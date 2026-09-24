@@ -10347,4 +10347,54 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get discovery => 'Atklājums';
+
+  @override
+  String get chatBlockShowMore => 'Rādīt vairāk';
+
+  @override
+  String get chatBlockShowLess => 'Rādīt mazāk';
+
+  @override
+  String get triggerEvent => 'Aktivizēšanas notikums';
+
+  @override
+  String get webhookUrl => 'Webhook URL';
+
+  @override
+  String get appHomeUrl => 'Lietotnes sākumlapas URL';
+
+  @override
+  String get authUrl => 'Autentifikācijas URL';
+
+  @override
+  String get setupCompletedUrl => 'Iestatīšanas pabeigšanas URL';
+
+  @override
+  String get chatToolsManifestUrl => 'Tērzēšanas rīku manifesta URL';
+
+  @override
+  String get invalidWebhookUrlError => 'Lūdzu, ievadiet derīgu webhook URL';
+
+  @override
+  String get githubRepositoryUrlRequired => 'GitHub repozitorija URL ir obligāts';
+
+  @override
+  String get removeScreenshot => 'Noņemt ekrānuzņēmumu';
+
+  @override
+  String get addScreenshot => 'Pievienot ekrānuzņēmumu';
+
+  @override
+  String get aiGenRegenerateIcon => 'Ģenerēt ikonu vēlreiz';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Lietotnes: $count',
+      one: '1 lietotne',
+    );
+    return '$_temp0';
+  }
 }

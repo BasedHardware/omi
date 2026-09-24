@@ -10882,5 +10882,19 @@
     "refreshManifest": "మానిఫెస్ట్ రిఫ్రెష్ చేయండి",
     "versionLabel": "వెర్షన్ {version}",
     "appUsersCount": "{count}+ వినియోగదారులు",
-    "discovery": "ఆవిష్కరణ"
+    "discovery": "ఆవిష్కరణ",
+    "chatBlockShowMore": "మరిన్ని చూపించు",
+    "chatBlockShowLess": "తక్కువ చూపించు",
+    "triggerEvent": "ట్రిగ్గర్ ఈవెంట్",
+    "webhookUrl": "వెబ్‌హుక్ URL",
+    "appHomeUrl": "యాప్ హోమ్ URL",
+    "authUrl": "ప్రమాణీకరణ URL",
+    "setupCompletedUrl": "సెటప్ పూర్తి URL",
+    "chatToolsManifestUrl": "చాట్ టూల్స్ మానిఫెస్ట్ URL",
+    "invalidWebhookUrlError": "దయచేసి చెల్లుబాటు అయ్యే వెబ్‌హుక్ URL నమోదు చేయండి",
+    "githubRepositoryUrlRequired": "GitHub రిపోజిటరీ URL అవసరం",
+    "removeScreenshot": "స్క్రీన్‌షాట్‌ను తీసివేయండి",
+    "addScreenshot": "స్క్రీన్‌షాట్‌ను జోడించండి",
+    "aiGenRegenerateIcon": "ఐకాన్‌ను మళ్లీ రూపొందించండి",
+    "categoryAppCount": "{count, plural, =1{1 యాప్} other{{count} యాప్‌లు}}"
 }

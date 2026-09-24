@@ -3310,5 +3310,19 @@
     "refreshManifest": "刷新清单",
     "versionLabel": "版本 {version}",
     "appUsersCount": "{count}+ 位用户",
-    "discovery": "发现"
+    "discovery": "发现",
+    "chatBlockShowMore": "显示更多",
+    "chatBlockShowLess": "收起",
+    "triggerEvent": "触发事件",
+    "webhookUrl": "Webhook URL",
+    "appHomeUrl": "应用主页 URL",
+    "authUrl": "认证 URL",
+    "setupCompletedUrl": "设置完成 URL",
+    "chatToolsManifestUrl": "聊天工具清单 URL",
+    "invalidWebhookUrlError": "请输入有效的 Webhook URL",
+    "githubRepositoryUrlRequired": "必须填写 GitHub 仓库 URL",
+    "removeScreenshot": "移除截图",
+    "addScreenshot": "添加截图",
+    "aiGenRegenerateIcon": "重新生成图标",
+    "categoryAppCount": "{count, plural, =1{1 个应用} other{{count} 个应用}}"
 }

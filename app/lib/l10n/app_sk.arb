@@ -3310,5 +3310,19 @@
     "refreshManifest": "Obnoviť manifest",
     "versionLabel": "Verzia {version}",
     "appUsersCount": "{count}+ používateľov",
-    "discovery": "Objav"
+    "discovery": "Objav",
+    "chatBlockShowMore": "Zobraziť viac",
+    "chatBlockShowLess": "Zobraziť menej",
+    "triggerEvent": "Spúšťacia udalosť",
+    "webhookUrl": "URL webhooku",
+    "appHomeUrl": "URL domovskej stránky aplikácie",
+    "authUrl": "URL overenia",
+    "setupCompletedUrl": "URL dokončenia nastavenia",
+    "chatToolsManifestUrl": "URL manifestu nástrojov chatu",
+    "invalidWebhookUrlError": "Zadajte platnú URL webhooku",
+    "githubRepositoryUrlRequired": "URL repozitára GitHub je povinná",
+    "removeScreenshot": "Odstrániť snímku obrazovky",
+    "addScreenshot": "Pridať snímku obrazovky",
+    "aiGenRegenerateIcon": "Znova vygenerovať ikonu",
+    "categoryAppCount": "{count, plural, =1{1 aplikácia} other{Aplikácie: {count}}}"
 }

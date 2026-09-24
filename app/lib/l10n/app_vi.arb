@@ -3310,5 +3310,19 @@
     "refreshManifest": "Làm mới manifest",
     "versionLabel": "Phiên bản {version}",
     "appUsersCount": "{count}+ người dùng",
-    "discovery": "Khám phá"
+    "discovery": "Khám phá",
+    "chatBlockShowMore": "Xem thêm",
+    "chatBlockShowLess": "Thu gọn",
+    "triggerEvent": "Sự kiện kích hoạt",
+    "webhookUrl": "URL webhook",
+    "appHomeUrl": "URL trang chủ ứng dụng",
+    "authUrl": "URL xác thực",
+    "setupCompletedUrl": "URL hoàn tất thiết lập",
+    "chatToolsManifestUrl": "URL manifest công cụ trò chuyện",
+    "invalidWebhookUrlError": "Vui lòng nhập URL webhook hợp lệ",
+    "githubRepositoryUrlRequired": "Bắt buộc nhập URL kho GitHub",
+    "removeScreenshot": "Xóa ảnh chụp màn hình",
+    "addScreenshot": "Thêm ảnh chụp màn hình",
+    "aiGenRegenerateIcon": "Tạo lại biểu tượng",
+    "categoryAppCount": "{count, plural, =1{1 ứng dụng} other{{count} ứng dụng}}"
 }

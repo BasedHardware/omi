@@ -10882,5 +10882,19 @@
     "refreshManifest": "ಮ್ಯಾನಿಫೆಸ್ಟ್ ರಿಫ್ರೆಶ್ ಮಾಡಿ",
     "versionLabel": "ಆವೃತ್ತಿ {version}",
     "appUsersCount": "{count}+ ಬಳಕೆದಾರರು",
-    "discovery": "ಅನ್ವೇಷಣೆ"
+    "discovery": "ಅನ್ವೇಷಣೆ",
+    "chatBlockShowMore": "ಇನ್ನಷ್ಟು ತೋರಿಸಿ",
+    "chatBlockShowLess": "ಕಡಿಮೆ ತೋರಿಸಿ",
+    "triggerEvent": "ಟ್ರಿಗರ್ ಈವೆಂಟ್",
+    "webhookUrl": "ವೆಬ್‌ಹುಕ್ URL",
+    "appHomeUrl": "ಆ್ಯಪ್ ಹೋಮ್ URL",
+    "authUrl": "ದೃಢೀಕರಣ URL",
+    "setupCompletedUrl": "ಸೆಟಪ್ ಪೂರ್ಣಗೊಂಡ URL",
+    "chatToolsManifestUrl": "ಚಾಟ್ ಪರಿಕರಗಳ ಮ್ಯಾನಿಫೆಸ್ಟ್ URL",
+    "invalidWebhookUrlError": "ದಯವಿಟ್ಟು ಮಾನ್ಯವಾದ ವೆಬ್‌ಹುಕ್ URL ನಮೂದಿಸಿ",
+    "githubRepositoryUrlRequired": "GitHub ರೆಪೊಸಿಟರಿ URL ಅಗತ್ಯವಿದೆ",
+    "removeScreenshot": "ಸ್ಕ್ರೀನ್‌ಶಾಟ್ ತೆಗೆದುಹಾಕಿ",
+    "addScreenshot": "ಸ್ಕ್ರೀನ್‌ಶಾಟ್ ಸೇರಿಸಿ",
+    "aiGenRegenerateIcon": "ಐಕಾನ್ ಮರುರಚಿಸಿ",
+    "categoryAppCount": "{count, plural, =1{1 ಆ್ಯಪ್} other{{count} ಆ್ಯಪ್‌ಗಳು}}"
 }

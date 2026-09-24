@@ -10329,4 +10329,54 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get discovery => 'Upptäckt';
+
+  @override
+  String get chatBlockShowMore => 'Visa mer';
+
+  @override
+  String get chatBlockShowLess => 'Visa mindre';
+
+  @override
+  String get triggerEvent => 'Utlösande händelse';
+
+  @override
+  String get webhookUrl => 'Webhook-URL';
+
+  @override
+  String get appHomeUrl => 'Appens startsides-URL';
+
+  @override
+  String get authUrl => 'Autentiserings-URL';
+
+  @override
+  String get setupCompletedUrl => 'URL för slutförd konfiguration';
+
+  @override
+  String get chatToolsManifestUrl => 'URL för chattverktygsmanifest';
+
+  @override
+  String get invalidWebhookUrlError => 'Ange en giltig webhook-URL';
+
+  @override
+  String get githubRepositoryUrlRequired => 'GitHub-repositoriets URL krävs';
+
+  @override
+  String get removeScreenshot => 'Ta bort skärmbild';
+
+  @override
+  String get addScreenshot => 'Lägg till skärmbild';
+
+  @override
+  String get aiGenRegenerateIcon => 'Generera ikonen igen';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count appar',
+      one: '1 app',
+    );
+    return '$_temp0';
+  }
 }

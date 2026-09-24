@@ -10241,4 +10241,54 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get discovery => 'תגלית';
+
+  @override
+  String get chatBlockShowMore => 'הצג עוד';
+
+  @override
+  String get chatBlockShowLess => 'הצג פחות';
+
+  @override
+  String get triggerEvent => 'אירוע מפעיל';
+
+  @override
+  String get webhookUrl => 'כתובת ה-Webhook';
+
+  @override
+  String get appHomeUrl => 'כתובת דף הבית של האפליקציה';
+
+  @override
+  String get authUrl => 'כתובת האימות';
+
+  @override
+  String get setupCompletedUrl => 'כתובת השלמת ההגדרה';
+
+  @override
+  String get chatToolsManifestUrl => 'כתובת מניפסט כלי הצ׳אט';
+
+  @override
+  String get invalidWebhookUrlError => 'יש להזין כתובת Webhook תקינה';
+
+  @override
+  String get githubRepositoryUrlRequired => 'נדרשת כתובת מאגר GitHub';
+
+  @override
+  String get removeScreenshot => 'הסרת צילום המסך';
+
+  @override
+  String get addScreenshot => 'הוספת צילום מסך';
+
+  @override
+  String get aiGenRegenerateIcon => 'יצירת הסמל מחדש';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count אפליקציות',
+      one: 'אפליקציה אחת',
+    );
+    return '$_temp0';
+  }
 }

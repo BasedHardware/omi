@@ -10132,4 +10132,54 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get discovery => '发现';
+
+  @override
+  String get chatBlockShowMore => '显示更多';
+
+  @override
+  String get chatBlockShowLess => '收起';
+
+  @override
+  String get triggerEvent => '触发事件';
+
+  @override
+  String get webhookUrl => 'Webhook URL';
+
+  @override
+  String get appHomeUrl => '应用主页 URL';
+
+  @override
+  String get authUrl => '认证 URL';
+
+  @override
+  String get setupCompletedUrl => '设置完成 URL';
+
+  @override
+  String get chatToolsManifestUrl => '聊天工具清单 URL';
+
+  @override
+  String get invalidWebhookUrlError => '请输入有效的 Webhook URL';
+
+  @override
+  String get githubRepositoryUrlRequired => '必须填写 GitHub 仓库 URL';
+
+  @override
+  String get removeScreenshot => '移除截图';
+
+  @override
+  String get addScreenshot => '添加截图';
+
+  @override
+  String get aiGenRegenerateIcon => '重新生成图标';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 个应用',
+      one: '1 个应用',
+    );
+    return '$_temp0';
+  }
 }

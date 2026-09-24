@@ -3310,5 +3310,19 @@
     "refreshManifest": "Ανανέωση manifest",
     "versionLabel": "Έκδοση {version}",
     "appUsersCount": "{count}+ χρήστες",
-    "discovery": "Ανακάλυψη"
+    "discovery": "Ανακάλυψη",
+    "chatBlockShowMore": "Εμφάνιση περισσότερων",
+    "chatBlockShowLess": "Εμφάνιση λιγότερων",
+    "triggerEvent": "Συμβάν ενεργοποίησης",
+    "webhookUrl": "URL webhook",
+    "appHomeUrl": "URL αρχικής σελίδας εφαρμογής",
+    "authUrl": "URL ελέγχου ταυτότητας",
+    "setupCompletedUrl": "URL ολοκλήρωσης ρύθμισης",
+    "chatToolsManifestUrl": "URL manifest εργαλείων συνομιλίας",
+    "invalidWebhookUrlError": "Εισαγάγετε ένα έγκυρο URL webhook",
+    "githubRepositoryUrlRequired": "Το URL αποθετηρίου GitHub είναι υποχρεωτικό",
+    "removeScreenshot": "Αφαίρεση στιγμιότυπου οθόνης",
+    "addScreenshot": "Προσθήκη στιγμιότυπου οθόνης",
+    "aiGenRegenerateIcon": "Επαναδημιουργία εικονιδίου",
+    "categoryAppCount": "{count, plural, =1{1 εφαρμογή} other{{count} εφαρμογές}}"
 }

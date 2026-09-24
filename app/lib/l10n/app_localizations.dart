@@ -19034,6 +19034,90 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Discovery'**
   String get discovery;
+
+  /// Button on a chat discovery card that expands it to its full text
+  ///
+  /// In en, this message translates to:
+  /// **'Show More'**
+  String get chatBlockShowMore;
+
+  /// Button on an expanded chat discovery card that collapses it back to its summary
+  ///
+  /// In en, this message translates to:
+  /// **'Show Less'**
+  String get chatBlockShowLess;
+
+  /// Placeholder of the trigger-event picker field when submitting an app with external integration
+  ///
+  /// In en, this message translates to:
+  /// **'Trigger Event'**
+  String get triggerEvent;
+
+  /// Label of the webhook URL field when submitting an app with external integration
+  ///
+  /// In en, this message translates to:
+  /// **'Webhook URL'**
+  String get webhookUrl;
+
+  /// Label of the app home URL field when submitting an app with external integration
+  ///
+  /// In en, this message translates to:
+  /// **'App Home URL'**
+  String get appHomeUrl;
+
+  /// Label of the authentication URL field when submitting an app with external integration
+  ///
+  /// In en, this message translates to:
+  /// **'Auth URL'**
+  String get authUrl;
+
+  /// Label of the setup-completed URL field when submitting an app with external integration
+  ///
+  /// In en, this message translates to:
+  /// **'Setup Completed URL'**
+  String get setupCompletedUrl;
+
+  /// Label of the chat tools manifest URL field when submitting an app with external integration
+  ///
+  /// In en, this message translates to:
+  /// **'Chat Tools Manifest URL'**
+  String get chatToolsManifestUrl;
+
+  /// Validation error under the webhook URL field when submitting an app
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter a valid webhook URL'**
+  String get invalidWebhookUrlError;
+
+  /// Validation error when the GitHub repository field is empty while submitting an app
+  ///
+  /// In en, this message translates to:
+  /// **'GitHub repository URL is required'**
+  String get githubRepositoryUrlRequired;
+
+  /// Accessibility label and tooltip of the X on an app screenshot in the submit/update app form
+  ///
+  /// In en, this message translates to:
+  /// **'Remove screenshot'**
+  String get removeScreenshot;
+
+  /// Accessibility label and tooltip of the control that adds an app screenshot in the submit/update app form
+  ///
+  /// In en, this message translates to:
+  /// **'Add screenshot'**
+  String get addScreenshot;
+
+  /// Tooltip and accessibility label of the icon-only button that regenerates the app icon on the AI app generator preview card
+  ///
+  /// In en, this message translates to:
+  /// **'Regenerate icon'**
+  String get aiGenRegenerateIcon;
+
+  /// Number of apps listed on a category page in the app store, above the list
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 app} other{{count} apps}}'**
+  String categoryAppCount(int count);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

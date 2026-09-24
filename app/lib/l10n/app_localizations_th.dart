@@ -10264,4 +10264,54 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get discovery => 'การค้นพบ';
+
+  @override
+  String get chatBlockShowMore => 'แสดงเพิ่มเติม';
+
+  @override
+  String get chatBlockShowLess => 'แสดงน้อยลง';
+
+  @override
+  String get triggerEvent => 'เหตุการณ์ทริกเกอร์';
+
+  @override
+  String get webhookUrl => 'URL ของ Webhook';
+
+  @override
+  String get appHomeUrl => 'URL หน้าแรกของแอป';
+
+  @override
+  String get authUrl => 'URL สำหรับยืนยันตัวตน';
+
+  @override
+  String get setupCompletedUrl => 'URL เมื่อตั้งค่าเสร็จ';
+
+  @override
+  String get chatToolsManifestUrl => 'URL แมนิเฟสต์เครื่องมือแชท';
+
+  @override
+  String get invalidWebhookUrlError => 'โปรดป้อน URL ของ Webhook ที่ถูกต้อง';
+
+  @override
+  String get githubRepositoryUrlRequired => 'ต้องระบุ URL ของที่เก็บ GitHub';
+
+  @override
+  String get removeScreenshot => 'ลบภาพหน้าจอ';
+
+  @override
+  String get addScreenshot => 'เพิ่มภาพหน้าจอ';
+
+  @override
+  String get aiGenRegenerateIcon => 'สร้างไอคอนใหม่';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count แอป',
+      one: '1 แอป',
+    );
+    return '$_temp0';
+  }
 }

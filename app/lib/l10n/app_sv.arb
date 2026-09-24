@@ -3310,5 +3310,19 @@
     "refreshManifest": "Uppdatera manifest",
     "versionLabel": "Version {version}",
     "appUsersCount": "{count}+ användare",
-    "discovery": "Upptäckt"
+    "discovery": "Upptäckt",
+    "chatBlockShowMore": "Visa mer",
+    "chatBlockShowLess": "Visa mindre",
+    "triggerEvent": "Utlösande händelse",
+    "webhookUrl": "Webhook-URL",
+    "appHomeUrl": "Appens startsides-URL",
+    "authUrl": "Autentiserings-URL",
+    "setupCompletedUrl": "URL för slutförd konfiguration",
+    "chatToolsManifestUrl": "URL för chattverktygsmanifest",
+    "invalidWebhookUrlError": "Ange en giltig webhook-URL",
+    "githubRepositoryUrlRequired": "GitHub-repositoriets URL krävs",
+    "removeScreenshot": "Ta bort skärmbild",
+    "addScreenshot": "Lägg till skärmbild",
+    "aiGenRegenerateIcon": "Generera ikonen igen",
+    "categoryAppCount": "{count, plural, =1{1 app} other{{count} appar}}"
 }

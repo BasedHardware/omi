@@ -3310,5 +3310,19 @@
     "refreshManifest": "Atsvaidzināt manifestu",
     "versionLabel": "Versija {version}",
     "appUsersCount": "{count}+ lietotāji",
-    "discovery": "Atklājums"
+    "discovery": "Atklājums",
+    "chatBlockShowMore": "Rādīt vairāk",
+    "chatBlockShowLess": "Rādīt mazāk",
+    "triggerEvent": "Aktivizēšanas notikums",
+    "webhookUrl": "Webhook URL",
+    "appHomeUrl": "Lietotnes sākumlapas URL",
+    "authUrl": "Autentifikācijas URL",
+    "setupCompletedUrl": "Iestatīšanas pabeigšanas URL",
+    "chatToolsManifestUrl": "Tērzēšanas rīku manifesta URL",
+    "invalidWebhookUrlError": "Lūdzu, ievadiet derīgu webhook URL",
+    "githubRepositoryUrlRequired": "GitHub repozitorija URL ir obligāts",
+    "removeScreenshot": "Noņemt ekrānuzņēmumu",
+    "addScreenshot": "Pievienot ekrānuzņēmumu",
+    "aiGenRegenerateIcon": "Ģenerēt ikonu vēlreiz",
+    "categoryAppCount": "{count, plural, =1{1 lietotne} other{Lietotnes: {count}}}"
 }

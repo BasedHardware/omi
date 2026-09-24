@@ -10882,5 +10882,19 @@
     "refreshManifest": "ম্যানিফেস্ট রিফ্রেশ করুন",
     "versionLabel": "সংস্করণ {version}",
     "appUsersCount": "{count}+ ব্যবহারকারী",
-    "discovery": "আবিষ্কার"
+    "discovery": "আবিষ্কার",
+    "chatBlockShowMore": "আরও দেখুন",
+    "chatBlockShowLess": "কম দেখুন",
+    "triggerEvent": "ট্রিগার ইভেন্ট",
+    "webhookUrl": "ওয়েবহুক URL",
+    "appHomeUrl": "অ্যাপ হোম URL",
+    "authUrl": "অথেনটিকেশন URL",
+    "setupCompletedUrl": "সেটআপ সম্পূর্ণ URL",
+    "chatToolsManifestUrl": "চ্যাট টুলস ম্যানিফেস্ট URL",
+    "invalidWebhookUrlError": "অনুগ্রহ করে একটি বৈধ ওয়েবহুক URL লিখুন",
+    "githubRepositoryUrlRequired": "GitHub রিপোজিটরি URL আবশ্যক",
+    "removeScreenshot": "স্ক্রিনশট সরান",
+    "addScreenshot": "স্ক্রিনশট যোগ করুন",
+    "aiGenRegenerateIcon": "আইকন আবার তৈরি করুন",
+    "categoryAppCount": "{count, plural, =1{1টি অ্যাপ} other{{count}টি অ্যাপ}}"
 }

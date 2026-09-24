@@ -10371,4 +10371,54 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get discovery => 'ఆవిష్కరణ';
+
+  @override
+  String get chatBlockShowMore => 'మరిన్ని చూపించు';
+
+  @override
+  String get chatBlockShowLess => 'తక్కువ చూపించు';
+
+  @override
+  String get triggerEvent => 'ట్రిగ్గర్ ఈవెంట్';
+
+  @override
+  String get webhookUrl => 'వెబ్‌హుక్ URL';
+
+  @override
+  String get appHomeUrl => 'యాప్ హోమ్ URL';
+
+  @override
+  String get authUrl => 'ప్రమాణీకరణ URL';
+
+  @override
+  String get setupCompletedUrl => 'సెటప్ పూర్తి URL';
+
+  @override
+  String get chatToolsManifestUrl => 'చాట్ టూల్స్ మానిఫెస్ట్ URL';
+
+  @override
+  String get invalidWebhookUrlError => 'దయచేసి చెల్లుబాటు అయ్యే వెబ్‌హుక్ URL నమోదు చేయండి';
+
+  @override
+  String get githubRepositoryUrlRequired => 'GitHub రిపోజిటరీ URL అవసరం';
+
+  @override
+  String get removeScreenshot => 'స్క్రీన్‌షాట్‌ను తీసివేయండి';
+
+  @override
+  String get addScreenshot => 'స్క్రీన్‌షాట్‌ను జోడించండి';
+
+  @override
+  String get aiGenRegenerateIcon => 'ఐకాన్‌ను మళ్లీ రూపొందించండి';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count యాప్‌లు',
+      one: '1 యాప్',
+    );
+    return '$_temp0';
+  }
 }

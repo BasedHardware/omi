@@ -10356,4 +10356,54 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get discovery => 'ಅನ್ವೇಷಣೆ';
+
+  @override
+  String get chatBlockShowMore => 'ಇನ್ನಷ್ಟು ತೋರಿಸಿ';
+
+  @override
+  String get chatBlockShowLess => 'ಕಡಿಮೆ ತೋರಿಸಿ';
+
+  @override
+  String get triggerEvent => 'ಟ್ರಿಗರ್ ಈವೆಂಟ್';
+
+  @override
+  String get webhookUrl => 'ವೆಬ್‌ಹುಕ್ URL';
+
+  @override
+  String get appHomeUrl => 'ಆ್ಯಪ್ ಹೋಮ್ URL';
+
+  @override
+  String get authUrl => 'ದೃಢೀಕರಣ URL';
+
+  @override
+  String get setupCompletedUrl => 'ಸೆಟಪ್ ಪೂರ್ಣಗೊಂಡ URL';
+
+  @override
+  String get chatToolsManifestUrl => 'ಚಾಟ್ ಪರಿಕರಗಳ ಮ್ಯಾನಿಫೆಸ್ಟ್ URL';
+
+  @override
+  String get invalidWebhookUrlError => 'ದಯವಿಟ್ಟು ಮಾನ್ಯವಾದ ವೆಬ್‌ಹುಕ್ URL ನಮೂದಿಸಿ';
+
+  @override
+  String get githubRepositoryUrlRequired => 'GitHub ರೆಪೊಸಿಟರಿ URL ಅಗತ್ಯವಿದೆ';
+
+  @override
+  String get removeScreenshot => 'ಸ್ಕ್ರೀನ್‌ಶಾಟ್ ತೆಗೆದುಹಾಕಿ';
+
+  @override
+  String get addScreenshot => 'ಸ್ಕ್ರೀನ್‌ಶಾಟ್ ಸೇರಿಸಿ';
+
+  @override
+  String get aiGenRegenerateIcon => 'ಐಕಾನ್ ಮರುರಚಿಸಿ';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ಆ್ಯಪ್‌ಗಳು',
+      one: '1 ಆ್ಯಪ್',
+    );
+    return '$_temp0';
+  }
 }

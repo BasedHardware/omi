@@ -10342,4 +10342,54 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get discovery => 'Відкриття';
+
+  @override
+  String get chatBlockShowMore => 'Показати більше';
+
+  @override
+  String get chatBlockShowLess => 'Показати менше';
+
+  @override
+  String get triggerEvent => 'Подія-тригер';
+
+  @override
+  String get webhookUrl => 'URL вебхука';
+
+  @override
+  String get appHomeUrl => 'URL головної сторінки застосунку';
+
+  @override
+  String get authUrl => 'URL автентифікації';
+
+  @override
+  String get setupCompletedUrl => 'URL завершення налаштування';
+
+  @override
+  String get chatToolsManifestUrl => 'URL маніфесту інструментів чату';
+
+  @override
+  String get invalidWebhookUrlError => 'Введіть дійсний URL вебхука';
+
+  @override
+  String get githubRepositoryUrlRequired => 'Потрібен URL репозиторію GitHub';
+
+  @override
+  String get removeScreenshot => 'Видалити знімок екрана';
+
+  @override
+  String get addScreenshot => 'Додати знімок екрана';
+
+  @override
+  String get aiGenRegenerateIcon => 'Згенерувати значок знову';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Застосунків: $count',
+      one: '1 застосунок',
+    );
+    return '$_temp0';
+  }
 }

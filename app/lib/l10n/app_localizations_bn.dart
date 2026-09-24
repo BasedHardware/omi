@@ -10327,4 +10327,54 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get discovery => 'আবিষ্কার';
+
+  @override
+  String get chatBlockShowMore => 'আরও দেখুন';
+
+  @override
+  String get chatBlockShowLess => 'কম দেখুন';
+
+  @override
+  String get triggerEvent => 'ট্রিগার ইভেন্ট';
+
+  @override
+  String get webhookUrl => 'ওয়েবহুক URL';
+
+  @override
+  String get appHomeUrl => 'অ্যাপ হোম URL';
+
+  @override
+  String get authUrl => 'অথেনটিকেশন URL';
+
+  @override
+  String get setupCompletedUrl => 'সেটআপ সম্পূর্ণ URL';
+
+  @override
+  String get chatToolsManifestUrl => 'চ্যাট টুলস ম্যানিফেস্ট URL';
+
+  @override
+  String get invalidWebhookUrlError => 'অনুগ্রহ করে একটি বৈধ ওয়েবহুক URL লিখুন';
+
+  @override
+  String get githubRepositoryUrlRequired => 'GitHub রিপোজিটরি URL আবশ্যক';
+
+  @override
+  String get removeScreenshot => 'স্ক্রিনশট সরান';
+
+  @override
+  String get addScreenshot => 'স্ক্রিনশট যোগ করুন';
+
+  @override
+  String get aiGenRegenerateIcon => 'আইকন আবার তৈরি করুন';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countটি অ্যাপ',
+      one: '1টি অ্যাপ',
+    );
+    return '$_temp0';
+  }
 }

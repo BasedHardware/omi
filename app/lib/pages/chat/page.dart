@@ -906,18 +906,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     // Unfocus the text field to prevent keyboard issues
     textFieldFocusNode.unfocus();
 
-    // clear chat
-    if (val == 'clear_chat') {
-      _showClearChatDialog();
-      return;
-    }
-
-    // enable apps - navigate to chat capability apps page
-    if (val == 'enable') {
-      _navigateToChatAppsPage();
-      return;
-    }
-
     // select app by id
     _selectApp(val, provider);
   }

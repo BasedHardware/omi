@@ -3352,5 +3352,19 @@
     "refreshManifest": "Opdater manifest",
     "versionLabel": "Version {version}",
     "appUsersCount": "{count}+ brugere",
-    "discovery": "Opdagelse"
+    "discovery": "Opdagelse",
+    "chatBlockShowMore": "Vis mere",
+    "chatBlockShowLess": "Vis mindre",
+    "triggerEvent": "Udløserhændelse",
+    "webhookUrl": "Webhook-URL",
+    "appHomeUrl": "Appens startside-URL",
+    "authUrl": "Godkendelses-URL",
+    "setupCompletedUrl": "URL for fuldført opsætning",
+    "chatToolsManifestUrl": "URL til chatværktøjsmanifest",
+    "invalidWebhookUrlError": "Indtast en gyldig webhook-URL",
+    "githubRepositoryUrlRequired": "GitHub-repository-URL er påkrævet",
+    "removeScreenshot": "Fjern skærmbillede",
+    "addScreenshot": "Tilføj skærmbillede",
+    "aiGenRegenerateIcon": "Generér ikon igen",
+    "categoryAppCount": "{count, plural, =1{1 app} other{{count} apps}}"
 }

@@ -10261,4 +10261,54 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get discovery => 'اكتشاف';
+
+  @override
+  String get chatBlockShowMore => 'عرض المزيد';
+
+  @override
+  String get chatBlockShowLess => 'عرض أقل';
+
+  @override
+  String get triggerEvent => 'حدث التشغيل';
+
+  @override
+  String get webhookUrl => 'عنوان URL للـ Webhook';
+
+  @override
+  String get appHomeUrl => 'عنوان URL للصفحة الرئيسية للتطبيق';
+
+  @override
+  String get authUrl => 'عنوان URL للمصادقة';
+
+  @override
+  String get setupCompletedUrl => 'عنوان URL لاكتمال الإعداد';
+
+  @override
+  String get chatToolsManifestUrl => 'عنوان URL لبيان أدوات الدردشة';
+
+  @override
+  String get invalidWebhookUrlError => 'يُرجى إدخال عنوان URL صالح للـ Webhook';
+
+  @override
+  String get githubRepositoryUrlRequired => 'عنوان URL لمستودع GitHub مطلوب';
+
+  @override
+  String get removeScreenshot => 'إزالة لقطة الشاشة';
+
+  @override
+  String get addScreenshot => 'إضافة لقطة شاشة';
+
+  @override
+  String get aiGenRegenerateIcon => 'إعادة إنشاء الأيقونة';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'التطبيقات: $count',
+      one: 'تطبيق واحد',
+    );
+    return '$_temp0';
+  }
 }

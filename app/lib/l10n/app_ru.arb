@@ -3345,5 +3345,19 @@
     "refreshManifest": "Обновить манифест",
     "versionLabel": "Версия {version}",
     "appUsersCount": "{count}+ пользователей",
-    "discovery": "Открытие"
+    "discovery": "Открытие",
+    "chatBlockShowMore": "Показать больше",
+    "chatBlockShowLess": "Показать меньше",
+    "triggerEvent": "Событие-триггер",
+    "webhookUrl": "URL вебхука",
+    "appHomeUrl": "URL главной страницы приложения",
+    "authUrl": "URL авторизации",
+    "setupCompletedUrl": "URL завершения настройки",
+    "chatToolsManifestUrl": "URL манифеста инструментов чата",
+    "invalidWebhookUrlError": "Введите действительный URL вебхука",
+    "githubRepositoryUrlRequired": "Требуется URL репозитория GitHub",
+    "removeScreenshot": "Удалить скриншот",
+    "addScreenshot": "Добавить скриншот",
+    "aiGenRegenerateIcon": "Сгенерировать значок заново",
+    "categoryAppCount": "{count, plural, =1{1 приложение} other{Приложений: {count}}}"
 }

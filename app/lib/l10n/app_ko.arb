@@ -3310,5 +3310,19 @@
     "refreshManifest": "매니페스트 새로 고침",
     "versionLabel": "버전 {version}",
     "appUsersCount": "사용자 {count}명 이상",
-    "discovery": "발견"
+    "discovery": "발견",
+    "chatBlockShowMore": "더 보기",
+    "chatBlockShowLess": "간략히 보기",
+    "triggerEvent": "트리거 이벤트",
+    "webhookUrl": "웹훅 URL",
+    "appHomeUrl": "앱 홈 URL",
+    "authUrl": "인증 URL",
+    "setupCompletedUrl": "설정 완료 URL",
+    "chatToolsManifestUrl": "채팅 도구 매니페스트 URL",
+    "invalidWebhookUrlError": "올바른 웹훅 URL을 입력하세요",
+    "githubRepositoryUrlRequired": "GitHub 저장소 URL이 필요합니다",
+    "removeScreenshot": "스크린샷 제거",
+    "addScreenshot": "스크린샷 추가",
+    "aiGenRegenerateIcon": "아이콘 다시 생성",
+    "categoryAppCount": "{count, plural, =1{앱 1개} other{앱 {count}개}}"
 }

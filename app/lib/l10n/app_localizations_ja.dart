@@ -10151,4 +10151,54 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get discovery => '発見';
+
+  @override
+  String get chatBlockShowMore => 'もっと見る';
+
+  @override
+  String get chatBlockShowLess => '表示を減らす';
+
+  @override
+  String get triggerEvent => 'トリガーイベント';
+
+  @override
+  String get webhookUrl => 'Webhook URL';
+
+  @override
+  String get appHomeUrl => 'アプリのホームURL';
+
+  @override
+  String get authUrl => '認証URL';
+
+  @override
+  String get setupCompletedUrl => 'セットアップ完了URL';
+
+  @override
+  String get chatToolsManifestUrl => 'チャットツールのマニフェストURL';
+
+  @override
+  String get invalidWebhookUrlError => '有効なWebhook URLを入力してください';
+
+  @override
+  String get githubRepositoryUrlRequired => 'GitHubリポジトリのURLは必須です';
+
+  @override
+  String get removeScreenshot => 'スクリーンショットを削除';
+
+  @override
+  String get addScreenshot => 'スクリーンショットを追加';
+
+  @override
+  String get aiGenRegenerateIcon => 'アイコンを再生成';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count 件のアプリ',
+      one: '1 件のアプリ',
+    );
+    return '$_temp0';
+  }
 }

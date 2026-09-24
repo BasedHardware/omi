@@ -10303,4 +10303,54 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get discovery => 'खोज';
+
+  @override
+  String get chatBlockShowMore => 'और दिखाएं';
+
+  @override
+  String get chatBlockShowLess => 'कम दिखाएं';
+
+  @override
+  String get triggerEvent => 'ट्रिगर इवेंट';
+
+  @override
+  String get webhookUrl => 'वेबहुक URL';
+
+  @override
+  String get appHomeUrl => 'ऐप होम URL';
+
+  @override
+  String get authUrl => 'प्रमाणीकरण URL';
+
+  @override
+  String get setupCompletedUrl => 'सेटअप पूर्ण URL';
+
+  @override
+  String get chatToolsManifestUrl => 'चैट टूल्स मैनिफ़ेस्ट URL';
+
+  @override
+  String get invalidWebhookUrlError => 'कृपया एक मान्य वेबहुक URL दर्ज करें';
+
+  @override
+  String get githubRepositoryUrlRequired => 'GitHub रिपॉज़िटरी URL आवश्यक है';
+
+  @override
+  String get removeScreenshot => 'स्क्रीनशॉट हटाएं';
+
+  @override
+  String get addScreenshot => 'स्क्रीनशॉट जोड़ें';
+
+  @override
+  String get aiGenRegenerateIcon => 'आइकन फिर से बनाएं';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ऐप',
+      one: '1 ऐप',
+    );
+    return '$_temp0';
+  }
 }

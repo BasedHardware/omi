@@ -3310,5 +3310,19 @@
     "refreshManifest": "Reîmprospătează manifestul",
     "versionLabel": "Versiunea {version}",
     "appUsersCount": "{count}+ utilizatori",
-    "discovery": "Descoperire"
+    "discovery": "Descoperire",
+    "chatBlockShowMore": "Afișează mai mult",
+    "chatBlockShowLess": "Afișează mai puțin",
+    "triggerEvent": "Eveniment declanșator",
+    "webhookUrl": "URL webhook",
+    "appHomeUrl": "URL-ul paginii principale a aplicației",
+    "authUrl": "URL de autentificare",
+    "setupCompletedUrl": "URL de configurare finalizată",
+    "chatToolsManifestUrl": "URL-ul manifestului instrumentelor de chat",
+    "invalidWebhookUrlError": "Introdu un URL webhook valid",
+    "githubRepositoryUrlRequired": "URL-ul depozitului GitHub este obligatoriu",
+    "removeScreenshot": "Elimină captura de ecran",
+    "addScreenshot": "Adaugă o captură de ecran",
+    "aiGenRegenerateIcon": "Regenerează pictograma",
+    "categoryAppCount": "{count, plural, =1{1 aplicație} other{{count} aplicații}}"
 }

@@ -3310,5 +3310,19 @@
     "refreshManifest": "Manifest vernieuwen",
     "versionLabel": "Versie {version}",
     "appUsersCount": "{count}+ gebruikers",
-    "discovery": "Ontdekking"
+    "discovery": "Ontdekking",
+    "chatBlockShowMore": "Meer tonen",
+    "chatBlockShowLess": "Minder tonen",
+    "triggerEvent": "Triggergebeurtenis",
+    "webhookUrl": "Webhook-URL",
+    "appHomeUrl": "Startpagina-URL van de app",
+    "authUrl": "Authenticatie-URL",
+    "setupCompletedUrl": "URL voor voltooide installatie",
+    "chatToolsManifestUrl": "URL van chattoolsmanifest",
+    "invalidWebhookUrlError": "Voer een geldige webhook-URL in",
+    "githubRepositoryUrlRequired": "GitHub-repository-URL is verplicht",
+    "removeScreenshot": "Screenshot verwijderen",
+    "addScreenshot": "Screenshot toevoegen",
+    "aiGenRegenerateIcon": "Pictogram opnieuw genereren",
+    "categoryAppCount": "{count, plural, =1{1 app} other{{count} apps}}"
 }

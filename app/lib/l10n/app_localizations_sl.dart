@@ -10354,4 +10354,54 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get discovery => 'Odkritje';
+
+  @override
+  String get chatBlockShowMore => 'Pokaži več';
+
+  @override
+  String get chatBlockShowLess => 'Pokaži manj';
+
+  @override
+  String get triggerEvent => 'Sprožilni dogodek';
+
+  @override
+  String get webhookUrl => 'URL spletnega kavlja';
+
+  @override
+  String get appHomeUrl => 'URL domače strani aplikacije';
+
+  @override
+  String get authUrl => 'URL za preverjanje pristnosti';
+
+  @override
+  String get setupCompletedUrl => 'URL dokončane nastavitve';
+
+  @override
+  String get chatToolsManifestUrl => 'URL manifesta orodij za klepet';
+
+  @override
+  String get invalidWebhookUrlError => 'Vnesite veljaven URL spletnega kavlja';
+
+  @override
+  String get githubRepositoryUrlRequired => 'URL repozitorija GitHub je obvezen';
+
+  @override
+  String get removeScreenshot => 'Odstrani posnetek zaslona';
+
+  @override
+  String get addScreenshot => 'Dodaj posnetek zaslona';
+
+  @override
+  String get aiGenRegenerateIcon => 'Znova ustvari ikono';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Aplikacije: $count',
+      one: '1 aplikacija',
+    );
+    return '$_temp0';
+  }
 }

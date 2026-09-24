@@ -61,6 +61,10 @@ String getThinkingDisplayText(String thinkingText) {
   return thinkingText;
 }
 
+/// Corner of the 15pt app and integration glyphs in the thinking line. The token scale starts at 8,
+/// which would turn a 15pt square into a circle.
+const BorderRadius _kGlyphRadius = BorderRadius.all(Radius.circular(3));
+
 /// Build app icon widget from app_id
 Widget _buildAppIcon(BuildContext context, String appId, {double size = 15, double opacity = 1.0}) {
   final appProvider = Provider.of<AppProvider>(context, listen: false);
@@ -73,7 +77,7 @@ Widget _buildAppIcon(BuildContext context, String appId, {double size = 15, doub
     return Opacity(
       opacity: opacity,
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(3),
+        borderRadius: _kGlyphRadius,
         child: CachedNetworkImage(
           imageUrl: app.getImageUrl(),
           httpHeaders: const {
@@ -84,7 +88,7 @@ Widget _buildAppIcon(BuildContext context, String appId, {double size = 15, doub
             width: size,
             height: size,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(3),
+              borderRadius: _kGlyphRadius,
               image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
             ),
           ),
@@ -163,7 +167,7 @@ Widget _buildThinkingIconWidget(String thinkingText, {double size = 15, Color co
   final logoPath = _getIntegrationLogoPath(thinkingText);
   if (logoPath != null) {
     return ClipRRect(
-      borderRadius: BorderRadius.circular(3),
+      borderRadius: _kGlyphRadius,
       child: Image.asset(
         logoPath,
         width: size,
@@ -502,11 +506,11 @@ class DaySummaryWidget extends StatelessWidget {
           minLeadingWidth: 0,
           leading: Text(
             '${index + 1}.',
-            style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Colors.grey.shade500),
+            style: OmiType.subhead.copyWith(fontWeight: FontWeight.bold, color: OmiColors.textTertiary),
           ),
           title: AutoSizeText(
             sentences[index],
-            style: const TextStyle(fontSize: 16.0, fontWeight: FontWeight.w500, height: 1.35, color: Colors.white),
+            style: OmiType.callout.copyWith(fontWeight: FontWeight.w500, height: 1.35),
             softWrap: true,
             maxLines: 3,
             overflow: TextOverflow.ellipsis,
@@ -567,25 +571,6 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
     super.dispose();
   }
 
-  Widget _buildChartShimmer() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-      child: ShimmerWithTimeout(
-        baseColor: const Color(0xFF1A1A20),
-        highlightColor: const Color(0xFF282830),
-        timeoutSeconds: 15,
-        child: Container(
-          height: 236,
-          decoration: BoxDecoration(
-            color: const Color(0xFF1A1A20),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
-          ),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     var thinkingTextRaw = widget.message.thinkings.isNotEmpty ? widget.message.thinkings.last.decodeString : null;
@@ -617,33 +602,7 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               mainAxisAlignment: MainAxisAlignment.start,
                               children: [
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    // Icon stays outside shimmer to preserve colors (app icon or integration logo)
-                                    if (currentAppId != null) ...[
-                                      _buildAppIcon(context, currentAppId, size: 15),
-                                      const SizedBox(width: 6),
-                                    ] else ...[
-                                      _buildThinkingIconWidget(displayThinkingText, size: 15),
-                                      const SizedBox(width: 6),
-                                    ],
-                                    // Shimmer only applies to text
-                                    Flexible(
-                                      child: ShimmerWithTimeout(
-                                        baseColor: Colors.white,
-                                        highlightColor: Colors.grey,
-                                        child: Text(
-                                          overflow: TextOverflow.fade,
-                                          maxLines: 1,
-                                          softWrap: false,
-                                          displayThinkingText,
-                                          style: const TextStyle(color: Colors.white, fontSize: 15),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                                _ThinkingLine(text: displayThinkingText, appId: currentAppId),
                               ],
                             ),
                           )
@@ -694,31 +653,7 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
         if (widget.showTypingIndicator && widget.messageText.isNotEmpty && widget.showThinkingAfterText)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (currentAppId != null) ...[
-                  _buildAppIcon(context, currentAppId, size: 15),
-                  const SizedBox(width: 6),
-                ] else ...[
-                  _buildThinkingIconWidget(displayThinkingText, size: 15),
-                  const SizedBox(width: 6),
-                ],
-                Flexible(
-                  child: ShimmerWithTimeout(
-                    baseColor: Colors.white,
-                    highlightColor: Colors.grey,
-                    child: Text(
-                      overflow: TextOverflow.fade,
-                      maxLines: 1,
-                      softWrap: false,
-                      displayThinkingText,
-                      style: const TextStyle(color: Colors.white, fontSize: 15),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+            child: _ThinkingLine(text: displayThinkingText, appId: currentAppId),
           ),
         if (widget.message.chartData != null)
           Padding(
@@ -726,7 +661,7 @@ class _NormalMessageWidgetState extends State<NormalMessageWidget> {
             child: ChartMessageWidget(chartData: widget.message.chartData!),
           )
         else if (widget.showTypingIndicator && widget.message.thinkings.any((t) => t.toLowerCase().contains('chart')))
-          _buildChartShimmer(),
+          const _ChartShimmer(),
         if (widget.messageText.isNotEmpty && !widget.showTypingIndicator)
           MessageActionBar(
             messageText: widget.messageText,
@@ -792,25 +727,6 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
     super.dispose();
   }
 
-  Widget _buildChartShimmer() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-      child: ShimmerWithTimeout(
-        baseColor: const Color(0xFF1A1A20),
-        highlightColor: const Color(0xFF282830),
-        timeoutSeconds: 15,
-        child: Container(
-          height: 236,
-          decoration: BoxDecoration(
-            color: const Color(0xFF1A1A20),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
-          ),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     var thinkingTextRaw = widget.message.thinkings.isNotEmpty ? widget.message.thinkings.last.decodeString : null;
@@ -849,33 +765,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               mainAxisAlignment: MainAxisAlignment.start,
                               children: [
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    // Icon stays outside shimmer to preserve colors (app icon or integration logo)
-                                    if (currentAppId != null) ...[
-                                      _buildAppIcon(context, currentAppId, size: 15),
-                                      const SizedBox(width: 6),
-                                    ] else ...[
-                                      _buildThinkingIconWidget(displayThinkingText, size: 15),
-                                      const SizedBox(width: 6),
-                                    ],
-                                    // Shimmer only applies to text
-                                    Flexible(
-                                      child: ShimmerWithTimeout(
-                                        baseColor: Colors.white,
-                                        highlightColor: Colors.grey,
-                                        child: Text(
-                                          overflow: TextOverflow.fade,
-                                          maxLines: 1,
-                                          softWrap: false,
-                                          displayThinkingText,
-                                          style: const TextStyle(color: Colors.white, fontSize: 15),
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
+                                _ThinkingLine(text: displayThinkingText, appId: currentAppId),
                               ],
                             ),
                           )
@@ -918,7 +808,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
             child: ChartMessageWidget(chartData: widget.message.chartData!),
           )
         else if (widget.showTypingIndicator && widget.message.thinkings.any((t) => t.toLowerCase().contains('chart')))
-          _buildChartShimmer(),
+          const _ChartShimmer(),
         const SizedBox(height: 16),
         Column(
           key: const ValueKey('chat-citation-list'),
@@ -933,10 +823,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                   child: Container(
                     padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12),
                     width: double.maxFinite,
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF1F1F25),
-                      borderRadius: BorderRadius.circular(16.0),
-                    ),
+                    decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
                     child: Row(
                       children: [
                         Expanded(
@@ -950,7 +837,7 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
                         const SizedBox(width: 8),
                         conversationDetailLoading[data.$1]
                             ? const OmiSpinner(size: OmiSpinnerSize.small, color: OmiColors.textSecondary)
-                            : const FaIcon(FontAwesomeIcons.chevronRight, size: 16, color: Colors.white54),
+                            : const FaIcon(FontAwesomeIcons.chevronRight, size: 16, color: OmiColors.textTertiary),
                       ],
                     ),
                   ),
@@ -1024,6 +911,59 @@ class _MemoriesMessageWidgetState extends State<MemoriesMessageWidget> {
     } catch (e) {
       return text;
     }
+  }
+}
+
+/// The app icon or integration logo, then the shimmering "thinking" text, while a reply streams.
+class _ThinkingLine extends StatelessWidget {
+  const _ThinkingLine({required this.text, this.appId});
+
+  final String text;
+  final String? appId;
+
+  @override
+  Widget build(BuildContext context) {
+    final appId = this.appId;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        // The icon stays outside the shimmer so an app icon or integration logo keeps its colours.
+        if (appId != null) _buildAppIcon(context, appId, size: 15) else _buildThinkingIconWidget(text, size: 15),
+        const SizedBox(width: 6),
+        Flexible(
+          child: ShimmerWithTimeout(
+            baseColor: OmiColors.textPrimary,
+            highlightColor: OmiColors.textTertiary,
+            child: Text(text, overflow: TextOverflow.fade, maxLines: 1, softWrap: false, style: OmiType.subhead),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Placeholder where a chart will appear while the reply that draws it is still streaming.
+class _ChartShimmer extends StatelessWidget {
+  const _ChartShimmer();
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
+      child: ShimmerWithTimeout(
+        baseColor: OmiColors.surface1,
+        highlightColor: OmiColors.surface2,
+        timeoutSeconds: 15,
+        child: Container(
+          height: 236,
+          decoration: BoxDecoration(
+            color: OmiColors.surface1,
+            borderRadius: OmiRadius.lgAll,
+            border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
+          ),
+        ),
+      ),
+    );
   }
 }
 

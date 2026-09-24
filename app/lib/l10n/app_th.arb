@@ -3310,5 +3310,19 @@
     "refreshManifest": "รีเฟรชไฟล์ manifest",
     "versionLabel": "เวอร์ชัน {version}",
     "appUsersCount": "ผู้ใช้ {count}+ คน",
-    "discovery": "การค้นพบ"
+    "discovery": "การค้นพบ",
+    "chatBlockShowMore": "แสดงเพิ่มเติม",
+    "chatBlockShowLess": "แสดงน้อยลง",
+    "triggerEvent": "เหตุการณ์ทริกเกอร์",
+    "webhookUrl": "URL ของ Webhook",
+    "appHomeUrl": "URL หน้าแรกของแอป",
+    "authUrl": "URL สำหรับยืนยันตัวตน",
+    "setupCompletedUrl": "URL เมื่อตั้งค่าเสร็จ",
+    "chatToolsManifestUrl": "URL แมนิเฟสต์เครื่องมือแชท",
+    "invalidWebhookUrlError": "โปรดป้อน URL ของ Webhook ที่ถูกต้อง",
+    "githubRepositoryUrlRequired": "ต้องระบุ URL ของที่เก็บ GitHub",
+    "removeScreenshot": "ลบภาพหน้าจอ",
+    "addScreenshot": "เพิ่มภาพหน้าจอ",
+    "aiGenRegenerateIcon": "สร้างไอคอนใหม่",
+    "categoryAppCount": "{count, plural, =1{1 แอป} other{{count} แอป}}"
 }

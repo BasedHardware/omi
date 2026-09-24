@@ -10415,4 +10415,54 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get discovery => 'Natuklasan';
+
+  @override
+  String get chatBlockShowMore => 'Magpakita Pa';
+
+  @override
+  String get chatBlockShowLess => 'Magpakita ng Mas Kaunti';
+
+  @override
+  String get triggerEvent => 'Trigger Event';
+
+  @override
+  String get webhookUrl => 'Webhook URL';
+
+  @override
+  String get appHomeUrl => 'URL ng Home ng App';
+
+  @override
+  String get authUrl => 'Auth URL';
+
+  @override
+  String get setupCompletedUrl => 'URL ng Natapos na Setup';
+
+  @override
+  String get chatToolsManifestUrl => 'URL ng Manifest ng Chat Tools';
+
+  @override
+  String get invalidWebhookUrlError => 'Maglagay ng valid na webhook URL';
+
+  @override
+  String get githubRepositoryUrlRequired => 'Kailangan ang URL ng GitHub repository';
+
+  @override
+  String get removeScreenshot => 'Alisin ang screenshot';
+
+  @override
+  String get addScreenshot => 'Magdagdag ng screenshot';
+
+  @override
+  String get aiGenRegenerateIcon => 'Gumawa muli ng icon';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count na app',
+      one: '1 app',
+    );
+    return '$_temp0';
+  }
 }

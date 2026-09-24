@@ -10323,4 +10323,54 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get discovery => 'کشف';
+
+  @override
+  String get chatBlockShowMore => 'نمایش بیشتر';
+
+  @override
+  String get chatBlockShowLess => 'نمایش کمتر';
+
+  @override
+  String get triggerEvent => 'رویداد راه‌انداز';
+
+  @override
+  String get webhookUrl => 'نشانی وب‌هوک';
+
+  @override
+  String get appHomeUrl => 'نشانی صفحهٔ اصلی برنامه';
+
+  @override
+  String get authUrl => 'نشانی احراز هویت';
+
+  @override
+  String get setupCompletedUrl => 'نشانی تکمیل راه‌اندازی';
+
+  @override
+  String get chatToolsManifestUrl => 'نشانی مانیفست ابزارهای گفتگو';
+
+  @override
+  String get invalidWebhookUrlError => 'لطفاً یک نشانی وب‌هوک معتبر وارد کنید';
+
+  @override
+  String get githubRepositoryUrlRequired => 'نشانی مخزن GitHub الزامی است';
+
+  @override
+  String get removeScreenshot => 'حذف نماگرفت';
+
+  @override
+  String get addScreenshot => 'افزودن نماگرفت';
+
+  @override
+  String get aiGenRegenerateIcon => 'ساخت دوباره نماد';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count اپلیکیشن',
+      one: '۱ اپلیکیشن',
+    );
+    return '$_temp0';
+  }
 }

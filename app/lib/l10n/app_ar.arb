@@ -3310,5 +3310,19 @@
     "refreshManifest": "تحديث البيان",
     "versionLabel": "الإصدار {version}",
     "appUsersCount": "+{count} مستخدم",
-    "discovery": "اكتشاف"
+    "discovery": "اكتشاف",
+    "chatBlockShowMore": "عرض المزيد",
+    "chatBlockShowLess": "عرض أقل",
+    "triggerEvent": "حدث التشغيل",
+    "webhookUrl": "عنوان URL للـ Webhook",
+    "appHomeUrl": "عنوان URL للصفحة الرئيسية للتطبيق",
+    "authUrl": "عنوان URL للمصادقة",
+    "setupCompletedUrl": "عنوان URL لاكتمال الإعداد",
+    "chatToolsManifestUrl": "عنوان URL لبيان أدوات الدردشة",
+    "invalidWebhookUrlError": "يُرجى إدخال عنوان URL صالح للـ Webhook",
+    "githubRepositoryUrlRequired": "عنوان URL لمستودع GitHub مطلوب",
+    "removeScreenshot": "إزالة لقطة الشاشة",
+    "addScreenshot": "إضافة لقطة شاشة",
+    "aiGenRegenerateIcon": "إعادة إنشاء الأيقونة",
+    "categoryAppCount": "{count, plural, =1{تطبيق واحد} other{التطبيقات: {count}}}"
 }

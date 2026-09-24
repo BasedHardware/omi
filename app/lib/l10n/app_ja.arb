@@ -3310,5 +3310,19 @@
     "refreshManifest": "マニフェストを更新",
     "versionLabel": "バージョン {version}",
     "appUsersCount": "{count}+ 人のユーザー",
-    "discovery": "発見"
+    "discovery": "発見",
+    "chatBlockShowMore": "もっと見る",
+    "chatBlockShowLess": "表示を減らす",
+    "triggerEvent": "トリガーイベント",
+    "webhookUrl": "Webhook URL",
+    "appHomeUrl": "アプリのホームURL",
+    "authUrl": "認証URL",
+    "setupCompletedUrl": "セットアップ完了URL",
+    "chatToolsManifestUrl": "チャットツールのマニフェストURL",
+    "invalidWebhookUrlError": "有効なWebhook URLを入力してください",
+    "githubRepositoryUrlRequired": "GitHubリポジトリのURLは必須です",
+    "removeScreenshot": "スクリーンショットを削除",
+    "addScreenshot": "スクリーンショットを追加",
+    "aiGenRegenerateIcon": "アイコンを再生成",
+    "categoryAppCount": "{count, plural, =1{1 件のアプリ} other{{count} 件のアプリ}}"
 }

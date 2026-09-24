@@ -10310,4 +10310,54 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get discovery => 'Opdagelse';
+
+  @override
+  String get chatBlockShowMore => 'Vis mere';
+
+  @override
+  String get chatBlockShowLess => 'Vis mindre';
+
+  @override
+  String get triggerEvent => 'Udløserhændelse';
+
+  @override
+  String get webhookUrl => 'Webhook-URL';
+
+  @override
+  String get appHomeUrl => 'Appens startside-URL';
+
+  @override
+  String get authUrl => 'Godkendelses-URL';
+
+  @override
+  String get setupCompletedUrl => 'URL for fuldført opsætning';
+
+  @override
+  String get chatToolsManifestUrl => 'URL til chatværktøjsmanifest';
+
+  @override
+  String get invalidWebhookUrlError => 'Indtast en gyldig webhook-URL';
+
+  @override
+  String get githubRepositoryUrlRequired => 'GitHub-repository-URL er påkrævet';
+
+  @override
+  String get removeScreenshot => 'Fjern skærmbillede';
+
+  @override
+  String get addScreenshot => 'Tilføj skærmbillede';
+
+  @override
+  String get aiGenRegenerateIcon => 'Generér ikon igen';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count apps',
+      one: '1 app',
+    );
+    return '$_temp0';
+  }
 }

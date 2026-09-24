@@ -10882,5 +10882,19 @@
     "refreshManifest": "רענון המניפסט",
     "versionLabel": "גרסה {version}",
     "appUsersCount": "{count}+ משתמשים",
-    "discovery": "תגלית"
+    "discovery": "תגלית",
+    "chatBlockShowMore": "הצג עוד",
+    "chatBlockShowLess": "הצג פחות",
+    "triggerEvent": "אירוע מפעיל",
+    "webhookUrl": "כתובת ה-Webhook",
+    "appHomeUrl": "כתובת דף הבית של האפליקציה",
+    "authUrl": "כתובת האימות",
+    "setupCompletedUrl": "כתובת השלמת ההגדרה",
+    "chatToolsManifestUrl": "כתובת מניפסט כלי הצ׳אט",
+    "invalidWebhookUrlError": "יש להזין כתובת Webhook תקינה",
+    "githubRepositoryUrlRequired": "נדרשת כתובת מאגר GitHub",
+    "removeScreenshot": "הסרת צילום המסך",
+    "addScreenshot": "הוספת צילום מסך",
+    "aiGenRegenerateIcon": "יצירת הסמל מחדש",
+    "categoryAppCount": "{count, plural, =1{אפליקציה אחת} other{{count} אפליקציות}}"
 }

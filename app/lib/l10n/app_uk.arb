@@ -3310,5 +3310,19 @@
     "refreshManifest": "Оновити маніфест",
     "versionLabel": "Версія {version}",
     "appUsersCount": "{count}+ користувачів",
-    "discovery": "Відкриття"
+    "discovery": "Відкриття",
+    "chatBlockShowMore": "Показати більше",
+    "chatBlockShowLess": "Показати менше",
+    "triggerEvent": "Подія-тригер",
+    "webhookUrl": "URL вебхука",
+    "appHomeUrl": "URL головної сторінки застосунку",
+    "authUrl": "URL автентифікації",
+    "setupCompletedUrl": "URL завершення налаштування",
+    "chatToolsManifestUrl": "URL маніфесту інструментів чату",
+    "invalidWebhookUrlError": "Введіть дійсний URL вебхука",
+    "githubRepositoryUrlRequired": "Потрібен URL репозиторію GitHub",
+    "removeScreenshot": "Видалити знімок екрана",
+    "addScreenshot": "Додати знімок екрана",
+    "aiGenRegenerateIcon": "Згенерувати значок знову",
+    "categoryAppCount": "{count, plural, =1{1 застосунок} other{Застосунків: {count}}}"
 }

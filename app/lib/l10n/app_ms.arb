@@ -3310,5 +3310,19 @@
     "refreshManifest": "Muat semula manifest",
     "versionLabel": "Versi {version}",
     "appUsersCount": "{count}+ pengguna",
-    "discovery": "Penemuan"
+    "discovery": "Penemuan",
+    "chatBlockShowMore": "Tunjukkan Lagi",
+    "chatBlockShowLess": "Tunjukkan Kurang",
+    "triggerEvent": "Peristiwa Pencetus",
+    "webhookUrl": "URL Webhook",
+    "appHomeUrl": "URL Laman Utama Aplikasi",
+    "authUrl": "URL Pengesahan",
+    "setupCompletedUrl": "URL Persediaan Selesai",
+    "chatToolsManifestUrl": "URL Manifes Alat Sembang",
+    "invalidWebhookUrlError": "Sila masukkan URL webhook yang sah",
+    "githubRepositoryUrlRequired": "URL repositori GitHub diperlukan",
+    "removeScreenshot": "Alih keluar tangkapan skrin",
+    "addScreenshot": "Tambah tangkapan skrin",
+    "aiGenRegenerateIcon": "Jana semula ikon",
+    "categoryAppCount": "{count, plural, =1{1 aplikasi} other{{count} aplikasi}}"
 }

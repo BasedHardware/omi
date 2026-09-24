@@ -3310,5 +3310,19 @@
     "refreshManifest": "Actualizar manifiesto",
     "versionLabel": "Versión {version}",
     "appUsersCount": "{count}+ usuarios",
-    "discovery": "Descubrimiento"
+    "discovery": "Descubrimiento",
+    "chatBlockShowMore": "Mostrar más",
+    "chatBlockShowLess": "Mostrar menos",
+    "triggerEvent": "Evento desencadenante",
+    "webhookUrl": "URL del webhook",
+    "appHomeUrl": "URL de inicio de la app",
+    "authUrl": "URL de autenticación",
+    "setupCompletedUrl": "URL de configuración completada",
+    "chatToolsManifestUrl": "URL del manifiesto de herramientas de chat",
+    "invalidWebhookUrlError": "Introduce una URL de webhook válida",
+    "githubRepositoryUrlRequired": "La URL del repositorio de GitHub es obligatoria",
+    "removeScreenshot": "Quitar captura de pantalla",
+    "addScreenshot": "Añadir captura de pantalla",
+    "aiGenRegenerateIcon": "Volver a generar el icono",
+    "categoryAppCount": "{count, plural, =1{1 app} other{{count} apps}}"
 }

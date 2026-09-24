@@ -10334,4 +10334,54 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get discovery => 'Temuan';
+
+  @override
+  String get chatBlockShowMore => 'Tampilkan Lebih Banyak';
+
+  @override
+  String get chatBlockShowLess => 'Tampilkan Lebih Sedikit';
+
+  @override
+  String get triggerEvent => 'Peristiwa Pemicu';
+
+  @override
+  String get webhookUrl => 'URL Webhook';
+
+  @override
+  String get appHomeUrl => 'URL Beranda Aplikasi';
+
+  @override
+  String get authUrl => 'URL Autentikasi';
+
+  @override
+  String get setupCompletedUrl => 'URL Penyiapan Selesai';
+
+  @override
+  String get chatToolsManifestUrl => 'URL Manifes Alat Obrolan';
+
+  @override
+  String get invalidWebhookUrlError => 'Masukkan URL webhook yang valid';
+
+  @override
+  String get githubRepositoryUrlRequired => 'URL repositori GitHub wajib diisi';
+
+  @override
+  String get removeScreenshot => 'Hapus tangkapan layar';
+
+  @override
+  String get addScreenshot => 'Tambahkan tangkapan layar';
+
+  @override
+  String get aiGenRegenerateIcon => 'Buat ulang ikon';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count aplikasi',
+      one: '1 aplikasi',
+    );
+    return '$_temp0';
+  }
 }

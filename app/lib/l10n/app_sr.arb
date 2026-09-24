@@ -10882,5 +10882,19 @@
     "refreshManifest": "Освежи манифест",
     "versionLabel": "Верзија {version}",
     "appUsersCount": "{count}+ корисника",
-    "discovery": "Откриће"
+    "discovery": "Откриће",
+    "chatBlockShowMore": "Прикажи више",
+    "chatBlockShowLess": "Прикажи мање",
+    "triggerEvent": "Događaj okidača",
+    "webhookUrl": "URL webhook-a",
+    "appHomeUrl": "URL početne stranice aplikacije",
+    "authUrl": "URL za autentifikaciju",
+    "setupCompletedUrl": "URL završetka podešavanja",
+    "chatToolsManifestUrl": "URL manifesta alata za ćaskanje",
+    "invalidWebhookUrlError": "Unesite važeći URL webhook-a",
+    "githubRepositoryUrlRequired": "URL GitHub repozitorijuma je obavezan",
+    "removeScreenshot": "Ukloni snimak ekrana",
+    "addScreenshot": "Dodaj snimak ekrana",
+    "aiGenRegenerateIcon": "Поново генериши иконицу",
+    "categoryAppCount": "{count, plural, =1{1 апликација} other{Апликације: {count}}}"
 }

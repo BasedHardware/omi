@@ -10393,4 +10393,54 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get discovery => 'கண்டுபிடிப்பு';
+
+  @override
+  String get chatBlockShowMore => 'மேலும் காட்டு';
+
+  @override
+  String get chatBlockShowLess => 'குறைவாகக் காட்டு';
+
+  @override
+  String get triggerEvent => 'தூண்டல் நிகழ்வு';
+
+  @override
+  String get webhookUrl => 'Webhook URL';
+
+  @override
+  String get appHomeUrl => 'ஆப் முகப்பு URL';
+
+  @override
+  String get authUrl => 'அங்கீகார URL';
+
+  @override
+  String get setupCompletedUrl => 'அமைப்பு நிறைவு URL';
+
+  @override
+  String get chatToolsManifestUrl => 'அரட்டை கருவிகள் மேனிஃபெஸ்ட் URL';
+
+  @override
+  String get invalidWebhookUrlError => 'சரியான Webhook URL ஐ உள்ளிடவும்';
+
+  @override
+  String get githubRepositoryUrlRequired => 'GitHub களஞ்சிய URL தேவை';
+
+  @override
+  String get removeScreenshot => 'திரைப்பிடிப்பை அகற்று';
+
+  @override
+  String get addScreenshot => 'திரைப்பிடிப்பைச் சேர்';
+
+  @override
+  String get aiGenRegenerateIcon => 'ஐகானை மீண்டும் உருவாக்கு';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ஆப்கள்',
+      one: '1 ஆப்',
+    );
+    return '$_temp0';
+  }
 }

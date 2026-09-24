@@ -3345,5 +3345,19 @@
     "refreshManifest": "Muat ulang manifest",
     "versionLabel": "Versi {version}",
     "appUsersCount": "{count}+ pengguna",
-    "discovery": "Temuan"
+    "discovery": "Temuan",
+    "chatBlockShowMore": "Tampilkan Lebih Banyak",
+    "chatBlockShowLess": "Tampilkan Lebih Sedikit",
+    "triggerEvent": "Peristiwa Pemicu",
+    "webhookUrl": "URL Webhook",
+    "appHomeUrl": "URL Beranda Aplikasi",
+    "authUrl": "URL Autentikasi",
+    "setupCompletedUrl": "URL Penyiapan Selesai",
+    "chatToolsManifestUrl": "URL Manifes Alat Obrolan",
+    "invalidWebhookUrlError": "Masukkan URL webhook yang valid",
+    "githubRepositoryUrlRequired": "URL repositori GitHub wajib diisi",
+    "removeScreenshot": "Hapus tangkapan layar",
+    "addScreenshot": "Tambahkan tangkapan layar",
+    "aiGenRegenerateIcon": "Buat ulang ikon",
+    "categoryAppCount": "{count, plural, =1{1 aplikasi} other{{count} aplikasi}}"
 }

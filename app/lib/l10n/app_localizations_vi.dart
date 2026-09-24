@@ -10318,4 +10318,54 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get discovery => 'Khám phá';
+
+  @override
+  String get chatBlockShowMore => 'Xem thêm';
+
+  @override
+  String get chatBlockShowLess => 'Thu gọn';
+
+  @override
+  String get triggerEvent => 'Sự kiện kích hoạt';
+
+  @override
+  String get webhookUrl => 'URL webhook';
+
+  @override
+  String get appHomeUrl => 'URL trang chủ ứng dụng';
+
+  @override
+  String get authUrl => 'URL xác thực';
+
+  @override
+  String get setupCompletedUrl => 'URL hoàn tất thiết lập';
+
+  @override
+  String get chatToolsManifestUrl => 'URL manifest công cụ trò chuyện';
+
+  @override
+  String get invalidWebhookUrlError => 'Vui lòng nhập URL webhook hợp lệ';
+
+  @override
+  String get githubRepositoryUrlRequired => 'Bắt buộc nhập URL kho GitHub';
+
+  @override
+  String get removeScreenshot => 'Xóa ảnh chụp màn hình';
+
+  @override
+  String get addScreenshot => 'Thêm ảnh chụp màn hình';
+
+  @override
+  String get aiGenRegenerateIcon => 'Tạo lại biểu tượng';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ứng dụng',
+      one: '1 ứng dụng',
+    );
+    return '$_temp0';
+  }
 }

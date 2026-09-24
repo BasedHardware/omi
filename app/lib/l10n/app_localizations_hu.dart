@@ -10362,4 +10362,54 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get discovery => 'Felfedezés';
+
+  @override
+  String get chatBlockShowMore => 'Több megjelenítése';
+
+  @override
+  String get chatBlockShowLess => 'Kevesebb megjelenítése';
+
+  @override
+  String get triggerEvent => 'Kiváltó esemény';
+
+  @override
+  String get webhookUrl => 'Webhook URL';
+
+  @override
+  String get appHomeUrl => 'Alkalmazás kezdőlapjának URL-je';
+
+  @override
+  String get authUrl => 'Hitelesítési URL';
+
+  @override
+  String get setupCompletedUrl => 'Beállítás befejezése URL';
+
+  @override
+  String get chatToolsManifestUrl => 'Csevegőeszközök manifesztjének URL-je';
+
+  @override
+  String get invalidWebhookUrlError => 'Adj meg egy érvényes webhook URL-t';
+
+  @override
+  String get githubRepositoryUrlRequired => 'A GitHub-tároló URL-je kötelező';
+
+  @override
+  String get removeScreenshot => 'Képernyőkép eltávolítása';
+
+  @override
+  String get addScreenshot => 'Képernyőkép hozzáadása';
+
+  @override
+  String get aiGenRegenerateIcon => 'Ikon újragenerálása';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count alkalmazás',
+      one: '1 alkalmazás',
+    );
+    return '$_temp0';
+  }
 }

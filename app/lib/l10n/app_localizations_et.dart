@@ -10317,4 +10317,54 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get discovery => 'Avastus';
+
+  @override
+  String get chatBlockShowMore => 'Näita rohkem';
+
+  @override
+  String get chatBlockShowLess => 'Näita vähem';
+
+  @override
+  String get triggerEvent => 'Käivitussündmus';
+
+  @override
+  String get webhookUrl => 'Webhooki URL';
+
+  @override
+  String get appHomeUrl => 'Rakenduse avalehe URL';
+
+  @override
+  String get authUrl => 'Autentimise URL';
+
+  @override
+  String get setupCompletedUrl => 'Seadistuse lõpetamise URL';
+
+  @override
+  String get chatToolsManifestUrl => 'Vestlustööriistade manifesti URL';
+
+  @override
+  String get invalidWebhookUrlError => 'Sisesta kehtiv webhooki URL';
+
+  @override
+  String get githubRepositoryUrlRequired => 'GitHubi hoidla URL on kohustuslik';
+
+  @override
+  String get removeScreenshot => 'Eemalda ekraanipilt';
+
+  @override
+  String get addScreenshot => 'Lisa ekraanipilt';
+
+  @override
+  String get aiGenRegenerateIcon => 'Loo ikoon uuesti';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count rakendust',
+      one: '1 rakendus',
+    );
+    return '$_temp0';
+  }
 }

@@ -10350,4 +10350,54 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get discovery => 'Ontdekking';
+
+  @override
+  String get chatBlockShowMore => 'Meer tonen';
+
+  @override
+  String get chatBlockShowLess => 'Minder tonen';
+
+  @override
+  String get triggerEvent => 'Triggergebeurtenis';
+
+  @override
+  String get webhookUrl => 'Webhook-URL';
+
+  @override
+  String get appHomeUrl => 'Startpagina-URL van de app';
+
+  @override
+  String get authUrl => 'Authenticatie-URL';
+
+  @override
+  String get setupCompletedUrl => 'URL voor voltooide installatie';
+
+  @override
+  String get chatToolsManifestUrl => 'URL van chattoolsmanifest';
+
+  @override
+  String get invalidWebhookUrlError => 'Voer een geldige webhook-URL in';
+
+  @override
+  String get githubRepositoryUrlRequired => 'GitHub-repository-URL is verplicht';
+
+  @override
+  String get removeScreenshot => 'Screenshot verwijderen';
+
+  @override
+  String get addScreenshot => 'Screenshot toevoegen';
+
+  @override
+  String get aiGenRegenerateIcon => 'Pictogram opnieuw genereren';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count apps',
+      one: '1 app',
+    );
+    return '$_temp0';
+  }
 }

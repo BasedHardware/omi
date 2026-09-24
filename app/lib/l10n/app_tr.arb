@@ -3345,5 +3345,19 @@
     "refreshManifest": "Manifesti yenile",
     "versionLabel": "Sürüm {version}",
     "appUsersCount": "{count}+ kullanıcı",
-    "discovery": "Keşif"
+    "discovery": "Keşif",
+    "chatBlockShowMore": "Daha Fazla Göster",
+    "chatBlockShowLess": "Daha Az Göster",
+    "triggerEvent": "Tetikleyici Olay",
+    "webhookUrl": "Webhook URL'si",
+    "appHomeUrl": "Uygulama Ana Sayfa URL'si",
+    "authUrl": "Kimlik Doğrulama URL'si",
+    "setupCompletedUrl": "Kurulum Tamamlandı URL'si",
+    "chatToolsManifestUrl": "Sohbet Araçları Bildirim URL'si",
+    "invalidWebhookUrlError": "Lütfen geçerli bir webhook URL'si girin",
+    "githubRepositoryUrlRequired": "GitHub depo URL'si gerekli",
+    "removeScreenshot": "Ekran görüntüsünü kaldır",
+    "addScreenshot": "Ekran görüntüsü ekle",
+    "aiGenRegenerateIcon": "Simgeyi yeniden oluştur",
+    "categoryAppCount": "{count, plural, =1{1 uygulama} other{{count} uygulama}}"
 }

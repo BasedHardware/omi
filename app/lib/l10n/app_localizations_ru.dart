@@ -10360,4 +10360,54 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get discovery => 'Открытие';
+
+  @override
+  String get chatBlockShowMore => 'Показать больше';
+
+  @override
+  String get chatBlockShowLess => 'Показать меньше';
+
+  @override
+  String get triggerEvent => 'Событие-триггер';
+
+  @override
+  String get webhookUrl => 'URL вебхука';
+
+  @override
+  String get appHomeUrl => 'URL главной страницы приложения';
+
+  @override
+  String get authUrl => 'URL авторизации';
+
+  @override
+  String get setupCompletedUrl => 'URL завершения настройки';
+
+  @override
+  String get chatToolsManifestUrl => 'URL манифеста инструментов чата';
+
+  @override
+  String get invalidWebhookUrlError => 'Введите действительный URL вебхука';
+
+  @override
+  String get githubRepositoryUrlRequired => 'Требуется URL репозитория GitHub';
+
+  @override
+  String get removeScreenshot => 'Удалить скриншот';
+
+  @override
+  String get addScreenshot => 'Добавить скриншот';
+
+  @override
+  String get aiGenRegenerateIcon => 'Сгенерировать значок заново';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Приложений: $count',
+      one: '1 приложение',
+    );
+    return '$_temp0';
+  }
 }

@@ -3406,5 +3406,19 @@
     "refreshManifest": "Manifest frissítése",
     "versionLabel": "{version} verzió",
     "appUsersCount": "{count}+ felhasználó",
-    "discovery": "Felfedezés"
+    "discovery": "Felfedezés",
+    "chatBlockShowMore": "Több megjelenítése",
+    "chatBlockShowLess": "Kevesebb megjelenítése",
+    "triggerEvent": "Kiváltó esemény",
+    "webhookUrl": "Webhook URL",
+    "appHomeUrl": "Alkalmazás kezdőlapjának URL-je",
+    "authUrl": "Hitelesítési URL",
+    "setupCompletedUrl": "Beállítás befejezése URL",
+    "chatToolsManifestUrl": "Csevegőeszközök manifesztjének URL-je",
+    "invalidWebhookUrlError": "Adj meg egy érvényes webhook URL-t",
+    "githubRepositoryUrlRequired": "A GitHub-tároló URL-je kötelező",
+    "removeScreenshot": "Képernyőkép eltávolítása",
+    "addScreenshot": "Képernyőkép hozzáadása",
+    "aiGenRegenerateIcon": "Ikon újragenerálása",
+    "categoryAppCount": "{count, plural, =1{1 alkalmazás} other{{count} alkalmazás}}"
 }

@@ -10882,5 +10882,19 @@
     "refreshManifest": "மேனிஃபெஸ்டைப் புதுப்பி",
     "versionLabel": "பதிப்பு {version}",
     "appUsersCount": "{count}+ பயனர்கள்",
-    "discovery": "கண்டுபிடிப்பு"
+    "discovery": "கண்டுபிடிப்பு",
+    "chatBlockShowMore": "மேலும் காட்டு",
+    "chatBlockShowLess": "குறைவாகக் காட்டு",
+    "triggerEvent": "தூண்டல் நிகழ்வு",
+    "webhookUrl": "Webhook URL",
+    "appHomeUrl": "ஆப் முகப்பு URL",
+    "authUrl": "அங்கீகார URL",
+    "setupCompletedUrl": "அமைப்பு நிறைவு URL",
+    "chatToolsManifestUrl": "அரட்டை கருவிகள் மேனிஃபெஸ்ட் URL",
+    "invalidWebhookUrlError": "சரியான Webhook URL ஐ உள்ளிடவும்",
+    "githubRepositoryUrlRequired": "GitHub களஞ்சிய URL தேவை",
+    "removeScreenshot": "திரைப்பிடிப்பை அகற்று",
+    "addScreenshot": "திரைப்பிடிப்பைச் சேர்",
+    "aiGenRegenerateIcon": "ஐகானை மீண்டும் உருவாக்கு",
+    "categoryAppCount": "{count, plural, =1{1 ஆப்} other{{count} ஆப்கள்}}"
 }

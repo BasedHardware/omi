@@ -3310,5 +3310,19 @@
     "refreshManifest": "Actualitza el manifest",
     "versionLabel": "Versió {version}",
     "appUsersCount": "{count}+ usuaris",
-    "discovery": "Descobriment"
+    "discovery": "Descobriment",
+    "chatBlockShowMore": "Mostra'n més",
+    "chatBlockShowLess": "Mostra'n menys",
+    "triggerEvent": "Esdeveniment desencadenant",
+    "webhookUrl": "URL del webhook",
+    "appHomeUrl": "URL de la pàgina d'inici de l'app",
+    "authUrl": "URL d'autenticació",
+    "setupCompletedUrl": "URL de configuració completada",
+    "chatToolsManifestUrl": "URL del manifest d'eines de xat",
+    "invalidWebhookUrlError": "Introdueix una URL de webhook vàlida",
+    "githubRepositoryUrlRequired": "Cal la URL del repositori de GitHub",
+    "removeScreenshot": "Elimina la captura de pantalla",
+    "addScreenshot": "Afegeix una captura de pantalla",
+    "aiGenRegenerateIcon": "Torna a generar la icona",
+    "categoryAppCount": "{count, plural, =1{1 aplicació} other{{count} aplicacions}}"
 }

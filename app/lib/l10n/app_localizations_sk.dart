@@ -10313,4 +10313,54 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get discovery => 'Objav';
+
+  @override
+  String get chatBlockShowMore => 'Zobraziť viac';
+
+  @override
+  String get chatBlockShowLess => 'Zobraziť menej';
+
+  @override
+  String get triggerEvent => 'Spúšťacia udalosť';
+
+  @override
+  String get webhookUrl => 'URL webhooku';
+
+  @override
+  String get appHomeUrl => 'URL domovskej stránky aplikácie';
+
+  @override
+  String get authUrl => 'URL overenia';
+
+  @override
+  String get setupCompletedUrl => 'URL dokončenia nastavenia';
+
+  @override
+  String get chatToolsManifestUrl => 'URL manifestu nástrojov chatu';
+
+  @override
+  String get invalidWebhookUrlError => 'Zadajte platnú URL webhooku';
+
+  @override
+  String get githubRepositoryUrlRequired => 'URL repozitára GitHub je povinná';
+
+  @override
+  String get removeScreenshot => 'Odstrániť snímku obrazovky';
+
+  @override
+  String get addScreenshot => 'Pridať snímku obrazovky';
+
+  @override
+  String get aiGenRegenerateIcon => 'Znova vygenerovať ikonu';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Aplikácie: $count',
+      one: '1 aplikácia',
+    );
+    return '$_temp0';
+  }
 }

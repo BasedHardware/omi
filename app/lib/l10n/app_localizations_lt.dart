@@ -10341,4 +10341,54 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get discovery => 'Atradimas';
+
+  @override
+  String get chatBlockShowMore => 'Rodyti daugiau';
+
+  @override
+  String get chatBlockShowLess => 'Rodyti mažiau';
+
+  @override
+  String get triggerEvent => 'Paleidimo įvykis';
+
+  @override
+  String get webhookUrl => 'Webhook URL';
+
+  @override
+  String get appHomeUrl => 'Programėlės pagrindinio puslapio URL';
+
+  @override
+  String get authUrl => 'Autentifikavimo URL';
+
+  @override
+  String get setupCompletedUrl => 'Sąrankos užbaigimo URL';
+
+  @override
+  String get chatToolsManifestUrl => 'Pokalbių įrankių manifesto URL';
+
+  @override
+  String get invalidWebhookUrlError => 'Įveskite galiojantį webhook URL';
+
+  @override
+  String get githubRepositoryUrlRequired => 'GitHub saugyklos URL yra privalomas';
+
+  @override
+  String get removeScreenshot => 'Pašalinti ekrano kopiją';
+
+  @override
+  String get addScreenshot => 'Pridėti ekrano kopiją';
+
+  @override
+  String get aiGenRegenerateIcon => 'Sugeneruoti piktogramą iš naujo';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Programėlės: $count',
+      one: '1 programėlė',
+    );
+    return '$_temp0';
+  }
 }

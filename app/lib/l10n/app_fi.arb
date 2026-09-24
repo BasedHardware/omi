@@ -3310,5 +3310,19 @@
     "refreshManifest": "Päivitä manifesti",
     "versionLabel": "Versio {version}",
     "appUsersCount": "{count}+ käyttäjää",
-    "discovery": "Löydös"
+    "discovery": "Löydös",
+    "chatBlockShowMore": "Näytä lisää",
+    "chatBlockShowLess": "Näytä vähemmän",
+    "triggerEvent": "Laukaisutapahtuma",
+    "webhookUrl": "Webhookin URL",
+    "appHomeUrl": "Sovelluksen kotisivun URL",
+    "authUrl": "Todennuksen URL",
+    "setupCompletedUrl": "Asennuksen valmistumisen URL",
+    "chatToolsManifestUrl": "Keskustelutyökalujen manifestin URL",
+    "invalidWebhookUrlError": "Anna kelvollinen webhookin URL",
+    "githubRepositoryUrlRequired": "GitHub-tietovaraston URL vaaditaan",
+    "removeScreenshot": "Poista kuvakaappaus",
+    "addScreenshot": "Lisää kuvakaappaus",
+    "aiGenRegenerateIcon": "Luo kuvake uudelleen",
+    "categoryAppCount": "{count, plural, =1{1 sovellus} other{{count} sovellusta}}"
 }

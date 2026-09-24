@@ -10394,4 +10394,54 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get discovery => 'Ανακάλυψη';
+
+  @override
+  String get chatBlockShowMore => 'Εμφάνιση περισσότερων';
+
+  @override
+  String get chatBlockShowLess => 'Εμφάνιση λιγότερων';
+
+  @override
+  String get triggerEvent => 'Συμβάν ενεργοποίησης';
+
+  @override
+  String get webhookUrl => 'URL webhook';
+
+  @override
+  String get appHomeUrl => 'URL αρχικής σελίδας εφαρμογής';
+
+  @override
+  String get authUrl => 'URL ελέγχου ταυτότητας';
+
+  @override
+  String get setupCompletedUrl => 'URL ολοκλήρωσης ρύθμισης';
+
+  @override
+  String get chatToolsManifestUrl => 'URL manifest εργαλείων συνομιλίας';
+
+  @override
+  String get invalidWebhookUrlError => 'Εισαγάγετε ένα έγκυρο URL webhook';
+
+  @override
+  String get githubRepositoryUrlRequired => 'Το URL αποθετηρίου GitHub είναι υποχρεωτικό';
+
+  @override
+  String get removeScreenshot => 'Αφαίρεση στιγμιότυπου οθόνης';
+
+  @override
+  String get addScreenshot => 'Προσθήκη στιγμιότυπου οθόνης';
+
+  @override
+  String get aiGenRegenerateIcon => 'Επαναδημιουργία εικονιδίου';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count εφαρμογές',
+      one: '1 εφαρμογή',
+    );
+    return '$_temp0';
+  }
 }

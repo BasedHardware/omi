@@ -10353,4 +10353,54 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get discovery => 'Адкрыццё';
+
+  @override
+  String get chatBlockShowMore => 'Паказаць больш';
+
+  @override
+  String get chatBlockShowLess => 'Паказаць менш';
+
+  @override
+  String get triggerEvent => 'Падзея запуску';
+
+  @override
+  String get webhookUrl => 'URL вэбхука';
+
+  @override
+  String get appHomeUrl => 'URL галоўнай старонкі праграмы';
+
+  @override
+  String get authUrl => 'URL аўтэнтыфікацыі';
+
+  @override
+  String get setupCompletedUrl => 'URL завяршэння наладжвання';
+
+  @override
+  String get chatToolsManifestUrl => 'URL маніфеста інструментаў чата';
+
+  @override
+  String get invalidWebhookUrlError => 'Увядзіце сапраўдны URL вэбхука';
+
+  @override
+  String get githubRepositoryUrlRequired => 'Патрэбны URL рэпазіторыя GitHub';
+
+  @override
+  String get removeScreenshot => 'Выдаліць здымак экрана';
+
+  @override
+  String get addScreenshot => 'Дадаць здымак экрана';
+
+  @override
+  String get aiGenRegenerateIcon => 'Згенераваць значок нанова';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Дадаткаў: $count',
+      one: '1 дадатак',
+    );
+    return '$_temp0';
+  }
 }

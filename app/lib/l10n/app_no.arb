@@ -3310,5 +3310,19 @@
     "refreshManifest": "Oppdater manifest",
     "versionLabel": "Versjon {version}",
     "appUsersCount": "{count}+ brukere",
-    "discovery": "Oppdagelse"
+    "discovery": "Oppdagelse",
+    "chatBlockShowMore": "Vis mer",
+    "chatBlockShowLess": "Vis mindre",
+    "triggerEvent": "Utløserhendelse",
+    "webhookUrl": "Webhook-URL",
+    "appHomeUrl": "Appens startside-URL",
+    "authUrl": "Autentiserings-URL",
+    "setupCompletedUrl": "URL for fullført oppsett",
+    "chatToolsManifestUrl": "URL til manifest for chatteverktøy",
+    "invalidWebhookUrlError": "Skriv inn en gyldig webhook-URL",
+    "githubRepositoryUrlRequired": "GitHub-repository-URL er påkrevd",
+    "removeScreenshot": "Fjern skjermbilde",
+    "addScreenshot": "Legg til skjermbilde",
+    "aiGenRegenerateIcon": "Generer ikonet på nytt",
+    "categoryAppCount": "{count, plural, =1{1 app} other{{count} apper}}"
 }

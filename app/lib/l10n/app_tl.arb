@@ -10882,5 +10882,19 @@
     "refreshManifest": "I-refresh ang manifest",
     "versionLabel": "Bersyon {version}",
     "appUsersCount": "{count}+ user",
-    "discovery": "Natuklasan"
+    "discovery": "Natuklasan",
+    "chatBlockShowMore": "Magpakita Pa",
+    "chatBlockShowLess": "Magpakita ng Mas Kaunti",
+    "triggerEvent": "Trigger Event",
+    "webhookUrl": "Webhook URL",
+    "appHomeUrl": "URL ng Home ng App",
+    "authUrl": "Auth URL",
+    "setupCompletedUrl": "URL ng Natapos na Setup",
+    "chatToolsManifestUrl": "URL ng Manifest ng Chat Tools",
+    "invalidWebhookUrlError": "Maglagay ng valid na webhook URL",
+    "githubRepositoryUrlRequired": "Kailangan ang URL ng GitHub repository",
+    "removeScreenshot": "Alisin ang screenshot",
+    "addScreenshot": "Magdagdag ng screenshot",
+    "aiGenRegenerateIcon": "Gumawa muli ng icon",
+    "categoryAppCount": "{count, plural, =1{1 app} other{{count} na app}}"
 }

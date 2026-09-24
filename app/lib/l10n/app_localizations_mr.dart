@@ -10332,4 +10332,54 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get discovery => 'शोध';
+
+  @override
+  String get chatBlockShowMore => 'अधिक दाखवा';
+
+  @override
+  String get chatBlockShowLess => 'कमी दाखवा';
+
+  @override
+  String get triggerEvent => 'ट्रिगर इव्हेंट';
+
+  @override
+  String get webhookUrl => 'वेबहुक URL';
+
+  @override
+  String get appHomeUrl => 'ॲप होम URL';
+
+  @override
+  String get authUrl => 'प्रमाणीकरण URL';
+
+  @override
+  String get setupCompletedUrl => 'सेटअप पूर्ण URL';
+
+  @override
+  String get chatToolsManifestUrl => 'चॅट टूल्स मॅनिफेस्ट URL';
+
+  @override
+  String get invalidWebhookUrlError => 'कृपया वैध वेबहुक URL प्रविष्ट करा';
+
+  @override
+  String get githubRepositoryUrlRequired => 'GitHub रिपॉझिटरी URL आवश्यक आहे';
+
+  @override
+  String get removeScreenshot => 'स्क्रीनशॉट काढा';
+
+  @override
+  String get addScreenshot => 'स्क्रीनशॉट जोडा';
+
+  @override
+  String get aiGenRegenerateIcon => 'आयकॉन पुन्हा तयार करा';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ॲप्स',
+      one: '1 ॲप',
+    );
+    return '$_temp0';
+  }
 }

@@ -12216,5 +12216,66 @@
     "discovery": "Discovery",
     "@discovery": {
         "description": "Eyebrow label of a chat card that shows something Omi discovered"
+    },
+    "chatBlockShowMore": "Show More",
+    "@chatBlockShowMore": {
+        "description": "Button on a chat discovery card that expands it to its full text"
+    },
+    "chatBlockShowLess": "Show Less",
+    "@chatBlockShowLess": {
+        "description": "Button on an expanded chat discovery card that collapses it back to its summary"
+    },
+    "triggerEvent": "Trigger Event",
+    "@triggerEvent": {
+        "description": "Placeholder of the trigger-event picker field when submitting an app with external integration"
+    },
+    "webhookUrl": "Webhook URL",
+    "@webhookUrl": {
+        "description": "Label of the webhook URL field when submitting an app with external integration"
+    },
+    "appHomeUrl": "App Home URL",
+    "@appHomeUrl": {
+        "description": "Label of the app home URL field when submitting an app with external integration"
+    },
+    "authUrl": "Auth URL",
+    "@authUrl": {
+        "description": "Label of the authentication URL field when submitting an app with external integration"
+    },
+    "setupCompletedUrl": "Setup Completed URL",
+    "@setupCompletedUrl": {
+        "description": "Label of the setup-completed URL field when submitting an app with external integration"
+    },
+    "chatToolsManifestUrl": "Chat Tools Manifest URL",
+    "@chatToolsManifestUrl": {
+        "description": "Label of the chat tools manifest URL field when submitting an app with external integration"
+    },
+    "invalidWebhookUrlError": "Please enter a valid webhook URL",
+    "@invalidWebhookUrlError": {
+        "description": "Validation error under the webhook URL field when submitting an app"
+    },
+    "githubRepositoryUrlRequired": "GitHub repository URL is required",
+    "@githubRepositoryUrlRequired": {
+        "description": "Validation error when the GitHub repository field is empty while submitting an app"
+    },
+    "removeScreenshot": "Remove screenshot",
+    "@removeScreenshot": {
+        "description": "Accessibility label and tooltip of the X on an app screenshot in the submit/update app form"
+    },
+    "addScreenshot": "Add screenshot",
+    "@addScreenshot": {
+        "description": "Accessibility label and tooltip of the control that adds an app screenshot in the submit/update app form"
+    },
+    "aiGenRegenerateIcon": "Regenerate icon",
+    "@aiGenRegenerateIcon": {
+        "description": "Tooltip and accessibility label of the icon-only button that regenerates the app icon on the AI app generator preview card"
+    },
+    "categoryAppCount": "{count, plural, =1{1 app} other{{count} apps}}",
+    "@categoryAppCount": {
+        "description": "Number of apps listed on a category page in the app store, above the list",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
     }
 }

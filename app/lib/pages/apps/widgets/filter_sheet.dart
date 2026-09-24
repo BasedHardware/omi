@@ -5,100 +5,72 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/providers/app_provider.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/app_localizations_helper.dart';
 
+/// The app store's filter sheet: authorship, rating, category, sort and capability filters, with
+/// Reset and Apply at the bottom.
+///
+/// Present it with [FilterBottomSheet.show]; the sheet shell owns the handle, title and close X.
 class FilterBottomSheet extends StatelessWidget {
   const FilterBottomSheet({super.key});
 
+  static Future<void> show(BuildContext context) {
+    return showOmiSheet<void>(
+      context: context,
+      title: AppLocalizations.of(context).filters,
+      padding: EdgeInsets.zero,
+      builder: (context) => const FilterBottomSheet(),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.85,
-      decoration: const BoxDecoration(
-        color: Color(0xFF1C1C1E),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+    return SizedBox(
+      height: MediaQuery.sizeOf(context).height * 0.75,
       child: Consumer<AppProvider>(
         builder: (context, provider, child) {
           return Column(
             children: [
-              // Header
-              Container(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 0),
-                child: Row(
-                  children: [
-                    Text(
-                      AppLocalizations.of(context).filters,
-                      style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w600, color: Colors.white),
-                    ),
-                    if (provider.filters.isNotEmpty) ...[
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.22),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          '${provider.filters.length}',
-                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.white),
-                        ),
-                      ),
-                    ],
-                    const Spacer(),
-                    IconButton(
-                      key: const ValueKey('filter_sheet_close_button'),
-                      onPressed: () => Navigator.of(context).pop(),
-                      icon: const Icon(Icons.close, color: Colors.white, size: 24),
-                    ),
-                  ],
-                ),
-              ),
-
-              // Divider
-              Container(margin: const EdgeInsets.symmetric(vertical: 16), height: 1, color: const Color(0xFF35343B)),
-
               // Content
               Expanded(
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  padding: const EdgeInsets.fromLTRB(OmiSpacing.lg, OmiSpacing.xs, OmiSpacing.lg, OmiSpacing.xl),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // Apps
                       _buildSectionTitle(AppLocalizations.of(context).apps),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: OmiSpacing.xs),
                       _buildAuthorshipChip(context, provider),
 
-                      const SizedBox(height: 32),
+                      const SizedBox(height: OmiSpacing.xl),
 
                       // Rating
                       _buildSectionTitle(AppLocalizations.of(context).rating),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: OmiSpacing.sm),
                       _buildRatingSelector(provider),
 
-                      const SizedBox(height: 32),
+                      const SizedBox(height: OmiSpacing.xl),
 
                       // Categories
                       _buildSectionTitle(AppLocalizations.of(context).categories),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: OmiSpacing.xs),
                       _buildCategoryChips(context, provider),
 
-                      const SizedBox(height: 32),
+                      const SizedBox(height: OmiSpacing.xl),
 
                       // Sort Options
                       _buildSectionTitle(AppLocalizations.of(context).sortBy),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: OmiSpacing.sm),
                       _buildSortOptions(context, provider),
 
-                      const SizedBox(height: 32),
+                      const SizedBox(height: OmiSpacing.xl),
 
                       // Capabilities
                       _buildSectionTitle(AppLocalizations.of(context).capabilities),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: OmiSpacing.xs),
                       _buildCapabilities(context, provider),
-
-                      const SizedBox(height: 100), // Extra space for bottom buttons
                     ],
                   ),
                 ),
@@ -106,52 +78,35 @@ class FilterBottomSheet extends StatelessWidget {
 
               // Bottom buttons
               Container(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 40),
+                padding: const EdgeInsets.fromLTRB(OmiSpacing.lg, OmiSpacing.md, OmiSpacing.lg, OmiSpacing.xs),
                 decoration: const BoxDecoration(
-                  color: Color(0xFF1C1C1E),
-                  border: Border(top: BorderSide(color: Color(0xFF35343B), width: 1)),
+                  border: Border(top: BorderSide(color: OmiColors.border, width: 1)),
                 ),
                 child: Row(
                   children: [
                     Expanded(
-                      child: TextButton(
+                      child: OmiButton.secondary(
                         key: const ValueKey('filter_sheet_reset_button'),
+                        label: AppLocalizations.of(context).resetFilters,
+                        expand: true,
                         onPressed: () {
                           provider.clearFilters();
                           PlatformManager.instance.analytics.appsClearFilters();
                           Navigator.of(context).pop();
                           Future.microtask(() => provider.applyFilters());
                         },
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            side: BorderSide(color: Colors.grey.shade600),
-                          ),
-                        ),
-                        child: Text(
-                          AppLocalizations.of(context).resetFilters,
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Colors.white),
-                        ),
                       ),
                     ),
-                    const SizedBox(width: 16),
+                    const SizedBox(width: OmiSpacing.md),
                     Expanded(
-                      child: ElevatedButton(
+                      child: OmiButton(
                         key: const ValueKey('filter_sheet_apply_button'),
+                        label: AppLocalizations.of(context).applyFilters,
+                        expand: true,
                         onPressed: () {
                           Navigator.of(context).pop();
                           Future.microtask(() => provider.applyFilters());
                         },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                        child: Text(
-                          AppLocalizations.of(context).applyFilters,
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.black),
-                        ),
                       ),
                     ),
                   ],

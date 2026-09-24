@@ -10335,4 +10335,54 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get discovery => 'Keşif';
+
+  @override
+  String get chatBlockShowMore => 'Daha Fazla Göster';
+
+  @override
+  String get chatBlockShowLess => 'Daha Az Göster';
+
+  @override
+  String get triggerEvent => 'Tetikleyici Olay';
+
+  @override
+  String get webhookUrl => 'Webhook URL\'si';
+
+  @override
+  String get appHomeUrl => 'Uygulama Ana Sayfa URL\'si';
+
+  @override
+  String get authUrl => 'Kimlik Doğrulama URL\'si';
+
+  @override
+  String get setupCompletedUrl => 'Kurulum Tamamlandı URL\'si';
+
+  @override
+  String get chatToolsManifestUrl => 'Sohbet Araçları Bildirim URL\'si';
+
+  @override
+  String get invalidWebhookUrlError => 'Lütfen geçerli bir webhook URL\'si girin';
+
+  @override
+  String get githubRepositoryUrlRequired => 'GitHub depo URL\'si gerekli';
+
+  @override
+  String get removeScreenshot => 'Ekran görüntüsünü kaldır';
+
+  @override
+  String get addScreenshot => 'Ekran görüntüsü ekle';
+
+  @override
+  String get aiGenRegenerateIcon => 'Simgeyi yeniden oluştur';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count uygulama',
+      one: '1 uygulama',
+    );
+    return '$_temp0';
+  }
 }

@@ -10882,5 +10882,19 @@
     "refreshManifest": "مینی فیسٹ ریفریش کریں",
     "versionLabel": "ورژن {version}",
     "appUsersCount": "{count}+ صارفین",
-    "discovery": "دریافت"
+    "discovery": "دریافت",
+    "chatBlockShowMore": "مزید دکھائیں",
+    "chatBlockShowLess": "کم دکھائیں",
+    "triggerEvent": "ٹرگر ایونٹ",
+    "webhookUrl": "ویب ہک URL",
+    "appHomeUrl": "ایپ ہوم URL",
+    "authUrl": "تصدیقی URL",
+    "setupCompletedUrl": "سیٹ اپ مکمل URL",
+    "chatToolsManifestUrl": "چیٹ ٹولز مینی فیسٹ URL",
+    "invalidWebhookUrlError": "براہ کرم درست ویب ہک URL درج کریں",
+    "githubRepositoryUrlRequired": "GitHub ریپوزٹری URL درکار ہے",
+    "removeScreenshot": "اسکرین شاٹ ہٹائیں",
+    "addScreenshot": "اسکرین شاٹ شامل کریں",
+    "aiGenRegenerateIcon": "آئیکن دوبارہ بنائیں",
+    "categoryAppCount": "{count, plural, =1{1 ایپ} other{{count} ایپس}}"
 }

@@ -3310,5 +3310,19 @@
     "refreshManifest": "मैनिफ़ेस्ट रीफ़्रेश करें",
     "versionLabel": "संस्करण {version}",
     "appUsersCount": "{count}+ उपयोगकर्ता",
-    "discovery": "खोज"
+    "discovery": "खोज",
+    "chatBlockShowMore": "और दिखाएं",
+    "chatBlockShowLess": "कम दिखाएं",
+    "triggerEvent": "ट्रिगर इवेंट",
+    "webhookUrl": "वेबहुक URL",
+    "appHomeUrl": "ऐप होम URL",
+    "authUrl": "प्रमाणीकरण URL",
+    "setupCompletedUrl": "सेटअप पूर्ण URL",
+    "chatToolsManifestUrl": "चैट टूल्स मैनिफ़ेस्ट URL",
+    "invalidWebhookUrlError": "कृपया एक मान्य वेबहुक URL दर्ज करें",
+    "githubRepositoryUrlRequired": "GitHub रिपॉज़िटरी URL आवश्यक है",
+    "removeScreenshot": "स्क्रीनशॉट हटाएं",
+    "addScreenshot": "स्क्रीनशॉट जोड़ें",
+    "aiGenRegenerateIcon": "आइकन फिर से बनाएं",
+    "categoryAppCount": "{count, plural, =1{1 ऐप} other{{count} ऐप}}"
 }

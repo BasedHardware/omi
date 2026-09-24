@@ -10360,4 +10360,54 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get discovery => 'Открытие';
+
+  @override
+  String get chatBlockShowMore => 'Покажи още';
+
+  @override
+  String get chatBlockShowLess => 'Покажи по-малко';
+
+  @override
+  String get triggerEvent => 'Задействащо събитие';
+
+  @override
+  String get webhookUrl => 'URL адрес на webhook';
+
+  @override
+  String get appHomeUrl => 'URL на началната страница на приложението';
+
+  @override
+  String get authUrl => 'URL за удостоверяване';
+
+  @override
+  String get setupCompletedUrl => 'URL за завършена настройка';
+
+  @override
+  String get chatToolsManifestUrl => 'URL на манифеста с инструменти за чат';
+
+  @override
+  String get invalidWebhookUrlError => 'Моля, въведете валиден URL адрес на webhook';
+
+  @override
+  String get githubRepositoryUrlRequired => 'URL адресът на хранилището в GitHub е задължителен';
+
+  @override
+  String get removeScreenshot => 'Премахване на екранната снимка';
+
+  @override
+  String get addScreenshot => 'Добавяне на екранна снимка';
+
+  @override
+  String get aiGenRegenerateIcon => 'Генериране на иконата отново';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count приложения',
+      one: '1 приложение',
+    );
+    return '$_temp0';
+  }
 }

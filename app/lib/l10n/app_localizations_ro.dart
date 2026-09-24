@@ -10371,4 +10371,54 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get discovery => 'Descoperire';
+
+  @override
+  String get chatBlockShowMore => 'Afișează mai mult';
+
+  @override
+  String get chatBlockShowLess => 'Afișează mai puțin';
+
+  @override
+  String get triggerEvent => 'Eveniment declanșator';
+
+  @override
+  String get webhookUrl => 'URL webhook';
+
+  @override
+  String get appHomeUrl => 'URL-ul paginii principale a aplicației';
+
+  @override
+  String get authUrl => 'URL de autentificare';
+
+  @override
+  String get setupCompletedUrl => 'URL de configurare finalizată';
+
+  @override
+  String get chatToolsManifestUrl => 'URL-ul manifestului instrumentelor de chat';
+
+  @override
+  String get invalidWebhookUrlError => 'Introdu un URL webhook valid';
+
+  @override
+  String get githubRepositoryUrlRequired => 'URL-ul depozitului GitHub este obligatoriu';
+
+  @override
+  String get removeScreenshot => 'Elimină captura de ecran';
+
+  @override
+  String get addScreenshot => 'Adaugă o captură de ecran';
+
+  @override
+  String get aiGenRegenerateIcon => 'Regenerează pictograma';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count aplicații',
+      one: '1 aplicație',
+    );
+    return '$_temp0';
+  }
 }

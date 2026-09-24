@@ -10882,5 +10882,19 @@
     "refreshManifest": "Абнавіць маніфест",
     "versionLabel": "Версія {version}",
     "appUsersCount": "{count}+ карыстальнікаў",
-    "discovery": "Адкрыццё"
+    "discovery": "Адкрыццё",
+    "chatBlockShowMore": "Паказаць больш",
+    "chatBlockShowLess": "Паказаць менш",
+    "triggerEvent": "Падзея запуску",
+    "webhookUrl": "URL вэбхука",
+    "appHomeUrl": "URL галоўнай старонкі праграмы",
+    "authUrl": "URL аўтэнтыфікацыі",
+    "setupCompletedUrl": "URL завяршэння наладжвання",
+    "chatToolsManifestUrl": "URL маніфеста інструментаў чата",
+    "invalidWebhookUrlError": "Увядзіце сапраўдны URL вэбхука",
+    "githubRepositoryUrlRequired": "Патрэбны URL рэпазіторыя GitHub",
+    "removeScreenshot": "Выдаліць здымак экрана",
+    "addScreenshot": "Дадаць здымак экрана",
+    "aiGenRegenerateIcon": "Згенераваць значок нанова",
+    "categoryAppCount": "{count, plural, =1{1 дадатак} other{Дадаткаў: {count}}}"
 }

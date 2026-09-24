@@ -10325,4 +10325,54 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get discovery => 'Löydös';
+
+  @override
+  String get chatBlockShowMore => 'Näytä lisää';
+
+  @override
+  String get chatBlockShowLess => 'Näytä vähemmän';
+
+  @override
+  String get triggerEvent => 'Laukaisutapahtuma';
+
+  @override
+  String get webhookUrl => 'Webhookin URL';
+
+  @override
+  String get appHomeUrl => 'Sovelluksen kotisivun URL';
+
+  @override
+  String get authUrl => 'Todennuksen URL';
+
+  @override
+  String get setupCompletedUrl => 'Asennuksen valmistumisen URL';
+
+  @override
+  String get chatToolsManifestUrl => 'Keskustelutyökalujen manifestin URL';
+
+  @override
+  String get invalidWebhookUrlError => 'Anna kelvollinen webhookin URL';
+
+  @override
+  String get githubRepositoryUrlRequired => 'GitHub-tietovaraston URL vaaditaan';
+
+  @override
+  String get removeScreenshot => 'Poista kuvakaappaus';
+
+  @override
+  String get addScreenshot => 'Lisää kuvakaappaus';
+
+  @override
+  String get aiGenRegenerateIcon => 'Luo kuvake uudelleen';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count sovellusta',
+      one: '1 sovellus',
+    );
+    return '$_temp0';
+  }
 }

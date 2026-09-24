@@ -10323,4 +10323,54 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get discovery => 'Oppdagelse';
+
+  @override
+  String get chatBlockShowMore => 'Vis mer';
+
+  @override
+  String get chatBlockShowLess => 'Vis mindre';
+
+  @override
+  String get triggerEvent => 'Utløserhendelse';
+
+  @override
+  String get webhookUrl => 'Webhook-URL';
+
+  @override
+  String get appHomeUrl => 'Appens startside-URL';
+
+  @override
+  String get authUrl => 'Autentiserings-URL';
+
+  @override
+  String get setupCompletedUrl => 'URL for fullført oppsett';
+
+  @override
+  String get chatToolsManifestUrl => 'URL til manifest for chatteverktøy';
+
+  @override
+  String get invalidWebhookUrlError => 'Skriv inn en gyldig webhook-URL';
+
+  @override
+  String get githubRepositoryUrlRequired => 'GitHub-repository-URL er påkrevd';
+
+  @override
+  String get removeScreenshot => 'Fjern skjermbilde';
+
+  @override
+  String get addScreenshot => 'Legg til skjermbilde';
+
+  @override
+  String get aiGenRegenerateIcon => 'Generer ikonet på nytt';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count apper',
+      one: '1 app',
+    );
+    return '$_temp0';
+  }
 }

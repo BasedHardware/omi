@@ -10154,4 +10154,54 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get discovery => '발견';
+
+  @override
+  String get chatBlockShowMore => '더 보기';
+
+  @override
+  String get chatBlockShowLess => '간략히 보기';
+
+  @override
+  String get triggerEvent => '트리거 이벤트';
+
+  @override
+  String get webhookUrl => '웹훅 URL';
+
+  @override
+  String get appHomeUrl => '앱 홈 URL';
+
+  @override
+  String get authUrl => '인증 URL';
+
+  @override
+  String get setupCompletedUrl => '설정 완료 URL';
+
+  @override
+  String get chatToolsManifestUrl => '채팅 도구 매니페스트 URL';
+
+  @override
+  String get invalidWebhookUrlError => '올바른 웹훅 URL을 입력하세요';
+
+  @override
+  String get githubRepositoryUrlRequired => 'GitHub 저장소 URL이 필요합니다';
+
+  @override
+  String get removeScreenshot => '스크린샷 제거';
+
+  @override
+  String get addScreenshot => '스크린샷 추가';
+
+  @override
+  String get aiGenRegenerateIcon => '아이콘 다시 생성';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '앱 $count개',
+      one: '앱 1개',
+    );
+    return '$_temp0';
+  }
 }

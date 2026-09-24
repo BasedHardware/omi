@@ -10882,5 +10882,19 @@
     "refreshManifest": "به‌روزرسانی مانیفست",
     "versionLabel": "نسخه {version}",
     "appUsersCount": "{count}+ کاربر",
-    "discovery": "کشف"
+    "discovery": "کشف",
+    "chatBlockShowMore": "نمایش بیشتر",
+    "chatBlockShowLess": "نمایش کمتر",
+    "triggerEvent": "رویداد راه‌انداز",
+    "webhookUrl": "نشانی وب‌هوک",
+    "appHomeUrl": "نشانی صفحهٔ اصلی برنامه",
+    "authUrl": "نشانی احراز هویت",
+    "setupCompletedUrl": "نشانی تکمیل راه‌اندازی",
+    "chatToolsManifestUrl": "نشانی مانیفست ابزارهای گفتگو",
+    "invalidWebhookUrlError": "لطفاً یک نشانی وب‌هوک معتبر وارد کنید",
+    "githubRepositoryUrlRequired": "نشانی مخزن GitHub الزامی است",
+    "removeScreenshot": "حذف نماگرفت",
+    "addScreenshot": "افزودن نماگرفت",
+    "aiGenRegenerateIcon": "ساخت دوباره نماد",
+    "categoryAppCount": "{count, plural, =1{۱ اپلیکیشن} other{{count} اپلیکیشن}}"
 }

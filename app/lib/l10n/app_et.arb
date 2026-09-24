@@ -3310,5 +3310,19 @@
     "refreshManifest": "Värskenda manifesti",
     "versionLabel": "Versioon {version}",
     "appUsersCount": "{count}+ kasutajat",
-    "discovery": "Avastus"
+    "discovery": "Avastus",
+    "chatBlockShowMore": "Näita rohkem",
+    "chatBlockShowLess": "Näita vähem",
+    "triggerEvent": "Käivitussündmus",
+    "webhookUrl": "Webhooki URL",
+    "appHomeUrl": "Rakenduse avalehe URL",
+    "authUrl": "Autentimise URL",
+    "setupCompletedUrl": "Seadistuse lõpetamise URL",
+    "chatToolsManifestUrl": "Vestlustööriistade manifesti URL",
+    "invalidWebhookUrlError": "Sisesta kehtiv webhooki URL",
+    "githubRepositoryUrlRequired": "GitHubi hoidla URL on kohustuslik",
+    "removeScreenshot": "Eemalda ekraanipilt",
+    "addScreenshot": "Lisa ekraanipilt",
+    "aiGenRegenerateIcon": "Loo ikoon uuesti",
+    "categoryAppCount": "{count, plural, =1{1 rakendus} other{{count} rakendust}}"
 }

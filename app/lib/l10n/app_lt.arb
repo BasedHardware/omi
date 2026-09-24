@@ -3310,5 +3310,19 @@
     "refreshManifest": "Atnaujinti manifestą",
     "versionLabel": "Versija {version}",
     "appUsersCount": "{count}+ naudotojų",
-    "discovery": "Atradimas"
+    "discovery": "Atradimas",
+    "chatBlockShowMore": "Rodyti daugiau",
+    "chatBlockShowLess": "Rodyti mažiau",
+    "triggerEvent": "Paleidimo įvykis",
+    "webhookUrl": "Webhook URL",
+    "appHomeUrl": "Programėlės pagrindinio puslapio URL",
+    "authUrl": "Autentifikavimo URL",
+    "setupCompletedUrl": "Sąrankos užbaigimo URL",
+    "chatToolsManifestUrl": "Pokalbių įrankių manifesto URL",
+    "invalidWebhookUrlError": "Įveskite galiojantį webhook URL",
+    "githubRepositoryUrlRequired": "GitHub saugyklos URL yra privalomas",
+    "removeScreenshot": "Pašalinti ekrano kopiją",
+    "addScreenshot": "Pridėti ekrano kopiją",
+    "aiGenRegenerateIcon": "Sugeneruoti piktogramą iš naujo",
+    "categoryAppCount": "{count, plural, =1{1 programėlė} other{Programėlės: {count}}}"
 }

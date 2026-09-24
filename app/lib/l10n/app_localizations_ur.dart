@@ -10334,4 +10334,54 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get discovery => 'دریافت';
+
+  @override
+  String get chatBlockShowMore => 'مزید دکھائیں';
+
+  @override
+  String get chatBlockShowLess => 'کم دکھائیں';
+
+  @override
+  String get triggerEvent => 'ٹرگر ایونٹ';
+
+  @override
+  String get webhookUrl => 'ویب ہک URL';
+
+  @override
+  String get appHomeUrl => 'ایپ ہوم URL';
+
+  @override
+  String get authUrl => 'تصدیقی URL';
+
+  @override
+  String get setupCompletedUrl => 'سیٹ اپ مکمل URL';
+
+  @override
+  String get chatToolsManifestUrl => 'چیٹ ٹولز مینی فیسٹ URL';
+
+  @override
+  String get invalidWebhookUrlError => 'براہ کرم درست ویب ہک URL درج کریں';
+
+  @override
+  String get githubRepositoryUrlRequired => 'GitHub ریپوزٹری URL درکار ہے';
+
+  @override
+  String get removeScreenshot => 'اسکرین شاٹ ہٹائیں';
+
+  @override
+  String get addScreenshot => 'اسکرین شاٹ شامل کریں';
+
+  @override
+  String get aiGenRegenerateIcon => 'آئیکن دوبارہ بنائیں';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ایپس',
+      one: '1 ایپ',
+    );
+    return '$_temp0';
+  }
 }
