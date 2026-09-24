@@ -46,7 +46,6 @@ __all__ = [
     'ExternalIntegrationCreateConversation',
     'MergeConversationsRequest',
     'MergeConversationsResponse',
-    'PluginResult',
     'SearchRequest',
     'SetConversationStarredOperation',
     'SetConversationTitleOperation',
@@ -59,7 +58,6 @@ __all__ = [
     'SharedConversationResponse',
     'SharedEvent',
     'SharedPerson',
-    'SharedPluginResult',
     'SharedStructured',
     'SharedTranscriptSegment',
     'project_shared_conversation',
@@ -171,12 +169,6 @@ class SharedAppResult(BaseModel):
     content: str
 
 
-class SharedPluginResult(BaseModel):
-    model_config = {'extra': 'ignore'}
-
-    plugin_id: Optional[str]
-    content: str
-
 
 class SharedPerson(BaseModel):
     """Speaker-label projection for a shared conversation."""
@@ -205,7 +197,6 @@ class SharedConversationResponse(BaseModel):
     structured: SharedStructured
     transcript_segments: List[SharedTranscriptSegment] = Field(default_factory=list)
     apps_results: List[SharedAppResult] = Field(default_factory=list)
-    plugins_results: List[SharedPluginResult] = Field(default_factory=list)
     people: List[SharedPerson] = Field(default_factory=list)
 
 
@@ -214,11 +205,6 @@ def project_shared_conversation(conversation: 'Conversation', people: List[Perso
     payload['people'] = [{'id': person.id, 'name': person.name} for person in people]
     return SharedConversationResponse.model_validate(payload)
 
-
-# TODO: remove this class when the app is updated to use apps_results
-class PluginResult(BaseModel):
-    plugin_id: Optional[str]
-    content: str
 
 
 class AppResult(BaseModel):
@@ -363,9 +349,6 @@ class Conversation(BaseModel):
     apps_results: List[AppResult] = []
     suggested_summarization_apps: List[str] = []
 
-    # TODO: plugins_results for backward compatibility with the old memories routes and app
-    plugins_results: List[PluginResult] = []
-
     external_data: Optional[Dict] = None
     app_id: Optional[str] = None
     # Cross-surface event membership (#3244). Read-only for every writer except database.capture_groups.
@@ -422,8 +405,6 @@ class Conversation(BaseModel):
             data['transcript_segments'] = normalized_segments
 
         super().__init__(**data)
-        # Update plugins_results based on apps_results
-        self.plugins_results = [PluginResult(plugin_id=app.app_id, content=app.content) for app in self.apps_results]
         self.processing_memory_id = self.processing_conversation_id
 
     def get_transcript(self, include_timestamps: bool, people: List[Person] = None, user_name: str = None) -> str:

@@ -8,7 +8,7 @@ def deserialize_conversation(data: Union[Conversation, Mapping[str, Any]]) -> Co
 
     If already a Conversation instance, returns it unchanged.
     Construction goes through Conversation(**data) so __init__ side-effects
-    (plugins_results sync, processing_memory_id sync) are preserved.
+    (processing_memory_id sync) are preserved.
     """
     if not isinstance(data, Mapping):
         return data

@@ -42,7 +42,7 @@ SCHEMA_GROUPS = {
             'TranscriptSegment',
             'ActionItem',
             'AppResult',
-            'PluginResult',
+
             'Event',
             'Section',
             'Structured',

@@ -7466,14 +7466,6 @@
             "title": "Photos",
             "type": "array"
           },
-          "plugins_results": {
-            "default": [],
-            "items": {
-              "$ref": "#/components/schemas/PluginResult"
-            },
-            "title": "Plugins Results",
-            "type": "array"
-          },
           "private_cloud_sync_enabled": {
             "default": false,
             "title": "Private Cloud Sync Enabled",
@@ -8603,14 +8595,6 @@
               "$ref": "#/components/schemas/ConversationPhoto"
             },
             "title": "Photos",
-            "type": "array"
-          },
-          "plugins_results": {
-            "default": [],
-            "items": {
-              "$ref": "#/components/schemas/PluginResult"
-            },
-            "title": "Plugins Results",
             "type": "array"
           },
           "private_cloud_sync_enabled": {
@@ -21404,31 +21388,6 @@
         "title": "PlatformMinimumBuild",
         "type": "object"
       },
-      "PluginResult": {
-        "properties": {
-          "content": {
-            "title": "Content",
-            "type": "string"
-          },
-          "plugin_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Plugin Id"
-          }
-        },
-        "required": [
-          "plugin_id",
-          "content"
-        ],
-        "title": "PluginResult",
-        "type": "object"
-      },
       "PricingOption": {
         "properties": {
           "description": {
@@ -24199,13 +24158,6 @@
             "title": "People",
             "type": "array"
           },
-          "plugins_results": {
-            "items": {
-              "$ref": "#/components/schemas/SharedPluginResult"
-            },
-            "title": "Plugins Results",
-            "type": "array"
-          },
           "source": {
             "anyOf": [
               {
@@ -24317,31 +24269,6 @@
           "name"
         ],
         "title": "SharedPerson",
-        "type": "object"
-      },
-      "SharedPluginResult": {
-        "properties": {
-          "content": {
-            "title": "Content",
-            "type": "string"
-          },
-          "plugin_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Plugin Id"
-          }
-        },
-        "required": [
-          "plugin_id",
-          "content"
-        ],
-        "title": "SharedPluginResult",
         "type": "object"
       },
       "SharedStructured": {

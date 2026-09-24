@@ -72,7 +72,6 @@ def _make_conv_dict(**overrides):
             events=[{"title": "Standup", "start": "2026-01-15T10:00:00", "duration": 30}],
         ),
         apps_results=[{"app_id": "a1", "content": "result"}],
-        plugins_results=[{"plugin_id": "a1", "content": "result"}],
         suggested_summarization_apps=["app1"],
         transcript_segments=[{"text": "hello", "speaker_id": 0, "is_user": True, "start": 0.0, "end": 1.0}],
     )
@@ -96,7 +95,6 @@ class TestRedactForList:
         assert result['structured']['action_items'] == []
         assert result['structured']['events'] == []
         assert result['apps_results'] == []
-        assert result['plugins_results'] == []
         assert result['suggested_summarization_apps'] == []
         assert result['transcript_segments'] == []
         assert result['match_snippets'] == []
@@ -137,7 +135,6 @@ class TestRedactForList:
             "is_locked": True,
             "structured": FakeStructured(),
             "apps_results": [{"a": 1}],
-            "plugins_results": [{"p": 1}],
             "suggested_summarization_apps": ["app1"],
             "transcript_segments": [{"text": "hi"}],
         }
@@ -169,7 +166,6 @@ class TestRedactForIntegration:
         assert result['structured']['action_items'] == []
         assert result['structured']['events'] == []
         assert result['apps_results'] == []
-        assert result['plugins_results'] == []
         assert result['suggested_summarization_apps'] == []
         assert result['transcript_segments'] == []
         assert result['match_snippets'] == []
@@ -200,7 +196,6 @@ class TestRedactForIntegration:
             "is_locked": True,
             "structured": FakeStructured(),
             "apps_results": [{"a": 1}],
-            "plugins_results": [{"p": 1}],
             "suggested_summarization_apps": ["app1"],
             "transcript_segments": [{"text": "hi"}],
         }

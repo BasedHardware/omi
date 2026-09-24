@@ -613,7 +613,6 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         'screenshot_sharing_enabled',
         'apps_results',
         'suggested_summarization_apps',
-        'plugins_results',
         'external_data',
         'app_id',
         'discarded',
