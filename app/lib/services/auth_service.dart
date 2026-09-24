@@ -225,12 +225,6 @@ class AuthService {
 
   Future<UserCredential?> signInWithAppleMobile() async {
     try {
-      // Sign out the current user first
-      Logger.debug('Signing out current user...');
-      handleAuthUserChanged(null);
-      await FirebaseAuth.instance.signOut();
-      Logger.debug('User signed out successfully.');
-
       final rawNonce = generateNonce();
       final nonce = sha256ofString(rawNonce);
 
@@ -279,16 +273,22 @@ class AuthService {
       await _updateUserPreferences(userCred, 'apple');
 
       return userCred;
+    } on SignInWithAppleAuthorizationException catch (e) {
+      if (e.code == AuthorizationErrorCode.canceled) {
+        Logger.debug('Apple Sign In was canceled by the user.');
+        return null;
+      }
+      Logger.debug('SignInWithAppleAuthorizationException: ${e.code} - ${e.message}');
+      rethrow;
     } on FirebaseAuthException catch (e) {
       Logger.debug('FirebaseAuthException: ${e.code} - ${e.message}');
       if (e.code == 'invalid-credential') {
         Logger.debug('Please check Firebase console configuration for Apple Sign In.');
       }
-      return null;
+      rethrow;
     } catch (e) {
       Logger.debug('Error during Apple Sign In: $e');
-      Logger.handle(e, null, message: 'An error occurred while signing in. Please try again later.');
-      return null;
+      rethrow;
     }
   }
 
