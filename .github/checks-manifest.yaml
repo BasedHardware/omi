@@ -1400,6 +1400,11 @@ checks:
     triggers: ["plugins/omi-ms365-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#15116: normalize recipient inputs and safely coerce date range parameters"
+  - id: ms365-error-handling-tests
+    command: ["python3", "plugins/omi-ms365-app/test_error_handling.py"]
+    triggers: ["plugins/omi-ms365-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Microsoft 365 plugin must sanitize authentication errors, argument binding type errors, and unexpected handler exceptions without leaking call stack traces or internal secrets"
   - id: wikipedia-request-boundary-tests
     command: ["python3", "plugins/omi-wikipedia-app/test_request_boundary.py"]
     triggers: ["plugins/omi-wikipedia-app/**", ".github/checks-manifest.yaml"]
