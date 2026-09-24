@@ -65,7 +65,10 @@ async def _solana_rpc_call(
     network: str = "mainnet",
 ) -> Dict[str, Any]:
     """Execute a JSON-RPC call against public Solana clusters."""
-    url = SOLANA_RPC_URLS.get(network.lower(), SOLANA_RPC_URLS["mainnet"])
+    clean_net = network.lower() if network else "mainnet"
+    if clean_net not in SOLANA_RPC_URLS:
+        return {"error": {"message": f"Unsupported Solana network '{network}'. Supported networks are: {', '.join(sorted(SOLANA_RPC_URLS.keys()))}."}}
+    url = SOLANA_RPC_URLS[clean_net]
     payload = {"jsonrpc": "2.0", "id": 1, "method": method, "params": params}
     try:
         resp = await client.post(url, json=payload)
@@ -191,6 +194,11 @@ async def check_solana_balance(req: CheckSolanaBalanceRequest):
         )
 
     network = req.network.lower() if req.network else "mainnet"
+    if network not in SOLANA_RPC_URLS:
+        return ChatToolResponse(
+            error=f"Invalid network '{req.network}'. Supported networks are: {', '.join(sorted(SOLANA_RPC_URLS.keys()))}."
+        )
+
     client = app.state.http_client
 
     rpc_resp = await _solana_rpc_call(
@@ -342,6 +350,11 @@ async def verify_transaction_signature(req: VerifyTransactionRequest):
         )
 
     network = req.network.lower() if req.network else "mainnet"
+    if network not in SOLANA_RPC_URLS:
+        return ChatToolResponse(
+            error=f"Invalid network '{req.network}'. Supported networks are: {', '.join(sorted(SOLANA_RPC_URLS.keys()))}."
+        )
+
     client = app.state.http_client
 
     rpc_resp = await _solana_rpc_call(
@@ -555,9 +568,9 @@ async def home():
 <body>
   <div class="container">
     <div class="header">
-      <div class="badge-pill">⚡ BASED HARDWARE OMI &bull; OFFICIAL PLUGIN</div>
+      <div class="badge-pill">⚡ OMI COMMUNITY CONTRIBUTION &bull; SOLANA PAY PLUGIN</div>
       <h1>👓 ApexGlass Solana Pay Studio</h1>
-      <p>Autonomous Solana Pay QR Optical Scanning & Voice Micro-Settlement for Omi Smart Glasses and Necklaces.</p>
+      <p>Solana Pay QR Optical Scanning, Audio Speech Synthesis & Verification for Omi Smart Glasses and Necklaces.</p>
     </div>
 
     <div class="grid">
