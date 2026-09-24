@@ -646,6 +646,7 @@ class MemoryDB(Memory):
     # Assessment time is distinct from as_of (the original evidence clock).
     # Clients retain it when caching a read-side belief projection.
     belief_computed_at: Optional[datetime] = None
+
     @property
     def is_active(self) -> bool:
         """A memory is active (currently true) until it is invalidated."""
