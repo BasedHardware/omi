@@ -1,15 +1,4 @@
-"""Voice-profile preferences, tag-prompt pacing state, and owner voice confirmations.
-
-Three small records back the speaker tag prompts:
-
-- ``users/{uid}`` fields ``speaker_tag_prompts_enabled`` and
-  ``save_other_voice_profiles`` (both default on; a missing field means on).
-- ``users/{uid}/speaker_tag_prompts/state`` holds pacing: when a set was last
-  shown, the dismissal streak, and which prompts were already answered.
-- ``users/{uid}.owner_voice_confirmations`` keeps the few clip voiceprints the
-  owner confirmed with "That's me". The live ``speaker_embedding`` becomes the
-  pooled centroid of the enrollment voiceprint plus those confirmations.
-"""
+"""Voice-profile preferences, tag-prompt pacing state, and owner voice confirmations."""
 
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
@@ -32,16 +21,30 @@ def _client(firestore_client: Any = None) -> Any:
     return firestore_client if firestore_client is not None else get_firestore_client()
 
 
+def _as_utc(value: Any) -> Optional[datetime]:
+    if isinstance(value, str) and value.strip():
+        try:
+            value = datetime.fromisoformat(value.strip().replace('Z', '+00:00'))
+        except ValueError:
+            return None
+    return (value if value.tzinfo else value.replace(tzinfo=timezone.utc)) if isinstance(value, datetime) else None
+
+
+def _resolve_settings(data: Dict[str, Any]) -> Dict[str, bool]:
+    return {
+        key: default if data.get(key) is None else bool(data.get(key)) for key, default in SETTINGS_DEFAULTS.items()
+    }
+
+
 def get_voice_profile_settings(uid: str, *, firestore_client: Any = None) -> Dict[str, bool]:
     data = _client(firestore_client).collection('users').document(uid).get().to_dict() or {}
-    return {key: bool(data.get(key, default)) for key, default in SETTINGS_DEFAULTS.items()}
+    return _resolve_settings(data)
 
 
 def get_voice_profile_context(uid: str, *, firestore_client: Any = None) -> Tuple[Dict[str, bool], bool]:
     """Settings plus whether the owner has a voiceprint, from one user-document read."""
     data = _client(firestore_client).collection('users').document(uid).get().to_dict() or {}
-    settings = {key: bool(data.get(key, default)) for key, default in SETTINGS_DEFAULTS.items()}
-    return settings, bool(data.get('speaker_embedding'))
+    return _resolve_settings(data), bool(data.get('speaker_embedding'))
 
 
 def set_voice_profile_settings(uid: str, updates: Dict[str, bool], *, firestore_client: Any = None) -> None:
@@ -69,9 +72,9 @@ def get_tag_prompt_state(uid: str, *, firestore_client: Any = None) -> Dict[str,
 
 
 def _pruned_answers(state: Dict[str, Any], now: datetime) -> Dict[str, Any]:
-    cutoff = now - ANSWERED_PROMPT_RETENTION
+    cutoff = (_as_utc(now) or datetime.now(timezone.utc)) - ANSWERED_PROMPT_RETENTION
     answered = state.get('answered') or {}
-    return {key: at for key, at in answered.items() if isinstance(at, datetime) and at >= cutoff}
+    return {k: at_utc for k, at in answered.items() if (at_utc := _as_utc(at)) is not None and at_utc >= cutoff}
 
 
 def record_tag_prompts_shown(uid: str, now: datetime, *, firestore_client: Any = None) -> bool:
@@ -156,13 +159,7 @@ def add_owner_voice_confirmation(
     conversation_id: str,
     firestore_client: Any = None,
 ) -> int:
-    """Pool a confirmed owner clip into the owner's voiceprint in one transaction.
-
-    ``speaker_embedding_base`` preserves the enrollment voiceprint the first time
-    we pool, and again whenever another writer (speech-profile upload, live
-    rebuild) replaced ``speaker_embedding`` after our last pooling. The stored
-    centroid is ``pool([base, *confirmations])``. Returns the confirmation count.
-    """
+    """Pool a confirmed owner clip into the owner's voiceprint in one transaction."""
     client = _client(firestore_client)
     ref = client.collection('users').document(uid)
 
@@ -172,8 +169,8 @@ def add_owner_voice_confirmation(
         data = snapshot.to_dict() or {}
         current = data.get('speaker_embedding')
         base = data.get('speaker_embedding_base')
-        pooled_at = data.get('owner_voice_pooled_at')
-        updated_at = data.get('speaker_embedding_updated_at')
+        pooled_at = _as_utc(data.get('owner_voice_pooled_at'))
+        updated_at = _as_utc(data.get('speaker_embedding_updated_at'))
         if current and (pooled_at is None or (updated_at is not None and updated_at > pooled_at)):
             base = current
         now = datetime.now(timezone.utc)
