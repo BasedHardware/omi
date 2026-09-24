@@ -56,8 +56,7 @@ def get_audio_apps_count(app_ids: List[str]) -> int:
 def get_private_apps_db(uid: str) -> List[Dict[str, Any]]:
     filters = [FieldFilter('uid', '==', uid), FieldFilter('private', '==', True)]
     private_apps = db.collection(apps_collection).where(filter=BaseCompositeFilter(_AND_OP, filters)).stream()
-    data = [_typed_doc(doc) for doc in private_apps]
-    return data
+    return [_typed_doc(doc) for doc in private_apps]
 
 
 # This returns public unapproved apps of all users
@@ -484,8 +483,7 @@ def get_omi_personas_by_uid_db(uid: str) -> List[Dict[str, Any]]:
     if not docs:
         return []
     typed_docs = [_typed_doc(doc) for doc in docs]
-    docs_out = [d for d in typed_docs if 'omi' in d.get('connected_accounts', [])]
-    return docs_out
+    return [d for d in typed_docs if 'omi' in d.get('connected_accounts', [])]
 
 
 def get_omi_persona_apps_by_uid_db(uid: str) -> List[Dict[str, Any]]:
@@ -494,8 +492,7 @@ def get_omi_persona_apps_by_uid_db(uid: str) -> List[Dict[str, Any]]:
     docs = persona_ref.get()
     if not docs:
         return []
-    docs_out = [_typed_doc(doc) for doc in docs]
-    return docs_out
+    return [_typed_doc(doc) for doc in docs]
 
 
 def update_persona_in_db(persona_data: Dict[str, Any]) -> None:
