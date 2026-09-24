@@ -207,3 +207,110 @@ def test_goal_update_rejects_set_and_clear_unit(authed_profile, respx_mock, monk
     assert "--unit" in error["detail"]
     assert "--clear-unit" in error["detail"]
     assert not respx_mock.calls
+
+
+def test_goal_create_with_planning_context_qualitative(authed_profile, respx_mock, cli_runner) -> None:
+    route = respx_mock.post("/v1/dev/user/goals").respond(
+        json={
+            "id": "g5",
+            "title": "Learn Rust",
+            "desired_outcome": "Build CLI tools",
+            "why_it_matters": "Performance and safety",
+            "success_criteria": ["Finish book", "Write a parser"],
+            "horizon_at": "2026-12-31T00:00:00",
+            "goal_type": None,
+            "target_value": None,
+            "current_value": None,
+            "min_value": None,
+            "max_value": None,
+            "unit": None,
+            "is_active": True,
+        }
+    )
+    result = cli_runner.invoke(
+        app,
+        [
+            "--json",
+            "goal",
+            "create",
+            "Learn Rust",
+            "--desired-outcome",
+            "Build CLI tools",
+            "--why-it-matters",
+            "Performance and safety",
+            "--success-criterion",
+            "Finish book",
+            "--success-criterion",
+            "Write a parser",
+            "--horizon-at",
+            "2026-12-31",
+        ],
+    )
+    assert result.exit_code == 0, result.stdout
+    body = json.loads(route.calls.last.request.content)
+    assert body == {
+        "title": "Learn Rust",
+        "desired_outcome": "Build CLI tools",
+        "why_it_matters": "Performance and safety",
+        "success_criteria": ["Finish book", "Write a parser"],
+        "horizon_at": "2026-12-31T00:00:00",
+    }
+
+
+def test_goal_create_with_planning_context_metric(authed_profile, respx_mock, cli_runner) -> None:
+    route = respx_mock.post("/v1/dev/user/goals").respond(
+        json={
+            "id": "g6",
+            "title": "Read papers",
+            "goal_type": "numeric",
+            "target_value": 50.0,
+            "current_value": 0,
+            "min_value": 0,
+            "max_value": 10,
+            "unit": "papers",
+            "desired_outcome": "Deep ML understanding",
+            "why_it_matters": "Research mastery",
+            "success_criteria": ["50 papers read"],
+            "horizon_at": "2026-12-31T23:59:59",
+            "is_active": True,
+        }
+    )
+    result = cli_runner.invoke(
+        app,
+        [
+            "--json",
+            "goal",
+            "create",
+            "Read papers",
+            "--target",
+            "50",
+            "--type",
+            "numeric",
+            "--unit",
+            "papers",
+            "--desired-outcome",
+            "Deep ML understanding",
+            "--why-it-matters",
+            "Research mastery",
+            "--success-criterion",
+            "50 papers read",
+            "--horizon-at",
+            "2026-12-31T23:59:59",
+        ],
+    )
+    assert result.exit_code == 0, result.stdout
+    body = json.loads(route.calls.last.request.content)
+    assert body["desired_outcome"] == "Deep ML understanding"
+    assert body["why_it_matters"] == "Research mastery"
+    assert body["success_criteria"] == ["50 papers read"]
+    assert body["horizon_at"] == "2026-12-31T23:59:59"
+    assert body["target_value"] == 50.0
+    assert body["goal_type"] == "numeric"
+    assert body["unit"] == "papers"
+
+
+def test_goal_create_invalid_horizon_rejected(authed_profile, respx_mock, cli_runner) -> None:
+    result = cli_runner.invoke(app, ["goal", "create", "Learn Rust", "--horizon-at", "not-a-date"])
+    assert result.exit_code != 0
+    assert "Invalid value" in result.stderr
+    assert len(respx_mock.calls) == 0
