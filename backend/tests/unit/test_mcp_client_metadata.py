@@ -12,7 +12,9 @@ import hashlib
 import io
 import json
 import os
+import re
 import socket as pysocket
+import ssl
 import threading
 import time
 from urllib.parse import parse_qsl, urlsplit
@@ -860,6 +862,13 @@ def test_dns_pool_saturation_raises_unavailable(monkeypatch):
         cimd.get_url_client(CLIENT_ID)
 
 
+def test_tls_context_enforces_tls12_floor_and_verification():
+    context = cimd._get_tls_context()
+    assert context.minimum_version >= ssl.TLSVersion.TLSv1_2
+    assert context.check_hostname is True
+    assert context.verify_mode == ssl.CERT_REQUIRED
+
+
 # --- End-to-end authorize/token flow ---------------------------------------
 
 
@@ -901,8 +910,31 @@ def test_cimd_authorize_get_renders_unverified_consent(mcp_client):
     assert response.status_code == 200
     assert "Unverified third-party app" in response.text
     assert "Client ID host:" in response.text
-    assert "app.example.com" in response.text
+    assert re.findall(r'<span class="unverified-client-host">([^<]*)</span>', response.text) == ["app.example.com"]
     assert "Example App" in response.text
+
+
+def test_authorize_errors_never_echo_exception_details(mcp_client, monkeypatch):
+    """A backend failure surfaces as a fixed OAuth error body, never its text."""
+    client, module = mcp_client
+
+    def boom(_cid):
+        raise ValueError("sentinel-secret in stack/credential")
+
+    monkeypatch.setattr(module.mcp_oauth_db, "get_client", boom)
+    response = client.get("/authorize", params=_authorize_params())
+    assert response.status_code == 400
+    assert response.json() == {
+        "error": "invalid_request",
+        "error_description": "Invalid authorization request",
+    }
+    assert "sentinel-secret" not in response.text
+
+    consent = dict(_authorize_params(), firebase_id_token="not-a-real-token")
+    response = client.post("/authorize", data=consent)
+    assert response.status_code == 400
+    assert response.json()["error"] == "invalid_request"
+    assert "sentinel-secret" not in response.text
 
 
 def test_cimd_authorize_get_missing_scope_defaults_to_read_scopes_only(mcp_client):

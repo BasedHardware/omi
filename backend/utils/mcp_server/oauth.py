@@ -168,7 +168,9 @@ def _validate_authorize_request(
     try:
         scopes = mcp_oauth_db.normalize_scopes(scope, client)
     except ValueError as exc:
-        raise _AuthorizeRequestError(str(exc), error="invalid_scope", redirect_allowed=True) from exc
+        raise _AuthorizeRequestError(
+            "Unsupported scope requested", error="invalid_scope", redirect_allowed=True
+        ) from exc
     return client, scopes
 
 
@@ -246,8 +248,8 @@ async def mcp_authorize(
         if e.redirect_allowed:
             return RedirectResponse(_redirect_with_error(redirect_uri, e.error, str(e), state), status_code=302)
         return _oauth_error(e.error, str(e))
-    except ValueError as e:
-        return _oauth_error("invalid_request", str(e))
+    except ValueError:
+        return _oauth_error("invalid_request", "Invalid authorization request")
 
     client_name = str(client.get("name") or client_id)
     # URL-form (CIMD) clients are unverified third parties: the consent page
@@ -323,7 +325,7 @@ async def mcp_authorize_consent(
                 return {"redirect_uri": _redirect_with_error(redirect_uri, e.error, str(e), state)}
             return _oauth_error(e.error, str(e))
         if isinstance(e, ValueError):
-            return _oauth_error("invalid_request", str(e))
+            return _oauth_error("invalid_request", "Invalid authorization request")
         return _oauth_error("access_denied", "Could not verify Omi sign-in token", status_code=401)
 
     try:
