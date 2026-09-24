@@ -1,44 +1,14 @@
-# Publish your conversations as an RSS 2.0 feed
+"""
+Convert Omi conversations JSON exports to standard RSS 2.0 feed XML for RSS readers and aggregators.
 
-Use this recipe to follow your own Omi recordings in standard RSS feed readers,
-podcast players, and team aggregators: it turns one or more `conversation list`
-exports into a single RSS 2.0 XML file that Feedly, NetNewsWire, Thunderbird,
-Slack RSS bots, or any reader can subscribe to over a `file://` path or local server.
-Each conversation becomes one item with its title, category, RFC 822 timestamps,
-and a clean metadata summary, newest first. It reads saved JSON exports, makes no
-network requests, does not export transcripts, and writes one XML file. You need
-Python 3.10+ and an authenticated `omi-cli` for the initial export.
+Usage:
+    # Single export
+    python conversations_to_rss.py conversations.xml conversations.json
 
-### Privacy Notice
+    # Merged multi-page exports (automatically deduplicated by conversation ID)
+    python conversations_to_rss.py feed.xml page1.json page2.json page3.json
+"""
 
-> [!NOTE]
-> Treat the generated RSS feed as sensitive personal data. While it does not include
-> raw audio or full transcript text, conversation titles, category tags, folders,
-> and timestamps reveal when and where you were active and what topics you discussed.
-
-## Quickstart
-
-Export the conversations you want in the feed (up to 200 per page):
-
-```sh
-omi --json conversation list --limit 200 --offset 0 > conversations.json
-```
-
-Check that the command succeeded before converting the file. If a page is full,
-retrieve the next one with `--offset 200` into a second file; the converter
-accepts multiple files and deduplicates each conversation ID automatically:
-
-```sh
-python examples/conversations_to_rss.py conversations.xml conversations.json
-# Or with multiple pages:
-python examples/conversations_to_rss.py feed.xml page1.json page2.json page3.json
-```
-
-## Standalone Converter Script
-
-The standalone exporter is located at `examples/conversations_to_rss.py`:
-
-```python
 import json
 import sys
 from datetime import datetime, timezone
@@ -53,7 +23,14 @@ FEED_DESCRIPTION = "Exported conversations from Omi"
 
 
 def text(value):
-    """Render a loosely typed field as one line of XML-safe text."""
+    """Render a loosely typed field as one line of XML-safe text.
+
+    The dev API is loosely typed, so a field can arrive as a non-string even
+    though the CLI models it as a string; anything non-null is coerced rather
+    than rejected. XML 1.0 has no escape sequence for C0 control characters and
+    no encoding for lone surrogates, so those are dropped here - one odd
+    character must not make the whole feed unparseable.
+    """
     if value is None:
         return ""
     if not isinstance(value, str):
@@ -181,13 +158,3 @@ if __name__ == "__main__":
     except (OSError, ValueError) as exc:
         sys.exit(f"RSS export failed: {exc}")
     print(f"{count} item{'s' if count != 1 else ''} written to {args[0]}")
-```
-
-Add the resulting file to your RSS reader or podcast tool as a local subscription,
-or serve the directory over HTTP if your reader requires remote URLs. Entries are
-ordered newest first; each item carries the conversation title, `pubDate` formatted
-according to RFC 822 / RFC 2822, `category` metadata, a stable non-permalink GUID,
-and a plain-text summary containing duration, folder, source, and language. Titles
-and categories come from the `structured` object returned by the API, so no private
-transcript text is parsed or leaked. Every field is XML-escaped and control characters
-are pruned to guarantee standard parser compatibility.
