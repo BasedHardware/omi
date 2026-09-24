@@ -548,11 +548,7 @@ def create_goal_idempotent(
 
 
 def update_goal(
-    uid: str,
-    goal_id: str,
-    updates: Dict[str, Any],
-    *,
-    firestore_client: Any = None,
+    uid: str, goal_id: str, updates: Dict[str, Any], *, firestore_client: Any = None
 ) -> Optional[Dict[str, Any]]:
     ref = _goal_ref(uid, goal_id, firestore_client=firestore_client)
     snapshot = ref.get()
@@ -564,6 +560,10 @@ def update_goal(
     clear_metric = bool(patch.pop('clear_metric', False))
     current = normalize_goal_storage(_goal_dict(snapshot), goal_id=goal_id)
     legacy_metric_keys = {'goal_type', 'current_value', 'target_value', 'min_value', 'max_value', 'unit'}
+    if not clear_metric and patch.get('metric', True) is not None:
+        for k in legacy_metric_keys:
+            if k in patch and patch[k] is None:
+                patch.pop(k)
     if clear_metric:
         metric = None
     elif 'metric' in patch:
@@ -584,9 +584,6 @@ def update_goal(
     if 'metric' in patch or clear_metric or any(key in patch for key in legacy_metric_keys):
         patch['metric'] = metric.model_dump(mode='python') if metric is not None else None
         if metric is None:
-            # Dropping the metric must also clear the released numeric aliases:
-            # _metric_from_storage rebuilds a metric from stale goal_type/current_value
-            # etc., so leaving them resurrects the "cleared" metric on the next read.
             for key in legacy_metric_keys:
                 patch[key] = None
         else:
