@@ -11958,5 +11958,68 @@
     "clearSearch": "Clear search",
     "@clearSearch": {
         "description": "Clear the current search query."
+    },
+    "captureRecordingsSheetTitle": "Recordings of this conversation",
+    "@captureRecordingsSheetTitle": {
+        "description": "Title of the sheet listing each device recording of one conversation"
+    },
+    "captureRecordingSeparate": "Separate…",
+    "@captureRecordingSeparate": {
+        "description": "Button that splits one device recording out of a grouped conversation"
+    },
+    "captureRecordingSeparateTitle": "Separate this recording?",
+    "@captureRecordingSeparateTitle": {
+        "description": "Confirmation title before splitting a recording out of a grouped conversation"
+    },
+    "captureRecordingSeparateMessage": "{recording} will show as its own conversation and won't be grouped with this event again.",
+    "@captureRecordingSeparateMessage": {
+        "description": "Confirmation body; recording is a device name and time range such as Desktop · 1:57 PM",
+        "placeholders": {
+            "recording": {
+                "type": "String"
+            }
+        }
+    },
+    "captureRecordingSeparateConfirm": "Separate",
+    "@captureRecordingSeparateConfirm": {
+        "description": "Confirm button that splits a recording out of a grouped conversation"
+    },
+    "captureRecordingSeparateFailed": "Couldn't separate. Try again.",
+    "@captureRecordingSeparateFailed": {
+        "description": "Error after splitting a recording out of a grouped conversation failed"
+    },
+    "captureRecordingOpenFailed": "Couldn't open this recording.",
+    "@captureRecordingOpenFailed": {
+        "description": "Error when another device recording of the conversation could not be loaded"
+    },
+    "captureRecordingViewing": "You're viewing this recording",
+    "@captureRecordingViewing": {
+        "description": "Accessibility label for the check mark on the recording currently open"
+    },
+    "captureRecordedBy": "Recorded by {devices}",
+    "@captureRecordedBy": {
+        "description": "Accessibility label for the device icons on a conversation recorded by several devices",
+        "placeholders": {
+            "devices": {
+                "type": "String"
+            }
+        }
+    },
+    "captureSourceDesktop": "Desktop",
+    "@captureSourceDesktop": {
+        "description": "The Omi desktop app as the device that recorded a conversation"
+    },
+    "renameConversation": "Rename",
+    "@renameConversation": {
+        "description": "Menu item that edits the conversation title"
+    },
+    "captureRecordingsCount": "{count, plural, =1{1 recording} other{{count} recordings}}",
+    "@captureRecordingsCount": {
+        "description": "How many devices recorded this conversation, on the conversation header",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
     }
 }

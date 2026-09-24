@@ -3291,5 +3291,17 @@
     "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Benim için neler yapabilirsin?} goal{Bir hedef belirlememe yardım et} activity{Son etkinliklerimi özetle} improve{Kendimi nasıl geliştirebilirim?} other{}}",
     "nextWeek": "Gelecek hafta",
-    "clearSearch": "Aramayı temizle"
+    "clearSearch": "Aramayı temizle",
+    "captureRecordingsSheetTitle": "Bu konuşmanın kayıtları",
+    "captureRecordingSeparate": "Ayır…",
+    "captureRecordingSeparateTitle": "Bu kayıt ayrılsın mı?",
+    "captureRecordingSeparateMessage": "{recording} ayrı bir konuşma olarak görünecek ve bu etkinlikle tekrar gruplanmayacak.",
+    "captureRecordingSeparateConfirm": "Ayır",
+    "captureRecordingSeparateFailed": "Ayrılamadı. Tekrar deneyin.",
+    "captureRecordingOpenFailed": "Bu kayıt açılamadı.",
+    "captureRecordingViewing": "Bu kaydı görüntülüyorsunuz",
+    "captureRecordedBy": "Kaydeden: {devices}",
+    "captureSourceDesktop": "Bilgisayar",
+    "renameConversation": "Yeniden adlandır",
+    "captureRecordingsCount": "{count, plural, =1{1 kayıt} other{{count} kayıt}}"
 }

@@ -1,8 +1,12 @@
-"""Non-destructive cross-source overlap hints at durable finalization (#3244).
+"""Non-destructive cross-source overlap hints and capture groups at finalization (#3244).
 
 Overlap is evidence of a possible shared meeting, not proof of identical speech.
 Keep both transcripts, discard state, and derived work independent. Longer wall
 windows are primary; equal windows use the document ID for stable ordering.
+
+A window match is only a proposal. When both captures also share speech
+(``shared_speech``), they join one capture group (``database.capture_groups``),
+which clients present as one event. Grouping is metadata only.
 """
 
 from __future__ import annotations
@@ -14,7 +18,9 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Mapping
 
+from database import capture_groups as capture_groups_db
 from database import conversations as conversations_db
+from utils.conversations.shared_speech import measure_shared_speech
 from utils.observability.fallback import record_fallback
 from utils.product_metrics import record_product_event
 
@@ -22,6 +28,8 @@ logger = logging.getLogger(__name__)
 MIN_OVERLAP_SECONDS = 60.0
 MIN_WINDOW_COVERAGE = 0.5
 CANDIDATE_PAGE_LIMIT = 100
+# Each confirmation re-reads one decrypted transcript; bound the work per finalization.
+MAX_CONTENT_CHECKS = 6
 
 
 @dataclass(frozen=True)
@@ -95,10 +103,12 @@ def link_duplicate_captures(uid: str, conversation: Any) -> None:
         # Largest windows first, so a secondary with several matches gets the
         # most complete observed capture. Existing pointers are idempotent.
         others = sorted(filter(None, map(capture_record, rows)), key=lambda row: row.primary_rank)
+        matches = []
         for other in others:
             match = overlap_match(candidate, other, seconds=seconds, ratio=ratio)
             if match is None:
                 continue
+            matches.append(other)
             primary, secondary = sorted((candidate, other), key=lambda row: row.primary_rank)
             if conversations_db.link_duplicate_capture(uid, primary, secondary, match):
                 record_product_event('duplicate_capture_detected')
@@ -110,13 +120,70 @@ def link_duplicate_captures(uid: str, conversation: Any) -> None:
     except Exception:
         # Exception strings can carry request data; keep telemetry content-free.
         _record_degraded()
+        return
+    _group_confirmed_captures(uid, conversation, candidate, matches[:MAX_CONTENT_CHECKS])
 
 
-def _record_degraded() -> None:
+def _segments_of(record: Any):
+    return (
+        record.get('transcript_segments')
+        if isinstance(record, Mapping)
+        else getattr(record, 'transcript_segments', None)
+    )
+
+
+def _group_confirmed_captures(uid: str, conversation: Any, candidate: CaptureRecord, matches: list) -> None:
+    """Group window matches that also share speech; never block finalization.
+
+    Both transcripts are re-read fresh (the in-memory conversation may predate a
+    later edit) together with a fingerprint the join transaction re-checks.
+    """
+    if not matches:
+        return
+    try:
+        own_row, own_fingerprint = conversations_db.get_conversation_for_capture_check(uid, candidate.conversation_id)
+    except Exception:
+        _record_degraded(to_mode='separate_captures')
+        return
+    own_segments = _segments_of(own_row or {})
+    for other in matches:
+        try:
+            other_row, other_fingerprint = conversations_db.get_conversation_for_capture_check(
+                uid, other.conversation_id
+            )
+            shared = measure_shared_speech(own_segments, _segments_of(other_row or {}))
+            if not shared.confirms():
+                record_product_event('capture_group_joined', outcome='none')
+                continue
+            group_id = capture_groups_db.join_capture_group(
+                uid,
+                candidate.conversation_id,
+                other.conversation_id,
+                shared.evidence(),
+                expected_windows={
+                    record.conversation_id: (record.started_at, record.finished_at) for record in (candidate, other)
+                },
+                expected_fingerprints={
+                    candidate.conversation_id: own_fingerprint,
+                    other.conversation_id: other_fingerprint,
+                },
+            )
+            record_product_event('capture_group_joined', outcome='applied' if group_id else 'conflict')
+            logger.info(
+                'capture_group_join outcome=%s containment=%.3f shared_trigrams=%d',
+                'applied' if group_id else 'conflict',
+                shared.containment,
+                shared.shared_trigrams,
+            )
+        except Exception:
+            _record_degraded(to_mode='separate_captures')
+
+
+def _record_degraded(to_mode: str = 'keep_both_captures') -> None:
     record_fallback(
         component='conversation_finalization',
         from_mode='duplicate_capture_check',
-        to_mode='keep_both_captures',
+        to_mode=to_mode,
         reason='other',
         outcome='degraded',
         log=logger,

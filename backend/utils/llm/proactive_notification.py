@@ -9,7 +9,7 @@ from pydantic import BaseModel, Field
 from utils.byok import has_byok_keys
 from utils.llm.clients import get_llm
 from utils.llm.gateway_client import should_route_features_through_gateway
-from utils.llm.model_config import get_model_config
+from utils.llm.model_config import get_model_config, uses_explicit_cache_and_chat_sanitizer
 from utils.llm.prompt_cache import EXPLICIT_CACHE_BREAKPOINT, bind_explicit_cache, has_cacheable_prefix
 from utils.llm.temporal import current_date_in_tz
 import logging
@@ -372,10 +372,10 @@ def _env_flag_enabled(name: str, *, default: bool) -> bool:
 
 
 def gate_cache_supported() -> bool:
-    """True only when the gate request actually reaches an OpenAI GPT-5.6 model.
+    """True only when the gate request reaches a model on the explicit-cache contract.
 
-    The explicit-cache contract (``prompt_cache_options`` plus a
-    ``prompt_cache_breakpoint`` content part) is a GPT-5.6 request shape. A BYOK
+    That contract (``prompt_cache_options`` plus a ``prompt_cache_breakpoint``
+    content part) is the GPT-5.6 request shape, and gpt-x-luna keeps it. A BYOK
     user's key can reroute this feature to another provider entirely, and a
     non-gateway deployment resolves the route from the QoS profile, so both are
     checked before a provider-specific field is put on the wire.
@@ -384,10 +384,10 @@ def gate_cache_supported() -> bool:
         return False
     if should_route_features_through_gateway():
         # generated_route_overrides.yaml pins the proactive_notification lane to
-        # openai/gpt-5.6-luna.
+        # openai/gpt-x-luna.
         return True
     model, provider = get_model_config('proactive_notification')
-    return provider == 'openai' and model.startswith('gpt-5.6')
+    return provider == 'openai' and uses_explicit_cache_and_chat_sanitizer(model)
 
 
 def gate_cache_enabled() -> bool:

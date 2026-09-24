@@ -10843,5 +10843,17 @@
     "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Šta možeš učiniti za mene?} goal{Pomozi mi da postavim cilj} activity{Sažmi moje nedavne aktivnosti} improve{Kako mogu napredovati?} other{}}",
     "nextWeek": "Sljedeće sedmice",
-    "clearSearch": "Očisti pretragu"
+    "clearSearch": "Očisti pretragu",
+    "captureRecordingsSheetTitle": "Snimci ovog razgovora",
+    "captureRecordingSeparate": "Odvoji…",
+    "captureRecordingSeparateTitle": "Odvojiti ovaj snimak?",
+    "captureRecordingSeparateMessage": "{recording} će se prikazivati kao zaseban razgovor i više se neće grupisati s ovim događajem.",
+    "captureRecordingSeparateConfirm": "Odvoji",
+    "captureRecordingSeparateFailed": "Odvajanje nije uspjelo. Pokušajte ponovo.",
+    "captureRecordingOpenFailed": "Nije moguće otvoriti ovaj snimak.",
+    "captureRecordingViewing": "Pregledate ovaj snimak",
+    "captureRecordedBy": "Snimio: {devices}",
+    "captureSourceDesktop": "Računar",
+    "renameConversation": "Preimenuj",
+    "captureRecordingsCount": "{count, plural, =1{1 snimak} other{Snimaka: {count}}}"
 }

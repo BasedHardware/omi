@@ -3256,5 +3256,17 @@
     "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Mitä voit tehdä hyväkseni?} goal{Auta minua asettamaan tavoite} activity{Tee yhteenveto viimeaikaisista toimistani} improve{Miten voin kehittyä?} other{}}",
     "nextWeek": "Ensi viikolla",
-    "clearSearch": "Tyhjennä haku"
+    "clearSearch": "Tyhjennä haku",
+    "captureRecordingsSheetTitle": "Tämän keskustelun tallenteet",
+    "captureRecordingSeparate": "Erota…",
+    "captureRecordingSeparateTitle": "Erotetaanko tämä tallenne?",
+    "captureRecordingSeparateMessage": "{recording} näytetään omana keskustelunaan, eikä sitä enää ryhmitellä tähän tapahtumaan.",
+    "captureRecordingSeparateConfirm": "Erota",
+    "captureRecordingSeparateFailed": "Erottaminen epäonnistui. Yritä uudelleen.",
+    "captureRecordingOpenFailed": "Tallennetta ei voitu avata.",
+    "captureRecordingViewing": "Katselet tätä tallennetta",
+    "captureRecordedBy": "Tallentanut {devices}",
+    "captureSourceDesktop": "Tietokone",
+    "renameConversation": "Nimeä uudelleen",
+    "captureRecordingsCount": "{count, plural, =1{1 tallenne} other{{count} tallennetta}}"
 }

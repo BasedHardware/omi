@@ -10843,5 +10843,17 @@
     "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{তুমি আমার জন্য কী করতে পারো?} goal{আমাকে একটি লক্ষ্য নির্ধারণে সাহায্য করো} activity{আমার সাম্প্রতিক কাজের সারসংক্ষেপ দাও} improve{আমি কীভাবে উন্নতি করতে পারি?} other{}}",
     "nextWeek": "পরের সপ্তাহে",
-    "clearSearch": "অনুসন্ধান মুছুন"
+    "clearSearch": "অনুসন্ধান মুছুন",
+    "captureRecordingsSheetTitle": "এই কথোপকথনের রেকর্ডিং",
+    "captureRecordingSeparate": "আলাদা করুন…",
+    "captureRecordingSeparateTitle": "এই রেকর্ডিং আলাদা করবেন?",
+    "captureRecordingSeparateMessage": "{recording} একটি আলাদা কথোপকথন হিসেবে দেখাবে এবং আর এই ইভেন্টের সাথে একত্র হবে না।",
+    "captureRecordingSeparateConfirm": "আলাদা করুন",
+    "captureRecordingSeparateFailed": "আলাদা করা যায়নি। আবার চেষ্টা করুন।",
+    "captureRecordingOpenFailed": "এই রেকর্ডিংটি খোলা যায়নি।",
+    "captureRecordingViewing": "আপনি এই রেকর্ডিংটি দেখছেন",
+    "captureRecordedBy": "{devices} দ্বারা রেকর্ড করা",
+    "captureSourceDesktop": "ডেস্কটপ",
+    "renameConversation": "নাম পরিবর্তন",
+    "captureRecordingsCount": "{count, plural, =1{1টি রেকর্ডিং} other{{count}টি রেকর্ডিং}}"
 }

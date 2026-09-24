@@ -3256,5 +3256,17 @@
     "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{ماذا يمكنك أن تفعل من أجلي؟} goal{ساعدني في تحديد هدف} activity{لخّص نشاطي الأخير} improve{كيف يمكنني التحسّن؟} other{}}",
     "nextWeek": "الأسبوع القادم",
-    "clearSearch": "مسح البحث"
+    "clearSearch": "مسح البحث",
+    "captureRecordingsSheetTitle": "تسجيلات هذه المحادثة",
+    "captureRecordingSeparate": "فصل…",
+    "captureRecordingSeparateTitle": "فصل هذا التسجيل؟",
+    "captureRecordingSeparateMessage": "سيظهر {recording} كمحادثة مستقلة ولن يُجمع مع هذا الحدث مرة أخرى.",
+    "captureRecordingSeparateConfirm": "فصل",
+    "captureRecordingSeparateFailed": "تعذّر الفصل. حاول مرة أخرى.",
+    "captureRecordingOpenFailed": "تعذّر فتح هذا التسجيل.",
+    "captureRecordingViewing": "أنت تشاهد هذا التسجيل",
+    "captureRecordedBy": "سجّلها {devices}",
+    "captureSourceDesktop": "سطح المكتب",
+    "renameConversation": "إعادة تسمية",
+    "captureRecordingsCount": "{count, plural, =1{تسجيل واحد} other{{count} تسجيلات}}"
 }

@@ -71,7 +71,7 @@ Tables without predefined columns include fields from every row, in first-seen o
 > Looking for localized guides? See the [nnapulitano (Neapolitan Quickstart)](examples/quickstart.nap.md), the [vosa vakaViti (Fijian Quickstart)](examples/quickstart.fj.md), the [papiamentu (Papiamento Quickstart)](examples/quickstart.pap.md), the [mirandés (Mirandese Quickstart)](examples/quickstart.mwl.md), the [hornjoserbšćina (Upper Sorbian Quickstart)](examples/quickstart.hsb.md), the [rumantsch (Romansh Quickstart)](examples/quickstart.rm.md), the [armãneashti (Aromanian Quickstart)](examples/quickstart.rup.md), or the [estremeñu (Extremaduran Quickstart)](examples/quickstart.ext.md).
 
 
-> Looking for localized guides? See the [🇮🇳 मैथिली त्वरित मार्गदर्शिका (Maithili Quickstart)](examples/quickstart.mai.md), the [🇮🇳 অসমীয়া ক্ষিপ্ৰ আৰম্ভণি নিৰ্দেশিকা (Assamese Quickstart)](examples/quickstart.as.md), or the [🇨🇦 ᐃᓄᒃᑎᑐᑦ (Inuktitut Quickstart)](examples/quickstart.iu.md).
+> Looking for localized guides? See the [🇮🇳 मैथिली त्वरित मार्गदर्शिका (Maithili Quickstart)](examples/quickstart.mai.md), the [🇮🇳 অসমীয়া ক্ষিপ্ৰ আৰম্ভণি নিৰ্দেশিকা (Assamese Quickstart)](examples/quickstart.as.md), the [🇧🇩 omi-cli দিয়ে শুরু করা (Bengali Quickstart)](examples/quickstart.bn.md), or the [🇨🇦 ᐃᓄᒃᑎᑐᑦ (Inuktitut Quickstart)](examples/quickstart.iu.md).
 
 > 🇩🇰 På dansk: [hurtigstartguide til omi-cli](examples/quickstart.da.md).
 

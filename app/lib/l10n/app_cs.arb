@@ -3256,5 +3256,17 @@
     "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Co pro mě můžeš udělat?} goal{Pomoz mi stanovit cíl} activity{Shrň mé nedávné aktivity} improve{Jak se mohu zlepšit?} other{}}",
     "nextWeek": "Příští týden",
-    "clearSearch": "Vymazat hledání"
+    "clearSearch": "Vymazat hledání",
+    "captureRecordingsSheetTitle": "Nahrávky této konverzace",
+    "captureRecordingSeparate": "Oddělit…",
+    "captureRecordingSeparateTitle": "Oddělit tuto nahrávku?",
+    "captureRecordingSeparateMessage": "{recording} se zobrazí jako samostatná konverzace a s touto událostí už nebude seskupena.",
+    "captureRecordingSeparateConfirm": "Oddělit",
+    "captureRecordingSeparateFailed": "Oddělení se nezdařilo. Zkuste to znovu.",
+    "captureRecordingOpenFailed": "Tuto nahrávku nelze otevřít.",
+    "captureRecordingViewing": "Prohlížíte tuto nahrávku",
+    "captureRecordedBy": "Nahráno: {devices}",
+    "captureSourceDesktop": "Počítač",
+    "renameConversation": "Přejmenovat",
+    "captureRecordingsCount": "{count, plural, =1{1 nahrávka} other{Nahrávek: {count}}}"
 }

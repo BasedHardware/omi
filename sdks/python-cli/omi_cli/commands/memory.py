@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Optional
 
 import typer
+from rich.markup import escape
 
 from omi_cli.errors import NotFoundError, UsageError
 from omi_cli.models import MemoryCategory, MemoryVisibility
@@ -134,7 +135,7 @@ def update_memory(
         )
     with ctx.make_client() as client:
         result = client.patch(f"/v1/dev/user/memories/{memory_id}", json_body=body)
-    ctx.renderer.success(f"Memory updated: [bold]{memory_id}[/bold]")
+    ctx.renderer.success(f"Memory updated: [bold]{escape(memory_id)}[/bold]")
     ctx.renderer.emit(result, title="memory")
 
 
@@ -151,4 +152,4 @@ def delete_memory(
         result = client.delete(f"/v1/dev/user/memories/{memory_id}")
     if ctx.renderer.json_mode:
         ctx.renderer.emit(result)
-    ctx.renderer.success(f"Deleted memory [bold]{memory_id}[/bold].")
+    ctx.renderer.success(f"Deleted memory [bold]{escape(memory_id)}[/bold].")

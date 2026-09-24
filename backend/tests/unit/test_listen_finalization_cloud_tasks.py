@@ -18,6 +18,7 @@ from fastapi.testclient import TestClient
 from database import conversation_finalization_jobs as jobs_db
 from database.firestore_transaction_retry import FirestoreContentionExhausted
 from models.conversation_enums import ConversationStatus
+from utils.conversations.processing_trigger import ProcessingTrigger
 from routers.conversation_finalization import _parse_task_payload
 import routers.conversation_finalization as finalization_router
 import routers.pusher as pusher_router
@@ -713,7 +714,7 @@ async def test_worker_forwards_rest_force_processing_mode_from_the_durable_job(m
         finalization_job_id='job-1',
         dispatch_generation=1,
         lease_epoch=1,
-        force_process=True,
+        trigger=ProcessingTrigger.CLIENT_FINALIZE,
         final_attempt=False,
     )
 

@@ -18,7 +18,7 @@ from utils.app_integrations import trigger_external_integrations
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.duplicate_capture import link_duplicate_captures
 from utils.conversations.location import async_resolve_geolocation
-from utils.conversations.relevance import ProcessingTrigger
+from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.meeting_receipt import record_and_persist_finalized_meeting_receipt
 from utils.conversations.process_conversation import (
     DerivedEffectsDisposition,
@@ -60,7 +60,7 @@ async def finalize_persisted_conversation(
     finalization_job_id: str,
     dispatch_generation: int,
     lease_epoch: int,
-    force_process: bool = False,
+    trigger: ProcessingTrigger = ProcessingTrigger.CAPTURE_END,
     final_attempt: bool = False,
 ) -> ConversationFinalizationDisposition:
     """Finalize persisted data once the caller has acquired the job lease.
@@ -146,10 +146,7 @@ async def finalize_persisted_conversation(
                 uid,
                 resolved_language,
                 conversation,
-                force_process=force_process,
-                # Only the client finalize route enqueues force_process jobs;
-                # listen's own finalization never does.
-                trigger=ProcessingTrigger.CLIENT_FINALIZE if force_process else ProcessingTrigger.CAPTURE_END,
+                trigger=trigger,
                 defer_derived_effects=True,
                 persistence_observer=lambda owned: persistence.__setitem__('owned', owned),
                 derived_effects_observer=derived_effects.append,

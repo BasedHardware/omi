@@ -3352,5 +3352,17 @@
     "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Mit tudsz tenni értem?} goal{Segíts kitűzni egy célt} activity{Foglald össze a legutóbbi tevékenységeimet} improve{Hogyan fejlődhetek?} other{}}",
     "nextWeek": "Jövő héten",
-    "clearSearch": "Keresés törlése"
+    "clearSearch": "Keresés törlése",
+    "captureRecordingsSheetTitle": "A beszélgetés felvételei",
+    "captureRecordingSeparate": "Leválasztás…",
+    "captureRecordingSeparateTitle": "Leválasztod ezt a felvételt?",
+    "captureRecordingSeparateMessage": "A(z) {recording} külön beszélgetésként jelenik meg, és többé nem kerül ehhez az eseményhez.",
+    "captureRecordingSeparateConfirm": "Leválasztás",
+    "captureRecordingSeparateFailed": "Nem sikerült leválasztani. Próbáld újra.",
+    "captureRecordingOpenFailed": "Nem sikerült megnyitni ezt a felvételt.",
+    "captureRecordingViewing": "Ezt a felvételt nézed",
+    "captureRecordedBy": "Rögzítette: {devices}",
+    "captureSourceDesktop": "Számítógép",
+    "renameConversation": "Átnevezés",
+    "captureRecordingsCount": "{count, plural, =1{1 felvétel} other{{count} felvétel}}"
 }

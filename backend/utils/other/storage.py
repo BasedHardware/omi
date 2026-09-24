@@ -29,7 +29,7 @@ from utils import encryption
 from utils.cloud_tasks import enqueue_audio_merge_job, is_audio_merge_dispatch_enabled
 from utils.observability.fallback import record_fallback
 from utils.other.deferred_delete import DeferredDeleter
-from utils.other.local_storage import create_storage_client, local_public_url
+from utils.other.local_storage import create_storage_client, iam_signing_kwargs, local_public_url
 from database import users as users_db
 import logging
 
@@ -1664,8 +1664,9 @@ def _get_signed_url(blob: Any, minutes: int) -> str:
     if cached := get_cached_signed_url(blob.name):
         return cached
 
+    signer = iam_signing_kwargs(getattr(blob, "client", None))
     signed_url: str = blob.generate_signed_url(
-        version="v4", expiration=datetime.timedelta(minutes=minutes), method="GET"
+        version="v4", expiration=datetime.timedelta(minutes=minutes), method="GET", **signer
     )
     cache_signed_url(blob.name, signed_url, minutes * 60)
     return signed_url

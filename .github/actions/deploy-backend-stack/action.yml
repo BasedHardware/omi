@@ -13,13 +13,11 @@ inputs:
     default: ''
   firebase_probe_signer_credentials:
     description: >-
-      Base64-encoded service-account key for the Firebase auth project, used to
-      sign release-probe custom tokens locally. This is how the development lane
-      signs for production Firebase without an IAM grant. desktop-backend
-      auto-dev no longer uses this path -- it signs via IAM signJwt with the
-      named signer (vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT); gcp_backend.yml
-      and sync_ledger still supply a credential. Mutually exclusive with
-      firebase_probe_signer_service_account.
+      Deprecated: base64-encoded service-account key for the Firebase auth
+      project, used to sign release-probe custom tokens locally. No workflow
+      supplies it any more; every development lane signs through IAM signJwt as
+      the named no-role signer (vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT).
+      Mutually exclusive with firebase_probe_signer_service_account.
     required: false
     default: ''
   dev_free_tier_local_processing_cohort:
@@ -907,13 +905,10 @@ runs:
         project_id: ${{ inputs.project_id }}
         firebase_auth_project_id: based-hardware
         # The development backend authenticates against production Firebase, so
-        # a development deploy identity cannot sign this gate's custom token: it
-        # failed at custom_token_signing and blocked every manual development
-        # deploy. Sign locally with the Firebase project's own key instead.
-        # (desktop_backend_auto_dev.yml has since moved to the named-signer
-        # IAM signJwt path; this lane still stages the key.) The
-        # named-signer input stays available but needs an IAM grant, so it is
-        # only consulted when a credential is not supplied.
+        # a development deploy identity cannot sign this gate's custom token as
+        # itself. It signs through IAM signJwt as the named no-role signer, on
+        # which the deploy identity holds roles/iam.serviceAccountTokenCreator.
+        # The deprecated key input is only consulted if a caller still passes it.
         firebase_signer_service_account: ${{ inputs.firebase_probe_signer_credentials == '' && inputs.firebase_probe_signer_service_account || '' }}
         firebase_signer_credentials: ${{ inputs.firebase_probe_signer_credentials }}
 

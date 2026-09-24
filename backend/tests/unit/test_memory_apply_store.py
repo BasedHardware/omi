@@ -15,6 +15,9 @@ from testing.import_isolation import load_module_fresh, stub_modules
 
 from models.feedback import FeedbackEvent, MemoryUseFeedback
 from models.memory_evidence import (
+    EVIDENCE_IDENTITY_FIELDS,
+    EVIDENCE_METADATA_FIELDS,
+    EVIDENCE_STATE_FIELDS,
     ArtifactPreservationState,
     MemoryEvidence,
     ProvenanceVisibility,
@@ -2013,6 +2016,80 @@ def test_firestore_apply_rejects_changed_source_version_for_existing_evidence_id
 
     assert db.docs["users/u1/memory_evidence/ev1"]["source_version"] == "v1"
     assert db.transaction_obj.mutations == []
+
+
+def test_every_evidence_field_has_exactly_one_identity_class():
+    # A new MemoryEvidence field must be classified before it can ship; an
+    # unclassified field is how capture metadata once decided identity (#17296).
+    classes = [EVIDENCE_IDENTITY_FIELDS, EVIDENCE_METADATA_FIELDS, EVIDENCE_STATE_FIELDS]
+    classified = [field for fields in classes for field in fields]
+    assert len(classified) == len(set(classified))
+    assert set(classified) == set(MemoryEvidence.model_fields)
+
+
+def test_firestore_apply_accepts_replay_whose_evidence_adds_capture_metadata(store):
+    # Evidence written before capture metadata existed stores those fields as
+    # null. A replay of the same source now proposes them; that is the same
+    # source, not a conflict (#17296).
+    operation = _operation()
+    db = _db_with(operation=operation, evidence=_evidence())
+    evidence_path = "users/u1/memory_evidence/ev1"
+    stored_before = copy.deepcopy(db.docs[evidence_path])
+
+    result = store.apply_long_term_patch_firestore(
+        uid="u1",
+        operation_id=operation.operation_id,
+        patch_payload=_patch(),
+        proposed_operation=operation,
+        proposed_evidence=[
+            _evidence(
+                source_signal="manual",
+                extractor_id="memory_extractor",
+                extractor_version="v1",
+                capture_confidence=0.95,
+                independence_group="conv1",
+            )
+        ],
+        db_client=db,
+    )
+
+    assert result.status == ApplyStatus.committed
+    assert db.docs[evidence_path] == stored_before
+    assert evidence_path not in [path for path, _ in db.transaction_obj.sets]
+
+
+def test_firestore_apply_keeps_stored_capture_metadata_when_a_replay_disagrees(store):
+    operation = _operation()
+    db = _db_with(operation=operation, evidence=_evidence(source_signal="manual", capture_confidence=0.95))
+    evidence_path = "users/u1/memory_evidence/ev1"
+
+    result = store.apply_long_term_patch_firestore(
+        uid="u1",
+        operation_id=operation.operation_id,
+        patch_payload=_patch(),
+        proposed_operation=operation,
+        proposed_evidence=[_evidence(source_signal="api", capture_confidence=0.5)],
+        db_client=db,
+    )
+
+    assert result.status == ApplyStatus.committed
+    assert db.docs[evidence_path]["source_signal"] == "manual"
+    assert db.docs[evidence_path]["capture_confidence"] == 0.95
+
+
+def test_firestore_apply_raises_typed_conflict_for_a_different_source(store):
+    operation = _operation()
+    db = _db_with(operation=operation, evidence=_evidence(source_id="conv1"))
+
+    with pytest.raises(store.EvidenceIdentityConflict):
+        store.apply_long_term_patch_firestore(
+            uid="u1",
+            operation_id=operation.operation_id,
+            patch_payload=_patch(),
+            proposed_operation=operation,
+            proposed_evidence=[_evidence(source_id="conv2", conversation_id=None)],
+            db_client=db,
+        )
 
 
 @pytest.mark.parametrize("source_state", [SourceState.tombstoned, SourceState.purged])

@@ -59,7 +59,7 @@ class SpeakerMatcher:
         self._profile_lock = asyncio.Lock()
         # The account owner's own first name, so hearing it in the transcript cannot
         # mint a person who is really the user. Resolved lazily by
-        # resolve_owner_name(); never used for matching, only as a veto.
+        # resolve_owner_name(); used for display and as a veto, never as voice-match evidence.
         self.owner_name: Optional[str] = None
         self._owner_name_resolved = False
 
@@ -75,11 +75,8 @@ class SpeakerMatcher:
     async def resolve_owner_name(self) -> Optional[str]:
         """The account owner's first name, resolved at most once per session.
 
-        Deliberately lazy. Text detection only produces a name when a segment
-        matches a self-introduction pattern, which is rare, and that path already
-        makes a person lookup — so the veto costs one extra call there instead of
-        an auth round trip on every conversation refresh. A failure leaves the
-        veto off rather than failing the session.
+        Resolved when an owner embedding or a textual introduction needs it.
+        A failure leaves the veto off rather than failing the session.
         """
         if self._owner_name_resolved:
             return self.owner_name
@@ -100,7 +97,7 @@ class SpeakerMatcher:
                 if embedding:
                     self.person_embeddings[USER_SELF_PERSON_ID] = {
                         'embedding': np.array(embedding, dtype=np.float32).reshape(1, -1),
-                        'name': 'User',
+                        'name': await self.resolve_owner_name() or 'The User',
                     }
                 else:
                     path = await run_blocking(storage_executor, get_profile_audio_if_exists, self.host.request.uid)
@@ -110,7 +107,10 @@ class SpeakerMatcher:
                             sync_executor, cast(Any, extract_embedding_from_bytes), profile, 'speech_profile.wav'
                         )
                         del profile
-                        self.person_embeddings[USER_SELF_PERSON_ID] = {'embedding': result, 'name': 'User'}
+                        self.person_embeddings[USER_SELF_PERSON_ID] = {
+                            'embedding': result,
+                            'name': await self.resolve_owner_name() or 'The User',
+                        }
                         await self.host.persistence.call(
                             user_db.set_user_speaker_embedding, self.host.request.uid, result.flatten().tolist()
                         )

@@ -235,6 +235,7 @@ def load_module_fresh(name: str, path: str) -> ModuleType:
 # scope. Harnesses that replace ``utils.conversations`` with a stub register the
 # real files so the policy under test is production's, never a copy.
 PURE_RELEVANCE_MODULES = (
+    'utils.conversations.processing_trigger',
     'utils.conversations.relevance_rules',
     'utils.conversations.relevance',
     'utils.conversations.fragment_visibility',

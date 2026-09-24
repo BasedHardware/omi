@@ -3256,5 +3256,17 @@
     "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Τι μπορείς να κάνεις για μένα;} goal{Βοήθησέ με να θέσω έναν στόχο} activity{Σύνοψε την πρόσφατη δραστηριότητά μου} improve{Πώς μπορώ να βελτιωθώ;} other{}}",
     "nextWeek": "Επόμενη εβδομάδα",
-    "clearSearch": "Εκκαθάριση αναζήτησης"
+    "clearSearch": "Εκκαθάριση αναζήτησης",
+    "captureRecordingsSheetTitle": "Ηχογραφήσεις αυτής της συνομιλίας",
+    "captureRecordingSeparate": "Διαχωρισμός…",
+    "captureRecordingSeparateTitle": "Διαχωρισμός αυτής της ηχογράφησης;",
+    "captureRecordingSeparateMessage": "Η ηχογράφηση {recording} θα εμφανίζεται ως ξεχωριστή συνομιλία και δεν θα ομαδοποιηθεί ξανά με αυτό το συμβάν.",
+    "captureRecordingSeparateConfirm": "Διαχωρισμός",
+    "captureRecordingSeparateFailed": "Ο διαχωρισμός απέτυχε. Δοκιμάστε ξανά.",
+    "captureRecordingOpenFailed": "Δεν ήταν δυνατό το άνοιγμα αυτής της ηχογράφησης.",
+    "captureRecordingViewing": "Βλέπετε αυτήν την ηχογράφηση",
+    "captureRecordedBy": "Ηχογραφήθηκε από {devices}",
+    "captureSourceDesktop": "Υπολογιστής",
+    "renameConversation": "Μετονομασία",
+    "captureRecordingsCount": "{count, plural, =1{1 ηχογράφηση} other{{count} ηχογραφήσεις}}"
 }

@@ -1,3 +1,4 @@
+import 'package:omi/env/physical_qualification.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:math';
@@ -48,6 +49,7 @@ class _FCMNotificationService implements NotificationInterface {
       ledColor: Colors.white,
     );
     await _initializeAwesomeNotifications();
+    if (PhysicalQualification.enabled) return;
     // Calling it here because the APNS token can sometimes arrive early or it might take some time (like a few seconds)
     // Reference: https://github.com/firebase/flutterfire/issues/12244#issuecomment-1969286794
     await _firebaseMessaging.getAPNSToken();
@@ -149,6 +151,7 @@ class _FCMNotificationService implements NotificationInterface {
 
   @override
   void saveNotificationToken() async {
+    if (PhysicalQualification.enabled) return;
     try {
       if (Platform.isIOS) {
         String? apnsToken;
@@ -201,6 +204,7 @@ class _FCMNotificationService implements NotificationInterface {
 
   @override
   Future<void> listenForMessages() async {
+    if (PhysicalQualification.enabled) return;
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       final data = message.data;
       final noti = message.notification;

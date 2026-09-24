@@ -29,6 +29,7 @@ from pydub import AudioSegment
 
 from database import conversations as conversations_db
 from database import users as users_db
+from database.auth import get_user_name
 from database.conversations import get_closest_conversation_to_timestamps
 from database.firestore_read_metrics import FirestoreReadSite
 from database.sync_jobs import (
@@ -73,7 +74,7 @@ from models.transcript_segment import TranscriptSegment
 from utils.analytics import record_usage
 from utils.byok import get_byok_keys, set_byok_keys, set_byok_uid
 from utils.conversations.factory import deserialize_conversation
-from utils.conversations.relevance import ProcessingTrigger
+from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.location import async_resolve_geolocation
 from utils.conversations.process_conversation import process_conversation
 from utils.executors import (
@@ -808,11 +809,8 @@ def _reprocess_conversation_after_update(uid: str, conversation_id: str, languag
         uid=uid,
         language_code=language or 'en',
         conversation=conversation,
-        force_process=True,
-        is_reprocess=True,
         trigger=ProcessingTrigger.SYNC_UPDATE,
         user_kept=bool(conversation_data.get('sync_relevance_user_kept')),
-        bypass_jit_first_open=True,
         persistence_observer=_require_current_conversation_persistence,
     )
 
@@ -843,7 +841,7 @@ def build_person_embeddings_cache(uid: str) -> Dict[str, dict]:
     embedding_list = users_db.get_user_speaker_embedding(uid)
     if embedding_list:
         user_embedding = np.array(embedding_list, dtype=np.float32).reshape(1, -1)
-        cache[USER_SELF_PERSON_ID] = {'embedding': user_embedding, 'name': 'User'}
+        cache[USER_SELF_PERSON_ID] = {'embedding': user_embedding, 'name': get_user_name(uid)}
 
     # Load all people with speaker embeddings
     people = users_db.get_people(uid)

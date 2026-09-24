@@ -3291,5 +3291,17 @@
     "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Что ты можешь для меня сделать?} goal{Помоги мне поставить цель} activity{Подведи итог моей недавней активности} improve{Как мне стать лучше?} other{}}",
     "nextWeek": "На следующей неделе",
-    "clearSearch": "Очистить поиск"
+    "clearSearch": "Очистить поиск",
+    "captureRecordingsSheetTitle": "Записи этого разговора",
+    "captureRecordingSeparate": "Отделить…",
+    "captureRecordingSeparateTitle": "Отделить эту запись?",
+    "captureRecordingSeparateMessage": "{recording} будет отображаться как отдельный разговор и больше не будет объединяться с этим событием.",
+    "captureRecordingSeparateConfirm": "Отделить",
+    "captureRecordingSeparateFailed": "Не удалось отделить. Попробуйте ещё раз.",
+    "captureRecordingOpenFailed": "Не удалось открыть эту запись.",
+    "captureRecordingViewing": "Вы просматриваете эту запись",
+    "captureRecordedBy": "Записано: {devices}",
+    "captureSourceDesktop": "Компьютер",
+    "renameConversation": "Переименовать",
+    "captureRecordingsCount": "{count, plural, =1{1 запись} other{Записей: {count}}}"
 }

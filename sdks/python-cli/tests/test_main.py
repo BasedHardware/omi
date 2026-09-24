@@ -102,9 +102,7 @@ def test_module_entry_point_honors_json_error_contract(config_path, monkeypatch,
 
     package_root = str(Path(__file__).resolve().parents[1])
     env = dict(os.environ, OMI_API_KEY="not-a-real-key")
-    env["PYTHONPATH"] = os.pathsep.join(
-        filter(None, [package_root, env.get("PYTHONPATH", "")])
-    )
+    env["PYTHONPATH"] = os.pathsep.join(filter(None, [package_root, env.get("PYTHONPATH", "")]))
     result = subprocess.run(
         [sys.executable, "-m", "omi_cli", "--json", "memory", "list"],
         capture_output=True,
@@ -154,9 +152,7 @@ def test_invalid_env_key_does_not_fall_back_to_saved_account(
 
 
 @pytest.mark.parametrize("command", ["status", "tools"])
-def test_local_commands_ignore_invalid_cloud_key(
-    command, authed_profile, config_path, cli_runner, monkeypatch
-) -> None:
+def test_local_commands_ignore_invalid_cloud_key(command, authed_profile, config_path, cli_runner, monkeypatch) -> None:
     import respx
 
     from omi_cli import config as cfg
@@ -170,9 +166,7 @@ def test_local_commands_ignore_invalid_cloud_key(
     monkeypatch.setenv("OMI_API_KEY", "invalid-cloud-key")
     with respx.mock(base_url=profile.local_api_url) as router:
         if command == "status":
-            route = router.post("/v1/local/tool").respond(
-                json={"ok": True, "result": json.dumps({"ok": True})}
-            )
+            route = router.post("/v1/local/tool").respond(json={"ok": True, "result": json.dumps({"ok": True})})
         else:
             route = router.get("/v1/local/tools").respond(json={"ok": True, "tools": []})
         result = cli_runner.invoke(app, ["--json", "local", command])
@@ -182,10 +176,79 @@ def test_local_commands_ignore_invalid_cloud_key(
     assert config_path.read_bytes() == original_config
 
 
-def test_auth_status_reports_saved_profile_despite_invalid_env_key(
-    authed_profile, cli_runner, monkeypatch
-) -> None:
+def test_auth_status_reports_saved_profile_despite_invalid_env_key(authed_profile, cli_runner, monkeypatch) -> None:
     monkeypatch.setenv("OMI_API_KEY", "invalid-cloud-key")
     result = cli_runner.invoke(app, ["--json", "auth", "status"])
     assert result.exit_code == 0, result.output
     assert json.loads(result.stdout)["credential"] == authed_profile.masked_credential()
+
+
+@pytest.mark.parametrize(
+    ("args", "expected_err_snippet"),
+    [
+        (["--json", "ask"], "Missing argument 'QUESTION'"),
+        (["--json", "--unknown-flag"], "No such option '--unknown-flag'"),
+        (["--json", "nonexistent-cmd"], "No such command 'nonexistent-cmd'"),
+        (["--json", "ask", "hello", "--limit", "999"], "Invalid value for '--limit'"),
+        (["--json", "ask", "hello", "--limit"], "Option '--limit' requires an argument"),
+    ],
+)
+def test_click_parser_errors_honor_json_error_contract(
+    args: list[str], expected_err_snippet: str, monkeypatch, capsys
+) -> None:
+    """Issue #15981: Click parser errors (missing arguments, unknown options,
+    unknown commands, invalid values) must emit valid JSON with exit code 2
+    when `--json` is supplied, keeping stdout empty."""
+    from omi_cli.main import main
+
+    monkeypatch.setattr("sys.argv", ["omi", *args])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 2
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    payload = json.loads(captured.err)
+    assert "error" in payload
+    assert expected_err_snippet in payload["error"]
+
+
+def test_click_parser_errors_preserve_normal_output_without_json(monkeypatch, capsys) -> None:
+    """In pretty/normal mode (without --json), Click's default usage text is
+    preserved on stderr."""
+    from omi_cli.main import main
+
+    monkeypatch.setattr("sys.argv", ["omi", "ask"])
+    with pytest.raises(SystemExit) as exc:
+        main()
+    assert exc.value.code == 2
+
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "Usage:" in captured.err or "Error:" in captured.err
+    assert "Missing argument 'QUESTION'" in captured.err
+
+
+def test_module_entry_point_honors_json_parser_error_contract(tmp_path) -> None:
+    """`python -m omi_cli --json ask` must emit valid JSON error on stderr and exit 2."""
+    import os
+    import subprocess
+    import sys
+    from pathlib import Path
+
+    package_root = str(Path(__file__).resolve().parents[1])
+    env = dict(os.environ)
+    env["PYTHONPATH"] = os.pathsep.join(filter(None, [package_root, env.get("PYTHONPATH", "")]))
+    result = subprocess.run(
+        [sys.executable, "-m", "omi_cli", "--json", "ask"],
+        capture_output=True,
+        text=True,
+        env=env,
+        cwd=str(tmp_path),
+        check=False,
+    )
+    assert result.returncode == 2
+    assert result.stdout == ""
+    payload = json.loads(result.stderr)
+    assert "error" in payload
+    assert "Missing argument 'QUESTION'" in payload["error"]

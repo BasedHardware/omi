@@ -10175,4 +10175,52 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get clearSearch => 'Ачысціць пошук';
+
+  @override
+  String get captureRecordingsSheetTitle => 'Запісы гэтай размовы';
+
+  @override
+  String get captureRecordingSeparate => 'Аддзяліць…';
+
+  @override
+  String get captureRecordingSeparateTitle => 'Аддзяліць гэты запіс?';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording будзе паказвацца як асобная размова і больш не будзе аб\'ядноўвацца з гэтай падзеяй.';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => 'Аддзяліць';
+
+  @override
+  String get captureRecordingSeparateFailed => 'Не ўдалося аддзяліць. Паспрабуйце яшчэ раз.';
+
+  @override
+  String get captureRecordingOpenFailed => 'Не ўдалося адкрыць гэты запіс.';
+
+  @override
+  String get captureRecordingViewing => 'Вы праглядаеце гэты запіс';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return 'Запісана: $devices';
+  }
+
+  @override
+  String get captureSourceDesktop => 'Камп\'ютар';
+
+  @override
+  String get renameConversation => 'Перайменаваць';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Запісаў: $count',
+      one: '1 запіс',
+    );
+    return '$_temp0';
+  }
 }

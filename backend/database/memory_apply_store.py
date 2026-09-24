@@ -30,6 +30,7 @@ from database.legal_holds import (
 from database.memory_collections import MemoryCollections
 from database.read_boundary import parse_snapshot_strict
 from models.memory_evidence import (
+    EVIDENCE_IDENTITY_FIELDS,
     ArtifactPreservationState,
     MemoryEvidence,
     ProvenanceVisibility,
@@ -75,6 +76,10 @@ from utils.memory.memory_use import MemoryUseConflict, build_memory_use_patch
 
 class MemoryFirestoreApplyError(Exception):
     pass
+
+
+class EvidenceIdentityConflict(MemoryFirestoreApplyError):
+    """A proposed evidence record reuses an active evidence_id for a different source."""
 
 
 MemoryFirestoreApplyError = MemoryFirestoreApplyError
@@ -2980,19 +2985,11 @@ def read_memory_use_feedback_replay(
     return _read_memory_use_feedback_replay_transaction(transaction, client, uid, feedback)
 
 
-_EVIDENCE_SEMANTIC_EXCLUDES = {
-    "created_at",
-    "artifact_preservation",
-    "source_state",
-    "source_state_reason",
-    "provenance_visibility",
-    "redaction_status",
-    "encryption_or_redaction_status",
-}
-
-
-def _evidence_semantic_payload(evidence: MemoryEvidence) -> Dict[str, Any]:
-    return evidence.model_dump(mode="json", exclude=_EVIDENCE_SEMANTIC_EXCLUDES)
+def _evidence_identity_payload(evidence: MemoryEvidence) -> Dict[str, Any]:
+    # Only identity decides whether a reused evidence_id names the same source.
+    # Capture metadata added after a record was written must not turn a replay
+    # of the same source into a conflict (#17296).
+    return evidence.model_dump(mode="json", include=set(EVIDENCE_IDENTITY_FIELDS))
 
 
 def _read_or_stage_authoritative_evidence(
@@ -3020,9 +3017,9 @@ def _read_or_stage_authoritative_evidence(
             if (
                 evidence.source_state == SourceState.active
                 and proposed is not None
-                and _evidence_semantic_payload(evidence) != _evidence_semantic_payload(proposed)
+                and _evidence_identity_payload(evidence) != _evidence_identity_payload(proposed)
             ):
-                raise MemoryFirestoreApplyError("proposed evidence conflicts with existing evidence identity")
+                raise EvidenceIdentityConflict("proposed evidence conflicts with existing evidence identity")
         elif proposed is not None:
             if proposed.source_state != SourceState.active:
                 raise MemoryFirestoreApplyError("proposed evidence must be active")

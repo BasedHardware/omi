@@ -70,7 +70,7 @@ backend/
                           #   pre-recorded batch transcription, speaker embeddings
     conversations/        #   Conversation lifecycle (6 files): ingestion, memory extraction, action items,
                           #   merge, post-processing, search
-    retrieval/            #   RAG pipeline (25+ files): agentic RAG via gateway Luna (gpt-5.6-luna) with 18 tool types —
+    retrieval/            #   RAG pipeline (25+ files): agentic RAG via gateway Luna (gpt-x-luna) with 18 tool types —
                           #   action items, calendar, Gmail, Apple Health, conversations, memories,
                           #   screen activity, files, Perplexity web search, notifications, etc.
     other/                #   Storage (GCS), auth dependencies, timeout middleware, Hume emotion detection

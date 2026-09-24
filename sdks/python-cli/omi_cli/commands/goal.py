@@ -5,6 +5,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Optional
 
 import typer
+from rich.markup import escape
 
 from omi_cli.errors import UsageError
 from omi_cli.models import GoalType
@@ -158,7 +159,7 @@ def update_goal(
         )
     with ctx.make_client() as client:
         result = client.patch(f"/v1/dev/user/goals/{goal_id}", json_body=body)
-    ctx.renderer.success(f"Updated goal [bold]{goal_id}[/bold].")
+    ctx.renderer.success(f"Updated goal [bold]{escape(goal_id)}[/bold].")
     ctx.renderer.emit(result)
 
 
@@ -172,7 +173,7 @@ def update_progress(
     with ctx.make_client() as client:
         # The progress endpoint takes current_value as a query param.
         result = client.patch(f"/v1/dev/user/goals/{goal_id}/progress", params={"current_value": current_value})
-    ctx.renderer.success(f"Updated progress on [bold]{goal_id}[/bold] → {current_value}.")
+    ctx.renderer.success(f"Updated progress on [bold]{escape(goal_id)}[/bold] → {current_value}.")
     ctx.renderer.emit(result)
 
 
@@ -201,4 +202,4 @@ def delete_goal(
         result = client.delete(f"/v1/dev/user/goals/{goal_id}")
     if ctx.renderer.json_mode:
         ctx.renderer.emit(result)
-    ctx.renderer.success(f"Deleted goal [bold]{goal_id}[/bold].")
+    ctx.renderer.success(f"Deleted goal [bold]{escape(goal_id)}[/bold].")

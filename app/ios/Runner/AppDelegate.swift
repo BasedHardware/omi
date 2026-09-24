@@ -120,6 +120,22 @@ final class QuickActionsIconPatcher: NSObject {
       return super.application(application, didFinishLaunchingWithOptions: launchOptions)
     }
     GeneratedPluginRegistrant.register(with: self)
+    // Read-only admission evidence for the separately signed capture lane.
+    // Missing flags stay nil so Dart fails closed before app-owned networking.
+    FlutterMethodChannel(name: "omi/physical_qualification", binaryMessenger: controller.binaryMessenger)
+      .setMethodCallHandler { call, result in
+        guard call.method == "isolation" else {
+          result(FlutterMethodNotImplemented)
+          return
+        }
+        let info = Bundle.main.infoDictionary ?? [:]
+        result([
+          "bundle_id": Bundle.main.bundleIdentifier ?? "",
+          "firebase_messaging_auto_init": info["FirebaseMessagingAutoInitEnabled"] ?? NSNull(),
+          "firebase_crashlytics_collection": info["FirebaseCrashlyticsCollectionEnabled"] ?? NSNull(),
+          "firebase_data_collection": info["FirebaseDataCollectionDefaultEnabled"] ?? NSNull()
+        ])
+      }
     QuickActionsIconPatcher.shared.startObserving()
       
       

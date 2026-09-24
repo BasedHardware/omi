@@ -17,6 +17,7 @@ from utils.metrics import (
     OMI_LIVE_STT_TERMINAL_FAILURES_TOTAL,
     OMI_LISTEN_ACCEPTED_TOTAL,
     OMI_LISTEN_AUDIO_OUTCOME_TOTAL,
+    OMI_LISTEN_REALTIME_DEMAND_SECONDS_TOTAL,
     OMI_LISTEN_UNKNOWN_CHANNEL_PREFIX_TOTAL,
     OMI_SYNC_INTAKE_TOTAL,
     OMI_SYNC_TRANSCRIPTION_JOBS_TOTAL,
@@ -375,6 +376,22 @@ def record_listen_audio_outcome(*, source: str | None, outcome: str, platform: s
         outcome=outcome,
         client_platform=_bounded_platform(platform),
     ).inc()
+
+
+_REALTIME_DEMAND_BUCKETS = frozenset({'visible', 'foreground', 'background', 'unreported'})
+
+
+def record_listen_realtime_demand(*, source: str | None, platform: str | None, seconds: Mapping[str, float]) -> None:
+    """Add one session's wall seconds per real-time demand bucket."""
+
+    for bucket, value in seconds.items():
+        if bucket not in _REALTIME_DEMAND_BUCKETS or value <= 0:
+            continue
+        OMI_LISTEN_REALTIME_DEMAND_SECONDS_TOTAL.labels(
+            transcription_source=_bounded_source(source),
+            client_platform=_bounded_platform(platform),
+            realtime_demand=bucket,
+        ).inc(value)
 
 
 def record_listen_unknown_channel_prefix(*, source: str | None, platform: str | None) -> None:

@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:collection/collection.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'package:omi/backend/schema/capture_group.dart';
 import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/utils/audio/audio_timeline_mapper.dart';
@@ -444,6 +445,10 @@ class ServerConversation {
   /// Search-only transcript evidence for find-and-play.
   final List<TranscriptMatchSnippet> matchSnippets;
 
+  /// The event this recording belongs to when other devices recorded it too;
+  /// null for a conversation captured by one surface.
+  final CaptureGroup? captureGroup;
+
   // local label
   bool isNew = false;
 
@@ -472,6 +477,7 @@ class ServerConversation {
     this.folderId,
     this.visibility = ConversationVisibility.private_,
     this.matchSnippets = const [],
+    this.captureGroup,
   });
 
   factory ServerConversation.fromJson(Map<String, dynamic> json) {
@@ -550,6 +556,7 @@ class ServerConversation {
       folderId: generated.folderId,
       visibility: ConversationVisibility.fromString(generated.visibility),
       matchSnippets: snippets,
+      captureGroup: generated.captureGroup == null ? null : CaptureGroup.fromGenerated(generated.captureGroup!),
     );
   }
 
@@ -581,6 +588,7 @@ class ServerConversation {
       'starred': starred,
       'folder_id': folderId,
       'visibility': visibility.value,
+      'capture_group': captureGroup?.toJson(),
     };
   }
 
@@ -610,6 +618,7 @@ class ServerConversation {
       starred: starred,
       folderId: folderId,
       visibility: visibility.value,
+      captureGroup: captureGroup?.toGenerated(),
     );
   }
 

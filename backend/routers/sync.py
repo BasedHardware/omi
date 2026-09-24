@@ -606,7 +606,7 @@ async def sync_local_files(
     if lane_decision.lane == SyncLane.BACKFILL:
         backfill_slot_token = f'v1-{_uuid.uuid4()}'
         try:
-            if not try_acquire_backfill_slot(uid, backfill_slot_token):
+            if not await run_blocking(db_executor, try_acquire_backfill_slot, uid, backfill_slot_token):
                 return JSONResponse(
                     status_code=429,
                     headers={
@@ -629,8 +629,8 @@ async def sync_local_files(
 
     try:
         try:
-            paths = retrieve_file_paths(files, uid)
-            wav_paths = decode_files_to_wav(paths)
+            paths = await run_blocking(sync_executor, retrieve_file_paths, files, uid)
+            wav_paths = await run_blocking(sync_executor, decode_files_to_wav, paths)
         except HTTPException as e:
             raise HTTPException(status_code=e.status_code, detail=e.detail, headers=_V1_DEPRECATION_HEADERS)
 
@@ -642,7 +642,7 @@ async def sync_local_files(
         await asyncio.gather(*[run_blocking(sync_executor, _run_vad, path) for path in wav_paths])
 
         # Clean up original wav files after VAD segmentation (segments are now in segmented_paths)
-        _cleanup_files(wav_paths)
+        await run_blocking(sync_executor, _cleanup_files, wav_paths)
         wav_paths = []  # Clear to avoid double cleanup in finally
 
         # Check for VAD errors - if any failed, abort to prevent data loss
@@ -661,7 +661,13 @@ async def sync_local_files(
         )
 
         if lane_decision.lane == SyncLane.BACKFILL:
-            reservation = reserve_backfill_speech(uid, backfill_slot_token or f'v1-{_uuid.uuid4()}', total_speech_ms)
+            reservation = await run_blocking(
+                db_executor,
+                reserve_backfill_speech,
+                uid,
+                backfill_slot_token or f'v1-{_uuid.uuid4()}',
+                total_speech_ms,
+            )
             if not reservation.allowed:
                 return JSONResponse(
                     status_code=429,
@@ -678,11 +684,11 @@ async def sync_local_files(
 
         if FAIR_USE_ENABLED and total_speech_ms > 0:
             meter_source = 'sync_backfill' if lane_decision.lane == SyncLane.BACKFILL else 'sync_fresh'
-            record_speech_ms(uid, total_speech_ms, source=meter_source)
+            await run_blocking(db_executor, record_speech_ms, uid, total_speech_ms, source=meter_source)
             if lane_decision.lane == SyncLane.FRESH:
                 fair_use_sub = await run_blocking(db_executor, users_db.get_existing_user_subscription, uid)
                 fair_use_plan = fair_use_sub.plan if fair_use_sub else None
-                speech_totals = get_rolling_speech_ms(uid)
+                speech_totals = await run_blocking(db_executor, get_rolling_speech_ms, uid)
                 triggered_caps = check_soft_caps(uid, speech_totals=speech_totals, plan=fair_use_plan)
                 if triggered_caps:
                     logger.info(f'sync: soft caps triggered for {uid}: {triggered_caps}')
@@ -712,7 +718,7 @@ async def sync_local_files(
 
         if dg_budget_blocked:
             logger.info(f'sync: DG budget exhausted, skipping {total_segments} segments uid={uid}')
-            _cleanup_files(list(segmented_paths))
+            await run_blocking(sync_executor, _cleanup_files, list(segmented_paths))
             return await _fair_use_restriction_response(
                 uid=uid,
                 retry_after=_retry_after_until_next_utc_day(),
@@ -790,7 +796,7 @@ async def sync_local_files(
             try:
                 dg_ms = int(total_speech_seconds * 1000)
                 if dg_ms > 0:
-                    record_dg_usage_ms(uid, dg_ms)
+                    await run_blocking(db_executor, record_dg_usage_ms, uid, dg_ms)
             except Exception as e:
                 logger.error(f'sync: DG usage record error for {uid}: {e}')
 
@@ -841,12 +847,14 @@ async def sync_local_files(
         return result
     finally:
         # Clean up any remaining temporary files
-        _cleanup_files(paths)  # .bin files (in case decode_files_to_wav didn't finish)
-        _cleanup_files(wav_paths)  # Original wav files (if VAD didn't complete)
-        _cleanup_files(segmented_paths)  # Segmented wav files after processing
+        await run_blocking(
+            sync_executor, _cleanup_files, paths
+        )  # .bin files (in case decode_files_to_wav didn't finish)
+        await run_blocking(sync_executor, _cleanup_files, wav_paths)  # Original wav files (if VAD didn't complete)
+        await run_blocking(sync_executor, _cleanup_files, segmented_paths)  # Segmented wav files after processing
         if backfill_slot_token:
             try:
-                release_backfill_slot(uid, backfill_slot_token)
+                await run_blocking(db_executor, release_backfill_slot, uid, backfill_slot_token)
             except Exception as e:
                 logger.warning('sync: failed to release v1 backfill slot uid=%s error=%s', uid, type(e).__name__)
 

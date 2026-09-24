@@ -674,12 +674,77 @@ class GeneratedTranscriptMatchSnippet {
   }
 }
 
+class GeneratedCaptureGroupMember {
+  final DateTime? finishedAt;
+  final String id;
+  final String? source;
+  final DateTime? startedAt;
+
+  const GeneratedCaptureGroupMember({
+    this.finishedAt,
+    required this.id,
+    this.source,
+    this.startedAt,
+  });
+
+  factory GeneratedCaptureGroupMember.fromJson(Map<String, dynamic> json) {
+    return GeneratedCaptureGroupMember(
+      finishedAt: _readFieldValue<DateTime>(_readField(json, const ["finished_at"]), "finished_at", _readDateTime, requiredField: false, nullable: true),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      source: _readFieldValue<String>(_readField(json, const ["source"]), "source", _readString, requiredField: false, nullable: true),
+      startedAt: _readFieldValue<DateTime>(_readField(json, const ["started_at"]), "started_at", _readDateTime, requiredField: false, nullable: true),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'finished_at': finishedAt?.toUtc().toIso8601String(),
+      'id': id,
+      'source': source,
+      'started_at': startedAt?.toUtc().toIso8601String(),
+    };
+  }
+}
+
+class GeneratedCaptureGroup {
+  final String id;
+  final List<GeneratedCaptureGroupMember> members;
+  final String primaryId;
+  final int revision;
+
+  const GeneratedCaptureGroup({
+    required this.id,
+    this.members = const [],
+    required this.primaryId,
+    this.revision = 1,
+  });
+
+  factory GeneratedCaptureGroup.fromJson(Map<String, dynamic> json) {
+    return GeneratedCaptureGroup(
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      members: _required(_readFieldValue<List<GeneratedCaptureGroupMember>>(_readField(json, const ["members"]), "members", (value) => _readObjectList(value, GeneratedCaptureGroupMember.fromJson), requiredField: false, nullable: false, defaultValue: const []), "members"),
+      primaryId: _required(_readFieldValue<String>(_readField(json, const ["primary_id"]), "primary_id", _readString, requiredField: true, nullable: false), "primary_id"),
+      revision: _required(_readFieldValue<int>(_readField(json, const ["revision"]), "revision", _readInt, requiredField: false, nullable: false, defaultValue: 1), "revision"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'members': members.map((value) => value.toJson()).toList(),
+      'primary_id': primaryId,
+      'revision': revision,
+    };
+  }
+}
+
 class GeneratedConversation {
   final String? appId;
   final List<GeneratedAppResult> appsResults;
   final List<GeneratedAudioFile> audioFiles;
   final GeneratedCalendarEventLink? calendarEvent;
   final String? callId;
+  final GeneratedCaptureGroup? captureGroup;
   final String? clientDeviceId;
   final String? clientPlatform;
   final GeneratedClientProcessing? clientProcessing;
@@ -727,6 +792,7 @@ class GeneratedConversation {
     this.audioFiles = const [],
     this.calendarEvent,
     this.callId,
+    this.captureGroup,
     this.clientDeviceId,
     this.clientPlatform,
     this.clientProcessing,
@@ -776,6 +842,7 @@ class GeneratedConversation {
       audioFiles: _required(_readFieldValue<List<GeneratedAudioFile>>(_readField(json, const ["audio_files"]), "audio_files", (value) => _readObjectList(value, GeneratedAudioFile.fromJson), requiredField: false, nullable: false, defaultValue: const []), "audio_files"),
       calendarEvent: _readFieldValue<GeneratedCalendarEventLink>(_readField(json, const ["calendar_event"]), "calendar_event", (value) => _readObject(value, GeneratedCalendarEventLink.fromJson), requiredField: false, nullable: true),
       callId: _readFieldValue<String>(_readField(json, const ["call_id"]), "call_id", _readString, requiredField: false, nullable: true),
+      captureGroup: _readFieldValue<GeneratedCaptureGroup>(_readField(json, const ["capture_group"]), "capture_group", (value) => _readObject(value, GeneratedCaptureGroup.fromJson), requiredField: false, nullable: true),
       clientDeviceId: _readFieldValue<String>(_readField(json, const ["client_device_id"]), "client_device_id", _readString, requiredField: false, nullable: true),
       clientPlatform: _readFieldValue<String>(_readField(json, const ["client_platform"]), "client_platform", _readString, requiredField: false, nullable: true),
       clientProcessing: _readFieldValue<GeneratedClientProcessing>(_readField(json, const ["client_processing"]), "client_processing", (value) => _readObject(value, GeneratedClientProcessing.fromJson), requiredField: false, nullable: true),
@@ -826,6 +893,7 @@ class GeneratedConversation {
       'audio_files': audioFiles.map((value) => value.toJson()).toList(),
       'calendar_event': calendarEvent?.toJson(),
       'call_id': callId,
+      'capture_group': captureGroup?.toJson(),
       'client_device_id': clientDeviceId,
       'client_platform': clientPlatform,
       'client_processing': clientProcessing?.toJson(),
@@ -1064,6 +1132,7 @@ class GeneratedConversationSearchItem {
   final List<GeneratedAudioFile> audioFiles;
   final GeneratedCalendarEventLink? calendarEvent;
   final String? callId;
+  final GeneratedCaptureGroup? captureGroup;
   final String? clientDeviceId;
   final String? clientPlatform;
   final GeneratedClientProcessing? clientProcessing;
@@ -1112,6 +1181,7 @@ class GeneratedConversationSearchItem {
     this.audioFiles = const [],
     this.calendarEvent,
     this.callId,
+    this.captureGroup,
     this.clientDeviceId,
     this.clientPlatform,
     this.clientProcessing,
@@ -1162,6 +1232,7 @@ class GeneratedConversationSearchItem {
       audioFiles: _required(_readFieldValue<List<GeneratedAudioFile>>(_readField(json, const ["audio_files"]), "audio_files", (value) => _readObjectList(value, GeneratedAudioFile.fromJson), requiredField: false, nullable: false, defaultValue: const []), "audio_files"),
       calendarEvent: _readFieldValue<GeneratedCalendarEventLink>(_readField(json, const ["calendar_event"]), "calendar_event", (value) => _readObject(value, GeneratedCalendarEventLink.fromJson), requiredField: false, nullable: true),
       callId: _readFieldValue<String>(_readField(json, const ["call_id"]), "call_id", _readString, requiredField: false, nullable: true),
+      captureGroup: _readFieldValue<GeneratedCaptureGroup>(_readField(json, const ["capture_group"]), "capture_group", (value) => _readObject(value, GeneratedCaptureGroup.fromJson), requiredField: false, nullable: true),
       clientDeviceId: _readFieldValue<String>(_readField(json, const ["client_device_id"]), "client_device_id", _readString, requiredField: false, nullable: true),
       clientPlatform: _readFieldValue<String>(_readField(json, const ["client_platform"]), "client_platform", _readString, requiredField: false, nullable: true),
       clientProcessing: _readFieldValue<GeneratedClientProcessing>(_readField(json, const ["client_processing"]), "client_processing", (value) => _readObject(value, GeneratedClientProcessing.fromJson), requiredField: false, nullable: true),
@@ -1213,6 +1284,7 @@ class GeneratedConversationSearchItem {
       'audio_files': audioFiles.map((value) => value.toJson()).toList(),
       'calendar_event': calendarEvent?.toJson(),
       'call_id': callId,
+      'capture_group': captureGroup?.toJson(),
       'client_device_id': clientDeviceId,
       'client_platform': clientPlatform,
       'client_processing': clientProcessing?.toJson(),

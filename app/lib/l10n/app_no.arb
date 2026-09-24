@@ -3256,5 +3256,17 @@
     "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Hva kan du gjøre for meg?} goal{Hjelp meg med å sette et mål} activity{Oppsummer mine siste aktiviteter} improve{Hvordan kan jeg bli bedre?} other{}}",
     "nextWeek": "Neste uke",
-    "clearSearch": "Tøm søk"
+    "clearSearch": "Tøm søk",
+    "captureRecordingsSheetTitle": "Opptak av denne samtalen",
+    "captureRecordingSeparate": "Skill ut…",
+    "captureRecordingSeparateTitle": "Skille ut dette opptaket?",
+    "captureRecordingSeparateMessage": "{recording} vises som en egen samtale og grupperes ikke med denne hendelsen igjen.",
+    "captureRecordingSeparateConfirm": "Skill ut",
+    "captureRecordingSeparateFailed": "Kunne ikke skille ut. Prøv igjen.",
+    "captureRecordingOpenFailed": "Kunne ikke åpne dette opptaket.",
+    "captureRecordingViewing": "Du ser på dette opptaket",
+    "captureRecordedBy": "Tatt opp av {devices}",
+    "captureSourceDesktop": "Datamaskin",
+    "renameConversation": "Gi nytt navn",
+    "captureRecordingsCount": "{count, plural, =1{1 opptak} other{{count} opptak}}"
 }

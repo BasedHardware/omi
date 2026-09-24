@@ -2,6 +2,41 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.383",
+      "date": "2026-09-24",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.382",
+      "date": "2026-09-23",
+      "changes": [
+        "Fixed a bug that could stop and restart ambient recording every few minutes, splitting one conversation into many"
+      ]
+    },
+    {
+      "version": "0.12.381",
+      "date": "2026-09-23",
+      "changes": [
+        "Omi no longer pulls its window in front of what you are working in to show a microphone or transcription warning. The alert waits and appears the next time you come back to Omi."
+      ]
+    },
+    {
+      "version": "0.12.380",
+      "date": "2026-09-23",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.379",
+      "date": "2026-09-23",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
       "version": "0.12.378",
       "date": "2026-09-22",
       "changes": [

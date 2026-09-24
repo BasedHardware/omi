@@ -176,6 +176,13 @@ struct ConversationRowView: View {
         .scaledFont(size: OmiType.caption)
         .foregroundColor(Ink.secondary)
 
+      if captureSources.count > 1 {
+        Text("·")
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(Ink.secondary)
+        captureSourcesBadge
+      }
+
       if isSettlingDerived {
         Text("·")
           .scaledFont(size: OmiType.caption)
@@ -194,23 +201,26 @@ struct ConversationRowView: View {
     conversation.canReprocess || (isLivePipelineRow && processingPhase(now: now) == .stalled)
   }
 
-  /// Label for the conversation source
-  private var sourceLabel: String {
-    switch conversation.source {
-    case .desktop: return "Desktop"
-    case .omi: return "omi"
-    case .phone: return "Phone"
-    case .appleWatch: return "Watch"
-    case .workflow: return "Workflow"
-    case .screenpipe: return "Screenpipe"
-    case .friend, .friendCom: return "Friend"
-    case .openglass: return "OpenGlass"
-    case .frame: return "Frame"
-    case .bee: return "Bee"
-    case .limitless: return "Limitless"
-    case .plaud: return "Plaud"
-    default: return "Unknown"
+  /// Distinct surfaces that recorded this event, in the order the server lists members.
+  private var captureSources: [ConversationSource] {
+    var seen: [ConversationSource] = []
+    for member in conversation.captureGroup?.members ?? [] where !seen.contains(member.source) {
+      seen.append(member.source)
     }
+    return seen
+  }
+
+  private var captureSourcesBadge: some View {
+    HStack(spacing: OmiSpacing.hairline) {
+      ForEach(captureSources, id: \.rawValue) { source in
+        Image(systemName: source.captureSymbol)
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(Ink.secondary)
+      }
+    }
+    .help("Recorded by " + captureSources.map(\.captureLabel).joined(separator: " and "))
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel("Recorded by " + captureSources.map(\.captureLabel).joined(separator: " and "))
   }
 
   private func toggleStar() async {

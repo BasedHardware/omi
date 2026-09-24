@@ -1618,3 +1618,33 @@ async def test_late_first_segment_after_nonspeech_is_not_reposted(monkeypatch):
     assert client.requests == []
     sock.finish()
     await asyncio.gather(sock._pump_task, return_exceptions=True)
+
+
+def test_decoder_loops_collapse_and_ordinary_repetition_survives():
+    from utils.stt.window_anchor import collapse_decoder_loops
+
+    loop = 'roles have increased in a little bit of a little bit of a little bit of a little bit of a ability to retain'
+    assert collapse_decoder_loops(loop) == ('roles have increased in a little bit of a ability to retain', 1)
+    for speech in (
+        'no no no I said',
+        'the the market',
+        'yeah yeah yeah yeah',
+        "I think I think that's right",
+        'we did forty million of incremental billings',
+    ):
+        assert collapse_decoder_loops(speech) == (speech, 0)
+
+
+@pytest.mark.asyncio
+async def test_window_segments_have_decoder_loops_collapsed(monkeypatch):
+    monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: _REAL_SLEEP(0))
+    looped = 'It went up a bit more a bit more a bit more a bit more than planned.'
+    client = SeqClient([{'segments': [{'text': looped, 'start': 0.2, 'end': 5.0}]}])
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    sock = window.connect_window(lambda _: None, 16000)
+    before = window.WINDOW_DECODER_LOOPS._value.get()
+    out = await sock._post_and_parse(b'\x01\x00' * 16000 * 6, 6.0)
+    assert [s.text for s in out] == ['It went up a bit more than planned.']
+    assert window.WINDOW_DECODER_LOOPS._value.get() == before + 1
+    sock.finish()
+    await asyncio.gather(sock._pump_task, return_exceptions=True)

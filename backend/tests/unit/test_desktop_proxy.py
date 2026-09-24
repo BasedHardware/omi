@@ -1430,6 +1430,51 @@ def test_overflow_plan_probes_the_target_before_paying_on_demand(monkeypatch):
     ]
 
 
+def _gateway_pt_provider():
+    from llm_gateway.gateway.providers import VertexGeminiProvider
+
+    async def _token() -> str:
+        return "token"
+
+    return VertexGeminiProvider(access_token_supplier=_token)
+
+
+@pytest.mark.asyncio
+async def test_gateway_and_desktop_kill_switch_overflow_agree(monkeypatch):
+    """Both copies of the PT policy apply the same origin ceiling."""
+    monkeypatch.delenv(desktop_proxy._OVERFLOW_MODEL_OVERRIDE_ENV, raising=False)
+    monkeypatch.delenv(desktop_proxy._PT_MODEL_OVERRIDE_ENV, raising=False)
+    monkeypatch.delenv(desktop_proxy._OVERFLOW_ENABLED_ENV, raising=False)
+    provider = _gateway_pt_provider()
+    try:
+        origin = "gemini-2.5-flash-lite"
+        unset_desktop = desktop_proxy._overflow_plan("gemini-2.5-flash")
+        unset_gateway = provider._overflow_plan("gemini-2.5-flash")
+        assert unset_desktop == unset_gateway
+        assert unset_desktop[0] == ("gemini-3.1-flash-lite", "dedicated")
+
+        capped_desktop = desktop_proxy._overflow_plan("gemini-2.5-flash", origin_model=origin)
+        capped_gateway = provider._overflow_plan("gemini-2.5-flash", origin_model=origin)
+        assert capped_desktop == capped_gateway == [("gemini-2.5-flash-lite", "shared")]
+        assert all("gemini-3.1" not in model for model, _capacity in capped_desktop)
+
+        desktop_proxy._record_pt_target_observation(True)
+        provider._pt_target_ready = True
+        promoted_desktop = desktop_proxy._overflow_plan("gemini-3.1-flash-lite", origin_model=origin)
+        promoted_gateway = provider._overflow_plan("gemini-3.1-flash-lite", origin_model=origin)
+        assert promoted_desktop == promoted_gateway == [("gemini-2.5-flash-lite", "shared")]
+        assert all(model != "gemini-3.1-flash-lite" for model, _capacity in promoted_desktop)
+    finally:
+        await provider.aclose()
+
+
+def test_desktop_kill_switch_reads_the_origin_table(monkeypatch):
+    """The ceiling is data on the shared table, not a per-call conditional."""
+    monkeypatch.delenv(desktop_proxy._OVERFLOW_MODEL_OVERRIDE_ENV, raising=False)
+    monkeypatch.setitem(desktop_proxy.ptr.LANE_OVERFLOW_ORIGINS, "gemini-2.5-flash", "gemini-2.5-flash-lite")
+    assert desktop_proxy._overflow_plan("gemini-2.5-flash") == [("gemini-2.5-flash-lite", "shared")]
+
+
 def test_overflow_skips_a_rung_traffic_has_proved_unreachable(monkeypatch):
     """Keeping an unreachable rung in the plan would spend a round trip to 404
     on every overflow request."""

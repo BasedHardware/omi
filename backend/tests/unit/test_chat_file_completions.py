@@ -21,6 +21,7 @@ from utils.other import chat_file  # noqa: E402
 from utils.retrieval import graph  # noqa: E402
 from utils.retrieval.agentic import AGENT_STREAM_FAILURE_MESSAGE  # noqa: E402
 import utils.retrieval.tools.file_tools as file_tools  # noqa: E402
+from utils.llm.model_config import LUNA_MODEL
 
 
 class _Callback:
@@ -105,7 +106,7 @@ async def test_doc_file_chat_uses_completions_and_never_assistants(monkeypatch):
     assert answer == 'PDF summary'
     assert callback.chunks == ['PDF summary']
     assert callback.ended is True
-    assert request['model'] == 'gpt-5.6-luna'
+    assert request['model'] == LUNA_MODEL
     assert request['max_completion_tokens'] == 2048
     assert 'max_tokens' not in request
     assert request['messages'][0]['content'][1] == {'type': 'file', 'file': {'file_id': 'openai-file-1'}}

@@ -62,6 +62,10 @@ SELECTION_FILE = LIVE_TRANSCRIPT_FILES[3]
 CONVERSATION_DETAIL_FILES = (
     "desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailView.swift",
     "desktop/macos/Desktop/Sources/MainWindow/Components/ConversationSummarySections.swift",
+    # The detail page's header and summary/action-item sections moved out of
+    # ConversationDetailView.swift; they keep the same blanket ban.
+    "desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailHeader.swift",
+    "desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailSections.swift",
 )
 
 # The chained-modifier rule scans every desktop Swift source, not a fixed

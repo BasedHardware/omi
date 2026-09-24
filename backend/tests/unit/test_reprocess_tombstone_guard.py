@@ -67,14 +67,19 @@ class TestReprocessTombstoneGuard:
         process.assert_not_called()  # deleted content never re-enters the pipeline
 
     def test_reprocess_still_allows_a_discarded_conversation(self):
+        """Any successful explicit reprocess of a hidden row is the user's keep, not only sync review rows."""
         discarded = {'id': 'c1', 'discarded': True, 'status': 'completed'}
-        fake_conv = SimpleNamespace(language='en')
+        fake_conv = SimpleNamespace(language='en', discarded=False, sync_relevance=None)
         with patch.object(conv_router, '_get_valid_conversation_by_id', return_value=discarded), patch.object(
             conv_router, 'deserialize_conversation', return_value=fake_conv
-        ), patch.object(conv_router, 'process_conversation', return_value=fake_conv) as process:
+        ), patch.object(conv_router, 'process_conversation', return_value=fake_conv) as process, patch.object(
+            conv_router.lifecycle_service, 'restore_discarded', return_value=True
+        ) as restore:
             result = conv_router.reprocess_conversation(conversation_id='c1', uid='u1')
         process.assert_called_once()
+        restore.assert_called_once_with('u1', 'c1')
         assert result is fake_conv
+        assert result.sync_relevance is None
 
 
 @pytest.mark.parametrize('discarded,restored', [(False, True), (False, False), (True, False)])

@@ -577,6 +577,8 @@ SPEAKER_NAME_STOPWORDS = frozenset(
         'ok',
         'yeah',
         'just',
+        'because',
+        'googling',
         'like',
         'so',
         'very',

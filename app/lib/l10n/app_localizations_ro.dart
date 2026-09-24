@@ -10192,4 +10192,52 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get clearSearch => 'Șterge căutarea';
+
+  @override
+  String get captureRecordingsSheetTitle => 'Înregistrările acestei conversații';
+
+  @override
+  String get captureRecordingSeparate => 'Separă…';
+
+  @override
+  String get captureRecordingSeparateTitle => 'Separi această înregistrare?';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording va apărea ca o conversație separată și nu va mai fi grupată cu acest eveniment.';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => 'Separă';
+
+  @override
+  String get captureRecordingSeparateFailed => 'Nu s-a putut separa. Încearcă din nou.';
+
+  @override
+  String get captureRecordingOpenFailed => 'Această înregistrare nu a putut fi deschisă.';
+
+  @override
+  String get captureRecordingViewing => 'Vizualizezi această înregistrare';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return 'Înregistrat de $devices';
+  }
+
+  @override
+  String get captureSourceDesktop => 'Computer';
+
+  @override
+  String get renameConversation => 'Redenumește';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Înregistrări: $count',
+      one: '1 înregistrare',
+    );
+    return '$_temp0';
+  }
 }

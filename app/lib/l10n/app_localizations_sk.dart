@@ -10137,4 +10137,52 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get clearSearch => 'Vymazať vyhľadávanie';
+
+  @override
+  String get captureRecordingsSheetTitle => 'Nahrávky tohto rozhovoru';
+
+  @override
+  String get captureRecordingSeparate => 'Oddeliť…';
+
+  @override
+  String get captureRecordingSeparateTitle => 'Oddeliť túto nahrávku?';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording sa zobrazí ako samostatný rozhovor a s touto udalosťou sa už nezoskupí.';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => 'Oddeliť';
+
+  @override
+  String get captureRecordingSeparateFailed => 'Oddelenie zlyhalo. Skúste to znova.';
+
+  @override
+  String get captureRecordingOpenFailed => 'Túto nahrávku sa nepodarilo otvoriť.';
+
+  @override
+  String get captureRecordingViewing => 'Prezeráte si túto nahrávku';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return 'Nahrané: $devices';
+  }
+
+  @override
+  String get captureSourceDesktop => 'Počítač';
+
+  @override
+  String get renameConversation => 'Premenovať';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'Nahrávok: $count',
+      one: '1 nahrávka',
+    );
+    return '$_temp0';
+  }
 }

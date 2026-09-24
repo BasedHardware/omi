@@ -3291,5 +3291,17 @@
     "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Co możesz dla mnie zrobić?} goal{Pomóż mi wyznaczyć cel} activity{Podsumuj moje ostatnie aktywności} improve{Jak mogę się poprawić?} other{}}",
     "nextWeek": "W przyszłym tygodniu",
-    "clearSearch": "Wyczyść wyszukiwanie"
+    "clearSearch": "Wyczyść wyszukiwanie",
+    "captureRecordingsSheetTitle": "Nagrania tej rozmowy",
+    "captureRecordingSeparate": "Rozdziel…",
+    "captureRecordingSeparateTitle": "Rozdzielić to nagranie?",
+    "captureRecordingSeparateMessage": "{recording} będzie widoczne jako osobna rozmowa i nie zostanie ponownie zgrupowane z tym wydarzeniem.",
+    "captureRecordingSeparateConfirm": "Rozdziel",
+    "captureRecordingSeparateFailed": "Nie udało się rozdzielić. Spróbuj ponownie.",
+    "captureRecordingOpenFailed": "Nie udało się otworzyć tego nagrania.",
+    "captureRecordingViewing": "Przeglądasz to nagranie",
+    "captureRecordedBy": "Nagrane przez {devices}",
+    "captureSourceDesktop": "Komputer",
+    "renameConversation": "Zmień nazwę",
+    "captureRecordingsCount": "{count, plural, =1{1 nagranie} other{Nagrania: {count}}}"
 }

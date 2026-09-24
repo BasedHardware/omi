@@ -3256,5 +3256,17 @@
     "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Що ти можеш для мене зробити?} goal{Допоможи мені поставити мету} activity{Підсумуй мою нещодавню діяльність} improve{Як я можу покращитися?} other{}}",
     "nextWeek": "Наступного тижня",
-    "clearSearch": "Очистити пошук"
+    "clearSearch": "Очистити пошук",
+    "captureRecordingsSheetTitle": "Записи цієї розмови",
+    "captureRecordingSeparate": "Відокремити…",
+    "captureRecordingSeparateTitle": "Відокремити цей запис?",
+    "captureRecordingSeparateMessage": "{recording} показуватиметься як окрема розмова й більше не групуватиметься з цією подією.",
+    "captureRecordingSeparateConfirm": "Відокремити",
+    "captureRecordingSeparateFailed": "Не вдалося відокремити. Спробуйте ще раз.",
+    "captureRecordingOpenFailed": "Не вдалося відкрити цей запис.",
+    "captureRecordingViewing": "Ви переглядаєте цей запис",
+    "captureRecordedBy": "Записано: {devices}",
+    "captureSourceDesktop": "Комп'ютер",
+    "renameConversation": "Перейменувати",
+    "captureRecordingsCount": "{count, plural, =1{1 запис} other{Записів: {count}}}"
 }

@@ -3256,5 +3256,17 @@
     "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{คุณช่วยอะไรฉันได้บ้าง?} goal{ช่วยฉันตั้งเป้าหมายหน่อย} activity{สรุปกิจกรรมล่าสุดของฉัน} improve{ฉันจะพัฒนาตัวเองได้อย่างไร?} other{}}",
     "nextWeek": "สัปดาห์หน้า",
-    "clearSearch": "ล้างการค้นหา"
+    "clearSearch": "ล้างการค้นหา",
+    "captureRecordingsSheetTitle": "การบันทึกของบทสนทนานี้",
+    "captureRecordingSeparate": "แยก…",
+    "captureRecordingSeparateTitle": "แยกการบันทึกนี้ไหม?",
+    "captureRecordingSeparateMessage": "{recording} จะแสดงเป็นบทสนทนาแยก และจะไม่ถูกจัดกลุ่มกับเหตุการณ์นี้อีก",
+    "captureRecordingSeparateConfirm": "แยก",
+    "captureRecordingSeparateFailed": "แยกไม่สำเร็จ ลองอีกครั้ง",
+    "captureRecordingOpenFailed": "เปิดการบันทึกนี้ไม่ได้",
+    "captureRecordingViewing": "คุณกำลังดูการบันทึกนี้",
+    "captureRecordedBy": "บันทึกโดย {devices}",
+    "captureSourceDesktop": "เดสก์ท็อป",
+    "renameConversation": "เปลี่ยนชื่อ",
+    "captureRecordingsCount": "{count, plural, =1{1 การบันทึก} other{{count} การบันทึก}}"
 }

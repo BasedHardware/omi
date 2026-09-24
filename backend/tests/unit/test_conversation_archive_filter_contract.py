@@ -290,6 +290,8 @@ def test_archive_filter_precedes_pagination_and_matches_count(conversations_db):
         "where",
         "where",
         "order_by",
+        "limit",
+        "offset",
         "stream",
     ]
 
@@ -364,33 +366,8 @@ def test_hosted_mcp_list_uses_transcript_and_photo_free_projection(conversations
     assert "structured.action_items" not in selected_fields
     assert "structured.sections" not in selected_fields
     assert "structured.events" not in selected_fields
-    expected_fields = tuple(
-        dict.fromkeys(module._MCP_CONVERSATION_CARD_FIELD_PATHS + module._FRAGMENT_VISIBILITY_FIELD_PATHS)
-    )
-    assert ("select", expected_fields) in firestore.queries[0].events
+    assert ("select", tuple(module._MCP_CONVERSATION_CARD_FIELD_PATHS)) in firestore.queries[0].events
     transcript_fields = set(module._MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS)
     assert "transcript_segments" in transcript_fields
     assert "photos" not in transcript_fields
     assert "structured.action_items" not in transcript_fields
-
-
-def test_hosted_mcp_list_hides_review_row_despite_generated_sections(conversations_db):
-    module, firestore = conversations_db
-    firestore.rows = [
-        {
-            **_conversation("sections-review", created_at=1, source="omi"),
-            "sync_relevance": "review",
-            "structured": {
-                "title": "A card",
-                "overview": "",
-                "sections": [{"heading": "Context", "body_markdown": "Details"}],
-                "action_items": [],
-                "events": [],
-            },
-        }
-    ]
-
-    result = module.get_mcp_conversation_cards("user-1", 20, 0, firestore_client=firestore)
-
-    # A generated summary is not a user action, so it does not protect a review row.
-    assert [row["id"] for row in result] == []

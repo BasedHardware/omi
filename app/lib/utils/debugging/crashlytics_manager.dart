@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:omi/env/physical_qualification.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
@@ -19,6 +20,7 @@ class CrashlyticsManager {
   }
 
   static Future<void> init() async {
+    if (PhysicalQualification.enabled) return;
     // Disable Crashlytics collection in debug mode
     if (kDebugMode) {
       await FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(false);
@@ -53,29 +55,34 @@ class CrashlyticsManager {
   }
 
   void logInfo(String message) {
+    if (PhysicalQualification.enabled) return;
     FirebaseCrashlytics.instance.log(message);
   }
 
   void logError(String message) {
+    if (PhysicalQualification.enabled) return;
     FirebaseCrashlytics.instance.log('ERROR: $message');
   }
 
   void logWarn(String message) {
+    if (PhysicalQualification.enabled) return;
     FirebaseCrashlytics.instance.log('WARN: $message');
   }
 
   void logDebug(String message) {
+    if (PhysicalQualification.enabled) return;
     FirebaseCrashlytics.instance.log('DEBUG: $message');
   }
 
   void logVerbose(String message) {
+    if (PhysicalQualification.enabled) return;
     FirebaseCrashlytics.instance.log('VERBOSE: $message');
   }
 
   /// No Firebase app means there is no Crashlytics to talk to (host test
   /// lane). Same guard main.dart's zone handler uses; without it the report
   /// throws [core/no-app] and masks the original error.
-  static bool get _deliverable => Firebase.apps.isNotEmpty;
+  static bool get _deliverable => !PhysicalQualification.enabled && Firebase.apps.isNotEmpty;
 
   void setUserAttribute(String key, String value) {
     if (!_deliverable) return;
@@ -88,7 +95,7 @@ class CrashlyticsManager {
 
   void setEnabled(bool isEnabled) {
     if (!_deliverable) return;
-    FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(isEnabled);
+    FirebaseCrashlytics.instance.setCrashlyticsCollectionEnabled(isEnabled && !PhysicalQualification.enabled);
   }
 
   Future<void> reportCrash(

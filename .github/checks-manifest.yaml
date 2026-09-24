@@ -172,7 +172,7 @@ checks:
     reason: "Mobile self-driving explicitly requires visible strict pending contracts and marker-only builder edits; a shared Python/Dart primitive binds the V1 builder to the reviewed spine"
   - id: dev-harness-unit-tests
     command: ["bash", "scripts/dev-harness/run-tests.sh"]
-    triggers: ["Makefile", "scripts/check_spine_contracts.py", "contracts/spine/**", "scripts/dev-harness/**", "app/integration_test/journeys/run_journeys.sh", "contracts/session/**", "desktop/macos/scripts/omi-fault-inject.sh", ".github/checks-manifest.yaml"]
+    triggers: ["Makefile", "scripts/check_spine_contracts.py", "contracts/spine/**", "scripts/dev-harness/**", "app/ios/test/phone_mic_probe/**", "app/ios/test/audio_interruption_driver/**", "app/integration_test/journeys/run_journeys.sh", "contracts/session/**", "desktop/macos/scripts/omi-fault-inject.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the hermetic dev-harness stack backs local desktop tests; the Jul 22 2026 Typesense runtime must stay behaviorally covered, and the mobile-verify selection/discovery contract (SCA-490) executes here — journey runner, session evidence contract, and Makefile edits must keep it selected"
   - id: windows-update-feed-probe-tests
@@ -532,6 +532,18 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "CV1 DFU stale iOS bonds surface as CB error 14; native reconnect must classify pairing_lost reliably"
+  - id: ios-native-probe-compile
+    command: ["python3", "app/ios/test/phone_mic_probe/build.py", "--check"]
+    triggers: ["app/ios/Runner/PhoneMic/**", "app/ios/test/phone_mic_probe/**", "app/ios/test/audio_interruption_driver/**", "app/lib/services/devices/models.dart", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "the native diagnostic app must compile with real UIKit/CoreBluetooth dependencies even when agents have no iPhone or signing identity"
+  - id: ios-phone-mic-lifecycle-replay
+    command: ["ruby", "app/ios/test/phone_mic_lifecycle_replay_test.rb"]
+    triggers: ["app/ios/Runner/PhoneMic/**", "app/ios/test/phone_mic_lifecycle_replay_test.*", "app/ios/test/phone_mic_probe/**", "app/test/fixtures/phone_mic_native_events/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "native capture changes must preserve foreground continuity, interruption recovery, and stale-frame rejection without requiring a physical iPhone"
   - id: ios-batch-audio-energy
     command: ["ruby", "app/ios/test/batch_audio_energy_test.rb"]
     triggers: ["app/ios/Runner/Batch/BaseBatchAudioWriter.swift", "app/ios/Runner/Batch/BatchAudioWriter.swift", "app/ios/Runner/PhoneMic/PhoneMicBatchAudioWriter.swift", "app/ios/test/batch_audio_energy_test.*", "app/test/fixtures/capture_policy.json", ".github/checks-manifest.yaml"]
@@ -863,6 +875,11 @@ checks:
     triggers: ["app/scripts/mobile_release_identity.py", "app/scripts/mobile_release_identity_test.py", "codemagic.yaml", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "platform-specific Codemagic tags must resolve one strict version/build/source identity before a mobile publisher or Flutter build runs"
+  - id: android-foreground-service-start-contract
+    command: ["python3", "app/scripts/patch_flutter_foreground_task_test.py"]
+    triggers: ["app/scripts/patch_flutter_foreground_task.py", "app/scripts/patch_flutter_foreground_task_test.py", "app/android/build.gradle", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#16600 passed Android CI yet the foreground-service deadline crash recurred in production; first promotion must precede plugin cold-start work on fresh and previously patched sources"
   - id: mobile-store-version-contract
     command: ["python3", "app/scripts/mobile_store_version_test.py"]
     triggers: ["app/scripts/mobile_store_version.py", "app/scripts/mobile_store_version_test.py", "codemagic.yaml", ".github/checks-manifest.yaml"]
@@ -922,6 +939,22 @@ checks:
     triggers: ["desktop/macos/run.sh", "desktop/macos/scripts/fast-dev-bundle.sh", "desktop/macos/scripts/agent-runtime-payload.sh", "desktop/macos/tests/test-fast-dev-bundle.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "a bundle built without Contents/Resources/pi-mono-extension accepted every chat turn and failed all of them (pi-mono exited 1 on `Unknown provider \"omi\"`); the fast lane reused it because the source fingerprint still matched, so packaging must verify the installed payload and not just its inputs"
+  - id: desktop-shared-node-runtime
+    command: ["bash", "desktop/macos/scripts/tests/test-agent-runtime-cache.sh"]
+    triggers: ["desktop/macos/scripts/agent-runtime-cache.sh", "desktop/macos/scripts/prepare-agent-runtime.sh", "desktop/macos/scripts/macos-copy-tree.sh", "desktop/macos/scripts/tests/test-agent-runtime-cache.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the shared Node runtime must stay content-addressed, clone only on the same APFS volume, and stay out of CI's per-user cache path"
+  - id: desktop-swift-test-shard-volume
+    command: ["bash", "desktop/macos/scripts/tests/test-swift-test-shard-volume.sh"]
+    triggers: ["desktop/macos/scripts/swift-test-suites.sh", "desktop/macos/scripts/agent-runtime-cache.sh", "desktop/macos/scripts/tests/test-swift-test-shard-volume.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "Swift shard scratches must be APFS clones on the build volume; a cross-volume run directory has to warn and skip the copy"
+  - id: desktop-macos-copy-tree
+    command: ["bash", "desktop/macos/tests/test-macos-copy-tree.sh"]
+    triggers: ["desktop/macos/run.sh", "desktop/macos/scripts/macos-copy-tree.sh", "desktop/macos/tests/test-macos-copy-tree.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "bundle copies must clone file contents on APFS and still drop resource forks via ditto --norsrc"
   - id: desktop-signed-artifact-smoke
     command: ["bash", "desktop/macos/tests/test-signed-artifact-smoke.sh"]
     triggers: ["desktop/macos/scripts/smoke-signed-desktop-artifact.sh", "desktop/macos/scripts/agent-runtime-payload.sh", "desktop/macos/tests/test-signed-artifact-smoke.sh", ".github/checks-manifest.yaml"]
@@ -1217,11 +1250,21 @@ checks:
     triggers: ["plugins/basic/mentor.py", "plugins/basic/mentor_webhook_auth.py", "plugins/test_mentor_session_auth.py", "scripts/run-plugin-mentor-session-auth-tests.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "POST /mentor trusted client session_id for the shared Redis transcript buffer without auth, so callers could read or poison another user's buffer"
+  - id: plugin-sdk-model-tests
+    command: ["bash", "scripts/run-plugin-sdk-tests.sh"]
+    triggers: ["plugins/omi-plugin-sdk/**", "scripts/run-plugin-sdk-tests.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the SDK owns the webhook models every plugin parses, and backend/models/structured.py imports ActionItem/Event/Section/Structured from it, but no lane ran plugins/omi-plugin-sdk/tests/ - so TranscriptSegment.combine_segments could delete a double space instead of collapsing it (welding 'Part 1 ' + 'Part 2' into 'Part 1Part 2') while the canonical backend copy collapsed it correctly"
   - id: coingecko-null-optionals-tests
     command: ["bash", "scripts/run-plugin-coingecko-tests.sh"]
     triggers: ["plugins/omi-coingecko-crypto-app/**", "scripts/run-plugin-coingecko-tests.sh", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "the backend sends every optional tool parameter the model omitted as JSON null; the request models rejected null, so all four CoinGecko tools failed on the ordinary call. Provider payloads carry null too: dict.get(key, default) does not apply its default for a present-but-null key, so coin.get('symbol', '').upper() raised AttributeError and discarded the whole result list"
+  - id: uber-call-geolocation-type-tests
+    command: ["python3", "plugins/uber_call/test_geolocation_types.py"]
+    triggers: ["plugins/uber_call/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the backend forwards geolocation as free-form JSON, so pydantic does not coerce the values inside it; a coordinate arriving as a list or object reached float(), which raises TypeError rather than the ValueError call_uber handles, so the documented 400 for a bad geolocation became an unhandled 500"
   - id: github-app-client-tests
     command: ["python3", "plugins/omi-github-app/test_github_client.py"]
     triggers: ["plugins/omi-github-app/**", ".github/checks-manifest.yaml"]
@@ -1247,6 +1290,11 @@ checks:
     triggers: ["mcp/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#13941: get_conversations silently dropped an unparseable start_date/end_date and returned the unfiltered list while search_conversations surfaced the backend 400 opaquely; malformed dates must raise a field-naming ValueError before any request"
+  - id: mcp-category-filter-tests
+    command: ["python3", "mcp/tests/test_category_filters.py"]
+    triggers: ["mcp/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "_parse_categories logged and dropped unknown categories, and both dispatchers omit an empty filter, so get_memories(categories=[\"finance\"]) requested the unfiltered list and returned every memory; unknown categories must raise a value-naming ValueError before any request, as the date filters already do"
   - id: plugin-oauth-client-log-safety-tests
     command: ["python3", "plugins/oauth/test_client_log_safety.py"]
     triggers: ["plugins/**/*.py", ".github/checks-manifest.yaml"]

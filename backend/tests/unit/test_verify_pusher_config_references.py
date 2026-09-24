@@ -192,6 +192,7 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
         "MEMORY_BELIEF_AUTOMATION_PAUSED": "false",
         "MEMORY_BELIEF_MODEL_ENABLED": "true",
         "MEMORY_ENABLED": "on",
+        "OMI_CUSTOMER_DATA_PROJECT": "based-hardware",
         "OMI_ENV_STAGE": "dev",
         "OMI_LLM_CHAT_AGENT_ROUTE": "gateway",
         "OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION": "false",

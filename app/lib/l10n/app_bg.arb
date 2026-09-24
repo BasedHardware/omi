@@ -3256,5 +3256,17 @@
     "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Какво можеш да направиш за мен?} goal{Помогни ми да си поставя цел} activity{Обобщи последните ми дейности} improve{Как мога да се подобря?} other{}}",
     "nextWeek": "Следващата седмица",
-    "clearSearch": "Изчистване на търсенето"
+    "clearSearch": "Изчистване на търсенето",
+    "captureRecordingsSheetTitle": "Записи на този разговор",
+    "captureRecordingSeparate": "Отдели…",
+    "captureRecordingSeparateTitle": "Да се отдели ли този запис?",
+    "captureRecordingSeparateMessage": "{recording} ще се показва като отделен разговор и няма да бъде групиран отново с това събитие.",
+    "captureRecordingSeparateConfirm": "Отдели",
+    "captureRecordingSeparateFailed": "Неуспешно отделяне. Опитайте отново.",
+    "captureRecordingOpenFailed": "Този запис не можа да се отвори.",
+    "captureRecordingViewing": "Разглеждате този запис",
+    "captureRecordedBy": "Записано от {devices}",
+    "captureSourceDesktop": "Компютър",
+    "renameConversation": "Преименувай",
+    "captureRecordingsCount": "{count, plural, =1{1 запис} other{{count} записа}}"
 }

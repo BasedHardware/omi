@@ -6077,6 +6077,86 @@
         "title": "CanonicalKnowledgeGraphResponse",
         "type": "object"
       },
+      "CaptureGroup": {
+        "description": "Conversations from different capture surfaces that recorded one event.\n\nServer-authored by ``database.capture_groups`` only after the captures are\nshown to share speech. ``id`` is the event identity and never changes when\n``primary_id`` (the longest capture) does. Clients present the group as one\nrow and keep every member reachable.",
+        "properties": {
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "members": {
+            "default": [],
+            "items": {
+              "$ref": "#/components/schemas/CaptureGroupMember"
+            },
+            "title": "Members",
+            "type": "array"
+          },
+          "primary_id": {
+            "title": "Primary Id",
+            "type": "string"
+          },
+          "revision": {
+            "default": 1,
+            "title": "Revision",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "primary_id"
+        ],
+        "title": "CaptureGroup",
+        "type": "object"
+      },
+      "CaptureGroupMember": {
+        "properties": {
+          "finished_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Finished At"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Started At"
+          }
+        },
+        "required": [
+          "id"
+        ],
+        "title": "CaptureGroupMember",
+        "type": "object"
+      },
       "CaptureLinkSpec": {
         "additionalProperties": false,
         "properties": {
@@ -7190,6 +7270,16 @@
             ],
             "description": "Twilio call SID for phone call conversations",
             "title": "Call Id"
+          },
+          "capture_group": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CaptureGroup"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "client_device_id": {
             "anyOf": [
@@ -8311,6 +8401,16 @@
             ],
             "description": "Twilio call SID for phone call conversations",
             "title": "Call Id"
+          },
+          "capture_group": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/CaptureGroup"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "client_device_id": {
             "anyOf": [
@@ -40610,6 +40710,93 @@
         ]
       }
     },
+    "/v1/conversations/{conversation_id}/capture-group/separate": {
+      "post": {
+        "description": "Separate this conversation from the capture group (one event recorded by several devices) it belongs to. The decision is sticky: this capture is never regrouped with the members it left. Idempotent.",
+        "operationId": "separate_conversation_from_capture_group_v1_conversations__conversation_id__capture_group_separate_post",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Separate Conversation From Capture Group",
+        "tags": [
+          "conversations"
+        ]
+      }
+    },
     "/v1/conversations/{conversation_id}/events": {
       "patch": {
         "operationId": "set_conversation_events_state_v1_conversations__conversation_id__events_patch",
@@ -44957,7 +45144,7 @@
         ]
       },
       "post": {
-        "description": "Create a new memory for the authenticated user.\n\n- **content**: The content of the memory (1-500 characters)\n- **category**: Memory category (auto-categorized if not provided)\n- **visibility**: Visibility: public or private (default: private)\n- **tags**: List of tags associated with the memory",
+        "description": "Create a new memory for the authenticated user.\n\n- **content**: The content of the memory (1-500 characters)\n- **category**: Memory category (auto-categorized if not provided)\n- **visibility**: Visibility: public or private (default: private)\n- **tags**: List of tags associated with the memory\n\nA memory is identified by its text. Sending text the user already has (ignoring surrounding\nwhitespace; case-sensitive) returns that memory unchanged, so retries are safe without extra\nheaders. Use PATCH to change an existing memory's fields. After a delete, the same text creates\na new memory.",
         "operationId": "createMemory",
         "requestBody": {
           "content": {
@@ -45007,7 +45194,7 @@
     },
     "/v1/dev/user/memories/batch": {
       "post": {
-        "description": "Create multiple memories in a batch.\n\n- **memories**: List of memories to create (max 25)",
+        "description": "Create multiple memories in a batch.\n\n- **memories**: List of memories to create (max 25)\n\nItems follow the single-create rule: text the user already has returns the existing memory at\nthat position, so a retried batch creates nothing twice. `created_count` is the number of\nmemories returned.",
         "operationId": "createMemoriesBatch",
         "requestBody": {
           "content": {

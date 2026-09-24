@@ -463,6 +463,8 @@ async def create_memory(
             require_canonical_promotion=True,
             direct_user_authority=mint_direct_user_write_authority(),
         )
+    except HTTPException:
+        raise
     except Exception:
         logger.exception("MemoryService create_memory failed uid=%s", uid)
         raise HTTPException(status_code=503, detail="Service temporarily unavailable")
@@ -561,6 +563,8 @@ async def create_memories_batch(
             require_canonical_promotion=True,
             direct_user_authority=mint_direct_user_write_authority(),
         )
+    except HTTPException:
+        raise
     except Exception:
         logger.exception("MemoryService create_memories_batch failed uid=%s count=%s", uid, len(memory_dbs))
         raise HTTPException(status_code=503, detail="Service temporarily unavailable")

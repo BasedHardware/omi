@@ -41,7 +41,11 @@ def test_corrected_person_reaches_summary_provider(monkeypatch):
 
     monkeypatch.setattr(pc, 'get_reprocess_transcript_structure', summarize)
     result, discarded = pc._get_structured(
-        'synthetic', 'en', conversation, force_process=True, people=[Person(id='correct', name='Correct Name')]
+        'synthetic',
+        'en',
+        conversation,
+        people=[Person(id='correct', name='Correct Name')],
+        trigger=pc.ProcessingTrigger.USER_REPROCESS,
     )
     assert not discarded and result.overview == 'Updated summary'
     assert len(prompts) == 1 and 'Correct Name: Synthetic meeting text' in prompts[0]

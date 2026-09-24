@@ -106,6 +106,9 @@ final class GlassContentChromeTests: XCTestCase {
   private static let restyledSources: [String] = [
     "MainWindow/Pages/ConversationsPage.swift",
     "MainWindow/Pages/ConversationDetailView.swift",
+    "MainWindow/Pages/ConversationDetailHeader.swift",
+    "MainWindow/Pages/ConversationDetailSections.swift",
+    "MainWindow/Components/ConversationCaptureRecordings.swift",
     "MainWindow/Pages/MemoriesPage.swift",
     "MainWindow/Pages/PersonaPage.swift",
     "MainWindow/Pages/TasksPage.swift",

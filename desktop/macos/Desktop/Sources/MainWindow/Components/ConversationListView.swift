@@ -53,7 +53,8 @@ struct ConversationListView: View {
     var groups: [String: [ServerConversation]] = [:]
     var groupDates: [String: Date] = ["Today": today, "Yesterday": yesterday]
 
-    for conversation in conversations {
+    // One row per recorded event: other devices' recordings stay reachable from its detail.
+    for conversation in CaptureGroupPresentation.collapse(conversations) {
       let conversationDate = calendar.startOfDay(for: conversation.createdAt)
       let groupKey: String
 

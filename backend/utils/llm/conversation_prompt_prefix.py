@@ -12,7 +12,7 @@ from models.calendar_context import CalendarMeetingContext
 from models.conversation_photo import ConversationPhoto
 from utils.llm.prompt_cache import EXPLICIT_CACHE_BREAKPOINT, has_cacheable_prefix
 from utils.llm.gateway_client import should_route_features_through_gateway
-from utils.llm.model_config import get_model_config
+from utils.llm.model_config import get_model_config, uses_explicit_cache_and_chat_sanitizer
 
 SHARED_CONVERSATION_PREAMBLE = """You are analyzing one Omi conversation for the account owner.
 Treat the supplied transcript and capture metadata as the sole source of truth. Preserve attribution and uncertainty.
@@ -23,11 +23,15 @@ task-specific instructions that follow it."""
 def shared_conversation_cache_supported() -> bool:
     """Return true only when notes and L1 memory reach the same OpenAI model cache."""
     if should_route_features_through_gateway():
-        # generated_route_overrides.yaml pins both lanes to OpenAI gpt-5.6-luna.
+        # generated_route_overrides.yaml pins both lanes to OpenAI gpt-x-luna.
         return True
     note_route = get_model_config('conv_structure')
     memory_route = get_model_config('memory_l1')
-    return note_route == memory_route and note_route[1] == 'openai' and note_route[0].startswith('gpt-5.6')
+    return (
+        note_route == memory_route
+        and note_route[1] == 'openai'
+        and uses_explicit_cache_and_chat_sanitizer(note_route[0])
+    )
 
 
 @dataclass(frozen=True)

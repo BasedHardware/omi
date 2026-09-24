@@ -3256,5 +3256,17 @@
     "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{你能为我做些什么？} goal{帮我设定一个目标} activity{总结我最近的活动} improve{我该如何改进？} other{}}",
     "nextWeek": "下周",
-    "clearSearch": "清除搜索"
+    "clearSearch": "清除搜索",
+    "captureRecordingsSheetTitle": "此对话的录音",
+    "captureRecordingSeparate": "分离…",
+    "captureRecordingSeparateTitle": "要分离此录音吗？",
+    "captureRecordingSeparateMessage": "{recording} 将显示为单独的对话，并且不会再与此事件归为一组。",
+    "captureRecordingSeparateConfirm": "分离",
+    "captureRecordingSeparateFailed": "无法分离，请重试。",
+    "captureRecordingOpenFailed": "无法打开此录音。",
+    "captureRecordingViewing": "你正在查看此录音",
+    "captureRecordedBy": "由 {devices} 录制",
+    "captureSourceDesktop": "电脑",
+    "renameConversation": "重命名",
+    "captureRecordingsCount": "{count, plural, =1{1 段录音} other{{count} 段录音}}"
 }

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-degraded-fallback-exceeds-origin-price",
+  "violated_contract": "A degradation overflow for work admitted onto a more expensive serving model must not cost more than the lane's origin model. The serving model's own fallback ladder is priced against that serving model, so moving a cheaper lane onto it without a per-lane ceiling turns a full reservation into pay-as-you-go that costs more than the model the lane ran before.",
+  "canonical_prevention": "Declare the origin model as data on the lane. Filter overflow and fallback candidates to models whose input and output list prices are both at or below that origin. An unset origin leaves the declared ladder unchanged. A behavioral test asserts a flash-lite origin admitted to flash Provisioned Throughput overflows to flash-lite and never to 3.1-flash-lite, and that every model in MODEL_FALLBACKS is unchanged when the origin is unset.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_vertex_pt_routing.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/llm/vertex_pt_routing.py",
+    "backend/llm_gateway/gateway/vertex_pt_policy.py",
+    "backend/routers/desktop_proxy.py"
+  ],
+  "status": "open"
+}

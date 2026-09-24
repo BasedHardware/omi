@@ -112,7 +112,7 @@ def _drive_create_route(conv: Any, monkeypatch: pytest.MonkeyPatch, *, dispositi
 
 def _disposition_for(conv: Any, *, flag_on: bool, user: str) -> Any:
     # Flag-on identified-basic desktop is the terminal minimum. Flag-off (legacy
-    # force_process bypass) and paid both report RUN — today's fan-out.
+    # run-now bypass) and paid both report RUN — today's fan-out.
     if flag_on and user == 'basic':
         return conv.DerivedEffectsDisposition.TERMINAL_NO_DERIVED_EFFECTS
     return conv.DerivedEffectsDisposition.RUN
@@ -125,7 +125,7 @@ def test_flag_on_basic_desktop_returns_conversation_without_app_fanout(conv, mon
         disposition=_disposition_for(conv, flag_on=True, user='basic'),
     )
 
-    assert seen.get('force_process') is True
+    assert seen.get('trigger') is conv.ProcessingTrigger.CLIENT_FINALIZE
     assert seen.get('derived_effects_disposition_observer') is not None
     assert response.conversation is processed
     assert response.messages == []
@@ -139,7 +139,7 @@ def test_flag_on_paid_desktop_fans_out_exactly_as_today(conv, monkeypatch) -> No
         disposition=_disposition_for(conv, flag_on=True, user='paid'),
     )
 
-    assert seen.get('force_process') is True
+    assert seen.get('trigger') is conv.ProcessingTrigger.CLIENT_FINALIZE
     assert seen.get('derived_effects_disposition_observer') is not None
     assert response.conversation is processed
     assert response.messages == _FANOUT_MESSAGES
@@ -154,7 +154,7 @@ def test_flag_off_is_byte_identical_to_today_for_basic_and_paid(conv, monkeypatc
         disposition=_disposition_for(conv, flag_on=False, user=user),
     )
 
-    assert seen.get('force_process') is True
+    assert seen.get('trigger') is conv.ProcessingTrigger.CLIENT_FINALIZE
     assert seen.get('derived_effects_disposition_observer') is not None
     assert response.conversation is processed
     assert response.messages == _FANOUT_MESSAGES

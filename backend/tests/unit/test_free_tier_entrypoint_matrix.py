@@ -16,7 +16,7 @@ owned False, which would fence a conversation that was stored.
 red-proof (1): force plan.mode to process_normally → flag-ON basic desktop rows fail
 red-proof (2): remove the flag-OFF elif deferral → flag-OFF basic desktop no-force rows fail
 red-proof (3): report_persistence(False) on the minimum → basic desktop rows fail
-red-proof (4): reprocess_force cell without overlaying force_process=True → flag-OFF
+red-proof (4): reprocess_force cell without overlaying the USER_REPROCESS trigger → flag-OFF
     listen would defer instead of bypassing, so _get_structured would not be called
 red-proof (5): desktop-sourced merge left on the legacy path (force bypasses deferral)
     → flag-ON basic merge would call _get_structured
@@ -46,6 +46,7 @@ from models.transcript_segment import TranscriptSegment
 from testing.import_isolation import AutoMockModule, load_module_fresh, package_submodule_stubs, stub_modules
 import utils.managed_compute as managed_compute
 from utils.managed_compute import Decision
+from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingMode, ProcessingTrigger
 
 _BACKEND = Path(__file__).resolve().parents[2]
 _UID = 'matrix-uid'
@@ -54,11 +55,7 @@ _FINISHED = datetime(2026, 9, 2, 12, 5, tzinfo=timezone.utc)
 
 # Real reprocess (routers/conversations.py:495, sync/pipeline.py:785) overlays these
 # on the conversation it already holds. The reprocess_force cell must actually pass them.
-_REPROCESS_FORCE_KWARGS: dict[str, bool] = {
-    'force_process': True,
-    'is_reprocess': True,
-    'bypass_jit_first_open': True,
-}
+_REPROCESS_FORCE_KWARGS: dict[str, Any] = {'trigger': ProcessingTrigger.USER_REPROCESS}
 
 _PENDING_JIT: dict[str, Any] = {
     'state': 'pending',
@@ -324,33 +321,33 @@ _ENTRIES: list[dict[str, Any]] = [
         'id': 'conversations_enrich_187',
         'label': (
             'routers/conversations.py:187 _enrich_deferred_conversation '
-            '(coordinator-with-exact-args; first-open force_process=True)'
+            '(coordinator-with-exact-args; trigger=FIRST_OPEN)'
         ),
         'kind': 'existing',
         'source': ConversationSource.desktop,
-        'kwargs': {'force_process': True, 'is_reprocess': False},
+        'kwargs': {'trigger': ProcessingTrigger.FIRST_OPEN},
         'attribution': 'non_user_reprocess',
     },
     {
         'id': 'conversations_create_351',
         'label': (
             'routers/conversations.py:351 process_in_progress_conversation '
-            '(coordinator-with-exact-args; POST /v1/conversations force_process=True)'
+            '(coordinator-with-exact-args; POST /v1/conversations trigger=CLIENT_FINALIZE)'
         ),
         'kind': 'existing',
         'source': ConversationSource.desktop,
-        'kwargs': {'force_process': True},
+        'kwargs': {'trigger': ProcessingTrigger.CLIENT_FINALIZE},
         'observer': True,
     },
     {
         'id': 'conversations_reprocess_495',
         'label': (
             'routers/conversations.py:495 reprocess_conversation '
-            '(coordinator-with-exact-args; force+is_reprocess+bypass_jit)'
+            '(coordinator-with-exact-args; trigger=USER_REPROCESS)'
         ),
         'kind': 'existing',
         'source': ConversationSource.desktop,
-        'kwargs': {'force_process': True, 'is_reprocess': True, 'bypass_jit_first_open': True},
+        'kwargs': {'trigger': ProcessingTrigger.USER_REPROCESS},
         'attribution': 'non_user_reprocess',
     },
     {
@@ -379,11 +376,11 @@ _ENTRIES: list[dict[str, Any]] = [
             'routers/listen/conversations.py:157 → finalizer.py:137 '
             '(coordinator-with-exact-args; listen enqueues, cannot drive WS hermetically; '
             'source=desktop is a supported listen source at conversations.py:318; '
-            'force_process defaults False, defer_derived_effects=True)'
+            'trigger=CAPTURE_END, defer_derived_effects=True)'
         ),
         'kind': 'existing',
         'source': ConversationSource.desktop,
-        'kwargs': {'force_process': False, 'defer_derived_effects': True},
+        'kwargs': {'trigger': ProcessingTrigger.CAPTURE_END, 'defer_derived_effects': True},
         'observer': True,
         'derived_observer': True,
     },
@@ -391,24 +388,24 @@ _ENTRIES: list[dict[str, Any]] = [
         'id': 'merge_354_omi',
         'label': (
             'utils/conversations/merge_conversations.py:354 '
-            '(coordinator-with-exact-args; force_process=True is_reprocess=False; '
+            '(coordinator-with-exact-args; trigger=MERGE; '
             'source from earliest conv :269 default omi — §1.2 non-desktop process_normally)'
         ),
         'kind': 'existing',
         'source': ConversationSource.omi,
-        'kwargs': {'force_process': True, 'is_reprocess': False},
+        'kwargs': {'trigger': ProcessingTrigger.MERGE},
         'scenario': 'merge',
     },
     {
         'id': 'merge_354_desktop',
         'label': (
             'utils/conversations/merge_conversations.py:354 '
-            '(coordinator-with-exact-args; force_process=True is_reprocess=False; '
+            '(coordinator-with-exact-args; trigger=MERGE; '
             'source from earliest conv :269 desktop — flag-on basic lands at the minimum)'
         ),
         'kind': 'existing',
         'source': ConversationSource.desktop,
-        'kwargs': {'force_process': True, 'is_reprocess': False},
+        'kwargs': {'trigger': ProcessingTrigger.MERGE},
         'scenario': 'merge',
     },
     {
@@ -432,12 +429,12 @@ _ENTRIES: list[dict[str, Any]] = [
         'id': 'sync_reprocess_785_omi',
         'label': (
             'utils/sync/pipeline.py:785 _reprocess_conversation_after_update '
-            '(coordinator-with-exact-args; force+is_reprocess+bypass_jit; '
+            '(coordinator-with-exact-args; trigger=SYNC_UPDATE; '
             'source carried from the stored conversation, default omi — §1.2 non-desktop)'
         ),
         'kind': 'existing',
         'source': ConversationSource.omi,
-        'kwargs': {'force_process': True, 'is_reprocess': True, 'bypass_jit_first_open': True},
+        'kwargs': {'trigger': ProcessingTrigger.SYNC_UPDATE},
         'observer': True,
         'scenario': 'sync',
     },
@@ -445,12 +442,12 @@ _ENTRIES: list[dict[str, Any]] = [
         'id': 'sync_reprocess_785_desktop',
         'label': (
             'utils/sync/pipeline.py:785 _reprocess_conversation_after_update '
-            '(coordinator-with-exact-args; force+is_reprocess+bypass_jit; '
+            '(coordinator-with-exact-args; trigger=SYNC_UPDATE; '
             'source carried from the stored conversation — desktop flag-on basic → minimum)'
         ),
         'kind': 'existing',
         'source': ConversationSource.desktop,
-        'kwargs': {'force_process': True, 'is_reprocess': True, 'bypass_jit_first_open': True},
+        'kwargs': {'trigger': ProcessingTrigger.SYNC_UPDATE},
         'observer': True,
         'scenario': 'sync',
     },
@@ -555,13 +552,13 @@ def _effective_kwargs(entry: dict[str, Any], cell: str) -> dict[str, Any]:
     return kwargs
 
 
+def _mode(kwargs: dict[str, Any]) -> ProcessingMode:
+    return PROCESSING_MODES[kwargs.get('trigger', ProcessingTrigger.CAPTURE_END)]
+
+
 def _legacy_defers(entry: dict[str, Any], cell: str, kwargs: dict[str, Any]) -> bool:
-    return (
-        _is_desktop(entry['source'])
-        and cell in _BASIC_CELLS
-        and not kwargs.get('force_process')
-        and not kwargs.get('is_reprocess')
-    )
+    mode = _mode(kwargs)
+    return _is_desktop(entry['source']) and cell in _BASIC_CELLS and not mode.run_now and not mode.reprocess
 
 
 def _flag_on_denies(entry: dict[str, Any], cell: str) -> bool:
@@ -570,11 +567,7 @@ def _flag_on_denies(entry: dict[str, Any], cell: str) -> bool:
 
 def _flag_off_eager_denies(entry: dict[str, Any], cell: str, kwargs: dict[str, Any]) -> bool:
     """S14 proactivity half, flag-off: first-open/reprocess eager desktop spend is denied."""
-    return (
-        _is_desktop(entry['source'])
-        and cell in _BASIC_CELLS
-        and (bool(kwargs.get('force_process')) or bool(kwargs.get('is_reprocess')))
-    )
+    return _is_desktop(entry['source']) and cell in _BASIC_CELLS and (_mode(kwargs).run_now or _mode(kwargs).reprocess)
 
 
 def _outcome(entry: dict[str, Any], cell: str, flag_on: bool, kwargs: dict[str, Any]) -> str:
@@ -608,12 +601,13 @@ def _expected_calls(entry: dict[str, Any], cell: str, flag_on: bool, kwargs: dic
             'init_first_open': False,
         }
     derived = not kwargs.get('defer_derived_effects', False)
-    jit_eligible = not kwargs.get('bypass_jit_first_open', False) and not kwargs.get('is_reprocess', False)
+    mode = _mode(kwargs)
+    jit_eligible = not mode.bypass_jit_first_open and not mode.reprocess
     return {
         'get_structured': True,
         'extract_memories': derived,
         'trigger_apps': derived and not jit_eligible,
-        'assign_folder': derived and not jit_eligible and not kwargs.get('is_reprocess', False),
+        'assign_folder': derived and not jit_eligible and not mode.reprocess,
         'init_first_open': jit_eligible,
     }
 
@@ -1047,7 +1041,7 @@ def test_red_proof_null_processing_state_default_stamped_on_persist(monkeypatch:
     monkeypatch.setattr(pc, 'free_tier_local_processing_enabled', lambda *_: False)
     spies = _spy_managed_effects(monkeypatch, pc)
     spies['should_defer'].return_value = False
-    # create_351 passes force_process=True on a desktop conversation, so the
+    # create_351 runs now (CLIENT_FINALIZE) on a desktop conversation, so the
     # flag-off eager gate consults the policy before the normal persist this
     # red-proof exercises. Patch the authorize seam (paid/allow) or the test
     # waits out a real Firestore fail-open on every run.

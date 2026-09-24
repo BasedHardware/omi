@@ -804,9 +804,6 @@ environment_shared:
           OPENAI_API_KEY:
             secret: OPENAI_API_KEY
             version: latest
-          SERVICE_ACCOUNT_JSON:
-            secret: SERVICE_ACCOUNT_JSON
-            version: latest
           ENCRYPTION_SECRET:
             secret: ENCRYPTION_SECRET
             version: latest
@@ -842,9 +839,6 @@ environment_shared:
             version: latest
           OPENAI_API_KEY:
             secret: OPENAI_API_KEY
-            version: latest
-          SERVICE_ACCOUNT_JSON:
-            secret: SERVICE_ACCOUNT_JSON
             version: latest
           POSTHOG_PROJECT_API_KEY:
             secret: POSTHOG_PROJECT_API_KEY
@@ -919,9 +913,6 @@ environment_shared:
             category: memory_rollout
       frame-request-retention-job:
         secrets:
-          SERVICE_ACCOUNT_JSON:
-            secret: SERVICE_ACCOUNT_JSON
-            version: latest
           POSTHOG_PROJECT_API_KEY:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
@@ -952,9 +943,6 @@ environment_shared:
             version: latest
           OPENAI_API_KEY:
             secret: OPENAI_API_KEY
-            version: latest
-          SERVICE_ACCOUNT_JSON:
-            secret: SERVICE_ACCOUNT_JSON
             version: latest
           POSTHOG_PROJECT_API_KEY:
             secret: POSTHOG_PROJECT_API_KEY
@@ -994,6 +982,9 @@ environment_shared:
             category: memory_rollout
           MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED:
             category: memory_rollout
+          MEMORY_DAILY_MEMORY_SWEEP_STAGGER_SECONDS:
+            value: '0'
+            category: memory_rollout
         forbidden_env:
         - HOSTED_PUSHER_API_URL
       knowledge-ledger-drain-job:
@@ -1003,9 +994,6 @@ environment_shared:
         secrets:
           ENCRYPTION_SECRET:
             secret: ENCRYPTION_SECRET
-            version: latest
-          SERVICE_ACCOUNT_JSON:
-            secret: SERVICE_ACCOUNT_JSON
             version: latest
           POSTHOG_PROJECT_API_KEY:
             secret: POSTHOG_PROJECT_API_KEY
@@ -1029,9 +1017,6 @@ environment_shared:
         secrets:
           ENCRYPTION_SECRET:
             secret: ENCRYPTION_SECRET
-            version: latest
-          SERVICE_ACCOUNT_JSON:
-            secret: SERVICE_ACCOUNT_JSON
             version: latest
           POSTHOG_PROJECT_API_KEY:
             secret: POSTHOG_PROJECT_API_KEY

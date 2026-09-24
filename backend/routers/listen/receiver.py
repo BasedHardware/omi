@@ -84,6 +84,7 @@ from utils.listen_audio import ChannelConfig, mix_n_channel_buffers, resample_pc
 from utils.observability.fallback import record_fallback
 from utils.observability.transcription import (
     record_listen_audio_outcome,
+    record_listen_realtime_demand,
     record_listen_unknown_channel_prefix,
     record_live_stt_failover_accepted,
 )
@@ -219,6 +220,38 @@ class ListenReceiver:
         target = socket if socket is not None else self.stt_socket
         typed = getattr(target, 'typed_death_reason', None) if target is not None else None
         pending.note_failure(typed if isinstance(typed, str) else None)
+
+    def _emit_realtime_demand(self, request: Any, decoded_audio_bytes: int) -> None:
+        """Report who could have watched this session live. Telemetry only; never raises."""
+
+        try:
+            tracker = self.host.state.realtime_demand
+            seconds = tracker.totals()
+            source = getattr(request, 'source', None)
+            platform = self._telemetry_platform()
+            record_listen_realtime_demand(source=source, platform=platform, seconds=seconds)
+            sample_rate = max(1, int(getattr(request, 'sample_rate', 16000)))
+            emit_product_event(
+                uid=str(getattr(request, 'uid', '') or ''),
+                event='Listen Session Realtime Demand',
+                properties={
+                    'recording_id': getattr(self.host, 'recording_session_id', None),
+                    'conversation_id': getattr(self.host.state, 'current_conversation_id', None),
+                    'source': str(source) if source is not None else None,
+                    'client_platform': str(platform) if platform is not None else None,
+                    'conversation_role': getattr(request, 'conversation_role', None),
+                    'audio_seconds': decoded_audio_bytes / (sample_rate * 2),
+                    'client_state_reported': tracker.reported,
+                    'client_state_reports': tracker.reports,
+                    'visible_seconds': seconds['visible'],
+                    'foreground_seconds': seconds['foreground'],
+                    'background_seconds': seconds['background'],
+                    'unreported_seconds': seconds['unreported'],
+                    'live_translation': bool(getattr(self.host, 'translation_language', None)),
+                },
+            )
+        except Exception as error:
+            logger.warning('Realtime demand telemetry failed type=%s', type(error).__name__)
 
     def _telemetry_platform(self) -> Any:
         """Platform label for listen funnel counters; never part of the audio failure domain."""
@@ -854,6 +887,9 @@ class ListenReceiver:
             self._enqueue_stt_segments(segments, provider=provider or 'custom')
         elif kind == 'speaker_assigned':
             await self._handle_speaker_assigned(payload)
+        elif kind == 'client_state':
+            if not self.host.state.realtime_demand.observe(payload):
+                logger.debug('Ignored malformed or over-budget client_state')
         elif kind == 'finalization_reason':
             reason = payload.get('reason')
             if reason in {
@@ -987,6 +1023,7 @@ class ListenReceiver:
             self.host.state.close_code = 1011
         finally:
             if decoded_audio_bytes:
+                self._emit_realtime_demand(request, decoded_audio_bytes)
                 sample_rate = max(1, int(getattr(request, 'sample_rate', 16000)))
                 emit_product_event(
                     uid=str(getattr(request, 'uid', '') or ''),

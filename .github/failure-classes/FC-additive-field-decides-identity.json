@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-additive-field-decides-identity",
+  "violated_contract": "An identity or equality check over persisted records must compare only the fields that define identity. When the check compares a whole model minus an exclude list, every field added later joins the identity by default; records written before the field existed store it as absent, so every replay of an older record is reported as a conflict for a source that did not change.",
+  "canonical_prevention": "Classify every field of a persisted model that takes part in an identity check as identity, metadata, or state, compare with an include list of identity fields, and keep a unit test that fails when a new field is unclassified.",
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/models/**",
+    "backend/database/**",
+    "backend/utils/memory/**"
+  ],
+  "status": "open",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_memory_apply_store.py"
+  ]
+}

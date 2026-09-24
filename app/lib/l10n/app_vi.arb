@@ -3256,5 +3256,17 @@
     "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Bạn có thể giúp gì cho tôi?} goal{Giúp tôi đặt mục tiêu} activity{Tóm tắt hoạt động gần đây của tôi} improve{Tôi có thể cải thiện như thế nào?} other{}}",
     "nextWeek": "Tuần tới",
-    "clearSearch": "Xóa tìm kiếm"
+    "clearSearch": "Xóa tìm kiếm",
+    "captureRecordingsSheetTitle": "Các bản ghi của cuộc trò chuyện này",
+    "captureRecordingSeparate": "Tách…",
+    "captureRecordingSeparateTitle": "Tách bản ghi này?",
+    "captureRecordingSeparateMessage": "{recording} sẽ hiển thị như một cuộc trò chuyện riêng và sẽ không được nhóm với sự kiện này nữa.",
+    "captureRecordingSeparateConfirm": "Tách",
+    "captureRecordingSeparateFailed": "Không thể tách. Hãy thử lại.",
+    "captureRecordingOpenFailed": "Không thể mở bản ghi này.",
+    "captureRecordingViewing": "Bạn đang xem bản ghi này",
+    "captureRecordedBy": "Được ghi bởi {devices}",
+    "captureSourceDesktop": "Máy tính",
+    "renameConversation": "Đổi tên",
+    "captureRecordingsCount": "{count, plural, =1{1 bản ghi} other{{count} bản ghi}}"
 }

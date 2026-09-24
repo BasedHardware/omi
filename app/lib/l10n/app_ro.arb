@@ -3256,5 +3256,17 @@
     "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Ce poți face pentru mine?} goal{Ajută-mă să stabilesc un obiectiv} activity{Rezumă activitatea mea recentă} improve{Cum mă pot îmbunătăți?} other{}}",
     "nextWeek": "Săptămâna viitoare",
-    "clearSearch": "Șterge căutarea"
+    "clearSearch": "Șterge căutarea",
+    "captureRecordingsSheetTitle": "Înregistrările acestei conversații",
+    "captureRecordingSeparate": "Separă…",
+    "captureRecordingSeparateTitle": "Separi această înregistrare?",
+    "captureRecordingSeparateMessage": "{recording} va apărea ca o conversație separată și nu va mai fi grupată cu acest eveniment.",
+    "captureRecordingSeparateConfirm": "Separă",
+    "captureRecordingSeparateFailed": "Nu s-a putut separa. Încearcă din nou.",
+    "captureRecordingOpenFailed": "Această înregistrare nu a putut fi deschisă.",
+    "captureRecordingViewing": "Vizualizezi această înregistrare",
+    "captureRecordedBy": "Înregistrat de {devices}",
+    "captureSourceDesktop": "Computer",
+    "renameConversation": "Redenumește",
+    "captureRecordingsCount": "{count, plural, =1{1 înregistrare} other{Înregistrări: {count}}}"
 }

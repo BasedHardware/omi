@@ -3256,5 +3256,17 @@
     "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Ką gali dėl manęs padaryti?} goal{Padėk man išsikelti tikslą} activity{Apibendrink mano naujausią veiklą} improve{Kaip galiu tobulėti?} other{}}",
     "nextWeek": "Kitą savaitę",
-    "clearSearch": "Išvalyti paiešką"
+    "clearSearch": "Išvalyti paiešką",
+    "captureRecordingsSheetTitle": "Šio pokalbio įrašai",
+    "captureRecordingSeparate": "Atskirti…",
+    "captureRecordingSeparateTitle": "Atskirti šį įrašą?",
+    "captureRecordingSeparateMessage": "{recording} bus rodomas kaip atskiras pokalbis ir daugiau nebus grupuojamas su šiuo įvykiu.",
+    "captureRecordingSeparateConfirm": "Atskirti",
+    "captureRecordingSeparateFailed": "Nepavyko atskirti. Bandykite dar kartą.",
+    "captureRecordingOpenFailed": "Nepavyko atidaryti šio įrašo.",
+    "captureRecordingViewing": "Peržiūrite šį įrašą",
+    "captureRecordedBy": "Įrašė {devices}",
+    "captureSourceDesktop": "Kompiuteris",
+    "renameConversation": "Pervadinti",
+    "captureRecordingsCount": "{count, plural, =1{1 įrašas} other{Įrašų: {count}}}"
 }

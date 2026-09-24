@@ -48,8 +48,6 @@ from typing import Any, Dict, Optional, cast
 
 from prometheus_client import Counter
 
-from utils.conversations.fragment_visibility import is_effectively_discarded
-
 logger = logging.getLogger(__name__)
 
 
@@ -108,19 +106,6 @@ _INDEXED_FIRESTORE_FIELDS = (
     "started_at",
     "finished_at",
     "geolocation",
-    # Visibility metadata for legacy review rows. These fields are not part of
-    # the Typesense schema; they are read only to project the existing
-    # ``discarded`` field consistently before indexing.
-    "status",
-    "sync_relevance",
-    "sync_relevance_user_kept",
-    "sync_live_target",
-    "has_photos",
-    "folder_user_set",
-    "visibility",
-    "starred",
-    "user_title",
-    "client_processing.schema_version",
 )
 
 CONVERSATION_TYPESENSE_INDEX_EVENTS = Counter(
@@ -291,7 +276,7 @@ def build_conversation_index_document(uid: str, conversation_data: Dict[str, Any
         "id": conversation_id,
         "userId": uid,
         "created_at": created_at,
-        "discarded": is_effectively_discarded(conversation_data),
+        "discarded": bool(conversation_data.get("discarded", False)),
     }
     started_at = _epoch_seconds(conversation_data.get("started_at"))
     if started_at is not None:

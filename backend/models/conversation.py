@@ -287,6 +287,28 @@ class TranscriptMatchSnippet(BaseModel):
     speaker_id: Optional[int] = None
 
 
+class CaptureGroupMember(BaseModel):
+    id: str
+    source: Optional[str] = None
+    started_at: Optional[datetime] = None
+    finished_at: Optional[datetime] = None
+
+
+class CaptureGroup(BaseModel):
+    """Conversations from different capture surfaces that recorded one event.
+
+    Server-authored by ``database.capture_groups`` only after the captures are
+    shown to share speech. ``id`` is the event identity and never changes when
+    ``primary_id`` (the longest capture) does. Clients present the group as one
+    row and keep every member reachable.
+    """
+
+    id: str
+    primary_id: str
+    revision: int = 1
+    members: List[CaptureGroupMember] = []
+
+
 class Conversation(BaseModel):
     sync_content_revision: Optional[int] = None
     sync_relevance: Optional[Literal['keep', 'review']] = None
@@ -346,6 +368,8 @@ class Conversation(BaseModel):
 
     external_data: Optional[Dict] = None
     app_id: Optional[str] = None
+    # Cross-surface event membership (#3244). Read-only for every writer except database.capture_groups.
+    capture_group: Optional[CaptureGroup] = None
 
     discarded: bool = False
     # True for conversations created via an external data import (e.g. Limitless ZIP).

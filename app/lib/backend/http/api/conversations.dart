@@ -539,6 +539,28 @@ Future<bool> setConversationStarred(String conversationId, bool starred) async {
   return response.statusCode == 200;
 }
 
+enum CaptureGroupSeparationResult { separated, unchanged, failed }
+
+/// Separates [conversationId] from the capture group (one event recorded by
+/// several devices) it belongs to. Sticky on the server: the recording is never
+/// regrouped with the members it left. `unchanged` means it was not grouped.
+Future<CaptureGroupSeparationResult> separateConversationFromCaptureGroup(String conversationId) async {
+  final response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/capture-group/separate',
+    headers: {},
+    method: 'POST',
+    body: '',
+  );
+  if (response == null || response.statusCode != 200) return CaptureGroupSeparationResult.failed;
+  try {
+    final body = jsonDecode(response.body);
+    final status = body is Map ? body['status'] : null;
+    return status == 'unchanged' ? CaptureGroupSeparationResult.unchanged : CaptureGroupSeparationResult.separated;
+  } catch (_) {
+    return CaptureGroupSeparationResult.separated;
+  }
+}
+
 Future<bool> setConversationActionItemState(String conversationId, List<int> actionItemsIdx, List<bool> values) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/conversations/$conversationId/action-items',

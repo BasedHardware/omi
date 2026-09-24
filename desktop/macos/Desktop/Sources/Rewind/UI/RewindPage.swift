@@ -1742,7 +1742,7 @@ struct RewindPage: View {
       let result = await appState.finishConversation()
       isFinishing = false
       switch result {
-      case .saved:
+      case .saved, .busy:  // .busy: an in-flight rotation already owns the finish
         OmiMotion.withGated(.easeInOut(duration: 0.3)) {
           showSavedSuccess = true
         }

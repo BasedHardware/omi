@@ -201,6 +201,7 @@ def test_memory_maintenance_runtime_has_no_daily_sweep_or_posthog_bindings(env):
         'MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG',
         'MEMORY_DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_SECONDS',
         'MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED',
+        'MEMORY_DAILY_MEMORY_SWEEP_STAGGER_SECONDS',
         'POSTHOG_HOST',
     }
     assert daily_names.isdisjoint(maintenance.get('env', {}))
@@ -258,8 +259,8 @@ def test_dev_runtime_manifest_contains_no_removed_first_user_or_capture_admissio
     assert notifications_env['PINECONE_INDEX_NAME']['value'] == 'memories-backend-dev'
     assert notifications_env['OMI_BACKGROUND_FLEX_CAPABLE']['value'] == 'true'
     assert notifications_env['OMI_LLM_GATEWAY_URL']['env_var'] == 'OMI_LLM_GATEWAY_URL'
+    assert notifications_env['OMI_CUSTOMER_DATA_PROJECT']['value'] == 'based-hardware'
     assert set(notifications_job['secrets']) == {
-        'SERVICE_ACCOUNT_JSON',
         'ENCRYPTION_SECRET',
         'OPENAI_API_KEY',
         'PINECONE_API_KEY',
@@ -398,7 +399,11 @@ def test_memory_maintenance_job_workflow_passes_vpc_vars_and_checkout_sha():
         'flags: ${{ steps.runtime-env.outputs.cloud_run_flags }} '
         '${{ steps.runtime-env.outputs.memory_maintenance_job_flags }}'
     ) in text
-    assert "id-token: 'write'" not in text
+    # Prod deploys through GitHub WIF (credential-hygiene WS-C), which needs the
+    # OIDC token; development keeps its JSON lane.
+    assert "id-token: 'write'" in text
+    assert 'omi-gha-deploy-prod/providers/github' in text
+    assert "if: github.event.inputs.environment == 'prod'" in text
     assert 'git rev-parse --short=7 HEAD' in text
     assert 'short_sha=${GITHUB_SHA::7}' not in text
     assert 'render_backend_runtime_env.py --env ${{ vars.ENV }} --job memory-maintenance-job' in text

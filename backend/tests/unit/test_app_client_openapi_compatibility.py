@@ -421,6 +421,8 @@ def test_compatibility_check_is_wired_in_ci_and_pre_push():
 
     assert 'fetch-depth: 0' in workflow
     assert 'check_app_client_openapi_compatibility.py --base-ref FETCH_HEAD' in workflow
+    # The public Developer API is released to third parties too; breaks need a new version, not an edit.
+    assert "--head-spec docs/api-reference/openapi.json --label 'Developer API'" in workflow
     assert 'backend/scripts/check_app_client_openapi_compatibility.py' in pre_push
     assert '--base-ref "$BASE_REMOTE_REF"' in pre_push
 

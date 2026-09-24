@@ -3256,5 +3256,17 @@
     "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{Apa yang boleh kamu lakukan untuk saya?} goal{Bantu saya menetapkan matlamat} activity{Ringkaskan aktiviti terkini saya} improve{Bagaimana saya boleh menjadi lebih baik?} other{}}",
     "nextWeek": "Minggu depan",
-    "clearSearch": "Kosongkan carian"
+    "clearSearch": "Kosongkan carian",
+    "captureRecordingsSheetTitle": "Rakaman perbualan ini",
+    "captureRecordingSeparate": "Asingkan…",
+    "captureRecordingSeparateTitle": "Asingkan rakaman ini?",
+    "captureRecordingSeparateMessage": "{recording} akan dipaparkan sebagai perbualan tersendiri dan tidak akan dikumpulkan dengan acara ini lagi.",
+    "captureRecordingSeparateConfirm": "Asingkan",
+    "captureRecordingSeparateFailed": "Tidak dapat mengasingkan. Cuba lagi.",
+    "captureRecordingOpenFailed": "Tidak dapat membuka rakaman ini.",
+    "captureRecordingViewing": "Anda sedang melihat rakaman ini",
+    "captureRecordedBy": "Dirakam oleh {devices}",
+    "captureSourceDesktop": "Desktop",
+    "renameConversation": "Namakan semula",
+    "captureRecordingsCount": "{count, plural, =1{1 rakaman} other{{count} rakaman}}"
 }

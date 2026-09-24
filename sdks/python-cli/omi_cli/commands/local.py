@@ -300,10 +300,13 @@ def _normalize_sql_result(result: Any) -> Any:
 
     if result == "No results":
         return {"rows": [], "columns": [], "row_count": 0}
+    # Column labels can start with status prefixes too. Prefer a complete,
+    # validated table; use the status interpretation only for non-table text.
+    fallback: dict[str, Any] = {"text": result}
     if result.startswith("Error:") or result.startswith("SQL Error:"):
-        return {"error": result}
-    if result.startswith("OK:"):
-        return {"ok": True, "message": result}
+        fallback = {"error": result}
+    elif result.startswith("OK:"):
+        fallback = {"ok": True, "message": result}
 
     # Find first non-empty line (header) and last non-empty line (footer)
     header_idx = None
@@ -319,17 +322,17 @@ def _normalize_sql_result(result: Any) -> Any:
             break
 
     if header_idx is None or footer_idx is None or header_idx >= footer_idx:
-        return {"text": result}
+        return fallback
 
     footer = lines[footer_idx].strip()
     row_count_match = re.match(r"^(\d+) row\(s\)$", footer)
     if not row_count_match:
-        return {"text": result}
+        return fallback
 
     header = lines[header_idx].strip()
     sep_idx = header_idx + 1
     if sep_idx >= footer_idx or not set(lines[sep_idx].strip()) <= {"-", " "}:
-        return {"text": result}
+        return fallback
 
     expected_count = int(row_count_match.group(1))
 
@@ -340,18 +343,18 @@ def _normalize_sql_result(result: Any) -> Any:
         data_lines.pop()
 
     if len(data_lines) != expected_count:
-        return {"text": result}
+        return fallback
 
     # Verify no embedded empty continuation lines inside data_lines
     if any(not line.strip() for line in data_lines):
-        return {"text": result}
+        return fallback
 
     columns = [part.strip() for part in header.split("|")] if "|" in header else [header.strip()]
     rows = []
     for line in data_lines:
         values = [part.strip() for part in line.split("|")] if "|" in line else [line.strip()]
         if len(values) != len(columns):
-            return {"text": result}
+            return fallback
         rows.append({column: values[index] for index, column in enumerate(columns)})
 
     return {

@@ -643,6 +643,10 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         # processing_state) — they are pinned here as non-projection-family.
         'sync_relevance',
         'sync_content_revision',
+        # Server-authored cross-surface event membership (#3244): member ids,
+        # sources, and windows only, written solely by database.capture_groups.
+        # No client-authored text, so not projection-family.
+        'capture_group',
     }
 )
 

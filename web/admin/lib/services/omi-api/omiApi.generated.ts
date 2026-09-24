@@ -941,6 +941,20 @@ export interface CanonicalKnowledgeGraphResponse {
   nodes: Array<Record<string, unknown>>;
 }
 
+export interface CaptureGroup {
+  id: string;
+  members?: Array<CaptureGroupMember>;
+  primary_id: string;
+  revision?: number;
+}
+
+export interface CaptureGroupMember {
+  finished_at?: string | null;
+  id: string;
+  source?: string | null;
+  started_at?: string | null;
+}
+
 export interface CaptureLinkSpec {
   conversation_id: string;
   moment_timestamp_ms?: number | null;
@@ -1129,6 +1143,7 @@ export interface Conversation {
   audio_files?: Array<AudioFile>;
   calendar_event?: CalendarEventLink | null;
   call_id?: string | null;
+  capture_group?: CaptureGroup | null;
   client_device_id?: string | null;
   client_platform?: string | null;
   client_processing?: ClientProcessing | null;
@@ -1311,6 +1326,7 @@ export interface ConversationSearchItem {
   audio_files?: Array<AudioFile>;
   calendar_event?: CalendarEventLink | null;
   call_id?: string | null;
+  capture_group?: CaptureGroup | null;
   client_device_id?: string | null;
   client_platform?: string | null;
   client_processing?: ClientProcessing | null;
@@ -5099,6 +5115,8 @@ export interface OmiApiSchemas {
   "CandidateStatus": CandidateStatus;
   "CandidateSubjectKind": CandidateSubjectKind;
   "CanonicalKnowledgeGraphResponse": CanonicalKnowledgeGraphResponse;
+  "CaptureGroup": CaptureGroup;
+  "CaptureGroupMember": CaptureGroupMember;
   "CaptureLinkSpec": CaptureLinkSpec;
   "CategoryEnum": CategoryEnum;
   "ChartData": ChartData;
@@ -6754,6 +6772,16 @@ export interface OmiApiPaths {
       operationId: "auto_link_calendar_event_v1_conversations__conversation_id__calendar_event_auto_link_post";
       responses: {
         "200": CalendarEventLink;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/conversations/{conversation_id}/capture-group/separate": {
+    post: {
+      operationId: "separate_conversation_from_capture_group_v1_conversations__conversation_id__capture_group_separate_post";
+      responses: {
+        "200": StatusResponse;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -12335,6 +12363,25 @@ export async function unlink_calendar_event_v1_conversations__conversation_id__c
 export async function auto_link_calendar_event_v1_conversations__conversation_id__calendar_event_auto_link_post(path: { conversation_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<CalendarEventLink> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/conversations/${path.conversation_id}/calendar-event/auto-link`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function separate_conversation_from_capture_group_v1_conversations__conversation_id__capture_group_separate_post(path: { conversation_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<StatusResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/conversations/${path.conversation_id}/capture-group/separate`;
   const _search = "";
   const _res = await fetch(`${_base}${_path}${_search}`, {
     method: "POST",
@@ -18912,4 +18959,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 443 client methods generated.
+// Total: 444 client methods generated.

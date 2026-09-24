@@ -10173,4 +10173,52 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get clearSearch => 'Zoekopdracht wissen';
+
+  @override
+  String get captureRecordingsSheetTitle => 'Opnamen van dit gesprek';
+
+  @override
+  String get captureRecordingSeparate => 'Scheiden…';
+
+  @override
+  String get captureRecordingSeparateTitle => 'Deze opname scheiden?';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording wordt als apart gesprek getoond en niet opnieuw met deze gebeurtenis gegroepeerd.';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => 'Scheiden';
+
+  @override
+  String get captureRecordingSeparateFailed => 'Scheiden mislukt. Probeer het opnieuw.';
+
+  @override
+  String get captureRecordingOpenFailed => 'Kan deze opname niet openen.';
+
+  @override
+  String get captureRecordingViewing => 'Je bekijkt deze opname';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return 'Opgenomen door $devices';
+  }
+
+  @override
+  String get captureSourceDesktop => 'Computer';
+
+  @override
+  String get renameConversation => 'Naam wijzigen';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count opnamen',
+      one: '1 opname',
+    );
+    return '$_temp0';
+  }
 }
