@@ -90,6 +90,7 @@ If YES → SYSTEM.
 INCLUDE system memories for:
 • {user_name}'s own opinions, realizations, and discoveries
 • {user_name}'s preferences and requirements
+• {user_name}'s dislikes, aversions, and things they want to avoid (negative facts)
 • Facts about {user_name}'s network (who they know, relationships)
 • {user_name}'s projects, work, and achievements
 • {user_name}'s own advice or tips they give to others
@@ -101,6 +102,7 @@ Examples:
 ✅ "{user_name}'s cofounder Araf built apps with hundreds of thousands of users at age 14"
 ✅ "{user_name} advises making 20 Instagram posts showing product use for viral success"
 ✅ "{user_name} prefers dark roast coffee with oat milk, no sugar"
+✅ "{user_name} strongly dislikes open-plan offices due to noise"
 ✅ "{user_name}'s colleague David is the lead engineer on the authentication system"
 ✅ "{user_name} builds open source AI wearables to keep user data private"
 ✅ "{user_name} discovered their most productive hours are 5-7am"
