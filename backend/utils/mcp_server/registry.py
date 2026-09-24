@@ -13,11 +13,13 @@ from models.conversation_enums import CategoryEnum
 from models.memories import MemoryCategory
 from utils.memory.product_authorization import ProductAuthorizationContext
 from utils.mcp_server.constants import (
+    MCP_CONVERSATION_BATCH_MAX_IDS,
     MCP_CONVERSATION_FETCH_DEFAULT_MAX_CHARS,
     MCP_CONVERSATION_FETCH_DEFAULT_MAX_SEGMENTS,
     MCP_CONVERSATION_FETCH_MAX_CHARS,
     MCP_CONVERSATION_FETCH_MAX_SEGMENTS,
     MCP_CONVERSATION_LIST_MAX_LIMIT,
+    MCP_MEMORY_BATCH_MAX_ITEMS,
     MCP_MEMORY_LIST_DEFAULT_LIMIT,
     MCP_MEMORY_LIST_MAX_LIMIT,
 )
@@ -153,6 +155,17 @@ class ToolSpec:
 _MEMORY_CATEGORY_ENUM = [c.value for c in MemoryCategory]
 _CONVERSATION_CATEGORY_ENUM = [c.value for c in CategoryEnum]
 
+# Shared schema fragments: every list tool that pages emits ``next_cursor``
+# and accepts it back as ``cursor`` (mutually exclusive with ``offset``).
+_CURSOR_INPUT: Dict[str, Any] = {
+    "type": "string",
+    "description": "Opaque cursor from a previous response's next_cursor (mutually exclusive with offset)",
+}
+_NEXT_CURSOR_OUTPUT: Dict[str, Any] = {
+    "type": "string",
+    "description": "Pass back as cursor to fetch the next page; absent when no more results",
+}
+
 _READ = "none"
 _MEMORY_CREATE = "memory_create"
 _MEMORY_UPDATE = "memory_update"
@@ -221,6 +234,7 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
                     "maximum": MCP_MEMORY_LIST_MAX_LIMIT,
                 },
                 "offset": {"type": "integer", "description": "Offset for pagination", "default": 0},
+                "cursor": _CURSOR_INPUT,
                 "sort": {
                     "type": "string",
                     "enum": ["scoring_desc", "created_desc", "updated_desc", "manual_first"],
@@ -246,7 +260,16 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
             },
         },
         output_schema=_output_schema(
-            _object_schema(["memories"], memories=_ARRAY_OF_OBJECTS, filters={"type": "object"})
+            _object_schema(
+                ["memories"],
+                memories=_ARRAY_OF_OBJECTS,
+                filters={"type": "object"},
+                next_cursor=_NEXT_CURSOR_OUTPUT,
+                has_more={"type": "boolean"},
+                more_in_window={"type": "boolean"},
+                scanned_count={"type": "integer"},
+                scan_truncated={"type": "boolean"},
+            )
         ),
         scope="memories.read",
         operation="memory_list",
@@ -279,6 +302,66 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
         write_operation=_MEMORY_CREATE,
         rate_bucket="memories:create",
         handler=memories.create_memory,
+    ),
+    ToolSpec(
+        name="create_memories",
+        title="Create memories",
+        description=(
+            "Create up to 25 memories in one call; prefer this over repeated create_memory calls when saving "
+            "several facts. Each item takes content and an optional category. Every item is rate-limited "
+            "individually and returns its own status: created, duplicate (exact content+category already "
+            "created earlier in the same batch), or error."
+        ),
+        annotations=_create_annotations("Create memories", idempotent=False),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "description": "Memories to create",
+                    "minItems": 1,
+                    "maxItems": MCP_MEMORY_BATCH_MAX_ITEMS,
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "content": {"type": "string", "description": "The content of the memory"},
+                            "category": {
+                                "type": "string",
+                                "enum": _MEMORY_CATEGORY_ENUM,
+                                "description": "The category of the memory",
+                            },
+                        },
+                        "required": ["content"],
+                    },
+                },
+            },
+            "required": ["items"],
+        },
+        output_schema=_output_schema(
+            _object_schema(
+                ["results"],
+                results={
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "required": ["index", "status"],
+                        "properties": {
+                            "index": {"type": "integer"},
+                            "status": {"type": "string", "enum": ["created", "duplicate", "error"]},
+                            "memory_id": {"type": "string"},
+                            "error": {"type": "object"},
+                        },
+                    },
+                },
+            )
+        ),
+        scope="memories.write",
+        operation="memories_batch",
+        write_operation=_MEMORY_CREATE,
+        # No transport-level bucket: the handler charges ``memories:create``
+        # once per submitted item so a batch cannot bypass the write limit.
+        rate_bucket=None,
+        handler=memories.create_memories,
     ),
     ToolSpec(
         name="delete_memory",
@@ -345,9 +428,16 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
                     "maximum": MCP_CONVERSATION_LIST_MAX_LIMIT,
                 },
                 "offset": {"type": "integer", "description": "Offset for pagination", "default": 0},
+                "cursor": _CURSOR_INPUT,
             },
         },
-        output_schema=_output_schema(_object_schema(["conversations"], conversations=_ARRAY_OF_OBJECTS)),
+        output_schema=_output_schema(
+            _object_schema(
+                ["conversations"],
+                conversations=_ARRAY_OF_OBJECTS,
+                next_cursor=_NEXT_CURSOR_OUTPUT,
+            )
+        ),
         scope="conversations.read",
         operation="conversation_list",
         write_operation=_READ,
@@ -395,6 +485,58 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
         write_operation=_READ,
         rate_bucket=None,
         handler=conversations.get_conversation_by_id,
+    ),
+    ToolSpec(
+        name="get_conversations_by_ids",
+        title="Get conversations by IDs",
+        description=(
+            "Deep-read up to 20 conversations in one call — the preferred follow-up after "
+            "get_conversations or search_conversations returns several relevant ids. Each item returns the "
+            "same bounded card and transcript as get_conversation_by_id with its own truncated flag; ids "
+            "that resolve to nothing are listed in not_found. When the response budget is hit, later items "
+            "are omitted and truncated=true — retry them with smaller max_segments/max_chars."
+        ),
+        annotations=_read_annotations("Get conversations by IDs"),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "conversation_ids": {
+                    "type": "array",
+                    "description": "Conversation IDs to retrieve (1-20; duplicates are fetched once)",
+                    "minItems": 1,
+                    "maxItems": MCP_CONVERSATION_BATCH_MAX_IDS,
+                    "items": {"type": "string", "minLength": 1},
+                },
+                "max_segments": {
+                    "type": "integer",
+                    "description": "Maximum transcript segments to return per conversation",
+                    "default": MCP_CONVERSATION_FETCH_DEFAULT_MAX_SEGMENTS,
+                    "minimum": 1,
+                    "maximum": MCP_CONVERSATION_FETCH_MAX_SEGMENTS,
+                },
+                "max_chars": {
+                    "type": "integer",
+                    "description": "Maximum total transcript text characters to return per conversation",
+                    "default": MCP_CONVERSATION_FETCH_DEFAULT_MAX_CHARS,
+                    "minimum": 1,
+                    "maximum": MCP_CONVERSATION_FETCH_MAX_CHARS,
+                },
+            },
+            "required": ["conversation_ids"],
+        },
+        output_schema=_output_schema(
+            _object_schema(
+                ["conversations", "not_found", "truncated"],
+                conversations=_ARRAY_OF_OBJECTS,
+                not_found={"type": "array", "items": {"type": "string"}},
+                truncated={"type": "boolean"},
+            )
+        ),
+        scope="conversations.read",
+        operation="conversation_get",
+        write_operation=_READ,
+        rate_bucket=None,
+        handler=conversations.get_conversations_by_ids,
     ),
     ToolSpec(
         name="search_memories",
@@ -517,9 +659,16 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
                 "due_end_date": {"type": "string", "description": "Only items due on/before this date (yyyy-mm-dd)"},
                 "limit": {"type": "integer", "description": "Number of action items to retrieve", "default": 100},
                 "offset": {"type": "integer", "description": "Offset for pagination", "default": 0},
+                "cursor": _CURSOR_INPUT,
             },
         },
-        output_schema=_output_schema(_object_schema(["action_items"], action_items=_ARRAY_OF_OBJECTS)),
+        output_schema=_output_schema(
+            _object_schema(
+                ["action_items"],
+                action_items=_ARRAY_OF_OBJECTS,
+                next_cursor=_NEXT_CURSOR_OUTPUT,
+            )
+        ),
         scope="action_items.read",
         operation="action_item_list",
         write_operation=_READ,
@@ -694,9 +843,16 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
             "properties": {
                 "limit": {"type": "integer", "description": "Number of messages to retrieve", "default": 50},
                 "offset": {"type": "integer", "description": "Offset for pagination", "default": 0},
+                "cursor": _CURSOR_INPUT,
             },
         },
-        output_schema=_output_schema(_object_schema(["messages"], messages=_ARRAY_OF_OBJECTS)),
+        output_schema=_output_schema(
+            _object_schema(
+                ["messages"],
+                messages=_ARRAY_OF_OBJECTS,
+                next_cursor=_NEXT_CURSOR_OUTPUT,
+            )
+        ),
         scope="chat.read",
         operation="chat_message_list",
         write_operation=_READ,
@@ -725,8 +881,10 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
         title="Get screen activity",
         description=(
             "Retrieve synced desktop screen observations (Rewind): apps, windows and OCR text ordered by time. "
-            "Use summary=true for per-app counts and coverage; check coverage.truncated. Counts do not measure "
-            "usage duration or intent. Capture and sync completeness are unknown."
+            "Use group_by=app|hour|day for aggregated buckets with counts, estimated observation seconds "
+            "(bounded capture gaps, never actual usage duration), and top window titles; page through raw "
+            "rows with cursor. Use summary=true for the legacy per-app counts and coverage. Counts do not "
+            "measure usage duration or intent. Capture and sync completeness are unknown."
         ),
         annotations=_read_annotations("Get screen activity"),
         input_schema={
@@ -735,6 +893,12 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
                 "start_date": {"type": "string", "description": "Filter on/after this date (yyyy-mm-dd)"},
                 "end_date": {"type": "string", "description": "Filter on/before this date (yyyy-mm-dd)"},
                 "app": {"type": "string", "description": "Filter to a single app name"},
+                "group_by": {
+                    "type": "string",
+                    "enum": ["none", "app", "hour", "day"],
+                    "description": "Aggregate rows into buckets by app, hour, or day instead of returning raw rows",
+                    "default": "none",
+                },
                 "summary": {
                     "type": "boolean",
                     "description": "Return per-app observation counts and coverage instead of raw rows",
@@ -742,16 +906,28 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
                 },
                 "limit": {
                     "type": "integer",
-                    "description": "Max raw rows to return (ignored when summary=true)",
+                    "description": "Max rows scanned per page (ignored when summary=true)",
                     "default": 200,
+                    "maximum": 1000,
                 },
+                "cursor": _CURSOR_INPUT,
             },
         },
         output_schema=_output_schema(
             {
                 "type": "object",
                 "oneOf": [
-                    _object_schema(["screen_activity"], screen_activity=_ARRAY_OF_OBJECTS),
+                    _object_schema(
+                        ["screen_activity"],
+                        screen_activity=_ARRAY_OF_OBJECTS,
+                        next_cursor=_NEXT_CURSOR_OUTPUT,
+                    ),
+                    _object_schema(
+                        ["buckets"],
+                        group_by={"type": "string"},
+                        buckets=_ARRAY_OF_OBJECTS,
+                        next_cursor=_NEXT_CURSOR_OUTPUT,
+                    ),
                     _object_schema(
                         ["apps", "total_screenshots", "coverage"],
                         apps={"type": "object"},
@@ -782,9 +958,16 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
                 "end_date": {"type": "string", "description": "Filter on/before this date (yyyy-mm-dd)"},
                 "limit": {"type": "integer", "description": "Number of summaries to retrieve", "default": 30},
                 "offset": {"type": "integer", "description": "Offset for pagination", "default": 0},
+                "cursor": _CURSOR_INPUT,
             },
         },
-        output_schema=_output_schema(_object_schema(["daily_summaries"], daily_summaries=_ARRAY_OF_OBJECTS)),
+        output_schema=_output_schema(
+            _object_schema(
+                ["daily_summaries"],
+                daily_summaries=_ARRAY_OF_OBJECTS,
+                next_cursor=_NEXT_CURSOR_OUTPUT,
+            )
+        ),
         scope="conversations.read",
         operation="daily_summary_list",
         write_operation=_READ,

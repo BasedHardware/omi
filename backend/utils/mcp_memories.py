@@ -348,10 +348,12 @@ def collect_filtered_memories(
 
     paged = candidates[offset : offset + limit]
     scan_truncated = scanned_count >= max_scan
+    more_in_window = len(candidates) > offset + limit
     return {
         'memories': paged,
         'returned_count': len(paged),
-        'has_more': len(candidates) > offset + limit or scan_truncated,
+        'has_more': more_in_window or scan_truncated,
+        'more_in_window': more_in_window,
         'offset': offset,
         'limit': limit,
         'sort': sort,

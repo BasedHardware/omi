@@ -32,6 +32,11 @@ from utils.mcp_server.auth import MCPAuthContext, authenticate_mcp_request, inva
 from utils.mcp_server.constants import MCP_MAX_BATCH_MESSAGES
 from utils.mcp_server.errors import ToolExecutionError, stable_error_code, tool_error_from_http
 from utils.mcp_server.metadata import protected_resource_metadata_url
+from utils.mcp_server.payloads import (
+    complete_result as _complete_result,
+    tool_error_payload as _tool_error_payload,
+    tool_result_payload as _tool_result_payload,
+)
 from utils.mcp_server.registry import (
     MCP_TOOLS,
     TOOL_REQUIRED_SCOPE,
@@ -45,7 +50,6 @@ from utils.mcp_server.versions import (
     MCP_METHOD_HEADER,
     MCP_NAME_HEADER,
     MCP_PROTOCOL_VERSION_HEADER,
-    META_SERVER_INFO,
     PROTOCOL_VERSION_2026,
     SERVER_INFO,
     SUPPORTED_PROTOCOL_VERSIONS,
@@ -109,43 +113,6 @@ def require_tool_scope(auth_context: MCPAuthContext, tool_name: str) -> None:
 
 
 _require_tool_scope = require_tool_scope
-
-
-def _json_safe(value: Any) -> Any:
-    return json.loads(json.dumps(value, default=str))
-
-
-def _compact_json(value: Any) -> str:
-    return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
-
-
-def _tool_result_payload(result: Dict[str, Any]) -> Dict[str, Any]:
-    structured = _json_safe(result)
-    return {
-        "content": [{"type": "text", "text": _compact_json(structured)}],
-        "structuredContent": structured,
-    }
-
-
-def _tool_error_payload(code: str, message: str) -> Dict[str, Any]:
-    structured = {"error": {"code": code, "message": message}}
-    return {
-        "isError": True,
-        "content": [{"type": "text", "text": _compact_json(structured)}],
-        "structuredContent": structured,
-    }
-
-
-def _complete_result(result: Dict[str, Any], effective_version: str) -> Dict[str, Any]:
-    """2026-07-28 results carry resultType and serverInfo ``_meta``."""
-    if effective_version != PROTOCOL_VERSION_2026:
-        return result
-    decorated = dict(result)
-    decorated["resultType"] = "complete"
-    meta = dict(decorated.get("_meta") or {})
-    meta[META_SERVER_INFO] = dict(SERVER_INFO)
-    decorated["_meta"] = meta
-    return decorated
 
 
 def _tool_call_analytics(

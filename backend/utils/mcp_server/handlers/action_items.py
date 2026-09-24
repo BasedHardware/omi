@@ -7,6 +7,7 @@ import utils.mcp_action_items as mcp_action_items
 from utils.memory.product_authorization import ProductAuthorizationContext
 from utils.mcp_data import clean_action_item, end_of_day_utc
 from utils.mcp_memories import parse_mcp_bool, parse_mcp_int, parse_optional_mcp_bool
+from utils.mcp_server.cursors import encode_cursor, offset_page, resolve_offset_cursor
 from utils.mcp_server.errors import ToolExecutionError
 from utils.mcp_server.helpers import parse_mcp_date
 
@@ -27,15 +28,32 @@ def get_action_items(
     if due_end is not None:
         # Include the entire end day, matching the integration-router convention.
         due_end = end_of_day_utc(due_end)
-    items = action_items_db.get_action_items(
+    filters = {
+        "completed": completed,
+        "due_start": due_start.isoformat() if due_start else None,
+        "due_end": due_end.isoformat() if due_end else None,
+    }
+    offset = resolve_offset_cursor(arguments, kind="get_action_items", uid=uid, filters=filters, offset=offset)
+    # The backend slices its live (non-deleted) list by offset, so a limit+1
+    # lookahead answers has_more exactly — a short page is the end.
+    fetched = action_items_db.get_action_items(
         uid,
         completed=completed,
         due_start_date=due_start,
         due_end_date=due_end,
-        limit=limit,
+        limit=limit + 1,
         offset=offset,
     )
-    return {"action_items": [clean_action_item(i) for i in items if not i.get("deleted", False)]}
+    page, consumed, has_more = offset_page([i for i in fetched if not i.get("deleted", False)], limit)
+    result: Dict[str, Any] = {"action_items": [clean_action_item(i) for i in page]}
+    if has_more:
+        result["next_cursor"] = encode_cursor(
+            kind="get_action_items",
+            uid=uid,
+            position={"offset": offset + consumed},
+            filters=filters,
+        )
+    return result
 
 
 def search_action_items(

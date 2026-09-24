@@ -477,7 +477,9 @@ def _fat_conversation():
 
 
 def test_conversation_list_and_search_return_cards_without_heavy_fields():
-    with patch.object(sse.conversations_db, 'get_mcp_conversation_cards', return_value=[_fat_conversation()]):
+    with patch.object(
+        sse.conversations_db, 'get_mcp_conversation_cards_page', return_value=([_fat_conversation()], None)
+    ):
         listed = sse.execute_tool(UID, 'get_conversations', {})['conversations'][0]
 
     with (
@@ -537,7 +539,7 @@ async def test_conversation_index_failure_is_json_rpc_http_200(tool_name, argume
     with (
         patch.object(sse_transport, 'run_blocking', side_effect=_run_blocking_inline),
         patch.object(sse_transport, 'authenticate_mcp_request', return_value=auth_context),
-        patch.object(sse.conversations_db, 'get_mcp_conversation_cards', side_effect=failure),
+        patch.object(sse.conversations_db, 'get_mcp_conversation_cards_page', side_effect=failure),
         patch.object(sse_conversations, 'resolve_mcp_conversation_search_ids', side_effect=failure),
     ):
         response = await sse.mcp_streamable_http(request, authorization='Bearer token', accept=None)
@@ -912,7 +914,7 @@ class TestScreenActivity:
 
     @patch('utils.mcp_server.handlers.other.screen_activity_db')
     def test_tool_rows(self, mock_db):
-        mock_db.get_screen_activity.return_value = [self._row()]
+        mock_db.get_screen_activity_page.return_value = ([self._row()], False)
         result = sse.execute_tool(UID, 'get_screen_activity', {'limit': 5})
         assert result['screen_activity'][0]['app_name'] == 'Cursor'
 
@@ -928,7 +930,7 @@ class TestScreenActivity:
         # actionable ToolExecutionError, not an opaque 500.
         from google.api_core.exceptions import FailedPrecondition
 
-        mock_db.get_screen_activity.side_effect = FailedPrecondition('query requires an index')
+        mock_db.get_screen_activity_page.side_effect = FailedPrecondition('query requires an index')
         with pytest.raises(sse.ToolExecutionError) as exc_info:
             sse.execute_tool(UID, 'get_screen_activity', {'app': 'Cursor'})
         assert exc_info.value.code == -32009

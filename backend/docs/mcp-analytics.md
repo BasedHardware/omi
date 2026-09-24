@@ -76,7 +76,7 @@ dashboards; do not rename its properties without a dashboard migration.
 | Property | Values / meaning |
 | --- | --- |
 | `tool` | Allowlisted MCP tool name from the registry, otherwise `unknown`. |
-| `operation` | Closed operation grouping from the registry: `memory_get` (also `get_user_profile`), `memory_list`, `memory_search`, `conversation_get`, `conversation_list`, `conversation_search`, `action_item_list`, `action_item_search`, `x_post_list`, `x_post_search`, `goal_list`, `chat_message_list`, `screen_activity_get`, `people_list`, `daily_summary_list`, or `other` (the write tools). |
+| `operation` | Closed operation grouping from the registry: `memory_get` (also `get_user_profile`), `memory_list`, `memory_search`, `memories_batch` (`create_memories`), `conversation_get` (singular and `get_conversations_by_ids`), `conversation_list`, `conversation_search`, `action_item_list`, `action_item_search`, `x_post_list`, `x_post_search`, `goal_list`, `chat_message_list`, `screen_activity_get`, `people_list`, `daily_summary_list`, or `other` (the remaining write tools). |
 | `client` | `chatgpt`, `claude`, `other_registered`, `api_key`, or `unknown`; never the raw OAuth client ID. |
 | `transport` | `hosted_oauth`, `api_key`, or `unknown`. |
 | `outcome` | `success` or `error`. |

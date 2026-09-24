@@ -76,7 +76,9 @@ _WRITE_OPERATIONS = frozenset({spec.write_operation for spec in TOOL_SPECS} | {"
 _RESULT_LIST_KEY_BY_TOOL = {
     "get_memories": "memories",
     "search_memories": "memories",
+    "create_memories": "results",
     "get_conversations": "conversations",
+    "get_conversations_by_ids": "conversations",
     "search_conversations": "conversations",
     "search_x_posts": "posts",
     "get_x_posts": "posts",
@@ -488,6 +490,9 @@ def result_count_for_tool_result(tool_name: object, result: Mapping[str, Any]) -
         # of the ``screen_activity`` row list; count its bounded screenshot total.
         if "total_screenshots" in result:
             return _bounded_int(result.get("total_screenshots"), maximum=1_000)
+        buckets = result.get("buckets")
+        if isinstance(buckets, list):
+            return _bounded_int(len(buckets), maximum=1_000)
     list_key = _RESULT_LIST_KEY_BY_TOOL.get(_normalize_tool(tool_name))
     if list_key is not None:
         value = result.get(list_key)

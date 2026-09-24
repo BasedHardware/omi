@@ -50,10 +50,12 @@ EXPECTED_TOOL_ORDER = [
     "get_user_profile",
     "get_memories",
     "create_memory",
+    "create_memories",
     "delete_memory",
     "edit_memory",
     "get_conversations",
     "get_conversation_by_id",
+    "get_conversations_by_ids",
     "search_memories",
     "search_conversations",
     "search_x_posts",
@@ -76,10 +78,16 @@ FAKE_SUCCESS = {
     "get_user_profile": {"profile_text": "p", "generated_at": "t", "data_sources_used": []},
     "get_memories": {"memories": [{"id": "m1"}], "filters": {}},
     "create_memory": {"success": True, "memory": {"id": "m1", "content": "c"}},
+    "create_memories": {"results": [{"index": 0, "status": "created", "memory_id": "m1"}]},
     "delete_memory": {"success": True},
     "edit_memory": {"success": True},
     "get_conversations": {"conversations": [{"id": "c1"}]},
     "get_conversation_by_id": {"conversation": {"id": "c1"}, "truncated": False},
+    "get_conversations_by_ids": {
+        "conversations": [{"id": "c1", "conversation": {"id": "c1"}, "truncated": False}],
+        "not_found": [],
+        "truncated": False,
+    },
     "search_memories": {"memories": []},
     "search_conversations": {"conversations": []},
     "search_x_posts": {"posts": []},
@@ -648,7 +656,13 @@ class TestUnknownsAndScope:
         auth = _full_auth(scopes=["conversations.read"])
         response = mcp_transport.handle_mcp_message(auth, _msg("tools/list"))
         names = {tool["name"] for tool in response["result"]["tools"]}
-        assert names == {"get_conversations", "get_conversation_by_id", "search_conversations", "get_daily_summaries"}
+        assert names == {
+            "get_conversations",
+            "get_conversation_by_id",
+            "get_conversations_by_ids",
+            "search_conversations",
+            "get_daily_summaries",
+        }
 
 
 class TestToolResultContract:

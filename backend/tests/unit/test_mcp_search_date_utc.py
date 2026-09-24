@@ -253,12 +253,12 @@ class TestSseSearchUtcBounds:
     def test_get_conversations_utc_aware_dates(self):
         captured = {}
 
-        def _get_conversations(uid, limit, offset, **kwargs):
+        def _get_conversations(uid, limit, **kwargs):
             captured.update(start_date=kwargs.get('start_date'), end_date=kwargs.get('end_date'))
-            return []
+            return [], None
 
         with patch.object(
-            mcp_sse_router.conversations_db, 'get_mcp_conversation_cards', side_effect=_get_conversations
+            mcp_sse_router.conversations_db, 'get_mcp_conversation_cards_page', side_effect=_get_conversations
         ):
             mcp_sse_router.execute_tool(
                 'user-1', 'get_conversations', {'start_date': '2026-08-01', 'end_date': '2026-08-02'}
@@ -295,11 +295,13 @@ class TestSseSearchUtcBounds:
         rest of the day)."""
         captured = {}
 
-        def _get_screen_activity(uid, start_date=None, end_date=None, app_filter=None, limit=None):
+        def _get_screen_activity_page(uid, *, start_date=None, end_date=None, app_filter=None, limit=None, after=None):
             captured.update(start_date=start_date, end_date=end_date)
-            return []
+            return ([], False)
 
-        with patch.object(mcp_sse_router.screen_activity_db, 'get_screen_activity', side_effect=_get_screen_activity):
+        with patch.object(
+            mcp_sse_router.screen_activity_db, 'get_screen_activity_page', side_effect=_get_screen_activity_page
+        ):
             mcp_sse_router.execute_tool(
                 'user-1',
                 'get_screen_activity',
