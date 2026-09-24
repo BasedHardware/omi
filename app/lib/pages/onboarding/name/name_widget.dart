@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/services/auth_service.dart';
+import 'package:omi/pages/onboarding/widgets/onboarding_card.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class NameWidget extends StatefulWidget {
@@ -35,142 +37,62 @@ class _NameWidgetState extends State<NameWidget> {
     super.dispose();
   }
 
+  bool get _canContinue => nameController.text.trim().isNotEmpty;
+
+  void _submit() {
+    if (!_canContinue) return;
+    FocusManager.instance.primaryFocus?.unfocus();
+    AuthService.instance.updateGivenName(nameController.text.trim());
+    OmiHaptics.selection();
+    widget.goNext();
+  }
+
   @override
   Widget build(BuildContext context) {
-    return Column(
-      children: [
-        // Background area - takes remaining space
-        Expanded(
-          child: Container(), // Just takes up space for background image
-        ),
-
-        // Bottom drawer card - wraps content
-        Container(
-          width: double.infinity,
-          // The SafeArea below adds the system inset; adding it here as well left
-          // twice the inset of dead space under the content on inset devices.
-          padding: const EdgeInsets.fromLTRB(32, 26, 32, 8),
-          decoration: const BoxDecoration(
-            color: Colors.black,
-            borderRadius: BorderRadius.only(topLeft: Radius.circular(40), topRight: Radius.circular(40)),
+    return OnboardingStep(
+      card: OnboardingCard(
+        content: [
+          Semantics(
+            header: true,
+            child: Text(context.l10n.whatsYourName, style: OmiType.title1, textAlign: TextAlign.center),
           ),
-          child: SafeArea(
-            top: false,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const SizedBox(height: 16),
-
-                // Main title
-                Text(
-                  context.l10n.whatsYourName,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    height: 1.2,
-                    fontFamily: 'Manrope',
-                  ),
-                  textAlign: TextAlign.center,
-                ),
-
-                const SizedBox(height: 8),
-
-                // // Subtitle
-                // Text(
-                //   'Tell us how you\'d like to be addressed.\nThis helps personalize your Omi experience.',
-                //   style: TextStyle(
-                //     color: Colors.white.withValues(alpha: 0.6),
-                //     fontSize: 16,
-                //     fontFamily: 'Manrope',
-                //     height: 1.5,
-                //   ),
-                //   textAlign: TextAlign.center,
-                // ),
-                const SizedBox(height: 28),
-
-                // Name input field
-                Container(
-                  decoration: BoxDecoration(
-                    color: Colors.grey[900],
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: Colors.grey[700]!, width: 1),
-                  ),
-                  child: TextField(
-                    controller: nameController,
-                    focusNode: focusNode,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontFamily: 'Manrope',
-                      fontWeight: FontWeight.w500,
-                    ),
-                    textAlign: TextAlign.center,
-                    decoration: InputDecoration(
-                      hintText: context.l10n.enterYourName,
-                      hintStyle: TextStyle(color: Colors.grey[500], fontSize: 18, fontFamily: 'Manrope'),
-                      border: InputBorder.none,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-                    ),
-                    onChanged: (value) {
-                      setState(() {}); // Trigger rebuild to update button state
-                    },
-                  ),
-                ),
-
-                const SizedBox(height: 32),
-
-                // Continue button
-                SizedBox(
-                  width: double.infinity,
-                  height: 56,
-                  child: ElevatedButton(
-                    onPressed: nameController.text.trim().isEmpty
-                        ? null
-                        : () async {
-                            FocusManager.instance.primaryFocus?.unfocus();
-                            AuthService.instance.updateGivenName(nameController.text.trim());
-                            widget.goNext();
-                          },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: nameController.text.trim().isEmpty ? Colors.grey[800] : Colors.white,
-                      foregroundColor: nameController.text.trim().isEmpty ? Colors.grey[600] : Colors.black,
-                      disabledBackgroundColor: Colors.grey[800],
-                      disabledForegroundColor: Colors.grey[600],
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                      elevation: 0,
-                    ),
-                    child: Text(
-                      context.l10n.continueButton,
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, fontFamily: 'Manrope'),
-                    ),
-                  ),
-                ),
-
-                // const SizedBox(height: 24),
-
-                // // Need Help link
-                // PlatformService.isIntercomSupported
-                //     ? InkWell(
-                //         onTap: () {
-                //           Intercom.instance.displayMessenger();
-                //         },
-                //         child: Text(
-                //           'Need Help?',
-                //           style: TextStyle(
-                //             color: Colors.white.withValues(alpha: 0.6),
-                //             fontSize: 14,
-                //             fontFamily: 'Manrope',
-                //             decoration: TextDecoration.underline,
-                //           ),
-                //         ),
-                //       )
-                //     : const SizedBox.shrink(),
-              ],
+          const SizedBox(height: OmiSpacing.xxl),
+          Container(
+            decoration: BoxDecoration(
+              color: OmiColors.surface1,
+              borderRadius: OmiRadius.lgAll,
+              border: Border.all(color: OmiColors.border),
+            ),
+            child: TextField(
+              controller: nameController,
+              focusNode: focusNode,
+              style: OmiType.body.copyWith(fontWeight: FontWeight.w500),
+              textAlign: TextAlign.center,
+              textCapitalization: TextCapitalization.words,
+              textInputAction: TextInputAction.done,
+              onSubmitted: (_) => _submit(),
+              decoration: InputDecoration(
+                hintText: context.l10n.enterYourName,
+                hintStyle: OmiType.body.copyWith(color: OmiColors.textTertiary),
+                border: InputBorder.none,
+                contentPadding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xl, vertical: OmiSpacing.lg),
+              ),
+              onChanged: (value) {
+                setState(() {}); // Trigger rebuild to update button state
+              },
             ),
           ),
-        ),
-      ],
+        ],
+        footer: [
+          const SizedBox(height: OmiSpacing.xxl),
+          OmiButton(
+            key: const Key('onboarding_name_continue'),
+            label: context.l10n.continueButton,
+            expand: true,
+            onPressed: _canContinue ? _submit : null,
+          ),
+        ],
+      ),
     );
   }
 }

@@ -24881,6 +24881,374 @@
         "title": "SpeakerAnalytics",
         "type": "object"
       },
+      "SpeakerTagPrompt": {
+        "properties": {
+          "clip_end": {
+            "description": "Clip end, seconds from conversation start",
+            "title": "Clip End",
+            "type": "number"
+          },
+          "clip_start": {
+            "description": "Clip start, seconds from conversation start",
+            "title": "Clip Start",
+            "type": "number"
+          },
+          "conversation_id": {
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "conversation_started_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Conversation Started At"
+          },
+          "conversation_title": {
+            "default": "",
+            "title": "Conversation Title",
+            "type": "string"
+          },
+          "excerpt": {
+            "default": "",
+            "title": "Excerpt",
+            "type": "string"
+          },
+          "id": {
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/SpeakerTagPromptKind"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/SpeakerTagPromptOrigin"
+          },
+          "segment_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Segment Ids",
+            "type": "array"
+          },
+          "speaker_id": {
+            "title": "Speaker Id",
+            "type": "integer"
+          },
+          "suggested_person_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggested Person Id"
+          },
+          "suggested_person_ids": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Suggested Person Ids",
+            "type": "array"
+          },
+          "suggested_person_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggested Person Name"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "origin",
+          "conversation_id",
+          "speaker_id",
+          "segment_ids",
+          "clip_start",
+          "clip_end"
+        ],
+        "title": "SpeakerTagPrompt",
+        "type": "object"
+      },
+      "SpeakerTagPromptAnswer": {
+        "enum": [
+          "me",
+          "not_me",
+          "person",
+          "new_person",
+          "someone_else",
+          "skip"
+        ],
+        "title": "SpeakerTagPromptAnswer",
+        "type": "string"
+      },
+      "SpeakerTagPromptAnswerRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "answer": {
+            "$ref": "#/components/schemas/SpeakerTagPromptAnswer"
+          },
+          "conversation_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "first_time": {
+            "default": false,
+            "title": "First Time",
+            "type": "boolean"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/SpeakerTagPromptKind"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "maxLength": 40,
+                "minLength": 2,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "origin": {
+            "$ref": "#/components/schemas/SpeakerTagPromptOrigin"
+          },
+          "person_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Person Id"
+          },
+          "prompt_id": {
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Prompt Id",
+            "type": "string"
+          },
+          "segment_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 50,
+            "minItems": 1,
+            "title": "Segment Ids",
+            "type": "array"
+          },
+          "speaker_id": {
+            "minimum": 0.0,
+            "title": "Speaker Id",
+            "type": "integer"
+          },
+          "suggested_person_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Suggested Person Id"
+          }
+        },
+        "required": [
+          "prompt_id",
+          "kind",
+          "origin",
+          "conversation_id",
+          "speaker_id",
+          "segment_ids",
+          "answer"
+        ],
+        "title": "SpeakerTagPromptAnswerRequest",
+        "type": "object"
+      },
+      "SpeakerTagPromptAnswerResponse": {
+        "properties": {
+          "person_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Person Id"
+          },
+          "quality_outcome": {
+            "$ref": "#/components/schemas/SpeakerTagPromptQualityOutcome"
+          },
+          "status": {
+            "default": "ok",
+            "title": "Status",
+            "type": "string"
+          },
+          "voice_sample_queued": {
+            "default": false,
+            "title": "Voice Sample Queued",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "quality_outcome"
+        ],
+        "title": "SpeakerTagPromptAnswerResponse",
+        "type": "object"
+      },
+      "SpeakerTagPromptClip": {
+        "description": "A short clip of the user's own stored audio, as base64 WAV (16 kHz mono PCM16).",
+        "properties": {
+          "audio_base64": {
+            "title": "Audio Base64",
+            "type": "string"
+          },
+          "content_type": {
+            "default": "audio/wav",
+            "title": "Content Type",
+            "type": "string"
+          },
+          "duration_seconds": {
+            "title": "Duration Seconds",
+            "type": "number"
+          }
+        },
+        "required": [
+          "audio_base64",
+          "duration_seconds"
+        ],
+        "title": "SpeakerTagPromptClip",
+        "type": "object"
+      },
+      "SpeakerTagPromptKind": {
+        "enum": [
+          "owner_check",
+          "confirm_person",
+          "identify"
+        ],
+        "title": "SpeakerTagPromptKind",
+        "type": "string"
+      },
+      "SpeakerTagPromptOrigin": {
+        "description": "What the system believed about the voice before asking.",
+        "enum": [
+          "auto_user",
+          "auto_person",
+          "unnamed"
+        ],
+        "title": "SpeakerTagPromptOrigin",
+        "type": "string"
+      },
+      "SpeakerTagPromptQualityOutcome": {
+        "description": "Bounded, privacy-safe quality label derived from one answer.\n\nAuto-labels the user reviewed yield precision (confirmed vs rejected);\nunnamed voices the user names yield misses (recall gaps).",
+        "enum": [
+          "owner_auto_confirmed",
+          "owner_auto_rejected",
+          "owner_missed",
+          "owner_unmatched_not_owner",
+          "person_auto_confirmed",
+          "person_auto_corrected",
+          "person_missed_known",
+          "person_not_enrolled",
+          "unknown_voice",
+          "skipped"
+        ],
+        "title": "SpeakerTagPromptQualityOutcome",
+        "type": "string"
+      },
+      "SpeakerTagPromptsResponse": {
+        "properties": {
+          "first_time": {
+            "default": false,
+            "title": "First Time",
+            "type": "boolean"
+          },
+          "next_eligible_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Eligible At"
+          },
+          "prompts": {
+            "items": {
+              "$ref": "#/components/schemas/SpeakerTagPrompt"
+            },
+            "title": "Prompts",
+            "type": "array"
+          },
+          "save_other_voice_profiles": {
+            "default": true,
+            "title": "Save Other Voice Profiles",
+            "type": "boolean"
+          },
+          "status": {
+            "default": "ok",
+            "title": "Status",
+            "type": "string"
+          }
+        },
+        "title": "SpeakerTagPromptsResponse",
+        "type": "object"
+      },
+      "SpeakerTagPromptsShownRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "prompt_ids": {
+            "items": {
+              "type": "string"
+            },
+            "maxItems": 10,
+            "title": "Prompt Ids",
+            "type": "array"
+          }
+        },
+        "title": "SpeakerTagPromptsShownRequest",
+        "type": "object"
+      },
+      "SpeakerTagPromptsShownResponse": {
+        "properties": {
+          "first_time": {
+            "title": "First Time",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "first_time"
+        ],
+        "title": "SpeakerTagPromptsShownResponse",
+        "type": "object"
+      },
       "SpeechProfileMutationResponse": {
         "properties": {
           "status": {
@@ -29623,6 +29991,63 @@
           "transcript"
         ],
         "title": "VoiceMessageTranscriptionResponse",
+        "type": "object"
+      },
+      "VoiceProfileSettings": {
+        "properties": {
+          "save_other_voice_profiles": {
+            "default": true,
+            "title": "Save Other Voice Profiles",
+            "type": "boolean"
+          },
+          "speaker_tag_prompts_enabled": {
+            "default": true,
+            "title": "Speaker Tag Prompts Enabled",
+            "type": "boolean"
+          }
+        },
+        "title": "VoiceProfileSettings",
+        "type": "object"
+      },
+      "VoiceProfileSettingsUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "save_other_voice_profiles": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Save Other Voice Profiles"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "pattern": "^(settings|first_prompt)$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          },
+          "speaker_tag_prompts_enabled": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Speaker Tag Prompts Enabled"
+          }
+        },
+        "title": "VoiceProfileSettingsUpdate",
         "type": "object"
       },
       "VoiceReadiness": {
@@ -54945,6 +55370,439 @@
         ]
       }
     },
+    "/v1/speaker-tag-prompts": {
+      "get": {
+        "description": "Today's small set of voices to confirm, from conversations in the last 48 hours.",
+        "operationId": "get_speaker_tag_prompts_v1_speaker_tag_prompts_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpeakerTagPromptsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Speaker Tag Prompts",
+        "tags": [
+          "speaker-tag-prompts"
+        ]
+      }
+    },
+    "/v1/speaker-tag-prompts/answer": {
+      "post": {
+        "operationId": "answer_speaker_tag_prompt_v1_speaker_tag_prompts_answer_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SpeakerTagPromptAnswerRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpeakerTagPromptAnswerResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Answer Speaker Tag Prompt",
+        "tags": [
+          "speaker-tag-prompts"
+        ]
+      }
+    },
+    "/v1/speaker-tag-prompts/clip": {
+      "get": {
+        "description": "A short clip of the user's own stored conversation audio (base64 WAV, at most 12 s).",
+        "operationId": "get_speaker_tag_prompt_clip_v1_speaker_tag_prompts_clip_get",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "conversation_id",
+            "required": true,
+            "schema": {
+              "maxLength": 128,
+              "minLength": 1,
+              "title": "Conversation Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "query",
+            "name": "start",
+            "required": true,
+            "schema": {
+              "minimum": 0,
+              "title": "Start",
+              "type": "number"
+            }
+          },
+          {
+            "in": "query",
+            "name": "end",
+            "required": true,
+            "schema": {
+              "exclusiveMinimum": 0,
+              "title": "End",
+              "type": "number"
+            }
+          },
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpeakerTagPromptClip"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Speaker Tag Prompt Clip",
+        "tags": [
+          "speaker-tag-prompts"
+        ]
+      }
+    },
+    "/v1/speaker-tag-prompts/dismiss": {
+      "post": {
+        "description": "The user closed a set without answering; repeated dismissals slow the prompts down.",
+        "operationId": "dismiss_speaker_tag_prompts_v1_speaker_tag_prompts_dismiss_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "204": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Dismiss Speaker Tag Prompts",
+        "tags": [
+          "speaker-tag-prompts"
+        ]
+      }
+    },
+    "/v1/speaker-tag-prompts/shown": {
+      "post": {
+        "description": "The client displayed a set; starts the once-a-day cooldown.",
+        "operationId": "mark_speaker_tag_prompts_shown_v1_speaker_tag_prompts_shown_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SpeakerTagPromptsShownRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SpeakerTagPromptsShownResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Mark Speaker Tag Prompts Shown",
+        "tags": [
+          "speaker-tag-prompts"
+        ]
+      }
+    },
     "/v1/stripe/connect-accounts": {
       "post": {
         "description": "Create a Stripe Connect account and return the account creation response",
@@ -63815,6 +64673,168 @@
           }
         ],
         "summary": "Update Transcription Preferences Endpoint",
+        "tags": [
+          "v1"
+        ]
+      }
+    },
+    "/v1/users/voice-profile-settings": {
+      "get": {
+        "operationId": "get_voice_profile_settings_v1_users_voice_profile_settings_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceProfileSettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Get Voice Profile Settings",
+        "tags": [
+          "v1"
+        ]
+      },
+      "patch": {
+        "operationId": "update_voice_profile_settings_v1_users_voice_profile_settings_patch",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VoiceProfileSettingsUpdate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/VoiceProfileSettings"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Update Voice Profile Settings",
         "tags": [
           "v1"
         ]

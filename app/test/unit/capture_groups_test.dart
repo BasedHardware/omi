@@ -147,15 +147,18 @@ void main() {
     });
   });
 
-  group('header people summary', () {
-    test('names the first two, then how many more', () {
-      expect(ConversationDetailMeta.peopleSummary(['You']), 'You');
-      expect(ConversationDetailMeta.peopleSummary(['You', 'Dana']), 'You, Dana');
-      expect(ConversationDetailMeta.peopleSummary(['You', 'Dana', 'Speaker 2', 'Speaker 3']), 'You, Dana +2');
-      expect(ConversationDetailMeta.peopleSummary(const []), '');
+  group('header people', () {
+    String label(List<String> named, int unnamed) =>
+        ConversationDetailMeta.peopleLabel(named, unnamed, summary: (first, n) => '$first + $n others') ?? '<hidden>';
+
+    test('only named speakers are labelled; the rest are counted', () {
+      expect(label(['David'], 0), 'David');
+      expect(label(['David'], 3), 'David + 3 others');
+      expect(label(['You', 'Dana'], 1), 'You + 2 others');
+      expect(label(const [], 4), '<hidden>', reason: 'nobody named: the chip hides');
     });
 
-    test('participants put the owner first, then first appearance, by name when known', () {
+    test('participants put the owner first, name people by first appearance, and count the unnamed', () {
       final people = ConversationDetailMeta.participants(
         [
           _segment('a', speaker: 2),
@@ -165,10 +168,10 @@ void main() {
           _segment('e', speaker: 3, personId: 'p-unknown'),
         ],
         you: 'You',
-        speaker: (id) => 'Speaker ${id + 1}',
         personName: (id) => id == 'p-dana' ? 'Dana' : null,
       );
-      expect(people, ['You', 'Speaker 3', 'Dana', 'Speaker 4']);
+      expect(people.named, ['You', 'Dana']);
+      expect(people.unnamed, 2, reason: 'speaker 2 and the unknown person, never "Speaker N"');
     });
   });
 

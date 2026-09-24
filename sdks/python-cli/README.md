@@ -300,6 +300,9 @@ Both transcript JSON and `local call --args-json` require finite numbers:
 range are rejected before opening an API client. In `--json` mode, these input
 errors are reported as JSON on stderr.
 
+Goal numeric options and progress values must also be finite. NaN, infinities,
+and overflowing exponents are rejected before an API request.
+
 `action-item get` searches successive API pages until it finds the ID or
 reaches the end of the results. It can retrieve items beyond the first 1,000;
 looking up an older or missing item may require several API requests.

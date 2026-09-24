@@ -170,6 +170,11 @@ checks:
     triggers: ["scripts/dev-harness/tests/spine/**", "app/test/spine/**", "app/test/support/spine/**", "contracts/spine/**", "scripts/check_spine_contracts.py", "app/test.sh", "backend/testing/e2e/test_client_compat_replay.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Mobile self-driving explicitly requires visible strict pending contracts and marker-only builder edits; a shared Python/Dart primitive binds the V1 builder to the reviewed spine"
+  - id: python-device-sdk-tests
+    command: ["bash", "sdks/python/test.sh"]
+    triggers: ["sdks/python/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the Python SDK's Deepgram handshake uses the websockets 14 API; exercise the actual client at the minimum supported version so an incompatible dependency floor cannot silently disable transcription"
   - id: dev-harness-unit-tests
     command: ["bash", "scripts/dev-harness/run-tests.sh"]
     triggers: ["Makefile", "scripts/check_spine_contracts.py", "contracts/spine/**", "scripts/dev-harness/**", "app/ios/test/phone_mic_probe/**", "app/ios/test/audio_interruption_driver/**", "app/integration_test/journeys/run_journeys.sh", "contracts/session/**", "desktop/macos/scripts/omi-fault-inject.sh", ".github/checks-manifest.yaml"]
@@ -433,6 +438,26 @@ checks:
     triggers: ["desktop/macos/**"]
     lanes: ["local", "ci"]
     reason: "desktop files changed"
+  - id: mobile-changelog-tests
+    command: ["python3", ".github/scripts/test_mobile_changelog.py"]
+    triggers: [".github/scripts/mobile-changelog.py", ".github/scripts/check-mobile-changelog.py", ".github/scripts/test_mobile_changelog.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "mobile release text and deterministic app-scoped exemption contract"
+  - id: mobile-changelog-data
+    command: ["python3", ".github/scripts/mobile-changelog.py", "validate"]
+    triggers: ["all"]
+    lanes: ["local", "ci"]
+    reason: "repository-wide mobile changelog fragment and release schema"
+  - id: mobile-changelog-entry
+    command: ["python3", ".github/scripts/check-mobile-changelog.py", "--base", "{base}", "--head", "{head}"]
+    triggers: ["app/**"]
+    lanes: ["local", "ci"]
+    reason: "user-facing app changes require a durable mobile fragment on PR and main push"
+  - id: mobile-store-promote-contract
+    command: ["python3", "app/scripts/mobile_store_promote_test.py"]
+    triggers: ["app/scripts/mobile_store_promote.py", "app/scripts/mobile_store_promote_test.py", "codemagic.yaml", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "manual public promotion requires exact already-processed build, matching release notes and roll-forward checks"
   - id: omi-macos-dev-cli
     command: ["bash", "desktop/macos/tests/test-omi-macos-dev.sh"]
     triggers: ["desktop/macos/scripts/omi-macos-dev", "desktop/macos/scripts/cleanup-omi-tcc.sh", "desktop/macos/tests/test-omi-macos-dev.sh", "desktop/macos/tests/test-cleanup-omi-tcc.sh"]
@@ -484,6 +509,26 @@ checks:
     triggers: ["desktop/macos/Desktop/Sources/**/*.swift", "app/lib/**/*.dart", "web/**/*.ts", "web/**/*.tsx", "web/**/*.js", "web/**/*.jsx", "web/**/*.css"]
     lanes: ["local", "ci"]
     reason: "INV-UI-1 applies to changed UI sources"
+  - id: desktop-ux-contract-tests
+    command: ["python3", ".github/scripts/test_check_desktop_ux_contract.py"]
+    triggers: [".github/scripts/check_desktop_ux_contract.py", ".github/scripts/test_check_desktop_ux_contract.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "INV-UI-2 is a no-increase ratchet; each rule must keep failing on the shape of the defect it was written for"
+  - id: desktop-ux-contract
+    command: ["python3", ".github/scripts/check_desktop_ux_contract.py", "--changed-files", "{changed_files}", "--base", "{base}"]
+    triggers: ["desktop/macos/Desktop/Sources/**/*.swift"]
+    lanes: ["local", "ci"]
+    reason: "INV-UI-2: the desktop app shipped ~11 back buttons, 6 close buttons, 9 date formats and 4 delete policies because every page drew its own; new code uses the shared components in desktop/macos/docs/ux-contract.md"
+  - id: mobile-ux-contract-tests
+    command: ["python3", ".github/scripts/test_check_mobile_ux_contract.py"]
+    triggers: [".github/scripts/check_mobile_ux_contract.py", ".github/scripts/test_check_mobile_ux_contract.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "INV-UI-3 is a no-increase ratchet; every rule must keep a case proving it fails on the defect it targets"
+  - id: mobile-ux-contract
+    command: ["python3", ".github/scripts/check_mobile_ux_contract.py", "--changed-files", "{changed_files}", "--base", "{base}"]
+    triggers: ["app/lib/**/*.dart"]
+    lanes: ["local", "ci"]
+    reason: "INV-UI-3: changed app/lib files may not add hand-rolled back glyphs, dialogs, sheets, toasts, clipboard writes, date patterns, UI literals or hardcoded copy (app/docs/ux-contract.md)"
   - id: rayban-dat-plugin-boundary
     command: ["ruby", "app/ios/test/rayban_dat_plugin_boundary_test.rb"]
     triggers: ["app/ios/Podfile", "app/ios/Podfile.lock", "app/ios/rayban_dat_plugin_boundary.rb", "app/ios/test/rayban_dat_plugin_boundary_test.rb", ".github/checks-manifest.yaml"]
@@ -1425,6 +1470,11 @@ checks:
     triggers: ["plugins/omi-dropbox-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#15120: persist refreshed tokens to database, guard search metadata extraction, and validate chat tool inputs"
+  - id: omi-dropbox-app-hardening-tests
+    command: ["python3", "plugins/omi-dropbox-app/test_main.py"]
+    triggers: ["plugins/omi-dropbox-app/main.py", "plugins/omi-dropbox-app/test_main.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#14130: harden error handling, type validation, audio buffer bounding, sample rate validation, timezone-aware datetime"
   - id: desktop-build-source-identity
     command: ["bash", "desktop/macos/tests/test-desktop-build-identity.sh"]
     triggers: ["desktop/macos/run.sh", "desktop/macos/scripts/desktop-build-identity.sh", "desktop/macos/scripts/desktop-health-check.py", "desktop/macos/scripts/desktop-core-harness.sh", "desktop/macos/tests/test-desktop-build-identity.sh", "desktop/macos/Desktop/Sources/Automation/DesktopBuildIdentity.swift", "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift", ".github/checks-manifest.yaml"]

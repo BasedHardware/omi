@@ -1,11 +1,12 @@
 // Copyright (c) 2023 Larry Aasen. All rights reserved.
 
 import 'package:omi/utils/platform/platform_manager.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 import 'package:upgrader/upgrader.dart';
 
+import 'package:omi/ui/feedback/omi_dialogs.dart';
+import 'package:omi/ui/prompts/prompt_queue.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class MyUpgrader extends Upgrader {
@@ -32,58 +33,47 @@ class MyUpgradeAlertState extends UpgradeAlertState {
     required bool barrierDismissible,
     required UpgraderMessages messages,
   }) {
-    showDialog(
+    // "Not Now" postpones (onUserLater); it never silences this version forever (onUserIgnored).
+    // Queued with the other startup prompts: one at a time, never over a recording or a call. A
+    // required update (upgrader "blocked") goes first.
+    PromptQueue.instance.enqueue(
+      'upgrade-alert',
+      widget.upgrader.blocked() ? PromptPriority.critical : PromptPriority.normal,
+      show: (promptContext) => _show(promptContext, key: key, message: message, barrierDismissible: barrierDismissible),
+    );
+  }
+
+  Future<void> _show(
+    BuildContext context, {
+    Key? key,
+    required String message,
+    required bool barrierDismissible,
+  }) {
+    return showDialog<void>(
       context: context,
-      builder: (BuildContext context) {
-        if (widget.dialogStyle == UpgradeDialogStyle.cupertino) {
-          return CupertinoAlertDialog(
-            key: key,
-            title: Text(
-              context.l10n.newVersionAvailable,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-            ),
-            content: SingleChildScrollView(child: ListBody(children: <Widget>[Text(message)])),
-            actions: <Widget>[
-              TextButton(
-                child: Text(context.l10n.no, style: TextStyle(color: Colors.grey.shade200, fontSize: 16)),
-                onPressed: () {
-                  onUserIgnored(context, true);
-                  PlatformManager.instance.analytics.upgradeModalDismissed();
-                },
-              ),
-              TextButton(
-                child: Text(context.l10n.upgrade, style: const TextStyle(color: Colors.white, fontSize: 16)),
-                onPressed: () {
-                  onUserUpdated(context, !widget.upgrader.blocked());
-                  PlatformManager.instance.analytics.upgradeModalClicked();
-                },
-              ),
-            ],
-          );
-        }
-        return AlertDialog(
-          key: key,
-          title: Text(
-            context.l10n.newVersionAvailable,
-            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+      barrierDismissible: barrierDismissible,
+      builder: (BuildContext context) => OmiAlertDialog(
+        key: key,
+        title: context.l10n.newVersionAvailable,
+        message: message,
+        actions: [
+          OmiDialogAction(
+            label: context.l10n.notNow,
+            onPressed: () {
+              onUserLater(context, true);
+              PlatformManager.instance.analytics.upgradeModalDismissed();
+            },
           ),
-          content: SingleChildScrollView(child: ListBody(children: <Widget>[Text(message)])),
-          actions: <Widget>[
-            TextButton(
-              child: Text(context.l10n.no, style: TextStyle(color: Colors.grey.shade200, fontSize: 16)),
-              onPressed: () {
-                onUserIgnored(context, true);
-              },
-            ),
-            TextButton(
-              child: Text(context.l10n.upgrade, style: const TextStyle(color: Colors.white, fontSize: 16)),
-              onPressed: () {
-                onUserUpdated(context, !widget.upgrader.blocked());
-              },
-            ),
-          ],
-        );
-      },
+          OmiDialogAction(
+            label: context.l10n.update,
+            isDefault: true,
+            onPressed: () {
+              onUserUpdated(context, !widget.upgrader.blocked());
+              PlatformManager.instance.analytics.upgradeModalClicked();
+            },
+          ),
+        ],
+      ),
     );
   }
 }
