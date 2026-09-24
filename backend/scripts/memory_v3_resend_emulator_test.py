@@ -28,7 +28,7 @@ os.environ.setdefault("GOOGLE_AUTH_DISABLE_GCE_CHECK", "true")
 os.environ.setdefault("GCE_METADATA_HOST", "127.0.0.1:9")
 os.environ.setdefault("MEMORY_BELIEF_MODEL_ENABLED", "false")
 os.environ.setdefault("NO_PROXY", "127.0.0.1,localhost,::1")
-os.environ.setdefault("no_proxy", os.environ["NO_PROXY"])
+os.environ.setdefault("no_proxy", "127.0.0.1,localhost,::1")
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 if str(BACKEND_DIR) not in sys.path:
