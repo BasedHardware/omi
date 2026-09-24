@@ -385,6 +385,38 @@ class _DeviceSettingsState extends State<DeviceSettings> {
 
   // Sections.
 
+  Future<void> _renameDevice(BtDevice device, DeviceProvider provider) async {
+    final controller = TextEditingController(text: device.name);
+    final newName = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text(context.l10n.deviceName),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLength: 40,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (value) => Navigator.of(dialogContext).pop(value),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: Text(context.l10n.cancel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(controller.text),
+            child: Text(context.l10n.save),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+
+    if (newName == null || newName.trim().isEmpty || newName.trim() == device.name) return;
+    await provider.renameDevice(newName);
+    if (mounted) setState(() {});
+  }
+
   Widget _customizationGroup(BtDevice? device, DeviceProvider provider) {
     final l10n = context.l10n;
     final isOmi = device?.type == DeviceType.omi;
@@ -590,6 +622,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             pairedDevice: paired,
             isDeviceConnected: connected != null,
             rayBanCameraStatus: paired?.type == DeviceType.raybanMeta ? _rayBanMetaCameraStatus(provider) : null,
+            onRenameDevice: (paired ?? connected) != null ? () => _renameDevice(paired ?? connected!, provider) : null,
           ),
           gap,
           _forgetGroup(provider),
