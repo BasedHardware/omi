@@ -240,8 +240,10 @@ def _get_tls_context() -> ssl.SSLContext:
     if _tls_context is None:
         with _tls_context_lock:
             if _tls_context is None:
-                _tls_context = ssl.create_default_context()
-                _tls_context.minimum_version = ssl.TLSVersion.TLSv1_2
+                context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+                context.minimum_version = ssl.TLSVersion.TLSv1_2
+                context.load_default_certs()
+                _tls_context = context
     return _tls_context
 
 

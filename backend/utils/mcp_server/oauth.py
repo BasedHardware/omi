@@ -247,7 +247,7 @@ async def mcp_authorize(
     except _AuthorizeRequestError as e:
         if e.redirect_allowed:
             return RedirectResponse(_redirect_with_error(redirect_uri, e.error, str(e), state), status_code=302)
-        return _oauth_error(e.error, str(e))
+        return _oauth_error(e.error, "Invalid authorization request")
     except ValueError:
         return _oauth_error("invalid_request", "Invalid authorization request")
 
@@ -323,7 +323,7 @@ async def mcp_authorize_consent(
         if isinstance(e, _AuthorizeRequestError):
             if e.redirect_allowed:
                 return {"redirect_uri": _redirect_with_error(redirect_uri, e.error, str(e), state)}
-            return _oauth_error(e.error, str(e))
+            return _oauth_error(e.error, "Invalid authorization request")
         if isinstance(e, ValueError):
             return _oauth_error("invalid_request", "Invalid authorization request")
         return _oauth_error("access_denied", "Could not verify Omi sign-in token", status_code=401)

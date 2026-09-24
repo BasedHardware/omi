@@ -869,6 +869,19 @@ def test_tls_context_enforces_tls12_floor_and_verification():
     assert context.verify_mode == ssl.CERT_REQUIRED
 
 
+def test_tls_context_loads_default_cert_store(monkeypatch):
+    calls = []
+    real_load = ssl.SSLContext.load_default_certs
+    monkeypatch.setattr(
+        ssl.SSLContext,
+        "load_default_certs",
+        lambda self, *args, **kwargs: calls.append(1) or real_load(self, *args, **kwargs),
+    )
+    monkeypatch.setattr(cimd, "_tls_context", None)
+    cimd._get_tls_context()
+    assert calls == [1]
+
+
 # --- End-to-end authorize/token flow ---------------------------------------
 
 
@@ -935,6 +948,19 @@ def test_authorize_errors_never_echo_exception_details(mcp_client, monkeypatch):
     assert response.status_code == 400
     assert response.json()["error"] == "invalid_request"
     assert "sentinel-secret" not in response.text
+
+    monkeypatch.setattr(module.mcp_oauth_db, "get_client", lambda cid: None)
+    response = client.get("/authorize", params=_authorize_params())
+    assert response.status_code == 400
+    assert response.json() == {
+        "error": "invalid_request",
+        "error_description": "Invalid authorization request",
+    }
+
+    response = client.post("/authorize", data=consent)
+    assert response.status_code == 400
+    assert response.json()["error"] == "invalid_request"
+    assert response.json()["error_description"] == "Invalid authorization request"
 
 
 def test_cimd_authorize_get_missing_scope_defaults_to_read_scopes_only(mcp_client):
