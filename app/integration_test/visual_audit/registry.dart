@@ -1,5 +1,8 @@
-// Every registered visual audit scenario. Add a scenario to the file for its area under
-// scenarios/, and a new area's list here. Ids are unique; the smoke test enforces it.
+// Every registered visual audit scenario for current main. Add a scenario to the file for its area
+// under scenarios/, and a new area's list here. Ids are unique; the smoke test enforces it.
+import 'package:omi/ui/ui.dart';
+
+import 'fakes.dart';
 import 'harness.dart';
 import 'scenarios/apps.dart';
 import 'scenarios/chat.dart';
@@ -13,16 +16,21 @@ import 'scenarios/settings.dart';
 import 'scenarios/settings_pages.dart';
 import 'scenarios/tasks.dart';
 
-final List<AuditScenario> auditScenarios = [
-  ...settingsScenarios,
-  ...settingsPagesScenarios,
-  ...homeScenarios,
-  ...deviceScenarios,
-  ...conversationsScenarios,
-  ...conversationDetailScenarios,
-  ...memoriesScenarios,
-  ...tasksScenarios,
-  ...chatScenarios,
-  ...appsScenarios,
-  ...onboardingScenarios,
-];
+final auditSuite = AuditSuite(
+  name: 'current',
+  providers: defaultAuditProviders,
+  theme: buildOmiTheme,
+  scenarios: [
+    ...settingsScenarios,
+    ...settingsPagesScenarios,
+    ...homeScenarios,
+    ...deviceScenarios,
+    ...conversationsScenarios,
+    ...conversationDetailScenarios,
+    ...memoriesScenarios,
+    ...tasksScenarios,
+    ...chatScenarios,
+    ...appsScenarios,
+    ...onboardingScenarios,
+  ],
+);

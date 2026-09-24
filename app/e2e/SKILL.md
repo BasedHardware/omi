@@ -485,7 +485,7 @@ permission dialogs, BLE, audio, real network timing, screen readers, or a claim 
 app. The captures are evidence of a widget rendering, not of device behavior.
 
 ```bash
-app/scripts/visual_audit.sh --list                                  # registered scenario ids
+app/scripts/visual_audit.sh --list                                  # scenario ids, per suite
 app/scripts/visual_audit.sh --base origin/main --head HEAD          # every scenario, both sides
 app/scripts/visual_audit.sh --base <sha> --head <sha> --only settings-sheet,settings-device
 app/scripts/visual_audit.sh --head WORKTREE --only settings-help    # this checkout, uncommitted, one side
@@ -494,7 +494,11 @@ app/scripts/visual_audit.sh --head WORKTREE --only settings-help    # this check
 Each revision is checked out in a temporary detached worktree under `$OMI_WORKTREES` (default: the
 system temp dir), prepared like CI (generated env files, `pub get`, `build_runner`) and removed on
 exit. The harness and scenarios always come from the checkout you run the command in, copied over
-both sides, so a scenario must compile against both revisions. The output directory (`--out`,
+both sides. The current suite (`registry.dart`) compiles against current main; a revision from
+before a large UI change is captured with a compat suite (`compat/<name>/`, chosen by its `UNTIL`
+commit; see `compat/README.md`) that pumps the equivalent old page under the same id, so the old
+Profile page pairs with Account. A page only one side has is shown as "did not exist" there. The
+output directory (`--out`,
 default a new temp dir; it must be empty and outside the repository) holds `before/` and `after/`
 PNGs named `<id>.png` or `<id>-<step>.png`, per-side `capture.log`, `INDEX.md` with both SHAs and
 capture times, and a static `gallery.html`. A scenario that throws on one side is reported as failed
