@@ -1753,8 +1753,8 @@ async def iq_rating_page(uid: Optional[str] = Query(None, description="User ID")
         return HTMLResponse(content=html)
         
     except Exception as e:
-        logger.error(f"Error generating IQ ratings: {e}")
-        error_content = f'<div class="empty-state"><h2>Error</h2><p>{str(e)}</p></div>'
+        logger.error(f"Error generating IQ ratings: {e}", exc_info=True)
+        error_content = '<div class="empty-state"><h2>Error</h2><p>Failed to load IQ ratings. Please try again later.</p></div>'
         html = IQ_RATING_HTML.format(content=error_content)
         return HTMLResponse(content=html)
 
