@@ -1465,6 +1465,11 @@ checks:
     triggers: ["plugins/omi-dropbox-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#15120: persist refreshed tokens to database, guard search metadata extraction, and validate chat tool inputs"
+  - id: omi-dropbox-app-hardening-tests
+    command: ["python3", "plugins/omi-dropbox-app/test_main.py"]
+    triggers: ["plugins/omi-dropbox-app/main.py", "plugins/omi-dropbox-app/test_main.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#14130: harden error handling, type validation, audio buffer bounding, sample rate validation, timezone-aware datetime"
   - id: desktop-build-source-identity
     command: ["bash", "desktop/macos/tests/test-desktop-build-identity.sh"]
     triggers: ["desktop/macos/run.sh", "desktop/macos/scripts/desktop-build-identity.sh", "desktop/macos/scripts/desktop-health-check.py", "desktop/macos/scripts/desktop-core-harness.sh", "desktop/macos/tests/test-desktop-build-identity.sh", "desktop/macos/Desktop/Sources/Automation/DesktopBuildIdentity.swift", "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift", ".github/checks-manifest.yaml"]
