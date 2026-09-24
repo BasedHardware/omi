@@ -10,8 +10,13 @@ import json
 import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
 from unittest.mock import patch
+import sys
+from pathlib import Path
+
+# Add examples and tests directory to sys.path so pytest discovers example modules in CI
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "examples"))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from action_items_to_digest import (
     convert,
