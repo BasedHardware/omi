@@ -219,6 +219,26 @@ GOOGLE_OAUTH_SECRETS = '''\
         {"name": "MODULATE_API_KEY", "valueFrom": {"secretKeyRef": {"name": "MODULATE_API_KEY", "key": "latest"}}},
         {"name": "GOOGLE_MAPS_API_KEY", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_MAPS_API_KEY", "key": "latest"}}},'''
 
+# POSTHOG_EVENTS_API_KEY is only declared for backend-integration in
+# deploy/runtime_env; deployed-state fixtures must scope it the same way.
+INTEGRATION_EVENTS_SECRET = (
+    '        {"name": "POSTHOG_EVENTS_API_KEY", "valueFrom": {"secretKeyRef": '
+    '{"name": "POSTHOG_EVENTS_API_KEY", "key": "latest"}}}'
+)
+
+
+def with_backend_integration_events_secret(payload: str) -> str:
+    marker = '"backend-integration": {'
+    head, sep, tail = payload.partition(marker)
+    assert sep, "fixture payload is missing a backend-integration block"
+    needle = (
+        '{"name": "GOOGLE_MAPS_API_KEY", "valueFrom": {"secretKeyRef": '
+        '{"name": "GOOGLE_MAPS_API_KEY", "key": "latest"}}}'
+    )
+    assert needle in tail, "backend-integration block is missing the shared secrets tail"
+    tail = tail.replace(needle, needle + ",\n" + INTEGRATION_EVENTS_SECRET, 1)
+    return head + sep + tail
+
 
 def with_belief_model_env(payload: str) -> str:
     """Belief processing and its deployment-wide pause are declared together.
@@ -274,12 +294,13 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         )
     )
     payload = with_screen_frame_egress_env(payload)
-    return re.sub(
+    payload = re.sub(
         r'^(\s*\{"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN".*\}\s*\})\s*,?\s*$',
         r'\1,\n' + GOOGLE_OAUTH_SECRETS.rstrip(','),
         payload,
         flags=re.MULTILINE,
     )
+    return with_backend_integration_events_secret(payload)
 
 
 def validate_cloud_run_workflows_only(validator, *, env: str, manifest_path: Path, workflow_root: Path | None = None):

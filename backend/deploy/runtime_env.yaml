@@ -1077,6 +1077,9 @@ environments:
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
               version: latest
+            POSTHOG_EVENTS_API_KEY:
+              secret: POSTHOG_EVENTS_API_KEY
+              version: latest
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
@@ -2535,6 +2538,9 @@ environments:
               version: latest
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
+              version: latest
+            POSTHOG_EVENTS_API_KEY:
+              secret: POSTHOG_EVENTS_API_KEY
               version: latest
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
