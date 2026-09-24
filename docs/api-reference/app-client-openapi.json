@@ -22391,6 +22391,19 @@
         "title": "ReferralLinkResponse",
         "type": "object"
       },
+      "RejectAppRequest": {
+        "properties": {
+          "reason": {
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason"
+        ],
+        "title": "RejectAppRequest",
+        "type": "object"
+      },
       "ReorderFoldersRequest": {
         "description": "Request model for reordering folders.",
         "properties": {
@@ -36238,6 +36251,16 @@
             }
           }
         ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RejectAppRequest"
+              }
+            }
+          },
+          "required": true
+        },
         "responses": {
           "200": {
             "content": {
