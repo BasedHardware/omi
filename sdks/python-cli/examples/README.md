@@ -31,8 +31,10 @@
 * [`conversations_sqlite.md`](conversations_sqlite.md) — import conversation-list
   JSON exports into a SQLite database for SQL queries and multi-page merges.
 * [`memories_markdown.md`](memories_markdown.md) — export memories, facts, and learnings to structured Markdown notes for Obsidian & Notion.
+* [`memories_pinecone.md`](memories_pinecone.md) — embed and upsert memories into a Pinecone vector index for semantic search (offline `--dry-run` validation, stable ids, privacy filter).
 * [`conversations_atom.md`](conversations_atom.md) — publish conversation-list
   exports as an Atom 1.0 feed for any feed reader.
+* [`action_items_csv.md`](action_items_csv.md) — convert an action-item JSON export to CSV for spreadsheets (formula-injection-safe, `TRUE`/`FALSE` completion, refuses to overwrite).
 * [`action_items_sqlite.md`](action_items_sqlite.md) — convert an action-item JSON export to SQLite for structured SQL queries.
 * [`action_items_markdown.md`](action_items_markdown.md) — export action items and tasks to Obsidian/Notion Markdown checklists.
 * [`memories_markdown.pt.md`](memories_markdown.pt.md) — exportar memórias e conhecimento do Omi para Markdown (Portuguese recipe).
