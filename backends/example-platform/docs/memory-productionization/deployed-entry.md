@@ -4,11 +4,28 @@ Development setup on 2026-09-07 created the isolated `based-hardware-dev`
 PostgreSQL 18.4 instance and applied tested migrations 1–50. The application
 login has only `omi_platform_application` membership, with neither superuser
 nor RLS bypass; private database URL, codec and cursor secret versions are all
-version 1. Credentials are outside source and OpenTofu state. The seven original runtime IAM grants and the transcription secret grant
-remain unapplied because the operator cannot change project/secret IAM
-or create the custom Firebase verification role. No Cloud Run service is live,
-and schema installation alone does not release a database generation or mint
-account/grant authority.
+version 1. Credentials are outside source and OpenTofu state.
+
+2026-09-24 increment (`68ef253618`): the checksummed runner applied migrations
+55–58 through the authenticated Cloud SQL proxy (58 receipts, head 58); the
+logical restore drill against `omi-platform-dev-pg18` produced byte-identical
+source/restored receipt projections, and the generation was released through
+`omi_memory.release_postgres_restore_generation_v2` as a dedicated
+`omi_platform_restore_operator` login (digest and receipts in the private
+operator audit log; readiness inspection returns released at head 58). The
+linux/amd64 production image from `68ef253618` is pushed as
+`us-central1-docker.pkg.dev/based-hardware-dev/omi-platform/service@sha256:ffc1e02bd04878dfcd821589682e8e91e980a0fa2c5f64cc60ebebbff54b1121`,
+and `release-candidate.ts` prepared the initial-dev
+`omi-platform-dev-r-e2366a680f5c16d0` revision (measured `max_connections`
+100; the 36-connection manifest allocation stays under the approved 70).
+The eight runtime IAM grants (project Cloud SQL client, five secret accessors,
+custom Firebase verification role and binding) remain unapplied: the operator
+identity holds `roles/editor` only and every project/secret `setIamPolicy` and
+`iam.roles.create` attempt returns 403. The saved OpenTofu plan matches the
+reviewed grant set; a project owner must apply it before
+`gcloud run services replace` can boot a revision. No Cloud Run service is
+live, and schema installation alone does not release a database generation or
+mint account/grant authority.
 
 `bun run start:deployed` starts the existing Firebase/PostgreSQL memory process on
 `0.0.0.0:$PORT`. `bun run check:deployed` is included in the v5 root `check` gate.
