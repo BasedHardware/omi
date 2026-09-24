@@ -11077,4 +11077,15 @@ class AppLocalizationsUr extends AppLocalizations {
   @override
   String get conversationDeveloperToolsDescription =>
       'گفتگو کے مینو میں گفتگو آئی ڈی کاپی کریں اور پرامپٹ ٹیسٹ کریں دکھائیں';
+
+  @override
+  String participantsSummary(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count دیگر',
+      one: '1 دیگر',
+    );
+    return '$name + $_temp0';
+  }
 }

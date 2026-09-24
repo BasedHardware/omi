@@ -11142,4 +11142,15 @@ class AppLocalizationsTa extends AppLocalizations {
   @override
   String get conversationDeveloperToolsDescription =>
       'உரையாடலின் மெனுவில் உரையாடல் ஐடியை நகலெடு மற்றும் ப்ராம்ப்டைச் சோதி காட்டு';
+
+  @override
+  String participantsSummary(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count மற்றவர்கள்',
+      one: '1 மற்றவர்',
+    );
+    return '$name + $_temp0';
+  }
 }

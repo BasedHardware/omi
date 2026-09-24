@@ -11064,4 +11064,15 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get conversationDeveloperToolsDescription => 'نمایش «کپی شناسه گفتگو» و «آزمایش پرامپت» در منوی گفتگو';
+
+  @override
+  String participantsSummary(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count نفر دیگر',
+      one: '1 نفر دیگر',
+    );
+    return '$name + $_temp0';
+  }
 }

@@ -10885,4 +10885,15 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get conversationDeveloperToolsDescription => '会話のメニューに「会話IDをコピー」と「プロンプトをテスト」を表示';
+
+  @override
+  String participantsSummary(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count人',
+      one: '1人',
+    );
+    return '$name + $_temp0';
+  }
 }

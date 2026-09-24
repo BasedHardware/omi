@@ -11109,4 +11109,15 @@ class AppLocalizationsBg extends AppLocalizations {
   @override
   String get conversationDeveloperToolsDescription =>
       'Показване на „Копиране на ID на разговора“ и „Тестване на подкана“ в менюто на разговора';
+
+  @override
+  String participantsSummary(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count други',
+      one: '1 друг',
+    );
+    return '$name + $_temp0';
+  }
 }

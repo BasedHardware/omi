@@ -11101,4 +11101,15 @@ class AppLocalizationsNl extends AppLocalizations {
   @override
   String get conversationDeveloperToolsDescription =>
       'Toon Gesprek-ID kopiëren en Prompt testen in het menu van een gesprek';
+
+  @override
+  String participantsSummary(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count anderen',
+      one: '1 ander',
+    );
+    return '$name + $_temp0';
+  }
 }

@@ -3499,5 +3499,6 @@
     "captureRecordingsCount": "{count, plural, =1{1 запис} other{{count} записа}}",
     "captureSourcePendant": "Висулка",
     "conversationDeveloperTools": "Инструменти за разработчици в разговорите",
-    "conversationDeveloperToolsDescription": "Показване на „Копиране на ID на разговора“ и „Тестване на подкана“ в менюто на разговора"
+    "conversationDeveloperToolsDescription": "Показване на „Копиране на ID на разговора“ и „Тестване на подкана“ в менюто на разговора",
+    "participantsSummary": "{name} + {count, plural, =1{1 друг} other{{count} други}}"
 }

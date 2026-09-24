@@ -11070,4 +11070,15 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String get conversationDeveloperToolsDescription =>
       'Näytä Kopioi keskustelun tunnus ja Testaa kehote keskustelun valikossa';
+
+  @override
+  String participantsSummary(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count muuta',
+      one: '1 muu',
+    );
+    return '$name + $_temp0';
+  }
 }

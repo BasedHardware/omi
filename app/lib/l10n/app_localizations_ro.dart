@@ -11118,4 +11118,15 @@ class AppLocalizationsRo extends AppLocalizations {
   @override
   String get conversationDeveloperToolsDescription =>
       'Afișează Copiază ID-ul conversației și Testează promptul în meniul conversației';
+
+  @override
+  String participantsSummary(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count alții',
+      one: '1 altul',
+    );
+    return '$name + $_temp0';
+  }
 }

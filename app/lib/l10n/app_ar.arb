@@ -3499,5 +3499,6 @@
     "captureRecordingsCount": "{count, plural, =1{تسجيل واحد} other{{count} تسجيلات}}",
     "captureSourcePendant": "القلادة",
     "conversationDeveloperTools": "أدوات المطوّر في المحادثات",
-    "conversationDeveloperToolsDescription": "إظهار «نسخ معرّف المحادثة» و«اختبار الموجّه» في قائمة المحادثة"
+    "conversationDeveloperToolsDescription": "إظهار «نسخ معرّف المحادثة» و«اختبار الموجّه» في قائمة المحادثة",
+    "participantsSummary": "{name} + {count, plural, =1{1 آخر} other{{count} آخرين}}"
 }

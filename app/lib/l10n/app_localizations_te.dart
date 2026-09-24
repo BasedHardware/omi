@@ -11115,4 +11115,15 @@ class AppLocalizationsTe extends AppLocalizations {
   @override
   String get conversationDeveloperToolsDescription =>
       'సంభాషణ మెనులో సంభాషణ ఐడీ కాపీ చేయి మరియు ప్రాంప్ట్ పరీక్షించు చూపించు';
+
+  @override
+  String participantsSummary(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ఇతరులు',
+      one: '1 ఇతరులు',
+    );
+    return '$name + $_temp0';
+  }
 }

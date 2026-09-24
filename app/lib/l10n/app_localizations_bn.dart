@@ -11069,4 +11069,15 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get conversationDeveloperToolsDescription => 'কথোপকথনের মেনুতে কথোপকথন আইডি কপি ও প্রম্পট পরীক্ষা দেখান';
+
+  @override
+  String participantsSummary(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'আরও $count জন',
+      one: 'আরও ১ জন',
+    );
+    return '$name + $_temp0';
+  }
 }

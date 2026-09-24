@@ -3499,5 +3499,6 @@
     "captureRecordingsCount": "{count, plural, =1{1 tallenne} other{{count} tallennetta}}",
     "captureSourcePendant": "Riipus",
     "conversationDeveloperTools": "Kehittäjätyökalut keskusteluissa",
-    "conversationDeveloperToolsDescription": "Näytä Kopioi keskustelun tunnus ja Testaa kehote keskustelun valikossa"
+    "conversationDeveloperToolsDescription": "Näytä Kopioi keskustelun tunnus ja Testaa kehote keskustelun valikossa",
+    "participantsSummary": "{name} + {count, plural, =1{1 muu} other{{count} muuta}}"
 }

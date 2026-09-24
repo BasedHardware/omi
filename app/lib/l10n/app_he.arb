@@ -11071,5 +11071,6 @@
     "captureRecordingsCount": "{count, plural, =1{הקלטה אחת} other{{count} הקלטות}}",
     "captureSourcePendant": "תליון",
     "conversationDeveloperTools": "כלי מפתחים בשיחות",
-    "conversationDeveloperToolsDescription": "הצגת „העתקת מזהה שיחה“ ו„בדיקת הנחיה“ בתפריט השיחה"
+    "conversationDeveloperToolsDescription": "הצגת „העתקת מזהה שיחה“ ו„בדיקת הנחיה“ בתפריט השיחה",
+    "participantsSummary": "{name} + {count, plural, =1{1 נוסף} other{{count} נוספים}}"
 }

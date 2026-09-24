@@ -11159,4 +11159,15 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get conversationDeveloperToolsDescription =>
       '„Gesprächs-ID kopieren“ und „Prompt testen“ im Gesprächsmenü anzeigen';
+
+  @override
+  String participantsSummary(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count weitere',
+      one: '1 weitere Person',
+    );
+    return '$name + $_temp0';
+  }
 }

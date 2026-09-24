@@ -10866,4 +10866,15 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get conversationDeveloperToolsDescription => '在对话菜单中显示“复制对话 ID”和“测试提示词”';
+
+  @override
+  String participantsSummary(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count人',
+      one: '1人',
+    );
+    return '$name + $_temp0';
+  }
 }

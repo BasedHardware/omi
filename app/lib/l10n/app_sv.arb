@@ -3499,5 +3499,6 @@
     "captureRecordingsCount": "{count, plural, =1{1 inspelning} other{{count} inspelningar}}",
     "captureSourcePendant": "Hänge",
     "conversationDeveloperTools": "Utvecklarverktyg i samtal",
-    "conversationDeveloperToolsDescription": "Visa Kopiera samtals-ID och Testa prompt i samtalets meny"
+    "conversationDeveloperToolsDescription": "Visa Kopiera samtals-ID och Testa prompt i samtalets meny",
+    "participantsSummary": "{name} + {count, plural, =1{1 annan} other{{count} andra}}"
 }

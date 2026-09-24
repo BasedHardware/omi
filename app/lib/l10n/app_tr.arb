@@ -3534,5 +3534,6 @@
     "captureRecordingsCount": "{count, plural, =1{1 kayıt} other{{count} kayıt}}",
     "captureSourcePendant": "Kolye",
     "conversationDeveloperTools": "Konuşmalarda geliştirici araçları",
-    "conversationDeveloperToolsDescription": "Konuşma menüsünde Konuşma kimliğini kopyala ve İstemi test et seçeneklerini göster"
+    "conversationDeveloperToolsDescription": "Konuşma menüsünde Konuşma kimliğini kopyala ve İstemi test et seçeneklerini göster",
+    "participantsSummary": "{name} + {count, plural, =1{1 kişi daha} other{{count} kişi daha}}"
 }

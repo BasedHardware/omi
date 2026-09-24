@@ -11071,5 +11071,6 @@
     "captureRecordingsCount": "{count, plural, =1{1 запіс} other{Запісаў: {count}}}",
     "captureSourcePendant": "Кулон",
     "conversationDeveloperTools": "Інструменты распрацоўшчыка ў размовах",
-    "conversationDeveloperToolsDescription": "Паказваць «Скапіраваць ID размовы» і «Праверыць промпт» у меню размовы"
+    "conversationDeveloperToolsDescription": "Паказваць «Скапіраваць ID размовы» і «Праверыць промпт» у меню размовы",
+    "participantsSummary": "{name} + {count, plural, =1{1 іншы} other{{count} іншых}}"
 }

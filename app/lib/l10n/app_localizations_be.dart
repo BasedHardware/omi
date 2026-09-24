@@ -11097,4 +11097,15 @@ class AppLocalizationsBe extends AppLocalizations {
   @override
   String get conversationDeveloperToolsDescription =>
       'Паказваць «Скапіраваць ID размовы» і «Праверыць промпт» у меню размовы';
+
+  @override
+  String participantsSummary(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count іншых',
+      one: '1 іншы',
+    );
+    return '$name + $_temp0';
+  }
 }

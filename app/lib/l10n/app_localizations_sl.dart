@@ -11099,4 +11099,15 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get conversationDeveloperToolsDescription => 'Pokaži Kopiraj ID pogovora in Preizkusi poziv v meniju pogovora';
+
+  @override
+  String participantsSummary(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count drugih',
+      one: '1 drug',
+    );
+    return '$name + $_temp0';
+  }
 }

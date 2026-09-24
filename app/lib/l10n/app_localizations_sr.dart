@@ -11082,4 +11082,15 @@ class AppLocalizationsSr extends AppLocalizations {
   @override
   String get conversationDeveloperToolsDescription =>
       'Прикажи „Копирај ID разговора“ и „Тестирај упит“ у менију разговора';
+
+  @override
+  String participantsSummary(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count других',
+      one: '1 други',
+    );
+    return '$name + $_temp0';
+  }
 }

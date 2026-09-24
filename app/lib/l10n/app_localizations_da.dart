@@ -11053,4 +11053,15 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get conversationDeveloperToolsDescription => 'Vis Kopiér samtale-id og Test prompt i samtalens menu';
+
+  @override
+  String participantsSummary(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count andre',
+      one: '1 anden',
+    );
+    return '$name + $_temp0';
+  }
 }

@@ -11076,4 +11076,15 @@ class AppLocalizationsMr extends AppLocalizations {
   @override
   String get conversationDeveloperToolsDescription =>
       'संभाषणाच्या मेनूमध्ये संभाषण आयडी कॉपी करा आणि प्रॉम्प्ट तपासा दाखवा';
+
+  @override
+  String participantsSummary(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count इतर',
+      one: '1 इतर',
+    );
+    return '$name + $_temp0';
+  }
 }

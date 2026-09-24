@@ -3499,5 +3499,6 @@
     "captureRecordingsCount": "{count, plural, =1{1 rakaman} other{{count} rakaman}}",
     "captureSourcePendant": "Loket",
     "conversationDeveloperTools": "Alat pembangun dalam perbualan",
-    "conversationDeveloperToolsDescription": "Tunjukkan Salin ID Perbualan dan Uji Gesaan dalam menu perbualan"
+    "conversationDeveloperToolsDescription": "Tunjukkan Salin ID Perbualan dan Uji Gesaan dalam menu perbualan",
+    "participantsSummary": "{name} + {count, plural, =1{1 lagi} other{{count} lagi}}"
 }

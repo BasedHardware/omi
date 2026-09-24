@@ -3499,5 +3499,6 @@
     "captureRecordingsCount": "{count, plural, =1{1 opname} other{{count} opnamen}}",
     "captureSourcePendant": "Hanger",
     "conversationDeveloperTools": "Ontwikkelaarstools in gesprekken",
-    "conversationDeveloperToolsDescription": "Toon Gesprek-ID kopiëren en Prompt testen in het menu van een gesprek"
+    "conversationDeveloperToolsDescription": "Toon Gesprek-ID kopiëren en Prompt testen in het menu van een gesprek",
+    "participantsSummary": "{name} + {count, plural, =1{1 ander} other{{count} anderen}}"
 }

@@ -3534,5 +3534,6 @@
     "captureRecordingsCount": "{count, plural, =1{1 nagranie} other{Nagrania: {count}}}",
     "captureSourcePendant": "Wisiorek",
     "conversationDeveloperTools": "Narzędzia deweloperskie w rozmowach",
-    "conversationDeveloperToolsDescription": "Pokazuj Kopiuj ID rozmowy i Testuj prompt w menu rozmowy"
+    "conversationDeveloperToolsDescription": "Pokazuj Kopiuj ID rozmowy i Testuj prompt w menu rozmowy",
+    "participantsSummary": "{name} + {count, plural, =1{1 inna osoba} other{{count} inne osoby}}"
 }

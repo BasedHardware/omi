@@ -3534,5 +3534,6 @@
     "captureRecordingsCount": "{count, plural, =1{1 rekaman} other{{count} rekaman}}",
     "captureSourcePendant": "Liontin",
     "conversationDeveloperTools": "Alat pengembang di percakapan",
-    "conversationDeveloperToolsDescription": "Tampilkan Salin ID Percakapan dan Uji Prompt di menu percakapan"
+    "conversationDeveloperToolsDescription": "Tampilkan Salin ID Percakapan dan Uji Prompt di menu percakapan",
+    "participantsSummary": "{name} + {count, plural, =1{1 lainnya} other{{count} lainnya}}"
 }

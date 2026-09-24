@@ -11079,4 +11079,15 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get conversationDeveloperToolsDescription =>
       'Konuşma menüsünde Konuşma kimliğini kopyala ve İstemi test et seçeneklerini göster';
+
+  @override
+  String participantsSummary(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kişi daha',
+      one: '1 kişi daha',
+    );
+    return '$name + $_temp0';
+  }
 }

@@ -11094,4 +11094,15 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get conversationDeveloperToolsDescription => 'Rādīt sarunas izvēlnē “Kopēt sarunas ID” un “Pārbaudīt uzvedni”';
+
+  @override
+  String participantsSummary(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count citi',
+      one: '1 cits',
+    );
+    return '$name + $_temp0';
+  }
 }

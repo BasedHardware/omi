@@ -11071,5 +11071,6 @@
     "captureRecordingsCount": "{count, plural, =1{۱ ضبط} other{{count} ضبط}}",
     "captureSourcePendant": "آویز",
     "conversationDeveloperTools": "ابزارهای توسعه‌دهنده در گفتگوها",
-    "conversationDeveloperToolsDescription": "نمایش «کپی شناسه گفتگو» و «آزمایش پرامپت» در منوی گفتگو"
+    "conversationDeveloperToolsDescription": "نمایش «کپی شناسه گفتگو» و «آزمایش پرامپت» در منوی گفتگو",
+    "participantsSummary": "{name} + {count, plural, =1{1 نفر دیگر} other{{count} نفر دیگر}}"
 }

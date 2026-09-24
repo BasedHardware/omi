@@ -10999,4 +10999,15 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get conversationDeveloperToolsDescription => 'إظهار «نسخ معرّف المحادثة» و«اختبار الموجّه» في قائمة المحادثة';
+
+  @override
+  String participantsSummary(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count آخرين',
+      one: '1 آخر',
+    );
+    return '$name + $_temp0';
+  }
 }

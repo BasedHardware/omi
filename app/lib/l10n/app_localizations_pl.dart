@@ -11101,4 +11101,15 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get conversationDeveloperToolsDescription => 'Pokazuj Kopiuj ID rozmowy i Testuj prompt w menu rozmowy';
+
+  @override
+  String participantsSummary(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count inne osoby',
+      one: '1 inna osoba',
+    );
+    return '$name + $_temp0';
+  }
 }

@@ -10889,4 +10889,15 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get conversationDeveloperToolsDescription => '대화 메뉴에 대화 ID 복사와 프롬프트 테스트 표시';
+
+  @override
+  String participantsSummary(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count명',
+      one: '1명',
+    );
+    return '$name + $_temp0';
+  }
 }

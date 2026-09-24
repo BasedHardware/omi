@@ -11088,4 +11088,15 @@ class AppLocalizationsUk extends AppLocalizations {
   @override
   String get conversationDeveloperToolsDescription =>
       'Показувати «Копіювати ID розмови» і «Перевірити промпт» у меню розмови';
+
+  @override
+  String participantsSummary(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count інших',
+      one: '1 інший',
+    );
+    return '$name + $_temp0';
+  }
 }

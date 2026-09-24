@@ -11130,4 +11130,15 @@ class AppLocalizationsCa extends AppLocalizations {
   @override
   String get conversationDeveloperToolsDescription =>
       'Mostra Copia l\'ID de la conversa i Prova la indicació al menú de la conversa';
+
+  @override
+  String participantsSummary(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count altres',
+      one: '1 altre',
+    );
+    return '$name + $_temp0';
+  }
 }

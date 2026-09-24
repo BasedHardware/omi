@@ -11002,4 +11002,15 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get conversationDeveloperToolsDescription => 'แสดง คัดลอก ID บทสนทนา และ ทดสอบพรอมต์ ในเมนูของบทสนทนา';
+
+  @override
+  String participantsSummary(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$countคน',
+      one: '1คน',
+    );
+    return '$name + $_temp0';
+  }
 }

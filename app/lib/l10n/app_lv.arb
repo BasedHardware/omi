@@ -3499,5 +3499,6 @@
     "captureRecordingsCount": "{count, plural, =1{1 ieraksts} other{Ieraksti: {count}}}",
     "captureSourcePendant": "Kulons",
     "conversationDeveloperTools": "Izstrādātāja rīki sarunās",
-    "conversationDeveloperToolsDescription": "Rādīt sarunas izvēlnē “Kopēt sarunas ID” un “Pārbaudīt uzvedni”"
+    "conversationDeveloperToolsDescription": "Rādīt sarunas izvēlnē “Kopēt sarunas ID” un “Pārbaudīt uzvedni”",
+    "participantsSummary": "{name} + {count, plural, =1{1 cits} other{{count} citi}}"
 }

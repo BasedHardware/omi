@@ -11058,4 +11058,15 @@ class AppLocalizationsSk extends AppLocalizations {
   @override
   String get conversationDeveloperToolsDescription =>
       'Zobraziť Kopírovať ID konverzácie a Otestovať prompt v ponuke konverzácie';
+
+  @override
+  String participantsSummary(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ďalších',
+      one: '1 ďalší',
+    );
+    return '$name + $_temp0';
+  }
 }

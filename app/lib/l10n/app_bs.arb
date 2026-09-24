@@ -11071,5 +11071,6 @@
     "captureRecordingsCount": "{count, plural, =1{1 snimak} other{Snimaka: {count}}}",
     "captureSourcePendant": "Privjesak",
     "conversationDeveloperTools": "Alati za programere u razgovorima",
-    "conversationDeveloperToolsDescription": "Prikaži Kopiraj ID razgovora i Testiraj prompt u meniju razgovora"
+    "conversationDeveloperToolsDescription": "Prikaži Kopiraj ID razgovora i Testiraj prompt u meniju razgovora",
+    "participantsSummary": "{name} + {count, plural, =1{1 drugi} other{{count} drugih}}"
 }

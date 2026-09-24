@@ -11047,4 +11047,15 @@ class AppLocalizationsHi extends AppLocalizations {
   @override
   String get conversationDeveloperToolsDescription =>
       'बातचीत के मेनू में बातचीत आईडी कॉपी करें और प्रॉम्प्ट टेस्ट करें दिखाएँ';
+
+  @override
+  String participantsSummary(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count अन्य',
+      one: '1 अन्य',
+    );
+    return '$name + $_temp0';
+  }
 }

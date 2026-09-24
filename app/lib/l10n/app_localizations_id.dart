@@ -11076,4 +11076,15 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get conversationDeveloperToolsDescription => 'Tampilkan Salin ID Percakapan dan Uji Prompt di menu percakapan';
+
+  @override
+  String participantsSummary(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count lainnya',
+      one: '1 lainnya',
+    );
+    return '$name + $_temp0';
+  }
 }

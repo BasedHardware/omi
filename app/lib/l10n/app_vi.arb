@@ -3499,5 +3499,6 @@
     "captureRecordingsCount": "{count, plural, =1{1 bản ghi} other{{count} bản ghi}}",
     "captureSourcePendant": "Mặt dây chuyền",
     "conversationDeveloperTools": "Công cụ nhà phát triển trong cuộc trò chuyện",
-    "conversationDeveloperToolsDescription": "Hiển thị Sao chép ID cuộc trò chuyện và Thử prompt trong menu cuộc trò chuyện"
+    "conversationDeveloperToolsDescription": "Hiển thị Sao chép ID cuộc trò chuyện và Thử prompt trong menu cuộc trò chuyện",
+    "participantsSummary": "{name} + {count, plural, =1{1 người khác} other{{count} người khác}}"
 }

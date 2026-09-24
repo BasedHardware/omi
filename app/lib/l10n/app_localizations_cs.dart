@@ -11064,4 +11064,15 @@ class AppLocalizationsCs extends AppLocalizations {
   @override
   String get conversationDeveloperToolsDescription =>
       'Zobrazit Kopírovat ID konverzace a Otestovat prompt v nabídce konverzace';
+
+  @override
+  String participantsSummary(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count dalších',
+      one: '1 další',
+    );
+    return '$name + $_temp0';
+  }
 }

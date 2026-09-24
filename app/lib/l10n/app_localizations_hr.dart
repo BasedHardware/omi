@@ -11104,4 +11104,15 @@ class AppLocalizationsHr extends AppLocalizations {
   @override
   String get conversationDeveloperToolsDescription =>
       'Prikaži Kopiraj ID razgovora i Testiraj upit u izborniku razgovora';
+
+  @override
+  String participantsSummary(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count drugih',
+      one: '1 drugi',
+    );
+    return '$name + $_temp0';
+  }
 }

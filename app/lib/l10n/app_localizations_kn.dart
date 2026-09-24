@@ -11101,4 +11101,15 @@ class AppLocalizationsKn extends AppLocalizations {
   @override
   String get conversationDeveloperToolsDescription =>
       'ಸಂಭಾಷಣೆಯ ಮೆನುವಿನಲ್ಲಿ ಸಂಭಾಷಣೆ ಐಡಿ ನಕಲಿಸಿ ಮತ್ತು ಪ್ರಾಂಪ್ಟ್ ಪರೀಕ್ಷಿಸಿ ತೋರಿಸಿ';
+
+  @override
+  String participantsSummary(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count ಇತರರು',
+      one: '1 ಇತರರು',
+    );
+    return '$name + $_temp0';
+  }
 }

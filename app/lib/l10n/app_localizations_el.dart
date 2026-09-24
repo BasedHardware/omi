@@ -11143,4 +11143,15 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get conversationDeveloperToolsDescription =>
       'Εμφάνιση «Αντιγραφή αναγνωριστικού συνομιλίας» και «Δοκιμή προτροπής» στο μενού της συνομιλίας';
+
+  @override
+  String participantsSummary(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ακόμη $count',
+      one: 'ακόμη 1',
+    );
+    return '$name + $_temp0';
+  }
 }

@@ -11071,5 +11071,6 @@
     "captureRecordingsCount": "{count, plural, =1{1 снимка} other{{count} снимки}}",
     "captureSourcePendant": "Приврзок",
     "conversationDeveloperTools": "Алатки за програмери во разговорите",
-    "conversationDeveloperToolsDescription": "Прикажи „Копирај ID на разговор“ и „Тестирај промпт“ во менито на разговорот"
+    "conversationDeveloperToolsDescription": "Прикажи „Копирај ID на разговор“ и „Тестирај промпт“ во менито на разговорот",
+    "participantsSummary": "{name} + {count, plural, =1{1 друг} other{{count} други}}"
 }

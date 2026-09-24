@@ -11164,4 +11164,15 @@ class AppLocalizationsTl extends AppLocalizations {
   @override
   String get conversationDeveloperToolsDescription =>
       'Ipakita ang Kopyahin ang Conversation ID at Subukan ang Prompt sa menu ng usapan';
+
+  @override
+  String participantsSummary(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count iba pa',
+      one: '1 iba pa',
+    );
+    return '$name + $_temp0';
+  }
 }

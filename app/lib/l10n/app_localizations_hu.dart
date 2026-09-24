@@ -11110,4 +11110,15 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String get conversationDeveloperToolsDescription =>
       'A beszélgetés menüjében jelenjen meg a Beszélgetésazonosító másolása és a Prompt tesztelése';
+
+  @override
+  String participantsSummary(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count másik',
+      one: '1 másik',
+    );
+    return '$name + $_temp0';
+  }
 }

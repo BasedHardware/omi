@@ -3499,5 +3499,6 @@
     "captureRecordingsCount": "{count, plural, =1{1 ηχογράφηση} other{{count} ηχογραφήσεις}}",
     "captureSourcePendant": "Μενταγιόν",
     "conversationDeveloperTools": "Εργαλεία προγραμματιστή στις συνομιλίες",
-    "conversationDeveloperToolsDescription": "Εμφάνιση «Αντιγραφή αναγνωριστικού συνομιλίας» και «Δοκιμή προτροπής» στο μενού της συνομιλίας"
+    "conversationDeveloperToolsDescription": "Εμφάνιση «Αντιγραφή αναγνωριστικού συνομιλίας» και «Δοκιμή προτροπής» στο μενού της συνομιλίας",
+    "participantsSummary": "{name} + {count, plural, =1{ακόμη 1} other{ακόμη {count}}}"
 }

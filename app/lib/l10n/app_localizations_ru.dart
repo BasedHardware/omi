@@ -11103,4 +11103,15 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get conversationDeveloperToolsDescription =>
       'Показывать «Копировать ID разговора» и «Проверить промпт» в меню разговора';
+
+  @override
+  String participantsSummary(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: 'ещё $count',
+      one: 'ещё 1',
+    );
+    return '$name + $_temp0';
+  }
 }

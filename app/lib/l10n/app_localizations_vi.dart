@@ -11061,4 +11061,15 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get conversationDeveloperToolsDescription =>
       'Hiển thị Sao chép ID cuộc trò chuyện và Thử prompt trong menu cuộc trò chuyện';
+
+  @override
+  String participantsSummary(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count người khác',
+      one: '1 người khác',
+    );
+    return '$name + $_temp0';
+  }
 }

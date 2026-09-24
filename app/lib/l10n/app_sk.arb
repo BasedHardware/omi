@@ -3499,5 +3499,6 @@
     "captureRecordingsCount": "{count, plural, =1{1 nahrávka} other{Nahrávok: {count}}}",
     "captureSourcePendant": "Prívesok",
     "conversationDeveloperTools": "Vývojárske nástroje v konverzáciách",
-    "conversationDeveloperToolsDescription": "Zobraziť Kopírovať ID konverzácie a Otestovať prompt v ponuke konverzácie"
+    "conversationDeveloperToolsDescription": "Zobraziť Kopírovať ID konverzácie a Otestovať prompt v ponuke konverzácie",
+    "participantsSummary": "{name} + {count, plural, =1{1 ďalší} other{{count} ďalších}}"
 }

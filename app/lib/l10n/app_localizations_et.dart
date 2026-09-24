@@ -11064,4 +11064,15 @@ class AppLocalizationsEt extends AppLocalizations {
   @override
   String get conversationDeveloperToolsDescription =>
       'Näita vestluse menüüs valikuid Kopeeri vestluse ID ja Testi viipa';
+
+  @override
+  String participantsSummary(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count teist',
+      one: '1 teine',
+    );
+    return '$name + $_temp0';
+  }
 }

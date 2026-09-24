@@ -11095,4 +11095,15 @@ class AppLocalizationsMs extends AppLocalizations {
   @override
   String get conversationDeveloperToolsDescription =>
       'Tunjukkan Salin ID Perbualan dan Uji Gesaan dalam menu perbualan';
+
+  @override
+  String participantsSummary(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count lagi',
+      one: '1 lagi',
+    );
+    return '$name + $_temp0';
+  }
 }

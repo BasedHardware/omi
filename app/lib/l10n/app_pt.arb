@@ -3534,5 +3534,6 @@
     "captureRecordingsCount": "{count, plural, =1{1 gravação} other{{count} gravações}}",
     "captureSourcePendant": "Pendente",
     "conversationDeveloperTools": "Ferramentas de programador nas conversas",
-    "conversationDeveloperToolsDescription": "Mostrar Copiar ID da conversa e Testar prompt no menu da conversa"
+    "conversationDeveloperToolsDescription": "Mostrar Copiar ID da conversa e Testar prompt no menu da conversa",
+    "participantsSummary": "{name} + {count, plural, =1{1 outro} other{{count} outros}}"
 }

@@ -3499,5 +3499,6 @@
     "captureRecordingsCount": "{count, plural, =1{1 įrašas} other{Įrašų: {count}}}",
     "captureSourcePendant": "Pakabukas",
     "conversationDeveloperTools": "Kūrėjo įrankiai pokalbiuose",
-    "conversationDeveloperToolsDescription": "Rodyti pokalbio meniu „Kopijuoti pokalbio ID“ ir „Išbandyti raginimą“"
+    "conversationDeveloperToolsDescription": "Rodyti pokalbio meniu „Kopijuoti pokalbio ID“ ir „Išbandyti raginimą“",
+    "participantsSummary": "{name} + {count, plural, =1{1 kitas} other{{count} kiti}}"
 }

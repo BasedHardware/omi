@@ -7,7 +7,6 @@ import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/folder.dart';
-import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_meta.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/share.dart';
@@ -59,6 +58,11 @@ class ConversationDetailHeader extends StatelessWidget {
               final folderId = conversation.folderId;
               final folder = folderId == null ? null : folderProvider.getFolderById(folderId);
               final people = _people(context, conversation);
+              final peopleLabel = ConversationDetailMeta.peopleLabel(
+                people.named,
+                people.unnamed,
+                summary: (first, others) => context.l10n.participantsSummary(first, others),
+              );
               return Wrap(
                 spacing: 6,
                 runSpacing: 6,
@@ -73,7 +77,7 @@ class ConversationDetailHeader extends StatelessWidget {
                         onOpenRecordings(recordings);
                       },
                     ),
-                  if (people.isNotEmpty) _peopleChip(context, conversation, people),
+                  if (peopleLabel != null) _peopleChip(context, conversation, peopleLabel),
                   _FolderChip(conversation: conversation, folder: folder),
                   _VisibilityChip(conversation: conversation),
                 ],
@@ -171,18 +175,17 @@ class ConversationDetailHeader extends StatelessWidget {
     );
   }
 
-  /// Who spoke, from the transcript; a linked calendar event's attendees when
-  /// the transcript names no one.
-  static List<String> _people(BuildContext context, ServerConversation conversation) {
-    final segments = conversation.transcriptSegments;
+  /// Who spoke, by name only: the owner as "You" and named people, plus how many unnamed speakers
+  /// there were. When the transcript names nobody, a linked calendar event's attendees.
+  static ({List<String> named, int unnamed}) _people(BuildContext context, ServerConversation conversation) {
     final speakers = ConversationDetailMeta.participants(
-      segments,
+      conversation.transcriptSegments,
       you: context.l10n.you,
-      speaker: (id) => context.l10n.speakerWithId('${TranscriptSegment.getDisplaySpeakerId(id, segments)}'),
       personName: (personId) => SharedPreferencesUtil().getPersonById(personId)?.name,
     );
-    if (speakers.isNotEmpty) return speakers;
-    return (conversation.calendarEvent?.attendees ?? const []).map(_attendeeName).toList();
+    if (speakers.named.isNotEmpty) return speakers;
+    final attendees = (conversation.calendarEvent?.attendees ?? const []).map(_attendeeName).toList();
+    return attendees.isEmpty ? speakers : (named: attendees, unnamed: 0);
   }
 
   static String _attendeeName(String attendee) {
@@ -193,17 +196,17 @@ class ConversationDetailHeader extends StatelessWidget {
     return attendee.split(' ')[0];
   }
 
-  Widget _peopleChip(BuildContext context, ServerConversation conversation, List<String> people) {
+  Widget _peopleChip(BuildContext context, ServerConversation conversation, String label) {
     final chip = _HeaderChip(
       icon: const Icon(Icons.people_outline, size: 15, color: OmiColors.textSecondary),
-      label: ConversationDetailMeta.peopleSummary(people),
+      label: label,
       color: OmiColors.textSecondary,
     );
     final calendarEvent = conversation.calendarEvent;
-    if (calendarEvent == null) return Semantics(label: people.join(', '), excludeSemantics: true, child: chip);
+    if (calendarEvent == null) return Semantics(label: label, excludeSemantics: true, child: chip);
     return Semantics(
       button: true,
-      label: people.join(', '),
+      label: label,
       excludeSemantics: true,
       child: GestureDetector(onTap: () => _showCalendarEvent(context, calendarEvent), child: chip),
     );

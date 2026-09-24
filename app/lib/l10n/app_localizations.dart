@@ -20186,6 +20186,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Show Copy Conversation ID and Test Prompt in a conversation\'s menu'**
   String get conversationDeveloperToolsDescription;
+
+  /// Conversation header people chip: the first named participant and how many others took part, e.g. 'David + 3 others'
+  ///
+  /// In en, this message translates to:
+  /// **'{name} + {count, plural, =1{1 other} other{{count} others}}'**
+  String participantsSummary(String name, int count);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

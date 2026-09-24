@@ -10977,4 +10977,15 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get conversationDeveloperToolsDescription => 'הצגת „העתקת מזהה שיחה“ ו„בדיקת הנחיה“ בתפריט השיחה';
+
+  @override
+  String participantsSummary(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count נוספים',
+      one: '1 נוסף',
+    );
+    return '$name + $_temp0';
+  }
 }

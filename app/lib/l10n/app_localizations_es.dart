@@ -11097,4 +11097,15 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get conversationDeveloperToolsDescription =>
       'Mostrar Copiar ID de conversación y Probar indicación en el menú de la conversación';
+
+  @override
+  String participantsSummary(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count otros',
+      one: '1 otro',
+    );
+    return '$name + $_temp0';
+  }
 }

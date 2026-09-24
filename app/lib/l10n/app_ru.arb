@@ -3534,5 +3534,6 @@
     "captureRecordingsCount": "{count, plural, =1{1 запись} other{Записей: {count}}}",
     "captureSourcePendant": "Кулон",
     "conversationDeveloperTools": "Инструменты разработчика в разговорах",
-    "conversationDeveloperToolsDescription": "Показывать «Копировать ID разговора» и «Проверить промпт» в меню разговора"
+    "conversationDeveloperToolsDescription": "Показывать «Копировать ID разговора» и «Проверить промпт» в меню разговора",
+    "participantsSummary": "{name} + {count, plural, =1{ещё 1} other{ещё {count}}}"
 }

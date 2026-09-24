@@ -3499,5 +3499,6 @@
     "captureRecordingsCount": "{count, plural, =1{1 nahrávka} other{Nahrávek: {count}}}",
     "captureSourcePendant": "Přívěsek",
     "conversationDeveloperTools": "Vývojářské nástroje v konverzacích",
-    "conversationDeveloperToolsDescription": "Zobrazit Kopírovat ID konverzace a Otestovat prompt v nabídce konverzace"
+    "conversationDeveloperToolsDescription": "Zobrazit Kopírovat ID konverzace a Otestovat prompt v nabídce konverzace",
+    "participantsSummary": "{name} + {count, plural, =1{1 další} other{{count} dalších}}"
 }

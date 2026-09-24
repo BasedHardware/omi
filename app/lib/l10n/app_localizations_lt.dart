@@ -11086,4 +11086,15 @@ class AppLocalizationsLt extends AppLocalizations {
   @override
   String get conversationDeveloperToolsDescription =>
       'Rodyti pokalbio meniu „Kopijuoti pokalbio ID“ ir „Išbandyti raginimą“';
+
+  @override
+  String participantsSummary(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count kiti',
+      one: '1 kitas',
+    );
+    return '$name + $_temp0';
+  }
 }
