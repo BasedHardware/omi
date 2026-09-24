@@ -1593,7 +1593,8 @@ def update_daily_summary_settings(data: DailySummarySettingsUpdate, uid: str = D
         try:
             notification_db.set_daily_summary_hour_local(uid, data.hour)
         except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e))
+            logger.error(f"Failed to set daily summary hour: {sanitize(str(e))}", exc_info=True)
+            raise HTTPException(status_code=400, detail="Invalid hour. Must be between 0 and 23.")
 
     return {'status': 'ok'}
 
@@ -2132,7 +2133,8 @@ def update_mentor_notification_settings(
     try:
         notification_db.set_mentor_notification_frequency(uid, data.frequency)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.error(f"Failed to set mentor notification frequency: {sanitize(str(e))}", exc_info=True)
+        raise HTTPException(status_code=400, detail="Invalid frequency. Must be between 0 and 5.")
 
     return {'status': 'ok'}
 

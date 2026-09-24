@@ -169,3 +169,33 @@ class TestUsersTimezoneSanitization:
             assert exc_info.value.status_code == 500
             assert exc_info.value.detail == "Failed to resolve user timezone."
             assert SENSITIVE_TRACE not in str(exc_info.value.detail)
+
+
+class TestUsersSettingsSanitization:
+    def test_daily_summary_hour_sanitized(self):
+        data = users_router.DailySummarySettingsUpdate(hour=10)
+        with patch.object(
+            users_router.notification_db,
+            "set_daily_summary_hour_local",
+            side_effect=ValueError(f"Internal DB connection leak: {SENSITIVE_TRACE}"),
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                users_router.update_daily_summary_settings(data=data, uid="test-uid-1")
+
+            assert exc_info.value.status_code == 400
+            assert exc_info.value.detail == "Invalid hour. Must be between 0 and 23."
+            assert SENSITIVE_TRACE not in str(exc_info.value.detail)
+
+    def test_mentor_notification_frequency_sanitized(self):
+        data = users_router.MentorNotificationSettingsUpdate(frequency=3)
+        with patch.object(
+            users_router.notification_db,
+            "set_mentor_notification_frequency",
+            side_effect=ValueError(f"Internal DB connection leak: {SENSITIVE_TRACE}"),
+        ):
+            with pytest.raises(HTTPException) as exc_info:
+                users_router.update_mentor_notification_settings(data=data, uid="test-uid-1")
+
+            assert exc_info.value.status_code == 400
+            assert exc_info.value.detail == "Invalid frequency. Must be between 0 and 5."
+            assert SENSITIVE_TRACE not in str(exc_info.value.detail)
