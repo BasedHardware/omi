@@ -49,6 +49,40 @@ def _load(module_name, rel_path):
     return mod
 
 
+# Ensure httpx is stubbed if not installed
+try:
+    import httpx
+except ImportError:
+    httpx = _mod("httpx")
+
+    class HTTPError(Exception):
+        pass
+
+    class TimeoutException(HTTPError):
+        pass
+
+    class ConnectError(HTTPError):
+        pass
+
+    class RequestError(HTTPError):
+        pass
+
+    class HTTPStatusError(HTTPError):
+        pass
+
+    class Response:
+        status_code = 200
+        text = ""
+
+    httpx.HTTPError = HTTPError
+    httpx.TimeoutException = TimeoutException
+    httpx.ConnectError = ConnectError
+    httpx.RequestError = RequestError
+    httpx.HTTPStatusError = HTTPStatusError
+    httpx.Response = Response
+    httpx.AsyncClient = MagicMock
+    httpx.Client = MagicMock
+
 # Ensure langchain_core is stubbed if not installed
 _pkg("langchain_core")
 _lc_tools = _mod("langchain_core.tools")
