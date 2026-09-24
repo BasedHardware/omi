@@ -8,7 +8,7 @@ extension ConversationSource {
   var captureLabel: String {
     switch self {
     case .desktop: return "Desktop"
-    case .omi: return "Omi"
+    case .omi: return "Pendant"
     case .phone: return "Phone"
     case .appleWatch: return "Apple Watch"
     case .workflow: return "Workflow"

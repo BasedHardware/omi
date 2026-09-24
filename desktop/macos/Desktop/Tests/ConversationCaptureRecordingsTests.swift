@@ -82,7 +82,7 @@ final class ConversationCaptureRecordingsTests: XCTestCase {
       id: "p", source: .omi, startedAt: Self.base.addingTimeInterval(33 * 60),
       finishedAt: Self.base.addingTimeInterval(36 * 60), isCurrent: false)
     let label = Self.plain(CaptureGroupPresentation.label(of: window, locale: Self.enUS, timeZone: Self.utc))
-    XCTAssertTrue(label.hasPrefix("Omi · 1:31"), label)
+    XCTAssertTrue(label.hasPrefix("Pendant · 1:31"), label)
     XCTAssertTrue(label.hasSuffix("1:34 PM"), label)
 
     let openEnded = CaptureGroupRecording(
