@@ -2360,7 +2360,7 @@ function DeveloperSection({
             <div>
               <p className="font-medium text-text-primary">Claude Desktop</p>
               <p className="text-xs text-text-tertiary">
-                Add to Claude Desktop or Claude Code config
+                Add to claude_desktop_config.json
               </p>
             </div>
           </div>
