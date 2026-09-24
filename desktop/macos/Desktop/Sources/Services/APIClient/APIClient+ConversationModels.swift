@@ -543,23 +543,15 @@ struct ServerConversation: Codable, Identifiable, Equatable {
     return span
   }
 
-  /// Formatted duration string (e.g., "5m 30s")
+  /// Formatted duration string ("8s", "5m 30s", "1h 5m").
   var formattedDuration: String {
-    let duration = durationInSeconds
-    let minutes = duration / 60
-    let seconds = duration % 60
-    if minutes > 0 {
-      return "\(minutes)m \(seconds)s"
-    }
-    return "\(seconds)s"
+    OmiDateFormat.duration(Double(durationInSeconds))
   }
 
-  /// Full transcript as a single string
+  /// Full transcript as a single string, speakers unnamed ("You", "Speaker N"). Surfaces that know
+  /// the user's people use `SpeakerLabelFormatter(people:).transcript(_:)` instead.
   var transcript: String {
-    transcriptSegments.map { segment in
-      let speaker = segment.isUser ? "You" : "Speaker \(segment.speakerId)"
-      return "\(speaker): \(segment.text)"
-    }.joined(separator: "\n\n")
+    SpeakerLabelFormatter(names: [:]).transcript(transcriptSegments)
   }
 
   var transcriptPresenceState: TranscriptPresenceState {

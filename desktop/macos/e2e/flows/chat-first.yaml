@@ -5,7 +5,6 @@ description: "Cohort-gated mounted-shell route contract. It never fabricates Cha
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
-  - desktop/macos/Desktop/Sources/MainWindow/Components/ChatSessionsSidebar.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ChatErrorCard.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/DailyTaskCreationSheet.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift

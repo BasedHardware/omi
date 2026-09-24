@@ -41,21 +41,12 @@ enum ConversationDetailMeta {
     return names.prefix(limit).joined(separator: ", ") + " +\(names.count - limit)"
   }
 
-  /// Who spoke, by the names the transcript shows: "You", a named person, or "Speaker N".
-  /// First appearance order, with the reader first.
+  /// Who spoke, by the names the transcript shows (`SpeakerLabelFormatter`: "You", a named person,
+  /// or the 1-based "Speaker N"). First appearance order, with the reader first.
   static func participants(in segments: [TranscriptSegment], people: [Person]) -> [String] {
-    let names = Dictionary(lastWriteWins: people.map { ($0.id, $0.name) })
-    var seen: Set<String> = []
-    var result: [String] = []
-    if segments.contains(where: \.isUser) {
-      seen.insert("You")
-      result.append("You")
-    }
-    for segment in segments where !segment.isUser {
-      let name = segment.personId.flatMap { names[$0] } ?? "Speaker \(segment.speakerId)"
-      if seen.insert(name).inserted { result.append(name) }
-    }
-    return result
+    let names = SpeakerLabelFormatter(people: people).participants(in: segments)
+    guard let you = names.firstIndex(of: "You") else { return names }
+    return ["You"] + names[..<you] + names[(you + 1)...]
   }
 }
 
@@ -76,6 +67,8 @@ struct ConversationDetailHeader<BannerInset: View, Recordings: View, Trailing: V
   let pane: ConversationDetailPane
   let canCopyTranscript: Bool
   let isGroupedEvent: Bool
+  /// Where Back returns to, named on the chip ("‹ Conversations", "‹ Memories").
+  let backTitle: String
   let onBack: () -> Void
   let onSelectPane: (ConversationDetailPane) -> Void
   let onToggleStar: () -> Void
@@ -100,13 +93,14 @@ struct ConversationDetailHeader<BannerInset: View, Recordings: View, Trailing: V
   }
 
   var body: some View {
-    HStack(alignment: .center, spacing: OmiSpacing.md) {
+    HStack(alignment: .top, spacing: OmiSpacing.md) {
+      // A drill-in leaves the way it came: the chip on the leading edge names the destination.
+      BackChip(backTitle, accessibilityIdentifier: "conversation-detail-back", action: onBack)
+        .frame(height: 28)
       VStack(alignment: .leading, spacing: OmiSpacing.xs) {
         titleRow
         HStack(spacing: OmiSpacing.sm) {
-          // Indented to the title, past the back button and the emoji.
           metaLine
-            .padding(.leading, 28 + OmiSpacing.sm)
           Spacer(minLength: OmiSpacing.sm)
           trailing()
         }
@@ -119,15 +113,16 @@ struct ConversationDetailHeader<BannerInset: View, Recordings: View, Trailing: V
 
   private var titleRow: some View {
     HStack(spacing: OmiSpacing.sm) {
-      Button(action: onBack) {
-        DetailIconLabel(systemImage: "chevron.left", color: Ink.primary)
+      // Emoji, or the neutral waveform the list row uses — a fallback 💬 would claim an identity the
+      // pipeline has not produced.
+      if conversation.structured.emoji.isEmpty {
+        Image(systemName: "waveform")
+          .scaledFont(size: OmiType.body)
+          .foregroundColor(Ink.secondary)
+      } else {
+        Text(conversation.structured.emoji)
+          .scaledFont(size: OmiType.heading)
       }
-      .buttonStyle(.plain)
-      .help("Back to conversations")
-      .accessibilityLabel("Back")
-
-      Text(conversation.structured.emoji.isEmpty ? "\u{1F4AC}" : conversation.structured.emoji)
-        .scaledFont(size: OmiType.heading)
       Text(conversation.displayTitle)
         .scaledFont(size: OmiType.heading, weight: .semibold)
         .foregroundColor(titleColor)
@@ -135,7 +130,9 @@ struct ConversationDetailHeader<BannerInset: View, Recordings: View, Trailing: V
         .truncationMode(.tail)
         .help(conversation.displayTitle)
         .layoutPriority(-1)
+      // Fixed so a narrow window truncates the title, never wraps the badge.
       ConversationStatusBadge(state: conversation.displayState)
+        .fixedSize()
 
       Spacer(minLength: OmiSpacing.md)
 
@@ -214,22 +211,19 @@ struct ConversationDetailHeader<BannerInset: View, Recordings: View, Trailing: V
   private var actions: some View {
     HStack(spacing: OmiSpacing.xs) {
       if let onDiscussInChat {
-        Button(action: onDiscussInChat) {
-          DetailIconLabel(systemImage: "bubble.left.and.bubble.right")
-        }
-        .buttonStyle(.plain)
-        .help("Discuss in Chat")
-        .accessibilityLabel("Discuss this conversation in Chat")
-        // Preserve the capture archive's automation contract.
-        .accessibilityIdentifier("chat-first-capture-discuss-\(conversation.id)")
+        OmiIconButton("bubble.left.and.bubble.right", help: "Discuss in Chat", action: onDiscussInChat)
+          .accessibilityLabel("Discuss this conversation in Chat")
+          // Preserve the capture archive's automation contract.
+          .accessibilityIdentifier("chat-first-capture-discuss-\(conversation.id)")
       }
 
+      // The star keeps its starred colour, so it is drawn here on the shared icon-button chrome.
       Button(action: onToggleStar) {
-        DetailIconLabel(
-          systemImage: conversation.starred ? "star.fill" : "star",
-          color: conversation.starred ? PageGlass.starred : Ink.secondary)
+        Image(systemName: conversation.starred ? "star.fill" : "star")
+          .scaledFont(size: OmiType.body, weight: .medium)
+          .foregroundColor(conversation.starred ? PageGlass.starred : Ink.secondary)
       }
-      .buttonStyle(.plain)
+      .buttonStyle(GlassIconButtonStyle(diameter: OmiIconButtonSize.regular.diameter, restsFilled: true))
       .help(conversation.starred ? "Remove from Starred" : "Add to Starred")
       .accessibilityLabel(conversation.starred ? "Remove from Starred" : "Add to Starred")
       .accessibilityIdentifier("conversation-detail-star")
@@ -248,7 +242,7 @@ struct ConversationDetailHeader<BannerInset: View, Recordings: View, Trailing: V
   }
 
   private var moreMenu: some View {
-    Menu {
+    OmiIconMenu(systemName: "ellipsis", help: "More actions") {
       Button(action: onCopyTranscript) {
         Label("Copy Transcript", systemImage: "doc.on.doc")
       }
@@ -286,16 +280,7 @@ struct ConversationDetailHeader<BannerInset: View, Recordings: View, Trailing: V
       Button(role: .destructive, action: onDelete) {
         Label("Delete Conversation…", systemImage: "trash")
       }
-    } label: {
-      DetailIconLabel(systemImage: "ellipsis")
     }
-    // `.button` + `.plain` draws the custom label; `.borderlessButton` redraws it as a system glyph.
-    .menuStyle(.button)
-    .buttonStyle(.plain)
-    .menuIndicator(.hidden)
-    .fixedSize()
-    .help("More actions")
-    .accessibilityLabel("More actions")
     .accessibilityIdentifier("conversation-detail-more")
   }
 }
@@ -342,22 +327,6 @@ struct ConversationDetailPaneSwitch: View {
     .buttonStyle(.plain)
     .accessibilityAddTraits(isActive ? .isSelected : [])
     .accessibilityIdentifier("conversation-detail-pane-\(target == .summary ? "summary" : "transcript")")
-  }
-}
-
-/// The one icon-button shape on this page: a 28 pt circle on the hover wash.
-struct DetailIconLabel: View {
-  let systemImage: String
-  var color: Color = Ink.secondary
-
-  var body: some View {
-    Image(systemName: systemImage)
-      .scaledFont(size: OmiType.body)
-      .foregroundColor(color)
-      .frame(width: 28, height: 28)
-      // Same circle as `ConversationShareLinkButton`, which sits in the same row.
-      .background(Circle().fill(Ink.rowFillHover))
-      .contentShape(Circle())
   }
 }
 

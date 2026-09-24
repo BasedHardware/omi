@@ -22,14 +22,26 @@ struct NameSpeakerSheet: View {
 
   /// Segments from the same speaker in this conversation
   private var sameSpeakerSegments: [TranscriptSegment] {
-    allSegments.filter { $0.speaker == segment.speaker && !$0.isUser }
+    Self.sameSpeakerIndices(of: segment, in: allSegments).map { allSegments[$0] }
   }
 
   /// Segment indices (positional index in allSegments) for the same speaker
   private var sameSpeakerIndices: [Int] {
-    allSegments.enumerated().compactMap { index, seg in
-      seg.speaker == segment.speaker && !seg.isUser ? index : nil
+    Self.sameSpeakerIndices(of: segment, in: allSegments)
+  }
+
+  /// Positions of the segments "Also tag" covers: the tapped segment's speaker, on the same side of
+  /// "You" as the tapped segment. A segment marked as you is only grouped with other "You" segments,
+  /// so fixing or clearing a wrong "You" reaches them, and naming someone else never overwrites them.
+  static func sameSpeakerIndices(of segment: TranscriptSegment, in segments: [TranscriptSegment]) -> [Int] {
+    segments.enumerated().compactMap { index, candidate in
+      candidate.speaker == segment.speaker && candidate.isUser == segment.isUser ? index : nil
     }
+  }
+
+  /// Whether the segment currently has an identity the sheet can take away.
+  static func canUnassign(_ segment: TranscriptSegment) -> Bool {
+    segment.isUser || segment.personId != nil
   }
 
   /// Index of the tapped segment
@@ -41,7 +53,7 @@ struct NameSpeakerSheet: View {
   private var previewText: String {
     let text = segment.text
     if text.count > 120 {
-      return String(text.prefix(120)) + "..."
+      return String(text.prefix(120)) + "…"
     }
     return text
   }
@@ -92,34 +104,35 @@ struct NameSpeakerSheet: View {
 
       // Action buttons
       HStack {
+        // Back to anonymous "Speaker N": no person, not you.
+        if Self.canUnassign(segment) {
+          Button("Unassign") {
+            Task { await save(personId: nil, isUser: false) }
+          }
+          .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+          .disabled(isSaving)
+          .help("Return this speaker to \(SpeakerLabelFormatter.anonymousLabel(speakerId: segment.speakerId))")
+          .accessibilityIdentifier("name-speaker-unassign")
+        }
         Spacer()
         Button("Cancel") {
           onDismiss()
         }
-        .buttonStyle(.plain)
-        .foregroundColor(Ink.secondary)
-        .padding(.horizontal, OmiSpacing.lg)
-        .padding(.vertical, OmiSpacing.sm)
+        .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+        .keyboardShortcut(.cancelAction)
 
         Button {
-          Task { await save() }
+          Task { await save(personId: selectedPersonId, isUser: isUserSelected) }
         } label: {
           if isSaving {
             ProgressView()
-              .scaleEffect(0.6)
-              .frame(width: 14, height: 14)
+              .controlSize(.small)
           } else {
             Text("Save")
           }
         }
-        .buttonStyle(.plain)
-        .foregroundColor(canSave ? Ink.surface : Ink.secondary)
-        .padding(.horizontal, OmiSpacing.xl)
-        .padding(.vertical, OmiSpacing.sm)
-        .background(
-          Capsule()
-            .fill(canSave ? Ink.primary : Ink.rowFillHover)
-        )
+        .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+        .keyboardShortcut(.defaultAction)
         .disabled(!canSave || isSaving)
       }
       .padding(.horizontal, OmiSpacing.xl)
@@ -128,6 +141,20 @@ struct NameSpeakerSheet: View {
     .frame(width: 400, height: 450)
     .background(Ink.surface)
     .glassContent()
+    // Reopening a named speaker starts on who it is now, so fixing a wrong name is one click.
+    .onAppear {
+      if segment.isUser {
+        isUserSelected = true
+      } else if let personId = segment.personId {
+        selectedPersonId = personId
+      }
+    }
+  }
+
+  private var currentAssignmentName: String? {
+    if segment.isUser { return "You" }
+    guard let personId = segment.personId else { return nil }
+    return people.first { $0.id == personId }?.name
   }
 
   // MARK: - Speaker Info
@@ -139,13 +166,20 @@ struct NameSpeakerSheet: View {
           .fill(Ink.rowFillHover)
           .frame(width: 28, height: 28)
           .overlay(
-            Text(String(segment.speakerId))
+            Text(String(SpeakerLabelFormatter.displayNumber(speakerId: segment.speakerId)))
               .scaledFont(size: OmiType.caption, weight: .semibold)
               .foregroundColor(Ink.primary)
           )
-        Text("Speaker \(segment.speakerId)")
-          .scaledFont(size: OmiType.body, weight: .medium)
-          .foregroundColor(Ink.primary)
+        VStack(alignment: .leading, spacing: 0) {
+          Text(SpeakerLabelFormatter.anonymousLabel(speakerId: segment.speakerId))
+            .scaledFont(size: OmiType.body, weight: .medium)
+            .foregroundColor(Ink.primary)
+          if let current = currentAssignmentName {
+            Text("Currently: \(current)")
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(Ink.secondary)
+          }
+        }
       }
 
       Text("\"\(previewText)\"")
@@ -308,13 +342,13 @@ struct NameSpeakerSheet: View {
     isCreating = false
   }
 
-  private func save() async {
+  private func save(personId: String?, isUser: Bool) async {
     guard !isSaving else { return }
 
     isSaving = true
     saveError = nil
     let segmentIndices = tagAllFromSpeaker ? sameSpeakerIndices : [tappedSegmentIndex]
-    let succeeded = await onSave(selectedPersonId, isUserSelected, segmentIndices)
+    let succeeded = await onSave(personId, isUser, segmentIndices)
     isSaving = false
 
     if succeeded {
