@@ -41,7 +41,7 @@ def parse_form_json(
             return model_type.model_validate_json(raw_value)
         return TypeAdapter(dict[str, Any]).validate_json(raw_value)
     except (ValidationError, ValueError) as e:
-        raise HTTPException(status_code=422, detail=f'Invalid {field_name}: {e}')
+        raise HTTPException(status_code=422, detail=f'Invalid {field_name}: malformed JSON or validation failed') from e
 
 
 def normalize_required_webhook_url(external_integration: dict[str, Any]) -> None:
