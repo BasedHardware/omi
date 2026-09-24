@@ -17,7 +17,9 @@ Check that the command succeeded before converting the file. This is one page;
 to retrieve more, increase `--offset` by 500 and use a different filename. Add
 `--open` to export only the items that still need doing.
 
-Save the following as `action_items_to_org.py`:
+Save the following as `action_items_to_org.py` (the same script is kept next to
+this recipe as [`action_items_to_org.py`](action_items_to_org.py) and covered
+by `tests/test_action_items_to_org.py`):
 
 ```python
 import argparse
@@ -29,7 +31,7 @@ from pathlib import Path
 
 WEEKDAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 DONE_WORDS = {"true", "yes", "1", "done", "completed"}
-ZWSP = "​"  # Org's documented escape character
+ZWSP = "​"  # zero-width space, Org's documented escape character
 
 
 def one_line(value):
