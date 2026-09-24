@@ -119,6 +119,7 @@ class PaymentMethodCard extends StatelessWidget {
                 if (!isActive && isConnected) ...[
                   PopupMenuButton<String>(
                     icon: const Icon(Icons.more_vert, color: OmiColors.textSecondary),
+                    tooltip: context.l10n.moreOptions,
                     onSelected: (value) {
                       if (value == 'update') {
                         onManageTap?.call();

@@ -57,7 +57,11 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
 
   void _showCountryPicker(PaymentMethodProvider provider) {
     provider.updateSearchQuery('');
-    showOmiSheet<void>(context: context, builder: (context) => const CountryBottomSheet());
+    showOmiSheet<void>(
+      context: context,
+      title: context.l10n.selectYourCountry,
+      builder: (context) => const CountryBottomSheet(),
+    );
   }
 
   String _selectedCountryName(PaymentMethodProvider provider) {
