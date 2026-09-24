@@ -166,7 +166,7 @@ class _AddAppPageState extends State<AddAppPage> {
                   padding: const EdgeInsets.only(right: OmiSpacing.md),
                   child: OmiButton(
                     label: l10n.docs,
-                    icon: Icons.open_in_new,
+                    leading: const FaIcon(FontAwesomeIcons.arrowUpRightFromSquare),
                     size: OmiButtonSize.compact,
                     onPressed: () {
                       PlatformManager.instance.analytics.pageOpened('App Submission Help');

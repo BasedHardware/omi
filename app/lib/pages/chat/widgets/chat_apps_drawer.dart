@@ -120,7 +120,7 @@ class ChatAppsDrawer extends StatelessWidget {
                 ListTile(
                   leading: const Padding(
                     padding: EdgeInsets.only(left: 2),
-                    child: Icon(Icons.delete_outline, color: OmiColors.danger),
+                    child: FaIcon(FontAwesomeIcons.solidTrashCan, color: OmiColors.danger, size: 20),
                   ),
                   title: Text(l10n.clearChat, style: OmiType.callout.copyWith(color: OmiColors.danger)),
                   onTap: () {
@@ -160,11 +160,12 @@ class _AppRow extends StatelessWidget {
       leading: avatar,
       title: Text(name, style: OmiType.callout, overflow: TextOverflow.ellipsis),
       trailing: isSelected
-          ? const ExcludeSemantics(child: Icon(Icons.check_circle, color: OmiColors.textPrimary, size: 20))
+          ? const ExcludeSemantics(
+              child: FaIcon(FontAwesomeIcons.solidCircleCheck, color: OmiColors.textPrimary, size: 18))
           : onDisable == null
               ? null
               : OmiIconButton(
-                  icon: const Icon(Icons.remove_circle_outline, size: 20),
+                  icon: const FaIcon(FontAwesomeIcons.circleMinus, size: 18),
                   label: context.l10n.disableAppNamed(name),
                   color: OmiColors.textTertiary,
                   onPressed: onDisable,

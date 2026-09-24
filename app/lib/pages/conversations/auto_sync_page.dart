@@ -106,14 +106,14 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
             title: Text(context.l10n.offlineSync),
             actions: [
               OmiIconButton(
-                icon: const Icon(Icons.info_outline_rounded),
+                icon: const FaIcon(FontAwesomeIcons.circleInfo, size: 18),
                 label: context.l10n.howSyncingWorks,
                 color: OmiColors.textSecondary,
                 onPressed: () => _showInfoSheet(context),
               ),
               if (syncProvider.clearableWalsCount > 0)
                 OmiIconButton(
-                  icon: const Icon(Icons.more_horiz_rounded),
+                  icon: const FaIcon(FontAwesomeIcons.ellipsisVertical, size: 18),
                   label: context.l10n.manageStorage,
                   color: OmiColors.textSecondary,
                   onPressed: () => _showManageStorageSheet(context, syncProvider),

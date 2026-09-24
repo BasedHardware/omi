@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 
@@ -133,11 +134,12 @@ class _OnboardingPermissionsPanelState extends State<OnboardingPermissionsPanel>
         for (final permission in _source.permissions) ...[
           OmiPermissionRow(
             key: ValueKey('onboarding_permission_${permission.name}'),
-            icon: switch (permission) {
-              OnboardingPermission.background => Icons.battery_charging_full,
-              OnboardingPermission.location => Icons.location_on_outlined,
-              OnboardingPermission.notifications => Icons.notifications_none,
-            },
+            // The same glyphs as the Settings permission list.
+            leading: FaIcon(switch (permission) {
+              OnboardingPermission.background => FontAwesomeIcons.batteryFull,
+              OnboardingPermission.location => FontAwesomeIcons.locationArrow,
+              OnboardingPermission.notifications => FontAwesomeIcons.solidBell,
+            }),
             title: switch (permission) {
               OnboardingPermission.background => l10n.backgroundActivity,
               OnboardingPermission.location => l10n.locationAccess,

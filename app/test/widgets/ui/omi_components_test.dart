@@ -3,6 +3,7 @@ import 'dart:ui' show Tristate;
 import 'package:flutter/material.dart';
 import 'package:flutter/semantics.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:omi/ui/ui.dart';
 
@@ -143,6 +144,17 @@ void main() {
       expect(find.text('Try a different search.'), findsOneWidget);
       await tester.tap(find.text('Clear Search'));
       expect(tapped, isTrue);
+    });
+
+    testWidgets('OmiEmptyState draws a non-Material glyph at the empty-state size', (tester) async {
+      await pumpUi(
+        tester,
+        const Scaffold(body: OmiEmptyState(glyph: FaIcon(FontAwesomeIcons.key), title: 'No API Keys')),
+      );
+      final glyph = find.byType(FaIcon);
+      expect(glyph, findsOneWidget);
+      expect(tester.getSize(glyph).height, 40);
+      expect(find.byType(Icon), findsNothing);
     });
 
     testWidgets('OmiLoadingState shows one white spinner and its label', (tester) async {

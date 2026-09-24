@@ -558,7 +558,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                               // Send button while recording — transcribes and sends in one tap.
                                               if (voiceRecorderProvider.isActive)
                                                 ChatComposerRoundButton(
-                                                  icon: Icons.arrow_upward_rounded,
+                                                  icon: const FaIcon(FontAwesomeIcons.arrowUp),
                                                   label: context.l10n.chatSendMessage,
                                                   onPressed: voiceRecorderProvider.state == VoiceRecorderState.recording
                                                       ? () {
@@ -573,7 +573,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                                   shouldShowVoiceRecorderButton() &&
                                                   textController.text.isEmpty)
                                                 ChatComposerRoundButton(
-                                                  icon: Icons.mic_rounded,
+                                                  icon: const FaIcon(FontAwesomeIcons.microphone),
                                                   label: context.l10n.startVoiceRecording,
                                                   onPressed: () {
                                                     OmiHaptics.light();
@@ -597,7 +597,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
 
                                                     return ChatComposerRoundButton(
                                                       buttonKey: const ValueKey('omi.chat.send'),
-                                                      icon: Icons.arrow_upward_rounded,
+                                                      icon: const FaIcon(FontAwesomeIcons.arrowUp),
                                                       label: context.l10n.chatSendMessage,
                                                       onPressed: canSend
                                                           ? () {

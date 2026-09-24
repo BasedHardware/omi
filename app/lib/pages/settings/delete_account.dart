@@ -241,7 +241,7 @@ class _DeleteConfirmStepState extends State<_DeleteConfirmStep> {
                   valueListenable: DataExport.exportInProgress,
                   builder: (context, exporting, _) => OmiButton.secondary(
                     label: context.l10n.exportAllData,
-                    icon: Icons.download_outlined,
+                    leading: const FaIcon(FontAwesomeIcons.fileArrowDown),
                     size: OmiButtonSize.compact,
                     expand: true,
                     isLoading: exporting,

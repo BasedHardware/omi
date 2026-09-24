@@ -520,7 +520,7 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
           OmiButton(
             key: const Key('omiglass_ota_install'),
             label: context.l10n.installUpdate,
-            icon: Icons.download_rounded,
+            leading: const FaIcon(FontAwesomeIcons.download),
             expand: true,
             onPressed: _startOtaUpdate,
           ),
@@ -574,6 +574,7 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
         OmiButton.destructive(
           key: const Key('omiglass_ota_cancel'),
           label: context.l10n.cancelUpdate,
+          leading: const FaIcon(FontAwesomeIcons.xmark),
           expand: true,
           onPressed: _cancelUpdate,
         ),
@@ -648,7 +649,7 @@ class _OmiGlassOtaUpdateState extends State<OmiGlassOtaUpdate> {
         const SizedBox(height: OmiSpacing.xl),
         OmiButton(
           label: context.l10n.tryAgain,
-          icon: Icons.refresh,
+          leading: const FaIcon(FontAwesomeIcons.arrowRotateLeft),
           expand: true,
           onPressed: () {
             final wasConnectionProblem = _status == _OtaMessage.connectFailed;

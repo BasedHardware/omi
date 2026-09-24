@@ -31,6 +31,7 @@ import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/conversations/capture_groups.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/share_sheet.dart';
+import 'package:omi/widgets/bottom_nav_bar.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'conversation_detail_provider.dart';
@@ -889,7 +890,9 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
           OmiButton(
             key: const Key('conversation_ask_omi'),
             label: l10n.askOmi,
-            icon: Icons.chat_bubble_outline,
+            // The bottom nav's two-bubbles glyph (FontAwesome comments, regular), so Ask Omi reads as
+            // the same place as the Chat tab.
+            leading: const FaIcon(kAskOmiGlyph),
             size: OmiButtonSize.compact,
             onPressed: () {
               HapticFeedback.mediumImpact();
@@ -943,7 +946,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
             itemBuilder: (context) => _menuItems(context, provider),
             buttonBuilder: (context, showMenu) => OmiIconButton.filled(
               key: const Key('conversation_more'),
-              icon: const Icon(Icons.more_horiz),
+              icon: const FaIcon(FontAwesomeIcons.ellipsisVertical, size: 16),
               label: l10n.moreOptions,
               onPressed: () {
                 HapticFeedback.mediumImpact();

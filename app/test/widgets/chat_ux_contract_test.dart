@@ -7,6 +7,7 @@ import 'dart:ui' show Tristate;
 
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -103,7 +104,7 @@ void main() {
   testWidgets('composer round button looks disabled and is announced disabled when it cannot send', (tester) async {
     final handle = tester.ensureSemantics();
     await tester.pumpWidget(_host(const Center(
-      child: ChatComposerRoundButton(icon: Icons.arrow_upward, label: 'Send message', onPressed: null),
+      child: ChatComposerRoundButton(icon: FaIcon(FontAwesomeIcons.arrowUp), label: 'Send message', onPressed: null),
     )));
 
     final node = tester.getSemantics(find.bySemanticsLabel('Send message'));
