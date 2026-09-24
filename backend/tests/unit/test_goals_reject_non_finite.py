@@ -16,6 +16,9 @@ import math
 import pytest
 from pydantic import ValidationError
 
+import routers.developer as developer
+import routers.goals as goals_router
+from database.goals import _metric_from_storage
 from models.goal import GoalCreate, GoalMetric, GoalType, GoalUpdate
 
 NON_FINITE = [math.nan, math.inf, -math.inf]
@@ -61,8 +64,6 @@ def test_finite_values_still_accepted():
 def test_stored_non_finite_metric_degrades_to_absent():
     # A row already corrupted before this fix must not project NaN back out; the existing
     # ValidationError backstop in _metric_from_storage now turns it into "no metric".
-    from database.goals import _metric_from_storage
-
     assert _metric_from_storage({'metric': {'type': 'numeric', 'current': math.nan, 'target': 10}}) is None
 
 
@@ -72,18 +73,16 @@ def _progress_query_field(router, path):
 
 
 @pytest.mark.parametrize(
-    'module_name,path',
+    'module,path',
     [
-        ('routers.goals', '/v1/goals/{goal_id}/progress'),
-        ('routers.developer', '/v1/dev/user/goals/{goal_id}/progress'),
+        (goals_router, '/v1/goals/{goal_id}/progress'),
+        (developer, '/v1/dev/user/goals/{goal_id}/progress'),
     ],
+    ids=['goals', 'developer'],
 )
 @pytest.mark.parametrize('raw', ['nan', 'NaN', 'inf', '-inf', 'Infinity'])
-def test_progress_query_param_rejects_non_finite(module_name, path, raw):
-    import importlib
-
-    router = importlib.import_module(module_name).router
-    field = _progress_query_field(router, path)
+def test_progress_query_param_rejects_non_finite(module, path, raw):
+    field = _progress_query_field(module.router, path)
     _, errors = field.validate(raw, {}, loc=('query', 'current_value'))
     assert errors, f'{path} accepted current_value={raw}'
     value, errors = field.validate('4.5', {}, loc=('query', 'current_value'))
@@ -93,8 +92,6 @@ def test_progress_query_param_rejects_non_finite(module_name, path, raw):
 @pytest.mark.parametrize('model_name', ['CreateGoalRequest', 'UpdateGoalRequest'])
 @pytest.mark.parametrize('value', NON_FINITE)
 def test_developer_goal_request_models_reject_non_finite(model_name, value):
-    import routers.developer as developer
-
     model = getattr(developer, model_name)
     with pytest.raises(ValidationError):
         model.model_validate({'title': 'run', 'target_value': value})
