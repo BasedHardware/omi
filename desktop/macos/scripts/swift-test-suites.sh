@@ -5,6 +5,9 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SCRIPT_PATH="$SCRIPT_DIR/$(basename "$0")"
 MACOS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+# shellcheck source-path=SCRIPTDIR
+# shellcheck source=agent-runtime-cache.sh
+source "$SCRIPT_DIR/agent-runtime-cache.sh"
 SKIP_RATCHET="$SCRIPT_DIR/swift-test-skip-ratchet.py"
 MAIN_ACTOR_XCTEST_HOOK_GUARD="$SCRIPT_DIR/check-main-actor-xctest-hooks.py"
 TESTS_ROOT="${OMI_SWIFT_TEST_DISCOVERY_ROOT:-$MACOS_DIR/Desktop/Tests}"
@@ -110,6 +113,26 @@ SLOW_RATCHET_SECONDS="${OMI_SWIFT_TEST_SLOW_RATCHET_SECONDS:-0}"
 fail() {
   echo "FAIL: $*" >&2
   exit 1
+}
+
+# Clone a prebuilt SwiftPM scratch only when it can share blocks. cp -c exits 0
+# and writes a full physical copy across volumes, so a refusal uses an empty
+# directory (the OMI_SWIFT_TEST_PREBUILD=0 shape) instead of copying.
+copy_prebuilt_scratch() {
+  local src="$1"
+  local dest="$2"
+  local reason=""
+  if [ "$PREBUILD" != "1" ]; then
+    mkdir -p "$dest"
+    return 0
+  fi
+  reason="$(arc_clone_block_reason "$src" "$(dirname "$dest")" || true)"
+  if [ -n "$reason" ]; then
+    echo "WARNING: refusing to clone $src into $(dirname "$dest") ($reason); using an empty scratch" >&2
+    mkdir -p "$dest"
+    return 0
+  fi
+  cp -cR "$src" "$dest"
 }
 
 dump_crash_reports() {
@@ -424,11 +447,7 @@ run_batch() {
           half_id="$batch_id-h$half_index"
           half_build="$fallback_dir/$half_id.build"
           half_runtime="$fallback_dir/$half_id.runtime"
-          if [ "$PREBUILD" = "1" ]; then
-            cp -cR "$build_path" "$half_build"
-          else
-            mkdir -p "$half_build"
-          fi
+          copy_prebuilt_scratch "$build_path" "$half_build"
           mkdir -p "$half_runtime/home" "$half_runtime/tmp"
           "$SCRIPT_PATH" __run_batch "$log_dir" "$half_id" "$half_build" "$half_runtime" "${half_suites[@]}" || true
         done
@@ -452,11 +471,7 @@ run_isolated_fallback_suite() {
   local fallback_dir="$4"
   local iso_build="$fallback_dir/$suite.build"
   local iso_runtime="$fallback_dir/$suite.runtime"
-  if [ "$PREBUILD" = "1" ]; then
-    cp -cR "$build_path" "$iso_build"
-  else
-    mkdir -p "$iso_build"
-  fi
+  copy_prebuilt_scratch "$build_path" "$iso_build"
   mkdir -p "$iso_runtime/home" "$iso_runtime/tmp"
   "$SCRIPT_PATH" __run_suite "$log_dir" "$suite" "$iso_build" "$iso_runtime" || true
   exit 0
@@ -546,6 +561,11 @@ if [ "${1:-}" = "__run_worker" ]; then
   exit 0
 fi
 
+if [ "${1:-}" = "__reap_stale_runs" ]; then
+  arc_reap_dead_owner_dirs "$2"
+  exit 0
+fi
+
 [[ "$WORKERS" =~ ^[0-9]+$ ]] || fail "worker count must be a positive integer, got '$WORKERS'"
 if [ "$WORKERS" -lt 1 ]; then
   fail "worker count must be at least 1"
@@ -606,9 +626,17 @@ suite_class_pattern='^[[:space:]]*(@[A-Za-z0-9_]+[[:space:]]+)*(public |internal
 suite_class_name='s/^[[:space:]]*(@[A-Za-z0-9_]+[[:space:]]+)*(public |internal |private |fileprivate |open )?(final )?(class|extension) ([A-Za-z0-9_]+):.*/\5/'
 
 cd "$MACOS_DIR"
-suite_log_dir="$(mktemp -d)"
-suite_worker_dir="$(mktemp -d)"
-trap 'rm -rf "$suite_log_dir" "$suite_worker_dir"' EXIT
+# Shard scratches live next to the package build, on its APFS volume. $TMPDIR
+# is often a different volume, and cp -c silently full-copies across that
+# boundary. OMI_SWIFT_TEST_SHARD_DIR is a test seam for that refusal path.
+shard_root="${OMI_SWIFT_TEST_SHARD_DIR:-$MACOS_DIR/.harness/swift-test-shards}"
+mkdir -p "$shard_root"
+arc_reap_dead_owner_dirs "$shard_root"
+suite_worker_dir="$(mktemp -d "$shard_root/run.XXXXXX")"
+printf '%s\n' "$$" >"$suite_worker_dir/owner.pid"
+suite_log_dir="$suite_worker_dir/logs"
+mkdir -p "$suite_log_dir"
+trap 'rm -rf "$suite_worker_dir"' EXIT
 suite_map="$suite_worker_dir/suite-map.tsv"
 : >"$suite_map"
 while IFS= read -r file; do
@@ -824,8 +852,29 @@ else
 fi
 
 if [ "$PREBUILD" = "1" ] && [ "$suite_count" -gt 0 ]; then
+  clone_probe="$package_root"
+  if [ -e "$package_root/.build" ] || [ -L "$package_root/.build" ]; then
+    clone_probe="$package_root/.build"
+  fi
+  clone_reason="$(arc_clone_block_reason "$clone_probe" "$suite_worker_dir" || true)"
+  if [ -n "$clone_reason" ]; then
+    echo "WARNING: Swift test shards cannot clone $clone_probe into $suite_worker_dir ($clone_reason); continuing with OMI_SWIFT_TEST_PREBUILD=0" >&2
+    PREBUILD=0
+    export OMI_SWIFT_TEST_PREBUILD=0
+  fi
+fi
+
+if [ "$PREBUILD" = "1" ] && [ "$suite_count" -gt 0 ]; then
   echo "Prebuilding Swift test bundle before parallel suite execution..."
   xcrun swift build --package-path "$PACKAGE_PATH" --build-tests
+  if [ -e "$package_root/.build" ] || [ -L "$package_root/.build" ]; then
+    clone_reason="$(arc_clone_block_reason "$package_root/.build" "$suite_worker_dir" || true)"
+    if [ -n "$clone_reason" ]; then
+      echo "WARNING: Swift test shards cannot clone $package_root/.build into $suite_worker_dir ($clone_reason); continuing with OMI_SWIFT_TEST_PREBUILD=0" >&2
+      PREBUILD=0
+      export OMI_SWIFT_TEST_PREBUILD=0
+    fi
+  fi
 fi
 
 # Only reports written after this point belong to the suite run; the prebuild
@@ -859,14 +908,9 @@ if [ "$parallel_suite_count" -gt 0 ]; then
   for ((worker = 0; worker < worker_count; worker++)); do
     worker_build_path="${worker_build_paths[$worker]}"
     worker_runtime_path="${worker_runtime_paths[$worker]}"
-    if [ "$PREBUILD" = "1" ]; then
-      # `cp -c` requires a copy-on-write clone rather than silently creating
-      # full physical copies. The hosted macOS runners use APFS; fail closed if
-      # that contract changes so suite parallelism never raises runner minutes.
-      cp -cR "$package_root/.build" "$worker_build_path"
-    else
-      mkdir -p "$worker_build_path"
-    fi
+    # Clone only when source and run directory share an APFS volume. A refused
+    # clone leaves an empty scratch, which is the non-prebuild path.
+    copy_prebuilt_scratch "$package_root/.build" "$worker_build_path"
     mkdir -p "$worker_runtime_path/home" "$worker_runtime_path/tmp"
     worker_args+=("${worker_lists[$worker]}" "$worker_build_path" "$worker_runtime_path")
   done
@@ -883,11 +927,7 @@ for ((serial_index = 0; serial_index < ${#serial_suites[@]}; serial_index++)); d
   suite="${serial_suites[$serial_index]}"
   serial_build_path="$suite_worker_dir/serial-$serial_index.build"
   serial_runtime_path="$suite_worker_dir/serial-$serial_index.runtime"
-  if [ "$PREBUILD" = "1" ]; then
-    cp -cR "$package_root/.build" "$serial_build_path"
-  else
-    mkdir -p "$serial_build_path"
-  fi
+  copy_prebuilt_scratch "$package_root/.build" "$serial_build_path"
   mkdir -p "$serial_runtime_path/home" "$serial_runtime_path/tmp"
   "$SCRIPT_PATH" __run_suite "$suite_log_dir" "$suite" "$serial_build_path" "$serial_runtime_path" || true
 done
