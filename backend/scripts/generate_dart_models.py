@@ -45,6 +45,8 @@ SCHEMA_GROUPS = {
             'PluginResult',
             'Event',
             'Section',
+            'Participant',
+            'Insight',
             'Structured',
             'Geolocation',
             'ConversationPhoto',

@@ -17,12 +17,13 @@ from models.app import App
 from models.calendar_context import CalendarMeetingContext
 from models.conversation import Conversation
 from models.conversation_photo import ConversationPhoto
-from models.structured import ActionItem, Event, Structured
-from models.structured_extraction import ActionItemsExtraction, StructuredExtraction
+from models.structured import ActionItem, Event, Participant, Structured
+from models.structured_extraction import ActionItemsExtraction, RichStructuredExtraction, StructuredExtraction
 from .clients import get_llm, get_llm_gateway_chat_structured, parser
 from .discard_parser import DiscardConversation, LenientDiscardParser
 from .gateway_error_contract import is_byok_rate_limit_gateway_error
 from utils.byok import has_byok_keys
+from utils.conversations.meeting_participants import MeetingRoster
 from utils.conversations.wake_word import (
     WAKE_WORD_DISCARD_PROMPT_RULES,
     WAKE_WORD_PROMPT_RULES,
@@ -1344,6 +1345,214 @@ DATE CONTEXT
     return text
 
 
+_LEGACY_NOTE_BODY_OPENING = (
+    "- Write section bodies as '- ' bullets in plain, readable sentences. Each bullet should group one\n"
+    '  coherent point with its useful supporting details. Separate distinct points when combining them\n'
+    '  makes reading harder; do not force terse fragments or one bullet per sentence.'
+)
+_LEGACY_SELECT_THREADS = (
+    '- Select the main meaningful threads, including social experiences, problems, reasons, proposals,\n'
+    '  decisions, and unresolved questions. Keep concrete details that help recall them. Omit repetition,\n'
+    '  incidental tangents, and unclear fragments; do not retain something just because it contains a name\n'
+    '  or number. Understandable multilingual content is not noise.'
+)
+_RICH_NOTE_BODY_OPENING = (
+    '- Open each section with a one-line takeaway bullet. Put supporting details in short, specific '
+    'bullets (aim for at most 25 words each); use nested `  - ` sub-bullets for detail instead of '
+    '40–60-word compound paragraphs. Preserve every supported commitment and concrete detail: '
+    'coverage beats brevity.'
+)
+_RICH_SELECT_THREADS = (
+    '- Select the main meaningful threads, including social experiences, problems, reasons, proposals, '
+    'decisions, and unresolved questions. Put worthwhile tangents (tools, products, links, '
+    'recommendations, memorable personal asides) in one side_notes section rather than dropping them. '
+    'Still omit filler, logistics chatter, repetition, and unclear fragments. Understandable '
+    'multilingual content is not noise.'
+)
+_RICH_MEETING_RULES = '''MEETING TITLE AND PEOPLE
+- The note title must be at most 70 characters. Never use a raw window title, meeting code, app name, or unread counter as the note title. When a human counterpart is identified, lead with their name (for example, "Intro with Ash Kalb (via Boardy): founding engineer"); otherwise lead with the topic. Do not invent names.
+- Refer to non-owner humans by name when known. Otherwise use a role grounded in this conversation (for example, "the candidate"), never a speaker key. Treat an AI agent as a separate speaker: attribute introductions, facilitation, and stepping out to that agent when the content supports it; never merge its words into a human's.
+- Fill participants from the roster and transcript evidence. Exclude the account owner. Keep a roster-only human nameless when only an email is known; never guess their name. Set role to at most eight words grounded in this conversation. Set meeting_type only to interview, intro, sales, customer, one_on_one, team_sync, planning, demo, social, or other.
+- When the transcript makes an action item's owner clear, set owner_name to that participant's name, including the account owner's name for their own commitments.
+SIDE NOTES AND BACKGROUND
+- At most one section has kind side_notes: place it last with heading Side notes and 1–4 short bullets on worthwhile tangents. Keep main threads in main sections; do not put prior-meeting links or goals into sections.
+- BACKGROUND CONTEXT (not part of this conversation) may help identify people, spell names/products/companies, and connect prior commitments; it was NOT said in this meeting. Never state a background fact as something said here. Do not summarize screen text that was not discussed: use it only to spell names/products correctly and identify what was shown.
+- Prior-meeting links and goal relevance go ONLY in insights, never in sections or overview. Insights are private: at most four, each at most 30 words, each grounded in supplied background context. Return [] when no background context exists.'''
+
+
+def _conversation_notes_rich_static_instructions(format_instructions: str) -> str:
+    """Static rules for rich meeting notes — only used when the rich flag is on.
+
+    The flag-off path renders ``_conversation_notes_static_instructions``
+    unchanged; this variant replaces the legacy body-style and select/omit
+    bullets with their rich counterparts and inserts the rich meeting rules
+    before the format instructions.
+    """
+    base = _conversation_notes_static_instructions(format_instructions)
+    assert _LEGACY_NOTE_BODY_OPENING in base, 'legacy NOTE BODY opening bullet missing'
+    assert _LEGACY_SELECT_THREADS in base, 'legacy select/omit bullet missing'
+    assert base.count(format_instructions) == 1, 'format instructions must appear exactly once'
+    text = base.replace(_LEGACY_NOTE_BODY_OPENING, _RICH_NOTE_BODY_OPENING)
+    text = text.replace(_LEGACY_SELECT_THREADS, _RICH_SELECT_THREADS)
+    return text.replace(format_instructions, f'{_RICH_MEETING_RULES}\n\n{format_instructions}')
+
+
+def _rich_density_bullet(density: str) -> str:
+    return (
+        f'- {density} These are flexible guides, not quotas. Use a one-line takeaway plus short '
+        'supporting bullets (aim at most 25 words per bullet); nest details with `  - `. Coverage '
+        'beats brevity: keep every commitment and specific even when the note grows beyond the target.'
+    )
+
+
+def _legacy_density_bullet(density: str) -> str:
+    return (
+        f'- {density} These are flexible guides, not quotas. Prefer one or two substantial bullets '
+        'per section,\n  with connected sentences rather than splitting every sentence into its own '
+        'bullet.\n  Give distinct subtopics room instead of cramming them into a final bullet. Keep '
+        'the main threads\n  while removing minor details if the note grows much beyond the target.'
+    )
+
+
+def _conversation_notes_rich_volatile_instructions(
+    *,
+    response_language: str,
+    density: str,
+    task_intelligence_capture: bool,
+    existing_context: str,
+    started_local_iso: str,
+    current_local_iso: str,
+    tz_label: str,
+    conversation_context: str,
+    meeting_context: Optional[str],
+    wake_word_rules: str = '',
+) -> str:
+    """Rich volatile suffix: legacy text with the rich density bullet, then background."""
+    text = _conversation_notes_volatile_instructions(
+        response_language=response_language,
+        density=density,
+        task_intelligence_capture=task_intelligence_capture,
+        existing_context=existing_context,
+        started_local_iso=started_local_iso,
+        current_local_iso=current_local_iso,
+        tz_label=tz_label,
+        conversation_context=conversation_context,
+        wake_word_rules=wake_word_rules,
+    )
+    legacy_density = _legacy_density_bullet(density)
+    assert legacy_density in text, 'legacy density bullet missing'
+    text = text.replace(legacy_density, _rich_density_bullet(density))
+    if meeting_context and meeting_context.strip():
+        text = f'{text}\n\n{meeting_context.strip()}'
+    return text
+
+
+def _name_in_transcript(name: str, transcript_body: str) -> bool:
+    """Case-insensitive whole-name (word-boundary) match against the transcript body."""
+    name = name.strip()
+    if not name or not transcript_body:
+        return False
+    return re.search(r'(?<!\w)' + re.escape(name) + r'(?!\w)', transcript_body, re.IGNORECASE) is not None
+
+
+def _validate_rich_meeting_notes(
+    structured: Structured,
+    *,
+    transcript_body: str,
+    roster: Optional[MeetingRoster],
+    has_background_context: bool,
+) -> Structured:
+    """Server-side guardrails for rich-only fields; the flag-off path never runs this.
+
+    Participants must be corroborated (roster name/email or a whole-name transcript
+    match), the account owner is never a participant, and nameless participants
+    survive only on a roster email. Insights exist only with background context,
+    capped at 4 entries of <=30 words. At most one side_notes section survives,
+    forced last with heading "Side notes" and 1-4 bullets.
+    """
+    roster_entries = list(roster.entries) if roster else []
+    roster_by_name = {e.display_name.casefold(): e for e in roster_entries if e.display_name}
+    roster_by_email = {e.email.casefold(): e for e in roster_entries if e.email}
+    owner_names = {e.display_name.casefold() for e in roster_entries if e.kind == 'owner' and e.display_name}
+    owner_emails = {e.email.casefold() for e in roster_entries if e.kind == 'owner' and e.email}
+    # A first-name-only owner entry still owns bare repeats of that first name
+    # in the model output.
+    owner_first_tokens = {name.split()[0] for name in owner_names if len(name.split()) == 1}
+
+    validated_participants: List[Participant] = []
+    for participant in structured.participants:
+        name = (participant.name or '').strip()
+        email = (participant.email or '').strip()
+        if name.casefold() in owner_names or email.casefold() in owner_emails:
+            continue
+        if owner_first_tokens and len(name.split()) == 1 and name.casefold() in owner_first_tokens:
+            continue
+        matched_entry = None
+        if name:
+            matched_entry = roster_by_name.get(name.casefold())
+            if matched_entry is None and not _name_in_transcript(name, transcript_body):
+                continue
+        elif email:
+            matched_entry = roster_by_email.get(email.casefold())
+            if matched_entry is None:
+                continue
+        else:
+            continue
+        # Keep an email only when it belongs to the same roster entry that
+        # corroborated the participant — a name match must not inherit someone
+        # else's roster email, and untrusted emails are dropped.
+        if (
+            email
+            and matched_entry is not None
+            and matched_entry.email
+            and matched_entry.email.casefold() == email.casefold()
+        ):
+            participant.email = email
+        else:
+            participant.email = None
+        if name:
+            participant.name = name
+        validated_participants.append(participant)
+    structured.participants = validated_participants
+
+    if not has_background_context:
+        structured.insights = []
+    else:
+        kept = []
+        for insight in structured.insights[:4]:
+            words = insight.text.split()
+            if len(words) > 30:
+                insight.text = ' '.join(words[:30])
+            if insight.text.strip():
+                kept.append(insight)
+        structured.insights = kept
+
+    side_notes = [s for s in structured.sections if getattr(s, 'kind', 'main') == 'side_notes']
+    main_sections = [s for s in structured.sections if getattr(s, 'kind', 'main') != 'side_notes']
+    if side_notes:
+        # Merge every side_notes section's bullets into one last section rather
+        # than silently dropping earlier tangents.
+        bullets: List[str] = []
+        for section in side_notes:
+            for line in (section.body_markdown or '').split('\n'):
+                line = line.strip()
+                if not line.startswith('-') or not line.lstrip('- ').strip():
+                    continue
+                if line not in bullets:
+                    bullets.append(line)
+        bullets = bullets[:4]
+        if bullets:
+            merged = side_notes[-1]
+            merged.heading = 'Side notes'
+            merged.body_markdown = '\n'.join(bullets)
+            structured.sections = [*main_sections, merged]
+        else:
+            structured.sections = main_sections
+    else:
+        structured.sections = main_sections
+    return structured
+
+
 def get_conversation_notes(
     prefix: ConversationPromptPrefix,
     *,
@@ -1354,8 +1563,18 @@ def get_conversation_notes(
     task_intelligence_capture: bool,
     existing_action_items: Optional[List[Dict[str, Any]]] = None,
     trusted_wake_word_markers: bool = False,
+    meeting_context: Optional[str] = None,
+    rich_context_enabled: bool = False,
+    roster: Optional[MeetingRoster] = None,
 ) -> Structured:
-    """Generate sections, actions, and events in one coherent model call."""
+    """Generate sections, actions, and events in one coherent model call.
+
+    ``rich_context_enabled`` switches to the extended extraction schema and the
+    rich instruction blocks; ``meeting_context`` is the rendered BACKGROUND
+    CONTEXT block appended to the volatile suffix only. With the flag off all
+    three new arguments must be absent/default and the prompt is byte-identical
+    to the legacy notes prompt.
+    """
     if not prefix.context.strip():
         return Structured()
 
@@ -1368,13 +1587,14 @@ def get_conversation_notes(
         user_tz = timezone.utc
     started_local = (started_at if started_at.tzinfo else started_at.replace(tzinfo=timezone.utc)).astimezone(user_tz)
     current_local = current_time.astimezone(user_tz)
+    rich_mode = rich_context_enabled
     transcript_word_count = _word_count(prefix.context.split('FULL TRANSCRIPT\n', 1)[-1])
     if transcript_word_count < 500:
-        density = 'Use 1-2 sections; target ~80 words across the entire note.'
+        density = f'Use 1-2 sections; target ~{95 if rich_mode else 80} words across the entire note.'
     elif transcript_word_count < 2500:
-        density = 'Use 2-4 sections; target ~200 words across the entire note.'
+        density = f'Use 2-4 sections; target ~{240 if rich_mode else 200} words across the entire note.'
     else:
-        density = 'Use 4-6 sections; target ~400 words across the entire note.'
+        density = f'Use 4-6 sections; target ~{480 if rich_mode else 400} words across the entire note.'
 
     existing_lines: List[str] = []
     for item in existing_action_items or []:
@@ -1385,22 +1605,41 @@ def get_conversation_notes(
         existing_lines.append(f'- {label}{item.get("description", "")}')
     existing_context = '\n'.join(existing_lines) or 'None supplied.'
 
-    extraction_parser = PydanticOutputParser(pydantic_object=StructuredExtraction)
-    static_instructions = _conversation_notes_static_instructions(extraction_parser.get_format_instructions())
+    extraction_parser = PydanticOutputParser(
+        pydantic_object=RichStructuredExtraction if rich_mode else StructuredExtraction
+    )
+    if rich_mode:
+        static_instructions = _conversation_notes_rich_static_instructions(extraction_parser.get_format_instructions())
+    else:
+        static_instructions = _conversation_notes_static_instructions(extraction_parser.get_format_instructions())
     wake_word_rules = ''
     if trusted_wake_word_markers and has_structural_wake_word_marker(prefix.context):
         wake_word_rules = WAKE_WORD_PROMPT_RULES
-    volatile_instructions = _conversation_notes_volatile_instructions(
-        response_language=response_language,
-        density=density,
-        task_intelligence_capture=task_intelligence_capture,
-        existing_context=existing_context,
-        started_local_iso=started_local.replace(tzinfo=None).isoformat(),
-        current_local_iso=current_local.replace(tzinfo=None).isoformat(),
-        tz_label=tz or 'UTC',
-        conversation_context=prefix.context,
-        wake_word_rules=wake_word_rules,
-    )
+    if rich_mode:
+        volatile_instructions = _conversation_notes_rich_volatile_instructions(
+            response_language=response_language,
+            density=density,
+            task_intelligence_capture=task_intelligence_capture,
+            existing_context=existing_context,
+            started_local_iso=started_local.replace(tzinfo=None).isoformat(),
+            current_local_iso=current_local.replace(tzinfo=None).isoformat(),
+            tz_label=tz or 'UTC',
+            conversation_context=prefix.context,
+            meeting_context=meeting_context,
+            wake_word_rules=wake_word_rules,
+        )
+    else:
+        volatile_instructions = _conversation_notes_volatile_instructions(
+            response_language=response_language,
+            density=density,
+            task_intelligence_capture=task_intelligence_capture,
+            existing_context=existing_context,
+            started_local_iso=started_local.replace(tzinfo=None).isoformat(),
+            current_local_iso=current_local.replace(tzinfo=None).isoformat(),
+            tz_label=tz or 'UTC',
+            conversation_context=prefix.context,
+            wake_word_rules=wake_word_rules,
+        )
     explicit_cache_enabled = shared_conversation_cache_supported() and explicit_cache_switch_enabled()
     cache_enabled = explicit_cache_enabled and has_cacheable_prefix(static_instructions)
     messages = [
@@ -1418,6 +1657,13 @@ def get_conversation_notes(
     response = extraction_parser.parse(_content_str(model.invoke(messages)))
     structured = response.to_structured()
     validate_structured_source_segment_ids(structured, prefix.transcript_segment_ids)
+    if rich_mode:
+        _validate_rich_meeting_notes(
+            structured,
+            transcript_body=prefix.context.split('FULL TRANSCRIPT\n', 1)[-1],
+            roster=roster,
+            has_background_context=bool(meeting_context and meeting_context.strip()),
+        )
 
     for action_item in structured.action_items:
         if action_item.created_at is None:

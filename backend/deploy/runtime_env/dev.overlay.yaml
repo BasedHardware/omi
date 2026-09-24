@@ -28,6 +28,10 @@ overlay:
           value: 'true'
         CONVERSATION_OCR_CONTEXT_ENABLED:
           value: 'true'
+        MEETING_NOTES_RICH_CONTEXT_ENABLED:
+          value: 'true'
+        MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
+          value: 'true'
         BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
           value: 'true'
         HOSTED_PARAKEET_API_URL:
@@ -97,6 +101,10 @@ overlay:
         CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
           value: 'true'
         CONVERSATION_OCR_CONTEXT_ENABLED:
+          value: 'true'
+        MEETING_NOTES_RICH_CONTEXT_ENABLED:
+          value: 'true'
+        MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
           value: 'true'
         BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
           value: 'true'
@@ -300,6 +308,10 @@ overlay:
             value: 'true'
           CONVERSATION_OCR_CONTEXT_ENABLED:
             value: 'true'
+          MEETING_NOTES_RICH_CONTEXT_ENABLED:
+            value: 'true'
+          MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
+            value: 'true'
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             value: 'true'
           BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:
@@ -382,6 +394,10 @@ overlay:
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
             value: 'true'
           CONVERSATION_OCR_CONTEXT_ENABLED:
+            value: 'true'
+          MEETING_NOTES_RICH_CONTEXT_ENABLED:
+            value: 'true'
+          MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
             value: 'true'
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             value: 'true'
