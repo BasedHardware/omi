@@ -98,6 +98,17 @@ class TestGoalsToCsv(unittest.TestCase):
         self.assertEqual(r[7], "50.00%")
         self.assertEqual(r[8], "2026-09-01T10:00:00Z")
 
+        # Test achieved / abandoned fallback when is_active is omitted
+        inactive_goals = {
+            "g2": {"id": "g2", "title": "Run marathon", "status": "achieved"},
+            "g3": {"id": "g3", "title": "Drop course", "status": "abandoned"},
+        }
+        rows_inactive = goals_to_rows(inactive_goals)
+        self.assertEqual(rows_inactive[0][2], "achieved")
+        self.assertEqual(rows_inactive[0][7], "100.00%")
+        self.assertEqual(rows_inactive[1][2], "abandoned")
+        self.assertEqual(rows_inactive[1][7], "100.00%")
+
     def test_load_and_deduplicate(self):
         d1 = [{"id": "g1", "title": "Goal 1", "status": "active"}]
         d2 = [{"id": "g1", "title": "Goal 1 Updated", "status": "completed"}]

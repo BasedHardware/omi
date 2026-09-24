@@ -11,17 +11,13 @@ It reads saved JSON exports or piped input via `stdin`, makes zero network reque
 
 ## 1. Export your goals
 
-Export your goals (up to 200 per page):
+Export your goals (up to 100 goals, including completed/achieved goals):
 
 ```sh
-omi --json goal list --limit 200 --offset 0 > goals_0.json
+omi --json goal list --limit 100 --include-inactive > goals.json
 ```
 
-If you have more than 200 goals, retrieve subsequent pages into separate files:
-
-```sh
-omi --json goal list --limit 200 --offset 200 > goals_200.json
-```
+> **Note**: By default, `omi goal list` only returns active goals. Pass `--include-inactive` to include completed, achieved, paused, and abandoned goals in the export so historical milestone data appears in your spreadsheet. The `--limit` parameter accepts values from 1 to 100.
 
 ## 2. Generate the CSV file
 
@@ -29,13 +25,13 @@ Run the companion converter script [`goals_to_csv.py`](goals_to_csv.py):
 
 ```sh
 # Basic export
-python sdks/python-cli/examples/goals_to_csv.py goals_0.json goals.csv
+python sdks/python-cli/examples/goals_to_csv.py goals.json goals.csv
 
 # Direct pipeline streaming via stdin
-omi --json goal list --limit 200 | python sdks/python-cli/examples/goals_to_csv.py - goals.csv
+omi --json goal list --limit 100 --include-inactive | python sdks/python-cli/examples/goals_to_csv.py - goals.csv
 
-# Combine multiple pages with automatic deduplication by goal ID
-python sdks/python-cli/examples/goals_to_csv.py goals_0.json goals_200.json all_goals.csv --force
+# Combine multiple exports with automatic deduplication by goal ID
+python sdks/python-cli/examples/goals_to_csv.py goals_work.json goals_personal.json all_goals.csv --force
 ```
 
 ### CLI Options
@@ -52,7 +48,7 @@ The exported CSV provides the following 10 structured fields:
 
 1. `id` - Unique goal identifier.
 2. `title` - Goal title or description.
-3. `status` - Normalized status (`active`, `completed`, `archived`).
+3. `status` - Goal status (e.g., `active`, `achieved`, `abandoned`, `paused`, `background`, `focused`).
 4. `goal_type` - Metric type (`numeric`, `scale`, `boolean`, `qualitative`).
 5. `current_value` - Current recorded metric value.
 6. `target_value` - Target milestone value.

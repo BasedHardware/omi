@@ -14,10 +14,10 @@ Usage:
     python goals_to_csv.py goals.json goals.csv
 
     # Pipeline streaming via stdin
-    omi --json goal list --limit 200 | python goals_to_csv.py - goals.csv
+    omi --json goal list --limit 100 --include-inactive | python goals_to_csv.py - goals.csv
 
-    # Multi-page deduplicated export
-    python goals_to_csv.py goals_0.json goals_200.json all_goals.csv --force
+    # Multi-file deduplicated export
+    python goals_to_csv.py goals_work.json goals_personal.json all_goals.csv --force
 """
 
 from __future__ import annotations
@@ -153,7 +153,7 @@ def goals_to_rows(goals: Dict[str, Dict[str, Any]]) -> List[List[str]]:
             active_flag = bool(is_active)
             status_str = "active" if active_flag else "completed"
         else:
-            active_flag = status_raw not in ("completed", "archived", "done")
+            active_flag = status_raw not in ("completed", "archived", "done", "achieved", "abandoned")
             status_str = status_raw or "active"
 
         goal_type = str(item.get("goal_type") or item.get("type") or "qualitative")
@@ -207,9 +207,9 @@ def main() -> None:
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""\
 Examples:
-  omi --json goal list | python goals_to_csv.py - goals.csv
+  omi --json goal list --limit 100 --include-inactive | python goals_to_csv.py - goals.csv
   python goals_to_csv.py goals.json my_goals.csv
-  python goals_to_csv.py g1.json g2.json all.csv --force
+  python goals_to_csv.py goals_work.json goals_personal.json all.csv --force
 """,
     )
     parser.add_argument(
