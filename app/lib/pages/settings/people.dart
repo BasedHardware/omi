@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/providers/connectivity_provider.dart';
+import 'package:omi/pages/settings/widgets/voice_profile_settings_section.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/dialog.dart';
@@ -237,99 +238,107 @@ class _UserPeoplePageState extends State<_UserPeoplePage> {
                   : const SizedBox(),
             ],
           ),
-          body: provider.loading
-              ? const Center(child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white)))
-              : provider.people.isEmpty
-                  ? Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          const Icon(Icons.question_mark, size: 40),
-                          const SizedBox(height: 24),
-                          Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 32),
-                            child: Text(
-                              context.l10n.createPersonHint,
-                              style: const TextStyle(color: Colors.white, fontSize: 24),
-                              textAlign: TextAlign.center,
-                            ),
-                          ),
-                          const SizedBox(height: 64),
-                        ],
-                      ),
-                    )
-                  : ListView.separated(
-                      itemCount: provider.people.length,
-                      separatorBuilder: (context, index) => const Divider(height: 1),
-                      itemBuilder: (context, index) {
-                        final person = provider.people[index];
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            ListTile(
-                              title:
-                                  Text(person.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500)),
-                              subtitle: Text(context.l10n.voiceRecognitionStatus(person.voiceReadiness)),
-                              onTap: () => _showPersonDialog(context, provider, person: person),
-                              trailing: IconButton(
-                                icon: const Icon(Icons.delete, size: 20),
-                                onPressed: () => _confirmDeletePerson(person, provider),
-                              ),
-                            ),
-                            if (person.speechSamples != null && person.speechSamples!.isNotEmpty)
-                              Padding(
-                                padding: const EdgeInsets.only(left: 8, right: 16, bottom: 8),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    const SizedBox(height: 4),
-                                    ...person.speechSamples!.mapIndexed(
-                                      (j, sample) => ListTile(
-                                        contentPadding: EdgeInsets.zero,
-                                        leading: IconButton(
-                                          padding: const EdgeInsets.all(0),
-                                          icon: Icon(
-                                            provider.currentPlayingPersonIndex == index &&
-                                                    provider.currentPlayingIndex == j &&
-                                                    provider.isPlaying
-                                                ? Icons.pause
-                                                : Icons.play_arrow,
-                                          ),
-                                          onPressed: () => provider.playPause(index, j, sample),
-                                        ),
-                                        title: Text(j == 0 ? context.l10n.speechProfile : context.l10n.sampleNumber(j)),
-                                        onTap: () => _confirmDeleteSample(index, person, j, provider),
-                                        subtitle: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
-                                          children: [
-                                            if (person.speechSampleTranscripts != null &&
-                                                j < person.speechSampleTranscripts!.length &&
-                                                person.speechSampleTranscripts![j].isNotEmpty)
-                                              Padding(
-                                                padding: const EdgeInsets.only(bottom: 4),
-                                                child: Text(
-                                                  '"${person.speechSampleTranscripts![j]}"',
-                                                  style: const TextStyle(fontSize: 14, fontStyle: FontStyle.italic),
-                                                ),
-                                              ),
-                                            Text(
-                                              context.l10n.tapToDelete,
-                                              style: const TextStyle(fontSize: 12, color: Colors.grey),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                          ],
-                        );
-                      },
-                    ),
+          body: Column(
+            children: [
+              const VoiceProfileSettingsSection(),
+              Expanded(child: _peopleBody(context, provider)),
+            ],
+          ),
         );
       },
     );
+  }
+
+  Widget _peopleBody(BuildContext context, PeopleProvider provider) {
+    return provider.loading
+        ? const Center(child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white)))
+        : provider.people.isEmpty
+            ? Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.question_mark, size: 40),
+                    const SizedBox(height: 24),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 32),
+                      child: Text(
+                        context.l10n.createPersonHint,
+                        style: const TextStyle(color: Colors.white, fontSize: 24),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                    const SizedBox(height: 64),
+                  ],
+                ),
+              )
+            : ListView.separated(
+                itemCount: provider.people.length,
+                separatorBuilder: (context, index) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final person = provider.people[index];
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      ListTile(
+                        title: Text(person.name, style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w500)),
+                        subtitle: Text(context.l10n.voiceRecognitionStatus(person.voiceReadiness)),
+                        onTap: () => _showPersonDialog(context, provider, person: person),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.delete, size: 20),
+                          onPressed: () => _confirmDeletePerson(person, provider),
+                        ),
+                      ),
+                      if (person.speechSamples != null && person.speechSamples!.isNotEmpty)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 8, right: 16, bottom: 8),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const SizedBox(height: 4),
+                              ...person.speechSamples!.mapIndexed(
+                                (j, sample) => ListTile(
+                                  contentPadding: EdgeInsets.zero,
+                                  leading: IconButton(
+                                    padding: const EdgeInsets.all(0),
+                                    icon: Icon(
+                                      provider.currentPlayingPersonIndex == index &&
+                                              provider.currentPlayingIndex == j &&
+                                              provider.isPlaying
+                                          ? Icons.pause
+                                          : Icons.play_arrow,
+                                    ),
+                                    onPressed: () => provider.playPause(index, j, sample),
+                                  ),
+                                  title: Text(j == 0 ? context.l10n.speechProfile : context.l10n.sampleNumber(j)),
+                                  onTap: () => _confirmDeleteSample(index, person, j, provider),
+                                  subtitle: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      if (person.speechSampleTranscripts != null &&
+                                          j < person.speechSampleTranscripts!.length &&
+                                          person.speechSampleTranscripts![j].isNotEmpty)
+                                        Padding(
+                                          padding: const EdgeInsets.only(bottom: 4),
+                                          child: Text(
+                                            '"${person.speechSampleTranscripts![j]}"',
+                                            style: const TextStyle(fontSize: 14, fontStyle: FontStyle.italic),
+                                          ),
+                                        ),
+                                      Text(
+                                        context.l10n.tapToDelete,
+                                        style: const TextStyle(fontSize: 12, color: Colors.grey),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
+                  );
+                },
+              );
   }
 }

@@ -68,6 +68,7 @@ import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/providers/people_provider.dart';
+import 'package:omi/providers/speaker_tag_prompts_provider.dart';
 import 'package:omi/providers/speech_profile_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/task_integration_provider.dart';
@@ -445,6 +446,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         ChangeNotifierProvider(create: (context) => createProductionConversationProvider()),
         ListenableProvider(create: (context) => AppProvider()),
         ChangeNotifierProvider(create: (context) => PeopleProvider()),
+        ChangeNotifierProvider(create: (context) => SpeakerTagPromptsProvider()),
         ChangeNotifierProvider(create: (context) => UsageProvider()),
         ChangeNotifierProxyProvider<AppProvider, MessageProvider>(
           create: (context) => MessageProvider(),
