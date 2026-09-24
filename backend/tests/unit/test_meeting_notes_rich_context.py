@@ -877,26 +877,46 @@ class TestMeetingContextPack:
         )
         assert should_gather_meeting_context(desktop_meeting, None) is True
 
-    def test_screen_text_dedupes_identical_titles_and_preserves_case(self, monkeypatch):
+    def test_screen_text_lists_windows_first_and_strips_repeated_chrome(self, monkeypatch):
         import utils.conversations.meeting_context_pack as pack_module
 
+        chrome = 'Ask Gemini • New Chrome available • nemotron-asr-streaming • Soniox Console'
         rows = [
-            {'windowTitle': 'Meet - dyo-jguo-jrw', 'appName': 'Chrome', 'ocrText': 'Design Doc V2'},
-            # Same normalized title with different OCR — dropped unconditionally.
-            {'windowTitle': 'meet - dyo-jguo-jrw', 'appName': 'Chrome', 'ocrText': 'Totally Different Words'},
-            {'windowTitle': 'Shared Q3 Board.pdf', 'appName': 'Chrome', 'ocrText': 'Revenue Forecast'},
-            # Over-budget rows are skipped without crowding out later small rows.
-            {'windowTitle': 'Huge', 'appName': 'Chrome', 'ocrText': 'x' * 4000},
+            {
+                'timestamp': '1',
+                'windowTitle': 'Meet - dyo-jguo-jrw - Google Chrome - David (acme.com)',
+                'appName': 'Google Chrome',
+                'ocrText': f'{chrome} • Priya Raman • Boardy Boardman • David Zhang',
+            },
+            {
+                'timestamp': '2',
+                'windowTitle': '(7) Priya Raman | LinkedIn - High memory usage - 1.2 GB',
+                'appName': 'Google Chrome',
+                'ocrText': f'{chrome} • Founding Engineer @ Northwind AI',
+            },
+            {'timestamp': '3', 'windowTitle': 'x.com', 'appName': 'Google Chrome', 'ocrText': chrome},
+            {
+                'timestamp': '4',
+                'windowTitle': '\u2068max carter\u2069 – (69165)',
+                'appName': 'Telegram',
+                'ocrText': 'max carter • i fell out of bed • private family thing',
+            },
+            {'timestamp': '5', 'windowTitle': 'Huge', 'appName': 'Google Chrome', 'ocrText': 'y' * 4000},
         ]
         monkeypatch.setattr(pack_module.screen_activity_db, 'get_screen_activity', lambda *a, **k: rows)
         conversation = SimpleNamespace(started_at=START, finished_at=START + timedelta(minutes=30))
         text = pack_module._gather_screen_text('uid', conversation)
-        assert text.count('dyo-jguo-jrw') == 1
-        # Original case is preserved for name/product spelling.
-        assert 'Design Doc V2' in text
-        assert 'Totally Different Words' not in text
-        assert 'Shared Q3 Board.pdf' in text
-        assert 'Revenue Forecast' in text
+        windows, _, on_screen = text.partition('On-screen text')
+        # Distinct cleaned window titles come first; meeting codes and browser noise are gone.
+        assert '- Google Chrome | Google Meet call' in windows
+        assert '- Google Chrome | Priya Raman | LinkedIn' in windows
+        assert 'dyo-jguo-jrw' not in windows and 'High memory usage' not in windows
+        # Case-preserving residual OCR keeps names and products; chrome repeated across frames is stripped.
+        assert 'Priya Raman' in on_screen and 'Northwind AI' in on_screen
+        assert 'Soniox Console' not in on_screen
+        # Private messaging OCR is never included, only the window title.
+        assert 'fell out of bed' not in text
+        assert 'Telegram | max carter' in windows
         assert len(text) <= pack_module.MAX_SCREEN_CHARACTERS
 
     def test_prior_meetings_person_id_match_and_query_bounds(self, monkeypatch):
@@ -1091,3 +1111,36 @@ def test_rich_prompt_anchors_still_match_legacy_wording():
     text = rich.rich_static_instructions('FORMAT', _conversation_notes_static_instructions)
     assert rich._RICH_NOTE_BODY_OPENING in text and rich._LEGACY_NOTE_BODY_OPENING not in text
     assert rich._RICH_SELECT_THREADS in text and rich._LEGACY_SELECT_THREADS not in text
+
+
+def test_participant_names_corroborated_by_screen_background_are_kept():
+    from models.structured import Participant, Structured
+    from utils.llm.meeting_notes_validation import validate_rich_meeting_notes
+
+    roster = normalize_meeting_participants(
+        _context(
+            [MeetingParticipant(email='someone@duck.com'), MeetingParticipant(name='Boardy Boardman')],
+            title='Meet - abc-defg-hij',
+            source='screen_activity',
+            platform='Google Meet',
+        ),
+        ConversationSource.desktop,
+        owner_name='David Zhang',
+        owner_emails=['david@acme.com'],
+        people=[],
+    )
+    structured = Structured(
+        participants=[
+            Participant(name='Priya Raman', role='Founding-engineer candidate', source='roster'),
+            Participant(name='Invented Person', role='guess', source='transcript'),
+        ]
+    )
+    background = 'BACKGROUND CONTEXT\nSCREEN ACTIVITY\nWindows open during the meeting:\n- Google Chrome | Priya Raman | LinkedIn'
+    validated = validate_rich_meeting_notes(
+        structured,
+        transcript_body='hello there',
+        roster=roster,
+        has_background_context=True,
+        background_body=background,
+    )
+    assert [p.name for p in validated.participants] == ['Priya Raman']

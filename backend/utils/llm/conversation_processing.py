@@ -1389,6 +1389,7 @@ def get_conversation_notes(
             transcript_body=prefix.context.split('FULL TRANSCRIPT\n', 1)[-1],
             roster=roster,
             has_background_context=bool(meeting_context and meeting_context.strip()),
+            background_body=meeting_context or '',
         )
 
     for action_item in structured.action_items:

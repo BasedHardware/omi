@@ -12,7 +12,6 @@ import logging
 import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
-from difflib import SequenceMatcher
 from typing import Any, Iterable, Mapping, Optional, Sequence
 from zoneinfo import ZoneInfo
 
@@ -25,8 +24,9 @@ import database.screen_activity as screen_activity_db
 from database._client import get_firestore_client
 from database.auth import get_user_from_uid
 from models.calendar_context import CalendarMeetingContext
-from utils.conversations.meeting_context import is_conferencing_row, stored_meeting_window
+from utils.conversations.meeting_context import stored_meeting_window
 from utils.conversations.meeting_participants import MeetingRoster
+from utils.conversations.screen_text_digest import digest_screen_rows
 from utils.conversations.meeting_treatment import deduplicated_transcribed_speech_seconds
 
 logger = logging.getLogger(__name__)
@@ -542,14 +542,6 @@ def _gather_memories(uid: str, roster: MeetingRoster) -> tuple[str, ...]:
     return tuple(lines)
 
 
-def _screen_row_rank(row: Mapping[str, Any]) -> int:
-    if is_conferencing_row(dict(row)):
-        return 0
-    # Shared-screen or browser content with OCR is next most useful; a bare
-    # window title ranks last.
-    return 1 if str(row.get('ocrText') or '').strip() else 2
-
-
 def _gather_screen_text(uid: str, conversation: Any) -> str:
     started_at = getattr(conversation, 'started_at', None)
     finished_at = getattr(conversation, 'finished_at', None)
@@ -564,37 +556,8 @@ def _gather_screen_text(uid: str, conversation: Any) -> str:
         return ''
     if not rows:
         return ''
-    ranked = sorted((row for row in rows if isinstance(row, Mapping)), key=_screen_row_rank)
-    lines: list[str] = []
-    seen_titles: set[str] = set()
-    seen_ocr: list[str] = []
-    used = 0
-    for row in ranked:
-        title = re.sub(r'\s+', ' ', str(row.get('windowTitle') or '')).strip()
-        # The emitted text keeps its original case so names/products spell
-        # correctly in the prompt; casefolding is only for dedupe keys.
-        ocr = re.sub(r'\s+', ' ', str(row.get('ocrText') or '')).strip()
-        ocr_key = ocr.casefold()
-        if title and title.casefold() in seen_titles:
-            continue
-        if ocr_key and any(SequenceMatcher(None, ocr_key[:400], prior[:400]).ratio() > 0.9 for prior in seen_ocr):
-            continue
-        if title:
-            seen_titles.add(title.casefold())
-        if ocr_key:
-            seen_ocr.append(ocr_key)
-        app_name = str(row.get('appName') or '').strip()
-        header = ' | '.join(part for part in (app_name, title) if part)
-        chunk = header if not ocr else f'{header}\n{ocr[:600]}' if header else ocr[:600]
-        chunk = chunk.strip()
-        if not chunk:
-            continue
-        if used + len(chunk) + 2 > MAX_SCREEN_CHARACTERS:
-            # A shorter later row may still fit inside the budget.
-            continue
-        lines.append(chunk)
-        used += len(chunk) + 2
-    return '\n\n'.join(lines)
+    ordered = sorted((row for row in rows if isinstance(row, Mapping)), key=lambda row: str(row.get('timestamp') or ''))
+    return digest_screen_rows(ordered, MAX_SCREEN_CHARACTERS)
 
 
 def gather_meeting_context_pack(

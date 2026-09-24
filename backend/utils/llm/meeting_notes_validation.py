@@ -95,6 +95,7 @@ def validate_rich_meeting_notes(
     transcript_body: str,
     roster: Optional[MeetingRoster],
     has_background_context: bool,
+    background_body: str = '',
 ) -> Structured:
     """Server-side guardrails for rich-only fields; the flag-off path never runs this.
 
@@ -124,7 +125,13 @@ def validate_rich_meeting_notes(
         matched_entry = None
         if name:
             matched_entry = roster_by_name.get(name.casefold())
-            if matched_entry is None and not _name_in_transcript(name, transcript_body):
+            # Screen text (a call's participant list, a profile opened during the
+            # call) is a legitimate identity source alongside the transcript.
+            if (
+                matched_entry is None
+                and not _name_in_transcript(name, transcript_body)
+                and not (background_body and _name_in_transcript(name, background_body))
+            ):
                 continue
         elif email:
             matched_entry = roster_by_email.get(email.casefold())
