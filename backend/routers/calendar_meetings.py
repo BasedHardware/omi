@@ -1,5 +1,5 @@
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -13,6 +13,10 @@ from utils.request_validation import CalendarMeetingsLimit
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _to_utc(dt: datetime) -> datetime:
+    return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt.astimezone(timezone.utc)
 
 
 class StoreMeetingRequest(BaseModel):
@@ -42,40 +46,35 @@ def store_calendar_meeting(
     request: StoreMeetingRequest,
     uid: str = Depends(auth.get_current_user_uid),
 ):
-    """
-    Store or update a calendar meeting in Firestore.
-    If a meeting with the same calendar_event_id and calendar_source exists, it will be updated.
-    """
-    # Calculate duration
-    duration_minutes = int((request.end_time - request.start_time).total_seconds() / 60)
+    """Store or update a calendar meeting in Firestore."""
+    start_utc = _to_utc(request.start_time)
+    end_utc = _to_utc(request.end_time)
+    if end_utc <= start_utc:
+        raise HTTPException(status_code=422, detail="end_time must be after start_time")
+    duration_minutes = int((end_utc - start_utc).total_seconds() / 60)
 
-    # Create CalendarMeetingContext for storage
     meeting_context = CalendarMeetingContext(
         calendar_event_id=request.calendar_event_id,
         title=request.title,
         participants=request.participants,
         platform=request.platform,
         meeting_link=request.meeting_link,
-        start_time=request.start_time,
+        start_time=start_utc,
         duration_minutes=duration_minutes,
         notes=request.notes,
         calendar_source=request.calendar_source,
     )
 
     meeting_dict = meeting_context.model_dump()
-    meeting_dict['end_time'] = request.end_time
+    meeting_dict['end_time'] = end_utc
 
-    # Check if meeting already exists (by calendar_event_id + calendar_source)
     existing_meeting_id = calendar_db.get_meeting_id_by_calendar_event(
         uid, request.calendar_event_id, request.calendar_source
     )
-
     if existing_meeting_id:
-        # Update existing meeting
         calendar_db.update_meeting(uid, existing_meeting_id, meeting_dict)
         meeting_id = existing_meeting_id
     else:
-        # Create new meeting
         meeting_id = calendar_db.create_meeting(uid, meeting_dict)
 
     return StoreMeetingResponse(meeting_id=meeting_id, calendar_event_id=request.calendar_event_id)
