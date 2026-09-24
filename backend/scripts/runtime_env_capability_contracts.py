@@ -176,19 +176,17 @@ def validate_conversation_finalization_capabilities(env: str, env_config: Config
         for capability in sorted(expected - declared):
             errors.append(ValidationError(scope, f'missing required runtime capability {capability!r}'))
 
-        # Use the production parser and its compatibility meaning. In
-        # particular, legacy MEMORY_MODE=read still permits mutation today;
-        # duplicating token policy here would let admission drift from runtime.
+        # Use the production parser; duplicating token policy here would let
+        # admission drift from runtime.
         literal_env = _literal_env(service_config)
         resolved_mode = rollout_mode_env_value(literal_env)
         if resolved_mode not in {MemoryRolloutMode.write.value, MemoryRolloutMode.read.value}:
             raw_enabled = literal_env.get('MEMORY_ENABLED')
-            raw_mode = literal_env.get('MEMORY_MODE')
             errors.append(
                 ValidationError(
                     scope,
                     'capability memory.canonical.mutate requires the runtime memory fence to permit writes; '
-                    f'MEMORY_ENABLED={raw_enabled!r} MEMORY_MODE={raw_mode!r} resolves to {resolved_mode!r}',
+                    f'MEMORY_ENABLED={raw_enabled!r} resolves to {resolved_mode!r}',
                 )
             )
 

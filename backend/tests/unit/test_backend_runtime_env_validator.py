@@ -2411,19 +2411,12 @@ def test_memory_maintenance_job_contract_rejects_notifications_job_maintenance_c
     assert expected <= actual
 
 
-def test_memory_maintenance_job_contract_rejects_read_mode_without_job_cron(tmp_path):
+def test_memory_maintenance_job_contract_rejects_enabled_surface_without_enabled_job(tmp_path):
     validator = load_validator()
     manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
     job = manifest['environments']['prod']['cloud_run']['jobs']['memory-maintenance-job']
-    # Leftover Gate 3 alias: surface MEMORY_MODE=read while the job stays off.
-    backend_env = manifest['environments']['prod']['cloud_run']['services']['backend']['env']
-    backend_env.pop('MEMORY_ENABLED', None)
-    backend_env['MEMORY_MODE'] = {
-        'value': 'read',
-        'category': 'memory_rollout',
-    }
-    job['env'].pop('MEMORY_ENABLED', None)
-    job['env']['MEMORY_MODE'] = {'value': 'off', 'category': 'memory_rollout'}
+    # A request-path surface stays on while the maintenance job is off.
+    job['env']['MEMORY_ENABLED'] = {'value': 'off', 'category': 'memory_rollout'}
     job['env']['MEMORY_CANONICAL_MAINTENANCE_ENABLED'] = {'value': 'false', 'category': 'memory_rollout'}
 
     path = tmp_path / 'runtime_env.yaml'
