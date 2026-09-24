@@ -3,8 +3,6 @@
 "NSBluetoothAlwaysUsageDescription" = "Omi は Bluetooth で Omi デバイスと接続し、マイクの音声を端末に送信します。例えば会議の音声を文字起こししてメモにしたり、デバイスの電池残量を確認したりします。";
 "NSBluetoothPeripheralUsageDescription" = "Omi は Bluetooth で Omi デバイスと接続し、マイクの音声を端末に送信します。例えば会議の音声を文字起こししてメモにしたり、デバイスの電池残量を確認したりします。";
 
-"NSCalendarsUsageDescription" = "Omi の会話やアクションアイテムから予定を表示・作成するためにカレンダーへのアクセスが必要です。";
-"NSCalendarsFullAccessUsageDescription" = "Omi の会話やアクションアイテムから予定を表示・作成するためにカレンダーへのアクセスが必要です。";
 
 "NSContactsUsageDescription" = "予定の出席者の編集や、会話のサマリーを SMS で共有するために連絡先にアクセスします。";
 
