@@ -183,21 +183,47 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     );
   }
 
-  String _doubleTapActionLabel(int action) {
+  String _buttonActionLabel(int action) {
     switch (action) {
       case 1:
         return context.l10n.deviceOnboardingMuteUnmute;
       case 2:
-        return context.l10n.starConversation;
+        return context.l10n.starOngoing;
+      case 3:
+        return 'Ask Question';
       default:
-        return context.l10n.endConversation;
+        return context.l10n.endAndProcess;
     }
   }
 
+  Future<void> _pickSingleTapAction() async {
+    final action = await showButtonActionSheet(
+      context,
+      title: 'Single Press Action',
+      current: SharedPreferencesUtil().singleTapAction,
+    );
+    if (action == null || !mounted) return;
+    setState(() => SharedPreferencesUtil().singleTapAction = action);
+  }
+
   Future<void> _pickDoubleTapAction() async {
-    final action = await showDoubleTapActionSheet(context, current: SharedPreferencesUtil().doubleTapAction);
+    final action = await showButtonActionSheet(
+      context,
+      title: context.l10n.doubleTapAction,
+      current: SharedPreferencesUtil().doubleTapAction,
+    );
     if (action == null || !mounted) return;
     setState(() => SharedPreferencesUtil().doubleTapAction = action);
+  }
+
+  Future<void> _pickTripleTapAction() async {
+    final action = await showButtonActionSheet(
+      context,
+      title: 'Triple Press Action',
+      current: SharedPreferencesUtil().tripleTapAction,
+    );
+    if (action == null || !mounted) return;
+    setState(() => SharedPreferencesUtil().tripleTapAction = action);
   }
 
   Future<void> _findDevice(DeviceProvider provider) async {
@@ -390,13 +416,43 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   Widget _customizationGroup(BtDevice? device, DeviceProvider provider) {
     final l10n = context.l10n;
     final isOmi = device?.type == DeviceType.omi;
-    final supportsFind = isOmi && !FirmwareUpdateBuildPolicy.current.isOpenGlassDevice(device);
+    final singleTapRow = OmiSettingsRow(
+      key: const Key('single_tap_setting'),
+      leading: const FaIcon(FontAwesomeIcons.handPointer),
+      title: 'Single Press',
+      value: _buttonActionLabel(SharedPreferencesUtil().singleTapAction),
+      onTap: _pickSingleTapAction,
+      showChevron: true,
+    );
     final doubleTapRow = OmiSettingsRow(
+      key: const Key('double_tap_setting'),
       leading: const FaIcon(FontAwesomeIcons.handPointer),
       title: l10n.doubleTap,
-      value: _doubleTapActionLabel(SharedPreferencesUtil().doubleTapAction),
+      value: _buttonActionLabel(SharedPreferencesUtil().doubleTapAction),
       onTap: _pickDoubleTapAction,
       showChevron: true,
+    );
+    final tripleTapRow = OmiSettingsRow(
+      key: const Key('triple_tap_setting'),
+      leading: const FaIcon(FontAwesomeIcons.handPointer),
+      title: 'Triple Press',
+      value: _buttonActionLabel(SharedPreferencesUtil().tripleTapAction),
+      onTap: _pickTripleTapAction,
+      showChevron: true,
+    );
+    final longPressRow = OmiSettingsRow(
+      key: const Key('long_press_setting'),
+      leading: const FaIcon(FontAwesomeIcons.powerOff),
+      title: 'Long Press',
+      value: 'Turn On/Off',
+      showChevron: false,
+      onTap: () {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(const SnackBar(
+            content: Text('Long press powers the device on/off and cannot be customized.'),
+          ));
+      },
     );
     return OmiSettingsGroup(
       header: l10n.customizationSection,
@@ -426,10 +482,18 @@ class _DeviceSettingsState extends State<DeviceSettings> {
               }
             },
           ),
-          // Double tap is only configurable while Omi button actions are enabled.
-          if (_omiButtonActionsEnabled) doubleTapRow,
-        ] else
+          if (_omiButtonActionsEnabled) ...[
+            singleTapRow,
+            doubleTapRow,
+            tripleTapRow,
+            longPressRow,
+          ],
+        ] else ...[
+          singleTapRow,
           doubleTapRow,
+          tripleTapRow,
+          longPressRow,
+        ],
         if (_isDimRatioLoaded && _hasDimmingFeature == true)
           OmiSettingsRow(
             leading: const FaIcon(FontAwesomeIcons.lightbulb),
