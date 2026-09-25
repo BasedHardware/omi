@@ -938,9 +938,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'claude_desktop_config.json க்கு சேர்க்கவும்';
-
-  @override
   String get copyConfig => 'ஆட்டு நகலெடுக்கவும்';
 
   @override
@@ -2496,13 +2493,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get clearAllNodesAndConnections => 'அனைத்து முனைகள் மற்றும் இணைப்புகளைத் தெளிவு செய்';
 
   @override
-  String get addToClaudeDesktopConfig => 'claude_desktop_config.json இல் சேர்க்கவும்';
-
-  @override
   String get connectAiAssistantsToData => 'AI உதவிக்காரர்களை உங்கள் தரவுக்கு இணைக்கவும்';
-
-  @override
-  String get useYourMcpApiKey => 'உங்கள் MCP API விசையைப் பயன்படுத்தவும்';
 
   @override
   String get realTimeTranscript => 'நிகழ்நேர மொழிபெயர்ப்பு';
@@ -10037,7 +10028,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get transcriptionNoAudio => 'நகலெடுப்பு ஆடியோவைப் பெறவில்லை';
 
   @override
-  String get tapPlusToStartRecording => 'பதிவைத் தொடங்க + ஐத் தட்டவும்';
+  String get tapPlusToStartRecording => 'பதிவைத் தொடங்க பதிவு பொத்தானைத் தட்டவும்';
 
   @override
   String get chatBlockTask => 'பணி';
@@ -10280,7 +10271,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'நீங்கள் பதிவுசெய்யும் உரையாடல்கள் இங்கே தோன்றும். முதலாவதைப் பதிவுசெய்ய முகப்பில் + ஐத் தட்டவும்.';
+      'நீங்கள் பதிவுசெய்யும் உரையாடல்கள் இங்கே தோன்றும். முதலாவதைப் பதிவுசெய்ய முகப்பில் பதிவு பொத்தானைத் தட்டவும்.';
 
   @override
   String get conversationMap => 'உரையாடல் வரைபடம்';
@@ -10759,7 +10750,8 @@ class AppLocalizationsTa extends AppLocalizations {
   String get deviceConnecting => 'இணைக்கிறது…';
 
   @override
-  String get recordOptionsTip => 'குறிப்பு: தொலைபேசி அழைப்பைப் பதிவுசெய்ய பதிவு பொத்தானை அழுத்திப் பிடிக்கவும்.';
+  String get recordOptionsTip =>
+      'குறிப்பு: தொலைபேசி அழைப்பைப் பதிவுசெய்ய பதிவு பொத்தானில் உள்ள அம்புக்குறியைத் தட்டவும்.';
 
   @override
   String get firmwareUpdateFailedTitle => 'புதுப்பிப்பு தோல்வியடைந்தது';
@@ -11236,6 +11228,23 @@ class AppLocalizationsTa extends AppLocalizations {
       'நீங்கள் ஒருவருக்குப் பெயரிடும்போது, அடுத்த முறை அடையாளம் காண Omi ஒரு சிறிய குரல் மாதிரியை வைத்திருக்கும்';
 
   @override
+  String get leaveBlank => 'வெற்றாக விடவும்';
+
+  @override
+  String get mcpOAuthSetup =>
+      'claude.ai இல் தனிப்பயன் கனெக்டரைச் சேர்த்து, சர்வர் URL ஐ ஒட்டவும். Claude மேம்பட்ட OAuth Client ID கேட்டால், கீழே உள்ள மதிப்பைப் பயன்படுத்தி, ரகசியத்தை வெற்றாக விடவும் — உங்கள் MCP API திறவுகோலை OAuth ரகசியமாக ஒருபோதும் பயன்படுத்த வேண்டாம்.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => '~/.claude.json இல் சேர்க்கவும்';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'Claude Desktop → Settings → Connectors இல் தனிப்பயன் கனெக்டரைச் சேர்த்து, சர்வர் URL ஐ ஒட்டவும். Claude மேம்பட்ட OAuth Client ID கேட்டால், கீழே உள்ள மதிப்பைப் பயன்படுத்தி, ரகசியத்தை வெற்றாக விடவும் — உங்கள் MCP API திறவுகோலை OAuth ரகசியமாக ஒருபோதும் பயன்படுத்த வேண்டாம்.';
+
+  @override
   String get transcriptionUnavailableRecordingContinues =>
       'நகலெடுப்புகள் கிடைக்கவில்லை, பதிவு சாதனத்தில் தொடர்கிறது, பின்னர் செயலாக்கப்படும்';
 
@@ -11251,4 +11260,51 @@ class AppLocalizationsTa extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'நிலுவையில் உள்ள நகலெடுப்புகள் $count';
   }
+
+  @override
+  String get captureSourceCall => 'அழைப்பு';
+
+  @override
+  String get captureSourcePhoneMic => 'போன் மைக்';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'மீண்டும் தொடரவும்';
+
+  @override
+  String get finish => 'முடிக்கவும்';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'பதக்கம் இடைநிறுத்தப்பட்டது · நீங்கள் முடித்ததும் தொடரும்';
+
+  @override
+  String get pendantIsListeningTitle => 'உங்கள் பதக்கம் கேட்கிறது';
+
+  @override
+  String get oneSourceAtATime => 'Omi ஒரே நேரத்தில் ஒரு மூலத்திலிருந்து மட்டுமே பதிவுசெய்யும்.';
+
+  @override
+  String get recordWithPhoneInstead => 'பதிலாக போனில் பதிவுசெய்யவும்';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'நீங்கள் முடிக்கும் வரை பதக்கம் இடைநிறுத்தப்படும்';
+
+  @override
+  String get pendantPausesDuringCall => 'அழைப்பின்போது பதக்கம் இடைநிறுத்தப்படும்';
+
+  @override
+  String get keepUsingPendant => 'பதக்கத்தையே பயன்படுத்தவும்';
+
+  @override
+  String get recordWith => 'பதிவுசெய்யும் முறை';
+
+  @override
+  String get moreWaysToRecord => 'பதிவுசெய்ய மேலும் வழிகள்';
+
+  @override
+  String get openCall => 'அழைப்பைத் திறக்கவும்';
 }

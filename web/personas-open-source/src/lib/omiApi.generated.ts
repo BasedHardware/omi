@@ -2239,6 +2239,7 @@ export interface FullConversation {
   started_at: string | null;
   structured: SimpleStructured;
   transcript_segments?: Array<SimpleTranscriptSegment>;
+  truncated?: boolean;
 }
 
 export interface GenerateAppIconRequest {
@@ -4034,9 +4035,11 @@ export interface SimpleActionItem {
   completed_at?: string | null;
   conversation_id?: string | null;
   created_at?: string | null;
+  deleted?: boolean | null;
   description: string;
   due_at?: string | null;
   id: string;
+  updated_at?: string | null;
 }
 
 export interface SimpleChatMessage {
@@ -8106,6 +8109,32 @@ export interface OmiApiPaths {
       operationId: "rebuild_graph_v1_knowledge_graph_rebuild_post";
       responses: {
         "200": RebuildResponse;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/mcp": {
+    get: {
+      operationId: "mcp_sse_get_v1_mcp_get";
+      responses: {
+        "200": void;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    post: {
+      operationId: "mcp_streamable_http_v1_mcp_post";
+      responses: {
+        "200": void;
+        "401": void;
+        "422": HTTPValidationError;
+      };
+    };
+    delete: {
+      operationId: "mcp_delete_session_v1_mcp_delete";
+      responses: {
+        "200": void;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -14903,7 +14932,59 @@ export async function rebuild_graph_v1_knowledge_graph_rebuild_post(header: { au
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function get_action_items_v1_mcp_action_items_get(query: { completed?: boolean | null, due_start_date?: string | null, due_end_date?: string | null, limit?: number, offset?: number }, init?: OmiApiClientInit): Promise<Array<SimpleActionItem>> {
+export async function mcp_sse_get_v1_mcp_get(header: { Authorization?: string | null, Mcp_Session_Id?: string | null }, init?: OmiApiClientInit): Promise<void> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/mcp`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.Authorization !== undefined ? { "Authorization": String(header.Authorization) } : {}),
+      ...(header.Mcp_Session_Id !== undefined ? { "Mcp-Session-Id": String(header.Mcp_Session_Id) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return;
+}
+
+export async function mcp_streamable_http_v1_mcp_post(header: { Authorization?: string | null, Mcp_Session_Id?: string | null, Accept?: string | null }, init?: OmiApiClientInit): Promise<void> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/mcp`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "POST",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.Authorization !== undefined ? { "Authorization": String(header.Authorization) } : {}),
+      ...(header.Mcp_Session_Id !== undefined ? { "Mcp-Session-Id": String(header.Mcp_Session_Id) } : {}),
+      ...(header.Accept !== undefined ? { "Accept": String(header.Accept) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return;
+}
+
+export async function mcp_delete_session_v1_mcp_delete(header: { Mcp_Session_Id?: string | null, Authorization?: string | null }, init?: OmiApiClientInit): Promise<void> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/mcp`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "DELETE",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.Mcp_Session_Id !== undefined ? { "Mcp-Session-Id": String(header.Mcp_Session_Id) } : {}),
+      ...(header.Authorization !== undefined ? { "Authorization": String(header.Authorization) } : {}),
+    },
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return;
+}
+
+export async function get_action_items_v1_mcp_action_items_get(query: { completed?: boolean | null, due_start_date?: string | null, due_end_date?: string | null, limit?: number, offset?: number, cursor?: string | null, updated_since?: string | null }, init?: OmiApiClientInit): Promise<Array<SimpleActionItem>> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/mcp/action-items`;
   const _params = query ? Object.entries(query)
@@ -15006,7 +15087,7 @@ export async function complete_action_item_v1_mcp_action_items__action_item_id__
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function get_chat_messages_v1_mcp_chat_get(query: { limit?: number, offset?: number }, init?: OmiApiClientInit): Promise<Array<SimpleChatMessage>> {
+export async function get_chat_messages_v1_mcp_chat_get(query: { limit?: number, offset?: number, cursor?: string | null }, init?: OmiApiClientInit): Promise<Array<SimpleChatMessage>> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/mcp/chat`;
   const _params = query ? Object.entries(query)
@@ -15024,7 +15105,7 @@ export async function get_chat_messages_v1_mcp_chat_get(query: { limit?: number,
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function get_conversations_v1_mcp_conversations_get(query: { start_date?: string | null, end_date?: string | null, categories?: string | null, limit?: number, offset?: number }, init?: OmiApiClientInit): Promise<Array<SimpleConversation>> {
+export async function get_conversations_v1_mcp_conversations_get(query: { start_date?: string | null, end_date?: string | null, categories?: string | null, limit?: number, offset?: number, cursor?: string | null, updated_since?: string | null }, init?: OmiApiClientInit): Promise<Array<SimpleConversation>> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/mcp/conversations`;
   const _params = query ? Object.entries(query)
@@ -15075,7 +15156,7 @@ export async function get_conversation_by_id_v1_mcp_conversations__conversation_
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function get_daily_summaries_v1_mcp_daily_summaries_get(query: { limit?: number, offset?: number, start_date?: string | null, end_date?: string | null }, init?: OmiApiClientInit): Promise<Array<Record<string, unknown>>> {
+export async function get_daily_summaries_v1_mcp_daily_summaries_get(query: { limit?: number, offset?: number, start_date?: string | null, end_date?: string | null, cursor?: string | null }, init?: OmiApiClientInit): Promise<Array<Record<string, unknown>>> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/mcp/daily-summaries`;
   const _params = query ? Object.entries(query)
@@ -15158,7 +15239,7 @@ export async function delete_key_v1_mcp_keys__key_id__delete(path: { key_id: str
   return;
 }
 
-export async function get_memories_v1_mcp_memories_get(query: { limit?: number, offset?: number, categories?: string | null, sort?: string, reviewed?: boolean | null, manually_added?: boolean | null, updated_after?: string | null, include_activity?: boolean, include_sensitive?: boolean }, init?: OmiApiClientInit): Promise<Array<CleanerMemory>> {
+export async function get_memories_v1_mcp_memories_get(query: { limit?: number, offset?: number, categories?: string | null, sort?: string, reviewed?: boolean | null, manually_added?: boolean | null, updated_after?: string | null, updated_since?: string | null, include_activity?: boolean, include_sensitive?: boolean, cursor?: string | null }, init?: OmiApiClientInit): Promise<Array<CleanerMemory>> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/mcp/memories`;
   const _params = query ? Object.entries(query)
@@ -15304,7 +15385,7 @@ export async function get_user_profile_v1_mcp_profile_get(init?: OmiApiClientIni
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function get_screen_activity_v1_mcp_screen_activity_get(query: { start_date?: string | null, end_date?: string | null, app?: string | null, summary?: boolean, limit?: number }, init?: OmiApiClientInit): Promise<Array<McpScreenActivityRow> | McpScreenActivitySummaryResponse> {
+export async function get_screen_activity_v1_mcp_screen_activity_get(query: { start_date?: string | null, end_date?: string | null, app?: string | null, summary?: boolean, limit?: number, cursor?: string | null }, init?: OmiApiClientInit): Promise<Array<McpScreenActivityRow> | McpScreenActivitySummaryResponse> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/mcp/screen-activity`;
   const _params = query ? Object.entries(query)
@@ -19292,4 +19373,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 451 client methods generated.
+// Total: 454 client methods generated.
