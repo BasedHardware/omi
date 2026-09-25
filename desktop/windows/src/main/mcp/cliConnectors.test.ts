@@ -14,6 +14,7 @@ import { join } from 'path'
 import {
   probeCliConnector,
   cliConnected,
+  cliConnectionState,
   buildSetupCard,
   upsertCodexConfig,
   removeCodexMcpEntry,
@@ -22,7 +23,7 @@ import {
   codexConfigPath
 } from './cliConnectors'
 import { atomicWriteFileSync } from './atomicWrite'
-import { mcpServerUrl } from '../../shared/mcpExports'
+import { mcpServerUrl, mcpLegacyServerUrl } from '../../shared/mcpExports'
 
 const root = mkdtempSync(join(tmpdir(), 'cli-connectors-test-'))
 afterAll(() => rmSync(root, { recursive: true, force: true }))
@@ -30,6 +31,7 @@ afterAll(() => rmSync(root, { recursive: true, force: true }))
 const API = 'https://api.omi.me'
 const DEV_API = 'https://api.omiapi.com'
 const URL = mcpServerUrl(API)
+const LEGACY_URL = mcpLegacyServerUrl(API)
 const KEY = 'mcp_secret_abc'
 
 let home: string
@@ -170,6 +172,159 @@ describe('cliConnected (config re-scan vs current key)', () => {
 
   it('returns false when the config file is absent', () => {
     expect(cliConnected('codex', API, KEY, home)).toBe(false)
+  })
+})
+
+describe('cliConnectionState (exact URL vs legacy /sse)', () => {
+  it('codex: a same-key /v1/mcp/sse entry reads needsUpdate, not connected', () => {
+    codexToml(
+      `[mcp_servers.omi-memory]\nurl = "${LEGACY_URL}"\nhttp_headers = { Authorization = "Bearer ${KEY}" }\n`
+    )
+    expect(cliConnectionState('codex', API, KEY, home)).toBe('needsUpdate')
+    expect(cliConnected('codex', API, KEY, home)).toBe(false)
+    // A stale bearer on the legacy URL is just disconnected.
+    expect(cliConnectionState('codex', API, 'rotated-key', home)).toBe('disconnected')
+  })
+
+  it('openclaw: a same-key /v1/mcp/sse entry reads needsUpdate', () => {
+    mkdirSync(join(home, '.openclaw'), { recursive: true })
+    const json = {
+      mcp: {
+        servers: {
+          'omi-memory': { url: LEGACY_URL, headers: { Authorization: `Bearer ${KEY}` } }
+        }
+      }
+    }
+    writeFileSync(join(home, '.openclaw', 'openclaw.json'), JSON.stringify(json), 'utf8')
+    expect(cliConnectionState('openclaw', API, KEY, home)).toBe('needsUpdate')
+  })
+
+  it('hermes: a same-key /v1/mcp/sse entry reads needsUpdate', () => {
+    const p = join(home, '.hermes', 'config.yaml')
+    mkdirSync(join(home, '.hermes'), { recursive: true })
+    writeFileSync(p, '', 'utf8')
+    upsertHermesConfig(p, LEGACY_URL, KEY)
+    expect(cliConnectionState('hermes', API, KEY, home)).toBe('needsUpdate')
+    expect(cliConnected('hermes', API, KEY, home)).toBe(false)
+  })
+
+  it('the canonical URL still reads connected for every CLI connector', () => {
+    codexToml(
+      `[mcp_servers.omi-memory]\nurl = "${URL}"\nhttp_headers = { Authorization = "Bearer ${KEY}" }\n`
+    )
+    expect(cliConnectionState('codex', API, KEY, home)).toBe('connected')
+  })
+
+  it('codex: a canonical URL in an unrelated field never reads as connected', () => {
+    codexToml(
+      `[mcp_servers.omi-memory]\nnote = "${URL}"\nhttp_headers = { Authorization = "Bearer ${KEY}" }\n`
+    )
+    expect(cliConnectionState('codex', API, KEY, home)).toBe('disconnected')
+  })
+
+  it('codex: conflicting canonical + legacy declarations never read as connected', () => {
+    codexToml(
+      `[mcp_servers.omi-memory]\nurl = "${URL}"\ncommand = "npx"\nargs = ["-y", "mcp-remote", "${LEGACY_URL}", "--header", "Authorization: Bearer ${KEY}"]\n`
+    )
+    expect(cliConnectionState('codex', API, KEY, home)).toBe('disconnected')
+  })
+
+  it('codex: a legacy mcp-remote args entry reads needsUpdate', () => {
+    codexToml(
+      `[mcp_servers.omi-memory]\ncommand = "npx"\nargs = ["-y", "mcp-remote", "${LEGACY_URL}", "--header", "Authorization: Bearer ${KEY}"]\n`
+    )
+    expect(cliConnectionState('codex', API, KEY, home)).toBe('needsUpdate')
+  })
+
+  it('codex: a present-but-malformed args marks ambiguity, never connected', () => {
+    codexToml(
+      `[mcp_servers.omi-memory]\nurl = "${URL}"\nargs = "not-an-array"\nhttp_headers = { Authorization = "Bearer ${KEY}" }\n`
+    )
+    expect(cliConnectionState('codex', API, KEY, home)).toBe('disconnected')
+  })
+
+  it('codex: multiple mcp-remote tokens declaring different endpoints refuse', () => {
+    codexToml(
+      `[mcp_servers.omi-memory]\ncommand = "npx"\nargs = ["mcp-remote", "${URL}", "mcp-remote", "${LEGACY_URL}", "--header", "Authorization: Bearer ${KEY}"]\n`
+    )
+    expect(cliConnectionState('codex', API, KEY, home)).toBe('disconnected')
+  })
+
+  it('openclaw: a canonical URL in a note field never reads as connected', () => {
+    mkdirSync(join(home, '.openclaw'), { recursive: true })
+    const json = {
+      mcp: {
+        servers: {
+          'omi-memory': { note: URL, headers: { Authorization: `Bearer ${KEY}` } }
+        }
+      }
+    }
+    writeFileSync(join(home, '.openclaw', 'openclaw.json'), JSON.stringify(json), 'utf8')
+    expect(cliConnectionState('openclaw', API, KEY, home)).toBe('disconnected')
+  })
+
+  it('openclaw: a conflicting url + mcp-remote arg never reads as connected', () => {
+    mkdirSync(join(home, '.openclaw'), { recursive: true })
+    const json = {
+      mcp: {
+        servers: {
+          'omi-memory': {
+            url: URL,
+            args: ['-y', 'mcp-remote', LEGACY_URL, '--header', `Authorization: Bearer ${KEY}`],
+            headers: { Authorization: `Bearer ${KEY}` }
+          }
+        }
+      }
+    }
+    writeFileSync(join(home, '.openclaw', 'openclaw.json'), JSON.stringify(json), 'utf8')
+    expect(cliConnectionState('openclaw', API, KEY, home)).toBe('disconnected')
+  })
+
+  it('openclaw: a present-but-malformed args marks ambiguity, never connected', () => {
+    mkdirSync(join(home, '.openclaw'), { recursive: true })
+    const json = {
+      mcp: {
+        servers: {
+          'omi-memory': {
+            url: URL,
+            args: 'not-an-array',
+            headers: { Authorization: `Bearer ${KEY}` }
+          }
+        }
+      }
+    }
+    writeFileSync(join(home, '.openclaw', 'openclaw.json'), JSON.stringify(json), 'utf8')
+    expect(cliConnectionState('openclaw', API, KEY, home)).toBe('disconnected')
+  })
+
+  it('hermes: a canonical URL in an unrelated field never reads as connected', () => {
+    mkdirSync(join(home, '.hermes'), { recursive: true })
+    writeFileSync(
+      join(home, '.hermes', 'config.yaml'),
+      `mcp_servers:\n  omi-memory:\n    note: "${URL}"\n    headers:\n      Authorization: "Bearer ${KEY}"\n`,
+      'utf8'
+    )
+    expect(cliConnectionState('hermes', API, KEY, home)).toBe('disconnected')
+  })
+
+  it('hermes: a present-but-malformed args marks ambiguity, never connected', () => {
+    mkdirSync(join(home, '.hermes'), { recursive: true })
+    writeFileSync(
+      join(home, '.hermes', 'config.yaml'),
+      `mcp_servers:\n  omi-memory:\n    url: "${URL}"\n    args: not-an-array\n    headers:\n      Authorization: "Bearer ${KEY}"\n`,
+      'utf8'
+    )
+    expect(cliConnectionState('hermes', API, KEY, home)).toBe('disconnected')
+  })
+
+  it('hermes: a legacy mcp-remote args entry reads needsUpdate', () => {
+    mkdirSync(join(home, '.hermes'), { recursive: true })
+    writeFileSync(
+      join(home, '.hermes', 'config.yaml'),
+      `mcp_servers:\n  omi-memory:\n    command: npx\n    args: ["-y", "mcp-remote", "${LEGACY_URL}", "--header", "Authorization: Bearer ${KEY}"]\n`,
+      'utf8'
+    )
+    expect(cliConnectionState('hermes', API, KEY, home)).toBe('needsUpdate')
   })
 })
 
@@ -316,6 +471,41 @@ describe('upsertCodexConfig (native TOML writer)', () => {
     expect(readFileSync(p, 'utf8')).toContain('[mcp_servers.omi-memory.env]')
   })
 
+  it('fails on an inline omi-memory assignment inside a bare [mcp_servers] table', () => {
+    const p = codexToml(
+      `[mcp_servers]\nomi-memory = { url = "${URL}", http_headers = { Authorization = "Bearer ${KEY}" } }\n`
+    )
+    expect(() => upsertCodexConfig(p, URL, KEY)).toThrow(/ambiguous/)
+    // Untouched, and never reads as connected.
+    expect(readFileSync(p, 'utf8')).toContain('omi-memory = { url =')
+    expect(cliConnected('codex', API, KEY, home)).toBe(false)
+    expect(() => removeCodexMcpEntry(p)).toThrow(/ambiguous/)
+  })
+
+  it('fails on a dotted mcp_servers.omi-memory.url key, including quoted variants', () => {
+    for (const body of [
+      `mcp_servers.omi-memory.url = "${URL}"\n`,
+      `mcp_servers."omi-memory".url = "${URL}"\n`,
+      `"mcp_servers".omi-memory.url = "${URL}"\n`,
+      `mcp_servers.omi-memory = { url = "${URL}" }\n`
+    ]) {
+      const p = codexToml(body)
+      expect(() => upsertCodexConfig(p, URL, KEY)).toThrow(/ambiguous/)
+      expect(readFileSync(p, 'utf8')).toBe(body) // untouched
+      expect(cliConnected('codex', API, KEY, home)).toBe(false)
+      expect(() => removeCodexMcpEntry(p)).toThrow(/ambiguous/)
+    }
+  })
+
+  it('does not flag dotted keys belonging to ANOTHER table', () => {
+    const p = codexToml(`[plugins]\nmcp_servers.omi-memory.url = "${URL}"\n`)
+    upsertCodexConfig(p, URL, KEY)
+    const text = readFileSync(p, 'utf8')
+    // Their plugins.mcp_servers.… key survives; ours appends as a real table.
+    expect(text).toContain('[plugins]\nmcp_servers.omi-memory.url')
+    expect(text).toContain('[mcp_servers.omi-memory]')
+  })
+
   it('writes the file 0o600 and creates ~/.codex 0o700 (Bearer key at rest)', () => {
     if (process.platform === 'win32') return
     const p = codexConfigPath(home)
@@ -438,6 +628,21 @@ describe('upsertHermesConfig (native YAML writer)', () => {
     mkdirSync(join(home, '.hermes'), { recursive: true })
     writeFileSync(p, 'mcp_servers:\n  a: {}\n\nmcp_servers:\n  b: {}\n', 'utf8')
     expect(() => upsertHermesConfig(p, URL, KEY)).toThrow(/duplicate/)
+  })
+
+  it('refuses a non-two-space sibling indentation, preserving the file', () => {
+    const p = join(home, '.hermes', 'config.yaml')
+    mkdirSync(join(home, '.hermes'), { recursive: true })
+    const original = 'mcp_servers:\n    other:\n        url: "https://other.example.com"\n'
+    writeFileSync(p, original, 'utf8')
+    expect(() => upsertHermesConfig(p, URL, KEY)).toThrow(/indentation/)
+    expect(readFileSync(p, 'utf8')).toBe(original)
+    // The same convention with an owned 4-space omi-memory block is refused on
+    // the replace path too (no silent duplicate at a different indent).
+    const withOwned = 'mcp_servers:\n    omi-memory:\n        url: "https://stale"\n'
+    writeFileSync(p, withOwned, 'utf8')
+    expect(() => upsertHermesConfig(p, URL, KEY)).toThrow(/indentation/)
+    expect(readFileSync(p, 'utf8')).toBe(withOwned)
   })
 
   it('does not touch a same-named key nested under another top-level key', () => {

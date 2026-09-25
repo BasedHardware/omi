@@ -19,9 +19,24 @@ import { existsSync, readFileSync, appendFileSync, mkdirSync } from 'fs'
 import { homedir } from 'os'
 import { dirname, join } from 'path'
 import { promisify } from 'util'
-import { MCP_SERVER_KEY, mcpServerUrl, type McpSetupCard } from '../../shared/mcpExports'
+import {
+  MCP_SERVER_KEY,
+  mcpServerUrl,
+  mcpLegacyServerUrl,
+  type McpSetupCard
+} from '../../shared/mcpExports'
 import { commandOnPath, fileExists } from './cliPresence'
 import { atomicWriteFileSync } from './atomicWrite'
+import {
+  argsBearerScans,
+  argsEndpoint,
+  bearerToken,
+  entryConnection,
+  jsonEntryScan,
+  stringArrayValue,
+  type EntryConnection,
+  type OwnedEntryScan
+} from './entryScan'
 
 const execFileAsync = promisify(execFile)
 const CLI_TIMEOUT_MS = 20_000
@@ -71,11 +86,144 @@ export function probeCliConnector(id: CliConnectorId, home = homedir()): CliConn
 
 // --- connected re-scan (config vs current key) ------------------------------
 
-/** True when `text` references the omi server URL AND a Bearer token == `key`. */
-function textHasConnection(text: string, url: string, key: string): boolean {
-  if (!text.includes(url)) return false
-  const m = text.match(/Bearer\s+([^\s"',}\]]+)/i)
-  return m?.[1] === key
+/** How the owned config entry relates to the canonical endpoint + key. */
+export type CliConnection = EntryConnection
+
+/** A TOML double-quoted basic string is JSON-compatible; a single-quoted
+ *  literal is `'…'` verbatim. Anything else (bare value, number, trailing
+ *  junk that isn't a comment) is not a scalar we can trust. */
+function tomlScalar(raw: string): string | null {
+  const m = raw.trim().match(/^("(?:[^"\\]|\\.)*"|'[^']*')/)
+  if (!m) return null
+  const rest = raw.trim().slice(m[1].length).trim()
+  if (rest !== '' && !rest.startsWith('#')) return null
+  if (m[1].startsWith("'")) return m[1].slice(1, -1)
+  try {
+    const v: unknown = JSON.parse(m[1])
+    return typeof v === 'string' ? v : null
+  } catch {
+    return null
+  }
+}
+
+/** A YAML scalar after `key:` — quoted like a TOML scalar, or a bare value
+ *  trimmed at a ` #` comment. An empty value is a mapping opener, not a URL. */
+function yamlScalar(raw: string): string | null {
+  const v = raw.trim()
+  if (v.startsWith('"') || v.startsWith("'")) return tomlScalar(v)
+  const hash = v.indexOf(' #')
+  const bare = (hash >= 0 ? v.slice(0, hash) : v).trimEnd()
+  return bare === '' ? null : bare
+}
+
+/** Parse `url`, `args`, and `http_headers` out of the owned Codex section's
+ *  `key = value` lines (each value is single-line — the section scan already
+ *  refused anything else). */
+function codexOwnedEntry(lines: string[]): OwnedEntryScan {
+  const endpoints: (string | null)[] = []
+  const bearers: (string | null)[] = []
+  for (const raw of lines) {
+    const kv = raw.trim().match(/^([A-Za-z0-9_-]+)\s*=\s*(.+)$/)
+    if (!kv) continue
+    const [, field, value] = kv
+    if (field === 'url') {
+      endpoints.push(tomlScalar(value))
+    } else if (field === 'args') {
+      const args = stringArrayValue(value)
+      if (args) {
+        endpoints.push(...argsEndpoint(args))
+        bearers.push(...argsBearerScans(args))
+      } else {
+        endpoints.push(null)
+      }
+    } else if (field === 'http_headers' || field === 'headers') {
+      const auth = value.match(/Authorization\s*=\s*("(?:[^"\\]|\\.)*"|'[^']*')/)
+      if (auth) {
+        const s = tomlScalar(auth[1])
+        bearers.push(s === null ? null : bearerToken(s))
+      }
+    }
+  }
+  return { endpoints, bearers }
+}
+
+/** Parse the owned Hermes sub-block: direct-child `url:`/`args:` fields plus
+ *  the `Authorization:` header line (which sits one level deeper). */
+function hermesOwnedEntry(lines: string[]): OwnedEntryScan {
+  const endpoints: (string | null)[] = []
+  const bearers: (string | null)[] = []
+  for (const raw of lines) {
+    const child = raw.match(/^    ([A-Za-z0-9_-]+)\s*:\s*(.*)$/)
+    if (child) {
+      const [, field, value] = child
+      if (field === 'url') endpoints.push(yamlScalar(value))
+      else if (field === 'args') {
+        const args = stringArrayValue(value)
+        if (args) {
+          endpoints.push(...argsEndpoint(args))
+          bearers.push(...argsBearerScans(args))
+        } else {
+          endpoints.push(null)
+        }
+      }
+    }
+    const auth = raw.match(/^\s+Authorization\s*:\s*(.*)$/)
+    if (auth) {
+      const s = yamlScalar(auth[1])
+      bearers.push(s === null ? null : bearerToken(s))
+    }
+  }
+  return { endpoints, bearers }
+}
+
+export function cliConnectionState(
+  id: CliConnectorId,
+  apiBase: string,
+  key: string,
+  home = homedir()
+): CliConnection {
+  const url = mcpServerUrl(apiBase)
+  const legacyUrl = mcpLegacyServerUrl(apiBase)
+  try {
+    switch (id) {
+      case 'codex': {
+        const p = codexConfigPath(home)
+        if (!existsSync(p)) return 'disconnected'
+        const lines = readFileSync(p, 'utf8').split('\n')
+        // Same authoritative parser as the writer — an ambiguous/malformed or
+        // commented-out section can never read as connected.
+        const section = codexOwnedSection(lines)
+        if (!section) return 'disconnected'
+        return entryConnection(
+          codexOwnedEntry(lines.slice(section.start, section.end)),
+          url,
+          legacyUrl,
+          key
+        )
+      }
+      case 'openclaw': {
+        const p = join(home, '.openclaw', 'openclaw.json')
+        if (!existsSync(p)) return 'disconnected'
+        const json = JSON.parse(readFileSync(p, 'utf8')) as {
+          mcp?: { servers?: Record<string, unknown> }
+        }
+        const server = json.mcp?.servers?.[MCP_SERVER_KEY]
+        if (!server) return 'disconnected'
+        return entryConnection(jsonEntryScan(server), url, legacyUrl, key)
+      }
+      case 'hermes': {
+        const p = join(home, '.hermes', 'config.yaml')
+        if (!existsSync(p)) return 'disconnected'
+        // Only the owned mcp_servers → omi-memory block counts.
+        const owned = hermesOwnedBlock(readFileSync(p, 'utf8'))
+        return owned === null
+          ? 'disconnected'
+          : entryConnection(hermesOwnedEntry(owned.split('\n')), url, legacyUrl, key)
+      }
+    }
+  } catch {
+    return 'disconnected'
+  }
 }
 
 export function cliConnected(
@@ -84,40 +232,7 @@ export function cliConnected(
   key: string,
   home = homedir()
 ): boolean {
-  const url = mcpServerUrl(apiBase)
-  try {
-    switch (id) {
-      case 'codex': {
-        const p = codexConfigPath(home)
-        if (!existsSync(p)) return false
-        const lines = readFileSync(p, 'utf8').split('\n')
-        // Same authoritative parser as the writer — an ambiguous/malformed or
-        // commented-out section can never read as connected.
-        const section = codexOwnedSection(lines)
-        if (!section) return false
-        return textHasConnection(lines.slice(section.start, section.end).join('\n'), url, key)
-      }
-      case 'openclaw': {
-        const p = join(home, '.openclaw', 'openclaw.json')
-        if (!existsSync(p)) return false
-        const json = JSON.parse(readFileSync(p, 'utf8')) as {
-          mcp?: { servers?: Record<string, unknown> }
-        }
-        const server = json.mcp?.servers?.[MCP_SERVER_KEY]
-        if (!server) return false
-        return textHasConnection(JSON.stringify(server), url, key)
-      }
-      case 'hermes': {
-        const p = join(home, '.hermes', 'config.yaml')
-        if (!existsSync(p)) return false
-        // Only the owned mcp_servers → omi-memory block counts.
-        const owned = hermesOwnedBlock(readFileSync(p, 'utf8'))
-        return owned !== null && textHasConnection(owned, url, key)
-      }
-    }
-  } catch {
-    return false
-  }
+  return cliConnectionState(id, apiBase, key, home) === 'connected'
 }
 
 // --- setup cards (manual fallback) ------------------------------------------
@@ -202,9 +317,17 @@ export function codexConfigPath(home = homedir()): string {
 
 const CODEX_SECTION_HEADER = `[mcp_servers.${MCP_SERVER_KEY}]`
 const CODEX_KEY_RE = '(?:omi-memory|"omi-memory"|\'omi-memory\')'
+const CODEX_MCP_KEY_RE = '(?:mcp_servers|"mcp_servers"|\'mcp_servers\')'
 const CODEX_SECTION_RE = new RegExp(`^\\s*\\[mcp_servers\\.${CODEX_KEY_RE}\\]\\s*$`)
 const CODEX_SUBTABLE_RE = new RegExp(`^\\s*\\[mcp_servers\\.${CODEX_KEY_RE}\\.[^\\]]+\\]\\s*$`)
+const CODEX_PARENT_TABLE_RE = new RegExp(`^\\s*\\[${CODEX_MCP_KEY_RE}\\]\\s*(?:#.*)?$`)
+const CODEX_ANY_TABLE_RE = /^\s*\[/
 const CODEX_KV_RE = /^[A-Za-z0-9_.-]+\s*=/
+// `omi-memory = {...}` (or `omi-memory.x = ...`) inside a bare [mcp_servers]
+// table, and `mcp_servers.omi-memory(.x)? = ...` dotted keys in the document
+// prologue, define the same entry through forms we can't rewrite — ambiguous.
+const CODEX_INLINE_SERVER_RE = new RegExp(`^\\s*${CODEX_KEY_RE}(?:\\.|\\s*=)`)
+const CODEX_DOTTED_SERVER_RE = new RegExp(`^\\s*${CODEX_MCP_KEY_RE}\\.${CODEX_KEY_RE}(?:\\.|\\s*=)`)
 
 /**
  * The native Codex `[mcp_servers.omi-memory]` block: Streamable HTTP `url` plus
@@ -228,12 +351,28 @@ function codexBlock(url: string, key: string): string {
  *  nested subtables we can't preserve, or contains an unparseable body line. */
 function codexOwnedSection(lines: string[]): { start: number; end: number } | null {
   const starts: number[] = []
+  let inAnyTable = false
+  let inServersParent = false
   for (let i = 0; i < lines.length; i++) {
-    if (CODEX_SECTION_RE.test(lines[i])) starts.push(i)
-    else if (CODEX_SUBTABLE_RE.test(lines[i])) {
+    const l = lines[i]
+    if (CODEX_SECTION_RE.test(l)) {
+      starts.push(i)
+      inAnyTable = true
+      inServersParent = false
+    } else if (CODEX_SUBTABLE_RE.test(l)) {
       throw new Error(
         `${CODEX_SECTION_HEADER} has a nested subtable we can't preserve; refusing to edit`
       )
+    } else if (CODEX_PARENT_TABLE_RE.test(l)) {
+      inAnyTable = true
+      inServersParent = true
+    } else if (CODEX_ANY_TABLE_RE.test(l)) {
+      inAnyTable = true
+      inServersParent = false
+    } else if (inServersParent && CODEX_INLINE_SERVER_RE.test(l)) {
+      throw new Error(`${CODEX_SECTION_HEADER} is ambiguous; refusing to edit`)
+    } else if (!inAnyTable && CODEX_DOTTED_SERVER_RE.test(l)) {
+      throw new Error(`${CODEX_SECTION_HEADER} is ambiguous; refusing to edit`)
     }
   }
   if (starts.length === 0) return null
@@ -332,6 +471,23 @@ function hermesServersSection(lines: string[]): {
     const indented = l.startsWith(' ') || l.startsWith('\t')
     if (l.trim() !== '' && !indented && !l.trimStart().startsWith('#')) break
     endIdx++
+  }
+  // The block writer only emits the 2-space convention. A mapping written with
+  // a different child indent (4-space, tab) is refused rather than edited into
+  // a mixed-indentation invalid document.
+  let minIndent = Number.POSITIVE_INFINITY
+  for (let i = topIdx + 1; i < endIdx; i++) {
+    const l = lines[i]
+    if (l.trim() === '' || l.trimStart().startsWith('#')) continue
+    const spaces = l.match(/^ */)?.[0].length ?? 0
+    if (l[spaces] === '\t') {
+      minIndent = 0
+      break
+    }
+    minIndent = Math.min(minIndent, spaces)
+  }
+  if (minIndent !== Number.POSITIVE_INFINITY && minIndent !== 2) {
+    throw new Error('mcp_servers uses non-two-space indentation; refusing to edit')
   }
   return { topIdx, endIdx, inlineEmpty }
 }

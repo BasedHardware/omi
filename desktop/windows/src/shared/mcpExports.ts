@@ -19,12 +19,21 @@ export const MCP_KEY_NAME = 'Omi Desktop'
 /** Path of Omi's canonical hosted MCP endpoint (Streamable HTTP). */
 export const MCP_PATH = '/v1/mcp'
 
+/** Legacy SSE-alias path older installs may still point at — a migration
+ *  target ("needs update"), never the canonical endpoint. */
+export const MCP_LEGACY_SSE_PATH = '/v1/mcp/sse'
+
 /** Path of the hosted MCP key REST collection. */
 export const MCP_KEYS_PATH = '/v1/mcp/keys'
 
 /** Build the canonical hosted MCP URL an external tool connects to. */
 export function mcpServerUrl(apiBase: string): string {
   return `${apiBase.replace(/\/+$/, '')}${MCP_PATH}`
+}
+
+/** The legacy SSE-alias URL older installs may still carry. */
+export function mcpLegacyServerUrl(apiBase: string): string {
+  return `${apiBase.replace(/\/+$/, '')}${MCP_LEGACY_SSE_PATH}`
 }
 
 /**
@@ -92,6 +101,7 @@ export const MCP_CONFIG_CONNECTORS: readonly McpConfigConnector[] = [
 /** The per-connector runtime state the UI renders. */
 export type McpConnectorStatusKind =
   | 'connected' // MCP entry present in the tool's config
+  | 'needsUpdate' // entry present with the SAME key but the legacy /sse URL → "Update"
   | 'available' // tool present, not yet connected → offer "Connect"
   | 'requiresTool' // CLI/config not detected → "requires <tool>" (no shell attempt)
 
