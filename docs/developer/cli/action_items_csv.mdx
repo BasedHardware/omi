@@ -1,0 +1,56 @@
+---
+title: "Export action items to CSV"
+icon: "table"
+description: "Export action items to a CSV file for use in spreadsheets."
+---
+
+This recipe shows how to export your OMI action items to a CSV file using a standalone script.
+
+<CardGroup cols={2}>
+  <Card title="Export script" icon="code">
+    [`scripts/action_items_to_csv.py`](https://github.com/BasedHardware/omi/blob/main/scripts/action_items_to_csv.py) — A standalone script to export your action items to CSV.
+  </Card>
+  <Card title="Prerequisites" icon="check">
+    You must have the `omi` SDK installed. If not, run `pip install omi`.
+  </Card>
+</CardGroup>
+
+## How to use
+
+1. Set your OMI token as an environment variable:
+
+   ```bash
+   export OMI_TOKEN="your_token_here"
+   ```
+
+2. Run the script:
+
+   ```bash
+   python scripts/action_items_to_csv.py
+   ```
+
+3. A file named `action_items.csv` will be created in the current directory.
+
+## CSV format
+
+The CSV file includes the following columns:
+
+- `id`: The unique identifier for the action item.
+- `title`: The title of the action item.
+- `description`: The description of the action item.
+- `created_at`: The creation timestamp.
+- `status`: The current status (e.g., "open", "completed").
+
+## Notes
+
+- The script uses UTF-8 with BOM (`utf-8-sig`) to ensure compatibility with Excel and other spreadsheet applications.
+- Formulas are prevented by escaping fields appropriately using Python's `csv` module.
+
+## Example
+
+After running the script, you can open `action_items.csv` in your favorite spreadsheet application:
+
+```csv
+id,title,description,created_at,status
+1,"Buy groceries","Milk, eggs, bread","2023-10-05T12:00:00Z",open
+```
