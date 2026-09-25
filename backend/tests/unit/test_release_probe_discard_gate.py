@@ -220,7 +220,8 @@ class TestReleaseProbeSkipsTheDiscardVerdict:
         assert structured.title == 'Release probe reading'
 
     def test_regular_uid_still_receives_the_discard_verdict(self):
-        conversation = _conversation([_segment('okay sure', 0.0, 3.0)])
+        # Speech the deterministic rules leave to the model.
+        conversation = _conversation([_segment('coming over there in a second', 0.0, 3.0)])
         gate = MagicMock(return_value=True)
 
         with (

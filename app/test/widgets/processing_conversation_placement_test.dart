@@ -3,7 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/http/api/goals.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
-import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/conversations/widgets/empty_conversations.dart';
@@ -23,10 +22,7 @@ Future<void> pumpPage(WidgetTester tester, ConversationProvider provider) async 
   tester.view.devicePixelRatio = 1;
   addTearDown(tester.view.resetPhysicalSize);
   addTearDown(tester.view.resetDevicePixelRatio);
-  final screen = await buildTypedConversationScreen(
-    provider,
-    dailySummariesFetcher: ({int limit = 20, int offset = 0}) async => (items: <DailySummary>[], ok: true),
-  );
+  final screen = await buildTypedConversationScreen(provider);
   SharedPreferencesUtil().showGoalTrackerEnabled = true;
   final goals = GoalsProvider(
       goalsFetcher: () async => [
@@ -136,15 +132,16 @@ void main() {
     await tester.pumpWidget(const SizedBox.shrink());
   });
 
-  testWidgets('pending conversation does not appear in Daily Recaps', (tester) async {
+  testWidgets('pending conversation stays on the Conversations list, never a recaps mode', (tester) async {
     final provider = ConversationProvider(isSignedIn: () => false);
     addTearDown(provider.dispose);
     await pumpPage(tester, provider);
-    provider.showDailySummaries = true;
     provider.addProcessingConversation(OptimisticProcessingPlaceholder.conversation());
     await tester.pump();
-    expect(find.text('Daily Recaps'), findsOneWidget);
-    expect(find.byType(ProcessingConversationWidget), findsNothing);
+    // Daily Recaps is its own page now; this tab must never switch into a
+    // recap mode, and the pending capture stays in the Conversations list.
+    expect(find.text('Daily Recaps'), findsNothing);
+    expect(find.byType(ProcessingConversationWidget), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
   });
 }

@@ -630,7 +630,7 @@ struct MicrophonePermissionSection: View {
 
   private func tryDirectReset() {
     isResetting = true
-    resetButtonText = "Resetting & Restarting..."
+    resetButtonText = "Resetting & Restarting…"
 
     // Capture the main-actor `appState` reference while still on the main
     // actor; the reset runs off-main to avoid blocking the UI during the

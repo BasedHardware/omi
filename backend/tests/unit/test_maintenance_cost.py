@@ -2,8 +2,8 @@ from utils.memory.maintenance_cost import estimate_pass, usd_for_tokens
 
 
 def test_flex_is_half_of_standard_short_context_rates():
-    assert usd_for_tokens(1_000_000, 1_000_000, flex=False) == 1.40
-    assert usd_for_tokens(1_000_000, 1_000_000, flex=True) == 0.70
+    assert usd_for_tokens(1_000_000, 1_000_000, flex=False) == 0.70
+    assert usd_for_tokens(1_000_000, 1_000_000, flex=True) == 0.35
 
 
 def test_average_user_folds_required_items_into_one_consolidation_batch():

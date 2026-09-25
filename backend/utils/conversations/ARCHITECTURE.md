@@ -23,6 +23,24 @@ and background processing.
   structuring, summary, and memory work (#7690). That gate sits after the
   unpaid desktop on-device / `store_projection` path (#14513) so it cannot
   strip a local summary.
+- `processing_trigger.py` owns *why* a conversation is processed. Every caller
+  of `process_conversation` (and every finalization job) names a
+  `ProcessingTrigger`; its `PROCESSING_MODES` row fixes run-now, reprocess,
+  JIT first-open bypass, and relevance policy together. Callers never pass
+  mode flags directly.
+- `relevance.py` owns the one keep/discard decision. Triggers assess unless
+  they are themselves a user action (first open, reprocess, merge).
+  Assessment is tiered: user restore (`sync_relevance_user_kept`), then the
+  stdlib-only rules in `relevance_rules.py`, then the `conv_discard` model for
+  the ambiguous middle; a calendar overlap overrides any discard. The outcome
+  is stored as `relevance_decision` (server-only, outside the wire model) and
+  counted in `omi_conversation_relevance_decision_total`.
+  With `CONVERSATION_RELEVANCE_JEV_ENABLED` (default off) the model tier of a
+  transcript-only conversation asks the Jev decision model instead
+  (`relevance_jev.py`, gateway lane `omi:auto:jev-decisions`) and discards only
+  when P(discard) exceeds `JEV_DISCARD_THRESHOLD`; no answer keeps
+  (`decided_by=jev`, `reason=jev_error`). Photos and wake-word invocations keep
+  `conv_discard`. The record carries the probability under `jev`.
 - `owner_attribution.py` owns typed source-cluster evidence for memory writes.
   A passive memory may be attributed to the account owner only when the
   transcript identifies exactly one owner speaker cluster, keyed by
@@ -32,6 +50,12 @@ and background processing.
   transcripts without cluster IDs fail closed: a `TranscriptSegment` that
   only materialized `speaker_id` from the SPEAKER_00 default is not
   cluster evidence.
+  One flagged exception (`MEMORY_OWNER_JEV_FLIP_ENABLED`, default off,
+  `owner_jev.py`): a candidate capture resolved to a *third party* may be
+  re-attributed to the user when Jev's P(owner = user) is at least 0.9. It
+  never moves a candidate away from the user or out of `unknown`, and the
+  item's `promotion.source_attribution.override` records the probability and
+  the pipeline's original subject so the flip can be audited or reverted.
   `transcript_for_llm.memory_transcript_from_segments` is the memory-only
   renderer: when owner evidence is untrusted it suppresses owner names and
   prefixes an explicit UNTRUSTED header. Summary and action-item rendering keep
@@ -48,6 +72,10 @@ and background processing.
   After durable finalization, it links the shorter completed capture using
   `external_data.duplicate_capture_of` plus structured overlap evidence. The
   database transaction rechecks both captures; discard and content stay independent.
+- `shared_speech.py` confirms a window match from content (word-trigram containment of
+  the smaller transcript). Confirmed pairs join a capture group through
+  `database/capture_groups.py`, the sole writer of `capture_group`; processing writes
+  strip it. Grouping is presentation metadata; content and derived work stay per capture.
 - `meeting_treatment.py` owns the post-capture meeting policy. It uses durable
   conversation timestamps plus the union of transcribed-speech intervals, so
   dual microphone/system-audio transcripts cannot double-count speech.

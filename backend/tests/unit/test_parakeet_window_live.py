@@ -29,6 +29,10 @@ def runtime(monkeypatch):
     monkeypatch.setenv('PARAKEET_WINDOW_ALLOCATION_PERCENT', '100')
     monkeypatch.setenv('PARAKEET_WINDOW_MAX_SESSIONS', '1')
     monkeypatch.setenv('HOSTED_PARAKEET_API_URL', 'http://tdt.invalid')
+    # The scheduling tests below are written in 6 s steps (one 6 s send = one POST).
+    # Pin that unit here so they test mechanics, not the shipped default, which
+    # test_default_pace_waits_for_fifteen_seconds_of_speech pins on its own.
+    monkeypatch.setenv('PARAKEET_WINDOW_PACE_SECONDS', '6')
     monkeypatch.setenv('SONIOX_API_KEY', 'test')
     monkeypatch.setenv('MODULATE_API_KEY', 'test')
     monkeypatch.setenv('HOSTED_SPEAKER_EMBEDDING_API_URL', 'http://embedding.invalid')
@@ -1069,14 +1073,16 @@ def test_default_buffer_cap_fits_documented_memory():
 
 
 def test_pace_and_max_context_env_clamps(monkeypatch):
-    from utils.stt.window_anchor import read_max_context_seconds, read_pace_seconds
+    from utils.stt.window_anchor import DEFAULT_PACE_SECONDS, read_max_context_seconds, read_pace_seconds
 
     monkeypatch.setenv('PARAKEET_WINDOW_PACE_SECONDS', '0')
     assert read_pace_seconds() == 1.0
     monkeypatch.setenv('PARAKEET_WINDOW_PACE_SECONDS', '99')
     assert read_pace_seconds() == 15.0
     monkeypatch.setenv('PARAKEET_WINDOW_PACE_SECONDS', 'nope')
-    assert read_pace_seconds() == 6.0
+    # Pace decides window size, and window size is what drives accuracy on this leg,
+    # so pin the fallback to the declared default rather than a literal.
+    assert read_pace_seconds() == DEFAULT_PACE_SECONDS == 15.0
     monkeypatch.setenv('PARAKEET_WINDOW_MAX_CONTEXT_SECONDS', '1')
     assert read_max_context_seconds() == 6.0
     monkeypatch.setenv('PARAKEET_WINDOW_MAX_CONTEXT_SECONDS', '100')
@@ -1393,6 +1399,30 @@ async def test_live_posts_are_paced_and_single_flight(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_default_pace_waits_for_fifteen_seconds_of_speech(monkeypatch):
+    # Window size drives accuracy on this leg, so continuous speech must not be posted
+    # in small slices: at the default pace, 6 s does not post and 15 s does.
+    from utils.stt.window_anchor import DEFAULT_PACE_SECONDS
+
+    monkeypatch.delenv('PARAKEET_WINDOW_PACE_SECONDS')
+    monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: _REAL_SLEEP(0))
+    client = Client(data={'segments': [{'text': 'Go on', 'start': 0.0, 'end': 5.0}]})
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    sock = window.connect_window(lambda _: None, 16000)
+    assert sock._pace_seconds == DEFAULT_PACE_SECONDS == 15.0
+    sock.mark_speech()
+    sock.send(b'\x01\x00' * 16000 * 6)
+    for _ in range(50):
+        await _REAL_SLEEP(0)
+    assert client.requests == []
+    sock.mark_speech()
+    sock.send(b'\x01\x00' * 16000 * 9)
+    await _wait_requests(client, 1)
+    sock.finish()
+    await asyncio.gather(sock._pump_task, return_exceptions=True)
+
+
+@pytest.mark.asyncio
 async def test_nonspeech_audio_is_never_posted(monkeypatch):
     client = Client()
     monkeypatch.setattr(window, 'get_stt_client', lambda: client)
@@ -1445,7 +1475,11 @@ async def test_cap_cut_next_post_starts_at_emitted_sentence_end(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_empty_at_cap_slides_pace_and_later_post_recovers(monkeypatch):
+@pytest.mark.parametrize('pace', ['6', '15'])
+async def test_empty_at_cap_slides_six_seconds_and_later_post_recovers(monkeypatch, pace):
+    # The slide is fixed, not the pace: at a 15 s pace, sliding by pace would
+    # discard 15 s of speech the model returned nothing for.
+    monkeypatch.setenv('PARAKEET_WINDOW_PACE_SECONDS', pace)
     posted = []
     monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: _REAL_SLEEP(0))
     empty, later = b'\x01\x00' * 16000 * 24, b'\x02\x00' * 16000 * 6
@@ -1527,5 +1561,90 @@ async def test_idle_remainder_posts_without_close(monkeypatch):
         sock._wake.set()
         await _REAL_SLEEP(0)
     assert len(client.requests) == n_posts
+    sock.finish()
+    await asyncio.gather(sock._pump_task, return_exceptions=True)
+
+
+def _head_socket(monkeypatch, payloads):
+    monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: _REAL_SLEEP(0))
+    client = SeqClient(payloads)
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    sock = window.connect_window(lambda _: None, 16000)
+    return sock, client
+
+
+def _job(sock, seconds: float) -> window._WindowJob:
+    pcm = b'\x01\x00' * int(16000 * seconds)
+    return window._WindowJob(pcm, 0.0, seconds, 0, len(pcm), False, False)
+
+
+@pytest.mark.asyncio
+async def test_skipped_leading_speech_is_reposted_and_prepended(monkeypatch):
+    later = window.RawSegment('Later sentence.', 15.1, 23.8)
+    sock, client = _head_socket(monkeypatch, [{'segments': [{'text': 'Skipped head.', 'start': 1.5, 'end': 14.8}]}])
+    job = _job(sock, 24.0)
+    sock._speech_spans.append((0, len(job.pcm)))
+    before = window.WINDOW_HEAD_RECOVERIES.labels(outcome='recovered')._value.get()
+    out = await sock._recover_skipped_head(job, [later])
+    assert [s.text for s in out] == ['Skipped head.', 'Later sentence.']
+    body = _posted_pcm(client.requests[0][1])
+    assert len(body) == sock._to_bytes(15.1)
+    assert window.WINDOW_HEAD_RECOVERIES.labels(outcome='recovered')._value.get() == before + 1
+    sock.finish()
+    await asyncio.gather(sock._pump_task, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_normal_lead_in_is_not_reposted(monkeypatch):
+    sock, client = _head_socket(monkeypatch, [{'text': 'unused'}])
+    job = _job(sock, 24.0)
+    sock._speech_spans.append((0, len(job.pcm)))
+    first = window.RawSegment('Starts on time.', 1.2, 9.0)
+    assert await sock._recover_skipped_head(job, [first]) == [first]
+    assert client.requests == []
+    sock.finish()
+    await asyncio.gather(sock._pump_task, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_late_first_segment_after_nonspeech_is_not_reposted(monkeypatch):
+    sock, client = _head_socket(monkeypatch, [{'text': 'unused'}])
+    job = _job(sock, 24.0)
+    # The VAD saw only 1 s of speech before the first segment: that gap is a pause.
+    sock._speech_spans.append((sock._to_bytes(9.0), sock._to_bytes(10.0)))
+    sock._speech_spans.append((sock._to_bytes(12.0), len(job.pcm)))
+    first = window.RawSegment('After a pause.', 12.1, 20.0)
+    assert await sock._recover_skipped_head(job, [first]) == [first]
+    assert client.requests == []
+    sock.finish()
+    await asyncio.gather(sock._pump_task, return_exceptions=True)
+
+
+def test_decoder_loops_collapse_and_ordinary_repetition_survives():
+    from utils.stt.window_anchor import collapse_decoder_loops
+
+    loop = 'roles have increased in a little bit of a little bit of a little bit of a little bit of a ability to retain'
+    assert collapse_decoder_loops(loop) == ('roles have increased in a little bit of a ability to retain', 1)
+    for speech in (
+        'no no no I said',
+        'the the market',
+        'yeah yeah yeah yeah',
+        "I think I think that's right",
+        'we did forty million of incremental billings',
+    ):
+        assert collapse_decoder_loops(speech) == (speech, 0)
+
+
+@pytest.mark.asyncio
+async def test_window_segments_have_decoder_loops_collapsed(monkeypatch):
+    monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: _REAL_SLEEP(0))
+    looped = 'It went up a bit more a bit more a bit more a bit more than planned.'
+    client = SeqClient([{'segments': [{'text': looped, 'start': 0.2, 'end': 5.0}]}])
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    sock = window.connect_window(lambda _: None, 16000)
+    before = window.WINDOW_DECODER_LOOPS._value.get()
+    out = await sock._post_and_parse(b'\x01\x00' * 16000 * 6, 6.0)
+    assert [s.text for s in out] == ['It went up a bit more than planned.']
+    assert window.WINDOW_DECODER_LOOPS._value.get() == before + 1
     sock.finish()
     await asyncio.gather(sock._pump_task, return_exceptions=True)

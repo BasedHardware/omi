@@ -12,6 +12,7 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/env/physical_qualification.dart';
 import 'package:omi/utils/analytics/adapters/posthog_adapter.dart';
 import 'package:omi/utils/analytics/analytics_adapter.dart';
 import 'package:omi/utils/analytics/intercom.dart';
@@ -145,6 +146,7 @@ class AnalyticsManager {
   }
 
   static Future<void> _settleIdentity() async {
+    if (PhysicalQualification.enabled) return;
     final adapter = _adapter;
     if (adapter == null || !adapter.isInitialized || !_trackingEnabled) return;
     if (adapter is AnalyticsIdentityAdapter && !_identityKnown) return;
@@ -181,6 +183,7 @@ class AnalyticsManager {
   }
 
   Future<void> refreshExperiments() async {
+    if (PhysicalQualification.enabled) return;
     if (!_analyticsReady) await init();
     if (_settledDistinctId == null) await _settleIdentity();
     await _experiments?.refresh();
@@ -221,6 +224,7 @@ class AnalyticsManager {
   }
 
   static Future<void> init({Duration timeout = _initTimeout}) async {
+    if (PhysicalQualification.enabled) return;
     _initStarted = true;
     if (_adapter == null && Env.posthogApiKey != null) {
       _adapter = PostHogAnalyticsAdapter(apiKey: Env.posthogApiKey!);

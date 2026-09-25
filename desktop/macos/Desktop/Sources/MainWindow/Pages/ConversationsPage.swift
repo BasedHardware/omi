@@ -42,6 +42,8 @@ struct ConversationsPage: View {
   @Binding var selectedConversation: ServerConversation?
   var brainDestination: MemoryHubDestination? = nil
   var onSelectBrainDestination: ((MemoryHubDestination) -> Void)? = nil
+  /// Where the open detail was opened from. Back returns there and names it.
+  var detailOrigin: MemoryHubDestination? = nil
   var initialCaptureMomentTimestamp: TimeInterval? = nil
   var onCaptureFocusResolved: ((Bool) -> Void)? = nil
   var onDiscussInChat: ((ServerConversation) -> Void)? = nil
@@ -68,6 +70,7 @@ struct ConversationsPage: View {
   @State private var isSearching: Bool = false
   @State private var searchError: String? = nil
   @StateObject private var searchCoordinator = DebouncedSearchCoordinator()
+  @StateObject private var rowPrompts = ConversationRowPrompts()
 
   // Date picker state
   @State private var showDatePicker: Bool = false
@@ -113,6 +116,34 @@ struct ConversationsPage: View {
     pageSurface
       .frame(maxWidth: .infinity, maxHeight: .infinity)
       .glassContent()
+      .conversationRowPrompts(rowPrompts, appState: appState)
+      .shellConfirmation(
+        isPresented: $showMergeConfirmation,
+        title: "Merge \(mergeableSelectedIds.count) Conversations?",
+        message: "They become one conversation and the originals are deleted. This can't be undone.",
+        confirmTitle: "Merge"
+      ) {
+        Task { await performMerge() }
+      }
+      // Esc on the list peels its own layers — selection mode, then the search — before the shell
+      // gets it. The open detail handles its own Esc.
+      .onEscapeKey(priority: .content) {
+        guard selectedConversation == nil else { return false }
+        if isMultiSelectMode {
+          exitMultiSelect()
+          return true
+        }
+        if !searchQuery.isEmpty {
+          searchQuery = ""
+          return true
+        }
+        return false
+      }
+      .onChange(of: mergeError) { _, error in
+        guard let error else { return }
+        OmiToastCenter.shared.notice(error, systemImage: "exclamationmark.triangle")
+        mergeError = nil
+      }
       .onAppear {
         // Load conversations when view appears
         if appState.conversations.isEmpty {
@@ -196,6 +227,8 @@ struct ConversationsPage: View {
       BrainSectionPageLayout(
         selected: brainDestination,
         onSelect: onSelectBrainDestination,
+        showsSearch: selectedConversation == nil,
+        onReselect: returnToList,
         search: {
           QuerySearchBar(
             text: $searchQuery,
@@ -204,7 +237,6 @@ struct ConversationsPage: View {
             searchSurface: .conversations
           )
           .onChange(of: searchQuery) { _, newValue in
-            if !newValue.isEmpty { selectedConversation = nil }
             submitSearch(newValue)
           }
         },
@@ -221,7 +253,8 @@ struct ConversationsPage: View {
       // Detail view for selected conversation
       ConversationDetailView(
         conversation: selected,
-        onBack: { selectedConversation = nil },
+        onBack: closeDetail,
+        backTitle: detailBackTitle,
         folders: appState.folders,
         onMoveToFolder: { conversationId, folderId in
           await appState.moveConversationToFolder(conversationId, folderId: folderId)
@@ -243,11 +276,42 @@ struct ConversationsPage: View {
         initialCaptureMomentTimestamp: initialCaptureMomentTimestamp,
         onCaptureFocusResolved: onCaptureFocusResolved,
         onDiscussInChat: selected.source == .omi ? { onDiscussInChat?(selected) } : nil,
-        onOpenLinkedTask: onOpenLinkedTask
+        onOpenLinkedTask: onOpenLinkedTask,
+        onOpenConversation: { selectedConversation = $0 },
+        onCaptureGroupChanged: {
+          // The list refresh is AppState's; an open search holds its own results.
+          if !searchQuery.isEmpty { performSearch(query: searchQuery) }
+        }
       )
     } else {
       // Main view with recording header and conversation list
       mainConversationsView
+    }
+  }
+
+  private var returnsToOrigin: Bool {
+    guard let detailOrigin else { return false }
+    return detailOrigin != .conversations && onSelectBrainDestination != nil
+  }
+
+  private var detailBackTitle: String {
+    returnsToOrigin ? (detailOrigin?.title ?? "Conversations") : "Conversations"
+  }
+
+  /// Back from the detail: to the page it was opened from, else to the list.
+  private func closeDetail() {
+    selectedConversation = nil
+    if returnsToOrigin, let detailOrigin {
+      onSelectBrainDestination?(detailOrigin)
+    }
+  }
+
+  /// Re-clicking the Conversations chip: close any open detail, then clear the search.
+  private func returnToList() {
+    if selectedConversation != nil {
+      selectedConversation = nil
+    } else if !searchQuery.isEmpty {
+      searchQuery = ""
     }
   }
 
@@ -305,6 +369,11 @@ struct ConversationsPage: View {
       if !isLive {
         isLiveTranscriptExpanded = false
       }
+    }
+    // A row that becomes hidden behind its event's row must not stay selected for
+    // a merge or delete the user can no longer see.
+    .onChange(of: collapsedAwayConversationIds) { _, hidden in
+      selectedConversationIds.subtract(hidden)
     }
   }
 
@@ -372,14 +441,19 @@ struct ConversationsPage: View {
       GeometryReader { geo in
         ScrollView {
           content
+            // Clear the floating load-more / merge bar so it never covers the last row.
+            .padding(.bottom, floatingBarClearance)
             .frame(maxWidth: .infinity, minHeight: geo.size.height, alignment: .top)
-        }
-        .refreshable {
-          await appState.refreshConversations()
         }
         .glassScrollFade()
       }
     }
+  }
+
+  private var floatingBarClearance: CGFloat {
+    let showsLoadMore = searchQuery.isEmpty && appState.canLoadMoreConversations
+    let showsMergeBar = isMultiSelectMode && !selectedConversationIds.isEmpty
+    return showsLoadMore || showsMergeBar ? 34 + OmiSpacing.lg * 2 : 0
   }
 
   /// Bottom-pinned floating controls that overlay the scroll (they must not
@@ -414,10 +488,22 @@ struct ConversationsPage: View {
     }
   }
 
+  /// Loaded rows hidden behind their capture group's representative.
+  private var collapsedAwayConversationIds: Set<String> {
+    let loaded = searchQuery.isEmpty ? appState.conversations : visibleSearchResults
+    return Set(loaded.map(\.id)).subtracting(displayedConversationIds)
+  }
+
+  /// The selection a merge may act on: only rows the user can see. A member hidden behind its
+  /// event's row never reaches a merge, even if it was selected before its group collapsed.
+  private var mergeableSelectedIds: [String] {
+    displayedConversationIds.filter { selectedConversationIds.contains($0) }
+  }
+
   /// IDs of the conversations currently shown to the user — search results while
   /// a search is active, otherwise the full list. Used to scope "Select All".
   private var displayedConversationIds: [String] {
-    searchQuery.isEmpty ? appState.conversations.map { $0.id } : visibleSearchResults.map { $0.id }
+    CaptureGroupPresentation.collapse(searchQuery.isEmpty ? appState.conversations : visibleSearchResults).map(\.id)
   }
 
   /// Search is text-only at the API boundary. Apply the same local refinements
@@ -437,12 +523,10 @@ struct ConversationsPage: View {
   /// because `isMultiSelectMode` was never set true anywhere.
   private var selectModeButton: some View {
     Button {
-      OmiMotion.withGated(.easeInOut(duration: 0.2)) {
-        isMultiSelectMode.toggle()
-        if !isMultiSelectMode {
-          selectedConversationIds.removeAll()
-          showMergeConfirmation = false
-        }
+      if isMultiSelectMode {
+        exitMultiSelect()
+      } else {
+        OmiMotion.withGated(.easeInOut(duration: 0.2)) { isMultiSelectMode = true }
       }
     } label: {
       HStack(spacing: OmiSpacing.xs) {
@@ -457,8 +541,16 @@ struct ConversationsPage: View {
       .glassChip(isActive: isMultiSelectMode)
     }
     .buttonStyle(.plain)
-    .help(isMultiSelectMode ? "Exit selection" : "Select conversations to merge")
+    .help(isMultiSelectMode ? "Exit selection (Esc)" : "Select conversations to merge")
     .accessibilityIdentifier("conversations-select-toggle")
+  }
+
+  private func exitMultiSelect() {
+    OmiMotion.withGated(.easeInOut(duration: 0.2)) {
+      isMultiSelectMode = false
+      selectedConversationIds.removeAll()
+      showMergeConfirmation = false
+    }
   }
 
   // MARK: - Conversation List Section
@@ -537,7 +629,7 @@ struct ConversationsPage: View {
       if isSearching {
         VStack(spacing: OmiSpacing.md) {
           ProgressView()
-          Text("Searching...")
+          Text("Searching…")
             .scaledFont(size: OmiType.body)
             .foregroundColor(Ink.secondary)
         }
@@ -583,7 +675,7 @@ struct ConversationsPage: View {
   @ViewBuilder
   private var searchResultsContent: some View {
     LazyVStack(spacing: OmiSpacing.sm) {
-      ForEach(visibleSearchResults) { conversation in
+      ForEach(CaptureGroupPresentation.collapse(visibleSearchResults)) { conversation in
         ConversationRowView(
           conversation: conversation,
           onTap: {
@@ -600,6 +692,7 @@ struct ConversationsPage: View {
             await appState.moveConversationToFolder(conversationId, folderId: folderId)
           },
           isCompactView: isCompactView,
+          showsFullTimestamp: true,
           isMultiSelectMode: isMultiSelectMode,
           isSelected: selectedConversationIds.contains(conversation.id),
           onToggleSelection: {
@@ -779,14 +872,14 @@ struct ConversationsPage: View {
   }
 
   private var conversationMoreMenu: some View {
-    Menu {
+    PageMoreMenu(help: "More conversation actions", accessibilityIdentifier: "conversations-more-actions") {
       if !appState.conversations.isEmpty {
         Button {
           OmiMotion.withGated(.easeInOut(duration: 0.2)) {
             isMultiSelectMode = true
           }
         } label: {
-          Label("Select conversations…", systemImage: "checkmark.circle")
+          Label("Select Conversations", systemImage: "checkmark.circle")
         }
       }
 
@@ -794,18 +887,10 @@ struct ConversationsPage: View {
         Button {
           appState.startTranscription()
         } label: {
-          Label("Start recording", systemImage: "mic.fill")
+          Label("Start Recording", systemImage: "mic.fill")
         }
       }
-    } label: {
-      PageQueryActionLabel(icon: "ellipsis", title: "More")
     }
-    .menuStyle(.borderlessButton)
-    .menuIndicator(.hidden)
-    .fixedSize()
-    .help("More conversation actions")
-    .accessibilityLabel("More conversation actions")
-    .accessibilityIdentifier("conversations-more-actions")
   }
 
   private var activeConversationFilters: [PageActiveFilter] {
@@ -991,39 +1076,16 @@ struct ConversationsPage: View {
     .glassFloatingBar()
     .padding(.horizontal, OmiSpacing.lg)
     .padding(.bottom, OmiSpacing.lg)
-    .alert("Merge Conversations", isPresented: $showMergeConfirmation) {
-      Button("Cancel", role: .cancel) {}
-      Button("Merge") {
-        Task {
-          await performMerge()
-        }
-      }
-    } message: {
-      Text(
-        "Are you sure you want to merge \(selectedConversationIds.count) conversations? This will combine them into a single conversation and delete the originals. This action cannot be undone."
-      )
-    }
-    .alert(
-      "Merge Failed",
-      isPresented: .init(
-        get: { mergeError != nil },
-        set: { if !$0 { mergeError = nil } }
-      )
-    ) {
-      Button("OK", role: .cancel) {}
-    } message: {
-      Text(mergeError ?? "Failed to merge conversations. Please try again.")
-    }
   }
 
   private func performMerge() async {
-    guard selectedConversationIds.count >= 2 else { return }
+    let ids = mergeableSelectedIds
+    guard ids.count >= 2 else { return }
 
     isMerging = true
     mergeError = nil
 
     do {
-      let ids = Array(selectedConversationIds)
       let response = try await APIClient.shared.mergeConversations(ids: ids)
 
       log("Merge completed: \(response.message)")

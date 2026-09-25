@@ -261,11 +261,13 @@ class GeneratedEvent {
 class GeneratedSection {
   final String bodyMarkdown;
   final String heading;
+  final String kind;
   final List<String>? sourceSegmentIds;
 
   const GeneratedSection({
     required this.bodyMarkdown,
     required this.heading,
+    this.kind = "main",
     this.sourceSegmentIds,
   });
 
@@ -273,6 +275,7 @@ class GeneratedSection {
     return GeneratedSection(
       bodyMarkdown: _required(_readFieldValue<String>(_readField(json, const ["body_markdown"]), "body_markdown", _readString, requiredField: true, nullable: false), "body_markdown"),
       heading: _required(_readFieldValue<String>(_readField(json, const ["heading"]), "heading", _readString, requiredField: true, nullable: false), "heading"),
+      kind: _required(_readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: false, nullable: false, defaultValue: "main"), "kind"),
       sourceSegmentIds: _readFieldValue<List<String>>(_readField(json, const ["source_segment_ids"]), "source_segment_ids", _readStringList, requiredField: false, nullable: true),
     );
   }
@@ -281,7 +284,72 @@ class GeneratedSection {
     return {
       'body_markdown': bodyMarkdown,
       'heading': heading,
+      'kind': kind,
       'source_segment_ids': sourceSegmentIds,
+    };
+  }
+}
+
+class GeneratedParticipant {
+  final String? email;
+  final bool isAiAgent;
+  final String? name;
+  final String? organization;
+  final String? role;
+  final String source;
+
+  const GeneratedParticipant({
+    this.email,
+    this.isAiAgent = false,
+    this.name,
+    this.organization,
+    this.role,
+    required this.source,
+  });
+
+  factory GeneratedParticipant.fromJson(Map<String, dynamic> json) {
+    return GeneratedParticipant(
+      email: _readFieldValue<String>(_readField(json, const ["email"]), "email", _readString, requiredField: false, nullable: true),
+      isAiAgent: _required(_readFieldValue<bool>(_readField(json, const ["is_ai_agent"]), "is_ai_agent", _readBool, requiredField: false, nullable: false, defaultValue: false), "is_ai_agent"),
+      name: _readFieldValue<String>(_readField(json, const ["name"]), "name", _readString, requiredField: false, nullable: true),
+      organization: _readFieldValue<String>(_readField(json, const ["organization"]), "organization", _readString, requiredField: false, nullable: true),
+      role: _readFieldValue<String>(_readField(json, const ["role"]), "role", _readString, requiredField: false, nullable: true),
+      source: _required(_readFieldValue<String>(_readField(json, const ["source"]), "source", _readString, requiredField: true, nullable: false), "source"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'email': email,
+      'is_ai_agent': isAiAgent,
+      'name': name,
+      'organization': organization,
+      'role': role,
+      'source': source,
+    };
+  }
+}
+
+class GeneratedInsight {
+  final String kind;
+  final String text;
+
+  const GeneratedInsight({
+    required this.kind,
+    required this.text,
+  });
+
+  factory GeneratedInsight.fromJson(Map<String, dynamic> json) {
+    return GeneratedInsight(
+      kind: _required(_readFieldValue<String>(_readField(json, const ["kind"]), "kind", _readString, requiredField: true, nullable: false), "kind"),
+      text: _required(_readFieldValue<String>(_readField(json, const ["text"]), "text", _readString, requiredField: true, nullable: false), "text"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'kind': kind,
+      'text': text,
     };
   }
 }
@@ -291,7 +359,10 @@ class GeneratedStructured {
   final String category;
   final String emoji;
   final List<GeneratedEvent>? events;
+  final List<GeneratedInsight>? insights;
+  final String? meetingType;
   final String overview;
+  final List<GeneratedParticipant>? participants;
   final List<GeneratedSection>? sections;
   final String title;
 
@@ -300,7 +371,10 @@ class GeneratedStructured {
     this.category = "other",
     this.emoji = "\ud83e\udde0",
     this.events,
+    this.insights,
+    this.meetingType,
     this.overview = "",
+    this.participants,
     this.sections,
     this.title = "",
   });
@@ -311,7 +385,10 @@ class GeneratedStructured {
       category: _required(_readFieldValue<String>(_readField(json, const ["category"]), "category", _readString, requiredField: false, nullable: false, defaultValue: "other"), "category"),
       emoji: _required(_readFieldValue<String>(_readField(json, const ["emoji"]), "emoji", _readString, requiredField: false, nullable: false, defaultValue: "\ud83e\udde0"), "emoji"),
       events: _readFieldValue<List<GeneratedEvent>>(_readField(json, const ["events"]), "events", (value) => _readObjectList(value, GeneratedEvent.fromJson), requiredField: false, nullable: true),
+      insights: _readFieldValue<List<GeneratedInsight>>(_readField(json, const ["insights"]), "insights", (value) => _readObjectList(value, GeneratedInsight.fromJson), requiredField: false, nullable: true),
+      meetingType: _readFieldValue<String>(_readField(json, const ["meeting_type"]), "meeting_type", _readString, requiredField: false, nullable: true),
       overview: _required(_readFieldValue<String>(_readField(json, const ["overview"]), "overview", _readString, requiredField: false, nullable: false, defaultValue: ""), "overview"),
+      participants: _readFieldValue<List<GeneratedParticipant>>(_readField(json, const ["participants"]), "participants", (value) => _readObjectList(value, GeneratedParticipant.fromJson), requiredField: false, nullable: true),
       sections: _readFieldValue<List<GeneratedSection>>(_readField(json, const ["sections"]), "sections", (value) => _readObjectList(value, GeneratedSection.fromJson), requiredField: false, nullable: true),
       title: _required(_readFieldValue<String>(_readField(json, const ["title"]), "title", _readString, requiredField: false, nullable: false, defaultValue: ""), "title"),
     );
@@ -323,7 +400,10 @@ class GeneratedStructured {
       'category': category,
       'emoji': emoji,
       'events': events?.map((value) => value.toJson()).toList(),
+      'insights': insights?.map((value) => value.toJson()).toList(),
+      'meeting_type': meetingType,
       'overview': overview,
+      'participants': participants?.map((value) => value.toJson()).toList(),
       'sections': sections?.map((value) => value.toJson()).toList(),
       'title': title,
     };
@@ -674,12 +754,77 @@ class GeneratedTranscriptMatchSnippet {
   }
 }
 
+class GeneratedCaptureGroupMember {
+  final DateTime? finishedAt;
+  final String id;
+  final String? source;
+  final DateTime? startedAt;
+
+  const GeneratedCaptureGroupMember({
+    this.finishedAt,
+    required this.id,
+    this.source,
+    this.startedAt,
+  });
+
+  factory GeneratedCaptureGroupMember.fromJson(Map<String, dynamic> json) {
+    return GeneratedCaptureGroupMember(
+      finishedAt: _readFieldValue<DateTime>(_readField(json, const ["finished_at"]), "finished_at", _readDateTime, requiredField: false, nullable: true),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      source: _readFieldValue<String>(_readField(json, const ["source"]), "source", _readString, requiredField: false, nullable: true),
+      startedAt: _readFieldValue<DateTime>(_readField(json, const ["started_at"]), "started_at", _readDateTime, requiredField: false, nullable: true),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'finished_at': finishedAt?.toUtc().toIso8601String(),
+      'id': id,
+      'source': source,
+      'started_at': startedAt?.toUtc().toIso8601String(),
+    };
+  }
+}
+
+class GeneratedCaptureGroup {
+  final String id;
+  final List<GeneratedCaptureGroupMember> members;
+  final String primaryId;
+  final int revision;
+
+  const GeneratedCaptureGroup({
+    required this.id,
+    this.members = const [],
+    required this.primaryId,
+    this.revision = 1,
+  });
+
+  factory GeneratedCaptureGroup.fromJson(Map<String, dynamic> json) {
+    return GeneratedCaptureGroup(
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      members: _required(_readFieldValue<List<GeneratedCaptureGroupMember>>(_readField(json, const ["members"]), "members", (value) => _readObjectList(value, GeneratedCaptureGroupMember.fromJson), requiredField: false, nullable: false, defaultValue: const []), "members"),
+      primaryId: _required(_readFieldValue<String>(_readField(json, const ["primary_id"]), "primary_id", _readString, requiredField: true, nullable: false), "primary_id"),
+      revision: _required(_readFieldValue<int>(_readField(json, const ["revision"]), "revision", _readInt, requiredField: false, nullable: false, defaultValue: 1), "revision"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'members': members.map((value) => value.toJson()).toList(),
+      'primary_id': primaryId,
+      'revision': revision,
+    };
+  }
+}
+
 class GeneratedConversation {
   final String? appId;
   final List<GeneratedAppResult> appsResults;
   final List<GeneratedAudioFile> audioFiles;
   final GeneratedCalendarEventLink? calendarEvent;
   final String? callId;
+  final GeneratedCaptureGroup? captureGroup;
   final String? clientDeviceId;
   final String? clientPlatform;
   final GeneratedClientProcessing? clientProcessing;
@@ -727,6 +872,7 @@ class GeneratedConversation {
     this.audioFiles = const [],
     this.calendarEvent,
     this.callId,
+    this.captureGroup,
     this.clientDeviceId,
     this.clientPlatform,
     this.clientProcessing,
@@ -776,6 +922,7 @@ class GeneratedConversation {
       audioFiles: _required(_readFieldValue<List<GeneratedAudioFile>>(_readField(json, const ["audio_files"]), "audio_files", (value) => _readObjectList(value, GeneratedAudioFile.fromJson), requiredField: false, nullable: false, defaultValue: const []), "audio_files"),
       calendarEvent: _readFieldValue<GeneratedCalendarEventLink>(_readField(json, const ["calendar_event"]), "calendar_event", (value) => _readObject(value, GeneratedCalendarEventLink.fromJson), requiredField: false, nullable: true),
       callId: _readFieldValue<String>(_readField(json, const ["call_id"]), "call_id", _readString, requiredField: false, nullable: true),
+      captureGroup: _readFieldValue<GeneratedCaptureGroup>(_readField(json, const ["capture_group"]), "capture_group", (value) => _readObject(value, GeneratedCaptureGroup.fromJson), requiredField: false, nullable: true),
       clientDeviceId: _readFieldValue<String>(_readField(json, const ["client_device_id"]), "client_device_id", _readString, requiredField: false, nullable: true),
       clientPlatform: _readFieldValue<String>(_readField(json, const ["client_platform"]), "client_platform", _readString, requiredField: false, nullable: true),
       clientProcessing: _readFieldValue<GeneratedClientProcessing>(_readField(json, const ["client_processing"]), "client_processing", (value) => _readObject(value, GeneratedClientProcessing.fromJson), requiredField: false, nullable: true),
@@ -826,6 +973,7 @@ class GeneratedConversation {
       'audio_files': audioFiles.map((value) => value.toJson()).toList(),
       'calendar_event': calendarEvent?.toJson(),
       'call_id': callId,
+      'capture_group': captureGroup?.toJson(),
       'client_device_id': clientDeviceId,
       'client_platform': clientPlatform,
       'client_processing': clientProcessing?.toJson(),
@@ -1064,6 +1212,7 @@ class GeneratedConversationSearchItem {
   final List<GeneratedAudioFile> audioFiles;
   final GeneratedCalendarEventLink? calendarEvent;
   final String? callId;
+  final GeneratedCaptureGroup? captureGroup;
   final String? clientDeviceId;
   final String? clientPlatform;
   final GeneratedClientProcessing? clientProcessing;
@@ -1112,6 +1261,7 @@ class GeneratedConversationSearchItem {
     this.audioFiles = const [],
     this.calendarEvent,
     this.callId,
+    this.captureGroup,
     this.clientDeviceId,
     this.clientPlatform,
     this.clientProcessing,
@@ -1162,6 +1312,7 @@ class GeneratedConversationSearchItem {
       audioFiles: _required(_readFieldValue<List<GeneratedAudioFile>>(_readField(json, const ["audio_files"]), "audio_files", (value) => _readObjectList(value, GeneratedAudioFile.fromJson), requiredField: false, nullable: false, defaultValue: const []), "audio_files"),
       calendarEvent: _readFieldValue<GeneratedCalendarEventLink>(_readField(json, const ["calendar_event"]), "calendar_event", (value) => _readObject(value, GeneratedCalendarEventLink.fromJson), requiredField: false, nullable: true),
       callId: _readFieldValue<String>(_readField(json, const ["call_id"]), "call_id", _readString, requiredField: false, nullable: true),
+      captureGroup: _readFieldValue<GeneratedCaptureGroup>(_readField(json, const ["capture_group"]), "capture_group", (value) => _readObject(value, GeneratedCaptureGroup.fromJson), requiredField: false, nullable: true),
       clientDeviceId: _readFieldValue<String>(_readField(json, const ["client_device_id"]), "client_device_id", _readString, requiredField: false, nullable: true),
       clientPlatform: _readFieldValue<String>(_readField(json, const ["client_platform"]), "client_platform", _readString, requiredField: false, nullable: true),
       clientProcessing: _readFieldValue<GeneratedClientProcessing>(_readField(json, const ["client_processing"]), "client_processing", (value) => _readObject(value, GeneratedClientProcessing.fromJson), requiredField: false, nullable: true),
@@ -1213,6 +1364,7 @@ class GeneratedConversationSearchItem {
       'audio_files': audioFiles.map((value) => value.toJson()).toList(),
       'calendar_event': calendarEvent?.toJson(),
       'call_id': callId,
+      'capture_group': captureGroup?.toJson(),
       'client_device_id': clientDeviceId,
       'client_platform': clientPlatform,
       'client_processing': clientProcessing?.toJson(),
@@ -1574,6 +1726,26 @@ class GeneratedSyncCaptureManifestResponse {
   Map<String, dynamic> toJson() {
     return {
       'manifest': manifest,
+    };
+  }
+}
+
+class GeneratedStatusResponse {
+  final String status;
+
+  const GeneratedStatusResponse({
+    required this.status,
+  });
+
+  factory GeneratedStatusResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedStatusResponse(
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'status': status,
     };
   }
 }
