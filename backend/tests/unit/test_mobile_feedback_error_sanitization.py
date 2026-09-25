@@ -23,6 +23,7 @@ from pydantic import BaseModel, Field
 
 _candidates = [
     Path(__file__).resolve().parents[2] / "routers" / "mobile_feedback.py",
+    Path(__file__).resolve().parents[1] / "routers" / "mobile_feedback.py",
     Path(__file__).resolve().parent / "mobile_feedback.py",
     Path("routers/mobile_feedback.py").resolve(),
     Path("backend/routers/mobile_feedback.py").resolve(),
@@ -34,6 +35,8 @@ BACKEND_DIR = (
     if len(Path(__file__).resolve().parents) >= 3
     else Path(__file__).resolve().parent
 )
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
 
 
 # Define real Pydantic models for testing router registration
@@ -148,7 +151,13 @@ class MobileFeedbackErrorSanitizationTests(unittest.TestCase):
         if "backend.routers.mobile_feedback" in sys.modules:
             del sys.modules["backend.routers.mobile_feedback"]
 
-        import mobile_feedback as mf_mod
+        try:
+            from routers import mobile_feedback as mf_mod
+        except ModuleNotFoundError:
+            try:
+                from backend.routers import mobile_feedback as mf_mod
+            except ModuleNotFoundError:
+                import mobile_feedback as mf_mod
 
         self.mf = mf_mod
 
