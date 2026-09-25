@@ -415,17 +415,17 @@ struct MeetingScreenshotTile: View {
       Button("Delete Screenshot…", role: .destructive) { isConfirmingDelete = true }
         .disabled(isDeleting)
     }
-    .alert("Delete Screenshot", isPresented: $isConfirmingDelete) {
-      Button("Cancel", role: .cancel) {}
-      Button("Delete", role: .destructive) {
-        isDeleting = true
-        Task {
-          await onDelete()
-          isDeleting = false
-        }
+    .shellConfirmation(
+      isPresented: $isConfirmingDelete,
+      title: "Delete Screenshot?",
+      message: "This removes the screenshot from this meeting's note. It can't be undone.",
+      confirmTitle: "Delete"
+    ) {
+      isDeleting = true
+      Task {
+        await onDelete()
+        isDeleting = false
       }
-    } message: {
-      Text("This removes the screenshot from this meeting's note. This cannot be undone.")
     }
     .accessibilityLabel(
       Text(frame.caption.isEmpty ? "Screenshot from this meeting" : frame.caption)

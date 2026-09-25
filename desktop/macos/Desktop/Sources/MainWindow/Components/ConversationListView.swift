@@ -22,12 +22,6 @@ struct ConversationListView: View {
 
   var appState: AppState
 
-  private static let groupDateFormatter: DateFormatter = {
-    let f = DateFormatter()
-    f.dateFormat = "MMM d, yyyy"
-    return f
-  }()
-
   /// Flat list item — either a section header or a conversation row.
   /// Using a single flat ForEach avoids nested ForEach attribute graph depth which can cause
   /// SwiftUI layout comparison hangs (AG::LayoutDescriptor::compare) on refresh.
@@ -44,47 +38,27 @@ struct ConversationListView: View {
   }
 
   /// Flat ordered list of headers + conversations, grouped by date.
+  ///
+  /// Grouped by the same date the row displays (`startedAt ?? createdAt`). Grouping by `createdAt`
+  /// while the row printed `startedAt` put a conversation that started at 11:50 PM and saved after
+  /// midnight under "Today" with a time from yesterday.
   private var flatListItems: [ListItem] {
     let calendar = Calendar.current
-    let today = calendar.startOfDay(for: Date())
-    let yesterday = calendar.date(byAdding: .day, value: -1, to: today)!
-    let formatter = Self.groupDateFormatter
+    let now = Date()
 
-    var groups: [String: [ServerConversation]] = [:]
-    var groupDates: [String: Date] = ["Today": today, "Yesterday": yesterday]
-
+    var order: [Date] = []
+    var groups: [Date: [ServerConversation]] = [:]
     // One row per recorded event: other devices' recordings stay reachable from its detail.
     for conversation in CaptureGroupPresentation.collapse(conversations) {
-      let conversationDate = calendar.startOfDay(for: conversation.createdAt)
-      let groupKey: String
-
-      if conversationDate == today {
-        groupKey = "Today"
-      } else if conversationDate == yesterday {
-        groupKey = "Yesterday"
-      } else {
-        groupKey = formatter.string(from: conversation.createdAt)
-        groupDates[groupKey] = conversationDate
-      }
-
-      groups[groupKey, default: []].append(conversation)
-    }
-
-    // Sort groups: Today first, then Yesterday, then by date descending
-    let sortedKeys = groups.keys.sorted { key1, key2 in
-      if key1 == "Today" { return true }
-      if key2 == "Today" { return false }
-      if key1 == "Yesterday" { return true }
-      if key2 == "Yesterday" { return false }
-      let date1 = groupDates[key1] ?? .distantPast
-      let date2 = groupDates[key2] ?? .distantPast
-      return date1 > date2
+      let day = calendar.startOfDay(for: conversation.startedAt ?? conversation.createdAt)
+      if groups[day] == nil { order.append(day) }
+      groups[day, default: []].append(conversation)
     }
 
     var items: [ListItem] = []
-    for (index, key) in sortedKeys.enumerated() {
-      guard let convos = groups[key] else { continue }
-      items.append(.header(key: key, isFirst: index == 0))
+    for (index, day) in order.sorted(by: >).enumerated() {
+      guard let convos = groups[day] else { continue }
+      items.append(.header(key: OmiDateFormat.dayHeader(day, now: now, calendar: calendar), isFirst: index == 0))
       for conv in convos {
         items.append(.conversation(conv))
       }
@@ -107,64 +81,23 @@ struct ConversationListView: View {
   }
 
   private var loadingView: some View {
-    VStack(spacing: OmiSpacing.lg) {
-      ProgressView()
-        .scaleEffect(1.2)
-        .tint(Ink.secondary)
-
-      Text("Loading conversations...")
-        .scaledFont(size: OmiType.body)
-        .foregroundColor(Ink.secondary)
-    }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    GlassLoadingState(label: "Loading conversations…")
   }
 
   private func errorView(_: String) -> some View {
-    VStack(spacing: OmiSpacing.lg) {
-      Image(systemName: "exclamationmark.triangle")
-        .scaledFont(size: OmiType.hero)
-        .foregroundColor(PageGlass.warning)
-
-      Text("Failed to load conversations")
-        .scaledFont(size: OmiType.subheading, weight: .medium)
-        .foregroundColor(Ink.primary)
-
-      Text("Check your connection and try again.")
-        .scaledFont(size: OmiType.body)
-        .foregroundColor(Ink.secondary)
-        .multilineTextAlignment(.center)
-
-      Button(action: onRefresh) {
-        Text("Try Again")
-          .scaledFont(size: OmiType.body, weight: .medium)
-          .foregroundColor(Ink.primary)
-          .padding(.horizontal, OmiSpacing.xl)
-          .padding(.vertical, OmiSpacing.sm)
-          .glassChip(isActive: true)
-      }
-      .buttonStyle(.plain)
-    }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .padding(OmiSpacing.section)
+    GlassErrorState(
+      title: "Couldn't Load Conversations",
+      message: "Check your connection and try again.",
+      retry: onRefresh
+    )
   }
 
   private var emptyView: some View {
-    VStack(spacing: OmiSpacing.lg) {
-      Image(systemName: "bubble.left.and.bubble.right")
-        .scaledFont(size: 48)
-        .foregroundColor(Ink.secondary)
-
-      Text("No Conversations")
-        .scaledFont(size: OmiType.heading, weight: .semibold)
-        .foregroundColor(Ink.primary)
-
-      Text("Start recording to capture your first conversation")
-        .scaledFont(size: OmiType.body)
-        .foregroundColor(Ink.secondary)
-        .multilineTextAlignment(.center)
-    }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .padding(OmiSpacing.section)
+    GlassEmptyState(
+      systemImage: "bubble.left.and.bubble.right",
+      title: "No Conversations",
+      message: "Start recording to capture your first conversation"
+    )
   }
 
   private var conversationListContent: some View {

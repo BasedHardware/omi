@@ -8,6 +8,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/user_provider.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class CustomVocabularyPage extends StatefulWidget {
@@ -33,11 +34,14 @@ class _CustomVocabularyPageState extends State<CustomVocabularyPage> {
   }
 
   Widget _buildVocabularyCard(UserProvider userProvider) {
+    final l10n = context.l10n;
     final isDisabled = _isDeletingBatch || userProvider.isUpdatingVocabulary;
+    final isAdding = userProvider.isUpdatingVocabulary && !_isDeletingBatch;
+    final words = userProvider.transcriptionVocabulary;
 
     return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(14)),
+      padding: const EdgeInsets.all(OmiSpacing.md),
+      decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -47,8 +51,8 @@ class _CustomVocabularyPageState extends State<CustomVocabularyPage> {
               Container(
                 width: 40,
                 height: 40,
-                decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(10)),
-                child: Center(child: FaIcon(FontAwesomeIcons.book, color: Colors.grey.shade400, size: 16)),
+                decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
+                child: const Center(child: FaIcon(FontAwesomeIcons.book, color: OmiColors.textSecondary, size: 16)),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -57,139 +61,119 @@ class _CustomVocabularyPageState extends State<CustomVocabularyPage> {
                   children: [
                     Row(
                       children: [
-                        Text(
-                          context.l10n.addWords,
-                          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+                        Flexible(
+                          child: Text(l10n.addWords, style: OmiType.callout.copyWith(fontWeight: FontWeight.w500)),
                         ),
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade800,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            '${userProvider.transcriptionVocabulary.length}',
-                            style: const TextStyle(color: Colors.grey, fontSize: 11, fontWeight: FontWeight.w500),
+                        const SizedBox(width: OmiSpacing.xs),
+                        Semantics(
+                          label: l10n.vocabularyWordCount(words.length),
+                          excludeSemantics: true,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xs, vertical: OmiSpacing.xxs),
+                            decoration: const BoxDecoration(color: OmiColors.surface3, borderRadius: OmiRadius.smAll),
+                            child: Text(
+                              '${words.length}',
+                              style: OmiType.caption.copyWith(
+                                color: OmiColors.textSecondary,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
                           ),
                         ),
                       ],
                     ),
                     const SizedBox(height: 2),
-                    Text(context.l10n.addWordsDesc, style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
+                    Text(l10n.addWordsDesc, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
                   ],
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: OmiSpacing.lg),
 
           // Input field
           Row(
             children: [
               Expanded(
-                child: Container(
-                  decoration: BoxDecoration(color: const Color(0xFF2C2C2E), borderRadius: BorderRadius.circular(10)),
-                  child: TextField(
-                    controller: _vocabularyController,
-                    enabled: !(userProvider.isUpdatingVocabulary && !_isDeletingBatch),
-                    style: const TextStyle(color: Colors.white, fontSize: 15),
-                    decoration: InputDecoration(
-                      hintText: context.l10n.vocabularyHint,
-                      hintStyle: TextStyle(color: Colors.grey.shade600, fontSize: 14),
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                      border: InputBorder.none,
-                      enabledBorder: InputBorder.none,
-                      focusedBorder: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(10),
-                        borderSide: const BorderSide(color: Colors.white24, width: 1),
-                      ),
+                child: TextField(
+                  controller: _vocabularyController,
+                  enabled: !isAdding,
+                  style: OmiType.subhead,
+                  decoration: InputDecoration(
+                    hintText: l10n.vocabularyHint,
+                    hintStyle: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
+                    filled: true,
+                    fillColor: OmiColors.surface2,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: 14),
+                    border: const OutlineInputBorder(borderRadius: OmiRadius.mdAll, borderSide: BorderSide.none),
+                    enabledBorder: const OutlineInputBorder(borderRadius: OmiRadius.mdAll, borderSide: BorderSide.none),
+                    focusedBorder: const OutlineInputBorder(
+                      borderRadius: OmiRadius.mdAll,
+                      borderSide: BorderSide(color: OmiColors.border),
                     ),
-                    onSubmitted: userProvider.isUpdatingVocabulary && !_isDeletingBatch
-                        ? null
-                        : (value) => _addWord(userProvider),
                   ),
+                  onSubmitted: isAdding ? null : (value) => _addWord(userProvider),
                 ),
               ),
-              const SizedBox(width: 12),
-              GestureDetector(
-                onTap: userProvider.isUpdatingVocabulary ? null : () => _addWord(userProvider),
-                child: Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: userProvider.isUpdatingVocabulary && !_isDeletingBatch
-                        ? const Color(0xFF1A1A1A)
-                        : const Color(0xFF2A2A2E),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: userProvider.isUpdatingVocabulary && !_isDeletingBatch
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6B6B6B)),
-                          ),
-                        )
-                      : const FaIcon(FontAwesomeIcons.plus, color: Colors.white, size: 16),
+              const SizedBox(width: OmiSpacing.xs),
+              if (isAdding)
+                const SizedBox(
+                  width: kOmiMinTapTarget,
+                  height: kOmiMinTapTarget,
+                  child: Center(child: OmiSpinner(size: OmiSpinnerSize.small)),
+                )
+              else
+                OmiIconButton.filled(
+                  icon: const FaIcon(FontAwesomeIcons.plus, size: 16),
+                  label: l10n.add,
+                  fillColor: OmiColors.surface2,
+                  diameter: kOmiMinTapTarget,
+                  onPressed: userProvider.isUpdatingVocabulary ? null : () => _addWord(userProvider),
                 ),
-              ),
             ],
           ),
 
           // Words chips section
-          if (userProvider.transcriptionVocabulary.isNotEmpty) ...[
-            const SizedBox(height: 20),
-            Divider(height: 1, color: Colors.grey.shade800),
-            const SizedBox(height: 16),
+          if (words.isNotEmpty) ...[
+            const SizedBox(height: OmiSpacing.lg),
+            const Divider(height: 1, color: OmiColors.border),
+            const SizedBox(height: OmiSpacing.md),
             Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: userProvider.transcriptionVocabulary.map((word) {
+              spacing: OmiSpacing.xs,
+              runSpacing: OmiSpacing.xs,
+              children: words.map((word) {
                 final isPendingDelete = _pendingDeletions.contains(word);
 
                 return Container(
-                  padding: const EdgeInsets.only(left: 14, right: 6, top: 6, bottom: 6),
+                  padding: const EdgeInsets.only(left: 14),
                   decoration: BoxDecoration(
-                    color: isPendingDelete ? const Color(0xFF1A1A1A) : const Color(0xFF2A2A2E),
-                    borderRadius: BorderRadius.circular(100),
+                    color: isPendingDelete ? OmiColors.surface1 : OmiColors.surface2,
+                    borderRadius: OmiRadius.pillAll,
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
                         word,
-                        style: TextStyle(
-                          color: isPendingDelete ? Colors.grey.shade600 : Colors.white,
-                          fontSize: 14,
+                        style: OmiType.subhead.copyWith(
+                          color: isPendingDelete ? OmiColors.textTertiary : OmiColors.textPrimary,
                           fontWeight: FontWeight.w500,
                         ),
                       ),
-                      const SizedBox(width: 6),
                       if (isPendingDelete)
                         const SizedBox(
-                          width: 18,
-                          height: 18,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF6B6B6B)),
-                          ),
+                          width: kOmiMinTapTarget,
+                          height: kOmiMinTapTarget,
+                          child: Center(child: OmiSpinner(size: OmiSpinnerSize.small, color: OmiColors.textTertiary)),
                         )
                       else
-                        GestureDetector(
-                          onTap: isDisabled ? null : () => _queueWordDeletion(userProvider, word),
-                          child: Container(
-                            padding: const EdgeInsets.all(4),
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade700.withValues(alpha: 0.5),
-                              shape: BoxShape.circle,
-                            ),
-                            child: Icon(
-                              Icons.close,
-                              color: isDisabled ? Colors.grey.shade700 : Colors.grey.shade300,
-                              size: 12,
-                            ),
-                          ),
+                        OmiIconButton.filled(
+                          icon: const Icon(Icons.close, size: 12),
+                          label: l10n.removeVocabularyWord(word),
+                          color: OmiColors.textSecondary,
+                          fillColor: OmiColors.surface3,
+                          diameter: 20,
+                          onPressed: isDisabled ? null : () => _queueWordDeletion(userProvider, word),
                         ),
                     ],
                   ),
@@ -265,27 +249,18 @@ class _CustomVocabularyPageState extends State<CustomVocabularyPage> {
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
       child: Scaffold(
-        backgroundColor: const Color(0xFF0D0D0D),
-        appBar: AppBar(
-          backgroundColor: const Color(0xFF0D0D0D),
-          elevation: 0,
-          leading: IconButton(
-            icon: const FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
-            onPressed: () => Navigator.of(context).pop(),
-          ),
-          title: Text(
-            context.l10n.customVocabularyTitle,
-            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-          ),
-          centerTitle: true,
-        ),
+        appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.customVocabularyTitle)),
         body: Consumer<UserProvider>(
           builder: (context, userProvider, _) {
             return SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg, vertical: OmiSpacing.xs),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: [const SizedBox(height: 16), _buildVocabularyCard(userProvider), const SizedBox(height: 32)],
+                children: [
+                  const SizedBox(height: OmiSpacing.md),
+                  _buildVocabularyCard(userProvider),
+                  const SizedBox(height: OmiSpacing.xxl),
+                ],
               ),
             );
           },

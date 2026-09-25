@@ -1,170 +1,104 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import 'package:omi/backend/schema/dev_api_key.dart';
-import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
-class DevApiKeyCreatedSheet extends StatefulWidget {
+/// Shows a newly created developer API key once. It cannot be shown again, so the sheet only
+/// closes through Done (no swipe-down, no scrim tap, no X).
+class DevApiKeyCreatedSheet extends StatelessWidget {
   final DevApiKeyCreated apiKey;
 
   const DevApiKeyCreatedSheet({super.key, required this.apiKey});
 
-  @override
-  State<DevApiKeyCreatedSheet> createState() => _DevApiKeyCreatedSheetState();
-}
-
-class _DevApiKeyCreatedSheetState extends State<DevApiKeyCreatedSheet> {
-  bool _copied = false;
-
-  void _copyKey(BuildContext context) {
-    Clipboard.setData(ClipboardData(text: widget.apiKey.key));
-    setState(() => _copied = true);
-    AppSnackbar.showSnackbar(context.l10n.copiedToClipboard(context.l10n.apiKey));
+  static Future<void> show(BuildContext context, DevApiKeyCreated apiKey) {
+    return showOmiSheet(
+      context: context,
+      showCloseButton: false,
+      isDismissible: false,
+      enableDrag: false,
+      builder: (_) => DevApiKeyCreatedSheet(apiKey: apiKey),
+    );
   }
+
+  Future<void> _copyKey(BuildContext context) => OmiClipboard.copy(context, apiKey.key, what: context.l10n.apiKey);
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFF0F0F0F),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
+    final l10n = context.l10n;
+    return SingleChildScrollView(
       child: Column(
         mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Handle bar
-          Center(
-            child: Container(
-              margin: const EdgeInsets.only(top: 12, bottom: 8),
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(color: const Color(0xFF3C3C43), borderRadius: BorderRadius.circular(2)),
-            ),
-          ),
           // Success header
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
-            child: Column(
+          const Icon(Icons.check_circle, color: OmiColors.success, size: 40),
+          const SizedBox(height: OmiSpacing.md),
+          Text(l10n.apiKeyCreated, textAlign: TextAlign.center, style: OmiType.title3),
+          const SizedBox(height: 6),
+          Text(
+            apiKey.name,
+            textAlign: TextAlign.center,
+            style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+          ),
+          const SizedBox(height: OmiSpacing.xl),
+          // Warning banner
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: OmiColors.warning.withValues(alpha: 0.1),
+              borderRadius: OmiRadius.mdAll,
+              border: Border.all(color: OmiColors.warning.withValues(alpha: 0.2)),
+            ),
+            child: Row(
               children: [
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [
-                        const Color(0xFF10B981).withValues(alpha: 0.2),
-                        const Color(0xFF10B981).withValues(alpha: 0.05),
-                      ],
-                    ),
-                    shape: BoxShape.circle,
+                const Icon(Icons.warning_amber_rounded, color: OmiColors.warning, size: 20),
+                const SizedBox(width: OmiSpacing.sm),
+                Expanded(
+                  child: Text(
+                    l10n.saveKeyWarning,
+                    style: OmiType.footnote.copyWith(color: OmiColors.warning, fontWeight: FontWeight.w500),
                   ),
-                  child: const Icon(Icons.check_circle, color: Color(0xFF10B981), size: 40),
                 ),
-                const SizedBox(height: 16),
-                Text(
-                  context.l10n.apiKeyCreated,
-                  style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 6),
-                Text(widget.apiKey.name, style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 14)),
               ],
             ),
           ),
-          const SizedBox(height: 24),
-          // Warning banner
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: Container(
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF59E0B).withValues(alpha: 0.1),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: const Color(0xFFF59E0B).withValues(alpha: 0.2)),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.warning_amber_rounded, color: Colors.amber.shade600, size: 20),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Text(
-                      context.l10n.saveKeyWarning,
-                      style: const TextStyle(color: Color(0xFFF59E0B), fontSize: 13, fontWeight: FontWeight.w500),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 20),
-          // Key display
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 24),
-            child: GestureDetector(
+          const SizedBox(height: OmiSpacing.lg),
+          // Key display (tap to copy)
+          Material(
+            color: OmiColors.surface2,
+            borderRadius: OmiRadius.mdAll,
+            child: InkWell(
+              borderRadius: OmiRadius.mdAll,
               onTap: () => _copyKey(context),
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1A1A1A),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(
-                    color: _copied ? const Color(0xFF10B981) : const Color(0xFF2C2C2E),
-                    width: _copied ? 1.5 : 1,
-                  ),
-                ),
+              child: Padding(
+                padding: const EdgeInsets.all(OmiSpacing.md),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       children: [
-                        Text(
-                          context.l10n.yourApiKey,
-                          style: const TextStyle(
-                            color: Color(0xFF8E8E93),
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.5,
+                        Expanded(
+                          child: Text(
+                            l10n.yourApiKey,
+                            style: OmiType.caption.copyWith(
+                              color: OmiColors.textTertiary,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.5,
+                            ),
                           ),
                         ),
-                        const Spacer(),
-                        AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: _copied ? const Color(0xFF10B981).withValues(alpha: 0.15) : const Color(0xFF252525),
-                            borderRadius: BorderRadius.circular(6),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                _copied ? Icons.check : Icons.copy,
-                                size: 14,
-                                color: _copied ? const Color(0xFF10B981) : const Color(0xFF8E8E93),
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                _copied ? context.l10n.copied : context.l10n.tapToCopy,
-                                style: TextStyle(
-                                  color: _copied ? const Color(0xFF10B981) : const Color(0xFF8E8E93),
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                        const Icon(Icons.copy, size: 14, color: OmiColors.textTertiary),
+                        const SizedBox(width: OmiSpacing.xxs),
+                        Text(l10n.tapToCopy, style: OmiType.caption.copyWith(color: OmiColors.textTertiary)),
                       ],
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: OmiSpacing.sm),
                     SelectableText(
-                      widget.apiKey.key,
-                      style: TextStyle(
-                        fontFamily: 'monospace',
-                        color: _copied ? const Color(0xFF10B981) : const Color(0xFF8B5CF6),
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                        height: 1.4,
-                      ),
+                      apiKey.key,
+                      onTap: () => _copyKey(context),
+                      style:
+                          OmiType.subhead.copyWith(fontFamily: 'monospace', fontWeight: FontWeight.w500, height: 1.4),
                     ),
                   ],
                 ),
@@ -173,50 +107,23 @@ class _DevApiKeyCreatedSheetState extends State<DevApiKeyCreatedSheet> {
           ),
           const SizedBox(height: 28),
           // Buttons
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 0, 24, 24),
-            child: Row(
-              children: [
-                Expanded(
-                  child: OutlinedButton(
-                    onPressed: () => _copyKey(context),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: _copied ? const Color(0xFF10B981) : const Color(0xFF8B5CF6),
-                      side: BorderSide(color: _copied ? const Color(0xFF10B981) : const Color(0xFF8B5CF6), width: 1.5),
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(_copied ? Icons.check : Icons.copy, size: 18),
-                        const SizedBox(width: 8),
-                        Text(
-                          _copied ? context.l10n.copied : context.l10n.copyKey,
-                          style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
-                        ),
-                      ],
-                    ),
-                  ),
+          Row(
+            children: [
+              Expanded(
+                child: OmiButton.secondary(
+                  label: l10n.copyKey,
+                  icon: Icons.copy,
+                  expand: true,
+                  onPressed: () => _copyKey(context),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () => Navigator.of(context).pop(),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF252525),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      elevation: 0,
-                    ),
-                    child: Text(context.l10n.done, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
-                  ),
-                ),
-              ],
-            ),
+              ),
+              const SizedBox(width: OmiSpacing.sm),
+              Expanded(
+                child: OmiButton(label: l10n.done, expand: true, onPressed: () => Navigator.of(context).pop()),
+              ),
+            ],
           ),
-          SizedBox(height: MediaQuery.of(context).padding.bottom),
+          const SizedBox(height: OmiSpacing.md),
         ],
       ),
     );

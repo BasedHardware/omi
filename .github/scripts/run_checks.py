@@ -250,8 +250,15 @@ def trigger_matches(pattern: str, path: str) -> bool:
         return True
     if fnmatch.fnmatchcase(path, pattern) or PurePath(path).match(pattern):
         return True
-    if "/**/" in pattern:
-        return fnmatch.fnmatchcase(path, pattern.replace("/**/", "/"))
+    if "/**/" in pattern and fnmatch.fnmatchcase(path, pattern.replace("/**/", "/")):
+        return True
+    # `**/x` means "x at any depth, the repository root included" -- the reading
+    # git, .gitignore and Actions path filters share. fnmatch needs the literal
+    # `/`, so a trigger list written only as `**/*.json` selects nothing for a
+    # root-level file it is meant to cover. Collapse a leading `**/` to nothing,
+    # exactly as the interior `/**/` is collapsed above.
+    if pattern.startswith("**/") and fnmatch.fnmatchcase(path, pattern[3:]):
+        return True
     return False
 
 

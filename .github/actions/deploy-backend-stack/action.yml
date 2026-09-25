@@ -717,11 +717,10 @@ runs:
       run: |
         echo "revision=backend-sync-${{ steps.image-tag.outputs.revision_suffix }}" >> "$GITHUB_OUTPUT"
 
-    - name: Provision sync-backfill platform
-      if: ${{ inputs.deploy_profile == 'auto-dev' || inputs.deploy_targets == 'all' }}
+    - name: Provision sync-backfill lane
       uses: ./.deploy-workflow-source/.github/actions/sync-backfill-lifecycle
       with:
-        mode: platform
+        mode: ${{ (inputs.deploy_profile == 'auto-dev' || inputs.deploy_targets == 'all') && 'platform' || 'dispatch' }}
         project_id: ${{ inputs.project_id }}
         firestore_project_id: ${{ inputs.runtime_gcp_project_id }}
         region: ${{ inputs.region }}

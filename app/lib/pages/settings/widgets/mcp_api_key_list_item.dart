@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/mcp_api_key.dart';
 import 'package:omi/providers/mcp_provider.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class McpApiKeyListItem extends StatelessWidget {
@@ -15,13 +16,13 @@ class McpApiKeyListItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.sm),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(color: const Color(0xFF2C2C2E), borderRadius: BorderRadius.circular(10)),
-            child: const FaIcon(FontAwesomeIcons.key, color: Color(0xFF8E8E93), size: 16),
+            decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
+            child: const FaIcon(FontAwesomeIcons.key, color: OmiColors.textTertiary, size: 16),
           ),
           const SizedBox(width: 14),
           Expanded(
@@ -30,67 +31,41 @@ class McpApiKeyListItem extends StatelessWidget {
               children: [
                 Text(
                   apiKey.name,
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Colors.white),
+                  style: OmiType.callout.copyWith(fontWeight: FontWeight.w500),
                   overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: OmiSpacing.xxs),
                 Text(
                   apiKey.keyPrefix,
-                  style: TextStyle(color: Colors.grey.shade500, fontSize: 13, fontFamily: 'monospace'),
+                  style: OmiType.footnote.copyWith(color: OmiColors.textTertiary, fontFamily: 'monospace'),
                 ),
               ],
             ),
           ),
-          const SizedBox(width: 12),
-          GestureDetector(
-            onTap: () => _showDeleteConfirmation(context, apiKey),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.red.withValues(alpha: 0.15),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                context.l10n.revoke,
-                style: const TextStyle(color: Colors.redAccent, fontSize: 13, fontWeight: FontWeight.w500),
-              ),
-            ),
+          const SizedBox(width: OmiSpacing.sm),
+          OmiButton.destructive(
+            label: context.l10n.revoke,
+            size: OmiButtonSize.compact,
+            // Not `=>`: a returned future would spin the button while the dialog is open.
+            onPressed: () {
+              _confirmRevoke(context);
+            },
           ),
         ],
       ),
     );
   }
 
-  void _showDeleteConfirmation(BuildContext context, McpApiKey apiKey) {
-    showDialog(
-      context: context,
-      builder: (BuildContext dialogContext) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF1C1C1E),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Text(
-            context.l10n.revokeKeyQuestion,
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-          ),
-          content: Text(context.l10n.revokeKeyConfirmation(apiKey.name), style: TextStyle(color: Colors.grey.shade400)),
-          actions: <Widget>[
-            TextButton(
-              child: Text(context.l10n.cancel, style: TextStyle(color: Colors.grey.shade400)),
-              onPressed: () => Navigator.of(dialogContext).pop(),
-            ),
-            TextButton(
-              child: Text(
-                context.l10n.revoke,
-                style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w600),
-              ),
-              onPressed: () {
-                Provider.of<McpProvider>(context, listen: false).deleteKey(apiKey.id);
-                Navigator.of(dialogContext).pop();
-              },
-            ),
-          ],
-        );
-      },
+  /// Revoking a key cannot be undone, so it is confirmed every time (docs/ux-contract.md §4).
+  Future<void> _confirmRevoke(BuildContext context) async {
+    final provider = Provider.of<McpProvider>(context, listen: false);
+    final confirmed = await showOmiConfirm(
+      context,
+      title: context.l10n.revokeKeyQuestion,
+      message: context.l10n.revokeKeyConfirmation(apiKey.name),
+      confirmLabel: context.l10n.revoke,
+      destructive: true,
     );
+    if (confirmed) provider.deleteKey(apiKey.id);
   }
 }

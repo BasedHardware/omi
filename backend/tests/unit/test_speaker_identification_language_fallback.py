@@ -38,6 +38,11 @@ def _conversation(language):
 
 
 def _wire_common_stubs(monkeypatch, conversation, captured):
+    monkeypatch.setattr(
+        speaker_identification_mod.voice_profiles_db,
+        "get_voice_profile_settings",
+        lambda uid: {"speaker_tag_prompts_enabled": True, "save_other_voice_profiles": True},
+    )
     monkeypatch.setattr(speaker_identification_mod.users_db, "get_person", lambda uid, pid: {"id": pid})
     monkeypatch.setattr(speaker_identification_mod.users_db, "get_person_speech_samples_count", lambda uid, pid: 0)
     monkeypatch.setattr(speaker_identification_mod.conversations_db, "get_conversation", lambda uid, cid: conversation)
