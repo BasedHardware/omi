@@ -9,7 +9,14 @@ APP_DIR = os.path.abspath(os.path.dirname(__file__))
 if APP_DIR not in sys.path:
     sys.path.insert(0, APP_DIR)
 
-from fastapi import HTTPException
+import hermetic_stubs
+
+# The Hygiene lane runs a bare python3 with no fastapi, so register the stub
+# before importing twitter_link_auth -- it does `from fastapi import HTTPException`
+# at module scope and would otherwise fail collection there while passing on a
+# developer machine that happens to have fastapi installed.
+hermetic_stubs.ensure_fastapi()
+HTTPException = hermetic_stubs.http_exception()
 
 import twitter_link_auth as auth
 
@@ -55,7 +62,7 @@ class TwitterLinkAuthTests(unittest.TestCase):
         os.environ["TWITTER_TOOLS_SECRET"] = TEST_SECRET
         import asyncio
 
-        import main as twitter_main
+        twitter_main = hermetic_stubs.load_main(APP_DIR)
 
         with patch.object(twitter_main, "delete_twitter_tokens") as delete:
             with self.assertRaises(HTTPException) as ctx:
