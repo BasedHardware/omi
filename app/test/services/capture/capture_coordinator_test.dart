@@ -508,6 +508,27 @@ void main() {
     (name: 'deferred Omi call does not pause a live phone mic', steps: [2, 6], phase: CapturePhase.phoneLive),
     (name: 'phone interruption restores the same owner', steps: [2, 13, 14], phase: CapturePhase.phoneLive),
     (name: 'no resumed pendant after disconnect during phone handoff', steps: [0, 2, 1, 3], phase: CapturePhase.idle),
+    (
+      name: 'Grok fixed: phone batch stop resumes a pendant connected mid-session',
+      steps: [26, 0, 3],
+      phase: CapturePhase.pendantLive
+    ),
+    (
+      name: 'Grok fixed: transcription settings cannot hand phone socket to pendant',
+      steps: [0, 2, 18],
+      phase: CapturePhase.phoneLive
+    ),
+    (
+      name: 'Grok fixed: suspended pendant honors latest resume intent',
+      steps: [0, 6, 24, 25, 7],
+      phase: CapturePhase.pendantLive
+    ),
+    (name: 'unowned device stop cannot tear down phone microphone', steps: [0, 2, 23], phase: CapturePhase.phoneLive),
+    (
+      name: 'deferred shared batch policy remains phone-owned while paused',
+      steps: [16, 26, 4],
+      phase: CapturePhase.phoneBatchPaused
+    ),
   ]) {
     test(episode.name, () {
       final model = SequenceModel();
