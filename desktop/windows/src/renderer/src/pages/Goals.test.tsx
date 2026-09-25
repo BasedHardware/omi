@@ -15,6 +15,26 @@ vi.mock('../lib/apiClient', () => ({
 }))
 vi.mock('../lib/toast', () => ({ toast: vi.fn() }))
 
+// This suite pins the LEGACY goals flow (cache-first fetch, error-vs-empty).
+// The canonical intelligence layer added to the page issues its own control/
+// goals requests through the same mocked client, which would consume this
+// suite's mockResolvedValueOnce queues and shift every expectation; stub it
+// inert here. Canonical behavior is covered by Goals.canonicalFocus.test.tsx.
+vi.mock('../hooks/useDashboardIntelligence', () => ({
+  useDashboardIntelligence: () => ({
+    accountGeneration: null,
+    recommendations: [],
+    goals: [],
+    selectedGoalDetail: null,
+    goalDetailError: null,
+    focusReplacementGoalId: null,
+    error: null,
+    isLoading: false,
+    hasLoadedOnce: true,
+    pendingFeedbackCount: 0
+  })
+}))
+
 const goal = (over: Partial<Goal>): Goal =>
   ({
     id: 'g1',
