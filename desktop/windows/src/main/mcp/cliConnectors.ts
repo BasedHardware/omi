@@ -153,7 +153,7 @@ function hermesOwnedEntry(lines: string[]): OwnedEntryScan {
   const endpoints: (string | null)[] = []
   const bearers: (string | null)[] = []
   for (const raw of lines) {
-    const child = raw.match(/^    ([A-Za-z0-9_-]+)\s*:\s*(.*)$/)
+    const child = raw.match(/^ {4}([A-Za-z0-9_-]+)\s*:\s*(.*)$/)
     if (child) {
       const [, field, value] = child
       if (field === 'url') endpoints.push(yamlScalar(value))
