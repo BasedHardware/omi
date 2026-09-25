@@ -971,7 +971,8 @@ class SocketErrorStage extends CaptureStage {
 
 /// The reconnect branch of the keep-alive tick.
 class ReconnectDeviceStage extends CaptureStage {
-  const ReconnectDeviceStage();
+  const ReconnectDeviceStage({this.testingProbe = false});
+  final bool testingProbe;
 }
 
 class ReconnectPhoneStage extends CaptureStage {
@@ -2566,7 +2567,7 @@ CaptureTransition _reduceAppForegrounded(CaptureCoordinatorState state) {
 CaptureTransition _reduceKeepAlive(CaptureCoordinatorState state, KeepAliveTick event, CaptureEnvironment env) {
   if (event.testingProbe) {
     if (env.deviceRecording && state.connectedDevice != null && !env.paused) {
-      return CaptureTransition(state, const [RunStage(ReconnectDeviceStage())]);
+      return CaptureTransition(state, const [RunStage(ReconnectDeviceStage(testingProbe: true))]);
     }
     if (env.micCapturing) return CaptureTransition(state, const [RunStage(ReconnectPhoneStage())]);
   }

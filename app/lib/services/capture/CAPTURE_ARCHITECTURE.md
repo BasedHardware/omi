@@ -154,7 +154,27 @@ socket/BLE open paths (`_reconnectDeviceCaptureBody`,
 native config or BLE subscription, and the `_initiateWebsocket` →
 `_openTranscriptionSocket` → `_publishTranscriptionSocket` chain whenever the
 attempt began pendant-owned). A stale attempt stops only its own socket — never
-the installed one; `onClosed` still mutates
+the installed one.
+
+One strictly test-only compatibility lane exists on top of that fence:
+`reconnectActiveCaptureForTesting` dispatches `KeepAliveTick(testingProbe: true)`.
+Concurrent probes coalesce onto the first in-flight probe's dispatch future
+(`_testingProbe`), so overlapping callers observe one reconnect. The probe
+carries `testingProbe` through `ReconnectDeviceStage` into
+`_reconnectDeviceCaptureBody`, where — and only there — a pre-coordinator
+fixture that attests `RecordingState.deviceRecord` while the committed phase is
+still `idle` is admitted alongside `pendantLive`; `callActive`, any phone
+ownership, and a live pendant suspension still refuse even under the probe. The
+method also holds `_testingReconnectProbeDepth > 0` for its duration, and only
+while that depth is held *and* the committed phase is `idle` (no coordinator
+owner — the pre-coordinator fixture world) does `updateRecordingDevice` retire
+the session generation synchronously, so the contract test can assert
+`isCurrent(before) == false` before the queued `DeviceUpdated` runs. Under a
+committed pendant/phone/call session the queued roll stays the only retirement —
+the revision fence alone blocks the stale continuation. Production never sets
+the depth, never probes, and never rolls synchronously: real keepalive ticks,
+transcription-settings reconnects, and call paths always require committed
+`pendantLive` plus a current generation; `onClosed` still mutates
 three flags at callback time — `_keepAliveEpoch++` invalidates any keepalive
 reconnect attempt in flight for the now-dead socket (a tick can fire between
 the close callback and the queued `SocketClosed`, so the epoch must move

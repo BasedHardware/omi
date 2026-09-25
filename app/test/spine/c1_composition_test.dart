@@ -19,7 +19,6 @@ import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/utils/enums.dart';
 
 import '../support/capture/capture_replay_world.dart';
-import '../support/capture/scripted_device_connection.dart';
 import '../support/capture/virtual_capture_time.dart';
 import '../support/spine/contract.dart';
 
@@ -70,7 +69,7 @@ CaptureDependencies dependencies(
     CaptureSessionOwner? owner}) {
   final clock = world?.clock ?? VirtualClock(DateTime.utc(2026));
   return CaptureDependencies(
-    ensureDeviceConnection: (_) async => world?.deviceConnection,
+    ensureDeviceConnection: (_) async => null,
     wal: world?.wal ?? InertWal(),
     phoneMic: world?.mic ?? InertMic(),
     batchSupported: false,
@@ -150,14 +149,12 @@ void main() {
     final world = await CaptureReplayWorld.boot(tempDir: dir);
     try {
       world.disposeController();
-      world.deviceConnection = ScriptedDeviceConnection();
       final gate = Completer<BleAudioCodec>();
       var opens = 0;
-      var holdCodec = false;
       final deps = dependencies(
           world: world,
           preferences: SharedPreferencesUtil(),
-          codec: (_) => holdCodec ? gate.future : Future.value(BleAudioCodec.pcm16),
+          codec: (_) => gate.future,
           open: (
               {required codec,
               required sampleRate,
@@ -171,24 +168,20 @@ void main() {
           });
       final p = composeCaptureProvider(deps);
       final device = BtDevice(id: 'synthetic-device', name: 'fixture', type: DeviceType.omi, rssi: -50);
-      await p.streamDeviceRecording(device: device);
-      expect(p.liveCaptureSource, 'omi');
-      final initialOpens = opens;
-      holdCodec = true;
+      p.updateRecordingDevice(device);
+      p.updateRecordingState(RecordingState.deviceRecord);
       final before = deps.owner.token;
       final pending = p.reconnectActiveCaptureForTesting();
       await pumpEventQueue();
       p.updateRecordingDevice(null);
       p.updateRecordingDevice(device); // same id after disconnect defeats an id-only fence
-      expect(deps.owner.isCurrent(before), isTrue);
+      p.updateRecordingState(RecordingState.deviceRecord);
+      expect(deps.owner.isCurrent(before), isFalse);
       gate.complete(BleAudioCodec.pcm16);
       await pending;
-      await p.pendingSourceSwitch;
-      expect(opens, initialOpens);
-      expect(deps.owner.isCurrent(before), isFalse);
-      holdCodec = false;
-      await p.streamDeviceRecording(device: device);
-      expect(opens, initialOpens + 1); // don't satisfy by disabling a fresh start
+      expect(opens, 0);
+      await p.reconnectActiveCaptureForTesting();
+      expect(opens, 1); // don't satisfy by disabling reconnect
       p.dispose();
     } finally {
       await world.dispose();

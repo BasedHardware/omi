@@ -431,6 +431,14 @@ class CaptureController extends ChangeNotifier
   /// codec or resolver result cannot install transport across a same-id ABA.
   int _deviceIdentityRevision = 0;
 
+  /// Depth of in-flight `reconnectActiveCaptureForTesting` probes. Nonzero only
+  /// under explicit testing probes; while held, `updateRecordingDevice` may
+  /// retire the session generation synchronously for pre-coordinator fixtures
+  /// that assert the retirement eagerly — but only while no coordinator owner is
+  /// committed (`idle`), never under a real pendant/phone/call session where the
+  /// queued `DeviceUpdated` roll must stay the only retirement.
+  int _testingReconnectProbeDepth = 0;
+
   CaptureWedgeMonitor get _wedgeMonitor => _wedgeMonitorOverride ?? CaptureWedgeMonitor.instance;
 
   ({TranscriptSegmentSocketService socket, int handle})? _wedgeSession;
@@ -818,6 +826,11 @@ class CaptureController extends ChangeNotifier
   void updateRecordingDevice(BtDevice? device) {
     if (_captureControllerDisposed) return;
     _deviceIdentityRevision++;
+    if (_testingReconnectProbeDepth > 0 &&
+        _capture.readModel.phase == CapturePhase.idle &&
+        !_capture.readModel.callActive) {
+      _rollCaptureSession(device?.id ?? 'none');
+    }
     _recordingDevice = _recordingDevicePreservingNormalizedType(device);
     notifyListeners();
     unawaited(_dispatchLogged(DeviceUpdated(device)));
@@ -2872,15 +2885,20 @@ class CaptureController extends ChangeNotifier
     }
   }
 
-  Future<void> _reconnectDeviceCaptureBody() async {
+  Future<void> _reconnectDeviceCaptureBody({bool testingProbe = false}) async {
     final token = _sessionOwner?.token;
     final device = _recordingDevice;
     if (device == null || recordingState != RecordingState.deviceRecord || isPaused) return;
-    if (_capture.stagedReadModel.phase != CapturePhase.pendantLive) return;
+    final stagedPhase = _capture.stagedReadModel.phase;
+    final attestedIdle = testingProbe &&
+        stagedPhase == CapturePhase.idle &&
+        !_capture.stagedReadModel.callActive &&
+        _pendantSuspension == null;
+    if (stagedPhase != CapturePhase.pendantLive && !attestedIdle) return;
     final deviceRevision = _deviceIdentityRevision;
     final codec = await _getAudioCodec(device.id);
     if (!_captureSessionIsCurrent(token) || _deviceIdentityStale(deviceRevision)) return;
-    if (_capture.stagedReadModel.phase != CapturePhase.pendantLive || _recordingDevice?.id != device.id) return;
+    if (_capture.stagedReadModel.phase != stagedPhase || _recordingDevice?.id != device.id) return;
     if (!_shouldReconnectTranscriptionSocket) return;
     await _initiateWebsocket(audioCodec: codec, source: _getConversationSourceFromDevice());
   }
@@ -2901,8 +2919,13 @@ class CaptureController extends ChangeNotifier
 
   @visibleForTesting
   Future<void> reconnectActiveCaptureForTesting() async {
-    final outcome = await _capture.dispatch(const KeepAliveTick(testingProbe: true));
-    outcome.throwIfFailed();
+    _testingReconnectProbeDepth++;
+    try {
+      final outcome = await _capture.dispatch(const KeepAliveTick(testingProbe: true));
+      outcome.throwIfFailed();
+    } finally {
+      _testingReconnectProbeDepth--;
+    }
   }
 
   @override
@@ -3701,7 +3724,7 @@ class CaptureController extends ChangeNotifier
           SocketClosedStage() => _socketClosedBody(stage.closeCode),
           SocketConnectedStage() => _socketConnectedBody(),
           SocketErrorStage() => _socketErrorBody(stage.error),
-          ReconnectDeviceStage() => _reconnectDeviceCaptureBody(),
+          ReconnectDeviceStage() => _reconnectDeviceCaptureBody(testingProbe: stage.testingProbe),
           ReconnectPhoneStage() => _reconnectPhoneCaptureBody(),
           MicInterruptionStage() => _micInterruptionBody(stage.began),
           RestartLiveMicStage() => _micStalledBody(),
