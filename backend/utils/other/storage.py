@@ -27,7 +27,7 @@ from database.redis_db import cache_signed_url, get_cached_signed_url, delete_ca
 from database.legal_holds import external_write_fence
 from utils import encryption
 from utils.cloud_tasks import enqueue_audio_merge_job, is_audio_merge_dispatch_enabled
-from database.audio_timeline import chunk_span, parse_span_blob_metadata, span_blob_metadata
+from database.audio_timeline import chunk_span, chunk_span_bounds, parse_span_blob_metadata, span_blob_metadata
 from utils.observability.fallback import record_fallback
 from utils.other.deferred_delete import DeferredDeleter
 from utils.other.local_storage import create_storage_client, iam_signing_kwargs, local_public_url
@@ -1568,7 +1568,8 @@ def compute_audio_files_fingerprint(audio_files: List[Dict[str, Any]]) -> str:
         entry = [af['id'], len(af['chunk_timestamps']), round(sorted(af['chunk_timestamps'])[-1], 3)]
         spans = af.get('chunk_spans')
         if spans:
-            entry.append([[round(float(s), 3), round(float(e), 3)] for s, e in spans])
+            bounds = [chunk_span_bounds(span) for span in spans]
+            entry.append([[round(b[0], 3), round(b[1], 3)] if b else None for b in bounds])
         parts.append(entry)
     parts.sort(key=lambda p: p[0])
     return hashlib.sha1(json.dumps(parts).encode()).hexdigest()[:12]

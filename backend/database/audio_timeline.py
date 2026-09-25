@@ -63,6 +63,29 @@ def parse_span_blob_metadata(metadata: Optional[Dict]) -> Optional[Dict]:
     return {'start': start, 'samples': samples, 'sample_rate': rate}
 
 
+def chunk_span_bounds(item: object) -> Optional[Tuple[float, float]]:
+    """``(start, end)`` of one stored ``chunk_spans`` entry, or None if malformed.
+
+    Entries are ``{start, end}`` objects (Firestore cannot store nested
+    arrays); a ``[start, end]`` pair is accepted for in-memory callers.
+    """
+    if isinstance(item, Mapping):
+        raw_start, raw_end = item.get('start'), item.get('end')
+    elif isinstance(item, (list, tuple)) and len(item) == 2:
+        raw_start, raw_end = item[0], item[1]
+    else:
+        return None
+    if isinstance(raw_start, bool) or isinstance(raw_end, bool):
+        return None
+    try:
+        start, end = float(raw_start), float(raw_end)  # type: ignore[arg-type]
+    except (TypeError, ValueError):
+        return None
+    if not span_valid(start, end):
+        return None
+    return start, end
+
+
 def span_valid(start: float, end: float) -> bool:
     return math.isfinite(start) and math.isfinite(end) and end > start
 

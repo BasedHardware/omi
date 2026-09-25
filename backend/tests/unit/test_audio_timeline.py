@@ -16,6 +16,7 @@ import math
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 
+from models.audio_file import AudioFile, ChunkSpan
 from utils.audio_timeline import (
     ANCHOR_GAP_SECONDS,
     CaptureTimeline,
@@ -348,7 +349,7 @@ class TestWallWindowAndCoverage:
         assert not is_audio_timeline_v2({})
 
     def test_covered_window_requires_validated_spans(self):
-        files = [{'chunk_spans': [[100.0, 160.0], [160.0, 220.0]]}]
+        files = [{'chunk_spans': [{'start': 100.0, 'end': 160.0}, {'start': 160.0, 'end': 220.0}]}]
         assert covered_window(files, 100.0, 220.0)
         assert covered_window(files, 120.0, 200.0)
         # Uncovered window never claims coverage.
@@ -358,8 +359,10 @@ class TestWallWindowAndCoverage:
         # Legacy timestamp lists never claim coverage.
         assert not covered_window([{'chunk_timestamps': [100.0, 160.0]}], 100.0, 160.0)
         # Malformed spans fail closed.
-        assert not covered_window([{'chunk_spans': [[100.0, 90.0]]}], 95.0, 99.0)
-        assert not covered_window([{'chunk_spans': [[float('nan'), 10.0]]}], 0.0, 5.0)
+        assert not covered_window([{'chunk_spans': [{'start': 100.0, 'end': 90.0}]}], 95.0, 99.0)
+        assert not covered_window([{'chunk_spans': [{'start': float('nan'), 'end': 10.0}]}], 0.0, 5.0)
+        assert not covered_window([{'chunk_spans': [{'start': True, 'end': 10.0}]}], 0.0, 5.0)
+        assert not covered_window([{'chunk_spans': [{'start': 1.0}]}], 0.0, 5.0)
         assert not covered_window([], 0.0, 1.0)
 
     def test_coverage_outcome_enum(self):
@@ -370,9 +373,33 @@ class TestWallWindowAndCoverage:
         assert coverage_outcome(no_storage, 0.0, 5.0) == 'no_audio'
         legacy = self._conversation(audio_files=[{'chunk_timestamps': [base]}])
         assert coverage_outcome(legacy, 0.0, 5.0) == 'unsupported'
-        partial = self._conversation(audio_files=[{'chunk_spans': [[base, base + 2.0]]}])
+        partial = self._conversation(audio_files=[{'chunk_spans': [{'start': base, 'end': base + 2.0}]}])
         assert coverage_outcome(partial, 0.0, 2.0) == 'covered'
         assert coverage_outcome(partial, 0.0, 5.0) == 'missing'
+
+    def test_audio_file_chunk_spans_dump_without_nested_arrays(self):
+        # Firestore rejects an array directly inside an array, so persisted
+        # chunk_spans must be objects, never [start, end] pairs.
+        audio_file = AudioFile(
+            id='f',
+            uid='u',
+            conversation_id='c',
+            chunk_timestamps=[100.0],
+            duration=60.0,
+            chunk_spans=[ChunkSpan(start=100.0, end=160.0)],
+        )
+
+        def has_nested_array(value):
+            if isinstance(value, list):
+                return any(isinstance(item, list) or has_nested_array(item) for item in value)
+            if isinstance(value, dict):
+                return any(has_nested_array(item) for item in value.values())
+            return False
+
+        dumped = audio_file.model_dump()
+        assert dumped['chunk_spans'] == [{'start': 100.0, 'end': 160.0}]
+        assert not has_nested_array(dumped)
+        assert covered_window([dumped], 110.0, 150.0)
 
     def test_anchor_gap_constant_is_jitter_guard(self):
         # The 2 s trigger is only an initial jitter guard, documented as such.

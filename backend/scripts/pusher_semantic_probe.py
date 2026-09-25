@@ -297,10 +297,14 @@ def _http_json(url: str, token: str) -> tuple[int, dict[str, Any] | None]:
 def _alignment_covered(spans: list[Any], start: float, end: float) -> bool:
     """Union-cover [start, end) with the conversation's validated chunk spans."""
     merged: list[list[float]] = []
-    for span in sorted(
-        (item for item in spans if isinstance(item, (list, tuple)) and len(item) == 2), key=lambda x: float(x[0])
-    ):
-        begin, finish = float(span[0]), float(span[1])
+    pairs: list[tuple[float, float]] = []
+    for item in spans:
+        # Stored entries are {start, end} objects (Firestore has no nested arrays).
+        if isinstance(item, dict) and item.get("start") is not None and item.get("end") is not None:
+            pairs.append((float(item["start"]), float(item["end"])))
+        elif isinstance(item, (list, tuple)) and len(item) == 2:
+            pairs.append((float(item[0]), float(item[1])))
+    for begin, finish in sorted(pairs):
         if merged and begin <= merged[-1][1] + ALIGNMENT_COVERAGE_TOLERANCE_SECONDS:
             merged[-1][1] = max(merged[-1][1], finish)
         else:

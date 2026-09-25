@@ -163,8 +163,8 @@ def _row(phrase_pre: bytes, phrase_post: bytes) -> dict:
                 'id': 'file-1',
                 'chunk_timestamps': [T0 + PRE_PHRASE_AT, T0 + POST_PHRASE_AT],
                 'chunk_spans': [
-                    (T0 + PRE_PHRASE_AT, T0 + PRE_PHRASE_AT + 5.0),
-                    (T0 + POST_PHRASE_AT, T0 + POST_PHRASE_AT + CLIP_SECONDS),
+                    {'start': T0 + PRE_PHRASE_AT, 'end': T0 + PRE_PHRASE_AT + 5.0},
+                    {'start': T0 + POST_PHRASE_AT, 'end': T0 + POST_PHRASE_AT + CLIP_SECONDS},
                 ],
             }
         ],

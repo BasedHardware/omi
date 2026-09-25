@@ -689,7 +689,7 @@ async def test_v2_end_to_end_alignment(monkeypatch, gcs, pusher_env, telemetry):
     timeline = result['stack'].receiver.capture_timeline
     assert len(timeline.anchors) == 1
     spans1 = row1['audio_files'][0]['chunk_spans']
-    assert spans1 and abs(spans1[0][0] - (T0 - 0.5)) < 0.05
+    assert spans1 and abs(spans1[0]['start'] - (T0 - 0.5)) < 0.05
 
 
 async def test_legacy_calculation_misplaces_burst_audio(monkeypatch, gcs, pusher_env, telemetry):

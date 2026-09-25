@@ -16,6 +16,7 @@ import io
 import wave
 from typing import Any, List, Mapping, Optional
 
+from database.audio_timeline import chunk_span_bounds
 from utils.audio_timeline import coverage_outcome, segment_wall_window
 from utils.metrics import OMI_AUDIO_TIMELINE_COVERAGE_TOTAL
 from utils.other.storage import download_audio_chunks_and_merge
@@ -56,8 +57,12 @@ def _v2_relevant_timestamps(conversation: Mapping[str, Any], abs_start: float, a
         timestamps = audio_file.get('chunk_timestamps') or []
         if not spans or len(spans) != len(timestamps):
             return []
-        for (start, end), timestamp in zip(spans, timestamps):
-            if float(start) < abs_end and float(end) > abs_start:
+        for span, timestamp in zip(spans, timestamps):
+            bounds = chunk_span_bounds(span)
+            if bounds is None:
+                return []
+            start, end = bounds
+            if start < abs_end and end > abs_start:
                 relevant.append(float(timestamp))
     return sorted(set(relevant))
 
@@ -90,12 +95,12 @@ def conversation_clip_pcm(
             uid, conversation['id'], relevant, fill_gaps=True, sample_rate=sample_rate
         )
         spans = [
-            span
+            bounds
             for audio_file in conversation.get('audio_files') or []
-            for span in (audio_file.get('chunk_spans') or [])
-            if float(span[0]) < abs_end and float(span[1]) > abs_start
+            for bounds in (chunk_span_bounds(span) for span in (audio_file.get('chunk_spans') or []))
+            if bounds is not None and bounds[0] < abs_end and bounds[1] > abs_start
         ]
-        buffer_start = min(float(span[0]) for span in spans)
+        buffer_start = min(start for start, _ in spans)
         pcm = trim_pcm16(merged, sample_rate, abs_start - buffer_start, abs_end - buffer_start)
         return pcm or None
     timestamps = _chunk_timestamps(conversation)

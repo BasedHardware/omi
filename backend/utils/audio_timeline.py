@@ -21,7 +21,7 @@ from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
 # Pure span helpers live in the database-layer module (stdlib only) so
 # database/ can share them without importing utils/.
-from database.audio_timeline import COVERAGE_TOLERANCE_SECONDS
+from database.audio_timeline import COVERAGE_TOLERANCE_SECONDS, chunk_span_bounds
 
 # Measured inter-arrival gap beyond which a new anchor is set. This is a jitter
 # guard, not a semantic silence boundary: a client still sending PCM silence
@@ -108,15 +108,10 @@ def _validated_chunk_spans(audio_files: Optional[Sequence]) -> Optional[List[Tup
         if not isinstance(raw, Sequence) or isinstance(raw, (str, bytes)):
             return None
         for item in raw:
-            if not isinstance(item, Sequence) or isinstance(item, (str, bytes)) or len(item) != 2:
+            bounds = chunk_span_bounds(item)
+            if bounds is None:
                 return None
-            try:
-                start, end = float(item[0]), float(item[1])
-            except (TypeError, ValueError):
-                return None
-            if not (math.isfinite(start) and math.isfinite(end)) or end <= start:
-                return None
-            spans.append((start, end))
+            spans.append(bounds)
     if not saw_any:
         return None
     spans.sort()

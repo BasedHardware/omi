@@ -510,8 +510,32 @@ class GeneratedConversationPhoto {
   }
 }
 
+class GeneratedChunkSpan {
+  final double end;
+  final double start;
+
+  const GeneratedChunkSpan({
+    required this.end,
+    required this.start,
+  });
+
+  factory GeneratedChunkSpan.fromJson(Map<String, dynamic> json) {
+    return GeneratedChunkSpan(
+      end: _required(_readFieldValue<double>(_readField(json, const ["end"]), "end", _readDouble, requiredField: true, nullable: false), "end"),
+      start: _required(_readFieldValue<double>(_readField(json, const ["start"]), "start", _readDouble, requiredField: true, nullable: false), "start"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'end': end,
+      'start': start,
+    };
+  }
+}
+
 class GeneratedAudioFile {
-  final List<List<double>>? chunkSpans;
+  final List<GeneratedChunkSpan>? chunkSpans;
   final List<double> chunkTimestamps;
   final String conversationId;
   final double duration;
@@ -533,7 +557,7 @@ class GeneratedAudioFile {
 
   factory GeneratedAudioFile.fromJson(Map<String, dynamic> json) {
     return GeneratedAudioFile(
-      chunkSpans: _readFieldValue<List<List<double>>>(_readField(json, const ["chunk_spans"]), "chunk_spans", _readDynamicList, requiredField: false, nullable: true),
+      chunkSpans: _readFieldValue<List<GeneratedChunkSpan>>(_readField(json, const ["chunk_spans"]), "chunk_spans", (value) => _readObjectList(value, GeneratedChunkSpan.fromJson), requiredField: false, nullable: true),
       chunkTimestamps: _required(_readFieldValue<List<double>>(_readField(json, const ["chunk_timestamps"]), "chunk_timestamps", _readDoubleList, requiredField: true, nullable: false), "chunk_timestamps"),
       conversationId: _required(_readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString, requiredField: true, nullable: false), "conversation_id"),
       duration: _required(_readFieldValue<double>(_readField(json, const ["duration"]), "duration", _readDouble, requiredField: true, nullable: false), "duration"),
@@ -546,7 +570,7 @@ class GeneratedAudioFile {
 
   Map<String, dynamic> toJson() {
     return {
-      'chunk_spans': chunkSpans,
+      'chunk_spans': chunkSpans?.map((value) => value.toJson()).toList(),
       'chunk_timestamps': chunkTimestamps,
       'conversation_id': conversationId,
       'duration': duration,

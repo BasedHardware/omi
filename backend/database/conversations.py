@@ -12,7 +12,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 import utils.other.hume as hume
-from models.audio_file import AudioFile
+from models.audio_file import AudioFile, ChunkSpan
 from models.client_processing import PROJECTION_FAMILY_FIELDS
 from models.conversation_enums import ConversationStatus, PostProcessingModel, PostProcessingStatus
 from models.conversation_photo import ConversationPhoto
@@ -1349,7 +1349,7 @@ def _finalize_audio_file_group(
             provider='gcp',
             started_at=started_at,
             duration=duration,
-            chunk_spans=[[round(start, 3), round(end, 3)] for start, end in spans],
+            chunk_spans=[ChunkSpan(start=round(start, 3), end=round(end, 3)) for start, end in spans],
         )
 
     # Calculate started_at and duration from timestamps and blob sizes

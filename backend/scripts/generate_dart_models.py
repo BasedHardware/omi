@@ -50,6 +50,7 @@ SCHEMA_GROUPS = {
             'Structured',
             'Geolocation',
             'ConversationPhoto',
+            'ChunkSpan',
             'AudioFile',
             'ConversationAudioSpan',
             'ConversationAudio',

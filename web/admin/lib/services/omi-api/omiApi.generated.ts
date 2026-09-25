@@ -605,7 +605,7 @@ export interface AudioDownloadPendingResponse {
 }
 
 export interface AudioFile {
-  chunk_spans?: Array<Array<number>> | null;
+  chunk_spans?: Array<ChunkSpan> | null;
   chunk_timestamps: Array<number>;
   conversation_id: string;
   duration: number;
@@ -1058,6 +1058,11 @@ export interface CheckVerificationRequest {
 export interface CheckVerificationResponse {
   phone_number_id?: string | null;
   verified: boolean;
+}
+
+export interface ChunkSpan {
+  end: number;
+  start: number;
 }
 
 export interface CleanerMemory {
@@ -5258,6 +5263,7 @@ export interface OmiApiSchemas {
   "ChatUsageQuota": ChatUsageQuota;
   "CheckVerificationRequest": CheckVerificationRequest;
   "CheckVerificationResponse": CheckVerificationResponse;
+  "ChunkSpan": ChunkSpan;
   "CleanerMemory": CleanerMemory;
   "ClickUpListsResponse": ClickUpListsResponse;
   "ClickUpSpacesResponse": ClickUpSpacesResponse;

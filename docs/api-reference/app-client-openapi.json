@@ -4147,10 +4147,7 @@
             "anyOf": [
               {
                 "items": {
-                  "items": {
-                    "type": "number"
-                  },
-                  "type": "array"
+                  "$ref": "#/components/schemas/ChunkSpan"
                 },
                 "type": "array"
               },
@@ -6798,6 +6795,25 @@
           "verified"
         ],
         "title": "CheckVerificationResponse",
+        "type": "object"
+      },
+      "ChunkSpan": {
+        "description": "One contiguous stretch of stored PCM, in wall-epoch seconds.",
+        "properties": {
+          "end": {
+            "title": "End",
+            "type": "number"
+          },
+          "start": {
+            "title": "Start",
+            "type": "number"
+          }
+        },
+        "required": [
+          "start",
+          "end"
+        ],
+        "title": "ChunkSpan",
         "type": "object"
       },
       "CleanerMemory": {
