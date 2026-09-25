@@ -7,16 +7,6 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		A10512060000000000000001 = {isa = PBXBuildFile; fileRef = A10512060000000000000002; };
-		A10512050000000000000001 = {isa = PBXBuildFile; fileRef = A10512050000000000000002; };
-		A10512040000000000000001 = {isa = PBXBuildFile; fileRef = A10512040000000000000002; };
-		A10512030000000000000001 = {isa = PBXBuildFile; fileRef = A10512030000000000000002; };
-		A10512020000000000000001 = {isa = PBXBuildFile; fileRef = A10512020000000000000002; };
-		A10512010000000000000001 = {isa = PBXBuildFile; fileRef = A10512010000000000000002; };
-		A10512000000000000000001 = {isa = PBXBuildFile; fileRef = A10512000000000000000002; };
-		A10511000000000000000001 = {isa = PBXBuildFile; fileRef = A10511000000000000000002; };
-		A10510000000000000000001 = {isa = PBXBuildFile; fileRef = A10510000000000000000002; };
-		A10510000000000000000003 = {isa = PBXBuildFile; fileRef = A10510000000000000000004; };
 		5142014D2437B4B30078DB4F /* AppDelegate.mm in Sources */ = {isa = PBXBuildFile; fileRef = 5142014C2437B4B30078DB4F /* AppDelegate.mm */; };
 		514201522437B4B40078DB4F /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 514201512437B4B40078DB4F /* Assets.xcassets */; };
 		514201552437B4B40078DB4F /* Main.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 514201532437B4B40078DB4F /* Main.storyboard */; };
@@ -24,9 +14,6 @@
 		976153F7B9245696A8FEEA7A /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 42B252A9C22C38646AC0EFED /* PrivacyInfo.xcprivacy */; };
 		9B6348701CA8A259BF932BD8 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 42B252A9C22C38646AC0EFED /* PrivacyInfo.xcprivacy */; };
 		A10401000000000000000001 /* OmiBackendModule.mm in Sources */ = {isa = PBXBuildFile; fileRef = A10401000000000000000002 /* OmiBackendModule.mm */; };
-		A10409000000000000000001 /* omi_backend_policy.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A10409000000000000000002 /* omi_backend_policy.cpp */; };
-		A1040C000000000000000001 /* omi_backend_http.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A1040C000000000000000002 /* omi_backend_http.cpp */; };
-		A1040D000000000000000001 /* omi_backend_recording.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A1040D000000000000000002 /* omi_backend_recording.cpp */; };
 		A10402000000000000000001 /* OmiDesktopCommandsModule.mm in Sources */ = {isa = PBXBuildFile; fileRef = A10402000000000000000002 /* OmiDesktopCommandsModule.mm */; };
 		A10403000000000000000001 /* OmiGlassPanelView.mm in Sources */ = {isa = PBXBuildFile; fileRef = A10403000000000000000002 /* OmiGlassPanelView.mm */; };
 		A10404000000000000000001 /* OmiSFSymbolView.mm in Sources */ = {isa = PBXBuildFile; fileRef = A10404000000000000000002 /* OmiSFSymbolView.mm */; };
@@ -37,20 +24,23 @@
 		A10409000000000000000001 /* CoreBluetooth.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10409000000000000000002 /* CoreBluetooth.framework */; };
 		A1040A000000000000000001 /* AVFoundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A1040A000000000000000002 /* AVFoundation.framework */; };
 		A1040B000000000000000001 /* UserNotifications.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A1040B000000000000000002 /* UserNotifications.framework */; };
+		A1040C000000000000000001 /* omi_backend_http.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A1040C000000000000000002 /* omi_backend_http.cpp */; };
+		A1040D000000000000000001 /* omi_backend_recording.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A1040D000000000000000002 /* omi_backend_recording.cpp */; };
+		A1040E000000000000000001 /* omi_backend_policy.cpp in Sources */ = {isa = PBXBuildFile; fileRef = A1040E000000000000000002 /* omi_backend_policy.cpp */; };
+		A10510000000000000000001 /* OmiRewindModule.mm in Sources */ = {isa = PBXBuildFile; fileRef = A10510000000000000000002 /* OmiRewindModule.mm */; };
+		A10510000000000000000003 /* libsqlite3.tbd in Frameworks */ = {isa = PBXBuildFile; fileRef = A10510000000000000000004 /* libsqlite3.tbd */; };
+		A10511000000000000000001 /* OmiRewindCapture.mm in Sources */ = {isa = PBXBuildFile; fileRef = A10511000000000000000002 /* OmiRewindCapture.mm */; };
+		A10512000000000000000001 /* ScreenCaptureKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10512000000000000000002 /* ScreenCaptureKit.framework */; };
+		A10512010000000000000001 /* Vision.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10512010000000000000002 /* Vision.framework */; };
+		A10512020000000000000001 /* ImageIO.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10512020000000000000002 /* ImageIO.framework */; };
+		A10512030000000000000001 /* CoreImage.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10512030000000000000002 /* CoreImage.framework */; };
+		A10512040000000000000001 /* CoreGraphics.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10512040000000000000002 /* CoreGraphics.framework */; };
+		A10512050000000000000001 /* CoreMedia.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10512050000000000000002 /* CoreMedia.framework */; };
+		A10512060000000000000001 /* CoreVideo.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10512060000000000000002 /* CoreVideo.framework */; };
 		DA2AA05EC605ADA710BAA8FE /* libPods-RnRuntime-macOS.a in Frameworks */ = {isa = PBXBuildFile; fileRef = F6C5F54BD846C1B394B83CD2 /* libPods-RnRuntime-macOS.a */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		A10512060000000000000002 = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreVideo.framework; path = System/Library/Frameworks/CoreVideo.framework; sourceTree = SDKROOT; };
-		A10512050000000000000002 = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreMedia.framework; path = System/Library/Frameworks/CoreMedia.framework; sourceTree = SDKROOT; };
-		A10512040000000000000002 = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreGraphics.framework; path = System/Library/Frameworks/CoreGraphics.framework; sourceTree = SDKROOT; };
-		A10512030000000000000002 = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreImage.framework; path = System/Library/Frameworks/CoreImage.framework; sourceTree = SDKROOT; };
-		A10512020000000000000002 = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ImageIO.framework; path = System/Library/Frameworks/ImageIO.framework; sourceTree = SDKROOT; };
-		A10512010000000000000002 = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Vision.framework; path = System/Library/Frameworks/Vision.framework; sourceTree = SDKROOT; };
-		A10512000000000000000002 = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ScreenCaptureKit.framework; path = System/Library/Frameworks/ScreenCaptureKit.framework; sourceTree = SDKROOT; };
-		A10511000000000000000002 = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = "../../apple/OmiRewindCapture.mm"; sourceTree = "<group>"; };
-		A10510000000000000000002 = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = OmiRewindModule.mm; sourceTree = "<group>"; };
-		A10510000000000000000004 = {isa = PBXFileReference; lastKnownFileType = sourcecode.text-based-dylib-definition; name = libsqlite3.tbd; path = usr/lib/libsqlite3.tbd; sourceTree = SDKROOT; };
 		01637F3961E6C48E5172DB1E /* Pods-RnRuntime-macOS.debug.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RnRuntime-macOS.debug.xcconfig"; path = "Target Support Files/Pods-RnRuntime-macOS/Pods-RnRuntime-macOS.debug.xcconfig"; sourceTree = "<group>"; };
 		13B07F961A680F5B00A75B9A /* RnRuntime.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = RnRuntime.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		42B252A9C22C38646AC0EFED /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; includeInIndex = 1; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
@@ -64,9 +54,6 @@
 		514201592437B4B40078DB4F /* RnRuntime.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = RnRuntime.entitlements; sourceTree = "<group>"; };
 		8C7DEB25EEE8A944361796CD /* Pods-RnRuntime-macOS.release.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-RnRuntime-macOS.release.xcconfig"; path = "Target Support Files/Pods-RnRuntime-macOS/Pods-RnRuntime-macOS.release.xcconfig"; sourceTree = "<group>"; };
 		A10401000000000000000002 /* OmiBackendModule.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = OmiBackendModule.mm; sourceTree = "<group>"; };
-		A10409000000000000000002 /* omi_backend_policy.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = omi_backend_policy.cpp; path = "../../native-core/src/omi_backend_policy.cpp"; sourceTree = "<group>"; };
-		A1040C000000000000000002 /* omi_backend_http.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = omi_backend_http.cpp; path = "../../native-core/src/omi_backend_http.cpp"; sourceTree = "<group>"; };
-		A1040D000000000000000002 /* omi_backend_recording.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = omi_backend_recording.cpp; path = "../../native-core/src/omi_backend_recording.cpp"; sourceTree = "<group>"; };
 		A10401000000000000000003 /* OmiBackendModule.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = OmiBackendModule.h; sourceTree = "<group>"; };
 		A10402000000000000000002 /* OmiDesktopCommandsModule.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = OmiDesktopCommandsModule.mm; sourceTree = "<group>"; };
 		A10402000000000000000003 /* OmiDesktopCommandsModule.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = OmiDesktopCommandsModule.h; sourceTree = "<group>"; };
@@ -83,6 +70,19 @@
 		A10409000000000000000002 /* CoreBluetooth.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreBluetooth.framework; path = System/Library/Frameworks/CoreBluetooth.framework; sourceTree = SDKROOT; };
 		A1040A000000000000000002 /* AVFoundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = AVFoundation.framework; path = System/Library/Frameworks/AVFoundation.framework; sourceTree = SDKROOT; };
 		A1040B000000000000000002 /* UserNotifications.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = UserNotifications.framework; path = System/Library/Frameworks/UserNotifications.framework; sourceTree = SDKROOT; };
+		A1040C000000000000000002 /* omi_backend_http.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = omi_backend_http.cpp; path = "../../../native-core/src/omi_backend_http.cpp"; sourceTree = "<group>"; };
+		A1040D000000000000000002 /* omi_backend_recording.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = omi_backend_recording.cpp; path = "../../../native-core/src/omi_backend_recording.cpp"; sourceTree = "<group>"; };
+		A1040E000000000000000002 /* omi_backend_policy.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; name = omi_backend_policy.cpp; path = "../../../native-core/src/omi_backend_policy.cpp"; sourceTree = "<group>"; };
+		A10510000000000000000002 /* OmiRewindModule.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = OmiRewindModule.mm; sourceTree = "<group>"; };
+		A10510000000000000000004 /* libsqlite3.tbd */ = {isa = PBXFileReference; lastKnownFileType = "sourcecode.text-based-dylib-definition"; name = libsqlite3.tbd; path = usr/lib/libsqlite3.tbd; sourceTree = SDKROOT; };
+		A10511000000000000000002 /* OmiRewindCapture.mm */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.objcpp; path = ../../apple/OmiRewindCapture.mm; sourceTree = "<group>"; };
+		A10512000000000000000002 /* ScreenCaptureKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ScreenCaptureKit.framework; path = System/Library/Frameworks/ScreenCaptureKit.framework; sourceTree = SDKROOT; };
+		A10512010000000000000002 /* Vision.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Vision.framework; path = System/Library/Frameworks/Vision.framework; sourceTree = SDKROOT; };
+		A10512020000000000000002 /* ImageIO.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ImageIO.framework; path = System/Library/Frameworks/ImageIO.framework; sourceTree = SDKROOT; };
+		A10512030000000000000002 /* CoreImage.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreImage.framework; path = System/Library/Frameworks/CoreImage.framework; sourceTree = SDKROOT; };
+		A10512040000000000000002 /* CoreGraphics.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreGraphics.framework; path = System/Library/Frameworks/CoreGraphics.framework; sourceTree = SDKROOT; };
+		A10512050000000000000002 /* CoreMedia.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreMedia.framework; path = System/Library/Frameworks/CoreMedia.framework; sourceTree = SDKROOT; };
+		A10512060000000000000002 /* CoreVideo.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = CoreVideo.framework; path = System/Library/Frameworks/CoreVideo.framework; sourceTree = SDKROOT; };
 		ED297162215061F000B7C4FE /* JavaScriptCore.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = JavaScriptCore.framework; path = System/Library/Frameworks/JavaScriptCore.framework; sourceTree = SDKROOT; };
 		F6C5F54BD846C1B394B83CD2 /* libPods-RnRuntime-macOS.a */ = {isa = PBXFileReference; explicitFileType = archive.ar; includeInIndex = 0; path = "libPods-RnRuntime-macOS.a"; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
@@ -103,14 +103,14 @@
 				A10407000000000000000001 /* LocalAuthentication.framework in Frameworks */,
 				A10409000000000000000001 /* CoreBluetooth.framework in Frameworks */,
 				A1040A000000000000000001 /* AVFoundation.framework in Frameworks */,
-				A10510000000000000000003,
-				A10512060000000000000001,
-				A10512050000000000000001,
-				A10512040000000000000001,
-				A10512030000000000000001,
-				A10512020000000000000001,
-				A10512010000000000000001,
-				A10512000000000000000001,
+				A10510000000000000000003 /* libsqlite3.tbd in Frameworks */,
+				A10512060000000000000001 /* CoreVideo.framework in Frameworks */,
+				A10512050000000000000001 /* CoreMedia.framework in Frameworks */,
+				A10512040000000000000001 /* CoreGraphics.framework in Frameworks */,
+				A10512030000000000000001 /* CoreImage.framework in Frameworks */,
+				A10512020000000000000001 /* ImageIO.framework in Frameworks */,
+				A10512010000000000000001 /* Vision.framework in Frameworks */,
+				A10512000000000000000001 /* ScreenCaptureKit.framework in Frameworks */,
 				A1040B000000000000000001 /* UserNotifications.framework in Frameworks */,
 				DA2AA05EC605ADA710BAA8FE /* libPods-RnRuntime-macOS.a in Frameworks */,
 			);
@@ -126,14 +126,14 @@
 				A10407000000000000000002 /* LocalAuthentication.framework */,
 				A10409000000000000000002 /* CoreBluetooth.framework */,
 				A1040A000000000000000002 /* AVFoundation.framework */,
-				A10510000000000000000004,
-				A10512060000000000000002,
-				A10512050000000000000002,
-				A10512040000000000000002,
-				A10512030000000000000002,
-				A10512020000000000000002,
-				A10512010000000000000002,
-				A10512000000000000000002,
+				A10510000000000000000004 /* libsqlite3.tbd */,
+				A10512060000000000000002 /* CoreVideo.framework */,
+				A10512050000000000000002 /* CoreMedia.framework */,
+				A10512040000000000000002 /* CoreGraphics.framework */,
+				A10512030000000000000002 /* CoreImage.framework */,
+				A10512020000000000000002 /* ImageIO.framework */,
+				A10512010000000000000002 /* Vision.framework */,
+				A10512000000000000000002 /* ScreenCaptureKit.framework */,
 				A1040B000000000000000002 /* UserNotifications.framework */,
 				ED297162215061F000B7C4FE /* JavaScriptCore.framework */,
 				F6C5F54BD846C1B394B83CD2 /* libPods-RnRuntime-macOS.a */,
@@ -163,13 +163,13 @@
 				514201592437B4B40078DB4F /* RnRuntime.entitlements */,
 				A10401000000000000000003 /* OmiBackendModule.h */,
 				A10401000000000000000002 /* OmiBackendModule.mm */,
-				A10409000000000000000002 /* omi_backend_policy.cpp */,
+				A1040E000000000000000002 /* omi_backend_policy.cpp */,
 				A1040C000000000000000002 /* omi_backend_http.cpp */,
 				A1040D000000000000000002 /* omi_backend_recording.cpp */,
 				A10402000000000000000003 /* OmiDesktopCommandsModule.h */,
 				A10402000000000000000002 /* OmiDesktopCommandsModule.mm */,
-				A10510000000000000000002,
-				A10511000000000000000002,
+				A10510000000000000000002 /* OmiRewindModule.mm */,
+				A10511000000000000000002 /* OmiRewindCapture.mm */,
 				A10403000000000000000003 /* OmiGlassPanelView.h */,
 				A10403000000000000000002 /* OmiGlassPanelView.mm */,
 				A10404000000000000000003 /* OmiSFSymbolView.h */,
@@ -411,12 +411,12 @@
 				514201582437B4B40078DB4F /* main.m in Sources */,
 				5142014D2437B4B30078DB4F /* AppDelegate.mm in Sources */,
 				A10401000000000000000001 /* OmiBackendModule.mm in Sources */,
-				A10409000000000000000001 /* omi_backend_policy.cpp in Sources */,
+				A1040E000000000000000001 /* omi_backend_policy.cpp in Sources */,
 				A1040C000000000000000001 /* omi_backend_http.cpp in Sources */,
 				A1040D000000000000000001 /* omi_backend_recording.cpp in Sources */,
 				A10402000000000000000001 /* OmiDesktopCommandsModule.mm in Sources */,
-				A10510000000000000000001,
-				A10511000000000000000001,
+				A10510000000000000000001 /* OmiRewindModule.mm in Sources */,
+				A10511000000000000000001 /* OmiRewindCapture.mm in Sources */,
 				A10403000000000000000001 /* OmiGlassPanelView.mm in Sources */,
 				A10404000000000000000001 /* OmiSFSymbolView.mm in Sources */,
 				A10405000000000000000001 /* OmiAuthModule.mm in Sources */,
@@ -486,9 +486,9 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
+				CODE_SIGN_ENTITLEMENTS = "RnRuntime-macOS/RnRuntime.entitlements";
 				CURRENT_PROJECT_VERSION = 1;
 				DEAD_CODE_STRIPPING = NO;
-				CODE_SIGN_ENTITLEMENTS = "RnRuntime-macOS/RnRuntime.entitlements";
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(SRCROOT)/../../native-core/include",
@@ -515,8 +515,8 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CLANG_ENABLE_MODULES = YES;
-				CURRENT_PROJECT_VERSION = 1;
 				CODE_SIGN_ENTITLEMENTS = "RnRuntime-macOS/RnRuntime.entitlements";
+				CURRENT_PROJECT_VERSION = 1;
 				HEADER_SEARCH_PATHS = (
 					"$(inherited)",
 					"$(SRCROOT)/../../native-core/include",
