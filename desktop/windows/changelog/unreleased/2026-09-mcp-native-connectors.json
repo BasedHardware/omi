@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "Memory connectors now use Omi's canonical MCP endpoint (/v1/mcp) and write native Codex (config.toml) and Hermes (config.yaml) entries — no mcp-remote bridge needed. Codex configs keep their other sections and comments untouched, key-rotation rewrites only the Omi entry, and the config files holding your API key are written with private permissions."
+  ]
+}

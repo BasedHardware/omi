@@ -6,12 +6,22 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/schema/device_guide.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/utils/responsive/responsive_helper.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/widgets/device_pairing_sheet.dart';
 import 'package:omi/widgets/rayban_meta_input_picker_sheet.dart';
 
+/// Pairing instructions per device, in the shared sheet shell (docs/ux-contract.md §2).
 class ConnectionGuideSheet extends StatelessWidget {
   const ConnectionGuideSheet({super.key});
+
+  /// Opens the guide. Picking a device opens its pairing steps on top; their Done closes both.
+  static Future<void> show(BuildContext context) {
+    return showOmiSheet<void>(
+      context: context,
+      title: context.l10n.connectionGuide,
+      builder: (_) => const ConnectionGuideSheet(),
+    );
+  }
 
   List<DeviceGuideProduct> _buildDevices(BuildContext context) {
     final l10n = context.l10n;
@@ -72,13 +82,15 @@ class ConnectionGuideSheet extends StatelessWidget {
         pairingDescription: l10n.pairingDescFieldy,
         localImagePath: Assets.images.fieldy.path,
       ),
-      DeviceGuideProduct(
-        id: 'apple_watch',
-        name: 'Apple Watch',
-        pairingTitle: l10n.pairingTitleAppleWatch,
-        pairingDescription: l10n.pairingDescAppleWatch,
-        localImagePath: Assets.images.appleWatch.path,
-      ),
+      // Apple Watch pairs through the iPhone Watch app only.
+      if (Platform.isIOS)
+        DeviceGuideProduct(
+          id: 'apple_watch',
+          name: 'Apple Watch',
+          pairingTitle: l10n.pairingTitleAppleWatch,
+          pairingDescription: l10n.pairingDescAppleWatch,
+          localImagePath: Assets.images.appleWatch.path,
+        ),
       DeviceGuideProduct(
         id: 'neo_one',
         name: 'Neo One',
@@ -94,10 +106,9 @@ class ConnectionGuideSheet extends StatelessWidget {
   void _onDeviceTapped(BuildContext context, DeviceGuideProduct product) {
     PlatformManager.instance.analytics.connectionGuideDeviceTapped(product.id);
     if (product.id == 'rayban_meta') {
-      showModalBottomSheet(
+      showOmiSheet<void>(
         context: context,
-        backgroundColor: Colors.transparent,
-        isScrollControlled: true,
+        title: context.l10n.rayBanMetaMicPickerTitle,
         builder: (sheetContext) => RayBanMetaInputPickerSheet(
           onConnected: () {
             Navigator.of(sheetContext).pop();
@@ -107,10 +118,8 @@ class ConnectionGuideSheet extends StatelessWidget {
       );
       return;
     }
-    showModalBottomSheet(
+    showOmiSheet<void>(
       context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
       builder: (sheetContext) => DevicePairingSheet(
         product: product,
         onDismissAll: () {
@@ -125,42 +134,11 @@ class ConnectionGuideSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final devices = _buildDevices(context);
-    return Container(
-      constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.85),
-      decoration: const BoxDecoration(
-        color: ResponsiveHelper.backgroundSecondary,
-        borderRadius: BorderRadius.only(topLeft: Radius.circular(24), topRight: Radius.circular(24)),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          // Handle bar
-          Container(
-            margin: const EdgeInsets.only(top: 12),
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(color: ResponsiveHelper.textTertiary, borderRadius: BorderRadius.circular(2)),
-          ),
-          const SizedBox(height: 20),
-          // Title
-          Text(
-            context.l10n.connectionGuide,
-            style: const TextStyle(color: ResponsiveHelper.textPrimary, fontSize: 20, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 24),
-          // Device grid
-          Flexible(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Column(
-                children: [
-                  _buildDeviceGrid(context, devices),
-                  SizedBox(height: MediaQuery.of(context).padding.bottom + 24),
-                ],
-              ),
-            ),
-          ),
-        ],
+    return ConstrainedBox(
+      constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.75),
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(OmiSpacing.xs, OmiSpacing.xs, OmiSpacing.xs, OmiSpacing.xl),
+        child: _buildDeviceGrid(context, devices),
       ),
     );
   }
@@ -174,38 +152,50 @@ class ConnectionGuideSheet extends StatelessWidget {
         Row(
           children: [
             Expanded(child: _buildDeviceCard(context, left)),
-            const SizedBox(width: 16),
+            const SizedBox(width: OmiSpacing.md),
             Expanded(child: right != null ? _buildDeviceCard(context, right) : const SizedBox.shrink()),
           ],
         ),
       );
-      if (i + 2 < devices.length) rows.add(const SizedBox(height: 16));
+      if (i + 2 < devices.length) rows.add(const SizedBox(height: OmiSpacing.md));
     }
     return Column(children: rows);
   }
 
   Widget _buildDeviceCard(BuildContext context, DeviceGuideProduct product) {
-    return GestureDetector(
-      onTap: () => _onDeviceTapped(context, product),
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 12),
-        decoration: BoxDecoration(color: ResponsiveHelper.backgroundTertiary, borderRadius: BorderRadius.circular(16)),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (product.localImagePath != null)
-              Image.asset(product.localImagePath!, width: 80, height: 80, fit: BoxFit.contain)
-            else
-              const SizedBox(width: 80, height: 80, child: Icon(Icons.devices, color: ResponsiveHelper.textTertiary)),
-            const SizedBox(height: 12),
-            Text(
-              product.name,
-              style: const TextStyle(color: ResponsiveHelper.textSecondary, fontSize: 14, fontWeight: FontWeight.w500),
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
+    return Semantics(
+      button: true,
+      label: product.name,
+      excludeSemantics: true,
+      child: Material(
+        color: OmiColors.surface2,
+        borderRadius: OmiRadius.lgAll,
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () {
+            OmiHaptics.selection();
+            _onDeviceTapped(context, product);
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: OmiSpacing.lg, horizontal: OmiSpacing.sm),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (product.localImagePath != null)
+                  Image.asset(product.localImagePath!, width: 80, height: 80, fit: BoxFit.contain)
+                else
+                  const SizedBox(width: 80, height: 80, child: Icon(Icons.devices, color: OmiColors.textTertiary)),
+                const SizedBox(height: OmiSpacing.sm),
+                Text(
+                  product.name,
+                  style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
+                  textAlign: TextAlign.center,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
             ),
-          ],
+          ),
         ),
       ),
     );

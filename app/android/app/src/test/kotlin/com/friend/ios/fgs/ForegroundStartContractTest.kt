@@ -16,6 +16,17 @@ class ForegroundStartContractTest {
     }
 
     @Test
+    fun `cold start uses shortService before dataSync on android 14 through 17`() {
+        assertEquals(null, ForegroundStartContract.coldStartType(Build.VERSION_CODES.TIRAMISU))
+        for (sdkInt in 34..37) {
+            assertEquals(
+                android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SHORT_SERVICE,
+                ForegroundStartContract.coldStartType(sdkInt),
+            )
+        }
+    }
+
+    @Test
     fun `missing application icon does not reach startForeground as zero`() {
         assertEquals(42, ForegroundStartContract.notificationIcon(42))
         assertEquals(
