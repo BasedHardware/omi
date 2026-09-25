@@ -978,7 +978,11 @@ neighboring epoch or replayed into a newer conversation. Ownership of recent
 capture ranges is retained as coalesced same-conversation *runs* for 120 s of
 capture time (a hard run cap is a pathological bound, not the working limit),
 so a provider final trailing its audio by tens of seconds still resolves its
-owner. A late batch whose owning conversation is still `in_progress` is
+owner; a sample older than the oldest retained run fails closed (retention
+may have trimmed the run and every boundary that contradicts the surviving
+conversation), and the single-conversation fail-open applies only between
+retained runs inside that horizon. A late batch whose owning conversation is
+still `in_progress` is
 persisted to that row (persist-only: no client delivery, realtime
 integrations, onboarding or translation — the session's current conversation
 owns the live socket, and the late row's finalization owns its
@@ -987,7 +991,10 @@ Diarization accounting (`Diarization Completed`) covers both persistence
 modes. Deepgram's SDK delivers transcripts on its own thread; the receiver's
 callbacks hop onto the listen event loop before touching timeline or send-map
 state (`_run_on_listen_loop`), so all capture-clock mutation stays
-single-threaded.
+single-threaded. The deferred callback runs on its own copy of the segment
+list; a failure inside it is counted in `omi_audio_timeline_segments_total`
+as `rejected` (with one bounded log line — exception type and segment count
+only) instead of dying as a bare asyncio callback error.
 
 Wire. The listen→pusher opt-in is the bounded `audio_timeline=2` WebSocket
 query parameter on `/v1/trigger/listen`; a capable pusher answers with the
@@ -1015,17 +1022,25 @@ the pending per-conversation batch (never concatenating across a gap or
 inside a batch), exact replays are ignored, partial overlaps are trimmed
 after verifying the retained bytes, and conflicting bytes for an accepted
 range fail closed. An overlap reaching past the live buffer is verified
-against a bounded digest ledger of recently flushed runs (`(start, end,
-sha256)` per chunk); a range that can be neither byte-compared nor
-digest-matched is a conflict — the frame is dropped and counted in
-`omi_audio_timeline_replay_conflicts_total`, never partially stored. Chunk
+against a bounded digest ledger of uploaded runs (`(start, end, sha256)` per
+contiguous batch, recorded only after the batch's GCS upload succeeds — a
+chunk evicted by the bounded queue or a batch dropped after exhausting its
+retries leaves no entry); a range that can be neither byte-compared nor
+digest-matched is a conflict — counted in
+`omi_audio_timeline_replay_conflicts_total`, the unverified overlap is never
+stored, and the frame's bytes past the accepted end continue the run from
+that end so no new tail is lost. A failed upload retries on a later
+process-interval tick (never in the same loop turn), keeping its batch
+order in the ready lane; during shutdown the retry gate is skipped so the
+drain stays bounded. Chunk
 queues carry the authoritative PCM sample count; uploads stamp span metadata
 (`v2_start`, `v2_samples`, `v2_sample_rate`) on the blob and refuse to
 overwrite a colliding 3-decimal filename: identity is a SHA-256 of the
 plaintext payload compared against the existing blob (decrypted first for
 enhanced protection, whose ciphertext length can never prove or disprove a
 retry), so an identical retry is an idempotent no-op and equal-size
-conflicting content fails closed. Listing rehydrates spans; grouping splits
+conflicting content — or an existence probe or download that errors — fails
+closed. Listing rehydrates spans; grouping splits
 at actual uncovered ends or overlaps; `AudioFile.chunk_spans` exposes
 validated contiguous coverage (absent on legacy files) and joins the artifact
 fingerprint.
