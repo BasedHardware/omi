@@ -884,7 +884,7 @@ async def get_desktop_appcast_xml(
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception("Error generating appcast")
+        logger.exception(f"Error generating appcast: {e}")
         raise HTTPException(status_code=500, detail="Error generating appcast. Please try again.")
 
 
