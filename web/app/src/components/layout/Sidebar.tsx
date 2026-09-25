@@ -87,22 +87,22 @@ const navItems: NavItem[] = [
   {
     label: 'Home',
     href: '/home',
-    icon: <House className="h-5 w-5" />,
+    icon: <House className="w-5 h-5" />,
   },
   {
     label: 'Conversations',
     href: '/conversations',
-    icon: <GanttChartSquare className="h-5 w-5" />,
+    icon: <GanttChartSquare className="w-5 h-5" />,
   },
   {
     label: 'Memories',
     href: '/memories',
-    icon: <Brain className="h-5 w-5" />,
+    icon: <Brain className="w-5 h-5" />,
   },
   {
     label: 'Tasks',
     href: '/tasks',
-    icon: <ListChecks className="h-5 w-5" />,
+    icon: <ListChecks className="w-5 h-5" />,
   },
 ];
 
@@ -145,7 +145,7 @@ function MenuRow({
   );
   const content = (
     <>
-      <Icon className="h-4 w-4 flex-shrink-0" />
+      <Icon className="w-4 h-4 flex-shrink-0" />
       <span className="whitespace-nowrap text-sm">{label}</span>
     </>
   );
@@ -185,7 +185,7 @@ function ProfileMenuRows({
 }) {
   return (
     <>
-      <div className="space-y-0.5 p-2">
+      <div className="p-2 space-y-0.5">
         <MenuRow
           href="/connectors"
           icon={Puzzle}
@@ -203,7 +203,7 @@ function ProfileMenuRows({
         ))}
       </div>
 
-      <div className="space-y-0.5 border-t border-stroke/60 p-2">
+      <div className="border-t border-stroke/60 p-2 space-y-0.5">
         <MenuRow
           href="https://omi.me/download"
           icon={Download}
@@ -229,12 +229,12 @@ function ProfileMenuRows({
         <button
           onClick={onSignOut}
           className={cn(
-            'flex w-full items-center gap-3 rounded-card px-3 py-2',
-            'text-red-400/80 hover:bg-red-500/[0.08] hover:text-red-400',
+            'w-full flex items-center gap-3 rounded-card px-3 py-2',
+            'text-red-400/80 hover:text-red-400 hover:bg-red-500/[0.08]',
             'transition-colors',
           )}
         >
-          <LogOut className="h-4 w-4 flex-shrink-0" />
+          <LogOut className="w-4 h-4 flex-shrink-0" />
           <span className="whitespace-nowrap text-sm">Sign Out</span>
         </button>
       </div>
@@ -371,7 +371,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+            className="fixed inset-0 bg-black/50 z-40 lg:hidden"
             onClick={onClose}
           />
         )}
@@ -391,9 +391,9 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
           // The rail sits on the raw window; the inset content pane is the
           // only card, so it carries no fill or divider of its own on desktop.
           'bg-bg-secondary lg:bg-transparent',
-          'flex flex-shrink-0 flex-col',
+          'flex flex-col flex-shrink-0',
           // Mobile: fixed overlay with slide transition
-          'fixed bottom-0 left-0 top-0 z-50',
+          'fixed top-0 left-0 bottom-0 z-50',
           // Desktop animates its width to match the macOS rail
           // (.omiAnimation(.easeInOut(duration: 0.2))); mobile slides instead.
           // Deliberately NOT overflow-hidden: the collapsed profile menu opens
@@ -409,7 +409,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             itself. They share the nav's horizontal padding so they read as one
             column of icons with the destinations below, rather than as a
             separate toolbar. */}
-        <div className="overflow-hidden px-2 pb-3 pt-6">
+        <div className="overflow-hidden px-2 pt-6 pb-3">
           {/* Expanded, the mark and the two shell controls share one line.
               Collapsed there is not room for both — two 36px controls do not
               fit in a 56px column — so they stack under the mark. */}
@@ -454,24 +454,21 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               <button
                 onClick={toggleNotificationCenter}
                 className={cn(
-                  'flex items-center justify-center rounded-element p-2 transition-colors',
+                  'flex items-center justify-center p-2 rounded-element transition-colors',
                   'text-text-tertiary hover:bg-bg-tertiary hover:text-text-primary',
                 )}
                 title="Notifications"
                 aria-label="Notifications"
               >
                 <div className="relative">
-                  <Bell className="h-5 w-5" />
-                  <span
-                    className="t-badge"
-                    data-open={unreadCount > 0 ? 'true' : 'false'}
-                  >
+                  <Bell className="w-5 h-5" />
+                  <span className="t-badge" data-open={unreadCount > 0 ? 'true' : 'false'}>
                     <span
                       className={cn(
                         't-badge-dot',
-                        'h-[18px] min-w-[18px] px-1',
+                        'min-w-[18px] h-[18px] px-1',
                         'flex items-center justify-center',
-                        'bg-red-500 text-[10px] font-bold text-white',
+                        'bg-red-500 text-white text-[10px] font-bold',
                         'rounded-full',
                       )}
                     >
@@ -488,7 +485,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                 <button
                   onClick={handleToggleExpand}
                   className={cn(
-                    'flex items-center justify-center rounded-element p-2 transition-colors',
+                    'flex items-center justify-center p-2 rounded-element transition-colors',
                     'text-text-tertiary hover:bg-bg-tertiary hover:text-text-primary',
                   )}
                   title={isExpanded ? 'Collapse sidebar' : 'Expand sidebar'}
@@ -496,10 +493,10 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                 >
                   <span className="t-icon-swap" data-state={isExpanded ? 'a' : 'b'}>
                     <span className="t-icon" data-icon="a">
-                      <PanelLeftClose className="h-5 w-5" />
+                      <PanelLeftClose className="w-5 h-5" />
                     </span>
                     <span className="t-icon" data-icon="b">
-                      <PanelLeft className="h-5 w-5" />
+                      <PanelLeft className="w-5 h-5" />
                     </span>
                   </span>
                 </button>
@@ -509,10 +506,10 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
               {!isDesktop && (
                 <button
                   onClick={onClose}
-                  className="rounded-element p-2 transition-colors hover:bg-bg-tertiary"
+                  className="p-2 rounded-element hover:bg-bg-tertiary transition-colors"
                   aria-label="Close menu"
                 >
-                  <X className="h-5 w-5 text-text-secondary" />
+                  <X className="w-5 h-5 text-text-secondary" />
                 </button>
               )}
             </div>
@@ -520,7 +517,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
         </div>
 
         {/* Scrollable middle section */}
-        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden">
+        <div className="flex-1 min-h-0 overflow-x-hidden overflow-y-auto">
           <nav className="space-y-1 px-2 py-2">
             {navItems.map((item) => {
               const isActive =
@@ -558,7 +555,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                       className="absolute inset-0 rounded-chip bg-text-primary"
                     />
                   )}
-                  <span className="relative z-10 flex-shrink-0">{item.icon}</span>
+                  <span className="flex-shrink-0 relative z-10">{item.icon}</span>
                   <span
                     className={cn(
                       'relative z-10 whitespace-nowrap font-medium',
@@ -617,7 +614,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                         }
                       : { type: 'spring', stiffness: 520, damping: 26 }
                   }
-                  className={cn('relative px-3 pb-2 pt-2', !showText && 'px-2')}
+                  className={cn('relative px-3 pt-2 pb-2', !showText && 'px-2')}
                 >
                   {bannerBursting && <ConfettiBurst />}
                   <div className="relative">
@@ -632,9 +629,9 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
                     >
                       <div className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full bg-white/[0.08]">
                         {isMac ? (
-                          <AppleLogo className="h-4 w-4 text-text-tertiary" />
+                          <AppleLogo className="w-4 h-4 text-text-tertiary" />
                         ) : (
-                          <Smartphone className="h-4 w-4 text-text-tertiary" />
+                          <Smartphone className="w-4 h-4 text-text-tertiary" />
                         )}
                       </div>
                       {showText && (
@@ -759,7 +756,7 @@ export function Sidebar({ isOpen, onClose }: SidebarProps) {
             >
               <>
                 {/* Name & email */}
-                <div className="min-w-0 flex-1 text-left">
+                <div className="flex-1 min-w-0 text-left">
                   <p className="truncate whitespace-nowrap text-sm font-medium text-text-primary">
                     {user?.displayName || 'User'}
                   </p>
@@ -816,12 +813,12 @@ export function MobileMenuButton({ onClick }: { onClick: () => void }) {
     <button
       onClick={onClick}
       className={cn(
-        'rounded-lg p-2 lg:hidden',
-        'transition-colors hover:bg-bg-tertiary',
+        'lg:hidden p-2 rounded-lg',
+        'hover:bg-bg-tertiary transition-colors',
         'focus:outline-none focus-visible:ring-2 focus-visible:ring-white/40',
       )}
     >
-      <Menu className="h-6 w-6 text-text-secondary" />
+      <Menu className="w-6 h-6 text-text-secondary" />
     </button>
   );
 }

@@ -14,11 +14,7 @@ export async function GET(): Promise<Response> {
   const urls = entries
     .map(
       (entry) =>
-        `<url><loc>${escapeXml(
-          entry.url,
-        )}</loc><lastmod>${entry.lastModified.toISOString()}</lastmod><changefreq>${
-          entry.changeFrequency
-        }</changefreq><priority>${entry.priority}</priority></url>`,
+        `<url><loc>${escapeXml(entry.url)}</loc><lastmod>${entry.lastModified.toISOString()}</lastmod><changefreq>${entry.changeFrequency}</changefreq><priority>${entry.priority}</priority></url>`,
     )
     .join('');
   return new Response(

@@ -33,9 +33,7 @@ function formatTimestamp(seconds: number): string {
   const secs = Math.floor(seconds % 60);
 
   if (hrs > 0) {
-    return `${hrs}:${mins.toString().padStart(2, '0')}:${secs
-      .toString()
-      .padStart(2, '0')}`;
+    return `${hrs}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
   }
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
@@ -233,7 +231,7 @@ export function SpeakerTagSheet({
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="absolute inset-0 z-40 rounded-xl bg-black/40"
+            className="absolute inset-0 bg-black/40 z-40 rounded-xl"
           />
 
           {/* Bottom Sheet - slides up from bottom within panel */}
@@ -244,26 +242,26 @@ export function SpeakerTagSheet({
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
             className={cn(
               'absolute bottom-0 left-0 right-0 z-50',
-              'rounded-t-2xl bg-bg-secondary',
-              'flex max-h-[80%] flex-col overflow-hidden',
-              'border-t border-bg-tertiary shadow-xl',
+              'bg-bg-secondary rounded-t-2xl',
+              'max-h-[80%] overflow-hidden flex flex-col',
+              'shadow-xl border-t border-bg-tertiary',
             )}
           >
             {/* Header */}
-            <div className="flex items-center justify-between border-b border-bg-tertiary p-4">
-              <div className="min-w-0 flex-1">
+            <div className="flex items-center justify-between p-4 border-b border-bg-tertiary">
+              <div className="flex-1 min-w-0">
                 <h2 className="text-lg font-semibold text-text-primary">
                   Tag Speaker {(segment.speaker_id ?? 0) + 1}
                 </h2>
-                <p className="mt-0.5 truncate text-sm text-text-tertiary">
+                <p className="text-sm text-text-tertiary truncate mt-0.5">
                   &quot;{segment.text.slice(0, 50)}...&quot;
                 </p>
               </div>
               <button
                 onClick={onClose}
-                className="rounded-lg p-2 transition-colors hover:bg-bg-tertiary"
+                className="p-2 rounded-lg hover:bg-bg-tertiary transition-colors"
               >
-                <X className="h-5 w-5 text-text-tertiary" />
+                <X className="w-5 h-5 text-text-tertiary" />
               </button>
             </div>
 
@@ -271,15 +269,15 @@ export function SpeakerTagSheet({
             <div className="flex-1 overflow-y-auto p-4">
               {/* Error */}
               {error && (
-                <div className="mb-4 rounded-lg border border-error/20 bg-error/10 p-3 text-sm text-error">
+                <div className="mb-4 p-3 rounded-lg bg-error/10 border border-error/20 text-error text-sm">
                   {error}
                 </div>
               )}
 
               {/* Add Person Form */}
               {showAddPerson && (
-                <div className="mb-4 rounded-lg border border-bg-quaternary bg-bg-tertiary p-3">
-                  <p className="mb-2 text-sm font-medium text-text-primary">
+                <div className="mb-4 p-3 rounded-lg bg-bg-tertiary border border-bg-quaternary">
+                  <p className="text-sm font-medium text-text-primary mb-2">
                     Add New Person
                   </p>
                   <div className="flex gap-2">
@@ -290,8 +288,8 @@ export function SpeakerTagSheet({
                       placeholder="Enter name..."
                       autoFocus
                       className={cn(
-                        'flex-1 rounded-lg px-3 py-2',
-                        'border border-bg-quaternary bg-bg-secondary',
+                        'flex-1 px-3 py-2 rounded-lg',
+                        'bg-bg-secondary border border-bg-quaternary',
                         'text-sm text-text-primary placeholder:text-text-quaternary',
                         'focus:outline-none focus:ring-2 focus:ring-white/25',
                       )}
@@ -304,14 +302,14 @@ export function SpeakerTagSheet({
                       onClick={handleCreatePerson}
                       disabled={!newPersonName.trim() || creatingPerson}
                       className={cn(
-                        'rounded-lg px-4 py-2 text-sm font-medium',
-                        'bg-text-primary text-bg-primary hover:bg-text-primary/90',
-                        'disabled:cursor-not-allowed disabled:opacity-50',
+                        'px-4 py-2 rounded-lg text-sm font-medium',
+                        'bg-text-primary hover:bg-text-primary/90 text-bg-primary',
+                        'disabled:opacity-50 disabled:cursor-not-allowed',
                         'transition-colors',
                       )}
                     >
                       {creatingPerson ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
+                        <Loader2 className="w-4 h-4 animate-spin" />
                       ) : (
                         'Add'
                       )}
@@ -321,7 +319,7 @@ export function SpeakerTagSheet({
                         setShowAddPerson(false);
                         setNewPersonName('');
                       }}
-                      className="rounded-lg px-3 py-2 text-sm text-text-secondary transition-colors hover:bg-bg-quaternary"
+                      className="px-3 py-2 rounded-lg text-sm text-text-secondary hover:bg-bg-quaternary transition-colors"
                     >
                       Cancel
                     </button>
@@ -331,12 +329,12 @@ export function SpeakerTagSheet({
 
               {/* Person Selection */}
               <div className="mb-4">
-                <p className="mb-3 text-sm font-medium text-text-secondary">
+                <p className="text-sm font-medium text-text-secondary mb-3">
                   Select Person
                 </p>
                 {loadingPeople ? (
                   <div className="flex items-center gap-2 text-text-tertiary">
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <Loader2 className="w-4 h-4 animate-spin" />
                     <span className="text-sm">Loading people...</span>
                   </div>
                 ) : (
@@ -365,8 +363,8 @@ export function SpeakerTagSheet({
                   <button
                     onClick={() => setTagOtherSegments(!tagOtherSegments)}
                     className={cn(
-                      'flex w-full items-center justify-between rounded-lg p-3',
-                      'bg-bg-tertiary transition-colors hover:bg-bg-quaternary',
+                      'w-full flex items-center justify-between p-3 rounded-lg',
+                      'bg-bg-tertiary hover:bg-bg-quaternary transition-colors',
                       'text-left',
                     )}
                   >
@@ -375,7 +373,7 @@ export function SpeakerTagSheet({
                         type="checkbox"
                         checked={tagOtherSegments}
                         onChange={() => {}}
-                        className="h-4 w-4 rounded border-bg-quaternary text-text-primary focus:ring-white/25"
+                        className="w-4 h-4 rounded border-bg-quaternary text-text-primary focus:ring-white/25"
                       />
                       <div>
                         <p className="text-sm font-medium text-text-primary">
@@ -384,28 +382,26 @@ export function SpeakerTagSheet({
                         <p className="text-xs text-text-tertiary">
                           {tagOtherSegments
                             ? `${selectedCount}/${totalUntagged} selected`
-                            : `${totalUntagged} untagged segment${
-                                totalUntagged !== 1 ? 's' : ''
-                              }`}
+                            : `${totalUntagged} untagged segment${totalUntagged !== 1 ? 's' : ''}`}
                         </p>
                       </div>
                     </div>
                     {tagOtherSegments ? (
-                      <ChevronUp className="h-4 w-4 text-text-tertiary" />
+                      <ChevronUp className="w-4 h-4 text-text-tertiary" />
                     ) : (
-                      <ChevronDown className="h-4 w-4 text-text-tertiary" />
+                      <ChevronDown className="w-4 h-4 text-text-tertiary" />
                     )}
                   </button>
 
                   {/* Segment List */}
                   {tagOtherSegments && (
-                    <div className="mt-3 max-h-40 space-y-2 overflow-y-auto">
+                    <div className="mt-3 max-h-40 overflow-y-auto space-y-2">
                       {otherUntaggedSegments.map((s) => (
                         <label
                           key={s.id}
                           className={cn(
-                            'flex cursor-pointer items-start gap-3 rounded-lg p-3',
-                            'bg-bg-tertiary transition-colors hover:bg-bg-quaternary',
+                            'flex items-start gap-3 p-3 rounded-lg cursor-pointer',
+                            'bg-bg-tertiary hover:bg-bg-quaternary transition-colors',
                             selectedSegmentIds.has(s.id!) && 'ring-1 ring-white/25',
                           )}
                         >
@@ -413,13 +409,13 @@ export function SpeakerTagSheet({
                             type="checkbox"
                             checked={selectedSegmentIds.has(s.id!)}
                             onChange={() => handleToggleSegment(s.id!)}
-                            className="mt-0.5 h-4 w-4 rounded border-bg-quaternary text-text-primary focus:ring-white/25"
+                            className="mt-0.5 w-4 h-4 rounded border-bg-quaternary text-text-primary focus:ring-white/25"
                           />
-                          <div className="min-w-0 flex-1">
-                            <p className="line-clamp-2 text-sm text-text-primary">
+                          <div className="flex-1 min-w-0">
+                            <p className="text-sm text-text-primary line-clamp-2">
                               {s.text}
                             </p>
-                            <p className="mt-1 text-xs text-text-quaternary">
+                            <p className="text-xs text-text-quaternary mt-1">
                               [{formatTimestamp(s.start)} - {formatTimestamp(s.end)}]
                             </p>
                           </div>
@@ -443,10 +439,10 @@ export function SpeakerTagSheet({
                     onClick={onManagePeople}
                     className={cn(
                       'flex items-center gap-2 text-sm text-text-tertiary',
-                      'transition-colors hover:text-text-secondary',
+                      'hover:text-text-secondary transition-colors',
                     )}
                   >
-                    <Settings className="h-4 w-4" />
+                    <Settings className="w-4 h-4" />
                     <span>Manage People</span>
                   </button>
                 </div>
@@ -454,20 +450,20 @@ export function SpeakerTagSheet({
             </div>
 
             {/* Footer */}
-            <div className="border-t border-bg-tertiary p-4">
+            <div className="p-4 border-t border-bg-tertiary">
               <button
                 onClick={handleSave}
                 disabled={(!selectedPersonId && !isYouSelected) || saving}
                 className={cn(
-                  'flex w-full items-center justify-center gap-2 rounded-xl px-4 py-3',
+                  'w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl',
                   'text-sm font-medium transition-all duration-150',
-                  'bg-text-primary text-bg-primary hover:bg-text-primary/90',
-                  'disabled:cursor-not-allowed disabled:opacity-50',
+                  'bg-text-primary hover:bg-text-primary/90 text-bg-primary',
+                  'disabled:opacity-50 disabled:cursor-not-allowed',
                 )}
               >
                 {saving ? (
                   <>
-                    <Loader2 className="h-4 w-4 animate-spin" />
+                    <Loader2 className="w-4 h-4 animate-spin" />
                     <span>Saving...</span>
                   </>
                 ) : (

@@ -62,15 +62,15 @@ function RecordPageContent() {
 
   return (
     <>
-      <div className="flex h-full flex-col bg-bg-primary">
+      <div className="h-full flex flex-col bg-bg-primary">
         {/* Header */}
-        <header className="flex flex-shrink-0 items-center justify-between px-6 py-4">
+        <header className="flex-shrink-0 flex items-center justify-between px-6 py-4">
           <div className="flex items-center gap-3">
             <Link
               href="/conversations"
-              className="rounded-element p-2 text-text-tertiary transition-colors hover:bg-bg-tertiary hover:text-text-primary"
+              className="p-2 rounded-element text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-colors"
             >
-              <ArrowLeft className="h-5 w-5" />
+              <ArrowLeft className="w-5 h-5" />
             </Link>
             <h1 className="text-sm font-medium text-text-tertiary">Record</h1>
           </div>
@@ -84,19 +84,19 @@ function RecordPageContent() {
         </header>
 
         {isIdle ? (
-          <div className="flex flex-1 flex-col items-center justify-center gap-6 px-6 pb-16 text-center">
+          <div className="flex-1 flex flex-col items-center justify-center gap-6 px-6 pb-16 text-center">
             <button
               type="button"
               onClick={handleStartClick}
               aria-label="Start recording"
               className={cn(
-                'group relative flex h-32 w-32 items-center justify-center rounded-full',
-                'outline-none transition-all duration-200',
+                'group relative w-32 h-32 rounded-full flex items-center justify-center',
+                'transition-all duration-200 outline-none',
                 'focus-visible:ring-2 focus-visible:ring-text-primary/60 focus-visible:ring-offset-4 focus-visible:ring-offset-bg-primary',
                 'bg-text-primary text-bg-primary hover:scale-105 active:scale-95',
               )}
             >
-              <Mic className="h-12 w-12" strokeWidth={1.5} />
+              <Mic className="w-12 h-12" strokeWidth={1.5} />
             </button>
 
             <div className="max-w-sm space-y-2">
@@ -108,9 +108,9 @@ function RecordPageContent() {
             </div>
           </div>
         ) : (
-          <div className="flex flex-1 flex-col gap-4 overflow-hidden px-6 pb-6">
+          <div className="flex-1 flex flex-col overflow-hidden px-6 pb-6 gap-4">
             {/* Recording controls - horizontal compact layout */}
-            <div className="flex flex-shrink-0 flex-col items-center gap-3">
+            <div className="flex-shrink-0 flex flex-col items-center gap-3">
               <RecordingControls
                 state={state}
                 duration={duration}
@@ -129,12 +129,12 @@ function RecordPageContent() {
                     initial={{ opacity: 0, y: -4 }}
                     animate={{ opacity: 1, y: 0 }}
                     exit={{ opacity: 0, y: -4 }}
-                    className="rounded-control border border-error/20 bg-error/10 px-4 py-2"
+                    className="px-4 py-2 rounded-control bg-error/10 border border-error/20"
                   >
                     <p className="text-sm text-error">{error}</p>
                     <button
                       onClick={clearError}
-                      className="text-xs text-error/60 transition-colors hover:text-error"
+                      className="text-xs text-error/60 hover:text-error transition-colors"
                     >
                       Dismiss
                     </button>
@@ -144,8 +144,8 @@ function RecordPageContent() {
             </div>
 
             {/* Transcript (takes remaining space) */}
-            <div className="flex flex-1 flex-col overflow-hidden rounded-card border border-stroke bg-bg-secondary">
-              <div className="flex flex-shrink-0 items-baseline gap-2 border-b border-stroke px-5 py-3">
+            <div className="flex-1 flex flex-col overflow-hidden rounded-card bg-bg-secondary border border-stroke">
+              <div className="flex-shrink-0 px-5 py-3 border-b border-stroke flex items-baseline gap-2">
                 <h2 className="text-sm font-medium text-text-primary">Live Transcript</h2>
                 <p className="text-xs text-text-quaternary">
                   {segments.length} segment{segments.length !== 1 ? 's' : ''}

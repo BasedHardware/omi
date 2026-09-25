@@ -55,7 +55,7 @@ export function TaskGroup({
         onClick={() => collapsible && setIsCollapsed(!isCollapsed)}
         disabled={!collapsible}
         className={cn(
-          'flex w-full items-center gap-2',
+          'flex items-center gap-2 w-full',
           'text-left',
           collapsible && 'cursor-pointer hover:opacity-80',
         )}
@@ -63,9 +63,9 @@ export function TaskGroup({
         {collapsible && (
           <span className="text-text-quaternary">
             {isCollapsed ? (
-              <ChevronRight className="h-4 w-4" />
+              <ChevronRight className="w-4 h-4" />
             ) : (
-              <ChevronDown className="h-4 w-4" />
+              <ChevronDown className="w-4 h-4" />
             )}
           </span>
         )}
@@ -98,7 +98,7 @@ export function TaskGroup({
               onClick={() => setShowAll(true)}
               className={cn(
                 'w-full py-2 text-sm text-text-tertiary',
-                'transition-colors hover:text-white',
+                'hover:text-white transition-colors',
                 'text-center',
               )}
             >
@@ -121,9 +121,9 @@ export function TaskGroupSkeleton({ count = 3 }: TaskGroupSkeletonProps) {
     <div className="space-y-2">
       {/* Header skeleton */}
       <div className="flex items-center gap-2">
-        <div className="h-4 w-4 animate-pulse rounded bg-bg-quaternary" />
-        <div className="h-4 w-24 animate-pulse rounded bg-bg-quaternary" />
-        <div className="h-3 w-6 animate-pulse rounded bg-bg-quaternary" />
+        <div className="w-4 h-4 bg-bg-quaternary rounded animate-pulse" />
+        <div className="h-4 w-24 bg-bg-quaternary rounded animate-pulse" />
+        <div className="h-3 w-6 bg-bg-quaternary rounded animate-pulse" />
       </div>
 
       {/* Card skeletons */}

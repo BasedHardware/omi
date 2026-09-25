@@ -44,9 +44,7 @@ function detectTimeGaps(conversations: Conversation[]): string | null {
   }
 
   if (maxGapHours > 0) {
-    return `These conversations have gaps of up to ${maxGapHours} hour${
-      maxGapHours > 1 ? 's' : ''
-    } between them.`;
+    return `These conversations have gaps of up to ${maxGapHours} hour${maxGapHours > 1 ? 's' : ''} between them.`;
   }
 
   return null;
@@ -81,9 +79,9 @@ export function MergeConfirmationDialog({
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
             className={cn(
-              'fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2',
-              'w-full max-w-md rounded-2xl p-6',
-              'border border-bg-tertiary bg-bg-secondary',
+              'fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50',
+              'w-full max-w-md p-6 rounded-2xl',
+              'bg-bg-secondary border border-bg-tertiary',
               'shadow-[0_16px_64px_rgba(0,0,0,0.5)]',
             )}
           >
@@ -92,32 +90,32 @@ export function MergeConfirmationDialog({
               onClick={onCancel}
               disabled={isLoading}
               className={cn(
-                'absolute right-4 top-4 rounded-lg p-2',
+                'absolute top-4 right-4 p-2 rounded-lg',
                 'text-text-quaternary hover:text-text-primary',
-                'transition-colors hover:bg-bg-tertiary',
-                'disabled:cursor-not-allowed disabled:opacity-50',
+                'hover:bg-bg-tertiary transition-colors',
+                'disabled:opacity-50 disabled:cursor-not-allowed',
               )}
             >
-              <X className="h-4 w-4" />
+              <X className="w-4 h-4" />
             </button>
 
             {/* Icon */}
             <div
               className={cn(
-                'mb-4 h-12 w-12 rounded-xl',
-                'flex items-center justify-center bg-white/[0.14]',
+                'w-12 h-12 rounded-xl mb-4',
+                'bg-white/[0.14] flex items-center justify-center',
               )}
             >
-              <Merge className="h-6 w-6 text-text-primary" />
+              <Merge className="w-6 h-6 text-text-primary" />
             </div>
 
             {/* Title */}
-            <h2 className="mb-2 text-lg font-semibold text-text-primary">
+            <h2 className="text-lg font-semibold text-text-primary mb-2">
               Merge {conversations.length} conversations?
             </h2>
 
             {/* Description */}
-            <p className="mb-4 text-sm text-text-secondary">
+            <p className="text-sm text-text-secondary mb-4">
               The selected conversations will be combined into a single conversation. This
               action is processed in the background.
             </p>
@@ -126,27 +124,27 @@ export function MergeConfirmationDialog({
             {timeGapWarning && (
               <div
                 className={cn(
-                  'mb-4 flex items-start gap-3 rounded-xl p-3',
-                  'border border-warning/20 bg-warning/10',
+                  'flex items-start gap-3 p-3 rounded-xl mb-4',
+                  'bg-warning/10 border border-warning/20',
                 )}
               >
-                <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-warning" />
+                <AlertTriangle className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" />
                 <p className="text-sm text-warning">{timeGapWarning}</p>
               </div>
             )}
 
             {/* Conversation list preview */}
-            <div className="mb-6 max-h-40 space-y-2 overflow-y-auto">
+            <div className="max-h-40 overflow-y-auto mb-6 space-y-2">
               {conversations.map((conv) => (
                 <div
                   key={conv.id}
                   className={cn(
-                    'flex items-center gap-2 rounded-lg px-3 py-2',
+                    'flex items-center gap-2 px-3 py-2 rounded-lg',
                     'bg-bg-tertiary',
                   )}
                 >
                   <span className="text-lg">{conv.structured.emoji || '💬'}</span>
-                  <span className="flex-1 truncate text-sm text-text-primary">
+                  <span className="text-sm text-text-primary truncate flex-1">
                     {conv.structured.title || 'Untitled'}
                   </span>
                 </div>
@@ -159,11 +157,11 @@ export function MergeConfirmationDialog({
                 onClick={onCancel}
                 disabled={isLoading}
                 className={cn(
-                  'flex-1 rounded-xl px-4 py-2.5',
+                  'flex-1 px-4 py-2.5 rounded-xl',
                   'text-sm font-medium text-text-secondary',
                   'bg-bg-tertiary hover:bg-bg-quaternary',
                   'transition-colors duration-150',
-                  'disabled:cursor-not-allowed disabled:opacity-50',
+                  'disabled:opacity-50 disabled:cursor-not-allowed',
                 )}
               >
                 Cancel
@@ -172,18 +170,18 @@ export function MergeConfirmationDialog({
                 onClick={onConfirm}
                 disabled={isLoading}
                 className={cn(
-                  'flex flex-1 items-center justify-center gap-2',
-                  'rounded-xl px-4 py-2.5',
+                  'flex-1 flex items-center justify-center gap-2',
+                  'px-4 py-2.5 rounded-xl',
                   'text-sm font-medium text-bg-primary',
                   'bg-text-primary hover:bg-text-primary/90',
                   'transition-colors duration-150',
-                  'disabled:cursor-not-allowed disabled:opacity-50',
+                  'disabled:opacity-50 disabled:cursor-not-allowed',
                 )}
               >
                 {isLoading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
-                  <Merge className="h-4 w-4" />
+                  <Merge className="w-4 h-4" />
                 )}
                 <span>{isLoading ? 'Merging...' : 'Merge'}</span>
               </button>

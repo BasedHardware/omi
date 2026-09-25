@@ -33,7 +33,8 @@ void main() {
     await tester.pumpWidget(
       _wrap(
         DailySummariesList(
-          fetchSummaries: ({int limit = 30, int offset = 0}) async => (items: const <DailySummary>[], ok: false),
+          fetchSummaries: ({int limit = 30, int offset = 0}) async =>
+              (items: const <DailySummary>[], ok: false),
         ),
       ),
     );
@@ -47,7 +48,8 @@ void main() {
     await tester.pumpWidget(
       _wrap(
         DailySummariesList(
-          fetchSummaries: ({int limit = 30, int offset = 0}) async => (items: const <DailySummary>[], ok: true),
+          fetchSummaries: ({int limit = 30, int offset = 0}) async =>
+              (items: const <DailySummary>[], ok: true),
         ),
       ),
     );

@@ -91,8 +91,8 @@ export function EditableTitle({
         onBlur={handleBlur}
         disabled={isSaving}
         className={cn(
-          'w-full border-b-2 border-white/25 bg-transparent',
-          'text-text-primary outline-none',
+          'w-full bg-transparent border-b-2 border-white/25',
+          'outline-none text-text-primary',
           'disabled:opacity-50',
           className,
         )}
@@ -107,7 +107,7 @@ export function EditableTitle({
       title="Double-click to edit"
       className={cn(
         'cursor-text select-none',
-        'rounded-lg transition-colors hover:bg-bg-tertiary/50',
+        'hover:bg-bg-tertiary/50 rounded-lg transition-colors',
         '-mx-2 px-2 py-1',
         className,
       )}

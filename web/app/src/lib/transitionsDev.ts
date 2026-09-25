@@ -16,12 +16,8 @@ export function replayErrorShake(input: HTMLElement): () => void {
   void input.offsetWidth;
   input.classList.add('is-shaking');
   const shakeMs =
-    readDurationToken('--shake-dur-a', 80) * 2 +
-    readDurationToken('--shake-dur-b', 60) * 2;
-  const timer = window.setTimeout(
-    () => input.classList.remove('is-shaking'),
-    shakeMs + 20,
-  );
+    readDurationToken('--shake-dur-a', 80) * 2 + readDurationToken('--shake-dur-b', 60) * 2;
+  const timer = window.setTimeout(() => input.classList.remove('is-shaking'), shakeMs + 20);
   return () => {
     window.clearTimeout(timer);
     input.classList.remove('is-shaking');

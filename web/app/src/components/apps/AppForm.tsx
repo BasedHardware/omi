@@ -505,13 +505,13 @@ export function AppForm({ mode, app }: AppFormProps) {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center p-8">
-        <div className="border-accent-primary h-8 w-8 animate-spin rounded-full border-2 border-t-transparent" />
+        <div className="animate-spin rounded-full h-8 w-8 border-2 border-accent-primary border-t-transparent" />
       </div>
     );
   }
 
   return (
-    <div className="flex h-full flex-col">
+    <div className="flex flex-col h-full">
       {/* Page Header */}
       <PageHeader
         title={mode === 'create' ? 'Create App' : 'Edit App'}
@@ -520,21 +520,21 @@ export function AppForm({ mode, app }: AppFormProps) {
       />
 
       {/* Toolbar with Actions */}
-      <div className="flex-shrink-0 border-b border-bg-tertiary bg-bg-secondary px-6 py-3">
-        <div className="mx-auto flex max-w-2xl items-center justify-end gap-3">
+      <div className="flex-shrink-0 px-6 py-3 border-b border-bg-tertiary bg-bg-secondary">
+        <div className="max-w-2xl mx-auto flex items-center justify-end gap-3">
           {mode === 'edit' && (
             <button
               type="button"
               onClick={handleDelete}
               disabled={isDeleting}
               className={cn(
-                'flex items-center gap-2 rounded-xl px-4 py-2.5 text-sm font-medium',
+                'flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium',
                 'bg-error/10 text-error',
-                'transition-colors hover:bg-error/20',
-                'disabled:cursor-not-allowed disabled:opacity-50',
+                'hover:bg-error/20 transition-colors',
+                'disabled:opacity-50 disabled:cursor-not-allowed',
               )}
             >
-              <TrashIcon className="h-4 w-4" />
+              <TrashIcon className="w-4 h-4" />
               {isDeleting ? 'Deleting...' : 'Delete'}
             </button>
           )}
@@ -543,26 +543,26 @@ export function AppForm({ mode, app }: AppFormProps) {
             form="app-form"
             disabled={isSubmitting}
             className={cn(
-              'flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-medium',
+              'flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-medium',
               'bg-white text-black',
-              'transition-colors hover:bg-white/90',
-              'disabled:cursor-not-allowed disabled:opacity-50',
+              'hover:bg-white/90 transition-colors',
+              'disabled:opacity-50 disabled:cursor-not-allowed',
             )}
           >
             {isSubmitting
               ? 'Saving...'
               : mode === 'create'
-              ? 'Create App'
-              : 'Save Changes'}
+                ? 'Create App'
+                : 'Save Changes'}
           </button>
         </div>
       </div>
 
       <form id="app-form" onSubmit={handleSubmit} className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-2xl space-y-6 p-6">
+        <div className="max-w-2xl mx-auto p-6 space-y-6">
           {/* Error display */}
           {error && (
-            <div className="rounded-xl border border-error/20 bg-error/10 p-4 text-error">
+            <div className="p-4 bg-error/10 border border-error/20 rounded-xl text-error">
               {error}
             </div>
           )}
@@ -573,13 +573,13 @@ export function AppForm({ mode, app }: AppFormProps) {
 
             {/* Logo */}
             <div>
-              <label className="mb-2 block text-sm text-text-secondary">App Logo *</label>
+              <label className="block text-sm text-text-secondary mb-2">App Logo *</label>
               <div className="flex items-center gap-4">
                 <button
                   type="button"
                   onClick={() => fileInputRef.current?.click()}
                   className={cn(
-                    'flex h-20 w-20 items-center justify-center rounded-2xl border border-dashed',
+                    'w-20 h-20 rounded-2xl border border-dashed flex items-center justify-center',
                     'transition-colors hover:border-white/50',
                     logoPreview ? 'border-transparent' : 'border-bg-quaternary',
                   )}
@@ -593,7 +593,7 @@ export function AppForm({ mode, app }: AppFormProps) {
                       className="rounded-2xl object-cover"
                     />
                   ) : (
-                    <ImageIcon className="h-8 w-8 text-text-tertiary" />
+                    <ImageIcon className="w-8 h-8 text-text-tertiary" />
                   )}
                 </button>
                 <input
@@ -611,7 +611,7 @@ export function AppForm({ mode, app }: AppFormProps) {
 
             {/* Name */}
             <div>
-              <label className="mb-2 block text-sm text-text-secondary">App Name *</label>
+              <label className="block text-sm text-text-secondary mb-2">App Name *</label>
               <input
                 type="text"
                 value={name}
@@ -623,20 +623,20 @@ export function AppForm({ mode, app }: AppFormProps) {
 
             {/* Description */}
             <div>
-              <div className="mb-2 flex items-center justify-between">
+              <div className="flex items-center justify-between mb-2">
                 <label className="text-sm text-text-secondary">Description *</label>
                 <button
                   type="button"
                   onClick={handleGenerateDescription}
                   disabled={isGeneratingDescription || !name}
                   className={cn(
-                    'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm',
+                    'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm',
                     'bg-white/10 text-text-primary',
-                    'transition-colors hover:bg-white/20',
-                    'disabled:cursor-not-allowed disabled:opacity-50',
+                    'hover:bg-white/20 transition-colors',
+                    'disabled:opacity-50 disabled:cursor-not-allowed',
                   )}
                 >
-                  <SparklesIcon className="h-4 w-4" />
+                  <SparklesIcon className="w-4 h-4" />
                   {isGeneratingDescription ? 'Generating...' : 'Generate with AI'}
                 </button>
               </div>
@@ -651,17 +651,17 @@ export function AppForm({ mode, app }: AppFormProps) {
 
             {/* Category */}
             <div>
-              <label className="mb-2 block text-sm text-text-secondary">Category *</label>
+              <label className="block text-sm text-text-secondary mb-2">Category *</label>
               <div className="relative" ref={categoryDropdownRef}>
                 <button
                   type="button"
                   onClick={() => setIsCategoryOpen(!isCategoryOpen)}
                   className={cn(
-                    'w-full rounded-xl px-4 py-3 pr-10 text-left',
+                    'w-full px-4 py-3 pr-10 rounded-xl text-left',
                     'border transition-all',
                     category
-                      ? 'border-white/50 bg-white/10 text-white'
-                      : 'border-bg-quaternary bg-bg-tertiary text-text-primary',
+                      ? 'bg-white/10 border-white/50 text-white'
+                      : 'bg-bg-tertiary border-bg-quaternary text-text-primary',
                     'focus:outline-none focus:ring-2 focus:ring-white/50',
                   )}
                 >
@@ -672,7 +672,7 @@ export function AppForm({ mode, app }: AppFormProps) {
                 </button>
                 <ChevronDownIcon
                   className={cn(
-                    'pointer-events-none absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 transition-all',
+                    'w-5 h-5 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none transition-all',
                     category ? 'text-text-primary' : 'text-text-tertiary',
                     isCategoryOpen && 'rotate-180',
                   )}
@@ -680,7 +680,7 @@ export function AppForm({ mode, app }: AppFormProps) {
 
                 {/* Dropdown menu */}
                 {isCategoryOpen && (
-                  <div className="absolute z-50 mt-2 max-h-64 w-full overflow-y-auto rounded-xl border border-bg-quaternary bg-bg-secondary py-2 shadow-xl">
+                  <div className="absolute z-50 w-full mt-2 py-2 rounded-xl bg-bg-secondary border border-bg-quaternary shadow-xl max-h-64 overflow-y-auto">
                     {categories.map((cat) => {
                       const isSelected = category === cat.id;
                       return (
@@ -692,7 +692,7 @@ export function AppForm({ mode, app }: AppFormProps) {
                             setIsCategoryOpen(false);
                           }}
                           className={cn(
-                            'flex w-full items-center justify-between px-4 py-2.5 text-left transition-colors',
+                            'w-full px-4 py-2.5 text-left transition-colors flex items-center justify-between',
                             isSelected
                               ? 'bg-white/20 text-white'
                               : 'text-text-primary hover:bg-bg-tertiary',
@@ -701,7 +701,7 @@ export function AppForm({ mode, app }: AppFormProps) {
                           <span>{cat.title}</span>
                           {isSelected && (
                             <svg
-                              className="h-4 w-4 text-text-primary"
+                              className="w-4 h-4 text-text-primary"
                               fill="none"
                               viewBox="0 0 24 24"
                               stroke="currentColor"
@@ -742,9 +742,9 @@ export function AppForm({ mode, app }: AppFormProps) {
                   <button
                     type="button"
                     onClick={() => removeThumbnail(index)}
-                    className="absolute -right-2 -top-2 rounded-full bg-error p-1"
+                    className="absolute -top-2 -right-2 p-1 bg-error rounded-full"
                   >
-                    <XIcon className="h-3 w-3 text-white" />
+                    <XIcon className="w-3 h-3 text-white" />
                   </button>
                 </div>
               ))}
@@ -753,17 +753,17 @@ export function AppForm({ mode, app }: AppFormProps) {
                 onClick={() => thumbnailInputRef.current?.click()}
                 disabled={uploadingThumbnail}
                 className={cn(
-                  'h-[180px] w-[120px] flex-shrink-0 rounded-xl',
+                  'flex-shrink-0 w-[120px] h-[180px] rounded-xl',
                   'border border-dashed border-bg-quaternary',
                   'flex items-center justify-center',
-                  'transition-colors hover:border-white/50',
+                  'hover:border-white/50 transition-colors',
                   'disabled:opacity-50',
                 )}
               >
                 {uploadingThumbnail ? (
-                  <div className="h-6 w-6 animate-spin rounded-full border-2 border-white/30 border-t-transparent" />
+                  <div className="animate-spin rounded-full h-6 w-6 border-2 border-white/30 border-t-transparent" />
                 ) : (
-                  <PlusIcon className="h-6 w-6 text-text-tertiary" />
+                  <PlusIcon className="w-6 h-6 text-text-tertiary" />
                 )}
               </button>
               <input
@@ -792,11 +792,11 @@ export function AppForm({ mode, app }: AppFormProps) {
                     type="button"
                     onClick={() => toggleCapability(cap.id)}
                     className={cn(
-                      'relative rounded-xl px-4 py-4 text-left transition-all',
-                      'flex items-center justify-between border',
+                      'relative px-4 py-4 rounded-xl text-left transition-all',
+                      'border flex items-center justify-between',
                       isSelected
-                        ? 'border-white/50 bg-white/10 text-white ring-1 ring-white/30'
-                        : 'border-transparent bg-bg-tertiary text-text-primary hover:bg-bg-quaternary',
+                        ? 'bg-white/10 text-white border-white/50 ring-1 ring-white/30'
+                        : 'bg-bg-tertiary border-transparent text-text-primary hover:bg-bg-quaternary',
                     )}
                   >
                     <span
@@ -809,15 +809,15 @@ export function AppForm({ mode, app }: AppFormProps) {
                     </span>
                     <div
                       className={cn(
-                        'flex h-5 w-5 items-center justify-center rounded-full border-2 transition-all',
+                        'w-5 h-5 rounded-full flex items-center justify-center border-2 transition-all',
                         isSelected
-                          ? 'border-white/30 bg-white'
+                          ? 'bg-white border-white/30'
                           : 'border-text-quaternary bg-transparent',
                       )}
                     >
                       {isSelected && (
                         <svg
-                          className="h-3 w-3 text-black"
+                          className="w-3 h-3 text-black"
                           fill="none"
                           viewBox="0 0 24 24"
                           stroke="currentColor"
@@ -888,7 +888,7 @@ export function AppForm({ mode, app }: AppFormProps) {
 
               {/* Trigger Event */}
               <div>
-                <label className="mb-2 block text-sm text-text-secondary">
+                <label className="block text-sm text-text-secondary mb-2">
                   Trigger Event
                 </label>
                 <div className="relative">
@@ -896,8 +896,8 @@ export function AppForm({ mode, app }: AppFormProps) {
                     value={triggerEvent}
                     onChange={(e) => setTriggerEvent(e.target.value)}
                     className={cn(
-                      'w-full appearance-none rounded-xl px-4 py-3',
-                      'border border-bg-quaternary bg-bg-tertiary',
+                      'w-full px-4 py-3 rounded-xl appearance-none',
+                      'bg-bg-tertiary border border-bg-quaternary',
                       'text-text-primary',
                       'focus:outline-none focus:ring-2 focus:ring-white/50',
                     )}
@@ -909,13 +909,13 @@ export function AppForm({ mode, app }: AppFormProps) {
                     </option>
                     <option value="audio_bytes">Audio Bytes Streamed</option>
                   </select>
-                  <ChevronDownIcon className="pointer-events-none absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-text-tertiary" />
+                  <ChevronDownIcon className="w-5 h-5 absolute right-3 top-1/2 -translate-y-1/2 text-text-tertiary pointer-events-none" />
                 </div>
               </div>
 
               {/* Webhook URL */}
               <div>
-                <label className="mb-2 block text-sm text-text-secondary">
+                <label className="block text-sm text-text-secondary mb-2">
                   Webhook URL *
                 </label>
                 <input
@@ -929,7 +929,7 @@ export function AppForm({ mode, app }: AppFormProps) {
 
               {/* Setup Completed URL */}
               <div>
-                <label className="mb-2 block text-sm text-text-secondary">
+                <label className="block text-sm text-text-secondary mb-2">
                   Setup Completed URL
                 </label>
                 <input
@@ -943,7 +943,7 @@ export function AppForm({ mode, app }: AppFormProps) {
 
               {/* App Home URL */}
               <div>
-                <label className="mb-2 block text-sm text-text-secondary">
+                <label className="block text-sm text-text-secondary mb-2">
                   App Home URL
                 </label>
                 <input
@@ -978,11 +978,11 @@ export function AppForm({ mode, app }: AppFormProps) {
                         );
                       }}
                       className={cn(
-                        'rounded-xl px-4 py-4 text-left transition-all',
-                        'flex items-center justify-between border',
+                        'px-4 py-4 rounded-xl text-left transition-all',
+                        'border flex items-center justify-between',
                         isSelected
-                          ? 'border-white/50 bg-white/10 text-white ring-1 ring-white/30'
-                          : 'border-transparent bg-bg-tertiary text-text-primary hover:bg-bg-quaternary',
+                          ? 'bg-white/10 text-white border-white/50 ring-1 ring-white/30'
+                          : 'bg-bg-tertiary border-transparent text-text-primary hover:bg-bg-quaternary',
                       )}
                     >
                       <span
@@ -995,15 +995,15 @@ export function AppForm({ mode, app }: AppFormProps) {
                       </span>
                       <div
                         className={cn(
-                          'flex h-5 w-5 items-center justify-center rounded-full border-2 transition-all',
+                          'w-5 h-5 rounded-full flex items-center justify-center border-2 transition-all',
                           isSelected
-                            ? 'border-white/30 bg-white'
+                            ? 'bg-white border-white/30'
                             : 'border-text-quaternary bg-transparent',
                         )}
                       >
                         {isSelected && (
                           <svg
-                            className="h-3 w-3 text-black"
+                            className="w-3 h-3 text-black"
                             fill="none"
                             viewBox="0 0 24 24"
                             stroke="currentColor"
@@ -1051,12 +1051,12 @@ export function AppForm({ mode, app }: AppFormProps) {
             {/* Privacy Toggle */}
             <div
               className={cn(
-                'flex items-center justify-between rounded-xl p-4 transition-all',
+                'flex items-center justify-between p-4 rounded-xl transition-all',
                 !isPrivate ? 'bg-white/10' : 'bg-bg-tertiary',
               )}
             >
               <div>
-                <p className="font-medium text-text-primary">Make Public</p>
+                <p className="text-text-primary font-medium">Make Public</p>
                 <p className="text-sm text-text-tertiary">
                   {isPrivate
                     ? 'Only you can use this app'
@@ -1067,13 +1067,13 @@ export function AppForm({ mode, app }: AppFormProps) {
                 type="button"
                 onClick={() => setIsPrivate(!isPrivate)}
                 className={cn(
-                  'relative h-8 w-14 rounded-full transition-all',
+                  'relative w-14 h-8 rounded-full transition-all',
                   !isPrivate ? 'bg-white' : 'bg-bg-quaternary',
                 )}
               >
                 <div
                   className={cn(
-                    'absolute top-1 h-6 w-6 rounded-full shadow-md transition-all',
+                    'absolute top-1 w-6 h-6 rounded-full transition-all shadow-md',
                     !isPrivate ? 'bg-black' : 'bg-white',
                     !isPrivate ? 'left-7' : 'left-1',
                   )}
@@ -1086,12 +1086,12 @@ export function AppForm({ mode, app }: AppFormProps) {
               <>
                 <div
                   className={cn(
-                    'flex items-center justify-between rounded-xl p-4 transition-all',
+                    'flex items-center justify-between p-4 rounded-xl transition-all',
                     isPaid ? 'bg-white/10' : 'bg-bg-tertiary',
                   )}
                 >
                   <div>
-                    <p className="font-medium text-text-primary">Paid App</p>
+                    <p className="text-text-primary font-medium">Paid App</p>
                     <p className="text-sm text-text-tertiary">
                       Charge users for your app
                     </p>
@@ -1100,13 +1100,13 @@ export function AppForm({ mode, app }: AppFormProps) {
                     type="button"
                     onClick={() => setIsPaid(!isPaid)}
                     className={cn(
-                      'relative h-8 w-14 rounded-full transition-all',
+                      'relative w-14 h-8 rounded-full transition-all',
                       isPaid ? 'bg-white' : 'bg-bg-quaternary',
                     )}
                   >
                     <div
                       className={cn(
-                        'absolute top-1 h-6 w-6 rounded-full shadow-md transition-all',
+                        'absolute top-1 w-6 h-6 rounded-full transition-all shadow-md',
                         isPaid ? 'bg-black' : 'bg-white',
                         isPaid ? 'left-7' : 'left-1',
                       )}
@@ -1115,10 +1115,10 @@ export function AppForm({ mode, app }: AppFormProps) {
                 </div>
 
                 {isPaid && (
-                  <div className="space-y-4 rounded-xl bg-bg-tertiary p-4">
+                  <div className="space-y-4 p-4 bg-bg-tertiary rounded-xl">
                     {/* Price */}
                     <div>
-                      <label className="mb-2 block text-sm text-text-secondary">
+                      <label className="block text-sm text-text-secondary mb-2">
                         Price (USD) *
                       </label>
                       <div className="relative">
@@ -1133,8 +1133,8 @@ export function AppForm({ mode, app }: AppFormProps) {
                           step="0.01"
                           placeholder="0.00"
                           className={cn(
-                            'w-full rounded-xl py-3 pl-8 pr-4',
-                            'border border-bg-quaternary bg-bg-secondary',
+                            'w-full pl-8 pr-4 py-3 rounded-xl',
+                            'bg-bg-secondary border border-bg-quaternary',
                             'text-text-primary placeholder:text-text-tertiary',
                             'focus:outline-none focus:ring-2 focus:ring-white/50',
                           )}
@@ -1144,7 +1144,7 @@ export function AppForm({ mode, app }: AppFormProps) {
 
                     {/* Payment Plan */}
                     <div>
-                      <label className="mb-2 block text-sm text-text-secondary">
+                      <label className="block text-sm text-text-secondary mb-2">
                         Payment Plan *
                       </label>
                       <div className="flex gap-2">
@@ -1156,11 +1156,11 @@ export function AppForm({ mode, app }: AppFormProps) {
                               type="button"
                               onClick={() => setPaymentPlan(plan.id)}
                               className={cn(
-                                'flex-1 rounded-xl px-4 py-3 text-sm font-medium transition-all',
+                                'flex-1 px-4 py-3 rounded-xl text-sm font-medium transition-all',
                                 'border',
                                 isSelected
-                                  ? 'border-white/50 bg-white/10 text-white'
-                                  : 'border-bg-quaternary bg-bg-secondary text-text-secondary hover:bg-bg-quaternary',
+                                  ? 'bg-white/10 text-white border-white/50'
+                                  : 'bg-bg-secondary border-bg-quaternary text-text-secondary hover:bg-bg-quaternary',
                               )}
                             >
                               {plan.title}

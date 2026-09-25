@@ -6,7 +6,7 @@ import { PublicBuildCanary } from '@/components/public-build-canary';
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <>
-      <div className="dark w-full overflow-x-hidden bg-bg-primary font-body text-text-primary antialiased">
+      <div className="dark bg-bg-primary text-text-primary font-body antialiased overflow-x-hidden w-full">
         <PublicBuildCanary />
         <AuthProvider>
           <RecordingProvider>

@@ -48,9 +48,7 @@ export function MobileBlockOverlay() {
   const resizeTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Check if current path should bypass mobile detection entirely
-  const shouldBypass = BYPASS_MOBILE_CHECK_PATHS.some((path) =>
-    pathname?.startsWith(path),
-  );
+  const shouldBypass = BYPASS_MOBILE_CHECK_PATHS.some(path => pathname?.startsWith(path));
 
   useEffect(() => {
     setMounted(true);
@@ -112,45 +110,45 @@ export function MobileBlockOverlay() {
   const StoreIcon = platform === 'android' ? PlayStoreIcon : AppleIcon;
 
   return (
-    <div className="fixed inset-0 z-[9999] flex flex-col items-center justify-center bg-bg-primary p-6">
+    <div className="fixed inset-0 z-[9999] bg-bg-primary flex flex-col items-center justify-center p-6">
       {/* Dismiss button - top right corner */}
       <button
         onClick={handleDismiss}
-        className="absolute right-4 top-4 z-20 rounded-lg bg-white/5 p-2 transition-colors hover:bg-white/10"
+        className="absolute top-4 right-4 z-20 p-2 bg-white/5 hover:bg-white/10 rounded-lg transition-colors"
         aria-label="Continue to web"
       >
-        <X className="h-5 w-5 text-gray-400" />
+        <X className="w-5 h-5 text-gray-400" />
       </button>
 
       {/* Background gradient effect */}
-      <div className="pointer-events-none absolute inset-0 overflow-hidden">
-        <div className="absolute left-1/2 top-1/4 h-[600px] w-[600px] -translate-x-1/2 rounded-full bg-white/[0.08] blur-[120px]" />
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute top-1/4 left-1/2 -translate-x-1/2 w-[600px] h-[600px] bg-white/[0.08] rounded-full blur-[120px]" />
       </div>
 
       {/* Main content container */}
-      <div className="relative z-10 flex max-w-sm flex-1 flex-col items-center justify-center text-center">
+      <div className="relative z-10 flex flex-col items-center justify-center flex-1 max-w-sm text-center">
         {/* Round logo with breathing glow */}
         <div className="relative mb-8">
           <div
-            className="absolute inset-0 animate-pulse rounded-full bg-white/[0.14] blur-xl"
+            className="absolute inset-0 rounded-full bg-white/[0.14] blur-xl animate-pulse"
             style={{ animationDuration: '3s' }}
           />
-          <div className="relative h-28 w-28">
+          <div className="w-28 h-28 relative">
             <Image
               src="/logo.png"
               alt="Omi"
               fill
-              className="relative z-10 object-contain drop-shadow-[0_0_15px_rgba(139,92,246,0.3)]"
+              className="object-contain relative z-10 drop-shadow-[0_0_15px_rgba(139,92,246,0.3)]"
               priority
             />
           </div>
         </div>
 
         {/* Message */}
-        <h1 className="mb-3 text-2xl font-semibold text-text-primary">
+        <h1 className="text-2xl font-semibold text-text-primary mb-3">
           Omi Web is optimized for desktop.
         </h1>
-        <p className="mb-8 text-text-tertiary">
+        <p className="text-text-tertiary mb-8">
           For the best mobile experience, download the Omi app.
         </p>
 
@@ -159,30 +157,36 @@ export function MobileBlockOverlay() {
           href={storeUrl}
           target="_blank"
           rel="noopener noreferrer"
-          className="mb-4 inline-flex items-center gap-3 rounded-xl bg-white px-6 py-3 font-medium text-black transition-colors hover:bg-gray-100"
+          className="inline-flex items-center gap-3 bg-white text-black px-6 py-3 rounded-xl font-medium hover:bg-gray-100 transition-colors mb-4"
         >
-          <StoreIcon className="h-6 w-6" />
+          <StoreIcon className="w-6 h-6" />
           <span>Download on {storeName}</span>
         </a>
 
         {/* Continue to web button */}
         <button
           onClick={handleDismiss}
-          className="text-sm text-text-tertiary transition-colors hover:text-text-secondary"
+          className="text-text-tertiary hover:text-text-secondary transition-colors text-sm"
         >
           Continue to web anyway
         </button>
       </div>
 
       {/* Bottom section with logo and links */}
-      <div className="relative z-10 flex flex-col items-center gap-4 pb-8">
-        <Image src="/omi-white.webp" alt="Omi" width={60} height={24} priority />
+      <div className="relative z-10 pb-8 flex flex-col items-center gap-4">
+        <Image
+          src="/omi-white.webp"
+          alt="Omi"
+          width={60}
+          height={24}
+          priority
+        />
         <div className="flex items-center gap-4 text-sm text-text-quaternary">
           <a
             href="https://www.omi.me/"
             target="_blank"
             rel="noopener noreferrer"
-            className="transition-colors hover:text-text-tertiary"
+            className="hover:text-text-tertiary transition-colors"
           >
             About
           </a>
@@ -191,7 +195,7 @@ export function MobileBlockOverlay() {
             href="https://www.omi.me/pages/privacy"
             target="_blank"
             rel="noopener noreferrer"
-            className="transition-colors hover:text-text-tertiary"
+            className="hover:text-text-tertiary transition-colors"
           >
             Privacy
           </a>
@@ -200,7 +204,7 @@ export function MobileBlockOverlay() {
             href="https://help.omi.me/"
             target="_blank"
             rel="noopener noreferrer"
-            className="transition-colors hover:text-text-tertiary"
+            className="hover:text-text-tertiary transition-colors"
           >
             Help
           </a>

@@ -159,7 +159,7 @@ export function GoalCard({
           </div>
         </div>
 
-        <div className="mt-0.5 flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity focus-within:opacity-100 group-hover:opacity-100">
+        <div className="mt-0.5 flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 focus-within:opacity-100">
           {/* Insight needs a real target; a 0-target yes/no goal gives the
               advice model little to reason about. Matches desktop. */}
           {target > 0 && (

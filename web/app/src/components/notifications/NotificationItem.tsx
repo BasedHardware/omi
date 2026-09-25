@@ -97,8 +97,8 @@ export function NotificationItem({
     <div
       onClick={onClick}
       className={cn(
-        'flex cursor-pointer items-start gap-3 px-4 py-3',
-        'transition-colors hover:bg-bg-tertiary/50',
+        'flex items-start gap-3 px-4 py-3 cursor-pointer',
+        'hover:bg-bg-tertiary/50 transition-colors',
         'group relative',
         !notification.read && 'bg-white/[0.08]',
       )}
@@ -106,7 +106,7 @@ export function NotificationItem({
       {/* Icon or App Image */}
       <div
         className={cn(
-          'flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-full',
+          'w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden',
           'bg-bg-tertiary',
         )}
       >
@@ -116,31 +116,31 @@ export function NotificationItem({
             alt=""
             width={36}
             height={36}
-            className="h-full w-full object-cover"
+            className="w-full h-full object-cover"
           />
         ) : (
-          <Icon className={cn('h-4 w-4', iconColor)} />
+          <Icon className={cn('w-4 h-4', iconColor)} />
         )}
       </div>
 
       {/* Content */}
-      <div className="min-w-0 flex-1">
+      <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2">
           <p
             className={cn(
-              'truncate text-sm font-medium',
+              'text-sm font-medium truncate',
               notification.read ? 'text-text-secondary' : 'text-text-primary',
             )}
           >
             {notification.title}
           </p>
-          <span className="flex-shrink-0 text-xs text-text-quaternary">
+          <span className="text-xs text-text-quaternary flex-shrink-0">
             {formatNotificationTimestamp(new Date(notification.timestamp))}
           </span>
         </div>
         <p
           className={cn(
-            'mt-0.5 line-clamp-2 text-sm',
+            'text-sm mt-0.5 line-clamp-2',
             notification.read ? 'text-text-quaternary' : 'text-text-tertiary',
           )}
         >
@@ -151,7 +151,7 @@ export function NotificationItem({
       {/* Unread indicator */}
       {!notification.read && (
         <div
-          className="mt-2 h-2 w-2 flex-shrink-0 rounded-full bg-text-primary"
+          className="w-2 h-2 rounded-full bg-text-primary flex-shrink-0 mt-2"
           title="Unread"
         />
       )}
@@ -161,25 +161,25 @@ export function NotificationItem({
         className={cn(
           'absolute right-2 top-1/2 -translate-y-1/2',
           'flex items-center gap-1',
-          'opacity-0 transition-opacity group-hover:opacity-100',
-          'rounded-lg bg-bg-secondary/90 px-1 py-1 backdrop-blur-sm',
+          'opacity-0 group-hover:opacity-100 transition-opacity',
+          'bg-bg-secondary/90 backdrop-blur-sm rounded-lg px-1 py-1',
         )}
       >
         {!notification.read && (
           <button
             onClick={handleMarkAsRead}
-            className="rounded-md p-1.5 transition-colors hover:bg-bg-tertiary"
+            className="p-1.5 rounded-md hover:bg-bg-tertiary transition-colors"
             title="Mark as read"
           >
-            <Clock className="h-3.5 w-3.5 text-text-quaternary" />
+            <Clock className="w-3.5 h-3.5 text-text-quaternary" />
           </button>
         )}
         <button
           onClick={handleClear}
-          className="rounded-md p-1.5 transition-colors hover:bg-bg-tertiary"
+          className="p-1.5 rounded-md hover:bg-bg-tertiary transition-colors"
           title="Remove"
         >
-          <X className="h-3.5 w-3.5 text-text-quaternary" />
+          <X className="w-3.5 h-3.5 text-text-quaternary" />
         </button>
       </div>
     </div>

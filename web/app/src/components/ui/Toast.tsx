@@ -113,21 +113,21 @@ function ToastItem({ toast, onRemove }: ToastItemProps) {
       exit={{ opacity: 0, y: -20, scale: 0.95 }}
       transition={{ duration: 0.2 }}
       className={cn(
-        'flex items-center gap-3 rounded-xl px-4 py-3',
-        'border shadow-lg backdrop-blur-lg',
+        'flex items-center gap-3 px-4 py-3 rounded-xl',
+        'border backdrop-blur-lg shadow-lg',
         'min-w-[280px] max-w-[400px]',
         colors,
       )}
     >
-      <Icon className="h-5 w-5 flex-shrink-0" />
+      <Icon className="w-5 h-5 flex-shrink-0" />
       <span className="flex-1 text-sm font-medium text-text-primary">
         {toast.message}
       </span>
       <button
         onClick={() => onRemove(toast.id)}
-        className="rounded-lg p-1 transition-colors hover:bg-white/10"
+        className="p-1 rounded-lg hover:bg-white/10 transition-colors"
       >
-        <X className="h-4 w-4 text-text-tertiary" />
+        <X className="w-4 h-4 text-text-tertiary" />
       </button>
     </motion.div>
   );

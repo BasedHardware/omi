@@ -214,8 +214,8 @@ export function BulkActionBar({
       openMenu === 'snooze'
         ? snoozeRef.current
         : openMenu === 'export'
-        ? exportRef.current
-        : overflowRef.current;
+          ? exportRef.current
+          : overflowRef.current;
 
     const onPointerDown = (event: PointerEvent) => {
       const target = event.target;
@@ -245,21 +245,21 @@ export function BulkActionBar({
           <button
             onClick={onSelectAll}
             className={cn(
-              'flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm',
+              'flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm',
               'transition-colors',
               allSelected
                 ? 'bg-white/10 text-white'
-                : 'text-text-tertiary hover:bg-bg-quaternary hover:text-text-primary',
+                : 'text-text-tertiary hover:text-text-primary hover:bg-bg-quaternary',
             )}
           >
             {allSelected ? (
-              <CheckSquare className="h-4 w-4" />
+              <CheckSquare className="w-4 h-4" />
             ) : (
-              <Square className="h-4 w-4" />
+              <Square className="w-4 h-4" />
             )}
             <span>Select All</span>
           </button>
-          <div className="h-6 w-px bg-bg-quaternary" />
+          <div className="w-px h-6 bg-bg-quaternary" />
         </>
       )}
 
@@ -270,15 +270,15 @@ export function BulkActionBar({
         {!inline && (
           <button
             onClick={onClear}
-            className="rounded p-1 text-text-quaternary transition-colors hover:bg-bg-tertiary hover:text-text-secondary"
+            className="p-1 rounded hover:bg-bg-tertiary text-text-quaternary hover:text-text-secondary transition-colors"
             title="Clear selection"
           >
-            <X className="h-4 w-4" />
+            <X className="w-4 h-4" />
           </button>
         )}
       </div>
 
-      <div className="h-6 w-px bg-bg-tertiary" />
+      <div className="w-px h-6 bg-bg-tertiary" />
 
       <div className="flex items-center gap-2">
         {!hideSnooze && onSnooze && (
@@ -288,16 +288,16 @@ export function BulkActionBar({
               onClick={() => toggleMenu('snooze')}
               disabled={selectedCount === 0}
               className={cn(
-                'flex items-center gap-1.5 rounded-lg px-3 py-1.5',
+                'flex items-center gap-1.5 px-3 py-1.5 rounded-lg',
                 'bg-bg-tertiary hover:bg-bg-quaternary',
-                'text-sm text-text-secondary',
+                'text-text-secondary text-sm',
                 'transition-colors',
-                'disabled:cursor-not-allowed disabled:opacity-50',
+                'disabled:opacity-50 disabled:cursor-not-allowed',
               )}
             >
-              <Clock className="h-4 w-4" />
+              <Clock className="w-4 h-4" />
               <span>Snooze</span>
-              <ChevronDown className="h-3 w-3" />
+              <ChevronDown className="w-3 h-3" />
             </button>
 
             <AnimatePresence>
@@ -315,14 +315,14 @@ export function BulkActionBar({
             onClick={onComplete}
             disabled={selectedCount === 0}
             className={cn(
-              'hidden items-center gap-1.5 rounded-lg px-3 py-1.5 min-[1430px]:flex',
+              'hidden min-[1430px]:flex items-center gap-1.5 px-3 py-1.5 rounded-lg',
               'bg-success/20 hover:bg-success/30',
-              'text-sm text-success',
+              'text-success text-sm',
               'transition-colors',
-              'disabled:cursor-not-allowed disabled:opacity-50',
+              'disabled:opacity-50 disabled:cursor-not-allowed',
             )}
           >
-            <Check className="h-4 w-4" />
+            <Check className="w-4 h-4" />
             <span>Complete</span>
           </button>
         )}
@@ -331,14 +331,14 @@ export function BulkActionBar({
           onClick={onDelete}
           disabled={selectedCount === 0}
           className={cn(
-            'hidden items-center gap-1.5 rounded-lg px-3 py-1.5 min-[1430px]:flex',
+            'hidden min-[1430px]:flex items-center gap-1.5 px-3 py-1.5 rounded-lg',
             'bg-error/20 hover:bg-error/30',
-            'text-sm text-error',
+            'text-error text-sm',
             'transition-colors',
-            'disabled:cursor-not-allowed disabled:opacity-50',
+            'disabled:opacity-50 disabled:cursor-not-allowed',
           )}
         >
-          <Trash2 className="h-4 w-4" />
+          <Trash2 className="w-4 h-4" />
           <span>Delete</span>
         </button>
 
@@ -351,15 +351,15 @@ export function BulkActionBar({
             onClick={onCopy}
             disabled={selectedCount === 0}
             className={cn(
-              'hidden items-center gap-1.5 rounded-lg px-3 py-1.5 min-[1600px]:flex',
+              'hidden min-[1600px]:flex items-center gap-1.5 px-3 py-1.5 rounded-lg',
               'bg-bg-tertiary hover:bg-bg-quaternary',
-              'text-sm text-text-secondary',
+              'text-text-secondary text-sm',
               'transition-colors',
-              'disabled:cursor-not-allowed disabled:opacity-50',
+              'disabled:opacity-50 disabled:cursor-not-allowed',
             )}
             title="Copy to clipboard"
           >
-            <Copy className="h-4 w-4" />
+            <Copy className="w-4 h-4" />
             <span>Copy</span>
           </button>
         )}
@@ -371,16 +371,16 @@ export function BulkActionBar({
               onClick={() => toggleMenu('export')}
               disabled={selectedCount === 0}
               className={cn(
-                'flex items-center gap-1.5 rounded-lg px-3 py-1.5',
+                'flex items-center gap-1.5 px-3 py-1.5 rounded-lg',
                 'bg-bg-tertiary hover:bg-bg-quaternary',
-                'text-sm text-text-secondary',
+                'text-text-secondary text-sm',
                 'transition-colors',
-                'disabled:cursor-not-allowed disabled:opacity-50',
+                'disabled:opacity-50 disabled:cursor-not-allowed',
               )}
             >
-              <Download className="h-4 w-4" />
+              <Download className="w-4 h-4" />
               <span>Export</span>
-              <ChevronDown className="h-3 w-3" />
+              <ChevronDown className="w-3 h-3" />
             </button>
 
             <AnimatePresence>
@@ -396,13 +396,13 @@ export function BulkActionBar({
 
       {inline && onDone && (
         <>
-          <div className="ml-auto h-6 w-px bg-bg-tertiary" />
+          <div className="w-px h-6 bg-bg-tertiary ml-auto" />
           <button
             onClick={onDone}
             className={cn(
-              'flex items-center gap-1.5 rounded-lg px-3 py-1.5',
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-lg',
               'bg-white/10 hover:bg-white/20',
-              'text-sm font-medium text-white',
+              'text-white text-sm font-medium',
               'transition-colors',
             )}
           >
@@ -425,7 +425,7 @@ export function BulkActionBar({
               'bg-bg-tertiary hover:bg-bg-quaternary',
               'text-text-secondary',
               'transition-colors',
-              'disabled:cursor-not-allowed disabled:opacity-50',
+              'disabled:opacity-50 disabled:cursor-not-allowed',
             )}
           >
             <MoreHorizontal className="h-4 w-4" />
@@ -507,8 +507,8 @@ export function BulkActionBar({
         exit={{ opacity: 0, height: 0 }}
         transition={{ duration: 0.2 }}
         className={cn(
-          'flex items-center gap-3 rounded-lg px-3 py-2',
-          'border border-bg-quaternary bg-bg-tertiary/50',
+          'flex items-center gap-3 py-2 px-3 rounded-lg',
+          'bg-bg-tertiary/50 border border-bg-quaternary',
         )}
       >
         {content}
@@ -525,7 +525,7 @@ export function BulkActionBar({
         transition={{ duration: 0.2, ease: 'easeOut' }}
         className={cn(
           'fixed bottom-4 left-1/2 -translate-x-1/2',
-          'border border-bg-tertiary bg-bg-secondary',
+          'bg-bg-secondary border border-bg-tertiary',
           'rounded-xl shadow-lg shadow-black/30',
           'px-4 py-3',
           'flex items-center gap-4',

@@ -9,7 +9,7 @@ const ENV_KEYS = [
   "POSTHOG_HOST",
 ] as const;
 const originalEnv = Object.fromEntries(
-  ENV_KEYS.map((key) => [key, process.env[key]])
+  ENV_KEYS.map((key) => [key, process.env[key]]),
 );
 
 afterEach(() => {
@@ -35,11 +35,9 @@ describe("computeDesktopRatings", () => {
     const payload = await computeDesktopRatings(60);
 
     expect(posthogResults.mock.calls[0][3]).toContain(
-      "toTimeZone(timestamp, 'America/New_York')"
+      "toTimeZone(timestamp, 'America/New_York')",
     );
-    expect(posthogResults.mock.calls[0][3]).toContain(
-      "Desktop Rating Submitted"
-    );
+    expect(posthogResults.mock.calls[0][3]).toContain("Desktop Rating Submitted");
     // HogQL rejects ClickHouse's toFloat64OrZero with a validation_error
     // ("Unsupported function call ... Perhaps you meant 'toFloatOrZero'") —
     // observed live on prod PostHog 2026-08-25.

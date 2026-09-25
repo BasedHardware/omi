@@ -10,12 +10,7 @@ interface PageHeaderProps {
   onBack?: () => void;
 }
 
-export function PageHeader({
-  title,
-  icon: Icon,
-  showBackButton,
-  onBack,
-}: PageHeaderProps) {
+export function PageHeader({ title, icon: Icon, showBackButton, onBack }: PageHeaderProps) {
   const router = useRouter();
 
   const handleBack = () => {
@@ -27,16 +22,16 @@ export function PageHeader({
   };
 
   return (
-    <div className="flex items-center gap-3 border-b border-bg-tertiary bg-bg-secondary px-6 py-4">
+    <div className="flex items-center gap-3 px-6 py-4 border-b border-bg-tertiary bg-bg-secondary">
       {showBackButton && (
         <button
           onClick={handleBack}
-          className="rounded-lg p-2 transition-colors hover:bg-bg-tertiary"
+          className="p-2 rounded-lg hover:bg-bg-tertiary transition-colors"
         >
-          <ArrowLeft className="h-5 w-5 text-text-secondary" />
+          <ArrowLeft className="w-5 h-5 text-text-secondary" />
         </button>
       )}
-      {Icon && <Icon className="h-6 w-6 text-text-secondary" />}
+      {Icon && <Icon className="w-6 h-6 text-text-secondary" />}
       <h1 className="text-2xl font-bold text-text-primary">{title}</h1>
     </div>
   );

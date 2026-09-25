@@ -45,7 +45,7 @@ export function WeekStrip({
   };
 
   return (
-    <div className="scrollbar-hide flex gap-2 overflow-x-auto pb-2">
+    <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
       {days.map((day, index) => {
         const isSelected = selectedDate?.toDateString() === day.date.toDateString();
         const hasNoTasks = day.pending === 0 && day.completed === 0;
@@ -62,11 +62,11 @@ export function WeekStrip({
             onDragLeave={handleDragLeave}
             onDrop={(e) => handleDrop(e, day.date)}
             className={cn(
-              'flex min-w-[72px] flex-col items-center rounded-lg px-3 py-2',
+              'flex flex-col items-center min-w-[72px] px-3 py-2 rounded-lg',
               'border transition-all duration-150',
               day.isToday
-                ? 'border-white/50 bg-white/10'
-                : 'border-transparent bg-bg-tertiary hover:border-white/30 hover:bg-bg-quaternary',
+                ? 'bg-white/10 border-white/50'
+                : 'bg-bg-tertiary border-transparent hover:bg-bg-quaternary hover:border-white/30',
               isSelected && 'ring-2 ring-white',
             )}
           >
@@ -83,7 +83,7 @@ export function WeekStrip({
             {/* Day number */}
             <span
               className={cn(
-                'my-0.5 text-lg font-semibold',
+                'text-lg font-semibold my-0.5',
                 day.isToday ? 'text-text-primary' : 'text-text-secondary',
               )}
             >
@@ -92,15 +92,15 @@ export function WeekStrip({
 
             {/* Badge */}
             {!hasNoTasks && (
-              <div className="flex h-5 items-center justify-center">
+              <div className="h-5 flex items-center justify-center">
                 {allCompleted ? (
-                  <div className="flex h-5 w-5 items-center justify-center rounded-full bg-success">
-                    <Check className="h-3 w-3 text-white" strokeWidth={3} />
+                  <div className="w-5 h-5 rounded-full bg-success flex items-center justify-center">
+                    <Check className="w-3 h-3 text-white" strokeWidth={3} />
                   </div>
                 ) : (
                   <span
                     className={cn(
-                      'rounded-full px-1.5 py-0.5 text-xs font-medium',
+                      'px-1.5 py-0.5 rounded-full text-xs font-medium',
                       'bg-white text-black',
                     )}
                   >

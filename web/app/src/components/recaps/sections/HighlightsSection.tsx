@@ -23,7 +23,7 @@ export function HighlightsSection({
   return (
     <div
       className={cn(
-        'noise-overlay overflow-hidden rounded-xl',
+        'noise-overlay rounded-xl overflow-hidden',
         'bg-gradient-to-b from-white/[0.03] to-white/[0.01]',
         'border border-white/[0.04]',
       )}
@@ -62,35 +62,33 @@ function HighlightCard({ highlight, isLast, onConversationClick }: HighlightCard
   return (
     <div
       className={cn(
-        'flex min-h-[160px] flex-col p-4',
+        'p-4 flex flex-col min-h-[160px]',
         !isLast && 'border-r border-white/[0.04]',
       )}
     >
       {/* Emoji + Topic + Conversation icon */}
-      <div className="mb-2 flex items-center gap-2">
+      <div className="flex items-center gap-2 mb-2">
         <span className="text-xl">{highlight.emoji}</span>
-        <h4 className="line-clamp-1 flex-1 text-sm font-semibold text-text-primary">
+        <h4 className="text-sm font-semibold text-text-primary flex-1 line-clamp-1">
           {highlight.topic}
         </h4>
         {hasConversations && (
           <button
             onClick={handleConversationClick}
             className={cn(
-              'flex-shrink-0 rounded-lg p-1.5',
+              'p-1.5 rounded-lg flex-shrink-0',
               'text-text-quaternary hover:text-text-primary',
-              'transition-colors hover:bg-white/[0.14]',
+              'hover:bg-white/[0.14] transition-colors',
             )}
-            title={`${highlight.conversation_ids!.length} conversation${
-              highlight.conversation_ids!.length > 1 ? 's' : ''
-            }`}
+            title={`${highlight.conversation_ids!.length} conversation${highlight.conversation_ids!.length > 1 ? 's' : ''}`}
           >
-            <MessageSquare className="h-3.5 w-3.5" />
+            <MessageSquare className="w-3.5 h-3.5" />
           </button>
         )}
       </div>
 
       {/* Summary */}
-      <p className="flex-1 text-sm leading-relaxed text-text-secondary">
+      <p className="text-sm text-text-secondary leading-relaxed flex-1">
         {highlight.summary}
       </p>
     </div>

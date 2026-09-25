@@ -237,7 +237,7 @@ export function ChatPanel() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-40 bg-black/30 sm:hidden"
+            className="fixed inset-0 bg-black/30 z-40 sm:hidden"
             onClick={closeChat}
           />
 
@@ -249,36 +249,34 @@ export function ChatPanel() {
             transition={{ type: 'spring', damping: 30, stiffness: 300 }}
             className={cn(
               'h-full flex-shrink-0 overflow-hidden',
-              'border-l border-bg-tertiary bg-bg-secondary',
+              'bg-bg-secondary border-l border-bg-tertiary',
               'max-sm:fixed max-sm:inset-0 max-sm:z-50 max-sm:w-full',
             )}
           >
-            <PanelReveal
-              className={cn('flex h-full w-[400px] flex-col', 'max-sm:w-full')}
-            >
+            <PanelReveal className={cn('w-[400px] h-full flex flex-col', 'max-sm:w-full')}>
               {/* Header */}
-              <div className="flex items-center justify-between border-b border-bg-tertiary p-4">
+              <div className="flex items-center justify-between p-4 border-b border-bg-tertiary">
                 <div className="flex items-center gap-3">
                   {/* Back button when in app-specific chat */}
                   {selectedAppId && (
                     <button
                       onClick={clearAppContext}
-                      className="-ml-1 rounded-lg p-1.5 transition-colors hover:bg-bg-tertiary"
+                      className="p-1.5 -ml-1 rounded-lg hover:bg-bg-tertiary transition-colors"
                       aria-label="Back to Omi chat"
                       title="Back to Omi"
                     >
-                      <ArrowLeft className="h-4 w-4 text-text-tertiary" />
+                      <ArrowLeft className="w-4 h-4 text-text-tertiary" />
                     </button>
                   )}
-                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/[0.14]">
-                    <Sparkles className="h-4 w-4 text-text-primary" />
+                  <div className="w-8 h-8 rounded-full bg-white/[0.14] flex items-center justify-center">
+                    <Sparkles className="w-4 h-4 text-text-primary" />
                   </div>
                   <div>
                     <h2 className="font-semibold text-text-primary">
                       {selectedApp ? `Chat with ${selectedApp.name}` : 'Chat with Omi'}
                     </h2>
                     {currentContext?.title && !selectedAppId && (
-                      <p className="max-w-[250px] truncate text-xs text-text-tertiary">
+                      <p className="text-xs text-text-tertiary truncate max-w-[250px]">
                         Context: {currentContext.title}
                       </p>
                     )}
@@ -288,34 +286,34 @@ export function ChatPanel() {
                   {messages.length > 0 && (
                     <button
                       onClick={() => setShowClearDialog(true)}
-                      className="rounded-lg p-2 transition-colors hover:bg-bg-tertiary"
+                      className="p-2 rounded-lg hover:bg-bg-tertiary transition-colors"
                       aria-label="Clear chat"
                       title="Clear chat history"
                     >
-                      <Trash2 className="h-4 w-4 text-text-quaternary hover:text-text-secondary" />
+                      <Trash2 className="w-4 h-4 text-text-quaternary hover:text-text-secondary" />
                     </button>
                   )}
                   <button
                     onClick={closeChat}
-                    className="rounded-lg p-2 transition-colors hover:bg-bg-tertiary"
+                    className="p-2 rounded-lg hover:bg-bg-tertiary transition-colors"
                     aria-label="Close chat"
                   >
-                    <X className="h-5 w-5 text-text-secondary" />
+                    <X className="w-5 h-5 text-text-secondary" />
                   </button>
                 </div>
               </div>
 
               {/* Error banner */}
               {error && (
-                <div className="border-b border-error/20 bg-error/10 px-4 py-2">
+                <div className="px-4 py-2 bg-error/10 border-b border-error/20">
                   <p className="text-sm text-error">{error}</p>
                 </div>
               )}
 
               {/* Quick prompts (shown when no messages) */}
               {messages.length === 0 && !isLoading && (
-                <div className="border-b border-bg-tertiary p-4">
-                  <p className="mb-2 text-xs text-text-quaternary">Quick prompts:</p>
+                <div className="p-4 border-b border-bg-tertiary">
+                  <p className="text-xs text-text-quaternary mb-2">Quick prompts:</p>
                   <div className="flex flex-wrap gap-2">
                     {quickPrompts.map((prompt, i) => (
                       <button
@@ -323,11 +321,11 @@ export function ChatPanel() {
                         onClick={() => handleSend(prompt)}
                         disabled={isLoading || isStreaming}
                         className={cn(
-                          'rounded-full px-3 py-1.5 text-sm',
+                          'px-3 py-1.5 rounded-full text-sm',
                           'bg-bg-tertiary hover:bg-bg-quaternary',
                           'text-text-secondary hover:text-text-primary',
                           'transition-colors',
-                          'disabled:cursor-not-allowed disabled:opacity-50',
+                          'disabled:opacity-50 disabled:cursor-not-allowed',
                         )}
                       >
                         {prompt}
@@ -338,16 +336,16 @@ export function ChatPanel() {
               )}
 
               {/* Messages */}
-              <div className="flex-1 space-y-4 overflow-y-auto p-4">
+              <div className="flex-1 overflow-y-auto p-4 space-y-4">
                 {messages.length === 0 && !isLoading ? (
-                  <div className="flex h-full flex-col items-center justify-center text-center">
-                    <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-white/[0.08]">
-                      <Sparkles className="h-8 w-8 text-text-primary" />
+                  <div className="flex flex-col items-center justify-center h-full text-center">
+                    <div className="w-16 h-16 rounded-full bg-white/[0.08] flex items-center justify-center mb-4">
+                      <Sparkles className="w-8 h-8 text-text-primary" />
                     </div>
-                    <h3 className="mb-2 text-lg font-medium text-text-primary">
+                    <h3 className="text-lg font-medium text-text-primary mb-2">
                       Hi! I&apos;m Omi
                     </h3>
-                    <p className="max-w-[280px] text-text-tertiary">
+                    <p className="text-text-tertiary max-w-[280px]">
                       Ask me anything about your conversations, tasks, or memories.
                     </p>
                   </div>
@@ -363,12 +361,12 @@ export function ChatPanel() {
                         )}
                       >
                         {message.sender === 'human' ? (
-                          <div className="max-w-[80%] rounded-2xl bg-text-primary px-4 py-2.5 text-bg-primary">
-                            <p className="whitespace-pre-wrap text-sm">{message.text}</p>
+                          <div className="max-w-[80%] rounded-2xl px-4 py-2.5 bg-text-primary text-bg-primary">
+                            <p className="text-sm whitespace-pre-wrap">{message.text}</p>
                           </div>
                         ) : (
-                          <div className="min-w-0 max-w-[80%]">
-                            <div className="rounded-2xl bg-bg-tertiary px-4 py-2.5 text-text-primary">
+                          <div className="max-w-[80%] min-w-0">
+                            <div className="rounded-2xl px-4 py-2.5 bg-bg-tertiary text-text-primary">
                               <ChatMarkdown>{message.text}</ChatMarkdown>
                             </div>
                             <ChatEvidenceCard
@@ -382,12 +380,12 @@ export function ChatPanel() {
                     {/* Thinking indicator */}
                     {currentThinking && (
                       <div className="flex justify-start">
-                        <div className="max-w-[80%] rounded-2xl border border-white/20 bg-bg-tertiary/50 px-4 py-2.5">
-                          <div className="mb-1 flex items-center gap-2 text-text-primary">
-                            <Brain className="h-3 w-3" />
+                        <div className="max-w-[80%] rounded-2xl px-4 py-2.5 bg-bg-tertiary/50 border border-white/20">
+                          <div className="flex items-center gap-2 text-text-primary mb-1">
+                            <Brain className="w-3 h-3" />
                             <span className="text-xs font-medium">Thinking...</span>
                           </div>
-                          <p className="line-clamp-3 whitespace-pre-wrap text-xs text-text-quaternary">
+                          <p className="text-xs text-text-quaternary whitespace-pre-wrap line-clamp-3">
                             {currentThinking}
                           </p>
                         </div>
@@ -397,7 +395,7 @@ export function ChatPanel() {
                     {/* Streaming text (AI response in progress) */}
                     {streamingText && (
                       <div className="flex justify-start">
-                        <div className="max-w-[80%] rounded-2xl bg-bg-tertiary px-4 py-2.5 text-text-primary">
+                        <div className="max-w-[80%] rounded-2xl px-4 py-2.5 bg-bg-tertiary text-text-primary">
                           <ChatMarkdown isStreaming>{streamingText}</ChatMarkdown>
                         </div>
                       </div>
@@ -406,18 +404,18 @@ export function ChatPanel() {
                     {/* Loading indicator (before streaming starts) */}
                     {isStreaming && !streamingText && !currentThinking && (
                       <div className="flex justify-start">
-                        <div className="rounded-2xl bg-bg-tertiary px-4 py-3">
+                        <div className="bg-bg-tertiary rounded-2xl px-4 py-3">
                           <div className="flex gap-1">
                             <div
-                              className="h-2 w-2 animate-bounce rounded-full bg-text-quaternary"
+                              className="w-2 h-2 bg-text-quaternary rounded-full animate-bounce"
                               style={{ animationDelay: '0ms' }}
                             />
                             <div
-                              className="h-2 w-2 animate-bounce rounded-full bg-text-quaternary"
+                              className="w-2 h-2 bg-text-quaternary rounded-full animate-bounce"
                               style={{ animationDelay: '150ms' }}
                             />
                             <div
-                              className="h-2 w-2 animate-bounce rounded-full bg-text-quaternary"
+                              className="w-2 h-2 bg-text-quaternary rounded-full animate-bounce"
                               style={{ animationDelay: '300ms' }}
                             />
                           </div>
@@ -432,15 +430,15 @@ export function ChatPanel() {
                   <div className="flex justify-center py-8">
                     <div className="flex gap-1">
                       <div
-                        className="h-2 w-2 animate-bounce rounded-full bg-text-quaternary"
+                        className="w-2 h-2 bg-text-quaternary rounded-full animate-bounce"
                         style={{ animationDelay: '0ms' }}
                       />
                       <div
-                        className="h-2 w-2 animate-bounce rounded-full bg-text-quaternary"
+                        className="w-2 h-2 bg-text-quaternary rounded-full animate-bounce"
                         style={{ animationDelay: '150ms' }}
                       />
                       <div
-                        className="h-2 w-2 animate-bounce rounded-full bg-text-quaternary"
+                        className="w-2 h-2 bg-text-quaternary rounded-full animate-bounce"
                         style={{ animationDelay: '300ms' }}
                       />
                     </div>
@@ -470,9 +468,9 @@ export function ChatPanel() {
                         isLoading || isStreaming || selectedFiles.length >= MAX_FILES
                       }
                       className={cn(
-                        'flex-shrink-0 rounded-lg p-2',
-                        'text-text-tertiary hover:bg-bg-tertiary hover:text-text-primary',
-                        'disabled:cursor-not-allowed disabled:opacity-50',
+                        'p-2 rounded-lg flex-shrink-0',
+                        'text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary',
+                        'disabled:opacity-50 disabled:cursor-not-allowed',
                         'transition-colors',
                       )}
                       title={
@@ -481,7 +479,7 @@ export function ChatPanel() {
                           : 'Attach file'
                       }
                     >
-                      <Paperclip className="h-5 w-5" />
+                      <Paperclip className="w-5 h-5" />
                     </button>
                     <input
                       ref={fileInputRef}
@@ -502,12 +500,12 @@ export function ChatPanel() {
                       placeholder="Ask anything..."
                       disabled={isLoading || isStreaming}
                       className={cn(
-                        'flex-1 rounded-xl px-4 py-3',
-                        'border border-bg-quaternary bg-bg-tertiary',
+                        'flex-1 px-4 py-3 rounded-xl',
+                        'bg-bg-tertiary border border-bg-quaternary',
                         'text-text-primary placeholder:text-text-quaternary',
                         'focus:outline-none focus:ring-2 focus:ring-white/25',
                         'transition-shadow',
-                        'disabled:cursor-not-allowed disabled:opacity-50',
+                        'disabled:opacity-50 disabled:cursor-not-allowed',
                       )}
                     />
 
@@ -522,14 +520,14 @@ export function ChatPanel() {
                       onClick={() => handleSend()}
                       disabled={!canSend}
                       className={cn(
-                        'flex-shrink-0 rounded-xl p-3',
+                        'p-3 rounded-xl flex-shrink-0',
                         'bg-text-primary text-bg-primary hover:bg-text-primary/90',
-                        'disabled:cursor-not-allowed disabled:opacity-50',
+                        'disabled:opacity-50 disabled:cursor-not-allowed',
                         'transition-colors',
                       )}
                       aria-label="Send message"
                     >
-                      <Send className="h-5 w-5 text-white" />
+                      <Send className="w-5 h-5 text-white" />
                     </button>
                   </div>
                 </div>

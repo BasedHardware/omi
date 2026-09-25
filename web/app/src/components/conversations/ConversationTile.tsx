@@ -86,16 +86,16 @@ export const ConversationTile = memo(function ConversationTile({
       onClick={handleClick}
       onDoubleClick={handleDoubleClick}
       className={cn(
-        'noise-overlay group relative flex cursor-pointer flex-col overflow-hidden rounded-card',
-        'border p-4 transition-all duration-150',
+        'noise-overlay group relative flex flex-col rounded-card cursor-pointer overflow-hidden',
+        'border transition-all duration-150 p-4',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40',
         isChecked
-          ? 'border-white/60 bg-bg-quaternary'
+          ? 'bg-bg-quaternary border-white/60'
           : isSelected
-          ? 'border-white/40 bg-bg-raised'
-          : 'border-stroke bg-bg-secondary hover:border-white/20 hover:bg-bg-tertiary',
+            ? 'bg-bg-raised border-white/40'
+            : 'bg-bg-secondary border-stroke hover:bg-bg-tertiary hover:border-white/20',
         // Merging state - dim the card
-        isMerging && 'pointer-events-none opacity-50',
+        isMerging && 'opacity-50 pointer-events-none',
       )}
       tabIndex={0}
       role="button"
@@ -103,7 +103,7 @@ export const ConversationTile = memo(function ConversationTile({
       aria-selected={isSelected || isChecked}
     >
       {/* Top row: Time + Star */}
-      <div className="mb-2 flex items-center justify-between">
+      <div className="flex items-center justify-between mb-2">
         <span className="text-[11px] tabular-nums text-text-tertiary">
           {formatTime(startedAt)}
           {durationSeconds > 0 && (
@@ -117,7 +117,7 @@ export const ConversationTile = memo(function ConversationTile({
         <button
           onClick={handleStarClick}
           className={cn(
-            'rounded-element p-0.5 transition-all duration-150',
+            'p-0.5 rounded-element transition-all duration-150',
             isStarred || isHovered ? 'opacity-100' : 'opacity-0',
             'hover:bg-bg-quaternary',
           )}
@@ -125,7 +125,7 @@ export const ConversationTile = memo(function ConversationTile({
         >
           <Star
             className={cn(
-              'h-3.5 w-3.5 transition-colors',
+              'w-3.5 h-3.5 transition-colors',
               isStarred
                 ? 'fill-text-primary text-text-primary'
                 : 'text-text-quaternary hover:text-text-secondary',
@@ -141,57 +141,57 @@ export const ConversationTile = memo(function ConversationTile({
             initial={{ opacity: 0, scale: 0.8 }}
             animate={{ opacity: 1, scale: 1 }}
             className={cn(
-              'flex h-5 w-5 flex-shrink-0 items-center justify-center rounded-element border-2',
+              'flex-shrink-0 w-5 h-5 rounded-element border-2 flex items-center justify-center',
               'transition-all duration-150',
               isChecked
-                ? 'border-white bg-white'
+                ? 'bg-white border-white'
                 : 'border-text-quaternary bg-transparent',
             )}
           >
             {isChecked && (
-              <Check className="h-3.5 w-3.5 text-bg-primary" strokeWidth={3} />
+              <Check className="w-3.5 h-3.5 text-bg-primary" strokeWidth={3} />
             )}
           </motion.div>
         )}
 
-        <div className="flex h-9 w-9 flex-shrink-0 select-none items-center justify-center rounded-chip bg-bg-tertiary text-xl transition-transform duration-150 group-hover:scale-105">
+        <div className="flex-shrink-0 w-9 h-9 rounded-chip bg-bg-tertiary flex items-center justify-center select-none text-xl group-hover:scale-105 transition-transform duration-150">
           {conversation.structured.emoji || '💬'}
         </div>
 
-        <h3 className="line-clamp-2 min-w-0 flex-1 text-sm font-medium leading-snug text-text-primary">
+        <h3 className="flex-1 min-w-0 text-sm font-medium leading-snug text-text-primary line-clamp-2">
           {conversation.structured.title || 'Untitled conversation'}
         </h3>
       </div>
 
       {/* Excerpt — the scannable payload of a gallery tile */}
       {excerpt && (
-        <p className="mt-3 line-clamp-3 text-xs leading-relaxed text-text-tertiary">
+        <p className="mt-3 text-xs leading-relaxed text-text-tertiary line-clamp-3">
           {excerpt}
         </p>
       )}
 
       {/* Structured signal row */}
-      <div className="mt-auto flex flex-wrap items-center gap-1.5 pt-3">
+      <div className="mt-auto pt-3 flex items-center flex-wrap gap-1.5">
         {category && (
-          <span className="rounded-chip bg-bg-tertiary px-2 py-0.5 text-[10px] capitalize text-text-secondary">
+          <span className="px-2 py-0.5 rounded-chip bg-bg-tertiary text-[10px] capitalize text-text-secondary">
             {category}
           </span>
         )}
         {actionItemCount > 0 && (
-          <span className="flex items-center gap-1 rounded-chip bg-bg-tertiary px-2 py-0.5 text-[10px] text-text-secondary">
-            <CheckSquare className="h-3 w-3" />
+          <span className="flex items-center gap-1 px-2 py-0.5 rounded-chip bg-bg-tertiary text-[10px] text-text-secondary">
+            <CheckSquare className="w-3 h-3" />
             {actionItemCount}
           </span>
         )}
         {speakerCount > 1 && (
-          <span className="flex items-center gap-1 rounded-chip bg-bg-tertiary px-2 py-0.5 text-[10px] text-text-secondary">
-            <Users className="h-3 w-3" />
+          <span className="flex items-center gap-1 px-2 py-0.5 rounded-chip bg-bg-tertiary text-[10px] text-text-secondary">
+            <Users className="w-3 h-3" />
             {speakerCount}
           </span>
         )}
         {conversation.status === 'processing' && (
-          <span className="flex items-center gap-1.5 rounded-chip bg-bg-tertiary px-2 py-0.5 text-[10px] text-text-secondary">
-            <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-text-primary" />
+          <span className="flex items-center gap-1.5 px-2 py-0.5 rounded-chip bg-bg-tertiary text-[10px] text-text-secondary">
+            <span className="w-1.5 h-1.5 rounded-full bg-text-primary animate-pulse" />
             Processing
           </span>
         )}
@@ -203,10 +203,10 @@ export const ConversationTile = memo(function ConversationTile({
 // Skeleton loader for timeline tiles - matches the gallery tile layout
 export function ConversationTileSkeleton() {
   return (
-    <div className="animate-pulse rounded-card border border-stroke bg-bg-secondary p-4">
-      <div className="mb-3 h-3 w-16 rounded bg-bg-tertiary" />
+    <div className="rounded-card border border-stroke bg-bg-secondary p-4 animate-pulse">
+      <div className="h-3 w-16 rounded bg-bg-tertiary mb-3" />
       <div className="flex items-start gap-2.5">
-        <div className="h-9 w-9 flex-shrink-0 rounded-chip bg-bg-tertiary" />
+        <div className="flex-shrink-0 w-9 h-9 rounded-chip bg-bg-tertiary" />
         <div className="flex-1 space-y-2">
           <div className="h-4 w-3/4 rounded bg-bg-tertiary" />
           <div className="h-3 w-1/2 rounded bg-bg-tertiary" />

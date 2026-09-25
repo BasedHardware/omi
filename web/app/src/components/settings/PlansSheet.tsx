@@ -230,7 +230,7 @@ export function PlansSheet({
                   animate={{ opacity: 1 }}
                   exit={{ opacity: 0 }}
                   transition={{ duration: 0.15 }}
-                  className="fixed inset-0 z-[100] bg-black/50"
+                  className="fixed inset-0 bg-black/50 z-[100]"
                 />
               </Dialog.Overlay>
               <Dialog.Content asChild>
@@ -240,28 +240,28 @@ export function PlansSheet({
                   exit={{ opacity: 0, scale: 0.95, y: 10 }}
                   transition={{ duration: 0.15, ease: 'easeOut' }}
                   className={cn(
-                    'fixed left-1/2 top-1/2 z-[101] -translate-x-1/2 -translate-y-1/2',
-                    'max-h-[85vh] w-[90vw] max-w-[500px] overflow-y-auto',
-                    'rounded-2xl bg-bg-secondary',
+                    'fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-[101]',
+                    'w-[90vw] max-w-[500px] max-h-[85vh] overflow-y-auto',
+                    'bg-bg-secondary rounded-2xl',
                     'border border-bg-tertiary',
                     'shadow-2xl',
                     'focus:outline-none',
                   )}
                 >
                   {/* Header */}
-                  <div className="sticky top-0 z-10 border-b border-bg-tertiary bg-bg-secondary px-6 pb-4 pt-6">
+                  <div className="sticky top-0 bg-bg-secondary z-10 px-6 pt-6 pb-4 border-b border-bg-tertiary">
                     <Dialog.Close asChild>
                       <button
-                        className="absolute right-4 top-4 rounded-lg p-1.5 transition-colors hover:bg-bg-tertiary"
+                        className="absolute top-4 right-4 p-1.5 rounded-lg hover:bg-bg-tertiary transition-colors"
                         aria-label="Close"
                       >
-                        <X className="h-4 w-4 text-text-quaternary" />
+                        <X className="w-4 h-4 text-text-quaternary" />
                       </button>
                     </Dialog.Close>
 
                     <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/[0.08]">
-                        <Crown className="h-5 w-5 text-text-primary" />
+                      <div className="w-10 h-10 rounded-full bg-white/[0.08] flex items-center justify-center">
+                        <Crown className="w-5 h-5 text-text-primary" />
                       </div>
                       <div>
                         <Dialog.Title className="text-lg font-semibold text-text-primary">
@@ -274,9 +274,7 @@ export function PlansSheet({
                         {isUnlimited && subscription?.current_period_end && (
                           <p className="text-xs text-text-quaternary">
                             {isCanceling_
-                              ? `Cancels on ${formatDate(
-                                  subscription.current_period_end,
-                                )}`
+                              ? `Cancels on ${formatDate(subscription.current_period_end)}`
                               : `Renews ${formatDate(subscription.current_period_end)}`}
                           </p>
                         )}
@@ -285,7 +283,7 @@ export function PlansSheet({
                   </div>
 
                   {/* Content */}
-                  <div className="space-y-6 p-6">
+                  <div className="p-6 space-y-6">
                     {isUnknownPlan ? (
                       <div className="py-8 text-center">
                         <p className="text-sm text-text-secondary">
@@ -296,7 +294,7 @@ export function PlansSheet({
                       </div>
                     ) : isLoadingPlans ? (
                       <div className="flex items-center justify-center py-12">
-                        <Loader2 className="h-6 w-6 animate-spin text-text-primary" />
+                        <Loader2 className="w-6 h-6 text-text-primary animate-spin" />
                       </div>
                     ) : (
                       <>
@@ -317,36 +315,36 @@ export function PlansSheet({
                                 onClick={() => setSelectedPriceId(option.id)}
                                 disabled={isCanceling_ && !isCurrent}
                                 className={cn(
-                                  'relative rounded-xl border-2 p-4 text-left transition-all',
+                                  'relative p-4 rounded-xl border-2 text-left transition-all',
                                   isSelected
                                     ? 'border-white/25 bg-white/[0.08]'
-                                    : 'border-bg-tertiary bg-bg-tertiary/50 hover:border-bg-quaternary',
+                                    : 'border-bg-tertiary hover:border-bg-quaternary bg-bg-tertiary/50',
                                   isCanceling_ &&
                                     !isCurrent &&
                                     'cursor-not-allowed opacity-50',
                                 )}
                               >
                                 {isAnnual && (
-                                  <span className="absolute -top-2 right-2 rounded-full bg-text-primary px-2 py-0.5 text-[10px] font-medium text-bg-primary">
+                                  <span className="absolute -top-2 right-2 px-2 py-0.5 bg-text-primary text-bg-primary text-[10px] font-medium rounded-full">
                                     POPULAR
                                   </span>
                                 )}
 
-                                <h4 className="mb-1 font-medium text-text-primary">
+                                <h4 className="font-medium text-text-primary mb-1">
                                   {option.title}
                                 </h4>
                                 <p className="text-lg font-bold text-text-primary">
                                   {option.price_string}
                                 </p>
                                 {option.description && (
-                                  <p className="mt-1 text-xs text-text-primary">
+                                  <p className="text-xs text-text-primary mt-1">
                                     {option.description}
                                   </p>
                                 )}
 
                                 {isCurrent && (
-                                  <span className="mt-2 inline-flex items-center gap-1 rounded-full bg-success/10 px-2 py-0.5 text-xs text-success">
-                                    <Check className="h-3 w-3" />
+                                  <span className="inline-flex items-center gap-1 mt-2 px-2 py-0.5 bg-success/10 text-success text-xs rounded-full">
+                                    <Check className="w-3 h-3" />
                                     Current
                                   </span>
                                 )}
@@ -370,7 +368,7 @@ export function PlansSheet({
                           <ul className="space-y-2">
                             {DEFAULT_PLAN_FEATURES.map((feature, idx) => (
                               <li key={idx} className="flex items-start gap-2">
-                                <Check className="mt-0.5 h-4 w-4 flex-shrink-0 text-text-primary" />
+                                <Check className="w-4 h-4 text-text-primary flex-shrink-0 mt-0.5" />
                                 <span className="text-sm text-text-tertiary">
                                   {feature}
                                 </span>
@@ -381,8 +379,8 @@ export function PlansSheet({
 
                         {/* Error Message */}
                         {error && (
-                          <div className="flex items-center gap-2 rounded-lg bg-error/10 p-3">
-                            <AlertCircle className="h-4 w-4 flex-shrink-0 text-error" />
+                          <div className="flex items-center gap-2 p-3 bg-error/10 rounded-lg">
+                            <AlertCircle className="w-4 h-4 text-error flex-shrink-0" />
                             <p className="text-sm text-error">{error}</p>
                           </div>
                         )}
@@ -396,15 +394,15 @@ export function PlansSheet({
                             (isUnlimited && !isCanceling_ && selectedOption?.is_active)
                           }
                           className={cn(
-                            'w-full rounded-xl py-3 font-medium transition-colors',
+                            'w-full py-3 rounded-xl font-medium transition-colors',
                             'bg-text-primary text-bg-primary',
                             'hover:bg-text-primary/90',
-                            'disabled:cursor-not-allowed disabled:opacity-50',
+                            'disabled:opacity-50 disabled:cursor-not-allowed',
                           )}
                         >
                           {isLoading ? (
                             <span className="flex items-center justify-center gap-2">
-                              <Loader2 className="h-4 w-4 animate-spin" />
+                              <Loader2 className="w-4 h-4 animate-spin" />
                               Processing...
                             </span>
                           ) : isCanceling_ ? (
@@ -424,22 +422,22 @@ export function PlansSheet({
                           <button
                             onClick={handleManagePayment}
                             disabled={isLoading}
-                            className="flex w-full items-center justify-center gap-2 py-2.5 text-text-secondary transition-colors hover:text-text-primary"
+                            className="w-full flex items-center justify-center gap-2 py-2.5 text-text-secondary hover:text-text-primary transition-colors"
                           >
-                            <CreditCard className="h-4 w-4" />
+                            <CreditCard className="w-4 h-4" />
                             <span className="text-sm">Manage Billing &amp; Invoices</span>
                           </button>
                         )}
 
                         {/* Secondary Actions */}
                         {isUnlimited && (
-                          <div className="space-y-3 border-t border-bg-tertiary pt-4">
+                          <div className="pt-4 border-t border-bg-tertiary space-y-3">
                             <button
                               onClick={handleManagePayment}
                               disabled={isLoading}
-                              className="flex w-full items-center justify-center gap-2 py-2.5 text-text-secondary transition-colors hover:text-text-primary"
+                              className="w-full flex items-center justify-center gap-2 py-2.5 text-text-secondary hover:text-text-primary transition-colors"
                             >
-                              <CreditCard className="h-4 w-4" />
+                              <CreditCard className="w-4 h-4" />
                               <span className="text-sm">
                                 Manage Billing &amp; Invoices
                               </span>
@@ -449,7 +447,7 @@ export function PlansSheet({
                               <button
                                 onClick={() => setShowCancelConfirm(true)}
                                 disabled={isLoading}
-                                className="w-full py-2.5 text-sm text-error/70 transition-colors hover:text-error"
+                                className="w-full py-2.5 text-sm text-error/70 hover:text-error transition-colors"
                               >
                                 Cancel Subscription
                               </button>
@@ -473,9 +471,7 @@ export function PlansSheet({
         title="Cancel Subscription?"
         description={
           subscription?.current_period_end
-            ? `Your subscription will remain active until ${formatDate(
-                subscription.current_period_end,
-              )}. After that, you'll be moved to the Free plan.`
+            ? `Your subscription will remain active until ${formatDate(subscription.current_period_end)}. After that, you'll be moved to the Free plan.`
             : "Are you sure you want to cancel your subscription? You'll lose access to unlimited features."
         }
         confirmLabel="Cancel Subscription"

@@ -29,13 +29,11 @@ export function parsePlatformScope(raw: string | null): PlatformScope {
  */
 export function scopeFilterAnd(
   scope: PlatformScope,
-  osColumn = "properties.$os_name"
+  osColumn = "properties.$os_name",
 ): string {
   if (scope === "macos") return `AND ${osColumn} = 'macOS'`;
   if (scope === "mobile") {
-    return `AND ${osColumn} IN (${MOBILE_OS_NAMES.map((os) => `'${os}'`).join(
-      ", "
-    )})`;
+    return `AND ${osColumn} IN (${MOBILE_OS_NAMES.map((os) => `'${os}'`).join(", ")})`;
   }
   return "AND NOT startsWith(event, 'cfc_')";
 }

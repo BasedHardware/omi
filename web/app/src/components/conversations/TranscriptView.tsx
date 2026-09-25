@@ -180,7 +180,7 @@ function SegmentTextEditor({
     // Segments without an id cannot be targeted by the edit API.
     return (
       <p
-        className="leading-relaxed text-text-primary opacity-60"
+        className="text-text-primary leading-relaxed opacity-60"
         title="This segment can't be edited"
       >
         {segment.text}
@@ -198,7 +198,7 @@ function SegmentTextEditor({
         rows={Math.min(6, Math.max(2, Math.ceil(draft.length / 60)))}
         className={cn(
           'w-full resize-y rounded-lg px-3 py-2 text-sm leading-relaxed',
-          'border border-bg-quaternary bg-bg-secondary text-text-primary',
+          'bg-bg-secondary border border-bg-quaternary text-text-primary',
           'outline-none focus:ring-2 focus:ring-white/20',
         )}
       />
@@ -254,7 +254,7 @@ export function TranscriptView({
 
   if (!segments || segments.length === 0) {
     return (
-      <div className="py-8 text-center text-text-tertiary">No transcript available</div>
+      <div className="text-center py-8 text-text-tertiary">No transcript available</div>
     );
   }
 
@@ -289,18 +289,18 @@ export function TranscriptView({
             ref={isActive ? activeGroupRef : undefined}
             className={cn(
               'group/segment rounded-xl p-4 transition-all duration-200',
-              isUser ? 'border border-white/25 bg-white/[0.08]' : 'bg-bg-tertiary',
+              isUser ? 'bg-white/[0.08] border border-white/25' : 'bg-bg-tertiary',
               // Active segment highlighting during audio playback
-              isActive && 'bg-white/[0.08] ring-2 ring-white/25',
+              isActive && 'ring-2 ring-white/25 bg-white/[0.08]',
             )}
           >
             {/* Speaker header */}
-            <div className="mb-2 flex items-center justify-between">
+            <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
                 {/* Avatar */}
                 <div
                   className={cn(
-                    'flex h-6 w-6 items-center justify-center rounded-full text-xs font-medium',
+                    'w-6 h-6 rounded-full flex items-center justify-center text-xs font-medium',
                     SPEAKER_COLORS[speakerColorIndex],
                   )}
                 >
@@ -313,17 +313,17 @@ export function TranscriptView({
                     onClick={() => handleSpeakerClick(firstSegment)}
                     className={cn(
                       'flex items-center gap-1.5 text-sm font-medium',
-                      'underline-offset-2 hover:underline',
+                      'hover:underline underline-offset-2',
                       isUser
                         ? 'text-text-primary'
                         : isTagged
-                        ? 'text-text-secondary'
-                        : 'text-text-tertiary',
+                          ? 'text-text-secondary'
+                          : 'text-text-tertiary',
                     )}
                   >
                     <span>{speakerName}</span>
-                    {!isTagged && <HelpCircle className="h-3.5 w-3.5 text-warning" />}
-                    {!isUser && <Tag className="h-3 w-3 opacity-50" />}
+                    {!isTagged && <HelpCircle className="w-3.5 h-3.5 text-warning" />}
+                    {!isUser && <Tag className="w-3 h-3 opacity-50" />}
                   </button>
                 ) : (
                   <span
@@ -344,12 +344,12 @@ export function TranscriptView({
                     onClick={() => onSeekTo(firstSegment.start)}
                     className={cn(
                       'flex items-center gap-1.5 text-xs',
-                      'text-text-quaternary transition-colors hover:text-text-primary',
+                      'text-text-quaternary hover:text-text-primary transition-colors',
                       'group',
                     )}
                     title="Click to play from here"
                   >
-                    <Play className="h-3 w-3 opacity-0 transition-opacity group-hover:opacity-100" />
+                    <Play className="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
                     <span>
                       {formatTimestamp(firstSegment.start)} -{' '}
                       {formatTimestamp(lastSegment.end)}
@@ -365,7 +365,7 @@ export function TranscriptView({
                 {/* Per-segment saving indicator (this block's edit is in flight) */}
                 {isSavingGroup && (
                   <span className="flex items-center gap-1 text-xs text-text-quaternary">
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
                     <span>Saving…</span>
                   </span>
                 )}
@@ -377,25 +377,25 @@ export function TranscriptView({
                       onClick={() => setEditingGroupIndex(null)}
                       className={cn(
                         'flex items-center gap-1 text-xs font-medium',
-                        'text-text-secondary transition-colors hover:text-text-primary',
+                        'text-text-secondary hover:text-text-primary transition-colors',
                       )}
                       title="Done editing"
                     >
-                      <Check className="h-3.5 w-3.5" />
+                      <Check className="w-3.5 h-3.5" />
                       <span>Done</span>
                     </button>
                   ) : (
                     <button
                       onClick={() => setEditingGroupIndex(groupIndex)}
                       className={cn(
-                        'rounded-md p-1 text-text-quaternary',
-                        'opacity-0 focus:opacity-100 group-hover/segment:opacity-100',
-                        'transition-all hover:bg-bg-quaternary/50 hover:text-text-primary',
+                        'p-1 rounded-md text-text-quaternary',
+                        'opacity-0 group-hover/segment:opacity-100 focus:opacity-100',
+                        'hover:text-text-primary hover:bg-bg-quaternary/50 transition-all',
                       )}
                       title="Edit transcript text"
                       aria-label="Edit transcript text"
                     >
-                      <Pencil className="h-3.5 w-3.5" />
+                      <Pencil className="w-3.5 h-3.5" />
                     </button>
                   ))}
               </div>
@@ -414,7 +414,7 @@ export function TranscriptView({
                 ))}
               </div>
             ) : (
-              <p className="leading-relaxed text-text-primary">{combinedText}</p>
+              <p className="text-text-primary leading-relaxed">{combinedText}</p>
             )}
           </div>
         );

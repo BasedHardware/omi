@@ -54,7 +54,7 @@ function Waveform({
   }, [level]);
 
   return (
-    <div className="flex h-6 items-center justify-center gap-[3px]">
+    <div className="flex items-center justify-center gap-[3px] h-6">
       {heights.map((height, i) => (
         <motion.div
           key={i}
@@ -146,16 +146,16 @@ export default function RecordingPopoutPage() {
   const isIdle = state === 'idle';
 
   return (
-    <div className="flex min-h-screen select-none flex-col items-center justify-center gap-2 bg-[#1a1a1a] p-2 text-white">
+    <div className="min-h-screen bg-[#1a1a1a] text-white select-none flex flex-col items-center justify-center p-2 gap-2">
       <div className="flex items-center gap-3">
         {/* Main toggle button */}
         <button
           onClick={handleToggle}
           disabled={isInitializing}
           className={cn(
-            'flex h-10 w-10 items-center justify-center rounded-full transition-all',
+            'w-10 h-10 rounded-full flex items-center justify-center transition-all',
             'focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-[#1a1a1a]',
-            isInitializing && 'cursor-not-allowed opacity-50',
+            isInitializing && 'opacity-50 cursor-not-allowed',
             isRecording && 'bg-text-primary hover:bg-text-primary/90 focus:ring-white/25',
             isPaused && 'bg-amber-500 hover:bg-amber-600 focus:ring-amber-500',
             !isActive &&
@@ -165,22 +165,22 @@ export default function RecordingPopoutPage() {
         >
           {isInitializing ? (
             <motion.div
-              className="h-4 w-4 rounded-full border-2 border-white border-t-transparent"
+              className="w-4 h-4 border-2 border-white border-t-transparent rounded-full"
               animate={{ rotate: 360 }}
               transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
             />
           ) : isRecording ? (
             /* Pause icon (two bars) */
             <div className="flex gap-1">
-              <div className="h-3 w-1 rounded-sm bg-white" />
-              <div className="h-3 w-1 rounded-sm bg-white" />
+              <div className="w-1 h-3 bg-white rounded-sm" />
+              <div className="w-1 h-3 bg-white rounded-sm" />
             </div>
           ) : isPaused ? (
             /* Play icon (triangle) */
-            <div className="ml-0.5 h-0 w-0 border-b-[6px] border-l-[10px] border-t-[6px] border-b-transparent border-l-white border-t-transparent" />
+            <div className="w-0 h-0 border-t-[6px] border-t-transparent border-l-[10px] border-l-white border-b-[6px] border-b-transparent ml-0.5" />
           ) : (
             /* Mic/Record icon (circle) */
-            <div className="h-3 w-3 rounded-full bg-white" />
+            <div className="w-3 h-3 bg-white rounded-full" />
           )}
         </button>
 
@@ -189,19 +189,19 @@ export default function RecordingPopoutPage() {
           <button
             onClick={() => setShowModeSelector(!showModeSelector)}
             className={cn(
-              'flex items-center gap-1.5 rounded-full px-2 py-1 text-xs',
-              'bg-white/10 transition-colors hover:bg-white/20',
+              'flex items-center gap-1.5 px-2 py-1 rounded-full text-xs',
+              'bg-white/10 hover:bg-white/20 transition-colors',
             )}
           >
             {selectedMode === 'mic-only' ? (
-              <Mic className="h-3 w-3" />
+              <Mic className="w-3 h-3" />
             ) : (
-              <Monitor className="h-3 w-3" />
+              <Monitor className="w-3 h-3" />
             )}
             <span>{selectedMode === 'mic-only' ? 'Mic' : 'Mic + System'}</span>
             <ChevronDown
               className={cn(
-                'h-3 w-3 transition-transform',
+                'w-3 h-3 transition-transform',
                 showModeSelector && 'rotate-180',
               )}
             />
@@ -213,7 +213,7 @@ export default function RecordingPopoutPage() {
           <div className="flex items-center gap-2">
             <Waveform level={micLevel} isActive={isActive} isPaused={isPaused} />
 
-            <span className="min-w-[45px] font-mono text-sm tabular-nums text-white">
+            <span className="text-sm font-mono tabular-nums min-w-[45px] text-white">
               {formatDuration(duration)}
             </span>
           </div>
@@ -223,10 +223,10 @@ export default function RecordingPopoutPage() {
         {isActive && (
           <button
             onClick={handleStop}
-            className="flex h-7 w-7 items-center justify-center rounded-full bg-red-500/20 transition-colors hover:bg-red-500/30"
+            className="w-7 h-7 rounded-full bg-red-500/20 hover:bg-red-500/30 flex items-center justify-center transition-colors"
             title="Stop"
           >
-            <Square className="h-3 w-3 fill-red-400 text-red-400" />
+            <Square className="w-3 h-3 text-red-400 fill-red-400" />
           </button>
         )}
       </div>
@@ -237,25 +237,25 @@ export default function RecordingPopoutPage() {
           <button
             onClick={() => handleModeSelect('mic-only')}
             className={cn(
-              'flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs transition-colors',
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs transition-colors',
               selectedMode === 'mic-only'
                 ? 'bg-text-primary text-bg-primary'
-                : 'bg-white/10 text-white/70 hover:bg-white/20',
+                : 'bg-white/10 hover:bg-white/20 text-white/70',
             )}
           >
-            <Mic className="h-3 w-3" />
+            <Mic className="w-3 h-3" />
             <span>Mic Only</span>
           </button>
           <button
             onClick={() => handleModeSelect('mic-and-system')}
             className={cn(
-              'flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs transition-colors',
+              'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs transition-colors',
               selectedMode === 'mic-and-system'
                 ? 'bg-text-primary text-bg-primary'
-                : 'bg-white/10 text-white/70 hover:bg-white/20',
+                : 'bg-white/10 hover:bg-white/20 text-white/70',
             )}
           >
-            <Monitor className="h-3 w-3" />
+            <Monitor className="w-3 h-3" />
             <span>Mic + System</span>
           </button>
         </div>

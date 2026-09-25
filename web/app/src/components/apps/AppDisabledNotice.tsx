@@ -29,12 +29,12 @@ export function AppDisabledNotice({
   return (
     <div className="mb-6 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
       <div className="flex gap-3">
-        <AlertTriangle className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-500" />
-        <div className="min-w-0 flex-1">
+        <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
+        <div className="flex-1 min-w-0">
           <p className="font-medium text-text-primary">
             This app is disabled and cannot be installed
           </p>
-          <p className="mt-1 text-sm text-text-secondary">
+          <p className="text-sm text-text-secondary mt-1">
             {app.disabled_reason === 'webhook_failures'
               ? 'Its endpoint failed for 72 hours in a row, so deliveries were stopped.'
               : 'It was disabled by Omi.'}
@@ -43,29 +43,29 @@ export function AppDisabledNotice({
           </p>
           {isOwner ? (
             <>
-              <p className="mt-2 text-sm text-text-tertiary">
+              <p className="text-sm text-text-tertiary mt-2">
                 Fix the endpoint first — re-enabling re-checks every configured URL.
               </p>
               <button
                 onClick={onReEnable}
                 disabled={isReEnabling}
                 className={cn(
-                  'mt-3 rounded-lg px-4 py-2 text-sm font-medium',
+                  'mt-3 px-4 py-2 rounded-lg font-medium text-sm',
                   'bg-bg-tertiary text-text-primary hover:bg-bg-quaternary',
-                  'flex items-center gap-2 transition-colors disabled:opacity-50',
+                  'transition-colors flex items-center gap-2 disabled:opacity-50',
                 )}
               >
                 {isReEnabling ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
+                  <Loader2 className="w-4 h-4 animate-spin" />
                 ) : (
-                  <RotateCcw className="h-4 w-4" />
+                  <RotateCcw className="w-4 h-4" />
                 )}
                 Re-enable
               </button>
-              {error && <p className="mt-2 text-sm text-red-500">{error}</p>}
+              {error && <p className="text-sm text-red-500 mt-2">{error}</p>}
             </>
           ) : (
-            <p className="mt-2 text-sm text-text-tertiary">
+            <p className="text-sm text-text-tertiary mt-2">
               Its developer has to re-enable it.
             </p>
           )}

@@ -20,9 +20,7 @@ vi.mock("@/lib/payload-cache", () => ({
 }));
 vi.mock("@/lib/firebase/admin", () => ({
   getDb: () => ({
-    collectionGroup: () => ({
-      select: () => ({ get: async () => ({ docs: [] }) }),
-    }),
+    collectionGroup: () => ({ select: () => ({ get: async () => ({ docs: [] }) }) }),
   }),
   getAdminAuth: () => ({
     listUsers: async () => ({ users: [], pageToken: undefined }),
@@ -44,10 +42,7 @@ function dayKeys(days: number): string[] {
   start.setUTCDate(start.getUTCDate() - (days - 1));
   for (const d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
     out.push(
-      `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(
-        2,
-        "0"
-      )}-${String(d.getUTCDate()).padStart(2, "0")}`
+      `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`,
     );
   }
   return out;
@@ -55,17 +50,8 @@ function dayKeys(days: number): string[] {
 
 function billingPayload(dates: string[]) {
   return {
-    daily: dates.map((date) => ({
-      date,
-      desktop: 60,
-      mobile: 40,
-      unknown: 0,
-      total: 100,
-    })),
-    summary: {
-      costSource: "billing",
-      assumptions: { overheadMonthlyUsd: 57447 },
-    },
+    daily: dates.map((date) => ({ date, desktop: 60, mobile: 40, unknown: 0, total: 100 })),
+    summary: { costSource: "billing", assumptions: { overheadMonthlyUsd: 57447 } },
   };
 }
 
@@ -85,38 +71,29 @@ beforeEach(() => {
 
 describe("profitability cache key", () => {
   it("defaults to the same key precompute writes when no cost params are given", async () => {
-    const { parseProfitabilityParams, profitabilityCacheKey } =
-      await loadRoute();
+    const { parseProfitabilityParams, profitabilityCacheKey } = await loadRoute();
 
     // What the GET handler builds for `?days=30` (or for no params at all).
-    const fromRequest = parseProfitabilityParams(
-      new URLSearchParams("days=30")
-    );
+    const fromRequest = parseProfitabilityParams(new URLSearchParams("days=30"));
     const fromNothing = parseProfitabilityParams(new URLSearchParams());
     // What precompute now writes.
-    const fromPrecompute = parseProfitabilityParams(
-      new URLSearchParams({ days: "30" })
-    );
+    const fromPrecompute = parseProfitabilityParams(new URLSearchParams({ days: "30" }));
 
     const key = profitabilityCacheKey(
       fromRequest.days,
       fromRequest.desktopCost,
-      fromRequest.mobileCost
+      fromRequest.mobileCost,
     );
     expect(key).toBe("profitability:v1:30:0.2:0.2");
     expect(
-      profitabilityCacheKey(
-        fromNothing.days,
-        fromNothing.desktopCost,
-        fromNothing.mobileCost
-      )
+      profitabilityCacheKey(fromNothing.days, fromNothing.desktopCost, fromNothing.mobileCost),
     ).toBe(key);
     expect(
       profitabilityCacheKey(
         fromPrecompute.days,
         fromPrecompute.desktopCost,
-        fromPrecompute.mobileCost
-      )
+        fromPrecompute.mobileCost,
+      ),
     ).toBe(key);
   });
 });
@@ -127,11 +104,7 @@ describe("computeProfitability cost-per-user honesty", () => {
     mockInfra.mockResolvedValue(billingPayload(dates));
     const { computeProfitability } = await loadRoute();
 
-    const payload = await computeProfitability({
-      days: DAYS,
-      desktopCost: 0.2,
-      mobileCost: 0.2,
-    });
+    const payload = await computeProfitability({ days: DAYS, desktopCost: 0.2, mobileCost: 0.2 });
 
     expect(payload.summary.assumptions.costSource).toBe("real");
     expect(payload.costPerUser).toHaveLength(DAYS);
@@ -150,25 +123,12 @@ describe("computeProfitability cost-per-user honesty", () => {
   it("keeps the labeled per-user assumption on the legacy estimated path", async () => {
     const dates = dayKeys(DAYS);
     mockInfra.mockResolvedValue({
-      daily: dates.map((date) => ({
-        date,
-        desktop: 0,
-        mobile: 0,
-        unknown: 0,
-        total: 0,
-      })),
-      summary: {
-        costSource: "estimated",
-        assumptions: { overheadMonthlyUsd: 57447 },
-      },
+      daily: dates.map((date) => ({ date, desktop: 0, mobile: 0, unknown: 0, total: 0 })),
+      summary: { costSource: "estimated", assumptions: { overheadMonthlyUsd: 57447 } },
     });
     const { computeProfitability } = await loadRoute();
 
-    const payload = await computeProfitability({
-      days: DAYS,
-      desktopCost: 0.2,
-      mobileCost: 0.2,
-    });
+    const payload = await computeProfitability({ days: DAYS, desktopCost: 0.2, mobileCost: 0.2 });
 
     expect(payload.summary.assumptions.costSource).toBe("estimated");
     for (const row of payload.costPerUser) {
@@ -192,20 +152,12 @@ describe("computeProfitability cost-per-user honesty", () => {
       const rows = q.includes("count(DISTINCT distinct_id)")
         ? dates.map((d) => [d, 10])
         : [];
-      return {
-        ok: true,
-        json: async () => ({ results: rows }),
-        text: async () => "",
-      } as any;
+      return { ok: true, json: async () => ({ results: rows }), text: async () => "" } as any;
     });
     vi.stubGlobal("fetch", fetchMock);
     try {
       const { computeProfitability } = await loadRoute();
-      const payload = await computeProfitability({
-        days: DAYS,
-        desktopCost: 0.2,
-        mobileCost: 0.2,
-      });
+      const payload = await computeProfitability({ days: DAYS, desktopCost: 0.2, mobileCost: 0.2 });
 
       // 10 desktop actives, $60 desktop cost -> $6.00/user, measured.
       for (const row of payload.costPerUser) {

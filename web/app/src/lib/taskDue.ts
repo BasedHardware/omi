@@ -36,11 +36,7 @@ export function formatDueStatus(dueAt: string, now: Date = new Date()): TaskDueS
     return { text: 'Due tomorrow', isOverdue: false, isToday: false };
   } else if (diffDays <= 7) {
     return {
-      text: `Due ${due.toLocaleDateString('en-US', {
-        weekday: 'short',
-        month: 'short',
-        day: 'numeric',
-      })}`,
+      text: `Due ${due.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}`,
       isOverdue: false,
       isToday: false,
     };

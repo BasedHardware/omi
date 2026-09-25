@@ -126,8 +126,8 @@ export function RecordingStage({
             {isInitializing
               ? 'Starting capture...'
               : isPaused
-              ? 'Paused.'
-              : 'Listening for speech...'}
+                ? 'Paused.'
+                : 'Listening for speech...'}
           </p>
         ) : (
           <div className="space-y-1.5">

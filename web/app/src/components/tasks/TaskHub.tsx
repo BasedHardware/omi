@@ -365,7 +365,7 @@ export function TaskHub() {
   const isEmpty = !loading && items.length === 0;
 
   return (
-    <div className="flex h-full flex-col overflow-hidden">
+    <div className="flex flex-col h-full overflow-hidden">
       <PageToolbar
         search={{
           value: searchQuery,
@@ -375,18 +375,18 @@ export function TaskHub() {
         controls={
           <>
             {/* View mode toggle */}
-            <div className="flex items-center gap-1 rounded-lg bg-bg-tertiary p-1">
+            <div className="flex items-center gap-1 p-1 bg-bg-tertiary rounded-lg">
               <button
                 onClick={() => setViewMode('hub')}
                 className={cn(
-                  'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm',
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm',
                   'transition-colors',
                   viewMode === 'hub'
                     ? 'bg-white text-black'
                     : 'text-text-tertiary hover:text-text-secondary',
                 )}
               >
-                <LayoutGrid className="h-4 w-4" />
+                <LayoutGrid className="w-4 h-4" />
                 Hub
               </button>
               <button
@@ -395,14 +395,14 @@ export function TaskHub() {
                   setSelectedDate(null); // Clear date filter when switching to list
                 }}
                 className={cn(
-                  'flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm',
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm',
                   'transition-colors',
                   viewMode === 'list'
                     ? 'bg-white text-black'
                     : 'text-text-tertiary hover:text-text-secondary',
                 )}
               >
-                <List className="h-4 w-4" />
+                <List className="w-4 h-4" />
                 List
               </button>
             </div>
@@ -412,21 +412,21 @@ export function TaskHub() {
               <button
                 onClick={toggleSelectMode}
                 className={cn(
-                  'flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm',
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm',
                   'transition-colors',
                   isSelectMode
                     ? 'bg-white/10 text-white'
-                    : 'text-text-tertiary hover:bg-bg-tertiary hover:text-text-primary',
+                    : 'text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary',
                 )}
               >
                 {isSelectMode ? (
                   <>
-                    <CheckSquare className="h-4 w-4" />
+                    <CheckSquare className="w-4 h-4" />
                     <span>Selecting</span>
                   </>
                 ) : (
                   <>
-                    <Square className="h-4 w-4" />
+                    <Square className="w-4 h-4" />
                     <span>Select</span>
                   </>
                 )}
@@ -438,9 +438,9 @@ export function TaskHub() {
 
       {/* Content - Two column layout for Hub view */}
       <div className="flex-1 overflow-hidden">
-        <div className="flex h-full w-full flex-col lg:flex-row">
+        <div className="h-full flex flex-col lg:flex-row w-full">
           {/* Left Column - Tasks (scrollable) */}
-          <div className="order-last flex-1 space-y-4 overflow-y-auto p-4 lg:order-first">
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 order-last lg:order-first">
             {/* Quick add */}
             <TaskQuickAdd onAdd={handleAddTask} disabled={loading} />
 
@@ -468,7 +468,7 @@ export function TaskHub() {
 
             {/* Error state */}
             {error && (
-              <div className="rounded-xl border border-error/20 bg-error/10 p-4 text-sm text-error">
+              <div className="p-4 rounded-xl bg-error/10 border border-error/20 text-error text-sm">
                 {error}
               </div>
             )}
@@ -485,13 +485,13 @@ export function TaskHub() {
             {/* Empty state */}
             {isEmpty && (
               <div className="flex flex-col items-center justify-center py-16 text-center">
-                <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-bg-tertiary">
-                  <CheckSquare className="h-8 w-8 text-text-quaternary" />
+                <div className="w-16 h-16 rounded-2xl bg-bg-tertiary flex items-center justify-center mb-4">
+                  <CheckSquare className="w-8 h-8 text-text-quaternary" />
                 </div>
-                <h3 className="mb-2 text-lg font-medium text-text-primary">
+                <h3 className="text-lg font-medium text-text-primary mb-2">
                   No tasks yet
                 </h3>
-                <p className="max-w-xs text-sm text-text-tertiary">
+                <p className="text-text-tertiary text-sm max-w-xs">
                   Add a task above or they&apos;ll appear automatically from your
                   conversations
                 </p>
@@ -575,7 +575,7 @@ export function TaskHub() {
                     )}
                     {filteredView.pending.length === 0 &&
                       filteredView.completed.length === 0 && (
-                        <div className="py-8 text-center text-sm text-text-tertiary">
+                        <div className="text-center py-8 text-text-tertiary text-sm">
                           No tasks for this date
                         </div>
                       )}
@@ -642,13 +642,13 @@ export function TaskHub() {
 
           {/* Right Column - Dashboard (sticky sidebar) - only in Hub view */}
           {viewMode === 'hub' && (
-            <div className="order-first w-full border-bg-tertiary p-4 lg:order-last lg:h-full lg:w-[380px] lg:flex-shrink-0 lg:overflow-y-auto lg:border-l lg:pl-6">
+            <div className="w-full lg:w-[380px] lg:flex-shrink-0 p-4 lg:pl-6 lg:border-l border-bg-tertiary order-first lg:order-last lg:h-full lg:overflow-y-auto">
               {/* Loading state for dashboard */}
               {loading && items.length === 0 && (
                 <div className="space-y-4">
-                  <div className="h-32 animate-pulse rounded-xl border border-bg-tertiary bg-bg-secondary" />
-                  <div className="h-24 animate-pulse rounded-xl border border-bg-tertiary bg-bg-secondary" />
-                  <div className="h-64 animate-pulse rounded-xl border border-bg-tertiary bg-bg-secondary" />
+                  <div className="h-32 bg-bg-secondary border border-bg-tertiary rounded-xl animate-pulse" />
+                  <div className="h-24 bg-bg-secondary border border-bg-tertiary rounded-xl animate-pulse" />
+                  <div className="h-64 bg-bg-secondary border border-bg-tertiary rounded-xl animate-pulse" />
                 </div>
               )}
 

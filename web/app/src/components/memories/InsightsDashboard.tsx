@@ -53,20 +53,20 @@ export function InsightsDashboard({ insights, onTagSelect }: InsightsDashboardPr
   // Loading state (computing insights in Web Worker)
   if (computing) {
     return (
-      <div className="h-full w-full max-w-full overflow-y-auto">
-        <div className="mx-auto w-full max-w-full space-y-6 p-6 lg:max-w-5xl">
+      <div className="h-full overflow-y-auto w-full max-w-full">
+        <div className="max-w-full lg:max-w-5xl mx-auto p-6 space-y-6 w-full">
           {/* Skeleton for Activity Calendar */}
-          <div className="animate-pulse rounded-2xl border border-bg-tertiary bg-bg-secondary p-6">
-            <div className="mb-4 h-4 w-24 rounded bg-bg-tertiary"></div>
-            <div className="h-32 rounded bg-bg-tertiary"></div>
+          <div className="p-6 rounded-2xl bg-bg-secondary border border-bg-tertiary animate-pulse">
+            <div className="h-4 w-24 bg-bg-tertiary rounded mb-4"></div>
+            <div className="h-32 bg-bg-tertiary rounded"></div>
           </div>
 
           {/* Skeleton for Tags */}
-          <div className="animate-pulse rounded-2xl border border-bg-tertiary bg-bg-secondary p-6">
-            <div className="mb-4 h-4 w-32 rounded bg-bg-tertiary"></div>
+          <div className="p-6 rounded-2xl bg-bg-secondary border border-bg-tertiary animate-pulse">
+            <div className="h-4 w-32 bg-bg-tertiary rounded mb-4"></div>
             <div className="grid grid-cols-2 gap-3">
               {Array.from({ length: 12 }).map((_, i) => (
-                <div key={i} className="h-8 rounded bg-bg-tertiary"></div>
+                <div key={i} className="h-8 bg-bg-tertiary rounded"></div>
               ))}
             </div>
           </div>
@@ -78,12 +78,12 @@ export function InsightsDashboard({ insights, onTagSelect }: InsightsDashboardPr
   // Empty state
   if (!summary) {
     return (
-      <div className="flex h-full flex-col items-center justify-center p-8 text-center">
-        <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-bg-tertiary">
-          <Sparkles className="h-10 w-10 text-text-quaternary" />
+      <div className="flex flex-col items-center justify-center h-full text-center p-8">
+        <div className="w-20 h-20 rounded-full bg-bg-tertiary flex items-center justify-center mb-4">
+          <Sparkles className="w-10 h-10 text-text-quaternary" />
         </div>
-        <h3 className="mb-2 text-lg font-medium text-text-primary">No insights yet</h3>
-        <p className="max-w-sm text-sm text-text-tertiary">
+        <h3 className="text-lg font-medium text-text-primary mb-2">No insights yet</h3>
+        <p className="text-sm text-text-tertiary max-w-sm">
           Add more memories to see insights about your life patterns and themes.
         </p>
       </div>
@@ -91,15 +91,15 @@ export function InsightsDashboard({ insights, onTagSelect }: InsightsDashboardPr
   }
 
   return (
-    <div className="h-full w-full max-w-full overflow-y-auto">
-      <div className="mx-auto w-full max-w-full space-y-6 p-6 lg:max-w-5xl">
+    <div className="h-full overflow-y-auto w-full max-w-full">
+      <div className="max-w-full lg:max-w-5xl mx-auto p-6 space-y-6 w-full">
         {/* Activity Calendar */}
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="rounded-2xl border border-bg-tertiary bg-bg-secondary p-6"
+          className="p-6 rounded-2xl bg-bg-secondary border border-bg-tertiary"
         >
-          <h2 className="mb-4 text-sm font-medium text-text-tertiary">ACTIVITY</h2>
+          <h2 className="text-sm font-medium text-text-tertiary mb-4">ACTIVITY</h2>
           <ActivityHeatmap data={activityCalendar} />
         </motion.div>
 
@@ -108,24 +108,24 @@ export function InsightsDashboard({ insights, onTagSelect }: InsightsDashboardPr
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.1 }}
-          className="rounded-2xl border border-bg-tertiary bg-bg-secondary p-6"
+          className="p-6 rounded-2xl bg-bg-secondary border border-bg-tertiary"
         >
-          <div className="mb-4 flex items-center justify-between">
+          <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
-              <Tag className="h-4 w-4 text-white" />
+              <Tag className="w-4 h-4 text-white" />
               <h2 className="text-sm font-medium text-text-tertiary">ALL TAGS</h2>
               <span className="text-xs text-text-quaternary">({allTags.length})</span>
             </div>
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-quaternary" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-quaternary" />
               <input
                 type="text"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 placeholder="Search tags..."
                 className={cn(
-                  'w-48 rounded-lg py-1.5 pl-9 pr-4',
-                  'border border-bg-quaternary bg-bg-tertiary',
+                  'pl-9 pr-4 py-1.5 rounded-lg w-48',
+                  'bg-bg-tertiary border border-bg-quaternary',
                   'text-sm text-text-primary',
                   'focus:outline-none focus:ring-2 focus:ring-white/50',
                   'placeholder:text-text-quaternary',
@@ -139,16 +139,16 @@ export function InsightsDashboard({ insights, onTagSelect }: InsightsDashboardPr
                 key={t.tag}
                 onClick={() => handleTagClick(t.tag)}
                 className={cn(
-                  'inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5',
-                  'border border-bg-quaternary bg-bg-tertiary',
+                  'inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg',
+                  'bg-bg-tertiary border border-bg-quaternary',
                   'hover:border-white/50 hover:bg-white/10',
-                  'group text-sm transition-all',
+                  'transition-all text-sm group',
                 )}
               >
-                <span className="text-text-primary transition-colors group-hover:text-white">
+                <span className="text-text-primary group-hover:text-white transition-colors">
                   {t.tag}
                 </span>
-                <span className="text-xs text-text-quaternary">({t.count})</span>
+                <span className="text-text-quaternary text-xs">({t.count})</span>
               </button>
             ))}
             {allTags.length > 50 && !searchQuery && (
@@ -158,7 +158,7 @@ export function InsightsDashboard({ insights, onTagSelect }: InsightsDashboardPr
             )}
           </div>
           {filteredTags.length === 0 && searchQuery && (
-            <p className="py-4 text-center text-text-quaternary">
+            <p className="text-center text-text-quaternary py-4">
               No tags match &quot;{searchQuery}&quot;
             </p>
           )}
@@ -306,7 +306,7 @@ export function TrendingTagRow({
   return (
     <button
       onClick={onClick}
-      className="flex w-full items-center justify-between rounded-lg p-2 transition-colors hover:bg-bg-tertiary"
+      className="w-full flex items-center justify-between p-2 rounded-lg hover:bg-bg-tertiary transition-colors"
     >
       <span className="text-sm text-text-primary">{tag.tag}</span>
       <span
@@ -340,8 +340,8 @@ export function TrendingSidebar({
       {/* Rising */}
       {risingTags.length > 0 && (
         <div>
-          <div className="mb-2 flex items-center gap-1.5">
-            <TrendingUp className="h-3.5 w-3.5 text-emerald-400" />
+          <div className="flex items-center gap-1.5 mb-2">
+            <TrendingUp className="w-3.5 h-3.5 text-emerald-400" />
             <span className="text-xs font-medium text-emerald-400">Rising</span>
           </div>
           <div className="space-y-1">
@@ -360,8 +360,8 @@ export function TrendingSidebar({
       {/* Fading */}
       {fadingTags.length > 0 && (
         <div>
-          <div className="mb-2 flex items-center gap-1.5">
-            <TrendingDown className="h-3.5 w-3.5 text-rose-400" />
+          <div className="flex items-center gap-1.5 mb-2">
+            <TrendingDown className="w-3.5 h-3.5 text-rose-400" />
             <span className="text-xs font-medium text-rose-400">Fading</span>
           </div>
           <div className="space-y-1">
@@ -426,7 +426,7 @@ function ActivityHeatmap({ data }: { data: ActivityDay[] }) {
   return (
     <div className="overflow-x-auto">
       {/* Month labels */}
-      <div className="mb-1 ml-8 flex">
+      <div className="flex mb-1 ml-8">
         {monthLabels.map((label, idx) => (
           <div
             key={idx}
@@ -445,7 +445,7 @@ function ActivityHeatmap({ data }: { data: ActivityDay[] }) {
 
       <div className="flex gap-0.5">
         {/* Day labels */}
-        <div className="mr-1 flex flex-col gap-0.5 text-xs text-text-quaternary">
+        <div className="flex flex-col gap-0.5 mr-1 text-xs text-text-quaternary">
           <div className="h-[10px]"></div>
           <div className="h-[10px] leading-[10px]">M</div>
           <div className="h-[10px]"></div>
@@ -464,7 +464,7 @@ function ActivityHeatmap({ data }: { data: ActivityDay[] }) {
                 <div
                   key={dayOfWeek}
                   className={cn(
-                    'h-[10px] w-[10px] rounded-sm',
+                    'w-[10px] h-[10px] rounded-sm',
                     day ? getColor(day.count) : 'bg-transparent',
                   )}
                   title={day ? `${day.date}: ${day.count} memories` : undefined}
@@ -476,14 +476,14 @@ function ActivityHeatmap({ data }: { data: ActivityDay[] }) {
       </div>
 
       {/* Legend */}
-      <div className="mt-3 flex items-center gap-2 text-xs text-text-quaternary">
+      <div className="flex items-center gap-2 mt-3 text-xs text-text-quaternary">
         <span>Less</span>
         <div className="flex gap-0.5">
-          <div className="h-[10px] w-[10px] rounded-sm bg-bg-tertiary" />
-          <div className="h-[10px] w-[10px] rounded-sm bg-white/20" />
-          <div className="h-[10px] w-[10px] rounded-sm bg-white/40" />
-          <div className="h-[10px] w-[10px] rounded-sm bg-white/60" />
-          <div className="h-[10px] w-[10px] rounded-sm bg-white" />
+          <div className="w-[10px] h-[10px] rounded-sm bg-bg-tertiary" />
+          <div className="w-[10px] h-[10px] rounded-sm bg-white/20" />
+          <div className="w-[10px] h-[10px] rounded-sm bg-white/40" />
+          <div className="w-[10px] h-[10px] rounded-sm bg-white/60" />
+          <div className="w-[10px] h-[10px] rounded-sm bg-white" />
         </div>
         <span>More</span>
       </div>

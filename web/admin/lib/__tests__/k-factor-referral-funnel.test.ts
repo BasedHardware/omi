@@ -7,19 +7,11 @@ vi.mock("@/lib/posthog", () => ({ posthogResults }));
 const RECENT_CLAIM_MS = Date.now() - 3_600_000;
 const OLD_CLAIM_MS = Date.now() - 10 * 86_400_000;
 const referralDocs = [
-  {
-    get: (f: string) =>
-      f === "referral.claimed_at" ? RECENT_CLAIM_MS / 1000 : null,
-  },
-  {
-    get: (f: string) =>
-      f === "referral.claimed_at" ? OLD_CLAIM_MS / 1000 : null,
-  },
+  { get: (f: string) => (f === "referral.claimed_at" ? RECENT_CLAIM_MS / 1000 : null) },
+  { get: (f: string) => (f === "referral.claimed_at" ? OLD_CLAIM_MS / 1000 : null) },
 ];
 // Pages served in order — pagination tests enqueue a full page plus a tail.
-let firestorePages: Array<Array<{ get: (f: string) => unknown }>> = [
-  referralDocs,
-];
+let firestorePages: Array<Array<{ get: (f: string) => unknown }>> = [referralDocs];
 const firestoreGet = vi.fn(async () => ({
   docs: firestorePages.shift() ?? [],
 }));
@@ -46,7 +38,7 @@ const ENV_KEYS = [
   "POSTHOG_HOST",
 ] as const;
 const originalEnv = Object.fromEntries(
-  ENV_KEYS.map((key) => [key, process.env[key]])
+  ENV_KEYS.map((key) => [key, process.env[key]]),
 );
 
 function configurePosthog() {
@@ -103,7 +95,7 @@ describe("computeKFactor viral signals", () => {
       funnel: { issued: 0, captured: 0, granted: 0 },
     });
     const funnelQueries = capturedQueries().filter((q) =>
-      q.includes("desktop_operator_month_v1")
+      q.includes("desktop_operator_month_v1"),
     );
     expect(funnelQueries).toHaveLength(3);
     expect(funnelQueries.join("\n")).toContain("properties.claimed = true");
@@ -116,7 +108,7 @@ describe("computeKFactor viral signals", () => {
     await compute("macos");
     const queries = capturedQueries();
     const friendQuery = queries.find((q) =>
-      q.includes("Onboarding How Did You Hear")
+      q.includes("Onboarding How Did You Hear"),
     )!;
     expect(friendQuery).toContain("properties.source = 'Friend'");
     expect(friendQuery).toContain("properties.$os_name = 'macOS'");
@@ -149,14 +141,9 @@ describe("computeKFactor viral signals", () => {
     const today = nycDate();
     posthogResults.mockImplementation(async (_h, _p, _k, query: string) => {
       if (query.includes("Onboarding How Did You Hear")) {
-        return query.includes("INTERVAL 7 DAY")
-          ? [[1, 3]]
-          : [[today, 2]].map((r) => r);
+        return query.includes("INTERVAL 7 DAY") ? [[1, 3]] : [[today, 2]].map((r) => r);
       }
-      if (
-        query.includes("Share Action") ||
-        query.includes("Conversation Shared")
-      ) {
+      if (query.includes("Share Action") || query.includes("Conversation Shared")) {
         return query.includes("INTERVAL 7 DAY") ? [[2, 6]] : [[today, 4]];
       }
       if (query.includes("min_ts")) {
@@ -199,10 +186,7 @@ describe("computeKFactor viral signals", () => {
     const { REFERRAL_LEDGER_PAGE_SIZE } = await import(
       "@/app/api/omi/stats/k-factor/posthog/route"
     );
-    const claim = {
-      get: (f: string) =>
-        f === "referral.claimed_at" ? RECENT_CLAIM_MS / 1000 : null,
-    };
+    const claim = { get: (f: string) => (f === "referral.claimed_at" ? RECENT_CLAIM_MS / 1000 : null) };
     // A full first page must NOT terminate the read: the claim on page two
     // has to reach the summary.
     firestorePages = [Array(REFERRAL_LEDGER_PAGE_SIZE).fill(claim), [claim]];
@@ -219,23 +203,13 @@ describe("computeKFactor viral signals", () => {
       if (query.includes("Onboarding How Did You Hear")) {
         // 5 signups yesterday + 1 today; the trailing 24h window sees 4 of
         // them (3 of yesterday's late-evening ones plus today's).
-        return query.includes("INTERVAL 7 DAY")
-          ? [[4, 6]]
-          : [
-              [yesterday, 5],
-              [today, 1],
-            ];
+        return query.includes("INTERVAL 7 DAY") ? [[4, 6]] : [[yesterday, 5], [today, 1]];
       }
       if (query.includes("Share Action")) {
         return query.includes("INTERVAL 7 DAY") ? [[0, 0]] : [];
       }
       if (query.includes("min_ts")) {
-        return query.includes("INTERVAL 7 DAY")
-          ? [[10, 20]]
-          : [
-              [yesterday, 10],
-              [today, 10],
-            ];
+        return query.includes("INTERVAL 7 DAY") ? [[10, 20]] : [[yesterday, 10], [today, 10]];
       }
       return [[0]];
     });
@@ -251,7 +225,7 @@ describe("computeKFactor viral signals", () => {
     // the last (rolling trailing 7d) bucket sums calendar values.
     const weeklySum = payload.weekly.reduce(
       (acc: number, w: any) => acc + w.friend,
-      0
+      0,
     );
     const lastWeekly = payload.weekly[payload.weekly.length - 1];
     expect(lastWeekly.friend).toBe(6); // trailing-7d query value, a replacement

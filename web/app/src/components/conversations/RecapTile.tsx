@@ -65,61 +65,61 @@ export const RecapTile = memo(function RecapTile({
       transition={{ duration: 0.15, ease: 'easeOut' }}
       onClick={onClick}
       className={cn(
-        'noise-overlay group relative flex cursor-pointer flex-col overflow-hidden rounded-card text-left',
-        'col-span-full border p-5 transition-all duration-150',
+        'noise-overlay group relative flex flex-col text-left rounded-card cursor-pointer overflow-hidden',
+        'col-span-full border transition-all duration-150 p-5',
         'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/40',
         isSelected
-          ? 'border-white/40 bg-bg-quaternary'
-          : 'border-white/15 bg-bg-raised hover:border-white/30 hover:bg-bg-tertiary',
+          ? 'bg-bg-quaternary border-white/40'
+          : 'bg-bg-raised border-white/15 hover:bg-bg-tertiary hover:border-white/30',
       )}
       aria-label={`Recap: ${recap.headline}`}
       aria-pressed={isSelected}
     >
-      <div className="mb-2 flex items-center gap-1.5">
-        <CalendarDays className="h-3.5 w-3.5 text-text-secondary" />
+      <div className="flex items-center gap-1.5 mb-2">
+        <CalendarDays className="w-3.5 h-3.5 text-text-secondary" />
         <span className="text-[10px] font-medium uppercase tracking-[0.14em] text-text-secondary">
           Day recap
         </span>
       </div>
 
       <div className="flex items-start gap-3">
-        <div className="flex h-11 w-11 flex-shrink-0 select-none items-center justify-center rounded-chip bg-bg-quaternary text-2xl transition-transform duration-150 group-hover:scale-105">
+        <div className="flex-shrink-0 w-11 h-11 rounded-chip bg-bg-quaternary flex items-center justify-center select-none text-2xl group-hover:scale-105 transition-transform duration-150">
           {recap.day_emoji || '📅'}
         </div>
 
         {/* Spans, not a heading and a paragraph: a button may only contain
             phrasing content, so the native element stays valid HTML. */}
-        <span className="line-clamp-2 min-w-0 flex-1 text-base font-semibold leading-snug text-text-primary">
+        <span className="flex-1 min-w-0 text-base font-semibold leading-snug text-text-primary line-clamp-2">
           {recap.headline || 'Daily Recap'}
         </span>
       </div>
 
       {recap.overview && (
-        <span className="mt-3 line-clamp-3 block text-xs leading-relaxed text-text-tertiary">
+        <span className="mt-3 block text-xs leading-relaxed text-text-tertiary line-clamp-3">
           {recap.overview}
         </span>
       )}
 
-      <div className="mt-auto flex flex-wrap items-center gap-1.5 pt-3">
-        <span className="flex items-center gap-1 rounded-chip bg-bg-quaternary px-2 py-0.5 text-[10px] text-text-secondary">
-          <MessageSquare className="h-3 w-3" />
+      <div className="mt-auto pt-3 flex items-center flex-wrap gap-1.5">
+        <span className="flex items-center gap-1 px-2 py-0.5 rounded-chip bg-bg-quaternary text-[10px] text-text-secondary">
+          <MessageSquare className="w-3 h-3" />
           {stats.total_conversations}
         </span>
         {stats.total_duration_minutes > 0 && (
-          <span className="flex items-center gap-1 rounded-chip bg-bg-quaternary px-2 py-0.5 text-[10px] text-text-secondary">
-            <Clock className="h-3 w-3" />
+          <span className="flex items-center gap-1 px-2 py-0.5 rounded-chip bg-bg-quaternary text-[10px] text-text-secondary">
+            <Clock className="w-3 h-3" />
             {formatDuration(stats.total_duration_minutes)}
           </span>
         )}
         {stats.action_items_count > 0 && (
-          <span className="flex items-center gap-1 rounded-chip bg-bg-quaternary px-2 py-0.5 text-[10px] text-text-secondary">
-            <CheckSquare className="h-3 w-3" />
+          <span className="flex items-center gap-1 px-2 py-0.5 rounded-chip bg-bg-quaternary text-[10px] text-text-secondary">
+            <CheckSquare className="w-3 h-3" />
             {stats.action_items_count}
           </span>
         )}
         {recap.locations && recap.locations.length > 0 && (
-          <span className="flex items-center gap-1 rounded-chip bg-bg-quaternary px-2 py-0.5 text-[10px] text-text-secondary">
-            <MapPin className="h-3 w-3" />
+          <span className="flex items-center gap-1 px-2 py-0.5 rounded-chip bg-bg-quaternary text-[10px] text-text-secondary">
+            <MapPin className="w-3 h-3" />
             {recap.locations.length}
           </span>
         )}

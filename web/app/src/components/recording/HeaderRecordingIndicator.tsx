@@ -116,17 +116,17 @@ export function HeaderRecordingIndicator() {
             <button
               onClick={() => setShowModeSelector(!showModeSelector)}
               className={cn(
-                'flex items-center gap-2 rounded-full px-4 py-2',
-                'border border-stroke bg-white/[0.08]',
-                'transition-colors hover:bg-white/[0.14]',
+                'flex items-center gap-2 px-4 py-2 rounded-full',
+                'bg-white/[0.08] border border-stroke',
+                'hover:bg-white/[0.14] transition-colors',
                 'text-sm font-medium',
               )}
             >
-              <Mic className="h-4 w-4 text-text-primary" />
+              <Mic className="w-4 h-4 text-text-primary" />
               <span className="text-text-primary">Record</span>
               <ChevronDown
                 className={cn(
-                  'h-3.5 w-3.5 text-text-tertiary transition-transform',
+                  'w-3.5 h-3.5 text-text-tertiary transition-transform',
                   showModeSelector && 'rotate-180',
                 )}
               />
@@ -141,30 +141,30 @@ export function HeaderRecordingIndicator() {
                   exit={{ opacity: 0, y: -10, scale: 0.95 }}
                   transition={{ duration: 0.15 }}
                   className={cn(
-                    'absolute right-0 top-full z-50 mt-2',
-                    'w-72 rounded-xl p-4',
-                    'border border-bg-tertiary bg-bg-secondary',
+                    'absolute right-0 top-full mt-2 z-50',
+                    'w-72 p-4 rounded-xl',
+                    'bg-bg-secondary border border-bg-tertiary',
                     'shadow-lg shadow-black/20',
                   )}
                 >
-                  <h3 className="mb-3 text-sm font-medium text-text-primary">
+                  <h3 className="text-sm font-medium text-text-primary mb-3">
                     Start Recording
                   </h3>
 
                   {/* Audio mode options */}
-                  <div className="mb-4 space-y-2">
+                  <div className="space-y-2 mb-4">
                     <button
                       onClick={() => handleModeSelect('mic-only')}
                       className={cn(
-                        'flex w-full items-center gap-3 rounded-lg p-3 text-left transition-colors',
+                        'w-full flex items-center gap-3 p-3 rounded-lg transition-colors text-left',
                         audioMode === 'mic-only'
-                          ? 'border border-stroke bg-white/[0.08]'
-                          : 'border border-transparent bg-bg-tertiary hover:bg-bg-quaternary',
+                          ? 'bg-white/[0.08] border border-stroke'
+                          : 'bg-bg-tertiary hover:bg-bg-quaternary border border-transparent',
                       )}
                     >
                       <div
                         className={cn(
-                          'flex h-8 w-8 items-center justify-center rounded-lg',
+                          'w-8 h-8 rounded-lg flex items-center justify-center',
                           audioMode === 'mic-only'
                             ? 'bg-white/[0.14]'
                             : 'bg-bg-secondary',
@@ -172,14 +172,14 @@ export function HeaderRecordingIndicator() {
                       >
                         <Mic
                           className={cn(
-                            'h-4 w-4',
+                            'w-4 h-4',
                             audioMode === 'mic-only'
                               ? 'text-text-primary'
                               : 'text-text-tertiary',
                           )}
                         />
                       </div>
-                      <div className="min-w-0 flex-1">
+                      <div className="flex-1 min-w-0">
                         <p
                           className={cn(
                             'text-sm font-medium',
@@ -199,15 +199,15 @@ export function HeaderRecordingIndicator() {
                     <button
                       onClick={() => handleModeSelect('mic-and-system')}
                       className={cn(
-                        'flex w-full items-center gap-3 rounded-lg p-3 text-left transition-colors',
+                        'w-full flex items-center gap-3 p-3 rounded-lg transition-colors text-left',
                         audioMode === 'mic-and-system'
-                          ? 'border border-stroke bg-white/[0.08]'
-                          : 'border border-transparent bg-bg-tertiary hover:bg-bg-quaternary',
+                          ? 'bg-white/[0.08] border border-stroke'
+                          : 'bg-bg-tertiary hover:bg-bg-quaternary border border-transparent',
                       )}
                     >
                       <div
                         className={cn(
-                          'flex h-8 w-8 items-center justify-center rounded-lg',
+                          'w-8 h-8 rounded-lg flex items-center justify-center',
                           audioMode === 'mic-and-system'
                             ? 'bg-white/[0.14]'
                             : 'bg-bg-secondary',
@@ -215,14 +215,14 @@ export function HeaderRecordingIndicator() {
                       >
                         <Monitor
                           className={cn(
-                            'h-4 w-4',
+                            'w-4 h-4',
                             audioMode === 'mic-and-system'
                               ? 'text-text-primary'
                               : 'text-text-tertiary',
                           )}
                         />
                       </div>
-                      <div className="min-w-0 flex-1">
+                      <div className="flex-1 min-w-0">
                         <p
                           className={cn(
                             'text-sm font-medium',
@@ -244,12 +244,12 @@ export function HeaderRecordingIndicator() {
                   <button
                     onClick={handleStartRecording}
                     className={cn(
-                      'w-full rounded-lg px-4 py-2.5 font-medium',
+                      'w-full py-2.5 px-4 rounded-lg font-medium',
                       'bg-text-primary text-bg-primary hover:opacity-90',
-                      'flex items-center justify-center gap-2 transition-colors',
+                      'transition-colors flex items-center justify-center gap-2',
                     )}
                   >
-                    <Mic className="h-4 w-4" />
+                    <Mic className="w-4 h-4" />
                     <span>Start Recording</span>
                   </button>
                 </motion.div>
@@ -262,13 +262,13 @@ export function HeaderRecordingIndicator() {
         {isInitializing && (
           <div
             className={cn(
-              'flex items-center gap-2 rounded-full px-3 py-1.5',
-              'border border-bg-tertiary bg-bg-secondary',
+              'flex items-center gap-2 px-3 py-1.5 rounded-full',
+              'bg-bg-secondary border border-bg-tertiary',
               'text-sm font-medium',
             )}
           >
             <motion.div
-              className="h-4 w-4 rounded-full border-2 border-text-primary border-t-transparent"
+              className="w-4 h-4 border-2 border-text-primary border-t-transparent rounded-full"
               animate={{ rotate: 360 }}
               transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
             />
@@ -282,21 +282,21 @@ export function HeaderRecordingIndicator() {
             <button
               onClick={() => setIsExpanded(!isExpanded)}
               className={cn(
-                'flex items-center gap-2 rounded-full px-3 py-1.5',
-                'border border-bg-tertiary bg-bg-secondary',
-                'transition-colors hover:bg-bg-tertiary',
+                'flex items-center gap-2 px-3 py-1.5 rounded-full',
+                'bg-bg-secondary border border-bg-tertiary',
+                'hover:bg-bg-tertiary transition-colors',
                 'text-sm font-medium',
               )}
             >
               {/* Recording dot */}
               {isRecording && (
                 <motion.div
-                  className="h-2 w-2 rounded-full bg-error"
+                  className="w-2 h-2 rounded-full bg-error"
                   animate={{ opacity: [1, 0.5, 1] }}
                   transition={{ duration: 1, repeat: Infinity }}
                 />
               )}
-              {isPaused && <div className="h-2 w-2 rounded-full bg-yellow-500" />}
+              {isPaused && <div className="w-2 h-2 rounded-full bg-yellow-500" />}
 
               {/* Timer */}
               <span className="font-mono tabular-nums text-text-primary">
@@ -306,7 +306,7 @@ export function HeaderRecordingIndicator() {
               {/* Chevron */}
               <ChevronDown
                 className={cn(
-                  'h-4 w-4 text-text-tertiary transition-transform',
+                  'w-4 h-4 text-text-tertiary transition-transform',
                   isExpanded && 'rotate-180',
                 )}
               />
@@ -321,30 +321,30 @@ export function HeaderRecordingIndicator() {
                   exit={{ opacity: 0, y: -10, scale: 0.95 }}
                   transition={{ duration: 0.15 }}
                   className={cn(
-                    'absolute right-0 top-full z-50 mt-2',
-                    'w-80 rounded-xl p-4',
-                    'border border-bg-tertiary bg-bg-secondary',
+                    'absolute right-0 top-full mt-2 z-50',
+                    'w-80 p-4 rounded-xl',
+                    'bg-bg-secondary border border-bg-tertiary',
                     'shadow-lg shadow-black/20',
                   )}
                 >
                   {/* Header */}
-                  <div className="mb-3 flex items-center justify-between">
+                  <div className="flex items-center justify-between mb-3">
                     <div className="flex items-center gap-2">
                       {isRecording && (
                         <motion.div
-                          className="h-2.5 w-2.5 rounded-full bg-error"
+                          className="w-2.5 h-2.5 rounded-full bg-error"
                           animate={{ opacity: [1, 0.5, 1] }}
                           transition={{ duration: 1, repeat: Infinity }}
                         />
                       )}
                       {isPaused && (
-                        <div className="h-2.5 w-2.5 rounded-full bg-yellow-500" />
+                        <div className="w-2.5 h-2.5 rounded-full bg-yellow-500" />
                       )}
                       <span className="text-sm font-medium text-text-primary">
                         {isRecording ? 'Recording' : 'Paused'}
                       </span>
                     </div>
-                    <span className="font-mono text-lg tabular-nums text-text-primary">
+                    <span className="text-lg font-mono tabular-nums text-text-primary">
                       {formatDuration(duration)}
                     </span>
                   </div>
@@ -352,10 +352,10 @@ export function HeaderRecordingIndicator() {
                   {/* Level meter */}
                   <div className="mb-4">
                     <div className="flex items-center gap-2">
-                      <Mic className="h-3 w-3 text-text-quaternary" />
-                      <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-bg-tertiary">
+                      <Mic className="w-3 h-3 text-text-quaternary" />
+                      <div className="flex-1 h-1.5 bg-bg-tertiary rounded-full overflow-hidden">
                         <motion.div
-                          className="h-full rounded-full bg-text-primary"
+                          className="h-full bg-text-primary rounded-full"
                           initial={{ width: 0 }}
                           animate={{ width: `${Math.min(100, micLevel * 100)}%` }}
                           transition={{ duration: 0.1 }}
@@ -370,21 +370,21 @@ export function HeaderRecordingIndicator() {
                   </div>
 
                   {/* Controls */}
-                  <div className="flex items-center justify-between border-t border-bg-tertiary pt-3">
+                  <div className="flex items-center justify-between pt-3 border-t border-bg-tertiary">
                     <div className="flex items-center gap-2">
                       {/* Pause/Resume */}
                       <button
                         onClick={isPaused ? resumeRecording : pauseRecording}
                         className={cn(
-                          'rounded-lg p-2 transition-colors',
+                          'p-2 rounded-lg transition-colors',
                           'bg-bg-tertiary text-text-primary hover:bg-bg-quaternary',
                         )}
                         title={isPaused ? 'Resume' : 'Pause'}
                       >
                         {isPaused ? (
-                          <Play className="h-4 w-4" />
+                          <Play className="w-4 h-4" />
                         ) : (
-                          <Pause className="h-4 w-4" />
+                          <Pause className="w-4 h-4" />
                         )}
                       </button>
 
@@ -395,12 +395,12 @@ export function HeaderRecordingIndicator() {
                           setIsExpanded(false);
                         }}
                         className={cn(
-                          'rounded-lg p-2 transition-colors',
+                          'p-2 rounded-lg transition-colors',
                           'bg-error/10 text-error hover:bg-error/20',
                         )}
                         title="Stop recording"
                       >
-                        <Square className="h-4 w-4 fill-current" />
+                        <Square className="w-4 h-4 fill-current" />
                       </button>
                     </div>
 
@@ -412,13 +412,13 @@ export function HeaderRecordingIndicator() {
                           openRecordingWidget();
                         }}
                         className={cn(
-                          'rounded-lg p-2 transition-colors',
+                          'p-2 rounded-lg transition-colors',
                           'text-text-tertiary hover:text-text-primary',
                           'hover:bg-bg-tertiary',
                         )}
                         title="Pop-out widget"
                       >
-                        <PanelTop className="h-4 w-4" />
+                        <PanelTop className="w-4 h-4" />
                       </button>
 
                       {/* Pop-out transcript */}
@@ -427,13 +427,13 @@ export function HeaderRecordingIndicator() {
                           openTranscriptWindow();
                         }}
                         className={cn(
-                          'rounded-lg p-2 transition-colors',
+                          'p-2 rounded-lg transition-colors',
                           'text-text-tertiary hover:text-text-primary',
                           'hover:bg-bg-tertiary',
                         )}
                         title="Pop-out transcript"
                       >
-                        <FileText className="h-4 w-4" />
+                        <FileText className="w-4 h-4" />
                       </button>
 
                       {/* View full page */}
@@ -441,13 +441,13 @@ export function HeaderRecordingIndicator() {
                         href="/record"
                         onClick={() => setIsExpanded(false)}
                         className={cn(
-                          'rounded-lg p-2 transition-colors',
+                          'p-2 rounded-lg transition-colors',
                           'text-text-tertiary hover:text-text-primary',
                           'hover:bg-bg-tertiary',
                         )}
                         title="View full page"
                       >
-                        <ExternalLink className="h-4 w-4" />
+                        <ExternalLink className="w-4 h-4" />
                       </Link>
                     </div>
                   </div>

@@ -117,16 +117,16 @@ export function MonthCalendar({
   const weekDays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
   return (
-    <div className="rounded-xl border border-bg-tertiary bg-bg-secondary p-4">
+    <div className="rounded-xl bg-bg-secondary border border-bg-tertiary p-4">
       {/* Header */}
-      <div className="mb-4 flex items-center justify-between">
+      <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-medium text-text-primary">{monthName}</h3>
         <div className="flex items-center gap-1">
           <button
             onClick={goToToday}
             className={cn(
-              'rounded px-2 py-1 text-xs',
-              'text-text-tertiary hover:bg-bg-quaternary hover:text-text-secondary',
+              'px-2 py-1 text-xs rounded',
+              'text-text-tertiary hover:text-text-secondary hover:bg-bg-quaternary',
               'transition-colors',
             )}
           >
@@ -135,32 +135,32 @@ export function MonthCalendar({
           <button
             onClick={goToPreviousMonth}
             className={cn(
-              'rounded p-1',
-              'text-text-tertiary hover:bg-bg-quaternary hover:text-text-secondary',
+              'p-1 rounded',
+              'text-text-tertiary hover:text-text-secondary hover:bg-bg-quaternary',
               'transition-colors',
             )}
           >
-            <ChevronLeft className="h-4 w-4" />
+            <ChevronLeft className="w-4 h-4" />
           </button>
           <button
             onClick={goToNextMonth}
             className={cn(
-              'rounded p-1',
-              'text-text-tertiary hover:bg-bg-quaternary hover:text-text-secondary',
+              'p-1 rounded',
+              'text-text-tertiary hover:text-text-secondary hover:bg-bg-quaternary',
               'transition-colors',
             )}
           >
-            <ChevronRight className="h-4 w-4" />
+            <ChevronRight className="w-4 h-4" />
           </button>
         </div>
       </div>
 
       {/* Weekday headers */}
-      <div className="mb-1 grid grid-cols-7 gap-1">
+      <div className="grid grid-cols-7 gap-1 mb-1">
         {weekDays.map((day) => (
           <div
             key={day}
-            className="py-1 text-center text-[10px] font-medium uppercase text-text-quaternary"
+            className="text-center text-[10px] font-medium text-text-quaternary uppercase py-1"
           >
             {day}
           </div>
@@ -189,12 +189,12 @@ export function MonthCalendar({
               onDragLeave={handleDragLeave}
               onDrop={(e) => handleDrop(e, date)}
               className={cn(
-                'relative flex aspect-square flex-col items-center justify-center rounded-lg',
+                'relative aspect-square flex flex-col items-center justify-center rounded-lg',
                 'transition-all duration-150',
                 isCurrentMonth
                   ? 'text-text-secondary'
                   : 'text-text-quaternary opacity-40',
-                isToday && 'bg-white/10 font-semibold text-white',
+                isToday && 'bg-white/10 text-white font-semibold',
                 isSelected && 'ring-2 ring-white',
                 !isToday && isCurrentMonth && 'hover:bg-bg-quaternary',
               )}
@@ -206,7 +206,7 @@ export function MonthCalendar({
               {hasTasks && isCurrentMonth && (
                 <div className="absolute bottom-1">
                   {allCompleted ? (
-                    <div className="h-1.5 w-1.5 rounded-full bg-success" />
+                    <div className="w-1.5 h-1.5 rounded-full bg-success" />
                   ) : (
                     <span
                       className={cn(

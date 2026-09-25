@@ -54,13 +54,13 @@ export function LiveTranscript({
   return (
     <div
       ref={scrollRef}
-      className="scrollbar-thin scrollbar-thumb-bg-tertiary scrollbar-track-transparent overflow-y-auto"
+      className="overflow-y-auto scrollbar-thin scrollbar-thumb-bg-tertiary scrollbar-track-transparent"
       style={{ maxHeight }}
     >
       {segments.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-8 text-center">
-          <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-bg-tertiary">
-            <Users className="h-6 w-6 text-text-quaternary" />
+          <div className="w-12 h-12 rounded-full bg-bg-tertiary flex items-center justify-center mb-3">
+            <Users className="w-6 h-6 text-text-quaternary" />
           </div>
           <p className="text-sm text-text-tertiary">{emptyMessage}</p>
         </div>
@@ -79,21 +79,21 @@ export function LiveTranscript({
                   className="flex gap-3"
                 >
                   {/* Content with speaker badge */}
-                  <div className="min-w-0 flex-1">
-                    <div className="mb-1 flex items-center gap-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
                       <span
                         className={cn(
-                          'inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs font-medium',
+                          'inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md text-xs font-medium border',
                           colors.bg,
                           colors.text,
                           colors.border,
                         )}
                       >
-                        {segment.isUser ? <User className="h-3 w-3" /> : null}
+                        {segment.isUser ? <User className="w-3 h-3" /> : null}
                         {getSpeakerLabel(segment.isUser, segment.speaker)}
                       </span>
                     </div>
-                    <p className="pl-0.5 text-sm leading-relaxed text-text-primary">
+                    <p className="text-sm text-text-primary leading-relaxed pl-0.5">
                       {segment.text}
                     </p>
                   </div>
@@ -124,7 +124,7 @@ export function LiveTranscriptCompact({
 
   if (segments.length === 0) {
     return (
-      <p className="py-2 text-center text-xs text-text-quaternary">
+      <p className="text-xs text-text-quaternary text-center py-2">
         Waiting for speech...
       </p>
     );
@@ -145,7 +145,7 @@ export function LiveTranscriptCompact({
             >
               <span
                 className={cn(
-                  'flex-shrink-0 rounded border px-1.5 py-0.5 text-[10px] font-medium',
+                  'flex-shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium border',
                   colors.bg,
                   colors.text,
                   colors.border,
@@ -153,7 +153,7 @@ export function LiveTranscriptCompact({
               >
                 {segment.isUser ? 'You' : `S${segment.speaker + 1}`}
               </span>
-              <p className="line-clamp-2 text-xs leading-relaxed text-text-secondary">
+              <p className="text-xs text-text-secondary line-clamp-2 leading-relaxed">
                 {segment.text}
               </p>
             </motion.div>
@@ -162,7 +162,7 @@ export function LiveTranscriptCompact({
       </AnimatePresence>
 
       {segments.length > maxItems && (
-        <p className="text-center text-[10px] text-text-quaternary">
+        <p className="text-[10px] text-text-quaternary text-center">
           +{segments.length - maxItems} more segments
         </p>
       )}

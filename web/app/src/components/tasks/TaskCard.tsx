@@ -157,13 +157,13 @@ export function TaskCard({
       onHoverEnd={() => setIsHovered(false)}
       onDoubleClick={handleCardDoubleClick}
       className={cn(
-        'noise-overlay group relative cursor-pointer rounded-xl',
+        'noise-overlay group relative rounded-xl cursor-pointer',
         'transition-all duration-150',
         'bg-white/[0.02] hover:bg-white/[0.05]',
         'p-4',
         showDatePicker && 'z-10',
         // Selection state
-        isSelected && 'bg-white/5 ring-2 ring-white/50',
+        isSelected && 'ring-2 ring-white/50 bg-white/5',
       )}
     >
       <div className="flex items-start gap-3">
@@ -172,11 +172,11 @@ export function TaskCard({
           <button
             onClick={handleSelectionClick}
             className={cn(
-              'mt-0.5 h-5 w-5 flex-shrink-0 rounded',
+              'flex-shrink-0 w-5 h-5 mt-0.5 rounded',
               'border-2 transition-all duration-200',
               'flex items-center justify-center',
               isSelected
-                ? 'border-white bg-white'
+                ? 'bg-white border-white'
                 : 'border-text-quaternary hover:border-white',
             )}
             aria-label={isSelected ? 'Deselect task' : 'Select task'}
@@ -189,7 +189,7 @@ export function TaskCard({
                   exit={{ scale: 0 }}
                   transition={{ duration: 0.15 }}
                 >
-                  <Check className="h-3 w-3 text-bg-primary" strokeWidth={3} />
+                  <Check className="w-3 h-3 text-bg-primary" strokeWidth={3} />
                 </motion.div>
               )}
             </AnimatePresence>
@@ -201,14 +201,14 @@ export function TaskCard({
           <button
             onClick={handleCheckboxClick}
             className={cn(
-              'mt-0.5 h-5 w-5 flex-shrink-0 rounded-full',
+              'flex-shrink-0 w-5 h-5 mt-0.5 rounded-full',
               'border-2 transition-all duration-200',
               'flex items-center justify-center',
               task.completed
-                ? 'border-success bg-success'
+                ? 'bg-success border-success'
                 : isOverdue
-                ? 'border-white hover:bg-white/20'
-                : 'border-text-quaternary hover:border-text-tertiary hover:bg-bg-tertiary',
+                  ? 'border-white hover:bg-white/20'
+                  : 'border-text-quaternary hover:border-text-tertiary hover:bg-bg-tertiary',
             )}
             aria-label={task.completed ? 'Mark incomplete' : 'Mark complete'}
           >
@@ -220,7 +220,7 @@ export function TaskCard({
                   exit={{ scale: 0 }}
                   transition={{ duration: 0.15 }}
                 >
-                  <Check className="h-3 w-3 text-white" strokeWidth={3} />
+                  <Check className="w-3 h-3 text-white" strokeWidth={3} />
                 </motion.div>
               )}
             </AnimatePresence>
@@ -228,7 +228,7 @@ export function TaskCard({
         )}
 
         {/* Content */}
-        <div className="min-w-0 flex-1">
+        <div className="flex-1 min-w-0">
           {isEditing ? (
             <input
               ref={inputRef}
@@ -238,8 +238,8 @@ export function TaskCard({
               onBlur={handleEditSubmit}
               onKeyDown={handleEditKeyDown}
               className={cn(
-                'w-full border border-white/50 bg-bg-secondary text-sm',
-                '-my-0.5 -ml-2 rounded px-2 py-0.5',
+                'w-full text-sm bg-bg-secondary border border-white/50',
+                'rounded px-2 py-0.5 -ml-2 -my-0.5',
                 'text-text-primary outline-none',
                 'focus:ring-2 focus:ring-white/30',
               )}
@@ -252,7 +252,7 @@ export function TaskCard({
                 task.completed
                   ? 'text-text-quaternary line-through'
                   : 'text-text-primary',
-                !task.completed && onUpdateDescription && 'cursor-text hover:text-white',
+                !task.completed && onUpdateDescription && 'hover:text-white cursor-text',
               )}
               title={!task.completed ? 'Double-click to edit' : undefined}
             >
@@ -262,17 +262,17 @@ export function TaskCard({
 
           {/* Due date / status */}
           {dueStatus && !task.completed && (
-            <div className="relative mt-1 flex items-center gap-1.5">
+            <div className="relative flex items-center gap-1.5 mt-1">
               <button
                 onClick={handleDateClick}
                 className={cn(
-                  'group/date flex items-center gap-1.5',
-                  'transition-colors hover:text-white',
+                  'flex items-center gap-1.5 group/date',
+                  'hover:text-white transition-colors',
                   isOverdue ? 'text-error hover:text-error' : 'text-text-quaternary',
                 )}
                 title="Click to change date"
               >
-                <Clock className="h-3 w-3" />
+                <Clock className="w-3 h-3" />
                 <span
                   className={cn(
                     'text-xs',
@@ -287,7 +287,7 @@ export function TaskCard({
 
               {/* Replaces the coloured left edge bar: overdue stays legible as text. */}
               {isOverdue && (
-                <span className="rounded-badge bg-bg-quaternary px-1.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-text-secondary">
+                <span className="px-1.5 py-0.5 rounded-badge bg-bg-quaternary text-[10px] font-medium uppercase tracking-wide text-text-secondary">
                   Overdue
                 </span>
               )}
@@ -302,9 +302,9 @@ export function TaskCard({
                     exit={{ opacity: 0, y: -5 }}
                     transition={{ duration: 0.15 }}
                     className={cn(
-                      'absolute left-0 top-full z-50 mt-1',
-                      'rounded-lg border border-bg-tertiary bg-bg-secondary',
-                      'p-3 shadow-lg shadow-black/30',
+                      'absolute top-full left-0 mt-1 z-50',
+                      'bg-bg-secondary border border-bg-tertiary rounded-lg',
+                      'shadow-lg shadow-black/30 p-3',
                     )}
                     onClick={(e) => e.stopPropagation()}
                   >
@@ -316,7 +316,7 @@ export function TaskCard({
                         }
                         onChange={handleDateChange}
                         className={cn(
-                          'rounded border border-bg-quaternary bg-bg-tertiary px-2 py-1',
+                          'bg-bg-tertiary border border-bg-quaternary rounded px-2 py-1',
                           'text-sm text-text-primary outline-none',
                           'focus:border-white',
                         )}
@@ -330,7 +330,7 @@ export function TaskCard({
                               setShowDatePicker(false);
                             }
                           }}
-                          className="flex-1 rounded bg-bg-tertiary px-2 py-1 text-xs text-text-secondary hover:bg-white/20"
+                          className="flex-1 px-2 py-1 text-xs bg-bg-tertiary hover:bg-white/20 rounded text-text-secondary"
                         >
                           Today
                         </button>
@@ -344,7 +344,7 @@ export function TaskCard({
                               setShowDatePicker(false);
                             }
                           }}
-                          className="flex-1 rounded bg-bg-tertiary px-2 py-1 text-xs text-text-secondary hover:bg-white/20"
+                          className="flex-1 px-2 py-1 text-xs bg-bg-tertiary hover:bg-white/20 rounded text-text-secondary"
                         >
                           Tomorrow
                         </button>
@@ -352,9 +352,9 @@ export function TaskCard({
                       {task.due_at && (
                         <button
                           onClick={handleClearDate}
-                          className="flex items-center justify-center gap-1 rounded bg-error/10 px-2 py-1 text-xs text-error hover:bg-error/20"
+                          className="flex items-center justify-center gap-1 px-2 py-1 text-xs bg-error/10 hover:bg-error/20 rounded text-error"
                         >
-                          <X className="h-3 w-3" />
+                          <X className="w-3 h-3" />
                           Remove date
                         </button>
                       )}
@@ -372,10 +372,10 @@ export function TaskCard({
                 onClick={handleDateClick}
                 className={cn(
                   'flex items-center gap-1.5 text-text-quaternary',
-                  'text-xs transition-colors hover:text-white',
+                  'hover:text-white transition-colors text-xs',
                 )}
               >
-                <Calendar className="h-3 w-3" />
+                <Calendar className="w-3 h-3" />
                 <span>Add due date</span>
               </button>
 
@@ -389,9 +389,9 @@ export function TaskCard({
                     exit={{ opacity: 0, y: -5 }}
                     transition={{ duration: 0.15 }}
                     className={cn(
-                      'absolute left-0 top-full z-50 mt-1',
-                      'rounded-lg border border-bg-tertiary bg-bg-secondary',
-                      'p-3 shadow-lg shadow-black/30',
+                      'absolute top-full left-0 mt-1 z-50',
+                      'bg-bg-secondary border border-bg-tertiary rounded-lg',
+                      'shadow-lg shadow-black/30 p-3',
                     )}
                     onClick={(e) => e.stopPropagation()}
                   >
@@ -400,7 +400,7 @@ export function TaskCard({
                         type="date"
                         onChange={handleDateChange}
                         className={cn(
-                          'rounded border border-bg-quaternary bg-bg-tertiary px-2 py-1',
+                          'bg-bg-tertiary border border-bg-quaternary rounded px-2 py-1',
                           'text-sm text-text-primary outline-none',
                           'focus:border-white',
                         )}
@@ -414,7 +414,7 @@ export function TaskCard({
                               setShowDatePicker(false);
                             }
                           }}
-                          className="flex-1 rounded bg-bg-tertiary px-2 py-1 text-xs text-text-secondary hover:bg-white/20"
+                          className="flex-1 px-2 py-1 text-xs bg-bg-tertiary hover:bg-white/20 rounded text-text-secondary"
                         >
                           Today
                         </button>
@@ -428,7 +428,7 @@ export function TaskCard({
                               setShowDatePicker(false);
                             }
                           }}
-                          className="flex-1 rounded bg-bg-tertiary px-2 py-1 text-xs text-text-secondary hover:bg-white/20"
+                          className="flex-1 px-2 py-1 text-xs bg-bg-tertiary hover:bg-white/20 rounded text-text-secondary"
                         >
                           Tomorrow
                         </button>
@@ -442,8 +442,8 @@ export function TaskCard({
 
           {/* Completed timestamp */}
           {task.completed && task.completed_at && (
-            <div className="mt-1 flex items-center gap-1.5">
-              <Check className="h-3 w-3 text-success" />
+            <div className="flex items-center gap-1.5 mt-1">
+              <Check className="w-3 h-3 text-success" />
               <span className="text-xs text-text-quaternary">
                 Completed{' '}
                 {new Date(task.completed_at).toLocaleDateString('en-US', {
@@ -469,7 +469,7 @@ export function TaskCard({
               <button
                 onClick={(e) => handleSnooze(e, 0)}
                 className={cn(
-                  'rounded px-2 py-1 text-xs',
+                  'px-2 py-1 text-xs rounded',
                   'bg-bg-secondary hover:bg-white/20 hover:text-white',
                   'text-text-tertiary transition-colors',
                 )}
@@ -480,7 +480,7 @@ export function TaskCard({
               <button
                 onClick={(e) => handleSnooze(e, 1)}
                 className={cn(
-                  'rounded px-2 py-1 text-xs',
+                  'px-2 py-1 text-xs rounded',
                   'bg-bg-secondary hover:bg-white/20 hover:text-white',
                   'text-text-tertiary transition-colors',
                 )}
@@ -491,7 +491,7 @@ export function TaskCard({
               <button
                 onClick={(e) => handleSnooze(e, 7)}
                 className={cn(
-                  'rounded px-2 py-1 text-xs',
+                  'px-2 py-1 text-xs rounded',
                   'bg-bg-secondary hover:bg-white/20 hover:text-white',
                   'text-text-tertiary transition-colors',
                 )}
@@ -504,13 +504,13 @@ export function TaskCard({
               <button
                 onClick={handleDelete}
                 className={cn(
-                  'rounded p-1.5',
+                  'p-1.5 rounded',
                   'bg-bg-secondary hover:bg-error/20 hover:text-error',
                   'text-text-quaternary transition-colors',
                 )}
                 title="Delete task"
               >
-                <Trash2 className="h-3.5 w-3.5" />
+                <Trash2 className="w-3.5 h-3.5" />
               </button>
             </motion.div>
           )}
@@ -521,13 +521,13 @@ export function TaskCard({
           <button
             onClick={handleDelete}
             className={cn(
-              'rounded p-1.5 opacity-0 group-hover:opacity-100',
+              'p-1.5 rounded opacity-0 group-hover:opacity-100',
               'hover:bg-error/20 hover:text-error',
               'text-text-quaternary transition-all',
             )}
             title="Delete task"
           >
-            <Trash2 className="h-3.5 w-3.5" />
+            <Trash2 className="w-3.5 h-3.5" />
           </button>
         )}
       </div>
@@ -538,11 +538,11 @@ export function TaskCard({
 // Skeleton loader
 export function TaskCardSkeleton() {
   return (
-    <div className="flex animate-pulse items-start gap-3 rounded-xl bg-bg-tertiary p-4">
-      <div className="h-5 w-5 flex-shrink-0 rounded-full bg-bg-quaternary" />
+    <div className="flex items-start gap-3 p-4 rounded-xl bg-bg-tertiary animate-pulse">
+      <div className="w-5 h-5 rounded-full bg-bg-quaternary flex-shrink-0" />
       <div className="flex-1 space-y-2">
-        <div className="h-4 w-3/4 rounded bg-bg-quaternary" />
-        <div className="h-3 w-1/4 rounded bg-bg-quaternary" />
+        <div className="h-4 bg-bg-quaternary rounded w-3/4" />
+        <div className="h-3 bg-bg-quaternary rounded w-1/4" />
       </div>
     </div>
   );

@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
   const projectId = process.env.POSTHOG_PROJECT_ID;
   const host = (process.env.POSTHOG_HOST || "https://us.posthog.com").replace(
     /\/$/,
-    ""
+    "",
   );
   if (!apiKey || !projectId) {
     return NextResponse.json({ available: false, results: [] });
@@ -37,7 +37,7 @@ export async function GET(request: NextRequest) {
           AND timestamp >= now() - INTERVAL ${days} DAY
         GROUP BY prompt_id, event, value
         ORDER BY prompt_id
-      `
+      `,
     )) as any[];
     const byPrompt: Record<
       string,

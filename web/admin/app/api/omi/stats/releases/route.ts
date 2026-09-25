@@ -23,21 +23,16 @@ let cache: { data: any; days: number; timestamp: number } | null = null;
 const CACHE_TTL = 15 * 60 * 1000;
 
 function nycToday(): string {
-  return new Date().toLocaleDateString("en-CA", {
-    timeZone: "America/New_York",
-  });
+  return new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
 }
 
 function nycDate(iso: string): string {
-  return new Date(iso).toLocaleDateString("en-CA", {
-    timeZone: "America/New_York",
-  });
+  return new Date(iso).toLocaleDateString("en-CA", { timeZone: "America/New_York" });
 }
 
 function daysBetween(fromYmd: string, toYmd: string): number {
   return Math.round(
-    (Date.parse(toYmd + "T00:00:00Z") - Date.parse(fromYmd + "T00:00:00Z")) /
-      86_400_000
+    (Date.parse(toYmd + "T00:00:00Z") - Date.parse(fromYmd + "T00:00:00Z")) / 86_400_000,
   );
 }
 
@@ -48,27 +43,17 @@ function shortDate(ymd: string): string {
   });
 }
 
-function buildRelease(
-  version: string | null,
-  date: string | null
-): PlatformRelease {
+function buildRelease(version: string | null, date: string | null): PlatformRelease {
   if (!version || !date) {
     return { version, date, daysSince: null, display: "no releases found" };
   }
   const daysSince = daysBetween(date, nycToday());
   // Age lives in the separate color-thresholded `daysSince` field; keeping it
   // out of the display string stops the stat tile from wrapping.
-  return {
-    version,
-    date,
-    daysSince,
-    display: `${version} · ${shortDate(date)}`,
-  };
+  return { version, date, daysSince, display: `${version} · ${shortDate(date)}` };
 }
 
-async function fetchMacosReleases(
-  days: number
-): Promise<{ dates: string[]; latest: PlatformRelease }> {
+async function fetchMacosReleases(days: number): Promise<{ dates: string[]; latest: PlatformRelease }> {
   const headers: Record<string, string> = {
     Accept: "application/vnd.github+json",
     "X-GitHub-Api-Version": "2022-11-28",
@@ -84,7 +69,7 @@ async function fetchMacosReleases(
   for (let page = 1; page <= 3; page++) {
     const res = await fetch(
       `https://api.github.com/repos/${GITHUB_REPO}/releases?per_page=100&page=${page}`,
-      { headers, cache: "no-store" }
+      { headers, cache: "no-store" },
     );
     if (!res.ok) {
       throw new Error(`GitHub releases fetch failed: ${res.status}`);
@@ -99,10 +84,7 @@ async function fetchMacosReleases(
       const createdAt: string = release.created_at ?? release.published_at;
       if (!createdAt) continue;
       if (!latest) {
-        const version = tag
-          .replace(/^v/, "")
-          .replace(/\+.*$/, "")
-          .replace(MACOS_TAG_SUFFIX, "");
+        const version = tag.replace(/^v/, "").replace(/\+.*$/, "").replace(MACOS_TAG_SUFFIX, "");
         latest = { version, date: nycDate(createdAt) };
       }
       if (Date.parse(createdAt) < cutoff) {
@@ -120,9 +102,7 @@ async function fetchMacosReleases(
   };
 }
 
-async function fetchIosReleases(
-  days: number
-): Promise<{ dates: string[]; latest: PlatformRelease }> {
+async function fetchIosReleases(days: number): Promise<{ dates: string[]; latest: PlatformRelease }> {
   const apiKey = process.env.POSTHOG_PERSONAL_API_KEY;
   const projectId = process.env.POSTHOG_PROJECT_ID;
   const host = process.env.POSTHOG_HOST || "https://us.posthog.com";
@@ -130,19 +110,14 @@ async function fetchIosReleases(
   // Latest release: the App Store itself (exact version + release date).
   let latest: PlatformRelease;
   try {
-    const res = await fetch(
-      `https://itunes.apple.com/lookup?bundleId=${IOS_BUNDLE_ID}`,
-      {
-        cache: "no-store",
-      }
-    );
+    const res = await fetch(`https://itunes.apple.com/lookup?bundleId=${IOS_BUNDLE_ID}`, {
+      cache: "no-store",
+    });
     const body = await res.json();
     const app = body?.results?.[0];
     latest = buildRelease(
       app?.version ?? null,
-      app?.currentVersionReleaseDate
-        ? nycDate(app.currentVersionReleaseDate)
-        : null
+      app?.currentVersionReleaseDate ? nycDate(app.currentVersionReleaseDate) : null,
     );
   } catch {
     latest = buildRelease(null, null);
@@ -170,14 +145,10 @@ async function fetchIosReleases(
         )
         GROUP BY v
         ORDER BY release_day
-      `
+      `,
     )) as [string, string][];
-    const cutoff = nycDate(
-      new Date(Date.now() - days * 86_400_000).toISOString()
-    );
-    dates = rows
-      .map(([, day]) => String(day).slice(0, 10))
-      .filter((d) => d >= cutoff);
+    const cutoff = nycDate(new Date(Date.now() - days * 86_400_000).toISOString());
+    dates = rows.map(([, day]) => String(day).slice(0, 10)).filter((d) => d >= cutoff);
   }
 
   return { dates, latest };
@@ -190,14 +161,10 @@ export async function GET(request: NextRequest) {
   try {
     const days = Math.min(
       parseInt(request.nextUrl.searchParams.get("days") || "30", 10),
-      90
+      90,
     );
 
-    if (
-      cache &&
-      cache.days === days &&
-      Date.now() - cache.timestamp < CACHE_TTL
-    ) {
+    if (cache && cache.days === days && Date.now() - cache.timestamp < CACHE_TTL) {
       return NextResponse.json(cache.data);
     }
 
@@ -224,10 +191,7 @@ export async function GET(request: NextRequest) {
     const data = {
       days,
       latest: { macos: macos.latest, ios: ios.latest },
-      daily: Array.from(perDay.entries()).map(([date, counts]) => ({
-        date,
-        ...counts,
-      })),
+      daily: Array.from(perDay.entries()).map(([date, counts]) => ({ date, ...counts })),
     };
     cache = { data, days, timestamp: Date.now() };
     return NextResponse.json(data);
@@ -235,7 +199,7 @@ export async function GET(request: NextRequest) {
     console.error("Releases stats error:", error);
     return NextResponse.json(
       { error: error.message || "Failed to fetch release stats" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
     console.error("Daily new users error:", error);
     return NextResponse.json(
       { error: error.message || "Failed to fetch daily new users" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

@@ -1,4 +1,4 @@
-import type Stripe from "stripe";
+import type Stripe from 'stripe';
 
 /**
  * Shared Stripe subscription reads for the revenue dashboards.
@@ -9,15 +9,10 @@ import type Stripe from "stripe";
  */
 
 /** Payment is still being retried on `past_due`; the subscription is intact, so it counts. */
-export const MRR_STATUSES: Stripe.SubscriptionListParams.Status[] = [
-  "active",
-  "past_due",
-];
+export const MRR_STATUSES: Stripe.SubscriptionListParams.Status[] = ['active', 'past_due'];
 
 /** Reported separately: a trial is pipeline, not revenue. */
-export const PIPELINE_STATUSES: Stripe.SubscriptionListParams.Status[] = [
-  "trialing",
-];
+export const PIPELINE_STATUSES: Stripe.SubscriptionListParams.Status[] = ['trialing'];
 
 /** Stripe's complete set of recurring intervals. Anything else is a Stripe change, not a gap. */
 const MONTHS_PER_INTERVAL: Record<string, number> = {
@@ -32,7 +27,7 @@ const MONTHS_PER_INTERVAL: Record<string, number> = {
  * price into a USD total would report a number that is not money in any currency, so non-USD
  * prices are excluded and counted separately rather than silently blended.
  */
-const REPORTING_CURRENCY = "usd";
+const REPORTING_CURRENCY = 'usd';
 
 export interface ProductGroup {
   productId: string;
@@ -52,17 +47,15 @@ export interface SubscriptionFetch {
  * account also holds marketplace apps and internal test products. Launching a plan adds a line.
  */
 export const OMI_PLAN_PRODUCTS: Record<string, string> = {
-  prod_SmpevIU38nIEUO: "Omi Unlimited",
-  prod_Uu6nrHIKWnnTWL: "Omi Unlimited v2",
-  prod_Uu5HDt3sygCK8N: "Omi Plus",
-  prod_ULep5SEo0pSdaM: "Operator",
-  prod_U8x5HNGnTF50X1: "Omi Architect",
-  prod_UM0IIpZ4iOgfk5: "Neo",
+  prod_SmpevIU38nIEUO: 'Omi Unlimited',
+  prod_Uu6nrHIKWnnTWL: 'Omi Unlimited v2',
+  prod_Uu5HDt3sygCK8N: 'Omi Plus',
+  prod_ULep5SEo0pSdaM: 'Operator',
+  prod_U8x5HNGnTF50X1: 'Omi Architect',
+  prod_UM0IIpZ4iOgfk5: 'Neo',
 };
 
-export function isOmiPlanSubscription(
-  subscription: Stripe.Subscription
-): boolean {
+export function isOmiPlanSubscription(subscription: Stripe.Subscription): boolean {
   return subscription.items.data.some((item) => {
     const productId = productIdOf(item);
     return productId !== null && productId in OMI_PLAN_PRODUCTS;
@@ -73,7 +66,7 @@ export function isOmiPlanSubscription(
 export class AllSubscriptionSourcesFailedError extends Error {}
 
 function priceOf(item: Stripe.SubscriptionItem): Stripe.Price | null {
-  return typeof item.price === "string" ? null : item.price;
+  return typeof item.price === 'string' ? null : item.price;
 }
 
 /**
@@ -91,7 +84,7 @@ export function productIdOf(item: Stripe.SubscriptionItem): string | null {
   if (!price) return null;
   const product = price.product;
   if (!product) return null;
-  return typeof product === "string" ? product : product.id;
+  return typeof product === 'string' ? product : product.id;
 }
 
 /**
@@ -109,7 +102,7 @@ export function monthlyAmount(subscription: Stripe.Subscription): number {
 
     if (isNonUsd(price)) {
       console.warn(
-        `Excluding non-USD price ${price.id} (${price.currency}) on subscription ${subscription.id} from MRR: dashboard totals are USD-only`
+        `Excluding non-USD price ${price.id} (${price.currency}) on subscription ${subscription.id} from MRR: dashboard totals are USD-only`,
       );
       return sum;
     }
@@ -123,7 +116,7 @@ export function monthlyAmount(subscription: Stripe.Subscription): number {
       // MONTHS_PER_INTERVAL covers Stripe's whole interval set, so this means Stripe added one.
       // Loud rather than a silent $0 contribution that reads as a real number on the dashboard.
       console.warn(
-        `Unknown recurring interval "${recurring.interval}" on price ${price.id}; excluded from MRR`
+        `Unknown recurring interval "${recurring.interval}" on price ${price.id}; excluded from MRR`,
       );
       return sum;
     }
@@ -139,9 +132,7 @@ function isNonUsd(price: Stripe.Price): boolean {
 }
 
 /** True when any item on the subscription is priced in a currency the dashboard cannot total. */
-export function isNonUsdSubscription(
-  subscription: Stripe.Subscription
-): boolean {
+export function isNonUsdSubscription(subscription: Stripe.Subscription): boolean {
   return subscription.items.data.some((item) => {
     const price = priceOf(item);
     return price !== null && isNonUsd(price);
@@ -149,9 +140,7 @@ export function isNonUsdSubscription(
 }
 
 /** How many subscriptions `monthlyAmount` left out of the totals for being non-USD. */
-export function countNonUsdSubscriptions(
-  subscriptions: Stripe.Subscription[]
-): number {
+export function countNonUsdSubscriptions(subscriptions: Stripe.Subscription[]): number {
   return subscriptions.filter(isNonUsdSubscription).length;
 }
 
@@ -164,24 +153,23 @@ export function annualAmount(subscription: Stripe.Subscription): number {
 export function isAnnual(subscription: Stripe.Subscription): boolean {
   const items = subscription.items.data;
   if (items.length === 0) return false;
-  return items.every((item) => priceOf(item)?.recurring?.interval === "year");
+  return items.every((item) => priceOf(item)?.recurring?.interval === 'year');
 }
 
 export async function listSubscriptions(
   stripe: Stripe,
-  params: Stripe.SubscriptionListParams
+  params: Stripe.SubscriptionListParams,
 ): Promise<Stripe.Subscription[]> {
   const all: Stripe.Subscription[] = [];
   let startingAfter: string | undefined;
 
   for (;;) {
-    const page: Stripe.ApiList<Stripe.Subscription> =
-      await stripe.subscriptions.list({
-        limit: 100,
-        expand: ["data.items.data.price"],
-        ...params,
-        ...(startingAfter ? { starting_after: startingAfter } : {}),
-      });
+    const page: Stripe.ApiList<Stripe.Subscription> = await stripe.subscriptions.list({
+      limit: 100,
+      expand: ['data.items.data.price'],
+      ...params,
+      ...(startingAfter ? { starting_after: startingAfter } : {}),
+    });
     all.push(...page.data);
     if (!page.has_more || page.data.length === 0) break;
     startingAfter = page.data[page.data.length - 1].id;
@@ -199,52 +187,37 @@ export async function listSubscriptions(
 export async function fetchOmiSubscriptions(
   stripe: Stripe,
   statuses: Stripe.SubscriptionListParams.Status[] = MRR_STATUSES,
-  params: Omit<Stripe.SubscriptionListParams, "status"> = {}
+  params: Omit<Stripe.SubscriptionListParams, 'status'> = {},
 ): Promise<SubscriptionFetch> {
   const results = await Promise.allSettled(
-    statuses.map((status) => listSubscriptions(stripe, { ...params, status }))
+    statuses.map((status) => listSubscriptions(stripe, { ...params, status })),
   );
 
   results.forEach((result, index) => {
-    if (result.status === "rejected") {
-      console.error(
-        `Error fetching ${statuses[index]} subscriptions:`,
-        result.reason
-      );
+    if (result.status === 'rejected') {
+      console.error(`Error fetching ${statuses[index]} subscriptions:`, result.reason);
     }
   });
 
-  if (
-    results.length > 0 &&
-    results.every((result) => result.status === "rejected")
-  ) {
-    throw new AllSubscriptionSourcesFailedError(
-      "All subscription data sources failed"
-    );
+  if (results.length > 0 && results.every((result) => result.status === 'rejected')) {
+    throw new AllSubscriptionSourcesFailedError('All subscription data sources failed');
   }
 
   const subscriptions = results
-    .flatMap((result) => (result.status === "fulfilled" ? result.value : []))
-    .filter(
-      (subscription) =>
-        !isAppSubscription(subscription) && isOmiPlanSubscription(subscription)
-    );
+    .flatMap((result) => (result.status === 'fulfilled' ? result.value : []))
+    .filter((subscription) => !isAppSubscription(subscription) && isOmiPlanSubscription(subscription));
 
-  return {
-    subscriptions,
-    partial: results.some((result) => result.status === "rejected"),
-  };
+  return { subscriptions, partial: results.some((result) => result.status === 'rejected') };
 }
 
 export function groupByProduct(
   subscriptions: Stripe.Subscription[],
-  productNames: Record<string, string> = {}
+  productNames: Record<string, string> = {},
 ): ProductGroup[] {
   const groups = new Map<string, ProductGroup>();
 
   for (const subscription of subscriptions) {
-    const productId =
-      subscription.items.data.map(productIdOf).find(Boolean) ?? "unknown";
+    const productId = subscription.items.data.map(productIdOf).find(Boolean) ?? 'unknown';
     const group = groups.get(productId) ?? {
       productId,
       productName: productNames[productId] ?? productId,

@@ -97,8 +97,8 @@ export function SearchBar({
     >
       <div
         className={cn(
-          'flex items-center gap-2 overflow-hidden rounded-lg px-3 py-2',
-          'border bg-bg-secondary transition-all duration-150',
+          'flex items-center gap-2 px-3 py-2 rounded-lg overflow-hidden',
+          'bg-bg-secondary border transition-all duration-150',
           isFocused
             ? 'border-white/25 ring-2 ring-white/25'
             : 'border-transparent hover:border-bg-quaternary',
@@ -107,7 +107,7 @@ export function SearchBar({
         {/* Search icon */}
         <Search
           className={cn(
-            'h-4 w-4 flex-shrink-0 transition-colors',
+            'w-4 h-4 flex-shrink-0 transition-colors',
             isFocused ? 'text-text-primary' : 'text-text-quaternary',
           )}
         />
@@ -139,13 +139,13 @@ export function SearchBar({
               transition={{ duration: 0.1 }}
               onClick={handleClear}
               className={cn(
-                'rounded-md p-1',
+                'p-1 rounded-md',
                 'text-text-quaternary hover:text-text-secondary',
-                'transition-colors hover:bg-bg-tertiary',
+                'hover:bg-bg-tertiary transition-colors',
               )}
               aria-label="Clear search"
             >
-              <X className="h-3.5 w-3.5" />
+              <X className="w-3.5 h-3.5" />
             </motion.button>
           ) : (
             <motion.div
@@ -155,9 +155,9 @@ export function SearchBar({
               exit={{ opacity: 0 }}
               transition={{ duration: 0.15 }}
               className={cn(
-                'hidden items-center gap-0.5 sm:flex',
-                'rounded px-1.5 py-0.5',
-                'bg-bg-tertiary text-xs text-text-quaternary',
+                'hidden sm:flex items-center gap-0.5',
+                'px-1.5 py-0.5 rounded',
+                'bg-bg-tertiary text-text-quaternary text-xs',
               )}
             >
               <kbd className="font-sans">{isMac ? '⌘' : 'Ctrl'}</kbd>

@@ -39,11 +39,11 @@ export function MergeActionBar({
       className={cn(
         'flex items-center',
         inline ? 'flex-wrap gap-2' : 'gap-3',
-        'rounded-xl px-4 py-2.5',
+        'px-4 py-2.5 rounded-xl',
         'bg-bg-tertiary/80',
         'border border-bg-tertiary',
         !inline && [
-          'fixed bottom-6 left-1/2 z-50 -translate-x-1/2',
+          'fixed bottom-6 left-1/2 -translate-x-1/2 z-50',
           'rounded-2xl backdrop-blur-lg',
           'shadow-[0_8px_32px_rgba(0,0,0,0.4)]',
         ],
@@ -54,22 +54,22 @@ export function MergeActionBar({
         onClick={onCancel}
         disabled={isLoading}
         className={cn(
-          'flex items-center justify-center gap-2 rounded-xl px-3 py-2',
+          'flex items-center justify-center gap-2 px-3 py-2 rounded-xl',
           'text-sm font-medium text-text-secondary',
           'hover:bg-bg-tertiary hover:text-text-primary',
           'transition-colors duration-150',
-          'disabled:cursor-not-allowed disabled:opacity-50',
+          'disabled:opacity-50 disabled:cursor-not-allowed',
           inline && 'flex-1',
         )}
       >
-        <X className="h-4 w-4" />
+        <X className="w-4 h-4" />
         <span>Cancel</span>
       </button>
 
       {/* Selection count badge */}
       <div
         className={cn(
-          'rounded-full px-3 py-1.5',
+          'px-3 py-1.5 rounded-full',
           'bg-white/[0.14] text-text-primary',
           'text-sm font-medium',
         )}
@@ -83,16 +83,16 @@ export function MergeActionBar({
           onClick={onMoveToFolder}
           disabled={!canMove || isLoading}
           className={cn(
-            'flex items-center justify-center gap-2 rounded-xl px-4 py-2',
+            'flex items-center justify-center gap-2 px-4 py-2 rounded-xl',
             'text-sm font-medium',
             'transition-all duration-150',
             canMove && !isLoading
               ? 'bg-bg-tertiary text-text-primary hover:bg-bg-quaternary'
-              : 'cursor-not-allowed bg-bg-tertiary text-text-quaternary',
+              : 'bg-bg-tertiary text-text-quaternary cursor-not-allowed',
             inline && 'flex-1',
           )}
         >
-          <FolderInput className="h-4 w-4" />
+          <FolderInput className="w-4 h-4" />
           <span>Move</span>
         </button>
       )}
@@ -103,16 +103,16 @@ export function MergeActionBar({
           onClick={onDelete}
           disabled={!canDelete || isLoading}
           className={cn(
-            'flex items-center justify-center gap-2 rounded-xl px-4 py-2',
+            'flex items-center justify-center gap-2 px-4 py-2 rounded-xl',
             'text-sm font-medium',
             'transition-all duration-150',
             canDelete && !isLoading
               ? 'bg-error/10 text-error hover:bg-error/20'
-              : 'cursor-not-allowed bg-bg-tertiary text-text-quaternary',
+              : 'bg-bg-tertiary text-text-quaternary cursor-not-allowed',
             inline && 'flex-1',
           )}
         >
-          <Trash2 className="h-4 w-4" />
+          <Trash2 className="w-4 h-4" />
           <span>Delete</span>
         </button>
       )}
@@ -122,19 +122,19 @@ export function MergeActionBar({
         onClick={onMerge}
         disabled={!canMerge || isLoading}
         className={cn(
-          'flex items-center justify-center gap-2 rounded-xl px-4 py-2',
+          'flex items-center justify-center gap-2 px-4 py-2 rounded-xl',
           'text-sm font-medium',
           'transition-all duration-150',
           canMerge && !isLoading
             ? 'bg-text-primary text-bg-primary hover:bg-text-primary/90'
-            : 'cursor-not-allowed bg-bg-tertiary text-text-quaternary',
+            : 'bg-bg-tertiary text-text-quaternary cursor-not-allowed',
           inline && 'flex-1',
         )}
       >
         {isLoading ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
+          <Loader2 className="w-4 h-4 animate-spin" />
         ) : (
-          <Merge className="h-4 w-4" />
+          <Merge className="w-4 h-4" />
         )}
         <span>Merge</span>
       </button>

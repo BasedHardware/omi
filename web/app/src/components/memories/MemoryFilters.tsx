@@ -21,17 +21,17 @@ const filterOptions: FilterOption[] = [
   {
     category: 'interesting',
     label: 'Interesting',
-    icon: <Lightbulb className="h-3.5 w-3.5" />,
+    icon: <Lightbulb className="w-3.5 h-3.5" />,
   },
   {
     category: 'manual',
     label: 'Manual',
-    icon: <FileText className="h-3.5 w-3.5" />,
+    icon: <FileText className="w-3.5 h-3.5" />,
   },
   {
     category: 'system',
     label: 'System',
-    icon: <Settings className="h-3.5 w-3.5" />,
+    icon: <Settings className="w-3.5 h-3.5" />,
   },
 ];
 
@@ -74,24 +74,24 @@ export function MemoryFilters({
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
-          'flex items-center gap-2 rounded-lg px-3 py-2',
-          'border border-bg-quaternary bg-bg-tertiary',
+          'flex items-center gap-2 px-3 py-2 rounded-lg',
+          'bg-bg-tertiary border border-bg-quaternary',
           'text-sm text-text-secondary hover:text-text-primary',
           'transition-colors',
           activeCategories.length > 0 && 'border-white/30 text-white',
         )}
       >
-        <Filter className="h-4 w-4" />
+        <Filter className="w-4 h-4" />
         <span>{getButtonLabel()}</span>
         <ChevronDown
-          className={cn('h-4 w-4 transition-transform', isOpen && 'rotate-180')}
+          className={cn('w-4 h-4 transition-transform', isOpen && 'rotate-180')}
         />
       </button>
 
       {isOpen && (
         <>
           <div className="fixed inset-0 z-40" onClick={() => setIsOpen(false)} />
-          <div className="absolute right-0 top-full z-50 mt-1 min-w-[160px] rounded-lg border border-bg-tertiary bg-bg-secondary py-1 shadow-lg">
+          <div className="absolute right-0 top-full mt-1 z-50 bg-bg-secondary border border-bg-tertiary rounded-lg shadow-lg py-1 min-w-[160px]">
             {filterOptions.map((option) => {
               const isActive =
                 option.category === 'all'
@@ -103,14 +103,14 @@ export function MemoryFilters({
                   key={option.category}
                   onClick={() => handleFilterClick(option.category)}
                   className={cn(
-                    'flex w-full items-center gap-2 px-3 py-2 text-sm',
-                    'text-left transition-colors hover:bg-bg-tertiary',
+                    'w-full flex items-center gap-2 px-3 py-2 text-sm',
+                    'hover:bg-bg-tertiary transition-colors text-left',
                     isActive ? 'text-white' : 'text-text-secondary',
                   )}
                 >
                   {option.icon}
                   <span className="flex-1">{option.label}</span>
-                  {isActive && <Check className="h-4 w-4" />}
+                  {isActive && <Check className="w-4 h-4" />}
                 </button>
               );
             })}

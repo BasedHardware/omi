@@ -26,14 +26,14 @@ function Toggle({
       onClick={() => !disabled && onChange(!enabled)}
       disabled={disabled}
       className={cn(
-        'relative h-6 w-11 flex-shrink-0 rounded-full transition-all duration-200',
+        'relative w-11 h-6 rounded-full transition-all duration-200 flex-shrink-0',
         enabled ? 'bg-white' : 'bg-white/[0.08]',
-        disabled && 'cursor-not-allowed opacity-50',
+        disabled && 'opacity-50 cursor-not-allowed',
       )}
     >
       <div
         className={cn(
-          'absolute top-0.5 h-5 w-5 rounded-full shadow-sm transition-all duration-200',
+          'absolute top-0.5 w-5 h-5 rounded-full transition-all duration-200 shadow-sm',
           enabled ? 'left-[22px] bg-black' : 'left-0.5 bg-white',
         )}
       />
@@ -50,7 +50,7 @@ function Card({
 }) {
   return (
     <div
-      className={cn('rounded-section border border-stroke bg-bg-tertiary p-5', className)}
+      className={cn('rounded-section p-5 bg-bg-tertiary border border-stroke', className)}
     >
       {children}
     </div>
@@ -207,56 +207,56 @@ export function ConnectedServices() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-lg font-medium text-text-primary">External services</h2>
-        <p className="mt-1 text-sm text-text-tertiary">
+        <h2 className="text-text-primary text-lg font-medium">External services</h2>
+        <p className="text-sm text-text-tertiary mt-1">
           {summary.connected} of {summary.available} connected
         </p>
       </div>
       {error && <p className="text-sm text-error">{error}</p>}
       {isLoading ? (
         <div className="flex justify-center py-12">
-          <Loader2 className="h-6 w-6 animate-spin text-text-tertiary" />
+          <Loader2 className="w-6 h-6 text-text-tertiary animate-spin" />
         </div>
       ) : (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {integrations.map((integration) => (
             <Card
               key={integration.id}
               className={cn(integration.coming_soon && 'opacity-60')}
             >
               <div className="flex items-center gap-4">
-                <div className="flex h-12 w-12 items-center justify-center overflow-hidden rounded-control bg-bg-quaternary">
+                <div className="w-12 h-12 rounded-control overflow-hidden bg-bg-quaternary flex items-center justify-center">
                   {integration.icon.startsWith('/') ? (
                     <img
                       src={integration.icon}
                       alt={integration.name}
-                      className="h-10 w-10 object-contain"
+                      className="w-10 h-10 object-contain"
                     />
                   ) : (
-                    <Puzzle className="h-6 w-6 text-text-secondary" />
+                    <Puzzle className="w-6 h-6 text-text-secondary" />
                   )}
                 </div>
-                <div className="min-w-0 flex-1">
+                <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <h3 className="font-medium text-text-primary">{integration.name}</h3>
+                    <h3 className="text-text-primary font-medium">{integration.name}</h3>
                     {integration.coming_soon && (
-                      <span className="rounded-chip bg-bg-quaternary px-2 py-0.5 text-xs text-text-tertiary">
+                      <span className="px-2 py-0.5 rounded-chip text-xs bg-bg-quaternary text-text-tertiary">
                         Soon
                       </span>
                     )}
                     {integration.connected && !integration.coming_soon && (
-                      <span className="rounded-chip bg-white/10 px-2 py-0.5 text-xs text-text-primary">
+                      <span className="px-2 py-0.5 rounded-chip text-xs bg-white/10 text-text-primary">
                         Connected
                       </span>
                     )}
                   </div>
-                  <p className="truncate text-sm text-text-tertiary">
+                  <p className="text-sm text-text-tertiary truncate">
                     {integration.description}
                   </p>
                 </div>
                 {!integration.coming_soon &&
                   (loadingId === integration.id ? (
-                    <Loader2 className="h-5 w-5 animate-spin text-text-tertiary" />
+                    <Loader2 className="w-5 h-5 animate-spin text-text-tertiary" />
                   ) : (
                     <Toggle
                       enabled={integration.connected}
@@ -271,18 +271,18 @@ export function ConnectedServices() {
 
       {/* Disconnect Confirmation Dialog */}
       {showDisconnectConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="mx-4 max-w-md rounded-card border border-stroke bg-bg-secondary p-6 shadow-xl">
-            <h3 className="mb-2 text-lg font-semibold text-text-primary">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-bg-secondary rounded-card p-6 max-w-md mx-4 shadow-xl border border-stroke">
+            <h3 className="text-lg font-semibold text-text-primary mb-2">
               Disconnect {integrations.find((i) => i.id === showDisconnectConfirm)?.name}?
             </h3>
-            <p className="mb-6 text-text-secondary">
+            <p className="text-text-secondary mb-6">
               This will remove the connection. You can reconnect anytime.
             </p>
-            <div className="flex justify-end gap-3">
+            <div className="flex gap-3 justify-end">
               <button
                 onClick={() => setShowDisconnectConfirm(null)}
-                className="rounded-control bg-bg-tertiary px-4 py-2 text-text-primary transition-colors hover:bg-bg-quaternary"
+                className="px-4 py-2 rounded-control bg-bg-tertiary text-text-primary hover:bg-bg-quaternary transition-colors"
               >
                 Cancel
               </button>
@@ -293,7 +293,7 @@ export function ConnectedServices() {
                   );
                   if (integration) handleDisconnect(integration);
                 }}
-                className="rounded-control bg-red-500 px-4 py-2 text-white transition-colors hover:bg-red-600"
+                className="px-4 py-2 rounded-control bg-red-500 text-white hover:bg-red-600 transition-colors"
               >
                 Disconnect
               </button>

@@ -22,9 +22,6 @@ describe('PanelReveal', () => {
     );
 
     expect(firstLayout[0]).toBe('false');
-    expect(container.querySelector('.t-panel-slide')).toHaveAttribute(
-      'data-open',
-      'true',
-    );
+    expect(container.querySelector('.t-panel-slide')).toHaveAttribute('data-open', 'true');
   });
 });

@@ -101,28 +101,28 @@ export function RecordingWidget() {
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: 'auto' }}
                   exit={{ opacity: 0, height: 0 }}
-                  className="overflow-hidden rounded-t-2xl border border-bg-tertiary bg-bg-secondary shadow-strong"
+                  className="bg-bg-secondary border border-bg-tertiary rounded-t-2xl overflow-hidden shadow-strong"
                 >
                   {/* Header */}
-                  <div className="flex items-center justify-between border-b border-bg-tertiary px-4 py-3">
+                  <div className="flex items-center justify-between px-4 py-3 border-b border-bg-tertiary">
                     <span className="text-sm font-medium text-text-primary">
                       Live Transcript
                     </span>
                     <button
                       onClick={() => setWidgetExpanded(false)}
-                      className="rounded-lg p-1 text-text-tertiary transition-colors hover:bg-bg-tertiary hover:text-text-secondary"
+                      className="p-1 rounded-lg text-text-tertiary hover:text-text-secondary hover:bg-bg-tertiary transition-colors"
                     >
-                      <ChevronDown className="h-4 w-4" />
+                      <ChevronDown className="w-4 h-4" />
                     </button>
                   </div>
 
                   {/* Transcript */}
-                  <div className="max-h-60 overflow-y-auto px-4 py-3">
+                  <div className="px-4 py-3 max-h-60 overflow-y-auto">
                     <LiveTranscriptCompact segments={segments} maxItems={5} />
                   </div>
 
                   {/* Controls */}
-                  <div className="border-t border-bg-tertiary bg-bg-tertiary/30 px-4 py-3">
+                  <div className="px-4 py-3 border-t border-bg-tertiary bg-bg-tertiary/30">
                     <RecordingControls
                       state={state}
                       duration={duration}
@@ -142,7 +142,7 @@ export function RecordingWidget() {
             {/* Main button / collapsed state */}
             <motion.div
               className={cn(
-                'border border-bg-tertiary bg-bg-secondary shadow-strong',
+                'bg-bg-secondary border border-bg-tertiary shadow-strong',
                 isWidgetExpanded && (isRecording || isPaused || segments.length > 0)
                   ? 'rounded-b-2xl border-t-0'
                   : 'rounded-2xl',
@@ -155,16 +155,16 @@ export function RecordingWidget() {
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: 'auto' }}
                     exit={{ opacity: 0, height: 0 }}
-                    className="border-b border-error/20 bg-error/10 px-4 py-2"
+                    className="px-4 py-2 bg-error/10 border-b border-error/20"
                   >
                     <div className="flex items-start gap-2">
-                      <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0 text-error" />
-                      <p className="flex-1 text-xs text-error">{error}</p>
+                      <AlertCircle className="w-4 h-4 text-error flex-shrink-0 mt-0.5" />
+                      <p className="text-xs text-error flex-1">{error}</p>
                       <button
                         onClick={clearError}
-                        className="p-0.5 text-error/60 transition-colors hover:text-error"
+                        className="p-0.5 text-error/60 hover:text-error transition-colors"
                       >
-                        <X className="h-3 w-3" />
+                        <X className="w-3 h-3" />
                       </button>
                     </div>
                   </motion.div>
@@ -178,12 +178,12 @@ export function RecordingWidget() {
                   <button
                     onClick={handleStartClick}
                     className={cn(
-                      'flex w-full items-center gap-3 rounded-xl px-4 py-2.5',
+                      'flex items-center gap-3 px-4 py-2.5 rounded-xl w-full',
                       'bg-text-primary text-bg-primary hover:bg-text-primary/90',
                       'transition-all',
                     )}
                   >
-                    <Mic className="h-5 w-5" />
+                    <Mic className="w-5 h-5" />
                     <span className="font-medium">Start Recording</span>
                   </button>
                 ) : !isWidgetExpanded ? (
@@ -191,7 +191,7 @@ export function RecordingWidget() {
                   <button
                     onClick={() => setWidgetExpanded(true)}
                     className={cn(
-                      'flex w-full items-center gap-3 rounded-xl px-4 py-2.5',
+                      'flex items-center gap-3 px-4 py-2.5 rounded-xl w-full',
                       'bg-bg-tertiary hover:bg-bg-quaternary',
                       'transition-all',
                     )}
@@ -199,20 +199,20 @@ export function RecordingWidget() {
                     {/* Recording indicator */}
                     {isRecording && (
                       <motion.div
-                        className="h-2.5 w-2.5 rounded-full bg-error"
+                        className="w-2.5 h-2.5 rounded-full bg-error"
                         animate={{ opacity: [1, 0.5, 1] }}
                         transition={{ duration: 1, repeat: Infinity }}
                       />
                     )}
                     {isPaused && (
-                      <div className="h-2.5 w-2.5 rounded-full bg-yellow-500" />
+                      <div className="w-2.5 h-2.5 rounded-full bg-yellow-500" />
                     )}
 
-                    <span className="font-mono text-sm tabular-nums text-text-primary">
+                    <span className="text-sm font-mono text-text-primary tabular-nums">
                       {formatDuration(duration)}
                     </span>
 
-                    <ChevronUp className="ml-auto h-4 w-4 text-text-tertiary" />
+                    <ChevronUp className="w-4 h-4 text-text-tertiary ml-auto" />
                   </button>
                 ) : // Expanded and recording - show nothing here (controls are above)
                 null}

@@ -127,22 +127,28 @@ export default function AppList({ initialPlugins, initialStats }: AppListProps) 
       .slice(0, 9);
 
     // Group plugins by category and sort by installs
-    const groupedPlugins = initialPlugins.reduce((acc, plugin) => {
-      const category = plugin.category;
-      if (!acc[category]) {
-        acc[category] = [];
-      }
-      acc[category].push(plugin);
-      return acc;
-    }, {} as Record<string, Plugin[]>);
+    const groupedPlugins = initialPlugins.reduce(
+      (acc, plugin) => {
+        const category = plugin.category;
+        if (!acc[category]) {
+          acc[category] = [];
+        }
+        acc[category].push(plugin);
+        return acc;
+      },
+      {} as Record<string, Plugin[]>,
+    );
 
     // Sort categories by number of plugins
     const sortedCategories = Object.entries(groupedPlugins)
       .sort(([, a], [, b]) => b.length - a.length)
-      .reduce((acc, [category, plugins]) => {
-        acc[category] = plugins.sort((a, b) => b.installs - a.installs);
-        return acc;
-      }, {} as Record<string, Plugin[]>);
+      .reduce(
+        (acc, [category, plugins]) => {
+          acc[category] = plugins.sort((a, b) => b.installs - a.installs);
+          return acc;
+        },
+        {} as Record<string, Plugin[]>,
+      );
 
     return {
       featuredApps: featured,

@@ -21,14 +21,12 @@ export function normalizePrompt(body: any): { error?: string; doc?: any } {
   const triggerKind = String(body?.trigger_kind ?? "app_launch");
   if (!TRIGGER_KINDS.has(triggerKind)) {
     return {
-      error: `trigger_kind must be one of ${Array.from(TRIGGER_KINDS).join(
-        ", "
-      )}`,
+      error: `trigger_kind must be one of ${Array.from(TRIGGER_KINDS).join(", ")}`,
     };
   }
   const rolloutPct = Math.min(
     Math.max(Number(body?.rollout_pct ?? 100), 0),
-    100
+    100,
   );
   const doc: any = {
     type,

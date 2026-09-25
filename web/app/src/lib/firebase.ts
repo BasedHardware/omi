@@ -31,11 +31,11 @@ const firebaseConfig = {
 export const isFirebaseAuthConfigured =
   Boolean(
     firebaseConfig.apiKey &&
-      firebaseConfig.authDomain &&
-      firebaseConfig.projectId &&
-      firebaseConfig.storageBucket &&
-      firebaseConfig.messagingSenderId &&
-      firebaseConfig.appId,
+    firebaseConfig.authDomain &&
+    firebaseConfig.projectId &&
+    firebaseConfig.storageBucket &&
+    firebaseConfig.messagingSenderId &&
+    firebaseConfig.appId,
   ) &&
   firebaseConfig.apiKey !== 'preview' &&
   firebaseConfig.authDomain !== 'preview.local';
@@ -45,8 +45,8 @@ const app =
   typeof window === 'undefined' || !isFirebaseAuthConfigured
     ? null
     : getApps().length === 0
-    ? initializeApp(firebaseConfig)
-    : getApps()[0];
+      ? initializeApp(firebaseConfig)
+      : getApps()[0];
 
 // Initialize Firebase Auth
 export const auth = app ? getAuth(app) : (null as unknown as ReturnType<typeof getAuth>);

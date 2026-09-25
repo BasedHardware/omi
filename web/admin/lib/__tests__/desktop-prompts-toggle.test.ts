@@ -4,7 +4,7 @@ import { patchPromptActive } from "@/lib/desktop-prompts-toggle";
 
 describe("patchPromptActive (kill-switch honesty)", () => {
   it("reports success only when the PATCH succeeded", async () => {
-    const fetchImpl = vi.fn(async () => ({ ok: true } as Response));
+    const fetchImpl = vi.fn(async () => ({ ok: true }) as Response);
     await expect(patchPromptActive(fetchImpl, "p1", false)).resolves.toEqual({
       ok: true,
     });
@@ -13,13 +13,13 @@ describe("patchPromptActive (kill-switch honesty)", () => {
       expect.objectContaining({
         method: "PATCH",
         body: JSON.stringify({ active: false }),
-      })
+      }),
     );
   });
 
   it("reports a failed kill-switch request instead of pretending it landed", async () => {
     const fetchImpl = vi.fn(
-      async () => ({ ok: false, status: 502 } as Response)
+      async () => ({ ok: false, status: 502 }) as Response,
     );
     await expect(patchPromptActive(fetchImpl, "p1", false)).resolves.toEqual({
       ok: false,

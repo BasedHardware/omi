@@ -24,7 +24,7 @@ export function Footer() {
               href="https://x.com/based_hardware"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-gray-400 transition-colors hover:text-white"
+              className="text-gray-400 hover:text-white transition-colors"
             >
               <Twitter className="h-5 w-5" />
             </a>
@@ -32,7 +32,7 @@ export function Footer() {
               href="https://www.linkedin.com/company/omi-ai/"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-gray-400 transition-colors hover:text-white"
+              className="text-gray-400 hover:text-white transition-colors"
             >
               <Linkedin className="h-5 w-5" />
             </a>
@@ -40,7 +40,7 @@ export function Footer() {
               href="https://github.com/BasedHardware"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-gray-400 transition-colors hover:text-white"
+              className="text-gray-400 hover:text-white transition-colors"
             >
               <Github className="h-5 w-5" />
             </a>

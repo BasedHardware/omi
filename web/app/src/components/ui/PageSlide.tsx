@@ -32,10 +32,7 @@ export function PageSlide({
     const page = pageRef.current;
     const settle = () => el.setAttribute('data-settled', '');
     page?.addEventListener('transitionend', settle);
-    const timer = window.setTimeout(
-      settle,
-      readDurationToken('--page-slide-dur', 250) + 80,
-    );
+    const timer = window.setTimeout(settle, readDurationToken('--page-slide-dur', 250) + 80);
     return () => {
       page?.removeEventListener('transitionend', settle);
       window.clearTimeout(timer);
