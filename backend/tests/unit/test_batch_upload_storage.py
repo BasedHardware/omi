@@ -867,3 +867,22 @@ class TestBatchUploadNoOverwriteByContent:
 
         with pytest.raises(ValueError):
             storage_mod.upload_audio_chunks_batch(self._chunks(b'\x05' * 200), 'uid', 'conv')
+
+    @patch.object(storage_mod, 'users_db')
+    def test_exists_probe_failure_fails_closed(self, mock_users_db):
+        """An existence probe that errors cannot prove the object absent.
+
+        Treating a raised ``exists()`` as "not there" would open the blob for
+        write and replace whatever object actually sits at the colliding
+        3-decimal key; it must fail closed exactly like an unreadable blob.
+        """
+        mock_users_db.get_data_protection_level.return_value = 'standard'
+        bucket = MagicMock()
+        blob = MagicMock()
+        blob.exists.side_effect = RuntimeError('probe timeout')
+        bucket.blob.return_value = blob
+        storage_mod.storage_client.bucket.return_value = bucket
+
+        with pytest.raises(ValueError):
+            storage_mod.upload_audio_chunks_batch(self._chunks(b'\x05' * 200), 'uid', 'conv')
+        blob.open.assert_not_called()

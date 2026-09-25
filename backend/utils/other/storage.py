@@ -823,8 +823,11 @@ def upload_audio_chunks_batch(
                 payload_digest.update(chunk['data'])
             try:
                 exists = blob.exists()
-            except Exception:
-                exists = False
+            except Exception as error:
+                # A probe that errors cannot prove the object absent; treat it
+                # exactly like an existing blob we cannot read — fail closed
+                # rather than open the blob for write over unknown bytes.
+                raise ValueError(f'v2 audio blob existence check failed at {path}') from error
             if exists:
                 identical = False
                 try:
