@@ -1,18 +1,10 @@
 """Pick the few speaker clips worth asking the user about.
-
-Pure: no IO. The service feeds decoded conversations from the last 48 hours and
-gets back a ranked, capped list of prompts. Ranking favours the questions that
-most improve recognition:
-
-1. "Is this you?" on the loudest unnamed voice of a conversation where the owner
-   was never recognised (owner missed) or when the owner has no voiceprint yet.
-2. "Is this <name>?" on an automatic match nobody has reviewed (precision).
-3. "Is this you?" on an automatic owner label nobody has reviewed (precision).
+Pure: no IO. Feeds decoded conversations from the last 48 hours and returns a ranked, capped list of prompts:
+1. "Is this you?" on the loudest unnamed voice when owner was missed or has no voiceprint.
+2. "Is this <name>?" on an automatic match nobody has reviewed.
+3. "Is this you?" on an automatic owner label nobody has reviewed.
 4. "Who is this?" on the unnamed voices that talked the most.
-
-Only clean clips qualify: one diarized speaker, consecutive segments with no
-other voice between them, at least ``MIN_CLIP_SECONDS`` long, not already
-decided by the user, from a conversation with stored audio.
+Only clean clips qualify: one speaker, consecutive segments >= MIN_CLIP_SECONDS, not decided, with stored audio.
 """
 
 from __future__ import annotations
@@ -63,14 +55,17 @@ def prompt_id(conversation_id: str, speaker_id: int, kind: SpeakerTagPromptKind)
 
 
 def _as_utc(value: Any) -> Optional[datetime]:
-    if isinstance(value, datetime):
-        return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
-    return None
+    if isinstance(value, str) and value.strip():
+        try:
+            value = datetime.fromisoformat(value.strip().replace('Z', '+00:00'))
+        except ValueError:
+            return None
+    return (value if value.tzinfo else value.replace(tzinfo=timezone.utc)) if isinstance(value, datetime) else None
 
 
 def speaker_id_of(segment: Mapping[str, Any]) -> int:
     raw = segment.get('speaker_id')
-    if isinstance(raw, int):
+    if isinstance(raw, int) and not isinstance(raw, bool):
         return raw
     speaker = segment.get('speaker') or ''
     try:
@@ -220,7 +215,8 @@ def select_prompts(
         best_run: Dict[Tuple[int, str], _Run] = {}
         for run in _runs(segments, decided_segments):
             if (
-                str(run.speaker_id) in decided_speakers
+                not run.text
+                or str(run.speaker_id) in decided_speakers
                 or run.duration < MIN_CLIP_SECONDS
                 or _clip_overlaps_other_speaker(segments, run)
             ):

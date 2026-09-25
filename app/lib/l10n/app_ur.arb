@@ -1114,7 +1114,6 @@
     "daySummary": "روزانہ خلاصہ",
     "summaryGenerated": "خلاصہ تیار کیا گیا",
     "claudeDesktop": "Claude ڈیسک ٹاپ",
-    "addToClaudeConfig": "claude_desktop_config.json میں شامل کریں",
     "copyConfig": "ترتیب کاپی کریں",
     "configCopied": "ترتیب کلپ بورڈ پر کاپی ہو گئی",
     "listeningMins": "سن رہا ہے (منٹ)",
@@ -2636,10 +2635,6 @@
     "@claudeDesktop": {
         "description": "Claude Desktop integration section"
     },
-    "addToClaudeDesktopConfig": "claude_desktop_config.json میں شامل کریں",
-    "@addToClaudeDesktopConfig": {
-        "description": "Description for Claude Desktop config"
-    },
     "@configCopiedToClipboard": {
         "description": "Confirmation when config is copied"
     },
@@ -2673,10 +2668,6 @@
     },
     "@clientSecret": {
         "description": "OAuth client secret label"
-    },
-    "useYourMcpApiKey": "اپنی MCP API کلید استعمال کریں",
-    "@useYourMcpApiKey": {
-        "description": "Hint for client secret value"
     },
     "@webhooks": {
         "description": "Webhooks section header"
@@ -10799,7 +10790,7 @@
     "@memoryHistory": {
         "description": "Filter option for retained memory history"
     },
-    "tapPlusToStartRecording": "ریکارڈنگ شروع کرنے کے لیے + پر ٹیپ کریں",
+    "tapPlusToStartRecording": "ریکارڈنگ شروع کرنے کے لیے ریکارڈ بٹن پر ٹیپ کریں",
     "processingTakingLonger": "ابھی کام جاری ہے — اس میں معمول سے زیادہ وقت لگ رہا ہے۔",
     "speechProfileEnrollmentPrompt": "تاکہ Omi آپ کی آواز پہچان سکے — کسی بھی موضوع پر تقریباً 5 سیکنڈ بات کریں۔",
     "home": "ہوم",
@@ -10842,7 +10833,7 @@
     "conversationsMovedCount": "{count, plural, =1{1 گفتگو منتقل ہو گئی} other{{count} گفتگوئیں منتقل ہو گئیں}}",
     "failedToMoveConversations": "گفتگوئیں منتقل نہیں ہو سکیں",
     "discardedConversationTitle": "مسترد · {duration}",
-    "noConversationsHeroMessage": "آپ کی ریکارڈ کی گئی گفتگوئیں یہاں دکھائی دیتی ہیں۔ پہلی ریکارڈ کرنے کے لیے ہوم پر + دبائیں۔",
+    "noConversationsHeroMessage": "آپ کی ریکارڈ کی گئی گفتگوئیں یہاں دکھائی دیتی ہیں۔ پہلی ریکارڈ کرنے کے لیے ہوم پر ریکارڈ بٹن دبائیں۔",
     "conversationMap": "گفتگو کا نقشہ",
     "conversationCount": "{count, plural, =1{1 گفتگو} other{{count} گفتگوئیں}}",
     "taskCount": "{count, plural, =1{1 ٹاسک} other{{count} ٹاسک}}",
@@ -10965,7 +10956,7 @@
     "batteryLevelSemantics": "بیٹری {level}%",
     "updateOmiGlassFirmware": "OmiGlass فرم ویئر اپ ڈیٹ کریں",
     "deviceConnecting": "منسلک ہو رہا ہے…",
-    "recordOptionsTip": "مشورہ: فون کال ریکارڈ کرنے کے لیے ریکارڈ بٹن دبا کر رکھیں۔",
+    "recordOptionsTip": "مشورہ: فون کال ریکارڈ کرنے کے لیے ریکارڈ بٹن پر تیر کو ٹیپ کریں۔",
     "firmwareUpdateFailedTitle": "اپ ڈیٹ ناکام",
     "firmwareUpdateFailedMessage": "اپ ڈیٹ مکمل نہیں ہوئی۔ آپ کی ڈیوائس ابھی بھی موجودہ فرم ویئر پر ہے اور استعمال کے لیے محفوظ ہے۔ اسے چارج اور فون کے قریب رکھیں، پھر دوبارہ کوشش کریں۔",
     "firmwareDownloadFailedMessage": "اپ ڈیٹ ڈاؤن لوڈ نہیں ہو سکی اور آپ کی ڈیوائس تبدیل نہیں ہوئی۔ انٹرنیٹ کنکشن چیک کریں، پھر دوبارہ کوشش کریں۔",
@@ -11096,5 +11087,30 @@
     "speakerTagPromptAnswerFailed": "محفوظ نہیں ہو سکا۔ براہ کرم دوبارہ کوشش کریں۔",
     "voiceSettingsAskToTag": "مجھ سے آوازیں ٹیگ کرنے کو کہیں",
     "voiceSettingsAskToTagSubtitle": "کبھی کبھار Omi پوچھے گا کہ آپ کی حالیہ گفتگو میں کون بول رہا تھا",
-    "voiceSettingsSaveOthersSubtitle": "جب آپ کسی کا نام دیتے ہیں تو Omi اگلی بار پہچاننے کے لیے آواز کا ایک مختصر نمونہ رکھتا ہے"
+    "voiceSettingsSaveOthersSubtitle": "جب آپ کسی کا نام دیتے ہیں تو Omi اگلی بار پہچاننے کے لیے آواز کا ایک مختصر نمونہ رکھتا ہے",
+    "leaveBlank": "خالی چھوڑیں",
+    "mcpOAuthSetup": "claude.ai پر ایک کسٹم کنیکٹر شامل کریں اور سرور URL پیسٹ کریں۔ اگر Claude ایک ایڈوانسڈ OAuth Client ID مانگے تو نیچے دی گئی قدر استعمال کریں اور سیکریٹ خالی چھوڑیں — اپنی MCP API کلید کو کبھی بھی OAuth سیکریٹ کے طور پر استعمال نہ کریں۔",
+    "claudeCode": "Claude Code",
+    "addToClaudeCodeConfig": "~/.claude.json میں شامل کریں",
+    "claudeDesktopConnectorSetup": "Claude Desktop → Settings → Connectors پر ایک کسٹم کنیکٹر شامل کریں اور سرور URL پیسٹ کریں۔ اگر Claude ایک ایڈوانسڈ OAuth Client ID مانگے تو نیچے دی گئی قدر استعمال کریں اور سیکریٹ خالی چھوڑیں — اپنی MCP API کلید کو کبھی بھی OAuth سیکریٹ کے طور پر استعمال نہ کریں۔",
+    "transcriptionUnavailableRecordingContinues": "ٹرانسکرپشن دستیاب نہیں، ریکارڈنگ ڈیوائس پر جاری ہے اور بعد میں پروسیس ہوگی",
+    "transcriptionUnavailableSavingOnDevice": "ٹرانسکرپشن دستیاب نہیں · ڈیوائس پر محفوظ ہو رہی ہے",
+    "transcriptionsPendingFraction": "زیرِ التوا ٹرانسکرپشن {pending}/{total}",
+    "transcriptionsPendingCount": "زیرِ التوا ٹرانسکرپشن {count}",
+    "captureSourceCall": "کال",
+    "captureSourcePhoneMic": "فون مائیک",
+    "captureStatusWithSource": "{status} · {source}",
+    "resume": "دوبارہ شروع کریں",
+    "finish": "ختم کریں",
+    "pendantPausedResumesWhenYouFinish": "پینڈنٹ موقوف · آپ کے ختم کرنے پر دوبارہ شروع ہوگا",
+    "pendantIsListeningTitle": "آپ کا پینڈنٹ سن رہا ہے",
+    "oneSourceAtATime": "Omi ایک وقت میں ایک ہی ذریعے سے ریکارڈ کرتا ہے۔",
+    "recordWithPhoneInstead": "اس کے بجائے فون سے ریکارڈ کریں",
+    "pendantPausesUntilYouFinish": "آپ کے ختم کرنے تک پینڈنٹ موقوف رہے گا",
+    "pendantPausesDuringCall": "کال کے دوران پینڈنٹ موقوف رہے گا",
+    "keepUsingPendant": "پینڈنٹ ہی استعمال کریں",
+    "recordWith": "ریکارڈ کرنے کا ذریعہ",
+    "moreWaysToRecord": "ریکارڈ کرنے کے مزید طریقے",
+    "openCall": "کال کھولیں",
+    "captureRecoveryBanner": "پینڈنٹ کی آواز ایپ تک نہیں پہنچ رہی — درست کرنے کے لیے ٹیپ کریں"
 }

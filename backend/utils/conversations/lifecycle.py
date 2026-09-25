@@ -799,10 +799,13 @@ def request_finalization(
     require_cloud_tasks: bool = False,
     client_kind: object = 'unknown',
     app_build: object = 'unknown',
+    recovery_cutoff: datetime | None = None,
     firestore_client: Any = None,
 ) -> dict[str, Any]:
     """Atomically admit finalization and choose its sole durable handoff route."""
-    if require_cloud_tasks and not is_listen_finalization_dispatch_configured():
+    if require_cloud_tasks and not (
+        is_listen_finalization_dispatch_configured() and is_listen_finalization_dispatch_enabled()
+    ):
         # A REST request has no pusher session to execute an inline handoff.
         # Reject before mutating the conversation instead of persisting work
         # that this deployment cannot recover or dispatch.
@@ -816,6 +819,7 @@ def request_finalization(
             finalization_admission=lambda conversation: _finalization_admission(conversation, conversation_id),
             trigger=trigger,
             extra_updates=extra_updates,
+            recovery_cutoff=recovery_cutoff if trigger is ProcessingTrigger.SERVER_RECOVERY else None,
             firestore_client=firestore_client,
         )
     except FirestoreContentionExhausted as error:

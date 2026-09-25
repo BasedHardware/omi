@@ -15,6 +15,7 @@ from pydantic import BaseModel, Field
 
 from database import conversations as conversations_db
 from database import fair_use as fair_use_db
+from database import sync_dead_letters
 from database import users as users_db
 from database.firestore_read_metrics import FirestoreReadSite
 from database.sync_jobs import (
@@ -1033,8 +1034,11 @@ async def sync_local_files_v2(
                 pass
             return JSONResponse(
                 status_code=429,
-                headers={'Retry-After': '30', 'X-Omi-Rate-Limit-Reason': 'backfill_paced'},
-                content={'code': 'backfill_paced', 'detail': 'Another historical recovery job is still in flight'},
+                headers={'Retry-After': '60', 'X-Omi-Rate-Limit-Reason': 'backfill_paced'},
+                content={
+                    'code': 'backfill_paced',
+                    'detail': 'Another historical recovery job is still in flight; local audio was not consumed.',
+                },
             )
 
     paths = []
@@ -1498,10 +1502,8 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
                                 type(error).__name__,
                             )
             except SyncJobRunLeaseLost:
-                # A newer epoch owns the durable ledger. Polling is a
-                # read-side recovery path, so it must leave that owner's
-                # retry material and Redis state untouched rather than turn
-                # the ownership handoff into a client-visible 500.
+                # A newer epoch owns the durable ledger; polling must leave its
+                # retry material and Redis state untouched rather than 500.
                 logger.warning('event=sync_stale_finalize outcome=lease_lost retry_material=preserved')
             finally:
                 release_job_run_lock(job_id, stale_lock_token)
@@ -1511,19 +1513,13 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
         and sync_job_uses_ledger_fence(job)
         and isinstance(job.get('content_id'), str)
     ):
-        # A fenced terminal write can land before its exact-job ledger release
-        # transiently fails (notably for inline/stale recovery, which has no
-        # Cloud Tasks duplicate delivery). Do not expose an ACKable terminal
-        # result until the retry claim is recoverable again: otherwise a WAL
-        # re-upload receives ``busy`` for the ledger stale window and looks
-        # permanently stuck to the client.
+        # Do not expose an ACKable terminal result until the retry claim is
+        # recoverable again: otherwise a WAL re-upload receives ``busy`` for
+        # the ledger stale window and looks permanently stuck to the client.
         try:
             release_sync_content_claim_after_job_retired(uid, job['content_id'], job_id)
         except Exception as error:
-            logger.error(
-                'event=sync_terminal_cleanup outcome=retrying exception_type=%s',
-                type(error).__name__,
-            )
+            logger.error('event=sync_terminal_cleanup outcome=retrying exception_type=%s', type(error).__name__)
             raise HTTPException(
                 status_code=503,
                 detail='Sync recovery finalization is retrying; local audio remains available.',
@@ -1532,6 +1528,31 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
         # Retaining an epoch counter after the durable claim is recoverable is
         # safe; never keep a client WAL pending solely for that optimization.
         delete_sync_job_run_lock_epoch(job_id)
+
+    if job.get('status') in ('failed', 'partial_failure') and job.get('lane') == SyncLane.BACKFILL.value:
+        try:
+            dead_letter = sync_dead_letters.get_dead_letter(job_id)
+        except Exception as error:
+            logger.error('event=sync_dead_letter_check outcome=read_failed exception_type=%s', type(error).__name__)
+            dead_letter = None
+        if (
+            dead_letter is None
+            or dead_letter.get('job_id') != job_id
+            or dead_letter.get('uid') != uid
+            or dead_letter.get('status') not in ('pending', 'dead_letter')
+        ):
+            raise HTTPException(
+                status_code=503,
+                detail='Sync recovery finalization is retrying; local audio remains available.',
+                headers={'Retry-After': '10'},
+            )
+        try:
+            release_backfill_slot(uid, job_id)
+        except Exception as error:
+            logger.error(
+                'event=sync_stale_finalize outcome=release_slot_failed exception_type=%s',
+                type(error).__name__,
+            )
 
     # Build response — include result only when terminal
     resp = {
@@ -1653,8 +1674,22 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
             # Duplicate delivery, stale-detector-failed job, or a prior attempt
             # that finished. Never re-run terminal jobs — the app may already be
             # re-uploading these files as a new job.
-            await _delete_staged_blobs_async(blob_paths)
-            if sync_lane == SyncLane.BACKFILL.value:
+            terminal_backfill_failure = job.get('lane') == SyncLane.BACKFILL.value and job['status'] in (
+                'failed',
+                'partial_failure',
+            )
+            if terminal_backfill_failure:
+                await run_blocking(
+                    db_executor,
+                    sync_dead_letters.ensure_dead_letter_confirmed,
+                    job_id,
+                    uid=job.get('uid'),
+                    conversation_id=job.get('conversation_id'),
+                    failure_code=job.get('reason_code') or 'unknown',
+                )
+            else:
+                await _delete_staged_blobs_async(blob_paths)
+            if job.get('lane') == SyncLane.BACKFILL.value:
                 await run_blocking(db_executor, release_backfill_slot, uid, job_id)
             if content_id and job['status'] in ('failed', 'partial_failure'):
                 release_claim = (

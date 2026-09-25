@@ -702,6 +702,8 @@ def get_memories(
     # so neither leg can consume the whole HTTP_GET_TIMEOUT by itself (#11831).
     budget = list_read_budget_for_request(request, route='memories')
 
+    # X-Omi-Memory-* capability headers exist for pre-capability desktop clients;
+    # removal requires minimum supported desktop version 0.12.386+12386.
     response_headers = {
         _MEMORY_DEVICE_SCOPE_SUPPORTED_HEADER: 'true',
         _MEMORY_CANONICAL_LIFECYCLE_EXPOSED_HEADER: 'true',

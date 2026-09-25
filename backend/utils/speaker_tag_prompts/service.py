@@ -82,8 +82,8 @@ def named_speaker_prompts_allowed(uid: str) -> bool:
 
 
 def _cooldown_until(state: Dict[str, Any]) -> Optional[datetime]:
-    last_shown = state.get('last_shown_at')
-    if not isinstance(last_shown, datetime):
+    last_shown = voice_profiles_db.as_utc(state.get('last_shown_at'))
+    if last_shown is None:
         return None
     streak = int(state.get('consecutive_dismissals') or 0)
     wait = DISMISSED_COOLDOWN if streak >= DISMISSALS_BEFORE_BACKOFF else SHOW_COOLDOWN
@@ -91,7 +91,7 @@ def _cooldown_until(state: Dict[str, Any]) -> Optional[datetime]:
 
 
 def get_prompts(uid: str, now: Optional[datetime] = None) -> SpeakerTagPromptsResponse:
-    now = now or datetime.now(timezone.utc)
+    now = voice_profiles_db.as_utc(now) or datetime.now(timezone.utc)
     settings, owner_has_voice = voice_profiles_db.get_voice_profile_context(uid)
     save_others = settings['save_other_voice_profiles']
     if not settings['speaker_tag_prompts_enabled']:
@@ -109,8 +109,8 @@ def get_prompts(uid: str, now: Optional[datetime] = None) -> SpeakerTagPromptsRe
             save_other_voice_profiles=save_others,
             next_eligible_at=cooldown_until,
         )
-    last_empty = state.get('last_empty_check_at')
-    if isinstance(last_empty, datetime) and last_empty + EMPTY_RECHECK > now:
+    last_empty = voice_profiles_db.as_utc(state.get('last_empty_check_at'))
+    if last_empty is not None and last_empty + EMPTY_RECHECK > now:
         SPEAKER_TAG_PROMPT_REQUESTS.labels(status='recently_checked').inc()
         return SpeakerTagPromptsResponse(
             status='no_candidates',
