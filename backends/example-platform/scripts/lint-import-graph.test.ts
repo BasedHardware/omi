@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
+const tripwireSuffix = `.p${process.pid}`;
 const platformRoot = new URL("..", import.meta.url).pathname;
 
 test("T0 static tripwire passes the clean platform tree", () => {
@@ -15,7 +16,7 @@ test("T0 static tripwire passes the clean platform tree", () => {
 });
 
 test("T0 adversarial tripwire catches an injected forbidden bare corpus root in a non-TypeScript platform source", () => {
-  const fixture = join(platformRoot, "scripts", "import-graph-tripwire-fixture.json");
+  const fixture = join(platformRoot, "scripts", `import-graph-tripwire-fixture${tripwireSuffix}.json`);
   const forbidden = ["omi", "real", "djz", "dev", "v1"].join("-");
   try {
     writeFileSync(fixture, JSON.stringify({ forbidden }));
@@ -35,16 +36,16 @@ test("T0 adversarial tripwire catches an injected forbidden bare corpus root in 
  * banned an ordinary English word and fired on prose while catching no real
  * reference, and a guard that fires on prose gets routed around.
  */
-const portFixture = join(platformRoot, "scripts", "port-registry-tripwire-fixture.ts");
+const portFixture = join(platformRoot, "scripts", `port-registry-tripwire-fixture${tripwireSuffix}.ts`);
 const runLint = () =>
   spawnSync("bun", ["run", "scripts/lint-import-graph.ts"], { cwd: platformRoot, encoding: "utf8" });
 
 test("authority fences reject issuer construction and raw PostgreSQL capabilities outside their owners", () => {
-  const issuerFixture = join(platformRoot, "scripts", "authorized-ledger-issuer-tripwire-fixture.ts");
-  const postgresFixture = join(platformRoot, "apps", "service", "routes", "postgres-transaction-tripwire-fixture.ts");
-  const driverCapabilityFixture = join(platformRoot, "drivers", "postgres", "connection-capability-tripwire-fixture.ts");
-  const projectionFixture = join(platformRoot, "apps", "service", "routes", "external-projection-tripwire-fixture.ts");
-  const graphCapabilityFixture = join(platformRoot, "drivers", "postgres", "graph-capability-tripwire-fixture.ts");
+  const issuerFixture = join(platformRoot, "scripts", `authorized-ledger-issuer-tripwire-fixture${tripwireSuffix}.ts`);
+  const postgresFixture = join(platformRoot, "apps", "service", "routes", `postgres-transaction-tripwire-fixture${tripwireSuffix}.ts`);
+  const driverCapabilityFixture = join(platformRoot, "drivers", "postgres", `connection-capability-tripwire-fixture${tripwireSuffix}.ts`);
+  const projectionFixture = join(platformRoot, "apps", "service", "routes", `external-projection-tripwire-fixture${tripwireSuffix}.ts`);
+  const graphCapabilityFixture = join(platformRoot, "drivers", "postgres", `graph-capability-tripwire-fixture${tripwireSuffix}.ts`);
   try {
     writeFileSync(issuerFixture, [
       'import * as authorityInternals from "../apps/service/auth/authorized-context-internal";',
@@ -89,10 +90,10 @@ test("authority fences reject issuer construction and raw PostgreSQL capabilitie
 
 test("PostgreSQL model workers cannot bypass parser-verified resource admission", () => {
   const rawAdmissionFixture = join(
-    platformRoot, "drivers", "postgres", "model-resource-admission-tripwire-fixture.ts",
+    platformRoot, "drivers", "postgres", `model-resource-admission-tripwire-fixture${tripwireSuffix}.ts`,
   );
   const genericLockFixture = join(
-    platformRoot, "drivers", "postgres", "generic-model-lock-tripwire-fixture.ts",
+    platformRoot, "drivers", "postgres", `generic-model-lock-tripwire-fixture${tripwireSuffix}.ts`,
   );
   try {
     writeFileSync(rawAdmissionFixture, [
@@ -115,8 +116,8 @@ test("PostgreSQL model workers cannot bypass parser-verified resource admission"
 });
 
 test("query evaluation constructors are private to the single composition root", () => {
-  const routeFixture = join(platformRoot, "apps", "service", "routes", "query-evaluation-tripwire-fixture.ts");
-  const copyFixture = join(platformRoot, "apps", "service", "composition", "memory-query-evaluation-copy.ts");
+  const routeFixture = join(platformRoot, "apps", "service", "routes", `query-evaluation-tripwire-fixture${tripwireSuffix}.ts`);
+  const copyFixture = join(platformRoot, "apps", "service", "composition", `memory-query-evaluation-copy${tripwireSuffix}.ts`);
   try {
     writeFileSync(routeFixture, [
       'import * as ownerSource from "../workers/memory-owner-query-evidence-source";',
@@ -132,8 +133,8 @@ test("query evaluation constructors are private to the single composition root",
     const rejected = runLint();
     expect(rejected.status).not.toBe(0);
     const output = `${rejected.stdout}${rejected.stderr}`;
-    expect(output).toContain("apps/service/routes/query-evaluation-tripwire-fixture.ts: low-level query-evaluation constructors are private");
-    expect(output).toContain("apps/service/composition/memory-query-evaluation-copy.ts: low-level query-evaluation constructors are private");
+    expect(output).toContain(`apps/service/routes/query-evaluation-tripwire-fixture${tripwireSuffix}.ts: low-level query-evaluation constructors are private`);
+    expect(output).toContain(`apps/service/composition/memory-query-evaluation-copy${tripwireSuffix}.ts: low-level query-evaluation constructors are private`);
 
     rmSync(copyFixture, { force: true });
     writeFileSync(routeFixture, [
@@ -150,7 +151,7 @@ test("query evaluation constructors are private to the single composition root",
 });
 
 test("source-impact core is private to the final-fenced composition", () => {
-  const routeFixture = join(platformRoot, "apps", "service", "routes", "source-impact-tripwire-fixture.ts");
+  const routeFixture = join(platformRoot, "apps", "service", "routes", `source-impact-tripwire-fixture${tripwireSuffix}.ts`);
   try {
     writeFileSync(routeFixture, [
       'import { enumerateAuthorizedSourceImpact } from "../../../core/retrieve/source-impact";',
@@ -173,7 +174,7 @@ test("source-impact core is private to the final-fenced composition", () => {
 });
 
 test("product conflict references have no application composition or public lifecycle", () => {
-  const routeFixture = join(platformRoot, "apps", "service", "routes", "product-conflict-tripwire-fixture.ts");
+  const routeFixture = join(platformRoot, "apps", "service", "routes", `product-conflict-tripwire-fixture${tripwireSuffix}.ts`);
   try {
     writeFileSync(routeFixture, [
       'import { buildProductConflictOccurrence } from "../../../core/retrieve/product-conflict";',
@@ -189,8 +190,8 @@ test("product conflict references have no application composition or public life
 });
 
 test("consolidation work has one composition and no route-level executor", () => {
-  const routeFixture = join(platformRoot, "apps", "service", "routes", "consolidation-tripwire-fixture.ts");
-  const workerFixture = join(platformRoot, "apps", "service", "workers", "consolidation-caller-fixture.ts");
+  const routeFixture = join(platformRoot, "apps", "service", "routes", `consolidation-tripwire-fixture${tripwireSuffix}.ts`);
+  const workerFixture = join(platformRoot, "apps", "service", "workers", `consolidation-caller-fixture${tripwireSuffix}.ts`);
   try {
     writeFileSync(routeFixture, [
       'import { defineDurableMemoryWorkRunner } from "../workers/durable-memory-work-runner";',
@@ -223,8 +224,8 @@ test("consolidation work has one composition and no route-level executor", () =>
 }, 15_000);
 
 test("product projection materialization stays behind the worker boundary", () => {
-  const routeFixture = join(platformRoot, "apps", "service", "routes", "projection-materializer-tripwire-fixture.ts");
-  const workerFixture = join(platformRoot, "apps", "service", "workers", "projection-materializer-caller-fixture.ts");
+  const routeFixture = join(platformRoot, "apps", "service", "routes", `projection-materializer-tripwire-fixture${tripwireSuffix}.ts`);
+  const workerFixture = join(platformRoot, "apps", "service", "workers", `projection-materializer-caller-fixture${tripwireSuffix}.ts`);
   try {
     writeFileSync(routeFixture, [
       'import { buildAuthorizedProductProjectionWriteRequest } from "../workers/product-projection-materialization";',
@@ -273,8 +274,8 @@ test("rule 16 catches a second composition of a registered port", () => {
       const output = `${result.stdout}${result.stderr}`;
       expect(output).toContain("second composition of registered port `ApplicationReadPorts`");
       // Both syntactic forms, not just the one that happens to come first.
-      expect(output).toContain("port-registry-tripwire-fixture.ts:2");
-      expect(output).toContain("port-registry-tripwire-fixture.ts:3");
+      expect(output).toContain(`port-registry-tripwire-fixture${tripwireSuffix}.ts:2`);
+      expect(output).toContain(`port-registry-tripwire-fixture${tripwireSuffix}.ts:3`);
     },
   );
 });
@@ -410,7 +411,7 @@ test("rule 16's second-composition detection is not vacuous: the same shape with
  * disposable fixture rather than the real doors, plus the previously-missing
  * comment-only case.
  */
-const wirePathFixture = join(platformRoot, "scripts", "wire-path-tripwire-fixture.ts");
+const wirePathFixture = join(platformRoot, "scripts", `wire-path-tripwire-fixture${tripwireSuffix}.ts`);
 const withWirePathFixture = (source: string, assertion: (result: ReturnType<typeof runLint>) => void): void => {
   try {
     writeFileSync(wirePathFixture, source);
@@ -468,7 +469,7 @@ test("rule 17 catches a hand-rolled door that serves the registered path without
       expect(result.status).not.toBe(0);
       const output = `${result.stdout}${result.stderr}`;
       expect(output).toContain("stands up an HTTP server and names the registered wire path");
-      expect(output).toContain("wire-path-tripwire-fixture.ts");
+      expect(output).toContain(`wire-path-tripwire-fixture${tripwireSuffix}.ts`);
     },
   );
 });
@@ -497,7 +498,7 @@ test("rule 17 does not fire when the file only names the path in a comment (comm
     ].join("\n"),
     (result) => {
       expect(result.status).toBe(0);
-      expect(`${result.stdout}${result.stderr}`).not.toContain("wire-path-tripwire-fixture.ts");
+      expect(`${result.stdout}${result.stderr}`).not.toContain(`wire-path-tripwire-fixture${tripwireSuffix}.ts`);
     },
   );
 });
@@ -507,7 +508,7 @@ test("rule 17 does not fire on a file that only CALLS the path (a client, not a 
     ['export async function callIt(baseUrl: string) {', '  return fetch(`${baseUrl}/v1/memories`);', "}"].join("\n"),
     (result) => {
       expect(result.status).toBe(0);
-      expect(`${result.stdout}${result.stderr}`).not.toContain("wire-path-tripwire-fixture.ts");
+      expect(`${result.stdout}${result.stderr}`).not.toContain(`wire-path-tripwire-fixture${tripwireSuffix}.ts`);
     },
   );
 });
@@ -527,7 +528,7 @@ test("rule 17 does not call a router plus its binder two servers", () => {
     ].join("\n"),
     (result) => {
       expect(result.status).toBe(0);
-      expect(`${result.stdout}${result.stderr}`).not.toContain("wire-path-tripwire-fixture.ts");
+      expect(`${result.stdout}${result.stderr}`).not.toContain(`wire-path-tripwire-fixture${tripwireSuffix}.ts`);
     },
   );
 });
@@ -548,7 +549,7 @@ test("rule 17's ambiguity check does not run on files with no registered wire pa
     ].join("\n"),
     (result) => {
       expect(result.status).toBe(0);
-      expect(`${result.stdout}${result.stderr}`).not.toContain("wire-path-tripwire-fixture.ts");
+      expect(`${result.stdout}${result.stderr}`).not.toContain(`wire-path-tripwire-fixture${tripwireSuffix}.ts`);
     },
   );
 });
@@ -587,7 +588,7 @@ test("rule 17 still catches a Hono-only door that never calls Bun.serve", () => 
     ].join("\n"),
     (result) => {
       expect(result.status).not.toBe(0);
-      expect(`${result.stdout}${result.stderr}`).toContain("wire-path-tripwire-fixture.ts");
+      expect(`${result.stdout}${result.stderr}`).toContain(`wire-path-tripwire-fixture${tripwireSuffix}.ts`);
     },
   );
 });
@@ -609,13 +610,13 @@ test("rule 17 does not fire on a DIFFERENT route that merely starts with a regis
     ].join("\n"),
     (result) => {
       expect(result.status).toBe(0);
-      expect(`${result.stdout}${result.stderr}`).not.toContain("wire-path-tripwire-fixture.ts");
+      expect(`${result.stdout}${result.stderr}`).not.toContain(`wire-path-tripwire-fixture${tripwireSuffix}.ts`);
     },
   );
 });
 
 test("T0 adversarial tripwire catches each prohibited path fragment", () => {
-  const fixture = join(platformRoot, "scripts", "import-graph-tripwire-fixture.json");
+  const fixture = join(platformRoot, "scripts", `import-graph-tripwire-fixture${tripwireSuffix}.json`);
   const fragments = ["." + "private", "bench" + "mark"];
   for (const forbidden of fragments) {
     try {
@@ -653,7 +654,7 @@ test("colocation fence rejects node_modules/.bun under frontend/", () => {
 });
 
 test("colocation fence rejects frontend source importing backend core/", () => {
-  const fixture = join(platformRoot, "frontend", "colocation-backend-import-tripwire.ts");
+  const fixture = join(platformRoot, "frontend", `colocation-backend-import-tripwire${tripwireSuffix}.ts`);
   mkdirSync(join(platformRoot, "frontend"), { recursive: true });
   try {
     writeFileSync(fixture, 'import { order } from "../core/order";\nexport const planted = order;\n');
@@ -666,7 +667,7 @@ test("colocation fence rejects frontend source importing backend core/", () => {
 });
 
 test("colocation fence rejects backend source importing frontend/", () => {
-  const fixture = join(platformRoot, "apps", "service", "routes", "colocation-frontend-import-tripwire.ts");
+  const fixture = join(platformRoot, "apps", "service", "routes", `colocation-frontend-import-tripwire${tripwireSuffix}.ts`);
   try {
     writeFileSync(
       fixture,
@@ -681,7 +682,7 @@ test("colocation fence rejects backend source importing frontend/", () => {
 });
 
 test("migration fence rejects apps/service importing migration/", () => {
-  const fixture = join(platformRoot, "apps", "service", "workers", "migration-import-tripwire.ts");
+  const fixture = join(platformRoot, "apps", "service", "workers", `migration-import-tripwire${tripwireSuffix}.ts`);
   try {
     writeFileSync(
       fixture,
@@ -696,7 +697,7 @@ test("migration fence rejects apps/service importing migration/", () => {
 });
 
 test("migration fence rejects drivers/ importing migration/", () => {
-  const fixture = join(platformRoot, "drivers", "postgres", "migration-import-tripwire.ts");
+  const fixture = join(platformRoot, "drivers", "postgres", `migration-import-tripwire${tripwireSuffix}.ts`);
   try {
     writeFileSync(
       fixture,
