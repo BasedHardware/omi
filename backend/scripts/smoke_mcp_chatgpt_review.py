@@ -27,7 +27,7 @@ CLAUDE_STATIC_REDIRECT_URI = "https://claude.ai/api/mcp/auth_callback"
 FIREBASE_SIGNIN_URL = "https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword"
 SCOPES = (
     "memories.read memories.write conversations.read action_items.read action_items.write "
-    "goals.read chat.read screen_activity.read people.read"
+    "goals.read chat.read people.read"
 )
 
 

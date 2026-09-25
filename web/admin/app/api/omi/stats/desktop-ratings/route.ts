@@ -11,7 +11,7 @@ export async function computeDesktopRatings(days: number) {
   const projectId = process.env.POSTHOG_PROJECT_ID;
   const host = (process.env.POSTHOG_HOST || "https://us.posthog.com").replace(
     /\/$/,
-    "",
+    ""
   );
 
   if (!apiKey || !projectId) {
@@ -32,7 +32,7 @@ export async function computeDesktopRatings(days: number) {
         AND timestamp >= now() - INTERVAL ${days} DAY
       GROUP BY day
       ORDER BY day
-    `,
+    `
   )) as any[];
 
   const daily = (rows ?? []).map((row) => ({
@@ -66,6 +66,11 @@ export async function GET(request: NextRequest) {
     return NextResponse.json(await computeDesktopRatings(days));
   } catch (error) {
     console.error("Desktop ratings stats error:", error);
-    return NextResponse.json({ days, available: false, daily: [], summary: null });
+    return NextResponse.json({
+      days,
+      available: false,
+      daily: [],
+      summary: null,
+    });
   }
 }

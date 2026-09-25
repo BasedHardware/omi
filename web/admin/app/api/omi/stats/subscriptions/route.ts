@@ -1,7 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { verifyAdmin } from '@/lib/auth';
-import { getOptionalStripe } from '@/lib/stripe';
-import { getPayload, setPayload, withFreshness } from '@/lib/payload-cache';
+import { NextRequest, NextResponse } from "next/server";
+import { verifyAdmin } from "@/lib/auth";
+import { getOptionalStripe } from "@/lib/stripe";
+import { getPayload, setPayload, withFreshness } from "@/lib/payload-cache";
 import {
   AllSubscriptionSourcesFailedError,
   MRR_STATUSES,
@@ -11,8 +11,8 @@ import {
   groupByProduct,
   isAnnual,
   OMI_PLAN_PRODUCTS,
-} from '@/lib/stripe-subscriptions';
-export const dynamic = 'force-dynamic';
+} from "@/lib/stripe-subscriptions";
+export const dynamic = "force-dynamic";
 export const maxDuration = 3600;
 
 function cacheKey(): string {
@@ -37,7 +37,10 @@ export async function computeSubscriptions() {
     };
   }
 
-  const { subscriptions, partial } = await fetchOmiSubscriptions(stripe, MRR_STATUSES);
+  const { subscriptions, partial } = await fetchOmiSubscriptions(
+    stripe,
+    MRR_STATUSES
+  );
 
   const annual = subscriptions.filter(isAnnual).length;
 
@@ -50,7 +53,7 @@ export async function computeSubscriptions() {
     trialing = trials.subscriptions.length;
     trialPartial = trials.partial;
   } catch (error) {
-    console.error('Error fetching trialing subscriptions:', error);
+    console.error("Error fetching trialing subscriptions:", error);
     trialPartial = true;
   }
 
@@ -73,7 +76,9 @@ export async function GET(request: NextRequest) {
   try {
     const key = cacheKey();
 
-    const cached = await getPayload<Awaited<ReturnType<typeof computeSubscriptions>>>(key);
+    const cached = await getPayload<
+      Awaited<ReturnType<typeof computeSubscriptions>>
+    >(key);
     if (cached) {
       return NextResponse.json(withFreshness(cached.data, cached.freshAt));
     }
@@ -85,9 +90,9 @@ export async function GET(request: NextRequest) {
     if (error instanceof AllSubscriptionSourcesFailedError) {
       return NextResponse.json({ error: error.message }, { status: 502 });
     }
-    console.error('Error fetching subscription stats:', error);
+    console.error("Error fetching subscription stats:", error);
     return NextResponse.json(
-      { error: 'Failed to fetch subscription data' },
+      { error: "Failed to fetch subscription data" },
       { status: 500 }
     );
   }

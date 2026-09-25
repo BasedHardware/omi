@@ -47,7 +47,7 @@ const makeMediaQuery = (matches: boolean): MediaQueryList =>
     addEventListener: vi.fn(),
     removeEventListener: vi.fn(),
     dispatchEvent: vi.fn(),
-  }) as unknown as MediaQueryList;
+  } as unknown as MediaQueryList);
 
 const geometry = (circles: SVGCircleElement[]) =>
   circles.map((circle) => [

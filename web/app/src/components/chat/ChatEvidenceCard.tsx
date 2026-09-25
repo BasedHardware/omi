@@ -75,7 +75,9 @@ function ChatEvidenceReferenceCard({ reference }: { reference: ChatEvidenceRefer
         >
           <Icon
             aria-hidden="true"
-            className={`h-3.5 w-3.5 ${reference.state === 'loading' ? 'animate-spin' : ''}`}
+            className={`h-3.5 w-3.5 ${
+              reference.state === 'loading' ? 'animate-spin' : ''
+            }`}
           />
           <span>{statusLabel}</span>
         </span>

@@ -246,7 +246,9 @@ export interface V2SingleCapabilityResponse {
  */
 export async function getAppsV2(includeReviews = false): Promise<V2AppsResponse> {
   try {
-    const url = `${publicApiBaseUrl()}/v2/apps${includeReviews ? '?include_reviews=true' : ''}`;
+    const url = `${publicApiBaseUrl()}/v2/apps${
+      includeReviews ? '?include_reviews=true' : ''
+    }`;
     // Cache for 5 minutes
     const response = await fetch(url);
 

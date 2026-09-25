@@ -138,13 +138,10 @@ final class StartupWarmupCoordinator {
 
     tasksStore.scheduleStartupMaintenanceIfNeeded()
 
-    await measurePerfAsync("DATA LOAD: DB lifecycle warmup") {
-      await measurePerfAsync("DATA LOAD: Screen activity sync") {
-        await ScreenActivitySyncService.shared.start(
-          initialDelay: StartupWarmupPolicy.screenActivitySyncInitialDelay
-        )
-      }
-    }
+    // The DB lifecycle warmup block is gone with both of its jobs: task-agent
+    // session restore was removed upstream with task execution, and the screen
+    // activity sync start was removed with the screen-activity cloud egress
+    // retirement (ScreenActivitySyncService no longer exists).
 
     logPerf("DATA LOAD: DB warmup complete", cpu: true)
   }

@@ -17,6 +17,7 @@ SERVICE_ACCOUNT_JSON still point at that identity.
 
 from __future__ import annotations
 
+import json
 import subprocess
 
 PROJECT = "based-hardware-dev"
@@ -154,6 +155,66 @@ def assert_not_public() -> None:
         raise SystemExit(f"Refusing public IAM on gs://{BUCKET}")
 
 
+def _is_screen_surface(value: object) -> bool:
+    normalized = value.strip().lower() if isinstance(value, str) else ""
+    return normalized.startswith("screen") or normalized.startswith("ocr")
+
+
+def cassette_is_screen_derived(document_text: str) -> bool:
+    """True when a cassette's surface/source discriminator marks it screen-derived.
+
+    Mirrors the capture gate's rule (``testing.parity_pack_v0.live_capture``):
+    a surface or source starting with ``screen``/``ocr`` is screen text.
+    Unparseable or discriminator-free cassettes are never deleted — this purge
+    only removes the screen rows exported before the capture gate refused
+    screen surfaces.
+    """
+    try:
+        document = json.loads(document_text)
+    except ValueError:
+        return False
+    if not isinstance(document, dict):
+        return False
+    return _is_screen_surface(document.get("surface")) or _is_screen_surface(document.get("source"))
+
+
+def _list_cassette_objects() -> list[str]:
+    listing = run(
+        ["gcloud", "storage", "ls", f"gs://{BUCKET}/{PREFIX}/cassettes/", f"--project={PROJECT}"],
+        check=False,
+    )
+    if listing.returncode != 0:
+        print(f"Screen-cassette purge skipped — listing unavailable: {listing.stderr.strip()[:200]}")
+        return []
+    return [line.strip() for line in listing.stdout.splitlines() if line.strip().endswith(".json")]
+
+
+def purge_screen_cassettes() -> int:
+    """Delete legacy screen-derived cassettes from the dev parity-pack bucket.
+
+    The exporter now refuses screen surfaces at capture time, but cassettes
+    exported before that rollout still hold bounded window titles and OCR text
+    under ``{PREFIX}/cassettes/``. Deleting them here keeps the dogfood bucket
+    free of screen text, matching the local-only promise of the egress removal.
+    Failures degrade to a skipped pass (the next run retries); nothing outside
+    the cassette prefix is ever touched.
+    """
+    removed = 0
+    for obj in _list_cassette_objects():
+        fetched = run(["gcloud", "storage", "cat", obj, f"--project={PROJECT}"], check=False)
+        if fetched.returncode != 0 or not cassette_is_screen_derived(fetched.stdout):
+            continue
+        deleted = run(["gcloud", "storage", "rm", obj, f"--project={PROJECT}"], check=False)
+        if deleted.returncode == 0:
+            removed += 1
+            print(f"Deleted screen-derived parity cassette: {obj}")
+    if removed == 0:
+        print("No screen-derived parity cassettes found")
+    else:
+        print(f"Purged {removed} screen-derived parity cassette(s)")
+    return removed
+
+
 def main() -> int:
     ensure_gsa()
     ensure_bucket()
@@ -161,6 +222,7 @@ def main() -> int:
     ensure_bucket_iam(RUNTIME_JSON_SA)
     ensure_workload_identity()
     assert_not_public()
+    purge_screen_cassettes()
     print(f"Ensured private dev parity-pack bucket gs://{BUCKET}/{PREFIX}")
     return 0
 

@@ -1,16 +1,17 @@
-import Accelerate
 import CryptoKit
 import Foundation
 
 /// Actor-based service for embedding screenshot OCR text using Gemini embeddings
 /// and performing disk-based vector search (no in-memory index).
 /// Embeds per-screenshot concatenated OCR text with app context prefix.
-/// Uses batched embedding with a 60-second flush window. The lossless sync rollout compacts
-/// completed five-minute (app, window) buckets and embeds only their longest OCR row.
+/// Uses batched embedding with a 60-second flush window.
 actor OCREmbeddingService {
   static let shared = OCREmbeddingService()
 
-  private let embeddingDimension = EmbeddingService.embeddingDimension
+  enum SearchError: Error {
+    case unavailable
+  }
+
   private let minTextLength = 20
 
   // MARK: - Batch Embedding Buffer
@@ -42,7 +43,6 @@ actor OCREmbeddingService {
   /// Content hashes of recently embedded texts to skip duplicates
   private var recentHashes: Set<String> = []
   private let maxRecentHashes = 5000
-  private var isBackfillRunning = false
   /// Ceiling on the deferred buffer. The old code dropped a gated batch outright, which lost
   /// data; re-queueing it fixes that but reinstates an unbounded buffer for a user whose backend
   /// is gating every call — the buffer grows for as long as the gating lasts. Oldest deferred
@@ -64,23 +64,20 @@ actor OCREmbeddingService {
   private let batchEmbedder: BatchEmbedder
   private let embeddingWriter: EmbeddingWriter
   private let flushSleeper: FlushSleeper
-  private let losslessSyncEnabled: @Sendable () async -> Bool
-  private let now: @Sendable () -> Date
+  /// Whether captured OCR text is queued for embedding at all. Production
+  /// embeds nothing since the cloud-egress retirement; only the test
+  /// initializer (injected embedder) enables queueing.
+  private let embedsCapturedOCR: Bool
 
   private init() {
-    self.batchEmbedder = { texts, taskType in
-      try await EmbeddingService.shared.embedBatch(texts: texts, taskType: taskType)
-    }
+    self.batchEmbedder = { _, _ in [] }
     self.embeddingWriter = { screenshotId, embedding in
       try await RewindDatabase.shared.updateScreenshotEmbedding(id: screenshotId, embedding: embedding)
     }
     self.flushSleeper = { nanoseconds in
       try await Task.sleep(nanoseconds: nanoseconds)
     }
-    self.losslessSyncEnabled = {
-      await MainActor.run { ScreenActivityLosslessSyncFeature.isEnabled }
-    }
-    self.now = Date.init
+    self.embedsCapturedOCR = false
   }
 
   /// Test-only initializer that injects the flush path's embedder, writer, and
@@ -88,9 +85,7 @@ actor OCREmbeddingService {
   init(
     batchEmbedderForTesting: @escaping BatchEmbedder,
     embeddingWriterForTesting: @escaping EmbeddingWriter,
-    flushSleeperForTesting: FlushSleeper? = nil,
-    losslessSyncEnabledForTesting: @escaping @Sendable () async -> Bool = { false },
-    nowForTesting: @escaping @Sendable () -> Date = Date.init
+    flushSleeperForTesting: FlushSleeper? = nil
   ) {
     self.batchEmbedder = batchEmbedderForTesting
     self.embeddingWriter = embeddingWriterForTesting
@@ -98,8 +93,7 @@ actor OCREmbeddingService {
       flushSleeperForTesting ?? { nanoseconds in
         try await Task.sleep(nanoseconds: nanoseconds)
       }
-    self.losslessSyncEnabled = losslessSyncEnabledForTesting
-    self.now = nowForTesting
+    self.embedsCapturedOCR = true
   }
 
   /// Number of screenshots queued for the next batch flush (test introspection).
@@ -149,17 +143,24 @@ actor OCREmbeddingService {
     ownerSnapshot suppliedOwnerSnapshot: RewindCaptureOwnerSnapshot? = nil
   ) async {
     guard ocrText.count >= minTextLength else { return }
+    guard embedsCapturedOCR else {
+      // Removed with the screen-activity cloud egress retirement: queueing
+      // captured OCR for the hosted Gemini embedder. The production embedder
+      // returns zero embeddings, so a queued batch would be deferred and
+      // requeued on every flush — unbounded growth for no output. On-device
+      // retrieval is served by LocalEmbeddingIndexer instead; see
+      // https://github.com/BasedHardware/omi/issues/11018
+      return
+    }
     guard let ownerSnapshot = suppliedOwnerSnapshot ?? RewindCaptureOwnerSnapshot.capture(),
       ownerSnapshot.isCurrent()
     else { return }
 
     let formatted = Self.formatForEmbedding(ocrText: ocrText, appName: appName, windowTitle: windowTitle)
     let hash = Self.contentHash(formatted)
-    let usesLosslessCompaction = await losslessSyncEnabled()
 
-    // The flag-off path preserves the old rollback behavior. Lossless mode never drops a row
-    // because a prior batch happened to contain the same text.
-    if !usesLosslessCompaction, recentHashes.contains(hash) {
+    // Skip a row whose text was already embedded by a recent batch.
+    if recentHashes.contains(hash) {
       return
     }
 
@@ -254,23 +255,7 @@ actor OCREmbeddingService {
     let batch = pendingItems
     pendingItems = []
 
-    let usesLosslessCompaction = await losslessSyncEnabled()
-
-    // Keep an open bucket buffered until its five-minute interval has closed. This makes the
-    // longest-row decision stable without delaying capture or OCR.
-    let itemsToProcess: [PendingItem]
-    if usesLosslessCompaction {
-      // Eligibility is per *bucket*, not per row: holding back only the rows younger than the
-      // slack would rank an already-open bucket, embedding one winner now and another once its
-      // later rows age in. Same alignment as ScreenActivitySyncService.bucketEligibilityCutoffEpoch.
-      let cutoffEpoch = Int64((now().timeIntervalSince1970 - 5 * 60).rounded(.down))
-      let isReady: (PendingItem) -> Bool = { (Self.bucketIndex(for: $0.capturedAt) + 1) * 300 <= cutoffEpoch }
-      let ready = batch.filter(isReady)
-      pendingItems.append(contentsOf: batch.filter { !isReady($0) })
-      itemsToProcess = Self.compactByFiveMinuteBucket(ready)
-    } else {
-      itemsToProcess = batch
-    }
+    let itemsToProcess = batch
 
     // Legacy rollback path: deduplicate within the batch by content hash.
     var seen = Set<String>()
@@ -278,7 +263,7 @@ actor OCREmbeddingService {
     var duplicateGroups: [String: [Int64]] = [:]  // hash -> [ids that share this hash]
 
     for item in itemsToProcess {
-      if usesLosslessCompaction || seen.insert(item.contentHash).inserted {
+      if seen.insert(item.contentHash).inserted {
         uniqueItems.append(item)
       }
       duplicateGroups[item.contentHash, default: []].append(item.id)
@@ -321,7 +306,7 @@ actor OCREmbeddingService {
           let data = await EmbeddingService.shared.floatsToData(embedding)
 
           // Apply embedding to all IDs that share this content hash
-          let allIds = usesLosslessCompaction ? [item.id] : (duplicateGroups[item.contentHash] ?? [item.id])
+          let allIds = duplicateGroups[item.contentHash] ?? [item.id]
           for screenshotId in allIds {
             let authorization = LocalMutationAuthorization { ownerSnapshot.isCurrent() }
             try await authorization.withCommitLease {
@@ -333,9 +318,7 @@ actor OCREmbeddingService {
             }
           }
 
-          if !usesLosslessCompaction {
-            recentHashes.insert(item.contentHash)
-          }
+          recentHashes.insert(item.contentHash)
         }
 
         log(
@@ -366,10 +349,6 @@ actor OCREmbeddingService {
     }
   }
 
-  static func bucketIndex(for date: Date) -> Int64 {
-    Int64(date.timeIntervalSince1970.rounded(.down)) / 300
-  }
-
   /// Re-queue a batch that could not be embedded, keeping the buffer bounded.
   private func deferItems(_ chunk: [PendingItem]) {
     pendingItems.append(contentsOf: chunk)
@@ -379,157 +358,14 @@ actor OCREmbeddingService {
     log("OCREmbeddingService: Deferred buffer at capacity — shed \(shed) oldest items")
   }
 
-  private static func compactByFiveMinuteBucket(_ items: [PendingItem]) -> [PendingItem] {
-    var winners: [String: PendingItem] = [:]
-    for item in items {
-      let bucket = bucketIndex(for: item.capturedAt)
-      let key = "\(item.appName)\u{1f}\(item.windowTitle)\u{1f}\(bucket)"
-      guard let current = winners[key] else {
-        winners[key] = item
-        continue
-      }
-      if item.ocrLength > current.ocrLength || (item.ocrLength == current.ocrLength && item.id > current.id) {
-        winners[key] = item
-      }
-    }
-    return winners.values.sorted { $0.id < $1.id }
-  }
-
   // MARK: - Backfill
 
-  /// Backfill embeddings for existing screenshots that have OCR text but no embedding.
-  /// Lossless mode is capped at 500 compacted winners per launch; the flag-off legacy path keeps
-  /// its existing 5000-row cap.
+  // Removed with the screen-activity cloud egress retirement: backfill embedded
+  // stored OCR text through the hosted Gemini embedder. The service now embeds
+  // nothing and this entry point stays only so callers keep compiling; see
+  // https://github.com/BasedHardware/omi/issues/11018
   func backfillIfNeeded() async {
-    guard !isBackfillRunning else { return }
-    isBackfillRunning = true
-    defer { isBackfillRunning = false }
-
-    guard let ownerSnapshot = RewindCaptureOwnerSnapshot.capture(),
-      ownerSnapshot.isCurrent()
-    else { return }
-    let authorization = LocalMutationAuthorization { ownerSnapshot.isCurrent() }
-    do {
-      let usesLosslessCompaction = await losslessSyncEnabled()
-      var status = try await RewindDatabase.shared.getScreenshotEmbeddingBackfillStatus()
-      guard ownerSnapshot.isCurrent() else { return }
-      if usesLosslessCompaction, status.completed {
-        let rearmed = try await RewindDatabase.shared.rearmScreenshotEmbeddingBackfillIfNeeded(
-          olderThan: now().addingTimeInterval(-5 * 60))
-        if rearmed {
-          status = (completed: false, processedCount: 0)
-          log("OCREmbeddingService: Re-armed incomplete screenshot embedding backfill")
-        }
-      }
-      if status.completed {
-        log("OCREmbeddingService: Backfill already complete, skipping")
-        return
-      }
-
-      log("OCREmbeddingService: Starting backfill (previously processed: \(status.processedCount))")
-
-      let batchSize = 100
-      let maxItemsPerLaunch = usesLosslessCompaction ? 500 : 5000
-      var totalProcessed = status.processedCount
-      var processedThisLaunch = 0
-      var hitError = false
-
-      while processedThisLaunch < maxItemsPerLaunch {
-        let items =
-          usesLosslessCompaction
-          ? try await RewindDatabase.shared.getCompactedScreenshotsMissingEmbeddings(
-            limit: batchSize, olderThan: now().addingTimeInterval(-5 * 60))
-          : try await RewindDatabase.shared.getScreenshotsMissingEmbeddings(limit: batchSize)
-        guard ownerSnapshot.isCurrent() else { return }
-        if items.isEmpty { break }
-
-        let itemsToProcess = items
-
-        let texts = itemsToProcess.map {
-          Self.formatForEmbedding(ocrText: $0.ocrText, appName: $0.appName, windowTitle: $0.windowTitle)
-        }
-        let embeddings: [[Float]]
-        do {
-          embeddings = try await EmbeddingService.shared.embedBatch(texts: texts, taskType: "RETRIEVAL_DOCUMENT")
-          guard ownerSnapshot.isCurrent() else { return }
-        } catch let error as EmbeddingService.EmbeddingError where error.isExpectedBackendState {
-          log(
-            "OCREmbeddingService: Backfill paused at \(totalProcessed) items — backend gating/limit: \(error.localizedDescription)"
-          )
-          hitError = true
-          break
-        } catch {
-          logError(
-            "OCREmbeddingService: Batch embed failed at \(totalProcessed) items, will retry on next launch",
-            error: error)
-          hitError = true
-          break
-        }
-
-        guard embeddings.count == itemsToProcess.count else {
-          log(
-            "OCREmbeddingService: Backfill embedding count mismatch (requested=\(itemsToProcess.count), received=\(embeddings.count)); will retry on next launch"
-          )
-          hitError = true
-          break
-        }
-
-        for (i, embedding) in embeddings.enumerated() where i < itemsToProcess.count {
-          let item = itemsToProcess[i]
-          let data = await EmbeddingService.shared.floatsToData(embedding)
-          try await authorization.withCommitLease {
-            try await RewindDatabase.shared.updateScreenshotEmbedding(
-              id: item.id, embedding: data)
-          }
-        }
-
-        totalProcessed += itemsToProcess.count
-        processedThisLaunch += itemsToProcess.count
-
-        // Update progress every 1000 items
-        if totalProcessed % 1000 < batchSize {
-          let progressCount = totalProcessed
-          try await authorization.withCommitLease {
-            try await RewindDatabase.shared.updateScreenshotEmbeddingBackfillStatus(
-              completed: false, processedCount: progressCount)
-          }
-          log(
-            "OCREmbeddingService: Backfill progress: \(totalProcessed) items (\(processedThisLaunch)/\(maxItemsPerLaunch) this launch)"
-          )
-        }
-
-        // Rate limiting delay between batches
-        try await Task.sleep(nanoseconds: 200_000_000)  // 200ms
-      }
-
-      let finalProcessedCount = totalProcessed
-      if processedThisLaunch >= maxItemsPerLaunch {
-        try await authorization.withCommitLease {
-          try await RewindDatabase.shared.updateScreenshotEmbeddingBackfillStatus(
-            completed: false, processedCount: finalProcessedCount)
-        }
-        log(
-          "OCREmbeddingService: Backfill paused at \(totalProcessed) items (cap of \(maxItemsPerLaunch)/launch reached), will continue on next launch"
-        )
-      } else if hitError {
-        try await authorization.withCommitLease {
-          try await RewindDatabase.shared.updateScreenshotEmbeddingBackfillStatus(
-            completed: false, processedCount: finalProcessedCount)
-        }
-        log("OCREmbeddingService: Backfill paused at \(totalProcessed) items due to error, will resume on next launch")
-      } else {
-        try await authorization.withCommitLease {
-          try await RewindDatabase.shared.updateScreenshotEmbeddingBackfillStatus(
-            completed: true, processedCount: finalProcessedCount)
-        }
-        log("OCREmbeddingService: Backfill complete — \(totalProcessed) items embedded")
-      }
-
-    } catch let error as EmbeddingService.EmbeddingError where error.isExpectedBackendState {
-      log("OCREmbeddingService: Backfill stopped — backend gating/limit: \(error.localizedDescription)")
-    } catch {
-      logError("OCREmbeddingService: Backfill failed", error: error)
-    }
+    return
   }
 
   // MARK: - Disk-Based Semantic Search
@@ -561,65 +397,6 @@ actor OCREmbeddingService {
     await flushPendingEmbeddings()
     guard ownerSnapshot.isCurrent() else { throw LocalMutationAuthorizationError.revoked }
 
-    // Embed the query with RETRIEVAL_QUERY task type for asymmetric search
-    let queryEmbedding = try await EmbeddingService.shared.embed(text: query, taskType: "RETRIEVAL_QUERY")
-    guard ownerSnapshot.isCurrent() else { throw LocalMutationAuthorizationError.revoked }
-
-    let batchSize = 5000
-    var offset = 0
-    var scanned = 0
-    var topResults: [(screenshotId: Int64, similarity: Float)] = []
-
-    while scanned < maxScannedEmbeddings {
-      let batch = try await RewindDatabase.shared.readEmbeddingBatch(
-        startDate: startDate,
-        endDate: endDate,
-        appFilter: appFilter,
-        limit: min(batchSize, maxScannedEmbeddings - scanned),
-        offset: offset
-      )
-      guard ownerSnapshot.isCurrent() else { throw LocalMutationAuthorizationError.revoked }
-
-      if batch.isEmpty { break }
-      scanned += batch.count
-
-      for (screenshotId, embeddingData) in batch {
-        guard let storedEmbedding = dataToFloats(embeddingData) else { continue }
-        let sim = cosineSimilarity(queryEmbedding, storedEmbedding)
-        topResults.append((screenshotId: screenshotId, similarity: sim))
-      }
-
-      // Compact top results periodically to keep memory bounded
-      if topResults.count > topK * 2 {
-        topResults.sort { $0.similarity > $1.similarity }
-        topResults = Array(topResults.prefix(topK))
-      }
-
-      offset += batch.count
-    }
-
-    // Final sort and trim
-    guard ownerSnapshot.isCurrent() else { throw LocalMutationAuthorizationError.revoked }
-    topResults.sort { $0.similarity > $1.similarity }
-    return Array(topResults.prefix(topK))
-  }
-
-  // MARK: - Helpers
-
-  /// Cosine similarity using Accelerate vDSP
-  private func cosineSimilarity(_ a: [Float], _ b: [Float]) -> Float {
-    guard a.count == b.count, !a.isEmpty else { return 0 }
-    var dot: Float = 0
-    vDSP_dotpr(a, 1, b, 1, &dot, vDSP_Length(a.count))
-    // Vectors are pre-normalized, so dot product = cosine similarity
-    return dot
-  }
-
-  /// Convert Data (BLOB) back to [Float]
-  private func dataToFloats(_ data: Data) -> [Float]? {
-    guard data.count == embeddingDimension * MemoryLayout<Float>.size else { return nil }
-    return data.withUnsafeBytes { raw in
-      Array(raw.bindMemory(to: Float.self))
-    }
+    throw SearchError.unavailable
   }
 }

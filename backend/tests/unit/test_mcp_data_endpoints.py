@@ -15,7 +15,8 @@ import sys
 from types import ModuleType, SimpleNamespace
 
 import pytest
-from fastapi import HTTPException
+from fastapi import FastAPI, HTTPException
+from fastapi.testclient import TestClient
 
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
@@ -153,6 +154,7 @@ sys.modules['utils.apps'].update_personas_async = MagicMock()
 sys.modules['utils.executors'].db_executor = MagicMock()
 sys.modules['utils.executors'].postprocess_executor = MagicMock()
 sys.modules['utils.llm.memories'].identify_category_for_memory = MagicMock(return_value='other')
+sys.modules['database.mcp_oauth'].RETIRED_SCOPES = {'screen_activity.read'}
 sys.modules['firebase_admin.auth'].InvalidIdTokenError = type('InvalidIdTokenError', (Exception,), {})
 sys.modules['firebase_admin.auth'].ExpiredIdTokenError = type('ExpiredIdTokenError', (Exception,), {})
 sys.modules['firebase_admin.auth'].RevokedIdTokenError = type('RevokedIdTokenError', (Exception,), {})
@@ -390,7 +392,6 @@ def test_sse_initialize_teaches_every_agent_to_retrieve_full_omi_context_safely(
         'search_conversations',
         'get_people',
         'get_action_items',
-        'get_screen_activity',
     ):
         assert f'`{tool}`' in instructions
     assert 'Use only tools exposed by `tools/list`' in instructions
@@ -740,6 +741,62 @@ def test_authorize_request_accepts_chatgpt_public_client():
     assert scopes == ['memories.read']
 
 
+def test_authorize_request_filters_retired_scope_for_legacy_connector():
+    client = {
+        'id': 'omi-chatgpt-prod',
+        'allowed_redirect_uris': ['https://chatgpt.com/connector_platform_oauth_redirect'],
+        'allowed_resources': [sse.MCP_RESOURCE_URL],
+        'allowed_scopes': ['memories.read'],
+        'token_endpoint_auth_method': 'none',
+    }
+    with (
+        patch('routers.mcp_sse.mcp_oauth_db.get_client', return_value=client),
+        patch('routers.mcp_sse.mcp_oauth_db.validate_redirect_uri', return_value=True),
+        patch('routers.mcp_sse.mcp_oauth_db.validate_resource', return_value=True),
+        patch('routers.mcp_sse.mcp_oauth_db.validate_pkce_challenge', return_value=True),
+        patch('routers.mcp_sse.mcp_oauth_db.normalize_scopes', return_value=['memories.read']) as normalize_scopes,
+    ):
+        validated_client, scopes = sse._validate_authorize_request(
+            'code',
+            'omi-chatgpt-prod',
+            'https://chatgpt.com/connector_platform_oauth_redirect',
+            sse.MCP_RESOURCE_URL,
+            'memories.read screen_activity.read',
+            'a' * 64,
+            'S256',
+        )
+
+    assert validated_client == client
+    assert scopes == ['memories.read']
+    normalize_scopes.assert_called_once_with('memories.read', client)
+
+
+def test_authorize_request_rejects_retired_only_scope_for_legacy_connector():
+    client = {
+        'id': 'omi-chatgpt-prod',
+        'allowed_redirect_uris': ['https://chatgpt.com/connector_platform_oauth_redirect'],
+        'allowed_resources': [sse.MCP_RESOURCE_URL],
+        'allowed_scopes': ['memories.read'],
+        'token_endpoint_auth_method': 'none',
+    }
+    with (
+        patch('routers.mcp_sse.mcp_oauth_db.get_client', return_value=client),
+        patch('routers.mcp_sse.mcp_oauth_db.validate_redirect_uri', return_value=True),
+        patch('routers.mcp_sse.mcp_oauth_db.validate_resource', return_value=True),
+        patch('routers.mcp_sse.mcp_oauth_db.validate_pkce_challenge', return_value=True),
+    ):
+        with pytest.raises(ValueError, match='No supported scopes requested'):
+            sse._validate_authorize_request(
+                'code',
+                'omi-chatgpt-prod',
+                'https://chatgpt.com/connector_platform_oauth_redirect',
+                sse.MCP_RESOURCE_URL,
+                'screen_activity.read',
+                'a' * 64,
+                'S256',
+            )
+
+
 def test_authorize_request_rejects_legacy_omi_client_id():
     with patch('routers.mcp_sse.mcp_oauth_db.get_client', return_value=None):
         with pytest.raises(ValueError, match='Unknown OAuth client'):
@@ -913,97 +970,6 @@ class TestPeople:
         assert 'speech_samples' not in result['people'][0]
 
 
-class TestScreenActivity:
-    def test_summary_coverage_survives_rest_serialization_and_sse_dispatch(self, monkeypatch):
-        from fastapi import FastAPI
-        from fastapi.testclient import TestClient
-
-        coverage = {
-            'source': 'synced_screen_activity',
-            'row_limit': 5000,
-            'truncated': True,
-            'first_observed_at': '2026-07-03 01:00:00.000',
-            'last_observed_at': '2026-07-03 12:00:00.000',
-            'capture_completeness': 'unknown',
-        }
-        summary = {'apps': {}, 'total_screenshots': 5000, 'coverage': coverage}
-        monkeypatch.setattr(
-            rest.mcp_other_handlers.screen_activity_db, 'get_screen_activity_summary', lambda *a, **k: summary
-        )
-        monkeypatch.setattr(sse_other.screen_activity_db, 'get_screen_activity_summary', lambda *a, **k: summary)
-        app = FastAPI()
-        app.include_router(rest.router)
-        app.dependency_overrides[rest.get_uid_from_mcp_api_key] = lambda: UID
-        with TestClient(app) as client:
-            response = client.get('/v1/mcp/screen-activity?summary=true')
-        assert response.status_code == 200
-        assert response.json()['coverage'] == coverage
-        assert sse.execute_tool(UID, 'get_screen_activity', {'summary': True})['coverage'] == coverage
-
-    def _row(self):
-        return {
-            'id': 's1',
-            'timestamp': '2026-06-11 10:00:00.000',
-            'appName': 'Cursor',
-            'windowTitle': 'mcp.py',
-            'ocrText': 'def foo',
-        }
-
-    @patch('utils.mcp_server.handlers.other.screen_activity_db')
-    def test_rest_rows(self, mock_db):
-        mock_db.get_screen_activity_page.return_value = ([self._row()], False)
-        result = rest.get_screen_activity(SimpleNamespace(headers={}), uid=UID)
-        assert result == [
-            {
-                'id': 's1',
-                'timestamp': '2026-06-11 10:00:00.000',
-                'app_name': 'Cursor',
-                'window_title': 'mcp.py',
-                'ocr_text': 'def foo',
-            }
-        ]
-
-    @patch('utils.mcp_server.handlers.other.screen_activity_db')
-    def test_rest_summary_mode(self, mock_db):
-        mock_db.get_screen_activity_summary.return_value = {'apps': {'Cursor': {'count': 1}}, 'total_screenshots': 1}
-        result = rest.get_screen_activity(SimpleNamespace(headers={}), summary=True, uid=UID)
-        assert result['total_screenshots'] == 1
-        mock_db.get_screen_activity_page.assert_not_called()
-
-    @patch('utils.mcp_server.handlers.other.screen_activity_db')
-    def test_tool_rows(self, mock_db):
-        mock_db.get_screen_activity_page.return_value = ([self._row()], False)
-        result = sse.execute_tool(UID, 'get_screen_activity', {'limit': 5})
-        assert result['screen_activity'][0]['app_name'] == 'Cursor'
-
-    @patch('utils.mcp_server.handlers.other.screen_activity_db')
-    def test_tool_summary(self, mock_db):
-        mock_db.get_screen_activity_summary.return_value = {'apps': {}, 'total_screenshots': 0}
-        result = sse.execute_tool(UID, 'get_screen_activity', {'summary': True})
-        assert result['total_screenshots'] == 0
-
-    @patch('utils.mcp_server.handlers.other.screen_activity_db')
-    def test_tool_rows_missing_index_returns_typed_error(self, mock_db):
-        # Regression for #9189: a missing Firestore index must surface as a typed,
-        # actionable ToolExecutionError, not an opaque 500.
-        from google.api_core.exceptions import FailedPrecondition
-
-        mock_db.get_screen_activity_page.side_effect = FailedPrecondition('query requires an index')
-        with pytest.raises(sse.ToolExecutionError) as exc_info:
-            sse.execute_tool(UID, 'get_screen_activity', {'app': 'Cursor'})
-        assert exc_info.value.code == -32009
-        assert 'index' in exc_info.value.message.lower()
-
-    @patch('utils.mcp_server.handlers.other.screen_activity_db')
-    def test_tool_summary_missing_index_returns_typed_error(self, mock_db):
-        from google.api_core.exceptions import FailedPrecondition
-
-        mock_db.get_screen_activity_summary.side_effect = FailedPrecondition('query requires an index')
-        with pytest.raises(sse.ToolExecutionError) as exc_info:
-            sse.execute_tool(UID, 'get_screen_activity', {'summary': True})
-        assert exc_info.value.code == -32009
-
-
 class TestDailySummaries:
     @patch('utils.mcp_server.handlers.other.daily_summaries_db')
     def test_rest(self, mock_db):
@@ -1018,6 +984,25 @@ class TestDailySummaries:
         assert result['daily_summaries'][0]['date'] == '2026-06-11'
 
 
+class TestScreenActivity:
+    def test_rest_route_is_empty_for_rows_and_summary(self, monkeypatch):
+        screen_db = MagicMock()
+        monkeypatch.setattr(rest, 'screen_activity_db', screen_db, raising=False)
+        app = FastAPI()
+        app.include_router(rest.router)
+        app.dependency_overrides[rest.get_uid_from_mcp_api_key] = lambda: UID
+        client = TestClient(app)
+
+        rows = client.get('/v1/mcp/screen-activity')
+        summary = client.get('/v1/mcp/screen-activity', params={'summary': 'true'})
+
+        assert rows.status_code == 200
+        assert rows.json() == []
+        assert summary.status_code == 200
+        assert summary.json() == {'apps': {}, 'total_screenshots': 0}
+        screen_db.assert_not_called()
+
+
 class TestToolRegistry:
     def test_new_tools_registered(self):
         names = {t['name'] for t in sse.MCP_TOOLS}
@@ -1026,7 +1011,6 @@ class TestToolRegistry:
             'get_goals',
             'get_chat_messages',
             'get_people',
-            'get_screen_activity',
             'get_daily_summaries',
         ]:
             assert expected in names, f"{expected} missing from MCP_TOOLS"

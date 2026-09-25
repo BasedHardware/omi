@@ -9,10 +9,6 @@ enum SyncQueryArg: Equatable {
   case text(String)
 }
 
-private struct AgentSyncRowsPayload: @unchecked Sendable {
-  let rows: [[String: Any]]
-}
-
 /// Polls the local GRDB database every 3 seconds for new/changed rows and
 /// POSTs them to the cloud agent VM's `/sync` endpoint.
 ///
@@ -76,6 +72,11 @@ actor AgentSyncService {
     let name: String
     let appendOnly: Bool  // true = cursor by id, false = cursor by updatedAt
     let excludedColumns: Set<String>
+    /// Tables whose `source == "screenshot"` rows are frame-derived extractions
+    /// (content/description, contextSummary, sourceApp, windowTitle…). Those rows
+    /// are Rewind data in non-screen clothing and must never leave the Mac, so
+    /// they are dropped from the payload before it is built.
+    var screenshotSourcedRowsExcluded: Bool { name == "memories" || name == "action_items" || name == "staged_tasks" }
   }
 
   /// Recovery state belongs to the effective owner, not to a particular loop
@@ -141,32 +142,98 @@ actor AgentSyncService {
     TableSpec(name: "staged_tasks", appendOnly: false, excludedColumns: []),
     TableSpec(name: "live_notes", appendOnly: false, excludedColumns: []),
     // Append-only (cursor by id) — segments after sessions
-    TableSpec(
-      name: "screenshots", appendOnly: true,
-      excludedColumns: [
-        "ocrDataJson"
-      ]),
     TableSpec(name: "transcription_segments", appendOnly: true, excludedColumns: []),
-    TableSpec(name: "focus_sessions", appendOnly: true, excludedColumns: []),
-    TableSpec(name: "observations", appendOnly: true, excludedColumns: []),
   ]
-
-  static var syncedTableNames: Set<String> {
-    Set(tableSpecs.map(\.name))
-  }
 
   private let tables = AgentSyncService.tableSpecs
   private static let requiredRemoteTables = Set(tableSpecs.map(\.name))
+
+  /// The exact set of tables this service is allowed to push to the agent VM.
+  /// Read-only, and deliberately not `#if DEBUG`: the guard test that proves
+  /// `screenshots`/`focus_sessions`/`observations` are absent has to compile in
+  /// the release test lane too, which is where the DEBUG-only accessor broke.
+  static var syncedTableNames: Set<String> { requiredRemoteTables }
 
   // Tables with only a createdAt (no updatedAt) that are append-only but not tracked
   // by id — handled via appendOnly=true above.
 
   // MARK: - Public API
 
-  /// Start the sync loop. Called after the VM is ready and DB is uploaded.
-  func start(vmIP: String, authToken: String) {
+  /// Start the sync loop. Called once the VM is ready and free of screen data.
+  ///
+  /// Retiring the database upload made the cursors load-bearing for
+  /// correctness: a replaced or reaped VM starts with no database, and resuming
+  /// from persisted cursors would send only rows changed since the *previous*
+  /// VM, silently leaving the new one without the user's existing action items,
+  /// memories, transcriptions, and notes. Cursors are therefore reset unless
+  /// the VM *affirmatively* reports a database: an affirmative "absent" resets
+  /// them, and so does every ambiguous answer (unreachable VM, non-2xx,
+  /// unparseable body), because absence that cannot be proven must not be
+  /// assumed away — a full re-send is merely expensive, while keeping stale
+  /// cursors permanently loses rows.
+  func start(vmIP: String, authToken: String) async {
     let generation = beginSync(vmIP: vmIP, authToken: authToken)
+    switch await remoteDatabasePresence(vmIP: vmIP, generation: generation) {
+    case .present:
+      break
+    case .absent:
+      guard syncGeneration == generation else { return }
+      resetCursorsForFreshRemote("VM has no database")
+    case .ambiguous:
+      guard syncGeneration == generation else { return }
+      resetCursorsForFreshRemote("VM database readiness could not be confirmed")
+    }
+    guard syncGeneration == generation else { return }
     syncLoop(generation: generation)
+  }
+
+  enum RemoteDatabasePresence {
+    /// The VM affirmatively reported `databaseReady: true`.
+    case present
+    /// The VM affirmatively reported `databaseReady: false`.
+    case absent
+    /// Unreachable, non-2xx, unparseable, or stale-generation response.
+    case ambiguous
+  }
+
+  /// Classify the VM's database state from an authenticated `/health` probe.
+  ///
+  /// Only an explicit answer is trusted. Anything else reads as `.ambiguous`
+  /// because the caller must assume the remote database may have been replaced:
+  /// cursors bound to a dead VM are a data-loss bug, not an optimization.
+  private func remoteDatabasePresence(vmIP: String, generation: UInt64) async -> RemoteDatabasePresence {
+    guard networkHooks.tableSyncEnabled else { return .ambiguous }
+    guard let authToken else { return .ambiguous }
+    guard let url = URL(string: "http://\(vmIP):8080/health?token=\(authToken)") else { return .ambiguous }
+    var request = URLRequest(url: url)
+    request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+    request.timeoutInterval = 15
+    do {
+      let (data, response) = try await networkHooks.dataForRequest(request)
+      guard syncGeneration == generation else { return .ambiguous }
+      guard let httpResponse = response as? HTTPURLResponse, (200...299).contains(httpResponse.statusCode),
+        let json = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+      else {
+        log("AgentSync: VM health was not a usable success response — treating readiness as ambiguous")
+        return .ambiguous
+      }
+      return Self.databaseReadiness(healthPayload: json) == .missingDatabase ? .absent : .present
+    } catch {
+      log("AgentSync: could not read VM database readiness (\(error.localizedDescription)) — treating it as ambiguous")
+      return .ambiguous
+    }
+  }
+
+  private func resetCursorsForFreshRemote(_ reason: String) {
+    guard !cursors.isEmpty else {
+      log("AgentSync: \(reason) — cursors already empty")
+      return
+    }
+    cursors.removeAll()
+    if let ownerID = cursorOwnerID, RuntimeOwnerIdentity.currentOwnerId() == ownerID {
+      UserDefaults.standard.removeObject(forKey: cursorDefaultsKey(ownerID: ownerID))
+    }
+    log("AgentSync: \(reason) — resetting cursors so the whitelisted tables re-sync in full")
   }
 
   private func beginSync(vmIP: String, authToken: String) -> UInt64 {
@@ -479,6 +546,19 @@ actor AgentSyncService {
     )
   }
 
+  /// A page read from the local database, ready to push.
+  ///
+  /// `rows` is what may leave the Mac (screenshot-sourced rows already removed
+  /// where the spec demands it); `lastRaw*` records where the *raw* page ended,
+  /// so a page that was entirely filtered out still advances the scan instead
+  /// of being re-read forever.
+  private struct AgentSyncPage {
+    let rows: [[String: Any]]
+    let lastRawId: Int64?
+    let lastRawUpdatedAt: String?
+    var isEmpty: Bool { rows.isEmpty && lastRawId == nil && lastRawUpdatedAt == nil }
+  }
+
   private func syncTable(_ spec: TableSpec, generation: UInt64) async -> Int {
     guard syncGeneration == generation else { return 0 }
     guard let dbPool = await getDBPool() else { return 0 }
@@ -513,7 +593,8 @@ actor AgentSyncService {
     do {
       let selectCols = columns.map { "\"\($0)\"" }.joined(separator: ", ")
       let batchSize = self.batchSize
-      let rowsPayload: AgentSyncRowsPayload = try await dbPool.read { db in
+      let excludesScreenshotRows = spec.screenshotSourcedRowsExcluded
+      let page: AgentSyncPage = try await dbPool.read { db in
         let (sql, queryArgs) = Self.buildBatchQuery(
           tableName: spec.name,
           selectCols: selectCols,
@@ -531,7 +612,10 @@ actor AgentSyncService {
 
         let dbRows = try Row.fetchAll(db, sql: sql, arguments: StatementArguments(args))
 
-        let rows = dbRows.map { row in
+        var lastRawId: Int64?
+        var lastRawUpdatedAt: String?
+        var rows: [[String: Any]] = []
+        for row in dbRows {
           var dict: [String: Any] = [:]
           for col in columns {
             let dbValue = row[col] as DatabaseValue
@@ -550,46 +634,40 @@ actor AgentSyncService {
               dict[col] = data.base64EncodedString()
             }
           }
-          return dict
+          if let id = dict["id"] as? Int64 { lastRawId = id }
+          if let updatedAt = dict["updatedAt"] as? String { lastRawUpdatedAt = updatedAt }
+          // Frame-derived extractions must not leave the Mac even though they
+          // live in non-screen tables. Dropped after their cursor point is
+          // recorded, so a fully filtered page never stalls the scan.
+          if excludesScreenshotRows, (dict["source"] as? String) == "screenshot" { continue }
+          rows.append(dict)
         }
-        return AgentSyncRowsPayload(rows: rows)
+        return AgentSyncPage(rows: rows, lastRawId: lastRawId, lastRawUpdatedAt: lastRawUpdatedAt)
       }
-      let rows = rowsPayload.rows
       await RewindDatabase.shared.reportQuerySuccess()
 
       guard syncGeneration == generation else { return 0 }
 
-      guard !rows.isEmpty else { return 0 }
+      if page.isEmpty { return 0 }
 
       // Push to VM
       let ownerID = cursorOwnerID
       guard let vmIP else { return 0 }
-      let result = await pushRows(spec.name, rows, generation: generation, ownerID: ownerID, vmIP: vmIP)
+      if page.rows.isEmpty {
+        // Every row in this page was screen-sourced and dropped locally:
+        // nothing to push, but the page is consumed, so advance the cursor
+        // past it instead of re-reading it forever.
+        advanceCursor(spec, page: page, previous: cursor)
+        return 0
+      }
+      let result = await pushRows(spec.name, page.rows, generation: generation, ownerID: ownerID, vmIP: vmIP)
       guard isCurrent(generation: generation, ownerID: ownerID, vmIP: vmIP) else { return 0 }
       if result == .success {
         clearRequiredSchemaRecovery(for: spec.name, generation: generation, ownerID: ownerID, vmIP: vmIP)
-        // Update cursor
-        if spec.appendOnly {
-          if let lastId = rows.last?["id"] as? Int64 {
-            cursors[spec.name] = SyncCursor(
-              lastId: lastId,
-              lastUpdatedAt: cursor.lastUpdatedAt
-            )
-          }
-        } else {
-          if let lastUpdatedAt = rows.last?["updatedAt"] as? String {
-            // Advance BOTH updatedAt and id so the compound cursor can
-            // resume within a run of rows sharing the same updatedAt
-            // (otherwise a >batchSize same-timestamp bulk update loses
-            // every row past the first page).
-            let lastRowId = (rows.last?["id"] as? Int64) ?? cursor.lastId
-            cursors[spec.name] = SyncCursor(
-              lastId: lastRowId,
-              lastUpdatedAt: lastUpdatedAt
-            )
-          }
-        }
-        return rows.count
+        // Advance from the RAW page end, not the pushed subset: dropped
+        // screenshot-sourced rows must never be re-read on a later tick.
+        advanceCursor(spec, page: page, previous: cursor)
+        return page.rows.count
       } else if result == .networkError {
         return -1  // Signal network failure for backoff
       }
@@ -598,6 +676,22 @@ actor AgentSyncService {
       await Self.reportDatabaseReadFailure(error)
     }
     return 0
+  }
+
+  /// Move this table's cursor past a consumed raw page. Append-only tables
+  /// paginate by id; mutable tables advance BOTH updatedAt and id so the
+  /// compound cursor can resume within a run of rows sharing the same
+  /// updatedAt (otherwise a >batchSize same-timestamp bulk update loses every
+  /// row past the first page).
+  private func advanceCursor(_ spec: TableSpec, page: AgentSyncPage, previous: SyncCursor) {
+    if spec.appendOnly {
+      guard let lastId = page.lastRawId else { return }
+      cursors[spec.name] = SyncCursor(lastId: lastId, lastUpdatedAt: previous.lastUpdatedAt)
+    } else {
+      guard let lastUpdatedAt = page.lastRawUpdatedAt else { return }
+      let lastRowId = page.lastRawId ?? previous.lastId
+      cursors[spec.name] = SyncCursor(lastId: lastRowId, lastUpdatedAt: lastUpdatedAt)
+    }
   }
 
   // MARK: - HTTP push

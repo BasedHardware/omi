@@ -1,29 +1,12 @@
 import logging
-from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from fastapi import APIRouter, Depends
+from pydantic import BaseModel, ConfigDict, Field
 
-from database.frame_requests import list_recoverable_frame_requests
-from database.screen_activity import (
-    normalize_screen_activity_timestamp,
-    upsert_screen_activity,
-)
-from database.vector_db import upsert_screen_activity_vectors
-from testing.parity_pack_v0.live_capture import SurfaceParityCapture
-from utils.executors import db_executor, run_blocking
-from utils.jit_rollout import JITDecisionStage
-from utils.other.endpoints import get_current_user_uid, with_rate_limit
-from utils.observability.fallback import record_fallback
-from utils.retrieval.frame_request_authority import resolve_frame_request_authority
-from utils.subscription import grants_cloud_screen_vectors, is_desktop_trial_paywalled
-from services.conversation_keyframes import reconcile_conversation_keyframe_jobs
+from utils.other.endpoints import get_current_user_uid
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-# Compatibility seam for existing route tests and downstream fakes; this name
-# now points at the recoverable requested/claimed/uploaded query.
-list_pending_frame_requests = list_recoverable_frame_requests
 
 
 class ScreenActivityRow(BaseModel):
@@ -37,192 +20,45 @@ class ScreenActivityRow(BaseModel):
     device_name: str | None = Field(default=None, alias="deviceName")
     client_device_id: str | None = Field(default=None, alias="clientDeviceId")
     embedding: list[float] | None = None
-    # Released/unknown clients omit this field, which must fail closed for
-    # automatic evidence capture. The production Mac explicitly attests only
-    # rows already admitted by Rewind's local exclusion policy.
-    capture_eligible: bool = Field(default=False, alias="captureEligible")
-
-    @field_validator("timestamp")
-    @classmethod
-    def canonicalize_timestamp(cls, value: str) -> str:
-        return normalize_screen_activity_timestamp(value)
 
     def storage_id(self) -> str:
         return f"{self.client_device_id}-{self.id}" if self.client_device_id else str(self.id)
 
 
 class ScreenActivitySyncRequest(BaseModel):
-    account_generation: int = Field(default=0, ge=0)
-    device_retention_seconds: int | None = Field(
-        default=None, alias="deviceRetentionSeconds", ge=1, le=6 * 24 * 60 * 60
-    )
     rows: list[ScreenActivityRow]
 
 
-class FrameRequestDelivery(BaseModel):
-    """Metadata-only queue item delivered to the owning desktop device."""
+@router.post("/v1/screen-activity/sync")
+def retire_screen_activity_sync(
+    request: ScreenActivitySyncRequest,
+    uid: str = Depends(get_current_user_uid),
+) -> dict[str, int]:
+    """Tombstone for the retired screen-activity sync route. Stores nothing, ever.
 
-    model_config = ConfigDict(extra="forbid")
+    LIFECYCLE: one-time
+    DELETE-AFTER: https://github.com/BasedHardware/omi/issues/11018
 
-    request_id: str
-    device_id: str
-    account_generation: int
-    conversation_id: str | None = None
-    screenshot_id: str | None = None
-    state: str
-    expires_at: str
+    The shipped desktop client treats only HTTP 200 as success and never
+    advances its cursor otherwise. It has no terminal-status handling, no
+    max-attempt limit, and no server-driven kill switch, so a 404/410 makes it
+    re-POST the *same* OCR batch every five minutes forever: more transmitted
+    screen text and more battery burn than before the change, on installs that
+    cannot be updated. Returning 200 with the released response shape lets
+    those clients advance past their backlog and go quiet.
 
+    `request` is accepted only so a released app-client contract keeps its body
+    and response schema (FastAPI still validates both, which lets an
+    un-updated client drain); the body is then discarded and never read,
+    parsed, logged, or written: no Firestore document, no Pinecone vector, no
+    log line derived from the payload. Nothing is stored, so the response's
+    released `0 synced` counts are always zero. This endpoint is a drain, not
+    a sink.
 
-class ScreenActivitySyncResponse(BaseModel):
-    """Additive sync response; old clients decode the two required fields."""
-
-    model_config = ConfigDict(extra="forbid")
-
-    synced: int
-    last_id: int
-    frame_requests: list[FrameRequestDelivery] | None = None
-
-
-async def _authorized_desktop_user(
-    uid: str = Depends(with_rate_limit(get_current_user_uid, "screen_activity:sync")),
-) -> str:
-    if await run_blocking(db_executor, is_desktop_trial_paywalled, uid, "desktop"):
-        raise HTTPException(status_code=402, detail="trial_expired")
-    return uid
-
-
-def _parity_screen_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Keep screen capture text-only and bounded; never retain embeddings/video."""
-    return [
-        {
-            "timestamp": str(row.get("timestamp") or ""),
-            "app_name": str(row.get("appName") or "")[:512],
-            "window_title": str(row.get("windowTitle") or "")[:2048],
-            "ocr_text": str(row.get("ocrText") or "")[:8192],
-        }
-        for row in rows[:100]
-    ]
-
-
-@router.post("/v1/screen-activity/sync", response_model=ScreenActivitySyncResponse, response_model_exclude_none=True)
-async def sync_screen_activity(
-    request: ScreenActivitySyncRequest, uid: str = Depends(_authorized_desktop_user)
-) -> ScreenActivitySyncResponse:
-    if len(request.rows) > 100:
-        raise HTTPException(status_code=400, detail="Maximum 100 rows per batch")
-    if not request.rows:
-        return ScreenActivitySyncResponse(synced=0, last_id=0)
-    rows = [
-        {
-            **row.model_dump(by_alias=True),
-            "storageId": row.storage_id(),
-            "accountGeneration": request.account_generation,
-            "deviceRetentionSeconds": request.device_retention_seconds,
-        }
-        for row in request.rows
-    ]
-    parity_capture = SurfaceParityCapture.from_environ(
-        principal_id=uid,
-        session_id=f"{rows[0]['storageId']}:{rows[-1]['storageId']}",
-        surface="screen",
-        source="desktop_screen_activity_sync",
-        provider_lane="screen",
-        route_or_model="screen-activity-sync",
-        request={"row_count": len(rows), "has_embeddings": any(row.get("embedding") for row in rows)},
-    )
-    parity_capture.observe("client", {"type": "screen_activity_rows", "rows": _parity_screen_rows(rows)})
-    try:
-        try:
-            written = await run_blocking(db_executor, upsert_screen_activity, uid, rows)
-        except Exception as exc:
-            logger.exception("Screen activity Firestore write failed for uid=%s", uid)
-            raise HTTPException(status_code=500, detail="Firestore write failed") from exc
-        # The vector is the expensive half of a synced row and its only server-side purpose is
-        # semantic screen search, which is a paid desktop capability. Gate it here rather than on
-        # the client: the client cannot be trusted to know its own entitlement, and the row is
-        # still stored either way, so a later upgrade can backfill vectors from the stored text.
-        embedded_rows = (
-            [row for row in rows if row.get("embedding")]
-            if await run_blocking(db_executor, grants_cloud_screen_vectors, uid)
-            else []
-        )
-        if embedded_rows:
-            try:
-                await run_blocking(db_executor, upsert_screen_activity_vectors, uid, embedded_rows)
-            except Exception:
-                logger.exception("Screen activity vector write failed for uid=%s", uid)
-        response_payload: dict[str, Any] = {"synced": written, "last_id": max(row.id for row in request.rows)}
-        # Frame requests are an additive, default-off response field.  Route
-        # them only to the exact device that supplied this sync batch and keep
-        # the payload metadata-only: no image bytes, URLs, or OCR are returned.
-        device_id = request.rows[0].client_device_id
-        same_device_batch = bool(device_id) and all(row.client_device_id == device_id for row in request.rows)
-        routed_device_id = device_id if isinstance(device_id, str) else ""
-        # Cached ingress read: this sync fires every ~60s from every desktop in
-        # the fleet, so an uncached (force_refresh) resolve here would bypass
-        # the per-uid coalescer and hammer the control plane once per device
-        # per minute. Frame-request delivery is metadata-only; the paid
-        # boundaries downstream re-resolve with force_refresh themselves.
-        decision = await resolve_frame_request_authority(
-            uid,
-            stage=JITDecisionStage.INGRESS,
-        )
-        if decision.enabled and decision.account_generation == request.account_generation and same_device_batch:
-            try:
-                await run_blocking(
-                    db_executor,
-                    reconcile_conversation_keyframe_jobs,
-                    uid,
-                    device_id=routed_device_id,
-                    account_generation=request.account_generation,
-                    device_retention_seconds=request.device_retention_seconds,
-                )
-                pending = await run_blocking(
-                    db_executor,
-                    list_pending_frame_requests,
-                    uid,
-                    device_id=routed_device_id,
-                    account_generation=request.account_generation,
-                )
-                response_payload["frame_requests"] = [
-                    FrameRequestDelivery(
-                        request_id=item.request_id,
-                        device_id=item.device_id,
-                        account_generation=item.account_generation,
-                        conversation_id=item.conversation_id,
-                        screenshot_id=item.screenshot_id,
-                        state=item.state.value,
-                        expires_at=item.expires_at.isoformat(),
-                    ).model_dump(mode="json")
-                    for item in pending
-                ]
-            except Exception:
-                # Queue delivery must never turn a successful screen sync into
-                # a 500.  The device will retry on its next sync; details stay
-                # in the private log rather than telemetry.
-                logger.exception("Frame-request delivery failed for uid=%s", uid)
-                record_fallback(
-                    component="other",
-                    from_mode="frame-request-queue",
-                    to_mode="screen-sync-retry",
-                    reason="enqueue_failed",
-                    outcome="degraded",
-                    log=logger,
-                )
-        elif decision.enabled and not same_device_batch:
-            record_fallback(
-                component="other",
-                from_mode="frame-request-queue",
-                to_mode="screen-sync-retry",
-                reason="policy",
-                outcome="degraded",
-                log=logger,
-            )
-        response = ScreenActivitySyncResponse.model_validate(response_payload)
-        parity_capture.observe(
-            "inbound",
-            {"type": "screen_activity_sync_result", **response.model_dump(mode="json", exclude_none=True)},
-        )
-        return response
-    finally:
-        parity_capture.persist()
+    This does not fully close the egress — the un-updated client that transmits
+    the OCR payload is still answered. Only a client that stops uploading does
+    that, which is why this is temporary and paired with a client change.
+    """
+    del request
+    logger.info("Discarding retired screen-activity sync payload uid=%s", uid)
+    return {"synced": 0, "last_id": 0}

@@ -22,12 +22,15 @@ export function ResizeHandle({
   const [isHovered, setIsHovered] = useState(false);
   const startXRef = useRef(0);
 
-  const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-    startXRef.current = e.clientX;
-    onResizeStart?.();
-  }, [onResizeStart]);
+  const handleMouseDown = useCallback(
+    (e: React.MouseEvent) => {
+      e.preventDefault();
+      setIsDragging(true);
+      startXRef.current = e.clientX;
+      onResizeStart?.();
+    },
+    [onResizeStart],
+  );
 
   const handleMouseMove = useCallback(
     (e: MouseEvent) => {
@@ -70,7 +73,7 @@ export function ResizeHandle({
       onMouseLeave={() => setIsHovered(false)}
       onDoubleClick={onDoubleClick}
       className={cn(
-        'relative w-1 cursor-col-resize group',
+        'group relative w-1 cursor-col-resize',
         'flex items-center justify-center',
         className,
       )}
@@ -84,7 +87,7 @@ export function ResizeHandle({
       {/* Visible handle line */}
       <div
         className={cn(
-          'w-0.5 h-full transition-all duration-150',
+          'h-full w-0.5 transition-all duration-150',
           isDragging ? 'bg-text-primary' : isHovered ? 'bg-white/50' : 'bg-bg-quaternary',
         )}
       />
@@ -101,7 +104,7 @@ export function ResizeHandle({
           <div
             key={i}
             className={cn(
-              'w-1 h-1 rounded-full',
+              'h-1 w-1 rounded-full',
               isDragging ? 'bg-text-primary' : 'bg-white/60',
             )}
           />

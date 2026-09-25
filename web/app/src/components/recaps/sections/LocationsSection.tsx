@@ -9,8 +9,8 @@ import type { LocationPin } from '@/types/recap';
 const LocationMap = dynamic(() => import('./LocationMap'), {
   ssr: false,
   loading: () => (
-    <div className="h-64 rounded-xl bg-bg-tertiary animate-pulse flex items-center justify-center">
-      <MapPin className="w-8 h-8 text-text-quaternary" />
+    <div className="flex h-64 animate-pulse items-center justify-center rounded-xl bg-bg-tertiary">
+      <MapPin className="h-8 w-8 text-text-quaternary" />
     </div>
   ),
 });
@@ -37,11 +37,13 @@ export function LocationsSection({
   }
 
   return (
-    <div className={cn(
-      'overflow-hidden',
-      showBorder && 'rounded-xl border border-white/[0.04]',
-      className
-    )}>
+    <div
+      className={cn(
+        'overflow-hidden',
+        showBorder && 'rounded-xl border border-white/[0.04]',
+        className,
+      )}
+    >
       <LocationMap
         locations={locations}
         height={height}

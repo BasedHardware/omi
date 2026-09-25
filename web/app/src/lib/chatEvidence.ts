@@ -16,9 +16,18 @@ export const CHAT_EVIDENCE_MAX_ERROR_CODE_CHARS = 128;
 export const CHAT_EVIDENCE_MAX_ERROR_MESSAGE_CHARS = 600;
 
 export type ChatEvidenceKind =
-  'conversation_summary' | 'conversation_segment' | 'screen' | 'keyframe' | 'request';
+  | 'conversation_summary'
+  | 'conversation_segment'
+  | 'screen'
+  | 'keyframe'
+  | 'request';
 export type ChatEvidenceState =
-  'available' | 'loading' | 'offline' | 'pruned' | 'failed' | 'unknown';
+  | 'available'
+  | 'loading'
+  | 'offline'
+  | 'pruned'
+  | 'failed'
+  | 'unknown';
 
 export interface ChatEvidenceReference {
   id: string;
@@ -163,8 +172,8 @@ export function parseChatEvidenceEnvelope(value: unknown): ChatEvidenceEnvelope 
   const raw = isRecord(value)
     ? value
     : Array.isArray(value)
-      ? { references: value }
-      : null;
+    ? { references: value }
+    : null;
   if (!raw) return null;
 
   const hasSchemaVersion =
@@ -173,7 +182,7 @@ export function parseChatEvidenceEnvelope(value: unknown): ChatEvidenceEnvelope 
     Object.prototype.hasOwnProperty.call(raw, 'version');
   const schemaValue = raw.schema_version ?? raw.schemaVersion ?? raw.version;
   const schemaVersion = hasSchemaVersion
-    ? (readSchemaVersion(schemaValue) ?? 0)
+    ? readSchemaVersion(schemaValue) ?? 0
     : CHAT_EVIDENCE_SCHEMA_VERSION;
   const requestId = boundedString(
     raw.request_id ?? raw.requestId,

@@ -81,7 +81,7 @@ const MEMORY_WRITE_TOOLS = new Set(["create_memory"]);
 // so they share its bundle rather than inventing a new one.
 const LEDGER_WRITE_TOOLS = new Set(["save_playbook", "create_standing_trigger", "close_fact"]);
 const SCREEN_IMAGE_TOOLS = new Set(["get_screenshot", "look_at_frame", "capture_screen"]);
-const SCREEN_SUMMARY_TOOLS = new Set(["semantic_search", "get_work_context"]);
+const SCREEN_SUMMARY_TOOLS = new Set(["get_work_context"]);
 // Coordinator policy classifies this as a production user-approved operation;
 // ChatToolExecutor independently enforces the current-turn consent at execution.
 const PERMISSION_REQUEST_TOOLS = new Set(["request_permission"]);

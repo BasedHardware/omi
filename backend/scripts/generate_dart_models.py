@@ -28,11 +28,12 @@ SCHEMA_GROUPS = {
     },
     'screen_activity': {
         'output': DEFAULT_OUTPUT_DIR / 'screen_activity_wire.g.dart',
+        # FrameRequestDelivery and ScreenActivitySyncResponse were retired with
+        # the /v1/screen-activity/sync drain (issue #11018): the tombstone keeps
+        # only the request body contract so released clients keep compiling.
         'schemas': (
             'ScreenActivityRow',
-            'FrameRequestDelivery',
             'ScreenActivitySyncRequest',
-            'ScreenActivitySyncResponse',
         ),
     },
     'conversation': {

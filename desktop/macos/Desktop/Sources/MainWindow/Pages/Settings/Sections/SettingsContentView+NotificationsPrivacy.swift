@@ -34,23 +34,34 @@ extension SettingsContentView {
 
             GlassSeparator()
 
-            // Sits under the master toggle and the frequency slider because both gate it:
-            // frequency caps how often any proactive card is delivered, and this decides
-            // whether focus nudges are generated at all.
-            settingRow(
-              title: "Focus Notifications",
-              subtitle: "Nudges in the notch to keep you on track, using what Omi already knows",
-              settingId: "notifications.livesuggestions"
-            ) {
-              Toggle("", isOn: $liveSuggestionsEnabled)
-                .toggleStyle(OmiToggleStyle())
-                .labelsHidden()
-                .onChange(of: liveSuggestionsEnabled) { _, newValue in
-                  SuggestionAssistantSettings.shared.applyUserEnabledChange(newValue)
-                }
-            }
+            // Every notification row produced by a frame-driven assistant is gated on
+            // `assistantFrameProcessingEnabled`: while screen frames are not distributed
+            // those assistants can never fire, so their toggles are hidden rather than
+            // shown as dead switches; the persisted values are untouched.
+            //
+            // Task, Meeting Summary, and Integration Notifications stay deliberately
+            // OUTSIDE the gate: contextual task interruptions also fire from non-frame
+            // events (meeting-state changes, resurfacing), and the meeting-summary and
+            // integration rows are not frame-driven at all.
+            if ProactiveCapturePolicy.assistantFrameProcessingEnabled {
+              // Sits under the master toggle and the frequency slider because both gate it:
+              // frequency caps how often any proactive card is delivered, and this decides
+              // whether focus nudges are generated at all.
+              settingRow(
+                title: "Focus Notifications",
+                subtitle: "Nudges in the notch to keep you on track, using what Omi already knows",
+                settingId: "notifications.livesuggestions"
+              ) {
+                Toggle("", isOn: $liveSuggestionsEnabled)
+                  .toggleStyle(OmiToggleStyle())
+                  .labelsHidden()
+                  .onChange(of: liveSuggestionsEnabled) { _, newValue in
+                    SuggestionAssistantSettings.shared.applyUserEnabledChange(newValue)
+                  }
+              }
 
-            GlassSeparator()
+              GlassSeparator()
+            }
 
             settingRow(
               title: "Task Notifications",
@@ -70,23 +81,25 @@ extension SettingsContentView {
 
             GlassSeparator()
 
-            settingRow(
-              title: "Insight Notifications",
-              subtitle: "Show notification when an insight is generated",
-              settingId: "notifications.insight"
-            ) {
-              Toggle("", isOn: $insightNotificationsEnabled)
-                .toggleStyle(OmiToggleStyle())
-                .labelsHidden()
-                .onChange(of: insightNotificationsEnabled) { _, newValue in
-                  InsightAssistantSettings.shared.notificationsEnabled = newValue
-                  SettingsSyncManager.shared.pushPartialUpdate(
-                    AssistantSettingsResponse(
-                      insight: InsightSettingsResponse(notificationsEnabled: newValue)))
-                }
-            }
+            if ProactiveCapturePolicy.assistantFrameProcessingEnabled {
+              settingRow(
+                title: "Insight Notifications",
+                subtitle: "Show notification when an insight is generated",
+                settingId: "notifications.insight"
+              ) {
+                Toggle("", isOn: $insightNotificationsEnabled)
+                  .toggleStyle(OmiToggleStyle())
+                  .labelsHidden()
+                  .onChange(of: insightNotificationsEnabled) { _, newValue in
+                    InsightAssistantSettings.shared.notificationsEnabled = newValue
+                    SettingsSyncManager.shared.pushPartialUpdate(
+                      AssistantSettingsResponse(
+                        insight: InsightSettingsResponse(notificationsEnabled: newValue)))
+                  }
+              }
 
-            GlassSeparator()
+              GlassSeparator()
+            }
 
             settingRow(
               title: "Meeting Summary Notifications",
@@ -103,20 +116,22 @@ extension SettingsContentView {
 
             GlassSeparator()
 
-            settingRow(
-              title: "Memory Notifications",
-              subtitle: "Show notification when a memory is extracted",
-              settingId: "notifications.memory"
-            ) {
-              Toggle("", isOn: $memoryNotificationsEnabled)
-                .toggleStyle(OmiToggleStyle())
-                .labelsHidden()
-                .onChange(of: memoryNotificationsEnabled) { _, newValue in
-                  MemoryAssistantSettings.shared.applyUserSettingChange(.notificationsEnabled, value: newValue)
-                  SettingsSyncManager.shared.pushPartialUpdate(
-                    AssistantSettingsResponse(
-                      memory: MemorySettingsResponse(notificationsEnabled: newValue)))
-                }
+            if ProactiveCapturePolicy.assistantFrameProcessingEnabled {
+              settingRow(
+                title: "Memory Notifications",
+                subtitle: "Show notification when a memory is extracted",
+                settingId: "notifications.memory"
+              ) {
+                Toggle("", isOn: $memoryNotificationsEnabled)
+                  .toggleStyle(OmiToggleStyle())
+                  .labelsHidden()
+                  .onChange(of: memoryNotificationsEnabled) { _, newValue in
+                    MemoryAssistantSettings.shared.applyUserSettingChange(.notificationsEnabled, value: newValue)
+                    SettingsSyncManager.shared.pushPartialUpdate(
+                      AssistantSettingsResponse(
+                        memory: MemorySettingsResponse(notificationsEnabled: newValue)))
+                  }
+              }
             }
 
             GlassSeparator()

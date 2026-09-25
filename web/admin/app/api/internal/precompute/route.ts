@@ -93,7 +93,9 @@ const K_FACTOR_DAYS = 30;
 const ACTIVATION_DAYS = 60;
 
 function defaultOverheadMonthly(): number {
-  const envOverhead = parseFloat(process.env.ADMIN_INFRA_OVERHEAD_MONTHLY || "");
+  const envOverhead = parseFloat(
+    process.env.ADMIN_INFRA_OVERHEAD_MONTHLY || ""
+  );
   return Number.isFinite(envOverhead) && envOverhead >= 0 ? envOverhead : 57447;
 }
 
@@ -134,16 +136,26 @@ export async function POST(request: NextRequest) {
   // carrying no cost params looks up.
   await run("profitability", async () => {
     const { days, desktopCost, mobileCost } = parseProfitabilityParams(
-      new URLSearchParams({ days: String(PROFIT_DAYS) }),
+      new URLSearchParams({ days: String(PROFIT_DAYS) })
     );
-    const payload = await computeProfitability({ days, desktopCost, mobileCost });
-    await setPayload(profitabilityCacheKey(days, desktopCost, mobileCost), payload);
+    const payload = await computeProfitability({
+      days,
+      desktopCost,
+      mobileCost,
+    });
+    await setPayload(
+      profitabilityCacheKey(days, desktopCost, mobileCost),
+      payload
+    );
   });
 
   // Infra costs
   await run("infraCosts", async () => {
     const overheadMonthly = defaultOverheadMonthly();
-    const payload = await computeInfraCosts({ days: INFRA_DAYS, overheadMonthly });
+    const payload = await computeInfraCosts({
+      days: INFRA_DAYS,
+      overheadMonthly,
+    });
     await setPayload(infraCostsCacheKey(INFRA_DAYS, overheadMonthly), payload);
   });
 
@@ -219,7 +231,9 @@ export async function POST(request: NextRequest) {
   const failedNames = Object.keys(failed);
   if (failedNames.length > 0) {
     console.error(
-      `[precompute] run finished with ${failedNames.length} failed metric(s): ${failedNames.join(", ")}`,
+      `[precompute] run finished with ${
+        failedNames.length
+      } failed metric(s): ${failedNames.join(", ")}`
     );
   }
 

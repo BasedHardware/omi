@@ -46,8 +46,9 @@ SENSITIVE_TRACE = "postgresql://user:super_secret_password@internal-db.prod.loca
 @pytest.mark.asyncio
 async def test_generate_app_endpoint_does_not_leak_exception():
     request = GenerateAppRequest(prompt="Create a fitness motivation bot for my workouts")
-    with patch("utils.llm.app_generator.generate_app_from_prompt", new_callable=AsyncMock) as mock_gen, \
-         patch("routers.apps.track_usage"):
+    with patch("utils.llm.app_generator.generate_app_from_prompt", new_callable=AsyncMock) as mock_gen, patch(
+        "routers.apps.track_usage"
+    ):
         mock_gen.side_effect = RuntimeError(f"Connection timeout to {SENSITIVE_TRACE}")
 
         with pytest.raises(HTTPException) as exc_info:
@@ -69,8 +70,9 @@ async def test_generate_app_icon_endpoint_does_not_leak_exception():
         description="Tracks workouts",
         category="health",
     )
-    with patch("utils.llm.app_generator.generate_app_icon", new_callable=AsyncMock) as mock_gen, \
-         patch("routers.apps.track_usage"):
+    with patch("utils.llm.app_generator.generate_app_icon", new_callable=AsyncMock) as mock_gen, patch(
+        "routers.apps.track_usage"
+    ):
         mock_gen.side_effect = RuntimeError(f"API key invalid or socket failed: {SENSITIVE_TRACE}")
 
         with pytest.raises(HTTPException) as exc_info:
@@ -88,9 +90,9 @@ async def test_generate_app_icon_endpoint_does_not_leak_exception():
 @pytest.mark.asyncio
 async def test_add_mcp_server_oauth_registration_does_not_leak_exception():
     request = McpServerRequest(name="Test MCP", mcp_server_url="https://mcp.example.com")
-    with patch("routers.apps.discover_oauth_metadata", new_callable=AsyncMock) as mock_oauth, \
-         patch("routers.apps.register_oauth_client", new_callable=AsyncMock) as mock_reg, \
-         patch.dict("os.environ", {"BASE_API_URL": "https://api.omi.me"}):
+    with patch("routers.apps.discover_oauth_metadata", new_callable=AsyncMock) as mock_oauth, patch(
+        "routers.apps.register_oauth_client", new_callable=AsyncMock
+    ) as mock_reg, patch.dict("os.environ", {"BASE_API_URL": "https://api.omi.me"}):
         mock_oauth.return_value = {
             "registration_endpoint": "https://mcp.example.com/register",
             "authorization_endpoint": "https://mcp.example.com/auth",
@@ -108,8 +110,9 @@ async def test_add_mcp_server_oauth_registration_does_not_leak_exception():
 @pytest.mark.asyncio
 async def test_add_mcp_server_direct_discovery_does_not_leak_exception():
     request = McpServerRequest(name="Test MCP", mcp_server_url="https://mcp.example.com")
-    with patch("routers.apps.discover_oauth_metadata", new_callable=AsyncMock) as mock_oauth, \
-         patch("routers.apps.discover_mcp_tools", new_callable=AsyncMock) as mock_disc:
+    with patch("routers.apps.discover_oauth_metadata", new_callable=AsyncMock) as mock_oauth, patch(
+        "routers.apps.discover_mcp_tools", new_callable=AsyncMock
+    ) as mock_disc:
         mock_oauth.return_value = None
         mock_disc.side_effect = RuntimeError(f"Internal SSL handshake error with {SENSITIVE_TRACE}")
 
@@ -123,9 +126,9 @@ async def test_add_mcp_server_direct_discovery_does_not_leak_exception():
 
 @pytest.mark.asyncio
 async def test_mcp_oauth_callback_token_exchange_does_not_leak_exception():
-    with patch("routers.apps.parse_state_token", return_value=("app-123", "uid-123")), \
-         patch("routers.apps.get_app_by_id_db") as mock_get_app, \
-         patch("routers.apps.exchange_oauth_code", new_callable=AsyncMock) as mock_exchange:
+    with patch("routers.apps.parse_state_token", return_value=("app-123", "uid-123")), patch(
+        "routers.apps.get_app_by_id_db"
+    ) as mock_get_app, patch("routers.apps.exchange_oauth_code", new_callable=AsyncMock) as mock_exchange:
         mock_get_app.return_value = {
             "id": "app-123",
             "external_integration": {
@@ -150,10 +153,11 @@ async def test_mcp_oauth_callback_token_exchange_does_not_leak_exception():
 
 @pytest.mark.asyncio
 async def test_mcp_oauth_callback_tool_discovery_does_not_leak_exception():
-    with patch("routers.apps.parse_state_token", return_value=("app-123", "uid-123")), \
-         patch("routers.apps.get_app_by_id_db") as mock_get_app, \
-         patch("routers.apps.exchange_oauth_code", new_callable=AsyncMock) as mock_exchange, \
-         patch("routers.apps.discover_mcp_tools", new_callable=AsyncMock) as mock_disc:
+    with patch("routers.apps.parse_state_token", return_value=("app-123", "uid-123")), patch(
+        "routers.apps.get_app_by_id_db"
+    ) as mock_get_app, patch("routers.apps.exchange_oauth_code", new_callable=AsyncMock) as mock_exchange, patch(
+        "routers.apps.discover_mcp_tools", new_callable=AsyncMock
+    ) as mock_disc:
         mock_get_app.return_value = {
             "id": "app-123",
             "external_integration": {
@@ -179,8 +183,9 @@ async def test_mcp_oauth_callback_tool_discovery_does_not_leak_exception():
 
 @pytest.mark.asyncio
 async def test_refresh_mcp_tools_does_not_leak_exception():
-    with patch("routers.apps.get_app_by_id_db") as mock_get_app, \
-         patch("routers.apps.discover_mcp_tools", new_callable=AsyncMock) as mock_disc:
+    with patch("routers.apps.get_app_by_id_db") as mock_get_app, patch(
+        "routers.apps.discover_mcp_tools", new_callable=AsyncMock
+    ) as mock_disc:
         mock_get_app.return_value = {
             "id": "app-123",
             "uid": "test-user-123",

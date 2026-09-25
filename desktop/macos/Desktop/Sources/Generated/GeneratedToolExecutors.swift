@@ -4,7 +4,6 @@ import Foundation
 enum GeneratedSwiftTool: String, CaseIterable {
   case getWorkContext = "get_work_context"
   case executeSql = "execute_sql"
-  case semanticSearch = "semantic_search"
   case getDailyRecap = "get_daily_recap"
   case fillCloudConnectorForm = "fill_cloud_connector_form"
   case searchTasks = "search_tasks"
@@ -56,11 +55,10 @@ enum GeneratedSwiftToolExecutor: String {
 
 enum GeneratedToolExecutors {
   static let manifestVersion = 1
-  static let manifestDigest = "sha256:69a17e53d566273c677a179aebfc296c102071ca4777762a0c4828baa5536023"
-  static let chatFirstManifestDigest = "sha256:96c0b6520763d162fa86820839f0d0fd83db3c25fe8b9823245b0258cc289d3d"
+  static let manifestDigest = "sha256:ab400a126d8adeb5657ae50893c37e5c66be5d521a1d05f1776cd9c8a082e3e3"
+  static let chatFirstManifestDigest = "sha256:25082f2cc13bc3a87ea6cd9289b669ac7e54925a6b93da41567bfebda8cc2d5a"
 
   static let aliasToCanonical: [String: GeneratedSwiftTool] = [
-    "search_screen_history": .semanticSearch,
     "start_file_scan": .scanFiles,
     "get_file_scan_results": .scanFiles
   ]
@@ -68,7 +66,6 @@ enum GeneratedToolExecutors {
   static let executorByTool: [GeneratedSwiftTool: GeneratedSwiftToolExecutor] = [
     .getWorkContext: .chatToolExecutor,
     .executeSql: .chatToolExecutor,
-    .semanticSearch: .chatToolExecutor,
     .getDailyRecap: .chatToolExecutor,
     .fillCloudConnectorForm: .chatToolExecutor,
     .searchTasks: .chatToolExecutor,
@@ -144,7 +141,6 @@ enum GeneratedToolExecutors {
   enum ChatDispatch {
     case getWorkContext
     case executeSql
-    case semanticSearch
     case getDailyRecap
     case fillCloudConnectorForm
     case searchTasks
@@ -190,7 +186,6 @@ enum GeneratedToolExecutors {
     switch tool {
     case .getWorkContext: return .getWorkContext
     case .executeSql: return .executeSql
-    case .semanticSearch: return .semanticSearch
     case .getDailyRecap: return .getDailyRecap
     case .fillCloudConnectorForm: return .fillCloudConnectorForm
     case .searchTasks: return .searchTasks

@@ -19,7 +19,9 @@ describe("parsePlatformScope", () => {
 describe("scopeFilterAnd", () => {
   it("produces three distinct filters — the same-DAU-on-every-board bug", () => {
     const fragments = new Set(
-      (["all", "macos", "mobile"] as const).map((scope) => scopeFilterAnd(scope)),
+      (["all", "macos", "mobile"] as const).map((scope) =>
+        scopeFilterAnd(scope)
+      )
     );
     expect(fragments.size).toBe(3);
   });
@@ -42,7 +44,7 @@ describe("scopeFilterAnd", () => {
 
   it("supports the legacy $os column used by retention and k-factor", () => {
     expect(scopeFilterAnd("macos", "properties.$os")).toBe(
-      "AND properties.$os = 'macOS'",
+      "AND properties.$os = 'macOS'"
     );
   });
 });
@@ -52,12 +54,16 @@ describe("viral-metrics platform scoping (query capture)", () => {
     vi.resetModules();
     const captured: string[] = [];
     vi.doMock("@/lib/posthog", () => ({
-      posthogResults: vi.fn(async (_h: string, _p: string, _k: string, query: string) => {
-        captured.push(query);
-        return [];
-      }),
+      posthogResults: vi.fn(
+        async (_h: string, _p: string, _k: string, query: string) => {
+          captured.push(query);
+          return [];
+        }
+      ),
     }));
-    vi.doMock("@/lib/auth", () => ({ verifyAdmin: vi.fn(async () => ({ uid: "test" })) }));
+    vi.doMock("@/lib/auth", () => ({
+      verifyAdmin: vi.fn(async () => ({ uid: "test" })),
+    }));
     vi.doMock("@/lib/payload-cache", () => ({
       getPayload: vi.fn(async () => null),
       setPayload: vi.fn(),
@@ -71,7 +77,9 @@ describe("viral-metrics platform scoping (query capture)", () => {
     const queriesFor = async (platform: string) => {
       captured.length = 0;
       const response = await GET(
-        new NextRequest(`http://localhost/api/omi/stats/viral-metrics?days=60&platform=${platform}`),
+        new NextRequest(
+          `http://localhost/api/omi/stats/viral-metrics?days=60&platform=${platform}`
+        )
       );
       expect(response.status).toBe(200);
       return captured.join("\n---\n");

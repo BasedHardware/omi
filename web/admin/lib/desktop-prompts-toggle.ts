@@ -3,7 +3,7 @@
 export async function patchPromptActive(
   fetchImpl: (url: string, init?: RequestInit) => Promise<Response>,
   promptId: string,
-  active: boolean,
+  active: boolean
 ): Promise<{ ok: boolean; error?: string }> {
   try {
     const response = await fetchImpl(`/api/omi/desktop-prompts/${promptId}`, {

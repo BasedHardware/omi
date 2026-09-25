@@ -824,13 +824,43 @@ def search_screen_activity_vectors(
 
 
 def delete_screen_activity_vectors(uid: str, ids: List[str]) -> None:
-    """Delete screen activity vectors by screenshot IDs."""
-    if index is None:
-        return
+    """Delete screen activity vectors by screenshot IDs.
+
+    Purges every index that can hold them, not just the configured one: the
+    development ``memory-maintenance`` job shares the production Firestore
+    project but points at the ``memories-backend-dev`` Pinecone index, while
+    production uses ``memories-backend``. A purge that hit only the configured
+    index would orphan the sibling index's vectors forever once the Firestore
+    documents — the only retry list — are deleted, so whichever job runs first
+    must clear both. Any exception propagates so callers keep the Firestore
+    documents and retry.
+    """
     vector_ids = [f'{uid}-sa-{sid}' for sid in ids]
-    # Chunk to stay within Pinecone's per-delete id limit (1,000).
-    for i in range(0, len(vector_ids), 1000):
-        index.delete(ids=vector_ids[i : i + 1000], namespace=SCREEN_ACTIVITY_NAMESPACE)
+    if not vector_ids:
+        return
+    for target in _screen_activity_purge_index_handles():
+        # Chunk to stay within Pinecone's per-delete id limit (1,000).
+        for i in range(0, len(vector_ids), 1000):
+            target.delete(ids=vector_ids[i : i + 1000], namespace=SCREEN_ACTIVITY_NAMESPACE)
+
+
+# The production index and its development twin share the Firestore project,
+# so retired vectors must be purged from both regardless of which job runs.
+_SCREEN_ACTIVITY_SIBLING_INDEXES = {
+    'memories-backend': 'memories-backend-dev',
+    'memories-backend-dev': 'memories-backend',
+}
+
+
+def _screen_activity_purge_index_handles() -> List[Any]:
+    """Index handles to purge retired screen-activity vectors from."""
+    handles: List[Any] = []
+    if index is not None:
+        handles.append(index)
+    sibling = _SCREEN_ACTIVITY_SIBLING_INDEXES.get(_pinecone_index_name or '')
+    if sibling and pc is not None:
+        handles.append(pc.Index(sibling))
+    return handles
 
 
 # ==========================================

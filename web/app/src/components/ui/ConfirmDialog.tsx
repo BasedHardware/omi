@@ -50,7 +50,7 @@ export function ConfirmDialog({
           <OpenSurface
             className={cn(
               't-modal relative',
-              'bg-bg-secondary rounded-2xl',
+              'rounded-2xl bg-bg-secondary',
               'border border-bg-tertiary',
               'shadow-2xl',
               'p-6',
@@ -59,35 +59,35 @@ export function ConfirmDialog({
             {/* Close button */}
             <Dialog.Close asChild>
               <button
-                className="absolute top-4 right-4 p-1.5 rounded-lg hover:bg-bg-tertiary transition-colors"
+                className="absolute right-4 top-4 rounded-lg p-1.5 transition-colors hover:bg-bg-tertiary"
                 aria-label="Close"
               >
-                <X className="w-4 h-4 text-text-quaternary" />
+                <X className="h-4 w-4 text-text-quaternary" />
               </button>
             </Dialog.Close>
 
             {/* Icon */}
             <div
               className={cn(
-                'w-12 h-12 rounded-full flex items-center justify-center mb-4',
+                'mb-4 flex h-12 w-12 items-center justify-center rounded-full',
                 variant === 'danger' ? 'bg-error/10' : 'bg-white/[0.08]',
               )}
             >
               <AlertTriangle
                 className={cn(
-                  'w-6 h-6',
+                  'h-6 w-6',
                   variant === 'danger' ? 'text-error' : 'text-text-primary',
                 )}
               />
             </div>
 
             {/* Title */}
-            <Dialog.Title className="text-lg font-semibold text-text-primary mb-2">
+            <Dialog.Title className="mb-2 text-lg font-semibold text-text-primary">
               {title}
             </Dialog.Title>
 
             {/* Description */}
-            <Dialog.Description className="text-sm text-text-tertiary mb-6">
+            <Dialog.Description className="mb-6 text-sm text-text-tertiary">
               {description}
             </Dialog.Description>
 
@@ -96,9 +96,9 @@ export function ConfirmDialog({
               <Dialog.Close asChild>
                 <button
                   className={cn(
-                    'flex-1 px-4 py-2.5 rounded-xl',
+                    'flex-1 rounded-xl px-4 py-2.5',
                     'bg-bg-tertiary hover:bg-bg-quaternary',
-                    'text-text-secondary text-sm font-medium',
+                    'text-sm font-medium text-text-secondary',
                     'transition-colors',
                   )}
                 >
@@ -109,10 +109,10 @@ export function ConfirmDialog({
                 onClick={handleConfirm}
                 disabled={isLoading}
                 className={cn(
-                  'flex-1 px-4 py-2.5 rounded-xl',
-                  'text-white text-sm font-medium',
+                  'flex-1 rounded-xl px-4 py-2.5',
+                  'text-sm font-medium text-white',
                   'transition-colors',
-                  'disabled:opacity-50 disabled:cursor-not-allowed',
+                  'disabled:cursor-not-allowed disabled:opacity-50',
                   variant === 'danger'
                     ? 'bg-error hover:bg-error/90'
                     : 'bg-text-primary text-bg-primary hover:bg-text-primary/90',
@@ -120,7 +120,7 @@ export function ConfirmDialog({
               >
                 {isLoading ? (
                   <span className="flex items-center justify-center gap-2">
-                    <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
                     <span>Clearing...</span>
                   </span>
                 ) : (

@@ -14,7 +14,11 @@ import type { TranscriptionSocket } from '@/lib/transcriptionSocket';
 // Types
 export type AudioMode = 'mic-only' | 'mic-and-system';
 export type RecordingState =
-  'idle' | 'initializing' | 'recording' | 'paused' | 'processing';
+  | 'idle'
+  | 'initializing'
+  | 'recording'
+  | 'paused'
+  | 'processing';
 
 export interface TranscriptSegment {
   id: string;

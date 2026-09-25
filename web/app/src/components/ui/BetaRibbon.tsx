@@ -28,34 +28,34 @@ export function BetaRibbon() {
   return (
     <>
       {/* Feedback links - positioned to the left of the ribbon */}
-      <div className="fixed top-3 right-36 z-[9998] flex items-center gap-2">
+      <div className="fixed right-36 top-3 z-[9998] flex items-center gap-2">
         <a
           href="https://feedback.omi.me"
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-bg-tertiary/80 backdrop-blur-sm text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-colors text-xs"
+          className="flex items-center gap-1.5 rounded-lg bg-bg-tertiary/80 px-3 py-1.5 text-xs text-text-tertiary backdrop-blur-sm transition-colors hover:bg-bg-tertiary hover:text-text-primary"
         >
-          <MessageSquare className="w-3.5 h-3.5" />
+          <MessageSquare className="h-3.5 w-3.5" />
           <span>Feedback</span>
         </a>
         <a
           href="http://discord.omi.me"
           target="_blank"
           rel="noopener noreferrer"
-          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-bg-tertiary/80 backdrop-blur-sm text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary transition-colors text-xs"
+          className="flex items-center gap-1.5 rounded-lg bg-bg-tertiary/80 px-3 py-1.5 text-xs text-text-tertiary backdrop-blur-sm transition-colors hover:bg-bg-tertiary hover:text-text-primary"
         >
-          <DiscordIcon className="w-3.5 h-3.5" />
+          <DiscordIcon className="h-3.5 w-3.5" />
           <span>Discord</span>
         </a>
       </div>
 
       {/* Beta ribbon */}
-      <div className="fixed top-0 right-0 z-[9998] overflow-hidden pointer-events-none w-32 h-32">
+      <div className="pointer-events-none fixed right-0 top-0 z-[9998] h-32 w-32 overflow-hidden">
         <a
           href="https://feedback.omi.me"
           target="_blank"
           rel="noopener noreferrer"
-          className="pointer-events-auto absolute top-6 -right-8 w-36 text-center py-1.5 bg-text-primary text-bg-primary text-xs font-semibold uppercase tracking-wider rotate-45 shadow-lg hover:bg-text-primary/90 transition-colors"
+          className="pointer-events-auto absolute -right-8 top-6 w-36 rotate-45 bg-text-primary py-1.5 text-center text-xs font-semibold uppercase tracking-wider text-bg-primary shadow-lg transition-colors hover:bg-text-primary/90"
         >
           Beta
         </a>

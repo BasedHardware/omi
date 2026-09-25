@@ -124,7 +124,6 @@ ACTION_ITEMS_READ_SECURITY = [{"type": "oauth2", "scopes": ["action_items.read"]
 ACTION_ITEMS_WRITE_SECURITY = [{"type": "oauth2", "scopes": ["action_items.write"]}]
 GOALS_READ_SECURITY = [{"type": "oauth2", "scopes": ["goals.read"]}]
 CHAT_READ_SECURITY = [{"type": "oauth2", "scopes": ["chat.read"]}]
-SCREEN_ACTIVITY_READ_SECURITY = [{"type": "oauth2", "scopes": ["screen_activity.read"]}]
 PEOPLE_READ_SECURITY = [{"type": "oauth2", "scopes": ["people.read"]}]
 
 _SECURITY_BY_SCOPE = {
@@ -137,7 +136,6 @@ _SECURITY_BY_SCOPE = {
         ACTION_ITEMS_WRITE_SECURITY,
         GOALS_READ_SECURITY,
         CHAT_READ_SECURITY,
-        SCREEN_ACTIVITY_READ_SECURITY,
         PEOPLE_READ_SECURITY,
     )
     for entry in security
@@ -994,74 +992,6 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
         write_operation=_READ,
         rate_bucket=None,
         handler=other.get_people,
-    ),
-    ToolSpec(
-        name="get_screen_activity",
-        title="Get screen activity",
-        description=(
-            "Retrieve synced desktop screen observations (Rewind): apps, windows and OCR text ordered by time. "
-            "Use group_by=app|hour|day for aggregated buckets with counts, estimated observation seconds "
-            "(bounded capture gaps, never actual usage duration), and top window titles; page through raw "
-            "rows with cursor. Use summary=true for the legacy per-app counts and coverage. Counts do not "
-            "measure usage duration or intent. Capture and sync completeness are unknown."
-        ),
-        annotations=_read_annotations("Get screen activity"),
-        input_schema={
-            "type": "object",
-            "properties": {
-                "start_date": {"type": "string", "description": "Filter on/after this date (yyyy-mm-dd)"},
-                "end_date": {"type": "string", "description": "Filter on/before this date (yyyy-mm-dd)"},
-                "app": {"type": "string", "description": "Filter to a single app name"},
-                "group_by": {
-                    "type": "string",
-                    "enum": ["none", "app", "hour", "day"],
-                    "description": "Aggregate rows into buckets by app, hour, or day instead of returning raw rows",
-                    "default": "none",
-                },
-                "summary": {
-                    "type": "boolean",
-                    "description": "Return per-app observation counts and coverage instead of raw rows",
-                    "default": False,
-                },
-                "limit": {
-                    "type": "integer",
-                    "description": "Max rows scanned per page (ignored when summary=true)",
-                    "default": 200,
-                    "minimum": 1,
-                    "maximum": 1000,
-                },
-                "cursor": _CURSOR_INPUT,
-            },
-        },
-        output_schema=_output_schema(
-            {
-                "type": "object",
-                "oneOf": [
-                    _object_schema(
-                        ["screen_activity"],
-                        screen_activity=_ARRAY_OF_OBJECTS,
-                        next_cursor=_NEXT_CURSOR_OUTPUT,
-                    ),
-                    _object_schema(
-                        ["buckets"],
-                        group_by={"type": "string"},
-                        buckets=_ARRAY_OF_OBJECTS,
-                        next_cursor=_NEXT_CURSOR_OUTPUT,
-                    ),
-                    _object_schema(
-                        ["apps", "total_screenshots", "coverage"],
-                        apps={"type": "object"},
-                        total_screenshots={"type": "integer"},
-                        coverage={"type": "object"},
-                    ),
-                ],
-            }
-        ),
-        scope="screen_activity.read",
-        operation="screen_activity_get",
-        write_operation=_READ,
-        rate_bucket=None,
-        handler=other.get_screen_activity,
     ),
     ToolSpec(
         name="get_daily_summaries",

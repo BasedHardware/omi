@@ -82,7 +82,7 @@ type ChatRow = [
   reason: unknown,
   count: unknown,
   durationMs: unknown,
-  actorId?: unknown,
+  actorId?: unknown
 ];
 
 type VoiceRow = [
@@ -95,7 +95,7 @@ type VoiceRow = [
   count: unknown,
   durationMs: unknown,
   source?: unknown,
-  actorId?: unknown,
+  actorId?: unknown
 ];
 
 type MutableMetric = {
@@ -146,10 +146,7 @@ const textValue = (value: unknown, fallback = "unknown"): string => {
 const percent = (numerator: number, denominator: number): number | null =>
   denominator > 0 ? Math.round((numerator / denominator) * 10_000) / 100 : null;
 
-const averageSeconds = (
-  durationMs: number,
-  successes: number,
-): number | null =>
+const averageSeconds = (durationMs: number, successes: number): number | null =>
   successes > 0 ? Math.round((durationMs / successes / 1_000) * 10) / 10 : null;
 
 const finalizeMetric = (metric: MutableMetric): ReliabilityMetric => {
@@ -178,7 +175,7 @@ const mergeMetric = (target: MutableMetric, source: MutableMetric): void => {
 const addMetric = (
   map: Map<string, MutableMetric>,
   key: string,
-  update: (metric: MutableMetric) => void,
+  update: (metric: MutableMetric) => void
 ): void => {
   const metric = map.get(key) ?? emptyMetric();
   update(metric);
@@ -203,7 +200,7 @@ function buildDayKeys(days: number, now: Date): string[] {
 }
 
 const finalizeBreakdowns = (
-  metrics: Map<string, MutableMetric>,
+  metrics: Map<string, MutableMetric>
 ): ReliabilityBreakdown[] =>
   Array.from(metrics.entries())
     .map(([label, metric]) => {
@@ -222,7 +219,7 @@ const finalizeBreakdowns = (
         b.success +
         b.failure +
         b.excluded -
-        (a.success + a.failure + a.excluded),
+        (a.success + a.failure + a.excluded)
     );
 
 export function responseReliabilityQueries(days: number): {
@@ -306,14 +303,14 @@ export function responseReliabilityQueries(days: number): {
  * those are real usage gaps.
  */
 export function trimDailyToCoverage(
-  daily: ReliabilityDailyPoint[],
+  daily: ReliabilityDailyPoint[]
 ): ReliabilityDailyPoint[] {
   const first = daily.findIndex(
     (point) =>
       point.chatSuccessRate != null ||
       point.voiceSuccessRate != null ||
       point.chatExcluded > 0 ||
-      point.voiceExcluded > 0,
+      point.voiceExcluded > 0
   );
   return first === -1 ? [] : daily.slice(first);
 }
@@ -380,7 +377,7 @@ export function buildResponseReliabilityPayload({
         const key = `chat:${reason}`;
         failureReasonCounts.set(
           key,
-          (failureReasonCounts.get(key) ?? 0) + count,
+          (failureReasonCounts.get(key) ?? 0) + count
         );
       }
     }
@@ -394,7 +391,7 @@ export function buildResponseReliabilityPayload({
         Array.isArray(rawRow) &&
         textValue((rawRow as VoiceRow)[8], "physical_shortcut") ===
           "physical_shortcut" &&
-        numberValue((rawRow as VoiceRow)[6]) > 0,
+        numberValue((rawRow as VoiceRow)[6]) > 0
     );
     voiceSource = hasPhysicalVoiceRows ? "physical_shortcut" : "floating_voice";
     for (const rawRow of voiceRows) {
@@ -453,7 +450,7 @@ export function buildResponseReliabilityPayload({
           const key = `voice:${reason}`;
           failureReasonCounts.set(
             key,
-            (failureReasonCounts.get(key) ?? 0) + count,
+            (failureReasonCounts.get(key) ?? 0) + count
           );
         }
       }
@@ -487,7 +484,7 @@ export function buildResponseReliabilityPayload({
           ? voiceFinal.averageFullAnswerSeconds
           : null,
       };
-    },
+    }
   );
 
   const failureReasons = Array.from(failureReasonCounts.entries())
@@ -545,12 +542,12 @@ export function buildChannelReliabilityPayloads({
   const rowsForChannel = (
     rows: unknown[],
     actorIndex: number,
-    channel: ReliabilityChannel,
+    channel: ReliabilityChannel
   ) =>
     rows.filter(
       (row) =>
         Array.isArray(row) &&
-        channelByActor.get(textValue(row[actorIndex])) === channel,
+        channelByActor.get(textValue(row[actorIndex])) === channel
     );
 
   const build = (channel: ReliabilityChannel) =>

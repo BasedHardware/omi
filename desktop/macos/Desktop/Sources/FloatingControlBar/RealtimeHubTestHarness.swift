@@ -154,7 +154,6 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
     case .searchToolOutput: stub = "Found 1 matching saved-output line."
     case .updateAgentArtifactLifecycle: stub = "Artifact lifecycle is now retained. Changed: true."
     case .getDailyRecap: stub = "Yesterday: 3 hrs in Xcode, 1 hr in Safari; 2 conversations; 1 task created."
-    case .searchScreenHistory: stub = "Found it: yesterday afternoon you were reading the launch doc in Safari."
     case .createActionItem: stub = "Created task: Example task."
     case .createContextReminder: stub = "I'll remind you next time you're in Pricing Engine."
     case .updateActionItem: stub = "Updated the task."

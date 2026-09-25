@@ -18,7 +18,7 @@ import {
 
 const ENV_KEYS = ["POSTHOG_PERSONAL_API_KEY", "POSTHOG_PROJECT_ID"] as const;
 const originalEnv = Object.fromEntries(
-  ENV_KEYS.map((key) => [key, process.env[key]]),
+  ENV_KEYS.map((key) => [key, process.env[key]])
 );
 
 afterEach(() => {
@@ -72,7 +72,7 @@ describe("computeActivation (2+ questions within 48h)", () => {
     const query = posthogResults.mock.calls[0][3] as string;
     expect(query).toContain("properties.$os_name = 'macOS'");
     expect(query).toContain(
-      `first_ts <= now() - INTERVAL ${ACTIVATION_WINDOW_HOURS} HOUR`,
+      `first_ts <= now() - INTERVAL ${ACTIVATION_WINDOW_HOURS} HOUR`
     );
     // Questions = typed chat AND floating-bar/PTT queries — counting only
     // one of them undercounts activation by ~a third (user-reported).
@@ -84,7 +84,7 @@ describe("computeActivation (2+ questions within 48h)", () => {
     expect(query).toContain("e.timestamp >= o.onb_ts");
     expect(query).toContain("o.onb_ts > toDateTime(0)");
     expect(query).toContain(
-      `f.first_ts + INTERVAL ${ACTIVATION_WINDOW_HOURS} HOUR`,
+      `f.first_ts + INTERVAL ${ACTIVATION_WINDOW_HOURS} HOUR`
     );
     expect(ACTIVATION_QUESTIONS).toBe(2);
   });
@@ -93,7 +93,7 @@ describe("computeActivation (2+ questions within 48h)", () => {
     delete process.env.POSTHOG_PERSONAL_API_KEY;
     delete process.env.POSTHOG_PROJECT_ID;
     await expect(computeActivation(60)).rejects.toThrow(
-      "PostHog credentials not configured",
+      "PostHog credentials not configured"
     );
   });
 });

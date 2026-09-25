@@ -109,19 +109,16 @@ export function formatNotificationTimestamp(date: Date): string {
  */
 export function groupBy<T, K extends string>(
   items: T[],
-  getKey: (item: T) => K
+  getKey: (item: T) => K,
 ): Record<K, T[]> {
-  return items.reduce(
-    (result, item) => {
-      const key = getKey(item);
-      if (!result[key]) {
-        result[key] = [];
-      }
-      result[key].push(item);
-      return result;
-    },
-    {} as Record<K, T[]>
-  );
+  return items.reduce((result, item) => {
+    const key = getKey(item);
+    if (!result[key]) {
+      result[key] = [];
+    }
+    result[key].push(item);
+    return result;
+  }, {} as Record<K, T[]>);
 }
 
 export function urlWithUidParam(rawUrl: string, uid: string): string {

@@ -180,8 +180,16 @@ def _validate_authorize_request(
         raise _AuthorizeRequestError("Invalid resource", error="invalid_target", redirect_allowed=True)
     if not mcp_oauth_db.validate_pkce_challenge(code_challenge, code_challenge_method):
         raise _AuthorizeRequestError("PKCE S256 is required", redirect_allowed=True)
+    # Legacy connectors re-authorizing with a pre-retirement scope string must
+    # have retired scopes (screen_activity.read) filtered out rather than
+    # rejected, so they can still reconnect; an explicitly all-retired request
+    # is refused instead of silently defaulting to memories.read.
+    requested_tokens = (scope or "").split()
+    requested_scope = " ".join(item for item in requested_tokens if item not in mcp_oauth_db.RETIRED_SCOPES)
+    if scope and requested_tokens and not requested_scope:
+        raise _AuthorizeRequestError("No supported scopes requested", error="invalid_scope", redirect_allowed=True)
     try:
-        scopes = mcp_oauth_db.normalize_scopes(scope, client)
+        scopes = mcp_oauth_db.normalize_scopes(requested_scope or None, client)
     except ValueError as exc:
         raise _AuthorizeRequestError(
             "Unsupported scope requested", error="invalid_scope", redirect_allowed=True

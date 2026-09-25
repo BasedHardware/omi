@@ -82,13 +82,13 @@ export function geminiUsageReport(metadata: GeminiUsageMetadata): RealtimeUsageR
   const output = splitUsage(metadata.responseTokensDetails);
   return {
     input_text_tokens:
-      input.text + input.audio > 0 ? input.text : (metadata.promptTokenCount ?? 0),
+      input.text + input.audio > 0 ? input.text : metadata.promptTokenCount ?? 0,
     input_audio_tokens: input.audio,
     input_cached_tokens: metadata.cachedContentTokenCount ?? 0,
     output_text_tokens:
       output.text + output.audio > 0
         ? output.text
-        : (metadata.candidatesTokenCount ?? metadata.responseTokenCount ?? 0),
+        : metadata.candidatesTokenCount ?? metadata.responseTokenCount ?? 0,
     output_audio_tokens: output.audio,
   };
 }

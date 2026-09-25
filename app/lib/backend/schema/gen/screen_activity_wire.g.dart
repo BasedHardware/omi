@@ -4,7 +4,6 @@
 
 class GeneratedScreenActivityRow {
   final String appName;
-  final bool captureEligible;
   final String? clientDeviceId;
   final String? deviceName;
   final List<double>? embedding;
@@ -15,7 +14,6 @@ class GeneratedScreenActivityRow {
 
   const GeneratedScreenActivityRow({
     this.appName = "",
-    this.captureEligible = false,
     this.clientDeviceId,
     this.deviceName,
     this.embedding,
@@ -28,7 +26,6 @@ class GeneratedScreenActivityRow {
   factory GeneratedScreenActivityRow.fromJson(Map<String, dynamic> json) {
     return GeneratedScreenActivityRow(
       appName: _required(_readFieldValue<String>(_readField(json, const ["appName"]), "appName", _readString, requiredField: false, nullable: false, defaultValue: ""), "appName"),
-      captureEligible: _required(_readFieldValue<bool>(_readField(json, const ["captureEligible"]), "captureEligible", _readBool, requiredField: false, nullable: false, defaultValue: false), "captureEligible"),
       clientDeviceId: _readFieldValue<String>(_readField(json, const ["clientDeviceId"]), "clientDeviceId", _readString, requiredField: false, nullable: true),
       deviceName: _readFieldValue<String>(_readField(json, const ["deviceName"]), "deviceName", _readString, requiredField: false, nullable: true),
       embedding: _readFieldValue<List<double>>(_readField(json, const ["embedding"]), "embedding", _readDoubleList, requiredField: false, nullable: true),
@@ -42,7 +39,6 @@ class GeneratedScreenActivityRow {
   Map<String, dynamic> toJson() {
     return {
       'appName': appName,
-      'captureEligible': captureEligible,
       'clientDeviceId': clientDeviceId,
       'deviceName': deviceName,
       'embedding': embedding,
@@ -54,102 +50,22 @@ class GeneratedScreenActivityRow {
   }
 }
 
-class GeneratedFrameRequestDelivery {
-  final int accountGeneration;
-  final String? conversationId;
-  final String deviceId;
-  final String expiresAt;
-  final String requestId;
-  final String? screenshotId;
-  final String state;
-
-  const GeneratedFrameRequestDelivery({
-    required this.accountGeneration,
-    this.conversationId,
-    required this.deviceId,
-    required this.expiresAt,
-    required this.requestId,
-    this.screenshotId,
-    required this.state,
-  });
-
-  factory GeneratedFrameRequestDelivery.fromJson(Map<String, dynamic> json) {
-    return GeneratedFrameRequestDelivery(
-      accountGeneration: _required(_readFieldValue<int>(_readField(json, const ["account_generation"]), "account_generation", _readInt, requiredField: true, nullable: false), "account_generation"),
-      conversationId: _readFieldValue<String>(_readField(json, const ["conversation_id"]), "conversation_id", _readString, requiredField: false, nullable: true),
-      deviceId: _required(_readFieldValue<String>(_readField(json, const ["device_id"]), "device_id", _readString, requiredField: true, nullable: false), "device_id"),
-      expiresAt: _required(_readFieldValue<String>(_readField(json, const ["expires_at"]), "expires_at", _readString, requiredField: true, nullable: false), "expires_at"),
-      requestId: _required(_readFieldValue<String>(_readField(json, const ["request_id"]), "request_id", _readString, requiredField: true, nullable: false), "request_id"),
-      screenshotId: _readFieldValue<String>(_readField(json, const ["screenshot_id"]), "screenshot_id", _readString, requiredField: false, nullable: true),
-      state: _required(_readFieldValue<String>(_readField(json, const ["state"]), "state", _readString, requiredField: true, nullable: false), "state"),
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'account_generation': accountGeneration,
-      'conversation_id': conversationId,
-      'device_id': deviceId,
-      'expires_at': expiresAt,
-      'request_id': requestId,
-      'screenshot_id': screenshotId,
-      'state': state,
-    };
-  }
-}
-
 class GeneratedScreenActivitySyncRequest {
-  final int accountGeneration;
-  final int? deviceRetentionSeconds;
   final List<GeneratedScreenActivityRow> rows;
 
   const GeneratedScreenActivitySyncRequest({
-    this.accountGeneration = 0,
-    this.deviceRetentionSeconds,
     required this.rows,
   });
 
   factory GeneratedScreenActivitySyncRequest.fromJson(Map<String, dynamic> json) {
     return GeneratedScreenActivitySyncRequest(
-      accountGeneration: _required(_readFieldValue<int>(_readField(json, const ["account_generation"]), "account_generation", _readInt, requiredField: false, nullable: false, defaultValue: 0), "account_generation"),
-      deviceRetentionSeconds: _readFieldValue<int>(_readField(json, const ["deviceRetentionSeconds"]), "deviceRetentionSeconds", _readInt, requiredField: false, nullable: true),
       rows: _required(_readFieldValue<List<GeneratedScreenActivityRow>>(_readField(json, const ["rows"]), "rows", (value) => _readObjectList(value, GeneratedScreenActivityRow.fromJson), requiredField: true, nullable: false), "rows"),
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
-      'account_generation': accountGeneration,
-      'deviceRetentionSeconds': deviceRetentionSeconds,
       'rows': rows.map((value) => value.toJson()).toList(),
-    };
-  }
-}
-
-class GeneratedScreenActivitySyncResponse {
-  final List<GeneratedFrameRequestDelivery>? frameRequests;
-  final int lastId;
-  final int synced;
-
-  const GeneratedScreenActivitySyncResponse({
-    this.frameRequests,
-    required this.lastId,
-    required this.synced,
-  });
-
-  factory GeneratedScreenActivitySyncResponse.fromJson(Map<String, dynamic> json) {
-    return GeneratedScreenActivitySyncResponse(
-      frameRequests: _readFieldValue<List<GeneratedFrameRequestDelivery>>(_readField(json, const ["frame_requests"]), "frame_requests", (value) => _readObjectList(value, GeneratedFrameRequestDelivery.fromJson), requiredField: false, nullable: true),
-      lastId: _required(_readFieldValue<int>(_readField(json, const ["last_id"]), "last_id", _readInt, requiredField: true, nullable: false), "last_id"),
-      synced: _required(_readFieldValue<int>(_readField(json, const ["synced"]), "synced", _readInt, requiredField: true, nullable: false), "synced"),
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'frame_requests': frameRequests?.map((value) => value.toJson()).toList(),
-      'last_id': lastId,
-      'synced': synced,
     };
   }
 }

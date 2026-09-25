@@ -5,7 +5,7 @@ enum OmiToolManifest {
   static let localAgentAPITools: [LocalAgentTool] = [
     LocalAgentTool(
       name: "get_work_context",
-      description: "Primary tool for recent-work questions and locating a document, URL, page, or file. Call get_work_context before semantic_search or execute_sql for requests such as 'what was I doing in X?' or 'where was that doc?'. It returns durable handles and is historical context, not current visual evidence.",
+      description: "Primary tool for recent-work questions and locating a document, URL, page, or file. Call get_work_context before execute_sql for requests such as 'what was I doing in X?' or 'where was that doc?'. It returns durable handles and is historical context, not current visual evidence.",
       properties: [
         "minutes": [
           "type": "number",
@@ -33,28 +33,6 @@ enum OmiToolManifest {
           "items": [
             "type": "string",
           ],
-        ]
-      ],
-      required: [
-      "query"
-    ],
-      annotations: ["readOnlyHint": true, "destructiveHint": false, "openWorldHint": false]
-    ),
-    LocalAgentTool(
-      name: "semantic_search",
-      description: "Vector similarity search on screen content. Use for fuzzy/conceptual content only after get_work_context cannot identify the document, URL, or file; get_work_context owns recent-work and location questions.",
-      properties: [
-        "query": [
-          "type": "string",
-          "description": "Natural language search query",
-        ],
-        "days": [
-          "type": "number",
-          "description": "Days to search back (default 7)",
-        ],
-        "app_filter": [
-          "type": "string",
-          "description": "Filter to a specific app",
         ]
       ],
       required: [
@@ -185,7 +163,7 @@ enum OmiToolManifest {
       properties: [
         "screenshot_id": [
           "type": "number",
-          "description": "Screenshot ID from search_screen_history or screenshots table",
+          "description": "Screenshot ID from the local screenshots table",
         ]
       ],
       required: [

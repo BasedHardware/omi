@@ -38,7 +38,9 @@ function shareEventsFilter(platform: PlatformScope): string {
   // `Conversation Summary Shared` is emitted server-side (no $os_name); the
   // share-email UI ships only on desktop, so it counts toward macos and all.
   const macosShares = `((event = 'Share Action' AND properties.category = 'conversation' AND properties.$os_name = 'macOS') OR event = 'Conversation Summary Shared')`;
-  const mobileShares = `(event = 'Conversation Shared' ${scopeFilterAnd("mobile")})`;
+  const mobileShares = `(event = 'Conversation Shared' ${scopeFilterAnd(
+    "mobile"
+  )})`;
   if (platform === "macos") return macosShares;
   if (platform === "mobile") return mobileShares;
   return `(${macosShares} OR (event = 'Share Action' AND properties.category = 'conversation') OR event = 'Conversation Shared')`;
@@ -48,7 +50,9 @@ function friendFilter(platform: PlatformScope): string {
   // Only macOS/Windows onboarding carries the source property; the mobile
   // acquisition step reports step-reach without the answer, so the mobile
   // scope is honestly zero rather than silently borrowing desktop data.
-  return `event = 'Onboarding How Did You Hear' AND properties.source = 'Friend' ${scopeFilterAnd(platform)}`;
+  return `event = 'Onboarding How Did You Hear' AND properties.source = 'Friend' ${scopeFilterAnd(
+    platform
+  )}`;
 }
 
 export const REFERRAL_LEDGER_PAGE_SIZE = 1000;
@@ -82,16 +86,19 @@ async function referralClaimTimes(): Promise<number[]> {
 function nycDateDaysAgo(daysAgo: number): string {
   return new Date(Date.now() - daysAgo * 86_400_000).toLocaleDateString(
     "en-CA",
-    { timeZone: "America/New_York" },
+    { timeZone: "America/New_York" }
   );
 }
 
-export async function computeKFactor(days: number, platform: PlatformScope = "macos") {
+export async function computeKFactor(
+  days: number,
+  platform: PlatformScope = "macos"
+) {
   const apiKey = process.env.POSTHOG_PERSONAL_API_KEY;
   const projectId = process.env.POSTHOG_PROJECT_ID;
   const host = (process.env.POSTHOG_HOST || "https://us.posthog.com").replace(
     /\/$/,
-    "",
+    ""
   );
 
   if (!apiKey || !projectId) {
@@ -172,7 +179,9 @@ export async function computeKFactor(days: number, platform: PlatformScope = "ma
       `),
     run(referralFunnelQuery("Referral Link Issued")),
     run(referralFunnelQuery("Referral Link Captured")),
-    run(referralFunnelQuery("Referral Claimed", "AND properties.claimed = true")),
+    run(
+      referralFunnelQuery("Referral Claimed", "AND properties.claimed = true")
+    ),
     // The referral program grants a desktop trial, so redemptions belong to
     // the macos and all scopes; the mobile board honestly reports zero.
     platform === "mobile" ? Promise.resolve([]) : referralClaimTimes(),
@@ -221,10 +230,10 @@ export async function computeKFactor(days: number, platform: PlatformScope = "ma
   const [shares24h, shares7d] = sharesRollingRows?.[0] ?? [0, 0];
   const [new24h, new7d] = newRollingRows?.[0] ?? [0, 0];
   const referral24h = referralTimes.filter(
-    (ms) => ms >= Date.now() - 86_400_000,
+    (ms) => ms >= Date.now() - 86_400_000
   ).length;
   const referral7d = referralTimes.filter(
-    (ms) => ms >= Date.now() - 7 * 86_400_000,
+    (ms) => ms >= Date.now() - 7 * 86_400_000
   ).length;
 
   // Window totals come from the CALENDAR buckets only. A trailing-24h window
@@ -237,7 +246,7 @@ export async function computeKFactor(days: number, platform: PlatformScope = "ma
       shares: acc.shares + row.shares,
       newUsers: acc.newUsers + row.newUsers,
     }),
-    { friend: 0, referral: 0, shares: 0, newUsers: 0 },
+    { friend: 0, referral: 0, shares: 0, newUsers: 0 }
   );
   const viralEvents = totals.friend + totals.referral + totals.shares;
 
@@ -255,7 +264,15 @@ export async function computeKFactor(days: number, platform: PlatformScope = "ma
     const week = weekOf(row.date);
     const bucket =
       weeklyMap.get(week) ??
-      ({ date: week, friend: 0, referral: 0, shares: 0, viralEvents: 0, newUsers: 0, kFactor: null } as DailyRow);
+      ({
+        date: week,
+        friend: 0,
+        referral: 0,
+        shares: 0,
+        viralEvents: 0,
+        newUsers: 0,
+        kFactor: null,
+      } as DailyRow);
     bucket.friend += row.friend;
     bucket.referral += row.referral;
     bucket.shares += row.shares;

@@ -204,34 +204,14 @@ in the first two sections below; the additional tools are hosted-server tools.
 | `get_goals` | `include_inactive?` (default false) | List goals, active by default |
 | `get_chat_messages` | `limit?` (default 50), `offset?`/`cursor?` | List recent Omi chat messages, newest first |
 | `get_people` | None | List recognized people with speaker samples |
-| `get_screen_activity` | `start_date?`, `end_date?`, `app?`, `group_by?` (`none`\|`app`\|`hour`\|`day`, default `none`), `summary?`, `limit?`, `cursor?` | List synced screen activity rows, aggregate them into buckets, or return the legacy per-app summary |
+| `get_screen_activity` | `start_date?`, `end_date?`, `app?` | Deprecated: returns a fixed message that screen activity is no longer available from cloud chat; captures stay on the user's computer in the Omi desktop app (Rewind) |
 | `get_daily_summaries` | `start_date?`, `end_date?`, `limit?` (default 30), `offset?` | List Omi's daily summaries, newest first |
 
-Dates use `YYYY-MM-DD`. `get_screen_activity` defaults to 200 raw rows per page
-(max 1000); `limit` is ignored when `summary` is true. `group_by` buckets rows
-by app, hour, or day with counts, estimated observation seconds (bounded
-capture gaps — never actual usage duration), and top window titles.
+Dates use `YYYY-MM-DD`.
 
-Screen summaries count **synced observations**, not elapsed app usage. OCR gating,
-frame deduplication, privacy exclusions, and sync compaction mean a row cannot be
-converted to a fixed number of seconds or treated as proof of the user's intent.
-The same summary contract serves hosted MCP, REST MCP, and
-`GET /v1/screen-activity/summary`:
-
-- `total_screenshots` and per-app `count` count only the summarized rows.
-- `coverage.source` is `synced_screen_activity`; `coverage.row_limit` is 5000.
-- `coverage.truncated` is true only when a lookahead row proves more matching
-  rows exist. Only the earliest 5000 rows contribute to the summary. Narrow the
-  date range to inspect later observations.
-- `coverage.first_observed_at` and `last_observed_at` bound the summarized rows,
-  in UTC (`YYYY-MM-DD HH:MM:SS.mmm`), and are null for an empty result. They do
-  not establish continuous activity or the device's latest capture time.
-- `coverage.capture_completeness` is `unknown`, even when `truncated` is false:
-  the cloud query cannot attest to device capture status, excluded activity,
-  retention, or pending sync. An empty result does not prove inactivity.
-
-Window titles are samples, not a ranking by dwell time. Summaries remain derived
-views of screen evidence; they do not create or promote semantic memories.
+Screen activity is local-only: cloud chat never queries it. The deprecated
+`get_screen_activity` tool exists only so existing clients get an explicit
+unavailable message instead of an error, and it never returns screen rows.
 
 ---
 

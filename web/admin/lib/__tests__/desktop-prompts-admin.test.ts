@@ -27,17 +27,17 @@ describe("normalizePrompt", () => {
 
   it("rejects unknown types, empty questions, and 1-option choices", () => {
     expect(normalizePrompt({ type: "modal", question: "x" }).error).toContain(
-      "type",
+      "type"
     );
     expect(normalizePrompt({ type: "stars", question: "  " }).error).toContain(
-      "question",
+      "question"
     );
     expect(
       normalizePrompt({
         type: "choice",
         question: "Pick",
         options: ["only one"],
-      }).error,
+      }).error
     ).toContain("options");
   });
 

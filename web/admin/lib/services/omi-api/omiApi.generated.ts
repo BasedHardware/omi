@@ -2197,16 +2197,6 @@ export interface FrameRequestBatch {
 
 export type FrameRequestCleanupState = "not_required" | "pending" | "failed" | "deleted" | "permanent";
 
-export interface FrameRequestDelivery {
-  account_generation: number;
-  conversation_id?: string | null;
-  device_id: string;
-  expires_at: string;
-  request_id: string;
-  screenshot_id?: string | null;
-  state: string;
-}
-
 export interface FrameRequestEnvelope {
   deduplicated?: boolean;
   request: FrameRequest;
@@ -3730,7 +3720,6 @@ export interface ScreenActivityCoverage {
 
 export interface ScreenActivityRow {
   appName?: string;
-  captureEligible?: boolean;
   clientDeviceId?: string | null;
   deviceName?: string | null;
   embedding?: Array<number> | null;
@@ -3747,15 +3736,7 @@ export interface ScreenActivitySummaryResponse {
 }
 
 export interface ScreenActivitySyncRequest {
-  account_generation?: number;
-  deviceRetentionSeconds?: number | null;
   rows: Array<ScreenActivityRow>;
-}
-
-export interface ScreenActivitySyncResponse {
-  frame_requests?: Array<FrameRequestDelivery> | null;
-  last_id: number;
-  synced: number;
 }
 
 export interface ScreenFrameAdjudicationRequest {
@@ -5385,7 +5366,6 @@ export interface OmiApiSchemas {
   "FrameRequest": FrameRequest;
   "FrameRequestBatch": FrameRequestBatch;
   "FrameRequestCleanupState": FrameRequestCleanupState;
-  "FrameRequestDelivery": FrameRequestDelivery;
   "FrameRequestEnvelope": FrameRequestEnvelope;
   "FrameRequestPromotion": FrameRequestPromotion;
   "FrameRequestState": FrameRequestState;
@@ -5596,7 +5576,6 @@ export interface OmiApiSchemas {
   "ScreenActivityRow": ScreenActivityRow;
   "ScreenActivitySummaryResponse": ScreenActivitySummaryResponse;
   "ScreenActivitySyncRequest": ScreenActivitySyncRequest;
-  "ScreenActivitySyncResponse": ScreenActivitySyncResponse;
   "ScreenFrameAdjudicationRequest": ScreenFrameAdjudicationRequest;
   "ScreenFrameAdjudicationResponse": ScreenFrameAdjudicationResponse;
   "ScreenFrameCandidateIn": ScreenFrameCandidateIn;
@@ -8646,9 +8625,9 @@ export interface OmiApiPaths {
   };
   "/v1/screen-activity/sync": {
     post: {
-      operationId: "sync_screen_activity_v1_screen_activity_sync_post";
+      operationId: "retire_screen_activity_sync_v1_screen_activity_sync_post";
       responses: {
-        "200": ScreenActivitySyncResponse;
+        "200": Record<string, number>;
         "401": void;
         "422": HTTPValidationError;
       };
@@ -15871,7 +15850,7 @@ export async function screen_activity_summary_v1_screen_activity_summary_get(que
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-export async function sync_screen_activity_v1_screen_activity_sync_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: ScreenActivitySyncRequest, init?: OmiApiClientInit): Promise<ScreenActivitySyncResponse> {
+export async function retire_screen_activity_sync_v1_screen_activity_sync_post(header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, body: ScreenActivitySyncRequest, init?: OmiApiClientInit): Promise<Record<string, number>> {
   const _base = init?.baseURL ?? "";
   const _path = `/v1/screen-activity/sync`;
   const _search = "";

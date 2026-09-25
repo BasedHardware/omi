@@ -42,6 +42,41 @@ final class GzipProcessController: @unchecked Sendable {
 actor AgentVMService {
   static let shared = AgentVMService()
 
+  /// The agent-session steps, injectable so the ordering contract — confirm the
+  /// VM holds no screen activity before any non-screen sync or backend token
+  /// reaches it — is testable without a live VM.
+  struct SessionHooks: Sendable {
+    let screenActivityAbsent: @Sendable (_ vmIP: String, _ authToken: String) async -> Bool
+    let startNonScreenSync: @Sendable (_ vmIP: String, _ authToken: String) async -> Void
+    let sendFirebaseToken:
+      @Sendable (_ vmIP: String, _ authToken: String, _ ownerID: String, _ generation: UInt64) async -> Void
+
+    static let live = SessionHooks(
+      screenActivityAbsent: { vmIP, authToken in
+        await AgentVMService.remoteScreenActivityAbsent(vmIP: vmIP, authToken: authToken)
+      },
+      startNonScreenSync: { vmIP, authToken in
+        await AgentSyncService.shared.start(vmIP: vmIP, authToken: authToken)
+      },
+      sendFirebaseToken: { vmIP, authToken, ownerID, generation in
+        await AgentVMService.shared.sendFirebaseToken(
+          vmIP: vmIP,
+          authToken: authToken,
+          ownerID: ownerID,
+          generation: generation)
+      })
+  }
+
+  private let sessionHooks: SessionHooks
+
+  private init() {
+    sessionHooks = .live
+  }
+
+  init(sessionHooks: SessionHooks) {
+    self.sessionHooks = sessionHooks
+  }
+
   private var isRunning = false
   private var lifecycleGeneration: UInt64 = 0
   private var pipelineTask: Task<Void, Never>?
@@ -210,25 +245,22 @@ actor AgentVMService {
     await prepareReadyVM(status, ip: ip, ownerID: ownerID, generation: generation)
   }
 
-  private func prepareReadyVM(
+  func prepareReadyVM(
     _ status: APIClient.AgentStatusResponse,
     ip: String,
     ownerID: String,
     generation: UInt64
   ) async {
     guard isCurrent(ownerID: ownerID, generation: generation) else { return }
-    if await checkVMNeedsDatabase(vmIP: ip, authToken: status.authToken) {
-      let uploaded = await uploadDatabase(
-        vmIP: ip,
-        authToken: status.authToken,
-        ownerID: ownerID,
-        generation: generation)
-      if !uploaded {
-        // AgentSync owns the in-session recovery path for a missing VM database.
-        // Keep it running after a transient initial upload failure so it can retry
-        // rather than leaving this launch permanently unsynchronised.
-        log("AgentVMService: Initial database upload failed; starting incremental sync recovery")
-      }
+    // The local database can hold screen/OCR rows, so it is never uploaded.
+    // A VM that still holds screen activity from before this change gets no
+    // session at all: no sync, no backend token. Nothing is deleted to clear
+    // that state — removing existing records is deliberately out of scope, so
+    // this gate refuses rather than repairs. The VM bootstraps the sanitized
+    // non-screen schema on its first `/sync`.
+    guard await sessionHooks.screenActivityAbsent(ip, status.authToken) else {
+      log("AgentVMService: Refusing to start agent session while the VM still holds screen activity")
+      return
     }
     guard isCurrent(ownerID: ownerID, generation: generation) else { return }
     await startIncrementalSync(
@@ -312,17 +344,14 @@ actor AgentVMService {
     return true
   }
 
-  /// Re-upload the database to a VM that lost its data (e.g. after a restart).
-  /// Called by AgentSyncService when it detects databaseReady: false on the VM.
+  /// Full-database upload is retired: the local database can hold screen/OCR
+  /// rows, so shipping it to the VM is exactly the egress this change closes.
+  /// A VM that lost its data recovers server-side instead — `/sync` bootstraps
+  /// the sanitized non-screen schema and creates any missing whitelisted table
+  /// — so this recovery hook stays disabled by design.
   func reuploadDatabase(vmIP: String, authToken: String) async -> Bool {
-    guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return false }
-    let generation = lifecycleGeneration
-    log("AgentVMService: Re-uploading database to VM (triggered by sync failure)")
-    return await uploadDatabase(
-      vmIP: vmIP,
-      authToken: authToken,
-      ownerID: ownerID,
-      generation: generation)
+    log("AgentVMService: Database re-upload is disabled; the VM recovers its non-screen schema on /sync")
+    return false
   }
 
   /// Compression ratio as a whole-number percent. Guards against a zero
@@ -388,6 +417,13 @@ actor AgentVMService {
     generation: UInt64
   ) async -> Bool {
     guard isCurrent(ownerID: ownerID, generation: generation) else { return false }
+    // Fail closed: the local database is only ever eligible to leave the Mac
+    // when it holds no screen/OCR rows. No caller reaches this today (upload is
+    // retired), and this guard keeps a future one from reopening the egress.
+    guard !(await RewindDatabase.shared.containsScreenData()) else {
+      log("AgentVMService: Database upload refused because local screen data is present")
+      return false
+    }
     await AgentSyncService.shared.pause()
     defer {
       Task {
@@ -528,17 +564,41 @@ actor AgentVMService {
     generation: UInt64
   ) async {
     guard isCurrent(ownerID: ownerID, generation: generation) else { return }
-    await AgentSyncService.shared.start(vmIP: vmIP, authToken: authToken)
+    await sessionHooks.startNonScreenSync(vmIP, authToken)
     guard isCurrent(ownerID: ownerID, generation: generation) else {
       await AgentSyncService.shared.stop(flushPendingChanges: false)
       return
     }
     // Send Firebase token so the VM can call backend tools
-    await sendFirebaseToken(
-      vmIP: vmIP,
-      authToken: authToken,
-      ownerID: ownerID,
-      generation: generation)
+    await sessionHooks.sendFirebaseToken(vmIP, authToken, ownerID, generation)
+  }
+
+  /// Report whether the VM is free of screen activity, without deleting
+  /// anything. Fail-closed in every ambiguous case: an unreachable VM, a
+  /// non-200, an unparseable body, or an older image without this endpoint all
+  /// return false, so no session starts.
+  private static func remoteScreenActivityAbsent(vmIP: String, authToken: String) async -> Bool {
+    guard let url = URL(string: "http://\(vmIP):8080/screen-activity-status") else { return false }
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+    request.timeoutInterval = 30
+
+    do {
+      let (data, response) = try await URLSession.shared.data(for: request)
+      guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else { return false }
+      guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+        let present = json["present"] as? Bool
+      else { return false }
+      if present {
+        let tables = (json["tables"] as? [String])?.joined(separator: ", ") ?? "unknown"
+        log("AgentVMService: VM still holds screen activity (\(tables)); leaving it in place and skipping the session")
+      }
+      return !present
+    } catch {
+      log("AgentVMService: Failed to read VM screen activity status — \(error.localizedDescription)")
+      return false
+    }
   }
 
   /// Send the user's Firebase ID token to the VM so it can call Python backend tools.

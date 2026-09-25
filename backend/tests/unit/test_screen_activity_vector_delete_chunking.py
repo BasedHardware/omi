@@ -57,3 +57,43 @@ def test_no_ids_issues_no_call(index: MagicMock) -> None:
     vector_db.delete_screen_activity_vectors('user-1', [])
 
     index.delete.assert_not_called()
+
+
+def test_purge_fans_out_to_the_sibling_pinecone_index(monkeypatch) -> None:
+    """The dev memory-maintenance job shares prod Firestore, not prod Pinecone.
+
+    It runs against ``memories-backend-dev`` while production uses
+    ``memories-backend``, so whichever purge runs first must clear both
+    indexes: once the Firestore ids are deleted there is no retry list left to
+    recover the sibling index's vectors from (review of #11018).
+    """
+    prod = MagicMock()
+    dev = MagicMock()
+    fake_pc = MagicMock()
+    fake_pc.Index.side_effect = {'memories-backend': prod, 'memories-backend-dev': dev}.__getitem__
+    monkeypatch.setattr(vector_db, 'index', prod)
+    monkeypatch.setattr(vector_db, 'pc', fake_pc)
+    monkeypatch.setattr(vector_db, '_pinecone_index_name', 'memories-backend')
+
+    vector_db.delete_screen_activity_vectors('user-1', ['sa-1', 'sa-2'])
+
+    prod.delete.assert_called_once_with(
+        ids=['user-1-sa-sa-1', 'user-1-sa-sa-2'], namespace=vector_db.SCREEN_ACTIVITY_NAMESPACE
+    )
+    dev.delete.assert_called_once_with(
+        ids=['user-1-sa-sa-1', 'user-1-sa-sa-2'], namespace=vector_db.SCREEN_ACTIVITY_NAMESPACE
+    )
+    fake_pc.Index.assert_called_once_with('memories-backend-dev')
+
+
+def test_purge_without_pinecone_client_skips_sibling_lookup(monkeypatch) -> None:
+    """No Pinecone client (offline/tests) means only the primary handle is used."""
+    monkeypatch.setattr(vector_db, 'pc', None)
+    monkeypatch.setattr(vector_db, 'index', MagicMock())
+    monkeypatch.setattr(vector_db, '_pinecone_index_name', 'memories-backend')
+
+    vector_db.delete_screen_activity_vectors('user-1', ['sa-1'])
+
+    vector_db.index.delete.assert_called_once_with(
+        ids=['user-1-sa-sa-1'], namespace=vector_db.SCREEN_ACTIVITY_NAMESPACE
+    )

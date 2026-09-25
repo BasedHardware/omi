@@ -34,17 +34,17 @@ export default function EditAppPage() {
 
   if (isLoading) {
     return (
-      <div className="h-full flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-2 border-accent-primary border-t-transparent" />
+      <div className="flex h-full items-center justify-center">
+        <div className="border-accent-primary h-8 w-8 animate-spin rounded-full border-2 border-t-transparent" />
       </div>
     );
   }
 
   if (error || !app) {
     return (
-      <div className="h-full flex items-center justify-center">
+      <div className="flex h-full items-center justify-center">
         <div className="text-center">
-          <p className="text-red-400 mb-4">{error || 'App not found'}</p>
+          <p className="mb-4 text-red-400">{error || 'App not found'}</p>
           <Link href="/connectors" className="text-accent-primary hover:underline">
             Back to Apps
           </Link>

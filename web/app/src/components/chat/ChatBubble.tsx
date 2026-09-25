@@ -11,13 +11,7 @@ import { cn } from '@/lib/utils';
 const fabClass =
   'flex h-14 w-14 items-center justify-center rounded-full bg-transparent text-bg-primary';
 
-function ChatIconButton({
-  isOpen,
-  onClick,
-}: {
-  isOpen: boolean;
-  onClick: () => void;
-}) {
+function ChatIconButton({ isOpen, onClick }: { isOpen: boolean; onClick: () => void }) {
   return (
     <button
       type="button"
@@ -119,7 +113,10 @@ export function ChatBubble() {
             ref={notifyRef}
             type="button"
             onClick={toggleNotificationCenter}
-            className={cn(fabClass, fan ? 'pointer-events-auto' : 'pointer-events-none opacity-0')}
+            className={cn(
+              fabClass,
+              fan ? 'pointer-events-auto' : 'pointer-events-none opacity-0',
+            )}
             aria-label="Notifications"
             tabIndex={fan ? 0 : -1}
             aria-hidden={!fan}

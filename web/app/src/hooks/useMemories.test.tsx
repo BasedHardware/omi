@@ -413,5 +413,4 @@ describe('useMemories beta capability negotiation and cache scope', () => {
       categories: ['manual'],
     });
   });
-
 });

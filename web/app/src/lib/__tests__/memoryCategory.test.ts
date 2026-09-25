@@ -10,7 +10,7 @@ import type { MemoryCategory } from '@/types/conversation';
  */
 
 const memory = (category?: string) =>
-  ({ category }) as unknown as { category: MemoryCategory };
+  ({ category } as unknown as { category: MemoryCategory });
 
 describe('categoryOf', () => {
   it('passes through the four product categories', () => {

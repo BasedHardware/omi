@@ -56,7 +56,7 @@ final class ShellMouseInterceptionSync {
   init(window: NSWindow) {
     self.window = window
     let scheduleReconciliation: @Sendable () -> Void = { [weak self] in
-      DispatchQueue.main.async { self?.sync() }
+      DispatchQueue.main.async { [weak self] in self?.sync() }
     }
     if let global = NSEvent.addGlobalMonitorForEvents(
       matching: [.mouseMoved, .leftMouseDragged],

@@ -22,7 +22,6 @@ import database.daily_summaries as daily_summaries_db
 import database.goals as goals_db
 import database.mcp_api_key as mcp_api_key_db
 import database.mcp_oauth as mcp_oauth_db
-import database.screen_activity as screen_activity_db
 import database.users as users_db
 import database.vector_db as vector_db
 import database.x_posts as x_posts_db
@@ -82,7 +81,6 @@ from utils.mcp_server.registry import (  # noqa: F401 — compat re-exports
     MEMORIES_READ_SECURITY,
     MEMORIES_WRITE_SECURITY,
     PEOPLE_READ_SECURITY,
-    SCREEN_ACTIVITY_READ_SECURITY,
     TOOL_REQUIRED_SCOPE,
     execute_tool,
 )

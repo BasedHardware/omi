@@ -19,7 +19,10 @@ const MAX_PAGES = 12;
 
 function toDateKey(iso: string | number): string {
   const d = typeof iso === "number" ? new Date(iso * 1000) : new Date(iso);
-  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(
+    2,
+    "0"
+  )}-${String(d.getUTCDate()).padStart(2, "0")}`;
 }
 
 function windowStartIso(days: number): string {
@@ -32,14 +35,18 @@ function windowStartIso(days: number): string {
 // Anthropic Admin API: GET /v1/organizations/cost_report, 1d buckets.
 // Raw `amount` values are decimal USD-cent strings — normalize by /100
 // (confirmed in the llm-cost-savings 2026-07-16 reconciliation).
-export async function fetchAnthropicDailyCosts(days: number): Promise<ProviderDailyCost[] | null> {
+export async function fetchAnthropicDailyCosts(
+  days: number
+): Promise<ProviderDailyCost[] | null> {
   const key = process.env.ADMIN_ANTHROPIC_COST_API_KEY;
   if (!key) return null;
   const byDay = new Map<string, number>();
   let page: string | null = null;
   try {
     for (let i = 0; i < MAX_PAGES; i++) {
-      const url = new URL("https://api.anthropic.com/v1/organizations/cost_report");
+      const url = new URL(
+        "https://api.anthropic.com/v1/organizations/cost_report"
+      );
       url.searchParams.set("starting_at", windowStartIso(days));
       url.searchParams.set("bucket_width", "1d");
       if (page) url.searchParams.set("page", page);
@@ -47,14 +54,19 @@ export async function fetchAnthropicDailyCosts(days: number): Promise<ProviderDa
         headers: { "x-api-key": key, "anthropic-version": "2023-06-01" },
       });
       if (!resp.ok) {
-        console.error("Anthropic cost_report failed:", resp.status, await resp.text());
+        console.error(
+          "Anthropic cost_report failed:",
+          resp.status,
+          await resp.text()
+        );
         return null;
       }
       const body = await resp.json();
       for (const bucket of body?.data ?? []) {
         const day = toDateKey(bucket.starting_at);
         let sum = 0;
-        for (const r of bucket.results ?? []) sum += Number(r.amount ?? 0) / 100;
+        for (const r of bucket.results ?? [])
+          sum += Number(r.amount ?? 0) / 100;
         byDay.set(day, (byDay.get(day) ?? 0) + sum);
       }
       if (!body?.has_more || !body?.next_page) break;
@@ -71,7 +83,9 @@ export async function fetchAnthropicDailyCosts(days: number): Promise<ProviderDa
 
 // OpenAI Admin API: GET /v1/organization/costs, 1d buckets, unix start_time.
 // amount.value is decimal USD.
-export async function fetchOpenAiDailyCosts(days: number): Promise<ProviderDailyCost[] | null> {
+export async function fetchOpenAiDailyCosts(
+  days: number
+): Promise<ProviderDailyCost[] | null> {
   const key = process.env.ADMIN_OPENAI_COST_API_KEY;
   if (!key) return null;
   const start = new Date();
@@ -82,20 +96,30 @@ export async function fetchOpenAiDailyCosts(days: number): Promise<ProviderDaily
   try {
     for (let i = 0; i < MAX_PAGES; i++) {
       const url = new URL("https://api.openai.com/v1/organization/costs");
-      url.searchParams.set("start_time", String(Math.floor(start.getTime() / 1000)));
+      url.searchParams.set(
+        "start_time",
+        String(Math.floor(start.getTime() / 1000))
+      );
       url.searchParams.set("bucket_width", "1d");
       url.searchParams.set("limit", "180");
       if (page) url.searchParams.set("page", page);
-      const resp = await fetch(url, { headers: { Authorization: `Bearer ${key}` } });
+      const resp = await fetch(url, {
+        headers: { Authorization: `Bearer ${key}` },
+      });
       if (!resp.ok) {
-        console.error("OpenAI org costs failed:", resp.status, await resp.text());
+        console.error(
+          "OpenAI org costs failed:",
+          resp.status,
+          await resp.text()
+        );
         return null;
       }
       const body = await resp.json();
       for (const bucket of body?.data ?? []) {
         const day = toDateKey(bucket.start_time);
         let sum = 0;
-        for (const r of bucket.results ?? []) sum += Number(r.amount?.value ?? 0);
+        for (const r of bucket.results ?? [])
+          sum += Number(r.amount?.value ?? 0);
         byDay.set(day, (byDay.get(day) ?? 0) + sum);
       }
       if (!body?.has_more || !body?.next_page) break;

@@ -933,15 +933,11 @@ def get_people(uid: str = Depends(get_uid_from_mcp_api_key)):
     return spec.handler(uid, {}, None)["people"]
 
 
-# ---------------------------------------------------------------------------
-# Screen activity — desktop Rewind (app, window title, OCR text)
-# ---------------------------------------------------------------------------
-
-
 @router.get(
     "/v1/mcp/screen-activity",
     tags=["mcp"],
     response_model=Union[List[McpScreenActivityRow], McpScreenActivitySummaryResponse],
+    deprecated=True,
 )
 def get_screen_activity(
     response: Response,
@@ -953,26 +949,10 @@ def get_screen_activity(
     cursor: Optional[str] = None,
     uid: str = Depends(get_uid_from_mcp_api_key),
 ):
-    logger.info(f"get_screen_activity {uid} summary={summary} app={app} limit={limit}")
-    limit = max(1, min(limit, 200))
-    try:
-        result = mcp_other_handlers.screen_activity_core(
-            uid,
-            start=start_date,
-            end=end_date,
-            app=app,
-            summary=summary,
-            group_by="none",
-            limit=limit,
-            cursor_token=cursor,
-            cursor_kind="rest_get_screen_activity",
-        )
-    except ToolExecutionError as e:
-        raise _http_error_from_tool_error(e)
-    _next_cursor_header(response, result.get("next_cursor"))
+    logger.info(f"get_screen_activity {uid} summary={summary} app={app} limit={limit} (deprecated empty)")
     if summary:
-        return result
-    return result["screen_activity"]
+        return McpScreenActivitySummaryResponse()
+    return []
 
 
 # ---------------------------------------------------------------------------

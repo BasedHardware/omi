@@ -1,7 +1,7 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { verifyAdmin } from '@/lib/auth';
-import { getOptionalStripe } from '@/lib/stripe';
-import { getPayload, setPayload, withFreshness } from '@/lib/payload-cache';
+import { NextRequest, NextResponse } from "next/server";
+import { verifyAdmin } from "@/lib/auth";
+import { getOptionalStripe } from "@/lib/stripe";
+import { getPayload, setPayload, withFreshness } from "@/lib/payload-cache";
 import {
   AllSubscriptionSourcesFailedError,
   MRR_STATUSES,
@@ -11,8 +11,8 @@ import {
   groupByProduct,
   monthlyAmount,
   OMI_PLAN_PRODUCTS,
-} from '@/lib/stripe-subscriptions';
-export const dynamic = 'force-dynamic';
+} from "@/lib/stripe-subscriptions";
+export const dynamic = "force-dynamic";
 export const maxDuration = 3600;
 
 function cacheKey(): string {
@@ -36,9 +36,15 @@ export async function computeRevenue() {
     };
   }
 
-  const { subscriptions, partial } = await fetchOmiSubscriptions(stripe, MRR_STATUSES);
+  const { subscriptions, partial } = await fetchOmiSubscriptions(
+    stripe,
+    MRR_STATUSES
+  );
 
-  const mrr = subscriptions.reduce((sum, subscription) => sum + monthlyAmount(subscription), 0);
+  const mrr = subscriptions.reduce(
+    (sum, subscription) => sum + monthlyAmount(subscription),
+    0
+  );
 
   // Trials are pipeline, not revenue: reported alongside MRR, never inside it. A failure here
   // must not cost the MRR figure that already succeeded — but it stays null rather than 0, so a
@@ -50,7 +56,7 @@ export async function computeRevenue() {
     trialingSubscriptions = trials.subscriptions.length;
     trialPartial = trials.partial;
   } catch (error) {
-    console.error('Error fetching trialing subscriptions:', error);
+    console.error("Error fetching trialing subscriptions:", error);
     trialPartial = true;
   }
 
@@ -72,7 +78,9 @@ export async function GET(request: NextRequest) {
   try {
     const key = cacheKey();
 
-    const cached = await getPayload<Awaited<ReturnType<typeof computeRevenue>>>(key);
+    const cached = await getPayload<Awaited<ReturnType<typeof computeRevenue>>>(
+      key
+    );
     if (cached) {
       return NextResponse.json(withFreshness(cached.data, cached.freshAt));
     }
@@ -84,9 +92,9 @@ export async function GET(request: NextRequest) {
     if (error instanceof AllSubscriptionSourcesFailedError) {
       return NextResponse.json({ error: error.message }, { status: 502 });
     }
-    console.error('Error calculating revenue metrics:', error);
+    console.error("Error calculating revenue metrics:", error);
     return NextResponse.json(
-      { error: 'Failed to calculate revenue metrics' },
+      { error: "Failed to calculate revenue metrics" },
       { status: 500 }
     );
   }

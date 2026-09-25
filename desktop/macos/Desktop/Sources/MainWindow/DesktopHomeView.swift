@@ -588,7 +588,6 @@ struct DesktopHomeView: View {
     guard currentValue == 0 else { return }
     topBarNewSinceRaw = Date().timeIntervalSince1970
   }
-
   private var currentAppStateLabel: String {
     if authState.isRestoringAuth { return "restoring_auth" }
     if authState.sessionPhase == .recoveryRequired { return "auth_recovery" }

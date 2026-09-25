@@ -167,7 +167,7 @@ export function InlineVoiceRecorder({
   return (
     <div className="flex items-center gap-2">
       {/* Error message */}
-      {error && <span className="text-xs text-error whitespace-nowrap">{error}</span>}
+      {error && <span className="whitespace-nowrap text-xs text-error">{error}</span>}
 
       {/* Duration display when recording */}
       {state === 'recording' && (
@@ -175,12 +175,12 @@ export function InlineVoiceRecorder({
           {/* Pulsing red dot */}
           <div className="relative">
             <div
-              className="absolute inset-0 rounded-full bg-error/40 animate-ping"
+              className="absolute inset-0 animate-ping rounded-full bg-error/40"
               style={{ animationDuration: '1s' }}
             />
-            <div className="w-2 h-2 rounded-full bg-error" />
+            <div className="h-2 w-2 rounded-full bg-error" />
           </div>
-          <span className="text-sm text-text-secondary font-mono tabular-nums">
+          <span className="font-mono text-sm tabular-nums text-text-secondary">
             {formatDuration(duration)}
           </span>
         </div>
@@ -196,26 +196,26 @@ export function InlineVoiceRecorder({
         onClick={handleClick}
         disabled={disabled || state === 'transcribing'}
         className={cn(
-          'p-2 rounded-lg flex-shrink-0',
+          'flex-shrink-0 rounded-lg p-2',
           'transition-all duration-200',
           state === 'idle' &&
-            'text-text-tertiary hover:text-text-primary hover:bg-bg-tertiary',
-          state === 'recording' && 'text-white bg-error hover:bg-error/80 animate-pulse',
-          state === 'transcribing' && 'text-text-quaternary cursor-not-allowed',
-          'disabled:opacity-50 disabled:cursor-not-allowed',
+            'text-text-tertiary hover:bg-bg-tertiary hover:text-text-primary',
+          state === 'recording' && 'animate-pulse bg-error text-white hover:bg-error/80',
+          state === 'transcribing' && 'cursor-not-allowed text-text-quaternary',
+          'disabled:cursor-not-allowed disabled:opacity-50',
         )}
         title={
           state === 'idle'
             ? 'Click to start recording'
             : state === 'recording'
-              ? 'Click to stop and transcribe'
-              : 'Transcribing...'
+            ? 'Click to stop and transcribe'
+            : 'Transcribing...'
         }
       >
         {state === 'transcribing' ? (
-          <Loader2 className="w-5 h-5 animate-spin" />
+          <Loader2 className="h-5 w-5 animate-spin" />
         ) : (
-          <Mic className="w-5 h-5" />
+          <Mic className="h-5 w-5" />
         )}
       </button>
     </div>

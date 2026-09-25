@@ -33,8 +33,14 @@ extension SettingsContentView {
       // insightAssistantSubsection
       // advancedCategoryHeader(title: "Memory Assistant", icon: "brain.head.profile")
       // memoryAssistantSubsection
-      advancedCategoryHeader(title: "Analysis Throttle", icon: "clock.arrow.2.circlepath")
-      analysisThrottleSubsection
+      // The shared analysis throttle is frame-driven as well: while screen frames are not
+      // distributed to assistants (`assistantFrameProcessingEnabled` off) it changes nothing,
+      // so it renders only behind the same gate. Persisted `*AssistantEnabled` defaults are
+      // left untouched, so restoring frame processing restores each user's previous choice.
+      if ProactiveCapturePolicy.assistantFrameProcessingEnabled {
+        advancedCategoryHeader(title: "Analysis Throttle", icon: "clock.arrow.2.circlepath")
+        analysisThrottleSubsection
+      }
 
       DisclosureGroup(isExpanded: $advancedDetailsExpanded) {
         VStack(spacing: OmiSpacing.xxl) {

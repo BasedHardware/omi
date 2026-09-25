@@ -7,10 +7,9 @@ MCP_SERVER_INSTRUCTIONS = (
     "search results are compact cards; deep-read the few hit ids that need transcripts in one "
     "`get_conversations_by_ids` call rather than repeated `get_conversation_by_id` calls. `get_memories` and "
     "`search_memories` contain durable facts about the user, not recent conversation history. Use "
-    "`get_user_profile` for broad orientation, `get_people` for relationship context, `get_action_items` for "
-    "commitments, and `get_screen_activity` for synced screen history — prefer `group_by` buckets there "
-    "before paging raw rows with cursor. When saving several facts at once, use `create_memories` instead of "
-    "repeated `create_memory` calls. "
+    "`get_user_profile` for broad orientation, `get_people` for relationship context, and `get_action_items` for "
+    "commitments. Screen activity is local to the user's computer and is not available through hosted MCP tools. "
+    "When saving several facts at once, use `create_memories` instead of repeated `create_memory` calls. "
     "Treat semantic search results as leads and confirm important claims against returned source records. "
     "Only create, edit, complete, or delete data when the user clearly asked for that change."
 )

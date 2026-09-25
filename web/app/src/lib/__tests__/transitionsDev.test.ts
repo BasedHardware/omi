@@ -1,5 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { prefersReducedMotion, readDurationToken, replayErrorShake } from '@/lib/transitionsDev';
+import {
+  prefersReducedMotion,
+  readDurationToken,
+  replayErrorShake,
+} from '@/lib/transitionsDev';
 
 describe('transitionsDev helpers', () => {
   beforeEach(() => {

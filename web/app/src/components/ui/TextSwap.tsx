@@ -4,13 +4,7 @@ import { useEffect, useLayoutEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 import { prefersReducedMotion, readDurationToken } from '@/lib/transitionsDev';
 
-export function TextSwap({
-  text,
-  className,
-}: {
-  text: string;
-  className?: string;
-}) {
+export function TextSwap({ text, className }: { text: string; className?: string }) {
   const [display, setDisplay] = useState(text);
   const [phase, setPhase] = useState<'idle' | 'exit' | 'enter-start'>('idle');
 

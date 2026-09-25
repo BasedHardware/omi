@@ -74,14 +74,14 @@ export function CaseStatusView({
 }) {
   if (!status) {
     return (
-      <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-6">
-        <div className="max-w-md w-full text-center">
-          <h1 className="text-lg font-semibold text-white mb-2">Case Not Found</h1>
-          <p className="text-sm text-zinc-400 mb-1">
+      <div className="flex min-h-screen items-center justify-center bg-zinc-950 p-6">
+        <div className="w-full max-w-md text-center">
+          <h1 className="mb-2 text-lg font-semibold text-white">Case Not Found</h1>
+          <p className="mb-1 text-sm text-zinc-400">
             No case found for reference{' '}
             <span className="font-mono text-zinc-300">{caseRef}</span>
           </p>
-          <p className="text-xs text-zinc-500 mt-4">
+          <p className="mt-4 text-xs text-zinc-500">
             If you believe this is an error, contact{' '}
             <a
               href={`mailto:${SUPPORT_EMAIL}`}
@@ -100,12 +100,12 @@ export function CaseStatusView({
   const email = status.support_email || SUPPORT_EMAIL;
 
   return (
-    <div className="min-h-screen bg-zinc-950 flex items-center justify-center p-6">
-      <div className="max-w-md w-full space-y-5">
+    <div className="flex min-h-screen items-center justify-center bg-zinc-950 p-6">
+      <div className="w-full max-w-md space-y-5">
         {/* Header */}
         <div className="text-center">
           <h1 className="text-lg font-semibold text-white">Case Status</h1>
-          <p className="text-xs text-zinc-500 font-mono mt-1">{status.case_ref}</p>
+          <p className="mt-1 font-mono text-xs text-zinc-500">{status.case_ref}</p>
         </div>
 
         {/* Status */}
@@ -118,22 +118,22 @@ export function CaseStatusView({
         >
           {/* Stage */}
           <div
-            className={cn('flex items-center gap-2.5 px-3 py-2 rounded-xl mb-4', meta.bg)}
+            className={cn('mb-4 flex items-center gap-2.5 rounded-xl px-3 py-2', meta.bg)}
           >
-            <div className={cn('w-2 h-2 rounded-full', meta.dot)} />
+            <div className={cn('h-2 w-2 rounded-full', meta.dot)} />
             <span className={cn('text-sm font-medium', meta.text)}>{meta.label}</span>
           </div>
 
           {/* Details */}
           <div className="space-y-3">
-            <div className="flex justify-between items-center">
+            <div className="flex items-center justify-between">
               <span className="text-xs text-zinc-500">Created</span>
               <span className="text-sm text-zinc-300">
                 {formatDate(status.created_at)}
               </span>
             </div>
             <div className="h-px bg-zinc-800" />
-            <div className="flex justify-between items-center">
+            <div className="flex items-center justify-between">
               <span className="text-xs text-zinc-500">Last Updated</span>
               <span className="text-sm text-zinc-300">
                 {formatDate(status.updated_at)}
@@ -144,8 +144,8 @@ export function CaseStatusView({
           {/* Message */}
           {status.message && (
             <>
-              <div className="h-px bg-zinc-800 my-3" />
-              <p className="text-sm text-zinc-400 leading-relaxed">{status.message}</p>
+              <div className="my-3 h-px bg-zinc-800" />
+              <p className="text-sm leading-relaxed text-zinc-400">{status.message}</p>
             </>
           )}
         </div>
@@ -153,7 +153,7 @@ export function CaseStatusView({
         {/* Support note */}
         {updatedDays >= 3 && (
           <div className="rounded-xl bg-zinc-900/50 px-4 py-3">
-            <p className="text-xs text-zinc-400 leading-relaxed">
+            <p className="text-xs leading-relaxed text-zinc-400">
               This case hasn&apos;t been updated in {updatedDays} days. If you need
               assistance, please contact{' '}
               <a

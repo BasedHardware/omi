@@ -29,8 +29,8 @@ import SpriteText from 'three-spritetext';
 const ForceGraph3D = dynamic(() => import('react-force-graph-3d'), {
   ssr: false,
   loading: () => (
-    <div className="flex items-center justify-center h-full">
-      <Loader2 className="w-8 h-8 text-white animate-spin" />
+    <div className="flex h-full items-center justify-center">
+      <Loader2 className="h-8 w-8 animate-spin text-white" />
     </div>
   ),
 });
@@ -305,14 +305,14 @@ export function KnowledgeGraph({ onNodeSelect }: KnowledgeGraphProps) {
   // Empty state
   if (!loading && (!graphData || graphData.nodes.length <= 1)) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-center p-8">
-        <div className="w-20 h-20 rounded-full bg-bg-tertiary flex items-center justify-center mb-4">
-          <Network className="w-10 h-10 text-text-quaternary" />
+      <div className="flex h-full flex-col items-center justify-center p-8 text-center">
+        <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-bg-tertiary">
+          <Network className="h-10 w-10 text-text-quaternary" />
         </div>
-        <h3 className="text-lg font-medium text-text-primary mb-2">
+        <h3 className="mb-2 text-lg font-medium text-text-primary">
           Knowledge graph is empty
         </h3>
-        <p className="text-sm text-text-tertiary max-w-sm mb-4">
+        <p className="mb-4 max-w-sm text-sm text-text-tertiary">
           Add more memories to build your personal knowledge network.
         </p>
       </div>
@@ -322,7 +322,7 @@ export function KnowledgeGraph({ onNodeSelect }: KnowledgeGraphProps) {
   return (
     <div
       ref={containerRef}
-      className="relative w-full h-full bg-bg-primary overflow-hidden"
+      className="relative h-full w-full overflow-hidden bg-bg-primary"
     >
       {/* Graph */}
       {graphData && (
@@ -353,17 +353,17 @@ export function KnowledgeGraph({ onNodeSelect }: KnowledgeGraphProps) {
       )}
 
       {/* Search bar - top left */}
-      <div className="absolute top-4 left-4 w-64">
+      <div className="absolute left-4 top-4 w-64">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-quaternary" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-quaternary" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => handleSearch(e.target.value)}
             placeholder="Search nodes..."
             className={cn(
-              'w-full pl-9 pr-8 py-2 rounded-lg',
-              'bg-bg-tertiary/80 backdrop-blur-sm border border-bg-quaternary',
+              'w-full rounded-lg py-2 pl-9 pr-8',
+              'border border-bg-quaternary bg-bg-tertiary/80 backdrop-blur-sm',
               'text-sm text-text-primary',
               'focus:outline-none focus:ring-2 focus:ring-white/50',
               'placeholder:text-text-quaternary',
@@ -372,9 +372,9 @@ export function KnowledgeGraph({ onNodeSelect }: KnowledgeGraphProps) {
           {searchQuery && (
             <button
               onClick={() => handleSearch('')}
-              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-text-quaternary hover:text-text-primary"
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-text-quaternary hover:text-text-primary"
             >
-              <X className="w-3 h-3" />
+              <X className="h-3 w-3" />
             </button>
           )}
         </div>
@@ -386,20 +386,20 @@ export function KnowledgeGraph({ onNodeSelect }: KnowledgeGraphProps) {
       </div>
 
       {/* Controls - top right */}
-      <div className="absolute top-4 right-4 flex items-center gap-2">
+      <div className="absolute right-4 top-4 flex items-center gap-2">
         {/* Labels toggle */}
         <button
           onClick={() => setShowAllLabels(!showAllLabels)}
           className={cn(
-            'flex items-center gap-2 px-3 py-2 rounded-lg',
-            'backdrop-blur-sm border transition-colors',
+            'flex items-center gap-2 rounded-lg px-3 py-2',
+            'border backdrop-blur-sm transition-colors',
             showAllLabels
-              ? 'bg-white/20 border-white/50 text-white'
-              : 'bg-bg-tertiary/80 border-bg-quaternary text-text-secondary hover:text-text-primary',
+              ? 'border-white/50 bg-white/20 text-white'
+              : 'border-bg-quaternary bg-bg-tertiary/80 text-text-secondary hover:text-text-primary',
           )}
           title={showAllLabels ? 'Hide labels' : 'Show all labels'}
         >
-          <Tag className="w-4 h-4" />
+          <Tag className="h-4 w-4" />
           <span className="text-sm">Labels</span>
         </button>
 
@@ -407,60 +407,59 @@ export function KnowledgeGraph({ onNodeSelect }: KnowledgeGraphProps) {
         <button
           onClick={resetView}
           className={cn(
-            'flex items-center gap-2 px-3 py-2 rounded-lg',
-            'bg-bg-tertiary/80 backdrop-blur-sm border border-bg-quaternary',
+            'flex items-center gap-2 rounded-lg px-3 py-2',
+            'border border-bg-quaternary bg-bg-tertiary/80 backdrop-blur-sm',
             'text-text-secondary hover:text-text-primary',
             'transition-colors',
           )}
           title="Reset view"
         >
-          <RotateCcw className="w-4 h-4" />
+          <RotateCcw className="h-4 w-4" />
           <span className="text-sm">Reset</span>
         </button>
-
       </div>
 
       {/* Zoom controls - right side */}
-      <div className="absolute right-4 top-1/2 -translate-y-1/2 flex flex-col gap-2">
+      <div className="absolute right-4 top-1/2 flex -translate-y-1/2 flex-col gap-2">
         <button
           onClick={zoomIn}
           className={cn(
-            'p-2 rounded-lg',
-            'bg-bg-tertiary/80 backdrop-blur-sm border border-bg-quaternary',
+            'rounded-lg p-2',
+            'border border-bg-quaternary bg-bg-tertiary/80 backdrop-blur-sm',
             'text-text-secondary hover:text-text-primary',
             'transition-colors',
           )}
           title="Zoom in"
         >
-          <ZoomIn className="w-5 h-5" />
+          <ZoomIn className="h-5 w-5" />
         </button>
         <button
           onClick={zoomOut}
           className={cn(
-            'p-2 rounded-lg',
-            'bg-bg-tertiary/80 backdrop-blur-sm border border-bg-quaternary',
+            'rounded-lg p-2',
+            'border border-bg-quaternary bg-bg-tertiary/80 backdrop-blur-sm',
             'text-text-secondary hover:text-text-primary',
             'transition-colors',
           )}
           title="Zoom out"
         >
-          <ZoomOut className="w-5 h-5" />
+          <ZoomOut className="h-5 w-5" />
         </button>
       </div>
 
       {/* Legend */}
-      <div className="absolute bottom-4 left-4 p-3 rounded-lg bg-bg-tertiary/80 backdrop-blur-sm border border-bg-quaternary">
-        <p className="text-xs text-text-quaternary mb-2">Node Types</p>
+      <div className="absolute bottom-4 left-4 rounded-lg border border-bg-quaternary bg-bg-tertiary/80 p-3 backdrop-blur-sm">
+        <p className="mb-2 text-xs text-text-quaternary">Node Types</p>
         <div className="grid grid-cols-2 gap-x-4 gap-y-1">
           {(
             Object.entries(NODE_COLORS) as [KnowledgeGraphNodeType | 'user', string][]
           ).map(([type, color]) => (
             <div key={type} className="flex items-center gap-2">
               <div
-                className="w-2.5 h-2.5 rounded-full"
+                className="h-2.5 w-2.5 rounded-full"
                 style={{ backgroundColor: color }}
               />
-              <span className="text-xs text-text-tertiary capitalize">
+              <span className="text-xs capitalize text-text-tertiary">
                 {type === 'user' ? 'You' : type}
               </span>
             </div>
@@ -482,40 +481,40 @@ export function KnowledgeGraph({ onNodeSelect }: KnowledgeGraphProps) {
             exit={{ opacity: 0, y: 20 }}
             className={cn(
               'absolute bottom-20 left-4 right-4 max-w-md',
-              'p-4 rounded-xl',
-              'bg-bg-tertiary/90 backdrop-blur-md border border-bg-quaternary',
+              'rounded-xl p-4',
+              'border border-bg-quaternary bg-bg-tertiary/90 backdrop-blur-md',
               'shadow-strong',
             )}
           >
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-3">
                 <div
-                  className="w-4 h-4 rounded-full flex-shrink-0"
+                  className="h-4 w-4 flex-shrink-0 rounded-full"
                   style={{ backgroundColor: selectedNode.color }}
                 />
                 <div>
                   <h4 className="font-medium text-text-primary">{selectedNode.label}</h4>
-                  <p className="text-xs text-text-quaternary capitalize">
+                  <p className="text-xs capitalize text-text-quaternary">
                     {selectedNode.nodeType}
                   </p>
                 </div>
               </div>
               <button
                 onClick={() => selectNode(null)}
-                className="p-1 rounded-md text-text-tertiary hover:text-text-primary hover:bg-bg-quaternary transition-colors"
+                className="rounded-md p-1 text-text-tertiary transition-colors hover:bg-bg-quaternary hover:text-text-primary"
               >
-                <X className="w-4 h-4" />
+                <X className="h-4 w-4" />
               </button>
             </div>
 
             {selectedNode.aliases.length > 0 && (
               <div className="mt-2">
-                <p className="text-xs text-text-quaternary mb-1">Also known as:</p>
+                <p className="mb-1 text-xs text-text-quaternary">Also known as:</p>
                 <div className="flex flex-wrap gap-1">
                   {selectedNode.aliases.map((alias, i) => (
                     <span
                       key={i}
-                      className="px-2 py-0.5 rounded text-xs bg-bg-quaternary text-text-tertiary"
+                      className="rounded bg-bg-quaternary px-2 py-0.5 text-xs text-text-tertiary"
                     >
                       {alias}
                     </span>
@@ -524,7 +523,7 @@ export function KnowledgeGraph({ onNodeSelect }: KnowledgeGraphProps) {
               </div>
             )}
 
-            <div className="flex items-center justify-between mt-3 pt-3 border-t border-bg-quaternary">
+            <div className="mt-3 flex items-center justify-between border-t border-bg-quaternary pt-3">
               <span className="text-sm text-text-tertiary">
                 {selectedNode.memoryIds.length} related memories
               </span>
@@ -532,13 +531,13 @@ export function KnowledgeGraph({ onNodeSelect }: KnowledgeGraphProps) {
                 <button
                   onClick={() => onNodeSelect(selectedNode.id, selectedNode.memoryIds)}
                   className={cn(
-                    'flex items-center gap-1 px-2 py-1 rounded-md text-xs',
+                    'flex items-center gap-1 rounded-md px-2 py-1 text-xs',
                     'text-white hover:bg-white/10',
                     'transition-colors',
                   )}
                 >
                   View Memories
-                  <ExternalLink className="w-3 h-3" />
+                  <ExternalLink className="h-3 w-3" />
                 </button>
               )}
             </div>
@@ -549,13 +548,13 @@ export function KnowledgeGraph({ onNodeSelect }: KnowledgeGraphProps) {
       {/* Loading overlay */}
       {loading && (
         <div className="absolute inset-0 flex items-center justify-center bg-bg-primary/80">
-          <Loader2 className="w-8 h-8 text-white animate-spin" />
+          <Loader2 className="h-8 w-8 animate-spin text-white" />
         </div>
       )}
 
       {/* Error state */}
       {error && (
-        <div className="absolute top-4 left-4 right-4 p-3 rounded-lg bg-error/10 border border-error/30 text-error text-sm">
+        <div className="absolute left-4 right-4 top-4 rounded-lg border border-error/30 bg-error/10 p-3 text-sm text-error">
           {error}
         </div>
       )}

@@ -43,7 +43,7 @@ export type FirestoreActivationCompat = ActivationSeries & {
 };
 
 export function isPartialFirestoreActivation(
-  firestore: FirestoreActivationCompat,
+  firestore: FirestoreActivationCompat
 ): boolean {
   return (firestore.erroredUsers ?? 0) > 0 || firestore.partial === true;
 }
@@ -60,7 +60,7 @@ export type GrafanaActivationPayload = ActivationSeries & {
 };
 
 export function toGrafanaActivationPayload(
-  series: ActivationSeries & { erroredUsers?: number },
+  series: ActivationSeries & { erroredUsers?: number }
 ): GrafanaActivationPayload {
   return {
     ...series,
@@ -71,7 +71,7 @@ export function toGrafanaActivationPayload(
 
 export function applyFirestoreActivationCompat(
   viral: ViralMetricsPayload,
-  firestore: FirestoreActivationCompat | null,
+  firestore: FirestoreActivationCompat | null
 ): ViralMetricsPayload {
   if (!firestore) return viral;
   if (isPartialFirestoreActivation(firestore)) return viral;

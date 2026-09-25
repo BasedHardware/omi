@@ -19,10 +19,10 @@ def _capture(root, *, principal_id="allowed-user"):
     return SurfaceParityCapture.from_environ(
         principal_id=principal_id,
         session_id="surface-session",
-        surface="screen",
-        source="desktop_screen_activity_sync",
-        provider_lane="screen",
-        route_or_model="screen-activity-sync",
+        surface="memory_write",
+        source="memory_write",
+        provider_lane="memory",
+        route_or_model="memory-write",
         request={"row_count": 1},
         environ=_env(root),
     )
@@ -33,13 +33,13 @@ def test_surface_capture_persists_discriminators_and_redacts_text_payloads(tmp_p
 
     capture.observe(
         "client",
-        {"type": "screen_activity_rows", "email": "dogfood@example.com", "token": "do-not-keep"},
+        {"type": "memory_rows", "email": "dogfood@example.com", "token": "do-not-keep"},
     )
     capture.persist()
 
     cassette = json.loads(next((tmp_path / "cassettes").glob("*.json")).read_text())
-    assert cassette["surface"] == "screen"
-    assert cassette["source"] == "desktop_screen_activity_sync"
+    assert cassette["surface"] == "memory_write"
+    assert cassette["source"] == "memory_write"
     assert cassette["identity"]["anon_session"] != "allowed-user"
     assert cassette["events"][0]["payload"]["email"] == "[REDACTED_EMAIL]"
     assert cassette["events"][0]["payload"]["token"] == "[REDACTED]"
@@ -58,3 +58,22 @@ def test_surface_capture_preserves_binary_audio_encoding_and_denies_non_allowlis
     denied.observe("client", {"must": "not-persist"})
     denied.persist()
     assert not (tmp_path / "denied" / "cassettes").exists()
+
+
+def test_surface_capture_denies_screen_and_ocr_surfaces(tmp_path):
+    for surface in ("screen", "screen_activity", "ocr_text"):
+        capture = SurfaceParityCapture.from_environ(
+            principal_id="allowed-user",
+            session_id="surface-session",
+            surface=surface,
+            source=surface,
+            provider_lane="screen",
+            route_or_model=surface,
+            request={"value": "secret"},
+            environ=_env(tmp_path / surface),
+        )
+        assert not capture.enabled
+        capture.observe("client", {"type": "screen_activity_rows", "value": "secret"})
+        capture.persist()
+
+    assert not list(tmp_path.glob("**/cassettes/*.json"))

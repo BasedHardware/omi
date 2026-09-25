@@ -179,17 +179,17 @@ export function DateFilter({ selectedDate, onDateChange, className }: DateFilter
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
-          'flex items-center gap-2 px-3 py-2 rounded-lg flex-shrink-0 whitespace-nowrap',
+          'flex flex-shrink-0 items-center gap-2 whitespace-nowrap rounded-lg px-3 py-2',
           'text-sm font-medium transition-all duration-150',
           'border',
           isOpen
-            ? 'bg-bg-tertiary border-white/25 text-text-primary'
+            ? 'border-white/25 bg-bg-tertiary text-text-primary'
             : selectedDate
-              ? 'bg-white/[0.08] border-white/25 text-text-primary'
-              : 'bg-transparent border-transparent text-text-secondary hover:bg-bg-tertiary hover:text-text-primary',
+            ? 'border-white/25 bg-white/[0.08] text-text-primary'
+            : 'border-transparent bg-transparent text-text-secondary hover:bg-bg-tertiary hover:text-text-primary',
         )}
       >
-        <Calendar className="w-4 h-4" />
+        <Calendar className="h-4 w-4" />
         <span>{formatButtonLabel(selectedDate)}</span>
         {selectedDate && (
           <span
@@ -206,10 +206,10 @@ export function DateFilter({ selectedDate, onDateChange, className }: DateFilter
                 handleClear();
               }
             }}
-            className="p-0.5 rounded hover:bg-bg-quaternary cursor-pointer"
+            className="cursor-pointer rounded p-0.5 hover:bg-bg-quaternary"
             aria-label="Clear date filter"
           >
-            <X className="w-3 h-3" />
+            <X className="h-3 w-3" />
           </span>
         )}
       </button>
@@ -223,22 +223,22 @@ export function DateFilter({ selectedDate, onDateChange, className }: DateFilter
             exit={{ opacity: 0, scale: 0.95, y: -10 }}
             transition={{ duration: 0.15 }}
             className={cn(
-              'absolute top-full right-0 mt-2 z-50',
-              'w-72 p-3 rounded-xl',
-              'bg-bg-secondary border border-bg-tertiary',
+              'absolute right-0 top-full z-50 mt-2',
+              'w-72 rounded-xl p-3',
+              'border border-bg-tertiary bg-bg-secondary',
               'shadow-lg shadow-black/20',
             )}
           >
             {/* Quick filters */}
             <div className="mb-3">
-              <p className="text-xs text-text-quaternary mb-2">Quick filters</p>
+              <p className="mb-2 text-xs text-text-quaternary">Quick filters</p>
               <div className="flex flex-wrap gap-1.5">
                 {quickFilters.map((filter) => (
                   <button
                     key={filter.label}
                     onClick={() => handleQuickFilter(filter)}
                     className={cn(
-                      'px-2.5 py-1 rounded-md text-xs font-medium',
+                      'rounded-md px-2.5 py-1 text-xs font-medium',
                       'transition-colors',
                       selectedDate && isSameDay(selectedDate, filter.getDate())
                         ? 'bg-text-primary text-bg-primary'
@@ -252,30 +252,30 @@ export function DateFilter({ selectedDate, onDateChange, className }: DateFilter
             </div>
 
             {/* Calendar header */}
-            <div className="flex items-center justify-between mb-2">
+            <div className="mb-2 flex items-center justify-between">
               <button
                 onClick={handlePrevMonth}
-                className="p-1 rounded-md hover:bg-bg-tertiary text-text-secondary hover:text-text-primary transition-colors"
+                className="rounded-md p-1 text-text-secondary transition-colors hover:bg-bg-tertiary hover:text-text-primary"
                 aria-label="Previous month"
               >
-                <ChevronLeft className="w-4 h-4" />
+                <ChevronLeft className="h-4 w-4" />
               </button>
               <span className="text-sm font-medium text-text-primary">
                 {MONTHS[viewDate.getMonth()]} {viewDate.getFullYear()}
               </span>
               <button
                 onClick={handleNextMonth}
-                className="p-1 rounded-md hover:bg-bg-tertiary text-text-secondary hover:text-text-primary transition-colors"
+                className="rounded-md p-1 text-text-secondary transition-colors hover:bg-bg-tertiary hover:text-text-primary"
                 aria-label="Next month"
               >
-                <ChevronRight className="w-4 h-4" />
+                <ChevronRight className="h-4 w-4" />
               </button>
             </div>
 
             {/* Day names */}
-            <div className="grid grid-cols-7 gap-1 mb-1">
+            <div className="mb-1 grid grid-cols-7 gap-1">
               {DAYS.map((day) => (
-                <div key={day} className="text-center text-xs text-text-quaternary py-1">
+                <div key={day} className="py-1 text-center text-xs text-text-quaternary">
                   {day}
                 </div>
               ))}
@@ -295,7 +295,7 @@ export function DateFilter({ selectedDate, onDateChange, className }: DateFilter
                     onClick={() => !isFuture && handleDateSelect(date)}
                     disabled={isFuture}
                     className={cn(
-                      'w-8 h-8 rounded-md text-xs font-medium',
+                      'h-8 w-8 rounded-md text-xs font-medium',
                       'transition-all duration-100',
                       !isCurrentMonth && 'text-text-quaternary/50',
                       isCurrentMonth &&
@@ -303,7 +303,7 @@ export function DateFilter({ selectedDate, onDateChange, className }: DateFilter
                         'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary',
                       isSelected && 'bg-text-primary text-bg-primary',
                       isTodayDate && !isSelected && 'ring-1 ring-white/25',
-                      isFuture && 'opacity-30 cursor-not-allowed',
+                      isFuture && 'cursor-not-allowed opacity-30',
                     )}
                   >
                     {date.getDate()}
@@ -317,9 +317,9 @@ export function DateFilter({ selectedDate, onDateChange, className }: DateFilter
               <button
                 onClick={handleClear}
                 className={cn(
-                  'w-full mt-3 py-2 rounded-lg text-sm font-medium',
+                  'mt-3 w-full rounded-lg py-2 text-sm font-medium',
                   'text-text-secondary hover:text-text-primary',
-                  'hover:bg-bg-tertiary transition-colors',
+                  'transition-colors hover:bg-bg-tertiary',
                 )}
               >
                 Clear filter

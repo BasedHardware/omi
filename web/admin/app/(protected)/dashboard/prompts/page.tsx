@@ -56,7 +56,7 @@ const TYPE_LABELS: Record<string, string> = {
 
 function summarizeAnswers(
   type: string,
-  answers: Record<string, number>,
+  answers: Record<string, number>
 ): string {
   const entries = Object.entries(answers);
   if (entries.length === 0) return "—";
@@ -157,14 +157,14 @@ export default function PromptsPage() {
     // and roll back on failure so the UI never claims a state change that
     // did not reach Firestore.
     setPrompts((current) =>
-      current.map((p) => (p.id === prompt.id ? { ...p, active } : p)),
+      current.map((p) => (p.id === prompt.id ? { ...p, active } : p))
     );
     const result = await patchPromptActive(fetchWithAuth, prompt.id, active);
     if (!result.ok) {
       setPrompts((current) =>
         current.map((p) =>
-          p.id === prompt.id ? { ...p, active: prompt.active } : p,
-        ),
+          p.id === prompt.id ? { ...p, active: prompt.active } : p
+        )
       );
       setError(result.error ?? "toggle failed");
     }
@@ -179,7 +179,7 @@ export default function PromptsPage() {
   }
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="max-w-4xl space-y-6">
       <div>
         <h1 className="text-2xl font-semibold">Desktop prompts</h1>
         <p className="text-sm text-muted-foreground">
@@ -303,7 +303,7 @@ export default function PromptsPage() {
               <CardContent className="flex items-center justify-between gap-4 py-4">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
-                    <span className="font-medium truncate">
+                    <span className="truncate font-medium">
                       {prompt.question}
                     </span>
                     <Badge variant="outline">
@@ -320,13 +320,18 @@ export default function PromptsPage() {
                       </Badge>
                     )}
                   </div>
-                  <p className="text-sm text-muted-foreground mt-1">
+                  <p className="mt-1 text-sm text-muted-foreground">
                     {tally
-                      ? `${tally.shown} shown · ${tally.answered} answered · ${tally.dismissed} dismissed · ${summarizeAnswers(prompt.type, tally.answers)}`
+                      ? `${tally.shown} shown · ${tally.answered} answered · ${
+                          tally.dismissed
+                        } dismissed · ${summarizeAnswers(
+                          prompt.type,
+                          tally.answers
+                        )}`
                       : "no responses yet"}
                   </p>
                 </div>
-                <div className="flex items-center gap-3 shrink-0">
+                <div className="flex shrink-0 items-center gap-3">
                   <Switch
                     checked={prompt.active}
                     onCheckedChange={(active) => void setActive(prompt, active)}

@@ -25,7 +25,7 @@ export function AppGridSection({
 
   return (
     <section>
-      <div className="flex items-center justify-between mb-4">
+      <div className="mb-4 flex items-center justify-between">
         <h2 className="text-lg font-semibold text-text-primary">{title}</h2>
         {showViewAll && capabilityId && (
           <Link
@@ -36,12 +36,12 @@ export function AppGridSection({
             )}
           >
             View all ({totalCount})
-            <ChevronRight className="w-4 h-4" />
+            <ChevronRight className="h-4 w-4" />
           </Link>
         )}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {apps.map((app) => (
           <AppCard key={app.id} app={app} onUpdate={onUpdate} />
         ))}

@@ -36,11 +36,11 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat]),
       summary: "Identify the documents, URLs, and files the user was recently working in.",
       bullets: [
-      "Call this before semantic_search or execute_sql for \"where was that doc\", \"what was I doing in X\", and other recent-work questions.",
+      "Call this before execute_sql for \"where was that doc\", \"what was I doing in X\", and other recent-work questions.",
       "Returns visits[].handles and briefs[].handles — the durable address of each source. Open or read that source; do not describe a screenshot of it.",
       "Screenshot timeline and screenshot_id are fallback evidence: pass include_screen=true only when no handle answers the question.",
       "For the live screen use capture_screen; this tool is history, not current visual evidence.",
-      "Call get_work_context first for recent work/activity history and document, URL, page, or file location; do not start with semantic_search or execute_sql. It is not for direct current-screen questions.",
+      "Call get_work_context first for recent work/activity history and document, URL, page, or file location; do not start with execute_sql. It is not for direct current-screen questions.",
       "Read visits[].handles and briefs[].handles first: they name the actual document, URL, or file. Open or read that source rather than describing a screenshot of it.",
       "Make one call with the defaults before any broader screen discovery. screen_now and timeline are empty by default and are fallback evidence only.",
       "Pass include_screen=true solely when the handles cannot answer the question or the question is visual; it costs a video-frame decode.",
@@ -61,35 +61,9 @@ enum GeneratedToolCapabilities {
       "Raw screenshots.ocrText columns are refused. Use a bounded substr(ocrText, 1, 200) preview only for explicit low-level OCR inspection.",
       "Supports FTS5 MATCH queries for keyword search; see the schema footer for FTS tables and patterns.",
       "SELECT queries auto-limit to 200 rows. UPDATE/DELETE require WHERE. DROP/ALTER/CREATE are blocked.",
-      "Prefer semantic_search for fuzzy screen-content questions after get_work_context cannot identify the source, and backend task tools for creating/updating tasks.",
       "Use execute_sql for quantitative queries (counts, sums, date ranges, aggregations).",
       "For recent work/activity or document/page/file location, call get_work_context before execute_sql and do not select raw screenshots.ocrText.",
-      "Use context_visits(handlesJson) joined to context_buckets for work aggregates; use semantic_search only for fuzzy screen content after get_work_context cannot answer."
-    ]
-    ),
-    Capability(
-      toolName: "semantic_search",
-      title: "Semantic Search",
-      latency: .fastLocal,
-      surfaces: Set([.desktopChat]),
-      summary: "Vector similarity search on the user's screen history.",
-      bullets: [
-      "Use for fuzzy/conceptual questions about screen content after get_work_context cannot identify the document, URL, or file.",
-      "Examples: \"reading about machine learning\", \"working on design mockups\".",
-      "Parameters: query (required), days (default 7), app_filter (optional).",
-      "For recent work or document/page/file location, call get_work_context before semantic_search.",
-      "Use semantic_search instead of execute_sql only for fuzzy or conceptual screen-content questions that handles cannot answer."
-    ]
-    ),
-    Capability(
-      toolName: "search_screen_history",
-      title: "Search Screen History",
-      latency: .fastLocal,
-      surfaces: Set([.realtimeHub]),
-      summary: "Search the user's on-screen history by meaning.",
-      bullets: [
-      "Use for what the user saw, read, or worked on, including text they read on a page earlier (a riddle, a message, a document). Speak a short summary of the result.",
-      "Prefer this over conversation tools for anything that was displayed rather than spoken."
+      "Use context_visits(handlesJson) joined to context_buckets for work aggregates."
     ]
     ),
     Capability(
@@ -288,17 +262,6 @@ enum GeneratedToolCapabilities {
       bullets: [
       "Use when continuing a multi-turn conversation with an Omi-managed agent by sessionId.",
       "Creates a new run in the existing session."
-    ]
-    ),
-    Capability(
-      toolName: "spawn_background_agent",
-      title: "Spawn Background Agent",
-      latency: .asyncBackground,
-      surfaces: Set([]),
-      summary: "Internal Swift coordinator entrypoint for creating canonical floating-bar runs.",
-      bullets: [
-      "Swift coordinator entrypoint only; not advertised to agent-facing surfaces.",
-      "Swift coordinator entrypoint only."
     ]
     ),
     Capability(
@@ -879,7 +842,7 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.desktopChat]),
       summary: "Inspect one retrieved Rewind frame by screenshot_id for a just-in-time visual answer.",
       bullets: [
-      "Use only after search_screen_history returns the screenshot_id; never invent an id.",
+      "Use only with a screenshot_id returned by another screen-history tool; never invent an id.",
       "This is one-frame inspection, not a continuous vision lane. Local API only."
     ]
     )
@@ -894,6 +857,6 @@ enum GeneratedToolCapabilities {
   }
 
   static var realtimeToolNames: [String] {
-    ["cancel_agent_run","check_permission_status","create_action_item","create_calendar_event","create_context_reminder","get_action_items","get_agent_run","get_conversations","get_daily_recap","get_memories","get_tasks","inspect_agent_artifacts","list_agent_sessions","point_click","read_conversation_evidence","read_tool_output","record_interject_feedback","report_screen_observation","request_permission","screenshot","search_conversation_evidence","search_conversations","search_memories","search_screen_history","search_tool_output","set_desktop_attention_override","spawn_agent","think_deeper","update_action_item","update_agent_artifact_lifecycle","web_search"]
+    ["cancel_agent_run","check_permission_status","create_action_item","create_calendar_event","create_context_reminder","get_action_items","get_agent_run","get_conversations","get_daily_recap","get_memories","get_tasks","inspect_agent_artifacts","list_agent_sessions","point_click","read_conversation_evidence","read_tool_output","record_interject_feedback","report_screen_observation","request_permission","screenshot","search_conversation_evidence","search_conversations","search_memories","search_tool_output","set_desktop_attention_override","spawn_agent","think_deeper","update_action_item","update_agent_artifact_lifecycle","web_search"]
   }
 }

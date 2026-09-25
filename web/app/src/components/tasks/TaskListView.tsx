@@ -60,10 +60,10 @@ export function TaskListView({
   if (isEmpty && !searchQuery) {
     return (
       <div className="flex flex-col items-center justify-center py-16 text-center">
-        <div className="w-16 h-16 mb-4 rounded-full bg-bg-tertiary flex items-center justify-center">
+        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-bg-tertiary">
           <span className="text-2xl">✓</span>
         </div>
-        <h3 className="text-lg font-medium text-text-primary mb-2">All caught up!</h3>
+        <h3 className="mb-2 text-lg font-medium text-text-primary">All caught up!</h3>
         <p className="text-sm text-text-tertiary">
           No tasks to show. Add a new task to get started.
         </p>
@@ -84,7 +84,7 @@ export function TaskListView({
   return (
     <div className="flex flex-col">
       {/* Pending tasks - flat list */}
-      <div className="border border-bg-tertiary rounded-lg">
+      <div className="rounded-lg border border-bg-tertiary">
         <AnimatePresence mode="popLayout">
           {filteredPending.map((task, index) => (
             <TaskRow
@@ -104,7 +104,7 @@ export function TaskListView({
         </AnimatePresence>
 
         {filteredPending.length === 0 && (
-          <div className="px-4 py-8 text-center text-text-tertiary text-sm">
+          <div className="px-4 py-8 text-center text-sm text-text-tertiary">
             No pending tasks
           </div>
         )}
@@ -116,15 +116,15 @@ export function TaskListView({
           <button
             onClick={onToggleShowCompleted}
             className={cn(
-              'flex items-center gap-2 px-3 py-2 w-full',
+              'flex w-full items-center gap-2 px-3 py-2',
               'text-sm text-text-tertiary hover:text-text-secondary',
-              'transition-colors rounded-lg hover:bg-bg-tertiary/50',
+              'rounded-lg transition-colors hover:bg-bg-tertiary/50',
             )}
           >
             {showCompleted ? (
-              <ChevronUp className="w-4 h-4" />
+              <ChevronUp className="h-4 w-4" />
             ) : (
-              <ChevronDown className="w-4 h-4" />
+              <ChevronDown className="h-4 w-4" />
             )}
             <span>
               {showCompleted ? 'Hide' : 'Show'} {filteredCompleted.length} completed task
@@ -141,7 +141,7 @@ export function TaskListView({
                 transition={{ duration: 0.2 }}
                 className="overflow-hidden"
               >
-                <div className="border border-bg-tertiary rounded-lg overflow-hidden mt-2">
+                <div className="mt-2 overflow-hidden rounded-lg border border-bg-tertiary">
                   {filteredCompleted.map((task, index) => (
                     <TaskRow
                       key={task.id}

@@ -13846,63 +13846,6 @@
         "title": "FrameRequestCleanupState",
         "type": "string"
       },
-      "FrameRequestDelivery": {
-        "additionalProperties": false,
-        "description": "Metadata-only queue item delivered to the owning desktop device.",
-        "properties": {
-          "account_generation": {
-            "title": "Account Generation",
-            "type": "integer"
-          },
-          "conversation_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Conversation Id"
-          },
-          "device_id": {
-            "title": "Device Id",
-            "type": "string"
-          },
-          "expires_at": {
-            "title": "Expires At",
-            "type": "string"
-          },
-          "request_id": {
-            "title": "Request Id",
-            "type": "string"
-          },
-          "screenshot_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Screenshot Id"
-          },
-          "state": {
-            "title": "State",
-            "type": "string"
-          }
-        },
-        "required": [
-          "request_id",
-          "device_id",
-          "account_generation",
-          "state",
-          "expires_at"
-        ],
-        "title": "FrameRequestDelivery",
-        "type": "object"
-      },
       "FrameRequestEnvelope": {
         "additionalProperties": false,
         "properties": {
@@ -23088,11 +23031,6 @@
             "title": "Appname",
             "type": "string"
           },
-          "captureEligible": {
-            "default": false,
-            "title": "Captureeligible",
-            "type": "boolean"
-          },
           "clientDeviceId": {
             "anyOf": [
               {
@@ -23188,25 +23126,6 @@
       },
       "ScreenActivitySyncRequest": {
         "properties": {
-          "account_generation": {
-            "default": 0,
-            "minimum": 0.0,
-            "title": "Account Generation",
-            "type": "integer"
-          },
-          "deviceRetentionSeconds": {
-            "anyOf": [
-              {
-                "maximum": 518400.0,
-                "minimum": 1.0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Deviceretentionseconds"
-          },
           "rows": {
             "items": {
               "$ref": "#/components/schemas/ScreenActivityRow"
@@ -23219,40 +23138,6 @@
           "rows"
         ],
         "title": "ScreenActivitySyncRequest",
-        "type": "object"
-      },
-      "ScreenActivitySyncResponse": {
-        "additionalProperties": false,
-        "description": "Additive sync response; old clients decode the two required fields.",
-        "properties": {
-          "frame_requests": {
-            "anyOf": [
-              {
-                "items": {
-                  "$ref": "#/components/schemas/FrameRequestDelivery"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Frame Requests"
-          },
-          "last_id": {
-            "title": "Last Id",
-            "type": "integer"
-          },
-          "synced": {
-            "title": "Synced",
-            "type": "integer"
-          }
-        },
-        "required": [
-          "synced",
-          "last_id"
-        ],
-        "title": "ScreenActivitySyncResponse",
         "type": "object"
       },
       "ScreenFrameAdjudicationRequest": {
@@ -53517,6 +53402,7 @@
     },
     "/v1/mcp/screen-activity": {
       "get": {
+        "deprecated": true,
         "operationId": "get_screen_activity_v1_mcp_screen_activity_get",
         "parameters": [
           {
@@ -55701,7 +55587,8 @@
     },
     "/v1/screen-activity/sync": {
       "post": {
-        "operationId": "sync_screen_activity_v1_screen_activity_sync_post",
+        "description": "Tombstone for the retired screen-activity sync route. Stores nothing, ever.\n\nLIFECYCLE: one-time\nDELETE-AFTER: https://github.com/BasedHardware/omi/issues/11018\n\nThe shipped desktop client treats only HTTP 200 as success and never\nadvances its cursor otherwise. It has no terminal-status handling, no\nmax-attempt limit, and no server-driven kill switch, so a 404/410 makes it\nre-POST the *same* OCR batch every five minutes forever: more transmitted\nscreen text and more battery burn than before the change, on installs that\ncannot be updated. Returning 200 with the released response shape lets\nthose clients advance past their backlog and go quiet.\n\n`request` is accepted only so a released app-client contract keeps its body\nand response schema (FastAPI still validates both, which lets an\nun-updated client drain); the body is then discarded and never read,\nparsed, logged, or written: no Firestore document, no Pinecone vector, no\nlog line derived from the payload. Nothing is stored, so the response's\nreleased `0 synced` counts are always zero. This endpoint is a drain, not\na sink.\n\nThis does not fully close the egress — the un-updated client that transmits\nthe OCR payload is still answered. Only a client that stops uploading does\nthat, which is why this is temporary and paired with a client change.",
+        "operationId": "retire_screen_activity_sync_v1_screen_activity_sync_post",
         "parameters": [
           {
             "in": "header",
@@ -55755,7 +55642,11 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ScreenActivitySyncResponse"
+                  "additionalProperties": {
+                    "type": "integer"
+                  },
+                  "title": "Response Retire Screen Activity Sync V1 Screen Activity Sync Post",
+                  "type": "object"
                 }
               }
             },
@@ -55780,7 +55671,7 @@
             "firebaseBearer": []
           }
         ],
-        "summary": "Sync Screen Activity"
+        "summary": "Retire Screen Activity Sync"
       }
     },
     "/v1/screen-frame-egress/adjudications": {

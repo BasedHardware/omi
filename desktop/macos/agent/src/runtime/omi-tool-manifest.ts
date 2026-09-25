@@ -386,38 +386,8 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
         "Raw screenshots.ocrText columns are refused. Use a bounded substr(ocrText, 1, 200) preview only for explicit low-level OCR inspection.",
         "Supports FTS5 MATCH queries for keyword search; see the schema footer for FTS tables and patterns.",
         "SELECT queries auto-limit to 200 rows. UPDATE/DELETE require WHERE. DROP/ALTER/CREATE are blocked.",
-        "Prefer semantic_search for fuzzy screen-content questions after get_work_context cannot identify the source, and backend task tools for creating/updating tasks.",
       ],
     ),
-  },
-  semantic_search: {
-    surfaces: ["desktop_chat"],
-    capabilityDoc: doc(
-      "Semantic Search",
-      "Vector similarity search on the user's screen history.",
-      [
-        "Use for fuzzy/conceptual questions about screen content after get_work_context cannot identify the document, URL, or file.",
-        "Examples: \"reading about machine learning\", \"working on design mockups\".",
-        "Parameters: query (required), days (default 7), app_filter (optional).",
-      ],
-    ),
-    aliasCapabilityDocs: {
-      search_screen_history: {
-        ...doc(
-          "Search Screen History",
-          "Search the user's on-screen history by meaning.",
-          [
-            "Use for what the user saw, read, or worked on, including text they read on a page earlier (a riddle, a message, a document). Speak a short summary of the result.",
-            "Prefer this over conversation tools for anything that was displayed rather than spoken.",
-          ],
-        ),
-        surfaces: ["realtime_voice"],
-      },
-    },
-    voice: {
-      realtimeDescription:
-        "Search the user's on-screen history — what they saw, read, or worked on — by meaning. Use for 'when was I looking at X', 'find where I read about Y', 'what was I doing in app Z', and for text they read on screen earlier ('the riddle on the first page', 'what did that message say'). Anything displayed rather than spoken lives here, not in conversations. Returns matching moments with the app, context, and an OCR text preview. Fast synchronous read. Speak the result.",
-    },
   },
   read_conversation_evidence: {
     surfaces: ["desktop_chat", "realtime_voice"],
@@ -582,7 +552,7 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
     ),
     voice: {
       realtimeDescription:
-        "Search the user's past spoken conversations (meetings, calls, things said aloud) for what they discussed ('what did I say about X', 'what did we decide', 'summarize my last meeting'), or pass a canonical conversation UUID/share link for an exact lookup. Not for things the user read on screen; use search_screen_history for those. Returns titles + summaries only (no full transcripts). Fast synchronous read. Speak the result.",
+        "Search the user's past spoken conversations (meetings, calls, things said aloud) for what they discussed ('what did I say about X', 'what did we decide', 'summarize my last meeting'), or pass a canonical conversation UUID/share link for an exact lookup. Not for things the user read on screen. Returns titles + summaries only (no full transcripts). Fast synchronous read. Speak the result.",
     },
   },
   get_memories: {
@@ -883,7 +853,7 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
           "Look at Frame",
           "Inspect one retrieved Rewind frame by screenshot_id for a just-in-time visual answer.",
           [
-            "Use only after search_screen_history returns the screenshot_id; never invent an id.",
+            "Use only with a screenshot_id returned by another screen-history tool; never invent an id.",
             "This is one-frame inspection, not a continuous vision lane. Local API only.",
           ],
         ),
@@ -897,7 +867,7 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
       "Get Work Context",
       "Identify the documents, URLs, and files the user was recently working in.",
       [
-        "Call this before semantic_search or execute_sql for \"where was that doc\", \"what was I doing in X\", and other recent-work questions.",
+        "Call this before execute_sql for \"where was that doc\", \"what was I doing in X\", and other recent-work questions.",
         "Returns visits[].handles and briefs[].handles — the durable address of each source. Open or read that source; do not describe a screenshot of it.",
         "Screenshot timeline and screenshot_id are fallback evidence: pass include_screen=true only when no handle answers the question.",
         "For the live screen use capture_screen; this tool is history, not current visual evidence.",
@@ -1056,10 +1026,10 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     name: "get_work_context",
     label: "Get Work Context",
     description:
-      "Primary tool for recent-work questions and locating a document, URL, page, or file. Call get_work_context before semantic_search or execute_sql for requests such as 'what was I doing in X?' or 'where was that doc?'. It returns durable handles and is historical context, not current visual evidence.",
+      "Primary tool for recent-work questions and locating a document, URL, page, or file. Call get_work_context before execute_sql for requests such as 'what was I doing in X?' or 'where was that doc?'. It returns durable handles and is historical context, not current visual evidence.",
     promptSnippet: "get_work_context - Identify recent work by document/URL/file before screen-history search",
     promptGuidelines: [
-      "Call get_work_context first for recent work/activity history and document, URL, page, or file location; do not start with semantic_search or execute_sql. It is not for direct current-screen questions.",
+      "Call get_work_context first for recent work/activity history and document, URL, page, or file location; do not start with execute_sql. It is not for direct current-screen questions.",
       "Read visits[].handles and briefs[].handles first: they name the actual document, URL, or file. Open or read that source rather than describing a screenshot of it.",
       "Make one call with the defaults before any broader screen discovery. screen_now and timeline are empty by default and are fallback evidence only.",
       "Pass include_screen=true solely when the handles cannot answer the question or the question is visual; it costs a video-frame decode.",
@@ -1091,7 +1061,7 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     promptGuidelines: [
       "Use execute_sql for quantitative queries (counts, sums, date ranges, aggregations).",
       "For recent work/activity or document/page/file location, call get_work_context before execute_sql and do not select raw screenshots.ocrText.",
-      "Use context_visits(handlesJson) joined to context_buckets for work aggregates; use semantic_search only for fuzzy screen content after get_work_context cannot answer.",
+      "Use context_visits(handlesJson) joined to context_buckets for work aggregates.",
     ],
     latency: "fast local",
     inputSchema: schema(
@@ -1114,36 +1084,6 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     adapters: {
       ...piAndStdio(),
       "local-agent-api": { advertised: true },
-    },
-  },
-  {
-    name: "semantic_search",
-    label: "Semantic Search",
-    description:
-      "Vector similarity search on screen content. Use for fuzzy/conceptual content only after get_work_context cannot identify the document, URL, or file; get_work_context owns recent-work and location questions.",
-    promptSnippet: "semantic_search - Search screen history by meaning",
-    promptGuidelines: [
-      "For recent work or document/page/file location, call get_work_context before semantic_search.",
-      "Use semantic_search instead of execute_sql only for fuzzy or conceptual screen-content questions that handles cannot answer.",
-    ],
-    latency: "fast local",
-    inputSchema: schema(
-      {
-        query: { type: "string", description: "Natural language search query" },
-        days: { type: "number", description: "Days to search back (default 7)" },
-        app_filter: { type: "string", description: "Filter to a specific app" },
-      },
-      ["query"],
-    ),
-    annotations: readOnlyLocal,
-    timeoutClass: "normal",
-    executor: { kind: "swiftTool" },
-    aliases: ["search_screen_history"],
-    intendedForAgents: true,
-    runtimePreconditions: ["Requires local Rewind screen-history data."],
-    adapters: {
-      ...piAndStdio(),
-      "local-agent-api": { advertised: true, adapterName: "search_screen_history", aliases: ["semantic_search"] },
     },
   },
   {
@@ -2248,7 +2188,7 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     description: "Fetch a local Rewind screenshot image by screenshot_id.",
     promptSnippet: "get_screenshot - Fetch a local screenshot image",
     latency: "fast local",
-    inputSchema: schema({ screenshot_id: { type: "number", description: "Screenshot ID from search_screen_history or screenshots table" } }, ["screenshot_id"]),
+    inputSchema: schema({ screenshot_id: { type: "number", description: "Screenshot ID from the local screenshots table" } }, ["screenshot_id"]),
     annotations: readOnlyLocal,
     timeoutClass: "normal",
     executor: { kind: "localApiOnly" },
@@ -2423,9 +2363,9 @@ function controlEntry(tool: AgentControlManifestTool): OmiToolManifestEntry {
 }
 
 export const omiToolManifest: OmiToolManifestEntry[] = [
-  ...swiftToolManifest.slice(0, 5),
+  ...swiftToolManifest.slice(0, 4),
   ...agentControlCapabilityManifest.map(controlEntry),
-  ...swiftToolManifest.slice(5),
+  ...swiftToolManifest.slice(4),
 ] satisfies OmiToolManifestEntry[];
 
 /**
@@ -2550,7 +2490,7 @@ export const chatFirstToolManifest: OmiToolManifestEntry[] = [
     inputSchema: schema({
       screenshot_id: {
         type: "number",
-        description: "Screenshot ID returned by search_screen_history or the local screenshots table.",
+        description: "Screenshot ID from the local screenshots table.",
       },
     }, ["screenshot_id"]),
     annotations: localWrite,

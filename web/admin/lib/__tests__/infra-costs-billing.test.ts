@@ -57,16 +57,40 @@ const LEDGER_DAYS = [
   {
     date: "2026-08-20",
     totalUsd: 100,
-    byProvider: { openai: 20, anthropic: 60, gemini: 20, openrouter: 0, perplexity: 0 },
-    byClass: { desktop: 30, mobile: 0, sharedExtraction: 40, sharedChat: 20, unknown: 10 },
+    byProvider: {
+      openai: 20,
+      anthropic: 60,
+      gemini: 20,
+      openrouter: 0,
+      perplexity: 0,
+    },
+    byClass: {
+      desktop: 30,
+      mobile: 0,
+      sharedExtraction: 40,
+      sharedChat: 20,
+      unknown: 10,
+    },
     attemptCount: 500,
     byokIncluded: false,
   },
   {
     date: "2026-08-21",
     totalUsd: 200,
-    byProvider: { openai: 10, anthropic: 30, gemini: 160, openrouter: 0, perplexity: 0 },
-    byClass: { desktop: 100, mobile: 0, sharedExtraction: 100, sharedChat: 0, unknown: 0 },
+    byProvider: {
+      openai: 10,
+      anthropic: 30,
+      gemini: 160,
+      openrouter: 0,
+      perplexity: 0,
+    },
+    byClass: {
+      desktop: 100,
+      mobile: 0,
+      sharedExtraction: 100,
+      sharedChat: 0,
+      unknown: 0,
+    },
     attemptCount: 800,
     byokIncluded: false,
   },
@@ -97,7 +121,10 @@ describe("computeInfraCosts billing mode", () => {
     mockLedger.mockResolvedValue(LEDGER_DAYS);
     const { computeInfraCosts } = await loadRoute();
 
-    const payload = await computeInfraCosts({ days: 30, overheadMonthly: 57447 });
+    const payload = await computeInfraCosts({
+      days: 30,
+      overheadMonthly: 57447,
+    });
 
     expect(payload.summary.costSource).toBe("billing");
     expect(payload.summary.windowEnd).toBe("2026-08-21");
@@ -121,8 +148,14 @@ describe("computeInfraCosts billing mode", () => {
     expect(share0).toBeCloseTo(0.54693, 5);
     const d0 = payload.daily[0];
     expect(d0.date).toBe("2026-08-20");
-    expect(d0.desktop).toBeCloseTo(400 * share0 + 100 * 0.5464 + 600 * 0.4673, 2);
-    expect(d0.mobile).toBeCloseTo(400 * (1 - share0) + 100 * 0.4536 + 600 * 0.5327, 2);
+    expect(d0.desktop).toBeCloseTo(
+      400 * share0 + 100 * 0.5464 + 600 * 0.4673,
+      2
+    );
+    expect(d0.mobile).toBeCloseTo(
+      400 * (1 - share0) + 100 * 0.4536 + 600 * 0.5327,
+      2
+    );
     expect(d0.total).toBeCloseTo(d0.desktop + d0.mobile, 2);
     // Day 2: extraction pool = 500 + 50 (openai); no chat; other = 1500. A
     // different ledger mix -> a different measured share on the same window.
@@ -134,14 +167,29 @@ describe("computeInfraCosts billing mode", () => {
     // Window ledger rollup.
     expect(payload.summary.gatewayLedger).toEqual({
       windowUsd: 300,
-      byProvider: { openai: 30, anthropic: 90, gemini: 180, openrouter: 0, perplexity: 0 },
-      byClass: { desktop: 130, mobile: 0, sharedExtraction: 140, sharedChat: 20, unknown: 10 },
+      byProvider: {
+        openai: 30,
+        anthropic: 90,
+        gemini: 180,
+        openrouter: 0,
+        perplexity: 0,
+      },
+      byClass: {
+        desktop: 130,
+        mobile: 0,
+        sharedExtraction: 140,
+        sharedChat: 20,
+        unknown: 10,
+      },
       byokIncluded: false,
     });
 
     // Direct-path leak = invoiced - ledger, per provider, clamped at zero.
     // Anthropic: 100 invoiced - 90 in the ledger. OpenAI: 50 - 30.
-    expect(payload.summary.directPath).toEqual({ anthropicUsd: 10, openaiUsd: 20 });
+    expect(payload.summary.directPath).toEqual({
+      anthropicUsd: 10,
+      openaiUsd: 20,
+    });
 
     const services = payload.breakdown.map((r) => r.service);
     expect(services).toContain("Anthropic (billed)");
@@ -156,7 +204,10 @@ describe("computeInfraCosts billing mode", () => {
     mockLedger.mockResolvedValue(null);
     const { computeInfraCosts } = await loadRoute();
 
-    const payload = await computeInfraCosts({ days: 30, overheadMonthly: 57447 });
+    const payload = await computeInfraCosts({
+      days: 30,
+      overheadMonthly: 57447,
+    });
 
     expect(payload.summary.coverage?.gatewayLedger).toBe(false);
     expect(payload.summary.partial).toBe(true);
@@ -165,8 +216,14 @@ describe("computeInfraCosts billing mode", () => {
     expect(payload.summary.gatewayLedger).toBeUndefined();
 
     const d0 = payload.daily[0];
-    expect(d0.desktop).toBeCloseTo(400 * 0.2273 + 100 * 0.5464 + 600 * 0.4673, 2);
-    expect(d0.mobile).toBeCloseTo(400 * 0.7727 + 100 * 0.4536 + 600 * 0.5327, 2);
+    expect(d0.desktop).toBeCloseTo(
+      400 * 0.2273 + 100 * 0.5464 + 600 * 0.4673,
+      2
+    );
+    expect(d0.mobile).toBeCloseTo(
+      400 * 0.7727 + 100 * 0.4536 + 600 * 0.5327,
+      2
+    );
   });
 
   it("keeps static shares on days the ledger does not cover", async () => {
@@ -176,14 +233,20 @@ describe("computeInfraCosts billing mode", () => {
     mockLedger.mockResolvedValue([LEDGER_DAYS[0]]); // day 2 missing
     const { computeInfraCosts } = await loadRoute();
 
-    const payload = await computeInfraCosts({ days: 30, overheadMonthly: 57447 });
+    const payload = await computeInfraCosts({
+      days: 30,
+      overheadMonthly: 57447,
+    });
 
     expect(payload.summary.coverage?.gatewayLedger).toBe(true);
     expect(payload.daily[0].desktop).toBeCloseTo(
       400 * measuredDesktopShare(LEDGER_DAYS[0]) + 100 * 0.5464 + 600 * 0.4673,
-      2,
+      2
     );
-    expect(payload.daily[1].desktop).toBeCloseTo(550 * 0.2273 + 1500 * 0.4673, 2);
+    expect(payload.daily[1].desktop).toBeCloseTo(
+      550 * 0.2273 + 1500 * 0.4673,
+      2
+    );
   });
 
   it("treats a missing provider leg as partial coverage, never as $0-and-fine", async () => {
@@ -192,12 +255,17 @@ describe("computeInfraCosts billing mode", () => {
     mockOpenAi.mockResolvedValue(null);
     const { computeInfraCosts } = await loadRoute();
 
-    const payload = await computeInfraCosts({ days: 30, overheadMonthly: 57447 });
+    const payload = await computeInfraCosts({
+      days: 30,
+      overheadMonthly: 57447,
+    });
 
     expect(payload.summary.costSource).toBe("billing");
     expect(payload.summary.partial).toBe(true);
     expect(payload.summary.coverage?.anthropic).toBe(false);
-    expect(payload.breakdown.map((r) => r.service)).not.toContain("Anthropic (billed)");
+    expect(payload.breakdown.map((r) => r.service)).not.toContain(
+      "Anthropic (billed)"
+    );
   });
 
   it("falls back to the legacy estimated path when BigQuery is unavailable", async () => {
@@ -206,7 +274,10 @@ describe("computeInfraCosts billing mode", () => {
     mockOpenAi.mockResolvedValue(null);
     const { computeInfraCosts } = await loadRoute();
 
-    const payload = await computeInfraCosts({ days: 30, overheadMonthly: 57447 });
+    const payload = await computeInfraCosts({
+      days: 30,
+      overheadMonthly: 57447,
+    });
 
     expect(payload.summary.costSource).toBe("estimated");
     expect(payload.summary.coverage?.gcpBilling).toBe(false);
@@ -228,7 +299,10 @@ describe("computeInfraCosts billing mode", () => {
     mockOpenAi.mockResolvedValue([]);
     const { computeInfraCosts } = await loadRoute();
 
-    const payload = await computeInfraCosts({ days: 30, overheadMonthly: 57447 });
+    const payload = await computeInfraCosts({
+      days: 30,
+      overheadMonthly: 57447,
+    });
 
     expect(payload.summary.shares?.asOf).toBe("2026-09-01");
     const d0 = payload.daily[0];

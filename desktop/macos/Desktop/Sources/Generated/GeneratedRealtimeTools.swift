@@ -2,7 +2,6 @@
 import Foundation
 
 enum HubTool: String {
-  case searchScreenHistory = "search_screen_history"
   case getDailyRecap = "get_daily_recap"
   case listAgentSessions = "list_agent_sessions"
   case getAgentRun = "get_agent_run"
@@ -38,31 +37,6 @@ enum HubTool: String {
 enum GeneratedRealtimeTools {
   private static let baseOpenAIToolsTemplateJSON = """
 [
-  {
-    "type": "function",
-    "name": "search_screen_history",
-    "description": "Search the user's on-screen history — what they saw, read, or worked on — by meaning. Use for 'when was I looking at X', 'find where I read about Y', 'what was I doing in app Z', and for text they read on screen earlier ('the riddle on the first page', 'what did that message say'). Anything displayed rather than spoken lives here, not in conversations. Returns matching moments with the app, context, and an OCR text preview. Fast synchronous read. Speak the result.",
-    "parameters": {
-      "type": "object",
-      "properties": {
-        "query": {
-          "type": "string",
-          "description": "Natural language search query"
-        },
-        "days": {
-          "type": "number",
-          "description": "Days to search back (default 7)"
-        },
-        "app_filter": {
-          "type": "string",
-          "description": "Filter to a specific app"
-        }
-      },
-      "required": [
-        "query"
-      ]
-    }
-  },
   {
     "type": "function",
     "name": "get_daily_recap",
@@ -408,7 +382,7 @@ enum GeneratedRealtimeTools {
   {
     "type": "function",
     "name": "search_conversations",
-    "description": "Search the user's past spoken conversations (meetings, calls, things said aloud) for what they discussed ('what did I say about X', 'what did we decide', 'summarize my last meeting'), or pass a canonical conversation UUID/share link for an exact lookup. Not for things the user read on screen; use search_screen_history for those. Returns titles + summaries only (no full transcripts). Fast synchronous read. Speak the result.",
+    "description": "Search the user's past spoken conversations (meetings, calls, things said aloud) for what they discussed ('what did I say about X', 'what did we decide', 'summarize my last meeting'), or pass a canonical conversation UUID/share link for an exact lookup. Not for things the user read on screen. Returns titles + summaries only (no full transcripts). Fast synchronous read. Speak the result.",
     "parameters": {
       "type": "object",
       "properties": {

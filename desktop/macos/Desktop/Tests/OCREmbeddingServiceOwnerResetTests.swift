@@ -53,6 +53,20 @@ final class OCREmbeddingServiceOwnerResetTests: XCTestCase {
     XCTAssertEqual(pending, 0)
   }
 
+  func testSemanticSearchDoesNotUseCloudEmbedding() async {
+    do {
+      _ = try await OCREmbeddingService.shared.searchSimilar(
+        query: "private screen text",
+        startDate: Date(timeIntervalSince1970: 0),
+        endDate: Date(timeIntervalSince1970: 1)
+      )
+      XCTFail("semantic screen search must not use a cloud embedding")
+    } catch is OCREmbeddingService.SearchError {
+    } catch {
+      XCTFail("unexpected error: \(error)")
+    }
+  }
+
   /// The re-entrancy window: a flush that is already mid-embed when the owner
   /// retargets must NOT resume and write the previous owner's rowids into the
   /// next owner's database. `reset()` clearing the queue is not enough because
