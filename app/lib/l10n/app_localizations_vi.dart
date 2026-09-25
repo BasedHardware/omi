@@ -11228,4 +11228,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Âm thanh từ mặt dây chuyền không đến được ứng dụng — chạm để sửa chữa';
+
+  @override
+  String get showOnLockScreen => 'Hiển thị trên màn hình khóa';
 }

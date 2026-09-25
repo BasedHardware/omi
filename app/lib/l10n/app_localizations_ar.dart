@@ -11165,4 +11165,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'صوت القلادة لا يصل إلى التطبيق — انقر للإصلاح';
+
+  @override
+  String get showOnLockScreen => 'إظهار على شاشة القفل';
 }

@@ -13347,5 +13347,9 @@
     "captureRecoveryBanner": "Pendant audio is not reaching the app — tap to repair",
     "@captureRecoveryBanner": {
         "description": "Persistent repair banner shown when a connected pendant's audio is not reaching the app; tapping opens device repair settings"
+    },
+    "showOnLockScreen": "Show on Lock Screen",
+    "@showOnLockScreen": {
+        "description": "Setting for recording Live Activities on the lock screen and Dynamic Island"
     }
 }

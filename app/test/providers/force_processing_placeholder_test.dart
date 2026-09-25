@@ -162,6 +162,32 @@ void main() {
     expect(actions.upserted, isEmpty);
   });
 
+  test('a conversation that changes during the drain removes the skeleton without processing', () async {
+    final finalize = Completer<void>();
+    final actions = _RecordingActions();
+    var processed = false;
+    final provider = _provider(
+      actions: actions,
+      finalizeGate: finalize,
+      process: () async {
+        processed = true;
+        return null;
+      },
+    );
+    addTearDown(provider.dispose);
+
+    final pending = provider.forceProcessingCurrentConversation();
+    expect(actions.processing.map((conversation) => conversation.id), ['0']);
+    // Another path (a server-finished conversation or a batch cut) moves on.
+    provider.startNewOfflineRecording();
+    finalize.complete();
+    await expectLater(pending, completes);
+    await Future<void>.delayed(Duration.zero);
+
+    expect(actions.processing, isEmpty);
+    expect(processed, isFalse);
+  });
+
   test('keeps a processing skeleton instead of a contentless completed row', () async {
     final finalize = Completer<void>();
     final actions = _RecordingActions();

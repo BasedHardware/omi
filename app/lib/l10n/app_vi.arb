@@ -3546,5 +3546,6 @@
     "recordWith": "Ghi âm bằng",
     "moreWaysToRecord": "Thêm cách ghi âm",
     "openCall": "Mở cuộc gọi",
-    "captureRecoveryBanner": "Âm thanh từ mặt dây chuyền không đến được ứng dụng — chạm để sửa chữa"
+    "captureRecoveryBanner": "Âm thanh từ mặt dây chuyền không đến được ứng dụng — chạm để sửa chữa",
+    "showOnLockScreen": "Hiển thị trên màn hình khóa"
 }

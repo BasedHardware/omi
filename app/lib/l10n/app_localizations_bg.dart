@@ -11275,4 +11275,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Звукът от висулката не достига до приложението — докоснете, за да поправите';
+
+  @override
+  String get showOnLockScreen => 'Показване на заключения екран';
 }

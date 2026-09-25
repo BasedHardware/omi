@@ -11263,4 +11263,7 @@ class AppLocalizationsBs extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Zvuk privjeska ne stiže do aplikacije — dodirnite za popravak';
+
+  @override
+  String get showOnLockScreen => 'Prikaži na zaključanom ekranu';
 }

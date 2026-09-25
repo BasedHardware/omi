@@ -11052,4 +11052,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => '펜던트 오디오가 앱에 도달하지 않습니다 — 탭하여 복구';
+
+  @override
+  String get showOnLockScreen => '잠금 화면에 표시';
 }

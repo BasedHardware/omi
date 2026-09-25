@@ -11242,4 +11242,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Ljudet från hänget når inte appen — tryck för att reparera';
+
+  @override
+  String get showOnLockScreen => 'Visa på låsskärmen';
 }

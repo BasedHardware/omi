@@ -3546,5 +3546,6 @@
     "recordWith": "Įrašyti naudojant",
     "moreWaysToRecord": "Daugiau įrašymo būdų",
     "openCall": "Atidaryti skambutį",
-    "captureRecoveryBanner": "Pakabuko garsas nepasiekia programėlės — palieskite, kad ištaisytumėte"
+    "captureRecoveryBanner": "Pakabuko garsas nepasiekia programėlės — palieskite, kad ištaisytumėte",
+    "showOnLockScreen": "Rodyti užrakinimo ekrane"
 }

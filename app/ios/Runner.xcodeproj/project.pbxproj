@@ -140,6 +140,18 @@
 		F8D0037DFD95E0FA0591D087 /* PhoneMicSessionConfigurator.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD05 /* PhoneMicSessionConfigurator.swift */; };
 		FAD7504969BE8B6F6D8D0BD1 /* devLaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = EF770A936DE2AA63387FD198 /* devLaunchScreen.storyboard */; };
 		78A318202AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage in Frameworks */ = {isa = PBXBuildFile; productRef = 78A3181F2AECB46A00862997 /* FlutterGeneratedPluginSwiftPackage */; };
+		261E5A36C62DAF7938874E94 /* OmiCaptureIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = A832E7FCE2964D801A4EB21F /* OmiCaptureIntents.swift */; };
+		369B31A8217B2FEE8CEB4B22 /* OmiCaptureAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39E21825B797F6BEAD08E6C3 /* OmiCaptureAttributes.swift */; };
+		4177FE2DA51D5720F8F5D01E /* OmiCaptureAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39E21825B797F6BEAD08E6C3 /* OmiCaptureAttributes.swift */; };
+		5C1D4C59DAD0780D7B679D6D /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 3496DF9B7E0EC244E1D63223 /* Localizable.xcstrings */; };
+		706F05FDF2E05DA66960E710 /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 3496DF9B7E0EC244E1D63223 /* Localizable.xcstrings */; };
+		728AD3B9CE56CAD614E49BC8 /* OmiCaptureAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = 39E21825B797F6BEAD08E6C3 /* OmiCaptureAttributes.swift */; };
+		8003A15D092653E251FDD8E5 /* LiveActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 643D3C8DFDC4F37DC79C2E11 /* LiveActivityManager.swift */; };
+		8BD6DEAF00C1D7FBA1706D20 /* OmiCaptureIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = A832E7FCE2964D801A4EB21F /* OmiCaptureIntents.swift */; };
+		A64BDCA35736F648E69CBF74 /* LiveActivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 643D3C8DFDC4F37DC79C2E11 /* LiveActivityManager.swift */; };
+		AFD5C0DF5AE115C934B37047 /* OmiCaptureLiveActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1B1B260455B26BF846102B80 /* OmiCaptureLiveActivity.swift */; };
+		ECDFF5DC9FC101351FF5730A /* OmiCaptureIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = A832E7FCE2964D801A4EB21F /* OmiCaptureIntents.swift */; };
+		EEF9579658AF77A0DD61B10F /* Localizable.xcstrings in Resources */ = {isa = PBXBuildFile; fileRef = 3496DF9B7E0EC244E1D63223 /* Localizable.xcstrings */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -302,6 +314,11 @@
 		EDFF6508A941E8259906DDE2 /* Pods-Runner.debug-dev.xcconfig */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.xcconfig; name = "Pods-Runner.debug-dev.xcconfig"; path = "Target Support Files/Pods-Runner/Pods-Runner.debug-dev.xcconfig"; sourceTree = "<group>"; };
 		EF770A936DE2AA63387FD198 /* devLaunchScreen.storyboard */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = file.storyboard; name = devLaunchScreen.storyboard; path = Runner/devLaunchScreen.storyboard; sourceTree = "<group>"; };
 		78E0A7A72DC9AD7400C4905E /* FlutterGeneratedPluginSwiftPackage */ = {isa = PBXFileReference; lastKnownFileType = wrapper; name = FlutterGeneratedPluginSwiftPackage; path = Flutter/ephemeral/Packages/FlutterGeneratedPluginSwiftPackage; sourceTree = "<group>"; };
+		1B1B260455B26BF846102B80 /* OmiCaptureLiveActivity.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OmiCaptureLiveActivity.swift; sourceTree = "<group>"; };
+		3496DF9B7E0EC244E1D63223 /* Localizable.xcstrings */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.json.xcstrings; path = Localizable.xcstrings; sourceTree = "<group>"; };
+		39E21825B797F6BEAD08E6C3 /* OmiCaptureAttributes.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OmiCaptureAttributes.swift; sourceTree = "<group>"; };
+		643D3C8DFDC4F37DC79C2E11 /* LiveActivityManager.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = LiveActivityManager.swift; sourceTree = "<group>"; };
+		A832E7FCE2964D801A4EB21F /* OmiCaptureIntents.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = OmiCaptureIntents.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
@@ -361,6 +378,7 @@
 				7B0B70AE9FE08165F2A53E0B /* SharedDefaults.swift */,
 				A19E38726A3D1BBD89696C57 /* BatteryWidget.entitlements */,
 				585D7D8307721A4D6595AA27 /* Assets.xcassets */,
+				1B1B260455B26BF846102B80 /* OmiCaptureLiveActivity.swift */,
 			);
 			path = BatteryWidget;
 			sourceTree = "<group>";
@@ -461,6 +479,7 @@
 				EF770A936DE2AA63387FD198 /* devLaunchScreen.storyboard */,
 				E7A9F5F37DDF9FA87AC8A5CD /* GoogleService-Info.plist */,
 				0C49E6672202A57A856CB534 /* BatteryWidget */,
+				0875F1D562BFF0E543689BD5 /* LiveActivity */,
 			);
 			sourceTree = "<group>";
 		};
@@ -506,6 +525,7 @@
 				7A3F1C2E9B4D5E6F0A1B2C3D /* FlutterLaunchEngineGuard.swift */,
 				74858FAD1ED2DC5600515810 /* Runner-Bridging-Header.h */,
 				6436409C27A31CD800820AF7 /* InfoPlist.strings */,
+				407DABA232BF4A9F3B36B206 /* LiveActivity */,
 			);
 			path = Runner;
 			sourceTree = "<group>";
@@ -569,6 +589,26 @@
 				BAADF00DF00DF00DF00DFD1E /* PhoneMicControllerSeams.swift */,
 			);
 			path = PhoneMic;
+			sourceTree = "<group>";
+		};
+		0875F1D562BFF0E543689BD5 /* LiveActivity */ = {
+			isa = PBXGroup;
+			children = (
+				39E21825B797F6BEAD08E6C3 /* OmiCaptureAttributes.swift */,
+				A832E7FCE2964D801A4EB21F /* OmiCaptureIntents.swift */,
+				3496DF9B7E0EC244E1D63223 /* Localizable.xcstrings */,
+			);
+			name = LiveActivity;
+			path = LiveActivity;
+			sourceTree = "<group>";
+		};
+		407DABA232BF4A9F3B36B206 /* LiveActivity */ = {
+			isa = PBXGroup;
+			children = (
+				643D3C8DFDC4F37DC79C2E11 /* LiveActivityManager.swift */,
+			);
+			name = LiveActivity;
+			path = LiveActivity;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -740,6 +780,7 @@
 				DD6F1E8CA4013B6A267D5DD2 /* prodLaunchScreen.storyboard in Resources */,
 				431C5CAEC909BB0043406A09 /* devLaunchScreen.storyboard in Resources */,
 				51EC531CFC451A317C883EBA /* GoogleService-Info.plist in Resources */,
+				5C1D4C59DAD0780D7B679D6D /* Localizable.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -748,6 +789,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				CB6580ED5AD268A053F41EB7 /* Assets.xcassets in Resources */,
+				EEF9579658AF77A0DD61B10F /* Localizable.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -772,6 +814,7 @@
 				CE7B938264FB7372447F8E21 /* prodLaunchScreen.storyboard in Resources */,
 				FAD7504969BE8B6F6D8D0BD1 /* devLaunchScreen.storyboard in Resources */,
 				16935068EFFE77C62C493C3C /* GoogleService-Info.plist in Resources */,
+				706F05FDF2E05DA66960E710 /* Localizable.xcstrings in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -997,6 +1040,9 @@
 				1498D2341E8E89220040F4C2 /* GeneratedPluginRegistrant.m in Sources */,
 				4255287D2E7C4B8300FD5CFB /* RecorderHostApiImpl.swift in Sources */,
 				42B17C7C2F69BC6600BFDA9D /* PigeonCommunicator.g.swift in Sources */,
+				369B31A8217B2FEE8CEB4B22 /* OmiCaptureAttributes.swift in Sources */,
+				261E5A36C62DAF7938874E94 /* OmiCaptureIntents.swift in Sources */,
+				8003A15D092653E251FDD8E5 /* LiveActivityManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1047,6 +1093,9 @@
 				B07ABDD2736E2C87A59FB5E1 /* GeneratedPluginRegistrant.m in Sources */,
 				5B5A7C09B854EF0BFB2C4D18 /* RecorderHostApiImpl.swift in Sources */,
 				15BE32846414AB444D807D9B /* PigeonCommunicator.g.swift in Sources */,
+				4177FE2DA51D5720F8F5D01E /* OmiCaptureAttributes.swift in Sources */,
+				8BD6DEAF00C1D7FBA1706D20 /* OmiCaptureIntents.swift in Sources */,
+				A64BDCA35736F648E69CBF74 /* LiveActivityManager.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -1057,6 +1106,9 @@
 				7BB46D8ED545353079641366 /* BatteryWidget.swift in Sources */,
 				A014F817EA8AFCDD9EECCEF5 /* BatteryWidgetBundle.swift in Sources */,
 				2424617E08011B02F15737C3 /* SharedDefaults.swift in Sources */,
+				728AD3B9CE56CAD614E49BC8 /* OmiCaptureAttributes.swift in Sources */,
+				ECDFF5DC9FC101351FF5730A /* OmiCaptureIntents.swift in Sources */,
+				AFD5C0DF5AE115C934B37047 /* OmiCaptureLiveActivity.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

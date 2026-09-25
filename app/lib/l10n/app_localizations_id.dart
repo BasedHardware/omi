@@ -11243,4 +11243,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Audio pendant tidak sampai ke aplikasi — ketuk untuk memperbaiki';
+
+  @override
+  String get showOnLockScreen => 'Tampilkan di layar kunci';
 }

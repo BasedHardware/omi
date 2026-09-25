@@ -11281,4 +11281,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'పెండెంట్ ఆడియో యాప్‌కు చేరడం లేదు — రిపేర్ చేయడానికి ట్యాప్ చేయండి';
+
+  @override
+  String get showOnLockScreen => 'లాక్ స్క్రీన్‌పై చూపించు';
 }

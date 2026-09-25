@@ -3546,5 +3546,6 @@
     "recordWith": "Înregistrează cu",
     "moreWaysToRecord": "Mai multe moduri de înregistrare",
     "openCall": "Deschide apelul",
-    "captureRecoveryBanner": "Sunetul pandantivului nu ajunge în aplicație — atinge pentru a repara"
+    "captureRecoveryBanner": "Sunetul pandantivului nu ajunge în aplicație — atinge pentru a repara",
+    "showOnLockScreen": "Afișează pe ecranul de blocare"
 }

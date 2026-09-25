@@ -11310,4 +11310,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Ο ήχος του μενταγιόν δεν φτάνει στην εφαρμογή — πατήστε για επισκευή';
+
+  @override
+  String get showOnLockScreen => 'Εμφάνιση στην οθόνη κλειδώματος';
 }

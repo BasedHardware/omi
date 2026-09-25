@@ -46,6 +46,9 @@ class FrameSyncKey {
   String toString() => 'FrameSyncKey(${bytes.map((b) => '0x${b.toRadixString(16).padLeft(2, '0')}').join(', ')})';
 }
 
+/// Receives each headerless audio payload a source processes, in [codec].
+typedef AudioTap = void Function(List<int> audio, BleAudioCodec codec);
+
 /// Abstract audio source that produces WAL-ready frames from raw hardware bytes.
 ///
 /// Both phone mic and BLE device implement this abstraction, encapsulating

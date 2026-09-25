@@ -11222,4 +11222,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Pendant audio is not reaching the app — tap to repair';
+
+  @override
+  String get showOnLockScreen => 'Show on Lock Screen';
 }

@@ -3546,5 +3546,6 @@
     "recordWith": "التسجيل باستخدام",
     "moreWaysToRecord": "طرق أخرى للتسجيل",
     "openCall": "فتح المكالمة",
-    "captureRecoveryBanner": "صوت القلادة لا يصل إلى التطبيق — انقر للإصلاح"
+    "captureRecoveryBanner": "صوت القلادة لا يصل إلى التطبيق — انقر للإصلاح",
+    "showOnLockScreen": "إظهار على شاشة القفل"
 }

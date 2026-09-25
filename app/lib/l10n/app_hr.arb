@@ -11112,5 +11112,6 @@
     "recordWith": "Snimaj pomoću",
     "moreWaysToRecord": "Više načina snimanja",
     "openCall": "Otvori poziv",
-    "captureRecoveryBanner": "Zvuk privjeska ne stiže do aplikacije — dodirnite za popravak"
+    "captureRecoveryBanner": "Zvuk privjeska ne stiže do aplikacije — dodirnite za popravak",
+    "showOnLockScreen": "Prikaži na zaključanom zaslonu"
 }

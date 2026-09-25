@@ -11230,4 +11230,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'صدای آویز به برنامه نمی‌رسد — برای تعمیر ضربه بزنید';
+
+  @override
+  String get showOnLockScreen => 'نمایش در صفحهٔ قفل';
 }

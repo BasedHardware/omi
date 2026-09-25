@@ -11233,4 +11233,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Lyden fra anhenget når ikke frem til appen — trykk for å reparere';
+
+  @override
+  String get showOnLockScreen => 'Vis på låseskjermen';
 }

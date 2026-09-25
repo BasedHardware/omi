@@ -11254,4 +11254,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Звук кулона не надходить до застосунку — натисніть, щоб виправити';
+
+  @override
+  String get showOnLockScreen => 'Показувати на екрані блокування';
 }

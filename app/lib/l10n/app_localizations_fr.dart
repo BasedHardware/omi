@@ -11329,4 +11329,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Le son du pendentif n\'arrive pas à l\'application — touchez pour réparer';
+
+  @override
+  String get showOnLockScreen => 'Afficher sur l’écran verrouillé';
 }

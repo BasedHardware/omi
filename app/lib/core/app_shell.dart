@@ -13,6 +13,7 @@ import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/settings/asana_settings_page.dart';
 import 'package:omi/pages/settings/clickup_settings_page.dart';
 import 'package:omi/pages/settings/usage_page.dart';
+import 'package:omi/pages/home/home_navigation.dart';
 import 'package:omi/pages/settings/wrapped_2025_page.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/app_provider.dart';
@@ -63,6 +64,10 @@ class _AppShellState extends State<AppShell> {
   }
 
   void openAppLink(Uri uri) async {
+    if (uri.host == 'app' && uri.path == '/capture') {
+      await HomeNavigation.openRoute('/capture?${uri.query}');
+      return;
+    }
     if (uri.pathSegments.isEmpty) {
       Logger.debug('No path segments in URI: $uri');
       return;

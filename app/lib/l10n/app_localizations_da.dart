@@ -11219,4 +11219,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Lyden fra vedhænget når ikke frem til appen — tryk for at reparere';
+
+  @override
+  String get showOnLockScreen => 'Vis på låseskærmen';
 }

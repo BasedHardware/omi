@@ -11310,4 +11310,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'பென்டன்ட் ஆடியோ செயலியை அடையவில்லை — சரிசெய்ய தட்டவும்';
+
+  @override
+  String get showOnLockScreen => 'பூட்டுத் திரையில் காட்டு';
 }

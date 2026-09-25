@@ -3581,5 +3581,6 @@
     "recordWith": "Nagraj za pomocą",
     "moreWaysToRecord": "Więcej sposobów nagrywania",
     "openCall": "Otwórz połączenie",
-    "captureRecoveryBanner": "Dźwięk z zawieszki nie dociera do aplikacji — dotknij, aby naprawić"
+    "captureRecoveryBanner": "Dźwięk z zawieszki nie dociera do aplikacji — dotknij, aby naprawić",
+    "showOnLockScreen": "Pokaż na ekranie blokady"
 }
