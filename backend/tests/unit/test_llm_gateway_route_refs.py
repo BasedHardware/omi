@@ -5,6 +5,7 @@ import pytest
 from utils.llm import model_config
 from utils.llm.gateway_client import is_auto_lane_id
 from utils.llm.model_config import (
+    LUNA_MODEL,
     AutoLaneRouteRef,
     ExplicitRouteRef,
     UnknownLLMFeature,
@@ -45,11 +46,11 @@ def test_pinned_feature_route_ref_preserves_pinned_route_and_options():
 
     assert route_ref == ExplicitRouteRef(
         feature='fair_use',
-        model='gpt-5.6-luna',
+        model=LUNA_MODEL,
         provider='openai',
         options={},
     )
-    assert get_model('fair_use') == 'gpt-5.6-luna'
+    assert get_model('fair_use') == LUNA_MODEL
     assert get_provider('fair_use') == 'openai'
 
 

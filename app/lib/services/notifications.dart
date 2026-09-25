@@ -7,7 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:awesome_notifications/awesome_notifications.dart';
 
 import 'package:omi/app_globals.dart';
-import 'package:omi/pages/home/page.dart';
+import 'package:omi/pages/home/home_navigation.dart';
+import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/utils/analytics/product_telemetry.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -48,7 +49,7 @@ class NotificationUtil {
       SendPort? sendPort = IsolateNameServer.lookupPortByName('notification_action_port');
 
       if (sendPort != null) {
-        print('Redirecting the execution to main isolate process in listening...');
+        print('Redirecting the execution to main isolate process in listening…');
         dynamic serializedData = receivedAction.toMap();
         sendPort.send(serializedData);
       }
@@ -56,13 +57,11 @@ class NotificationUtil {
   }
 
   static Future<void> onActionReceivedMethodImpl(ReceivedAction receivedAction) async {
-    if (receivedAction.payload == null || receivedAction.payload!.isEmpty) {
+    final payload = receivedAction.payload;
+    if (payload == null || payload.isEmpty) {
       return;
     }
-    final navigateTo = receivedAction.payload!['navigate_to'];
-    if (navigateTo is String && navigateTo.isNotEmpty) {
-      await handleNavigateTo(navigateTo);
-    }
+    await handleFcmDataTap(payload);
   }
 
   /// Public entry for FCM background/terminated notification taps (#5126).
@@ -90,6 +89,30 @@ class NotificationUtil {
       return navigateTo;
     }
     return null;
+  }
+
+  static const String captureRecoveryPushType = 'capture_recovery';
+  static const String captureRecoveryRepairAction = 'repair_device';
+  static const String captureRecoveryRoute = '/settings/device';
+
+  static String? routeFromFcmData(Map<String, dynamic> data) {
+    final pushType = data['push_type'];
+    if (pushType is String && pushType.isNotEmpty) {
+      if (pushType == captureRecoveryPushType && data['action'] == captureRecoveryRepairAction) {
+        return captureRecoveryRoute;
+      }
+      return null;
+    }
+    return navigateToFromFcmData(data);
+  }
+
+  static Future<bool> handleFcmDataTap(Map<String, dynamic> data, {RecordReference? objectId}) async {
+    final route = routeFromFcmData(data);
+    if (route == null) return false;
+    if (data['push_type'] == captureRecoveryPushType) {
+      CaptureWedgeMonitor.instance.onRecoveryActioned(surface: 'push');
+    }
+    return handleNavigateTo(route, objectId: objectId);
   }
 
   /// Poll until [read] returns non-null, or [timeout] elapses.
@@ -130,10 +153,10 @@ class NotificationUtil {
       return false;
     }
 
-    navigator.pushReplacement(
-      MaterialPageRoute(builder: (context) => HomePageWrapper(navigateToRoute: navigateTo)),
-    );
-    return true;
+    // Open the destination inside the Home already on screen (pop to it, then push the page) —
+    // never a second Home over whatever was showing (nav #3). No Home within the wait (signed
+    // out, still onboarding) drops the link rather than skipping those screens.
+    return HomeNavigation.openRoute(navigateTo, navigator: navigator);
   }
 
   static Future<void> triggerFallNotification() async {

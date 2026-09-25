@@ -6,21 +6,18 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/models/local_recording.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
-import 'package:omi/widgets/omi_confirm_dialog.dart';
-import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/utils/other/temp.dart';
-import 'package:omi/utils/other/time_utils.dart';
 import 'package:omi/widgets/waveform_painter.dart';
 
 /// Floating bottom sheet for a batch/offline recording — playback (waveform +
 /// scrub + transport), the primary "Sync now" (transcribe → conversation)
 /// action, and share / details / delete. Replaces the old full-page detail.
 Future<void> showRecordingDetailSheet(BuildContext context, LocalRecording recording) {
-  return showModalBottomSheet(
+  return showOmiSheet<void>(
     context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
+    title: OmiDateFormat.of(context).date(recording.startedAt),
+    padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xl),
     builder: (_) => _RecordingDetailSheet(recording: recording),
   );
 }
@@ -85,169 +82,122 @@ class _RecordingDetailSheetState extends State<_RecordingDetailSheet> {
     return data.map((v) => (v * scale).clamp(0.0, 1.0)).toList();
   }
 
-  String _fmt(Duration d) {
-    final m = d.inMinutes.remainder(60);
-    final s = d.inSeconds.remainder(60);
-    return '$m:${s.toString().padLeft(2, '0')}';
-  }
+  /// A position in the recording ("3:38", "1:02:05"); never drops the hours (tokens audit #20).
+  String _fmt(Duration d) => OmiDuration.offset(d.inSeconds);
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-      child: Container(
-        margin: const EdgeInsets.all(8),
-        clipBehavior: Clip.antiAlias,
-        decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(28)),
-        child: SafeArea(
-          top: false,
-          child: Consumer<LocalRecordingsProvider>(
-            builder: (context, provider, child) {
-              final rec = provider.getById(widget.recording.id) ?? widget.recording;
-              final isPlaying = provider.isPlaying(rec);
-              final canPlay = provider.canPlay(rec);
-              final total = provider.totalDuration.inMilliseconds > 0 && isPlaying
-                  ? provider.totalDuration
-                  : Duration(seconds: rec.seconds);
-              final position = isPlaying ? provider.currentPosition : Duration.zero;
-              final progress = isPlaying ? provider.playbackProgress.clamp(0.0, 1.0) : 0.0;
+    final l10n = context.l10n;
+    return Consumer<LocalRecordingsProvider>(
+      builder: (context, provider, child) {
+        final rec = provider.getById(widget.recording.id) ?? widget.recording;
+        final isPlaying = provider.isPlaying(rec);
+        final canPlay = provider.canPlay(rec);
+        final total = provider.totalDuration.inMilliseconds > 0 && isPlaying
+            ? provider.totalDuration
+            : Duration(seconds: rec.seconds);
+        final position = isPlaying ? provider.currentPosition : Duration.zero;
+        final progress = isPlaying ? provider.playbackProgress.clamp(0.0, 1.0) : 0.0;
 
-              return Stack(
+        return Stack(
+          children: [
+            SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.fromLTRB(24, 14, 24, 30),
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 36,
-                          height: 4,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF3C3C43),
-                            borderRadius: BorderRadius.circular(2),
-                          ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          OmiDateFormat.of(context).time(rec.startedAt),
+                          style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
                         ),
-                        const SizedBox(height: 18),
-                        Row(
-                          children: [
-                            const SizedBox(width: 40),
-                            Expanded(
-                              child: Column(
-                                children: [
-                                  Text(
-                                    dateTimeFormat('dd MMM yyyy', rec.startedAt),
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 19,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 3),
-                                  Text(
-                                    dateTimeFormat('h:mm a', rec.startedAt),
-                                    style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            _buildMenu(context, provider, rec),
-                          ],
-                        ),
-                        const SizedBox(height: 36),
-                        SizedBox(height: 60, child: _buildWaveform(provider, rec, isPlaying, canPlay, total, progress)),
-                        const SizedBox(height: 14),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(_fmt(position), style: _timeStyle),
-                            Text(_fmt(total), style: _timeStyle),
-                          ],
-                        ),
-                        const SizedBox(height: 28),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            IconButton(
-                              iconSize: 28,
-                              color: Colors.white,
-                              disabledColor: Colors.grey.shade700,
-                              onPressed: canPlay && isPlaying ? () => provider.skipBackward() : null,
-                              icon: const Icon(Icons.replay_10_rounded),
-                            ),
-                            const SizedBox(width: 28),
-                            GestureDetector(
-                              onTap: canPlay ? () => provider.togglePlayback(rec) : null,
-                              child: Container(
-                                width: 66,
-                                height: 66,
-                                decoration: BoxDecoration(
-                                  color: canPlay ? Colors.white : const Color(0xFF35343B),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Icon(
-                                  provider.isProcessingAudio && isPlaying
-                                      ? Icons.hourglass_empty_rounded
-                                      : (isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded),
-                                  color: canPlay ? Colors.black : Colors.grey.shade600,
-                                  size: 36,
-                                ),
-                              ),
-                            ),
-                            const SizedBox(width: 28),
-                            IconButton(
-                              iconSize: 28,
-                              color: Colors.white,
-                              disabledColor: Colors.grey.shade700,
-                              onPressed: canPlay && isPlaying ? () => provider.skipForward() : null,
-                              icon: const Icon(Icons.forward_10_rounded),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 32),
-                        SizedBox(
-                          width: double.infinity,
-                          height: 52,
-                          child: ElevatedButton.icon(
-                            onPressed: rec.isBusy ? null : () => _handleTranscribe(provider, rec),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF35343B),
-                              disabledBackgroundColor: const Color(0xFF2A2A2E),
-                              foregroundColor: Colors.white,
-                              disabledForegroundColor: Colors.grey.shade600,
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                            ),
-                            icon: rec.isBusy
-                                ? SizedBox(
-                                    width: 16,
-                                    height: 16,
-                                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.grey.shade500),
-                                  )
-                                : const Icon(Icons.cloud_upload_outlined, size: 20),
-                            label: Text(
-                              rec.isBusy ? context.l10n.syncStatusUploaded : context.l10n.processNow,
-                              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                      ),
+                      _buildMenu(context, provider, rec),
+                    ],
                   ),
-                  if (provider.isPreparingShare) _preparingOverlay(context),
+                  const SizedBox(height: OmiSpacing.lg),
+                  SizedBox(height: 60, child: _buildWaveform(provider, rec, isPlaying, canPlay, total, progress)),
+                  const SizedBox(height: 14),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(_fmt(position), style: _timeStyle),
+                      Text(_fmt(total), style: _timeStyle),
+                    ],
+                  ),
+                  const SizedBox(height: 28),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      IconButton(
+                        iconSize: 28,
+                        color: Colors.white,
+                        disabledColor: OmiColors.textDisabled,
+                        tooltip: l10n.skipBack10Seconds,
+                        onPressed: canPlay && isPlaying ? () => provider.skipBackward() : null,
+                        icon: const Icon(Icons.replay_10_rounded),
+                      ),
+                      const SizedBox(width: 28),
+                      Semantics(
+                        button: true,
+                        enabled: canPlay,
+                        label: isPlaying ? l10n.pause : l10n.play,
+                        child: GestureDetector(
+                          onTap: canPlay ? () => provider.togglePlayback(rec) : null,
+                          child: Container(
+                            width: 66,
+                            height: 66,
+                            decoration: BoxDecoration(
+                              color: canPlay ? OmiColors.accent : OmiColors.surface2,
+                              shape: BoxShape.circle,
+                            ),
+                            child: ExcludeSemantics(
+                              child: Icon(
+                                provider.isProcessingAudio && isPlaying
+                                    ? Icons.hourglass_empty_rounded
+                                    : (isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded),
+                                color: canPlay ? OmiColors.onAccent : OmiColors.textDisabled,
+                                size: 36,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 28),
+                      IconButton(
+                        iconSize: 28,
+                        color: Colors.white,
+                        disabledColor: OmiColors.textDisabled,
+                        tooltip: l10n.skipForward10Seconds,
+                        onPressed: canPlay && isPlaying ? () => provider.skipForward() : null,
+                        icon: const Icon(Icons.forward_10_rounded),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 32),
+                  OmiButton.secondary(
+                    label: rec.isBusy ? l10n.syncStatusUploaded : l10n.processNow,
+                    icon: Icons.cloud_upload_outlined,
+                    isLoading: rec.isBusy,
+                    expand: true,
+                    onPressed: rec.isBusy ? null : () => _handleTranscribe(provider, rec),
+                  ),
+                  const SizedBox(height: OmiSpacing.lg),
                 ],
-              );
-            },
-          ),
-        ),
-      ),
+              ),
+            ),
+            if (provider.isPreparingShare) _preparingOverlay(context),
+          ],
+        );
+      },
     );
   }
 
-  static const TextStyle _timeStyle = TextStyle(
-    color: Color(0xFF9A9CA3),
-    fontSize: 12,
+  static final TextStyle _timeStyle = OmiType.caption.copyWith(
+    color: OmiColors.textTertiary,
     fontWeight: FontWeight.w500,
-    fontFeatures: [FontFeature.tabularFigures()],
+    fontFeatures: const [FontFeature.tabularFigures()],
   );
 
   Widget _buildWaveform(
@@ -259,13 +209,7 @@ class _RecordingDetailSheetState extends State<_RecordingDetailSheet> {
     double progress,
   ) {
     if (_loadingWaveform) {
-      return Center(
-        child: SizedBox(
-          width: 18,
-          height: 18,
-          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.grey.shade600),
-        ),
-      );
+      return const Center(child: OmiSpinner(size: OmiSpinnerSize.small));
     }
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -298,22 +242,9 @@ class _RecordingDetailSheetState extends State<_RecordingDetailSheet> {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () {},
-        child: Container(
-          color: const Color(0xE61F1F25),
-          child: Center(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const SizedBox(
-                  width: 26,
-                  height: 26,
-                  child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white),
-                ),
-                const SizedBox(height: 16),
-                Text(context.l10n.preparingAudio, style: TextStyle(color: Colors.grey.shade300, fontSize: 14)),
-              ],
-            ),
-          ),
+        child: ColoredBox(
+          color: OmiColors.surface1.withValues(alpha: 0.9),
+          child: OmiLoadingState(label: context.l10n.preparingAudio),
         ),
       ),
     );
@@ -321,9 +252,10 @@ class _RecordingDetailSheetState extends State<_RecordingDetailSheet> {
 
   Widget _buildMenu(BuildContext context, LocalRecordingsProvider provider, LocalRecording rec) {
     return PopupMenuButton<String>(
-      icon: Icon(Icons.more_horiz_rounded, color: Colors.grey.shade400),
-      color: const Color(0xFF2A2A2E),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+      tooltip: context.l10n.moreOptions,
+      icon: const Icon(Icons.more_horiz_rounded, color: OmiColors.textSecondary),
+      color: OmiColors.surface2,
+      shape: const RoundedRectangleBorder(borderRadius: OmiRadius.mdAll),
       position: PopupMenuPosition.under,
       onSelected: (v) {
         switch (v) {
@@ -338,7 +270,7 @@ class _RecordingDetailSheetState extends State<_RecordingDetailSheet> {
       itemBuilder: (_) => [
         _menuItem('share', Icons.ios_share_rounded, context.l10n.shareRecording, Colors.white),
         _menuItem('info', Icons.info_outline_rounded, context.l10n.recordingInfo, Colors.white),
-        if (!rec.isBusy) _menuItem('delete', Icons.delete_outline_rounded, context.l10n.delete, Colors.redAccent),
+        if (!rec.isBusy) _menuItem('delete', Icons.delete_outline_rounded, context.l10n.delete, OmiColors.danger),
       ],
     );
   }
@@ -350,7 +282,7 @@ class _RecordingDetailSheetState extends State<_RecordingDetailSheet> {
         children: [
           Icon(icon, color: color, size: 20),
           const SizedBox(width: 12),
-          Text(label, style: TextStyle(color: color, fontSize: 14)),
+          Text(label, style: OmiType.subhead.copyWith(color: color)),
         ],
       ),
     );
@@ -361,11 +293,11 @@ class _RecordingDetailSheetState extends State<_RecordingDetailSheet> {
     if (!mounted) return;
     switch (outcome) {
       case LocalUploadOutcome.fairUseLimited:
-        AppSnackbar.showSnackbarError(context.l10n.fairUseBudgetExhausted, duration: const Duration(seconds: 4));
+        OmiFeedback.error(context, context.l10n.fairUseBudgetExhausted);
       case LocalUploadOutcome.backendBusy:
-        AppSnackbar.showSnackbarError(context.l10n.msgUploadFileFailed, duration: const Duration(seconds: 4));
+        OmiFeedback.error(context, context.l10n.msgUploadFileFailed);
       case LocalUploadOutcome.failed:
-        AppSnackbar.showSnackbarError(context.l10n.anErrorOccurredTryAgain);
+        OmiFeedback.error(context, context.l10n.anErrorOccurredTryAgain);
       case LocalUploadOutcome.busy:
         break;
       case LocalUploadOutcome.started:
@@ -375,42 +307,40 @@ class _RecordingDetailSheetState extends State<_RecordingDetailSheet> {
 
   void _confirmDelete(BuildContext context, LocalRecordingsProvider provider, LocalRecording rec) async {
     final navigator = Navigator.of(context);
-    final confirmed = await OmiConfirmDialog.show(
+    // The local file may be the only copy: always confirm, never "Don't ask again" (§4).
+    final confirmed = await showOmiConfirm(
       context,
       title: context.l10n.deleteRecording,
       message: context.l10n.deleteRecordingConfirmation,
       confirmLabel: context.l10n.delete,
-      confirmColor: Colors.red,
+      destructive: true,
     );
-    if (confirmed == true) {
+    if (confirmed) {
       navigator.pop();
       provider.delete(rec);
     }
   }
 
   void _showFileDetailsDialog(BuildContext context, LocalRecording rec) {
-    final theme = Theme.of(context);
-    showDialog(
+    showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A1A),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _detailRow(context.l10n.dateTimeLabel, dateTimeFormat('MMM dd, yyyy h:mm:ss a', rec.startedAt)),
-              _detailRow(context.l10n.durationLabel, secondsToHumanReadable(rec.seconds, context)),
-              _detailRow(context.l10n.audioFormatLabel, rec.codec.toFormattedString()),
-              _detailRow(context.l10n.estimatedSizeLabel, _formatBytes(rec.sizeBytes)),
-            ],
-          ),
+      builder: (dialogContext) => OmiAlertDialog(
+        title: dialogContext.l10n.recordingInfo,
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _detailRow(context.l10n.dateTimeLabel, OmiDateFormat.of(context).dateTime(rec.startedAt)),
+            _detailRow(context.l10n.durationLabel, OmiDuration.long(rec.seconds, context.l10n)),
+            _detailRow(context.l10n.audioFormatLabel, rec.codec.toFormattedString()),
+            _detailRow(context.l10n.estimatedSizeLabel, _formatBytes(rec.sizeBytes)),
+          ],
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text(context.l10n.close, style: theme.textTheme.labelMedium?.copyWith(color: Colors.white)),
+          OmiDialogAction(
+            label: dialogContext.l10n.close,
+            isDefault: true,
+            onPressed: () => Navigator.of(dialogContext).pop(),
           ),
         ],
       ),
@@ -423,7 +353,7 @@ class _RecordingDetailSheetState extends State<_RecordingDetailSheet> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: Theme.of(context).textTheme.labelMedium!.copyWith(color: Colors.grey.shade400)),
+          Text(label, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
           const SizedBox(height: 2),
           Text(value, style: Theme.of(context).textTheme.bodyMedium),
         ],

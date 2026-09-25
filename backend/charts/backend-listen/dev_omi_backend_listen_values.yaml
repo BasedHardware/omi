@@ -16,8 +16,8 @@ image:
 
 # GKE host / image project. Chart defaults keep GOOGLE_CLOUD_PROJECT aligned with
 # composed runtime_env gke.backend-listen (compute). Customer Firestore must not
-# rely on this env: database/_client.py pins SERVICE_ACCOUNT_JSON + its
-# project_id (based-hardware). Deploy may still --set runtimeGcpProjectId from
+# rely on this env: database/_client.py pins OMI_CUSTOMER_DATA_PROJECT
+# (based-hardware). Deploy may still --set runtimeGcpProjectId from
 # vars.RUNTIME_GCP_PROJECT_ID (manifest runtime_gcp_project = based-hardware).
 gcpProjectId: based-hardware-dev
 runtimeGcpProjectId: based-hardware-dev
@@ -35,11 +35,13 @@ serviceAccount:
   # Automatically mount a ServiceAccount's API credentials?
   automount: true
   # Annotations to add to the service account.
-  # Development-only parity-pack exporter GSA (WI). Customer-data Firestore and
-  # Firebase Admin must use nik-164 via SERVICE_ACCOUNT_JSON — never this pack
-  # WI identity. Both have objectAdmin on the pack bucket for cassette export.
+  # Keyless runtime identity (Workload Identity). It replaces the prod nik-164
+  # JSON key: production customer data via narrow grants in based-hardware
+  # (Firestore, Firebase Auth, FCM, one bucket), dev Cloud Tasks, the dev
+  # buckets and the parity-pack bucket. OMI_CUSTOMER_DATA_PROJECT pins the
+  # customer project, since GOOGLE_CLOUD_PROJECT here is the compute project.
   annotations:
-    iam.gke.io/gcp-service-account: dev-omi-listen-parity-pack@based-hardware-dev.iam.gserviceaccount.com
+    iam.gke.io/gcp-service-account: dev-backend-runtime@based-hardware-dev.iam.gserviceaccount.com
   # The name of the service account to use.
   # If not set and create is true, a name is generated using the fullname template
   name: ""
@@ -187,7 +189,15 @@ env:
     value: "true"
   - name: CONVERSATION_OCR_CONTEXT_ENABLED
     value: "true"
+  - name: MEETING_NOTES_RICH_CONTEXT_ENABLED
+    value: "true"
+  - name: MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED
+    value: "true"
   - name: BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED
+    value: "true"
+  - name: CONVERSATION_RELEVANCE_JEV_ENABLED
+    value: "true"
+  - name: MEMORY_OWNER_JEV_FLIP_ENABLED
     value: "true"
   - name: WAKE_WORD_ADJUDICATION_ENABLED
     value: "true"
@@ -278,11 +288,6 @@ env:
     value: "http://parakeet.omiapi.com"
   - name: STT_PRERECORDED_MODEL
     value: "parakeet,modulate-velma-2"
-  - name: DEEPGRAM_API_KEY
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: DEEPGRAM_API_KEY
   - name: DEEPGRAM_SELF_HOSTED_ENABLED
     value: "false"
   - name: STT_CONNECT_ORDER_FROM_CONFIG
@@ -315,11 +320,6 @@ env:
     value: "http://pusher.omiapi.com"
   - name: BUCKET_PLUGINS_LOGOS
     value: "plugin_resources"
-  - name: GOOGLE_APPLICATION_CREDENTIALS
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: GOOGLE_APPLICATION_CREDENTIALS
   - name: DD_SERVICE
     value: "backend-listen"
   - name: DD_ENV
@@ -397,11 +397,8 @@ env:
     value: "2025-08-21"
   - name: BUCKET_PRIVATE_CLOUD_SYNC
     value: "omi-dev-private-cloud-sync"
-  - name: SERVICE_ACCOUNT_JSON
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: SERVICE_ACCOUNT_JSON
+  - name: OMI_CUSTOMER_DATA_PROJECT
+    value: "based-hardware"
   - name: GOOGLE_CLOUD_PROJECT
     # Template substitutes runtimeGcpProjectId (chart default = compute project).
     value: "based-hardware-dev"
@@ -446,7 +443,7 @@ env:
   - name: FAIR_USE_CLASSIFIER_COOLDOWN_SECONDS
     value: "43200"
   - name: FAIR_USE_CLASSIFIER_MODEL
-    value: "gpt-5.6-luna"
+    value: "gpt-6-luna"
   - name: FAIR_USE_CLASSIFIER_LOOKBACK_DAYS
     value: "7"
   - name: FAIR_USE_CHECK_INTERVAL_SECONDS
