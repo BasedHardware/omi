@@ -970,6 +970,40 @@ validated span coverage; a v1-only chunk list is a candidate, never proof.
 Playback parts stay one contiguous span per part (grouping splits at every
 real gap), preserving the released clients' strict-seek arithmetic.
 
+#### Live speaker ID runs on the capture clock for every server-STT session
+
+The clock itself is **not** flag-gated. Every single-channel server-STT
+listen session runs the capture sample cursor, the per-provider-epoch
+translators (rebuilt by `_rebuild_stt_socket_locked` on every mid-session
+failover, including streams whose timestamps restart at zero) and the
+capture-positioned `AudioRingBuffer`; `state.capture_timeline_v2` alone
+admits the v2 persistence described above. With the flag off the translator
+runs in clock-only mode: provider-native segment times, conversation
+ownership and the pusher wire stay byte-identical to the flag-off baseline —
+only the speaker-ID clip window relocates onto the capture clock, which is
+what keeps live recognition working after a Modulate→Soniox-style failover
+(the 2026-09-25 incident: the legacy `first_audio + raw_start` window landed
+minutes before the 60 s ring buffer and matching returned silently for the
+rest of the recording). Embedding work in the legacy path is queued from the
+provider's raw segments, each carrying its capture window — the live merge
+relabels merged turns with the absorbing segment id, and the matcher's
+covered-audio subtraction already dedupes overlapping re-sends. Multi-channel
+and custom-STT sessions keep no capture clock.
+
+Every early return before a live speaker-ID match decision — in
+`speakers._match_unmapped` and in the callers that drop a queued detection —
+emits exactly one bounded reason as the `omi_speaker_id_match_exits_total`
+counter (label = reason only) plus one log line:
+`window_outside_buffer` (the post-failover signature), `too_short`, `no_pcm`,
+`stale_generation`, `already_mapped`. Pending evidence accumulation is not a
+drop (it logs and decides on the next clip). `speaker_id_evidence` /
+`speaker_id_decision` / the exit line carry `session=<recording session id>`
+— never uid, never transcript content — so one user's report is attributable
+without replaying the saved conversation. "That's me" outcomes are likewise
+attributable: `store_owner_voice_sample` logs one
+`owner sample outcome=… conversation=<id>` line per outcome next to the
+existing counter.
+
 ## 6. Event Wire Protocol
 
 ### Server → Client (JSON over WS text frames)
