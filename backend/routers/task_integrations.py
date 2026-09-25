@@ -430,7 +430,7 @@ async def create_task_via_integration(
 
 def _sanitize_task_integration_error(exc: Exception, action: str) -> str:
     """Sanitize task integration provider error reflections while preserving server-side observability."""
-    logger.error("Task integration provider error during %s: %s: %s", action, type(exc).__name__, exc)
+    logger.error("Task integration provider error during %s: %s: %s", action, type(exc).__name__, sanitize(str(exc)))
     return f"Failed to fetch {action}"
 
 
