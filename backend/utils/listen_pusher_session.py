@@ -35,6 +35,13 @@ logger = logging.getLogger(__name__)
 
 TARGET_SAMPLE_RATE = 16000
 
+# Two buffered runs belong to one opcode-101 frame only when their projected
+# positions are contiguous within 1 ms. A wider positive gap (a client stall
+# that minted a new capture anchor, or a withheld-then-resumed window) must
+# flush a separate frame: concatenating the bytes would delete the gap from
+# the stored audio while the header still claims the first run's start.
+AUDIO_RUN_GAP_TOLERANCE_SECONDS = 0.001
+
 
 class PusherReconnectState(str, Enum):
     CONNECTED = 'connected'
@@ -328,6 +335,14 @@ class ListenPusherSession:
                     duration = pending_total_size / (effective_rate * 2)
                     return (self.audio_buffer_last_received or self.deps.now()) - duration
 
+                def runs_are_contiguous(prev: AudioRun, nxt: AudioRun) -> bool:
+                    # Legacy runs carry no projection; keep the legacy
+                    # grouping for them.
+                    if prev.start_wall is None or nxt.start_wall is None:
+                        return True
+                    projected_prev_end = prev.start_wall + len(prev.data) / (effective_rate * 2)
+                    return nxt.start_wall - projected_prev_end <= AUDIO_RUN_GAP_TOLERANCE_SECONDS
+
                 async def send_group(runs: List[AudioRun]) -> None:
                     nonlocal sent_runs
                     if not runs:
@@ -350,7 +365,7 @@ class ListenPusherSession:
 
                 for run in pending_runs:
                     run_conversation = run.conversation_id or current_conversation_id
-                    if group and run_conversation != group_conversation:
+                    if group and (run_conversation != group_conversation or not runs_are_contiguous(group[-1], run)):
                         await send_group(group)
                         group = []
                     group.append(run)

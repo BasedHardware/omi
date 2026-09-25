@@ -26,8 +26,10 @@ class AudioRingBuffer:
         self.total_bytes_written = 0
         self.last_write_timestamp: Optional[float] = None
         # Logical spans of the audio currently retained: (first-sample wall
-        # time, byte count), oldest first.
-        self._spans: Deque[Tuple[float, int]] = deque()
+        # time, byte count, absolute byte index of the span's first byte),
+        # oldest first. The absolute index locates the span inside the byte
+        # ring (position = absolute % capacity) even after wraparound.
+        self._spans: Deque[Tuple[float, int, int]] = deque()
         self._buffered_bytes = 0
 
     def _append_bytes(self, data: bytes) -> None:
@@ -39,13 +41,17 @@ class AudioRingBuffer:
     def _record_span(self, start_ts: float, n_bytes: int) -> None:
         if n_bytes <= 0:
             return
-        self._spans.append((start_ts, n_bytes))
+        self._spans.append((start_ts, n_bytes, self.total_bytes_written - n_bytes))
         self._buffered_bytes += n_bytes
         excess = self._buffered_bytes - self.capacity
         while excess > 0 and self._spans:
-            front_ts, front_bytes = self._spans[0]
+            front_ts, front_bytes, front_abs = self._spans[0]
             if front_bytes > excess:
-                self._spans[0] = (front_ts + excess / self.bytes_per_second, front_bytes - excess)
+                self._spans[0] = (
+                    front_ts + excess / self.bytes_per_second,
+                    front_bytes - excess,
+                    front_abs + excess,
+                )
                 self._buffered_bytes -= excess
                 excess = 0
             else:
@@ -77,43 +83,47 @@ class AudioRingBuffer:
         """Return (start_ts, end_ts) of audio currently in buffer."""
         if not self._spans:
             return None
-        front_ts, _ = self._spans[0]
-        back_ts, back_bytes = self._spans[-1]
+        front_ts, _, _ = self._spans[0]
+        back_ts, back_bytes, _ = self._spans[-1]
         return (front_ts, back_ts + back_bytes / self.bytes_per_second)
 
     def extract(self, start_ts: float, end_ts: float) -> Optional[bytes]:
-        """Extract audio for absolute timestamp range."""
-        time_range = self.get_time_range()
-        if time_range is None:
+        """Extract the audio overlapping ``[start_ts, end_ts)`` by walking the span ledger.
+
+        Bytes are copied span by span, so a wall-clock arrival gap inside the
+        window is skipped rather than misread as continuous audio: the byte
+        ring holds only the bytes actually written, never the silence of a
+        client stall, and a window crossing a stall must not translate the
+        whole wall delta into one byte offset.
+        """
+        if not self._spans:
             return None
-
-        buffer_start_ts, buffer_end_ts = time_range
-        actual_start = max(start_ts, buffer_start_ts)
-        actual_end = min(end_ts, buffer_end_ts)
-
-        if actual_start >= actual_end:
+        result = bytearray()
+        for span_start_ts, n_bytes, start_abs in self._spans:
+            span_end_ts = span_start_ts + n_bytes / self.bytes_per_second
+            lo = max(start_ts, span_start_ts)
+            hi = min(end_ts, span_end_ts)
+            if hi <= lo:
+                continue
+            lo_off = int((lo - span_start_ts) * self.bytes_per_second)
+            hi_off = int((hi - span_start_ts) * self.bytes_per_second)
+            # Align the start to the PCM16 2-byte sample boundary. lo is an
+            # arbitrary float timestamp, so lo_off is odd roughly half the
+            # time; an odd offset begins the copy on a sample's high byte and
+            # byte-shifts every int16 sample into noise. Flooring to an even
+            # offset is what keeps whole samples intact.
+            lo_off -= lo_off % 2
+            # Ensure even number of bytes (PCM16)
+            length = ((hi_off - lo_off) // 2) * 2
+            if length <= 0:
+                continue
+            src = (start_abs + lo_off) % self.capacity
+            if src + length <= self.capacity:
+                result += self.buffer[src : src + length]
+            else:
+                first = self.capacity - src
+                result += self.buffer[src:]
+                result += self.buffer[: length - first]
+        if not result:
             return None
-
-        bytes_in_buffer = min(self.total_bytes_written, self.capacity)
-        buffer_logical_start = (self.write_pos - bytes_in_buffer) % self.capacity
-
-        start_offset = int((actual_start - buffer_start_ts) * self.bytes_per_second)
-        end_offset = int((actual_end - buffer_start_ts) * self.bytes_per_second)
-
-        # Align the start to the PCM16 2-byte sample boundary. actual_start is an arbitrary float
-        # timestamp, so start_offset is odd roughly half the time; an odd offset begins the copy on a
-        # sample's high byte and byte-shifts every int16 sample into noise. length below is already
-        # forced even, so flooring the start to an even offset is what keeps whole samples intact.
-        start_offset -= start_offset % 2
-
-        # Ensure even number of bytes (PCM16)
-        length = ((end_offset - start_offset) // 2) * 2
-        if length <= 0:
-            return None
-
-        result = bytearray(length)
-        for i in range(length):
-            pos = (buffer_logical_start + start_offset + i) % self.capacity
-            result[i] = self.buffer[pos]
-
         return bytes(result)

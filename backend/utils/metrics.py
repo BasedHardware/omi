@@ -115,6 +115,13 @@ OMI_AUDIO_TIMELINE_COVERAGE_TOTAL = Counter(
     'Audio-linked coverage checks observed at bounded reconciliation points',
     ['mode', 'outcome'],
 )
+# Pusher-side v2 replay reconciliation: frames overlapping already-accepted
+# audio whose bytes could not be proven identical (live-buffer compare or
+# flushed-run digest). Bounded counter, no identity labels.
+OMI_AUDIO_TIMELINE_REPLAY_CONFLICTS_TOTAL = Counter(
+    'omi_audio_timeline_replay_conflicts_total',
+    'v2 audio frames dropped because an already-accepted range holds different bytes',
+)
 for _mode in ('legacy', 'v2'):
     for _outcome in ('mapped', 'rejected', 'straddled', 'late_owner_dropped'):
         OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode=_mode, outcome=_outcome)

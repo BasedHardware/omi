@@ -1,8 +1,9 @@
+import hashlib
 import struct
 import asyncio
 import time
 from collections import deque
-from typing import Any, Awaitable, Dict, List, Optional, cast
+from typing import Any, Awaitable, Dict, List, Optional, Tuple, cast
 
 from fastapi import APIRouter
 from fastapi.websockets import WebSocketDisconnect, WebSocket
@@ -51,6 +52,7 @@ from utils.cloud_tasks import is_audio_merge_dispatch_enabled
 from utils.other.storage import maybe_invalidate_conversation_playback, upload_audio_chunks_batch
 from utils.journey_metrics_contract import ClientKind, bounded_client_kind
 from utils.metrics import (
+    OMI_AUDIO_TIMELINE_REPLAY_CONFLICTS_TOTAL,
     PUSHER_ACTIVE_WS_CONNECTIONS,
     PUSHER_PRIVATE_CLOUD_UPLOAD_DROPS,
 )
@@ -91,6 +93,13 @@ AUDIO_TIMELINE_CONTINUITY_TOLERANCE = 0.001
 
 # Queue size limits
 SPEAKER_SAMPLE_QUEUE_WARN_SIZE = 100
+
+# Bounded ledger of recently flushed v2 runs: (start_wall, end_wall, sha256 of
+# the flushed bytes). An overlapping replay whose conflict window reaches past
+# the live buffer can only be reconciled against these digests; anything the
+# ledger no longer covers fails closed. 64 runs bounds the memory (~200 B)
+# while covering over an hour of 60 s chunks.
+V2_FLUSHED_RUN_LEDGER_SIZE = 64
 
 # Constants for transcript queue batching
 TRANSCRIPT_QUEUE_FLUSH_INTERVAL = 1.0  # seconds
@@ -509,6 +518,9 @@ async def _websocket_util_trigger(
         # the last accepted run and its conversation. None until first audio
         # or after a conversation switch (which flushes the run).
         audio_timeline_last_end: Optional[float] = None
+        # (start_wall, end_wall, sha256) of the last flushed v2 chunks, for
+        # reconciling replays that reach past the live buffer.
+        v2_flushed_runs: Deque[Tuple[float, float, str]] = deque(maxlen=V2_FLUSHED_RUN_LEDGER_SIZE)
 
         def _queue_private_cloud_chunk() -> None:
             if not (private_cloud_sync_enabled and current_conversation_id and len(private_cloud_sync_buffer) > 0):
@@ -526,10 +538,16 @@ async def _websocket_util_trigger(
             if audio_timeline_v2:
                 # v2 runs carry their authoritative PCM sample count so
                 # coverage never has to be inferred from encoded blob size.
-                chunk_payload['span'] = {
+                span = {
                     'samples': len(private_cloud_sync_buffer) // 2,
                     'sample_rate': sample_rate,
                 }
+                chunk_payload['span'] = span
+                start_wall = cast(float, chunk_payload['timestamp'])
+                run_seconds = len(private_cloud_sync_buffer) / (sample_rate * 2)
+                v2_flushed_runs.append(
+                    (start_wall, start_wall + run_seconds, hashlib.sha256(chunk_payload['data']).hexdigest())
+                )
             append_bounded(
                 private_cloud_queue,
                 chunk_payload,
@@ -543,6 +561,63 @@ async def _websocket_util_trigger(
             nonlocal private_cloud_chunk_start_time
             private_cloud_sync_buffer = bytearray()
             private_cloud_chunk_start_time = None
+
+        def _v2_overlap_conflict(run_start: float, overlap_bytes: int, audio: bytes) -> bool:
+            """True when the overlapping range's bytes cannot be proven identical.
+
+            The overlap region [run_start, run_start + overlap_bytes) is
+            verified against the live buffer (byte compare) and, for the part
+            predating it, against the flushed-run digest ledger. Any region
+            that can be neither compared nor digest-matched is a conflict:
+            the already-stored bytes stay and the frame is dropped.
+            """
+            tol = AUDIO_TIMELINE_CONTINUITY_TOLERANCE
+            bps = sample_rate * 2
+            overlap_hi = run_start + overlap_bytes / bps
+            buffer_lo = private_cloud_chunk_start_time if private_cloud_sync_buffer else None
+
+            def flushed_runs_cover(need_lo: float, need_hi: float) -> bool:
+                if need_hi <= need_lo + tol:
+                    return True
+                covered_hi = need_hi
+                for fs, fe, digest in reversed(v2_flushed_runs):
+                    if fe <= need_lo + tol:
+                        break
+                    if fs >= covered_hi - tol:
+                        continue
+                    if fs < need_lo - tol:
+                        # Partial run overlap: only whole-run digests exist.
+                        return False
+                    off = round((fs - run_start) * bps)
+                    n = round((fe - fs) * bps)
+                    if off < 0 or off + n > len(audio) or hashlib.sha256(audio[off : off + n]).hexdigest() != digest:
+                        return False
+                    covered_hi = fs
+                    if covered_hi <= need_lo + tol:
+                        return True
+                return covered_hi <= need_lo + tol
+
+            if buffer_lo is None or buffer_lo > run_start + tol:
+                pre_hi = overlap_hi if buffer_lo is None else min(overlap_hi, buffer_lo)
+                if not flushed_runs_cover(run_start, pre_hi):
+                    return True
+            if buffer_lo is not None:
+                b_lo = max(run_start, buffer_lo)
+                if b_lo < overlap_hi - tol:
+                    in_audio = round((b_lo - run_start) * bps)
+                    in_audio -= in_audio % 2
+                    in_buffer = round((b_lo - buffer_lo) * bps)
+                    in_buffer -= in_buffer % 2
+                    comparable = min(
+                        overlap_bytes - in_audio, len(audio) - in_audio, len(private_cloud_sync_buffer) - in_buffer
+                    )
+                    if (
+                        comparable > 0
+                        and bytes(private_cloud_sync_buffer[in_buffer : in_buffer + comparable])
+                        != audio[in_audio : in_audio + comparable]
+                    ):
+                        return True
+            return False
 
         try:
             while websocket_active:
@@ -723,26 +798,17 @@ async def _websocket_util_trigger(
                                 overlap_bytes -= overlap_bytes % 2
                                 if overlap_bytes >= len(audio_data):
                                     continue
-                                # Verify the overlapping prefix against the
-                                # retained buffer: differing bytes for the same
-                                # range fail closed and are never overwritten.
-                                buffer_start_offset = int(
-                                    (run_start - (private_cloud_chunk_start_time or run_start)) * sample_rate * 2
-                                )
-                                comparable = max(
-                                    0, min(overlap_bytes, len(private_cloud_sync_buffer) - buffer_start_offset)
-                                )
-                                if (
-                                    comparable > 0
-                                    and buffer_start_offset >= 0
-                                    and private_cloud_sync_buffer[
-                                        buffer_start_offset : buffer_start_offset + comparable
-                                    ]
-                                    != audio_data[:comparable]
-                                ):
+                                # Verify the overlapping prefix against every
+                                # retained copy of that range — the live buffer
+                                # by bytes, anything older by flushed-run
+                                # digest. Differing or unverifiable bytes for
+                                # an accepted range fail closed and are never
+                                # overwritten.
+                                if _v2_overlap_conflict(run_start, overlap_bytes, audio_data):
+                                    OMI_AUDIO_TIMELINE_REPLAY_CONFLICTS_TOTAL.inc()
                                     logger.warning(
                                         f'Conflicting v2 audio for an accepted range '
-                                        f'start={run_start:.3f}s; dropping frame {uid}'
+                                        f'start={run_start:.3f}s overlap={overlap_bytes}B; dropping frame {uid}'
                                     )
                                     continue
                                 audio_data = audio_data[overlap_bytes:]
