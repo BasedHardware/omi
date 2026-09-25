@@ -191,7 +191,7 @@ Examples:
         type=int,
         default=None,
         metavar="DIM",
-        help="Optional placeholder vector dimension (e.g. 768, 1536) for collection schema testing.",
+        help="Optional placeholder vector dimension (e.g. 384, 768) for schema testing (placeholder vectors do not carry semantic embeddings).",
     )
     parser.add_argument(
         "-f",
