@@ -59,6 +59,7 @@ SCHEMA_GROUPS = {
             'CaptureGroupMember',
             'CaptureGroup',
             'ConversationSpeakers',
+            'AudioTimelineProvenance',
             'Conversation',
             'ProjectedActionItem',
             'ProjectedSection',

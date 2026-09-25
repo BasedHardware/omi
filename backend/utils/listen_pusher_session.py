@@ -20,7 +20,6 @@ from utils.metrics import PUSHER_CIRCUIT_BREAKER_REJECTIONS, PUSHER_SESSION_DEGR
 from utils.pusher import PusherCircuitBreakerOpen, connect_to_trigger_pusher
 from utils.pusher_protocol import (
     AUDIO_TIMELINE_PROTOCOL,
-    AUDIO_TIMELINE_QUERY_PARAM,
     PUSHER_AUDIO_TIMELINE_ACK_OPCODE,
 )
 
@@ -302,7 +301,8 @@ class ListenPusherSession:
     async def _audio_bytes_flush(self):
         async with self.audio_flush_lock:
             current_conversation_id = self.deps.get_current_conversation_id()
-            if not (self.pusher_connected and self.pusher_ws):
+            pusher_ws = self.pusher_ws
+            if not (self.pusher_connected and pusher_ws):
                 return
             if self.audio_timeline_suspended and self.audio_total_size > 0:
                 # Capability loss mid-v2-recording: keep the recording alive
@@ -352,7 +352,7 @@ class ListenPusherSession:
                         header = bytearray()
                         header.extend(struct.pack("I", 103))
                         header.extend(bytes(conversation, "utf-8"))
-                        await self.pusher_ws.send(cast(bytes, header))
+                        await pusher_ws.send(cast(bytes, header))
                         self.last_synced_conversation_id = conversation
                     audio_data = b''.join(run.data for run in runs)
                     data = bytearray()
@@ -360,7 +360,7 @@ class ListenPusherSession:
                     data.extend(struct.pack("d", frame_header_time(runs)))
                     data.extend(audio_data)
                     del audio_data
-                    await self.pusher_ws.send(cast(bytes, data))
+                    await pusher_ws.send(cast(bytes, data))
                     sent_runs += len(runs)
 
                 for run in pending_runs:
@@ -378,7 +378,7 @@ class ListenPusherSession:
                     data = bytearray()
                     data.extend(struct.pack("I", 103))
                     data.extend(bytes(current_conversation_id, "utf-8"))
-                    await self.pusher_ws.send(cast(bytes, data))
+                    await pusher_ws.send(cast(bytes, data))
                     self.last_synced_conversation_id = current_conversation_id
             except (asyncio.CancelledError, Exception) as e:
                 unsent = list(pending_runs)[sent_runs:]
@@ -670,13 +670,16 @@ class ListenPusherSession:
         An old pusher ignores the unknown ``audio_timeline`` query parameter
         and stays silent: the bounded timeout below then means v1.
         """
+        pusher_ws = self.pusher_ws
+        if pusher_ws is None:
+            return False
         deadline = self.deps.monotonic() + AUDIO_TIMELINE_ACK_TIMEOUT_SECONDS
         while True:
             remaining = deadline - self.deps.monotonic()
             if remaining <= 0:
                 return False
             try:
-                message = await asyncio.wait_for(self.pusher_ws.recv(), timeout=remaining)
+                message = await asyncio.wait_for(pusher_ws.recv(), timeout=remaining)
             except (asyncio.TimeoutError, ConnectionClosed, asyncio.CancelledError):
                 return False
             except Exception as e:

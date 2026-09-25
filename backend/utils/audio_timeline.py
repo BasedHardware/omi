@@ -17,18 +17,11 @@ from __future__ import annotations
 
 import math
 from dataclasses import dataclass, field
-from typing import Callable, Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Optional, Sequence, Tuple, cast
 
 # Pure span helpers live in the database-layer module (stdlib only) so
 # database/ can share them without importing utils/.
-from database.audio_timeline import (  # noqa: F401  (re-exported)
-    COVERAGE_TOLERANCE_SECONDS,
-    chunk_span,
-    group_chunks_by_coverage,
-    parse_span_blob_metadata,
-    span_blob_metadata,
-    span_valid,
-)
+from database.audio_timeline import COVERAGE_TOLERANCE_SECONDS
 
 # Measured inter-arrival gap beyond which a new anchor is set. This is a jitter
 # guard, not a semantic silence boundary: a client still sending PCM silence
@@ -58,12 +51,12 @@ CoverageOutcome = str  # 'covered' | 'missing' | 'pending_upload' | 'no_audio' |
 
 def is_audio_timeline_v2(conversation: Mapping) -> bool:
     """True when the conversation row carries the v2 provenance marker."""
-    marker = conversation.get('audio_timeline') if conversation is not None else None
+    marker = conversation.get('audio_timeline')
     return isinstance(marker, Mapping) and marker.get('version') == AUDIO_TIMELINE_V2
 
 
 def _started_at_seconds(conversation: Mapping) -> Optional[float]:
-    started_at = conversation.get('started_at') if conversation is not None else None
+    started_at = conversation.get('started_at')
     if started_at is None:
         return None
     if hasattr(started_at, 'timestamp'):
@@ -434,7 +427,7 @@ class ProviderEpochTranslator:
         translated: List[Dict] = []
         for segment in segments:
             try:
-                start, end = float(segment.get('start')), float(segment.get('end'))
+                start, end = float(cast(Any, segment.get('start'))), float(cast(Any, segment.get('end')))
             except (TypeError, ValueError):
                 self._reject(segment, 'non_numeric')
                 continue
@@ -475,6 +468,3 @@ class ProviderEpochTranslator:
 
 
 # Private aliases used by utils.other.storage (kept importable for tests).
-_chunk_span = chunk_span
-_span_blob_metadata = span_blob_metadata
-_parse_span_blob_metadata = parse_span_blob_metadata

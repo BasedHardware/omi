@@ -11,7 +11,7 @@ import uuid
 
 from utils.manual_speaker_assignments import acknowledged_teaching
 from collections import OrderedDict, deque
-from typing import Any, Deque, Dict, List, Optional, Tuple, cast
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 from config.audio_timeline import audio_timeline_v2_enabled
 from routers.listen.contracts import ConversationCaptureOrigin
@@ -153,7 +153,8 @@ class ListenReceiver:
         # Providers whose socket already died this session; a failover must not
         # reselect one, or a dead primary would be chosen again immediately.
         self._stt_failed_providers: set[str] = set()
-        self._stt_rebuild: Optional[Tuple[Any, Any, int]] = None
+        # (callback factory, sample rate): each rebuild mints fresh epoch callbacks.
+        self._stt_rebuild: Optional[Tuple[Any, int]] = None
         self._stt_failover_lock = asyncio.Lock()
         self._pending_live_failover: Optional[PendingLiveFailover] = None
         self.stt_sockets_multi: List[Any] = [None] * len(channel_configs)
@@ -849,9 +850,6 @@ class ListenReceiver:
                     )
                 except Exception:
                     logger.exception('VAD gate initialization failed; continuing without it')
-
-            def capture_and_enqueue(segments: List[Dict[str, Any]]) -> None:
-                self._enqueue_stt_segments(segments)
 
             parakeet_callback, modulate_callback, epoch = self._build_stt_callbacks()
             raw = await self._create_stt_socket(

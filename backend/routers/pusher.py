@@ -3,7 +3,7 @@ import struct
 import asyncio
 import time
 from collections import deque
-from typing import Any, Awaitable, Dict, List, Optional, Tuple, cast
+from typing import Any, Awaitable, Deque, Dict, List, Optional, Tuple, cast
 
 from fastapi import APIRouter
 from fastapi.websockets import WebSocketDisconnect, WebSocket
@@ -21,6 +21,7 @@ from utils.pusher_protocol import (
     AudioBytesQueueItem,
     ByteBudget,
     PrivateCloudChunk,
+    PrivateCloudSpan,
     SpeakerSampleRequest,
     TranscriptQueueItem,
     append_bounded,
@@ -256,13 +257,13 @@ async def _websocket_util_trigger(
             if conv_id in deleted_conversations:
                 audio_budget.release(len(chunk_info['data']))
                 return
-            span = chunk_info.get('span') if isinstance(chunk_info, dict) else None
+            span = chunk_info.get('span')
             chunk_end: Optional[float] = None
             if span:
                 # v2 chunks know their exact end; legacy chunks end where the
                 # next chunk's start lands (the old contiguous assumption).
                 chunk_end = chunk_info['timestamp'] + span['samples'] / span['sample_rate']
-            batch = pending.get(conv_id)
+            batch: Optional[Dict[str, Any]] = pending.get(conv_id)
             if batch is not None and chunk_end is not None and batch.get('end') is not None:
                 # Never batch noncontiguous PCM: a gap (or overlap) between
                 # the batch's current end and this chunk's start closes the
@@ -282,7 +283,7 @@ async def _websocket_util_trigger(
                 }
                 pending[conv_id] = batch
             batch['data'].extend(chunk_info['data'])
-            if chunk_end is not None:
+            if chunk_end is not None and span:
                 batch['end'] = chunk_end
                 batch['span'] = {
                     'samples': len(batch['data']) // 2,
@@ -557,7 +558,7 @@ async def _websocket_util_trigger(
                     f"private_cloud_queue full ({len(private_cloud_queue)}/{PRIVATE_CLOUD_QUEUE_MAX_SIZE}), "
                     f"dropping oldest chunk to prevent OOM {uid}"
                 )
-            chunk_payload: Dict[str, Any] = {
+            chunk_payload: PrivateCloudChunk = {
                 'data': bytes(private_cloud_sync_buffer),
                 'conversation_id': current_conversation_id,
                 'timestamp': private_cloud_chunk_start_time or time.time(),
@@ -567,9 +568,9 @@ async def _websocket_util_trigger(
                 # coverage never has to be inferred from encoded blob size.
                 # The flushed-run digest is recorded by the upload task only
                 # after this chunk's batch lands in GCS (see _upload_batch).
-                span = {
+                span: PrivateCloudSpan = {
                     'samples': len(private_cloud_sync_buffer) // 2,
-                    'sample_rate': sample_rate,
+                    'sample_rate': int(sample_rate),
                 }
                 chunk_payload['span'] = span
             append_bounded(

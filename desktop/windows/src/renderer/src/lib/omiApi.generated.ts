@@ -605,6 +605,7 @@ export interface AudioDownloadPendingResponse {
 }
 
 export interface AudioFile {
+  chunk_spans?: Array<Array<number>> | null;
   chunk_timestamps: Array<number>;
   conversation_id: string;
   duration: number;
@@ -626,6 +627,10 @@ export interface AudioPrecacheResponse {
   audio_file_count?: number | null;
   message?: string | null;
   status: string;
+}
+
+export interface AudioTimelineProvenance {
+  version: number;
 }
 
 export interface AudioUrlsResponse {
@@ -1141,6 +1146,7 @@ export interface Conversation {
   app_id?: string | null;
   apps_results?: Array<AppResult>;
   audio_files?: Array<AudioFile>;
+  audio_timeline?: AudioTimelineProvenance | null;
   calendar_event?: CalendarEventLink | null;
   call_id?: string | null;
   capture_group?: CaptureGroup | null;
@@ -1325,6 +1331,7 @@ export interface ConversationSearchItem {
   app_id?: string | null;
   apps_results?: Array<AppResult>;
   audio_files?: Array<AudioFile>;
+  audio_timeline?: AudioTimelineProvenance | null;
   calendar_event?: CalendarEventLink | null;
   call_id?: string | null;
   capture_group?: CaptureGroup | null;
@@ -5181,6 +5188,7 @@ export interface OmiApiSchemas {
   "AudioFile": AudioFile;
   "AudioFileUrlInfo": AudioFileUrlInfo;
   "AudioPrecacheResponse": AudioPrecacheResponse;
+  "AudioTimelineProvenance": AudioTimelineProvenance;
   "AudioUrlsResponse": AudioUrlsResponse;
   "AuthStep": AuthStep;
   "AvailableLanguage": AvailableLanguage;

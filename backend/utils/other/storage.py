@@ -27,11 +27,7 @@ from database.redis_db import cache_signed_url, get_cached_signed_url, delete_ca
 from database.legal_holds import external_write_fence
 from utils import encryption
 from utils.cloud_tasks import enqueue_audio_merge_job, is_audio_merge_dispatch_enabled
-from utils.audio_timeline import (
-    _parse_span_blob_metadata,
-    _span_blob_metadata,
-    _chunk_span,
-)
+from database.audio_timeline import chunk_span, parse_span_blob_metadata, span_blob_metadata
 from utils.observability.fallback import record_fallback
 from utils.other.deferred_delete import DeferredDeleter
 from utils.other.local_storage import create_storage_client, iam_signing_kwargs, local_public_url
@@ -802,7 +798,7 @@ def upload_audio_chunks_batch(
     last_ts = f'{sorted_chunks[-1]["timestamp"]:.3f}'
     batch_name = f'{first_ts}-{last_ts}' if len(sorted_chunks) > 1 else first_ts
 
-    span = _chunk_span(sorted_chunks[0])
+    span = chunk_span(sorted_chunks[0])
     if span is not None and len(sorted_chunks) > 1:
         # A batch of v2 chunks is one contiguous run; the aggregate span is
         # the first chunk's start plus the summed sample count.
@@ -849,7 +845,7 @@ def upload_audio_chunks_batch(
                     # Identical retry: never overwrite or double-write.
                     return [path]
                 raise ValueError(f'v2 audio blob content conflict at {path}')
-            blob.metadata = _span_blob_metadata(span)
+            blob.metadata = span_blob_metadata(span)
         if protection_level == 'enhanced':
             # Encrypt each chunk individually (length-prefixed), stream to GCS
             with blob.open('wb', content_type='application/octet-stream') as f:
@@ -950,7 +946,7 @@ def list_audio_chunks(uid: str, conversation_id: str) -> List[Dict[str, Any]]:
                     'size': blob.size,
                     'is_batch': is_batch,
                 }
-                span = _parse_span_blob_metadata(getattr(blob, 'metadata', None))
+                span = parse_span_blob_metadata(getattr(blob, 'metadata', None))
                 if span is not None:
                     chunk_entry['span'] = span
                 chunks.append(chunk_entry)

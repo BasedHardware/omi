@@ -12,7 +12,7 @@ utils/routers layers use.
 from __future__ import annotations
 
 import math
-from typing import Dict, List, Mapping, Optional, Sequence, Tuple
+from typing import Dict, List, Mapping, Optional, Tuple
 
 # 1 ms: filename-rounding tolerance for coverage and continuity checks.
 COVERAGE_TOLERANCE_SECONDS = 0.001

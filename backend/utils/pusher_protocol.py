@@ -1,6 +1,6 @@
 import json
 import struct
-from typing import Any, Deque, Dict, List, Optional, TypedDict, TypeVar
+from typing import Any, Deque, Dict, List, NotRequired, Optional, TypedDict, TypeVar
 
 from utils.metrics import PUSHER_QUEUE_DROPPED_BYTES, PUSHER_QUEUE_DROPS
 from utils.observability.journeys import JourneyOutcome
@@ -134,7 +134,14 @@ class AudioBytesQueueItem(TypedDict):
     data: bytearray
 
 
+class PrivateCloudSpan(TypedDict):
+    samples: int
+    sample_rate: int
+
+
 class PrivateCloudChunk(TypedDict):
     data: bytes
     conversation_id: str
     timestamp: float
+    # Audio-timeline v2 only: the chunk's authoritative PCM sample count.
+    span: NotRequired[PrivateCloudSpan]
