@@ -6,7 +6,10 @@ and surfacing capture gaps (booked meetings with no recorded conversation).
 """
 
 from datetime import datetime, timedelta, timezone
+import logging
 from typing import Any, Dict, List, Optional
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -166,13 +169,15 @@ async def list_google_calendar_events(
                     )
                 except Exception as retry_error:
                     emit_sync_failed(telemetry_context, retry_error)
-                    raise HTTPException(status_code=500, detail=f"Failed after token refresh: {str(retry_error)}")
+                    logger.error(f"Failed to fetch calendar events after token refresh for user {uid}", exc_info=True)
+                    raise HTTPException(status_code=500, detail="Failed to fetch calendar events. Please try again later.")
             else:
                 emit_sync_failed(telemetry_context, e)
                 raise HTTPException(status_code=401, detail="Google Calendar authentication expired. Please reconnect.")
         else:
             emit_sync_failed(telemetry_context, e)
-            raise HTTPException(status_code=500, detail=f"Failed to fetch calendar events: {error_msg}")
+            logger.error(f"Failed to fetch calendar events for user {uid}", exc_info=True)
+            raise HTTPException(status_code=500, detail="Failed to fetch calendar events. Please try again later.")
 
     converted_events = [converted for event in events if (converted := _event_to_response(event))]
     emit_sync_succeeded(telemetry_context, item_count=len(converted_events))
@@ -233,13 +238,15 @@ async def get_calendar_capture_gaps(
                     )
                 except Exception as retry_error:
                     emit_sync_failed(telemetry_context, retry_error)
-                    raise HTTPException(status_code=500, detail=f"Failed after token refresh: {str(retry_error)}")
+                    logger.error(f"Failed to fetch calendar capture gaps after token refresh for user {uid}", exc_info=True)
+                    raise HTTPException(status_code=500, detail="Failed to fetch calendar events. Please try again later.")
             else:
                 emit_sync_failed(telemetry_context, e)
                 raise HTTPException(status_code=401, detail="Google Calendar authentication expired. Please reconnect.")
         else:
             emit_sync_failed(telemetry_context, e)
-            raise HTTPException(status_code=500, detail=f"Failed to fetch calendar events: {error_msg}")
+            logger.error(f"Failed to fetch calendar capture gaps for user {uid}", exc_info=True)
+            raise HTTPException(status_code=500, detail="Failed to fetch calendar events. Please try again later.")
 
     # include_discarded=True keeps this a single-field Firestore range read
     # (no composite index); `select_capture_gaps` applies the discarded filter.
