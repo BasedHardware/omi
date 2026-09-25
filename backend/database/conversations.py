@@ -2,6 +2,7 @@ import copy
 import json
 import logging
 import uuid
+import concurrent.futures
 import zlib
 from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
@@ -42,6 +43,7 @@ from .conversation_revisions import ensure_timezone_aware, firestore_revision_da
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read, with_photos
 from utils.other.list_budget import ListReadBudget, ListReadBudgetExhausted, budgeted_stream_iter
 from utils.other.storage import list_audio_chunks
+
 from .first_open_obligations import (
     FIRST_OPEN_EFFECTS,
     claim_authorized_first_open_work,
@@ -1646,9 +1648,11 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
             'transcript_segments_compressed',
             'manual_speaker_assignments',
             'manual_speaker_assignments_compressed',
+            'has_photos',
         ],
     )
 
+    photo_queries = []
     for doc_snapshot in doc_snapshots:
         if not doc_snapshot.exists:
             logger.warning(f"Conversation {doc_snapshot.id} not found, skipping.")
@@ -1682,32 +1686,48 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
         if not _migrate(db.transaction()):
             continue
 
-        # Photos retain their separate batched migration path.
-        photos_ref = doc_snapshot.reference.collection('photos')
-        photos_stream = photos_ref.select(['data_protection_level', 'base64']).stream()
-        for photo_doc in photos_stream:
-            photo_data = photo_doc.to_dict()
-            current_photo_level = photo_data.get('data_protection_level', 'standard')
-            if current_photo_level == target_level:
-                continue
+        current_data = doc_snapshot.to_dict() or {}
+        # `has_photos` is read from the pre-transaction get_all projection, while photo writes set it
+        # transactionally (conversation store path here, frame promotion in frame_requests.py). A photo
+        # landing between the projection and the fetch on a conversation whose snapshot said False keeps
+        # its old protection level while the conversation migrates; the migration is re-runnable, so a
+        # later pass re-encrypts it. Absent flag (legacy docs) conservatively queries anyway.
+        if current_data.get('has_photos', True):
+            photos_ref = doc_snapshot.reference.collection('photos')
+            photo_queries.append(photos_ref.select(['data_protection_level', 'base64']))
 
-            # Decrypt first to get a clean state
-            plain_photo_data = _prepare_photo_for_read(photo_data, uid)
+    # Fetch all photos concurrently
+    photo_docs = []
+    if photo_queries:
+        with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+            futures = [executor.submit(lambda q: list(q.stream()), query) for query in photo_queries]
+            for future in concurrent.futures.as_completed(futures):
+                photo_docs.extend(future.result())
 
-            # Prepare the specific fields for update
-            photo_update_payload = {'data_protection_level': target_level}
-            if target_level == 'enhanced':
-                photo_update_payload['base64'] = encryption.encrypt(plain_photo_data['base64'], uid)
-            else:  # Moving from enhanced to standard
-                photo_update_payload['base64'] = plain_photo_data['base64']
+    # Process fetched photos and batch their updates
+    for photo_doc in photo_docs:
+        photo_data = photo_doc.to_dict()
+        current_photo_level = photo_data.get('data_protection_level', 'standard')
+        if current_photo_level == target_level:
+            continue
 
-            # Add photo update to the batch
-            batch.update(photo_doc.reference, photo_update_payload)
-            batch_count += 1
-            if batch_count >= 100:
-                batch.commit()
-                batch = db.batch()
-                batch_count = 0
+        # Decrypt first to get a clean state
+        plain_photo_data = _prepare_photo_for_read(photo_data, uid)
+
+        # Prepare the specific fields for update
+        photo_update_payload = {'data_protection_level': target_level}
+        if target_level == 'enhanced':
+            photo_update_payload['base64'] = encryption.encrypt(plain_photo_data['base64'], uid)
+        else:  # Moving from enhanced to standard
+            photo_update_payload['base64'] = plain_photo_data['base64']
+
+        # Add photo update to the batch
+        batch.update(photo_doc.reference, photo_update_payload)
+        batch_count += 1
+        if batch_count >= 100:
+            batch.commit()
+            batch = db.batch()
+            batch_count = 0
 
     if batch_count > 0:
         batch.commit()
