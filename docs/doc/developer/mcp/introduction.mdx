@@ -55,12 +55,12 @@ When the Omi macOS app connects Claude Code or Codex, it also installs a small `
 |------|-------------|
 | `get_memories` | List memories with optional category filtering |
 | `search_memories` | Semantic search across memories |
-| `create_memory` | Create a new memory |
+| `create_memory`, `create_memories` | Create one memory, or up to 25 in a bounded batch |
 | `edit_memory` | Edit an existing memory |
 | `delete_memory` | Delete a memory |
 | `get_conversations` | List conversations with date/category filters |
 | `search_conversations` | Semantic search across conversations |
-| `get_conversation_by_id` | Get full conversation with transcript |
+| `get_conversation_by_id`, `get_conversations_by_ids` | Get full conversations with transcripts — one, or up to 20 in a bounded batch |
 | `get_user_profile` | Get Omi's cached high-level user summary |
 | `get_x_posts`, `search_x_posts` | Browse or search imported X posts and bookmarks |
 | `get_action_items`, `search_action_items` | Browse or search tasks |

@@ -1,0 +1,3 @@
+{
+  "change": "Memory export and AI-assistant connections now use Omi's canonical MCP endpoint, and connection checks show the server's actual error instead of a generic failure."
+}

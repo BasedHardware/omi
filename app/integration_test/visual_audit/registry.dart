@@ -5,6 +5,7 @@ import 'package:omi/ui/ui.dart';
 import 'fakes.dart';
 import 'harness.dart';
 import 'scenarios/apps.dart';
+import 'scenarios/capture.dart';
 import 'scenarios/chat.dart';
 import 'scenarios/conversation_detail.dart';
 import 'scenarios/conversations.dart';
@@ -24,6 +25,7 @@ final auditSuite = AuditSuite(
     ...settingsScenarios,
     ...settingsPagesScenarios,
     ...homeScenarios,
+    ...captureScenarios,
     ...deviceScenarios,
     ...conversationsScenarios,
     ...conversationDetailScenarios,

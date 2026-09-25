@@ -187,6 +187,8 @@ app.add_middleware(
     allow_methods=['*'],
     allow_headers=['*'],
     expose_headers=[
+        'X-Next-Cursor',
+        'X-Scan-Truncated',
         'X-Omi-Memory-As-Of',
         'X-Omi-Memory-Belief-Enabled',
         'X-Omi-Memory-Canonical-Lifecycle-Exposed',

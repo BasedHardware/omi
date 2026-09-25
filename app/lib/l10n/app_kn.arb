@@ -1114,7 +1114,6 @@
     "daySummary": "ದಿನ ಸಾರಾಂಶ",
     "summaryGenerated": "ಸಾರಾಂಶ ರಚಿತ",
     "claudeDesktop": "Claude Desktop",
-    "addToClaudeConfig": "claude_desktop_config.json ಗೆ ಸೇರಿಸಿ",
     "copyConfig": "ಕಾನ್ಫಿಗರೇಶನ್ ನಕಲಿ ಮಾಡಿ",
     "configCopied": "ಕಾನ್ಫಿಗರೇಶನ್ ಪರಿವರ್ತನೆಗೆ ನಕಲಿ ಮಾಡಲಾಗಿದೆ",
     "listeningMins": "ಕೇಳುವುದು (ನಿಮಿಷ)",
@@ -2636,10 +2635,6 @@
     "@claudeDesktop": {
         "description": "Claude Desktop integration section"
     },
-    "addToClaudeDesktopConfig": "claude_desktop_config.json ಗೆ ಸೇರಿಸಿ",
-    "@addToClaudeDesktopConfig": {
-        "description": "Description for Claude Desktop config"
-    },
     "@configCopiedToClipboard": {
         "description": "Confirmation when config is copied"
     },
@@ -2673,10 +2668,6 @@
     },
     "@clientSecret": {
         "description": "OAuth client secret label"
-    },
-    "useYourMcpApiKey": "ನಿಮ್ಮ MCP API ಕೀ ಬಳಸಿ",
-    "@useYourMcpApiKey": {
-        "description": "Hint for client secret value"
     },
     "@webhooks": {
         "description": "Webhooks section header"
@@ -10799,7 +10790,7 @@
     "@memoryHistory": {
         "description": "Filter option for retained memory history"
     },
-    "tapPlusToStartRecording": "ರೆಕಾರ್ಡಿಂಗ್ ಪ್ರಾರಂಭಿಸಲು + ಟ್ಯಾಪ್ ಮಾಡಿ",
+    "tapPlusToStartRecording": "ರೆಕಾರ್ಡಿಂಗ್ ಪ್ರಾರಂಭಿಸಲು ರೆಕಾರ್ಡ್ ಬಟನ್ ಟ್ಯಾಪ್ ಮಾಡಿ",
     "processingTakingLonger": "ಇನ್ನೂ ಕೆಲಸ ನಡೆಯುತ್ತಿದೆ — ಇದು ಸಾಮಾನ್ಯಕ್ಕಿಂತ ಹೆಚ್ಚು ಸಮಯ ತೆಗೆದುಕೊಳ್ಳುತ್ತಿದೆ.",
     "speechProfileEnrollmentPrompt": "Omi ನಿಮ್ಮ ಧ್ವನಿಯನ್ನು ಗುರುತಿಸಲು — ಯಾವುದೇ ವಿಷಯದ ಬಗ್ಗೆ ಸುಮಾರು 5 ಸೆಕೆಂಡುಗಳ ಕಾಲ ಮಾತನಾಡಿ.",
     "home": "ಮುಖಪುಟ",
@@ -10842,7 +10833,7 @@
     "conversationsMovedCount": "{count, plural, =1{1 ಸಂಭಾಷಣೆ ಸರಿಸಲಾಗಿದೆ} other{{count} ಸಂಭಾಷಣೆಗಳನ್ನು ಸರಿಸಲಾಗಿದೆ}}",
     "failedToMoveConversations": "ಸಂಭಾಷಣೆಗಳನ್ನು ಸರಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ",
     "discardedConversationTitle": "ತಿರಸ್ಕರಿಸಲಾಗಿದೆ · {duration}",
-    "noConversationsHeroMessage": "ನೀವು ರೆಕಾರ್ಡ್ ಮಾಡಿದ ಸಂಭಾಷಣೆಗಳು ಇಲ್ಲಿ ಕಾಣಿಸುತ್ತವೆ. ಮೊದಲನೆಯದನ್ನು ರೆಕಾರ್ಡ್ ಮಾಡಲು ಮುಖಪುಟದಲ್ಲಿ + ಟ್ಯಾಪ್ ಮಾಡಿ.",
+    "noConversationsHeroMessage": "ನೀವು ರೆಕಾರ್ಡ್ ಮಾಡಿದ ಸಂಭಾಷಣೆಗಳು ಇಲ್ಲಿ ಕಾಣಿಸುತ್ತವೆ. ಮೊದಲನೆಯದನ್ನು ರೆಕಾರ್ಡ್ ಮಾಡಲು ಮುಖಪುಟದಲ್ಲಿ ರೆಕಾರ್ಡ್ ಬಟನ್ ಟ್ಯಾಪ್ ಮಾಡಿ.",
     "conversationMap": "ಸಂಭಾಷಣೆ ನಕ್ಷೆ",
     "conversationCount": "{count, plural, =1{1 ಸಂಭಾಷಣೆ} other{{count} ಸಂಭಾಷಣೆಗಳು}}",
     "taskCount": "{count, plural, =1{1 ಕಾರ್ಯ} other{{count} ಕಾರ್ಯಗಳು}}",
@@ -10965,7 +10956,7 @@
     "batteryLevelSemantics": "ಬ್ಯಾಟರಿ {level}%",
     "updateOmiGlassFirmware": "OmiGlass ಫರ್ಮ್‌ವೇರ್ ಅಪ್‌ಡೇಟ್ ಮಾಡಿ",
     "deviceConnecting": "ಸಂಪರ್ಕಿಸಲಾಗುತ್ತಿದೆ…",
-    "recordOptionsTip": "ಸಲಹೆ: ಫೋನ್ ಕರೆ ರೆಕಾರ್ಡ್ ಮಾಡಲು ರೆಕಾರ್ಡ್ ಬಟನ್ ಒತ್ತಿ ಹಿಡಿಯಿರಿ.",
+    "recordOptionsTip": "ಸಲಹೆ: ಫೋನ್ ಕರೆ ರೆಕಾರ್ಡ್ ಮಾಡಲು ರೆಕಾರ್ಡ್ ಬಟನ್‌ನಲ್ಲಿರುವ ಬಾಣದ ಗುರುತನ್ನು ಟ್ಯಾಪ್ ಮಾಡಿ.",
     "firmwareUpdateFailedTitle": "ಅಪ್‌ಡೇಟ್ ವಿಫಲವಾಗಿದೆ",
     "firmwareUpdateFailedMessage": "ಅಪ್‌ಡೇಟ್ ಪೂರ್ಣಗೊಂಡಿಲ್ಲ. ನಿಮ್ಮ ಸಾಧನ ಈಗಲೂ ಪ್ರಸ್ತುತ ಫರ್ಮ್‌ವೇರ್‌ನಲ್ಲಿದೆ ಮತ್ತು ಬಳಸಲು ಸುರಕ್ಷಿತವಾಗಿದೆ. ಚಾರ್ಜ್ ಮಾಡಿ ಫೋನ್ ಹತ್ತಿರ ಇಡಿ, ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
     "firmwareDownloadFailedMessage": "ಅಪ್‌ಡೇಟ್ ಡೌನ್‌ಲೋಡ್ ಆಗಲಿಲ್ಲ, ನಿಮ್ಮ ಸಾಧನ ಬದಲಾಗಿಲ್ಲ. ಇಂಟರ್ನೆಟ್ ಸಂಪರ್ಕ ಪರಿಶೀಲಿಸಿ, ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
@@ -11097,8 +11088,28 @@
     "voiceSettingsAskToTag": "ಧ್ವನಿಗಳನ್ನು ಟ್ಯಾಗ್ ಮಾಡಲು ನನ್ನನ್ನು ಕೇಳಿ",
     "voiceSettingsAskToTagSubtitle": "ಆಗಾಗ, ನಿಮ್ಮ ಇತ್ತೀಚಿನ ಸಂಭಾಷಣೆಗಳಲ್ಲಿ ಯಾರು ಮಾತನಾಡುತ್ತಿದ್ದರು ಎಂದು Omi ಕೇಳುತ್ತದೆ",
     "voiceSettingsSaveOthersSubtitle": "ನೀವು ಯಾರಿಗಾದರೂ ಹೆಸರಿಸಿದಾಗ, ಮುಂದಿನ ಬಾರಿ ಗುರುತಿಸಲು Omi ಒಂದು ಚಿಕ್ಕ ಧ್ವನಿ ಮಾದರಿಯನ್ನು ಇಟ್ಟುಕೊಳ್ಳುತ್ತದೆ",
+    "leaveBlank": "ಖಾಲಿ ಬಿಡಿ",
+    "mcpOAuthSetup": "claude.ai ನಲ್ಲಿ ಕಸ್ಟಮ್ ಕನೆಕ್ಟರ್ ಸೇರಿಸಿ ಮತ್ತು ಸರ್ವರ್ URL ಅನ್ನು ಅಂಟಿಸಿ. Claude ಸುಧಾರಿತ OAuth Client ID ಕೇಳಿದರೆ, ಕೆಳಗಿನ ಮೌಲ್ಯವನ್ನು ಬಳಸಿ ಮತ್ತು ಸೀಕ್ರೆಟ್ ಅನ್ನು ಖಾಲಿ ಬಿಡಿ — ನಿಮ್ಮ MCP API ಕೀಯನ್ನು OAuth ಸೀಕ್ರೆಟ್ ಆಗಿ ಎಂದಿಗೂ ಬಳಸಬೇಡಿ.",
+    "claudeCode": "Claude Code",
+    "addToClaudeCodeConfig": "~/.claude.json ಗೆ ಸೇರಿಸಿ",
+    "claudeDesktopConnectorSetup": "Claude Desktop → Settings → Connectors ನಲ್ಲಿ ಕಸ್ಟಮ್ ಕನೆಕ್ಟರ್ ಸೇರಿಸಿ ಮತ್ತು ಸರ್ವರ್ URL ಅನ್ನು ಅಂಟಿಸಿ. Claude ಸುಧಾರಿತ OAuth Client ID ಕೇಳಿದರೆ, ಕೆಳಗಿನ ಮೌಲ್ಯವನ್ನು ಬಳಸಿ ಮತ್ತು ಸೀಕ್ರೆಟ್ ಅನ್ನು ಖಾಲಿ ಬಿಡಿ — ನಿಮ್ಮ MCP API ಕೀಯನ್ನು OAuth ಸೀಕ್ರೆಟ್ ಆಗಿ ಎಂದಿಗೂ ಬಳಸಬೇಡಿ.",
     "transcriptionUnavailableRecordingContinues": "ಲಿಪ್ಯಂತರಗಳು ಲಭ್ಯವಿಲ್ಲ, ಧ್ವನಿಮುದ್ರಣ ಸಾಧನದಲ್ಲಿ ಮುಂದುವರಿಯುತ್ತದೆ ಮತ್ತು ನಂತರ ಪ್ರಕ್ರಿಯೆಗೊಳ್ಳುತ್ತದೆ",
     "transcriptionUnavailableSavingOnDevice": "ಲಿಪ್ಯಂತರ ಲಭ್ಯವಿಲ್ಲ · ಸಾಧನದಲ್ಲಿ ಉಳಿಸಲಾಗುತ್ತಿದೆ",
     "transcriptionsPendingFraction": "ಬಾಕಿ ಇರುವ ಲಿಪ್ಯಂತರಗಳು {pending}/{total}",
-    "transcriptionsPendingCount": "ಬಾಕಿ ಇರುವ ಲಿಪ್ಯಂತರಗಳು {count}"
+    "transcriptionsPendingCount": "ಬಾಕಿ ಇರುವ ಲಿಪ್ಯಂತರಗಳು {count}",
+    "captureSourceCall": "ಕರೆ",
+    "captureSourcePhoneMic": "ಫೋನ್ ಮೈಕ್",
+    "captureStatusWithSource": "{status} · {source}",
+    "resume": "ಮುಂದುವರಿಸಿ",
+    "finish": "ಮುಗಿಸಿ",
+    "pendantPausedResumesWhenYouFinish": "ಪೆಂಡೆಂಟ್ ವಿರಾಮದಲ್ಲಿದೆ · ನೀವು ಮುಗಿಸಿದಾಗ ಮುಂದುವರಿಯುತ್ತದೆ",
+    "pendantIsListeningTitle": "ನಿಮ್ಮ ಪೆಂಡೆಂಟ್ ಕೇಳುತ್ತಿದೆ",
+    "oneSourceAtATime": "Omi ಒಂದು ಬಾರಿಗೆ ಒಂದೇ ಮೂಲದಿಂದ ರೆಕಾರ್ಡ್ ಮಾಡುತ್ತದೆ.",
+    "recordWithPhoneInstead": "ಬದಲಿಗೆ ಫೋನ್‌ನಿಂದ ರೆಕಾರ್ಡ್ ಮಾಡಿ",
+    "pendantPausesUntilYouFinish": "ನೀವು ಮುಗಿಸುವವರೆಗೆ ಪೆಂಡೆಂಟ್ ವಿರಾಮದಲ್ಲಿರುತ್ತದೆ",
+    "pendantPausesDuringCall": "ಕರೆಯ ಸಮಯದಲ್ಲಿ ಪೆಂಡೆಂಟ್ ವಿರಾಮದಲ್ಲಿರುತ್ತದೆ",
+    "keepUsingPendant": "ಪೆಂಡೆಂಟ್ ಬಳಸುವುದನ್ನು ಮುಂದುವರಿಸಿ",
+    "recordWith": "ರೆಕಾರ್ಡ್ ಮಾಡುವ ವಿಧಾನ",
+    "moreWaysToRecord": "ರೆಕಾರ್ಡ್ ಮಾಡಲು ಇನ್ನಷ್ಟು ಮಾರ್ಗಗಳು",
+    "openCall": "ಕರೆ ತೆರೆಯಿರಿ"
 }

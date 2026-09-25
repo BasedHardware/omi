@@ -52,6 +52,14 @@ def _fake_requests_module() -> types.ModuleType:
         module scope, not just the ones tests call.
         """
 
+        status_code = 200
+
+        def json(self):
+            return {}
+
+        def raise_for_status(self):
+            return None
+
     def _blocked(*args, **kwargs):
         raise AssertionError("requests stub: network access is not allowed in tests")
 
