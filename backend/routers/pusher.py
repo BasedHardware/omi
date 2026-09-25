@@ -382,7 +382,11 @@ async def _websocket_util_trigger(
                 for chunk_info in chunks_to_process:
                     _add_to_batch(chunk_info)
 
-            if not pending:
+            if not pending and not ready_batches:
+                # `pending` alone must not gate the iteration: a failed
+                # upload's retry batch lives in `ready_batches`, and skipping
+                # the ready lane below with `continue` would leave the loop
+                # condition truthy forever (a busy spin once shutdown is set).
                 continue
 
             now = time.monotonic()
