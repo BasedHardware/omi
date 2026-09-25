@@ -209,7 +209,10 @@ class _DeviceSettingsState extends State<DeviceSettings> {
       current: SharedPreferencesUtil().buttonActionFor(gesture),
     );
     if (action == null || !mounted) return;
-    setState(() => SharedPreferencesUtil().setButtonActionFor(gesture, action));
+    // Persist first: setButtonActionFor returns a Future, which setState must not see.
+    await SharedPreferencesUtil().setButtonActionFor(gesture, action);
+    if (!mounted) return;
+    setState(() {});
   }
 
   List<Widget> _remappableButtonGestureRows() {

@@ -132,7 +132,9 @@ void main() {
     expect(find.byKey(const Key('button_action_tripleTap_askQuestion')), findsOneWidget);
     expect(find.byKey(const Key('button_action_tripleTap_none')), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('button_action_tripleTap_none')));
+    final none = find.byKey(const Key('button_action_tripleTap_none'));
+    await tester.ensureVisible(none);
+    await tester.tap(none);
     await tester.pumpAndSettle();
 
     expect(find.text('Triple Tap Action'), findsNothing);
@@ -150,7 +152,9 @@ void main() {
     await tester.pumpWidget(_app(provider));
     await tester.pump();
 
-    await tester.tap(find.byKey(const Key('button_gesture_longPress')));
+    final longPress = find.byKey(const Key('button_gesture_longPress'));
+    await tester.ensureVisible(longPress);
+    await tester.tap(longPress);
     await tester.pumpAndSettle();
 
     expect(find.byKey(const Key('button_gesture_longPress')), findsOneWidget);

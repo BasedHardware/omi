@@ -53,21 +53,23 @@ Future<OmiButtonAction?> showButtonActionSheet(
     context: context,
     title: title,
     padding: const EdgeInsets.only(bottom: OmiSpacing.md),
-    builder: (sheetContext) => Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        for (final action in OmiButtonAction.values)
-          Semantics(
-            selected: action == current,
-            child: OmiSettingsRow(
-              key: Key('button_action_${gesture.name}_${action.name}'),
-              title: optionLabel(action),
-              showChevron: false,
-              trailing: action == current ? const Icon(Icons.check, color: OmiColors.textPrimary, size: 20) : null,
-              onTap: () => Navigator.of(sheetContext).pop(action),
+    builder: (sheetContext) => SingleChildScrollView(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (final action in OmiButtonAction.values)
+            Semantics(
+              selected: action == current,
+              child: OmiSettingsRow(
+                key: Key('button_action_${gesture.name}_${action.name}'),
+                title: optionLabel(action),
+                showChevron: false,
+                trailing: action == current ? const Icon(Icons.check, color: OmiColors.textPrimary, size: 20) : null,
+                onTap: () => Navigator.of(sheetContext).pop(action),
+              ),
             ),
-          ),
-      ],
+        ],
+      ),
     ),
   );
 }
