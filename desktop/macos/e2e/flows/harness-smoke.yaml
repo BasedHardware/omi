@@ -42,6 +42,8 @@ covers:
   - desktop/macos/Desktop/Sources/Generated/OmiApi.generated.swift
   - desktop/macos/Desktop/Sources/Startup/OmiFontRegistration.swift
   - desktop/macos/Desktop/Sources/Startup/StartupSystemMaintenancePolicy.swift
+  - desktop/macos/Desktop/Sources/MainWindow/AppDelegate+ShellWindowLaunch.swift
+  - desktop/macos/Desktop/Sources/MainWindow/ShellWindowLaunchRecoveryPolicy.swift
 preconditions:
   - automation_bridge_ready
 
@@ -54,6 +56,14 @@ steps:
         mode: quiet
     expect:
       result.detail.mode: quiet
+
+  - id: S0a
+    name: Confirm the primary scene mounted during launch
+    log.expect:
+      contains:
+        - "OmiApp: Main window content appeared"
+      absent:
+        - "shell window not found after launch recovery retries"
 
   - id: S1
     name: Navigate to Dashboard

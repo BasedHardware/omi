@@ -2,12 +2,17 @@
 
 from __future__ import annotations
 
+import logging
 import re
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Iterable, Optional
 
+import database.calendar_meetings as calendar_db
+import database.redis_db as redis_db
 from models.calendar_context import CalendarMeetingContext, MeetingParticipant
-from models.conversation import CalendarEventLink
+from models.conversation import CalendarEventLink, Conversation, CreateConversation
+
+logger = logging.getLogger(__name__)
 
 MAX_SCREEN_CONTEXT_ROWS = 80
 MAX_SCREEN_CONTEXT_CHARACTERS = 12_000
@@ -77,7 +82,7 @@ def _has_call_control(row: dict[str, Any]) -> bool:
     return _CALL_CONTROL_PATTERN.search(hay) is not None
 
 
-def _is_conferencing_row(row: dict[str, Any]) -> bool:
+def is_conferencing_row(row: dict[str, Any]) -> bool:
     if _is_messaging_call_app(str(row.get('appName') or '')):
         return True
     haystack = f'{row.get("appName", "")} {row.get("windowTitle", "")}'.casefold()
@@ -219,7 +224,7 @@ def _row_identity_signal(text: str, row: Optional[dict[str, Any]] = None) -> int
 
 
 def _select_conferencing_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    conferencing = [row for row in rows if _is_conferencing_row(row)]
+    conferencing = [row for row in rows if is_conferencing_row(row)]
     if not conferencing:
         return []
     combined = [
@@ -560,3 +565,72 @@ def resolve_meeting_context(
     context = merge_meeting_contexts(context, stored_screen)
     context = merge_meeting_contexts(context, direct_screen)
     return merge_meeting_contexts(context, _call('screen', screen))
+
+
+def stored_meeting_context(conversation: Any) -> Optional[CalendarMeetingContext]:
+    direct = getattr(conversation, 'calendar_meeting_context', None)
+    if isinstance(direct, CalendarMeetingContext):
+        return direct
+    if isinstance(direct, dict) and direct:
+        return CalendarMeetingContext(**direct)
+    raw_external_data = getattr(conversation, 'external_data', None)
+    external_data = raw_external_data if isinstance(raw_external_data, dict) else {}
+    raw = external_data.get('calendar_meeting_context')
+    if isinstance(raw, CalendarMeetingContext):
+        return raw
+    if isinstance(raw, dict) and raw:
+        return CalendarMeetingContext(**raw)
+    return None
+
+
+def store_meeting_context(conversation: Any, context: CalendarMeetingContext) -> None:
+    if isinstance(conversation, CreateConversation):
+        conversation.calendar_meeting_context = context
+        return
+    external_data = dict(getattr(conversation, 'external_data', None) or {})
+    external_data['calendar_meeting_context'] = context.model_dump(mode='json')
+    conversation.external_data = external_data
+
+
+def meeting_context_from_redis_mapping(uid: str, conversation: Any) -> Optional[CalendarMeetingContext]:
+    """Exact conversation->meeting association, when one was recorded.
+
+    `redis_db.set_conversation_meeting_id` is written in exactly one place
+    (`routers/listen/conversations.py`, at desktop conversation creation) and only
+    when a stored meeting already overlaps that instant, so this is frequently
+    absent. It is an optimization, never the only path.
+    """
+    conversation_id = getattr(conversation, 'id', None)
+    if not isinstance(conversation, Conversation) or not conversation_id:
+        return None
+    try:
+        meeting_id = redis_db.get_conversation_meeting_id(conversation_id)
+        if not meeting_id:
+            return None
+        meeting_data = calendar_db.get_meeting(uid, meeting_id)
+        if not meeting_data:
+            return None
+        parsed = CalendarMeetingContext.from_records([meeting_data])
+        return parsed[0] if parsed else None
+    except Exception as exc:
+        logger.error('Error retrieving mapped meeting context for conversation %s: %s', conversation_id, exc)
+        return None
+
+
+def meeting_context_from_time_overlap(
+    uid: str, started_at: Optional[datetime], finished_at: Optional[datetime]
+) -> Optional[CalendarMeetingContext]:
+    """Time-overlap lookup against the user's stored meetings.
+
+    Independent of the Redis mapping and of any OAuth grant: it reads the same
+    `users/{uid}/meetings` collection that `POST /v1/calendar/meetings` writes.
+    """
+    if started_at is None or finished_at is None:
+        return None
+    try:
+        tolerance = timedelta(minutes=MEETING_SEARCH_TOLERANCE_MINUTES)
+        records = calendar_db.get_meetings_in_time_range(uid, started_at - tolerance, finished_at + tolerance)
+        return select_overlapping_meeting(records, started_at=started_at, finished_at=finished_at)
+    except Exception as exc:
+        logger.error('Error reading stored meetings by time range for uid %s: %s', uid, exc)
+        return None
