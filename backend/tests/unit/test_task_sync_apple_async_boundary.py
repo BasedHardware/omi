@@ -154,10 +154,10 @@ def test_apple_reminder_sync_preserves_single_and_batch_error_results() -> None:
             single = await task_sync.auto_sync_action_item('user-1', item)
             batch = await task_sync.auto_sync_action_items_batch('user-1', [item, dict(item, id='task-2')])
 
-            assert single == {'synced': False, 'error': 'firestore unavailable'}
+            assert single == {'synced': False, 'error': 'Auto-sync failed'}
             assert batch == [
-                {'synced': False, 'error': 'firestore unavailable'},
-                {'synced': False, 'error': 'firestore unavailable'},
+                {'synced': False, 'error': 'Auto-sync failed'},
+                {'synced': False, 'error': 'Auto-sync failed'},
             ]
 
         asyncio.run(exercise())
