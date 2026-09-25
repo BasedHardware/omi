@@ -2,10 +2,10 @@
 """Convert Omi memory JSON exports to a SurrealDB SurrealQL ingestion script.
 
 Reads Omi memory JSON exports (from file paths or stdin), deduplicates by memory ID,
-and generates clean, idempotent SurrealQL statements (DEFINE TABLE/FIELD/INDEX and UPSERT).
+and generates clean, idempotent SurrealQL statements (UPSERT memory:⟨id⟩ MERGE ...).
 
-SurrealDB is an advanced multi-model database (document, graph, vector, full-text)
-running embedded or in the cloud.
+SurrealDB is a multi-model database that integrates document, graph, and vector capabilities
+into a unified SurrealQL engine.
 
 Zero external dependencies - uses Python 3 standard library only.
 """
@@ -15,9 +15,8 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 
 def surreal_quote(val: Any) -> str:
@@ -28,8 +27,14 @@ def surreal_quote(val: Any) -> str:
         return "true" if val else "false"
     if isinstance(val, (int, float)):
         return str(val)
-    # Double single quotes or backslash escape single quotes for SurrealQL
-    text = str(val).replace("\\", "\\\\").replace("'", "\\'")
+    text = (
+        str(val)
+        .replace("\\", "\\\\")
+        .replace("'", "\\'")
+        .replace("\r", "\\r")
+        .replace("\n", "\\n")
+        .replace("\t", "\\t")
+    )
     return f"'{text}'"
 
 
@@ -37,14 +42,13 @@ def surreal_array_literal(items: Sequence[str]) -> str:
     """Format a sequence of strings into a SurrealQL array literal."""
     if not items:
         return "[]"
-    escaped_items = ["'" + str(x).replace("\\", "\\\\").replace("'", "\\'") + "'" for x in items]
+    escaped_items = [surreal_quote(str(x)) for x in items]
     return f"[{', '.join(escaped_items)}]"
 
 
 def surreal_record_id(table_name: str, raw_id: str) -> str:
     """Format a safe record ID for SurrealDB using ⟨...⟩ wrapper if needed."""
     cleaned = str(raw_id).strip()
-    # SurrealQL allows memory:⟨uuid-or-complex-id⟩
     return f"{table_name}:⟨{cleaned}⟩"
 
 
@@ -107,7 +111,7 @@ def generate_surrealql(
     inputs: Sequence[str],
     table_name: str = "memory",
 ) -> Tuple[str, int]:
-    """Load, deduplicate by ID, and generate SurrealQL statements."""
+    """Load, deduplicate by ID, and generate SurrealQL ingestion script."""
     dedup: Dict[str, Dict[str, Any]] = {}
 
     for inp in inputs:
@@ -127,20 +131,17 @@ def generate_surrealql(
 
     normalized = [format_memory_for_surreal(m) for m in dedup.values()]
 
-    sql_lines: List[str] = [
-        f"-- SurrealDB Ingestion Script for Omi Memories",
+    lines: List[str] = [
+        "-- SurrealDB SurrealQL Ingestion Script for Omi Memories",
         f"-- Total records: {len(normalized)}",
+        f"-- Table name: {table_name}",
         "",
-        f"-- Schema definitions",
+        "-- 1. Table schema and indexes definition (safe to run repeatedly)",
         f"DEFINE TABLE IF NOT EXISTS {table_name} SCHEMALESS;",
-        f"DEFINE FIELD IF NOT EXISTS content ON TABLE {table_name} TYPE string;",
-        f"DEFINE FIELD IF NOT EXISTS category ON TABLE {table_name} TYPE option<string>;",
-        f"DEFINE FIELD IF NOT EXISTS tags ON TABLE {table_name} TYPE array<string>;",
-        f"DEFINE FIELD IF NOT EXISTS visibility ON TABLE {table_name} TYPE option<string>;",
-        f"DEFINE FIELD IF NOT EXISTS created_at ON TABLE {table_name} TYPE option<datetime>;",
-        f"DEFINE FIELD IF NOT EXISTS updated_at ON TABLE {table_name} TYPE option<datetime>;",
-        f"DEFINE INDEX IF NOT EXISTS {table_name}_category ON TABLE {table_name} COLUMNS category;",
+        f"DEFINE INDEX IF NOT EXISTS idx_{table_name}_category ON {table_name} FIELDS category;",
+        f"DEFINE INDEX IF NOT EXISTS idx_{table_name}_created ON {table_name} FIELDS created_at;",
         "",
+        "-- 2. Upsert memory records",
     ]
 
     for rec in normalized:
@@ -149,37 +150,33 @@ def generate_surrealql(
         category_val = surreal_quote(rec["category"])
         tags_val = surreal_array_literal(rec["tags"])
         vis_val = surreal_quote(rec["visibility"])
-        created_val = f"type::datetime({surreal_quote(rec['created_at'])})" if rec["created_at"] else "NONE"
-        updated_val = f"type::datetime({surreal_quote(rec['updated_at'])})" if rec["updated_at"] else "NONE"
+        created_val = surreal_quote(rec["created_at"])
+        updated_val = surreal_quote(rec["updated_at"])
 
-        sql_lines.append(
-            f"UPSERT {rec_id} SET "
-            f"content = {content_val}, "
-            f"category = {category_val}, "
-            f"tags = {tags_val}, "
-            f"visibility = {vis_val}, "
-            f"created_at = {created_val}, "
-            f"updated_at = {updated_val};"
+        fields = (
+            f"{{ content: {content_val}, "
+            f"category: {category_val}, "
+            f"tags: {tags_val}, "
+            f"visibility: {vis_val}, "
+            f"created_at: {created_val}, "
+            f"updated_at: {updated_val} }}"
         )
+        lines.append(f"UPSERT {rec_id} MERGE {fields};")
 
-    sql_lines.extend([
+    lines.extend([
         "",
-        f"-- Sample Analytical Queries in SurrealQL:",
-        f"-- 1. Count memories by category:",
-        f"-- SELECT category, count() FROM {table_name} GROUP BY category;",
-        "",
-        f"-- 2. Find memories with specific tags:",
-        f"-- SELECT * FROM {table_name} WHERE tags CONTAINS 'project';",
-        "",
-        f"-- 3. Full-text search content:",
-        f"-- SELECT * FROM {table_name} WHERE content ~ 'meeting';",
+        "-- Sample Analytical Queries in SurrealQL:",
+        f"-- 1. Search content: SELECT * FROM {table_name} WHERE string::contains(string::lowercase(content), 'meeting');",
+        f"-- 2. Count by category: SELECT category, count() AS total FROM {table_name} GROUP BY category;",
+        f"-- 3. Recent memories: SELECT * FROM {table_name} ORDER BY created_at DESC LIMIT 10;",
         "",
     ])
 
-    return "\n".join(sql_lines), len(normalized)
+    return "\n".join(lines), len(normalized)
 
 
-def main() -> None:
+def build_parser() -> argparse.ArgumentParser:
+    """Build CLI parser."""
     parser = argparse.ArgumentParser(
         description="Convert Omi memory JSON exports to a SurrealDB SurrealQL ingestion script.",
         epilog="""\
@@ -214,8 +211,13 @@ examples:
         action="store_true",
         help="Overwrite output file if it already exists.",
     )
+    return parser
 
-    args = parser.parse_args()
+
+def main(argv: Optional[Sequence[str]] = None) -> int:
+    """CLI entry point."""
+    parser = build_parser()
+    args = parser.parse_args(argv)
 
     if args.output != "-":
         out_path = Path(args.output)
@@ -223,13 +225,13 @@ examples:
             sys.stderr.write(
                 f"Error: Output file already exists: {args.output} (use --force to overwrite)\n"
             )
-            sys.exit(1)
+            return 1
 
     try:
         sql_content, count = generate_surrealql(args.inputs, table_name=args.table_name)
     except Exception as e:
         sys.stderr.write(f"Error: {e}\n")
-        sys.exit(1)
+        return 1
 
     if args.output == "-":
         sys.stdout.write(sql_content + "\n")
@@ -240,7 +242,8 @@ examples:
         sys.stderr.write(
             f"Successfully generated SurrealQL script: {args.output} ({count} memories)\n"
         )
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())
