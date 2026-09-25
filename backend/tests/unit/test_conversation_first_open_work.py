@@ -1,8 +1,9 @@
 from __future__ import annotations
+import database.first_open_obligations as first_open_obligations_db
 
 from datetime import datetime, timedelta, timezone
 
-import database.first_open_obligations as first_open_obligations_db
+import database.conversations as conversations_db
 import database.goals as goals_db
 from google.cloud import firestore
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
@@ -66,10 +67,7 @@ def test_first_open_persists_and_fences_account_and_source_generation() -> None:
 
     control = store.rows[("users", "owner", "memory_state", "apply_control")]
     control["source_generation"] = 8
-    assert (
-        first_open_obligations_db.claim_first_open_work("owner", "conversation", now=now, firestore_client=store)
-        is None
-    )
+    assert first_open_obligations_db.claim_first_open_work("owner", "conversation", now=now, firestore_client=store) is None
 
 
 def test_account_deletion_suspends_claim_and_fences_effect_commit() -> None:

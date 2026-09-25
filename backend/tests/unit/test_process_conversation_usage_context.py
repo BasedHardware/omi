@@ -68,7 +68,6 @@ def _build_fakes() -> dict[str, ModuleType]:
     client_mod = ModuleType("database._client")
     client_mod.db = MagicMock(name="db")
     client_mod.get_firestore_client = lambda: client_mod.db
-    client_mod.run_transactional = MagicMock(name="run_transactional")
 
     def _document_id_from_seed(seed: str) -> str:
         seed_hash = hashlib.sha256(seed.encode("utf-8")).digest()
@@ -1801,7 +1800,7 @@ def test_running_now_still_defers_folders_and_apps_when_jit_admits(monkeypatch):
         lambda **_kwargs: SimpleNamespace(defer_derived_work=True),
     )
     monkeypatch.setattr(
-        process_conversation.first_open_obligations_db,
+        process_conversation.conversations_db,
         'initialize_first_open_work',
         lambda uid, conversation_id, **_kwargs: claims.append(f'{uid}:{conversation_id}') or True,
     )

@@ -23,7 +23,6 @@ from utils.conversations.transcript_for_llm import (
 )
 from utils.conversations.wake_word import has_structural_wake_word_marker
 import database.conversations as conversations_db
-import database.first_open_obligations as first_open_obligations_db
 import database.notifications as notification_db
 import database.users as users_db
 import database.tasks as tasks_db
@@ -89,7 +88,6 @@ from utils.conversations.factory import deserialize_conversation
 from utils.conversations.projection_payload import (
     client_processing_mutation,
     omit_null_processing_state,
-    sanitize_untrusted_provenance_field,
     strip_client_processing,
 )
 from utils.conversations import lifecycle as lifecycle_service
@@ -552,7 +550,7 @@ def _get_structured(
         if conversation_relevance_jev_enabled() and not has_described_photos and not has_wake_word_marker:
             jev_transcript = relevance_transcript(segments)
             if jev_tier_applies(jev_transcript):
-                jev_discard = lambda: jev_discard_probability(jev_transcript)
+                def jev_discard(): return jev_discard_probability(jev_transcript)
 
         decision = decide_relevance(
             trigger=trigger,
@@ -2935,7 +2933,7 @@ def process_conversation(
         first_open_plan = resolve_authorized_first_open_plan(uid=uid, source=str(source_value))
         if first_open_plan.defer_derived_work:
             try:
-                jit_defer_expensive = first_open_obligations_db.initialize_first_open_work(uid, conversation.id)
+                jit_defer_expensive = conversations_db.initialize_first_open_work(uid, conversation.id)
                 if jit_defer_expensive:
                     record_jit_first_open(event='claim', effect='obligation')
             except Exception as error:

@@ -5,7 +5,6 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any, Optional
 
-import database.first_open_obligations as first_open_obligations_db
 from models.app import UsageHistoryType
 from models.other import Person
 from utils.metrics import record_jit_first_open
@@ -15,6 +14,7 @@ def run_first_open_derived_work(uid: str, conversation_data: dict[str, Any], tok
     # Import lazily to preserve the large processing module's existing test
     # seams without creating an import cycle at router startup.
     from utils.conversations import process_conversation as processing
+    import database.first_open_obligations as first_open_obligations_db
 
     conversation = processing.deserialize_conversation(conversation_data)
     obligation = conversation_data.get('jit_first_open') or {}
@@ -51,7 +51,7 @@ def run_first_open_derived_work(uid: str, conversation_data: dict[str, Any], tok
             raise
 
     if conversation.discarded:
-        for effect in first_open_obligations_db.FIRST_OPEN_EFFECTS:
+        for effect in processing.conversations_db.FIRST_OPEN_EFFECTS:
             if not complete_state(effect):
                 complete(effect)
         return
