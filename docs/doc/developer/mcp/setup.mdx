@@ -137,10 +137,30 @@ OAuth flows.
 ## Manual hosted-client configuration
 
 <Tabs>
-  <Tab title="Claude Desktop / Claude Code" icon="robot">
-    Claude's cloud connector supports OAuth as described above. For a manual-key
-    fallback, current Claude Desktop builds that support remote MCP servers
-    accept a hosted HTTP entry in `claude_desktop_config.json`:
+  <Tab title="Claude Desktop" icon="robot">
+    Claude Desktop adds remote MCP servers through the Connectors UI — not a
+    config file. Open **Settings → Connectors → Add custom connector**, then use:
+
+    - **Name:** Omi Memory
+    - **Remote MCP server URL:** `https://api.omi.me/v1/mcp`
+    - **Advanced settings** (only if asked): OAuth Client ID `omi-claude-prod`,
+      OAuth Client Secret **leave blank**
+
+    Click **Add**, then **Connect**, and approve Omi's OAuth consent screen.
+    `claude_desktop_config.json` only launches local stdio `command` servers — it
+    cannot hold a hosted HTTP entry. For a manual-key local path use the
+    [deprecated local stdio fallback](#local-stdio-server-with-uvx-or-python-deprecated).
+  </Tab>
+  <Tab title="Claude Code" icon="terminal">
+    Add the hosted server at user scope:
+
+    ```bash
+    claude mcp add --scope user --transport http omi-memory \
+      https://api.omi.me/v1/mcp \
+      --header "Authorization: Bearer omi_mcp_YOUR_KEY_HERE"
+    ```
+
+    Equivalently, add the entry to `~/.claude.json` directly:
 
     ```json
     {
@@ -154,25 +174,6 @@ OAuth flows.
         }
       }
     }
-    ```
-
-    **Config file location:**
-    - macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`
-    - Windows PowerShell: `$env:APPDATA\Claude\claude_desktop_config.json`
-    - Windows cmd: `%APPDATA%\Claude\claude_desktop_config.json`
-
-    <Note>
-    Older Claude Desktop builds only support local stdio servers — use the
-    [local stdio fallback](#local-stdio-server-with-uvx-or-python-deprecated)
-    there, or the claude.ai OAuth connector flow instead.
-    </Note>
-
-    Claude Code can be configured at user scope instead:
-
-    ```bash
-    claude mcp add --scope user --transport http omi-memory \
-      https://api.omi.me/v1/mcp \
-      --header "Authorization: Bearer omi_mcp_YOUR_KEY_HERE"
     ```
 
   </Tab>
