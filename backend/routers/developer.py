@@ -2331,7 +2331,7 @@ class GoalResponse(BaseModel):
 
 
 class CreateGoalRequest(BaseModel):
-    model_config = ConfigDict(title='CreateGoalRequest')
+    model_config = ConfigDict(title='CreateGoalRequest', allow_inf_nan=False)
 
     title: str = Field(description="The goal title/description", min_length=1, max_length=500)
     desired_outcome: Optional[str] = Field(default=None, max_length=2000)
@@ -2347,7 +2347,7 @@ class CreateGoalRequest(BaseModel):
 
 
 class UpdateGoalRequest(BaseModel):
-    model_config = ConfigDict(title='UpdateGoalRequest')
+    model_config = ConfigDict(title='UpdateGoalRequest', allow_inf_nan=False)
 
     title: Optional[str] = Field(default=None, description="New title", min_length=1, max_length=500)
     desired_outcome: Optional[str] = Field(default=None, max_length=2000)
@@ -2518,7 +2518,7 @@ def update_goal(
 )
 def update_goal_progress(
     goal_id: str,
-    current_value: float = Query(..., description="New progress value"),
+    current_value: float = Query(..., description="New progress value", allow_inf_nan=False),
     uid: str = Depends(get_uid_with_goals_write),
 ):
     """

@@ -1,6 +1,7 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
 import 'package:omi/backend/schema/message.dart';
+import 'package:omi/ui/ui.dart';
 
 class ChartMessageWidget extends StatelessWidget {
   final ChartData chartData;
@@ -8,7 +9,8 @@ class ChartMessageWidget extends StatelessWidget {
   const ChartMessageWidget({super.key, required this.chartData});
 
   Color _parseColor(String? hex) {
-    if (hex == null || hex.isEmpty) return const Color(0xFF448AFF);
+    // A series without a colour is drawn in the neutral accent (INV-UI-1), not a default blue.
+    if (hex == null || hex.isEmpty) return OmiColors.accent;
     hex = hex.replaceFirst('#', '');
     if (hex.length == 6) hex = 'FF$hex';
     return Color(int.parse(hex, radix: 16));
@@ -24,8 +26,8 @@ class ChartMessageWidget extends StatelessWidget {
       margin: const EdgeInsets.symmetric(vertical: 8),
       padding: const EdgeInsets.fromLTRB(12, 16, 16, 12),
       decoration: BoxDecoration(
-        color: const Color(0xFF1A1A20),
-        borderRadius: BorderRadius.circular(16),
+        color: OmiColors.surface1,
+        borderRadius: OmiRadius.lgAll,
         border: Border.all(color: Colors.white.withValues(alpha: 0.06)),
       ),
       child: Column(
@@ -33,7 +35,7 @@ class ChartMessageWidget extends StatelessWidget {
         children: [
           Text(
             chartData.title,
-            style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
+            style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 20),
           SizedBox(height: 200, child: chartData.chartType == 'bar' ? _buildBarChart() : _buildLineChart()),
@@ -62,7 +64,7 @@ class ChartMessageWidget extends StatelessWidget {
         padding: const EdgeInsets.only(top: 8),
         child: Text(
           text,
-          style: TextStyle(color: Colors.grey.shade500, fontSize: 10),
+          style: OmiType.caption.copyWith(color: OmiColors.textTertiary),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
           textAlign: TextAlign.center,
@@ -115,7 +117,7 @@ class ChartMessageWidget extends StatelessWidget {
               interval: _niceInterval(minY, maxY),
               getTitlesWidget: (value, meta) {
                 if (value == meta.max || value == meta.min) return const SizedBox.shrink();
-                return Text(_formatValue(value), style: TextStyle(color: Colors.grey.shade500, fontSize: 11));
+                return Text(_formatValue(value), style: OmiType.caption.copyWith(color: OmiColors.textTertiary));
               },
             ),
           ),
@@ -123,15 +125,15 @@ class ChartMessageWidget extends StatelessWidget {
         borderData: FlBorderData(show: false),
         lineTouchData: LineTouchData(
           touchTooltipData: LineTouchTooltipData(
-            getTooltipColor: (_) => const Color(0xFF2C2C34),
-            tooltipRoundedRadius: 8,
+            getTooltipColor: (_) => OmiColors.surface2,
+            tooltipRoundedRadius: OmiRadius.sm,
             getTooltipItems: (spots) {
               return spots.map((spot) {
                 int idx = spot.x.toInt();
                 String label = idx >= 0 && idx < points.length ? points[idx].label : '';
                 return LineTooltipItem(
                   '$label\n${_formatValue(spot.y)}',
-                  const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+                  OmiType.footnote.copyWith(fontWeight: FontWeight.w500),
                 );
               }).toList();
             },
@@ -204,7 +206,7 @@ class ChartMessageWidget extends StatelessWidget {
               interval: _niceInterval(0, maxY),
               getTitlesWidget: (value, meta) {
                 if (value == meta.max || value == meta.min) return const SizedBox.shrink();
-                return Text(_formatValue(value), style: TextStyle(color: Colors.grey.shade500, fontSize: 11));
+                return Text(_formatValue(value), style: OmiType.caption.copyWith(color: OmiColors.textTertiary));
               },
             ),
           ),
@@ -212,14 +214,14 @@ class ChartMessageWidget extends StatelessWidget {
         borderData: FlBorderData(show: false),
         barTouchData: BarTouchData(
           touchTooltipData: BarTouchTooltipData(
-            getTooltipColor: (_) => const Color(0xFF2C2C34),
-            tooltipRoundedRadius: 8,
+            getTooltipColor: (_) => OmiColors.surface2,
+            tooltipRoundedRadius: OmiRadius.sm,
             getTooltipItem: (group, groupIndex, rod, rodIndex) {
               int idx = group.x;
               String label = idx >= 0 && idx < points.length ? points[idx].label : '';
               return BarTooltipItem(
                 '$label\n${_formatValue(rod.toY)}',
-                const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+                OmiType.footnote.copyWith(fontWeight: FontWeight.w500),
               );
             },
           ),

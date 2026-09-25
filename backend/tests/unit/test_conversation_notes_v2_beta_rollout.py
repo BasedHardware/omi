@@ -23,6 +23,8 @@ ROLLOUT_FLAGS = (
     'CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED',
     'CONVERSATION_OCR_CONTEXT_ENABLED',
     'BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED',
+    'MEETING_NOTES_RICH_CONTEXT_ENABLED',
+    'MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED',
 )
 
 # backend-listen finalizes a live GKE conversation; gke/pusher hosts the same
@@ -77,6 +79,14 @@ def test_prod_keeps_calendar_and_ocr_context_flags_dark():
     env_maps = _env_maps(_composed()['environments']['prod'])
     for scope in SUMMARY_PIPELINE_SCOPES:
         for flag in ('CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED', 'CONVERSATION_OCR_CONTEXT_ENABLED'):
+            assert _value(env_maps[scope], flag) == 'false', f'{scope}:{flag}'
+
+
+def test_prod_keeps_rich_meeting_notes_flags_dark():
+    """Rich meeting notes and screen-text context start dev-only for their bake."""
+    env_maps = _env_maps(_composed()['environments']['prod'])
+    for scope in SUMMARY_PIPELINE_SCOPES:
+        for flag in ('MEETING_NOTES_RICH_CONTEXT_ENABLED', 'MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED'):
             assert _value(env_maps[scope], flag) == 'false', f'{scope}:{flag}'
 
 

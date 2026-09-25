@@ -46,7 +46,7 @@ struct SessionRecoveryView: View {
             ProgressView()
               .controlSize(.small)
           } else {
-            Text("Retry")
+            Text("Try Again")
           }
         }
         .buttonStyle(InkButtonStyle(kind: .primary))

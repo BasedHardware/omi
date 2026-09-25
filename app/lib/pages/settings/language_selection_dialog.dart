@@ -2,12 +2,18 @@ import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
 
+import 'package:omi/pages/settings/transcription/stt_language.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/user_provider.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
+/// Asks for the primary language (the one language setting; docs/ux-contract.md §12).
+///
+/// A searchable list in the shared sheet. When the language is required (none set yet) the sheet
+/// cannot be swiped or tapped away and has no close button.
 class LanguageSelectionDialog {
   static Future<void> show(
     BuildContext context, {
@@ -27,210 +33,169 @@ class LanguageSelectionDialog {
       isRequired = true; // Make the dialog required if no language is set
     }
 
-    // Use the availableLanguages directly as they're already ordered by popularity
-    final languages = homeProvider.availableLanguages.entries.toList();
-
-    // Preset the selected language if the user has one
-    String? selectedLanguage = homeProvider.userPrimaryLanguage.isNotEmpty ? homeProvider.userPrimaryLanguage : null;
-    String? selectedLanguageName = selectedLanguage != null ? homeProvider.getLanguageName(selectedLanguage) : null;
-    String searchQuery = '';
-    List<MapEntry<String, String>> filteredLanguages = List.from(languages);
-    final ScrollController scrollController = ScrollController();
-
-    await showDialog(
+    await showOmiSheet<void>(
       context: context,
-      barrierDismissible: !isRequired,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (context, setState) {
-            void filterLanguages(String query) {
-              setState(() {
-                searchQuery = query.toLowerCase();
-                if (query.isEmpty) {
-                  filteredLanguages = languages;
-                } else {
-                  // Filter all languages
-                  final filtered = languages.where((lang) {
-                    return lang.key.toLowerCase().contains(searchQuery) ||
-                        lang.value.toLowerCase().contains(searchQuery);
-                  }).toList();
+      title: context.l10n.tellUsPrimaryLanguage,
+      showCloseButton: !isRequired,
+      isDismissible: !isRequired,
+      enableDrag: !isRequired,
+      builder: (sheetContext) => _PrimaryLanguagePicker(
+        homeProvider: homeProvider,
+        showSingleLanguageWarning: showSingleLanguageWarning,
+      ),
+    );
+  }
+}
 
-                  // Keep the original order from availableLanguages
-                  filtered.sort((a, b) {
-                    final aIndex = languages.indexOf(a);
-                    final bIndex = languages.indexOf(b);
-                    return aIndex.compareTo(bIndex);
-                  });
+class _PrimaryLanguagePicker extends StatefulWidget {
+  const _PrimaryLanguagePicker({
+    required this.homeProvider,
+    required this.showSingleLanguageWarning,
+  });
 
-                  filteredLanguages = filtered;
-                }
-              });
-            }
+  final HomeProvider homeProvider;
+  final bool showSingleLanguageWarning;
 
-            return AlertDialog(
-              backgroundColor: const Color(0xFF1A1A1A),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-              title: Text(
-                context.l10n.tellUsPrimaryLanguage,
-                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              content: SizedBox(
-                width: double.maxFinite,
-                height: 300,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      context.l10n.languageForTranscription,
-                      style: const TextStyle(color: Colors.grey, fontSize: 14),
-                    ),
-                    if (showSingleLanguageWarning) ...[
-                      const SizedBox(height: 8),
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF2A2A2A),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(color: const Color(0xFF8E8E93).withValues(alpha: 0.3)),
-                        ),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.info_outline, color: Color(0xFF8E8E93), size: 18),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                context.l10n.singleLanguageModeInfo,
-                                style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 12),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                    const SizedBox(height: 16),
-                    TextField(
-                      onChanged: filterLanguages,
-                      style: const TextStyle(color: Colors.white),
-                      decoration: InputDecoration(
-                        hintText: context.l10n.searchLanguageHint,
-                        hintStyle: const TextStyle(color: Colors.grey),
-                        prefixIcon: const Icon(Icons.search, color: Colors.grey),
-                        filled: true,
-                        fillColor: const Color(0xFF2A2A2A),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(color: Color(0xFF35343B)),
-                        ),
-                        enabledBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(color: Color(0xFF35343B)),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(8),
-                          borderSide: const BorderSide(color: Colors.white),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-                    Expanded(
-                      child: filteredLanguages.isEmpty
-                          ? Center(
-                              child: Text(context.l10n.noLanguagesFound, style: const TextStyle(color: Colors.grey)),
-                            )
-                          : ListView.builder(
-                              controller: scrollController,
-                              itemCount: filteredLanguages.length,
-                              itemBuilder: (context, index) {
-                                final language = filteredLanguages[index];
-                                final isSelected = selectedLanguage == language.value;
+  @override
+  State<_PrimaryLanguagePicker> createState() => _PrimaryLanguagePickerState();
+}
 
-                                return ListTile(
-                                  title: Text(language.key, style: const TextStyle(color: Colors.white)),
-                                  trailing: isSelected ? const Icon(Icons.check_circle, color: Colors.white) : null,
-                                  selected: isSelected,
-                                  selectedTileColor: Colors.white.withValues(alpha: 0.12),
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                  onTap: () {
-                                    setState(() {
-                                      // Toggle selection - if already selected, unselect it
-                                      if (selectedLanguage == language.value) {
-                                        selectedLanguage = null;
-                                        selectedLanguageName = null;
-                                      } else {
-                                        selectedLanguage = language.value;
-                                        selectedLanguageName = language.key;
-                                      }
-                                    });
-                                  },
-                                );
-                              },
-                            ),
-                    ),
-                    // Auto-scroll to selected language when selection changes
-                    if (selectedLanguage != null)
-                      Builder(
-                        builder: (context) {
-                          WidgetsBinding.instance.addPostFrameCallback((_) {
-                            final selectedIndex = filteredLanguages.indexWhere(
-                              (lang) => lang.value == selectedLanguage,
-                            );
-                            if (selectedIndex != -1 && scrollController.hasClients) {
-                              scrollController.animateTo(
-                                selectedIndex * 56.0, // Approximate height of each list item
-                                duration: const Duration(milliseconds: 300),
-                                curve: Curves.easeInOut,
-                              );
-                            }
-                          });
-                          return const SizedBox.shrink();
-                        },
-                      ),
-                  ],
-                ),
-              ),
-              actions: [
-                if (!isRequired)
-                  TextButton(
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                    },
-                    style: TextButton.styleFrom(foregroundColor: Colors.grey),
-                    child: Text(context.l10n.skip),
+class _PrimaryLanguagePickerState extends State<_PrimaryLanguagePicker> {
+  // Already ordered by popularity.
+  late final List<MapEntry<String, String>> _languages = widget.homeProvider.availableLanguages.entries.toList();
+  late List<MapEntry<String, String>> _filtered = _languages;
+  final ScrollController _scrollController = ScrollController();
+
+  // Preset the selected language if the user has one
+  late String? _selected =
+      widget.homeProvider.userPrimaryLanguage.isNotEmpty ? widget.homeProvider.userPrimaryLanguage : null;
+  late String? _selectedName = _selected != null ? widget.homeProvider.getLanguageName(_selected!) : null;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _scrollToSelected());
+  }
+
+  @override
+  void dispose() {
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  void _scrollToSelected() {
+    final index = _filtered.indexWhere((lang) => lang.value == _selected);
+    if (index == -1 || !_scrollController.hasClients) return;
+    _scrollController.animateTo(
+      (index * 56.0).clamp(0, _scrollController.position.maxScrollExtent), // Approximate row height
+      duration: OmiMotion.of(context).standard,
+      curve: Curves.easeInOut,
+    );
+  }
+
+  void _filter(String query) {
+    final q = query.toLowerCase();
+    setState(() {
+      // A filtered list keeps the original (popularity) order.
+      _filtered = q.isEmpty
+          ? _languages
+          : _languages
+              .where((lang) => lang.key.toLowerCase().contains(q) || lang.value.toLowerCase().contains(q))
+              .toList();
+    });
+  }
+
+  Future<void> _save() async {
+    final code = _selected;
+    if (code == null) return;
+    final successMsg = context.l10n.languageSetTo(_selectedName ?? code);
+    final failMsg = context.l10n.failedToSetLanguage;
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    final previous = widget.homeProvider.userPrimaryLanguage;
+    final success = await widget.homeProvider.updateUserPrimaryLanguage(code, userProvider: userProvider);
+    if (!mounted) return;
+    if (success) {
+      // Custom STT providers that follow the primary language pick up the new one.
+      await SttLanguage.syncToPrimary(code, previous: previous);
+      if (!mounted) return;
+      Provider.of<CaptureProvider>(context, listen: false).onRecordProfileSettingChanged();
+      Navigator.of(context).pop();
+      AppSnackbar.showSnackbarSuccess(successMsg);
+    } else {
+      AppSnackbar.showSnackbarError(failMsg);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Text(l10n.languageForTranscription, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
+        if (widget.showSingleLanguageWarning) ...[
+          const SizedBox(height: OmiSpacing.xs),
+          Container(
+            padding: const EdgeInsets.all(OmiSpacing.sm),
+            decoration: BoxDecoration(
+              color: OmiColors.surface2,
+              borderRadius: OmiRadius.smAll,
+              border: Border.all(color: OmiColors.border),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.info_outline, color: OmiColors.textTertiary, size: 18),
+                const SizedBox(width: OmiSpacing.xs),
+                Expanded(
+                  child: Text(
+                    l10n.singleLanguageModeInfo,
+                    style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
                   ),
-                ElevatedButton(
-                  onPressed: selectedLanguage == null
-                      ? null
-                      : () async {
-                          final successMsg = context.l10n.languageSetTo(selectedLanguageName!);
-                          final failMsg = context.l10n.failedToSetLanguage;
-                          final userProvider = Provider.of<UserProvider>(context, listen: false);
-                          final success = await homeProvider.updateUserPrimaryLanguage(
-                            selectedLanguage!,
-                            userProvider: userProvider,
-                          );
-                          if (!context.mounted) return;
-                          if (success) {
-                            Provider.of<CaptureProvider>(context, listen: false).onRecordProfileSettingChanged();
-                            Navigator.of(context).pop();
-                            AppSnackbar.showSnackbarSuccess(successMsg);
-                          } else {
-                            AppSnackbar.showSnackbarError(failMsg);
-                          }
-                        },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    disabledBackgroundColor: Colors.white.withValues(alpha: 0.3),
-                    foregroundColor: Colors.black,
-                    disabledForegroundColor: Colors.black.withValues(alpha: 0.4),
-                  ),
-                  child: Text(context.l10n.confirm),
                 ),
               ],
-            );
-          },
-        );
-      },
+            ),
+          ),
+        ],
+        const SizedBox(height: OmiSpacing.sm),
+        OmiSearchField(placeholder: l10n.searchLanguageHint, onChanged: _filter, onCleared: () => _filter('')),
+        const SizedBox(height: OmiSpacing.xs),
+        SizedBox(
+          height: MediaQuery.sizeOf(context).height * 0.4,
+          child: _filtered.isEmpty
+              ? Center(
+                  child: Text(l10n.noLanguagesFound, style: OmiType.subhead.copyWith(color: OmiColors.textTertiary)),
+                )
+              : ListView.builder(
+                  controller: _scrollController,
+                  itemCount: _filtered.length,
+                  itemBuilder: (context, index) {
+                    final language = _filtered[index];
+                    final isSelected = _selected == language.value;
+                    return ListTile(
+                      title: Text(language.key, style: OmiType.body),
+                      trailing: isSelected ? const Icon(Icons.check_circle, color: OmiColors.textPrimary) : null,
+                      selected: isSelected,
+                      selectedTileColor: OmiColors.surface2,
+                      shape: const RoundedRectangleBorder(borderRadius: OmiRadius.smAll),
+                      onTap: () => setState(() {
+                        // Tapping the selected language clears the choice.
+                        if (isSelected) {
+                          _selected = null;
+                          _selectedName = null;
+                        } else {
+                          _selected = language.value;
+                          _selectedName = language.key;
+                        }
+                      }),
+                    );
+                  },
+                ),
+        ),
+        const SizedBox(height: OmiSpacing.sm),
+        OmiButton(label: l10n.save, expand: true, onPressed: _selected == null ? null : _save),
+        const SizedBox(height: OmiSpacing.xs),
+      ],
     );
   }
 }

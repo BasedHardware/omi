@@ -985,14 +985,6 @@ class AnalyticsManager {
     PostHogManager.shared.chatCleared()
   }
 
-  func chatSessionCreated() {
-    PostHogManager.shared.track("chat_session_created", properties: [:])
-  }
-
-  func chatSessionDeleted() {
-    PostHogManager.shared.track("chat_session_deleted", properties: [:])
-  }
-
   func messageRated(rating: Int, surface: String = "text") {
     let ratingString = rating == 1 ? "thumbs_up" : "thumbs_down"
     // `source` splits the admin thumbs-ratio chart: "text" = main-window
@@ -1000,22 +992,6 @@ class AnalyticsManager {
     // existed chart as the combined series only.
     PostHogManager.shared.track(
       "message_rated", properties: ["rating": ratingString, "source": surface])
-  }
-
-  func initialMessageGenerated(hasApp: Bool) {
-    PostHogManager.shared.track("initial_message_generated", properties: ["has_app": hasApp])
-  }
-
-  func sessionTitleGenerated() {
-    PostHogManager.shared.track("session_title_generated", properties: [:])
-  }
-
-  func chatStarredFilterToggled(enabled: Bool) {
-    PostHogManager.shared.track("chat_starred_filter_toggled", properties: ["enabled": enabled])
-  }
-
-  func sessionRenamed() {
-    PostHogManager.shared.track("session_renamed", properties: [:])
   }
 
   // MARK: - Claude Agent Events

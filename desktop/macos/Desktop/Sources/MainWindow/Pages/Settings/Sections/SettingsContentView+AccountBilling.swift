@@ -41,7 +41,9 @@ extension SettingsContentView {
                   try? await AuthService.shared.signOut()
                 }
               }
-              .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+              // Secondary: signing out is reversible and is not what this page is for, so it is not
+              // the loudest control on it.
+              .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
               .disabled(isDeletingAccount)
             }
           }
@@ -86,17 +88,15 @@ extension SettingsContentView {
           }
         }
       }
-      .alert("Delete Account and Data?", isPresented: $showDeleteAccountAlert) {
-        Button("Cancel", role: .cancel) {
-          AnalyticsManager.shared.deleteAccountCancelled()
-        }
-        Button("Delete Permanently", role: .destructive) {
-          deleteAccountAndData()
-        }
-      } message: {
-        Text(
-          "This cannot be undone. Your account, chat history, and all server data will be permanently deleted. Local data for this account will be cleared and you'll return to onboarding."
-        )
+      .shellConfirmation(
+        isPresented: $showDeleteAccountAlert,
+        title: "Delete Account & Data?",
+        message: "This can't be undone. Your account, chat history, and all server data will be permanently "
+          + "deleted. Local data for this account will be cleared and you'll return to onboarding.",
+        confirmTitle: "Delete Permanently",
+        onCancel: { AnalyticsManager.shared.deleteAccountCancelled() }
+      ) {
+        deleteAccountAndData()
       }
 
       //            settingsCard {
@@ -457,12 +457,7 @@ extension SettingsContentView {
             .scaledFont(size: OmiType.heading, weight: .semibold)
             .foregroundColor(Ink.primary)
           Spacer()
-          Button(action: { showOverageExplainer = false }) {
-            Image(systemName: "xmark.circle.fill")
-              .scaledFont(size: OmiType.heading)
-              .foregroundColor(Ink.secondary)
-          }
-          .buttonStyle(.plain)
+          DismissButton(action: { showOverageExplainer = false })
         }
 
         Text(overageInfo?.explainerBody ?? "")

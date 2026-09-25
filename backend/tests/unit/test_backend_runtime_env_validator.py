@@ -12,6 +12,12 @@ from types import SimpleNamespace
 import pytest
 import yaml
 
+from config.jev_decisions import (
+    CONVERSATION_RELEVANCE_JEV_ENABLED_ENV,
+    MEMORY_OWNER_JEV_FLIP_ENABLED_ENV,
+)
+from scripts.verify_pusher_cohost_env_diff import parse_env_entries
+
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / 'scripts/validate-backend-runtime-env.py'
 RENDERER_SCRIPT = ROOT / 'scripts/render_backend_runtime_env.py'
@@ -112,6 +118,8 @@ def with_conversation_notes_v2_env(payload: str) -> str:
         r'\1\n        {"name": "CONVERSATION_NOTES_V2_ENABLED", "value": "true"},'
         r'\n        {"name": "CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED", "value": "true"},'
         r'\n        {"name": "CONVERSATION_OCR_CONTEXT_ENABLED", "value": "true"},'
+        r'\n        {"name": "MEETING_NOTES_RICH_CONTEXT_ENABLED", "value": "true"},'
+        r'\n        {"name": "MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED", "value": "true"},'
         r'\n        {"name": "BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED", "value": "true"},'
     )
     payload = re.sub(
@@ -155,6 +163,27 @@ def with_wake_word_adjudication_env(payload: str) -> str:
     return re.sub(
         r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
         r'\1\n        {"name": "WAKE_WORD_ADJUDICATION_ENABLED", "value": "true"},',
+        payload,
+        count=1,
+        flags=re.DOTALL,
+    )
+
+
+def with_jev_flags_env(payload: str) -> str:
+    flags = (
+        r'\1\n        {"name": "CONVERSATION_RELEVANCE_JEV_ENABLED", "value": "true"},'
+        r'\n        {"name": "MEMORY_OWNER_JEV_FLIP_ENABLED", "value": "true"},'
+    )
+    payload = re.sub(
+        r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
+        flags,
+        payload,
+        count=1,
+        flags=re.DOTALL,
+    )
+    return re.sub(
+        r'("backend-sync":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
+        flags,
         payload,
         count=1,
         flags=re.DOTALL,
@@ -236,17 +265,36 @@ def with_belief_model_env(payload: str) -> str:
     )
 
 
+def with_screen_frame_egress_env(payload: str) -> str:
+    """Meeting-note screenshot egress is provisioned on the dev Cloud Run `backend` only.
+
+    The adjudication and read routes run there; the gate in
+    utils/screen_frames/availability.py needs the flag, the bucket, and the signer.
+    """
+    return re.sub(
+        r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
+        r'\1\n        {"name": "SCREEN_FRAME_EGRESS_ENABLED", "value": "true"},'
+        r'\n        {"name": "BUCKET_SCREEN_FRAMES", "value": "based-hardware-dev-screen-frames"},'
+        r'\n        {"name": "SCREEN_FRAME_SIGNING_SECRET", "valueFrom": {"secretKeyRef": {"name": "SCREEN_FRAME_SIGNING_SECRET", "key": "latest"}}},',
+        payload,
+        count=1,
+        flags=re.DOTALL,
+    )
+
+
 def with_cloud_run_oauth_secrets(payload: str) -> str:
     payload = with_backend_public_shared_chat_auth_env(
         with_wake_word_adjudication_env(
             with_meeting_receipt_reconciler_env(
-                with_conversation_notes_v2_env(
-                    with_backend_pusher_env(
-                        with_parity_pack_env(
-                            with_listen_finalization_orphan_env(
-                                with_belief_model_env(
-                                    with_memory_env(
-                                        with_sync_ledger_fence_mode(with_account_cutover_enforcement(payload))
+                with_jev_flags_env(
+                    with_conversation_notes_v2_env(
+                        with_backend_pusher_env(
+                            with_parity_pack_env(
+                                with_listen_finalization_orphan_env(
+                                    with_belief_model_env(
+                                        with_memory_env(
+                                            with_sync_ledger_fence_mode(with_account_cutover_enforcement(payload))
+                                        )
                                     )
                                 )
                             )
@@ -256,6 +304,7 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
             )
         )
     )
+    payload = with_screen_frame_egress_env(payload)
     return re.sub(
         r'^(\s*\{"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN".*\}\s*\})\s*,?\s*$',
         r'\1,\n' + GOOGLE_OAUTH_SECRETS.rstrip(','),
@@ -2792,3 +2841,92 @@ def test_rendered_cloud_run_state_rejects_invalid_free_tier_cohort(monkeypatch, 
     assert len(errors) == 1
     assert errors[0].scope == 'cloud_run/backend-sync-backfill'
     assert 'FREE_TIER_LOCAL_PROCESSING_COHORT' in errors[0].message
+
+
+_JEV_PROCESS_CONVERSATION_HOSTS = {
+    'gke/backend-listen',
+    'gke/pusher',
+    'cloud_run/backend',
+    'cloud_run/backend-sync',
+}
+
+
+def _manifest_env_blocks(env_config: dict) -> list[tuple[str, dict]]:
+    blocks: list[tuple[str, dict]] = []
+    for name, service in (env_config.get('gke') or {}).items():
+        if name == 'config_map':
+            continue
+        blocks.append((f'gke/{name}', (service or {}).get('env') or {}))
+    cloud_run = env_config.get('cloud_run') or {}
+    for name, service in (cloud_run.get('services') or {}).items():
+        blocks.append((f'cloud_run/{name}', (service or {}).get('env') or {}))
+    for name, job in (cloud_run.get('jobs') or {}).items():
+        blocks.append((f'cloud_run/jobs/{name}', (job or {}).get('env') or {}))
+    blocks.append(('desktop_backend', (env_config.get('desktop_backend') or {}).get('env') or {}))
+    return blocks
+
+
+def test_jev_rollout_flags_cover_only_process_conversation_hosts(monkeypatch):
+    jev_flags = (CONVERSATION_RELEVANCE_JEV_ENABLED_ENV, MEMORY_OWNER_JEV_FLIP_ENABLED_ENV)
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+
+    for env_name in ('dev', 'prod'):
+        env_config = validator._get_env_config(manifest, env_name)
+        for scope, env_block in _manifest_env_blocks(env_config):
+            for flag in jev_flags:
+                entry = env_block.get(flag)
+                if env_name == 'dev' and scope in _JEV_PROCESS_CONVERSATION_HOSTS:
+                    assert entry == {'value': 'true', 'category': 'rollout'}, (
+                        f'{env_name}/{scope} runs process_conversation; {flag} must be '
+                        f"an explicit 'true' rollout flag, got {entry!r}"
+                    )
+                else:
+                    assert entry is None, (
+                        f'{env_name}/{scope} must not carry {flag} '
+                        '(Jev flags belong only to the four dev process_conversation hosts)'
+                    )
+
+    for chart_path in (
+        ROOT / 'charts/backend-listen/dev_omi_backend_listen_values.yaml',
+        ROOT / 'charts/pusher/dev_omi_pusher_values.yaml',
+    ):
+        text = chart_path.read_text(encoding='utf-8')
+        entries = parse_env_entries(text)
+        for flag in jev_flags:
+            assert text.count(f'- name: {flag}\n') == 1, f'{chart_path.name} must declare {flag} exactly once'
+            assert entries[flag].value == 'true', f'{chart_path.name} {flag} must be the literal true'
+        gateway_entry = entries.get('OMI_LLM_GATEWAY_URL')
+        assert (
+            gateway_entry is not None and gateway_entry.value
+        ), f'{chart_path.name} must pin a non-empty dev gateway URL for the Jev client'
+    for chart_path in (
+        ROOT / 'charts/backend-listen/prod_omi_backend_listen_values.yaml',
+        ROOT / 'charts/pusher/prod_omi_pusher_values.yaml',
+    ):
+        entries = parse_env_entries(chart_path.read_text(encoding='utf-8'))
+        for flag in jev_flags:
+            assert flag not in entries, f'{chart_path.name} must not carry {flag}'
+
+    dev_config = validator._get_env_config(manifest, 'dev')
+    for service_name in ('backend-listen', 'pusher'):
+        gateway_entry = (dev_config['gke'][service_name].get('env') or {}).get('OMI_LLM_GATEWAY_URL') or {}
+        assert gateway_entry.get('value'), f'dev/gke/{service_name} must declare a non-empty OMI_LLM_GATEWAY_URL'
+    for service_name in ('backend', 'backend-sync'):
+        gateway_entry = (dev_config['cloud_run']['services'][service_name].get('env') or {}).get(
+            'OMI_LLM_GATEWAY_URL'
+        ) or {}
+        assert (
+            gateway_entry.get('env_var') == 'OMI_LLM_GATEWAY_URL'
+        ), f'dev/cloud_run/{service_name} must source OMI_LLM_GATEWAY_URL from the auto-dev env injection'
+        assert 'value' not in gateway_entry
+
+    render_cloud_run_state(dev_config, monkeypatch)
+    monkeypatch.setenv('OMI_LLM_GATEWAY_URL', 'http://jev-gateway-render.invalid:8080')
+    renderer = runpy.run_path(str(RENDERER_SCRIPT), run_name='runtime_env_state_test_renderer')
+    rendered = renderer['_render_cloud_run_state'](dev_config)
+    for service_name in ('backend', 'backend-sync'):
+        rendered_env = {entry['name']: entry.get('value') for entry in rendered['services'][service_name]['env']}
+        assert rendered_env['OMI_LLM_GATEWAY_URL'] == 'http://jev-gateway-render.invalid:8080'
+        for flag in jev_flags:
+            assert rendered_env[flag] == 'true'

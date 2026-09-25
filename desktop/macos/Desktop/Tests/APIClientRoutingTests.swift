@@ -1016,25 +1016,7 @@ final class APIClientRoutingTests: XCTestCase {
     XCTAssertEqual(ids, ["task-1"])
   }
 
-  // -- Chat sessions (GET, POST, DELETE → Python, migrated from Rust) --
-
-  func testGetChatSessionsRoutesToPython() async {
-    let client = await makeTestClient()
-    _ = try? await client.getChatSessions() as [ChatSession]
-    assertRoutes(
-      URLCapture.capturedRequests, host: "python-test", port: 9001,
-      pathContains: "v2/chat-sessions", method: "GET",
-      label: "getChatSessions")
-  }
-
-  func testCreateChatSessionRoutesToPython() async {
-    let client = await makeTestClient()
-    _ = try? await client.createChatSession(title: "test") as ChatSession
-    assertRoutes(
-      URLCapture.capturedRequests, host: "python-test", port: 9001,
-      pathContains: "v2/chat-sessions", method: "POST",
-      label: "createChatSession")
-  }
+  // -- Chat sessions (DELETE → Python, migrated from Rust) --
 
   func testDeleteChatSessionRoutesToPython() async {
     let client = await makeTestClient()
@@ -1136,24 +1118,6 @@ final class APIClientRoutingTests: XCTestCase {
   }
 
   // -- Chat AI endpoints (migrated from Rust to Python) --
-
-  func testGetInitialMessageRoutesToPython() async {
-    let client = await makeTestClient()
-    _ = try? await client.getInitialMessage(sessionId: "s1")
-    assertRoutes(
-      URLCapture.capturedRequests, host: "python-test", port: 9001,
-      pathContains: "v2/chat/initial-message", method: "POST",
-      label: "getInitialMessage")
-  }
-
-  func testGenerateSessionTitleRoutesToPython() async {
-    let client = await makeTestClient()
-    _ = try? await client.generateSessionTitle(sessionId: "s1", messages: [("hi", "human")])
-    assertRoutes(
-      URLCapture.capturedRequests, host: "python-test", port: 9001,
-      pathContains: "v2/chat/generate-title", method: "POST",
-      label: "generateSessionTitle")
-  }
 
   func testGetChatMessageCountRoutesToPython() async {
     let client = await makeTestClient()

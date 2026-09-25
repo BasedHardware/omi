@@ -1,15 +1,21 @@
 """Real VAD export and process_segment preserve speech extents; silence creates nothing."""
 
+import logging
 from pathlib import Path
 import threading
 from unittest.mock import MagicMock
+import uuid
 
+import fakeredis
+import httpx
 import pytest
 
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from tests.unit.test_sync_cloud_tasks import _load_sync_jobs, _seed_fenced_job
 from tests.unit.test_sync_cross_job_assignment import intake, conversations
 from tests.unit.test_sync_geolocation_enrichment import _build_pipeline_fakes
+from utils.sync import telemetry
 from utils.sync.capture import chunk_identity
 
 
@@ -95,9 +101,203 @@ def test_empty_transcription_creates_nothing_and_cannot_bridge(pipeline, empty_w
         module.process_segment('1700000000.wav', 'u', response, threading.Lock(), errors, deferred_outcome=outcome)
         is False
     )
+    assert module.prerecorded.call_count == 2
     assert not store.rows and not errors
     assert response == {'new_memories': set(), 'updated_memories': set()}
     assert outcome['outcome'].value == 'expected_silence' and not outcome['retryable']
+
+
+def test_empty_retry_recovers_through_original_path_once(pipeline):
+    module, store = pipeline
+    module.prerecorded = MagicMock(side_effect=[([], 'en'), ([{}], 'en')])
+    response = {'new_memories': set(), 'updated_memories': set()}
+    errors, outcome = [], {}
+    assert module.process_segment('1700000000.wav', 'u', response, threading.Lock(), errors, deferred_outcome=outcome)
+    assert module.prerecorded.call_count == 2
+    first, second = module.prerecorded.call_args_list
+    assert first == second
+    assert len(conversations(store)) == 1
+    assert errors == []
+    assert outcome['outcome'].value == 'success'
+
+
+def test_retry_exception_keeps_failure_classification_with_provider_call_phase(pipeline):
+    module, store = pipeline
+    request = httpx.Request('POST', 'https://stt.invalid/transcribe')
+    module.prerecorded = MagicMock(
+        side_effect=[
+            ([], 'en'),
+            httpx.HTTPStatusError('503', request=request, response=httpx.Response(503, request=request)),
+        ]
+    )
+    response = {'new_memories': set(), 'updated_memories': set()}
+    errors, outcome = [], {}
+    assert (
+        module.process_segment('1700000000.wav', 'u', response, threading.Lock(), errors, deferred_outcome=outcome)
+        is False
+    )
+    assert module.prerecorded.call_count == 2
+    assert not conversations(store)
+    assert errors == ['stt_upstream_error']
+    assert outcome['outcome'].value == 'upstream_error' and outcome['retryable']
+    assert outcome['phase'] == 'provider_call'
+    assert outcome['exception_type'] == 'HTTPStatusError'
+
+
+def test_provider_timeout_is_distinct_from_other_provider_failures(pipeline):
+    module, store = pipeline
+    module.prerecorded = MagicMock(side_effect=TimeoutError('provider read timed out'))
+    response = {'new_memories': set(), 'updated_memories': set()}
+    errors, outcome = [], {}
+    assert (
+        module.process_segment('1700000000.wav', 'u', response, threading.Lock(), errors, deferred_outcome=outcome)
+        is False
+    )
+    assert module.prerecorded.call_count == 1
+    assert errors == ['stt_timeout']
+    assert outcome['outcome'].value == 'timeout' and outcome['retryable']
+    assert outcome['phase'] == 'provider_call'
+    assert outcome['exception_type'] == 'TimeoutError'
+
+
+def test_downstream_exception_after_provider_success_is_not_attributed_to_provider(pipeline):
+    module, store = pipeline
+    module.postprocess_words = MagicMock(side_effect=RuntimeError('normalize failed'))
+    response = {'new_memories': set(), 'updated_memories': set()}
+    errors, outcome = [], {}
+    assert (
+        module.process_segment('1700000000.wav', 'u', response, threading.Lock(), errors, deferred_outcome=outcome)
+        is False
+    )
+    assert module.prerecorded.call_count == 1
+    assert not conversations(store)
+    assert outcome['outcome'].value == 'upstream_error'
+    assert outcome['phase'] == 'parse'
+    assert outcome['exception_type'] == 'RuntimeError'
+
+
+def test_success_does_not_retry_and_failure_log_has_no_identifiers(pipeline, caplog):
+    module, store = pipeline
+    response = {'new_memories': set(), 'updated_memories': set()}
+    assert module.process_segment('1700000000.wav', 'u', response, threading.Lock(), [])
+    assert module.prerecorded.call_count == 1
+
+    request = httpx.Request('POST', 'https://stt.invalid/transcribe')
+    module.prerecorded = MagicMock(
+        side_effect=httpx.HTTPStatusError(
+            'detail user@example.com /tmp/private.wav', request=request, response=httpx.Response(503, request=request)
+        )
+    )
+    with caplog.at_level(logging.ERROR):
+        assert module.process_segment('1700000001.wav', 'u', response, threading.Lock(), []) is False
+    record = next(r for r in caplog.records if 'event=sync_transcription_segment' in r.getMessage())
+    message = record.getMessage()
+    assert 'phase=provider_call' in message
+    assert 'exception_type=HTTPStatusError' in message
+    assert 'job_ref=none' in message and 'attempt_ref=none' in message
+    assert 'user@example.com' not in message and '/tmp/private.wav' not in message
+    assert 'stt.invalid' not in message
+
+
+def test_correlation_refs_accept_uuid4_only():
+    job = uuid.uuid4()
+    assert telemetry.bounded_correlation_ref(str(job)) == job.hex
+    assert telemetry.bounded_correlation_ref(job.hex) == job.hex
+    assert telemetry.bounded_correlation_ref(str(uuid.uuid1())) == 'none'
+    assert telemetry.bounded_correlation_ref('user-uid-123') == 'none'
+    assert telemetry.bounded_correlation_ref('/tmp/audio.wav') == 'none'
+    assert telemetry.bounded_correlation_ref(None) == 'none'
+    first, second = telemetry.new_attempt_ref(), telemetry.new_attempt_ref()
+    assert first != second
+    assert uuid.UUID(first).version == 4
+
+
+@pytest.mark.parametrize('second_pass', ['words', 'empty', 'exception'])
+def test_empty_retry_event_carries_bounded_correlation(pipeline, caplog, second_pass):
+    module, _store = pipeline
+    job_id = str(uuid.uuid4())
+    attempt_ref = uuid.uuid4().hex
+    module.get_prerecorded_service = lambda language: ('deepgram', None, 'nova-3')
+    second = {'words': ([{}], 'en'), 'empty': ([], 'en')}.get(second_pass, RuntimeError('provider exploded'))
+    module.prerecorded = MagicMock(side_effect=[([], 'en'), second])
+    response = {'new_memories': set(), 'updated_memories': set()}
+    outcome = {}
+    with caplog.at_level(logging.INFO):
+        module.process_segment(
+            '1700000000.wav',
+            'uid-secret-9f2c',
+            response,
+            threading.Lock(),
+            [],
+            deferred_outcome=outcome,
+            job_id=job_id,
+            segment_key='seg-1',
+            attempt_ref=attempt_ref,
+        )
+    retry_events = [r.getMessage() for r in caplog.records if 'sync_transcription_empty_retry' in r.getMessage()]
+    expected = ['started', {'words': 'recovered', 'empty': 'still_empty'}.get(second_pass)]
+    if expected[1] is None:
+        expected.pop()
+        assert outcome['phase'] == 'provider_call' and outcome['exception_type'] == 'RuntimeError'
+    assert [m.split('outcome=')[1].split(' ')[0] for m in retry_events] == expected
+    for message in retry_events:
+        assert 'provider=deepgram' in message and 'lane=fresh' in message
+        assert f'job_ref={uuid.UUID(job_id).hex}' in message and f'attempt_ref={attempt_ref}' in message
+        assert 'uid-secret-9f2c' not in message and '1700000000.wav' not in message
+
+
+def test_job_finalized_event_shares_segment_correlation(pipeline, caplog):
+    module, _store = pipeline
+    job_id = str(uuid.uuid4())
+    attempt_ref = uuid.uuid4().hex
+    module.try_mark_once = MagicMock(return_value=True)
+    module.record_sync_transcription_outcome = MagicMock()
+
+    redis_client = fakeredis.FakeRedis()
+    sync_jobs, _ = _load_sync_jobs(redis_client)
+    _seed_fenced_job(
+        redis_client,
+        sync_jobs,
+        job_id,
+        {
+            'job_id': job_id,
+            'status': 'processing',
+            'ledger_fence_mode': 'legacy',
+            'result': None,
+            'failed_segments': 0,
+        },
+    )
+
+    with caplog.at_level(logging.INFO):
+        module._record_sync_segment_outcome(
+            module.TranscriptionOutcome.SUCCESS,
+            provider='deepgram',
+            model='nova-3',
+            lane='fresh',
+            retryable=False,
+            job_id=job_id,
+            segment_key='seg-1',
+            attempt_ref=attempt_ref,
+        )
+        finalized = sync_jobs.finalize_sync_job(
+            job_id,
+            {'failed_segments': 0, 'total_segments': 1, 'errors': [], 'outcome': 'success'},
+            attempt_ref=attempt_ref,
+        )
+
+    assert finalized is not None
+    shared_ref = f'job_ref={uuid.UUID(job_id).hex} attempt_ref={attempt_ref}'
+    segment_msg = next(r.getMessage() for r in caplog.records if 'event=sync_transcription_segment' in r.getMessage())
+    job_msg = next(r.getMessage() for r in caplog.records if 'event=sync_transcription_job_finalized' in r.getMessage())
+    assert shared_ref in segment_msg and shared_ref in job_msg
+    assert 'failure_phase=none' in job_msg and 'failure_class=none' in job_msg
+    assert set(module.record_sync_transcription_outcome.call_args.kwargs) == {
+        'kind',
+        'provider',
+        'model',
+        'lane',
+        'outcome',
+    }
 
 
 def test_bridge_finishes_once_at_process_segment_completion(pipeline, monkeypatch):

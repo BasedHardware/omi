@@ -12,20 +12,20 @@ export default function SharedConversationInstallCta({
   openInOmiHref,
 }: SharedConversationInstallCtaProps) {
   return (
-    <div className="mt-12 text-center md:mt-16">
-      <a
-        href={openInOmiHref}
-        className="inline-block rounded-2xl bg-white px-10 py-4 text-lg font-semibold text-black transition-all duration-300 hover:translate-y-[-2px] hover:bg-gray-100"
-      >
+    <div className="sn-cta">
+      <p className="sn-cta-copy">
+        This conversation was captured with Omi — the wearable that remembers everything
+        for you.
+      </p>
+      <a href={openInOmiHref} className="sn-cta-button">
         Open in Omi
       </a>
 
-      <div className="mt-6 flex items-center justify-center gap-4">
+      <div className="sn-cta-badges">
         <a
           href="https://apps.apple.com/us/app/friend-ai-wearable/id6502156163"
           target="_blank"
           rel="noopener noreferrer"
-          className="transition-transform duration-300 hover:scale-105"
         >
           <Image
             src="/app-store-badge.svg"
@@ -39,7 +39,6 @@ export default function SharedConversationInstallCta({
           href="https://play.google.com/store/apps/details?id=com.friend.ios"
           target="_blank"
           rel="noopener noreferrer"
-          className="transition-transform duration-300 hover:scale-105"
         >
           <Image
             src="/google-play-badge.png"

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/schema/chat_content_block.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 import 'chat_block_chrome.dart';
@@ -22,7 +23,6 @@ class QuestionCardBlock extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = context.l10n;
-    final colorScheme = Theme.of(context).colorScheme;
     final selectedId = block.selectedOptionId;
     final answered = selectedId != null;
     final options = answered
@@ -49,12 +49,12 @@ class QuestionCardBlock extends StatelessWidget {
                     key: Key('chat-block-questionCard-${block.id}-option-${option.optionId}'),
                     onPressed: answered ? null : () => sendMessage(option.preparedAnswer),
                     style: OutlinedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      minimumSize: const Size(0, 32),
+                      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: 6),
+                      minimumSize: const Size(0, kOmiMinTapTarget),
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      foregroundColor: colorScheme.onSurface,
-                      side: BorderSide(color: colorScheme.outline.withValues(alpha: 0.55)),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                      foregroundColor: OmiColors.textPrimary,
+                      side: const BorderSide(color: OmiColors.border),
+                      shape: const RoundedRectangleBorder(borderRadius: OmiRadius.pillAll),
                     ),
                     child: Text(option.label, style: Theme.of(context).textTheme.bodySmall),
                   ),

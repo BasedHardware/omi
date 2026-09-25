@@ -159,60 +159,8 @@ private struct ChatJournalTerminalTarget {
 // MARK: - UserDefaults Extension for KVO
 
 extension UserDefaults {
-  @objc dynamic var multiChatEnabled: Bool {
-    return bool(forKey: "multiChatEnabled")
-  }
   @objc dynamic var playwrightUseExtension: Bool {
     return bool(forKey: "playwrightUseExtension")
-  }
-}
-
-// MARK: - Chat Session Model
-
-/// A chat session that groups related messages
-struct ChatSession: Identifiable, Codable, Equatable {
-  let id: String
-  var title: String
-  var preview: String?
-  let createdAt: Date
-  var updatedAt: Date
-  let appId: String?
-  var messageCount: Int
-  var starred: Bool
-
-  enum CodingKeys: String, CodingKey {
-    case id, title, preview, starred
-    case createdAt = "created_at"
-    case updatedAt = "updated_at"
-    case appId = "app_id"
-    case messageCount = "message_count"
-  }
-
-  init(
-    id: String = UUID().uuidString, title: String = "New Chat", preview: String? = nil,
-    createdAt: Date = Date(), updatedAt: Date = Date(), appId: String? = nil,
-    messageCount: Int = 0, starred: Bool = false
-  ) {
-    self.id = id
-    self.title = title
-    self.preview = preview
-    self.createdAt = createdAt
-    self.updatedAt = updatedAt
-    self.appId = appId
-    self.messageCount = messageCount
-    self.starred = starred
-  }
-
-  init(from decoder: Decoder) throws {
-    let container = try decoder.container(keyedBy: CodingKeys.self)
-    id = try container.decode(String.self, forKey: .id)
-    title = try container.decodeIfPresent(String.self, forKey: .title) ?? "New Chat"
-    preview = try container.decodeIfPresent(String.self, forKey: .preview)
-    createdAt = try container.decodeIfPresent(Date.self, forKey: .createdAt) ?? Date()
-    updatedAt = try container.decodeIfPresent(Date.self, forKey: .updatedAt) ?? Date()
-    appId = try container.decodeIfPresent(String.self, forKey: .appId)
-    messageCount = try container.decodeIfPresent(Int.self, forKey: .messageCount) ?? 0
-    starred = try container.decodeIfPresent(Bool.self, forKey: .starred) ?? false
   }
 }
 
@@ -1124,12 +1072,7 @@ class ChatProvider: ObservableObject {
   /// accepted or the user removes them.
   @Published var pendingComposerReferences: [ChatComposerReference] = []
   @Published var messages: [ChatMessage] = []
-  @Published var sessions: [ChatSession] = []
-  @Published var currentSession: ChatSession? {
-    didSet { restoreDraftForCurrentContextIfNeeded() }
-  }
   @Published var isLoading = false
-  @Published var isLoadingSessions = true  // Start true since we load sessions on init
   /// Root-only prompt materialization waits for the current main-chat journal
   /// replay, never for an unrelated legacy session load.
   @Published private(set) var isMainChatJournalFirstPageReady = false
@@ -1235,18 +1178,10 @@ class ChatProvider: ObservableObject {
   private(set) var selectedChatAppContext: ChatAppContext?
   @Published var hasMoreMessages = false
   @Published var isLoadingMoreMessages = false
-  @Published var showStarredOnly = false
-  @Published var searchQuery = ""
-  /// Pre-computed grouped sessions for sidebar display.
-  /// Updated reactively via Combine instead of recomputed on every SwiftUI render pass.
-  @Published private(set) var groupedSessions: [(String, [ChatSession])] = []
 
   /// Triggered when a browser tool is called but the extension token isn't configured.
   /// The UI should observe this and present BrowserExtensionSetup.
   @Published var needsBrowserExtensionSetup = false
-
-  /// Whether the user is currently viewing the default chat (syncs with Flutter app)
-  @Published var isInDefaultChat = true
 
   /// Working directory for Claude Agent SDK file-system tools (Read, Write, Bash, etc.)
   /// Set by TaskChatCoordinator to point at the user's project directory.
@@ -1269,10 +1204,6 @@ class ChatProvider: ObservableObject {
   var hasBridgeHarnessOverride: Bool {
     bridgeHarnessOverride != nil
   }
-
-  /// Multi-chat mode setting - when false, only default chat is shown (syncs with Flutter)
-  /// When true, user can create multiple chat sessions
-  @AppStorage("multiChatEnabled") var multiChatEnabled = false
 
   // MARK: - Agent client
   // NOTE: initialized lazily so it reads the persisted bridgeMode from UserDefaults,
@@ -1401,16 +1332,14 @@ class ChatProvider: ObservableObject {
   private var messagesPaginationOffset = 0
 
   /// Reset history-pagination state. Must accompany every clear/replace of
-  /// `messages` outside the two loaders (`selectSession`,
-  /// `loadDefaultChatMessages`), which set both fields from a fresh fetch.
+  /// `messages` outside `loadDefaultChatMessages`, which sets both fields from a
+  /// fresh fetch.
   func resetMessagesPagination() {
     messagesPaginationOffset = 0
     hasMoreMessages = false
   }
 
-  private var multiChatObserver: AnyCancellable?
   private var playwrightExtensionObserver: AnyCancellable?
-  private var sessionGroupingObserver: AnyCancellable?
   private var activationObserver: AnyCancellable?
   private var runtimeOwnerObserver: AnyCancellable?
   private var signOutObserver: AnyCancellable?
@@ -1427,26 +1356,6 @@ class ChatProvider: ObservableObject {
   // Not private: the journal projection extension releases the turn's raw
   // accumulator when the authoritative answer lands.
   let streamingBuffer = ChatStreamingBuffer(flushInterval: 0.035)
-
-  // MARK: - Filtered Sessions
-  var filteredSessions: [ChatSession] {
-    // Filter out "empty" sessions (only AI greeting, no user messages)
-    // These have messageCount <= 1 and default "New Chat" title
-    // Always keep the currently selected session visible
-    let nonEmptySessions = sessions.filter { session in
-      // Always show the current session (so user can continue working)
-      if session.id == currentSession?.id { return true }
-      // Keep sessions that have user messages (more than just AI greeting)
-      // or have been renamed (user intentionally kept them)
-      return session.messageCount > 1 || session.title != "New Chat"
-    }
-
-    guard !searchQuery.isEmpty else { return nonEmptySessions }
-    let query = searchQuery.lowercased()
-    return nonEmptySessions.filter { session in
-      session.title.lowercased().contains(query) || (session.preview?.lowercased().contains(query) ?? false)
-    }
-  }
 
   // MARK: - Cached Context for Prompts
   private var cachedMemories: [ServerMemory] = []
@@ -1506,11 +1415,6 @@ class ChatProvider: ObservableObject {
   @AppStorage("devModeEnabled") var devModeEnabled = false
   private var devModeContext: String?
 
-  // MARK: - Current Session ID
-  var currentSessionId: String? {
-    currentSession?.id
-  }
-
   // MARK: - Current Model
   var currentModel: String {
     "Claude"
@@ -1534,15 +1438,8 @@ class ChatProvider: ObservableObject {
       log("ChatProvider: migrated legacy agentSDK bridgeMode -> piMono")
     }
 
-    // Observe changes to multiChatEnabled setting
-    multiChatObserver = UserDefaults.standard.publisher(for: \.multiChatEnabled)
-      .dropFirst()  // Skip initial value
-      .receive(on: DispatchQueue.main)
-      .sink { [weak self] _ in
-        Task { @MainActor in
-          await self?.reinitialize()
-        }
-      }
+    // "Multiple Chat Sessions" was retired; drop the stale toggle value.
+    UserDefaults.standard.removeObject(forKey: .multiChatEnabled)
 
     // Refresh messages when app becomes active
     activationObserver = NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
@@ -1652,14 +1549,6 @@ class ChatProvider: ObservableObject {
         }
       }
 
-    // Keep groupedSessions in sync — runs off the hot path so SwiftUI body never recomputes it
-    sessionGroupingObserver = Publishers.CombineLatest3($sessions, $searchQuery, $currentSession)
-      .receive(on: RunLoop.main)
-      .sink { [weak self] _, _, _ in
-        guard let self else { return }
-        self.groupedSessions = self.computeGroupedSessions()
-      }
-
     // Kill agent bridge subprocess on app quit to prevent orphaned Node.js processes
     terminationObserver = NotificationCenter.default.addObserver(
       forName: NSApplication.willTerminateNotification,
@@ -1682,8 +1571,7 @@ class ChatProvider: ObservableObject {
 
   private var currentDraftKey: ChatDraftKey {
     let appContext = selectedAppId?.isEmpty == false ? selectedAppId! : "omi"
-    let chatContext = currentSession?.id ?? "default"
-    return .mainChat(contextID: "\(appContext):\(chatContext)")
+    return .mainChat(contextID: "\(appContext):default")
   }
 
   private func restoreDraftForCurrentContextIfNeeded() {
@@ -1894,8 +1782,6 @@ class ChatProvider: ObservableObject {
     RecentFrameStagingLifecycle.discardAppOwnedFiles(pendingAttachments)
     pendingAttachments.removeAll()
     pendingComposerReferences.removeAll()
-    sessions.removeAll()
-    currentSession = nil
     selectedAppId = nil
     selectedChatAppContext = nil
     cachedMemories = []
@@ -1915,19 +1801,15 @@ class ChatProvider: ObservableObject {
     RuntimeOwnerIdentity.currentOwnerId()
   }
 
-  func mainChatRuntimeChatId(sessionId: String?) -> String {
-    guard let sessionId, !sessionId.isEmpty else {
-      if let appId = selectedAppId, !appId.isEmpty {
-        return "default|\(appId)"
-      }
-      return "default"
+  func mainChatRuntimeChatId() -> String {
+    if let appId = selectedAppId, !appId.isEmpty {
+      return "default|\(appId)"
     }
-    return sessionId
+    return "default"
   }
 
   private func querySurface(
     surfaceRef: AgentSurfaceReference?,
-    sessionId: String?,
     systemPromptStyle: ChatSystemPromptStyle
   ) -> AgentSurfaceReference {
     switch Self.querySurfaceChoice(
@@ -1935,9 +1817,9 @@ class ChatProvider: ObservableObject {
       isFloating: systemPromptStyle == .floating)
     {
     case .onboarding: return .onboarding()
-    case .explicit: return surfaceRef ?? .mainChat(chatId: mainChatRuntimeChatId(sessionId: sessionId))
+    case .explicit: return surfaceRef ?? .mainChat(chatId: mainChatRuntimeChatId())
     case .floatingMain: return mainChatSurfaceReference()
-    case .defaultMain: return .mainChat(chatId: mainChatRuntimeChatId(sessionId: sessionId))
+    case .defaultMain: return .mainChat(chatId: mainChatRuntimeChatId())
     }
   }
 
@@ -2553,182 +2435,7 @@ class ChatProvider: ObservableObject {
     await switchBridgeMode(to: .piMono)
   }
 
-  // MARK: - Session Management
-
-  /// Fetch all chat sessions for the current app (retries up to 3 times on failure)
-  func fetchSessions() async {
-    isLoadingSessions = true
-    defer { isLoadingSessions = false }
-
-    let maxAttempts = 3
-    let delays: [UInt64] = [1_000_000_000, 2_000_000_000]  // 1s, 2s
-    var lastError: Error?
-
-    for attempt in 1...maxAttempts {
-      do {
-        sessions = try await APIClient.shared.getChatSessions(
-          appId: selectedAppId,
-          starred: showStarredOnly ? true : nil
-        )
-        log("ChatProvider loaded \(sessions.count) sessions (starred filter: \(showStarredOnly))")
-        sessionsLoadError = nil
-
-        // If we have sessions and no current session, select the most recent
-        if currentSession == nil, let mostRecent = sessions.first {
-          await selectSession(mostRecent)
-        }
-        return
-      } catch {
-        lastError = error
-        logError("Failed to load chat sessions (attempt \(attempt)/\(maxAttempts))", error: error)
-        if attempt < maxAttempts {
-          try? await Task.sleep(nanoseconds: delays[attempt - 1])
-        }
-      }
-    }
-
-    sessions = []
-    sessionsLoadError = lastError?.localizedDescription ?? "Failed to load chats. Check your connection and try again."
-  }
-
-  /// Toggle the starred filter and reload sessions
-  func toggleStarredFilter() async {
-    showStarredOnly.toggle()
-    log("Toggled starred filter: \(showStarredOnly)")
-    AnalyticsManager.shared.chatStarredFilterToggled(enabled: showStarredOnly)
-    await fetchSessions()
-  }
-
-  /// Create a new chat session
-  /// - Parameters:
-  ///   - title: Optional session title
-  ///   - skipGreeting: Skip the initial AI greeting message
-  ///   - appId: Override app ID (e.g. "task-chat" to isolate task sessions from default chat)
-  func createNewSession(
-    title: String? = nil,
-    skipGreeting: Bool = false,
-    appId: String? = nil,
-    authoritativeSendGeneration: Int? = nil
-  ) async -> ChatSession? {
-    do {
-      let session = try await APIClient.shared.createChatSession(title: title, appId: appId ?? selectedAppId)
-      guard authoritativeSendGeneration.map({ sendGeneration == $0 }) ?? true else { return nil }
-      sessions.insert(session, at: 0)
-      currentSession = session
-      isInDefaultChat = false
-      messages = []
-      resetMessagesPagination()
-      log("Created new chat session: \(session.id)")
-      AnalyticsManager.shared.chatSessionCreated()
-
-      // Generate initial greeting message (skip for task chats that send their own context)
-      if !skipGreeting {
-        await fetchInitialMessage(for: session, authoritativeSendGeneration: authoritativeSendGeneration)
-      }
-
-      return session
-    } catch {
-      logError("Failed to create chat session", error: error)
-      if authoritativeSendGeneration.map({ sendGeneration == $0 }) ?? true {
-        errorMessage = "Failed to create new chat"
-      }
-      return nil
-    }
-  }
-
-  /// Fetch an initial greeting for a new session, then admit it through the
-  /// canonical journal before it can appear in any visible projection.
-  private func fetchInitialMessage(
-    for session: ChatSession,
-    authoritativeSendGeneration: Int? = nil
-  ) async {
-    do {
-      guard let ownerId = runtimeOwnerId else {
-        log("ChatProvider: initial greeting skipped because owner is unavailable")
-        return
-      }
-      let response = try await APIClient.shared.getInitialMessage(
-        sessionId: session.id,
-        appId: selectedAppId,
-        expectedOwnerId: ownerId
-      )
-      guard authoritativeSendGeneration.map({ sendGeneration == $0 }) ?? true else { return }
-
-      let surface = AgentSurfaceReference.mainChat(
-        chatId: mainChatRuntimeChatId(sessionId: session.id)
-      )
-      let accepted = await kernelTurnProjection.importRemoteTurn(
-        surface: surface,
-        turn: KernelJournalRemoteTurn(
-          remoteId: response.messageId,
-          canonicalTurnId: response.messageId,
-          role: "assistant",
-          content: response.message,
-          contentBlocksJSON: "[]",
-          resourcesJSON: "[]",
-          metadataJSON: "{}",
-          createdAtMs: Int(Date().timeIntervalSince1970 * 1_000)
-        ),
-        ownerID: ownerId
-      )
-      guard accepted else {
-        log("ChatProvider: initial greeting journal admission failed")
-        return
-      }
-      await kernelTurnProjection.refresh(surface: surface)
-
-      // Preview is also downstream of canonical journal acceptance.
-      if let index = sessions.firstIndex(where: { $0.id == session.id }) {
-        sessions[index].preview = response.message
-      }
-
-      // Track analytics
-      AnalyticsManager.shared.initialMessageGenerated(hasApp: selectedAppId != nil)
-
-      log("Added initial greeting message for session \(session.id)")
-    } catch {
-      // Non-fatal: session still works without greeting
-      logError("Failed to fetch initial message", error: error)
-    }
-  }
-
-  /// Select a session and load its messages
-  func selectSession(_ session: ChatSession, force: Bool = false) async {
-    guard force || currentSession?.id != session.id || isInDefaultChat else { return }
-
-    // This replaces the transcript, so it is a transcript reset and must go
-    // through the one revocation authority — same as `selectApp`/`reinitialize`.
-    // Without it a turn still in flight for the previous session stays
-    // generation-current, and its late result (including the reconstructed
-    // failure notice) is accepted into *this* session's transcript.
-    revokeActiveTurn(reason: .superseded)
-
-    currentSession = session
-    isInDefaultChat = false
-    isLoading = true
-    isMainChatJournalFirstPageReady = false
-    errorMessage = nil
-    hasMoreMessages = false
-
-    let surface = mainChatSurfaceReference()
-    guard await ensureBridgeStartedForKernel() else {
-      messages = []
-      resetMessagesPagination()
-      isLoading = false
-      return
-    }
-    await importLegacyBackendMessagesIfNeeded(surface: surface, sessionId: session.id)
-    await kernelTurnProjection.reload(surface: surface)
-    await rehydrateMissingArtifactResourcesFromKernel()
-    messagesPaginationOffset = messages.count
-    hasMoreMessages = false
-    log("ChatProvider loaded \(messages.count) kernel journal messages for session \(session.id)")
-    isMainChatJournalFirstPageReady = true
-
-    isLoading = false
-  }
-
-  /// Load more (older) messages for the current session
+  /// Load more (older) messages for the main chat
   func loadMoreMessages() async {
     guard !isLoadingMoreMessages else { return }
 
@@ -2739,84 +2446,6 @@ class ChatProvider: ObservableObject {
     hasMoreMessages = false
 
     isLoadingMoreMessages = false
-  }
-
-  /// Track which sessions are currently being deleted
-  @Published var deletingSessionIds: Set<String> = []
-
-  /// Delete a chat session
-  func deleteSession(_ session: ChatSession) async {
-    deletingSessionIds.insert(session.id)
-    let surface = AgentSurfaceReference.mainChat(chatId: session.id)
-    guard await kernelTurnProjection.clear(surface: surface) else {
-      deletingSessionIds.remove(session.id)
-      errorMessage = "Failed to delete chat"
-      return
-    }
-    deletingSessionIds.remove(session.id)
-    sessions.removeAll { $0.id == session.id }
-
-    if currentSession?.id == session.id {
-      if let nextSession = sessions.first {
-        await selectSession(nextSession)
-      } else {
-        currentSession = nil
-        messages = []
-        resetMessagesPagination()
-      }
-    }
-
-    log("Deleted kernel chat session projection: \(session.id)")
-    AnalyticsManager.shared.chatSessionDeleted()
-  }
-
-  /// Toggle starred status for a session
-  func toggleStarred(_ session: ChatSession) async {
-    do {
-      let updated = try await APIClient.shared.updateChatSession(
-        sessionId: session.id,
-        starred: !session.starred
-      )
-
-      // Update in sessions list
-      if let index = sessions.firstIndex(where: { $0.id == session.id }) {
-        sessions[index] = updated
-      }
-
-      // Update current session if it's the same
-      if currentSession?.id == session.id {
-        currentSession = updated
-      }
-
-      log("Toggled starred for session \(session.id): \(updated.starred)")
-    } catch {
-      logError("Failed to toggle starred", error: error)
-    }
-  }
-
-  /// Update session title (user-initiated rename)
-  func updateSessionTitle(_ session: ChatSession, title: String) async {
-    do {
-      let updated = try await APIClient.shared.updateChatSession(
-        sessionId: session.id,
-        title: title
-      )
-
-      // Update in sessions list
-      if let index = sessions.firstIndex(where: { $0.id == session.id }) {
-        sessions[index] = updated
-      }
-
-      // Update current session if it's the same
-      if currentSession?.id == session.id {
-        currentSession = updated
-      }
-
-      log("Updated title for session \(session.id): \(title)")
-      AnalyticsManager.shared.sessionRenamed()
-    } catch {
-      logError("Failed to update session title", error: error)
-    }
   }
 
   // MARK: - Load Context (Memories)
@@ -3262,7 +2891,7 @@ class ChatProvider: ObservableObject {
     }
   }
 
-  /// Initialize chat: fetch sessions and load messages
+  /// Initialize chat: load the main chat messages
   func initialize() async {
     await initializeVisibleMessages()
     await warmupPromptContext()
@@ -3292,16 +2921,7 @@ class ChatProvider: ObservableObject {
       }
     }
 
-    if multiChatEnabled {
-      // Multi-chat mode: load sessions, default to default chat
-      await fetchSessions()
-      // Start in default chat mode
-      await switchToDefaultChat()
-    } else {
-      // Single chat mode: just load default chat messages (syncs with Flutter)
-      isLoadingSessions = false
-      await loadDefaultChatMessages()
-    }
+    await loadDefaultChatMessages()
   }
 
   /// Warm local prompt context used by first send / bridge startup.
@@ -3330,19 +2950,6 @@ class ChatProvider: ObservableObject {
       withIntermediateDirectories: true
     )
     return artifactsDirectory
-  }
-
-  /// Reinitialize after settings change
-  func reinitialize() async {
-    // The `multiChatEnabled` observer fires on any write to the key, so this
-    // can land mid-turn. Revoke before the transcript goes away.
-    revokeActiveTurn(reason: .superseded)
-    sessions = []
-    messages = []
-    resetMessagesPagination()
-    currentSession = nil
-    isInDefaultChat = true
-    await initialize()
   }
 
   /// Retry loading after a failure — clears error state and re-runs initialize
@@ -3542,14 +3149,6 @@ class ChatProvider: ObservableObject {
     }
   }
 
-  /// Switch to the default chat (messages without session_id, syncs with Flutter app)
-  func switchToDefaultChat() async {
-    currentSession = nil
-    isInDefaultChat = true
-    await loadDefaultChatMessages()
-    log("Switched to default chat")
-  }
-
   /// Load the kernel-owned default-chat journal. The backend is consulted only
   /// by the bounded, checkpointed legacy importer on first migration.
   func loadDefaultChatMessages() async {
@@ -3566,7 +3165,7 @@ class ChatProvider: ObservableObject {
       isLoading = false
       return
     }
-    await importLegacyBackendMessagesIfNeeded(surface: surface, sessionId: nil)
+    await importLegacyBackendMessagesIfNeeded(surface: surface)
     await kernelTurnProjection.reload(surface: surface)
     await rehydrateMissingArtifactResourcesFromKernel()
     messagesPaginationOffset = messages.count
@@ -3580,33 +3179,18 @@ class ChatProvider: ObservableObject {
   /// One-release compatibility import. The checkpoint is written only after
   /// every bounded row is idempotently accepted by the kernel; normal refresh
   /// never reads backend history again.
-  private func importLegacyBackendMessagesIfNeeded(
-    surface: AgentSurfaceReference,
-    sessionId: String?
-  ) async {
+  private func importLegacyBackendMessagesIfNeeded(surface: AgentSurfaceReference) async {
     guard let ownerId = runtimeOwnerId else { return }
     let checkpointKey = "kernelJournal.legacyBackendImport.v1|\(ownerId)|\(surface.key)"
     guard !UserDefaults.standard.bool(forKey: checkpointKey) else { return }
     do {
-      let legacy: [ChatMessageDB]
-      if let sessionId {
-        legacy = try await ChatLegacyPageCollector.all { limit, offset in
-          try await APIClient.shared.getMessages(
-            sessionId: sessionId,
-            limit: limit,
-            offset: offset,
-            expectedOwnerId: ownerId
-          )
-        }
-      } else {
-        legacy = try await ChatLegacyPageCollector.all { [selectedAppId] limit, offset in
-          try await APIClient.shared.getMessages(
-            appId: selectedAppId,
-            limit: limit,
-            offset: offset,
-            expectedOwnerId: ownerId
-          )
-        }
+      let legacy: [ChatMessageDB] = try await ChatLegacyPageCollector.all { [selectedAppId] limit, offset in
+        try await APIClient.shared.getMessages(
+          appId: selectedAppId,
+          limit: limit,
+          offset: offset,
+          expectedOwnerId: ownerId
+        )
       }
       let importPlan = ChatLegacyImportChronology.plan(
         legacy,
@@ -3909,7 +3493,7 @@ class ChatProvider: ObservableObject {
   }
 
   func mainChatSurfaceReference() -> AgentSurfaceReference {
-    .mainChat(chatId: mainChatRuntimeChatId(sessionId: isInDefaultChat ? nil : currentSessionId))
+    .mainChat(chatId: mainChatRuntimeChatId())
   }
 
   /// PTT is a realtime projection of the selected main chat, never a second
@@ -4423,7 +4007,7 @@ class ChatProvider: ObservableObject {
         assistantMessage: assistantMessage,
         origin: journalOrigin(for: session.surface),
         appId: overrideAppId ?? selectedAppId,
-        sessionId: isInDefaultChat ? nil : currentSessionId,
+        sessionId: nil,
         messageSource: journalOrigin(for: session.surface)
       )
     else {
@@ -4616,33 +4200,6 @@ class ChatProvider: ObservableObject {
     }
     tracer?.end("bridge_ensure", metadata: ["status": "ok"])
 
-    // Determine session ID based on mode
-    // In default chat mode (isInDefaultChat=true): no session ID (compatible with Flutter)
-    // In session mode: require session ID
-    var sessionId: String? = nil
-    if !isInDefaultChat {
-      // Session mode - require a session
-      if currentSession == nil {
-        _ = await createNewSession(authoritativeSendGeneration: sendGen)
-      }
-      guard sendGeneration == sendGen, turnLifecycle.acceptsResult else {
-        tracer?.finalize(tokenCount: 0, model: model ?? modelOverride)
-        telemetryAttempt.finish(stopReason: turnLifecycle.stopReason ?? stopReason(for: sendGen))
-        clearChatTelemetryState(for: sendGen)
-        releaseSendLock(sendGeneration: sendGen)
-
-        return nil
-      }
-      guard let sid = currentSessionId else {
-        errorMessage = "Failed to create chat session"
-        tracer?.finalize(tokenCount: 0, model: model ?? modelOverride)
-        telemetryAttempt.fail(errorClass: .sessionSetup)
-        clearChatTelemetryState(for: sendGen)
-        releaseSendLock(sendGeneration: sendGen)
-        return nil
-      }
-      sessionId = sid
-    }
     guard sendGeneration == sendGen else {
       tracer?.finalize(tokenCount: 0, model: model ?? modelOverride)
       telemetryAttempt.finish(stopReason: stopReason(for: sendGen))
@@ -4651,11 +4208,7 @@ class ChatProvider: ObservableObject {
       return nil
     }
 
-    let resolvedSurface = querySurface(
-      surfaceRef: surfaceRef,
-      sessionId: sessionId,
-      systemPromptStyle: systemPromptStyle
-    )
+    let resolvedSurface = querySurface(surfaceRef: surfaceRef, systemPromptStyle: systemPromptStyle)
     let pinnedSession: AgentSurfaceSession
     do {
       pinnedSession = try await resolveKernelQuerySession(
@@ -4955,8 +4508,6 @@ class ChatProvider: ObservableObject {
     // second writer identity.
     let turnMessageIds = Self.messageIds(forAttemptId: turnAttemptId)
     let userMessageId = turnMessageIds.user
-    let isFirstMessage = messages.isEmpty
-    let capturedSessionId = sessionId
     let capturedAppId = overrideAppId ?? selectedAppId
     let journalOrigin = journalOrigin(for: resolvedSurface)
     let userMessageResources = ChatResource.userMessageResources(
@@ -5002,7 +4553,7 @@ class ChatProvider: ObservableObject {
         assistantMessage: aiMessage,
         origin: journalOrigin,
         appId: capturedAppId,
-        sessionId: capturedSessionId,
+        sessionId: nil,
         messageSource: journalOrigin
       )
     }
@@ -5731,11 +5282,6 @@ class ChatProvider: ObservableObject {
       // The durable outbox may retry independently after this point.
       releaseSendLock(sendGeneration: sendGen)
 
-      // Auto-generate title after first exchange (user message + AI response)
-      if isFirstMessage, let sid = capturedSessionId {
-        await generateSessionTitle(sessionId: sid)
-      }
-
       log("Chat response complete")
 
       // Track onboarding response shape and bounded tool dimensions without content.
@@ -6385,43 +5931,6 @@ class ChatProvider: ObservableObject {
     }
   }
 
-  /// Generate a title for the session using LLM
-  private func generateSessionTitle(sessionId: String) async {
-    // Need at least 2 messages (user + AI) for meaningful title
-    guard messages.count >= 2 else {
-      log("Not enough messages for title generation")
-      return
-    }
-
-    // Convert messages to the format expected by the API
-    let messageTuples: [(text: String, sender: String)] = messages.map { msg in
-      (text: msg.text, sender: msg.sender == .user ? "human" : "ai")
-    }
-
-    do {
-      let response = try await APIClient.shared.generateSessionTitle(
-        sessionId: sessionId,
-        messages: messageTuples
-      )
-
-      // Update session in list
-      if let index = sessions.firstIndex(where: { $0.id == sessionId }) {
-        sessions[index].title = response.title
-      }
-
-      // Update current session
-      if currentSession?.id == sessionId {
-        currentSession?.title = response.title
-      }
-
-      log("Generated session title (\(response.title.count) chars)")
-      AnalyticsManager.shared.sessionTitleGenerated()
-    } catch {
-      logError("Failed to generate session title", error: error)
-      // Non-fatal - session continues with default title
-    }
-  }
-
   /// Update message text (replaces entire text)
   private func updateMessage(id: String, text: String) {
     if let index = messages.firstIndex(where: { $0.id == id }) {
@@ -7061,7 +6570,7 @@ class ChatProvider: ObservableObject {
 
   // MARK: - Clear Chat
 
-  /// Clear current session messages (delete and create new)
+  /// Clear the main chat's messages
   func clearChat() async {
     isClearing = true
     defer { isClearing = false }
@@ -7077,38 +6586,14 @@ class ChatProvider: ObservableObject {
     // the reader just emptied reads as a clear that did not work.
     ChatDailySummaryCoordinator.shared.noteChatCleared()
 
-    if isInDefaultChat {
-      let runtimeChatId = mainChatRuntimeChatId(sessionId: nil)
-      let surface = AgentSurfaceReference.mainChat(chatId: runtimeChatId)
-      AgentRuntimeStatusStore.shared.clear(surface: surface)
-      guard await kernelTurnProjection.clear(surface: surface) else {
-        errorMessage = "Failed to clear chat"
-        return
-      }
-      log("Cleared default chat messages")
-    } else {
-      // Session mode: clear UI immediately, delete old session in background, create new
-      let sessionToDelete = currentSession
-      if let session = sessionToDelete {
-        let surface = AgentSurfaceReference.mainChat(chatId: session.id)
-        AgentRuntimeStatusStore.shared.clear(surface: surface)
-        guard await kernelTurnProjection.clear(surface: surface) else {
-          errorMessage = "Failed to clear chat"
-          return
-        }
-      }
-
-      // Immediately clear UI state
-      if let session = sessionToDelete {
-        sessions.removeAll { $0.id == session.id }
-      }
-      currentSession = nil
-      messages = []
-      resetMessagesPagination()
-
-      // Create a fresh session immediately
-      _ = await createNewSession()
+    let runtimeChatId = mainChatRuntimeChatId()
+    let surface = AgentSurfaceReference.mainChat(chatId: runtimeChatId)
+    AgentRuntimeStatusStore.shared.clear(surface: surface)
+    guard await kernelTurnProjection.clear(surface: surface) else {
+      errorMessage = "Failed to clear chat"
+      return
     }
+    log("Cleared default chat messages")
 
     log("Chat cleared")
     AnalyticsManager.shared.chatCleared()
@@ -7116,7 +6601,7 @@ class ChatProvider: ObservableObject {
 
   // MARK: - App Selection
 
-  /// Select a chat app and load its sessions
+  /// Select a chat app and load its main chat
   func selectApp(_ appId: String?) async {
     await selectApp(appId, name: nil, chatPrompt: nil)
   }
@@ -7129,56 +6614,10 @@ class ChatProvider: ObservableObject {
     revokeActiveTurn(reason: .superseded)
     selectedAppId = appId
     selectedChatAppContext = appContext
-    currentSession = nil
     messages = []
     resetMessagesPagination()
-    sessions = []
     errorMessage = nil
-    isInDefaultChat = true
-
-    if multiChatEnabled {
-      // Multi-chat mode: load sessions, then switch to default chat
-      await fetchSessions()
-      await switchToDefaultChat()
-    } else {
-      // Single chat mode: just load default chat messages
-      await loadDefaultChatMessages()
-    }
-  }
-
-  // MARK: - Session Grouping Helpers
-
-  /// Group sessions by date — called by the Combine observer, not on every SwiftUI render pass.
-  private func computeGroupedSessions() -> [(String, [ChatSession])] {
-    let calendar = Calendar.current
-    let now = Date()
-
-    var today: [ChatSession] = []
-    var yesterday: [ChatSession] = []
-    var thisWeek: [ChatSession] = []
-    var older: [ChatSession] = []
-
-    for session in filteredSessions {
-      if calendar.isDateInToday(session.updatedAt) {
-        today.append(session)
-      } else if calendar.isDateInYesterday(session.updatedAt) {
-        yesterday.append(session)
-      } else if let weekAgo = calendar.date(byAdding: .day, value: -7, to: now),
-        session.updatedAt > weekAgo
-      {
-        thisWeek.append(session)
-      } else {
-        older.append(session)
-      }
-    }
-
-    var groups: [(String, [ChatSession])] = []
-    if !today.isEmpty { groups.append(("Today", today)) }
-    if !yesterday.isEmpty { groups.append(("Yesterday", yesterday)) }
-    if !thisWeek.isEmpty { groups.append(("This Week", thisWeek)) }
-    if !older.isEmpty { groups.append(("Older", older)) }
-
-    return groups
+    await loadDefaultChatMessages()
   }
 
   // MARK: - Local automation (continuity gauntlet)

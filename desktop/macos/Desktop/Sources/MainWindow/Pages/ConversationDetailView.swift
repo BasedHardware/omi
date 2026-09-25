@@ -47,6 +47,8 @@ struct ConversationDetailProcessingLayout<Banner: View, Content: View>: View {
 struct ConversationDetailView: View {
   let conversation: ServerConversation
   let onBack: () -> Void
+  /// Where Back returns to, named on the chip ("‹ Conversations", "‹ Memories", "‹ Activity").
+  var backTitle: String = "Conversations"
   var folders: [Folder] = []
   var onMoveToFolder: ((String, String?) async -> Void)?
   var onDelete: (() -> Void)?
@@ -97,6 +99,7 @@ struct ConversationDetailView: View {
     await AppState.current?.separateConversationFromCaptureGroup(id) ?? false
   }
   @State private var showRecordings = false
+  @State private var pendingSeparation: CaptureGroupRecording?
   @State private var showAppSelector = false
   @State private var isReprocessing = false
   @State private var selectedAppForReprocess: OmiApp?
@@ -107,6 +110,9 @@ struct ConversationDetailView: View {
   // Transcript presentation state. Summary and transcript are exclusive panes so neither one is
   // compressed into an unreadable split view at the minimum window width.
   @State private var showTranscriptDrawer = false
+  @State private var transcriptSearch = TranscriptSearchModel()
+  @State private var isTranscriptSearchOpen = false
+  @FocusState private var isTranscriptSearchFocused: Bool
 
   // Entry animation
   @State private var hasAppeared = false
@@ -162,6 +168,11 @@ struct ConversationDetailView: View {
     displayConversation.startedAt ?? displayConversation.createdAt
   }
 
+  /// "1 segment", "388 segments" — a badge says what it counts.
+  nonisolated static func segmentCountLabel(_ count: Int) -> String {
+    count == 1 ? "1 segment" : "\(count) segments"
+  }
+
   static func visiblePane(transcriptOpen: Bool) -> ConversationDetailPane {
     transcriptOpen ? .transcript : .summary
   }
@@ -202,10 +213,41 @@ struct ConversationDetailView: View {
     .modifier(
       CaptureRecordingsPanelHost(
         isOpen: $showRecordings, recordings: captureRecordings, phase: separation.phase,
-        onOpen: openRecording, onSeparate: separateRecording)
+        onOpen: openRecording, onSeparate: separateRecording, pendingSeparation: $pendingSeparation)
     )
     .opacity(hasAppeared ? 1 : 0)
     .offset(y: hasAppeared ? 0 : 20)
+    // Esc peels one layer: the transcript back to the summary, then the summary back to the list.
+    // (The recordings list and find each claim Esc first, at a higher priority.)
+    .onEscapeKey(priority: .content) {
+      if showTranscriptDrawer {
+        closeTranscript()
+      } else {
+        onBack()
+      }
+      return true
+    }
+    .shellConfirmation(
+      isPresented: $showDeleteConfirmation,
+      title: "Delete Conversation?",
+      message: "This permanently deletes the conversation, its transcript and its summary.",
+      confirmTitle: "Delete"
+    ) {
+      Task { await deleteConversation() }
+    }
+    .dismissableSheet(isPresented: $showEditDialog) {
+      TextPromptSheet(
+        title: "Rename Conversation",
+        placeholder: "Title",
+        text: $editedTitle,
+        isBusy: isUpdatingTitle,
+        onConfirm: {
+          showEditDialog = false
+          Task { await updateTitle() }
+        },
+        onCancel: { showEditDialog = false }
+      )
+    }
     .onAppear {
       showTranscriptDrawer = ConversationDetailAutomationState.shared.syncPresentedDetail(
         conversationId: conversation.id,
@@ -234,6 +276,7 @@ struct ConversationDetailView: View {
         serverClockConversation = nil
         separation.reset()
         showRecordings = false
+        pendingSeparation = nil
       }
     }
     .onDisappear {
@@ -338,7 +381,24 @@ struct ConversationDetailView: View {
       guard
         let recording = captureRecordings.first(where: { $0.id == notification.userInfo?["recordingId"] as? String })
       else { return }
-      if action == "separate" { separateRecording(recording) } else { openRecording(recording) }
+      switch action {
+      case "separate": separateRecording(recording)
+      // Raises the confirmation a row's Separate… raises, so the dialog itself can be checked.
+      case "request_separate": pendingSeparation = recording
+      default: openRecording(recording)
+      }
+    }
+    .onReceive(
+      NotificationCenter.default.publisher(for: .desktopAutomationConversationPromptRequested)
+    ) { notification in
+      guard notification.userInfo?["conversationId"] as? String == displayConversation.id else { return }
+      switch notification.userInfo?["prompt"] as? String {
+      case "rename":
+        editedTitle = displayConversation.title
+        showEditDialog = true
+      case "delete": showDeleteConfirmation = true
+      default: break
+      }
     }
     .dismissableSheet(isPresented: $showAppSelector) {
       AppSelectorSheet(
@@ -402,6 +462,7 @@ struct ConversationDetailView: View {
       pane: Self.visiblePane(transcriptOpen: showTranscriptDrawer),
       canCopyTranscript: canCopyTranscript,
       isGroupedEvent: !captureRecordings.isEmpty,
+      backTitle: backTitle,
       onBack: onBack,
       onSelectPane: { pane in
         OmiMotion.withGated(.easeInOut(duration: 0.2)) { showTranscriptDrawer = pane == .transcript }
@@ -424,7 +485,16 @@ struct ConversationDetailView: View {
         }
       },
       trailing: {
-        if showTranscriptDrawer { refreshTranscriptButton }
+        if showTranscriptDrawer {
+          TranscriptFindField(
+            isOpen: isTranscriptSearchOpen,
+            query: Binding(get: { transcriptSearch.query }, set: { runTranscriptSearch($0) }),
+            countLabel: transcriptSearch.countLabel, hasMatches: transcriptSearch.currentMatch != nil,
+            isFocused: $isTranscriptSearchFocused, onOpen: openTranscriptSearch,
+            onStep: { forward in forward ? transcriptSearch.next() : transcriptSearch.previous() },
+            onClose: closeTranscriptSearch)
+          refreshTranscriptButton
+        }
       }
     )
     .padding(.horizontal, OmiSpacing.xxl)
@@ -433,24 +503,6 @@ struct ConversationDetailView: View {
     // The banner, as this header's ground rather than as a slot below it. It draws no text and is
     // absent when the note has no approved frame, which leaves the ordinary header as it was.
     .background(headerBanner)
-    .alert("Rename Conversation", isPresented: $showEditDialog) {
-      TextField("Title", text: $editedTitle)
-      Button("Cancel", role: .cancel) {}
-      Button("Save") {
-        Task { await updateTitle() }
-      }
-      .disabled(editedTitle.isEmpty || isUpdatingTitle)
-    } message: {
-      Text("Enter a new title for this conversation")
-    }
-    .alert("Delete Conversation", isPresented: $showDeleteConfirmation) {
-      Button("Cancel", role: .cancel) {}
-      Button("Delete", role: .destructive) {
-        Task { await deleteConversation() }
-      }
-    } message: {
-      Text("Are you sure you want to delete this conversation? This action cannot be undone.")
-    }
   }
 
   @ViewBuilder
@@ -614,24 +666,15 @@ struct ConversationDetailView: View {
     }
   }
 
+  /// The transcript every copy action here produces, or nil when it is locked.
+  private var transcriptText: String? {
+    guard canCopyTranscript else { return nil }
+    return SpeakerLabelFormatter(people: people).transcript(displayConversation.transcriptSegments)
+  }
+
   private func copyTranscript() {
-    guard canCopyTranscript else { return }
-
-    let peopleDict = Dictionary(lastWriteWins: people.map { ($0.id, $0) })
-    let transcript: String = displayConversation.transcriptSegments.map { segment -> String in
-      let speakerName: String
-      if segment.isUser {
-        speakerName = "You"
-      } else if let personId = segment.personId, let person = peopleDict[personId] {
-        speakerName = person.name
-      } else {
-        speakerName = "Speaker \(segment.speaker ?? "Unknown")"
-      }
-      return "[\(speakerName)]: \(segment.text)"
-    }.joined(separator: "\n\n")
-
-    NSPasteboard.general.clearContents()
-    NSPasteboard.general.setString(transcript, forType: .string)
+    guard let transcriptText else { return }
+    OmiToastCenter.shared.copy(transcriptText, confirming: "Transcript copied")
   }
 
   private func updateTitle() async {
@@ -847,17 +890,14 @@ struct ConversationDetailView: View {
     let isBusy = isRefreshingTranscript || transcriptResync.phase.isBusy
     return Button(action: refreshTranscript) {
       Image(systemName: "arrow.clockwise")
-        .scaledFont(size: OmiType.body)
-        .foregroundColor(Ink.secondary)
+        .scaledFont(size: OmiType.body, weight: .medium)
         .rotationEffect(.degrees(isBusy ? 360 : 0))
         .animation(
           isBusy ? .linear(duration: 0.8).repeatForever(autoreverses: false) : .default,
           value: isBusy
         )
-        .frame(width: 24, height: 24)
-        .background(Circle().fill(Ink.rowFillHover))
     }
-    .buttonStyle(.plain)
+    .buttonStyle(GlassIconButtonStyle(diameter: OmiIconButtonSize.regular.diameter, restsFilled: true))
     .disabled(isBusy)
     .help("Refresh transcript and re-sync it to the audio")
     .accessibilityLabel("Refresh transcript and re-sync it to the audio")
@@ -902,7 +942,9 @@ struct ConversationDetailView: View {
             .padding(.horizontal, OmiSpacing.sm)
             .padding(.bottom, OmiSpacing.section)
           }
-          .glassScrollFade()
+          // A soft top edge, so a speaker label scrolling under the header fades instead of being
+          // sliced mid-glyph.
+          .glassScrollFade(top: OmiSpacing.lg)
           .onAppear { focusTranscript(using: proxy) }
           .onChange(of: automation.focusedTranscriptSegmentIds) { _, _ in
             focusTranscript(using: proxy)
@@ -913,9 +955,46 @@ struct ConversationDetailView: View {
           .onChange(of: activeCaptureTranscriptSegmentID) { _, segmentID in
             followCapturePlayback(using: proxy, segmentID: segmentID)
           }
+          .onChange(of: transcriptSearch.revealRequest) { _, _ in
+            guard let segmentID = transcriptSearch.currentMatch?.segmentID else { return }
+            proxy.scrollTo(segmentID, anchor: .center)
+          }
         }
       }
     }
+    // Esc clears and closes find before the pane's own Esc leaves the transcript.
+    .onEscapeKey(priority: .editing) {
+      guard isTranscriptSearchOpen else { return false }
+      closeTranscriptSearch()
+      return true
+    }
+    .onChange(of: displayConversation.transcriptSegments.count) { _, _ in
+      if transcriptSearch.isActive { runTranscriptSearch(transcriptSearch.query) }
+    }
+    .onDisappear { closeTranscriptSearch() }
+  }
+
+  private func closeTranscript() {
+    OmiMotion.withGated(.easeInOut(duration: 0.25)) {
+      showTranscriptDrawer = false
+    }
+  }
+
+  private func openTranscriptSearch() {
+    isTranscriptSearchOpen = true
+    DispatchQueue.main.async { isTranscriptSearchFocused = true }
+  }
+
+  private func closeTranscriptSearch() {
+    runTranscriptSearch("")
+    isTranscriptSearchOpen = false
+    isTranscriptSearchFocused = false
+  }
+
+  private func runTranscriptSearch(_ query: String) {
+    transcriptSearch.update(
+      query: query,
+      segments: displayConversation.transcriptSegments.map { (id: $0.backendId ?? $0.id, text: $0.text) })
   }
 
   // MARK: - Transcript Bubbles (shared)
@@ -942,7 +1021,9 @@ struct ConversationDetailView: View {
             Task { await capturePlayback.playFromMoment(wallOffset: segment.start) }
           }
           : nil,
-        isMomentPlayable: canSeekCaptureMoment(segment)
+        isMomentPlayable: canSeekCaptureMoment(segment),
+        searchHighlights: transcriptSearch.ranges(inSegment: segmentID),
+        currentSearchHighlight: transcriptSearch.currentRange(inSegment: segmentID)
       )
       .padding(.horizontal, OmiSpacing.lg)
       .padding(.vertical, OmiSpacing.xs)

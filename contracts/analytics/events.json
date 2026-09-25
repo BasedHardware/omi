@@ -2164,6 +2164,216 @@
         "mobile-product-outcomes"
       ],
       "correlation": null
+    },
+    {
+      "id": "conversationAction",
+      "wire_name": "Conversation Action",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "action": {
+          "type": "enum",
+          "wire_name": "action",
+          "values": [
+            "ask_omi",
+            "star",
+            "unstar",
+            "share",
+            "rename",
+            "move_folder",
+            "recordings_open",
+            "separate",
+            "delete",
+            "copy_transcript",
+            "copy_summary",
+            "share_audio",
+            "link_event",
+            "reprocess",
+            "search",
+            "visibility",
+            "open",
+            "select",
+            "copy_conversation_id",
+            "test_prompt"
+          ]
+        },
+        "surface": {
+          "type": "enum",
+          "wire_name": "surface",
+          "values": [
+            "top_bar",
+            "overflow",
+            "detail_body",
+            "row_long_press",
+            "row_swipe"
+          ]
+        }
+      },
+      "consumers": [
+        "mobile-conversation-actions"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "speakerTagPromptsViewed",
+      "wire_name": "Speaker Tag Prompts Viewed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "promptCount": {
+          "type": "int",
+          "wire_name": "prompt_count"
+        },
+        "firstTime": {
+          "type": "bool",
+          "wire_name": "first_time"
+        }
+      },
+      "consumers": [
+        "speaker-tag-prompts-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "speakerTagPromptClipPlayed",
+      "wire_name": "Speaker Tag Prompt Clip Played",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "kind": {
+          "type": "enum",
+          "wire_name": "kind",
+          "values": [
+            "owner_check",
+            "confirm_person",
+            "identify",
+            "unknown"
+          ]
+        },
+        "loaded": {
+          "type": "bool",
+          "wire_name": "loaded"
+        }
+      },
+      "consumers": [
+        "speaker-tag-prompts-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "speakerTagPromptAnswerSubmitted",
+      "wire_name": "Speaker Tag Prompt Answer Submitted",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "kind": {
+          "type": "enum",
+          "wire_name": "kind",
+          "values": [
+            "owner_check",
+            "confirm_person",
+            "identify",
+            "unknown"
+          ]
+        },
+        "answer": {
+          "type": "enum",
+          "wire_name": "answer",
+          "values": [
+            "me",
+            "not_me",
+            "person",
+            "new_person",
+            "someone_else",
+            "skip",
+            "unknown"
+          ]
+        },
+        "clipPlayed": {
+          "type": "bool",
+          "wire_name": "clip_played"
+        },
+        "firstTime": {
+          "type": "bool",
+          "wire_name": "first_time"
+        },
+        "succeeded": {
+          "type": "bool",
+          "wire_name": "succeeded"
+        }
+      },
+      "consumers": [
+        "speaker-tag-prompts-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "speakerTagPromptsClosed",
+      "wire_name": "Speaker Tag Prompts Closed",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "answeredCount": {
+          "type": "int",
+          "wire_name": "answered_count"
+        },
+        "promptCount": {
+          "type": "int",
+          "wire_name": "prompt_count"
+        }
+      },
+      "consumers": [
+        "speaker-tag-prompts-funnel"
+      ],
+      "correlation": null
+    },
+    {
+      "id": "voiceProfileSettingToggled",
+      "wire_name": "Voice Profile Setting Toggled",
+      "status": "active",
+      "replaced_by": null,
+      "phase": "point",
+      "intent": null,
+      "properties": {
+        "setting": {
+          "type": "enum",
+          "wire_name": "setting",
+          "values": [
+            "tag_prompts",
+            "save_other_voices"
+          ]
+        },
+        "enabled": {
+          "type": "bool",
+          "wire_name": "enabled"
+        },
+        "source": {
+          "type": "enum",
+          "wire_name": "source",
+          "values": [
+            "settings",
+            "first_prompt"
+          ]
+        },
+        "succeeded": {
+          "type": "bool",
+          "wire_name": "succeeded"
+        }
+      },
+      "consumers": [
+        "speaker-tag-prompts-funnel"
+      ],
+      "correlation": null
     }
   ]
 }

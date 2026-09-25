@@ -9,7 +9,7 @@ Capture timestamps are client assertions, so a well-formed device header alone n
 
 A signed fresh manifest covers at most 20 files. Mobile detects a conversation with more than 20 pending fresh WALs before requesting a manifest and routes the whole conversation through backfill in three-file batches. It never claims one immutable fresh content set and strands the remainder behind a conflicting manifest.
 
-Historical recovery defaults are a 30-day lookback, one in-flight job per UID, four processed speech hours per UID per UTC day, 555 processed speech hours globally per UTC day, and four globally concurrent Cloud Tasks. Change the first three limits with `SYNC_BACKFILL_MAX_AGE_SECONDS`, `SYNC_BACKFILL_USER_DAILY_HOURS`, and `SYNC_BACKFILL_GLOBAL_DAILY_HOURS`; queue concurrency is controlled by the shared `.github/actions/sync-backfill-lifecycle` composite used by both manual and auto-dev deploys.
+Historical recovery defaults are a 30-day lookback, one in-flight job per UID, four processed speech hours per UID per UTC day, 555 processed speech hours globally per UTC day, and thirty globally concurrent Cloud Tasks dispatches capped at thirty per second. Change the first three limits with `SYNC_BACKFILL_MAX_AGE_SECONDS`, `SYNC_BACKFILL_USER_DAILY_HOURS`, and `SYNC_BACKFILL_GLOBAL_DAILY_HOURS`; queue concurrency is controlled by the shared `.github/actions/sync-backfill-lifecycle` composite used by both manual and auto-dev deploys.
 
 Production deploys require `SYNC_BACKFILL_ALERT_NOTIFICATION_CHANNELS` as a comma-separated list of Cloud Monitoring notification-channel resource names. The workflow provisions log-based metrics and routed alert policies at 70% and 90%, then verifies each policy has a notification channel before traffic shifts.
 
@@ -19,8 +19,18 @@ Backfill speech is written under the `sync_backfill` accounting source. Live har
 
 VAD is the eligibility owner for offline sync. A batch for which VAD produces
 zero segments is a valid `expected_silence` completion. Every file passed to
-the provider after segmentation is speech-eligible; an empty provider result
-or empty normalized transcript is therefore `empty_unexpected`, not silence.
+the provider after segmentation is speech-eligible; when the provider returns
+no words, or normalization yields no transcript, the worker makes exactly one
+identical bounded `prerecorded` retry (`attempts=0`, same URL, language,
+keywords, and speaker count). If the retry also yields nothing the segment is
+`expected_silence` — VAD over-reports on noise, so an empty result is valid
+rather than a failure. No conversation or partial-result checkpoint is
+written for it, but its processed markers are persisted under the same
+lease/epoch guard as successful segments, so a Cloud Tasks redelivery skips
+it without another provider call; a job that still completes persists its
+content ledger normally. An exception on the retry keeps the normal failure
+classification, and a recovered retry continues through the original
+processing path exactly once.
 
 The terminal job states have one acknowledgement meaning across mobile and
 macOS:
@@ -47,6 +57,22 @@ task. Operators investigate `event=sync_dispatch outcome=enqueue_uncertain`
 and `omi_sync_dispatch_attempts_total{mode="enqueue_uncertain"}`. A staging
 failure before any enqueue removes partial blobs, marks the job failed, and
 returns 503 for a normal WAL retry.
+
+## Failure telemetry
+
+Structured sync logs carry fixed-shape diagnostic fields, never metric labels
+and never exception text, audio, transcript, path, or UID. Segment and job
+events emit `phase` from a closed token set (`download`, `decode`, `vad`,
+`provider_select`, `provider_call`, `parse`, `assignment`, `persistence`,
+`postprocess`, `usage`, `finalize`, `unknown`, with `none` when no failure
+context exists) and `exception_type` from a closed exception-class allowlist
+that collapses anything else to `OtherException`. `job_ref` correlates the
+job's UUIDv4 identifier and `attempt_ref` is a fresh random UUIDv4 per
+coordinator invocation — never a run token, uid, content id, or path — so
+Cloud Tasks retries of one job stay joinable without high-cardinality labels.
+The terminal `sync_transcription_job_finalized` event adds the first failed
+segment's bounded `failure_phase` and `failure_class`; successful and
+speech-free jobs log `none`.
 
 ## Run ownership and recovery
 
@@ -119,4 +145,4 @@ Pause `sync-backfill` in Cloud Tasks or set the global daily allowance to a valu
 
 ## Release acceptance
 
-Upload a synthetic eight-day backlog and then create a current recording. Verify the current recording reaches a terminal job first, historical jobs never exceed four concurrent dispatches, live fair-use totals exclude `sync_backfill`, and replaying the same raw upload returns the durable completed result without new metering.
+Upload a synthetic eight-day backlog and then create a current recording. Verify the current recording reaches a terminal job first, historical jobs never exceed thirty concurrent dispatches, live fair-use totals exclude `sync_backfill`, and replaying the same raw upload returns the durable completed result without new metering.

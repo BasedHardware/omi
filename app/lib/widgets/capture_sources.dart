@@ -30,8 +30,10 @@ abstract final class CaptureSources {
     switch (source) {
       case 'desktop':
         return context.l10n.captureSourceDesktop;
+      // The wearable is "Pendant" wherever a capture source is named (design ruling 2026-09-24),
+      // never "Omi", which is the app.
       case 'omi':
-        return context.l10n.omiAppName;
+        return context.l10n.captureSourcePendant;
       case 'phone':
         return context.l10n.phone;
       // Product and brand names are not translated.

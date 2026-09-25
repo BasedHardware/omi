@@ -534,7 +534,8 @@ jobs:
             --expected-workflow-id "$PUSHER_QUALIFICATION_WORKFLOW_ID" \
             --expected-run-id "$PUSHER_QUALIFICATION_RUN_ID" \
             --expected-canary-workflow-id "$EXPECTED_CANARY_WORKFLOW_ID" \
-            --expected-canary-run-id "$GITHUB_RUN_ID"
+            --expected-canary-run-id "$GITHUB_RUN_ID" \
+            --expected-canary-source-sha "$CHECKED_OUT_SHA"
 
       - name: Upload protected production Pusher canary evidence
         if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod'
@@ -708,7 +709,8 @@ jobs:
             --expected-workflow-id "$PUSHER_QUALIFICATION_WORKFLOW_ID" \
             --expected-run-id "$PUSHER_QUALIFICATION_RUN_ID" \
             --expected-canary-workflow-id "$EXPECTED_CANARY_WORKFLOW_ID" \
-            --expected-canary-run-id "$GITHUB_RUN_ID"
+            --expected-canary-run-id "$GITHUB_RUN_ID" \
+            --expected-canary-source-sha "$CHECKED_OUT_SHA"
 
       - name: Upload exact live production Pusher deployment receipt
         if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod'

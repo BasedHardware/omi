@@ -566,9 +566,8 @@ struct SpineDayHeader: View {
       .contentShape(Rectangle())
     }
     .buttonStyle(.plain)
-    .onHover { hovering in
+    .pointingHandOnHover { hovering in
       isHovering = hovering
-      if hovering { NSCursor.pointingHand.push() } else { NSCursor.pop() }
     }
     .accessibilityElement(children: .combine)
     .accessibilityAddTraits(.isButton)

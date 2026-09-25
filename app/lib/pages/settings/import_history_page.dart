@@ -1,46 +1,27 @@
 import 'dart:async';
 import 'dart:io';
 
-import 'package:omi/utils/error_message.dart';
-import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import 'package:file_picker/file_picker.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:pull_down_button/pull_down_button.dart';
-import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 import 'package:omi/backend/http/api/imports.dart';
-import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/error_message.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:omi/widgets/shimmer_with_timeout.dart';
 
-/// Renders an import job's creation timestamp for its history row.
+/// The label an import-history row shows for [createdAt]: the time today, "Yesterday at …", then
+/// the date and time — in the reader's locale and clock (docs/ux-contract.md §8).
 ///
-/// [createdAt] is a server timestamp and parses as UTC, so both the day the row
-/// is labelled with and the clock time it shows must come from the *local*
-/// projection: reading the raw UTC components puts the row on the wrong day and
-/// at the wrong time for every viewer whose local day differs from the UTC day.
-/// [now] exists for tests; production passes the real clock.
-String formatImportJobTimestamp(AppLocalizations l10n, DateTime createdAt, {DateTime? now}) {
-  final local = createdAt.toLocal();
-  final reference = (now ?? DateTime.now()).toLocal();
-  final today = DateTime(reference.year, reference.month, reference.day);
-  final jobDay = DateTime(local.year, local.month, local.day);
-  final time = '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
-
-  if (jobDay == today) {
-    return l10n.todayAtTime(time);
-  }
-  // Calendar arithmetic, not a 24h subtraction: on either DST transition
-  // `today - Duration(days: 1)` lands at 23:00 or 01:00 rather than midnight,
-  // so it never equals a day key and the yesterday row silently falls through.
-  if (jobDay == DateTime(reference.year, reference.month, reference.day - 1)) {
-    return l10n.yesterdayAtTime(time);
-  }
-  return '${local.day}/${local.month}/${local.year} at $time';
-}
+/// [createdAt] is a server timestamp and parses as UTC; it is projected to local time first so the
+/// row lands on the reader's day.
+String importJobTimestampLabel(OmiDateFormat dates, DateTime createdAt) => dates.timestamp(createdAt.toLocal());
 
 class ImportJobCountChip {
   final int count;
@@ -66,6 +47,7 @@ class ImportHistoryPage extends StatefulWidget {
 class _ImportHistoryPageState extends State<ImportHistoryPage> {
   List<ImportJobResponse> _jobs = [];
   bool _isLoading = true;
+  bool _loadFailed = false;
   bool _isUploading = false;
   Timer? _pollTimer;
 
@@ -83,7 +65,10 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
   }
 
   Future<void> _loadJobs() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _loadFailed = false;
+    });
     try {
       final jobs = await getImportJobs();
       if (mounted) {
@@ -96,7 +81,10 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
     } catch (e) {
       Logger.debug('Error loading import jobs: $e');
       if (mounted) {
-        setState(() => _isLoading = false);
+        setState(() {
+          _isLoading = false;
+          _loadFailed = true;
+        });
       }
     }
   }
@@ -138,7 +126,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
       setState(() => _isUploading = true);
 
       // Pick ZIP file
-      Logger.debug('Opening file picker for ZIP...');
+      Logger.debug('Opening file picker for ZIP…');
       final result = await FilePicker.platform.pickFiles(type: FileType.custom, allowedExtensions: ['zip']);
 
       if (result == null || result.files.isEmpty) {
@@ -154,11 +142,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
 
       if (filePath == null) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(context.l10n.couldNotAccessFile), backgroundColor: Colors.red.shade700),
-          );
-        }
-        if (mounted) {
+          OmiFeedback.error(context, context.l10n.couldNotAccessFile);
           setState(() => _isUploading = false);
         }
         return;
@@ -167,7 +151,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
       final file = File(filePath);
 
       // Start import
-      Logger.debug('Starting Limitless import...');
+      Logger.debug('Starting Limitless import…');
       final response = await startLimitlessImport(file);
       Logger.debug('Import response: ${response?.jobId}');
 
@@ -178,38 +162,14 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
       if (response != null) {
         // Refresh the list and start polling
         await _loadJobs();
-
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Row(
-                children: [
-                  const Icon(Icons.check_circle, color: Colors.white),
-                  const SizedBox(width: 12),
-                  Expanded(child: Text(context.l10n.importStarted)),
-                ],
-              ),
-              backgroundColor: Colors.green.shade700,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-          );
-        }
+        if (mounted) OmiFeedback.confirm(context, context.l10n.importStarted);
       } else {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Row(
-                children: [
-                  const Icon(Icons.error_outline, color: Colors.white),
-                  const SizedBox(width: 12),
-                  Expanded(child: Text(context.l10n.failedToStartImport)),
-                ],
-              ),
-              backgroundColor: Colors.red.shade700,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
+          OmiFeedback.error(
+            context,
+            context.l10n.failedToStartImport,
+            actionLabel: context.l10n.tryAgain,
+            onAction: _startLimitlessImport,
           );
         }
       }
@@ -217,106 +177,38 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
       Logger.debug('FilePicker PlatformException: ${e.code} - ${e.message}');
       if (mounted) {
         setState(() => _isUploading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(context.l10n.importErrorOpeningFilePicker(e.message ?? '')),
-            backgroundColor: Colors.red.shade700,
-          ),
-        );
+        OmiFeedback.error(context, context.l10n.importErrorOpeningFilePicker(e.message ?? ''));
       }
     } catch (e, stackTrace) {
       Logger.debug('Import error: $e');
       Logger.debug('Stack trace: $stackTrace');
       if (mounted) {
         setState(() => _isUploading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.l10n.importErrorGeneric(readableError(e))), backgroundColor: Colors.red.shade700),
-        );
+        OmiFeedback.error(context, context.l10n.importErrorGeneric(readableError(e)));
       }
     }
   }
 
+  /// Deleting imported conversations cannot be undone, so it always confirms (contract §4).
   Future<void> _showDeleteLimitlessDialog() async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1F1F25),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(
-          context.l10n.deleteAllLimitlessConversations,
-          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-        ),
-        content: Text(
-          context.l10n.deleteAllLimitlessWarning,
-          style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: Text(context.l10n.cancel, style: TextStyle(color: Colors.grey.shade400)),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text(context.l10n.delete, style: const TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
+    final confirmed = await showOmiConfirm(
+      context,
+      title: context.l10n.deleteAllLimitlessConversations,
+      message: context.l10n.deleteAllLimitlessWarning,
+      confirmLabel: context.l10n.delete,
+      destructive: true,
     );
+    if (!confirmed || !mounted) return;
 
-    if (confirmed == true && mounted) {
-      // Show loading
-      showDialog(
-        context: context,
-        barrierDismissible: false,
-        builder: (context) => AlertDialog(
-          backgroundColor: const Color(0xFF1F1F25),
-          content: Row(
-            children: [
-              const CircularProgressIndicator(color: Colors.white),
-              const SizedBox(width: 16),
-              Text(context.l10n.deleting, style: const TextStyle(color: Colors.white)),
-            ],
-          ),
-        ),
-      );
+    // Progress toast, replaced by the result.
+    OmiFeedback.progress(context, context.l10n.deleting);
+    final deletedCount = await deleteLimitlessConversations();
+    if (!mounted) return;
 
-      final deletedCount = await deleteLimitlessConversations();
-
-      if (mounted) {
-        Navigator.of(context).pop(); // Close loading dialog
-
-        if (deletedCount != null) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Row(
-                children: [
-                  const Icon(Icons.check_circle, color: Colors.white),
-                  const SizedBox(width: 12),
-                  Expanded(child: Text(context.l10n.deletedLimitlessConversations(deletedCount))),
-                ],
-              ),
-              backgroundColor: Colors.green.shade700,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-          );
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Row(
-                children: [
-                  const Icon(Icons.error_outline, color: Colors.white),
-                  const SizedBox(width: 12),
-                  Expanded(child: Text(context.l10n.failedToDeleteConversations)),
-                ],
-              ),
-              backgroundColor: Colors.red.shade700,
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-            ),
-          );
-        }
-      }
+    if (deletedCount != null) {
+      OmiFeedback.confirm(context, context.l10n.deletedLimitlessConversations(deletedCount));
+    } else {
+      OmiFeedback.error(context, context.l10n.failedToDeleteConversations);
     }
   }
 
@@ -325,97 +217,108 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
     required String logoPath,
     required String description,
     required bool isAvailable,
-    required VoidCallback onTap,
+    required VoidCallback? onTap,
   }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1F1F25),
-          borderRadius: BorderRadius.circular(12),
-          border: isAvailable ? Border.all(color: Colors.deepPurple.withValues(alpha: 0.3), width: 1) : null,
-        ),
-        child: Row(
-          children: [
-            // Logo
-            ClipRRect(
-              borderRadius: BorderRadius.circular(10),
-              child: Image.asset(
-                logoPath,
-                width: 48,
-                height: 48,
-                fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) {
-                  return Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(color: Colors.grey.shade800, borderRadius: BorderRadius.circular(10)),
-                    child: const Icon(Icons.device_unknown, color: Colors.grey),
-                  );
-                },
-              ),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: 6),
+      child: MergeSemantics(
+        child: Semantics(
+          button: true,
+          child: Material(
+            color: OmiColors.surface1,
+            shape: RoundedRectangleBorder(
+              borderRadius: OmiRadius.mdAll,
+              side: isAvailable ? const BorderSide(color: OmiColors.border) : BorderSide.none,
             ),
-            const SizedBox(width: 16),
-            // Text content
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        name,
-                        style: TextStyle(
-                          color: isAvailable ? Colors.white : Colors.grey.shade500,
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: onTap,
+              child: Padding(
+                padding: const EdgeInsets.all(OmiSpacing.md),
+                child: Row(
+                  children: [
+                    // Logo
+                    ExcludeSemantics(
+                      child: ClipRRect(
+                        borderRadius: OmiRadius.smAll,
+                        child: Image.asset(
+                          logoPath,
+                          width: 48,
+                          height: 48,
+                          fit: BoxFit.cover,
+                          errorBuilder: (context, error, stackTrace) {
+                            return Container(
+                              width: 48,
+                              height: 48,
+                              color: OmiColors.surface2,
+                              child: const Icon(Icons.device_unknown, color: OmiColors.textTertiary),
+                            );
+                          },
                         ),
                       ),
-                      if (!isAvailable) ...[
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade800,
-                            borderRadius: BorderRadius.circular(4),
+                    ),
+                    const SizedBox(width: OmiSpacing.md),
+                    // Text content
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  name,
+                                  style: OmiType.callout.copyWith(
+                                    color: isAvailable ? OmiColors.textPrimary : OmiColors.textTertiary,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ),
+                              if (!isAvailable) ...[
+                                const SizedBox(width: OmiSpacing.xs),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xs, vertical: 2),
+                                  decoration: const BoxDecoration(
+                                    color: OmiColors.surface2,
+                                    borderRadius: OmiRadius.smAll,
+                                  ),
+                                  child: Text(
+                                    context.l10n.comingSoon,
+                                    style: OmiType.caption.copyWith(
+                                      color: OmiColors.textSecondary,
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
-                          child: Text(
-                            context.l10n.comingSoon,
-                            style: TextStyle(color: Colors.grey.shade400, fontSize: 10, fontWeight: FontWeight.w500),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                  if (description.isNotEmpty) ...[
-                    const SizedBox(height: 4),
-                    Text(description, style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
+                          if (description.isNotEmpty) ...[
+                            const SizedBox(height: OmiSpacing.xxs),
+                            Text(description, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+                          ],
+                        ],
+                      ),
+                    ),
+                    // Arrow or upload indicator
+                    if (isAvailable)
+                      _isUploading
+                          ? const OmiSpinner(size: OmiSpinnerSize.small)
+                          : Container(
+                              width: 30,
+                              height: 30,
+                              decoration: const BoxDecoration(color: OmiColors.accent, borderRadius: OmiRadius.smAll),
+                              child: const Center(
+                                child: FaIcon(FontAwesomeIcons.plus, color: OmiColors.onAccent, size: 16),
+                              ),
+                            )
+                    else
+                      const Icon(Icons.lock_outline, color: OmiColors.textTertiary, size: 20),
                   ],
-                ],
+                ),
               ),
             ),
-            // Arrow or upload indicator
-            if (isAvailable)
-              _isUploading
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.deepPurple),
-                    )
-                  : Container(
-                      width: 30,
-                      height: 30,
-                      decoration: BoxDecoration(
-                        color: Colors.deepPurple.withValues(alpha: 0.8),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const FaIcon(FontAwesomeIcons.plus, color: Colors.white, size: 16),
-                    )
-            else
-              Icon(Icons.lock_outline, color: Colors.grey.shade700, size: 20),
-          ],
+          ),
         ),
       ),
     );
@@ -430,26 +333,26 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
           logoPath: 'assets/competitor-logos/limitless-logo.jpg',
           description: context.l10n.selectZipFileToImport,
           isAvailable: true,
-          onTap: _isUploading ? () {} : _startLimitlessImport,
+          onTap: _isUploading ? null : _startLimitlessImport,
         ),
         // Coming soon placeholder
         Container(
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(12)),
+          margin: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: 6),
+          padding: const EdgeInsets.all(OmiSpacing.md),
+          decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
           child: Row(
             children: [
               Container(
                 width: 48,
                 height: 48,
-                decoration: BoxDecoration(color: Colors.grey.shade800, borderRadius: BorderRadius.circular(10)),
-                child: Icon(Icons.devices_other, color: Colors.grey.shade600, size: 24),
+                decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
+                child: const Icon(Icons.devices_other, color: OmiColors.textTertiary, size: 24),
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: OmiSpacing.md),
               Expanded(
                 child: Text(
                   context.l10n.otherDevicesComingSoon,
-                  style: TextStyle(color: Colors.grey.shade500, fontSize: 14, fontWeight: FontWeight.w500),
+                  style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
                 ),
               ),
             ],
@@ -467,33 +370,33 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
     switch (job.status) {
       case ImportJobStatus.pending:
         statusIcon = FontAwesomeIcons.hourglass;
-        statusColor = Colors.orange;
+        statusColor = OmiColors.warning;
         statusText = context.l10n.statusPending;
         break;
       case ImportJobStatus.processing:
         statusIcon = FontAwesomeIcons.arrowsRotate;
-        statusColor = Colors.blue;
+        statusColor = OmiColors.textPrimary;
         statusText = context.l10n.statusProcessing;
         break;
       case ImportJobStatus.completed:
         statusIcon = FontAwesomeIcons.check;
-        statusColor = Colors.green;
+        statusColor = OmiColors.success;
         statusText = context.l10n.statusCompleted;
         break;
       case ImportJobStatus.failed:
         statusIcon = FontAwesomeIcons.circleExclamation;
-        statusColor = Colors.red;
+        statusColor = OmiColors.danger;
         statusText = context.l10n.statusFailed;
         break;
     }
 
     final createdAt = job.createdAt;
-    final String dateTimeStr = createdAt == null ? '' : formatImportJobTimestamp(context.l10n, createdAt);
+    final String dateTimeStr = createdAt == null ? '' : importJobTimestampLabel(OmiDateFormat.of(context), createdAt);
 
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(12)),
+      margin: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: 6),
+      padding: const EdgeInsets.all(OmiSpacing.md),
+      decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -501,7 +404,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
             children: [
               // Limitless logo small
               ClipRRect(
-                borderRadius: BorderRadius.circular(6),
+                borderRadius: const BorderRadius.all(Radius.circular(6)),
                 child: Image.asset(
                   'assets/competitor-logos/limitless-logo.jpg',
                   width: 26,
@@ -509,7 +412,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
                   fit: BoxFit.cover,
                 ),
               ),
-              const SizedBox(width: 8),
+              const SizedBox(width: OmiSpacing.xs),
               // Status icon (don't show for completed)
               if (job.isProcessing)
                 _RotatingSyncIcon(color: statusColor, size: 18)
@@ -521,12 +424,9 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      statusText,
-                      style: TextStyle(color: statusColor, fontSize: 14, fontWeight: FontWeight.w600),
-                    ),
+                    Text(statusText, style: OmiType.subhead.copyWith(color: statusColor, fontWeight: FontWeight.w600)),
                     if (dateTimeStr.isNotEmpty && job.status == ImportJobStatus.completed)
-                      Text(dateTimeStr, style: TextStyle(color: Colors.grey.shade600, fontSize: 10)),
+                      Text(dateTimeStr, style: OmiType.caption.copyWith(color: OmiColors.textTertiary)),
                   ],
                 ),
               ),
@@ -537,26 +437,25 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
                 Padding(
                   padding: EdgeInsets.only(left: chip.skipped && (job.conversationsCreated ?? 0) > 0 ? 6 : 0),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xs, vertical: OmiSpacing.xxs),
                     decoration: BoxDecoration(
-                      color: chip.skipped ? Colors.white.withValues(alpha: 0.12) : Colors.green.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(8),
+                      color: chip.skipped ? OmiColors.surface2 : OmiColors.successSurface,
+                      borderRadius: OmiRadius.smAll,
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
                           context.l10n.nConversations(chip.count),
-                          style: TextStyle(
-                            color: chip.skipped ? Colors.white70 : Colors.green.shade400,
-                            fontSize: 12,
+                          style: OmiType.footnote.copyWith(
+                            color: chip.skipped ? OmiColors.textSecondary : OmiColors.success,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
-                        const SizedBox(width: 4),
+                        const SizedBox(width: OmiSpacing.xxs),
                         Icon(
                           chip.skipped ? Icons.history : Icons.check_circle,
-                          color: chip.skipped ? Colors.white70 : Colors.green.shade400,
+                          color: chip.skipped ? OmiColors.textSecondary : OmiColors.success,
                           size: 14,
                         ),
                       ],
@@ -566,7 +465,7 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
             ],
           ),
           if (job.isProcessing && job.totalFiles != null && job.totalFiles! > 0) ...[
-            const SizedBox(height: 16),
+            const SizedBox(height: OmiSpacing.md),
             Builder(
               builder: (context) {
                 final remainingFiles = job.totalFiles! - (job.processedFiles ?? 0);
@@ -582,29 +481,24 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
                   estimatedTime = context.l10n.estimatedHours(hours);
                 }
 
+                final captionStyle = OmiType.footnote.copyWith(color: OmiColors.textSecondary);
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          context.l10n.estimatedTimeRemaining(estimatedTime),
-                          style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
-                        ),
-                        Text(
-                          '${job.processedFiles ?? 0}/${job.totalFiles}',
-                          style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
-                        ),
+                        Flexible(child: Text(context.l10n.estimatedTimeRemaining(estimatedTime), style: captionStyle)),
+                        Text('${job.processedFiles ?? 0}/${job.totalFiles}', style: captionStyle),
                       ],
                     ),
-                    const SizedBox(height: 12),
+                    const SizedBox(height: OmiSpacing.sm),
                     ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
+                      borderRadius: const BorderRadius.all(Radius.circular(OmiSpacing.xxs)),
                       child: LinearProgressIndicator(
                         value: job.progress,
-                        backgroundColor: Colors.grey.shade800,
-                        color: Colors.blue,
+                        backgroundColor: OmiColors.surface3,
+                        color: OmiColors.accent,
                         minHeight: 6,
                       ),
                     ),
@@ -612,13 +506,13 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
                 );
               },
             ),
-            const SizedBox(height: 8),
+            const SizedBox(height: OmiSpacing.xs),
           ],
           if (job.error != null) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: OmiSpacing.xs),
             Text(
               job.error!,
-              style: TextStyle(color: Colors.red.shade300, fontSize: 12),
+              style: OmiType.footnote.copyWith(color: OmiColors.danger),
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
             ),
@@ -628,62 +522,45 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
     );
   }
 
+  Widget _shimmerBlock(double width, double height, {BoxShape shape = BoxShape.rectangle}) {
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        color: OmiColors.surface2,
+        shape: shape,
+        borderRadius: shape == BoxShape.circle ? null : const BorderRadius.all(Radius.circular(OmiSpacing.xxs)),
+      ),
+    );
+  }
+
   Widget _buildShimmerLoading() {
     return Column(
       children: List.generate(3, (index) {
         return Container(
-          margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(12)),
+          margin: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: 6),
+          padding: const EdgeInsets.all(OmiSpacing.md),
+          decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
           child: ShimmerWithTimeout(
-            baseColor: Colors.grey[800]!,
-            highlightColor: Colors.grey[600]!,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            baseColor: OmiColors.surface2,
+            highlightColor: OmiColors.surface3,
+            child: Row(
               children: [
-                Row(
-                  children: [
-                    // Logo shimmer
-                    Container(
-                      width: 26,
-                      height: 26,
-                      decoration: BoxDecoration(color: Colors.grey[800], borderRadius: BorderRadius.circular(6)),
-                    ),
-                    const SizedBox(width: 8),
-                    // Status icon shimmer
-                    Container(
-                      width: 18,
-                      height: 18,
-                      decoration: BoxDecoration(color: Colors.grey[800], shape: BoxShape.circle),
-                    ),
-                    const SizedBox(width: 6),
-                    // Status text shimmer
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Container(
-                            width: 80,
-                            height: 14,
-                            decoration: BoxDecoration(color: Colors.grey[800], borderRadius: BorderRadius.circular(4)),
-                          ),
-                          const SizedBox(height: 4),
-                          Container(
-                            width: 120,
-                            height: 10,
-                            decoration: BoxDecoration(color: Colors.grey[800], borderRadius: BorderRadius.circular(4)),
-                          ),
-                        ],
-                      ),
-                    ),
-                    // Badge shimmer
-                    Container(
-                      width: 100,
-                      height: 24,
-                      decoration: BoxDecoration(color: Colors.grey[800], borderRadius: BorderRadius.circular(8)),
-                    ),
-                  ],
+                _shimmerBlock(26, 26),
+                const SizedBox(width: OmiSpacing.xs),
+                _shimmerBlock(18, 18, shape: BoxShape.circle),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _shimmerBlock(80, 14),
+                      const SizedBox(height: OmiSpacing.xxs),
+                      _shimmerBlock(120, 10),
+                    ],
+                  ),
                 ),
+                _shimmerBlock(100, 24),
               ],
             ),
           ),
@@ -697,27 +574,26 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Always show the header
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-          child: Text(
-            context.l10n.importHistory,
-            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
-          ),
-        ),
+        OmiSectionHeader(context.l10n.importHistory),
         // Content based on state
         if (_isLoading)
           _buildShimmerLoading()
+        else if (_loadFailed)
+          OmiErrorState(message: context.l10n.couldNotLoadImportHistory, onRetry: _loadJobs)
         else if (_jobs.isEmpty)
           Container(
-            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(12)),
+            margin: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: 6),
+            padding: const EdgeInsets.all(OmiSpacing.xl),
+            decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
             child: Row(
               children: [
-                Icon(Icons.history, color: Colors.grey.shade600, size: 24),
-                const SizedBox(width: 16),
+                const Icon(Icons.history, color: OmiColors.textTertiary, size: 24),
+                const SizedBox(width: OmiSpacing.md),
                 Expanded(
-                  child: Text(context.l10n.noImportsYet, style: TextStyle(color: Colors.grey.shade500, fontSize: 14)),
+                  child: Text(
+                    context.l10n.noImportsYet,
+                    style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+                  ),
                 ),
               ],
             ),
@@ -731,59 +607,38 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.primary,
       appBar: AppBar(
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        title: Text(context.l10n.importData, style: const TextStyle(fontWeight: FontWeight.w600)),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, size: 20),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
+        leading: const OmiBackButton(),
+        title: Text(context.l10n.importData),
         actions: [
-          Container(
-            width: 36,
-            height: 36,
-            margin: const EdgeInsets.only(right: 8),
-            child: GestureDetector(
-              onTap: () {
-                HapticFeedback.mediumImpact();
-                _loadJobs();
-              },
-              child: Container(
-                width: 36,
-                height: 36,
-                decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
-                child: const Center(child: FaIcon(FontAwesomeIcons.arrowsRotate, size: 16.0, color: Colors.white)),
-              ),
-            ),
+          OmiIconButton.filled(
+            icon: const FaIcon(FontAwesomeIcons.arrowsRotate, size: 16),
+            label: context.l10n.refresh,
+            onPressed: () {
+              OmiHaptics.medium();
+              _loadJobs();
+            },
           ),
-          Container(
-            width: 36,
-            height: 36,
-            margin: const EdgeInsets.only(right: 8),
+          Padding(
+            padding: const EdgeInsets.only(right: OmiSpacing.xxs),
             child: PullDownButton(
               itemBuilder: (context) => [
                 PullDownMenuItem(
                   title: context.l10n.deleteImportedData,
-                  iconWidget: const FaIcon(FontAwesomeIcons.trashCan, size: 16, color: Colors.red),
+                  isDestructive: true,
+                  iconWidget: const FaIcon(FontAwesomeIcons.trashCan, size: 16, color: OmiColors.danger),
                   onTap: () {
                     _showDeleteLimitlessDialog();
                   },
                 ),
               ],
-              buttonBuilder: (context, showMenu) => GestureDetector(
-                onTap: () {
-                  HapticFeedback.mediumImpact();
+              buttonBuilder: (context, showMenu) => OmiIconButton.filled(
+                icon: const FaIcon(FontAwesomeIcons.ellipsisVertical, size: 16),
+                label: context.l10n.moreOptions,
+                onPressed: () {
+                  OmiHaptics.medium();
                   showMenu();
                 },
-                child: Container(
-                  width: 36,
-                  height: 36,
-                  decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
-                  child: const Center(
-                    child: FaIcon(FontAwesomeIcons.ellipsisVertical, size: 16.0, color: Colors.white),
-                  ),
-                ),
               ),
             ),
           ),
@@ -796,11 +651,11 @@ class _ImportHistoryPageState extends State<ImportHistoryPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SizedBox(height: 8),
+              const SizedBox(height: OmiSpacing.xs),
               _buildImportSources(),
-              const SizedBox(height: 24),
+              const SizedBox(height: OmiSpacing.xl),
               _buildImportHistory(),
-              const SizedBox(height: 32),
+              const SizedBox(height: OmiSpacing.xxl),
             ],
           ),
         ),

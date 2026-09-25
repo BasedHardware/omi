@@ -21,8 +21,11 @@ import 'package:omi/pages/settings/fair_use_page.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/pages/settings/widgets/plans_sheet.dart';
 import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/pages/settings/widgets/plans/plan_display_name.dart';
 import 'package:omi/services/wals/sync_rate_limit_reconciliation.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/other/temp.dart';
 
 class UsagePage extends StatefulWidget {
   final bool showUpgradeDialog;
@@ -37,7 +40,6 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
   final List<GlobalKey> _screenshotKeys = List.generate(4, (_) => GlobalKey());
   final GlobalKey _shareButtonKey = GlobalKey();
   final List<bool> _isMetricVisible = [true, true, true, true];
-  bool _isUpgrading = false;
   late AnimationController _waveController;
   late AnimationController _notesController;
   late AnimationController _arrowController;
@@ -131,7 +133,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     final watermarkedImage = await recorder.endRecording().toImage(image.width, image.height);
     final ByteData? byteData = await watermarkedImage.toByteData(format: ui.ImageByteFormat.png);
     if (byteData == null) {
-      if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(l10n.wrappedFailedToShare)));
+      if (mounted) OmiFeedback.error(context, l10n.wrappedFailedToShare);
       return;
     }
     final Uint8List pngBytes = byteData.buffer.asUint8List();
@@ -298,27 +300,25 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
       appBar: AppBar(
-        backgroundColor: Colors.black,
-        title: Text(context.l10n.yourOmiInsights),
-        centerTitle: true,
-        elevation: 0,
-        leading: IconButton(icon: const Icon(Icons.arrow_back_ios_new), onPressed: () => Navigator.of(context).pop()),
+        leading: const OmiBackButton(),
+        // Matches the "Plan & Usage" row that opens this page.
+        title: Text(context.l10n.planAndUsage),
         actions: [
-          IconButton(
+          OmiIconButton(
             key: _shareButtonKey,
-            icon: const FaIcon(FontAwesomeIcons.solidShareFromSquare),
+            icon: const FaIcon(FontAwesomeIcons.solidShareFromSquare, size: 20),
+            label: context.l10n.share,
             onPressed: _shareUsage,
           ),
         ],
         bottom: TabBar(
           controller: _tabController,
-          indicatorColor: Colors.deepPurple,
+          indicatorColor: OmiColors.accent,
           isScrollable: true,
           indicatorWeight: 3,
-          labelStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-          unselectedLabelStyle: const TextStyle(fontSize: 16),
+          labelStyle: OmiType.callout.copyWith(fontWeight: FontWeight.bold),
+          unselectedLabelStyle: OmiType.callout,
           tabs: [
             Tab(text: context.l10n.today),
             Tab(text: context.l10n.thisMonth),
@@ -338,9 +338,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
             return Column(
               children: [
                 _buildFairUseBanner(),
-                const Expanded(
-                  child: Center(child: CircularProgressIndicator(color: Colors.deepPurple)),
-                ),
+                const Expanded(child: OmiLoadingState()),
               ],
             );
           }
@@ -350,15 +348,9 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
               children: [
                 _buildFairUseBanner(),
                 Expanded(
-                  child: Center(
-                    child: Padding(
-                      padding: const EdgeInsets.all(24.0),
-                      child: Text(
-                        provider.error!,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(color: Colors.grey.shade400, fontSize: 16),
-                      ),
-                    ),
+                  child: OmiErrorState(
+                    message: provider.error!,
+                    onRetry: () => provider.fetchUsageStats(period: _getPeriodForIndex(_tabController.index)),
                   ),
                 ),
               ],
@@ -433,18 +425,17 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
       return const SizedBox.shrink();
     }
 
-    final plan = provider.subscription!.subscription.plan;
-    final isPaid = plan.isPaid;
-    // Plan names are product names; only the free/unlimited labels are localized.
-    final planLabel = plan == PlanType.plus ? 'Plus' : (isPaid ? context.l10n.unlimitedPlan : context.l10n.basicPlan);
+    final isPaid = provider.subscription!.subscription.plan.isPaid;
+    // The backend's name for the plan ("Plus", "Operator", …); "Free Plan" for the free tier.
+    final planLabel = currentPlanDisplayName(context, provider.subscription);
 
     return Container(
-      margin: const EdgeInsets.fromLTRB(16, 24, 16, 0),
-      padding: const EdgeInsets.all(16),
+      margin: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xl, OmiSpacing.md, 0),
+      padding: const EdgeInsets.all(OmiSpacing.md),
       decoration: BoxDecoration(
-        color: const Color(0xFF1F1F25),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+        color: OmiColors.surface1,
+        borderRadius: OmiRadius.lgAll,
+        border: Border.all(color: OmiColors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -452,50 +443,37 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(planLabel, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              Flexible(child: Text(planLabel, style: OmiType.headline)),
               if (isPaid)
-                GestureDetector(
-                  onTap: _isUpgrading ? null : _showPlansSheet,
-                  child: Row(
-                    children: [
-                      Text(context.l10n.managePlan, style: TextStyle(color: Colors.grey.shade400, fontSize: 14)),
-                      const SizedBox(width: 4),
-                      Icon(Icons.chevron_right, color: Colors.grey.shade400, size: 20),
-                    ],
+                Semantics(
+                  button: true,
+                  child: InkWell(
+                    onTap: _showPlansSheet,
+                    borderRadius: OmiRadius.smAll,
+                    child: ConstrainedBox(
+                      constraints: const BoxConstraints(minHeight: 44),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(context.l10n.managePlan,
+                              style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
+                          const SizedBox(width: OmiSpacing.xxs),
+                          const Icon(Icons.chevron_right, color: OmiColors.textSecondary, size: 20),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
             ],
           ),
           if (!isPaid) ...[
-            const SizedBox(height: 4),
-            Text(context.l10n.basicPlanDescription, style: TextStyle(fontSize: 13, color: Colors.grey.shade500)),
-            const SizedBox(height: 16),
-            SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: ElevatedButton(
-                onPressed: _isUpgrading ? null : _showPlansSheet,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  foregroundColor: Colors.black,
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                child: _isUpgrading
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
-                      )
-                    : Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Text(context.l10n.upgrade, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
-                          const SizedBox(width: 8),
-                          const Icon(Icons.arrow_forward, size: 18),
-                        ],
-                      ),
-              ),
+            const SizedBox(height: OmiSpacing.xxs),
+            Text(context.l10n.basicPlanDescription, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+            const SizedBox(height: OmiSpacing.md),
+            OmiButton(
+              label: context.l10n.upgrade,
+              expand: true,
+              onPressed: _showPlansSheet,
             ),
           ],
         ],
@@ -507,22 +485,15 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     if (!context.read<UsageProvider>().showSubscriptionUI) {
       return;
     }
-    showModalBottomSheet(
+    showOmiSheet(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.black,
-      builder: (context) {
-        return StatefulBuilder(
-          builder: (BuildContext context, StateSetter setModalState) {
-            return PlansSheet(
-              waveController: _waveController,
-              notesController: _notesController,
-              arrowController: _arrowController,
-              arrowAnimation: _arrowAnimation,
-            );
-          },
-        );
-      },
+      padding: EdgeInsets.zero,
+      builder: (context) => PlansSheet(
+        waveController: _waveController,
+        notesController: _notesController,
+        arrowController: _arrowController,
+        arrowAnimation: _arrowAnimation,
+      ),
     );
   }
 
@@ -536,15 +507,15 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     String stageLabel;
     switch (stage) {
       case 'warning':
-        dotColor = const Color(0xFFFBBF24);
+        dotColor = OmiColors.warning;
         stageLabel = context.l10n.fairUseStageWarning;
         break;
       case 'throttle':
-        dotColor = const Color(0xFFF97316);
+        dotColor = Colors.orange.shade400;
         stageLabel = context.l10n.fairUseStageThrottle;
         break;
       case 'restrict':
-        dotColor = const Color(0xFFEF4444);
+        dotColor = OmiColors.danger;
         stageLabel = context.l10n.fairUseStageRestrict;
         break;
       default:
@@ -554,12 +525,13 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     return GestureDetector(
       key: const Key('fair_use_banner_tap'),
       onTap: () {
-        Navigator.of(context).push(MaterialPageRoute(builder: (context) => const FairUsePage()));
+        routeToPage(context, const FairUsePage());
       },
       child: Container(
-        margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+        margin: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, 0),
+        constraints: const BoxConstraints(minHeight: 44),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(color: dotColor.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(12)),
+        decoration: BoxDecoration(color: dotColor.withValues(alpha: 0.08), borderRadius: OmiRadius.mdAll),
         child: Row(
           children: [
             Container(
@@ -569,11 +541,12 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
               decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
             ),
             const SizedBox(width: 10),
-            Text(
-              context.l10n.fairUseBannerStatus(stageLabel),
-              style: TextStyle(color: dotColor, fontSize: 13, fontWeight: FontWeight.w500),
+            Expanded(
+              child: Text(
+                context.l10n.fairUseBannerStatus(stageLabel),
+                style: OmiType.footnote.copyWith(color: dotColor, fontWeight: FontWeight.w500),
+              ),
             ),
-            const Spacer(),
             Icon(Icons.chevron_right, color: dotColor, size: 18),
           ],
         ),
@@ -582,19 +555,10 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
   }
 
   Widget _buildEmptyState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text(context.l10n.noActivityYet, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
-          Text(
-            context.l10n.startConversationToSeeInsights,
-            textAlign: TextAlign.center,
-            style: TextStyle(fontSize: 16, color: Colors.grey.shade400),
-          ),
-        ],
-      ),
+    return OmiEmptyState(
+      icon: Icons.insights_outlined,
+      title: context.l10n.noActivityYet,
+      message: context.l10n.startConversationToSeeInsights,
     );
   }
 
@@ -611,7 +575,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     }
 
     if (stats == null) {
-      return const Center(child: CircularProgressIndicator(color: Colors.deepPurple));
+      return const OmiLoadingState();
     }
 
     if (stats.transcriptionSeconds == 0 &&
@@ -620,11 +584,10 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
         stats.memoriesCreated == 0) {
       return RefreshIndicator(
         onRefresh: onRefresh,
-        color: Colors.deepPurple,
         child: RepaintBoundary(
           key: key,
           child: Container(
-            color: Colors.black,
+            color: OmiColors.surface0,
             child: LayoutBuilder(
               builder: (context, constraints) {
                 return SingleChildScrollView(
@@ -637,19 +600,18 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
         ),
       );
     }
-    final numberFormatter = NumberFormat.decimalPattern('en_US');
+    final numberFormatter = NumberFormat.decimalPattern(context.l10n.localeName);
     final transcriptionMinutes = (stats.transcriptionSeconds / 60).round();
     final transcriptionValue = '${numberFormatter.format(transcriptionMinutes)} ${context.l10n.minutes}';
 
     return RefreshIndicator(
       onRefresh: onRefresh,
-      color: Colors.deepPurple,
       child: RepaintBoundary(
         key: key,
         child: Container(
-          color: Colors.black,
+          color: OmiColors.surface0,
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
+            padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xl, OmiSpacing.md, OmiSpacing.md),
             children: [
               if (history != null && history.isNotEmpty) ...[_buildChart(history, period), const SizedBox(height: 24)],
               _buildUsageCard(
@@ -689,7 +651,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                 title: context.l10n.remembering,
                 value: '${numberFormatter.format(stats.memoriesCreated)} ${context.l10n.memories}',
                 subtitle: context.l10n.rememberingSubtitle,
-                color: Colors.purple.shade300,
+                color: _memoriesColor,
                 subscription: provider.subscription,
               ),
               if (provider.chatQuotaUnit != null && period == 'monthly') ...[
@@ -789,7 +751,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
         processedHistory = List.from(history);
     }
 
-    final metricColors = [Colors.blue.shade300, Colors.green.shade300, Colors.orange.shade300, Colors.purple.shade300];
+    final metricColors = [Colors.blue.shade300, Colors.green.shade300, Colors.orange.shade300, _memoriesColor];
 
     double maxY = 0;
     for (var point in processedHistory) {
@@ -856,7 +818,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
       lineTouchData: LineTouchData(
         handleBuiltInTouches: true,
         touchTooltipData: LineTouchTooltipData(
-          getTooltipColor: (touchedSpot) => Colors.grey.shade800,
+          getTooltipColor: (touchedSpot) => OmiColors.surface3,
           getTooltipItems: (List<LineBarSpot> touchedBarSpots) {
             return touchedBarSpots
                 .map((barSpot) {
@@ -875,8 +837,8 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                     TextStyle(color: metricColors[originalIndex], fontWeight: FontWeight.bold),
                     children: [
                       TextSpan(
-                        text: NumberFormat.compact(locale: 'en_US').format(flSpot.y),
-                        style: const TextStyle(color: Colors.white, fontSize: 12),
+                        text: NumberFormat.compact(locale: context.l10n.localeName).format(flSpot.y),
+                        style: OmiType.caption.copyWith(color: OmiColors.textPrimary),
                       ),
                     ],
                   );
@@ -898,8 +860,8 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                 axisSide: meta.axisSide,
                 space: 8,
                 child: Text(
-                  NumberFormat.compact(locale: 'en_US').format(value),
-                  style: const TextStyle(color: Colors.grey, fontSize: 10),
+                  NumberFormat.compact(locale: context.l10n.localeName).format(value),
+                  style: OmiType.caption.copyWith(color: OmiColors.textTertiary),
                 ),
               );
             },
@@ -916,7 +878,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
               if (index >= processedHistory.length) return const SizedBox();
               final point = processedHistory[index];
               final dateTime = DateTime.parse(point.date).toLocal();
-              final locale = Localizations.localeOf(context).languageCode;
+              final locale = OmiDateFormat.of(context).localeName;
               String text;
 
               switch (period) {
@@ -928,20 +890,20 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
                     interval = 2;
                   }
                   if (index % interval == 0) {
-                    text = DateFormat.Hm(locale).format(dateTime);
+                    text = DateFormat.j(locale).format(dateTime);
                   } else {
                     return const SizedBox();
                   }
                   break;
                 case 'monthly':
                   if (index % 7 == 0) {
-                    text = DateFormat('d', locale).format(dateTime);
+                    text = DateFormat.d(locale).format(dateTime);
                   } else {
                     return const SizedBox();
                   }
                   break;
                 case 'yearly':
-                  text = DateFormat('MMM', locale).format(dateTime);
+                  text = DateFormat.MMM(locale).format(dateTime);
                   break;
                 case 'all_time':
                   text = DateFormat.y(locale).format(dateTime).substring(2);
@@ -952,7 +914,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
 
               return SideTitleWidget(
                 axisSide: meta.axisSide,
-                child: Text(text, style: const TextStyle(color: Colors.grey, fontSize: 10)),
+                child: Text(text, style: OmiType.caption.copyWith(color: OmiColors.textTertiary)),
               );
             },
             reservedSize: 20,
@@ -966,11 +928,11 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
       children: [
         Container(
           height: 200,
-          padding: const EdgeInsets.only(top: 16, right: 16),
+          padding: const EdgeInsets.only(top: OmiSpacing.md, right: OmiSpacing.md),
           decoration: BoxDecoration(
-            color: const Color(0xFF1F1F25),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
+            color: OmiColors.surface1,
+            borderRadius: OmiRadius.lgAll,
+            border: Border.all(color: OmiColors.border),
           ),
           child: LineChart(lineChartData, duration: const Duration(milliseconds: 250)),
         ),
@@ -985,7 +947,7 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
       {'color': Colors.blue.shade300, 'text': context.l10n.listeningMins},
       {'color': Colors.green.shade300, 'text': context.l10n.understandingWords},
       {'color': Colors.orange.shade300, 'text': context.l10n.insights},
-      {'color': Colors.purple.shade300, 'text': context.l10n.memories},
+      {'color': _memoriesColor, 'text': context.l10n.memories},
     ];
 
     return Wrap(
@@ -1008,17 +970,25 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
   }
 
   Widget _buildLegendItem(Color color, String text, bool isVisible, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Opacity(
-        opacity: isVisible ? 1.0 : 0.5,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(width: 10, height: 10, color: color),
-            const SizedBox(width: 6),
-            Text(text, style: TextStyle(fontSize: 12, color: Colors.grey.shade400)),
-          ],
+    return Semantics(
+      button: true,
+      toggled: isVisible,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: OmiRadius.smAll,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 44),
+          child: Opacity(
+            opacity: isVisible ? 1.0 : 0.5,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(width: 10, height: 10, color: color),
+                const SizedBox(width: 6),
+                Text(text, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -1028,86 +998,41 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     final sub = provider.subscription;
     if (sub == null) return const SizedBox.shrink();
 
-    final numberFormatter = NumberFormat.decimalPattern('en_US');
+    final l10n = context.l10n;
+    final numberFormatter = NumberFormat.decimalPattern(l10n.localeName);
     final used = sub.chatQuotaUsed;
-    final unit = sub.chatQuotaUnit;
     final limits = sub.subscription.limits;
     final color = Colors.blue.shade300;
 
-    String value;
-    String usageText;
+    final String value;
+    String? usageText;
     double percentage = 0.0;
 
-    if (unit == 'cost_usd') {
+    if (sub.chatQuotaUnit == 'cost_usd') {
       value = '\$${used.toStringAsFixed(2)}';
       final limit = limits.chatCostUsdPerMonth;
       if (limit != null && limit > 0) {
-        usageText = '\$${used.toStringAsFixed(2)} of \$${limit.toStringAsFixed(0)} used this month';
+        usageText = l10n.chatUsedOfLimitCompute(used.toStringAsFixed(2), limit.toStringAsFixed(0));
         percentage = (used / limit).clamp(0.0, 1.0);
-      } else {
-        usageText = '\$${used.toStringAsFixed(2)} used this month';
       }
     } else {
-      value = '${numberFormatter.format(used.toInt())} ${context.l10n.chatTitle}';
+      value = '${numberFormatter.format(used.toInt())} ${l10n.chatTitle}';
       final limit = limits.chatQuestionsPerMonth;
       if (limit != null && limit > 0) {
-        usageText = '${numberFormatter.format(used.toInt())} of $limit messages used this month';
+        usageText = l10n.chatUsedOfLimitMessages(numberFormatter.format(used.toInt()), numberFormatter.format(limit));
         percentage = (used / limit).clamp(0.0, 1.0);
-      } else {
-        usageText = '${numberFormatter.format(used.toInt())} messages used this month';
       }
     }
 
-    return Container(
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF2A2A2E), Color(0xFF1F1F25)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-        boxShadow: [
-          BoxShadow(color: color.withValues(alpha: 0.1), blurRadius: 10, spreadRadius: 1, offset: const Offset(0, 2)),
-        ],
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              value,
-              style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: color, height: 1.1),
-            ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                FaIcon(FontAwesomeIcons.solidMessage, color: color, size: 16),
-                const SizedBox(width: 8),
-                Text(context.l10n.chatTitle, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              context.l10n.chatQuotaSubtitle,
-              style: TextStyle(fontSize: 14, color: Colors.grey.shade400, height: 1.4),
-            ),
-            if (percentage > 0) ...[
-              const SizedBox(height: 16),
-              Text(usageText, style: TextStyle(fontSize: 12, color: Colors.grey.shade400)),
-              const SizedBox(height: 8),
-              LinearProgressIndicator(
-                value: percentage,
-                backgroundColor: Colors.grey.shade700,
-                valueColor: AlwaysStoppedAnimation<Color>(color),
-                minHeight: 4,
-                borderRadius: BorderRadius.circular(2),
-              ),
-            ],
-          ],
-        ),
-      ),
+    return _UsageStatCard(
+      icon: FontAwesomeIcons.solidMessage,
+      title: l10n.chatTitle,
+      value: value,
+      subtitle: l10n.chatQuotaSubtitle,
+      color: color,
+      footer: usageText != null && percentage > 0
+          ? _UsageMeter(text: usageText, percentage: percentage, color: color)
+          : null,
     );
   }
 
@@ -1120,196 +1045,168 @@ class _UsagePageState extends State<UsagePage> with TickerProviderStateMixin {
     required Color color,
     UserSubscriptionResponse? subscription,
   }) {
-    final numberFormatter = NumberFormat.decimalPattern('en_US');
+    final l10n = context.l10n;
+    final numberFormatter = NumberFormat.decimalPattern(l10n.localeName);
+    final onFreePlan = subscription != null && subscription.subscription.plan == PlanType.basic;
+    Widget? footer;
+
+    if (onFreePlan && icon == FontAwesomeIcons.microphone && subscription.transcriptionSecondsLimit > 0) {
+      final minutesUsed = (subscription.transcriptionSecondsUsed / 60).round();
+      final minutesLimit = (subscription.transcriptionSecondsLimit / 60).round();
+      final percentage =
+          (subscription.transcriptionSecondsUsed / subscription.transcriptionSecondsLimit).clamp(0.0, 1.0);
+      footer = _UsageMeter(
+        text: l10n.minsUsedThisMonth(numberFormatter.format(minutesUsed), minutesLimit),
+        percentage: percentage,
+        color: color,
+        hint: percentage >= 1.0
+            ? _OnDeviceHint(
+                before: '${l10n.premiumMinutesUsed} ',
+                link: l10n.setupOnDevice,
+                after: ' ${l10n.forUnlimitedFreeTranscription}',
+              )
+            : percentage >= 0.8
+                ? _OnDeviceHint(
+                    before: '${l10n.premiumMinsLeft(minutesLimit - minutesUsed)} ',
+                    link: l10n.onDevice,
+                    after: ' ${l10n.alwaysAvailable}',
+                  )
+                : null,
+      );
+    } else if (onFreePlan && icon == FontAwesomeIcons.comments && subscription.wordsTranscribedLimit > 0) {
+      final used = subscription.wordsTranscribedUsed;
+      final limit = subscription.wordsTranscribedLimit;
+      footer = _UsageMeter(
+        text: l10n.wordsUsedThisMonth(numberFormatter.format(used), numberFormatter.format(limit)),
+        percentage: (used / limit).clamp(0.0, 1.0),
+        color: color,
+      );
+    } else if (onFreePlan && icon == FontAwesomeIcons.wandMagicSparkles && subscription.insightsGainedLimit > 0) {
+      final used = subscription.insightsGainedUsed;
+      final limit = subscription.insightsGainedLimit;
+      footer = _UsageMeter(
+        text: l10n.insightsUsedThisMonth(numberFormatter.format(used), numberFormatter.format(limit)),
+        percentage: (used / limit).clamp(0.0, 1.0),
+        color: color,
+      );
+    }
+
+    return _UsageStatCard(icon: icon, title: title, value: value, subtitle: subtitle, color: color, footer: footer);
+  }
+}
+
+/// Series colour for memories; pink keeps the chart off the brand-banned hues (INV-UI-1).
+final Color _memoriesColor = Colors.pink.shade200;
+
+/// One metric card: the big number, its name and what it means, and an optional meter.
+class _UsageStatCard extends StatelessWidget {
+  const _UsageStatCard({
+    required this.icon,
+    required this.title,
+    required this.value,
+    required this.subtitle,
+    required this.color,
+    this.footer,
+  });
+
+  final FaIconData icon;
+  final String title;
+  final String value;
+  final String subtitle;
+  final Color color;
+  final Widget? footer;
+
+  @override
+  Widget build(BuildContext context) {
     return Container(
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF2A2A2E), Color(0xFF1F1F25)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.1)),
-        boxShadow: [
-          BoxShadow(color: color.withValues(alpha: 0.1), blurRadius: 10, spreadRadius: 1, offset: const Offset(0, 2)),
+        color: OmiColors.surface1,
+        borderRadius: OmiRadius.lgAll,
+        border: Border.all(color: OmiColors.border),
+      ),
+      padding: const EdgeInsets.all(OmiSpacing.lg),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(value, style: OmiType.largeTitle.copyWith(color: color, height: 1.1)),
+          const SizedBox(height: OmiSpacing.sm),
+          Row(
+            children: [
+              ExcludeSemantics(child: FaIcon(icon, color: color, size: 16)),
+              const SizedBox(width: OmiSpacing.xs),
+              Expanded(child: Text(title, style: OmiType.callout.copyWith(fontWeight: FontWeight.w500))),
+            ],
+          ),
+          const SizedBox(height: OmiSpacing.xs),
+          Text(subtitle, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.4)),
+          if (footer != null) ...[const SizedBox(height: OmiSpacing.md), footer!],
         ],
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(20.0),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              value,
-              style: TextStyle(fontSize: 36, fontWeight: FontWeight.bold, color: color, height: 1.1),
+    );
+  }
+}
+
+/// "12 of 30 min used this month" with a progress bar, and an optional hint under it.
+class _UsageMeter extends StatelessWidget {
+  const _UsageMeter({required this.text, required this.percentage, required this.color, this.hint});
+
+  final String text;
+  final double percentage;
+  final Color color;
+  final Widget? hint;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(text, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+        const SizedBox(height: OmiSpacing.xs),
+        LinearProgressIndicator(
+          value: percentage,
+          backgroundColor: OmiColors.surface3,
+          valueColor: AlwaysStoppedAnimation<Color>(color),
+          minHeight: 4,
+          borderRadius: OmiRadius.pillAll,
+        ),
+        if (hint != null) ...[const SizedBox(height: OmiSpacing.xs), hint!],
+      ],
+    );
+  }
+}
+
+/// A sentence with an underlined link to on-device transcription settings.
+class _OnDeviceHint extends StatelessWidget {
+  const _OnDeviceHint({required this.before, required this.link, required this.after});
+
+  final String before;
+  final String link;
+  final String after;
+
+  @override
+  Widget build(BuildContext context) {
+    final style = OmiType.caption.copyWith(color: OmiColors.textTertiary);
+    return Semantics(
+      link: true,
+      child: InkWell(
+        onTap: () => routeToPage(context, const TranscriptionSettingsPage()),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 44),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text.rich(
+              TextSpan(
+                children: [
+                  TextSpan(text: before, style: style),
+                  TextSpan(
+                    text: link,
+                    style: style.copyWith(color: OmiColors.textSecondary, decoration: TextDecoration.underline),
+                  ),
+                  TextSpan(text: after, style: style),
+                ],
+              ),
             ),
-            const SizedBox(height: 12),
-            Row(
-              children: [
-                FaIcon(icon, color: color, size: 16),
-                const SizedBox(width: 8),
-                Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(subtitle, style: TextStyle(fontSize: 14, color: Colors.grey.shade400, height: 1.4)),
-            if (icon == FontAwesomeIcons.microphone &&
-                subscription != null &&
-                subscription.subscription.plan == PlanType.basic &&
-                subscription.transcriptionSecondsLimit > 0) ...[
-              const SizedBox(height: 16),
-              Builder(
-                builder: (context) {
-                  final minutesUsed = (subscription.transcriptionSecondsUsed / 60).round();
-                  final minutesLimit = (subscription.transcriptionSecondsLimit / 60).round();
-                  final percentage =
-                      (subscription.transcriptionSecondsUsed / subscription.transcriptionSecondsLimit).clamp(0.0, 1.0);
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        context.l10n.minsUsedThisMonth(numberFormatter.format(minutesUsed), minutesLimit),
-                        style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
-                      ),
-                      const SizedBox(height: 8),
-                      LinearProgressIndicator(
-                        value: percentage,
-                        backgroundColor: Colors.grey.shade700,
-                        valueColor: AlwaysStoppedAnimation<Color>(color),
-                        minHeight: 4,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                      if (percentage >= 1.0) ...[
-                        const SizedBox(height: 8),
-                        GestureDetector(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (context) => const TranscriptionSettingsPage()),
-                            );
-                          },
-                          child: Text.rich(
-                            TextSpan(
-                              children: [
-                                TextSpan(
-                                  text: '${context.l10n.premiumMinutesUsed} ',
-                                  style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
-                                ),
-                                TextSpan(
-                                  text: context.l10n.setupOnDevice,
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.grey.shade400,
-                                    decoration: TextDecoration.underline,
-                                  ),
-                                ),
-                                TextSpan(
-                                  text: ' ${context.l10n.forUnlimitedFreeTranscription}',
-                                  style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ] else if (percentage >= 0.8) ...[
-                        const SizedBox(height: 8),
-                        GestureDetector(
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(builder: (context) => const TranscriptionSettingsPage()),
-                            );
-                          },
-                          child: Text.rich(
-                            TextSpan(
-                              children: [
-                                TextSpan(
-                                  text: '${context.l10n.premiumMinsLeft(minutesLimit - minutesUsed)} ',
-                                  style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
-                                ),
-                                TextSpan(
-                                  text: context.l10n.onDevice,
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: Colors.grey.shade400,
-                                    decoration: TextDecoration.underline,
-                                  ),
-                                ),
-                                TextSpan(
-                                  text: ' ${context.l10n.alwaysAvailable}',
-                                  style: TextStyle(fontSize: 11, color: Colors.grey.shade500),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  );
-                },
-              ),
-            ],
-            if (icon == FontAwesomeIcons.comments &&
-                subscription != null &&
-                subscription.subscription.plan == PlanType.basic &&
-                subscription.wordsTranscribedLimit > 0) ...[
-              const SizedBox(height: 16),
-              Builder(
-                builder: (context) {
-                  final used = subscription.wordsTranscribedUsed;
-                  final limit = subscription.wordsTranscribedLimit;
-                  final percentage = (limit > 0) ? (used / limit).clamp(0.0, 1.0) : 0.0;
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        context.l10n.wordsUsedThisMonth(numberFormatter.format(used), numberFormatter.format(limit)),
-                        style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
-                      ),
-                      const SizedBox(height: 8),
-                      LinearProgressIndicator(
-                        value: percentage,
-                        backgroundColor: Colors.grey.shade700,
-                        valueColor: AlwaysStoppedAnimation<Color>(color),
-                        minHeight: 4,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ],
-            if (icon == FontAwesomeIcons.wandMagicSparkles &&
-                subscription != null &&
-                subscription.subscription.plan == PlanType.basic &&
-                subscription.insightsGainedLimit > 0) ...[
-              const SizedBox(height: 16),
-              Builder(
-                builder: (context) {
-                  final used = subscription.insightsGainedUsed;
-                  final limit = subscription.insightsGainedLimit;
-                  final percentage = (limit > 0) ? (used / limit).clamp(0.0, 1.0) : 0.0;
-                  return Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        context.l10n.insightsUsedThisMonth(numberFormatter.format(used), numberFormatter.format(limit)),
-                        style: TextStyle(fontSize: 12, color: Colors.grey.shade400),
-                      ),
-                      const SizedBox(height: 8),
-                      LinearProgressIndicator(
-                        value: percentage,
-                        backgroundColor: Colors.grey.shade700,
-                        valueColor: AlwaysStoppedAnimation<Color>(color),
-                        minHeight: 4,
-                        borderRadius: BorderRadius.circular(2),
-                      ),
-                    ],
-                  );
-                },
-              ),
-            ],
-          ],
+          ),
         ),
       ),
     );

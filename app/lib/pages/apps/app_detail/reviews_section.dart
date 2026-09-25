@@ -8,6 +8,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/apps/app_detail/widgets/review_avatar.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/widgets/extensions/string.dart';
@@ -31,28 +32,28 @@ class RatingDistributionWidget extends StatelessWidget {
       children: [
         Text(
           ratingAvg.toStringAsFixed(1),
-          style: TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: Colors.grey.shade400, height: 1),
+          style: OmiType.largeTitle.copyWith(color: OmiColors.textSecondary, height: 1),
         ),
-        const SizedBox(width: 16),
+        const SizedBox(width: OmiSpacing.md),
         Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Row(
               children: List.generate(5, (index) {
                 return Padding(
-                  padding: EdgeInsets.only(right: index < 4 ? 4 : 0),
+                  padding: EdgeInsets.only(right: index < 4 ? OmiSpacing.xxs : 0),
                   child: FaIcon(
                     FontAwesomeIcons.solidStar,
                     size: 14,
-                    color: index < ratingAvg.round() ? Colors.white : Colors.grey.shade700,
+                    color: index < ratingAvg.round() ? OmiColors.textPrimary : OmiColors.textTertiary,
                   ),
                 );
               }),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: OmiSpacing.xxs),
             Text(
-              ratingCount == 1 ? '1 rating' : '$ratingCount ratings',
-              style: TextStyle(fontSize: 13, color: Colors.grey.shade500),
+              context.l10n.appRatingCount(ratingCount),
+              style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
             ),
           ],
         ),
@@ -100,7 +101,7 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
 
   Future<void> _submitReview() async {
     if (editRating == 0) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.pleaseSelectRating)));
+      OmiFeedback.error(context, context.l10n.pleaseSelectRating);
       return;
     }
 
@@ -153,21 +154,16 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
         PlatformManager.instance.analytics.appRated(widget.app.id, editRating);
 
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                widget.userReview == null
-                    ? context.l10n.reviewAddedSuccessfully
-                    : context.l10n.reviewUpdatedSuccessfully,
-              ),
-            ),
+          OmiFeedback.confirm(
+            context,
+            widget.userReview == null ? context.l10n.reviewAddedSuccessfully : context.l10n.reviewUpdatedSuccessfully,
           );
           setState(() => isEditing = false);
           widget.onReviewUpdated?.call();
         }
       } else {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.failedToSubmitReview)));
+          OmiFeedback.error(context, context.l10n.failedToSubmitReview);
         }
       }
     } finally {
@@ -229,11 +225,11 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
 
   Widget _buildEditableReview() {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(OmiSpacing.sm),
       decoration: BoxDecoration(
-        color: Colors.white.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.3)),
+        color: OmiColors.surface2,
+        borderRadius: OmiRadius.mdAll,
+        border: Border.all(color: OmiColors.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -241,8 +237,8 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
           Row(
             children: [
               Text(
-                widget.userReview == null ? 'Add Your Review' : 'Edit Your Review',
-                style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
+                widget.userReview == null ? context.l10n.addYourReview : context.l10n.editYourReview,
+                style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600),
               ),
               const Spacer(),
               if (widget.userReview != null)
@@ -254,11 +250,11 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
                       editRating = widget.userReview?.score ?? 0;
                     });
                   },
-                  child: Text('Cancel', style: TextStyle(color: Colors.grey.shade400, fontSize: 12)),
+                  child: Text(context.l10n.cancel, style: OmiType.caption.copyWith(color: OmiColors.textSecondary)),
                 ),
             ],
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: OmiSpacing.sm),
           // Star rating
           Row(
             children: List.generate(5, (index) {
@@ -267,62 +263,41 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
                   setState(() => editRating = index + 1.0);
                 },
                 child: Padding(
-                  padding: const EdgeInsets.only(right: 8),
+                  padding: const EdgeInsets.only(right: OmiSpacing.xs),
                   child: FaIcon(
                     FontAwesomeIcons.solidStar,
                     size: 24,
-                    color: index < editRating ? Colors.white : Colors.grey.shade600,
+                    color: index < editRating ? OmiColors.textPrimary : OmiColors.textTertiary,
                   ),
                 ),
               );
             }),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: OmiSpacing.sm),
           // Review text field
           TextField(
             controller: reviewController,
             maxLines: 3,
             maxLength: 250,
-            style: const TextStyle(color: Colors.white, fontSize: 14),
+            style: OmiType.subhead.copyWith(color: OmiColors.textPrimary),
             decoration: InputDecoration(
               hintText: context.l10n.writeReviewOptional,
-              hintStyle: TextStyle(color: Colors.grey.shade500),
+              hintStyle: const TextStyle(color: OmiColors.textTertiary),
               filled: true,
-              fillColor: Colors.black.withValues(alpha: 0.3),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
-              contentPadding: const EdgeInsets.all(12),
-              counterStyle: TextStyle(color: Colors.grey.shade500),
+              fillColor: OmiColors.surface0.withValues(alpha: 0.3),
+              border: const OutlineInputBorder(borderRadius: OmiRadius.smAll, borderSide: BorderSide.none),
+              contentPadding: const EdgeInsets.all(OmiSpacing.sm),
+              counterStyle: const TextStyle(color: OmiColors.textTertiary),
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: OmiSpacing.sm),
           // Submit button
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton(
-              key: const ValueKey('app_detail_submit_review_button'),
-              onPressed: isSubmitting ? null : _submitReview,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: Colors.black,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-              child: isSubmitting
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        // The button surface is now white, so a white spinner would be invisible.
-                        valueColor: AlwaysStoppedAnimation<Color>(Colors.black),
-                      ),
-                    )
-                  : Text(
-                      widget.userReview == null
-                          ? AppLocalizations.of(context).submitReview
-                          : AppLocalizations.of(context).updateReview,
-                    ),
-            ),
+          OmiButton(
+            key: const ValueKey('app_detail_submit_review_button'),
+            label: widget.userReview == null ? context.l10n.submitReview : context.l10n.updateReview,
+            expand: true,
+            isLoading: isSubmitting,
+            onPressed: isSubmitting ? null : _submitReview,
           ),
         ],
       ),
@@ -348,10 +323,10 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
                 seed: avatarSeed,
                 username: review.username,
                 size: 36,
-                backgroundColor: isUserReview ? Colors.white.withValues(alpha: 0.2) : null,
-                foregroundColor: isUserReview ? Colors.white : null,
+                backgroundColor: isUserReview ? OmiColors.textPrimary.withValues(alpha: 0.2) : null,
+                foregroundColor: isUserReview ? OmiColors.textPrimary : null,
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: OmiSpacing.sm),
               // Name, date, and stars
               Expanded(
                 child: Column(
@@ -361,30 +336,32 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
                       children: [
                         Text(
                           displayName,
-                          style: TextStyle(
-                            color: isUserReview ? Colors.white : Colors.grey,
-                            fontSize: 14,
+                          style: OmiType.subhead.copyWith(
+                            color: isUserReview ? OmiColors.textPrimary : OmiColors.textSecondary,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
-                        const SizedBox(width: 8),
+                        const SizedBox(width: OmiSpacing.xs),
                         Text(
                           timeago.format(review.ratedAt),
-                          style: TextStyle(color: Colors.grey.shade700, fontSize: 12),
+                          style: OmiType.caption.copyWith(color: OmiColors.textTertiary),
                         ),
-                        if (isUserReview) ...[const Spacer(), Icon(Icons.edit, size: 14, color: Colors.grey.shade500)],
+                        if (isUserReview) ...[
+                          const Spacer(),
+                          const ExcludeSemantics(child: Icon(Icons.edit, size: 14, color: OmiColors.textTertiary)),
+                        ],
                       ],
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: OmiSpacing.xs),
                     // Star rating
                     Row(
                       children: List.generate(5, (index) {
                         return Padding(
-                          padding: const EdgeInsets.only(right: 4),
+                          padding: const EdgeInsets.only(right: OmiSpacing.xxs),
                           child: FaIcon(
                             FontAwesomeIcons.solidStar,
                             size: 14,
-                            color: index < review.score.round() ? Colors.white : Colors.grey.shade700,
+                            color: index < review.score.round() ? OmiColors.textPrimary : OmiColors.textTertiary,
                           ),
                         );
                       }),
@@ -396,12 +373,12 @@ class _RecentReviewsSectionState extends State<RecentReviewsSection> {
           ),
           // Review text - limited to 2 lines
           if (review.review.isNotEmpty) ...[
-            const SizedBox(height: 8),
+            const SizedBox(height: OmiSpacing.xs),
             Padding(
               padding: const EdgeInsets.only(left: 48),
               child: Text(
                 review.review.decodeString,
-                style: const TextStyle(color: Colors.grey, fontSize: 14, height: 1.4),
+                style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.4),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),

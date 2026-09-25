@@ -8,9 +8,8 @@ import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/payments/widgets/country_bottom_sheet.dart';
-import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/other/temp.dart';
-import 'package:omi/widgets/animated_loading_button.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'payment_method_provider.dart';
@@ -24,361 +23,88 @@ class StripeConnectSetup extends StatefulWidget {
 
 class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTickerProviderStateMixin {
   late AnimationController _pulseController;
+  late final PaymentMethodProvider _payments = context.read<PaymentMethodProvider>();
 
   @override
   void initState() {
     super.initState();
     _pulseController = AnimationController(vsync: this, duration: const Duration(seconds: 2))..repeat(reverse: true);
-    context.read<PaymentMethodProvider>().getSupportedCountries();
+    _payments.getSupportedCountries();
   }
 
   @override
   void dispose() {
-    if (context.mounted) {
-      context.read<PaymentMethodProvider>().stopStripePolling();
-    }
+    // The provider was captured while mounted; context lookups no longer work in dispose.
+    _payments.stopStripePolling();
     _pulseController.dispose();
     super.dispose();
+  }
+
+  bool _canConnect(PaymentMethodProvider provider) =>
+      provider.stripeConnectionState == PaymentConnectionState.inComplete || provider.selectedCountryId != null;
+
+  /// Starts (or restarts) Stripe onboarding in the browser and polls for completion.
+  Future<void> _connect(PaymentMethodProvider provider, {required String event, required String errorMessage}) async {
+    PlatformManager.instance.analytics.track(event);
+    final url = await provider.connectStripe();
+    if (url != null) {
+      provider.startStripePolling();
+      await launchUrl(Uri.parse(url));
+    } else if (mounted) {
+      OmiFeedback.error(context, errorMessage);
+    }
+  }
+
+  void _showCountryPicker(PaymentMethodProvider provider) {
+    provider.updateSearchQuery('');
+    showOmiSheet<void>(
+      context: context,
+      title: context.l10n.selectYourCountry,
+      builder: (context) => const CountryBottomSheet(),
+    );
+  }
+
+  String _selectedCountryName(PaymentMethodProvider provider) {
+    if (provider.selectedCountryId?.isEmpty ?? true) return context.l10n.selectYourCountry;
+    // Not filteredCountries: that still carries the picker's last search.
+    final name = provider.supportedCountries.firstWhereOrNull(
+      (country) => country['id'] == provider.selectedCountryId,
+    )?['name'] as String?;
+    return name?.decodeString ?? context.l10n.selectYourCountry;
   }
 
   @override
   Widget build(BuildContext context) {
     return Consumer<PaymentMethodProvider>(
       builder: (context, provider, child) {
+        // Every way out (back button, edge swipe, system back, the in-page buttons) pops the route,
+        // and every pop stops polling.
         return PopScope(
           onPopInvokedWithResult: (_, __) async {
             provider.stopStripePolling();
           },
           child: Scaffold(
-            backgroundColor: Colors.black,
-            appBar: AppBar(
-              backgroundColor: Colors.transparent,
-              leading: IconButton(
-                icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
-                onPressed: () {
-                  provider.stopStripePolling();
-                  Navigator.pop(context);
-                },
-              ),
-            ),
+            backgroundColor: OmiColors.surface0,
+            appBar: AppBar(leading: const OmiBackButton()),
             body: SafeArea(
               child: LayoutBuilder(
                 builder: (context, constraints) {
                   return SingleChildScrollView(
-                    padding: const EdgeInsets.all(24.0),
+                    padding: const EdgeInsets.all(OmiSpacing.xl),
                     child: ConstrainedBox(
                       constraints: BoxConstraints(minHeight: constraints.maxHeight),
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          const SizedBox(height: 20),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const SizedBox(width: 18),
-                              Container(
-                                padding: const EdgeInsets.all(10),
-                                decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                                child: Image.asset(Assets.images.herologo.path, width: 26, color: Colors.black),
-                              ),
-                              Transform.translate(
-                                offset: const Offset(-18, 0),
-                                child: Container(
-                                  padding: const EdgeInsets.all(14),
-                                  decoration: const BoxDecoration(color: Color(0xFF635BFF), shape: BoxShape.circle),
-                                  child: SvgPicture.asset(
-                                    Assets.images.stripeLogo,
-                                    width: 40,
-                                    colorFilter: const ColorFilter.mode(Colors.white, BlendMode.srcIn),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 32),
-                          if (!provider.isStripePolling && !provider.isStripeConnected) ...[
-                            Text(
-                              context.l10n.getPaidThroughStripe,
-                              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 48),
-                            _buildFeatureRow(
-                              icon: Icons.payments_rounded,
-                              title: context.l10n.monthlyPayouts,
-                              description: context.l10n.monthlyPayoutsDescription,
-                            ),
-                            const SizedBox(height: 24),
-                            _buildFeatureRow(
-                              icon: Icons.shield_outlined,
-                              title: context.l10n.secureAndReliable,
-                              description: context.l10n.stripeSecureDescription,
-                            ),
-                            const SizedBox(height: 24),
-                            provider.stripeConnectionState == PaymentConnectionState.notConnected
-                                ? Column(
-                                    children: [
-                                      const SizedBox(height: 8),
-                                      ElevatedButton(
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: Colors.white.withValues(alpha: 0.1),
-                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                                        ),
-                                        onPressed: () {
-                                          provider.updateSearchQuery('');
-                                          showModalBottomSheet(
-                                            context: context,
-                                            isScrollControlled: true,
-                                            backgroundColor: const Color(0xFF1A1A1A),
-                                            shape: const RoundedRectangleBorder(
-                                              borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                                            ),
-                                            builder: (context) {
-                                              return const CountryBottomSheet();
-                                            },
-                                          );
-                                        },
-                                        child: Row(
-                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                          children: [
-                                            Row(
-                                              children: [
-                                                if (!(provider.selectedCountryId?.isEmpty ?? true) &&
-                                                    provider.selectedCountryId != null)
-                                                  Text(
-                                                    countryFlagFromCode(provider.selectedCountryId!),
-                                                    style: const TextStyle(fontSize: 24),
-                                                  ),
-                                                const SizedBox(width: 8),
-                                                Text(
-                                                  provider.selectedCountryId?.isEmpty ?? true
-                                                      ? context.l10n.selectYourCountry
-                                                      : ((provider.filteredCountries.firstWhereOrNull(
-                                                            (country) => country['id'] == provider.selectedCountryId,
-                                                          )?['name'] as String?)
-                                                              ?.decodeString ??
-                                                          context.l10n.selectYourCountry),
-                                                  style: const TextStyle(color: Colors.white),
-                                                ),
-                                              ],
-                                            ),
-                                            const Icon(Icons.arrow_drop_down, color: Colors.white),
-                                          ],
-                                        ),
-                                      ),
-                                    ],
-                                  )
-                                : const SizedBox(),
-                            const SizedBox(height: 12),
-                            provider.stripeConnectionState == PaymentConnectionState.notConnected
-                                ? Container(
-                                    padding: const EdgeInsets.all(12),
-                                    decoration: BoxDecoration(
-                                      color: Colors.red.withValues(alpha: 0.1),
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: Row(
-                                      children: [
-                                        Icon(Icons.warning_amber_rounded, color: Colors.red[400], size: 20),
-                                        const SizedBox(width: 8),
-                                        Expanded(
-                                          child: Text(
-                                            context.l10n.countrySelectionPermanent,
-                                            style: TextStyle(color: Colors.red[400], fontSize: 14),
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  )
-                                : const SizedBox(),
-                            const SizedBox(height: 24),
-                            Text(
-                              context.l10n.byClickingConnectNow,
-                              style: TextStyle(color: Colors.grey[400], fontSize: 14),
-                            ),
-                            const SizedBox(height: 4),
-                            GestureDetector(
-                              onTap: () {
-                                launchUrl(Uri.parse('https://stripe.com/connect-account/legal'));
-                              },
-                              child: Text(
-                                context.l10n.stripeConnectedAccountAgreement,
-                                style: const TextStyle(color: Color(0xFF635BFF), fontSize: 14),
-                              ),
-                            ),
-                            const SizedBox(height: 18),
-                            AnimatedLoadingButton(
-                              text: context.l10n.connectNow,
-                              loaderColor: Colors.black,
-                              onPressed: provider.stripeConnectionState == PaymentConnectionState.inComplete ||
-                                      provider.selectedCountryId != null
-                                  ? () async {
-                                      PlatformManager.instance.analytics.track('Stripe Connect Started');
-                                      var url = await provider.connectStripe();
-                                      if (url != null) {
-                                        provider.startStripePolling();
-                                        await launchUrl(Uri.parse(url));
-                                      } else if (context.mounted) {
-                                        AppSnackbar.showSnackbarError(context.l10n.errorConnectingToStripe);
-                                      }
-                                    }
-                                  : () async {},
-                              color: provider.stripeConnectionState == PaymentConnectionState.inComplete ||
-                                      provider.selectedCountryId != null
-                                  ? Colors.white
-                                  : Colors.grey,
-                              textStyle: TextStyle(
-                                fontSize: 16,
-                                color: provider.stripeConnectionState == PaymentConnectionState.inComplete ||
-                                        provider.selectedCountryId != null
-                                    ? Colors.black
-                                    : Colors.grey[600],
-                              ),
-                              width: MediaQuery.of(context).size.width * 0.8,
-                            ),
-                          ],
-                          if (provider.isStripePolling && !provider.isStripeConnected) ...[
-                            const SizedBox(height: 48),
-                            AnimatedBuilder(
-                              animation: _pulseController,
-                              builder: (context, child) {
-                                return Container(
-                                  width: 80,
-                                  height: 80,
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    border: Border.all(color: const Color(0xFF635BFF), width: 3),
-                                    boxShadow: [
-                                      BoxShadow(
-                                        color: const Color(0xFF635BFF).withValues(alpha: 0.5),
-                                        blurRadius: 20 * _pulseController.value,
-                                        spreadRadius: 10 * _pulseController.value,
-                                      ),
-                                    ],
-                                  ),
-                                  child: const Center(child: Icon(Icons.sync, color: Color(0xFF635BFF), size: 40)),
-                                );
-                              },
-                            ),
-                            const SizedBox(height: 48),
-                            Text(
-                              context.l10n.connectingYourStripeAccount,
-                              style: const TextStyle(fontSize: 24, fontWeight: FontWeight.bold, color: Colors.white),
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              context.l10n.stripeOnboardingInstructions,
-                              style: TextStyle(fontSize: 16, color: Colors.grey[400]),
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 24),
-                            AnimatedLoadingButton(
-                              text: context.l10n.failedTryAgain,
-                              onPressed: () async {
-                                PlatformManager.instance.analytics.track('Stripe Connect Retry');
-                                var res = await provider.connectStripe();
-                                if (res != null) {
-                                  provider.startStripePolling();
-                                  await launchUrl(Uri.parse(res));
-                                } else if (context.mounted) {
-                                  AppSnackbar.showSnackbarError(context.l10n.errorConnectingToStripe);
-                                }
-                              },
-                              color: Colors.white,
-                              loaderColor: Colors.black,
-                              textStyle: const TextStyle(fontSize: 16, color: Colors.black),
-                              width: MediaQuery.of(context).size.width * 0.8,
-                            ),
-                            TextButton(
-                              onPressed: () {
-                                PlatformManager.instance.analytics.track('Stripe Connect Later');
-                                provider.stopStripePolling();
-                                Navigator.pop(context);
-                              },
-                              child: Text(context.l10n.illDoItLater, style: TextStyle(color: Colors.grey[400])),
-                            ),
-                          ],
-                          if (!provider.isStripePolling && provider.isStripeConnected) ...[
-                            const SizedBox(height: 48),
-                            Container(
-                              padding: const EdgeInsets.all(24),
-                              decoration: BoxDecoration(
-                                gradient: LinearGradient(
-                                  colors: [
-                                    const Color(0xFF635BFF).withValues(alpha: 0.15),
-                                    Colors.purple.shade900.withValues(alpha: 0.1),
-                                  ],
-                                  begin: Alignment.topLeft,
-                                  end: Alignment.bottomRight,
-                                ),
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(color: const Color(0xFF635BFF).withValues(alpha: 0.3), width: 1),
-                              ),
-                              child: Column(
-                                children: [
-                                  Container(
-                                    padding: const EdgeInsets.all(16),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF635BFF).withValues(alpha: 0.1),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: const Icon(
-                                      Icons.check_circle_outline_rounded,
-                                      color: Color(0xFF635BFF),
-                                      size: 48,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 24),
-                                  Text(
-                                    '${context.l10n.successfullyConnected} 🎉',
-                                    style: const TextStyle(
-                                      fontSize: 24,
-                                      fontWeight: FontWeight.bold,
-                                      color: Colors.white,
-                                    ),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                  const SizedBox(height: 16),
-                                  Text(
-                                    context.l10n.stripeReadyForPayments,
-                                    style: TextStyle(fontSize: 16, color: Colors.grey[400], height: 1.5),
-                                    textAlign: TextAlign.center,
-                                  ),
-                                ],
-                              ),
-                            ),
-                            const SizedBox(height: 24),
-                            AnimatedLoadingButton(
-                              text: context.l10n.updateStripeDetails,
-                              onPressed: () async {
-                                PlatformManager.instance.analytics.track('Stripe Connect Update');
-                                var url = await provider.connectStripe();
-                                if (url != null) {
-                                  provider.startStripePolling();
-                                  await launchUrl(Uri.parse(url));
-                                } else if (context.mounted) {
-                                  AppSnackbar.showSnackbarError(context.l10n.errorUpdatingStripeDetails);
-                                }
-                              },
-                              color: Colors.white,
-                              loaderColor: Colors.black,
-                              textStyle: const TextStyle(
-                                fontSize: 16,
-                                fontWeight: FontWeight.w500,
-                                color: Colors.black,
-                              ),
-                              width: MediaQuery.of(context).size.width * 0.8,
-                            ),
-                            TextButton(
-                              onPressed: () {
-                                provider.stopStripePolling();
-                                Navigator.pop(context);
-                              },
-                              child: Text(context.l10n.goBack, style: TextStyle(color: Colors.grey[400])),
-                            ),
-                          ],
+                          const SizedBox(height: OmiSpacing.lg),
+                          _buildLogos(),
+                          const SizedBox(height: OmiSpacing.xxl),
+                          if (!provider.isStripePolling && !provider.isStripeConnected)
+                            ..._buildConnectSection(provider),
+                          if (provider.isStripePolling && !provider.isStripeConnected)
+                            ..._buildPollingSection(provider),
+                          if (!provider.isStripePolling && provider.isStripeConnected)
+                            ..._buildConnectedSection(provider),
                           const SizedBox(height: 36),
                         ],
                       ),
@@ -393,29 +119,256 @@ class _StripeConnectSetupState extends State<StripeConnectSetup> with SingleTick
     );
   }
 
+  Widget _buildLogos() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const SizedBox(width: 18),
+        Container(
+          padding: const EdgeInsets.all(10),
+          decoration: const BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
+          child: Image.asset(Assets.images.herologo.path, width: 26, color: OmiColors.onAccent),
+        ),
+        Transform.translate(
+          offset: const Offset(-18, 0),
+          child: Container(
+            padding: const EdgeInsets.all(14),
+            decoration: const BoxDecoration(color: OmiColors.surface2, shape: BoxShape.circle),
+            child: SvgPicture.asset(
+              Assets.images.stripeLogo,
+              width: 40,
+              colorFilter: const ColorFilter.mode(OmiColors.textPrimary, BlendMode.srcIn),
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
+  List<Widget> _buildConnectSection(PaymentMethodProvider provider) {
+    final notConnected = provider.stripeConnectionState == PaymentConnectionState.notConnected;
+    final hasCountry = !(provider.selectedCountryId?.isEmpty ?? true) && provider.selectedCountryId != null;
+    return [
+      Text(
+        context.l10n.getPaidThroughStripe,
+        style: OmiType.title2.copyWith(fontWeight: FontWeight.w700),
+        textAlign: TextAlign.center,
+      ),
+      const SizedBox(height: 48),
+      _buildFeatureRow(
+        icon: Icons.payments_rounded,
+        title: context.l10n.monthlyPayouts,
+        description: context.l10n.monthlyPayoutsDescription,
+      ),
+      const SizedBox(height: OmiSpacing.xl),
+      _buildFeatureRow(
+        icon: Icons.shield_outlined,
+        title: context.l10n.secureAndReliable,
+        description: context.l10n.stripeSecureDescription,
+      ),
+      const SizedBox(height: OmiSpacing.xl),
+      if (notConnected) ...[
+        const SizedBox(height: OmiSpacing.xs),
+        Material(
+          color: OmiColors.surface2,
+          borderRadius: OmiRadius.mdAll,
+          child: InkWell(
+            borderRadius: OmiRadius.mdAll,
+            onTap: () => _showCountryPicker(provider),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 48),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.sm),
+                child: Row(
+                  children: [
+                    if (hasCountry) ...[
+                      Text(countryFlagFromCode(provider.selectedCountryId!), style: OmiType.title2),
+                      const SizedBox(width: OmiSpacing.xs),
+                    ],
+                    Expanded(child: Text(_selectedCountryName(provider), style: OmiType.callout)),
+                    const Icon(Icons.arrow_drop_down, color: OmiColors.textPrimary),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      ],
+      const SizedBox(height: OmiSpacing.sm),
+      if (notConnected)
+        Container(
+          padding: const EdgeInsets.all(OmiSpacing.sm),
+          decoration: const BoxDecoration(color: OmiColors.dangerSurface, borderRadius: OmiRadius.smAll),
+          child: Row(
+            children: [
+              const Icon(Icons.warning_amber_rounded, color: OmiColors.danger, size: 20),
+              const SizedBox(width: OmiSpacing.xs),
+              Expanded(
+                child: Text(
+                  context.l10n.countrySelectionPermanent,
+                  style: OmiType.footnote.copyWith(color: OmiColors.danger),
+                ),
+              ),
+            ],
+          ),
+        ),
+      const SizedBox(height: OmiSpacing.xl),
+      Text(context.l10n.byClickingConnectNow, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+      const SizedBox(height: OmiSpacing.xxs),
+      GestureDetector(
+        onTap: () {
+          launchUrl(Uri.parse('https://stripe.com/connect-account/legal'));
+        },
+        child: Text(
+          context.l10n.stripeConnectedAccountAgreement,
+          style: OmiType.footnote.copyWith(decoration: TextDecoration.underline),
+        ),
+      ),
+      const SizedBox(height: 18),
+      OmiButton(
+        label: context.l10n.connectNow,
+        expand: true,
+        onPressed: _canConnect(provider)
+            ? () => _connect(
+                  provider,
+                  event: 'Stripe Connect Started',
+                  errorMessage: context.l10n.errorConnectingToStripe,
+                )
+            : null,
+      ),
+    ];
+  }
+
+  List<Widget> _buildPollingSection(PaymentMethodProvider provider) {
+    return [
+      const SizedBox(height: 48),
+      AnimatedBuilder(
+        animation: _pulseController,
+        builder: (context, child) {
+          return Container(
+            width: 80,
+            height: 80,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: OmiColors.accent, width: 3),
+              boxShadow: [
+                BoxShadow(
+                  color: OmiColors.accent.withValues(alpha: 0.25),
+                  blurRadius: 20 * _pulseController.value,
+                  spreadRadius: 10 * _pulseController.value,
+                ),
+              ],
+            ),
+            child: const Center(child: Icon(Icons.sync, color: OmiColors.accent, size: 40)),
+          );
+        },
+      ),
+      const SizedBox(height: 48),
+      Text(
+        context.l10n.connectingYourStripeAccount,
+        style: OmiType.title2.copyWith(fontWeight: FontWeight.w700),
+        textAlign: TextAlign.center,
+      ),
+      const SizedBox(height: OmiSpacing.md),
+      Text(
+        context.l10n.stripeOnboardingInstructions,
+        style: OmiType.callout.copyWith(color: OmiColors.textSecondary),
+        textAlign: TextAlign.center,
+      ),
+      const SizedBox(height: OmiSpacing.xl),
+      OmiButton(
+        label: context.l10n.failedTryAgain,
+        expand: true,
+        onPressed: () => _connect(
+          provider,
+          event: 'Stripe Connect Retry',
+          errorMessage: context.l10n.errorConnectingToStripe,
+        ),
+      ),
+      const SizedBox(height: OmiSpacing.xs),
+      OmiButton.tertiary(
+        label: context.l10n.illDoItLater,
+        expand: true,
+        onPressed: () {
+          PlatformManager.instance.analytics.track('Stripe Connect Later');
+          provider.stopStripePolling();
+          Navigator.pop(context);
+        },
+      ),
+    ];
+  }
+
+  List<Widget> _buildConnectedSection(PaymentMethodProvider provider) {
+    return [
+      const SizedBox(height: 48),
+      Container(
+        padding: const EdgeInsets.all(OmiSpacing.xl),
+        decoration: BoxDecoration(
+          color: OmiColors.surface1,
+          borderRadius: OmiRadius.lgAll,
+          border: Border.all(color: OmiColors.border, width: 1),
+        ),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(OmiSpacing.md),
+              decoration: const BoxDecoration(color: OmiColors.successSurface, shape: BoxShape.circle),
+              child: const Icon(Icons.check_circle_outline_rounded, color: OmiColors.success, size: 48),
+            ),
+            const SizedBox(height: OmiSpacing.xl),
+            Text(
+              context.l10n.successfullyConnected,
+              style: OmiType.title2.copyWith(fontWeight: FontWeight.w700),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: OmiSpacing.md),
+            Text(
+              context.l10n.stripeReadyForPayments,
+              style: OmiType.callout.copyWith(color: OmiColors.textSecondary, height: 1.5),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+      ),
+      const SizedBox(height: OmiSpacing.xl),
+      OmiButton(
+        label: context.l10n.updateStripeDetails,
+        expand: true,
+        onPressed: () => _connect(
+          provider,
+          event: 'Stripe Connect Update',
+          errorMessage: context.l10n.errorUpdatingStripeDetails,
+        ),
+      ),
+      const SizedBox(height: OmiSpacing.xs),
+      OmiButton.tertiary(
+        label: context.l10n.goBack,
+        expand: true,
+        onPressed: () {
+          provider.stopStripePolling();
+          Navigator.pop(context);
+        },
+      ),
+    ];
+  }
+
   Widget _buildFeatureRow({required IconData icon, required String title, required String description}) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: const Color(0xFF635BFF).withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(icon, color: const Color(0xFF635BFF), size: 24),
+          padding: const EdgeInsets.all(OmiSpacing.xs),
+          decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
+          child: Icon(icon, color: OmiColors.textPrimary, size: 24),
         ),
-        const SizedBox(width: 16),
+        const SizedBox(width: OmiSpacing.md),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                title,
-                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: Colors.white),
-              ),
-              const SizedBox(height: 4),
-              Text(description, style: TextStyle(fontSize: 14, color: Colors.grey[400])),
+              Text(title, style: OmiType.callout.copyWith(fontWeight: FontWeight.w500)),
+              const SizedBox(height: OmiSpacing.xxs),
+              Text(description, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
             ],
           ),
         ),

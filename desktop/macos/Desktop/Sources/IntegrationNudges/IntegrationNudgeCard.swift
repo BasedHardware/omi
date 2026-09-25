@@ -68,7 +68,7 @@ struct IntegrationNudgeCard: View {
           telemetryID: entry.telemetryID, triggerID: triggerID)
         FloatingControlBarManager.shared.dismissCurrentNotification()
       } label: {
-        Text("Not now").scaledFont(size: 12).foregroundColor(.white.opacity(0.55))
+        Text("Not Now").scaledFont(size: 12).foregroundColor(.white.opacity(0.55))
       }
       .buttonStyle(.plain)
 

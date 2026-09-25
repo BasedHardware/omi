@@ -143,7 +143,8 @@ void main() {
     tester.takeException();
 
     expect(find.text('Finished Conversation?'), findsOneWidget);
-    await tester.tap(find.text('Confirm').last);
+    // The confirm button names the action (docs/ux-contract.md §4); the dialog's is the last one.
+    await tester.tap(find.text('Process Now').last);
     await tester.pump();
     tester.takeException();
     await tester.pump(const Duration(milliseconds: 400));
@@ -211,7 +212,9 @@ void main() {
 
 Future<void> _stopFromPage(WidgetTester tester, CaptureProvider capture) async {
   final dynamic state = tester.state(find.byType(ConversationCapturingPage));
-  await state.debugStopConversation(capture);
+  // Not awaited: with confirmation on, stopping waits for the dialog the test answers next.
+  unawaited(state.debugStopConversation(capture) as Future<void>);
+  await tester.pump();
 }
 
 Future<_Harness> _pumpCapturingPage(WidgetTester tester) async {

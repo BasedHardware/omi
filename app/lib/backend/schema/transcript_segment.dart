@@ -1,4 +1,7 @@
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/person.dart';
+import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/ui/format/speaker_names.dart';
 import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
 
 // Phase 4.1 — pure 1:1 thin wrapper: both fields (String lang, String text) match
@@ -170,35 +173,35 @@ class TranscriptSegment {
     segments.addAll(joinedSimilarSegments);
   }
 
+  /// Plain-text transcript for copy, share and export, one "[time] Name: text" block per segment.
+  ///
+  /// Names come from [SpeakerNames] so they match the screen: the owner is [ownerName] (default:
+  /// the user's given name, else the localized "You"), assigned people by name ([people], default
+  /// the cached list), Omi as "Omi", everyone else "Speaker N" in the conversation's dense
+  /// numbering, localized with [l10n] (default: the app locale via [SpeakerNames.contextFreeL10n]).
+  /// Pass [numberingSegments] (the whole conversation) when [segments] is only a slice of it.
   static String segmentsAsString(
     List<TranscriptSegment> segments, {
     bool includeTimestamps = false,
-    String Function(String speakerId)? speakerLabelBuilder,
+    AppLocalizations? l10n,
+    List<Person>? people,
+    String? ownerName,
+    List<TranscriptSegment>? numberingSegments,
   }) {
-    String transcript = '';
-    var userName = SharedPreferencesUtil().givenName;
-    var people = SharedPreferencesUtil().cachedPeople;
-    var peopleMap = {for (var p in people) p.id: p.name};
-
+    final names = SpeakerNames.forSegments(
+      numberingSegments ?? segments,
+      people: people ?? SharedPreferencesUtil().cachedPeople,
+      ownerName: ownerName ?? SharedPreferencesUtil().givenName,
+      l10n: l10n ?? SpeakerNames.contextFreeL10n(),
+    );
+    final buffer = StringBuffer();
     includeTimestamps = includeTimestamps && TranscriptSegment.canDisplaySeconds(segments);
-    for (var segment in segments) {
-      var segmentText = segment.text.trim();
-      var timestampStr = includeTimestamps ? '[${segment.getTimestampString()}]' : '';
-      if (segment.isUser) {
-        transcript += '$timestampStr ${userName.isEmpty ? 'User' : userName}: $segmentText ';
-      } else {
-        String speakerName;
-        if (segment.personId != null && peopleMap.containsKey(segment.personId)) {
-          speakerName = peopleMap[segment.personId]!;
-        } else {
-          var displayId = '${getDisplaySpeakerId(segment.speakerId, segments)}';
-          speakerName = speakerLabelBuilder != null ? speakerLabelBuilder(displayId) : 'Speaker $displayId';
-        }
-        transcript += '$timestampStr $speakerName: $segmentText ';
-      }
-      transcript += '\n\n';
+    for (final segment in segments) {
+      final timestampStr = includeTimestamps ? '[${segment.getTimestampString()}]' : '';
+      buffer.write('$timestampStr ${names.forSegment(segment)}: ${segment.text.trim()} ');
+      buffer.write('\n\n');
     }
-    return transcript.trim();
+    return buffer.toString().trim();
   }
 
   static bool canDisplaySeconds(List<TranscriptSegment> segments) {
@@ -212,7 +215,14 @@ class TranscriptSegment {
     return true;
   }
 
-  /// Canonical IDs remain stable when a speaker is labeled as the user.
-  /// Gaps are intentional: provider restarts can allocate additional identities.
-  static int getDisplaySpeakerId(int speakerId, List<TranscriptSegment> segments) => speakerId + 1;
+  /// The "Speaker N" number shown for [speakerId] in the conversation made of [segments].
+  ///
+  /// Dense and 1-based in order of first appearance, skipping the owner and Omi (see
+  /// [SpeakerNames]): canonical ids keep their gaps (provider restarts allocate new identities),
+  /// the display does not. Assigning a person keeps everyone's number; tagging a speaker as the
+  /// owner removes them from the count.
+  static int getDisplaySpeakerId(int speakerId, List<TranscriptSegment> segments) {
+    final ordinals = SpeakerNames.denseOrdinals(segments);
+    return ordinals[speakerId] ?? ordinals.length + 1;
+  }
 }

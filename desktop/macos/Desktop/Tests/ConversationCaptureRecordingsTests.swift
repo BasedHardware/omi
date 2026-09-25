@@ -82,7 +82,7 @@ final class ConversationCaptureRecordingsTests: XCTestCase {
       id: "p", source: .omi, startedAt: Self.base.addingTimeInterval(33 * 60),
       finishedAt: Self.base.addingTimeInterval(36 * 60), isCurrent: false)
     let label = Self.plain(CaptureGroupPresentation.label(of: window, locale: Self.enUS, timeZone: Self.utc))
-    XCTAssertTrue(label.hasPrefix("omi · 1:31"), label)
+    XCTAssertTrue(label.hasPrefix("Pendant · 1:31"), label)
     XCTAssertTrue(label.hasSuffix("1:34 PM"), label)
 
     let openEnded = CaptureGroupRecording(
@@ -209,7 +209,8 @@ final class ConversationCaptureRecordingsTests: XCTestCase {
     ]
     XCTAssertEqual(
       ConversationDetailMeta.participants(in: segments, people: [Person(id: "p-1", name: "Dana")]),
-      ["You", "Speaker 1", "Dana"])
+      // 1-based, like the transcript bubbles and mobile: SPEAKER_01 is "Speaker 2".
+      ["You", "Speaker 2", "Dana"])
     XCTAssertEqual(ConversationDetailMeta.participants(in: [], people: []), [])
   }
 

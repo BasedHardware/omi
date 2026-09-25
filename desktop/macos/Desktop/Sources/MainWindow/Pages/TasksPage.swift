@@ -542,6 +542,9 @@ class TasksViewModel: ObservableObject {
   @Published var multiSelection = TaskMultiSelectionState()
   @Published var isSelectingAllTasks = false
   @Published var bulkTaskErrorMessage: String?
+  /// The page's shell-drawn "Delete N Tasks?" is up. Set by the Delete button and ⌘⌫; the page's
+  /// confirmation calls `deleteSelectedTasks()`.
+  @Published var isConfirmingBulkDelete = false
   /// Invalidates async selection/delete completions when the user changes
   /// owner, scope, mode, or selected IDs while an operation is suspended.
   var selectionOperationGeneration: UInt64 = 0
@@ -747,7 +750,9 @@ class TasksViewModel: ObservableObject {
       restoreTaskOperation ?? { task in
         await TasksStore.shared.restoreTask(task)
       }
-    self.bulkDeleteConfirmation = bulkDeleteConfirmation ?? Self.confirmBulkDelete
+    // The UI confirms before calling in (`isConfirmingBulkDelete`); tests inject a refusal to prove
+    // the gate still holds.
+    self.bulkDeleteConfirmation = bulkDeleteConfirmation ?? { _ in true }
     self.orderingDefaults = orderingDefaults
     activeOwnerID = Self.normalizedOwnerID(ownerIDProvider())
     if let activeOwnerID {
@@ -1675,8 +1680,8 @@ class TasksViewModel: ObservableObject {
         }
         return true
       }
-      if modifiers == .command && keyCode == 2 {
-        Task { [weak self] in await self?.deleteSelectedTasks() }
+      if modifiers == .command && keyCode == 51 {
+        if multiSelection.selectionCount > 0 { isConfirmingBulkDelete = true }
         return true
       }
       return false
@@ -1689,9 +1694,10 @@ class TasksViewModel: ObservableObject {
       return true
     }
 
-    // Cmd+D: delete task
-    if modifiers == .command && keyCode == 2 {
-      guard let taskId = keyboardSelectedTaskId ?? hoveredTaskId,
+    // ⌘⌫: delete the keyboard-selected task. Never the hovered one: a resting pointer plus a stray
+    // chord must not delete something the user did not select.
+    if modifiers == .command && keyCode == 51 {
+      guard let taskId = keyboardSelectedTaskId,
         let task = findTask(taskId)
       else { return false }
       let nav = navigationOrder
@@ -3456,33 +3462,30 @@ struct TasksPage: View {
         QuerySearchBar(
           text: $viewModel.searchText,
           accessibilityID: "tasks-search-field",
-          placeholder: "Search tasks…", searchSurface: .tasks
+          placeholder: "Search tasks", searchSurface: .tasks
         )
 
         taskWorkspace
           .frame(maxWidth: .infinity, maxHeight: .infinity)
+          .shellConfirmation(
+            isPresented: $viewModel.isConfirmingBulkDelete,
+            title: "Delete \(viewModel.multiSelection.selectionCount) Tasks?",
+            message: "This permanently deletes the selected tasks. It can't be undone.",
+            confirmTitle: "Delete Tasks"
+          ) {
+            Task { await viewModel.deleteSelectedTasks() }
+          }
           .inkGlassPanel(cornerRadius: QueryShellLayout.panelCornerRadius, shadow: .ambient)
       }
       .frame(width: lane)
       .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
       .padding(.top, QueryShellLayout.surfaceTopInset)
     }
-    .alert(
-      "Task action failed",
-      isPresented: Binding(
-        get: { viewModel.bulkTaskErrorMessage != nil },
-        set: { isPresented in
-          if !isPresented {
-            viewModel.bulkTaskErrorMessage = nil
-          }
-        }
-      )
-    ) {
-      Button("OK", role: .cancel) {
-        viewModel.bulkTaskErrorMessage = nil
-      }
-    } message: {
-      Text(viewModel.bulkTaskErrorMessage ?? "Please try again.")
+    // A failed bulk action is a notice, not a question: the shared toast, not a modal alert.
+    .onChange(of: viewModel.bulkTaskErrorMessage) { _, message in
+      guard let message else { return }
+      OmiToastCenter.shared.notice(message, systemImage: "exclamationmark.triangle")
+      viewModel.bulkTaskErrorMessage = nil
     }
     .onEscapeKey(priority: .content) { handleEscapeKey() }
     .onAppear {
@@ -3498,7 +3501,6 @@ struct TasksPage: View {
       suggestedStore.registerAutomationActions()
       if chatCoordinator.isPanelOpen, chatCoordinator.activeTaskId != nil {
         showChatPanel = true
-        adjustWindowWidth(expand: true)
       }
       Task { await TaskPrioritizationService.shared.start() }
       if !showChatPanel {
@@ -3509,7 +3511,6 @@ struct TasksPage: View {
     }
     .onDisappear {
       if showChatPanel {
-        adjustWindowWidth(expand: false)
         showChatPanel = false
       }
     }
@@ -3523,16 +3524,12 @@ struct TasksPage: View {
       guard isOpen != showChatPanel else { return }
       if isOpen {
         viewModel.detailPanelTaskID = nil
-        adjustWindowWidth(expand: true)
         OmiMotion.withGated(.easeInOut(duration: 0.25)) {
           showChatPanel = true
         }
       } else {
         OmiMotion.withGated(.easeInOut(duration: 0.25)) {
           showChatPanel = false
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-          adjustWindowWidth(expand: false)
         }
       }
     }
@@ -3646,8 +3643,8 @@ struct TasksPage: View {
     )
     viewModel.detailPanelTaskID = nil
     if !showChatPanel {
-      // First open: expand window and reveal the panel together
-      adjustWindowWidth(expand: true)
+      // The panel opens inside the current window width. It used to resize the user's window, which
+      // no other panel in the app does.
       OmiMotion.withGated(.easeInOut(duration: 0.25)) {
         showChatPanel = true
       }
@@ -3681,11 +3678,9 @@ struct TasksPage: View {
     viewModel.detailPanelTaskID = task.id
   }
 
+  /// Esc peels the innermost layer: an edit, then a side panel (detail or chat), then the list's own
+  /// selection and search state.
   private func handleEscapeKey() -> Bool {
-    if taskDetailTask != nil {
-      closeTaskDetailPanel()
-      return true
-    }
     if viewModel.isAnyTaskEditing || viewModel.editingTaskId != nil {
       NSApp.keyWindow?.makeFirstResponder(nil)
       return true
@@ -3694,53 +3689,11 @@ struct TasksPage: View {
       closeTaskDetailPanel()
       return true
     }
+    if showChatPanel {
+      closeChatPanel()
+      return true
+    }
     return viewModel.handleEscape()
-  }
-
-  /// Expand or shrink the main window to accommodate the chat panel.
-  /// Saves the user's original width before expanding so it can be restored exactly.
-  private func adjustWindowWidth(expand: Bool) {
-    guard let window = NSApp.windows.first(where: { $0.title.lowercased().hasPrefix("omi") && $0.isVisible }) else {
-      return
-    }
-
-    let expandAmount = chatPanelWidth + 1  // +1 for divider
-    var frame = window.frame
-
-    if expand {
-      // Remember the user's current width before we change it
-      preChatWindowWidth = frame.size.width
-      frame.size.width += expandAmount
-      // Clamp to screen bounds
-      if let screen = window.screen {
-        let maxRight = screen.visibleFrame.maxX
-        if frame.maxX > maxRight {
-          frame.origin.x = maxRight - frame.size.width
-        }
-      }
-    } else {
-      // Restore to the saved width, or just subtract the expand amount
-      if preChatWindowWidth > 0 {
-        frame.size.width = preChatWindowWidth
-      } else {
-        frame.size.width -= expandAmount
-      }
-    }
-
-    NSAnimationContext.runAnimationGroup(
-      { context in
-        context.duration = 0.25
-        context.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-        window.animator().setFrame(frame, display: true)
-      },
-      completionHandler: {
-        // Clear preChatWindowWidth only after the resize animation completes.
-        // If the app quits mid-animation, this won't fire, leaving the saved
-        // width intact so restorePreChatWindowWidth() can shrink on next launch.
-        if !expand {
-          UserDefaults.standard.set(Double(0), forKey: "tasksPreChatWindowWidth")
-        }
-      })
   }
 
   /// On launch, restore the window to its pre-chat width if the user quit with chat open.
@@ -3810,9 +3763,10 @@ struct TasksPage: View {
       // Undo is transient feedback, not navigation. It remains over the panel
       // while the keyboard hint bar has its own reserved space above it.
       if viewModel.showUndoToast, let lastAction = viewModel.undoStack.last {
-        UndoToastView(
-          taskDescription: lastAction.task.description,
-          undoCount: viewModel.undoStack.count,
+        UndoToast(
+          message: "Task deleted",
+          detail: lastAction.task.description,
+          count: viewModel.undoStack.count,
           onUndo: { Task { await viewModel.undoLastDelete() } }
         )
         .padding(.bottom, OmiSpacing.lg)
@@ -4108,53 +4062,32 @@ struct TasksPage: View {
 
   private var deleteSelectedButton: some View {
     Button {
-      Task {
-        await viewModel.deleteSelectedTasks()
-      }
+      viewModel.isConfirmingBulkDelete = true
     } label: {
-      HStack(spacing: OmiSpacing.xs) {
-        Image(systemName: "trash")
-          .scaledFont(size: OmiType.caption)
-        Text("Delete \(viewModel.multiSelection.selectionCount)")
-          .scaledFont(size: OmiType.body, weight: .medium)
-      }
-      .foregroundColor(Ink.surface)
-      .padding(.horizontal, OmiSpacing.md)
-      .padding(.vertical, OmiSpacing.sm)
-      .background(
-        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-          .fill(Ink.errorRed)
-      )
+      Label("Delete \(viewModel.multiSelection.selectionCount)", systemImage: "trash")
     }
-    .buttonStyle(.plain)
+    .buttonStyle(OmiButtonStyle(.destructive, size: .compact))
+    .disabled(viewModel.multiSelection.selectionCount == 0)
   }
 
+  /// Leaves selection mode. "Done", as on Conversations; Esc does the same.
   private var cancelMultiSelectButton: some View {
-    Button {
+    Button("Done") {
       viewModel.toggleMultiSelectMode()
-    } label: {
-      Text("Cancel")
-        .scaledFont(size: OmiType.body, weight: .medium)
-        .foregroundColor(Ink.secondary)
-        .padding(.horizontal, OmiSpacing.md)
-        .padding(.vertical, OmiSpacing.sm)
-        .background(
-          RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-            .fill(Ink.rowFill)
-        )
     }
-    .buttonStyle(.plain)
+    .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+    .help("Exit selection (Esc)")
   }
 
   private var tasksMoreMenu: some View {
-    Menu {
+    PageMoreMenu(help: "More task actions", accessibilityIdentifier: "tasks-more-actions") {
       if !viewModel.displayTasks.isEmpty {
         Button {
           OmiMotion.withGated(.easeInOut(duration: 0.2)) {
             viewModel.toggleMultiSelectMode()
           }
         } label: {
-          Label("Select tasks…", systemImage: "checkmark.circle")
+          Label("Select Tasks", systemImage: "checkmark.circle")
         }
       }
 
@@ -4167,24 +4100,15 @@ struct TasksPage: View {
           {
             openChatForTask(task)
           } else {
-            adjustWindowWidth(expand: true)
             OmiMotion.withGated(.easeInOut(duration: 0.25)) {
               showChatPanel = true
             }
           }
         } label: {
-          Label(showChatPanel ? "Close task assistant" : "Open task assistant", systemImage: "bubble.left")
+          Label(showChatPanel ? "Close Task Assistant" : "Open Task Assistant", systemImage: "bubble.left")
         }
       }
-    } label: {
-      PageQueryActionLabel(icon: "ellipsis", title: "More")
     }
-    .menuStyle(.borderlessButton)
-    .menuIndicator(.hidden)
-    .fixedSize()
-    .help("More task actions")
-    .accessibilityLabel("More task actions")
-    .accessibilityIdentifier("tasks-more-actions")
   }
 
   private var chatToggleButton: some View {
@@ -4198,7 +4122,6 @@ struct TasksPage: View {
         openChatForTask(task)
       } else {
         // No task selected — open empty sidebar
-        adjustWindowWidth(expand: true)
         OmiMotion.withGated(.easeInOut(duration: 0.25)) {
           showChatPanel = true
         }
@@ -4221,16 +4144,7 @@ struct TasksPage: View {
   // MARK: - Loading View
 
   private var loadingView: some View {
-    VStack(spacing: OmiSpacing.lg) {
-      ProgressView()
-        .scaleEffect(1.2)
-        .tint(Ink.secondary)
-
-      Text("Loading tasks...")
-        .scaledFont(size: OmiType.body)
-        .foregroundColor(Ink.secondary)
-    }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    GlassLoadingState(label: "Loading tasks…")
   }
 
   // MARK: - Error View
@@ -4250,12 +4164,8 @@ struct TasksPage: View {
 
       Spacer(minLength: 8)
 
-      Button("Retry") {
-        viewModel.retrySortOrderSync()
-      }
-      .buttonStyle(.bordered)
-      .controlSize(.small)
-      .tint(Ink.secondary)
+      Button(GlassPageState.retryTitle) { viewModel.retrySortOrderSync() }
+        .buttonStyle(GlassPageState.retryStyle)
     }
     .padding(.horizontal, OmiSpacing.md)
     .padding(.vertical, OmiSpacing.sm)
@@ -4272,30 +4182,11 @@ struct TasksPage: View {
   }
 
   private func errorView(_: String) -> some View {
-    VStack(spacing: OmiSpacing.lg) {
-      Image(systemName: "exclamationmark.triangle.fill")
-        .scaledFont(size: 48)
-        .foregroundColor(Ink.secondary)
-
-      Text("Failed to load tasks")
-        .scaledFont(size: OmiType.heading, weight: .semibold)
-        .foregroundColor(Ink.primary)
-
-      Text("Check your connection and try again.")
-        .scaledFont(size: OmiType.body)
-        .foregroundColor(Ink.secondary)
-        .multilineTextAlignment(.center)
-        .padding(.horizontal, OmiSpacing.section)
-
-      Button("Try Again") {
-        Task {
-          await viewModel.loadTasks()
-        }
-      }
-      .buttonStyle(.bordered)
-      .tint(Ink.secondary)
-    }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    GlassErrorState(
+      title: "Couldn't Load Tasks",
+      message: "Check your connection and try again.",
+      retry: { Task { await viewModel.loadTasks() } }
+    )
   }
 
   // MARK: - Empty View
@@ -4304,33 +4195,18 @@ struct TasksPage: View {
     // Search with no hits gets its own messaging (mobile parity);
     // otherwise the list is genuinely empty for the current view.
     let isSearchEmpty = !viewModel.normalizedSearchQuery.isEmpty
-    return VStack(spacing: OmiSpacing.lg) {
-      Image(systemName: isSearchEmpty ? "magnifyingglass" : "tray.fill")
-        .scaledFont(size: 48)
-        .foregroundColor(Ink.secondary)
-
-      Text(isSearchEmpty ? "No Matching Tasks" : (viewModel.showCompleted ? "No Completed Tasks" : "All Caught Up"))
-        .scaledFont(size: 24, weight: .semibold)
-        .foregroundColor(Ink.primary)
-
-      Text(
-        isSearchEmpty
-          ? "No \(viewModel.showCompleted ? "completed" : "to-do") tasks match “\(viewModel.normalizedSearchQuery)”"
-          : (viewModel.showCompleted ? "Tasks you complete will appear here" : "You have no tasks yet")
-      )
-      .scaledFont(size: OmiType.body)
-      .foregroundColor(Ink.secondary)
-      .multilineTextAlignment(.center)
-
+    return GlassEmptyState(
+      systemImage: isSearchEmpty ? "magnifyingglass" : "tray",
+      title: isSearchEmpty ? "No Matching Tasks" : (viewModel.showCompleted ? "No Completed Tasks" : "All Caught Up"),
+      message: isSearchEmpty
+        ? "No \(viewModel.showCompleted ? "completed" : "to-do") tasks match “\(viewModel.normalizedSearchQuery)”"
+        : (viewModel.showCompleted ? "Tasks you complete will appear here" : "You have no tasks yet")
+    ) {
       if isSearchEmpty {
-        Button("Clear Search") {
-          viewModel.searchText = ""
-        }
-        .buttonStyle(.bordered)
-        .tint(Ink.secondary)
+        Button("Clear Search") { viewModel.searchText = "" }
+          .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
       }
     }
-    .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 
   // MARK: - Tasks List View
@@ -5068,10 +4944,9 @@ struct ChatSessionStatusIndicator: View {
         // Streaming: spinning indicator + status text
         HStack(spacing: OmiSpacing.xxs) {
           ProgressView()
-            .scaleEffect(0.5)
-            .frame(width: 10, height: 10)
+            .controlSize(.small)
 
-          Text(streamingStatus ?? "Responding...")
+          Text(streamingStatus ?? "Responding…")
             .scaledFont(size: OmiType.micro, weight: .medium)
             .foregroundColor(Ink.secondary)
             .lineLimit(1)
@@ -5370,14 +5245,9 @@ struct TaskRow: View {
     // Hover lives on the outer body — not on taskRowContent — so the drag
     // handle (which is a sibling of taskRowContent inside the outer HStack)
     // reveals when the cursor approaches it, not only when it's over text.
-    .onHover { hovering in
+    .pointingHandOnHover { hovering in
       isHovering = hovering
       onHover?(hovering ? task.id : nil)
-      if hovering {
-        NSCursor.pointingHand.push()
-      } else {
-        NSCursor.pop()
-      }
     }
   }
 
@@ -5989,7 +5859,7 @@ struct TaskRow: View {
         Button("Cancel") {
           showDatePicker = false
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
 
         Button("Save") {
           showDatePicker = false
@@ -5997,8 +5867,7 @@ struct TaskRow: View {
             await onUpdateDetails?(task, nil, editDueDate, nil, nil)
           }
         }
-        .buttonStyle(.borderedProminent)
-        .tint(Ink.primary)
+        .buttonStyle(OmiButtonStyle(.primary, size: .compact))
       }
     }
     .padding(OmiSpacing.lg)
@@ -6028,7 +5897,7 @@ struct TaskRow: View {
         Button("Cancel") {
           showRepeatPicker = false
         }
-        .buttonStyle(.bordered)
+        .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
 
         Button("Save") {
           showRepeatPicker = false
@@ -6037,8 +5906,7 @@ struct TaskRow: View {
             await onUpdateDetails?(task, nil, nil, nil, ruleToSave)
           }
         }
-        .buttonStyle(.borderedProminent)
-        .tint(Ink.primary)
+        .buttonStyle(OmiButtonStyle(.primary, size: .compact))
       }
     }
     .padding(OmiSpacing.lg)
@@ -6242,18 +6110,11 @@ struct TagBadgeInteractive: View {
             }
           }
 
-          Button {
+          Button("Done") {
             showTagPicker = false
             onUpdateTags(Array(editingTags))
-          } label: {
-            Text("Done")
-              .scaledFont(size: OmiType.caption, weight: .semibold)
-              .foregroundColor(Ink.surface)
-              .padding(.horizontal, OmiSpacing.lg)
-              .padding(.vertical, OmiSpacing.xs)
-              .background(Capsule().fill(Ink.primary))
           }
-          .buttonStyle(.plain)
+          .buttonStyle(OmiButtonStyle(.primary, size: .compact))
           .frame(maxWidth: .infinity, alignment: .trailing)
         }
         .padding(OmiSpacing.md)
@@ -6450,8 +6311,7 @@ struct TaskCreateSheet: View {
       // Footer
       HStack(spacing: OmiSpacing.md) {
         Button("Cancel") { dismissSheet() }
-          .buttonStyle(.bordered)
-          .controlSize(.large)
+          .buttonStyle(OmiButtonStyle(.secondary))
 
         Button {
           Task { await createTask() }
@@ -6462,9 +6322,7 @@ struct TaskCreateSheet: View {
             Text("Create").frame(width: 60)
           }
         }
-        .buttonStyle(.borderedProminent)
-        .tint(Ink.primary)
-        .controlSize(.large)
+        .buttonStyle(OmiButtonStyle(.primary))
         .disabled(!canSave || isSaving)
       }
       .padding(OmiSpacing.xl)
@@ -6506,58 +6364,6 @@ struct TaskCreateSheet: View {
   }
 }
 
-// MARK: - Undo Toast View
-
-struct UndoToastView: View {
-  let taskDescription: String
-  let undoCount: Int
-  let onUndo: () -> Void
-
-  var body: some View {
-    HStack(spacing: OmiSpacing.md) {
-      Image(systemName: "trash")
-        .scaledFont(size: OmiType.body, weight: .medium)
-        .foregroundColor(PageGlass.primaryActionLabel.opacity(0.78))
-
-      Text("Task deleted")
-        .scaledFont(size: OmiType.body, weight: .medium)
-        .foregroundColor(PageGlass.primaryActionLabel)
-        .lineLimit(1)
-
-      if undoCount > 1 {
-        Text("(\(undoCount))")
-          .scaledFont(size: OmiType.caption, weight: .medium)
-          .foregroundColor(PageGlass.primaryActionLabel.opacity(0.78))
-      }
-
-      Spacer()
-
-      Button {
-        onUndo()
-      } label: {
-        Text("Undo")
-          .scaledFont(size: OmiType.body, weight: .semibold)
-          .foregroundColor(Ink.surface)
-          .padding(.horizontal, OmiSpacing.md)
-          .padding(.vertical, OmiSpacing.xs)
-          .background(
-            Capsule()
-              .fill(Ink.primary)
-          )
-      }
-      .buttonStyle(.plain)
-    }
-    .padding(.horizontal, OmiSpacing.lg)
-    .padding(.vertical, OmiSpacing.sm)
-    .background(
-      Capsule()
-        .fill(Ink.primary)
-        .shadow(color: .black.opacity(0.08), radius: 8, x: 0, y: 4)
-    )
-    .frame(maxWidth: 360)
-  }
-}
-
 // MARK: - Inline Task Creation Row
 
 struct InlineTaskCreationRow: View {
@@ -6579,7 +6385,7 @@ struct InlineTaskCreationRow: View {
         .frame(width: 20, height: 20)
         .padding(.leading, OmiSpacing.md)
 
-      TextField("New task...", text: $text)
+      TextField("New task…", text: $text)
         .textFieldStyle(.plain)
         .scaledFont(size: OmiType.body)
         .foregroundColor(Ink.primary)
@@ -6654,13 +6460,13 @@ struct KeyboardHintBar: View {
         keyboardHint("\u{21A9} \u{21A9}", label: "Edit")
         keyboardHint("\u{2423}", label: "Done")
         keyboardHint("esc", label: "Deselect")
-        keyboardHint("\u{2318}D", label: "Delete")
+        keyboardHint("\u{2318}\u{232B}", label: "Delete")
         keyboardHint("\u{21E5}", label: "Indent")
         keyboardHint("\u{21E7} \u{21E5}", label: "Outdent")
       } else {
         keyboardHint("\u{2191} \u{2193}", label: "Navigate")
         keyboardHint("\u{2318}N", label: "New")
-        keyboardHint("\u{2318}D", label: "Delete")
+        keyboardHint("\u{2318}\u{232B}", label: "Delete")
         keyboardHint("\u{21E5}", label: "Indent")
         keyboardHint("\u{21E7} \u{21E5}", label: "Outdent")
       }

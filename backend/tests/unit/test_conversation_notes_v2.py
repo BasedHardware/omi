@@ -381,6 +381,20 @@ def test_note_source_refs_are_empty_without_transcript_headers(monkeypatch):
     assert result.action_items[0].source_segment_ids == []
 
 
+def test_source_segment_refs_drop_non_string_ids():
+    """Malformed non-string ids never become valid evidence references."""
+    from utils.llm.meeting_notes_validation import validate_structured_source_segment_ids
+
+    structured = SimpleNamespace(
+        sections=[SimpleNamespace(source_segment_ids=['s1', 7])],
+        action_items=[SimpleNamespace(source_segment_ids=['s1', 7])],
+    )
+    result = validate_structured_source_segment_ids(structured, ['s1', 7])
+
+    assert result.sections[0].source_segment_ids == ['s1']
+    assert result.action_items[0].source_segment_ids == ['s1']
+
+
 def test_telegram_screen_identity_prefix_uses_real_name_not_speaker_placeholder():
     from utils.conversations.meeting_context import context_from_screen_activity
     from utils.llm.conversation_prompt_prefix import build_conversation_prompt_prefix

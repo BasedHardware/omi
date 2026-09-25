@@ -14,7 +14,6 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/http/api/audio.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
-import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/gen/assets.gen.dart';
@@ -23,6 +22,7 @@ import 'package:omi/pages/conversation_detail/conversation_summary_selection.dar
 import 'package:omi/pages/conversation_detail/widgets/summarized_apps_sheet.dart';
 import 'package:omi/utils/audio/audio_timeline_mapper.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/ui/ui.dart';
 
 enum ConversationBottomBarMode {
   recording, // During active recording (no summary icon)
@@ -163,7 +163,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
 
     if (!_singleArtifact || _timelineMapper == null) {
       if (mounted) {
-        AppSnackbar.showSnackbarError(context.l10n.audioPlaybackUnavailable);
+        OmiFeedback.error(context, context.l10n.audioPlaybackUnavailable);
       }
       return;
     }
@@ -171,7 +171,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     final filePosition = _timelineMapper!.wallToArtifactStrict(segmentStartSeconds);
     if (filePosition == null) {
       if (mounted) {
-        AppSnackbar.showSnackbarError(context.l10n.audioPlaybackUnavailable);
+        OmiFeedback.error(context, context.l10n.audioPlaybackUnavailable);
       }
       return;
     }
@@ -258,7 +258,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
             _isAudioLoading = false;
           });
           if (mounted) {
-            AppSnackbar.showSnackbarError(context.l10n.anErrorOccurredTryAgain);
+            OmiFeedback.error(context, context.l10n.anErrorOccurredTryAgain);
           }
           return;
         }
@@ -291,7 +291,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
         Logger.debug('No cached audio sources for ${widget.conversation!.id}');
         AnalyticsManager().audioPlaybackFailed(conversationId: widget.conversation!.id, reason: 'no_matching_sources');
         if (mounted) {
-          AppSnackbar.showSnackbarError(context.l10n.anErrorOccurredTryAgain);
+          OmiFeedback.error(context, context.l10n.anErrorOccurredTryAgain);
         }
         return;
       }
@@ -352,10 +352,8 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
 
   String _formatDurationRemaining(Duration position) {
     final remaining = _totalDuration - position;
-    if (remaining.isNegative) return '0:00';
-    final minutes = remaining.inMinutes.remainder(60);
-    final seconds = remaining.inSeconds.remainder(60).toString().padLeft(2, '0');
-    return '$minutes:$seconds';
+    // OmiDuration.offset keeps the hours: 1h 5m remaining reads 1:05:00, not 5:00.
+    return OmiDuration.offset(remaining.isNegative ? 0 : remaining.inSeconds);
   }
 
   @override
@@ -378,14 +376,14 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     return Material(
       elevation: 8,
       color: Colors.transparent,
-      borderRadius: BorderRadius.circular(28),
+      borderRadius: OmiRadius.pillAll,
       child: Container(
         height: 56,
         width: 180,
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
         decoration: BoxDecoration(
-          color: const Color(0xFF1A0B2E),
-          borderRadius: BorderRadius.circular(28),
+          color: OmiColors.surface1,
+          borderRadius: OmiRadius.pillAll,
           boxShadow: [
             BoxShadow(
               color: Colors.black.withValues(alpha: 0.3),
@@ -433,7 +431,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
           width: (isTranscriptSelected && hasAudio) ? transcriptPillWidth : iconSize,
           height: iconSize,
           clipBehavior: Clip.hardEdge,
-          decoration: BoxDecoration(borderRadius: BorderRadius.circular(28)),
+          decoration: const BoxDecoration(borderRadius: OmiRadius.pillAll),
           child: OverflowBox(
             maxWidth: transcriptPillWidth,
             alignment: Alignment.center,
@@ -456,7 +454,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
           width: isSummarySelected ? summaryPillWidth : iconSize,
           height: iconSize,
           clipBehavior: Clip.hardEdge,
-          decoration: BoxDecoration(borderRadius: BorderRadius.circular(28)),
+          decoration: const BoxDecoration(borderRadius: OmiRadius.pillAll),
           child: OverflowBox(
             maxWidth: summaryPillWidth,
             alignment: Alignment.center,
@@ -489,8 +487,8 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       height: 56,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFF6B46C1),
-        borderRadius: BorderRadius.circular(28),
+        color: OmiColors.surface3,
+        borderRadius: OmiRadius.pillAll,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.3),
@@ -532,7 +530,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
         height: 56,
         width: 56,
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF6B46C1) : const Color(0xFF2D1B4E),
+          color: isSelected ? OmiColors.surface3 : OmiColors.surface1,
           shape: BoxShape.circle,
           boxShadow: [
             BoxShadow(
@@ -547,12 +545,13 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
           color: Colors.transparent,
           shape: const CircleBorder(),
           child: InkWell(
-            borderRadius: BorderRadius.circular(28),
+            borderRadius: OmiRadius.pillAll,
             onTap: () {
               HapticFeedback.mediumImpact();
               onTap();
             },
-            child: Center(child: FaIcon(icon, color: isSelected ? Colors.white : Colors.grey.shade400, size: 22)),
+            child: Center(
+                child: FaIcon(icon, color: isSelected ? OmiColors.textPrimary : OmiColors.textTertiary, size: 22)),
           ),
         ),
       ),
@@ -584,12 +583,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     void handleTap() {
       HapticFeedback.mediumImpact();
       if (widget.selectedTab == ConversationTab.summary) {
-        showModalBottomSheet(
-          context: context,
-          isScrollControlled: true,
-          backgroundColor: Colors.transparent,
-          builder: (context) => const SummarizedAppsBottomSheet(),
-        );
+        showSummarizedAppsSheet(context);
       } else {
         widget.onTabSelected(ConversationTab.summary);
       }
@@ -600,10 +594,6 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       displayName = reprocessingApp.name;
     } else if (summarySelection.isApp) {
       displayName = app?.name ?? context.l10n.unknownApp;
-    }
-
-    if (displayName.length > 8) {
-      displayName = '${displayName.substring(0, 8)}...';
     }
 
     String? appImageUrl;
@@ -624,8 +614,8 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       height: 56,
       padding: const EdgeInsets.symmetric(horizontal: 12),
       decoration: BoxDecoration(
-        color: const Color(0xFF6B46C1),
-        borderRadius: BorderRadius.circular(28),
+        color: OmiColors.surface3,
+        borderRadius: OmiRadius.pillAll,
         boxShadow: [
           BoxShadow(
             color: Colors.black.withValues(alpha: 0.3),
@@ -637,9 +627,9 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
       ),
       child: Material(
         color: Colors.transparent,
-        borderRadius: BorderRadius.circular(28),
+        borderRadius: OmiRadius.pillAll,
         child: InkWell(
-          borderRadius: BorderRadius.circular(28),
+          borderRadius: OmiRadius.pillAll,
           onTap: handleTap,
           child: Row(
             mainAxisSize: MainAxisSize.min,
@@ -652,12 +642,13 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
               Flexible(
                 child: Text(
                   displayName,
+                  maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+                  style: OmiType.footnote.copyWith(fontWeight: FontWeight.w600),
                 ),
               ),
               // Dropdown arrow
-              const Icon(Icons.keyboard_arrow_down, color: Colors.white, size: 18),
+              const Icon(Icons.keyboard_arrow_down, color: OmiColors.textPrimary, size: 18),
             ],
           ),
         ),
@@ -665,52 +656,31 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     );
   }
 
+  /// Play/pause: a 32pt white circle in a 44pt target, labelled for screen readers.
   Widget _buildPlayPauseButton() {
-    // Show loading only when actively loading
-    if (_isAudioLoading) {
-      return const SizedBox(
-        width: 32,
-        height: 32,
-        child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
-      );
-    }
+    Widget button(bool isPlaying) => OmiIconButton.filled(
+          icon: Icon(isPlaying ? Icons.pause : Icons.play_arrow, size: 20),
+          label: isPlaying ? context.l10n.pause : context.l10n.play,
+          diameter: 32,
+          fillColor: OmiColors.accent,
+          color: OmiColors.onAccent,
+          onPressed: _togglePlayPause,
+        );
+    const loading =
+        SizedBox.square(dimension: kOmiMinTapTarget, child: Center(child: OmiSpinner(size: OmiSpinnerSize.small)));
 
-    if (_audioPlayer == null) {
-      return GestureDetector(
-        onTap: _togglePlayPause,
-        child: Container(
-          width: 32,
-          height: 32,
-          decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-          child: const Icon(Icons.play_arrow, color: Color(0xFF6B46C1), size: 20),
-        ),
-      );
-    }
+    if (_isAudioLoading) return loading;
+    if (_audioPlayer == null) return button(false);
 
     return StreamBuilder<PlayerState>(
       stream: _audioPlayer!.playerStateStream,
       builder: (context, snapshot) {
         final playerState = snapshot.data;
-        final isPlaying = playerState?.playing ?? false;
         final processingState = playerState?.processingState ?? ProcessingState.idle;
-
         if (processingState == ProcessingState.loading || processingState == ProcessingState.buffering) {
-          return const SizedBox(
-            width: 32,
-            height: 32,
-            child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
-          );
+          return loading;
         }
-
-        return GestureDetector(
-          onTap: _togglePlayPause,
-          child: Container(
-            width: 32,
-            height: 32,
-            decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-            child: Icon(isPlaying ? Icons.pause : Icons.play_arrow, color: const Color(0xFF6B46C1), size: 20),
-          ),
-        );
+        return button(playerState?.playing ?? false);
       },
     );
   }
@@ -731,12 +701,12 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
               height: 4,
               decoration: BoxDecoration(
                 color: Colors.white.withValues(alpha: 0.3),
-                borderRadius: BorderRadius.circular(2),
+                borderRadius: const BorderRadius.all(Radius.circular(2)),
               ),
             ),
           ),
           const SizedBox(width: 8),
-          Text(_formatDurationRemaining(Duration.zero), style: const TextStyle(color: Colors.white, fontSize: 12)),
+          Text(_formatDurationRemaining(Duration.zero), style: OmiType.caption),
         ],
       );
     }
@@ -780,13 +750,14 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
                       height: 4,
                       decoration: BoxDecoration(
                         color: Colors.white.withValues(alpha: 0.3),
-                        borderRadius: BorderRadius.circular(2),
+                        borderRadius: const BorderRadius.all(Radius.circular(2)),
                       ),
                       child: FractionallySizedBox(
                         alignment: Alignment.centerLeft,
                         widthFactor: progress,
                         child: Container(
-                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(2)),
+                          decoration: const BoxDecoration(
+                              color: OmiColors.accent, borderRadius: BorderRadius.all(Radius.circular(2))),
                         ),
                       ),
                     ),
@@ -794,10 +765,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
                 ),
                 const SizedBox(width: 8),
                 // Duration remaining
-                Text(
-                  _formatDurationRemaining(combinedPosition),
-                  style: const TextStyle(color: Colors.white, fontSize: 12),
-                ),
+                Text(_formatDurationRemaining(combinedPosition), style: OmiType.caption),
               ],
             );
           },
@@ -882,7 +850,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
           height: 56,
           width: 56,
           decoration: BoxDecoration(
-            color: isSelected ? const Color(0xFF6B46C1) : const Color(0xFF2D1B4E),
+            color: isSelected ? OmiColors.surface3 : OmiColors.surface1,
             shape: BoxShape.circle,
             boxShadow: [
               BoxShadow(
@@ -897,12 +865,13 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
             color: Colors.transparent,
             shape: const CircleBorder(),
             child: InkWell(
-              borderRadius: BorderRadius.circular(28),
+              borderRadius: OmiRadius.pillAll,
               onTap: () {
                 HapticFeedback.mediumImpact();
                 onTap();
               },
-              child: Center(child: FaIcon(icon, color: isSelected ? Colors.white : Colors.grey.shade400, size: 22)),
+              child: Center(
+                  child: FaIcon(icon, color: isSelected ? OmiColors.textPrimary : OmiColors.textTertiary, size: 22)),
             ),
           ),
         ),
@@ -911,23 +880,13 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
   }
 
   Widget _buildStopButton() {
-    return Container(
-      height: 40,
-      width: 40,
-      decoration: BoxDecoration(
-        color: Colors.red,
-        shape: BoxShape.circle,
-        boxShadow: [BoxShadow(color: Colors.red.withValues(alpha: 0.4), spreadRadius: 1, blurRadius: 4)],
-      ),
-      child: Material(
-        color: Colors.transparent,
-        shape: const CircleBorder(),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(20),
-          onTap: widget.onStopPressed,
-          child: const Icon(Icons.stop_rounded, color: Colors.white, size: 24),
-        ),
-      ),
+    return OmiIconButton.filled(
+      icon: const Icon(Icons.stop_rounded, size: 24),
+      label: context.l10n.stopRecording,
+      diameter: 40,
+      fillColor: OmiColors.danger,
+      color: OmiColors.textPrimary,
+      onPressed: widget.onStopPressed,
     );
   }
 
@@ -935,18 +894,14 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     const double size = 28;
 
     if (isLoading) {
-      return const SizedBox(
-        width: size,
-        height: size,
-        child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
-      );
+      return const SizedBox.square(dimension: size, child: Center(child: OmiSpinner(size: OmiSpinnerSize.small)));
     }
 
     if (isUnknownApp) {
       return const SizedBox(
         width: size,
         height: size,
-        child: Icon(Icons.apps_outlined, color: Colors.white, size: 24),
+        child: Icon(Icons.apps_outlined, color: OmiColors.textPrimary, size: 24),
       );
     }
 
@@ -994,11 +949,8 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
           ),
         );
       },
-      placeholder: (context, url) => const SizedBox(
-        width: size,
-        height: size,
-        child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
-      ),
+      placeholder: (context, url) =>
+          const SizedBox.square(dimension: size, child: Center(child: OmiSpinner(size: OmiSpinnerSize.small))),
     );
   }
 }

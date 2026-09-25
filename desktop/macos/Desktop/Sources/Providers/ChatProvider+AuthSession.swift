@@ -32,16 +32,8 @@ extension ChatProvider {
 
   func reloadChatSessionsAfterAuthentication() async {
     guard AuthState.shared.isSignedIn else { return }
-    log("ChatProvider: sessionDidAuthenticate — reloading chat sessions")
-    let resumeSessionId = currentSession?.id
-    if multiChatEnabled {
-      await fetchSessions()
-      if let resumeSessionId, let session = sessions.first(where: { $0.id == resumeSessionId }) {
-        await selectSession(session)
-      }
-    } else {
-      await loadDefaultChatMessages()
-    }
+    log("ChatProvider: sessionDidAuthenticate — reloading main chat")
+    await loadDefaultChatMessages()
     await refreshJournalProjection()
   }
 }

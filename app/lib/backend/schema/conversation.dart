@@ -689,19 +689,29 @@ class ServerConversation {
     return _getDurationInSecondsByTranscripts();
   }
 
-  /// Calculates the conversation duration in seconds based on transcript segments
+  /// Calculates the conversation duration in seconds based on transcript segments.
+  ///
+  /// Computes the speech span (lastEndTime - firstStartTime) so that speech
+  /// recorded late in an ongoing continuous audio stream is not inflated by the
+  /// stream's session start offset (#18520).
   int _getDurationInSecondsByTranscripts() {
     if (transcriptSegments.isEmpty) return 0;
 
-    // Find the last segment's end time
-    double lastEndTime = 0;
+    double firstStartTime = transcriptSegments.first.start;
+    double lastEndTime = transcriptSegments.first.end;
+
     for (var segment in transcriptSegments) {
+      if (segment.start < firstStartTime) {
+        firstStartTime = segment.start;
+      }
       if (segment.end > lastEndTime) {
         lastEndTime = segment.end;
       }
     }
 
-    return lastEndTime.toInt();
+    if (firstStartTime < 0) firstStartTime = 0;
+    final duration = lastEndTime - firstStartTime;
+    return duration > 0 ? duration.toInt() : 0;
   }
 
   /// Matches desktop's recoverable-content heuristic: one transcript segment

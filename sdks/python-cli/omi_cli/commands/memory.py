@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Optional
 import typer
 from rich.markup import escape
 
+from omi_cli.client import path_segment
 from omi_cli.errors import NotFoundError, UsageError
 from omi_cli.models import MemoryCategory, MemoryVisibility
 from omi_cli.output import shorten
@@ -134,7 +135,7 @@ def update_memory(
             message="No fields to update", detail="Provide at least one of --content/--category/--visibility/--tag."
         )
     with ctx.make_client() as client:
-        result = client.patch(f"/v1/dev/user/memories/{memory_id}", json_body=body)
+        result = client.patch(f"/v1/dev/user/memories/{path_segment(memory_id)}", json_body=body)
     ctx.renderer.success(f"Memory updated: [bold]{escape(memory_id)}[/bold]")
     ctx.renderer.emit(result, title="memory")
 
@@ -149,7 +150,7 @@ def delete_memory(
     if not confirm:
         typer.confirm(f"Delete memory {memory_id}?", abort=True)
     with ctx.make_client() as client:
-        result = client.delete(f"/v1/dev/user/memories/{memory_id}")
+        result = client.delete(f"/v1/dev/user/memories/{path_segment(memory_id)}")
     if ctx.renderer.json_mode:
         ctx.renderer.emit(result)
     ctx.renderer.success(f"Deleted memory [bold]{escape(memory_id)}[/bold].")

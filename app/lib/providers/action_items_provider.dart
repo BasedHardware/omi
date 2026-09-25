@@ -17,6 +17,7 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/analytics/product_telemetry.dart';
+import 'package:omi/ui/feedback/omi_feedback.dart';
 
 typedef ActionItemsFetcher = Future<ActionItemsResponse?> Function({
   int limit,
@@ -95,6 +96,10 @@ class ActionItemsProvider extends ChangeNotifier {
   // IDs of action items that have been optimistically deleted but whose server
   // delete may still be in flight. Guarded against re-insertion by fetch/load.
   final Set<String> _pendingDeletionIds = {};
+
+  // Single-task deletes waiting for their Undo toast to close (docs/ux-contract.md §4): hidden
+  // from every list, not yet deleted on the server.
+  final Map<String, ({ActionItemWithMetadata item, int index, int homeIndex})> _stagedDeletes = {};
 
   // Search state — lexical client-side filter over already-loaded items.
   // Backend vector search will replace the filter implementation behind
@@ -676,6 +681,63 @@ class ActionItemsProvider extends ChangeNotifier {
     }
   }
 
+  /// Hides [item] from the Tasks list and Home at once and holds its server delete until
+  /// [commitStagedDelete]; [undoStagedDelete] puts it back where it was. Every single-task delete
+  /// goes through this so it can offer Undo (D5) — see `deleteTaskWithUndo`.
+  void stageDeleteActionItem(ActionItemWithMetadata item) {
+    if (_stagedDeletes.containsKey(item.id)) return;
+    _pendingDeletionIds.add(item.id);
+    final index = _actionItems.indexWhere((i) => i.id == item.id);
+    final homeIndex = _homeDayItems.indexWhere((i) => i.id == item.id);
+    _actionItems.removeWhere((i) => i.id == item.id);
+    _homeDayItems.removeWhere((i) => i.id == item.id);
+    _selectedItems.remove(item.id);
+    _stagedDeletes[item.id] = (item: item, index: index, homeIndex: homeIndex);
+    notifyListeners();
+  }
+
+  /// Restores a task hidden by [stageDeleteActionItem]. False when it was not staged (already
+  /// committed or restored).
+  bool undoStagedDelete(String id) {
+    final staged = _stagedDeletes.remove(id);
+    if (staged == null) return false;
+    _pendingDeletionIds.remove(id);
+    if (!_actionItems.any((i) => i.id == id)) {
+      _actionItems.insert((staged.index == -1 ? 0 : staged.index).clamp(0, _actionItems.length), staged.item);
+    }
+    if (staged.homeIndex != -1 && !_homeDayItems.any((i) => i.id == id)) {
+      _homeDayItems.insert(staged.homeIndex.clamp(0, _homeDayItems.length), staged.item);
+    }
+    notifyListeners();
+    return true;
+  }
+
+  /// Deletes a task hidden by [stageDeleteActionItem] on the server. On failure the task comes
+  /// back where it was. False when it was not staged.
+  Future<bool> commitStagedDelete(String id) async {
+    final staged = _stagedDeletes.remove(id);
+    if (staged == null) return false;
+    _deleteAppleReminderIfLinked(staged.item);
+    var success = false;
+    try {
+      success = await _deleteActionItemRequest(id);
+    } catch (e) {
+      Logger.debug('Error deleting action item: $e');
+    }
+    if (!success) {
+      _pendingDeletionIds.remove(id);
+      _restoreDeletedItem(staged.item, staged.index);
+      if (staged.homeIndex != -1 && !_homeDayItems.any((i) => i.id == id)) {
+        _homeDayItems.insert(staged.homeIndex.clamp(0, _homeDayItems.length), staged.item);
+        notifyListeners();
+      }
+    }
+    return success;
+  }
+
+  @visibleForTesting
+  bool isDeleteStaged(String id) => _stagedDeletes.containsKey(id);
+
   void _restoreDeletedItem(ActionItemWithMetadata item, int index) {
     if (index == -1 || _actionItems.any((actionItem) => actionItem.id == item.id)) return;
     _actionItems.insert(index.clamp(0, _actionItems.length), item);
@@ -993,6 +1055,7 @@ class ActionItemsProvider extends ChangeNotifier {
     _homeDayLoaded = false;
     _homeTodayLoad = null;
     _selectedItems = {};
+    _stagedDeletes.clear();
     _pendingSortUpdates.clear();
     _pendingIndentUpdates.clear();
     notifyListeners();
@@ -1045,15 +1108,7 @@ class ActionItemsProvider extends ChangeNotifier {
       notifyListeners();
 
       if (context != null && context.mounted) {
-        ScaffoldMessenger.of(context)
-          ..clearSnackBars()
-          ..showSnackBar(
-            SnackBar(
-              content: Text(context.l10n.bulkDeleteFailed),
-              backgroundColor: const Color(0xFFB3261E),
-              duration: const Duration(seconds: 3),
-            ),
-          );
+        OmiFeedback.error(context, context.l10n.bulkDeleteFailed);
       }
       return false;
     }
@@ -1101,28 +1156,13 @@ class ActionItemsProvider extends ChangeNotifier {
     final items = selected.where((i) => !i.exported).toList(growable: false);
     final total = items.length;
 
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.clearSnackBars();
-
     if (total == 0) {
-      messenger.showSnackBar(
-        SnackBar(
-          content: Text(context.l10n.bulkExportAlreadyExported),
-          backgroundColor: const Color(0xFF2C2C2E),
-          duration: const Duration(seconds: 3),
-        ),
-      );
+      OmiFeedback.info(context, context.l10n.bulkExportAlreadyExported);
       endSelection();
       return;
     }
 
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(context.l10n.bulkExportInProgress),
-        duration: const Duration(seconds: 30),
-        backgroundColor: Colors.blue,
-      ),
-    );
+    OmiFeedback.progress(context, context.l10n.bulkExportInProgress);
 
     final results = await Future.wait(items.map((i) => ActionItemExportService.export(i, platform)));
     final successCount = results.where((r) => r == ExportResult.success).length;
@@ -1131,18 +1171,14 @@ class ActionItemsProvider extends ChangeNotifier {
     await fetchActionItems();
     endSelection();
 
-    if (!context.mounted) return;
-    messenger.clearSnackBars();
-    final message = successCount == total
-        ? context.l10n.bulkExportSuccess(successCount, platform.displayName)
-        : context.l10n.bulkExportPartial(successCount, total, platform.displayName);
-    messenger.showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: successCount == total ? Colors.green : Colors.orange,
-        duration: const Duration(seconds: 3),
-      ),
-    );
+    if (!context.mounted) {
+      return;
+    }
+    if (successCount == total) {
+      OmiFeedback.confirm(context, context.l10n.bulkExportSuccess(successCount, platform.displayName));
+    } else {
+      OmiFeedback.error(context, context.l10n.bulkExportPartial(successCount, total, platform.displayName));
+    }
   }
 
   @override

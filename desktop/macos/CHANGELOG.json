@@ -2,6 +2,44 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.388",
+      "date": "2026-09-25",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.387",
+      "date": "2026-09-25",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.386",
+      "date": "2026-09-24",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.385",
+      "date": "2026-09-24",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.384",
+      "date": "2026-09-24",
+      "changes": [
+        "Improved the conversation page: the title, date, people, and actions stay at the top while you switch between Summary and Transcript, and you can star a conversation from its page",
+        "Clicking the microphone in the top bar now opens a menu to choose Off, Always On or Only Meetings instead of switching modes on each click; the icon stays a microphone in every mode, and waiting for a call has its own ring-shaped dot so green always means recording",
+        "A conversation recorded by both your Mac and your Omi device now shows as one row with a badge for each device, and its page lists every recording so you can open or separate one",
+        "Made navigation, closing, deleting and copying work the same way across the app: Back returns to where you came from, Esc steps back one layer, every delete can be undone or asks first, and copy actions confirm"
+      ]
+    },
+    {
       "version": "0.12.383",
       "date": "2026-09-24",
       "changes": [

@@ -171,6 +171,22 @@ _load_module_from_file(
     BACKEND_DIR / "utils" / "conversations" / "relevance_rules.py",
 )
 
+# Pure helpers imported by conversation_processing; load the real modules so
+# the isolated import chain exercises production code. meeting_participants and
+# meeting_notes_validation resolve models/* through the real models.__path__.
+_load_module_from_file(
+    "utils.conversations.meeting_participants",
+    BACKEND_DIR / "utils" / "conversations" / "meeting_participants.py",
+)
+_load_module_from_file(
+    "utils.llm.meeting_notes_rich_prompts",
+    BACKEND_DIR / "utils" / "llm" / "meeting_notes_rich_prompts.py",
+)
+_load_module_from_file(
+    "utils.llm.meeting_notes_validation",
+    BACKEND_DIR / "utils" / "llm" / "meeting_notes_validation.py",
+)
+
 conv_proc = _load_module_from_file(
     "utils.llm.conversation_processing",
     BACKEND_DIR / "utils" / "llm" / "conversation_processing.py",

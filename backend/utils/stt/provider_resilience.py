@@ -77,6 +77,7 @@ class ProviderCircuitBreaker:
         clock: Callable[[], float] = time.monotonic,
         serve_error_cooldown_seconds: float | None = None,
         serve_error_successes_to_close: int = 3,
+        account_cooldown_seconds: float | None = None,
     ) -> None:
         if failure_threshold < 1:
             raise ValueError('failure_threshold must be >= 1')
@@ -89,10 +90,19 @@ class ProviderCircuitBreaker:
         serve_cooldown = 180.0 if serve_error_cooldown_seconds is None else serve_error_cooldown_seconds
         if serve_cooldown <= 0:
             raise ValueError('serve_error_cooldown_seconds must be > 0')
+        # Account-level rejections (HTTP 402 balance exhaustion) are deterministic
+        # for the whole credential: no half-open probe can succeed until the bill
+        # is paid, so the account bench defaults to 30m.
+        account_cooldown = 1800.0 if account_cooldown_seconds is None else account_cooldown_seconds
+        if account_cooldown <= 0:
+            raise ValueError('account_cooldown_seconds must be > 0')
         self._failure_threshold = failure_threshold
         self._cooldown_seconds = cooldown_seconds
         self._serve_error_cooldown_seconds = serve_cooldown
         self._serve_error_successes_to_close = serve_error_successes_to_close
+        # Default bench armed by record_account_rejection(); record_account_failure()
+        # callers may pass their own window per call.
+        self._account_cooldown_seconds = account_cooldown
         # Repeated serve-error deaths escalate the bench: the baseline window is
         # the first rung, each further serve death doubles it, and the ladder
         # caps at 8x so an ongoing outage cannot bench a provider forever.
@@ -116,6 +126,26 @@ class ProviderCircuitBreaker:
         if self._opened_by_serve_error:
             return self._serve_error_bench_seconds
         return self._cooldown_seconds
+
+    @property
+    def account_cooldown_seconds_remaining(self) -> float:
+        """Seconds left in the current open window (0 when not open)."""
+        with self._lock:
+            if self._state != 'open':
+                return 0.0
+            return max(0.0, self._active_cooldown() - (self._clock() - self._opened_at))
+
+    def account_cooldown_elapsed(self) -> bool:
+        """Read-only: an account-level bench would let a dial through.
+
+        The account clause of ``allow_request`` (the one not even ``force``
+        bypasses) without claiming the single half-open probe slot, so a
+        fallback-leg dial can refuse to re-offer a provider whose credential
+        is rejecting at account level (HTTP 402) while serve-death and
+        connect benches stay outside its judgment.
+        """
+        with self._lock:
+            return self._account_cooldown is None or self._clock() - self._opened_at >= self._account_cooldown
 
     @property
     def state(self) -> str:
@@ -250,6 +280,21 @@ class ProviderCircuitBreaker:
             self.record_success()
             return
         self.record_failure()
+
+    def record_account_rejection(self) -> None:
+        """Open the circuit for the account cooldown after an account-level rejection.
+
+        An HTTP 402 (payment required / balance exhausted) is not evidence about
+        connect health — the WebSocket upgrade path rejected the request before
+        any audio flowed, and it will keep rejecting for the whole credential
+        until the account is funded. Re-admitting every 30s (connect cooldown)
+        re-dials a dead account every session; the account bench (default 30m)
+        makes one probe per half hour the cost of noticing the bill got paid.
+        A half-open probe failure re-opens for the full account cooldown, and a
+        single probe success closes (the account is served again the moment it
+        is actually usable).
+        """
+        self.record_account_failure(self._account_cooldown_seconds)
 
     def deferred_result_callbacks(self) -> tuple[Callable[[], None], Callable[[], None]]:
         """A batch adapter proves health on its first POST, not local construction."""

@@ -209,6 +209,19 @@ from utils.conversations.meeting_context import (
     resolve_meeting_context,
     select_overlapping_meeting,
 )
+from utils.conversations.meeting_context import (
+    meeting_context_from_redis_mapping as _meeting_context_from_redis_mapping,
+    meeting_context_from_time_overlap as _meeting_context_from_time_overlap,
+    stored_meeting_context as _stored_meeting_context,
+    store_meeting_context as _store_meeting_context,
+)
+from utils.conversations.meeting_notes_wiring import (
+    meeting_notes_rich_context_enabled as _meeting_notes_rich_context_enabled,
+    meeting_notes_screen_text_context_enabled as _meeting_notes_screen_text_context_enabled,
+    rich_notes_inputs,
+    rich_roster_inputs,
+)
+from utils.conversations.meeting_participants import MeetingRoster
 from utils.cloud_tasks import is_audio_merge_dispatch_enabled
 from utils.jit_first_open_policy import resolve_authorized_first_open_plan
 from utils.other.storage import (
@@ -447,6 +460,17 @@ def _get_structured(
             started_at = cast(datetime, ext_conv.started_at)
             if ext_conv.text_source == ExternalIntegrationConversationSource.audio:
                 if _conversation_notes_v2_enabled():
+                    roster: Optional[MeetingRoster] = None
+                    meeting_context_block: Optional[str] = None
+                    if _meeting_notes_rich_context_enabled():
+                        roster, meeting_context_block, _desktop_capture = rich_notes_inputs(
+                            uid,
+                            conversation,
+                            calendar_context,
+                            tz_str,
+                            include_background=True,
+                            include_screen_text=_meeting_notes_screen_text_context_enabled(),
+                        )
                     prefix = build_conversation_prompt_prefix(
                         conversation_id=prompt_conversation_id,
                         transcript=ext_conv.text,
@@ -454,6 +478,7 @@ def _get_structured(
                         timezone_name=tz_str,
                         language_code=language_code,
                         calendar_context=calendar_context,
+                        roster=roster,
                     )
                     with track_usage(uid, Features.CONVERSATION_STRUCTURE):
                         structured = get_conversation_notes(
@@ -464,6 +489,9 @@ def _get_structured(
                             tz=tz_str,
                             task_intelligence_capture=task_intelligence_capture,
                             existing_action_items=_fetch_dedup_candidates_for_query(uid, ext_conv.text, conversation),
+                            meeting_context=meeting_context_block,
+                            rich_context_enabled=roster is not None,
+                            roster=roster,
                         )
                     validate_structured_source_segment_ids(structured, ())
                     return structured, False
@@ -588,6 +616,18 @@ def _get_structured(
         # If not discarded, proceed to generate the structured summary from transcript and/or photos.
         conv_started_at = cast(datetime, main_conv.started_at)
         if _conversation_notes_v2_enabled():
+            roster: Optional[MeetingRoster] = None
+            meeting_context_block: Optional[str] = None
+            desktop_capture = False
+            if _meeting_notes_rich_context_enabled():
+                roster, meeting_context_block, desktop_capture = rich_notes_inputs(
+                    uid,
+                    main_conv,
+                    calendar_context,
+                    tz_str,
+                    include_background=True,
+                    include_screen_text=_meeting_notes_screen_text_context_enabled(),
+                )
             prefix = build_conversation_prompt_prefix(
                 conversation_id=prompt_conversation_id,
                 transcript=action_items_transcript,
@@ -598,6 +638,8 @@ def _get_structured(
                 photos=main_conv.photos,
                 speaker_map=speaker_map,
                 transcript_segment_ids=transcript_segment_ids,
+                roster=roster,
+                desktop_meeting_capture=desktop_capture,
             )
             with track_usage(uid, Features.CONVERSATION_STRUCTURE):
                 structured = get_conversation_notes(
@@ -609,6 +651,9 @@ def _get_structured(
                     task_intelligence_capture=task_intelligence_capture,
                     existing_action_items=_fetch_dedup_candidates_for_query(uid, transcript_text, conversation),
                     trusted_wake_word_markers=has_wake_word_marker,
+                    meeting_context=meeting_context_block,
+                    rich_context_enabled=roster is not None,
+                    roster=roster,
                 )
             validate_structured_source_segment_ids(structured, transcript_segment_ids)
             return structured, False
@@ -846,18 +891,25 @@ def trigger_conversation_apps(
             prompt_prefix = None
             if _conversation_notes_v2_enabled() and conversation.started_at:
                 app_transcript, app_speaker_map = conversation_transcript_and_speaker_map(uid, conversation, people)
+                app_calendar_context = _stored_meeting_context(conversation)
+                app_roster: Optional[MeetingRoster] = None
+                app_desktop_capture = False
+                if _meeting_notes_rich_context_enabled():
+                    app_roster, app_desktop_capture = rich_roster_inputs(uid, conversation, app_calendar_context)
                 prompt_prefix = build_conversation_prompt_prefix(
                     conversation_id=conversation.id,
                     transcript=app_transcript,
                     started_at=conversation.started_at,
                     timezone_name=notification_db.get_user_time_zone(uid) or '',
                     language_code=language_code,
-                    calendar_context=_stored_meeting_context(conversation),
+                    calendar_context=app_calendar_context,
                     photos=conversation.photos,
                     speaker_map=app_speaker_map,
                     transcript_segment_ids=[
                         getattr(segment, 'id', None) for segment in conversation.transcript_segments
                     ],
+                    roster=app_roster,
+                    desktop_meeting_capture=app_desktop_capture,
                 )
             result = get_app_result(
                 transcript,
@@ -1544,6 +1596,10 @@ def _extract_memories_canonical(
                     conversation.transcript_segments, user_name=user_name, people=prompt_people
                 )
                 prompt_speaker_map = {}
+            prompt_roster: Optional[MeetingRoster] = None
+            prompt_desktop_capture = False
+            if _meeting_notes_rich_context_enabled():
+                prompt_roster, prompt_desktop_capture = rich_roster_inputs(uid, conversation, calendar_context)
             prompt_prefix = build_conversation_prompt_prefix(
                 conversation_id=conversation.id,
                 transcript=prompt_transcript,
@@ -1554,6 +1610,8 @@ def _extract_memories_canonical(
                 photos=conversation.photos,
                 speaker_map=prompt_speaker_map,
                 transcript_segment_ids=[getattr(segment, 'id', None) for segment in conversation.transcript_segments],
+                roster=prompt_roster,
+                desktop_meeting_capture=prompt_desktop_capture,
             )
         try:
             extracted_candidates = extract_canonical_l1_memory_candidates(
@@ -2456,56 +2514,6 @@ def _flag_off_identified_basic_deny(
     return plan
 
 
-def _stored_meeting_context(conversation: Any) -> Optional[CalendarMeetingContext]:
-    direct = getattr(conversation, 'calendar_meeting_context', None)
-    if isinstance(direct, CalendarMeetingContext):
-        return direct
-    if isinstance(direct, dict) and direct:
-        return CalendarMeetingContext(**direct)
-    raw_external_data = getattr(conversation, 'external_data', None)
-    external_data = raw_external_data if isinstance(raw_external_data, dict) else {}
-    raw = external_data.get('calendar_meeting_context')
-    if isinstance(raw, CalendarMeetingContext):
-        return raw
-    if isinstance(raw, dict) and raw:
-        return CalendarMeetingContext(**raw)
-    return None
-
-
-def _store_meeting_context(conversation: Any, context: CalendarMeetingContext) -> None:
-    if isinstance(conversation, CreateConversation):
-        conversation.calendar_meeting_context = context
-        return
-    external_data = dict(getattr(conversation, 'external_data', None) or {})
-    external_data['calendar_meeting_context'] = context.model_dump(mode='json')
-    conversation.external_data = external_data
-
-
-def _meeting_context_from_redis_mapping(uid: str, conversation: Any) -> Optional[CalendarMeetingContext]:
-    """Exact conversation->meeting association, when one was recorded.
-
-    `redis_db.set_conversation_meeting_id` is written in exactly one place
-    (`routers/listen/conversations.py`, at desktop conversation creation) and only
-    when a stored meeting already overlaps that instant, so this is frequently
-    absent. It is an optimization, never the only path.
-    """
-    conversation_id = getattr(conversation, 'id', None)
-    if not isinstance(conversation, Conversation) or not conversation_id:
-        return None
-    try:
-        meeting_id = redis_db.get_conversation_meeting_id(conversation_id)
-        if not meeting_id:
-            return None
-        meeting_data = calendar_db.get_meeting(uid, meeting_id)
-        if not meeting_data:
-            return None
-        parsed = CalendarMeetingContext.from_records([meeting_data])
-        return parsed[0] if parsed else None
-    except Exception as exc:
-        logger.error('Error retrieving mapped meeting context for conversation %s: %s', conversation_id, exc)
-        return None
-
-
 def _calendar_overlap_retains_conversation(
     uid: str, started_at: Optional[datetime], finished_at: Optional[datetime]
 ) -> bool:
@@ -2535,25 +2543,6 @@ def _calendar_overlap_retains_conversation(
     except Exception as exc:
         logger.error('Error reading Google Calendar for discard override uid=%s: %s', uid, exc)
         return False
-
-
-def _meeting_context_from_time_overlap(
-    uid: str, started_at: Optional[datetime], finished_at: Optional[datetime]
-) -> Optional[CalendarMeetingContext]:
-    """Time-overlap lookup against the user's stored meetings.
-
-    Independent of the Redis mapping and of any OAuth grant: it reads the same
-    `users/{uid}/meetings` collection that `POST /v1/calendar/meetings` writes.
-    """
-    if started_at is None or finished_at is None:
-        return None
-    try:
-        tolerance = timedelta(minutes=MEETING_SEARCH_TOLERANCE_MINUTES)
-        records = calendar_db.get_meetings_in_time_range(uid, started_at - tolerance, finished_at + tolerance)
-        return select_overlapping_meeting(records, started_at=started_at, finished_at=finished_at)
-    except Exception as exc:
-        logger.error('Error reading stored meetings by time range for uid %s: %s', uid, exc)
-        return None
 
 
 def _enrich_meeting_context(uid: str, conversation: Any) -> None:

@@ -8,7 +8,7 @@ extension ConversationSource {
   var captureLabel: String {
     switch self {
     case .desktop: return "Desktop"
-    case .omi: return "omi"
+    case .omi: return "Pendant"
     case .phone: return "Phone"
     case .appleWatch: return "Apple Watch"
     case .workflow: return "Workflow"
@@ -137,6 +137,10 @@ extension Notification.Name {
   /// (`conversation_detail_recording`), the same calls its chips and confirmation make.
   static let desktopAutomationConversationRecordingRequested = Notification.Name(
     "desktopAutomationConversationRecordingRequested")
+  /// Raises one of the open conversation page's own prompts (rename, delete) or presses an action
+  /// item's task control, for `conversation_detail_prompt`.
+  static let desktopAutomationConversationPromptRequested = Notification.Name(
+    "desktopAutomationConversationPromptRequested")
 }
 
 // MARK: - Separation
@@ -359,10 +363,15 @@ struct CaptureRecordingsPanelHost: ViewModifier {
   let onOpen: (CaptureGroupRecording) -> Void
   let onSeparate: (CaptureGroupRecording) -> Void
 
-  @State private var pendingSeparation: CaptureGroupRecording?
+  /// The recording awaiting "Separate" confirmation. Owned by the page so automation can raise the
+  /// same confirmation a row's Separate… raises.
+  @Binding var pendingSeparation: CaptureGroupRecording?
 
   func body(content: Content) -> some View {
-    content
+    // Captured here: the dialog clears the binding before it runs the confirm action.
+    let pending = pendingSeparation
+    return
+      content
       .overlayPreferenceValue(CaptureRecordingsAnchorKey.self) { anchor in
         GeometryReader { proxy in
           if isOpen, let anchor, !recordings.isEmpty {
@@ -393,19 +402,25 @@ struct CaptureRecordingsPanelHost: ViewModifier {
           }
         }
       }
-      .onExitCommand { isOpen = false }
-      .alert(
-        "Separate this recording?",
-        isPresented: Binding(get: { pendingSeparation != nil }, set: { if !$0 { pendingSeparation = nil } }),
-        presenting: pendingSeparation
-      ) { recording in
-        Button("Cancel", role: .cancel) {}
-        Button("Separate") { onSeparate(recording) }
-      } message: { recording in
-        Text(
-          "\(CaptureGroupPresentation.label(of: recording)) will show as its own conversation and won’t be grouped with this event again."
-        )
+      // Esc closes the open list before the page's own Esc leaves the transcript or the page.
+      .onEscapeKey(priority: .modal) {
+        guard isOpen else { return false }
+        isOpen = false
+        return true
       }
+      .shellConfirmation(
+        isPresented: Binding(get: { pendingSeparation != nil }, set: { if !$0 { pendingSeparation = nil } }),
+        title: "Separate This Recording?",
+        message: pending.map(Self.separationMessage) ?? "",
+        confirmTitle: "Separate",
+        isDestructive: false
+      ) {
+        if let pending { onSeparate(pending) }
+      }
+  }
+
+  static func separationMessage(for recording: CaptureGroupRecording) -> String {
+    "\(CaptureGroupPresentation.label(of: recording)) will show as its own conversation and won’t be grouped with this event again."
   }
 }
 

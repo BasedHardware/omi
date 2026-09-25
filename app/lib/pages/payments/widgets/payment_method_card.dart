@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:skeletonizer/skeletonizer.dart';
 
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/pages/payments/models/payment_method_config.dart';
 
@@ -44,13 +45,13 @@ class PaymentMethodCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Skeleton.leaf(
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(OmiSpacing.md),
         decoration: BoxDecoration(
           color: backgroundColor,
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: OmiRadius.mdAll,
           border: !isConnected
               ? Border.all(
-                  color: Colors.white.withValues(alpha: 0.3),
+                  color: OmiColors.border,
                   width: 2,
                   strokeAlign: BorderSide.strokeAlignOutside,
                   style: BorderStyle.solid,
@@ -64,44 +65,40 @@ class PaymentMethodCard extends StatelessWidget {
               children: [
                 Container(
                   padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
+                  decoration: const BoxDecoration(color: OmiColors.surface3, borderRadius: OmiRadius.smAll),
                   child: icon,
                 ),
-                const SizedBox(width: 16),
+                const SizedBox(width: OmiSpacing.md),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         title,
-                        style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w500),
+                        style: OmiType.headline,
                       ),
                       const SizedBox(height: 8),
                       Container(
                         padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                         decoration: BoxDecoration(
-                          color: isActive ? Colors.green.withValues(alpha: 0.2) : Colors.white.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(12),
+                          color: isActive ? OmiColors.successSurface : OmiColors.surface3,
+                          borderRadius: OmiRadius.mdAll,
                         ),
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
                             if (isActive) ...[
-                              const Icon(Icons.check_circle, color: Colors.green, size: 16),
+                              const Icon(Icons.check_circle, color: OmiColors.success, size: 16),
                               const SizedBox(width: 4),
                             ] else if (isConnected && !isActive) ...[
-                              Icon(Icons.circle, color: Colors.white.withValues(alpha: 0.7), size: 16),
+                              const Icon(Icons.circle, color: OmiColors.textSecondary, size: 16),
                               const SizedBox(width: 4),
                             ],
                             Text(
                               subtitle,
-                              style: TextStyle(
-                                color: isActive ? Colors.green : Colors.white.withValues(alpha: 0.7),
-                                fontSize: 14,
-                                fontWeight: isActive ? FontWeight.w500 : FontWeight.normal,
+                              style: OmiType.footnote.copyWith(
+                                color: isActive ? OmiColors.success : OmiColors.textSecondary,
+                                fontWeight: isActive ? FontWeight.w500 : FontWeight.w400,
                               ),
                             ),
                           ],
@@ -112,26 +109,17 @@ class PaymentMethodCard extends StatelessWidget {
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: OmiSpacing.md),
             Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 if (isConnected && isActive) ...[
-                  ElevatedButton(
-                    onPressed: onManageTap,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: Colors.black,
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                    child: Text(context.l10n.update, style: const TextStyle(fontWeight: FontWeight.w500)),
-                  ),
-                  const SizedBox(width: 16),
+                  OmiButton(label: context.l10n.update, onPressed: onManageTap, size: OmiButtonSize.compact),
                 ],
                 if (!isActive && isConnected) ...[
                   PopupMenuButton<String>(
-                    icon: Icon(Icons.more_vert, color: Colors.white.withValues(alpha: 0.7)),
+                    icon: const Icon(Icons.more_vert, color: OmiColors.textSecondary),
+                    tooltip: context.l10n.moreOptions,
                     onSelected: (value) {
                       if (value == 'update') {
                         onManageTap?.call();
@@ -147,16 +135,7 @@ class PaymentMethodCard extends StatelessWidget {
                   ),
                 ],
                 if (!isConnected) ...[
-                  ElevatedButton(
-                    onPressed: onManageTap,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: Colors.black,
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    ),
-                    child: Text(context.l10n.connect, style: const TextStyle(fontWeight: FontWeight.w500)),
-                  ),
+                  OmiButton(label: context.l10n.connect, onPressed: onManageTap, size: OmiButtonSize.compact),
                 ],
               ],
             ),

@@ -1195,7 +1195,11 @@ struct DesktopHomeView: View {
           // labelled "Conversations" and the hub's remembered view defaults to Memories, so
           // without this the menu item lands you somewhere it did not name. The two automation
           // routes below already did this by hand; the menu and keyboard path did not.
-          if let destination = MemoryHubDestination.destination(for: item) {
+          if let hubRaw = notification.userInfo?["hubDestination"] as? Int,
+            let destination = MemoryHubDestination(rawValue: hubRaw)
+          {
+            memoryDestinationRawValue = destination.rawValue
+          } else if let destination = MemoryHubDestination.destination(for: item) {
             memoryDestinationRawValue = destination.rawValue
           }
           // Settings owns pages now, not only preference rows, so a caller that names Settings can
@@ -1251,6 +1255,8 @@ struct ConversationsPageHost: View {
   let appState: AppState
   var brainDestination: MemoryHubDestination? = nil
   var onSelectBrainDestination: ((MemoryHubDestination) -> Void)? = nil
+  /// The hub page an open conversation came from; its Back returns there.
+  var detailOrigin: MemoryHubDestination? = nil
   /// Optional exact record supplied by a Chat-first conversation deep-link.
   /// The normal Conversations page still owns list loading and row selection;
   /// this value only seeds selection when a link fetched a record that is not
@@ -1280,6 +1286,7 @@ struct ConversationsPageHost: View {
       selectedConversation: $selectedConversation,
       brainDestination: brainDestination,
       onSelectBrainDestination: onSelectBrainDestination,
+      detailOrigin: detailOrigin,
       initialCaptureMomentTimestamp: initialCaptureMomentTimestamp,
       onCaptureFocusResolved: onCaptureFocusResolved,
       onDiscussInChat: onDiscussInChat,

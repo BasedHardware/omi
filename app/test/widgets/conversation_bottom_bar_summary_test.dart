@@ -64,7 +64,8 @@ void main() {
 
     await _pumpBar(tester, provider);
 
-    expect(find.text('Unknown ...'), findsOneWidget);
+    // The full name is the text; the pill ellipsizes it by layout, never with a hand-made "...".
+    expect(find.text('Unknown App'), findsOneWidget);
     expect(find.byIcon(Icons.apps_outlined), findsOneWidget);
     expect(find.text('Summary'), findsNothing);
   });

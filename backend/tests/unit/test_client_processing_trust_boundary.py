@@ -126,6 +126,7 @@ _SCAN_FILES: tuple[str, ...] = (
     'models/client_processing.py',
     'models/conversation.py',
     'routers/developer.py',
+    'utils/conversations/meeting_context.py',
     'utils/conversations/process_conversation.py',
     'utils/conversations/projection_payload.py',
     # Named intelligence plumbing.
@@ -523,7 +524,7 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
         DumpSite('utils/conversations/process_conversation.py', '_store_deferred_conversation', 'dict'),
         DumpSite('utils/conversations/process_conversation.py', '_terminal_persist_payload', 'dict'),
         DumpSite('utils/conversations/process_conversation.py', '_normal_persist_payload', 'dict'),
-        DumpSite('utils/conversations/process_conversation.py', '_store_meeting_context', 'model_dump'),
+        DumpSite('utils/conversations/meeting_context.py', 'store_meeting_context', 'model_dump'),
         DumpSite('utils/conversations/process_conversation.py', '_emit_derived_effects', 'dict'),
         DumpSite('utils/conversations/process_conversation.py', '_emit_derived_effects', 'model_dump'),
         DumpSite('utils/conversations/process_conversation.py', 'process_user_emotion', 'dict'),

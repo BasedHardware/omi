@@ -1,7 +1,8 @@
 import 'package:flutter/widgets.dart';
+
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
-import 'package:omi/utils/constants.dart';
+import 'package:omi/ui/format/speaker_names.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 Person? personById(List<Person> people, String? id) {
@@ -12,8 +13,12 @@ Person? personById(List<Person> people, String? id) {
   return null;
 }
 
-String speakerLabel(BuildContext context, TranscriptSegment segment, Person? person) {
-  if (segment.isUser) return context.l10n.you;
-  if (segment.speakerId == omiSpeakerId) return 'omi';
-  return person?.name ?? context.l10n.speakerWithId('${segment.speakerId + 1}');
+/// In-app name for [segment]'s speaker: "You", the assigned [person], "Omi", or "Speaker N".
+///
+/// Pass the conversation's [segments] so "Speaker N" uses the conversation's dense numbering
+/// (see [SpeakerNames]); without them only [segment] is known and it is numbered 1. Code that
+/// labels many segments builds one [SpeakerNames.forSegments] resolver instead.
+String speakerLabel(BuildContext context, TranscriptSegment segment, Person? person,
+    {List<TranscriptSegment>? segments}) {
+  return SpeakerNames.forSegments(segments ?? [segment], l10n: context.l10n).forSegment(segment, person: person);
 }

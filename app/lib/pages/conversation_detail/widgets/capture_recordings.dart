@@ -1,9 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
-
-import 'package:intl/intl.dart';
 
 import 'package:omi/pages/conversation_detail/capture_group_separation.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/conversations/capture_groups.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/capture_sources.dart';
@@ -12,10 +10,10 @@ import 'package:omi/widgets/capture_sources.dart';
 String? captureRecordingTimeWindow(BuildContext context, CaptureRecording recording) {
   final start = recording.startedAt;
   if (start == null) return null;
-  final format = DateFormat.jm(Localizations.localeOf(context).toString());
+  final dates = OmiDateFormat.of(context);
   final end = recording.finishedAt;
-  if (end == null || !end.isAfter(start)) return format.format(start);
-  return '${format.format(start)} – ${format.format(end)}';
+  if (end == null || !end.isAfter(start)) return dates.time(start);
+  return dates.timeRange(start, end);
 }
 
 /// "Desktop · 1:57 PM – 2:59 PM": the name a confirmation uses for one recording.
@@ -44,14 +42,13 @@ class CaptureRecordingsChip extends StatelessWidget {
         key: const Key('conversation_detail_recordings'),
         behavior: HitTestBehavior.opaque,
         onTap: () {
-          HapticFeedback.selectionClick();
+          OmiHaptics.selection();
           onTap();
         },
         child: Container(
-          height: 30,
+          constraints: const BoxConstraints(minHeight: 30),
           padding: const EdgeInsets.only(left: 4, right: 8),
-          decoration:
-              BoxDecoration(color: Colors.grey.withValues(alpha: 0.16), borderRadius: BorderRadius.circular(15)),
+          decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.pillAll),
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -59,10 +56,10 @@ class CaptureRecordingsChip extends StatelessWidget {
               const SizedBox(width: 6),
               Text(
                 count,
-                style: TextStyle(color: Colors.grey.shade300, fontSize: 13, fontWeight: FontWeight.w500),
+                style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
               ),
               const SizedBox(width: 2),
-              Icon(Icons.keyboard_arrow_down, size: 16, color: Colors.grey.shade300),
+              const Icon(Icons.keyboard_arrow_down, size: 16, color: OmiColors.textSecondary),
             ],
           ),
         ),
@@ -81,10 +78,10 @@ Future<void> showCaptureRecordingsSheet(
   required Future<bool> Function(CaptureRecording recording) onSeparate,
 }) {
   controller.reset();
-  return showModalBottomSheet<void>(
+  return showOmiSheet<void>(
     context: context,
-    backgroundColor: const Color(0xFF1C1C1E),
-    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
+    title: context.l10n.captureRecordingsSheetTitle,
+    padding: EdgeInsets.zero,
     builder: (sheetContext) => CaptureRecordingsSheet(
       recordings: recordings,
       controller: controller,
@@ -93,8 +90,7 @@ Future<void> showCaptureRecordingsSheet(
         onOpen(recording);
       },
       onSeparate: (recording) async {
-        final confirmed = await confirmCaptureRecordingSeparation(sheetContext, recording);
-        if (confirmed != true) return;
+        if (!await confirmCaptureRecordingSeparation(sheetContext, recording)) return;
         final separated = await onSeparate(recording);
         // The page reloads behind the sheet; close it once the new membership is in.
         if (separated && sheetContext.mounted) Navigator.pop(sheetContext);
@@ -103,29 +99,13 @@ Future<void> showCaptureRecordingsSheet(
   );
 }
 
-Future<bool?> confirmCaptureRecordingSeparation(BuildContext context, CaptureRecording recording) {
-  return showDialog<bool>(
-    context: context,
-    builder: (dialogContext) => AlertDialog(
-      backgroundColor: const Color(0xFF1C1C1E),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      title: Text(context.l10n.captureRecordingSeparateTitle, style: const TextStyle(color: Colors.white)),
-      content: Text(
-        context.l10n.captureRecordingSeparateMessage(captureRecordingLabel(context, recording)),
-        style: const TextStyle(color: Color(0xFF8E8E93)),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(dialogContext, false),
-          child: Text(context.l10n.cancel, style: const TextStyle(color: Color(0xFF8E8E93))),
-        ),
-        TextButton(
-          key: const Key('conversation_detail_recording_separate_confirm'),
-          onPressed: () => Navigator.pop(dialogContext, true),
-          child: Text(context.l10n.captureRecordingSeparateConfirm, style: const TextStyle(color: Colors.white)),
-        ),
-      ],
-    ),
+/// "Separate this recording?" — separation is sticky on the server, so it always asks.
+Future<bool> confirmCaptureRecordingSeparation(BuildContext context, CaptureRecording recording) {
+  return showOmiConfirm(
+    context,
+    title: context.l10n.captureRecordingSeparateTitle,
+    message: context.l10n.captureRecordingSeparateMessage(captureRecordingLabel(context, recording)),
+    confirmLabel: context.l10n.captureRecordingSeparateConfirm,
   );
 }
 
@@ -153,23 +133,8 @@ class CaptureRecordingsSheet extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Center(
-                child: Container(
-                  margin: const EdgeInsets.only(top: 8),
-                  width: 36,
-                  height: 4,
-                  decoration: BoxDecoration(color: Colors.grey.shade700, borderRadius: BorderRadius.circular(2)),
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-                child: Text(
-                  context.l10n.captureRecordingsSheetTitle,
-                  style: TextStyle(color: Colors.grey.shade400, fontSize: 13, fontWeight: FontWeight.w600),
-                ),
-              ),
               for (final (index, recording) in recordings.indexed) ...[
-                if (index > 0) Divider(height: 1, indent: 56, color: Colors.white.withValues(alpha: 0.08)),
+                if (index > 0) const Divider(height: 1, indent: 56, color: OmiColors.border),
                 _row(context, recording),
               ],
               if (controller.phase == CaptureGroupSeparationPhase.failed)
@@ -177,11 +142,11 @@ class CaptureRecordingsSheet extends StatelessWidget {
                   padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
                   child: Row(
                     children: [
-                      const Icon(Icons.error_outline, size: 16, color: Colors.orangeAccent),
+                      const Icon(Icons.error_outline, size: 16, color: OmiColors.warning),
                       const SizedBox(width: 6),
                       Text(
                         context.l10n.captureRecordingSeparateFailed,
-                        style: const TextStyle(color: Colors.orangeAccent, fontSize: 13),
+                        style: OmiType.footnote.copyWith(color: OmiColors.warning),
                       ),
                     ],
                   ),
@@ -215,12 +180,8 @@ class CaptureRecordingsSheet extends StatelessWidget {
                     SizedBox(
                       width: 24,
                       child: isSeparating
-                          ? const SizedBox(
-                              width: 16,
-                              height: 16,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white70),
-                            )
-                          : Icon(CaptureSources.icon(recording.source), size: 20, color: Colors.grey.shade400),
+                          ? const OmiSpinner(size: OmiSpinnerSize.small)
+                          : Icon(CaptureSources.icon(recording.source), size: 20, color: OmiColors.textTertiary),
                     ),
                     const SizedBox(width: 12),
                     Expanded(
@@ -229,18 +190,15 @@ class CaptureRecordingsSheet extends StatelessWidget {
                         children: [
                           Text(
                             CaptureSources.label(context, recording.source),
-                            style: TextStyle(
-                              color: Colors.white,
-                              fontSize: 16,
+                            style: OmiType.callout.copyWith(
                               fontWeight: recording.isCurrent ? FontWeight.w600 : FontWeight.w500,
                             ),
                           ),
                           if (window != null)
                             Text(
                               window,
-                              style: TextStyle(
-                                color: Colors.grey.shade500,
-                                fontSize: 13,
+                              style: OmiType.footnote.copyWith(
+                                color: OmiColors.textTertiary,
                                 fontFeatures: const [FontFeature.tabularFigures()],
                               ),
                             ),
@@ -250,7 +208,7 @@ class CaptureRecordingsSheet extends StatelessWidget {
                     if (recording.isCurrent)
                       Semantics(
                         label: context.l10n.captureRecordingViewing,
-                        child: const Icon(Icons.check, size: 18, color: Colors.white),
+                        child: const Icon(Icons.check, size: 18, color: OmiColors.textPrimary),
                       ),
                   ],
                 ),
@@ -260,15 +218,11 @@ class CaptureRecordingsSheet extends StatelessWidget {
         ),
         Padding(
           padding: const EdgeInsets.only(right: 8),
-          child: TextButton(
+          child: OmiButton.tertiary(
             key: Key('conversation_detail_recording_separate_${recording.id}'),
+            label: context.l10n.captureRecordingSeparate,
+            size: OmiButtonSize.compact,
             onPressed: controller.isBusy ? null : () => onSeparate(recording),
-            style: TextButton.styleFrom(
-              foregroundColor: Colors.grey.shade300,
-              minimumSize: const Size(44, 44),
-              padding: const EdgeInsets.symmetric(horizontal: 12),
-            ),
-            child: Text(context.l10n.captureRecordingSeparate, style: const TextStyle(fontSize: 14)),
           ),
         ),
       ],

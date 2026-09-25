@@ -30,6 +30,12 @@ import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/analytics/product_telemetry.dart';
 
 typedef ChatFilesUploader = Future<List<MessageFile>?> Function(List<File> files, {String? appId});
+typedef ChatReplyStreamer = Stream<ServerMessageChunk> Function(
+  String text, {
+  String? appId,
+  List<String>? filesId,
+  ChatPageContext? context,
+});
 
 class _ChatTelemetryAttempt {
   _ChatTelemetryAttempt(this.attempt);
@@ -43,10 +49,27 @@ class _ChatTelemetryAttempt {
   void dispose() => timeout?.cancel();
 }
 
+/// What to send again when the reader taps Try Again on a failed reply.
+class _FailedReply {
+  const _FailedReply({this.text, this.context, this.fileIds = const []});
+
+  /// The user's message as it was sent (with any quoted context). Null when the reply cannot be
+  /// retried from here (a voice message: its audio is gone).
+  final String? text;
+  final ChatPageContext? context;
+  final List<String> fileIds;
+
+  bool get canRetry => text != null;
+}
+
 class MessageProvider extends ChangeNotifier {
   MessageProvider({ChatFilesUploader? filesUploader}) : _filesUploader = filesUploader ?? uploadFilesServer;
 
   final ChatFilesUploader _filesUploader;
+
+  /// Test seam — replaces [sendMessageStreamServer] for typed messages.
+  @visibleForTesting
+  ChatReplyStreamer? replyStreamOverride;
   final Map<String, _ChatTelemetryAttempt> _chatTelemetryAttempts = {};
 
   AppProvider? appProvider;
@@ -69,6 +92,22 @@ class MessageProvider extends ChangeNotifier {
   // Chat quota exceeded — set transiently when backend returns 402
   bool _chatQuotaExceeded = false;
   bool get isChatQuotaExceeded => _chatQuotaExceeded;
+
+  // Replies that failed (network or server error), keyed by the placeholder message object —
+  // placeholders share the id '0000', so the id cannot tell two failures apart.
+  final Map<ServerMessage, _FailedReply> _failedReplies = Map.identity();
+
+  /// Whether [message] is an AI reply that failed. The chat shows a localized error with Try Again
+  /// in its place instead of the raw server text.
+  bool isReplyFailed(ServerMessage message) => _failedReplies.containsKey(message);
+
+  /// Whether a failed [message] can be sent again (typed messages can; voice messages cannot).
+  bool canRetryReply(ServerMessage message) => _failedReplies[message]?.canRetry ?? false;
+
+  void _markReplyFailed(ServerMessage message, _FailedReply reply) {
+    message.text = '';
+    _failedReplies[message] = reply;
+  }
 
   List<File> selectedFiles = [];
   List<String> selectedFileTypes = [];
@@ -329,7 +368,7 @@ class MessageProvider extends ChangeNotifier {
         type: FileType.custom,
         allowMultiple: true,
         allowedExtensions: ['jpeg', 'md', 'pdf', 'gif', 'doc', 'png', 'pptx', 'txt', 'xlsx', 'webp'],
-        dialogTitle: 'Select files',
+        dialogTitle: l10n?.chooseFile ?? 'Select files',
         withData: false,
         withReadStream: false,
       );
@@ -431,6 +470,7 @@ class MessageProvider extends ChangeNotifier {
   }
 
   Future refreshMessages({bool dropdownSelected = false}) async {
+    _failedReplies.clear();
     setLoadingMessages(true);
     if (SharedPreferencesUtil().cachedMessages.isNotEmpty) {
       setHasCachedMessages(true);
@@ -459,13 +499,13 @@ class MessageProvider extends ChangeNotifier {
   Future<List<ServerMessage>> getMessagesFromServer({bool dropdownSelected = false}) async {
     final l10n = globalNavigatorKey.currentContext?.l10n;
     if (!hasCachedMessages) {
-      firstTimeLoadingText = l10n?.msgReadingMemories ?? 'Reading your memories...';
+      firstTimeLoadingText = l10n?.msgReadingMemories ?? 'Reading your memories…';
       notifyListeners();
     }
     setLoadingMessages(true);
     var mes = await getMessagesServer(appId: appProvider?.selectedChatAppId, dropdownSelected: dropdownSelected);
     if (!hasCachedMessages) {
-      firstTimeLoadingText = l10n?.msgLearningMemories ?? 'Learning from your memories...';
+      firstTimeLoadingText = l10n?.msgLearningMemories ?? 'Learning from your memories…';
       notifyListeners();
     }
     messages = List<ServerMessage>.from(mes);
@@ -488,6 +528,7 @@ class MessageProvider extends ChangeNotifier {
     setClearingChat(true);
     try {
       var mes = await clearChatServer(appId: appProvider?.selectedChatAppId);
+      _failedReplies.clear();
       messages = List<ServerMessage>.from(mes);
       messages.sort((a, b) => a.createdAt.compareTo(b.createdAt));
     } catch (e) {
@@ -676,14 +717,15 @@ class MessageProvider extends ChangeNotifier {
             completeChat(ProductOutcome.failure, failure: ProductFailure.quota);
             return;
           }
-          message.text = chunk.text;
+          Logger.debug('Voice chat reply failed: ${chunk.text}');
+          _markReplyFailed(message, const _FailedReply());
           completeChat(ProductOutcome.failure, failure: ProductFailure.server);
           notifyListeners();
           continue;
         }
       }
     } catch (e) {
-      message.text = ServerMessageChunk.failedMessage().text;
+      _markReplyFailed(message, const _FailedReply());
       if (playResponseAudio) {
         await OmiVoicePlaybackService.instance.interrupt();
       }
@@ -699,7 +741,11 @@ class MessageProvider extends ChangeNotifier {
     }
   }
 
-  Future sendMessageStreamToServer(String text, {ChatPageContext? context}) async {
+  Future sendMessageStreamToServer(String text, {ChatPageContext? context}) => _streamReply(text, context: context);
+
+  /// Streams the reply to [text]. [retryFileIds] resends a failed message's attachments without
+  /// touching the files currently selected in the composer (see [retryFailedReply]).
+  Future<void> _streamReply(String text, {ChatPageContext? context, List<String>? retryFileIds}) async {
     _chatQuotaExceeded = false; // Clear stale quota state from previous sends
     aiStreamProgress = 0.0;
     // If Omi was still speaking a prior voice reply, stop it — the user's
@@ -744,9 +790,12 @@ class MessageProvider extends ChangeNotifier {
     responseMessageId = message.id;
     _registerChatTelemetryAttempt(responseMessageId, chatAttempt);
     notifyListeners();
-    List<String> fileIds = uploadedFiles.map((e) => e.id).toList();
-    clearSelectedFiles();
-    clearUploadedFiles();
+    final List<String> fileIds = retryFileIds ?? uploadedFiles.map((e) => e.id).toList();
+    if (retryFileIds == null) {
+      clearSelectedFiles();
+      clearUploadedFiles();
+    }
+    final failedReply = _FailedReply(text: text, context: context, fileIds: fileIds);
     String textBuffer = '';
     Timer? timer;
 
@@ -761,7 +810,12 @@ class MessageProvider extends ChangeNotifier {
     }
 
     try {
-      await for (var chunk in sendMessageStreamServer(text, appId: currentAppId, filesId: fileIds, context: context)) {
+      await for (var chunk in (replyStreamOverride ?? sendMessageStreamServer)(
+        text,
+        appId: currentAppId,
+        filesId: fileIds,
+        context: context,
+      )) {
         if (chunk.type == MessageChunkType.think) {
           flushBuffer();
           message.thinkings.add(chunk.text);
@@ -808,14 +862,15 @@ class MessageProvider extends ChangeNotifier {
             notifyListeners();
             return;
           }
-          message.text = chunk.text;
+          Logger.debug('Chat reply failed: ${chunk.text}');
+          _markReplyFailed(message, failedReply);
           completeChat(ProductOutcome.failure, failure: ProductFailure.server);
           notifyListeners();
           continue;
         }
       }
     } catch (e) {
-      message.text = ServerMessageChunk.failedMessage().text;
+      _markReplyFailed(message, failedReply);
       completeChat(ProductOutcome.failure, failure: ProductFailure.network);
       notifyListeners();
     } finally {
@@ -828,6 +883,22 @@ class MessageProvider extends ChangeNotifier {
     if (!chatAttemptCompleted) {
       completeChat(ProductOutcome.failure, failure: ProductFailure.incomplete);
     }
+  }
+
+  /// Sends the user message behind the failed reply [message] again: the failed reply is removed
+  /// and a new one streams in its place. No-op unless [canRetryReply]. The caller owns
+  /// [sendingMessage] the same way it does for a normal send.
+  Future<void> retryFailedReply(ServerMessage message) async {
+    final failed = _failedReplies.remove(message);
+    if (failed == null || !failed.canRetry) {
+      // The failure was cleared (a refresh) between build and tap: nothing to resend, so release the
+      // composer the caller locked.
+      setSendingMessage(false);
+      return;
+    }
+    messages.removeWhere((m) => identical(m, message));
+    notifyListeners();
+    await _streamReply(failed.text!, context: failed.context, retryFileIds: failed.fileIds);
   }
 
   bool _tryParseQuotaError(String errorText) {

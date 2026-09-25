@@ -4,6 +4,7 @@ tier: manual
 description: Tasks tab — search, Today/No Deadline sections, keyboard toolbar (v0.12.119+ redesign)
 app: com.omi.computer-macos
 covers:
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/TaskAgentStatusRegistry.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift
   # The exact-record handoff TasksPage consumes on arrival.
   - desktop/macos/Desktop/Sources/MainWindow/Dashboard/TaskNavigationRequestStore.swift
@@ -49,7 +50,7 @@ steps:
     do: "Click one visible task row (not its completion or selection checkbox) to open the panel identified as task-detail-panel. Verify it shows the task description, 'Why Omi added this' (task-detail-why), 'Linked sources', status/details, and the task actions including the accessible task-detail-toggle and task-detail-copy-link controls. Activate task-detail-close and verify the task list remains visible."
     expect:
       text_visible:
-        - Task details
+        - Task Details
         - Why Omi added this
         - Linked sources
         - Details

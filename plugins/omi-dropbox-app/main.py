@@ -59,9 +59,13 @@ app = FastAPI(
 )
 
 # ============== Audio Buffer ==============
+MAX_AUDIO_BUFFER_BYTES = 25 * 1024 * 1024  # 25 MB per user
+AUDIO_BUFFER_TTL_SECONDS = 3600  # 1 hour eviction
+
 # Store audio chunks by user ID
 audio_buffers: Dict[str, bytes] = defaultdict(bytes)
 audio_sample_rates: Dict[str, int] = {}
+audio_buffer_created: Dict[str, datetime] = {}
 
 
 def create_wav_file(audio_bytes: bytes, sample_rate: int = 16000) -> bytes:
@@ -83,8 +87,24 @@ def get_and_clear_audio(uid: str) -> Optional[bytes]:
         del audio_buffers[uid]
         if uid in audio_sample_rates:
             del audio_sample_rates[uid]
+        if uid in audio_buffer_created:
+            del audio_buffer_created[uid]
         return create_wav_file(audio_data, sample_rate)
     return None
+
+
+def _evict_stale_audio_buffers() -> None:
+    """Remove audio buffers that have exceeded TTL."""
+    now = datetime.now(timezone.utc)
+    stale_uids = [
+        uid for uid, created in audio_buffer_created.items()
+        if (now - created).total_seconds() > AUDIO_BUFFER_TTL_SECONDS
+    ]
+    for uid in stale_uids:
+        audio_buffers.pop(uid, None)
+        audio_sample_rates.pop(uid, None)
+        audio_buffer_created.pop(uid, None)
+        print(f"[AUDIO] Evicted stale buffer for uid={uid} (TTL exceeded)")
 
 
 # ============== Helper Functions ==============
@@ -475,8 +495,8 @@ async def auth_callback(
         if not access_token:
             return HTMLResponse("No access token received", status_code=400)
 
-        # Calculate expiration
-        expires_at = (datetime.utcnow() + timedelta(seconds=expires_in)).isoformat() + "Z"
+        # Calculate expiration (timezone-aware)
+        expires_at = (datetime.now(timezone.utc) + timedelta(seconds=expires_in)).strftime("%Y-%m-%dT%H:%M:%SZ")
 
         # Get user info
         display_name = ""
@@ -639,6 +659,8 @@ async def on_conversation_created(
 
     # Save audio if available
     if save_audio:
+        # Evict stale buffers before reading
+        _evict_stale_audio_buffers()
         audio_wav = get_and_clear_audio(uid)
         if audio_wav:
             print(f"[WEBHOOK] Uploading audio.wav ({len(audio_wav)} bytes)")
@@ -969,11 +991,27 @@ async def receive_audio(
     Accumulates audio until the conversation webhook is triggered.
     """
     try:
+        # Validate sample rate (human speech: 8kHz - 48kHz)
+        if sample_rate < 8000 or sample_rate > 48000:
+            return {"status": "error", "message": f"Invalid sample_rate: {sample_rate}. Must be between 8000 and 48000."}
+
         audio_bytes = await request.body()
 
         if audio_bytes:
+            # Evict stale buffers (TTL-based cleanup)
+            _evict_stale_audio_buffers()
+
+            current_size = len(audio_buffers[uid])
+            if current_size + len(audio_bytes) > MAX_AUDIO_BUFFER_BYTES:
+                return {
+                    "status": "error",
+                    "message": f"Audio buffer overflow: {current_size} + {len(audio_bytes)} exceeds {MAX_AUDIO_BUFFER_BYTES} bytes",
+                }
+
             audio_buffers[uid] += audio_bytes
             audio_sample_rates[uid] = sample_rate
+            if uid not in audio_buffer_created:
+                audio_buffer_created[uid] = datetime.now(timezone.utc)
             print(f"[AUDIO] Received {len(audio_bytes)} bytes for uid={uid}, total: {len(audio_buffers[uid])} bytes")
 
         return {"status": "ok"}

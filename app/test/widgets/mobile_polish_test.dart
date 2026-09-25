@@ -11,6 +11,7 @@ import 'package:omi/pages/action_items/widgets/action_item_form_sheet.dart';
 import 'package:omi/pages/chat/widgets/chat_starters.dart';
 import 'package:omi/pages/memories/widgets/memory_dialog.dart';
 import 'package:omi/providers/action_items_provider.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
@@ -80,13 +81,13 @@ void main() {
     addTearDown(memories.dispose);
     await tester.pumpWidget(_app(MemoryDialog(provider: memories)));
     final save = find.byKey(const Key('memory_save_button'));
-    expect(tester.widget<ElevatedButton>(save).onPressed, isNull);
+    expect(tester.widget<OmiButton>(save).onPressed, isNull);
     await tester.enterText(find.byKey(const Key('memory_content_field')), '   ');
     await tester.pump();
-    expect(tester.widget<ElevatedButton>(save).onPressed, isNull);
+    expect(tester.widget<OmiButton>(save).onPressed, isNull);
     await tester.enterText(find.byKey(const Key('memory_content_field')), 'I prefer morning meetings.');
     await tester.pump();
-    expect(tester.widget<ElevatedButton>(save).onPressed, isNotNull);
+    expect(tester.widget<OmiButton>(save).onPressed, isNotNull);
   });
 
   testWidgets('task awaits save, prevents duplicates, retains a rejected draft and retries', (tester) async {
@@ -104,7 +105,7 @@ void main() {
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();
     final save = find.byKey(const Key('task_save_button'));
-    expect(tester.widget<FilledButton>(save).onPressed, isNull);
+    expect(tester.widget<OmiButton>(save).onPressed, isNull);
     await tester.enterText(find.byKey(const Key('task_description')), 'Send notes');
     await tester.pump();
     expect(find.text('10/4096'), findsOneWidget);
@@ -115,12 +116,12 @@ void main() {
     await tester.tap(save);
     expect(tasks.writes, 1);
     expect(find.byType(ActionItemFormSheet), findsOneWidget);
-    expect(find.text('Action item created'), findsNothing);
+    expect(find.text('Task created'), findsNothing);
     final tomorrow = DateTime.now().add(const Duration(days: 1));
     expect(tasks.savedDueDate!.day, tomorrow.day);
     tasks.result.complete(null);
     await tester.pumpAndSettle();
-    expect(find.text('Failed to create action item'), findsOneWidget);
+    expect(find.text('Failed to create task'), findsOneWidget);
     expect(tester.widget<TextField>(find.byKey(const Key('task_description'))).controller!.text, 'Send notes');
     tasks.result = Completer();
     await tester.tap(save);
@@ -129,6 +130,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(tasks.writes, 2);
     expect(find.byType(ActionItemFormSheet), findsNothing);
-    expect(find.text('Action item created'), findsOneWidget);
+    expect(find.text('Task created'), findsOneWidget);
   });
 }

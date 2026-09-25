@@ -38,6 +38,8 @@ REQUIRED_IDENTICAL_LITERALS = (
     "CONVERSATION_NOTES_V2_ENABLED",
     "CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED",
     "CONVERSATION_OCR_CONTEXT_ENABLED",
+    "MEETING_NOTES_RICH_CONTEXT_ENABLED",
+    "MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED",
     "BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED",
     "FREE_TIER_LOCAL_PROCESSING",
     "FREE_TIER_EMERGENCY_STOP",
@@ -66,7 +68,6 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
             "STT_CIRCUIT_HALF_OPEN_PROBES",
             "STT_CONNECT_ORDER_FROM_CONFIG",
             "ACCOUNT_CUTOVER_ENFORCEMENT",
-            "DEEPGRAM_API_KEY",
             "DEEPGRAM_SELF_HOSTED_ENABLED",
             "DESKTOP_UPDATE_POINTERS_MODE",
             "DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE",
@@ -192,7 +193,12 @@ LISTEN_ONLY_ALLOWED: dict[str, frozenset[str]] = {
 
 PUSHER_ONLY_ALLOWED: dict[str, frozenset[str]] = {
     "dev": frozenset({"GOOGLE_CLIENT_ID", "REDIS_DB_HOST", "TYPESENSE_HOST"}),
-    "prod": frozenset({"DEEPGRAM_SELF_HOSTED_URL", "REDIS_DB_HOST", "TYPESENSE_HOST"}),
+    # DEEPGRAM_API_KEY: pusher reaches self-hosted dg.omi.me with it; the
+    # backend-listen managed (cloud) credential was retired 2026-09-18 — no
+    # streaming session selects Deepgram cloud, and a spent managed key made
+    # the fallback hops dial a 402 account for days (FC-deterministic-provider-
+    # rejection-burns-connect-retries).
+    "prod": frozenset({"DEEPGRAM_API_KEY", "DEEPGRAM_SELF_HOSTED_URL", "REDIS_DB_HOST", "TYPESENSE_HOST"}),
 }
 
 # Shared keys whose *literal* values are allowed to differ. Name-only diffs

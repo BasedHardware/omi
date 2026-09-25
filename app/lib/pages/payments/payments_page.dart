@@ -7,6 +7,7 @@ import 'package:skeletonizer/skeletonizer.dart';
 import 'package:omi/pages/payments/payment_method_provider.dart';
 import 'package:omi/pages/payments/stripe_connect_setup.dart';
 import 'package:omi/pages/payments/widgets/payment_method_card.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'models/payment_method_config.dart';
@@ -36,20 +37,20 @@ class _PaymentsPageState extends State<PaymentsPage> {
 
   Widget _buildInfoCard() {
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(OmiSpacing.md),
       decoration: BoxDecoration(
-        color: const Color(0xFF1F1F25),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFF35343B), width: 1),
+        color: OmiColors.surface1,
+        borderRadius: OmiRadius.mdAll,
+        border: Border.all(color: OmiColors.border, width: 1),
       ),
       child: Row(
         children: [
-          const Icon(Icons.info_outline, color: Colors.white70, size: 24),
-          const SizedBox(width: 12),
+          const Icon(Icons.info_outline, color: OmiColors.textSecondary, size: 24),
+          const SizedBox(width: OmiSpacing.sm),
           Expanded(
             child: Text(
               context.l10n.connectPaymentMethodInfo,
-              style: const TextStyle(color: Colors.white70, fontSize: 14),
+              style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
             ),
           ),
         ],
@@ -62,14 +63,10 @@ class _PaymentsPageState extends State<PaymentsPage> {
     return Consumer<PaymentMethodProvider>(
       builder: (context, provider, child) {
         return Scaffold(
-          backgroundColor: Colors.black,
+          backgroundColor: OmiColors.surface0,
           appBar: AppBar(
-            backgroundColor: Colors.transparent,
-            title: Text(context.l10n.payments, style: const TextStyle(color: Colors.white)),
-            leading: IconButton(
-              icon: const Icon(Icons.arrow_back, color: Colors.white),
-              onPressed: () => Navigator.pop(context),
-            ),
+            leading: const OmiBackButton(),
+            title: Text(context.l10n.payments),
           ),
           body: Skeletonizer(
             enabled: provider.isLoading,
@@ -81,7 +78,7 @@ class _PaymentsPageState extends State<PaymentsPage> {
                   children: [
                     Text(
                       context.l10n.selectedPaymentMethod,
-                      style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w500),
+                      style: OmiType.title3,
                     ),
                     const SizedBox(height: 18),
                     Consumer<PaymentMethodProvider>(
@@ -98,7 +95,7 @@ class _PaymentsPageState extends State<PaymentsPage> {
                             if (hasActiveMethod) ...[_buildActiveMethodCard(provider), const SizedBox(height: 24)],
                             Text(
                               context.l10n.availablePaymentMethods,
-                              style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w500),
+                              style: OmiType.title3,
                             ),
                             const SizedBox(height: 16),
                             ..._buildOtherMethodCards(provider, activeMethod),
@@ -122,25 +119,22 @@ class _PaymentsPageState extends State<PaymentsPage> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
       decoration: BoxDecoration(
-        color: const Color(0xFF14141A),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.06), width: 1),
+        color: OmiColors.surface1,
+        borderRadius: OmiRadius.mdAll,
+        border: Border.all(color: OmiColors.border, width: 1),
       ),
       child: Row(
         children: [
           Container(
             padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.04),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: Icon(Icons.schedule_outlined, color: Colors.white.withValues(alpha: 0.45), size: 22),
+            decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
+            child: const Icon(Icons.schedule_outlined, color: OmiColors.textTertiary, size: 22),
           ),
           const SizedBox(width: 14),
           Expanded(
             child: Text(
               context.l10n.morePaymentMethodsComingSoon,
-              style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 15, fontWeight: FontWeight.w400),
+              style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
             ),
           ),
         ],

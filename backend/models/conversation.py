@@ -2,7 +2,7 @@ from datetime import datetime
 from collections.abc import Mapping
 from typing import Annotated, Dict, List, Literal, Optional, Union
 
-from pydantic import BaseModel, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_serializer, model_validator
 
 from models.audio_file import AudioFile
 from models.calendar_context import CalendarMeetingContext
@@ -21,7 +21,7 @@ from models.conversation_enums import (
 from models.conversation_photo import ConversationPhoto
 from models.geolocation import Geolocation
 from models.other import Person
-from models.structured import Structured
+from models.structured import MeetingType, Structured
 from models.transcript_segment import legacy_conversation_segment_id, TranscriptSegment
 
 # Only locally-defined symbols are exported. Use canonical modules for moved types:
@@ -58,6 +58,7 @@ __all__ = [
     'SharedConversationChatResponse',
     'SharedConversationResponse',
     'SharedEvent',
+    'SharedParticipant',
     'SharedPerson',
     'SharedPluginResult',
     'SharedStructured',
@@ -136,6 +137,18 @@ class SharedEvent(BaseModel):
     created: bool = False
 
 
+class SharedParticipant(BaseModel):
+    """Public share projection of a meeting participant — never an email."""
+
+    model_config = {'extra': 'ignore'}
+
+    name: Optional[str] = None
+    organization: Optional[str] = None
+    role: Optional[str] = None
+    is_ai_agent: bool = False
+    source: Optional[Literal['roster', 'transcript']] = None
+
+
 class SharedStructured(BaseModel):
     """Public share projection of conversation structure."""
 
@@ -147,6 +160,33 @@ class SharedStructured(BaseModel):
     category: CategoryEnum = CategoryEnum.other
     action_items: List[SharedActionItem] = Field(default_factory=list)
     events: List[SharedEvent] = Field(default_factory=list)
+    meeting_type: Optional[MeetingType] = None
+    participants: List[SharedParticipant] = Field(default_factory=list)
+
+    @model_serializer(mode='wrap')
+    def _omit_unset_rich_fields(self, handler):
+        # Same contract as Structured: rich-only keys absent from the source
+        # document must not materialize as null/[] on the public payload.
+        data = handler(self)
+        for field_name in ('meeting_type', 'participants'):
+            if field_name not in self.model_fields_set:
+                data.pop(field_name, None)
+        return data
+
+    @field_validator('participants', mode='before')
+    @classmethod
+    def drop_unidentifiable_participants(cls, value):
+        # A participant with no public name carries no identifying public
+        # information (emails never leave the private note), so it drops out of
+        # the share projection rather than surfacing as an empty shell.
+        if not isinstance(value, list):
+            return value
+        kept = []
+        for item in value:
+            name = item.get('name') if isinstance(item, Mapping) else getattr(item, 'name', None)
+            if isinstance(name, str) and name.strip():
+                kept.append(item)
+        return kept
 
 
 class SharedTranscriptSegment(BaseModel):

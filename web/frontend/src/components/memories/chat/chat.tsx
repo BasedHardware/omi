@@ -198,7 +198,7 @@ export default function Chat({
               <>
                 <div className="mb-4 flex gap-4">
                   {/* Avatar */}
-                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-purple-500 to-purple-600">
+                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-purple-600">
                     <Message className="h-5 w-5 text-white" />
                   </div>
 
@@ -288,9 +288,7 @@ export default function Chat({
                 {/* Avatar */}
                 <div
                   className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
-                    message.role === 'user'
-                      ? 'bg-gradient-to-br from-blue-500 to-blue-600'
-                      : 'bg-gradient-to-br from-purple-500 to-purple-600'
+                    message.role === 'user' ? 'bg-blue-600' : 'bg-purple-600'
                   }`}
                 >
                   {message.role === 'user' ? (
@@ -309,7 +307,7 @@ export default function Chat({
                   <div
                     className={`max-w-[85%] rounded-2xl px-4 py-3 ${
                       message.role === 'user'
-                        ? 'bg-gradient-to-br from-blue-600 to-blue-700 text-white shadow-lg'
+                        ? 'bg-blue-600 text-white shadow-lg'
                         : 'bg-zinc-800/80 text-gray-100 shadow-lg'
                     }`}
                   >
@@ -328,7 +326,7 @@ export default function Chat({
             ))}
             {isLoading && (
               <div className="flex gap-4">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-purple-500 to-purple-600">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-purple-600">
                   <Message className="h-5 w-5 text-white" />
                 </div>
                 <div className="flex flex-col gap-1">
@@ -361,7 +359,7 @@ export default function Chat({
         </div>
 
         {/* Input Area - Fixed at bottom */}
-        <div className="shrink-0 border-t border-zinc-800/50 bg-zinc-900/30 p-3 backdrop-blur-sm md:p-4">
+        <div className="shrink-0 border-t border-zinc-800/50 bg-zinc-900/30 p-3 md:p-4">
           <div className="flex items-center gap-2 md:gap-3">
             <div className="relative flex-1">
               <textarea
@@ -383,7 +381,7 @@ export default function Chat({
             <button
               onClick={handleSend}
               disabled={!input.trim() || isLoading}
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-blue-600 to-blue-700 text-white shadow-lg transition-all hover:from-blue-700 hover:to-blue-800 hover:shadow-xl active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:shadow-lg disabled:active:scale-100"
+              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-600 text-white shadow-lg transition-all hover:bg-blue-700 active:scale-95 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100"
               title="Send message"
               aria-label="Send message"
             >

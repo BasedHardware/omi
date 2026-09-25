@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import runpy
+import subprocess
+from collections.abc import Callable
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -55,14 +57,13 @@ def prod_canary() -> SimpleNamespace:
     return SimpleNamespace(**runpy.run_path(str(PROD_CANARY_SCRIPT)))
 
 
-@pytest.fixture
-def deployment_receipt(receipt_builder: SimpleNamespace) -> dict[str, object]:
+def _deployment_receipt(source_sha: str = SOURCE_SHA) -> dict[str, object]:
     return {
         "schema_version": 1,
         "environment": "development",
         "recorded_at": "2026-08-30T12:05:00Z",
         "run_id": RUN_ID,
-        "source_sha": SOURCE_SHA,
+        "source_sha": source_sha,
         "image": {"repository": REPOSITORY, "digest": DIGEST},
         "rendered_chart_sha256": "sha256:" + "c" * 64,
         "config_sha256": "sha256:" + "d" * 64,
@@ -85,7 +86,11 @@ def deployment_receipt(receipt_builder: SimpleNamespace) -> dict[str, object]:
 
 
 @pytest.fixture
-def evidence(verifier: SimpleNamespace, deployment_receipt: dict[str, object]) -> dict[str, object]:
+def deployment_receipt() -> dict[str, object]:
+    return _deployment_receipt()
+
+
+def _evidence(verifier: SimpleNamespace, deployment_receipt: dict[str, object]) -> dict[str, object]:
     receipt_sha = verifier.canonical_sha256(deployment_receipt)
     return {
         "schema_version": 2,
@@ -94,7 +99,7 @@ def evidence(verifier: SimpleNamespace, deployment_receipt: dict[str, object]) -
         "image_digest": DIGEST,
         "image_repository": REPOSITORY,
         "run_id": RUN_ID,
-        "source_sha": SOURCE_SHA,
+        "source_sha": deployment_receipt["source_sha"],
         "workflow": "gcp_backend_pusher_auto_deploy.yml",
         "rendered_chart_sha256": deployment_receipt["rendered_chart_sha256"],
         "config_sha256": deployment_receipt["config_sha256"],
@@ -107,7 +112,7 @@ def evidence(verifier: SimpleNamespace, deployment_receipt: dict[str, object]) -
             "status": "PASS",
             "evidence_id": "dev-probe-321",
             "candidate": {
-                "source_sha": SOURCE_SHA,
+                "source_sha": deployment_receipt["source_sha"],
                 "image_digest": DIGEST,
                 "deployment_receipt_sha256": receipt_sha,
             },
@@ -126,36 +131,34 @@ def evidence(verifier: SimpleNamespace, deployment_receipt: dict[str, object]) -
 
 
 @pytest.fixture
-def run() -> dict[str, object]:
+def evidence(verifier: SimpleNamespace, deployment_receipt: dict[str, object]) -> dict[str, object]:
+    return _evidence(verifier, deployment_receipt)
+
+
+def _run(source_sha: str = SOURCE_SHA) -> dict[str, object]:
     return {
         "id": RUN_ID,
         "workflow_id": WORKFLOW_ID,
         "event": "push",
         "head_branch": "main",
-        "head_sha": SOURCE_SHA,
+        "head_sha": source_sha,
         "status": "completed",
         "conclusion": "success",
     }
 
 
-def validate(
-    verifier: SimpleNamespace,
-    evidence: dict[str, object],
-    deployment_receipt: dict[str, object],
-    run: dict[str, object],
-    *,
-    canary_override: dict[str, object] | None = None,
-    canary_run_override: dict[str, object] | None = None,
-    canary_semantic_override: dict[str, object] | None = None,
-    canary_semantic_hash_override: str | None = None,
-) -> list[str]:
-    receipt_sha = verifier.canonical_sha256(deployment_receipt)
-    canary_deployment_receipt = {
+@pytest.fixture
+def run() -> dict[str, object]:
+    return _run()
+
+
+def _canary_deployment_receipt(source_sha: str) -> dict[str, object]:
+    return {
         "schema_version": 1,
         "environment": "prod",
         "recorded_at": "2026-08-30T12:19:00Z",
         "run_id": CANARY_RUN_ID,
-        "source_sha": SOURCE_SHA,
+        "source_sha": source_sha,
         "image": {"repository": "gcr.io/based-hardware/pusher", "digest": DIGEST},
         "rendered_chart_sha256": "sha256:" + "1" * 64,
         "config_sha256": "sha256:" + "2" * 64,
@@ -172,12 +175,73 @@ def validate(
             "pods": [{"name": "canary-pusher-1", "uid": "pod-canary", "image_id": f"repo@{DIGEST}"}],
         },
     }
+
+
+def _final_deployment_receipt(source_sha: str, *, config_sha256: str) -> dict[str, object]:
+    return {
+        "schema_version": 1,
+        "environment": "prod",
+        "recorded_at": "2026-08-30T12:40:00Z",
+        "run_id": CANARY_RUN_ID,
+        "source_sha": source_sha,
+        "image": {"repository": "gcr.io/based-hardware/pusher", "digest": DIGEST},
+        "rendered_chart_sha256": "sha256:" + "1" * 64,
+        "config_sha256": config_sha256,
+        "expected_pod_template_sha256": "sha256:" + "3" * 64,
+        "live_pod_template_sha256": "sha256:" + "3" * 64,
+        "live_identity": {
+            "namespace": "prod-omi-backend",
+            "deployment_name": "prod-omi-pusher",
+            "replicas": 40,
+            "ready_replicas": 40,
+            "generation": 9,
+            "observed_generation": 9,
+            "pods": [
+                {"name": f"pusher-{index}", "uid": f"pod-{index}", "image_id": f"repo@{DIGEST}"} for index in range(40)
+            ],
+        },
+    }
+
+
+def _canary_run(source_sha: str) -> dict[str, object]:
+    return {
+        "id": CANARY_RUN_ID,
+        "workflow_id": CANARY_WORKFLOW_ID,
+        "event": "workflow_dispatch",
+        "head_branch": "main",
+        "head_sha": source_sha,
+        "status": "completed",
+        "conclusion": "success",
+    }
+
+
+def validate(
+    verifier: SimpleNamespace,
+    evidence: dict[str, object],
+    deployment_receipt: dict[str, object],
+    run: dict[str, object],
+    *,
+    prod_source_sha: str = SOURCE_SHA,
+    expected_canary_source_sha: str | None = None,
+    checkout_repository: Path | None = None,
+    canary_override: dict[str, object] | None = None,
+    canary_run_override: dict[str, object] | None = None,
+    canary_semantic_override: dict[str, object] | None = None,
+    canary_semantic_hash_override: str | None = None,
+    canary_deployment_receipt_override: dict[str, object] | None = None,
+    final_deployment_receipt_override: dict[str, object] | None = None,
+    canary_mutator: Callable[[dict[str, object]], None] | None = None,
+    require_final: bool = False,
+) -> list[str]:
+    expected_sha = prod_source_sha if expected_canary_source_sha is None else expected_canary_source_sha
+    receipt_sha = verifier.canonical_sha256(deployment_receipt)
+    canary_deployment_receipt = canary_deployment_receipt_override or _canary_deployment_receipt(prod_source_sha)
     canary_semantic = canary_semantic_override or {
         "schema_version": 1,
         "status": "PASS",
         "evidence_id": "prod-probe-987",
         "candidate": {
-            "source_sha": SOURCE_SHA,
+            "source_sha": prod_source_sha,
             "image_digest": DIGEST,
             "deployment_receipt_sha256": verifier.canonical_sha256(canary_deployment_receipt),
         },
@@ -197,7 +261,7 @@ def validate(
         "status": "PASS",
         "evidence_id": "prod-canary-321",
         "candidate": {
-            "source_sha": SOURCE_SHA,
+            "source_sha": prod_source_sha,
             "image_digest": DIGEST,
             "qualification_deployment_receipt_sha256": receipt_sha,
             "canary_deployment_receipt_sha256": verifier.canonical_sha256(canary_deployment_receipt),
@@ -226,15 +290,12 @@ def validate(
         },
         "semantic_evidence_sha256": canary_semantic_hash_override or verifier.canonical_sha256(canary_semantic),
     }
-    canary_run = canary_run_override or {
-        "id": CANARY_RUN_ID,
-        "workflow_id": CANARY_WORKFLOW_ID,
-        "event": "workflow_dispatch",
-        "head_branch": "main",
-        "head_sha": SOURCE_SHA,
-        "status": "completed",
-        "conclusion": "success",
-    }
+    if canary_override is None and canary_mutator is not None:
+        canary_mutator(canary)
+    canary_run = canary_run_override or _canary_run(prod_source_sha)
+    final_deployment_receipt = final_deployment_receipt_override or _final_deployment_receipt(
+        prod_source_sha, config_sha256=str(canary_deployment_receipt["config_sha256"])
+    )
     return verifier.validate(
         evidence,
         deployment_receipt,
@@ -247,9 +308,65 @@ def validate(
         expected_run_id=RUN_ID,
         expected_canary_workflow_id=CANARY_WORKFLOW_ID,
         expected_canary_run_id=CANARY_RUN_ID,
+        expected_canary_source_sha=expected_sha,
         canary_deployment_receipt=canary_deployment_receipt,
         canary_semantic_evidence=canary_semantic,
+        final_deployment_receipt=final_deployment_receipt,
+        expected_final_repository="gcr.io/based-hardware/pusher",
+        require_final=require_final,
+        checkout_repository=checkout_repository or verifier.ROOT,
     )
+
+
+def _git(repo: Path, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", "-C", str(repo), *args],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+
+
+def _commit_all(repo: Path, message: str) -> str:
+    _git(repo, "-c", "user.email=pusher-test@example.com", "-c", "user.name=Pusher Test", "add", "-A")
+    _git(
+        repo,
+        "-c",
+        "user.email=pusher-test@example.com",
+        "-c",
+        "user.name=Pusher Test",
+        "-c",
+        "core.hooksPath=/dev/null",
+        "commit",
+        "-qm",
+        message,
+    )
+    return _git(repo, "rev-parse", "HEAD").stdout.strip()
+
+
+def _promotion_repo(tmp_path: Path, *, closure_change: bool) -> tuple[Path, str, str]:
+    """Build a hermetic two-commit repo: dev-qualified SHA, then moved main.
+
+    Returns (repo, dev_sha, prod_sha). ``closure_change=False`` advances main
+    only outside the Dockerfile-derived Pusher closure; ``True`` also mutates
+    ``backend/pusher`` and the pusher chart so the closure gate must fire.
+    """
+    repo = tmp_path / "repo"
+    (repo / "backend/pusher").mkdir(parents=True)
+    (repo / "backend/charts/pusher").mkdir(parents=True)
+    (repo / "docs").mkdir(parents=True)
+    (repo / "backend/pusher/main.py").write_text("qualified\n", encoding="utf-8")
+    (repo / "backend/charts/pusher/values.yaml").write_text("replicas: 1\n", encoding="utf-8")
+    (repo / "docs/notes.md").write_text("one\n", encoding="utf-8")
+    _git(repo, "init", "-q")
+    dev_sha = _commit_all(repo, "qualified")
+    if closure_change:
+        (repo / "backend/pusher/main.py").write_text("moved main\n", encoding="utf-8")
+        (repo / "backend/charts/pusher/values.yaml").write_text("replicas: 2\n", encoding="utf-8")
+    else:
+        (repo / "docs/notes.md").write_text("two\n", encoding="utf-8")
+    prod_sha = _commit_all(repo, "moved main")
+    return repo, dev_sha, prod_sha
 
 
 def test_accepts_an_exact_digest_from_the_successful_main_dev_run(
@@ -1007,3 +1124,292 @@ def test_listener_canary_clone_is_digest_pinned_and_excluded_from_ordinary_servi
     assert not all(template["metadata"]["labels"].get(key) == value for key, value in second_selector.items())
     assert cloned_service["spec"]["type"] == "ClusterIP"
     assert "annotations" not in cloned_service["metadata"]
+
+
+def test_accepts_moved_production_main_with_unchanged_pusher_closure(verifier: SimpleNamespace, tmp_path: Path) -> None:
+    repo, dev_sha, prod_sha = _promotion_repo(tmp_path, closure_change=False)
+    deployment_receipt = _deployment_receipt(dev_sha)
+    evidence = _evidence(verifier, deployment_receipt)
+    run = _run(dev_sha)
+
+    assert (
+        validate(
+            verifier,
+            evidence,
+            deployment_receipt,
+            run,
+            prod_source_sha=prod_sha,
+            checkout_repository=repo,
+        )
+        == []
+    )
+
+
+def test_rejects_moved_production_main_when_the_pusher_source_closure_changed(
+    verifier: SimpleNamespace, tmp_path: Path
+) -> None:
+    repo, dev_sha, prod_sha = _promotion_repo(tmp_path, closure_change=True)
+    deployment_receipt = _deployment_receipt(dev_sha)
+    evidence = _evidence(verifier, deployment_receipt)
+    run = _run(dev_sha)
+
+    errors = validate(
+        verifier,
+        evidence,
+        deployment_receipt,
+        run,
+        prod_source_sha=prod_sha,
+        checkout_repository=repo,
+    )
+    assert any("Pusher image source or chart changed" in error for error in errors)
+
+
+def test_rejects_a_production_checkout_not_descended_from_the_qualified_source(
+    verifier: SimpleNamespace, tmp_path: Path
+) -> None:
+    repo, dev_sha, prod_sha = _promotion_repo(tmp_path, closure_change=False)
+    deployment_receipt = _deployment_receipt(prod_sha)
+    evidence = _evidence(verifier, deployment_receipt)
+    run = _run(prod_sha)
+
+    errors = validate(
+        verifier,
+        evidence,
+        deployment_receipt,
+        run,
+        prod_source_sha=dev_sha,
+        checkout_repository=repo,
+    )
+    assert any("not an ancestor" in error for error in errors)
+
+
+def test_rejects_prod_evidence_still_bound_to_the_dev_qualified_source(
+    verifier: SimpleNamespace, tmp_path: Path
+) -> None:
+    """Prod run 35963192878's mirror: receipts stamped with the dev SHA while the
+    checked-out production source moved on must fail every source binding."""
+    repo, dev_sha, prod_sha = _promotion_repo(tmp_path, closure_change=False)
+    deployment_receipt = _deployment_receipt(dev_sha)
+    evidence = _evidence(verifier, deployment_receipt)
+    run = _run(dev_sha)
+
+    errors = validate(
+        verifier,
+        evidence,
+        deployment_receipt,
+        run,
+        prod_source_sha=dev_sha,
+        expected_canary_source_sha=prod_sha,
+        checkout_repository=repo,
+    )
+
+    assert any("does not match the exact candidate receipt" in error for error in errors)
+    assert any("one exact isolated candidate Pusher pod" in error for error in errors)
+    assert any("semantic probe candidate does not match" in error for error in errors)
+    assert any("run source does not match the checked-out production source" in error for error in errors)
+
+
+def test_rejects_canary_run_head_sha_that_is_not_the_checked_out_production_source(
+    verifier: SimpleNamespace,
+    evidence: dict[str, object],
+    deployment_receipt: dict[str, object],
+    run: dict[str, object],
+) -> None:
+    canary_run = _canary_run(SOURCE_SHA)
+    canary_run["head_sha"] = "d" * 40
+
+    errors = validate(verifier, evidence, deployment_receipt, run, canary_run_override=canary_run)
+    assert any("run source does not match the checked-out production source" in error for error in errors)
+
+
+@pytest.mark.parametrize("expected_sha", ["", "D" * 40, "not-a-sha"])
+def test_rejects_missing_or_malformed_expected_canary_source(
+    verifier: SimpleNamespace,
+    evidence: dict[str, object],
+    deployment_receipt: dict[str, object],
+    run: dict[str, object],
+    expected_sha: str,
+) -> None:
+    errors = validate(
+        verifier,
+        evidence,
+        deployment_receipt,
+        run,
+        expected_canary_source_sha=expected_sha,
+    )
+    assert any("canary source" in error and "full lowercase" in error for error in errors)
+
+
+def test_qualification_phase_does_not_require_the_canary_source(
+    verifier: SimpleNamespace,
+    evidence: dict[str, object],
+    deployment_receipt: dict[str, object],
+    run: dict[str, object],
+) -> None:
+    errors = verifier.validate(
+        evidence,
+        deployment_receipt,
+        {},
+        {},
+        run,
+        expected_digest=DIGEST,
+        expected_repository=REPOSITORY,
+        expected_workflow_id=WORKFLOW_ID,
+        expected_run_id=RUN_ID,
+        expected_canary_workflow_id=0,
+        expected_canary_run_id=0,
+        require_canary=False,
+    )
+    assert errors == []
+
+
+def test_final_phase_accepts_the_checked_out_source_and_rejects_digest_or_pod_drift(
+    verifier: SimpleNamespace,
+    evidence: dict[str, object],
+    deployment_receipt: dict[str, object],
+    run: dict[str, object],
+) -> None:
+    assert validate(verifier, evidence, deployment_receipt, run, require_final=True) == []
+
+    drifted_digest = _final_deployment_receipt(SOURCE_SHA, config_sha256="sha256:" + "2" * 64)
+    drifted_digest["image"] = {"repository": "gcr.io/based-hardware/pusher", "digest": "sha256:" + "f" * 64}
+    digest_errors = validate(
+        verifier,
+        evidence,
+        deployment_receipt,
+        run,
+        require_final=True,
+        final_deployment_receipt_override=drifted_digest,
+    )
+    assert any("exact promoted image" in error for error in digest_errors)
+
+    drifted_pod = _final_deployment_receipt(SOURCE_SHA, config_sha256="sha256:" + "2" * 64)
+    identity = drifted_pod["live_identity"]
+    assert isinstance(identity, dict)
+    pods = identity["pods"]
+    assert isinstance(pods, list) and isinstance(pods[0], dict)
+    pods[0]["image_id"] = "repo@sha256:" + "f" * 64
+    pod_errors = validate(
+        verifier,
+        evidence,
+        deployment_receipt,
+        run,
+        require_final=True,
+        final_deployment_receipt_override=drifted_pod,
+    )
+    assert any("fully ready shared production Pusher" in error for error in pod_errors)
+
+
+def test_final_phase_rejects_a_receipt_bound_to_the_dev_qualified_source(
+    verifier: SimpleNamespace, tmp_path: Path
+) -> None:
+    repo, dev_sha, prod_sha = _promotion_repo(tmp_path, closure_change=False)
+    deployment_receipt = _deployment_receipt(dev_sha)
+    evidence = _evidence(verifier, deployment_receipt)
+    run = _run(dev_sha)
+    final = _final_deployment_receipt(dev_sha, config_sha256="sha256:" + "2" * 64)
+
+    errors = validate(
+        verifier,
+        evidence,
+        deployment_receipt,
+        run,
+        prod_source_sha=prod_sha,
+        checkout_repository=repo,
+        require_final=True,
+        final_deployment_receipt_override=final,
+    )
+    assert any("does not match the checked-out production source" in error for error in errors)
+
+
+def test_rejects_canary_deployment_receipt_run_id_mismatch(
+    verifier: SimpleNamespace,
+    evidence: dict[str, object],
+    deployment_receipt: dict[str, object],
+    run: dict[str, object],
+) -> None:
+    receipt = _canary_deployment_receipt(SOURCE_SHA)
+    receipt["run_id"] = CANARY_RUN_ID + 1
+
+    errors = validate(verifier, evidence, deployment_receipt, run, canary_deployment_receipt_override=receipt)
+    assert any("one exact isolated candidate Pusher pod" in error for error in errors)
+    assert not any("does not match the exact candidate receipt" in error for error in errors)
+
+
+def test_rejects_canary_pod_image_id_that_is_not_the_promoted_digest(
+    verifier: SimpleNamespace,
+    evidence: dict[str, object],
+    deployment_receipt: dict[str, object],
+    run: dict[str, object],
+) -> None:
+    receipt = _canary_deployment_receipt(SOURCE_SHA)
+    identity = receipt["live_identity"]
+    assert isinstance(identity, dict)
+    pods = identity["pods"]
+    assert isinstance(pods, list) and isinstance(pods[0], dict)
+    pods[0]["image_id"] = "repo@sha256:" + "f" * 64
+
+    errors = validate(verifier, evidence, deployment_receipt, run, canary_deployment_receipt_override=receipt)
+    assert any("one exact isolated candidate Pusher pod" in error for error in errors)
+    assert not any("does not match the exact candidate receipt" in error for error in errors)
+
+
+@pytest.mark.parametrize(
+    ("surface", "name"),
+    [
+        ("pusher", f"prod-omi-pusher-canary-{CANARY_RUN_ID}0"),
+        ("listener", f"prod-omi-listener-canary-{CANARY_RUN_ID}0"),
+    ],
+)
+def test_rejects_canary_deployment_names_that_only_share_the_prefix(
+    verifier: SimpleNamespace,
+    evidence: dict[str, object],
+    deployment_receipt: dict[str, object],
+    run: dict[str, object],
+    surface: str,
+    name: str,
+) -> None:
+    if surface == "pusher":
+        receipt = _canary_deployment_receipt(SOURCE_SHA)
+        identity = receipt["live_identity"]
+        assert isinstance(identity, dict)
+        identity["deployment_name"] = name
+        errors = validate(
+            verifier,
+            evidence,
+            deployment_receipt,
+            run,
+            canary_deployment_receipt_override=receipt,
+        )
+        assert any("one exact isolated candidate Pusher pod" in error for error in errors)
+    else:
+
+        def mutate(canary: dict[str, object]) -> None:
+            deployment_identity = canary["deployment_identity"]
+            assert isinstance(deployment_identity, dict)
+            listener = deployment_identity["listener"]
+            assert isinstance(listener, dict)
+            listener["deployment_name"] = name
+
+        errors = validate(verifier, evidence, deployment_receipt, run, canary_mutator=mutate)
+        assert any("isolated digest-pinned listener clone" in error for error in errors)
+
+
+def test_accepts_final_phase_with_distinct_dev_and_prod_sources(verifier: SimpleNamespace, tmp_path: Path) -> None:
+    repo, dev_sha, prod_sha = _promotion_repo(tmp_path, closure_change=False)
+    deployment_receipt = _deployment_receipt(dev_sha)
+    evidence = _evidence(verifier, deployment_receipt)
+    run = _run(dev_sha)
+
+    assert (
+        validate(
+            verifier,
+            evidence,
+            deployment_receipt,
+            run,
+            prod_source_sha=prod_sha,
+            checkout_repository=repo,
+            require_final=True,
+        )
+        == []
+    )

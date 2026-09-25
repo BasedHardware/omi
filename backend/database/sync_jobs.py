@@ -30,6 +30,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, Optional, Set, cast
 
+from config.sync_telemetry import bounded_correlation_ref, bounded_exception_class, bounded_sync_phase
 from database.redis_db import r
 
 logger = logging.getLogger(__name__)
@@ -612,6 +613,10 @@ def _log_sync_job_finalized(
     status: str,
     total: int,
     failed: int,
+    job_id: Optional[str] = None,
+    attempt_ref: Optional[str] = None,
+    failure_phase: Optional[str] = None,
+    failure_class: Optional[str] = None,
 ) -> None:
     default_outcome = 'success' if status == 'completed' else status
     outcome = result.get('outcome', default_outcome)
@@ -620,7 +625,8 @@ def _log_sync_job_finalized(
     model = result.get('model', 'unknown')
     logger.info(
         'event=sync_transcription_job_finalized status=%s outcome=%s '
-        'provider=%s model=%s lane=%s total_segments=%d failed_segments=%d',
+        'provider=%s model=%s lane=%s total_segments=%d failed_segments=%d '
+        'job_ref=%s attempt_ref=%s failure_phase=%s failure_class=%s',
         status,
         outcome if outcome in _SYNC_JOB_OUTCOMES else 'upstream_error',
         provider if provider in _SYNC_PROVIDERS else 'unknown',
@@ -628,16 +634,31 @@ def _log_sync_job_finalized(
         lane if lane in _SYNC_LANES else 'unknown',
         total,
         failed,
+        bounded_correlation_ref(job_id),
+        bounded_correlation_ref(attempt_ref),
+        bounded_sync_phase(failure_phase),
+        bounded_exception_class(failure_class),
     )
 
 
-def finalize_sync_job(job_id: str, result: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+def finalize_sync_job(
+    job_id: str,
+    result: Dict[str, Any],
+    *,
+    attempt_ref: Optional[str] = None,
+    failure_phase: Optional[str] = None,
+    failure_class: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
     """Finalize a sync job with a truthful terminal status.
 
     ``completed`` is reserved for batches where every speech-eligible segment
     succeeded (including the valid zero-segment result produced when VAD finds
     no speech). Any segment failure keeps the job visibly retryable as either
     ``partial_failure`` or ``failed``.
+
+    The diagnostic kwargs are logging-only: they join the terminal log line to
+    the worker attempt and first-failure phase/class but are never written
+    into the stored result or returned document.
     """
     status, total, failed, updates = _sync_job_finalization_updates(result, completed_at=time.time())
 
@@ -649,6 +670,10 @@ def finalize_sync_job(job_id: str, result: Dict[str, Any]) -> Optional[Dict[str,
             status=status,
             total=total,
             failed=failed,
+            job_id=job_id,
+            attempt_ref=attempt_ref,
+            failure_phase=failure_phase,
+            failure_class=failure_class,
         )
     return finalized
 
@@ -660,6 +685,9 @@ def _fenced_finalize_sync_job(
     *,
     now: Optional[float] = None,
     allowed_current_statuses: Set[str],
+    attempt_ref: Optional[str] = None,
+    failure_phase: Optional[str] = None,
+    failure_class: Optional[str] = None,
 ) -> FencedSyncJobMutation:
     """Publish a terminal result only while the caller retains the run lock.
 
@@ -683,6 +711,10 @@ def _fenced_finalize_sync_job(
             status=status,
             total=total,
             failed=failed,
+            job_id=job_id,
+            attempt_ref=attempt_ref,
+            failure_phase=failure_phase,
+            failure_class=failure_class,
         )
     return mutation
 
@@ -693,6 +725,9 @@ def fenced_finalize_sync_job(
     result: Dict[str, Any],
     *,
     now: Optional[float] = None,
+    attempt_ref: Optional[str] = None,
+    failure_phase: Optional[str] = None,
+    failure_class: Optional[str] = None,
 ) -> FencedSyncJobMutation:
     """Publish ordinary worker terminal work only from the processing state."""
     return _fenced_finalize_sync_job(
@@ -701,6 +736,9 @@ def fenced_finalize_sync_job(
         result,
         now=now,
         allowed_current_statuses={'processing'},
+        attempt_ref=attempt_ref,
+        failure_phase=failure_phase,
+        failure_class=failure_class,
     )
 
 
@@ -710,6 +748,9 @@ def fenced_finalize_sync_job_from_durable_ledger(
     result: Dict[str, Any],
     *,
     now: Optional[float] = None,
+    attempt_ref: Optional[str] = None,
+    failure_phase: Optional[str] = None,
+    failure_class: Optional[str] = None,
 ) -> FencedSyncJobMutation:
     """Converge a validated content-ledger completion after a task retry.
 
@@ -723,6 +764,9 @@ def fenced_finalize_sync_job_from_durable_ledger(
         result,
         now=now,
         allowed_current_statuses={'queued', 'processing'},
+        attempt_ref=attempt_ref,
+        failure_phase=failure_phase,
+        failure_class=failure_class,
     )
 
 

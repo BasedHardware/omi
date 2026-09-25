@@ -1,19 +1,21 @@
-import 'package:omi/utils/platform/platform_manager.dart';
-import 'package:omi/utils/analytics/product_telemetry.dart';
 import 'package:flutter/material.dart';
 
 import 'package:provider/provider.dart';
-import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 import 'package:omi/pages/apps/add_app.dart';
 import 'package:omi/pages/settings/apple_health_detail_page.dart';
+import 'package:omi/pages/settings/integration_selection_card.dart';
 import 'package:omi/providers/integration_provider.dart';
 import 'package:omi/services/integrations/apple_health_service.dart';
 import 'package:omi/services/integrations/gmail_service.dart';
 import 'package:omi/services/integrations/google_calendar_service.dart';
+import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/analytics/product_telemetry.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 enum IntegrationApp { appleHealth, googleCalendar, gmail }
 
@@ -82,11 +84,11 @@ extension IntegrationAppExtension on IntegrationApp {
   Color get iconColor {
     switch (this) {
       case IntegrationApp.googleCalendar:
-        return const Color(0xFF4285F4);
+        return const Color(0xFF4285F4); // omi-ux-allow: color-literal -- third-party brand colour
       case IntegrationApp.gmail:
-        return const Color(0xFFEA4335);
+        return const Color(0xFFEA4335); // omi-ux-allow: color-literal -- third-party brand colour
       case IntegrationApp.appleHealth:
-        return const Color(0xFFFF2D55); // Apple Health brand color (pink/red)
+        return const Color(0xFFFF2D55); // omi-ux-allow: color-literal -- third-party brand colour
     }
   }
 
@@ -94,10 +96,6 @@ extension IntegrationAppExtension on IntegrationApp {
     // Apple Health checks platform availability at runtime in the service.
     return true;
   }
-
-  // String get comingSoonText {
-  //   return 'Coming Soon';
-  // }
 }
 
 class IntegrationsPage extends StatefulWidget {
@@ -216,17 +214,11 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
   Future<void> _openAppleHealthDetail() async {
     if (!AppleHealthService().isAvailable) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(context.l10n.appleHealthNotAvailable),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 3),
-          ),
-        );
+        OmiFeedback.error(context, context.l10n.appleHealthNotAvailable);
       }
       return;
     }
-    await Navigator.of(context).push(MaterialPageRoute(builder: (_) => const AppleHealthDetailPage()));
+    await routeToPage(context, const AppleHealthDetailPage());
     if (mounted) await _loadFromBackend();
   }
 
@@ -238,111 +230,52 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
     if (isAuthenticated) return _IntegrationAuthOutcome.alreadyAuthenticated;
 
     final shouldAuth = await _showAuthDialog(app);
-    if (shouldAuth != true) return _IntegrationAuthOutcome.cancelled;
-    {
-      // Capture ScaffoldMessenger before async operation to avoid use_build_context_synchronously
-      if (!mounted) return _IntegrationAuthOutcome.failed;
-      final scaffoldMessenger = ScaffoldMessenger.of(context);
+    if (!shouldAuth) return _IntegrationAuthOutcome.cancelled;
+    if (!mounted) return _IntegrationAuthOutcome.failed;
 
-      final success = await authenticate();
-      if (success) {
-        PlatformManager.instance.analytics.integrationConnectSucceeded(integrationName: app.displayName);
-        if (mounted) {
-          scaffoldMessenger.showSnackBar(
-            SnackBar(content: Text(context.l10n.completeAuthInBrowser), duration: const Duration(seconds: 5)),
-          );
-        }
-        await _loadFromBackend();
-        Logger.debug('✓ Integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
-        return _IntegrationAuthOutcome.started;
-      } else {
-        PlatformManager.instance.analytics.integrationConnectFailed(integrationName: app.displayName);
-        if (mounted) {
-          scaffoldMessenger.showSnackBar(
-            SnackBar(
-              content: Text(context.l10n.failedToStartAuth(app.displayName)),
-              backgroundColor: Colors.red,
-              duration: const Duration(seconds: 3),
-            ),
-          );
-        }
-        return _IntegrationAuthOutcome.failed;
-      }
+    final success = await authenticate();
+    if (success) {
+      PlatformManager.instance.analytics.integrationConnectSucceeded(integrationName: app.displayName);
+      if (mounted) OmiFeedback.info(context, context.l10n.completeAuthInBrowser);
+      await _loadFromBackend();
+      Logger.debug('✓ Integration enabled: ${app.displayName} (${app.key}) - authentication in progress');
+      return _IntegrationAuthOutcome.started;
+    } else {
+      PlatformManager.instance.analytics.integrationConnectFailed(integrationName: app.displayName);
+      if (mounted) OmiFeedback.error(context, context.l10n.failedToStartAuth(app.displayName));
+      return _IntegrationAuthOutcome.failed;
     }
   }
 
   Future<void> _disconnectApp(IntegrationApp app) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF1C1C1E),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Text(
-            context.l10n.disconnectAppTitle(app.disconnectDisplayName),
-            style: const TextStyle(color: Colors.white),
-          ),
-          content: Text(
-            context.l10n.disconnectAppMessage(app.disconnectDisplayName),
-            style: const TextStyle(color: Color(0xFF8E8E93)),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: Text(context.l10n.cancel, style: const TextStyle(color: Color(0xFF8E8E93))),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: Text(context.l10n.disconnect, style: const TextStyle(color: Colors.red)),
-            ),
-          ],
-        );
-      },
+    final confirmed = await showOmiConfirm(
+      context,
+      title: context.l10n.disconnectAppTitle(app.disconnectDisplayName),
+      message: context.l10n.disconnectAppMessage(app.disconnectDisplayName),
+      confirmLabel: context.l10n.disconnect,
+      destructive: true,
     );
+    if (!confirmed || !mounted) return;
 
-    if (confirmed == true) {
-      if (app == IntegrationApp.googleCalendar) {
-        final service = GoogleCalendarService();
-        await _handleDisconnect(app, service.disconnect);
-      } else if (app == IntegrationApp.gmail) {
-        final service = GmailService();
-        await _handleDisconnect(app, service.disconnect);
-      } else if (app == IntegrationApp.appleHealth) {
-        // Capture instances before async operation to avoid use_build_context_synchronously
-        if (!mounted) return;
-        final integrationProvider = context.read<IntegrationProvider>();
-        final scaffoldMessenger = ScaffoldMessenger.of(context);
-
-        final success = await integrationProvider.deleteConnection(IntegrationApp.appleHealth.key);
-        if (success) {
-          PlatformManager.instance.analytics.integrationDisconnected(integrationName: 'Apple Health');
-          if (mounted) {
-            scaffoldMessenger.showSnackBar(
-              SnackBar(
-                content: Text(context.l10n.disconnectedFrom(IntegrationApp.appleHealth.displayName)),
-                duration: const Duration(seconds: 2),
-              ),
-            );
-          }
-        } else {
-          if (mounted) {
-            scaffoldMessenger.showSnackBar(
-              SnackBar(
-                content: Text(context.l10n.failedToDisconnect),
-                backgroundColor: Colors.red,
-                duration: const Duration(seconds: 3),
-              ),
-            );
-          }
-        }
+    if (app == IntegrationApp.googleCalendar) {
+      await _handleDisconnect(app, GoogleCalendarService().disconnect);
+    } else if (app == IntegrationApp.gmail) {
+      await _handleDisconnect(app, GmailService().disconnect);
+    } else if (app == IntegrationApp.appleHealth) {
+      final success = await context.read<IntegrationProvider>().deleteConnection(IntegrationApp.appleHealth.key);
+      if (success) PlatformManager.instance.analytics.integrationDisconnected(integrationName: 'Apple Health');
+      if (!mounted) return;
+      if (success) {
+        OmiFeedback.confirm(context, context.l10n.disconnectedFrom(IntegrationApp.appleHealth.displayName));
+      } else {
+        OmiFeedback.error(context, context.l10n.failedToDisconnect);
       }
     }
   }
 
   Future<void> _handleDisconnect(IntegrationApp app, Future<bool> Function() disconnect) async {
-    // Capture instances before async operation to avoid use_build_context_synchronously
+    // Capture the provider before the async gap to avoid use_build_context_synchronously
     final integrationProvider = context.read<IntegrationProvider>();
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
 
     final success = await disconnect();
     if (success) {
@@ -352,48 +285,18 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
       if (mounted) {
         await integrationProvider.loadFromBackend();
       }
-      if (mounted) {
-        scaffoldMessenger.showSnackBar(
-          SnackBar(content: Text(context.l10n.disconnectedFrom(app.displayName)), duration: const Duration(seconds: 2)),
-        );
-      }
+      if (mounted) OmiFeedback.confirm(context, context.l10n.disconnectedFrom(app.displayName));
     } else {
-      if (mounted) {
-        scaffoldMessenger.showSnackBar(
-          SnackBar(
-            content: Text(context.l10n.failedToDisconnect),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 3),
-          ),
-        );
-      }
+      if (mounted) OmiFeedback.error(context, context.l10n.failedToDisconnect);
     }
   }
 
-  Future<bool?> _showAuthDialog(IntegrationApp app) {
-    return showDialog<bool>(
-      context: context,
-      builder: (BuildContext context) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF1C1C1E),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Text(context.l10n.connectTo(app.displayName), style: const TextStyle(color: Colors.white)),
-          content: Text(
-            context.l10n.authAccessMessage(app.displayName),
-            style: const TextStyle(color: Color(0xFF8E8E93)),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(false),
-              child: Text(context.l10n.cancel, style: const TextStyle(color: Color(0xFF8E8E93))),
-            ),
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(true),
-              child: Text(context.l10n.continueAction, style: const TextStyle(color: Colors.white)),
-            ),
-          ],
-        );
-      },
+  Future<bool> _showAuthDialog(IntegrationApp app) {
+    return showOmiConfirm(
+      context,
+      title: context.l10n.connectTo(app.displayName),
+      message: context.l10n.authAccessMessage(app.displayName),
+      confirmLabel: context.l10n.continueAction,
     );
   }
 
@@ -404,12 +307,45 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
 
   Widget _buildShimmerButton() {
     return ShimmerWithTimeout(
-      baseColor: Colors.grey.shade800,
-      highlightColor: Colors.grey.shade600,
+      baseColor: OmiColors.surface2,
+      highlightColor: OmiColors.surface3,
       child: Container(
         width: 80,
         height: 32,
-        decoration: BoxDecoration(color: Colors.grey.shade800, borderRadius: BorderRadius.circular(16)),
+        decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.pillAll),
+      ),
+    );
+  }
+
+  Widget _fallbackIcon(IntegrationApp app, bool isAvailable) {
+    return Container(
+      decoration: BoxDecoration(
+        color: isAvailable ? app.iconColor.withValues(alpha: 0.2) : OmiColors.surface2,
+        borderRadius: OmiRadius.smAll,
+      ),
+      child: Icon(app.icon, color: isAvailable ? app.iconColor : OmiColors.textTertiary, size: 24),
+    );
+  }
+
+  /// One tappable row: the whole row is the button, announced with its trailing action.
+  Widget _buildRow({required Widget leading, required String title, required Widget trailing, VoidCallback? onTap}) {
+    return MergeSemantics(
+      child: Semantics(
+        button: true,
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: OmiSpacing.md),
+            child: Row(
+              children: [
+                ExcludeSemantics(child: SizedBox(width: 40, height: 40, child: leading)),
+                const SizedBox(width: OmiSpacing.md),
+                Expanded(child: Text(title, style: OmiType.body)),
+                trailing,
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -418,7 +354,32 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
     final isConnected = _isAppConnected(app);
     final isAvailable = app.isAvailable;
 
-    return GestureDetector(
+    final Widget trailing;
+    if (isLoading) {
+      trailing = _buildShimmerButton();
+    } else if (!isAvailable) {
+      trailing = IntegrationStatusChip(context.l10n.comingSoon, tone: IntegrationChipTone.muted);
+    } else if (!isConnected) {
+      trailing = IntegrationStatusChip(context.l10n.connect);
+    } else {
+      trailing = IntegrationStatusChip(context.l10n.disconnect, tone: IntegrationChipTone.danger);
+    }
+
+    return _buildRow(
+      leading: app.logoPath != null
+          ? ClipRRect(
+              borderRadius: OmiRadius.smAll,
+              child: Image.asset(
+                app.logoPath!,
+                width: 40,
+                height: 40,
+                fit: BoxFit.contain,
+                errorBuilder: (context, error, stackTrace) => _fallbackIcon(app, isAvailable),
+              ),
+            )
+          : _fallbackIcon(app, isAvailable),
+      title: app.displayName,
+      trailing: trailing,
       onTap: isAvailable
           ? () {
               if (isLoading) return;
@@ -436,134 +397,18 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
               }
             }
           : null,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 16),
-        child: Row(
-          children: [
-            // App Icon/Logo
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(borderRadius: BorderRadius.circular(8)),
-              child: app.logoPath != null
-                  ? ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.asset(
-                        app.logoPath!,
-                        width: 40,
-                        height: 40,
-                        fit: BoxFit.contain,
-                        errorBuilder: (context, error, stackTrace) {
-                          return Container(
-                            decoration: BoxDecoration(
-                              color: isAvailable
-                                  ? app.iconColor.withValues(alpha: 0.2)
-                                  : Colors.grey.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Icon(app.icon, color: isAvailable ? app.iconColor : Colors.grey, size: 24),
-                          );
-                        },
-                      ),
-                    )
-                  : Container(
-                      decoration: BoxDecoration(
-                        color: isAvailable ? app.iconColor.withValues(alpha: 0.2) : Colors.grey.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Icon(app.icon, color: isAvailable ? app.iconColor : Colors.grey, size: 24),
-                    ),
-            ),
-            const SizedBox(width: 16),
-            // App Name
-            Expanded(
-              child: Text(
-                app.displayName,
-                style: TextStyle(
-                  color: isAvailable ? Colors.white : Colors.grey,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w400,
-                ),
-              ),
-            ),
-            // Action Button - Show shimmer while loading
-            if (isLoading)
-              _buildShimmerButton()
-            else if (!isConnected)
-              // Connect button
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: !isAvailable ? Colors.grey.withValues(alpha: 0.3) : Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Text(
-                  !isAvailable ? context.l10n.comingSoon : context.l10n.connect,
-                  style: TextStyle(
-                    color: !isAvailable ? Colors.grey : Colors.black,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              )
-            else
-              // Disconnect button
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.red.withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Text(
-                  context.l10n.disconnect,
-                  style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
-                ),
-              ),
-          ],
-        ),
-      ),
     );
   }
 
   Widget _buildCreateYourOwnAppTile() {
-    return GestureDetector(
-      onTap: () {
-        routeToPage(context, const AddAppPage(presetExternalIntegration: true));
-      },
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 0, vertical: 16),
-        child: Row(
-          children: [
-            // Icon
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(
-                color: Colors.purple.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Icon(Icons.add_circle_outline, color: Colors.purple, size: 24),
-            ),
-            const SizedBox(width: 16),
-            // App Name
-            Expanded(
-              child: Text(
-                context.l10n.createYourOwnApp,
-                style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w400),
-              ),
-            ),
-            // Arrow icon
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.purple.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(16),
-              ),
-              child: const Icon(Icons.arrow_forward_ios, color: Colors.purple, size: 12),
-            ),
-          ],
-        ),
+    return _buildRow(
+      leading: Container(
+        decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
+        child: const Icon(Icons.add_circle_outline, color: OmiColors.textPrimary, size: 24),
       ),
+      title: context.l10n.createYourOwnApp,
+      trailing: const Icon(Icons.chevron_right, color: OmiColors.textTertiary, size: 20),
+      onTap: () => routeToPage(context, const AddAppPage(presetExternalIntegration: true)),
     );
   }
 
@@ -574,23 +419,10 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
     final isLoading = provider.isLoading || !provider.hasLoaded;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF000000),
-      appBar: AppBar(
-        backgroundColor: const Color(0xFF000000),
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.pop(context),
-        ),
-        title: Text(
-          context.l10n.integrations,
-          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-        ),
-        centerTitle: true,
-      ),
+      appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.integrations)),
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.all(20),
+          padding: const EdgeInsets.all(OmiSpacing.lg),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -599,9 +431,9 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
                 child: ListView(
                   children: [
                     ...IntegrationApp.values.map((app) => _buildAppTile(app, isLoading)),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 8),
-                      child: Divider(color: Colors.grey.shade800, thickness: 1),
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: OmiSpacing.xs),
+                      child: Divider(color: OmiColors.border, thickness: 1),
                     ),
                     _buildCreateYourOwnAppTile(),
                   ],
@@ -609,15 +441,15 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
               ),
               // Footer
               Padding(
-                padding: const EdgeInsets.only(top: 20),
+                padding: const EdgeInsets.only(top: OmiSpacing.lg),
                 child: Row(
                   children: [
-                    const Icon(Icons.info_outline, color: Color(0xFF8E8E93), size: 16),
-                    const SizedBox(width: 8),
+                    const Icon(Icons.info_outline, color: OmiColors.textTertiary, size: 16),
+                    const SizedBox(width: OmiSpacing.xs),
                     Expanded(
                       child: Text(
                         context.l10n.integrationsFooter,
-                        style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 12),
+                        style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
                       ),
                     ),
                   ],
