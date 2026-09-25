@@ -133,14 +133,26 @@ def _hive_error_message(result: Dict[str, Any]) -> Optional[str]:
     errors = result.get("errors")
     if not errors:
         return None
+    def _sanitize(val: Any) -> str:
+        if not isinstance(val, str) or not val.strip():
+            return "Unknown error"
+        lowered = val.lower()
+        if any(marker in lowered for marker in [
+            "traceback", "exception", "runtimeerror", "line ", "file ", "http://", "https://", "/", "\\"
+        ]):
+            return "Unknown error"
+        return val.strip()
+
     if isinstance(errors, list):
+        if not errors:
+            return None
         first = errors[0]
         if isinstance(first, dict):
-            return first.get("message", "Unknown error")
-        return str(first)
+            return _sanitize(first.get("message", "Unknown error"))
+        return _sanitize(first)
     if isinstance(errors, dict):
-        return errors.get("message", "Unknown error")
-    return str(errors)
+        return _sanitize(errors.get("message", "Unknown error"))
+    return _sanitize(errors)
 
 
 def hive_rest_request(uid: str, method: str, endpoint: str, data: Optional[Dict] = None, params: Optional[Dict] = None) -> Dict[str, Any]:

@@ -24,6 +24,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+
 APP_DIR = Path(__file__).parent
 
 SECRET_TRACE = "/srv/app/.secrets/hive_credentials.json"
@@ -165,18 +170,14 @@ class HiveErrorHandlingTests(unittest.TestCase):
 
     def test_get_tasks_does_not_reflect_the_exception(self):
         with patch.object(main, "get_project_tasks", side_effect=RuntimeError(SECRET_TRACE)):
-            response = asyncio.run(
-                main.tool_hive_get_tasks(FakeRequest({"uid": "u1", "project_id": "p1"}))
-            )
+            response = asyncio.run(main.tool_hive_get_tasks(FakeRequest({"uid": "u1", "project_id": "p1"})))
 
         self.assert_no_leak(response)
 
     def test_create_task_does_not_reflect_the_exception(self):
         with patch.object(main, "hive_rest_request", side_effect=RuntimeError(SECRET_TRACE)):
             response = asyncio.run(
-                main.tool_hive_create_task(
-                    FakeRequest({"uid": "u1", "task_name": "Ship it", "project_id": "p1"})
-                )
+                main.tool_hive_create_task(FakeRequest({"uid": "u1", "task_name": "Ship it", "project_id": "p1"}))
             )
 
         self.assert_no_leak(response)
@@ -190,12 +191,58 @@ class HiveErrorHandlingTests(unittest.TestCase):
     def test_update_task_status_does_not_reflect_the_exception(self):
         with patch.object(main, "hive_rest_request", side_effect=RuntimeError(SECRET_TRACE)):
             response = asyncio.run(
-                main.tool_hive_update_task_status(
-                    FakeRequest({"uid": "u1", "task_id": "t1", "status": "done"})
-                )
+                main.tool_hive_update_task_status(FakeRequest({"uid": "u1", "task_id": "t1", "status": "done"}))
             )
 
         self.assert_no_leak(response)
+
+    def test_hive_error_message_non_dict_string_does_not_leak(self):
+        msg = main._hive_error_message({"errors": SECRET_TRACE})
+        self.assertEqual(msg, "Unknown error")
+        self.assertNotIn(SECRET_TRACE, msg)
+
+    def test_hive_error_message_non_dict_list_does_not_leak(self):
+        msg = main._hive_error_message({"errors": [SECRET_TRACE]})
+        self.assertEqual(msg, "Unknown error")
+        self.assertNotIn(SECRET_TRACE, msg)
+
+    def test_hive_error_message_empty_or_none(self):
+        self.assertIsNone(main._hive_error_message({}))
+        self.assertIsNone(main._hive_error_message({"errors": None}))
+        self.assertIsNone(main._hive_error_message({"errors": []}))
+
+    def test_hive_error_message_dict_without_message(self):
+        msg = main._hive_error_message({"errors": {"code": 500}})
+        self.assertEqual(msg, "Unknown error")
+
+    def test_hive_error_message_valid_dict(self):
+        msg = main._hive_error_message({"errors": [{"message": "Invalid workspace"}]})
+        self.assertEqual(msg, "Invalid workspace")
+
+    def test_create_task_handles_raw_string_error_payload(self):
+        with patch.object(
+            main, "get_hive_credentials", return_value={"api_key": "k", "hive_user_id": "u", "workspace_id": "w1"}
+        ):
+            with patch.object(
+                main, "get_user_projects", return_value=[main.HiveProject(id="p1", name="Proj", workspace_id="w1")]
+            ):
+                with patch.object(main, "hive_rest_request", return_value={"errors": SECRET_TRACE}):
+                    response = asyncio.run(
+                        main.tool_hive_create_task(
+                            FakeRequest({"uid": "u1", "task_name": "Ship it", "project_id": "p1"})
+                        )
+                    )
+        self.assert_no_leak(response)
+        self.assertEqual(response.error, "Failed to create task: Unknown error")
+
+    def test_update_task_status_handles_raw_string_error_payload(self):
+        with patch.object(main, "get_hive_credentials", return_value={"api_key": "k", "hive_user_id": "u"}):
+            with patch.object(main, "hive_rest_request", return_value={"errors": [SECRET_TRACE]}):
+                response = asyncio.run(
+                    main.tool_hive_update_task_status(FakeRequest({"uid": "u1", "task_id": "t1", "status": "done"}))
+                )
+        self.assert_no_leak(response)
+        self.assertEqual(response.error, "Failed to update task: Unknown error")
 
     def test_no_except_block_interpolates_the_exception_into_a_response(self):
         """Pin the class, not the string: `type(e).__name__` logging is fine."""
