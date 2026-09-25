@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "Rewind search understands natural-language time phrases such as yesterday, today, this morning, and this evening, and scopes results to that window."
+  ]
+}
