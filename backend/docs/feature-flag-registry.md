@@ -1,4 +1,4 @@
-<!-- feature-flag-registry as-of: 2026-09-24 -->
+<!-- feature-flag-registry as-of: 2026-09-26 -->
 
 # Feature-flag authority registry
 
@@ -78,9 +78,18 @@ repository capability, not a deployed or currently serving value.
 explicit `OMI_FORCE_*=1` (except where noted), Beta is on unless the kill is
 true, stable is on only when the enable flag is true.
 
+## Running experiments
+
+Every running experiment links its preregistration doc. `decision: kill`
+entries are exempt: they are queued for removal, not running.
+
+| key | owner | prereg | review_by |
+| --- | --- | --- | --- |
+| `DAY3_REENGAGEMENT_EMAIL_ENABLED` | dazheng | [backend/docs/experiments/EXP-001-day3-reengagement.md](../../backend/docs/experiments/EXP-001-day3-reengagement.md) | 2026-10-28 |
+
 ## Overdue for a decision
 
-None as of 2026-09-24.
+None as of 2026-09-26.
 
 ## Flags
 
@@ -95,10 +104,9 @@ and an explicit empty literal renders as `''`.
 
 | key | summary | surfaces | kind | fail | _base | dev | prod | PostHog row | decision | review_by | owner |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `DAY3_REENGAGEMENT_EMAIL_ENABLED` | Send randomized day-three re-engagement email | backend | env | closed | false | false | true | — | pending | 2026-10-15 | unowned |
-| `OMI_LLM_GATEWAY_OUTPUT_BUDGET_EXPERIMENTS` | Select gateway output-budget experiments | llm-gateway | env | closed | — | public_shared_conversation_chat (llm-gateway (chart)) | public_shared_conversation_chat (llm-gateway (chart)) | — | pending | 2026-10-15 | unowned |
-| `mobile-experiments-enabled` | Master gate for mobile experiment enrollment | mobile | posthog | closed | — | — | — | absent (enable) | pending | 2026-10-15 | unowned |
-| `mobile-summary-feedback-layout-v1` | Compare summary feedback layouts | mobile | posthog | closed | — | — | — | absent (exposure) | pending | 2026-10-15 | unowned |
+| `DAY3_REENGAGEMENT_EMAIL_ENABLED` | Send randomized day-three re-engagement email | backend | env | closed | false | false | true | — | pending | 2026-10-28 | dazheng |
+| `OMI_LLM_GATEWAY_OUTPUT_BUDGET_EXPERIMENTS` | Select gateway output-budget experiments | llm-gateway | env | closed | — | — | — | — | kill | 2026-10-15 | dazheng |
+| `mobile-experiments-enabled` | Master gate for mobile experiment enrollment | mobile | posthog | closed | — | — | — | absent (enable) | kill | 2026-10-15 | dazheng |
 
 ### rollout
 
@@ -106,33 +114,32 @@ and an explicit empty literal renders as `''`.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `ACCOUNT_CUTOVER_COHORT` | Account cutover cohort | backend | hardcoded | closed | — | — | — | — | pending | 2026-10-15 | unowned |
 | `ACCOUNT_CUTOVER_ENFORCEMENT` | Fence accounts onto the rewritten backend | backend | env | closed | off | off (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | off (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | — | pending | 2026-10-15 | unowned |
-| `BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED` | Gate basic-plan eager extraction | backend | env | closed | declared | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | 2026-10-15 | unowned |
-| `BASIC_PLAN_GATE_PROACTIVITY_ENABLED` | Gate basic-plan proactivity | backend | env | closed | declared | true | false | — | pending | 2026-10-15 | unowned |
-| `BASIC_PLAN_GATE_PROXY_EMBED_ENABLED` | Gate basic-plan embedding proxy | backend | env | closed | declared | true | false | — | pending | 2026-10-15 | unowned |
-| `CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED` | Read calendar context during conversation processing | backend | env | closed | declared | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | 2026-10-15 | unowned |
+| `BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED` | Gate basic-plan eager extraction | backend | env | closed | declared | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen, gke/pusher, pusher (chart)) | — | graduate | 2026-10-23 | dazheng |
+| `BASIC_PLAN_GATE_PROACTIVITY_ENABLED` | Gate basic-plan proactivity | backend | env | closed | declared | true | false | — | graduate | 2026-10-23 | dazheng |
+| `BASIC_PLAN_GATE_PROXY_EMBED_ENABLED` | Gate basic-plan embedding proxy | backend | env | closed | declared | true | false | — | graduate | 2026-10-23 | dazheng |
+| `CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED` | Read calendar context during conversation processing | backend | env | closed | declared | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | — | graduate | 2026-10-23 | dazheng |
 | `CONVERSATION_NOTES_V2_ENABLED` | Select notes-v2 summary versus legacy structure extraction | backend | env | closed | true | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | 2026-10-15 | unowned |
-| `CONVERSATION_OCR_CONTEXT_ENABLED` | Read OCR meeting identity during conversation processing | backend | env | closed | declared | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | 2026-10-15 | unowned |
-| `CONVERSATION_RELEVANCE_JEV_ENABLED` | Enable Jev conversation relevance decisions | backend | env | closed | — | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | — | — | pending | 2026-10-15 | unowned |
-| `ContextBucketsFeature.isEnabled` | Beta-by-bundle context bucket pipeline, stable off | macos | bundle | open | — | — | — | — | pending | 2026-10-15 | unowned |
-| `FAIR_USE_ENABLED` | Enforce fair-use metering on selected hosts | backend | env | closed | — | true (backend-listen (chart)) | true (backend-listen (chart)) | — | pending | 2026-10-15 | unowned |
-| `FREE_TIER_LOCAL_PROCESSING` | Enable on-device processing for eligible free users | backend | env | closed | declared | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher, pusher (chart)) | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | 2026-10-15 | unowned |
-| `FREE_TIER_LOCAL_PROCESSING_COHORT` | Admitted UIDs for free-tier local processing | backend | env | closed | declared | config_map (gke/backend-listen, gke/pusher); env_var (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend); valueFrom (backend-listen (chart), pusher (chart)) | '' (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | 2026-10-15 | unowned |
-| `FREE_TIER_MEMORY_SUPPRESSION` | Suppress cloud memory extraction for eligible free users | backend | env | closed | — | — | — | — | pending | 2026-10-15 | unowned |
-| `FREE_TIER_MEMORY_SUPPRESSION_COHORT` | Admitted UIDs for free-tier memory suppression | backend | env | closed | — | — | — | — | pending | 2026-10-15 | unowned |
-| `GOOGLE_CALENDAR_AUTO_LINK_ENABLED` | Automatically link conversations to calendar events | backend | env | closed | — | true (backend-listen (chart), gke/backend-listen) | — | — | pending | 2026-10-15 | unowned |
-| `KNOWLEDGE_LEDGER_DRAIN_ENABLED` | Drain knowledge-ledger writes | backend | env | closed | false | false | false | — | pending | 2026-10-15 | unowned |
+| `CONVERSATION_OCR_CONTEXT_ENABLED` | Read OCR meeting identity during conversation processing | backend | env | closed | declared | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | — | graduate | 2026-10-23 | dazheng |
+| `CONVERSATION_RELEVANCE_JEV_ENABLED` | Enable Jev conversation relevance decisions | backend | env | closed | — | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | — | — | pending | 2026-10-23 | unowned |
+| `ContextBucketsFeature.isEnabled` | Beta-by-bundle context bucket pipeline, stable off | macos | bundle | open | — | — | — | — | pending | 2026-10-23 | unowned |
+| `FAIR_USE_ENABLED` | Enforce fair-use metering on selected hosts | backend | env | closed | — | true (backend-listen (chart)) | true (backend-listen (chart)) | — | pending | 2026-10-23 | unowned |
+| `FREE_TIER_LOCAL_PROCESSING` | Enable on-device processing for eligible free users | backend | env | closed | declared | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher, pusher (chart)) | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher, pusher (chart)) | — | graduate | 2026-10-23 | dazheng |
+| `FREE_TIER_LOCAL_PROCESSING_COHORT` | Admitted UIDs for free-tier local processing | backend | env | closed | declared | config_map (gke/backend-listen, gke/pusher); env_var (cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend); valueFrom (backend-listen (chart), pusher (chart)) | '' (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher, pusher (chart)) | — | graduate | 2026-10-23 | dazheng |
+| `FREE_TIER_MEMORY_SUPPRESSION` | Suppress cloud memory extraction for eligible free users | backend | env | closed | — | — | — | — | pending | 2026-10-23 | unowned |
+| `FREE_TIER_MEMORY_SUPPRESSION_COHORT` | Admitted UIDs for free-tier memory suppression | backend | env | closed | — | — | — | — | pending | 2026-10-23 | unowned |
+| `KNOWLEDGE_LEDGER_DRAIN_ENABLED` | Drain knowledge-ledger writes | backend | env | closed | false | false | false | — | pending | 2026-10-23 | unowned |
 | `MEETING_NOTES_RICH_CONTEXT_ENABLED` | Gather the rich meeting context pack for meeting notes | backend | env | closed | false | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | 2026-10-15 | unowned |
 | `MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED` | Include screen text context in the rich meeting-notes pack | backend | env | closed | false | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | — | pending | 2026-10-15 | unowned |
 | `MEETING_RECEIPT_RECONCILER_ENABLED` | Reconcile meeting receipts | backend | env | closed | false | false (backend-listen (chart), cloud_run/backend, gke/backend-listen) | false (backend-listen (chart), cloud_run/backend, gke/backend-listen) | — | pending | 2026-10-15 | unowned |
-| `MEMORY_BELIEF_MODEL_ENABLED` | Enable belief-model processing | backend | env | closed | declared | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher, job/daily-memory-sweep-job, job/memory-maintenance-job, pusher (chart)) | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, job/daily-memory-sweep-job, job/memory-maintenance-job, pusher (chart)) | — | pending | 2026-10-15 | unowned |
+| `MEMORY_BELIEF_MODEL_ENABLED` | Enable belief-model processing | backend | env | closed | declared | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, gke/pusher, job/daily-memory-sweep-job, job/memory-maintenance-job, pusher (chart)) | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, desktop-backend, gke/backend-listen, job/daily-memory-sweep-job, job/memory-maintenance-job, pusher (chart)) | — | graduate | 2026-10-23 | dazheng |
 | `MEMORY_CANONICAL_CONSOLIDATION_ENABLED` | Enable canonical memory consolidation | backend | env | closed | true | true | true | — | pending | 2026-10-15 | unowned |
 | `MEMORY_CANONICAL_GRAPH_BACKFILL_ENABLED` | Enable canonical graph backfill | backend | env | closed | false | false | false | — | pending | 2026-10-15 | unowned |
-| `MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED` | Enable daily memory sweep cohort gate | backend | env | closed | declared | false | false | — | pending | 2026-10-15 | unowned |
-| `MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG` | PostHog exposure name for sweep cohort, empty in overlays | backend | env | closed | declared | '' | '' | — | pending | 2026-10-15 | unowned |
-| `MEMORY_DAILY_MEMORY_SWEEP_ENABLED` | Enable daily memory sweep job | backend | env | closed | declared | true | false | — | pending | 2026-10-15 | unowned |
-| `MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED` | Allow model calls during daily memory sweep | backend | env | closed | declared | true | false | — | pending | 2026-10-15 | unowned |
-| `MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED` | Reconcile sweep timezone selection | backend | env | closed | declared | true | false | — | pending | 2026-10-15 | unowned |
-| `MEMORY_OWNER_JEV_FLIP_ENABLED` | Switch memory owner decisions to Jev | backend | env | closed | — | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | — | — | pending | 2026-10-15 | unowned |
+| `MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED` | Enable daily memory sweep cohort gate | backend | env | closed | declared | false | false | — | pending | 2026-10-23 | unowned |
+| `MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG` | PostHog exposure name for sweep cohort, empty in overlays | backend | env | closed | declared | '' | '' | — | pending | 2026-10-23 | unowned |
+| `MEMORY_DAILY_MEMORY_SWEEP_ENABLED` | Enable daily memory sweep job | backend | env | closed | declared | true | false | — | pending | 2026-10-23 | unowned |
+| `MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED` | Allow model calls during daily memory sweep | backend | env | closed | declared | true | false | — | pending | 2026-10-23 | unowned |
+| `MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED` | Reconcile sweep timezone selection | backend | env | closed | declared | true | false | — | pending | 2026-10-23 | unowned |
+| `MEMORY_OWNER_JEV_FLIP_ENABLED` | Switch memory owner decisions to Jev | backend | env | closed | — | true (backend-listen (chart), cloud_run/backend, cloud_run/backend-sync, gke/backend-listen, gke/pusher, pusher (chart)) | — | — | pending | 2026-10-23 | unowned |
 | `MENTOR_GATE_DEBOUNCE_ENABLED` | Debounce mentor gate evaluation | backend | env | closed | — | — | — | — | pending | 2026-10-15 | unowned |
 | `MENTOR_GATE_PROMPT_CACHE_ENABLED` | Cache mentor gate prompts | backend | env | closed | — | — | — | — | pending | 2026-10-15 | unowned |
 | `OMI_GEMINI_OVERFLOW_ENABLED` | Enable overflow routing to Gemini | backend | env | closed | — | — | — | — | pending | 2026-10-15 | unowned |
@@ -140,42 +147,39 @@ and an explicit empty literal renders as `''`.
 | `OMI_LLM_GATEWAY_CONVERSATION_STRUCTURE_SHADOW_ENABLED` | Shadow gateway conversation structuring | backend | env | closed | — | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | — | — | pending | 2026-10-15 | unowned |
 | `OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED` | Shadow all development gateway lanes | backend | env | closed | — | false (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | — | — | pending | 2026-10-15 | unowned |
 | `OMI_LLM_GPT56_EXPLICIT_CACHE_ENABLED` | Enable explicit GPT-5.6 cache hints | backend | env | closed | true | true (backend-listen (chart), gke/backend-listen) | true (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-15 | unowned |
-| `PARAKEET_STREAM_ALLOCATION_PERCENT` | Allocate streaming sessions to Parakeet | backend | env | closed | 100 | 100 (gke/parakeet, parakeet (chart)) | 100 (gke/parakeet, parakeet (chart)) | — | pending | 2026-10-15 | unowned |
-| `PARAKEET_WINDOW_ALLOCATION_PERCENT` | Allocate live sessions to Parakeet window | backend | env | closed | 0 | 100 (backend-listen (chart), gke/backend-listen) | 0 (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-15 | unowned |
-| `PARAKEET_WINDOW_DIARIZATION` | Enable Parakeet window diarization | backend | env | closed | false | false (backend-listen (chart), gke/backend-listen) | false (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-15 | unowned |
-| `PUBLIC_SHARED_CONVERSATION_CHAT_MODE` | Enable chat on public shared conversations | backend | env | closed | off | off (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | off (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | — | pending | 2026-10-15 | unowned |
+| `PARAKEET_STREAM_ALLOCATION_PERCENT` | Allocate streaming sessions to Parakeet | backend | env | closed | 100 | 100 (gke/parakeet, parakeet (chart)) | 100 (gke/parakeet, parakeet (chart)) | — | pending | 2026-10-23 | unowned |
+| `PARAKEET_WINDOW_ALLOCATION_PERCENT` | Allocate live sessions to Parakeet window | backend | env | closed | 0 | 100 (backend-listen (chart), gke/backend-listen) | 0 (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-23 | unowned |
+| `PARAKEET_WINDOW_DIARIZATION` | Enable Parakeet window diarization | backend | env | closed | false | false (backend-listen (chart), gke/backend-listen) | false (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-23 | unowned |
+| `PUBLIC_SHARED_CONVERSATION_CHAT_MODE` | Enable chat on public shared conversations | backend | env | closed | off | off (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | off (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | — | kill | 2026-10-15 | dazheng |
 | `RATE_LIMIT_SHADOW_MODE` | Shadow backend rate limits | backend | env | closed | — | — | — | — | pending | 2026-10-15 | unowned |
-| `SCREEN_FRAME_EGRESS_ENABLED` | Allow meeting-note screen frame egress | backend | env | closed | — | true | — | — | pending | 2026-10-15 | unowned |
+| `SCREEN_FRAME_EGRESS_ENABLED` | Allow meeting-note screen frame egress | backend | env | closed | — | true | — | — | graduate | 2026-10-23 | dazheng |
 | `SELFHEAL_MODE` | Conversation self-heal sweeper mode: off/detect-only/nudge/heal | backend | env | closed | — | — | — | — | pending | 2026-10-15 | backend runtime_env (PR #18855) |
 | `STT_CONNECT_ORDER_FROM_CONFIG` | Use configured STT provider connection order | backend | env | closed | false | true (backend-listen (chart), gke/backend-listen) | false (backend-listen (chart), gke/backend-listen) | — | pending | 2026-10-15 | unowned |
 | `SYNC_BACKFILL_ROUTING_ENABLED` | Route eligible sync work to backfill lane | backend | env | closed | — | — | — | — | pending | 2026-10-15 | unowned |
 | `TRANSCRIPT_CHUNK_INDEXING_ENABLED` | Index transcript chunks for retrieval | backend | env | closed | — | — | — | — | pending | 2026-10-15 | unowned |
-| `TRIAL_PAYWALL_ENABLED` | Enable desktop trial paywall | backend | env | closed | — | — | — | — | pending | 2026-10-15 | unowned |
 | `VAD_GATE_MODE` | Select off, shadow, or active server VAD gate | backend, mobile | env | closed | — | active (backend-listen (chart)) | active (backend-listen (chart)) | — | pending | 2026-10-15 | unowned |
 | `X-Omi-Memory-Belief-Enabled` | Expose belief processing capability to memory clients | backend, macos | server_capability | closed | — | — | — | — | pending | 2026-10-15 | unowned |
 | `X-Omi-Memory-Canonical-Lifecycle-Exposed` | Canonical memory lifecycle response header retained for older clients | backend, macos | server_capability | closed | — | — | — | — | pending | 2026-10-15 | unowned |
 | `chat_first_ui` | Universal chat-first capability sent for older clients and sampled by macOS | backend, macos | server_capability | closed | — | — | — | — | pending | 2026-10-15 | unowned |
-| `context_buckets_departure_eval_kill` | Beta departure-evaluation stop | macos | posthog | inverted | — | — | — | expected (kill) | pending | 2026-10-15 | unowned |
-| `context_buckets_destination_kill` | Beta destination-routing stop | macos | posthog | inverted | — | — | — | expected (kill) | pending | 2026-10-15 | unowned |
-| `context_buckets_dwell_refresh_kill` | Beta dwell-refresh stop | macos | posthog | inverted | — | — | — | expected (kill) | pending | 2026-10-15 | unowned |
-| `context_buckets_fact_write_policy_kill` | Beta fact-write policy stop | macos | posthog | inverted | — | — | — | expected (kill) | pending | 2026-10-15 | unowned |
-| `context_buckets_kill` | Beta context-buckets emergency stop | macos | posthog | inverted | — | — | — | expected (kill) | pending | 2026-10-15 | unowned |
-| `context_buckets_retrieval_kill` | Beta retrieval-hop stop | macos | posthog | inverted | — | — | — | expected (kill) | pending | 2026-10-15 | unowned |
-| `desktop-onboarding-rerun` | Payload-controlled onboarding rerun | macos | posthog | closed | — | — | — | expected (payload) | pending | 2026-10-15 | unowned |
-| `desktop_interject` | Enable floating-card interject on stable | macos | posthog | closed | — | — | — | absent (enable) | pending | 2026-10-15 | unowned |
-| `desktop_interject_kill` | Beta floating-card interject stop | macos | posthog | inverted | — | — | — | expected (kill) | pending | 2026-10-15 | unowned |
-| `desktop_persistent_capture_stream` | Enable persistent capture stream in shipped bundles | macos | posthog | closed | — | — | — | absent (enable) | pending | 2026-10-15 | unowned |
+| `context_buckets_departure_eval_kill` | Beta departure-evaluation stop | macos | posthog | inverted | — | — | — | expected (kill) | pending | 2026-10-23 | unowned |
+| `context_buckets_destination_kill` | Beta destination-routing stop | macos | posthog | inverted | — | — | — | expected (kill) | pending | 2026-10-23 | unowned |
+| `context_buckets_dwell_refresh_kill` | Beta dwell-refresh stop | macos | posthog | inverted | — | — | — | expected (kill) | pending | 2026-10-23 | unowned |
+| `context_buckets_fact_write_policy_kill` | Beta fact-write policy stop | macos | posthog | inverted | — | — | — | expected (kill) | pending | 2026-10-23 | unowned |
+| `context_buckets_kill` | Beta context-buckets emergency stop | macos | posthog | inverted | — | — | — | expected (kill) | pending | 2026-10-23 | unowned |
+| `context_buckets_retrieval_kill` | Beta retrieval-hop stop | macos | posthog | inverted | — | — | — | expected (kill) | pending | 2026-10-23 | unowned |
+| `desktop_interject` | Enable floating-card interject on stable | macos | posthog | closed | — | — | — | absent (enable) | pending | 2026-10-23 | unowned |
+| `desktop_interject_kill` | Beta floating-card interject stop | macos | posthog | inverted | — | — | — | expected (kill) | pending | 2026-10-23 | unowned |
 | `free-tier-cohort-v1` | Free-tier exposure cohort, never direct admission | backend | posthog | closed | — | — | — | absent (exposure) | pending | 2026-10-15 | unowned |
-| `isProactiveCandidatesEnabled` | Dogfood-only prewritten proactive candidates | macos | hardcoded | closed | — | — | — | — | pending | 2026-10-15 | unowned |
-| `isWorkstreamPoolingEnabled` | Dogfood-only context-bucket workstream pooling | macos | hardcoded | closed | — | — | — | — | pending | 2026-10-15 | unowned |
-| `jit-processing-v1` | JIT processing admission cohort | backend | posthog | closed | — | — | — | expected (enable) | pending | 2026-10-15 | unowned |
-| `negative_feedback_remediation` | Enable negative-feedback remediation on stable | macos | posthog | closed | — | — | — | absent (enable) | pending | 2026-10-15 | unowned |
-| `negative_feedback_remediation_kill` | Beta negative-feedback remediation stop | macos | posthog | inverted | — | — | — | expected (kill) | pending | 2026-10-15 | unowned |
-| `on_device_meeting_identity` | Enable on-device meeting identity on stable | macos | posthog | closed | — | — | — | absent (enable) | pending | 2026-10-15 | unowned |
+| `isProactiveCandidatesEnabled` | Dogfood-only prewritten proactive candidates | macos | hardcoded | closed | — | — | — | — | kill | 2026-10-15 | dazheng |
+| `isWorkstreamPoolingEnabled` | Dogfood-only context-bucket workstream pooling | macos | hardcoded | closed | — | — | — | — | kill | 2026-10-15 | dazheng |
+| `jit-processing-v1` | JIT processing admission cohort | backend | posthog | closed | — | — | — | expected (enable) | graduate | 2026-10-23 | dazheng |
+| `negative_feedback_remediation` | Enable negative-feedback remediation on stable | macos | posthog | closed | — | — | — | absent (enable) | pending | 2026-10-23 | unowned |
+| `negative_feedback_remediation_kill` | Beta negative-feedback remediation stop | macos | posthog | inverted | — | — | — | expected (kill) | pending | 2026-10-23 | unowned |
+| `on_device_meeting_identity` | Enable on-device meeting identity on stable | macos | posthog | closed | — | — | — | absent (enable) | graduate | 2026-10-23 | dazheng |
 | `on_device_meeting_identity_kill` | Beta on-device meeting identity stop | macos | posthog | inverted | — | — | — | expected (kill) | pending | 2026-10-15 | unowned |
 | `screen_activity_lossless_sync` | Enable lossless screen sync on stable | macos | posthog | closed | — | — | — | absent (enable) | pending | 2026-10-15 | unowned |
 | `screen_activity_lossless_sync_kill` | Beta lossless screen sync stop | macos | posthog | inverted | — | — | — | expected (kill) | pending | 2026-10-15 | unowned |
-| `system_calendar_meeting_context` | Enable system calendar meeting context on stable | macos | posthog | closed | — | — | — | absent (enable) | pending | 2026-10-15 | unowned |
+| `system_calendar_meeting_context` | Enable system calendar meeting context on stable | macos | posthog | closed | — | — | — | absent (enable) | graduate | 2026-10-23 | dazheng |
 | `system_calendar_meeting_context_kill` | Beta system calendar meeting context stop | macos | posthog | inverted | — | — | — | expected (kill) | pending | 2026-10-15 | unowned |
 
 ### ops_kill
@@ -184,8 +188,10 @@ and an explicit empty literal renders as `''`.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `ACTION_ITEMS_LIST_STALE_CLIENT_REFUSE` | Refuse stale action-items list clients | backend | env | open | — | — | 1 | — | keep | — | unowned |
 | `ADMIN_KEY_AUTH_ENABLED` | Allow administrator-key authentication | backend | env | open | — | — | — | — | keep | — | unowned |
+| `CONVERSATION_SPEAKER_RESOLUTION_ENABLED` | Incident stop for conversation-wide speaker resolution | backend | env | open | — | — | — | — | keep | — | unowned |
 | `CONVERSATION_STORED_MEETING_CONTEXT_ENABLED` | Incident stop for stored meeting context lookup | backend | env | open | — | — | — | — | keep | — | unowned |
 | `DAY3_REENGAGEMENT_EMAIL_KILL_SWITCH` | Stop day-three re-engagement email | backend | env | inverted | false | false | false | — | keep | — | unowned |
+| `DEEPGRAM_SELF_HOSTED_ENABLED` | Select self-hosted Deepgram filler-word policy on pusher | backend | env | closed | — | false (backend-listen (chart)) | false (backend-listen (chart)); true (pusher (chart)) | — | keep | — | unowned |
 | `DESKTOP_UPDATE_POINTERS_MODE` | Fall back to legacy desktop update pointers | backend | env | open | primary | primary (backend-listen (chart), cloud_run/backend, gke/backend-listen) | primary (backend-listen (chart), cloud_run/backend, gke/backend-listen) | — | keep | — | unowned |
 | `FAIR_USE_KILL_SWITCH` | Emergency stop for fair-use enforcement | backend | env | inverted | — | false (backend-listen (chart)) | false (backend-listen (chart)) | — | keep | — | unowned |
 | `FRAME_REQUEST_RETENTION_INDEPENDENT_HEALTHY` | Skip shared retention when independent job is healthy | backend | env | closed | false | false | false | — | keep | — | unowned |
@@ -214,7 +220,6 @@ and an explicit empty literal renders as `''`.
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `ACCOUNT_DELETION_DISPATCH_MODE` | Select Cloud Tasks for account deletion | backend | env | closed | — | — | cloud_tasks (backend-listen (chart), cloud_run/backend, cloud_run/backend-integration, cloud_run/backend-sync, cloud_run/backend-sync-backfill, gke/backend-listen) | — | keep | — | unowned |
 | `AUDIO_MERGE_DISPATCH_MODE` | Select audio-merge dispatch lane | backend | env | closed | — | — | — | — | keep | — | unowned |
-| `DEEPGRAM_SELF_HOSTED_ENABLED` | Select self-hosted Deepgram filler-word policy on pusher | backend | env | closed | — | false (backend-listen (chart)) | false (backend-listen (chart)); true (pusher (chart)) | — | keep | — | unowned |
 | `FIRESTORE_CACHE_ENABLED` | Enable Firestore response cache | backend | env | closed | — | — | — | — | keep | — | unowned |
 | `LISTEN_FINALIZATION_DISPATCH_MODE` | Select conversation finalization dispatch lane | backend | env | closed | — | — | cloud_tasks | — | keep | — | unowned |
 | `MEMORY_CANONICAL_MAINTENANCE_FLEX` | Select gateway Flex lane for memory maintenance | backend | env | closed | true | true | true | — | keep | — | unowned |
@@ -244,6 +249,7 @@ their code default (`fail` tells you which way a missing value resolves).
 
 - `ADMIN_KEY_AUTH_ENABLED` — Allow administrator-key authentication (fail: open)
 - `AUDIO_MERGE_DISPATCH_MODE` — Select audio-merge dispatch lane (fail: closed)
+- `CONVERSATION_SPEAKER_RESOLUTION_ENABLED` — Incident stop for conversation-wide speaker resolution (fail: open)
 - `CONVERSATION_STORED_MEETING_CONTEXT_ENABLED` — Incident stop for stored meeting context lookup (fail: open)
 - `FIRESTORE_CACHE_ENABLED` — Enable Firestore response cache (fail: closed)
 - `FREE_TIER_MEMORY_SUPPRESSION` — Suppress cloud memory extraction for eligible free users (fail: closed)
@@ -255,6 +261,7 @@ their code default (`fail` tells you which way a missing value resolves).
 - `MENTOR_GATE_PROMPT_CACHE_ENABLED` — Cache mentor gate prompts (fail: closed)
 - `OMI_GEMINI_OVERFLOW_ENABLED` — Enable overflow routing to Gemini (fail: closed)
 - `OMI_LLM_GATEWAY_OBSERVABILITY_LOGS_ENABLED` — Enable gateway observability logs (fail: closed)
+- `OMI_LLM_GATEWAY_OUTPUT_BUDGET_EXPERIMENTS` — Select gateway output-budget experiments (fail: closed)
 - `OMI_MODEL_TIER` — Select proxy budget tier (fail: closed)
 - `PARAKEET_DIARIZATION` — Enable prerecorded Parakeet diarization (fail: closed)
 - `PARAKEET_USE_V2` — Select Parakeet prerecorded v2 pipeline (fail: open)
@@ -265,7 +272,6 @@ their code default (`fail` tells you which way a missing value resolves).
 - `SYNC_BACKFILL_ROUTING_ENABLED` — Route eligible sync work to backfill lane (fail: closed)
 - `SYNC_DISPATCH_MODE` — Select sync dispatch lane (fail: closed)
 - `TRANSCRIPT_CHUNK_INDEXING_ENABLED` — Index transcript chunks for retrieval (fail: closed)
-- `TRIAL_PAYWALL_ENABLED` — Enable desktop trial paywall (fail: closed)
 - `TYPESENSE_CONVERSATION_INDEX_WRITES` — Write conversations to Typesense index (fail: closed)
 
 ## Not feature flags
@@ -274,8 +280,8 @@ Do not list these as rollout flags:
 
 - Flutter `OmiFeatures` hardware capability bits.
 - Integration-nudge UserDefaults opt-out (per-user preference, not a remote gate).
-- Local process overrides (`OMI_FORCE_*`, `OMI_PERSISTENT_CAPTURE_STREAM`,
-  and the bucket-pipeline `OMI_FORCE_BUCKET_*` / `OMI_FORCE_DWELL_REFRESH` /
+- Local process overrides (`OMI_FORCE_*` and the bucket-pipeline
+  `OMI_FORCE_BUCKET_*` / `OMI_FORCE_DWELL_REFRESH` /
   `OMI_FORCE_DEPARTURE_EVALUATION` / `OMI_FORCE_FACT_WRITE_POLICY` knobs).
   Most are dev-only controls, but some (e.g. `OMI_FORCE_CLOUD_STT`,
   `OMI_FORCE_NOTCH`) are deliberately honored by shipped builds. Either way
@@ -285,64 +291,69 @@ Do not list these as rollout flags:
 The registry `ignore:` block names every other intentional non-flag with its
 reason:
 
-| Key | Reason |
-| --- | --- |
-| `DD_TRACE_ENABLED` | Datadog telemetry instrumentation switch, not a product behavior flag |
-| `DD_LOGS_ENABLED` | Datadog telemetry log routing switch, not a product behavior flag |
-| `OMI_FORCE_CONTEXT_BUCKETS` | Local-only dev override, not shipped remote authority |
-| `OMI_FORCE_BUCKET_RETRIEVAL` | Local-only dev override, not shipped remote authority |
-| `OMI_FORCE_BUCKET_DESTINATIONS` | Local-only dev override, not shipped remote authority |
-| `OMI_FORCE_BUCKET_WORKSTREAMS` | Local-only dev override, not shipped remote authority |
-| `OMI_FORCE_BUCKET_CANDIDATES` | Local-only dev override, not shipped remote authority |
-| `OMI_FORCE_LOSSLESS_SCREEN_SYNC` | Local-only dev override, not shipped remote authority |
-| `OMI_FORCE_DWELL_REFRESH` | Local-only dev override, not shipped remote authority |
-| `OMI_FORCE_DEPARTURE_EVALUATION` | Local-only dev override, not shipped remote authority |
-| `OMI_FORCE_FACT_WRITE_POLICY` | Local-only dev override, not shipped remote authority |
-| `OMI_FORCE_CANONICAL_MEMORY_ATLAS` | Local-only dev brain-map override retained while the legacy fallback remains |
-| `OMI_FORCE_INTERJECT` | Local-only dev floating-card override, not remote rollout authority |
-| `OMI_FORCE_NEGATIVE_FEEDBACK_REMEDIATION` | Local-only dev remediation override, not remote rollout authority |
-| `OMI_FORCE_SYSTEM_CALENDAR_MEETING_CONTEXT` | Local-only dev calendar override, not remote rollout authority |
-| `OMI_FORCE_ON_DEVICE_MEETING_IDENTITY` | Local-only dev meeting identity override, not remote rollout authority |
-| `OMI_FORCE_NOTCH` | Local display override honored by shipped builds, not remote rollout authority |
-| `OMI_FORCE_NO_NOTCH` | Local display override honored by shipped builds, not remote rollout authority |
-| `OMI_FORCE_SYNTHESIS_FAIL` | Local QA fault-injection override honored by shipped builds, not remote rollout authority |
-| `OMI_FORCE_CLOUD_STT` | Local override deliberately honored in shipped builds; not remote rollout authority |
-| `OMI_LOCAL_EMBEDDINGS` | Local override deliberately honored in shipped builds; not remote rollout authority |
-| `OMI_DISABLE_LOCAL_EMBEDDINGS` | Local incident override deliberately honored in shipped builds; not remote rollout authority |
-| `OMI_DISABLE_LOCAL_INFERENCE` | Local incident override deliberately honored in shipped builds; not remote rollout authority |
-| `freeTierLocalProcessing` | UserDefaults override deliberately honored in shipped builds; not remote rollout authority |
-| `localEmbeddingsEnabled` | UserDefaults override deliberately honored in shipped builds; not remote rollout authority |
-| `disableLocalInference` | UserDefaults override deliberately honored in shipped builds; not remote rollout authority |
-| `forceCloudSTT` | UserDefaults override deliberately honored in shipped builds; not remote rollout authority |
-| `vadGateEnabled` | Mobile shipped developer preference, pending product decision; not remote rollout authority |
-| `autoCreateSpeakersEnabled` | Mobile shipped developer preference, pending product decision; not remote rollout authority |
-| `OMI_FREE_TIER_LOCAL_PROCESSING` | Environment override deliberately honored in shipped builds; not remote rollout authority |
-| `OMI_FORCE_LOCAL_INFERENCE_ENGINE` | Local inference engine override deliberately honored in shipped builds |
-| `forceLocalInferenceEngine` | UserDefaults inference engine override deliberately honored in shipped builds |
-| `OMI_FORCE_LOCAL_EMBEDDING_ENGINE` | Local embedding engine override deliberately honored in shipped builds |
-| `forceLocalEmbeddingEngine` | UserDefaults embedding engine override deliberately honored in shipped builds |
-| `disableLocalEmbeddings` | UserDefaults embedding incident override deliberately honored in shipped builds |
-| `OMI_LOCAL_INFERENCE_URL` | Local engine endpoint override deliberately honored in shipped builds, not rollout authority |
-| `localInferenceServerURL` | UserDefaults local engine endpoint override deliberately honored in shipped builds |
-| `OMI_LOCAL_INFERENCE_MODEL` | Local model choice deliberately honored in shipped builds, not rollout authority |
-| `localInferenceModel` | UserDefaults local model choice deliberately honored in shipped builds |
-| `OMI_LOCAL_INFERENCE_CONTEXT_TOKENS` | Local numeric tuning deliberately honored in shipped builds, not rollout authority |
-| `localInferenceContextTokens` | UserDefaults local numeric tuning deliberately honored in shipped builds |
-| `OMI_LOCAL_INFERENCE_TIMEOUT_SECONDS` | Local timeout deliberately honored in shipped builds, not rollout authority |
-| `localInferenceTimeoutSeconds` | UserDefaults local timeout deliberately honored in shipped builds |
-| `OMI_FORCE_PARAKEET_FAIL` | Local QA failure override, not remote rollout authority |
-| `forceParakeetFail` | Local QA failure override, not remote rollout authority |
-| `OMI_YOLO_MODE` | Local agent override restricted to non-production builds; not remote rollout authority |
-| `PROVIDER_MODE` | Local offline provider harness, not a product flag |
+| Key | Reason | owner | decision | review_by | notes |
+| --- | --- | --- | --- | --- | --- |
+| `DD_TRACE_ENABLED` | Datadog telemetry instrumentation switch, not a product behavior flag | — | — | — | — |
+| `DD_LOGS_ENABLED` | Datadog telemetry log routing switch, not a product behavior flag | — | — | — | — |
+| `OMI_FORCE_CONTEXT_BUCKETS` | Local-only dev override, not shipped remote authority | — | — | — | — |
+| `OMI_FORCE_BUCKET_RETRIEVAL` | Local-only dev override, not shipped remote authority | — | — | — | — |
+| `OMI_FORCE_BUCKET_DESTINATIONS` | Local-only dev override, not shipped remote authority | — | — | — | — |
+| `OMI_FORCE_BUCKET_WORKSTREAMS` | Local-only dev override, not shipped remote authority | — | — | — | — |
+| `OMI_FORCE_BUCKET_CANDIDATES` | Local-only dev override, not shipped remote authority | — | — | — | — |
+| `OMI_FORCE_LOSSLESS_SCREEN_SYNC` | Local-only dev override, not shipped remote authority | — | — | — | — |
+| `OMI_FORCE_DWELL_REFRESH` | Local-only dev override, not shipped remote authority | — | — | — | — |
+| `OMI_FORCE_DEPARTURE_EVALUATION` | Local-only dev override, not shipped remote authority | — | — | — | — |
+| `OMI_FORCE_FACT_WRITE_POLICY` | Local-only dev override, not shipped remote authority | — | — | — | — |
+| `OMI_FORCE_CANONICAL_MEMORY_ATLAS` | Local-only dev brain-map override retained while the legacy fallback remains | — | — | — | — |
+| `OMI_FORCE_INTERJECT` | Local-only dev floating-card override, not remote rollout authority | — | — | — | — |
+| `OMI_FORCE_NEGATIVE_FEEDBACK_REMEDIATION` | Local-only dev remediation override, not remote rollout authority | — | — | — | — |
+| `OMI_FORCE_SYSTEM_CALENDAR_MEETING_CONTEXT` | Local-only dev calendar override, not remote rollout authority | — | — | — | — |
+| `OMI_FORCE_ON_DEVICE_MEETING_IDENTITY` | Local-only dev meeting identity override, not remote rollout authority | — | — | — | — |
+| `OMI_FORCE_NOTCH` | Local display override honored by shipped builds, not remote rollout authority | — | — | — | — |
+| `OMI_FORCE_NO_NOTCH` | Local display override honored by shipped builds, not remote rollout authority | — | — | — | — |
+| `OMI_FORCE_SYNTHESIS_FAIL` | Local QA fault-injection override honored by shipped builds, not remote rollout authority | — | — | — | — |
+| `OMI_FORCE_CLOUD_STT` | Local override deliberately honored in shipped builds; not remote rollout authority | — | — | — | — |
+| `OMI_LOCAL_EMBEDDINGS` | Local override deliberately honored in shipped builds; not remote rollout authority | — | — | — | — |
+| `OMI_DISABLE_LOCAL_EMBEDDINGS` | Local incident override deliberately honored in shipped builds; not remote rollout authority | — | — | — | — |
+| `OMI_DISABLE_LOCAL_INFERENCE` | Local incident override deliberately honored in shipped builds; not remote rollout authority | — | — | — | — |
+| `freeTierLocalProcessing` | UserDefaults override deliberately honored in shipped builds; not remote rollout authority | — | — | — | — |
+| `localEmbeddingsEnabled` | UserDefaults override deliberately honored in shipped builds; not remote rollout authority | dazheng | graduate | 2026-10-23 | Blocked on production local-embedding availability and fallback verification |
+| `disableLocalInference` | UserDefaults override deliberately honored in shipped builds; not remote rollout authority | — | — | — | — |
+| `forceCloudSTT` | UserDefaults override deliberately honored in shipped builds; not remote rollout authority | — | — | — | — |
+| `vadGateEnabled` | Mobile shipped developer preference, pending product decision; not remote rollout authority | — | pending | 2026-10-23 | David: decide after registry+cleanup is prod-stable |
+| `meeting_note_screenshots_enabled` | Account-level screenshot consent, not remote rollout authority | dazheng | graduate | 2026-10-23 | Blocked on screen-frame consent and prod egress validation |
+| `OMI_FREE_TIER_LOCAL_PROCESSING` | Environment override deliberately honored in shipped builds; not remote rollout authority | — | — | — | — |
+| `OMI_FORCE_LOCAL_INFERENCE_ENGINE` | Local inference engine override deliberately honored in shipped builds | — | — | — | — |
+| `forceLocalInferenceEngine` | UserDefaults inference engine override deliberately honored in shipped builds | — | — | — | — |
+| `OMI_FORCE_LOCAL_EMBEDDING_ENGINE` | Local embedding engine override deliberately honored in shipped builds | — | — | — | — |
+| `forceLocalEmbeddingEngine` | UserDefaults embedding engine override deliberately honored in shipped builds | — | — | — | — |
+| `disableLocalEmbeddings` | UserDefaults embedding incident override deliberately honored in shipped builds | — | — | — | — |
+| `OMI_LOCAL_INFERENCE_URL` | Local engine endpoint override deliberately honored in shipped builds, not rollout authority | — | — | — | — |
+| `localInferenceServerURL` | UserDefaults local engine endpoint override deliberately honored in shipped builds | — | — | — | — |
+| `OMI_LOCAL_INFERENCE_MODEL` | Local model choice deliberately honored in shipped builds, not rollout authority | — | — | — | — |
+| `localInferenceModel` | UserDefaults local model choice deliberately honored in shipped builds | — | — | — | — |
+| `OMI_LOCAL_INFERENCE_CONTEXT_TOKENS` | Local numeric tuning deliberately honored in shipped builds, not rollout authority | — | — | — | — |
+| `localInferenceContextTokens` | UserDefaults local numeric tuning deliberately honored in shipped builds | — | — | — | — |
+| `OMI_LOCAL_INFERENCE_TIMEOUT_SECONDS` | Local timeout deliberately honored in shipped builds, not rollout authority | — | — | — | — |
+| `localInferenceTimeoutSeconds` | UserDefaults local timeout deliberately honored in shipped builds | — | — | — | — |
+| `OMI_FORCE_PARAKEET_FAIL` | Local QA failure override, not remote rollout authority | — | — | — | — |
+| `forceParakeetFail` | Local QA failure override, not remote rollout authority | — | — | — | — |
+| `OMI_YOLO_MODE` | Local agent override restricted to non-production builds; not remote rollout authority | — | — | — | — |
+| `PROVIDER_MODE` | Local offline provider harness, not a product flag | — | — | — | — |
 
 ## Retired names — do not reuse
 
-Code was deleted but an external row may still exist; the sync reports
-live leftovers as read-only delete candidates. Never re-read these names
-for admission.
+Code was deleted but an external row may still exist. Names cover PostHog
+keys and shipped local preference keys; the sync reports live PostHog
+leftovers as read-only delete candidates. Never re-read these names for
+admission.
 
 | Key | Retired | Reason |
 | --- | --- | --- |
+| `autoCreateSpeakersEnabled` | 2026-09-26 | Shipped developer preference removed; create_speakers always true |
 | `context_buckets` | 2026-09-24 | Unused nominal enable row; bundle identity owns the active gate |
 | `daily-memory-sweep-v1` | 2026-09-24 | Decoy name never authorizes JIT or sweep admission |
+| `desktop-onboarding-rerun` | 2026-09-26 | Onboarding rerun policy removed; onboarding resumes via persisted state |
+| `desktop_persistent_capture_stream` | 2026-09-26 | Persistent capture stream removed; capture uses the one-shot path |
 | `jit-processing-ledger-migration-v1` | 2026-09-24 | Old ledger migration name never authorizes JIT processing |
+| `mobile-summary-feedback-layout-v1` | 2026-09-26 | Experiment removed; summary feedback uses the standard layout |

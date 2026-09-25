@@ -183,6 +183,7 @@ class _HomeFrame extends StatelessWidget {
       body: Stack(children: [
         const HomeContentPage(),
         BottomNavBar(onTabTap: (_, __) {}),
+        const HomeChatBarBackdrop(),
         Positioned(
           left: 16,
           right: 16,

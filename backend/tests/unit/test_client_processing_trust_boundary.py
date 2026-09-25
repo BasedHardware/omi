@@ -526,7 +526,6 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
         DumpSite('utils/conversations/process_conversation.py', '_normal_persist_payload', 'dict'),
         DumpSite('utils/conversations/meeting_context.py', 'store_meeting_context', 'model_dump'),
         DumpSite('utils/conversations/process_conversation.py', '_emit_derived_effects', 'dict'),
-        DumpSite('utils/conversations/process_conversation.py', '_emit_derived_effects', 'model_dump'),
         DumpSite('utils/conversations/process_conversation.py', 'process_user_emotion', 'dict'),
         DumpSite(
             'utils/conversations/process_conversation.py',
@@ -648,6 +647,10 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         # sources, and windows only, written solely by database.capture_groups.
         # No client-authored text, so not projection-family.
         'capture_group',
+        # Server-authored by speaker resolution during processing: a status and
+        # the participant speaker ids. No client-authored text, so not
+        # projection-family.
+        'speaker_resolution',
     }
 )
 

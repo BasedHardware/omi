@@ -2712,14 +2712,6 @@
     "@detailedDiagnosticMessages": {
         "description": "Description for transcription diagnostics"
     },
-    "autoCreateSpeakers": "Automatski kreiraj govornika",
-    "@autoCreateSpeakers": {
-        "description": "Experimental feature name"
-    },
-    "autoCreateWhenNameDetected": "Automatski kreiraj kada je ime detektirano",
-    "@autoCreateWhenNameDetected": {
-        "description": "Description for auto-create speakers"
-    },
     "followUpQuestions": "Pitanja za praćenje",
     "@followUpQuestions": {
         "description": "Experimental feature name"
@@ -11094,7 +11086,6 @@
     "addToClaudeCodeConfig": "Dodaj u ~/.claude.json",
     "claudeDesktopConnectorSetup": "Na Claude Desktop → Settings → Connectors dodajte prilagođeni konektor i zalijepite URL poslužitelja. Ako Claude zatraži napredni OAuth Client ID, koristite vrijednost ispod i ostavite tajnu praznom — nikada nemojte koristiti svoj MCP API ključ kao OAuth tajnu.",
     "transcriptionUnavailableRecordingContinues": "Transkripcije nisu dostupne, snimanje se nastavlja na uređaju i obradit će se kasnije",
-    "transcriptionUnavailableSavingOnDevice": "Transkripcija nedostupna · sprema se na uređaj",
     "transcriptionsPendingFraction": "Transkripcije na čekanju {pending}/{total}",
     "transcriptionsPendingCount": "Transkripcije na čekanju {count}",
     "captureSourceCall": "Poziv",
@@ -11113,5 +11104,16 @@
     "moreWaysToRecord": "Više načina snimanja",
     "openCall": "Otvori poziv",
     "captureRecoveryBanner": "Zvuk privjeska ne stiže do aplikacije — dodirnite za popravak",
-    "phoneRecordingBlockedByPendantBatch": "Zaustavite Transcribe Later na privjesku prije snimanja telefonom."
+    "phoneRecordingBlockedByPendantBatch": "Zaustavite Transcribe Later na privjesku prije snimanja telefonom.",
+    "captureNotTranscribing": "Nema transkripcije",
+    "captureAudioSavedTranscribesLater": "Zvuk je spremljen, transkripcija kasnije",
+    "captureStillRecording": "Snimanje se nastavlja",
+    "captureMicInUseElsewhere": "Mikrofon koristi druga aplikacija",
+    "captureMicInterruptedDetail": "Poziv ili druga aplikacija preuzela je mikrofon, pa Omi trenutačno ne čuje. Omi će sam nastaviti kad mikrofon bude slobodan. Sve dosad snimljeno je sigurno.",
+    "captureCustomSttUnreachableDetail": "Vaša prilagođena usluga pretvorbe govora u tekst nije dostupna. Omi čuva zvuk na ovom telefonu i poslat će ga kad se usluga vrati. Ništa se ne gubi.",
+    "captureStarting": "Pokretanje…",
+    "capturePhoneStorageFull": "Pohrana telefona je puna",
+    "captureStorageAlmostFull": "Pohrana je gotovo puna",
+    "capturePendantDisconnectedDetail": "Privjesak je izgubio vezu s ovim telefonom. Omi će se sam ponovno povezati kad je privjesak uključen i u blizini. Sve dosad snimljeno je sigurno.",
+    "participantsSummaryUncounted": "{name} i drugi"
 }

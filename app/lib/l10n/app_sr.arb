@@ -2712,14 +2712,6 @@
     "@detailedDiagnosticMessages": {
         "description": "Description for transcription diagnostics"
     },
-    "autoCreateSpeakers": "Аутоматски создај говорнике",
-    "@autoCreateSpeakers": {
-        "description": "Experimental feature name"
-    },
-    "autoCreateWhenNameDetected": "Аутоматски создај када је име откривено",
-    "@autoCreateWhenNameDetected": {
-        "description": "Description for auto-create speakers"
-    },
     "followUpQuestions": "Додатна питања",
     "@followUpQuestions": {
         "description": "Experimental feature name"
@@ -11094,7 +11086,6 @@
     "addToClaudeCodeConfig": "Додај у ~/.claude.json",
     "claudeDesktopConnectorSetup": "На Claude Desktop → Settings → Connectors додајте прилагођени конектор и налепите URL сервера. Ако Claude тражи напредни OAuth Client ID, користите вредност испод и оставите тајну празном — никада не користите свој MCP API кључ као OAuth тајну.",
     "transcriptionUnavailableRecordingContinues": "Транскрипције нису доступне, снимање се наставља на уређају и биће обрађено касније",
-    "transcriptionUnavailableSavingOnDevice": "Транскрипција недоступна · чува се на уређају",
     "transcriptionsPendingFraction": "Транскрипције на чекању {pending}/{total}",
     "transcriptionsPendingCount": "Транскрипције на чекању {count}",
     "captureSourceCall": "Позив",
@@ -11113,5 +11104,16 @@
     "moreWaysToRecord": "Више начина снимања",
     "openCall": "Отвори позив",
     "captureRecoveryBanner": "Звук привеска не стиже до апликације — додирните за поправку",
-    "phoneRecordingBlockedByPendantBatch": "Zaustavite Transcribe Later na privesku pre snimanja telefonom."
+    "phoneRecordingBlockedByPendantBatch": "Zaustavite Transcribe Later na privesku pre snimanja telefonom.",
+    "captureNotTranscribing": "Нема транскрипције",
+    "captureAudioSavedTranscribesLater": "Звук је сачуван, транскрипција касније",
+    "captureStillRecording": "Снимање се наставља",
+    "captureMicInUseElsewhere": "Микрофон користи друга апликација",
+    "captureMicInterruptedDetail": "Позив или друга апликација преузела је микрофон, па Omi тренутно не чује. Omi ће сам наставити кад микрофон буде слободан. Све снимљено до сада је безбедно.",
+    "captureCustomSttUnreachableDetail": "Ваша прилагођена услуга претварања говора у текст није доступна. Omi чува звук на овом телефону и послаће га кад се услуга врати. Ништа се не губи.",
+    "captureStarting": "Покретање…",
+    "capturePhoneStorageFull": "Меморија телефона је пуна",
+    "captureStorageAlmostFull": "Меморија је скоро пуна",
+    "capturePendantDisconnectedDetail": "Привезак је изгубио везу са овим телефоном. Omi ће се сам поново повезати кад је привезак укључен и у близини. Све снимљено до сада је безбедно.",
+    "participantsSummaryUncounted": "{name} и други"
 }

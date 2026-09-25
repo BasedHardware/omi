@@ -114,6 +114,7 @@ from utils.observability.fallback import record_fallback
 from utils.observability.transcription import record_sync_transcription_outcome
 from utils.speaker_assignment import process_speaker_assigned_segments
 from utils.speaker_identification import detect_speaker_from_text
+from utils.stt.voiceprints import usable_person_voiceprint
 from utils.stt.pre_recorded import get_prerecorded_service, postprocess_words, prerecorded
 from utils.stt.outcomes import (
     TranscriptionFailure,
@@ -926,10 +927,8 @@ def build_person_embeddings_cache(uid: str) -> Dict[str, dict]:
     # Load all people with speaker embeddings
     people = users_db.get_people(uid)
     for person in people or []:
-        emb = person.get('speaker_embedding')
-        # Only load embedding if person has speech samples — contacts without
-        # samples may have stale embeddings from a pre-v3 model (#6238)
-        if emb and person.get('speech_samples') and person.get('speech_samples_version', 1) >= 3:
+        emb = usable_person_voiceprint(person)
+        if emb:
             cache[person['id']] = {
                 'embedding': np.array(emb, dtype=np.float32).reshape(1, -1),
                 'name': person['name'],

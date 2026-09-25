@@ -7527,6 +7527,16 @@
             ],
             "default": "omi"
           },
+          "speaker_resolution": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversationSpeakers"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "starred": {
             "default": false,
             "title": "Starred",
@@ -8666,6 +8676,16 @@
             ],
             "default": "omi"
           },
+          "speaker_resolution": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ConversationSpeakers"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "starred": {
             "default": false,
             "title": "Starred",
@@ -8808,6 +8828,38 @@
         ],
         "title": "ConversationSource",
         "type": "string"
+      },
+      "ConversationSpeakers": {
+        "description": "Server-authored meaning of this conversation's ``speaker_id`` values.\n\n``resolved``: re-diarized from the stored audio, so each ``speaker_id`` is one\nvoice for the whole conversation. ``capture``: one uninterrupted capture\ndiarized it, so capture's ids are that diarization. ``unavailable``: capture\nrestarted its numbering (reconnects, failovers, uploaded chunks) and no\nstored audio could resolve it, so ids are not people and must not be counted.\n``participant_speaker_ids`` lists the voices that spoke enough to count as\nparticipants; it is empty when the status is ``unavailable``.",
+        "properties": {
+          "participant_speaker_ids": {
+            "default": [],
+            "items": {
+              "type": "integer"
+            },
+            "title": "Participant Speaker Ids",
+            "type": "array"
+          },
+          "status": {
+            "enum": [
+              "resolved",
+              "capture",
+              "unavailable"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "version": {
+            "default": 1,
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "status"
+        ],
+        "title": "ConversationSpeakers",
+        "type": "object"
       },
       "ConversationStatus": {
         "enum": [

@@ -2712,14 +2712,6 @@
     "@detailedDiagnosticMessages": {
         "description": "Description for transcription diagnostics"
     },
-    "autoCreateSpeakers": "ವಕ್ತೃ ಸ್ವಯಂ ರಚನೆ",
-    "@autoCreateSpeakers": {
-        "description": "Experimental feature name"
-    },
-    "autoCreateWhenNameDetected": "ಹೆಸರು ಕಂಡುಬಂದಾಗ ಸ್ವಯಂ ರಚಿಸಿ",
-    "@autoCreateWhenNameDetected": {
-        "description": "Description for auto-create speakers"
-    },
     "followUpQuestions": "ಫಾಲೋ-ಅಪ್ ಪ್ರಶ್ನೆಗಳು",
     "@followUpQuestions": {
         "description": "Experimental feature name"
@@ -11094,7 +11086,6 @@
     "addToClaudeCodeConfig": "~/.claude.json ಗೆ ಸೇರಿಸಿ",
     "claudeDesktopConnectorSetup": "Claude Desktop → Settings → Connectors ನಲ್ಲಿ ಕಸ್ಟಮ್ ಕನೆಕ್ಟರ್ ಸೇರಿಸಿ ಮತ್ತು ಸರ್ವರ್ URL ಅನ್ನು ಅಂಟಿಸಿ. Claude ಸುಧಾರಿತ OAuth Client ID ಕೇಳಿದರೆ, ಕೆಳಗಿನ ಮೌಲ್ಯವನ್ನು ಬಳಸಿ ಮತ್ತು ಸೀಕ್ರೆಟ್ ಅನ್ನು ಖಾಲಿ ಬಿಡಿ — ನಿಮ್ಮ MCP API ಕೀಯನ್ನು OAuth ಸೀಕ್ರೆಟ್ ಆಗಿ ಎಂದಿಗೂ ಬಳಸಬೇಡಿ.",
     "transcriptionUnavailableRecordingContinues": "ಲಿಪ್ಯಂತರಗಳು ಲಭ್ಯವಿಲ್ಲ, ಧ್ವನಿಮುದ್ರಣ ಸಾಧನದಲ್ಲಿ ಮುಂದುವರಿಯುತ್ತದೆ ಮತ್ತು ನಂತರ ಪ್ರಕ್ರಿಯೆಗೊಳ್ಳುತ್ತದೆ",
-    "transcriptionUnavailableSavingOnDevice": "ಲಿಪ್ಯಂತರ ಲಭ್ಯವಿಲ್ಲ · ಸಾಧನದಲ್ಲಿ ಉಳಿಸಲಾಗುತ್ತಿದೆ",
     "transcriptionsPendingFraction": "ಬಾಕಿ ಇರುವ ಲಿಪ್ಯಂತರಗಳು {pending}/{total}",
     "transcriptionsPendingCount": "ಬಾಕಿ ಇರುವ ಲಿಪ್ಯಂತರಗಳು {count}",
     "captureSourceCall": "ಕರೆ",
@@ -11113,5 +11104,16 @@
     "moreWaysToRecord": "ರೆಕಾರ್ಡ್ ಮಾಡಲು ಇನ್ನಷ್ಟು ಮಾರ್ಗಗಳು",
     "openCall": "ಕರೆ ತೆರೆಯಿರಿ",
     "captureRecoveryBanner": "ಪೆಂಡೆಂಟ್‌ನ ಆಡಿಯೊ ಆ್ಯಪ್‌ಗೆ ತಲುಪುತ್ತಿಲ್ಲ — ಸರಿಪಡಿಸಲು ಟ್ಯಾಪ್ ಮಾಡಿ",
-    "phoneRecordingBlockedByPendantBatch": "ನಿಮ್ಮ ಫೋನ್‌ನಿಂದ ರೆಕಾರ್ಡ್ ಮಾಡುವ ಮೊದಲು ನಿಮ್ಮ ಪೆಂಡಂಟ್‌ನಲ್ಲಿ Transcribe Later ನಿಲ್ಲಿಸಿ."
+    "phoneRecordingBlockedByPendantBatch": "ನಿಮ್ಮ ಫೋನ್‌ನಿಂದ ರೆಕಾರ್ಡ್ ಮಾಡುವ ಮೊದಲು ನಿಮ್ಮ ಪೆಂಡಂಟ್‌ನಲ್ಲಿ Transcribe Later ನಿಲ್ಲಿಸಿ.",
+    "captureNotTranscribing": "ಪ್ರತಿಲೇಖನ ಆಗುತ್ತಿಲ್ಲ",
+    "captureAudioSavedTranscribesLater": "ಆಡಿಯೋ ಉಳಿಸಲಾಗಿದೆ, ನಂತರ ಪ್ರತಿಲೇಖನ",
+    "captureStillRecording": "ಇನ್ನೂ ರೆಕಾರ್ಡ್ ಆಗುತ್ತಿದೆ",
+    "captureMicInUseElsewhere": "ಮೈಕ್ ಅನ್ನು ಬೇರೆ ಆ್ಯಪ್ ಬಳಸುತ್ತಿದೆ",
+    "captureMicInterruptedDetail": "ಒಂದು ಕರೆ ಅಥವಾ ಬೇರೆ ಆ್ಯಪ್ ಮೈಕ್ರೊಫೋನ್ ಅನ್ನು ತೆಗೆದುಕೊಂಡಿದೆ, ಆದ್ದರಿಂದ Omi ಈಗ ಕೇಳಲು ಸಾಧ್ಯವಿಲ್ಲ. ಮೈಕ್ರೊಫೋನ್ ಮುಕ್ತವಾದಾಗ Omi ತಾನಾಗಿಯೇ ಮುಂದುವರಿಯುತ್ತದೆ. ಇದಕ್ಕೂ ಮೊದಲು ರೆಕಾರ್ಡ್ ಆದದ್ದೆಲ್ಲ ಸುರಕ್ಷಿತವಾಗಿದೆ.",
+    "captureCustomSttUnreachableDetail": "ನಿಮ್ಮ ಕಸ್ಟಮ್ ಸ್ಪೀಚ್-ಟು-ಟೆಕ್ಸ್ಟ್ ಸೇವೆಯನ್ನು ತಲುಪಲು ಸಾಧ್ಯವಾಗುತ್ತಿಲ್ಲ. Omi ಆಡಿಯೋವನ್ನು ಈ ಫೋನ್‌ನಲ್ಲಿ ಇರಿಸಿಕೊಂಡು ಸೇವೆ ಮರಳಿದಾಗ ಕಳುಹಿಸುತ್ತದೆ. ಏನೂ ಕಳೆದುಹೋಗುವುದಿಲ್ಲ.",
+    "captureStarting": "ಪ್ರಾರಂಭವಾಗುತ್ತಿದೆ…",
+    "capturePhoneStorageFull": "ಫೋನ್ ಸಂಗ್ರಹಣೆ ತುಂಬಿದೆ",
+    "captureStorageAlmostFull": "ಸಂಗ್ರಹಣೆ ಬಹುತೇಕ ತುಂಬಿದೆ",
+    "capturePendantDisconnectedDetail": "ನಿಮ್ಮ ಪೆಂಡೆಂಟ್ ಈ ಫೋನ್‌ನೊಂದಿಗೆ ಸಂಪರ್ಕ ಕಳೆದುಕೊಂಡಿದೆ. ಪೆಂಡೆಂಟ್ ಆನ್ ಆಗಿದ್ದು ಹತ್ತಿರದಲ್ಲಿದ್ದಾಗ Omi ತಾನಾಗಿಯೇ ಮರುಸಂಪರ್ಕಿಸುತ್ತದೆ. ಇದಕ್ಕೂ ಮೊದಲು ರೆಕಾರ್ಡ್ ಆದದ್ದೆಲ್ಲ ಸುರಕ್ಷಿತವಾಗಿದೆ.",
+    "participantsSummaryUncounted": "{name} ಮತ್ತು ಇತರರು"
 }

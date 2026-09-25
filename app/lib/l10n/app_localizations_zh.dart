@@ -2443,12 +2443,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get detailedDiagnosticMessages => '详细诊断消息';
 
   @override
-  String get autoCreateSpeakers => '自动创建说话者';
-
-  @override
-  String get autoCreateWhenNameDetected => '检测到名称时自动创建';
-
-  @override
   String get followUpQuestions => '后续问题';
 
   @override
@@ -10968,9 +10962,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get transcriptionUnavailableRecordingContinues => '转录暂不可用，录音仍在设备上继续，稍后会进行处理';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => '转录不可用 · 正在设备上保存';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return '待处理转录 $pending/$total';
   }
@@ -11032,4 +11023,39 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get phoneRecordingBlockedByPendantBatch => '在用手机录音之前，请先停止吊坠上的“稍后转录”。';
+
+  @override
+  String get captureNotTranscribing => '未在转录';
+
+  @override
+  String get captureAudioSavedTranscribesLater => '音频已保存，稍后转录';
+
+  @override
+  String get captureStillRecording => '仍在录音';
+
+  @override
+  String get captureMicInUseElsewhere => '麦克风被其他应用占用';
+
+  @override
+  String get captureMicInterruptedDetail => '通话或其他应用占用了麦克风，因此 Omi 现在无法收音。麦克风空闲后 Omi 会自动继续。此前录下的内容都已保存。';
+
+  @override
+  String get captureCustomSttUnreachableDetail => '无法连接到你的自定义语音转文字服务。Omi 会把音频保存在这部手机上，服务恢复后再发送。不会丢失任何内容。';
+
+  @override
+  String get captureStarting => '正在启动…';
+
+  @override
+  String get capturePhoneStorageFull => '手机存储空间已满';
+
+  @override
+  String get captureStorageAlmostFull => '存储空间即将用完';
+
+  @override
+  String get capturePendantDisconnectedDetail => '吊坠与这部手机的连接已断开。吊坠开机并在附近时，Omi 会自动重新连接。此前录下的内容都已保存。';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name等人';
+  }
 }
