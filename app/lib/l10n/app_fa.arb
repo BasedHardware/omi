@@ -11096,5 +11096,9 @@
     "speakerTagPromptAnswerFailed": "ذخیره نشد. لطفاً دوباره تلاش کنید.",
     "voiceSettingsAskToTag": "از من بخواه صداها را برچسب بزنم",
     "voiceSettingsAskToTagSubtitle": "گاهی Omi می‌پرسد چه کسی در گفتگوهای اخیر شما صحبت می‌کرد",
-    "voiceSettingsSaveOthersSubtitle": "وقتی کسی را نام‌گذاری می‌کنید، Omi یک نمونه کوتاه از صدا نگه می‌دارد تا دفعه بعد او را بشناسد"
+    "voiceSettingsSaveOthersSubtitle": "وقتی کسی را نام‌گذاری می‌کنید، Omi یک نمونه کوتاه از صدا نگه می‌دارد تا دفعه بعد او را بشناسد",
+    "transcriptionUnavailableRecordingContinues": "رونویسی‌ها در دسترس نیستند، ضبط در دستگاه ادامه دارد و بعداً پردازش می‌شود",
+    "transcriptionUnavailableSavingOnDevice": "رونویسی در دسترس نیست · در حال ذخیره روی دستگاه",
+    "transcriptionsPendingFraction": "رونویسی‌های در انتظار {pending}/{total}",
+    "transcriptionsPendingCount": "رونویسی‌های در انتظار {count}"
 }

@@ -11219,4 +11219,21 @@ class AppLocalizationsMk extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'Кога ќе именувате некого, Omi чува краток примерок од гласот за да го препознае следниот пат';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Транскрипциите се недостапни, снимањето продолжува на уредот и ќе биде обработено подоцна';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Транскрипцијата е недостапна · се зачувува на уредот';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Чекаат транскрипции $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Чекаат транскрипции $count';
+  }
 }

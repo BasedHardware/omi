@@ -23,6 +23,11 @@ class ConversationStateAppBar extends StatelessWidget implements PreferredSizeWi
       state == CaptureDisplayState.capturing ||
       state == CaptureDisplayState.recording;
 
+  /// The transcription-outage sentence is far longer than the one-word states,
+  /// so it wraps (smaller, up to three lines) instead of ellipsizing away the
+  /// "recording continues" half — the half the reader needs most.
+  static bool _isSentenceStatus(CaptureDisplayState state) => state == CaptureDisplayState.transcriptionUnavailable;
+
   /// Key for the back button, for tests.
   final Key? backKey;
 
@@ -42,6 +47,7 @@ class ConversationStateAppBar extends StatelessWidget implements PreferredSizeWi
           ),
         ),
     };
+    final sentenceStatus = _isSentenceStatus(state);
     return AppBar(
       automaticallyImplyLeading: false,
       backgroundColor: OmiColors.surface0,
@@ -51,15 +57,19 @@ class ConversationStateAppBar extends StatelessWidget implements PreferredSizeWi
         liveRegion: true,
         child: Row(
           mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             ExcludeSemantics(child: indicator),
             const SizedBox(width: OmiSpacing.xs),
             Flexible(
               child: Text(
                 captureStateLabel(context.l10n, state, bufferingFor: bufferingFor),
-                style: OmiType.headline,
-                maxLines: 1,
+                style: sentenceStatus
+                    ? OmiType.footnote.copyWith(fontWeight: FontWeight.w600, height: 1.25)
+                    : OmiType.headline,
+                maxLines: sentenceStatus ? 3 : 1,
                 overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
               ),
             ),
           ],

@@ -20336,6 +20336,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'When you name someone, Omi keeps a short voice sample so it can recognize them next time'**
   String get voiceSettingsSaveOthersSubtitle;
+
+  /// Live capture status while the transcription service is down; audio keeps recording locally.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcriptions are unavailable, recording continues on device and will process later'**
+  String get transcriptionUnavailableRecordingContinues;
+
+  /// Compact transcription-outage status for the in-progress capture card.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcription unavailable · saving on device'**
+  String get transcriptionUnavailableSavingOnDevice;
+
+  /// Queued recordings still waiting for transcription (pending) out of the session total, on the live-capture WAL indicator.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcriptions pending {pending}/{total}'**
+  String transcriptionsPendingFraction(int pending, int total);
+
+  /// Phone-local recordings still waiting to be uploaded for transcription, on the conversations list banner.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcriptions pending {count}'**
+  String transcriptionsPendingCount(int count);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

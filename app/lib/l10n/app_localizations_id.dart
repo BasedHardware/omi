@@ -11168,4 +11168,21 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'Saat Anda memberi nama seseorang, Omi menyimpan sampel suara singkat agar bisa mengenalinya lain kali';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Transkripsi tidak tersedia, perekaman berlanjut di perangkat dan akan diproses nanti';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Transkripsi tidak tersedia · disimpan di perangkat';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Transkripsi tertunda $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Transkripsi tertunda $count';
+  }
 }

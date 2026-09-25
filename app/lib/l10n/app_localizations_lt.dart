@@ -11177,4 +11177,21 @@ class AppLocalizationsLt extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'Kai ką nors pavadinate, Omi išsaugo trumpą balso pavyzdį, kad kitą kartą jį atpažintų';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Transkripcijos neprieinamos, įrašymas tęsiamas įrenginyje ir bus apdorotas vėliau';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Transkripcija neprieinama · saugoma įrenginyje';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Laukiančios transkripcijos $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Laukiančios transkripcijos $count';
+  }
 }

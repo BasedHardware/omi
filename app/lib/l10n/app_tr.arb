@@ -3559,5 +3559,9 @@
     "speakerTagPromptAnswerFailed": "Kaydedilemedi. Lütfen tekrar deneyin.",
     "voiceSettingsAskToTag": "Sesleri etiketlememi iste",
     "voiceSettingsAskToTagSubtitle": "Omi arada bir, son konuşmalarında kimin konuştuğunu sorar",
-    "voiceSettingsSaveOthersSubtitle": "Birine ad verdiğinde Omi, onu bir dahaki sefere tanıyabilmek için kısa bir ses örneği saklar"
+    "voiceSettingsSaveOthersSubtitle": "Birine ad verdiğinde Omi, onu bir dahaki sefere tanıyabilmek için kısa bir ses örneği saklar",
+    "transcriptionUnavailableRecordingContinues": "Transkriptler kullanılamıyor, kayıt cihazda devam ediyor ve daha sonra işlenecek",
+    "transcriptionUnavailableSavingOnDevice": "Transkript kullanılamıyor · cihaza kaydediliyor",
+    "transcriptionsPendingFraction": "Bekleyen transkriptler {pending}/{total}",
+    "transcriptionsPendingCount": "Bekleyen transkriptler {count}"
 }

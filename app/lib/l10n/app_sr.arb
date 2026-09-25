@@ -11096,5 +11096,9 @@
     "speakerTagPromptAnswerFailed": "Чување није успело. Покушајте поново.",
     "voiceSettingsAskToTag": "Тражи од мене да означим гласове",
     "voiceSettingsAskToTagSubtitle": "Повремено Omi пита ко је говорио у вашим недавним разговорима",
-    "voiceSettingsSaveOthersSubtitle": "Када некога именујете, Omi чува кратак узорак гласа да би га следећи пут препознао"
+    "voiceSettingsSaveOthersSubtitle": "Када некога именујете, Omi чува кратак узорак гласа да би га следећи пут препознао",
+    "transcriptionUnavailableRecordingContinues": "Транскрипције нису доступне, снимање се наставља на уређају и биће обрађено касније",
+    "transcriptionUnavailableSavingOnDevice": "Транскрипција недоступна · чува се на уређају",
+    "transcriptionsPendingFraction": "Транскрипције на чекању {pending}/{total}",
+    "transcriptionsPendingCount": "Транскрипције на чекању {count}"
 }
