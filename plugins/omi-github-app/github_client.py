@@ -212,9 +212,7 @@ class GitHubClient:
                 }
 
         except Exception as e:
-            print(f"[ERROR] Error creating issue: {e}")
-            import traceback
-            traceback.print_exc()
+            print(f"[ERROR] Error creating issue: {type(e).__name__}")
             return {
                 "success": False,
                 "error": "Failed to create issue"
@@ -409,7 +407,7 @@ class GitHubClient:
                 }
 
         except Exception as e:
-            print(f"[ERROR] Error adding comment: {e}")
+            print(f"[ERROR] Error adding comment: {type(e).__name__}")
             return {
                 "success": False,
                 "error": "Failed to add comment"
