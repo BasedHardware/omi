@@ -503,13 +503,81 @@ def _oauth_memory_grant_entry_is_absent(state: object, grant: Dict[str, Any]) ->
     return False
 
 
+def _oauth_memory_grant_entry(state: object, grant: Dict[str, Any]) -> Any:
+    current = state
+    for field in (
+        "grants",
+        MCP_CONSUMER,
+        "apps",
+        grant["client_id"],
+        "keys",
+        grant["id"],
+    ):
+        if not isinstance(current, dict) or field not in current:
+            return None
+        current = current[field]
+    return current
+
+
+def _widen_enabled_memory_grant(entry: object, grant: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Union newly consented memory capabilities onto an enabled grant entry.
+
+    A later consent that adds ``memories.read`` or ``memories.write`` must update
+    the persisted capability flags. Disabled entries are left untouched so a
+    re-consent cannot re-enable a control-plane disable, and ``archive_read``
+    is never granted from this path.
+    """
+    if not isinstance(entry, dict) or entry.get("enabled") is not True:
+        return None
+    existing_scopes = entry.get("scopes")
+    if (
+        not isinstance(existing_scopes, list)
+        or not all(isinstance(scope, str) and scope for scope in existing_scopes)
+        or not isinstance(entry.get("default_read"), bool)
+        or not isinstance(entry.get("write"), bool)
+    ):
+        return None
+    desired = [scope for scope in grant.get("scopes") or [] if scope in {"memories.read", "memories.write"}]
+    merged_scopes = sorted(set(existing_scopes).union(desired))
+    default_read = entry["default_read"] or "memories.read" in desired
+    write = entry["write"] or "memories.write" in desired
+    if set(merged_scopes) == set(existing_scopes) and default_read == entry["default_read"] and write == entry["write"]:
+        return None
+    return {"scopes": merged_scopes, "default_read": default_read, "write": write}
+
+
+def _memory_grant_fields_patch(grant: Dict[str, Any], fields: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "grants": {
+            MCP_CONSUMER: {
+                "apps": {
+                    grant["client_id"]: {
+                        "keys": {
+                            grant["id"]: fields,
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+
 def _create_oauth_memory_grant_if_absent(
-    transaction: Any, grant_ref: Any, snapshot: Any, grant: Dict[str, Any]
+    transaction: Any, grant_ref: Any, snapshot: Any, grant: Dict[str, Any], *, widen: bool = False
 ) -> bool:
     if getattr(snapshot, "exists", False):
         state: object = snapshot.to_dict()
         if not _oauth_memory_grant_entry_is_absent(state, grant):
-            return False
+            # Token validation backfill must not rewrite an existing control-plane
+            # entry. Only an explicit consent may widen an enabled grant.
+            if not widen:
+                return False
+            patch = _widen_enabled_memory_grant(_oauth_memory_grant_entry(state, grant), grant)
+            if patch is None:
+                return False
+            # Merge only the widened fields so ``enabled`` and ``archive_read`` stay as stored.
+            transaction.set(grant_ref, _memory_grant_fields_patch(grant, patch), merge=True)
+            return True
     transaction.set(grant_ref, _oauth_memory_grant_contract(grant), merge=True)
     return True
 
@@ -634,7 +702,7 @@ def create_grant_and_authorization_code_if_allowed(
             now=now,
         )
         transaction.set(current_grant_ref, grant_data, merge=True)
-        _create_oauth_memory_grant_if_absent(transaction, memory_grant_ref, memory_grant_doc, grant_data)
+        _create_oauth_memory_grant_if_absent(transaction, memory_grant_ref, memory_grant_doc, grant_data, widen=True)
         transaction.set(code_ref, code_data)
         return {**existing, **grant_data}, raw_code
 

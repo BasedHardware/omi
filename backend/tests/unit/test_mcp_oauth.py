@@ -8,8 +8,15 @@ from types import ModuleType
 import pytest
 
 from testing.import_isolation import load_module_fresh, stub_modules
-from utils.mcp_memories import McpVerifiedAuth, build_mcp_default_memory_read_context
-from utils.memory.product_authorization import authorize_memory_external_default_memory_read
+from utils.mcp_memories import (
+    McpVerifiedAuth,
+    build_mcp_default_memory_read_context,
+    build_mcp_default_memory_write_context,
+)
+from utils.memory.product_authorization import (
+    authorize_memory_external_default_memory_read,
+    authorize_memory_external_default_memory_write,
+)
 
 _BACKEND = Path(__file__).resolve().parents[2]
 
@@ -461,6 +468,84 @@ def test_reconsent_does_not_reenable_a_disabled_memory_control_grant():
     assert renewed_grant['id'] == grant['id']
     persisted = memory_grant_ref.get().to_dict()['grants']['mcp']['apps']['omi-chatgpt-prod']['keys'][grant['id']]
     assert persisted['enabled'] is False
+
+
+def test_reconsent_widens_an_enabled_read_grant_when_write_is_requested():
+    uid = 'oauth-reconsent-write-upgrade'
+    client_id = 'omi-chatgpt-prod'
+    redirect_uri = 'https://chatgpt.com/connector_platform_oauth_redirect'
+    grant, _ = mcp_oauth.create_grant_and_authorization_code_if_allowed(
+        uid,
+        client_id,
+        redirect_uri,
+        mcp_oauth.MCP_RESOURCE_URL,
+        ['memories.read'],
+        mcp_oauth.pkce_s256('r' * 64),
+    )
+    memory_grant_ref = mcp_oauth.db.collection(f'users/{uid}/memory_control').document('app_key_memory_grants')
+    stored = memory_grant_ref.get().to_dict()['grants']['mcp']['apps'][client_id]['keys'][grant['id']]
+    assert stored['write'] is False
+    assert stored['enabled'] is True
+
+    renewed, _ = mcp_oauth.create_grant_and_authorization_code_if_allowed(
+        uid,
+        client_id,
+        redirect_uri,
+        mcp_oauth.MCP_RESOURCE_URL,
+        ['memories.read', 'memories.write'],
+        mcp_oauth.pkce_s256('w' * 64),
+    )
+
+    assert renewed['id'] == grant['id']
+    persisted = memory_grant_ref.get().to_dict()['grants']['mcp']['apps'][client_id]['keys'][grant['id']]
+    assert persisted['enabled'] is True
+    assert persisted['archive_read'] is False
+    assert persisted['default_read'] is True
+    assert persisted['write'] is True
+    assert set(persisted['scopes']) == {'memories.read', 'memories.write'}
+    authorization = authorize_memory_external_default_memory_write(
+        build_mcp_default_memory_write_context(
+            McpVerifiedAuth(
+                uid=uid,
+                app_id=client_id,
+                key_id=grant['id'],
+                scopes=('memories.read', 'memories.write'),
+            )
+        ),
+        db_client=mcp_oauth.db,
+    )
+    assert authorization.allowed is True
+
+
+def test_reconsent_does_not_widen_a_disabled_grant_when_write_is_requested():
+    uid = 'oauth-reconsent-disabled-no-write'
+    client_id = 'omi-chatgpt-prod'
+    redirect_uri = 'https://chatgpt.com/connector_platform_oauth_redirect'
+    grant, _ = mcp_oauth.create_grant_and_authorization_code_if_allowed(
+        uid,
+        client_id,
+        redirect_uri,
+        mcp_oauth.MCP_RESOURCE_URL,
+        ['memories.read'],
+        mcp_oauth.pkce_s256('d' * 64),
+    )
+    memory_grant_ref = mcp_oauth.db.collection(f'users/{uid}/memory_control').document('app_key_memory_grants')
+    state = memory_grant_ref.get().to_dict()
+    state['grants']['mcp']['apps'][client_id]['keys'][grant['id']]['enabled'] = False
+    memory_grant_ref.set(state)
+
+    mcp_oauth.create_grant_and_authorization_code_if_allowed(
+        uid,
+        client_id,
+        redirect_uri,
+        mcp_oauth.MCP_RESOURCE_URL,
+        ['memories.read', 'memories.write'],
+        mcp_oauth.pkce_s256('e' * 64),
+    )
+
+    persisted = memory_grant_ref.get().to_dict()['grants']['mcp']['apps'][client_id]['keys'][grant['id']]
+    assert persisted['enabled'] is False
+    assert persisted['write'] is False
 
 
 _MISSING = object()
