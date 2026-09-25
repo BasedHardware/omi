@@ -17374,5 +17374,5 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  // Total: 451 Swift client methods generated.
+  // Total: 452 Swift client methods generated.
 }
