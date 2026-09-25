@@ -97,7 +97,7 @@ struct SignInView: View {
           }
 
           // `secondary` and not a fainter grey: glass carries two rungs, and the bottom one is this.
-          Text("open source · runs on your mac · pause anytime")
+          Text("open source · runs on your Mac · pause anytime")
             .inkStyle(InkType.statusLabel, color: Ink.secondary)
             .padding(.top, InkLayout.rhythm[0])
         }

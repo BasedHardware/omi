@@ -146,6 +146,16 @@ def _response_json(response: requests.Response):
 
 
 def _parse_categories(categories, category_cls: type, logger: logging.Logger) -> list:
+    """Parse a category filter, failing closed on any value this tool cannot use.
+
+    An unknown category used to be logged and dropped. Dropping every value of a
+    filter leaves an *empty* list, and both dispatchers only send the filter when
+    it is non-empty -- so "get my finance memories" (a conversation category, not
+    a memory one) requested the unfiltered list and the model reasoned over every
+    memory the user has, with nothing in the response to say the filter was gone.
+    That is the same silent-widening failure #13941 removed from the date filters
+    just below; categories now surface the same field-naming ValueError instead.
+    """
     if not isinstance(categories, list):
         raise ValueError(f"categories must be a list, got {type(categories)}")
     parsed = []
@@ -153,7 +163,9 @@ def _parse_categories(categories, category_cls: type, logger: logging.Logger) ->
         try:
             parsed.append(category_cls(category))
         except ValueError:
-            logger.warning(f"Could not parse category: {category}")
+            logger.warning(f"Rejecting unknown category: {category}")
+            valid = ", ".join(member.value for member in category_cls)
+            raise ValueError(f"Invalid category '{category}'. Expected one of: {valid}.") from None
     return parsed
 
 

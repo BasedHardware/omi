@@ -1,5 +1,6 @@
 import { ActionItems as ActionItemsType } from '@/src/types/memory.types';
-import { CheckCircle } from 'iconoir-react';
+import { avatarToneIndex, participantInitials } from '@/src/lib/shared-note.mjs';
+import moment from 'moment';
 
 interface ActionsItemsProps {
   items: ActionItemsType[];
@@ -8,22 +9,45 @@ interface ActionsItemsProps {
 export default function ActionItems({ items }: ActionsItemsProps) {
   return (
     <div>
-      <h3 className="mb-4 text-xl font-semibold text-white md:text-2xl">Action Items</h3>
-      <ul className="space-y-4 text-base md:text-lg">
-        {items.map((item, index) => (
-          <li key={index} className="flex items-start gap-3">
-            {item.completed ? (
-              <div className="mt-0.5">
-                <CheckCircle className="h-5 w-5 text-green-400" />
+      <h2 className="sn-h3">Action items</h2>
+      <ul className="sn-actions">
+        {items.map((item, index) => {
+          const owner = typeof item.owner_name === 'string' ? item.owner_name.trim() : '';
+          const context = typeof item.context === 'string' ? item.context.trim() : '';
+          const due = item.due_at ? moment(item.due_at) : null;
+          const dueLabel = due && due.isValid() ? due.format('MMM D, YYYY') : '';
+          return (
+            <li
+              key={index}
+              className={`sn-action${item.completed ? ' sn-action-done' : ''}`}
+            >
+              <span className="sn-checkbox" aria-hidden="true" />
+              <span className="sn-sr">
+                {item.completed ? 'Completed' : 'Not completed'}
+              </span>
+              <div className="sn-action-body">
+                <p className="sn-action-text">{item.description}</p>
+                {(owner || context || dueLabel) && (
+                  <div className="sn-action-meta">
+                    {owner && (
+                      <span className="sn-owner">
+                        <span
+                          className={`sn-avatar sn-avatar-${avatarToneIndex(owner)}`}
+                          aria-hidden="true"
+                        >
+                          {participantInitials(owner)}
+                        </span>
+                        {owner}
+                      </span>
+                    )}
+                    {context && <span className="sn-context">{context}</span>}
+                    {dueLabel && <span>Due {dueLabel}</span>}
+                  </div>
+                )}
               </div>
-            ) : (
-              <div className="mt-0.5">
-                <CheckCircle className="h-5 w-5 text-zinc-600" />
-              </div>
-            )}
-            <p className="flex-1 leading-relaxed text-zinc-300">{item.description}</p>
-          </li>
-        ))}
+            </li>
+          );
+        })}
       </ul>
     </div>
   );

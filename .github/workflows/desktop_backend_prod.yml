@@ -172,7 +172,9 @@ jobs:
         id: auth
         uses: google-github-actions/auth@v3
         with:
-          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+          # Prod GitHub WIF (credential-hygiene WS-C); no JSON key, no Owner.
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
+          service_account: omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v3
@@ -219,7 +221,6 @@ jobs:
         run: |
           set -euo pipefail
           for secret in \
-            SERVICE_ACCOUNT_JSON \
             DESKTOP_GEMINI_API_KEY \
             DESKTOP_FIREBASE_API_KEY \
             DESKTOP_REDIS_DB_PASSWORD \
@@ -331,15 +332,15 @@ jobs:
             --network=${{ vars.CLOUD_RUN_VPC_NETWORK }}
             --subnet=${{ vars.CLOUD_RUN_VPC_SUBNET }}
             --vpc-egress=private-ranges-only
-            --remove-env-vars=OMI_DESKTOP_RELEASE_TAG,OMI_DESKTOP_RELEASE_SHA,OMI_DESKTOP_RELEASE_CHANNEL,AGENT_VM_TRUSTED_HEALTH_CHANNEL,AGENT_GCS_BUCKET,GCE_SERVICE_ACCOUNT,GCE_RUNTIME_SERVICE_ACCOUNT,GCE_PROJECT_ID,AGENT_VM_BOOT_IMAGE,AGENT_VM_STARTUP_URI,AGENT_VM_RELEASE_ID,AGENT_VM_IMAGE_DIGEST,AGENT_VM_STARTUP_SHA256,AGENT_VM_STOP_AUDIENCE
-            --remove-secrets=PINECONE_API_KEY,PINECONE_HOST
+            --remove-env-vars=GOOGLE_APPLICATION_CREDENTIALS,OMI_DESKTOP_RELEASE_TAG,OMI_DESKTOP_RELEASE_SHA,OMI_DESKTOP_RELEASE_CHANNEL,AGENT_VM_TRUSTED_HEALTH_CHANNEL,AGENT_GCS_BUCKET,GCE_SERVICE_ACCOUNT,GCE_RUNTIME_SERVICE_ACCOUNT,GCE_PROJECT_ID,AGENT_VM_BOOT_IMAGE,AGENT_VM_STARTUP_URI,AGENT_VM_RELEASE_ID,AGENT_VM_IMAGE_DIGEST,AGENT_VM_STARTUP_SHA256,AGENT_VM_STOP_AUDIENCE
+            --service-account=desktop-backend-runtime@based-hardware.iam.gserviceaccount.com
+            --remove-secrets=PINECONE_API_KEY,PINECONE_HOST,/secrets/firebase/service-account.json
           env_vars: |
             FIREBASE_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}
             USE_VERTEX_AI=true
             GOOGLE_CLOUD_PROJECT=${{ vars.GCP_PROJECT_ID }}
             GCP_LOCATION=us-central1
             OMI_FIRESTORE_DATA_PLANE_PROJECT=${{ vars.GCP_PROJECT_ID }}
-            GOOGLE_APPLICATION_CREDENTIALS=/secrets/firebase/service-account.json
             BASE_API_URL=${{ env.PRODUCTION_DESKTOP_BACKEND_URL }}
             OMI_DESKTOP_BACKEND_RELEASE_SHA=${{ steps.admitted-source.outputs.source_sha }}
             OMI_DESKTOP_BACKEND_RELEASE_CHANNEL=production
@@ -357,7 +358,6 @@ jobs:
             MEMORY_BELIEF_AUTOMATION_PAUSED=false
             PROMETHEUS_SIDECAR_PORT=9090
           secrets: |
-            /secrets/firebase/service-account.json=SERVICE_ACCOUNT_JSON:latest
             GEMINI_API_KEY=DESKTOP_GEMINI_API_KEY:latest
             OPENAI_API_KEY=OPENAI_API_KEY:latest
             ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest

@@ -239,7 +239,9 @@ jobs:
             --network=${{ vars.CLOUD_RUN_VPC_NETWORK }}
             --subnet=${{ vars.CLOUD_RUN_VPC_SUBNET }}
             --vpc-egress=private-ranges-only
-            --remove-env-vars=GOOGLE_APPLICATION_CREDENTIALS,SERVICE_ACCOUNT_JSON,OMI_DESKTOP_RELEASE_TAG,OMI_DESKTOP_RELEASE_SHA,OMI_DESKTOP_RELEASE_CHANNEL,AGENT_VM_TRUSTED_HEALTH_CHANNEL,AGENT_GCS_BUCKET,GCE_SERVICE_ACCOUNT,GCE_RUNTIME_SERVICE_ACCOUNT,GCE_PROJECT_ID,AGENT_VM_BOOT_IMAGE,AGENT_VM_STARTUP_URI,AGENT_VM_RELEASE_ID,AGENT_VM_IMAGE_DIGEST,AGENT_VM_STARTUP_SHA256,AGENT_VM_STOP_AUDIENCE,AGENT_VM_PROVISIONING_ENABLED
+            --service-account=dev-backend-runtime@based-hardware-dev.iam.gserviceaccount.com
+            --remove-secrets=/secrets/firebase/service-account.json
+            --remove-env-vars=GOOGLE_APPLICATION_CREDENTIALS,SERVICE_ACCOUNT_JSON,FIREBASE_AUTH_CREDENTIALS_PATH,OMI_DESKTOP_RELEASE_TAG,OMI_DESKTOP_RELEASE_SHA,OMI_DESKTOP_RELEASE_CHANNEL,AGENT_VM_TRUSTED_HEALTH_CHANNEL,AGENT_GCS_BUCKET,GCE_SERVICE_ACCOUNT,GCE_RUNTIME_SERVICE_ACCOUNT,GCE_PROJECT_ID,AGENT_VM_BOOT_IMAGE,AGENT_VM_STARTUP_URI,AGENT_VM_RELEASE_ID,AGENT_VM_IMAGE_DIGEST,AGENT_VM_STARTUP_SHA256,AGENT_VM_STOP_AUDIENCE,AGENT_VM_PROVISIONING_ENABLED
           env_vars: |
             FIREBASE_AUTH_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}
             FIREBASE_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}
@@ -247,7 +249,7 @@ jobs:
             USE_VERTEX_AI=true
             GCP_LOCATION=us-central1
             OMI_FIRESTORE_DATA_PLANE_PROJECT=based-hardware
-            FIREBASE_AUTH_CREDENTIALS_PATH=/secrets/firebase/service-account.json
+            FIREBASE_SIGNER_SERVICE_ACCOUNT=dev-auth-token-signer@based-hardware.iam.gserviceaccount.com
             BASE_API_URL=${{ steps.desktop-base-api-url.outputs.base_api_url }}
             OMI_DESKTOP_BACKEND_RELEASE_SHA=${{ steps.candidate-identity.outputs.source_sha }}
             OMI_DESKTOP_BACKEND_RELEASE_CHANNEL=development
@@ -265,7 +267,6 @@ jobs:
             MEMORY_BELIEF_AUTOMATION_PAUSED=false
             PROMETHEUS_SIDECAR_PORT=9090
           secrets: |
-            /secrets/firebase/service-account.json=SERVICE_ACCOUNT_JSON:latest
             GEMINI_API_KEY=GEMINI_API_KEY:latest
             OPENAI_API_KEY=OPENAI_API_KEY:latest
             ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest

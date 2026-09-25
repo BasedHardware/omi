@@ -698,6 +698,7 @@ def main(argv: list[str] | None = None) -> int:
     source.add_argument('--base-spec', type=Path, help='released/base app-client OpenAPI JSON')
     source.add_argument('--base-ref', help='git ref whose merge-base with HEAD contains the released contract')
     parser.add_argument('--head-spec', type=Path, default=DEFAULT_SPEC, help='candidate app-client OpenAPI JSON')
+    parser.add_argument('--label', default='App-client', help='contract name used in messages')
     args = parser.parse_args(argv)
 
     try:
@@ -715,15 +716,15 @@ def main(argv: list[str] | None = None) -> int:
 
     if issues:
         print(
-            f'App-client OpenAPI compatibility failed: {len(issues)} breaking change(s) relative to {base_label}.',
+            f'{args.label} OpenAPI compatibility failed: {len(issues)} breaking change(s) relative to {base_label}.',
             file=sys.stderr,
         )
         for issue in issues:
             print(f'  BREAKING {issue}', file=sys.stderr)
-        print('Version the endpoint instead of breaking a released app-client contract.', file=sys.stderr)
+        print(f'Version the endpoint instead of breaking a released {args.label} contract.', file=sys.stderr)
         return 1
 
-    print(f'App-client OpenAPI compatibility passed against {base_label}.')
+    print(f'{args.label} OpenAPI compatibility passed against {base_label}.')
     return 0
 
 
