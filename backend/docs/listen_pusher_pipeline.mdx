@@ -6,7 +6,7 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
-> Last updated: 2026-09-21 (Cloud Run sync shares the diarizer ILB via `HOSTED_SPEAKER_EMBEDDING_API_URL`; cross-device overlap linked without discard at finalization; provider-scoped speaker identity and bounded clustering; durable meeting receipt; bounded client-kind propagation; end-of-conversation wake-word command adjudication; private conversation start-location provenance; explicit finalization capability admission; semantic release probes; identity-bound Pusher promotion receipts)
+> Last updated: 2026-09-25 (Cloud Run sync shares the diarizer ILB via `HOSTED_SPEAKER_EMBEDDING_API_URL`; cross-device overlap linked without discard at finalization; provider-scoped speaker identity and bounded clustering; durable meeting receipt; bounded client-kind propagation; end-of-conversation wake-word command adjudication; private conversation start-location provenance; explicit finalization capability admission; semantic release probes; identity-bound Pusher promotion receipts; bounded sync empty-retry with phase-attributed failure telemetry)
 >
 > These diagrams document the real behavior observed during E2E testing with
 > live services (backend, pusher, STT providers, embedding API). Update when the
@@ -42,6 +42,22 @@ batch model retains its multilingual capability. A client Parakeet preference
 can prioritize Parakeet only when that live-model capability matches; it never
 overrides the selected service/language/model tuple. All providers implement the
 `STTSocket` ABC and are wrapped by the universal `GatedSTTSocket` VAD gate.
+
+Soniox streams final token deltas whose network-frame boundaries can split a
+word. Its adapter retains the pending word across frames, preserving subword
+text until whitespace, a speaker change, a gap of at least three seconds, or
+the provider's `<end>`/`<fin>` marker establishes a boundary. A 4,096-character
+limit bounds accumulation; non-final and translated tokens do not enter the
+spoken transcript. Segment times use the provider's `start_ms` and `end_ms`,
+minus speech-profile preroll, rather than extending to the next token's start.
+
+When VAD requests finalization, Soniox queues a `{"type":"finalize"}` text
+control after accepted audio. Receive completion and synchronous `finish()`
+flush the last committed word exactly once; asynchronous draining awaits that
+callback even when the provider completion deadline expires. Off-loop finish
+and finalize calls schedule their work on the provider loop. These contracts
+are exercised in `tests/unit/test_soniox_token_boundaries.py`, including the
+downstream transcript merge that inserts spaces between distinct segments.
 
 Segments buffered in `realtime_segment_buffers` are sorted by `start` time
 before processing — this corrects non-deterministic WebSocket arrival order
@@ -213,6 +229,49 @@ or complementary speech remains independently available. `processing_conversatio
 is a lifecycle identity and the meeting receipt is a treatment verdict, so neither
 is repurposed as a cross-capture group.
 
+**Capture groups (one event, several surfaces).** A window match only proposes a
+pair. For up to six window matches per finalization, the helper re-reads the
+other capture's decrypted transcript and measures shared speech
+(`utils/conversations/shared_speech.py`). Word trigrams are compared, and
+containment is taken against the smaller transcript. Confirmation requires
+all three of these, each overridable:
+
+- at least 30 words on each side (`CROSS_DEVICE_GROUP_MIN_WORDS`);
+- at least 15 shared trigrams (`CROSS_DEVICE_GROUP_MIN_SHARED_TRIGRAMS`);
+- containment of at least 0.25 (`CROSS_DEVICE_GROUP_MIN_CONTAINMENT`).
+
+In production, unrelated pairs of the same user from different surfaces
+peaked at a containment of 0.13 (p99), while pairs that heard the same speech
+landed between 0.2 and 0.8. Confirmed pairs join one group through
+`database/capture_groups.py`, which is the only writer of:
+
+- `capture_group`: `id`, `primary_id`, `revision`, and `members[]` (`id`,
+  `source`, window, numeric evidence), identical on every member.
+- `capture_group_exclusions`: the conversations a person separated this one
+  from.
+
+The group `id` is minted independently of any member, so the primary (the
+longest window) can move without changing the event identity. A capture joins
+an existing group through any member. Two different groups are never bridged
+by one pair. The group is capped at 12 members. Every member is re-read inside
+the transaction, so a discard, a deletion, a separation or a window change
+fences the join.
+
+Processing writes (`upsert_conversation_with_lifecycle`,
+`persist_processing_result_with_lifecycle`) strip `capture_group`, so a stale
+in-memory conversation cannot clobber membership. Deleting a conversation
+removes it from its group first. `POST
+/v1/conversations/{id}/capture-group/separate` leaves the group stickily; a
+pair dissolves when one member leaves.
+
+Grouping is presentation metadata only. Transcripts, summaries, discard state
+and derived effects stay per capture. Clients render one row per group from
+the members they have loaded and keep every member reachable.
+`omi_product_event_total{event="capture_group_joined"}` counts the outcomes:
+`applied`, `none` (window match without shared speech) and `conflict`. A
+failure records `duplicate_capture_check → separate_captures` and never blocks
+finalization.
+
 The candidate read is bounded to 100 rows ordered by finish time; dense histories
 or delayed finalization may exceed it. Saturation and lookup/write/config failures
 emit shared degraded fallback telemetry. Successful new links log only numeric
@@ -336,6 +395,23 @@ mobile and desktop reconnect/fallback logic. The backend deliberately does not
 replace a provider socket in-session because maintaining transcript timestamp
 continuity across that handoff requires a separate state model.
 
+#### Provider re-admission pacing (serve-error bench)
+
+A provider that dies mid-session (a typed serve error, e.g. Modulate/Velma
+`modulate_serve_error`) benches its process-local selection circuit
+(`utils/stt/provider_resilience.py`). The bench **escalates**: each further
+serve death in an unbroken benching cycle doubles the window from the
+baseline (180s default) up to 8x, and the ladder resets only on a full close
+(a probe that actually served). While such a bench stands, re-closing the
+breaker requires **serving evidence** — the probe session delivering a
+transcript segment or the provider's done frame (`SafeModulateSocket`
+health callbacks, attached by the connect seam) — never the 0.3s
+post-connect liveness grace alone, which a doomed stream passes before the
+fault kills it. The `/v3/speech-profile/stt-availability` pre-flight answers
+from the same breaker, so an escalated window also extends the "primary
+down" answer clients see; it flips true the moment the window lapses.
+Operational detail: `backend/docs/operational/modulate-serve-error-bench-escalation.md`.
+
 ```mermaid
 sequenceDiagram
     participant Client
@@ -452,6 +528,19 @@ verdicts are measured but deliberately produce nothing in v1 because the task
 extractor and capture policy have no question-routing destination. This path
 has no realtime wake-word state or notification surface.
 
+With `MEETING_NOTES_RICH_CONTEXT_ENABLED`, notes, memory, and app prompts share
+a normalized meeting roster in the CONVERSATION METADATA prefix: participant
+names and organizations come from the resolved calendar or screen-derived
+meeting context, and `spk` cluster binding follows the stricter roster guard.
+A desktop meeting capture treats the remote audio channel as mixed — when more
+than one remote participant could share it, that cluster stays `spk ?` rather
+than attributing several people's words to one name. Background context (prior
+meetings, people facts, goals, memories, and — under
+`MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED` — screen text) is gathered
+best-effort and appended only to the notes volatile suffix as BACKGROUND
+CONTEXT; it never enters the shared prefix, the memory extractor, or app
+prompts, and no single source failure can block the note.
+
 ### 2.1 Durable finalization ownership
 
 `conversation_finalization_jobs/{job_id}` is the finalization ledger. It is
@@ -495,6 +584,14 @@ The job and task payload never contain transcript text, raw BYOK keys, headers,
 or raw exception text. `blocked_byok` is an explicit recovery state: durable
 offline BYOK is not supported without a separately reviewed credential broker;
 the worker must never silently use Omi keys.
+
+A stale `in_progress` row with content can also be finalized by the opt-in
+self-heal sweep as a `SERVER_RECOVERY` admission on the same conversation id —
+never a new conversation — through this same durable job ledger. The recovery
+run reuses normal persistence but is fenced by a pre-persist structured guard:
+output carrying only the deterministic minimum raises before the
+completed-status transaction, leaving the row's content and lifecycle state
+for the existing dead-letter review workflow.
 
 Eligible meeting receipts also carry the stable Chat intent ID and, after the
 desktop kernel acknowledges its journal write, the materialization time. With
@@ -673,6 +770,17 @@ job, lease, retry, or reconciliation worker. Reassigning the label can retry.
 Stored MANUAL decisions include concrete segment IDs and a generation; automatic
 matches and text suggestions do not create teaching receipts.
 
+Owner display names share `database.auth.get_user_name`: Firebase display name,
+Firestore `name`, then an explicit identity bullet on the first line of
+`ai_user_profile.profile_text`. Only the first name is displayed; unknown-name
+labels retain their caller defaults. Transcript prompts, chat prompts, API speaker
+labels, and live/sync owner embedding caches use this resolution. Live matching
+loads a stored owner embedding even when `speech_profile.wav` is absent; audio
+recovery still requires that file. Matching evidence and distance margins are
+unchanged. Text introductions matching the owner's first name (casefolded), or
+English stopwords including "because" and "googling", cannot mint a person.
+Existing people and stored conversation labels are not backfilled.
+
 People's `voice_readiness` is derived from stored evidence: `ready` requires
 verified v3 samples and a finite nonzero vector; `saved_sample_awaiting_embedding`
 means audio exists but processing is still needed, not that a job is running;
@@ -726,6 +834,50 @@ cannot drag another speaker's centroid away. The segment is never dropped and
 no overflow speaker ID is invented. Backend-side defaults use
 `SPEAKER_CLUSTERING_THRESHOLD` / `SPEAKER_CLUSTERING_MAX_SPEAKERS`; the
 Parakeet service uses the `PARAKEET_`-prefixed equivalents.
+
+### 4.1 Speaker tag prompts ("Is this you?" / "Who is this?")
+
+`routers/speaker_tag_prompts.py` serves a small daily set of voices to confirm,
+chosen by the pure `utils/speaker_tag_prompts/selection.py` from conversations
+started in the last **48 hours** that have stored audio (`audio_files`, i.e.
+private cloud sync was on). A candidate is one diarized speaker's longest clean
+stretch: consecutive segments with no other voice between them, at least 5 s,
+clipped to 10 s, never already decided by a manual receipt. Kinds:
+`owner_check` (free: an automatic owner label, or the loudest unnamed voice in a
+conversation with no owner segments or when the owner has no voiceprint),
+`confirm_person` (an unreviewed automatic person match) and `identify` (an
+unnamed voice); the last two need a paid plan (named speaker-ID). At most 4
+prompts, 2 per conversation, 2 owner checks; answered prompt ids are remembered
+for 7 days in `users/{uid}/speaker_tag_prompts/state`.
+
+Pacing is server-owned: `POST /shown` starts a 20 h cooldown, three unanswered
+sets in a row (`POST /dismiss`) back off to 7 days, and an empty scan is cached
+for 2 h so repeated app opens do not rescan 30 conversations.
+
+Answers apply through the same `assign_conversation_speaker` transaction as the
+transcript tag sheet (scope: that diarized speaker in that conversation), so a
+prompt answer is an ordinary manual receipt. Rejecting an automatic label writes
+an explicit unknown decision. Voice learning stays behind existing gates:
+
+- **Other people**: `extract_speaker_samples` (unchanged quality gates) — and
+  that function now returns early when the user turned off
+  `users/{uid}.save_other_voice_profiles` (default on). Every teaching path (tag
+  sheet, tag prompts, live socket) reaches it, so the switch is enforced once.
+- **Owner** ("That's me"): the confirmed clip must be the owner's only voice for
+  5-10 s and pass `verify_and_transcribe_sample`; its embedding is pooled into
+  `users/{uid}.speaker_embedding` as the normalized mean of the enrollment
+  voiceprint (`speaker_embedding_base`, refreshed whenever another writer
+  replaced `speaker_embedding` after the last pooling) plus the last 5
+  confirmations (`owner_voice_confirmations`).
+
+`GET /v1/speaker-tag-prompts/clip` streams at most 12 s of the user's own stored
+audio as WAV (`speaker_tag_prompts:clip` rate limit). Instrumentation is
+privacy-safe: Prometheus `omi_speaker_tag_prompt_{requests,served,sets,answers,
+quality,voice_samples}_total` and `omi_voice_profile_setting_changes_total`
+carry only closed-enum labels. `quality` turns answers into precision
+(`owner_auto_confirmed|rejected`, `person_auto_confirmed|corrected`) and recall
+(`owner_missed`, `person_missed_known`) observations — biased toward what was
+asked, so compare trends per kind rather than reading absolute accuracy.
 
 ## 5. Private Cloud Sync (Audio Upload)
 
@@ -823,6 +975,12 @@ After supervisor exit, remaining tasks drain with `BG_DRAIN_TIMEOUT` (30s) befor
 Sync uses the same default speech-gap boundary as realtime: silence of at least
 120 seconds splits conversations. VAD-segment timestamps and last-word ends define
 incoming intervals. Empty VAD or STT creates nothing and cannot bridge records.
+A VAD-admitted segment whose provider response or normalized transcript is empty
+gets exactly one identical bounded `prerecorded` retry; a second empty is valid
+`expected_silence` — no conversation or partial-result writes, but the segment
+still persists its processed markers so a Cloud Tasks redelivery skips it (a
+completed job also persists its content ledger), while an exception on the
+retry keeps normal failure classification.
 Transactional intake joins connected sync-owned speech components independent of
 arrival order, keeping existing IDs on append and redirects for genuine bridges.
 Reconnect IDs do not partition membership. Missing explicit targets and empty live
@@ -835,6 +993,10 @@ input difference is that realtime can configure its timeout per session, while W
 do not carry this setting and sync uses the default. Job leases, persistence fences,
 encryption codecs and revision fencing remain in force. Bridge effects use existing
 merge/delete helpers; original donor audio remains available for late uploads.
+Sync failure telemetry is fixed-shape: segment and job log events carry a closed
+pipeline-phase token and a bounded exception class, correlated by UUIDv4-only
+`job_ref`/`attempt_ref` fields — never metric labels and never exception text,
+audio, paths, or user identifiers.
 
 The September 19 incident arose from legacy sync adopting a different empty
 live-flap stub per WAL. Realtime reconnect reuse and empty-stub reaping remain

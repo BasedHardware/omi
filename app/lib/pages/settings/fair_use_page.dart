@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/services/wals/sync_rate_limit_reconciliation.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class FairUsePage extends StatefulWidget {
@@ -37,7 +38,7 @@ class _FairUsePageState extends State<FairUsePage> {
       if (mounted) {
         if (result == null) {
           setState(() {
-            _error = 'Unable to load fair use status';
+            _error = 'empty fair use status';
             _isLoading = false;
           });
         } else {
@@ -60,59 +61,29 @@ class _FairUsePageState extends State<FairUsePage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        title: Text(context.l10n.fairUsePolicy),
-        leading: IconButton(icon: const Icon(Icons.arrow_back_ios), onPressed: () => Navigator.of(context).pop()),
-      ),
+      appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.fairUsePolicy)),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator(color: Colors.white))
-          : _error != null
-              ? _buildError()
-              : _status == null
-                  ? _buildError()
-                  : RefreshIndicator(
-                      onRefresh: _loadStatus,
-                      child: SingleChildScrollView(
-                        physics: const AlwaysScrollableScrollPhysics(),
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _buildStatusBanner(),
-                            _buildUsageSection(),
-                            _buildBudgetSection(),
-                            _buildMessageBanner(),
-                            const SizedBox(height: 24),
-                            _buildAboutFooter(),
-                          ],
-                        ),
-                      ),
+          ? const OmiLoadingState()
+          : _error != null || _status == null
+              ? OmiErrorState(message: context.l10n.fairUseLoadError, onRetry: _loadStatus)
+              : RefreshIndicator(
+                  onRefresh: _loadStatus,
+                  child: SingleChildScrollView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.all(OmiSpacing.md),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        _buildStatusBanner(),
+                        _buildUsageSection(),
+                        _buildBudgetSection(),
+                        _buildMessageBanner(),
+                        const SizedBox(height: OmiSpacing.xl),
+                        _buildAboutFooter(),
+                      ],
                     ),
-    );
-  }
-
-  Widget _buildError() {
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              context.l10n.fairUseLoadError,
-              style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 15),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 16),
-            TextButton(
-              onPressed: _loadStatus,
-              child: Text(context.l10n.retry, style: const TextStyle(color: Color(0xFF8B5CF6))),
-            ),
-          ],
-        ),
-      ),
+                  ),
+                ),
     );
   }
 
@@ -127,15 +98,15 @@ class _FairUsePageState extends State<FairUsePage> {
 
     switch (stage) {
       case 'warning':
-        dotColor = const Color(0xFFFBBF24);
+        dotColor = OmiColors.warning;
         stageLabel = context.l10n.fairUseStageWarning;
         break;
       case 'throttle':
-        dotColor = const Color(0xFFF97316);
+        dotColor = OmiColors.warning;
         stageLabel = context.l10n.fairUseStageThrottle;
         break;
       case 'restrict':
-        dotColor = const Color(0xFFEF4444);
+        dotColor = OmiColors.danger;
         stageLabel = context.l10n.fairUseStageRestrict;
         break;
       default:
@@ -143,10 +114,11 @@ class _FairUsePageState extends State<FairUsePage> {
     }
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: OmiSpacing.sm),
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(color: dotColor.withValues(alpha: 0.08), borderRadius: BorderRadius.circular(12)),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: OmiSpacing.xxs),
+        constraints: const BoxConstraints(minHeight: 44),
+        decoration: BoxDecoration(color: dotColor.withValues(alpha: 0.08), borderRadius: OmiRadius.mdAll),
         child: Row(
           children: [
             Container(
@@ -155,33 +127,34 @@ class _FairUsePageState extends State<FairUsePage> {
               decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
             ),
             const SizedBox(width: 10),
-            Text(
-              stageLabel,
-              style: TextStyle(color: dotColor, fontSize: 14, fontWeight: FontWeight.w500),
+            Expanded(
+              child: Text(stageLabel, style: OmiType.subhead.copyWith(color: dotColor, fontWeight: FontWeight.w500)),
             ),
-            const Spacer(),
             if (caseRef.isNotEmpty)
-              GestureDetector(
-                onTap: () {
-                  Clipboard.setData(ClipboardData(text: caseRef));
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(context.l10n.fairUseCaseRefCopied(caseRef)),
-                      duration: const Duration(seconds: 2),
-                      backgroundColor: const Color(0xFF2C2C2E),
+              Semantics(
+                button: true,
+                label: '${context.l10n.copy} $caseRef',
+                excludeSemantics: true,
+                child: InkWell(
+                  borderRadius: OmiRadius.smAll,
+                  onTap: () => OmiClipboard.copy(context, caseRef, what: caseRef),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(minHeight: 44),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xxs),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            caseRef,
+                            style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontFamily: 'monospace'),
+                          ),
+                          const SizedBox(width: OmiSpacing.xxs),
+                          const Icon(Icons.copy, size: 14, color: OmiColors.textSecondary),
+                        ],
+                      ),
                     ),
-                  );
-                },
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      caseRef,
-                      style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 12, fontFamily: 'monospace'),
-                    ),
-                    const SizedBox(width: 4),
-                    const Icon(Icons.copy, size: 12, color: Color(0xFF8E8E93)),
-                  ],
+                  ),
                 ),
               ),
           ],
@@ -198,14 +171,14 @@ class _FairUsePageState extends State<FairUsePage> {
     final speechWeekly = (_status!['speech_hours_weekly'] as num?)?.toDouble() ?? 0;
 
     return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(16)),
+      padding: const EdgeInsets.all(OmiSpacing.lg),
+      decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             context.l10n.fairUseSpeechUsage,
-            style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 13, fontWeight: FontWeight.w500),
+            style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
           ),
           const SizedBox(height: 16),
           _buildUsageBar(
@@ -235,10 +208,11 @@ class _FairUsePageState extends State<FairUsePage> {
 
   Widget _buildUsageBar({required String label, required double hours, required double limit, required double pct}) {
     final barColor = pct >= 100
-        ? const Color(0xFFEF4444)
+        ? OmiColors.danger
         : pct >= 80
-            ? const Color(0xFFFBBF24)
-            : const Color(0xFF8B5CF6);
+            ? OmiColors.warning
+            : OmiColors.accent;
+    final l10n = context.l10n;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -246,19 +220,19 @@ class _FairUsePageState extends State<FairUsePage> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(label, style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 13)),
+            Text(label, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
             Text(
-              '${hours.toStringAsFixed(1)}h / ${limit.toStringAsFixed(0)}h',
-              style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+              '${OmiDuration.compact((hours * 3600).round(), l10n)} / ${OmiDuration.compact((limit * 3600).round(), l10n)}',
+              style: OmiType.footnote.copyWith(fontWeight: FontWeight.w500),
             ),
           ],
         ),
         const SizedBox(height: 6),
         ClipRRect(
-          borderRadius: BorderRadius.circular(3),
+          borderRadius: const BorderRadius.all(Radius.circular(3)),
           child: LinearProgressIndicator(
             value: (pct / 100).clamp(0.0, 1.0),
-            backgroundColor: const Color(0xFF2C2C2E),
+            backgroundColor: OmiColors.surface3,
             valueColor: AlwaysStoppedAnimation<Color>(barColor),
             minHeight: 4,
           ),
@@ -284,7 +258,7 @@ class _FairUsePageState extends State<FairUsePage> {
     final usedMin = (usedMs / 60000).round();
     final limitMin = (dailyLimitMs / 60000).round();
     final pct = (usedMs / dailyLimitMs * 100).clamp(0.0, 100.0);
-    final barColor = exhausted ? const Color(0xFFEF4444) : const Color(0xFF8B5CF6);
+    final barColor = exhausted ? OmiColors.danger : OmiColors.accent;
 
     String resetLabel = '';
     if (resetsAt.isNotEmpty) {
@@ -292,21 +266,19 @@ class _FairUsePageState extends State<FairUsePage> {
         final resetTime = DateTime.parse(resetsAt);
         final now = DateTime.now().toUtc();
         final diff = resetTime.difference(now);
-        if (diff.inHours > 0) {
-          resetLabel = context.l10n.fairUseBudgetResetsAt('${diff.inHours}h');
-        } else if (diff.inMinutes > 0) {
-          resetLabel = context.l10n.fairUseBudgetResetsAt('${diff.inMinutes}m');
+        if (diff.inMinutes > 0) {
+          resetLabel = context.l10n.fairUseBudgetResetsAt(OmiDuration.compact(diff.inMinutes * 60, context.l10n));
         }
       } catch (_) {}
     }
 
     return Padding(
-      padding: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.only(top: OmiSpacing.sm),
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(OmiSpacing.md),
         decoration: BoxDecoration(
-          color: exhausted ? const Color(0xFFEF4444).withValues(alpha: 0.06) : const Color(0xFF1C1C1E),
-          borderRadius: BorderRadius.circular(16),
+          color: exhausted ? OmiColors.dangerSurface : OmiColors.surface1,
+          borderRadius: OmiRadius.lgAll,
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -314,22 +286,24 @@ class _FairUsePageState extends State<FairUsePage> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  context.l10n.fairUseDailyTranscription,
-                  style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 13, fontWeight: FontWeight.w500),
+                Flexible(
+                  child: Text(
+                    context.l10n.fairUseDailyTranscription,
+                    style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
+                  ),
                 ),
                 Text(
                   context.l10n.fairUseBudgetUsed('$usedMin', '$limitMin'),
-                  style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
+                  style: OmiType.footnote.copyWith(fontWeight: FontWeight.w500),
                 ),
               ],
             ),
             const SizedBox(height: 8),
             ClipRRect(
-              borderRadius: BorderRadius.circular(3),
+              borderRadius: const BorderRadius.all(Radius.circular(3)),
               child: LinearProgressIndicator(
                 value: (pct / 100).clamp(0.0, 1.0),
-                backgroundColor: const Color(0xFF2C2C2E),
+                backgroundColor: OmiColors.surface3,
                 valueColor: AlwaysStoppedAnimation<Color>(barColor),
                 minHeight: 4,
               ),
@@ -338,12 +312,12 @@ class _FairUsePageState extends State<FairUsePage> {
               const SizedBox(height: 10),
               Text(
                 context.l10n.fairUseBudgetExhausted,
-                style: const TextStyle(color: Color(0xFFEF4444), fontSize: 13, fontWeight: FontWeight.w500),
+                style: OmiType.footnote.copyWith(color: OmiColors.danger, fontWeight: FontWeight.w500),
               ),
             ],
             if (resetLabel.isNotEmpty) ...[
               const SizedBox(height: 4),
-              Text(resetLabel, style: const TextStyle(color: Color(0xFF636366), fontSize: 12)),
+              Text(resetLabel, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
             ],
           ],
         ),
@@ -356,17 +330,17 @@ class _FairUsePageState extends State<FairUsePage> {
     if (message.isEmpty) return const SizedBox.shrink();
 
     return Padding(
-      padding: const EdgeInsets.only(top: 12),
+      padding: const EdgeInsets.only(top: OmiSpacing.sm),
       child: Container(
         padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(12)),
+        decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
         child: Row(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Icon(Icons.info_outline, color: Color(0xFF8E8E93), size: 16),
+            const Icon(Icons.info_outline, color: OmiColors.textSecondary, size: 16),
             const SizedBox(width: 10),
             Expanded(
-              child: Text(message, style: const TextStyle(color: Color(0xFFAAAAAA), fontSize: 13, height: 1.4)),
+              child: Text(message, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, height: 1.4)),
             ),
           ],
         ),
@@ -382,12 +356,12 @@ class _FairUsePageState extends State<FairUsePage> {
         children: [
           Text(
             context.l10n.fairUseAboutTitle,
-            style: const TextStyle(color: Color(0xFF636366), fontSize: 12, fontWeight: FontWeight.w500),
+            style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
           ),
           const SizedBox(height: 4),
           Text(
             context.l10n.fairUseAboutBody,
-            style: const TextStyle(color: Color(0xFF48484A), fontSize: 12, height: 1.4),
+            style: OmiType.footnote.copyWith(color: OmiColors.textTertiary, height: 1.4),
           ),
         ],
       ),

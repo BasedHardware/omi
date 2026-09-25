@@ -428,7 +428,7 @@ struct InsightTestRunnerView: View {
     elapsedTime = 0
     totalScreenshots = 0
     cancellationRequested = false
-    statusMessage = "Loading screenshots..."
+    statusMessage = "Loading screenshots…"
 
     Task {
       let startTime = Date()
@@ -509,7 +509,7 @@ struct InsightTestRunnerView: View {
 
       await MainActor.run {
         totalScreenshots = sampled.count
-        statusMessage = "Testing \(sampled.count) screenshots (sampled from \(filtered.count))..."
+        statusMessage = "Testing \(sampled.count) screenshots (sampled from \(filtered.count))…"
       }
 
       // Process each sampled screenshot
@@ -517,7 +517,7 @@ struct InsightTestRunnerView: View {
         if cancellationRequested { break }
 
         await MainActor.run {
-          statusMessage = "Processing \(i + 1)/\(sampled.count) — \(screenshot.appName)..."
+          statusMessage = "Processing \(i + 1)/\(sampled.count) — \(screenshot.appName)…"
         }
 
         do {

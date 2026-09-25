@@ -4,9 +4,7 @@ import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/scheduler.dart';
-import 'package:flutter/services.dart';
 
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:collection/collection.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
@@ -19,7 +17,6 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message.dart';
-import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/apps/widgets/capability_apps_page.dart';
 import 'package:omi/pages/chat/chat_scroll_policy.dart';
 import 'package:omi/pages/chat/widgets/ai_message.dart';
@@ -41,7 +38,10 @@ import 'package:omi/providers/voice_recorder_provider.dart';
 import 'package:omi/services/integrations/apple_health_service.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
-import 'package:omi/widgets/dialog.dart';
+import 'package:omi/pages/apps/widgets/app_actions.dart';
+import 'package:omi/pages/chat/widgets/chat_apps_drawer.dart';
+import 'package:omi/pages/chat/widgets/chat_composer_parts.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/widgets/bottom_nav_bar.dart';
 
 class ChatPage extends StatefulWidget {
@@ -86,8 +86,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
 
-  // Track which app is pending deletion confirmation
-  String? _pendingDeleteAppId;
   String? _selectedContext;
   bool _quotaSheetShown = false;
   ChatPageContext? _chatScope;
@@ -229,7 +227,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
       await integrationProvider.ensureLoaded();
       if (!mounted) return;
       if (integrationProvider.isAppConnected(IntegrationApp.appleHealth)) {
-        debugPrint('🍎 [Apple Health] Starting auto-sync on chat open...');
+        debugPrint('🍎 [Apple Health] Starting auto-sync on chat open…');
         final success = await appleHealthService.syncHealthDataToBackend(days: 7);
         debugPrint('🍎 [Apple Health] Auto-sync ${success ? "completed" : "failed"}');
       }
@@ -245,9 +243,13 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
         _observeMessagesForAutoScroll(provider);
         return Scaffold(
           key: scaffoldKey,
-          backgroundColor: Theme.of(context).colorScheme.primary,
           appBar: _buildAppBar(context, provider),
-          endDrawer: _buildChatAppsEndDrawer(context),
+          endDrawer: ChatAppsDrawer(
+            onSelectApp: (id) => _handleAppSelection(id, context.read<AppProvider>()),
+            onEnableApps: _navigateToChatAppsPage,
+            onDisableApp: _disableChatApp,
+            onClearChat: _showClearChatDialog,
+          ),
           onEndDrawerChanged: (isOpened) {
             if (isOpened) {
               // Unfocus text field when drawer opens
@@ -264,24 +266,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                 // Messages area - takes up remaining space
                 Expanded(
                   child: provider.isLoadingMessages && !provider.hasCachedMessages
-                      ? Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
-                            const SizedBox(height: 16),
-                            Text(provider.firstTimeLoadingText, style: const TextStyle(color: Colors.white)),
-                          ],
-                        )
+                      ? OmiLoadingState(label: provider.firstTimeLoadingText)
                       : provider.isClearingChat
-                          ? Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                const CircularProgressIndicator(
-                                    valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
-                                const SizedBox(height: 16),
-                                Text(context.l10n.deletingMessages, style: const TextStyle(color: Colors.white)),
-                              ],
-                            )
+                          ? OmiLoadingState(label: context.l10n.deletingMessages)
                           : (provider.messages.isEmpty)
                               ? ChatStarters(
                                   isConnected: connectivityProvider.isConnected,
@@ -294,7 +281,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                     textController.text = prompt;
                                     textController.selection = TextSelection.collapsed(offset: prompt.length);
                                     textFieldFocusNode.requestFocus();
-                                    HapticFeedback.selectionClick();
+                                    OmiHaptics.selection();
                                   },
                                 )
                               : LayoutBuilder(
@@ -303,7 +290,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                       data: Theme.of(context).copyWith(
                                         textSelectionTheme: TextSelectionThemeData(
                                           selectionColor: Colors.white.withValues(alpha: 0.3),
-                                          selectionHandleColor: Colors.blue,
+                                          selectionHandleColor: OmiColors.accent,
                                         ),
                                       ),
                                       // Tight width: under the Column's loose constraints this Stack
@@ -362,6 +349,10 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                                             },
                                                             setMessageNps: (int value, {String? reason}) =>
                                                                 provider.setMessageNps(message, value, reason: reason),
+                                                            replyFailed: provider.isReplyFailed(message),
+                                                            onRetry: provider.canRetryReply(message)
+                                                                ? () => _retryReply(message)
+                                                                : null,
                                                           )
                                                         : HumanMessage(
                                                             message: message,
@@ -426,92 +417,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                       return Column(
                         children: [
                           // Selected images display above the send bar
-                          Consumer<MessageProvider>(
-                            builder: (context, provider, child) {
-                              if (provider.selectedFiles.isNotEmpty) {
-                                return Container(
-                                  margin: const EdgeInsets.only(top: 16, bottom: 8),
-                                  // Align with chat bar's left edge: outer Padding(8) + plus button (48) + gap (8).
-                                  padding: const EdgeInsets.only(left: 64, right: 8),
-                                  height: 70,
-                                  child: ListView.builder(
-                                    scrollDirection: Axis.horizontal,
-                                    itemCount: provider.selectedFiles.length,
-                                    itemBuilder: (ctx, idx) {
-                                      return Container(
-                                        margin: const EdgeInsets.only(right: 8),
-                                        width: 60,
-                                        height: 60,
-                                        decoration: BoxDecoration(
-                                          color: Colors.grey[800],
-                                          borderRadius: BorderRadius.circular(16),
-                                          image: provider.selectedFileTypes[idx] == 'image'
-                                              ? DecorationImage(
-                                                  image: FileImage(provider.selectedFiles[idx]),
-                                                  fit: BoxFit.cover,
-                                                )
-                                              : null,
-                                        ),
-                                        child: Stack(
-                                          children: [
-                                            // File icon for non-images
-                                            if (provider.selectedFileTypes[idx] != 'image')
-                                              const Center(
-                                                child: Icon(Icons.insert_drive_file, color: Colors.white, size: 24),
-                                              ),
-                                            // Loading indicator
-                                            if (provider.isFileUploading(provider.selectedFiles[idx].path))
-                                              Container(
-                                                decoration: BoxDecoration(
-                                                  color: Colors.black.withValues(alpha: 0.5),
-                                                  borderRadius: BorderRadius.circular(16),
-                                                ),
-                                                child: const Center(
-                                                  child: SizedBox(
-                                                    width: 16,
-                                                    height: 16,
-                                                    child: CircularProgressIndicator(
-                                                      strokeWidth: 2,
-                                                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white70),
-                                                    ),
-                                                  ),
-                                                ),
-                                              ),
-                                            // Close button
-                                            Positioned(
-                                              top: 4,
-                                              right: 4,
-                                              child: GestureDetector(
-                                                onTap: () {
-                                                  provider.clearSelectedFile(idx);
-                                                },
-                                                child: Container(
-                                                  width: 16,
-                                                  height: 16,
-                                                  alignment: Alignment.center,
-                                                  decoration: BoxDecoration(
-                                                    color: Colors.white,
-                                                    borderRadius: BorderRadius.circular(10),
-                                                  ),
-                                                  child: const FaIcon(
-                                                    FontAwesomeIcons.xmark,
-                                                    size: 10,
-                                                    color: Colors.black,
-                                                  ),
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                );
-                              } else {
-                                return const SizedBox.shrink();
-                              }
-                            },
-                          ),
+                          const ChatSelectedFilesStrip(),
+                          if (!connectivityProvider.isConnected) const _OfflineHint(),
                           // Scope chip (#4515) — clears an active conversation scope (Ask about this)
                           Builder(
                             builder: (context) {
@@ -525,10 +432,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                   scrollDirection: Axis.horizontal,
                                   child: Row(
                                     children: [
-                                      _scopeChip(
+                                      _ComposerChip(
                                         label: l10n.chatScopeAbout(scope!.title ?? l10n.conversationTab),
-                                        selected: true,
-                                        onTap: () => setState(() => _chatScope = null),
+                                        onRemove: () => setState(() => _chatScope = null),
                                       ),
                                     ],
                                   ),
@@ -569,30 +475,13 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                       // CENTER pill — text field/waveform + right-side button stays inside.
                                       Expanded(
                                         child: Container(
-                                          padding: const EdgeInsets.only(left: 14, right: 8, top: 7, bottom: 7),
+                                          // 4 + 44 pt target + 4 keeps the pill as tall as the 38 pt button did.
+                                          padding: const EdgeInsets.only(left: 14, right: 4, top: 4, bottom: 4),
                                           decoration: BoxDecoration(
-                                            color: const Color(0xFF1F1F25),
-                                            borderRadius: BorderRadius.circular(32),
-                                            border: Border.all(color: const Color(0xFF35343B), width: 1),
-                                            boxShadow: [
-                                              BoxShadow(
-                                                color: Colors.black.withValues(alpha: 0.65),
-                                                blurRadius: 60,
-                                                spreadRadius: 14,
-                                                offset: const Offset(0, -16),
-                                              ),
-                                              BoxShadow(
-                                                color: Colors.black.withValues(alpha: 0.45),
-                                                blurRadius: 32,
-                                                spreadRadius: 6,
-                                                offset: const Offset(0, -8),
-                                              ),
-                                              BoxShadow(
-                                                color: Colors.black.withValues(alpha: 0.25),
-                                                blurRadius: 10,
-                                                offset: const Offset(0, 2),
-                                              ),
-                                            ],
+                                            color: OmiColors.surface1,
+                                            borderRadius: OmiRadius.pillAll,
+                                            border: Border.all(color: OmiColors.surface3, width: 1),
+                                            boxShadow: kChatComposerShadow,
                                           ),
                                           child: Row(
                                             crossAxisAlignment: CrossAxisAlignment.center,
@@ -603,59 +492,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                                   crossAxisAlignment: CrossAxisAlignment.start,
                                                   children: [
                                                     if (_selectedContext != null && !voiceRecorderProvider.isActive)
-                                                      Padding(
-                                                        padding: const EdgeInsets.only(bottom: 4, top: 4, left: 2),
-                                                        child: Container(
-                                                          decoration: BoxDecoration(
-                                                            color: const Color(0xFF1f1f25),
-                                                            borderRadius: BorderRadius.circular(16),
-                                                          ),
-                                                          padding: const EdgeInsets.symmetric(
-                                                            horizontal: 12,
-                                                            vertical: 8,
-                                                          ),
-                                                          child: Row(
-                                                            mainAxisSize: MainAxisSize.min,
-                                                            children: [
-                                                              const Padding(
-                                                                padding: EdgeInsets.only(top: 1),
-                                                                child: Icon(
-                                                                  Icons.subdirectory_arrow_right,
-                                                                  size: 14,
-                                                                  color: Colors.blue,
-                                                                ),
-                                                              ),
-                                                              const SizedBox(width: 8),
-                                                              Flexible(
-                                                                child: Text(
-                                                                  _selectedContext!.length > 25
-                                                                      ? '${_selectedContext!.substring(0, 25)}...'
-                                                                      : _selectedContext!,
-                                                                  style: const TextStyle(
-                                                                    color: Colors.blue,
-                                                                    fontSize: 14,
-                                                                    fontWeight: FontWeight.w500,
-                                                                  ),
-                                                                  maxLines: 1,
-                                                                  overflow: TextOverflow.ellipsis,
-                                                                ),
-                                                              ),
-                                                              const SizedBox(width: 8),
-                                                              GestureDetector(
-                                                                onTap: () {
-                                                                  setState(() {
-                                                                    _selectedContext = null;
-                                                                  });
-                                                                },
-                                                                child: const Icon(
-                                                                  Icons.close,
-                                                                  size: 14,
-                                                                  color: Colors.blue,
-                                                                ),
-                                                              ),
-                                                            ],
-                                                          ),
-                                                        ),
+                                                      _SelectedTextChip(
+                                                        text: _selectedContext!,
+                                                        onRemove: () => setState(() => _selectedContext = null),
                                                       ),
                                                     voiceRecorderProvider.isActive
                                                         ? VoiceRecorderWidget(
@@ -693,9 +532,8 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                                               textAlignVertical: const TextAlignVertical(y: -0.35),
                                                               decoration: InputDecoration(
                                                                 hintText: context.l10n.askAnything,
-                                                                hintStyle: const TextStyle(
-                                                                  fontSize: 16.0,
-                                                                  color: Colors.grey,
+                                                                hintStyle: OmiType.callout.copyWith(
+                                                                  color: OmiColors.textTertiary,
                                                                 ),
                                                                 focusedBorder: InputBorder.none,
                                                                 enabledBorder: InputBorder.none,
@@ -709,11 +547,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                                               maxLines: 10,
                                                               keyboardType: TextInputType.multiline,
                                                               textCapitalization: TextCapitalization.sentences,
-                                                              style: const TextStyle(
-                                                                fontSize: 16.0,
-                                                                color: Colors.white,
-                                                                height: 1.2,
-                                                              ),
+                                                              style: OmiType.callout.copyWith(height: 1.2),
                                                             ),
                                                           ),
                                                   ],
@@ -723,62 +557,32 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                               // Right-side button — stays INSIDE the pill.
                                               // Send button while recording — transcribes and sends in one tap.
                                               if (voiceRecorderProvider.isActive)
-                                                GestureDetector(
-                                                  onTap: voiceRecorderProvider.state == VoiceRecorderState.recording
+                                                ChatComposerRoundButton(
+                                                  icon: const FaIcon(FontAwesomeIcons.arrowUp),
+                                                  label: context.l10n.chatSendMessage,
+                                                  onPressed: voiceRecorderProvider.state == VoiceRecorderState.recording
                                                       ? () {
-                                                          HapticFeedback.mediumImpact();
+                                                          OmiHaptics.medium();
                                                           voiceRecorderProvider.requestAutoSendOnNextTranscript();
                                                           voiceRecorderProvider.processRecording();
                                                         }
                                                       : null,
-                                                  child: Container(
-                                                    height: 38,
-                                                    width: 38,
-                                                    decoration: BoxDecoration(
-                                                      color: voiceRecorderProvider.state == VoiceRecorderState.recording
-                                                          ? Colors.white
-                                                          : const Color(0xFF4A4A4F),
-                                                      shape: BoxShape.circle,
-                                                    ),
-                                                    child: Center(
-                                                      child: FaIcon(
-                                                        FontAwesomeIcons.arrowUp,
-                                                        color:
-                                                            voiceRecorderProvider.state == VoiceRecorderState.recording
-                                                                ? const Color(0xFF1f1f25)
-                                                                : Colors.grey.shade400,
-                                                        size: 16,
-                                                      ),
-                                                    ),
-                                                  ),
                                                 ),
                                               // Microphone button — round white pill matching the send button.
                                               if (!voiceRecorderProvider.isActive &&
                                                   shouldShowVoiceRecorderButton() &&
                                                   textController.text.isEmpty)
-                                                GestureDetector(
-                                                  onTap: () {
-                                                    HapticFeedback.lightImpact();
+                                                ChatComposerRoundButton(
+                                                  icon: const FaIcon(FontAwesomeIcons.microphone),
+                                                  label: context.l10n.startVoiceRecording,
+                                                  onPressed: () {
+                                                    OmiHaptics.light();
                                                     FocusScope.of(context).unfocus();
                                                     voiceRecorderProvider.startRecording();
                                                   },
-                                                  child: Container(
-                                                    height: 38,
-                                                    width: 38,
-                                                    decoration: const BoxDecoration(
-                                                      color: Colors.white,
-                                                      shape: BoxShape.circle,
-                                                    ),
-                                                    child: const Center(
-                                                      child: FaIcon(
-                                                        FontAwesomeIcons.microphone,
-                                                        color: Color(0xFF1f1f25),
-                                                        size: 16,
-                                                      ),
-                                                    ),
-                                                  ),
                                                 ),
-                                              // Send button — only when there's text and not in voice mode
+                                              // Send button — only when there's text and not in voice mode.
+                                              // Offline or uploading it stays visible but is drawn disabled.
                                               if (!voiceRecorderProvider.isActive && shouldShowSendButton(provider))
                                                 ValueListenableBuilder<TextEditingValue>(
                                                   valueListenable: textController,
@@ -791,31 +595,18 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                                         !provider.isUploadingFiles &&
                                                         connectivityProvider.isConnected;
 
-                                                    return GestureDetector(
-                                                      key: const ValueKey('omi.chat.send'),
-                                                      onTap: canSend
+                                                    return ChatComposerRoundButton(
+                                                      buttonKey: const ValueKey('omi.chat.send'),
+                                                      icon: const FaIcon(FontAwesomeIcons.arrowUp),
+                                                      label: context.l10n.chatSendMessage,
+                                                      onPressed: canSend
                                                           ? () {
-                                                              HapticFeedback.mediumImpact();
+                                                              OmiHaptics.medium();
                                                               String message = textController.text.trim();
                                                               if (message.isEmpty) return;
                                                               _sendMessageUtil(message);
                                                             }
                                                           : null,
-                                                      child: Container(
-                                                        height: 38,
-                                                        width: 38,
-                                                        decoration: const BoxDecoration(
-                                                          color: Colors.white,
-                                                          shape: BoxShape.circle,
-                                                        ),
-                                                        child: const Center(
-                                                          child: FaIcon(
-                                                            FontAwesomeIcons.arrowUp,
-                                                            color: Color(0xFF1f1f25),
-                                                            size: 16,
-                                                          ),
-                                                        ),
-                                                      ),
                                                     );
                                                   },
                                                 ),
@@ -834,40 +625,13 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                       top: 0,
                                       bottom: 0,
                                       child: Center(
-                                        child: GestureDetector(
-                                          onTap: () {
-                                            HapticFeedback.lightImpact();
+                                        child: ChatComposerSideButton(
+                                          icon: const Icon(Icons.stop),
+                                          label: context.l10n.stopRecording,
+                                          onPressed: () {
+                                            OmiHaptics.light();
                                             voiceRecorderProvider.processRecording();
                                           },
-                                          child: Container(
-                                            height: 48,
-                                            width: 48,
-                                            decoration: BoxDecoration(
-                                              color: const Color(0xFF1F1F25),
-                                              shape: BoxShape.circle,
-                                              border: Border.all(color: const Color(0xFF35343B), width: 1),
-                                              boxShadow: [
-                                                BoxShadow(
-                                                  color: Colors.black.withValues(alpha: 0.65),
-                                                  blurRadius: 60,
-                                                  spreadRadius: 14,
-                                                  offset: const Offset(0, -16),
-                                                ),
-                                                BoxShadow(
-                                                  color: Colors.black.withValues(alpha: 0.45),
-                                                  blurRadius: 32,
-                                                  spreadRadius: 6,
-                                                  offset: const Offset(0, -8),
-                                                ),
-                                                BoxShadow(
-                                                  color: Colors.black.withValues(alpha: 0.25),
-                                                  blurRadius: 10,
-                                                  offset: const Offset(0, 2),
-                                                ),
-                                              ],
-                                            ),
-                                            child: const Center(child: Icon(Icons.stop, color: Colors.white, size: 18)),
-                                          ),
                                         ),
                                       ),
                                     )
@@ -883,7 +647,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                               title: context.l10n.takePhoto,
                                               iconWidget: const FaIcon(FontAwesomeIcons.camera, size: 16),
                                               onTap: () {
-                                                HapticFeedback.selectionClick();
+                                                OmiHaptics.selection();
                                                 if (mounted) {
                                                   this.context.read<MessageProvider>().captureImage();
                                                 }
@@ -893,7 +657,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                               title: context.l10n.photoLibrary,
                                               iconWidget: const FaIcon(FontAwesomeIcons.images, size: 16),
                                               onTap: () {
-                                                HapticFeedback.selectionClick();
+                                                OmiHaptics.selection();
                                                 if (mounted) {
                                                   this.context.read<MessageProvider>().selectImage();
                                                 }
@@ -903,7 +667,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                               title: context.l10n.chooseFile,
                                               iconWidget: const FaIcon(FontAwesomeIcons.folder, size: 16),
                                               onTap: () {
-                                                HapticFeedback.selectionClick();
+                                                OmiHaptics.selection();
                                                 if (mounted) {
                                                   this.context.read<MessageProvider>().selectFile();
                                                 }
@@ -911,16 +675,13 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                             ),
                                           ],
                                           position: PullDownMenuPosition.automatic,
-                                          buttonBuilder: (context, showMenu) => GestureDetector(
-                                            onTap: () async {
-                                              HapticFeedback.lightImpact();
+                                          buttonBuilder: (context, showMenu) => ChatComposerSideButton(
+                                            icon: const FaIcon(FontAwesomeIcons.plus),
+                                            label: context.l10n.chatAddAttachment,
+                                            onPressed: () async {
+                                              OmiHaptics.light();
                                               if (provider.selectedFiles.length > 3) {
-                                                ScaffoldMessenger.of(context).showSnackBar(
-                                                  SnackBar(
-                                                    content: Text(context.l10n.maxFilesLimit),
-                                                    duration: const Duration(seconds: 2),
-                                                  ),
-                                                );
+                                                OmiFeedback.info(context, context.l10n.maxFilesLimit);
                                                 return;
                                               }
                                               if (textFieldFocusNode.hasFocus) {
@@ -930,41 +691,6 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                               }
                                               showMenu();
                                             },
-                                            child: Container(
-                                              height: 48,
-                                              width: 48,
-                                              decoration: BoxDecoration(
-                                                color: const Color(0xFF1F1F25),
-                                                shape: BoxShape.circle,
-                                                border: Border.all(color: const Color(0xFF35343B), width: 1),
-                                                boxShadow: [
-                                                  BoxShadow(
-                                                    color: Colors.black.withValues(alpha: 0.65),
-                                                    blurRadius: 60,
-                                                    spreadRadius: 14,
-                                                    offset: const Offset(0, -16),
-                                                  ),
-                                                  BoxShadow(
-                                                    color: Colors.black.withValues(alpha: 0.45),
-                                                    blurRadius: 32,
-                                                    spreadRadius: 6,
-                                                    offset: const Offset(0, -8),
-                                                  ),
-                                                  BoxShadow(
-                                                    color: Colors.black.withValues(alpha: 0.25),
-                                                    blurRadius: 10,
-                                                    offset: const Offset(0, 2),
-                                                  ),
-                                                ],
-                                              ),
-                                              child: Center(
-                                                child: FaIcon(
-                                                  FontAwesomeIcons.plus,
-                                                  color: provider.selectedFiles.length > 3 ? Colors.grey : Colors.white,
-                                                  size: 18,
-                                                ),
-                                              ),
-                                            ),
                                           ),
                                         ),
                                       ),
@@ -1023,48 +749,34 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     provider.setSendingMessage(false);
   }
 
-  Widget _scopeChip({required String label, required bool selected, required VoidCallback onTap}) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: selected ? const Color(0xFF35343B) : const Color(0xFF1F1F25),
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: selected ? const Color(0xFFC4C4CC) : const Color(0xFF35343B)),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: selected ? Colors.white : const Color(0xFFC4C4CC),
-            fontSize: 12,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ),
-    );
+  /// Sends the message behind a failed reply again (the reply's Try Again).
+  Future<void> _retryReply(ServerMessage failed) async {
+    final provider = context.read<MessageProvider>();
+    if (provider.sendingMessage) return;
+    provider.setSendingMessage(true);
+    _resumeFollowingAndScroll(animated: true);
+    await provider.retryFailedReply(failed);
   }
 
   void _showPlansSheetOnQuotaExceeded() {
     if (!mounted) return;
     // Refresh subscription data so the plans sheet is up-to-date
     context.read<UsageProvider>().fetchSubscription();
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (_) => const _PlansSheetWrapper(),
-    );
+    showOmiSheet<void>(context: context, padding: EdgeInsets.zero, builder: (_) => const _PlansSheetWrapper());
   }
 
   sendInitialAppMessage(App? app) async {
-    context.read<MessageProvider>().setSendingMessage(true);
+    // The provider outlives this page: release the composer even if the page closes mid-request.
+    final provider = context.read<MessageProvider>();
+    provider.setSendingMessage(true);
     _resumeFollowingAndScroll();
-    ServerMessage message = await getInitialAppMessage(app?.id);
-    if (mounted) {
-      context.read<MessageProvider>().addMessage(message);
+    try {
+      final message = await getInitialAppMessage(app?.id);
+      if (!mounted) return;
+      provider.addMessage(message);
       _resumeFollowingAndScroll();
-      context.read<MessageProvider>().setSendingMessage(false);
+    } finally {
+      provider.setSendingMessage(false);
     }
   }
 
@@ -1193,44 +905,22 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     // Unfocus the text field to prevent keyboard issues
     textFieldFocusNode.unfocus();
 
-    // clear chat
-    if (val == 'clear_chat') {
-      _showClearChatDialog();
-      return;
-    }
-
-    // enable apps - navigate to chat capability apps page
-    if (val == 'enable') {
-      _navigateToChatAppsPage();
-      return;
-    }
-
     // select app by id
     _selectApp(val, provider);
   }
 
-  void _showClearChatDialog() {
+  Future<void> _showClearChatDialog() async {
     if (!mounted) return;
-
-    showDialog(
-      context: context,
-      builder: (ctx) {
-        return getDialog(
-          context,
-          () {
-            Navigator.of(context).pop();
-          },
-          () {
-            if (mounted) {
-              context.read<MessageProvider>().clearChat();
-              Navigator.of(context).pop();
-            }
-          },
-          context.l10n.clearChatQuestion,
-          context.l10n.clearChatConfirm,
-        );
-      },
+    final l10n = context.l10n;
+    // Clearing cannot be undone: confirm every time, with the verb on the button.
+    final confirmed = await showOmiConfirm(
+      context,
+      title: l10n.clearChatQuestion,
+      message: l10n.clearChatConfirm,
+      confirmLabel: l10n.clearChat,
+      destructive: true,
     );
+    if (confirmed && mounted) context.read<MessageProvider>().clearChat();
   }
 
   Future<void> _navigateToChatAppsPage() async {
@@ -1264,14 +954,20 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     messageProvider.setChatApps(localChatApps);
   }
 
-  Future<void> _handleAppUninstall(String appId, AppProvider appProvider, MessageProvider messageProvider) async {
-    if (!mounted) return;
-
-    // Immediately remove from local chat apps list for instant visual feedback
-    messageProvider.removeChatApp(appId);
-
-    // Disable the app on server (runs in background)
-    appProvider.toggleApp(appId, false, null);
+  /// Disables a chat app everywhere, with Undo (the same action as Disable on its detail page).
+  Future<void> _disableChatApp(App app) async {
+    final messageProvider = context.read<MessageProvider>();
+    Navigator.of(context).maybePop(); // close the drawer so the Undo toast is visible
+    await disableAppWithUndo(
+      context,
+      app,
+      onHidden: () => messageProvider.removeChatApp(app.id),
+      onRestored: () {
+        if (messageProvider.chatApps.every((a) => a.id != app.id)) {
+          messageProvider.setChatApps(List.of(messageProvider.chatApps)..add(app));
+        }
+      },
+    );
   }
 
   void _selectApp(String appId, AppProvider appProvider) async {
@@ -1308,49 +1004,44 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
   }
 
   PreferredSizeWidget _buildAppBar(BuildContext context, MessageProvider provider) {
+    final l10n = context.l10n;
     return AppBar(
-      backgroundColor: Theme.of(context).colorScheme.surface,
       elevation: 0,
-      leading: Container(
-        width: 36,
-        height: 36,
-        margin: const EdgeInsets.all(8),
-        decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
-        child: IconButton(
-          padding: EdgeInsets.zero,
-          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 18),
-          onPressed: () {
-            HapticFeedback.mediumImpact();
-            Navigator.of(context).pop();
-          },
-        ),
-      ),
+      leading: const Center(child: OmiBackButton.circled()),
       title: Consumer<AppProvider>(
         builder: (context, appProvider, child) {
-          return _buildSelectedAppDisplay(context, appProvider);
+          final selectedApp = provider.chatApps.firstWhereOrNull((app) => app.id == appProvider.selectedChatAppId);
+          return Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              selectedApp != null ? ChatAppAvatar(app: selectedApp) : const ChatOmiAvatar(),
+              const SizedBox(width: OmiSpacing.xs),
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 140),
+                child: Text(
+                  selectedApp != null ? selectedApp.getName() : l10n.omiAppName,
+                  style: OmiType.callout,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          );
         },
       ),
       centerTitle: true,
       actions: [
-        Container(
-          width: 36,
-          height: 36,
-          margin: const EdgeInsets.only(right: 8),
-          decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
-          child: IconButton(
-            padding: EdgeInsets.zero,
-            icon: const Icon(Icons.extension, color: Colors.white, size: 18),
-            onPressed: () {
-              HapticFeedback.mediumImpact();
-              // Dismiss keyboard before opening drawer
-              FocusScope.of(context).unfocus();
-              // Use post-frame callback to ensure scaffold state is ready
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                scaffoldKey.currentState?.openEndDrawer();
-              });
-            },
-          ),
+        OmiIconButton.filled(
+          icon: const Icon(Icons.extension),
+          label: l10n.chatAppsTitle,
+          onPressed: () {
+            OmiHaptics.selection();
+            // Dismiss the keyboard before opening the drawer, once the scaffold has settled.
+            FocusScope.of(context).unfocus();
+            WidgetsBinding.instance.addPostFrameCallback((_) => scaffoldKey.currentState?.openEndDrawer());
+          },
         ),
+        const SizedBox(width: OmiSpacing.xxs),
       ],
       bottom: provider.isLoadingMessages
           ? PreferredSize(
@@ -1358,290 +1049,139 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
               child: Container(
                 width: double.infinity,
                 height: 32,
-                color: Colors.green,
-                child: Center(
-                  child: Text(context.l10n.syncingMessages, style: const TextStyle(color: Colors.white, fontSize: 12)),
+                color: OmiColors.surface2,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const OmiSpinner(size: OmiSpinnerSize.small),
+                    const SizedBox(width: OmiSpacing.xs),
+                    Text(l10n.syncingMessages, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+                  ],
                 ),
               ),
             )
           : null,
     );
   }
+}
 
-  Widget _buildSelectedAppDisplay(BuildContext context, AppProvider provider) {
-    final messageProvider = Provider.of<MessageProvider>(context, listen: false);
-    var selectedApp = messageProvider.chatApps.firstWhereOrNull((app) => app.id == provider.selectedChatAppId);
+/// "You're offline" above the composer; Send is disabled until the connection returns.
+class _OfflineHint extends StatelessWidget {
+  const _OfflineHint();
 
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
-      mainAxisAlignment: MainAxisAlignment.center,
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        selectedApp != null ? _getAppAvatar(selectedApp) : _getOmiAvatar(),
-        const SizedBox(width: 8),
-        Container(
-          constraints: const BoxConstraints(maxWidth: 140),
-          child: Text(
-            selectedApp != null ? selectedApp.getName() : context.l10n.omiAppName,
-            style: const TextStyle(color: Colors.white, fontSize: 16),
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildChatAppsEndDrawer(BuildContext context) {
-    return Drawer(
-      backgroundColor: const Color(0xFF1F1F25),
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.only(topLeft: Radius.circular(20), bottomLeft: Radius.circular(20)),
-      ),
-      child: SafeArea(
-        child: Consumer2<MessageProvider, AppProvider>(
-          builder: (context, messageProvider, appProvider, child) {
-            final chatApps = messageProvider.chatApps;
-            final selectedAppId = appProvider.selectedChatAppId;
-            final isOmiSelected = chatApps.firstWhereOrNull((a) => a.id == selectedAppId) == null;
-
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Header
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(20, 16, 16, 8),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        context.l10n.chatAppsTitle,
-                        style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
-                      ),
-                      IconButton(
-                        icon: const Padding(
-                          padding: EdgeInsets.only(left: 2, top: 1),
-                          child: FaIcon(FontAwesomeIcons.xmark, color: Colors.white60, size: 18),
-                        ),
-                        onPressed: () => Navigator.of(context).pop(),
-                      ),
-                    ],
-                  ),
-                ),
-                const Divider(color: Colors.white12, height: 1),
-                // Actions
-                ListTile(
-                  leading: const Padding(
-                    padding: EdgeInsets.only(left: 2, top: 1),
-                    child: FaIcon(FontAwesomeIcons.solidTrashCan, color: Colors.redAccent, size: 20),
-                  ),
-                  title: Text(context.l10n.clearChat, style: const TextStyle(color: Colors.redAccent, fontSize: 16)),
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    _handleAppSelection('clear_chat', appProvider);
-                  },
-                ),
-                ListTile(
-                  leading: const Padding(
-                    padding: EdgeInsets.only(left: 2, top: 1),
-                    child: FaIcon(FontAwesomeIcons.circlePlus, color: Colors.white, size: 20),
-                  ),
-                  title: Text(context.l10n.enableApps, style: const TextStyle(color: Colors.white, fontSize: 16)),
-                  trailing: const Padding(
-                    padding: EdgeInsets.only(left: 2, top: 1),
-                    child: FaIcon(FontAwesomeIcons.chevronRight, color: Colors.white38, size: 14),
-                  ),
-                  onTap: () {
-                    Navigator.of(context).pop();
-                    _navigateToChatAppsPage();
-                  },
-                ),
-                const Divider(color: Colors.white12, height: 1),
-                Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 16, 20, 8),
-                  child: Text(
-                    context.l10n.selectApp,
-                    style: const TextStyle(color: Colors.white60, fontSize: 13, fontWeight: FontWeight.w500),
-                  ),
-                ),
-                // App list
-                Expanded(
-                  child: ListView(
-                    padding: EdgeInsets.zero,
-                    children: [
-                      // Omi option
-                      _buildDrawerAppItem(
-                        avatar: _getOmiAvatar(),
-                        name: context.l10n.omiAppName,
-                        isSelected: isOmiSelected,
-                        onTap: () {
-                          Navigator.of(context).pop();
-                          _handleAppSelection('no_selected', appProvider);
-                        },
-                      ),
-                      // Enabled chat apps
-                      ...chatApps.map(
-                        (app) => _buildDrawerAppItem(
-                          avatar: _getAppAvatar(app),
-                          name: app.getName(),
-                          isSelected: selectedAppId == app.id,
-                          appId: app.id,
-                          onTap: () {
-                            Navigator.of(context).pop();
-                            _handleAppSelection(app.id, appProvider);
-                          },
-                          onConfirmDelete: selectedAppId != app.id
-                              ? () => _handleAppUninstall(app.id, appProvider, messageProvider)
-                              : null,
-                        ),
-                      ),
-                      if (chatApps.isEmpty)
-                        Padding(
-                          padding: const EdgeInsets.all(20),
-                          child: Text(
-                            context.l10n.noChatAppsEnabled,
-                            style: const TextStyle(color: Colors.white38, fontSize: 14),
-                            textAlign: TextAlign.center,
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ],
-            );
-          },
-        ),
-      ),
-    );
-  }
-
-  Widget _buildDrawerAppItem({
-    required Widget avatar,
-    required String name,
-    required bool isSelected,
-    required VoidCallback onTap,
-    String? appId,
-    VoidCallback? onConfirmDelete,
-  }) {
-    final bool isPendingDelete = appId != null && _pendingDeleteAppId == appId;
-
-    if (isPendingDelete) {
-      // Show inline confirmation buttons - match ListTile height (56px)
-      return Container(
-        height: 56,
-        padding: const EdgeInsets.symmetric(horizontal: 16),
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      liveRegion: true,
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.xs, OmiSpacing.md, 0),
         child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            avatar,
-            const SizedBox(width: 12),
-            Expanded(
+            const ExcludeSemantics(child: Icon(Icons.cloud_off_rounded, size: 14, color: OmiColors.textTertiary)),
+            const SizedBox(width: 6),
+            Flexible(
               child: Text(
-                name,
-                style: const TextStyle(color: Colors.white, fontSize: 16),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            const SizedBox(width: 8),
-            // Cancel button (white)
-            GestureDetector(
-              onTap: () {
-                setState(() {
-                  _pendingDeleteAppId = null;
-                });
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(16)),
-                child: Text(
-                  context.l10n.cancel,
-                  style: const TextStyle(color: Colors.black, fontSize: 13, fontWeight: FontWeight.w500),
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            // Disable button (red)
-            GestureDetector(
-              onTap: () {
-                setState(() {
-                  _pendingDeleteAppId = null;
-                });
-                onConfirmDelete?.call();
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(color: Colors.redAccent, borderRadius: BorderRadius.circular(16)),
-                child: Text(
-                  context.l10n.disable,
-                  style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w500),
-                ),
+                context.l10n.chatOfflineHint,
+                style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
+                textAlign: TextAlign.center,
               ),
             ),
           ],
         ),
-      );
-    }
-
-    return ListTile(
-      leading: avatar,
-      title: Text(
-        name,
-        style: const TextStyle(color: Colors.white, fontSize: 16),
-        overflow: TextOverflow.ellipsis,
       ),
-      trailing: isSelected
-          ? const Padding(
-              padding: EdgeInsets.only(left: 2, top: 1),
-              child: FaIcon(FontAwesomeIcons.solidCircleCheck, color: Colors.white, size: 18),
-            )
-          : appId != null && onConfirmDelete != null
-              ? GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _pendingDeleteAppId = appId;
-                    });
-                  },
-                  child: const Padding(
-                    padding: EdgeInsets.only(left: 2, top: 1),
-                    child: FaIcon(FontAwesomeIcons.solidTrashCan, color: Colors.white38, size: 16),
-                  ),
-                )
-              : null,
-      selected: isSelected,
-      selectedTileColor: Colors.white.withValues(alpha: 0.1),
-      onTap: onTap,
     );
   }
+}
 
-  Widget _getAppAvatar(App app) {
-    return CachedNetworkImage(
-      imageUrl: app.getImageUrl(),
-      imageBuilder: (context, imageProvider) {
-        return CircleAvatar(backgroundColor: Colors.white, radius: 12, backgroundImage: imageProvider);
-      },
-      errorWidget: (context, url, error) {
-        return const CircleAvatar(backgroundColor: Colors.white, radius: 12, child: Icon(Icons.error_outline_rounded));
-      },
-      progressIndicatorBuilder: (context, url, progress) => CircleAvatar(
-        backgroundColor: Colors.white,
-        radius: 12,
-        child: CircularProgressIndicator(
-          value: progress.progress,
-          valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
+/// A small chip above or inside the composer with a remove control (the conversation scope).
+class _ComposerChip extends StatelessWidget {
+  const _ComposerChip({required this.label, required this.onRemove});
+
+  final String label;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Semantics(
+      button: true,
+      label: label,
+      hint: MaterialLocalizations.of(context).deleteButtonTooltip,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onRemove,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: kOmiMinTapTarget),
+          child: Center(
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: 6),
+              decoration: BoxDecoration(
+                color: OmiColors.surface2,
+                borderRadius: OmiRadius.lgAll,
+                border: Border.all(color: OmiColors.textTertiary),
+              ),
+              child: ExcludeSemantics(
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: OmiType.footnote.copyWith(fontWeight: FontWeight.w500),
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    const Icon(Icons.close, size: 14, color: OmiColors.textSecondary),
+                  ],
+                ),
+              ),
+            ),
+          ),
         ),
       ),
     );
   }
+}
 
-  Widget _getOmiAvatar() {
-    return Container(
-      decoration: BoxDecoration(
-        image: DecorationImage(image: AssetImage(Assets.images.background.path), fit: BoxFit.cover),
-        borderRadius: const BorderRadius.all(Radius.circular(16.0)),
-      ),
-      height: 24,
-      width: 24,
-      child: Stack(
-        alignment: Alignment.center,
-        children: [Image.asset(Assets.images.herologo.path, height: 16, width: 16)],
+/// The quoted text the next message asks about ("Ask Omi" on a selection), with a remove control.
+class _SelectedTextChip extends StatelessWidget {
+  const _SelectedTextChip({required this.text, required this.onRemove});
+
+  final String text;
+  final VoidCallback onRemove;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(top: OmiSpacing.xxs, left: 2),
+      child: Container(
+        decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.lgAll),
+        padding: const EdgeInsets.only(left: OmiSpacing.sm),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const ExcludeSemantics(
+              child: Icon(Icons.subdirectory_arrow_right, size: 14, color: OmiColors.textSecondary),
+            ),
+            const SizedBox(width: OmiSpacing.xs),
+            Flexible(
+              child: Text(
+                text,
+                style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            OmiIconButton(
+              icon: const Icon(Icons.close, size: 16),
+              label: context.l10n.chatRemoveSelectedText,
+              color: OmiColors.textSecondary,
+              onPressed: onRemove,
+            ),
+          ],
+        ),
       ),
     );
   }

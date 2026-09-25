@@ -524,7 +524,7 @@ class TranscriptProcessor:
             # The owner is identified by voice, never by hearing their own name: minting
             # a person for it produced a second "David" alongside "David (You)".
             owner_name = await speaker.resolve_owner_name()
-            if owner_name and name.lower() == owner_name.lower():
+            if owner_name and name.casefold() == owner_name.casefold():
                 continue
             person = await self.host.persistence.call(user_db.get_person_by_name, self.host.request.uid, name)
             # Only an explicit self-introduction may create a person. A bare copula

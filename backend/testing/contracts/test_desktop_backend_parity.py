@@ -83,7 +83,7 @@ def filter_parts(field_filter):
 
 def test_python_conversation_codec_reads_shared_standard_and_enhanced_fixtures():
     data = fixture("conversations.json")
-    standard = conversations_db._prepare_conversation_for_read(
+    standard = conversations_db.prepare_conversation_for_read(
         {
             "data_protection_level": "standard",
             "transcript_segments": base64.b64decode(data["standard_compressed_transcript_b64"]),
@@ -91,7 +91,7 @@ def test_python_conversation_codec_reads_shared_standard_and_enhanced_fixtures()
         },
         data["uid"],
     )
-    enhanced = conversations_db._prepare_conversation_for_read(
+    enhanced = conversations_db.prepare_conversation_for_read(
         {
             "data_protection_level": "enhanced",
             "transcript_segments": data["enhanced_encrypted_transcript"],
@@ -142,11 +142,10 @@ def test_python_conversation_query_semantics(monkeypatch):
     assert (data["date_field"], ">=", datetime.fromisoformat(data["start_date"])) in filters
     assert (data["date_field"], "<=", datetime.fromisoformat(data["end_date"])) in filters
     assert fake_db.orders == [(data["date_field"], "DESCENDING")]
-    # Legacy sync review fragments are filtered after the Firestore stream, so
-    # pagination must be applied to the visible rows rather than to raw query
-    # results. A raw limit/offset would let a hidden filler row steal a slot.
-    assert fake_db.limit_value is None
-    assert fake_db.offset_value is None
+    # Visibility is the stored ``discarded`` flag in the indexed query, so the
+    # default list pages server-side (hidden rows never reach the stream).
+    assert fake_db.limit_value == data["limit"]
+    assert fake_db.offset_value == data["offset"]
 
 
 def test_python_conversation_query_defaults_to_created_at(monkeypatch):
@@ -156,8 +155,8 @@ def test_python_conversation_query_defaults_to_created_at(monkeypatch):
     conversations_db.get_conversations("contract-user-8547", limit=2, offset=1)
 
     assert fake_db.orders == [("created_at", "DESCENDING")]
-    assert fake_db.limit_value is None
-    assert fake_db.offset_value is None
+    assert fake_db.limit_value == 2
+    assert fake_db.offset_value == 1
 
 
 def test_python_memory_codec_reads_shared_enhanced_fixture():
