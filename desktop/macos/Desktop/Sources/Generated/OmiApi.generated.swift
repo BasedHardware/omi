@@ -7276,7 +7276,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode(OmiAnyCodable.self, from: data)
   }
 
-  public static func rejectAppV1AppsAppIdRejectPost(client: OmiApiClient, appId: String, uid: String, secretKey: String, body: OmiAnyCodable) async throws -> OmiAnyCodable {
+  public static func rejectAppV1AppsAppIdRejectPost(client: OmiApiClient, appId: String, uid: String, secretKey: String, body: OmiAnyCodable? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/apps/\(appId)/reject"
     guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL

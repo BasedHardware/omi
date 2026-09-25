@@ -22497,6 +22497,7 @@
       "RejectAppRequest": {
         "properties": {
           "reason": {
+            "maxLength": 500,
             "title": "Reason",
             "type": "string"
           }
@@ -36946,11 +36947,18 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/RejectAppRequest"
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/RejectAppRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Payload"
               }
             }
-          },
-          "required": true
+          }
         },
         "responses": {
           "200": {
