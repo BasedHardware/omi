@@ -901,6 +901,75 @@ At conversation completion (`process_conversation`, and `_finalize_sync_audio_fi
 
 Staleness is fingerprint-driven: when late chunks change `audio_files` (pusher batch flush after completion, offline sync, conversation merge), the stamped fingerprint no longer matches and both the call sites and the `/v1/sync/audio/{id}/urls` poll re-enqueue a rebuild under a new task name (defeating the named-task tombstone). `/urls` returns the artifact as a top-level `conversation_audio` object alongside the per-part `audio_files` list, which remains for older app versions.
 
+### Audio timeline v2 (AUDIO_TIMELINE_V2, dev-only until promoted)
+
+`AUDIO_TIMELINE_V2` admits **new eligible recordings only**: single-channel,
+server-STT live capture on a fresh conversation. Existing sockets, resumed v1
+conversations, multi-channel mixes, custom/BYOK STT, offline WAL sync and
+manually merged rows always stay v1. The flag is read at the call boundary
+(`config/audio_timeline.py`); flag off means the v1 wire, storage and
+persistence behavior is byte-for-byte unchanged.
+
+One coordinate. A per-listen-socket integer capture sample cursor
+(`utils/audio_timeline.CaptureTimeline`) owns the order of decoded PCM16 mono.
+The first anchor is the first accepted decoded frame; a later anchor is set
+only at a measured inter-arrival hiatus (both wall estimate and monotonic gap
+beyond 2 s — a wall-clock step can never mint an hour of recorded audio).
+`conversation.started_at` is pinned once, transactionally with the typed
+`audio_timeline: {version: 2}` marker, to the wall projection of the first
+accepted audio sample of that conversation (fenced in
+`update_conversation_segments`: once pinned, stale `started_at` writes are
+ignored). The first segment of a v2 conversation may therefore start after 0.
+
+Provider times. Every selected provider socket — initial fallback and
+send-path failover — gets its own epoch translator created at callback
+creation. Sockets record only sends the provider accepted (pre-roll spans
+included through the VAD gate; SafeDeepgram keepalives are never audio);
+provider timestamps map through those spans to capture samples, then to the
+wall axis, before `_enqueue_stt_segments`. Out-of-range, evicted or
+straddling-generation segments are dropped and counted, never clamped onto a
+neighboring epoch or replayed into a newer conversation.
+
+Wire. The listen→pusher opt-in is the bounded `audio_timeline=2` WebSocket
+query parameter on `/v1/trigger/listen`; a capable pusher answers with the
+pusher→listen acknowledgment opcode **202** (`{"type":"audio_timeline_ack",
+"version":2}`) before any v2 audio. An old pusher ignores the unknown query
+key and stays silent: the listen session's bounded 4 s ack timeout then means
+v1 for that new session. The ack is required again on every reconnect; if it
+is missing mid-recording, the recording continues, transcripts and
+finalization keep flowing, but audio is withheld (a coverage gap) and
+audio-linked features are withheld for the gap — the recording is never
+terminated and never silently downgraded. Opcode 101 keeps its 12-byte header
+(`opcode | float64 timestamp | PCM`): the timestamp is the projected start of
+the run's first sample, retained per buffered run (with its conversation
+binding) from acceptance through replays and reconnects. Opcode 103 is emitted
+ahead of each conversation boundary so the pusher flushes rather than
+concatenating across rollovers.
+
+Storage. v2 audio runs compare against the last accepted run's end with 1 ms
+tolerance: a positive discontinuity flushes the partial 60 s chunk and closes
+the pending per-conversation batch (never concatenating across a gap or
+inside a batch), exact replays are ignored, partial overlaps are trimmed
+after verifying the retained bytes, and conflicting bytes for an accepted
+range fail closed. Chunk queues carry the authoritative PCM sample count;
+uploads stamp span metadata (`v2_start`, `v2_samples`, `v2_sample_rate`) on
+the blob and refuse to overwrite a colliding 3-decimal filename with
+differing bytes (an identical retry is an idempotent no-op). Listing
+rehydrates spans; grouping splits at actual uncovered ends or overlaps;
+`AudioFile.chunk_spans` exposes validated contiguous coverage (absent on
+legacy files) and joins the artifact fingerprint.
+
+Consumers. `segment_wall_window` / `covered_window` / `coverage_outcome`
+(`utils/audio_timeline.py`) are the one coordinate conversion and the
+metadata-backed coverage check with the outcome vocabulary
+`covered|missing|pending_upload|no_audio|unsupported` (counted in
+`omi_audio_timeline_*` counters at bounded reconciliation points; labels
+never carry UID, conversation id or content). Clips, speaker-tag prompt
+selection and speaker-sample extraction serve v2 conversations only from
+validated span coverage; a v1-only chunk list is a candidate, never proof.
+Playback parts stay one contiguous span per part (grouping splits at every
+real gap), preserving the released clients' strict-seek arithmetic.
+
 ## 6. Event Wire Protocol
 
 ### Server → Client (JSON over WS text frames)
