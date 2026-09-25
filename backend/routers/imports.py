@@ -73,7 +73,7 @@ async def import_limitless_data(
         finally:
             f.close()
     except Exception as e:
-        logger.error(f"Failed to save uploaded file: {type(e).__name__}")
+        logger.exception("Failed to save uploaded file")
         # Clean up on error
         await run_blocking(
             db_executor,

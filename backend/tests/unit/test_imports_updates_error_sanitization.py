@@ -63,11 +63,17 @@ sys.modules["google.oauth2"] = google_oauth2
 sys.modules["google.oauth2.id_token"] = google_oauth2.id_token
 sys.modules.setdefault("google.protobuf", MagicMock())
 sys.modules.setdefault("google.protobuf.duration_pb2", MagicMock())
-sys.modules.setdefault("redis", MagicMock())
-sys.modules.setdefault("firebase_admin", MagicMock())
-sys.modules.setdefault("firebase_admin.auth", MagicMock())
-sys.modules.setdefault("prometheus_client", MagicMock())
+firebase_admin = ModuleType("firebase_admin")
+firebase_admin.__path__ = []
+firebase_admin_auth = ModuleType("firebase_admin.auth")
+for exc_name in ["CertificateFetchError", "ExpiredIdTokenError", "InvalidIdTokenError", "RevokedIdTokenError"]:
+    setattr(firebase_admin_auth, exc_name, type(exc_name, (Exception,), {}))
+sys.modules["firebase_admin"] = firebase_admin
+sys.modules["firebase_admin.auth"] = firebase_admin_auth
 sys.modules.setdefault("cachetools", MagicMock())
+prom = sys.modules.get("prometheus_client")
+if prom is None or not hasattr(prom, "start_http_server"):
+    sys.modules["prometheus_client"] = MagicMock()
 
 limitless_mock = ModuleType("utils.imports.limitless")
 limitless_mock.create_import_job = MagicMock()
@@ -85,18 +91,29 @@ class ImportsUpdatesErrorSanitizationTests(unittest.IsolatedAsyncioTestCase):
     async def test_appcast_generation_error_sanitized(self):
         from routers import updates
 
-        dummy_release = {
-            "version": "1.0.0",
-            "build": "100",
-            "published_at": "2026-09-24T00:00:00Z",
+        dummy_entry = {
             "channel": "stable",
-            "ed_signature": "sig",
+            "release": {
+                "tag_name": "v1.0.0+100-macos-cm",
+                "published_at": "2026-09-24T00:00:00Z",
+                "body": "",
+                "assets": [{"name": "Omi.zip", "browser_download_url": "https://test/Omi.zip"}],
+            },
+            "version_info": {
+                "version": "1.0.0",
+                "build": "100",
+                "tag_name": "v1.0.0+100-macos-cm",
+            },
+            "metadata": {
+                "edSignature": "sig",
+                "changelog": [],
+                "mandatory": "false",
+                "sourceSha": "sha",
+            },
         }
 
         with (
-            patch.object(updates, "_get_live_desktop_releases", return_value=[dummy_release]),
-            patch.object(updates, "_parse_desktop_version", return_value={"version": "1.0.0", "build": "100"}),
-            patch.object(updates, "_get_installer_download_url", return_value="https://test/app.dmg"),
+            patch.object(updates, "_get_live_desktop_releases", return_value=[dummy_entry]),
             patch.object(updates, "_generate_appcast_xml", side_effect=RuntimeError(SECRET_PATH)),
         ):
             with self.assertRaises(HTTPException) as ctx:
