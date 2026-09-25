@@ -53,12 +53,10 @@ def format_memory_for_redis(item: Dict[str, Any]) -> Dict[str, Any]:
     if not mid:
         raise ValueError("Memory record missing required 'id' field")
 
-    content = ""
+    content = str(item.get("content") or item.get("text") or item.get("transcript") or "").strip()
     structured = item.get("structured")
-    if isinstance(structured, dict):
-        content = structured.get("title") or structured.get("overview") or ""
-    if not content:
-        content = item.get("content") or item.get("text") or item.get("transcript") or ""
+    if not content and isinstance(structured, dict):
+        content = str(structured.get("title") or structured.get("overview") or "").strip()
 
     category = item.get("category")
     if not category and isinstance(structured, dict):
@@ -165,9 +163,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if args.output != "-":
         out_path = Path(args.output)
         if out_path.exists() and not args.force:
-            sys.stderr.write(
-                f"Error: Output file already exists: {args.output} (use --force to overwrite)\n"
-            )
+            sys.stderr.write(f"Error: Output file already exists: {args.output} (use --force to overwrite)\n")
             return 1
 
     try:
@@ -185,9 +181,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         out_path = Path(args.output)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(content, encoding="utf-8")
-        sys.stderr.write(
-            f"Successfully generated Redis script: {args.output} ({count} memories)\n"
-        )
+        sys.stderr.write(f"Successfully generated Redis script: {args.output} ({count} memories)\n")
     return 0
 
 
