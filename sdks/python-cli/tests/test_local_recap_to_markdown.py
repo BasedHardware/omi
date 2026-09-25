@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Tests for local desktop daily recap to markdown converter.
 
-Pins YAML frontmatter rendering, highlights formatting, application focus table,
-activity timeline, multi-recap merging, stdin piping, and overwrite protection.
+Pins YAML frontmatter rendering, real sections/totals parsing from Omi Desktop,
+tasks checkbox formatting, application focus table, focus sessions, stdin piping,
+and overwrite protection.
 """
 
 from __future__ import annotations
@@ -26,7 +27,8 @@ if spec is None or spec.loader is None:
 r2m = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(r2m)
 
-convert_recaps_to_markdown = r2m.convert_recaps_to_markdown
+convert_recap_to_markdown = r2m.convert_recap_to_markdown
+extract_sections_map = r2m.extract_sections_map
 format_single_recap = r2m.format_single_recap
 main = r2m.main
 parse_recap_data = r2m.parse_recap_data
@@ -49,52 +51,102 @@ class TestLocalRecapToMarkdown(unittest.TestCase):
         with self.assertRaises(ValueError):
             parse_recap_data("{not json")
 
-    def test_render_frontmatter(self):
-        recap = {
-            "highlights": ["Finished task 1", "Shipped PR"],
-            "apps": [{"name": "Chrome"}, {"name": "VS Code"}],
-        }
-        fm = render_frontmatter(recap, "2026-09-24")
-        self.assertIn('date: "2026-09-24"', fm)
-        self.assertIn("highlights_count: 2", fm)
-        self.assertIn("apps_count: 2", fm)
-        self.assertIn("omi/recap", fm)
-
-    def test_format_single_recap_full(self):
-        recap = {
+    def test_format_desktop_real_payload_schema(self):
+        """Pin the exact schema structure emitted by omi --json local recap."""
+        real_desktop_payload = {
+            "ok": True,
+            "tool": "get_daily_recap",
             "date": "2026-09-24",
-            "summary": "Focused heavily on open source contributions.",
-            "highlights": ["Submitted Weaviate recipe", "Reviewed PR feedback"],
-            "apps": [
-                {"name": "Visual Studio Code", "duration_minutes": 180, "notes": "Core coding"},
-                {"name": "Terminal", "duration": 45, "notes": "Testing & git"},
-            ],
-            "timeline": [
-                {"time": "09:00", "description": "Standup and task triage"},
-                {"time": "14:00", "description": "Implemented test suites"},
+            "totals": {
+                "apps": 2,
+                "conversations": 1,
+                "tasks": 3,
+                "focus": 1,
+                "memories": 1,
+                "observations": 5,
+                "summary": 1,
+            },
+            "sections": [
+                {
+                    "name": "summary",
+                    "total": 1,
+                    "items": [
+                        {"content": "Productive sprint day focused on frontend and backend features."}
+                    ],
+                },
+                {
+                    "name": "apps",
+                    "total": 2,
+                    "items": [
+                        {
+                            "title": "Safari",
+                            "minutes": 180.5,
+                            "captures": 40,
+                            "firstSeenAt": "09:00:00Z",
+                            "lastSeenAt": "17:30:00Z",
+                        }
+                    ],
+                },
+                {
+                    "name": "tasks",
+                    "total": 3,
+                    "items": [
+                        {
+                            "title": "Implement feature X",
+                            "summary": "Detailed technical spec",
+                            "completed": False,
+                            "priority": "high",
+                        },
+                        {
+                            "title": "Ship PR #18673",
+                            "completed": True,
+                        },
+                    ],
+                },
+                {
+                    "name": "focus",
+                    "total": 1,
+                    "items": [
+                        {"title": "Deep Work", "status": "completed", "durationSeconds": 3600}
+                    ],
+                },
+                {
+                    "name": "conversations",
+                    "total": 1,
+                    "items": [
+                        {"title": "Sprint Planning", "summary": "Discussed roadmap milestones", "durationSeconds": 900}
+                    ],
+                },
             ],
         }
-        md = format_single_recap(recap, include_frontmatter=True)
-        self.assertIn("---", md)
-        self.assertIn("# Daily Recap — 2026-09-24", md)
+
+        md = format_single_recap(real_desktop_payload, include_frontmatter=True)
+        # Frontmatter
+        self.assertIn('date: "2026-09-24"', md)
+        self.assertIn("apps_count: 2", md)
+        self.assertIn("tasks_count: 3", md)
+        # Overview
         self.assertIn("## Overview", md)
-        self.assertIn("Focused heavily on open source contributions.", md)
-        self.assertIn("## Key Highlights", md)
-        self.assertIn("- [x] Submitted Weaviate recipe", md)
+        self.assertIn("Productive sprint day focused on frontend and backend features.", md)
+        # Tasks
+        self.assertIn("## Tasks & Action Items", md)
+        self.assertIn("- [ ] Implement feature X `[HIGH]` — Detailed technical spec", md)
+        self.assertIn("- [x] Ship PR #18673", md)
+        # Apps
         self.assertIn("## App Usage & Focus", md)
-        self.assertIn("| **Visual Studio Code** | 180m | Core coding |", md)
-        self.assertIn("## Activity Timeline", md)
-        self.assertIn("* **09:00**: Standup and task triage", md)
+        self.assertIn("| **Safari** | 180.5m | 40 | 09:00:00Z - 17:30:00Z |", md)
+        # Focus
+        self.assertIn("## Focus Sessions", md)
+        self.assertIn("- **Deep Work** (60m) — *completed*", md)
+        # Conversations
+        self.assertIn("## Conversations & Discussions", md)
+        self.assertIn("- **Sprint Planning** (15m): Discussed roadmap milestones", md)
 
     def test_format_single_recap_no_frontmatter(self):
         recap = {"date": "2026-09-24", "summary": "Short day"}
         md = format_single_recap(recap, include_frontmatter=False)
         self.assertNotIn("---", md)
         self.assertIn("# Daily Recap — 2026-09-24", md)
-
-    def test_convert_recaps_to_markdown_empty(self):
-        md = convert_recaps_to_markdown([])
-        self.assertIn("No local activity recap data provided", md)
 
     def test_cli_end_to_end_file_to_file(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -105,7 +157,12 @@ class TestLocalRecapToMarkdown(unittest.TestCase):
             sample = {
                 "date": "2026-09-24",
                 "summary": "Sprint review day",
-                "highlights": ["Passed all checks"],
+                "sections": [
+                    {
+                        "name": "tasks",
+                        "items": [{"title": "Passed all checks", "completed": True}],
+                    }
+                ],
             }
             in_file.write_text(json.dumps(sample), encoding="utf-8")
 
@@ -114,6 +171,7 @@ class TestLocalRecapToMarkdown(unittest.TestCase):
             self.assertTrue(out_file.exists())
             content = out_file.read_text(encoding="utf-8")
             self.assertIn("Sprint review day", content)
+            self.assertIn("- [x] Passed all checks", content)
 
     def test_cli_overwrite_guard(self):
         with tempfile.TemporaryDirectory() as tmpdir:

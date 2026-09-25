@@ -38,11 +38,14 @@ omi --json local recap --days-ago 0 | python local_recap_to_markdown.py - -o tod
 
 ### Obsidian daily notes integration
 
-To append directly to an Obsidian vault without frontmatter:
+To export directly to your Obsidian vault daily notes directory:
 
 ```sh
-omi --json local recap --days-ago 0 | python local_recap_to_markdown.py - --no-frontmatter -o ~/Vault/Daily/2026-09-24.md
+omi --json local recap --days-ago 0 | python local_recap_to_markdown.py - -o ~/Vault/Daily/2026-09-24.md --force
 ```
+
+> **Note**: The converter protects against accidental overwrites by default. When updating an existing note for the day, pass `--force`.
+> To omit the frontmatter block when embedding into an existing template, add `--no-frontmatter`.
 
 ## Converter options
 
@@ -56,14 +59,16 @@ omi --json local recap --days-ago 0 | python local_recap_to_markdown.py - --no-f
 
 ## Generated Markdown structure
 
-The generated note organizes local activity into clear sections:
+The generated note maps the Desktop `sections` and `totals` into structured Markdown:
 
 ```markdown
 ---
 date: "2026-09-24"
 type: "omi-daily-recap"
-highlights_count: 2
 apps_count: 2
+tasks_count: 2
+conversations_count: 1
+focus_count: 1
 generated_at: "2026-09-24T12:00:00Z"
 tags:
   - omi/recap
@@ -73,19 +78,24 @@ tags:
 # Daily Recap — 2026-09-24
 
 ## Overview
-Focused on core backend services and shipping pull requests.
+Productive sprint day focused on client-side exporters and automated test verification.
 
-## Key Highlights
-- [x] Implemented vector batch ingestion pipeline
-- [x] Passed all end-to-end integration tests
+## Tasks & Action Items
+- [ ] Implement vector batch ingestion pipeline `[HIGH]` — Refactor points payload structure
+- [x] Pass all end-to-end integration tests
 
 ## App Usage & Focus
-| Application | Duration | Notes |
-| :--- | :--- | :--- |
-| **VS Code** | 180m | Coding & refactoring |
-| **Terminal** | 45m | CI & local testing |
+| Application | Active Time | Captures | First / Last Seen |
+| :--- | :--- | :--- | :--- |
+| **Safari** | 180.5m | 40 | 09:00:00Z - 17:30:00Z |
+| **VS Code** | 120.0m | 25 | 10:15:00Z - 16:45:00Z |
 
-## Activity Timeline
-* **09:00**: Morning triage and sprint review
-* **14:00**: Feature development and verification
+## Focus Sessions
+- **Deep Work** (60m) — *completed*
+
+## Conversations & Discussions
+- **Team Standup** (15m): Reviewed sprint backlog and release targets.
+
+## Key Insights & Memories
+- Explored zero-copy array operations for memory pipeline
 ```
