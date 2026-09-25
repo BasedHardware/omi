@@ -3545,5 +3545,6 @@
     "keepUsingPendant": "Jatka riipuksella",
     "recordWith": "Tallennustapa",
     "moreWaysToRecord": "Lisää tallennustapoja",
-    "openCall": "Avaa puhelu"
+    "openCall": "Avaa puhelu",
+    "captureRecoveryBanner": "Riipuksen ääni ei tule perille sovellukseen — korjaa napauttamalla"
 }

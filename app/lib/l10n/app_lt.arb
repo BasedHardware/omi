@@ -3545,5 +3545,6 @@
     "keepUsingPendant": "Toliau naudoti pakabuką",
     "recordWith": "Įrašyti naudojant",
     "moreWaysToRecord": "Daugiau įrašymo būdų",
-    "openCall": "Atidaryti skambutį"
+    "openCall": "Atidaryti skambutį",
+    "captureRecoveryBanner": "Pakabuko garsas nepasiekia programėlės — palieskite, kad ištaisytumėte"
 }

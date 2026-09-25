@@ -3545,5 +3545,6 @@
     "keepUsingPendant": "Hanger blijven gebruiken",
     "recordWith": "Opnemen met",
     "moreWaysToRecord": "Meer manieren om op te nemen",
-    "openCall": "Gesprek openen"
+    "openCall": "Gesprek openen",
+    "captureRecoveryBanner": "De audio van de hanger komt niet aan in de app — tik om te repareren"
 }

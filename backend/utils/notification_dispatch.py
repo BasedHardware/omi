@@ -23,6 +23,7 @@ APP_NOTIFICATION_RATE_LIMIT_POLICY = 'integration-notification'
 
 class NotificationKind(str, Enum):
     APP_INTEGRATION = 'app_integration'
+    CAPTURE_RECOVERY = 'capture_recovery'
 
 
 class NotificationPolicy(str, Enum):
@@ -105,11 +106,12 @@ class NotificationDispatchOutcome:
     status: NotificationDispatchStatus
     rate_limit: Optional[NotificationRateLimit] = None
     reason: Optional[str] = None
+    delivered: Optional[int] = None
 
 
 RateLimitReserve = Callable[[str, str, int, int], tuple[bool, int, int]]
-SyncDelivery = Callable[[str, str, str, Optional[dict[str, Any]]], None]
-AsyncDelivery = Callable[[str, str, str, Optional[dict[str, Any]]], Awaitable[None]]
+SyncDelivery = Callable[[str, str, str, Optional[dict[str, Any]]], Optional[int]]
+AsyncDelivery = Callable[[str, str, str, Optional[dict[str, Any]]], Awaitable[Optional[int]]]
 Clock = Callable[[], datetime]
 
 
@@ -124,17 +126,17 @@ def _default_reserve(key: str, policy: str, limit: int, window: int) -> tuple[bo
     return reserve_rate_limit(key, policy, limit, window)
 
 
-def _default_sync_delivery(user_id: str, title: str, body: str, data: Optional[dict[str, Any]]) -> None:
+def _default_sync_delivery(user_id: str, title: str, body: str, data: Optional[dict[str, Any]]) -> Optional[int]:
     # Keep the transport import lazy: intent and policy tests do not need Firebase.
-    from utils.notifications import send_notification
+    from utils.notifications import send_notification_result
 
-    send_notification(user_id, title, body, data)
+    return send_notification_result(user_id, title, body, data)
 
 
-async def _default_async_delivery(user_id: str, title: str, body: str, data: Optional[dict[str, Any]]) -> None:
+async def _default_async_delivery(user_id: str, title: str, body: str, data: Optional[dict[str, Any]]) -> Optional[int]:
     from utils.notifications import send_notification_async
 
-    await send_notification_async(user_id, title, body, data)
+    return await send_notification_async(user_id, title, body, data)
 
 
 class NotificationDispatcher:
@@ -194,7 +196,7 @@ class NotificationDispatcher:
             return policy_outcome
 
         try:
-            self._sync_delivery(intent.user_id, intent.title, intent.body, dict(intent.data))
+            delivered = self._sync_delivery(intent.user_id, intent.title, intent.body, dict(intent.data))
         except Exception:
             logger.exception(
                 'notification delivery failed uid=%s kind=%s source=%s',
@@ -217,6 +219,7 @@ class NotificationDispatcher:
         return NotificationDispatchOutcome(
             NotificationDispatchStatus.DISPATCHED,
             rate_limit=policy_outcome.rate_limit if policy_outcome else None,
+            delivered=delivered,
         )
 
     async def dispatch_async(self, intent: NotificationIntent) -> NotificationDispatchOutcome:
@@ -225,7 +228,7 @@ class NotificationDispatcher:
             return policy_outcome
 
         try:
-            await self._async_delivery(intent.user_id, intent.title, intent.body, dict(intent.data))
+            delivered = await self._async_delivery(intent.user_id, intent.title, intent.body, dict(intent.data))
         except Exception:
             logger.exception(
                 'notification delivery failed uid=%s kind=%s source=%s',
@@ -248,6 +251,7 @@ class NotificationDispatcher:
         return NotificationDispatchOutcome(
             NotificationDispatchStatus.DISPATCHED,
             rate_limit=policy_outcome.rate_limit if policy_outcome else None,
+            delivered=delivered,
         )
 
 

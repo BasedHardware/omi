@@ -11230,4 +11230,7 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get openCall => 'Åpne anrop';
+
+  @override
+  String get captureRecoveryBanner => 'Lyden fra anhenget når ikke frem til appen — trykk for å reparere';
 }

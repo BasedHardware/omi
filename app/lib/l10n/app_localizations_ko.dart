@@ -11049,4 +11049,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get openCall => '통화 열기';
+
+  @override
+  String get captureRecoveryBanner => '펜던트 오디오가 앱에 도달하지 않습니다 — 탭하여 복구';
 }

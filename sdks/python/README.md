@@ -3,6 +3,8 @@
 
 A pip-installable Python SDK for connecting to Omi wearable devices over Bluetooth, decoding Opus-encoded audio, and transcribing it in real time using Deepgram.
 
+Deepgram transcription requires `websockets` 14.0 or newer. The SDK's dependency declarations enforce this minimum for its authenticated WebSocket handshake.
+
 <CardGroup cols={3}>
   <Card title="Bluetooth Connection" icon="bluetooth">
     Connect to any Omi device
@@ -123,6 +125,10 @@ pip install -e .
 # Install dev dependencies
 pip install -e ".[dev]"
 ```
+
+Run the SDK's hardware-free regression suite with `bash test.sh`. It uses the
+repository's `uv` environment manager to test the minimum supported `websockets`
+version and is also selected by the shared local/CI check manifest.
 
 
 ## License

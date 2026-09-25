@@ -141,6 +141,10 @@ def resolve_effective_version(message: Dict[str, Any], header_version: Optional[
     when both are present. Undeclared messages fall back to the header, then to
     the legacy default. Unsupported explicit versions are rejected.
     """
+    if message.get("method") == "initialize":
+        # The handshake negotiates from params.protocolVersion; the header
+        # belongs to post-initialize requests and must not block it.
+        header_version = None
     declared = declared_protocol_version(message)
     if header_version and declared and declared != header_version:
         raise JsonRpcProtocolError(

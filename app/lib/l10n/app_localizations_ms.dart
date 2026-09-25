@@ -11259,4 +11259,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get openCall => 'Buka panggilan';
+
+  @override
+  String get captureRecoveryBanner => 'Audio loket tidak sampai ke aplikasi — ketik untuk membaiki';
 }

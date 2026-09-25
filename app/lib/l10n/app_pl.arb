@@ -3580,5 +3580,6 @@
     "keepUsingPendant": "Używaj dalej wisiorka",
     "recordWith": "Nagraj za pomocą",
     "moreWaysToRecord": "Więcej sposobów nagrywania",
-    "openCall": "Otwórz połączenie"
+    "openCall": "Otwórz połączenie",
+    "captureRecoveryBanner": "Dźwięk z zawieszki nie dociera do aplikacji — dotknij, aby naprawić"
 }

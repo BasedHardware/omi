@@ -3545,5 +3545,6 @@
     "keepUsingPendant": "Terus guna loket",
     "recordWith": "Rakam dengan",
     "moreWaysToRecord": "Lebih banyak cara merakam",
-    "openCall": "Buka panggilan"
+    "openCall": "Buka panggilan",
+    "captureRecoveryBanner": "Audio loket tidak sampai ke aplikasi — ketik untuk membaiki"
 }
