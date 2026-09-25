@@ -213,7 +213,7 @@ Under the flag, **new claims look for the rows they touch** (ingest-scaled):
 1. After candidates are parsed, for each new claim call
    `query_memory_vector_candidates` (same helper as consolidation; cap ~5).
 2. Judge with `get_llm('memory_conflict')` (`model_config.py` lane
-   `gpt-5.6-luna` / openai — already the conflict lane). Prompt lives next to
+   `gpt-x-luna` / openai — already the conflict lane). Prompt lives next to
    the judge in `belief_evidence.py` (no new prompt-file tree). Structured
    output:
 

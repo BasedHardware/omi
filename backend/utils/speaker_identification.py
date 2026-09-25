@@ -9,6 +9,7 @@ import numpy as np
 
 from database import conversations as conversations_db
 from database import users as users_db
+from database import voice_profiles as voice_profiles_db
 from utils.executors import db_executor, storage_executor, sync_executor, run_blocking
 from utils.other.storage import (
     download_audio_chunks_and_merge,
@@ -577,6 +578,8 @@ SPEAKER_NAME_STOPWORDS = frozenset(
         'ok',
         'yeah',
         'just',
+        'because',
+        'googling',
         'like',
         'so',
         'very',
@@ -763,6 +766,13 @@ async def extract_speaker_samples(
     Processes each segment one by one, stops when sample limit reached.
     """
     try:
+        # The user can turn off saving other people's voices; this is the one choke
+        # point every teaching path (tag sheet, tag prompts, live socket) reaches.
+        settings = await run_blocking(db_executor, voice_profiles_db.get_voice_profile_settings, uid)
+        if not settings['save_other_voice_profiles']:
+            logger.info('Speaker sample extraction skipped reason=user_disabled_other_voice_profiles')
+            return
+
         # Snapshot the person before slow audio work. Publishing compares this version
         # so a correction, deletion or replacement cannot resurrect stale teaching.
         person = await run_blocking(db_executor, users_db.get_person, uid, person_id)
