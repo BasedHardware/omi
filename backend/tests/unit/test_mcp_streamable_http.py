@@ -1371,6 +1371,21 @@ class TestClientCapabilities2026:
         assert response.status_code == 200
         assert response.json()["result"]["resultType"] == "complete"
 
+    @pytest.mark.parametrize("path", ["/v1/mcp", "/v1/mcp/sse"])
+    @pytest.mark.parametrize("header", [PROTOCOL_VERSION_2026, "2099-01-01"])
+    def test_initialize_ignores_protocol_version_header(self, client, authed, path, header):
+        # Prod regression 2026-09-25: a client sent ``MCP-Protocol-Version: 2026-07-28``
+        # on a handshake ``initialize`` and every retry got HTTP 400.
+        message = _msg("initialize")
+        message["params"] = {
+            "protocolVersion": "2025-11-25",
+            "capabilities": {},
+            "clientInfo": {"name": "probe", "version": "1"},
+        }
+        response = _post(client, path, message, **{"mcp-protocol-version": header})
+        assert response.status_code == 200
+        assert response.json()["result"]["protocolVersion"] == "2025-11-25"
+
     @pytest.mark.parametrize("version", ["2025-11-25", "2025-03-26"])
     def test_handshake_requests_need_no_capabilities(self, client, authed, version):
         response = _post(client, "/v1/mcp", _msg("tools/list"), **{"mcp-protocol-version": version})
