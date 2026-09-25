@@ -4,8 +4,7 @@ import Foundation
 /// Actor-based service for embedding screenshot OCR text using Gemini embeddings
 /// and performing disk-based vector search (no in-memory index).
 /// Embeds per-screenshot concatenated OCR text with app context prefix.
-/// Uses batched embedding with a 60-second flush window. The lossless sync rollout compacts
-/// completed five-minute (app, window) buckets and embeds only their longest OCR row.
+/// Uses batched embedding with a 60-second flush window.
 actor OCREmbeddingService {
   static let shared = OCREmbeddingService()
 
@@ -65,8 +64,6 @@ actor OCREmbeddingService {
   private let batchEmbedder: BatchEmbedder
   private let embeddingWriter: EmbeddingWriter
   private let flushSleeper: FlushSleeper
-  private let losslessSyncEnabled: @Sendable () async -> Bool
-  private let now: @Sendable () -> Date
   /// Whether captured OCR text is queued for embedding at all. Production
   /// embeds nothing since the cloud-egress retirement; only the test
   /// initializer (injected embedder) enables queueing.
@@ -80,10 +77,6 @@ actor OCREmbeddingService {
     self.flushSleeper = { nanoseconds in
       try await Task.sleep(nanoseconds: nanoseconds)
     }
-    self.losslessSyncEnabled = {
-      await MainActor.run { ScreenActivityLosslessSyncFeature.isEnabled }
-    }
-    self.now = Date.init
     self.embedsCapturedOCR = false
   }
 
@@ -92,9 +85,7 @@ actor OCREmbeddingService {
   init(
     batchEmbedderForTesting: @escaping BatchEmbedder,
     embeddingWriterForTesting: @escaping EmbeddingWriter,
-    flushSleeperForTesting: FlushSleeper? = nil,
-    losslessSyncEnabledForTesting: @escaping @Sendable () async -> Bool = { false },
-    nowForTesting: @escaping @Sendable () -> Date = Date.init
+    flushSleeperForTesting: FlushSleeper? = nil
   ) {
     self.batchEmbedder = batchEmbedderForTesting
     self.embeddingWriter = embeddingWriterForTesting
@@ -102,8 +93,6 @@ actor OCREmbeddingService {
       flushSleeperForTesting ?? { nanoseconds in
         try await Task.sleep(nanoseconds: nanoseconds)
       }
-    self.losslessSyncEnabled = losslessSyncEnabledForTesting
-    self.now = nowForTesting
     self.embedsCapturedOCR = true
   }
 
@@ -169,11 +158,9 @@ actor OCREmbeddingService {
 
     let formatted = Self.formatForEmbedding(ocrText: ocrText, appName: appName, windowTitle: windowTitle)
     let hash = Self.contentHash(formatted)
-    let usesLosslessCompaction = await losslessSyncEnabled()
 
-    // The flag-off path preserves the old rollback behavior. Lossless mode never drops a row
-    // because a prior batch happened to contain the same text.
-    if !usesLosslessCompaction, recentHashes.contains(hash) {
+    // Skip a row whose text was already embedded by a recent batch.
+    if recentHashes.contains(hash) {
       return
     }
 
@@ -268,23 +255,7 @@ actor OCREmbeddingService {
     let batch = pendingItems
     pendingItems = []
 
-    let usesLosslessCompaction = await losslessSyncEnabled()
-
-    // Keep an open bucket buffered until its five-minute interval has closed. This makes the
-    // longest-row decision stable without delaying capture or OCR.
-    let itemsToProcess: [PendingItem]
-    if usesLosslessCompaction {
-      // Eligibility is per *bucket*, not per row: holding back only the rows younger than the
-      // slack would rank an already-open bucket, embedding one winner now and another once its
-      // later rows age in. Same alignment as ScreenActivitySyncService.bucketEligibilityCutoffEpoch.
-      let cutoffEpoch = Int64((now().timeIntervalSince1970 - 5 * 60).rounded(.down))
-      let isReady: (PendingItem) -> Bool = { (Self.bucketIndex(for: $0.capturedAt) + 1) * 300 <= cutoffEpoch }
-      let ready = batch.filter(isReady)
-      pendingItems.append(contentsOf: batch.filter { !isReady($0) })
-      itemsToProcess = Self.compactByFiveMinuteBucket(ready)
-    } else {
-      itemsToProcess = batch
-    }
+    let itemsToProcess = batch
 
     // Legacy rollback path: deduplicate within the batch by content hash.
     var seen = Set<String>()
@@ -292,7 +263,7 @@ actor OCREmbeddingService {
     var duplicateGroups: [String: [Int64]] = [:]  // hash -> [ids that share this hash]
 
     for item in itemsToProcess {
-      if usesLosslessCompaction || seen.insert(item.contentHash).inserted {
+      if seen.insert(item.contentHash).inserted {
         uniqueItems.append(item)
       }
       duplicateGroups[item.contentHash, default: []].append(item.id)
@@ -335,7 +306,7 @@ actor OCREmbeddingService {
           let data = await EmbeddingService.shared.floatsToData(embedding)
 
           // Apply embedding to all IDs that share this content hash
-          let allIds = usesLosslessCompaction ? [item.id] : (duplicateGroups[item.contentHash] ?? [item.id])
+          let allIds = duplicateGroups[item.contentHash] ?? [item.id]
           for screenshotId in allIds {
             let authorization = LocalMutationAuthorization { ownerSnapshot.isCurrent() }
             try await authorization.withCommitLease {
@@ -347,9 +318,7 @@ actor OCREmbeddingService {
             }
           }
 
-          if !usesLosslessCompaction {
-            recentHashes.insert(item.contentHash)
-          }
+          recentHashes.insert(item.contentHash)
         }
 
         log(
@@ -380,10 +349,6 @@ actor OCREmbeddingService {
     }
   }
 
-  static func bucketIndex(for date: Date) -> Int64 {
-    Int64(date.timeIntervalSince1970.rounded(.down)) / 300
-  }
-
   /// Re-queue a batch that could not be embedded, keeping the buffer bounded.
   private func deferItems(_ chunk: [PendingItem]) {
     pendingItems.append(contentsOf: chunk)
@@ -391,22 +356,6 @@ actor OCREmbeddingService {
     let shed = pendingItems.count - maxDeferredItems
     pendingItems.removeFirst(shed)
     log("OCREmbeddingService: Deferred buffer at capacity — shed \(shed) oldest items")
-  }
-
-  private static func compactByFiveMinuteBucket(_ items: [PendingItem]) -> [PendingItem] {
-    var winners: [String: PendingItem] = [:]
-    for item in items {
-      let bucket = bucketIndex(for: item.capturedAt)
-      let key = "\(item.appName)\u{1f}\(item.windowTitle)\u{1f}\(bucket)"
-      guard let current = winners[key] else {
-        winners[key] = item
-        continue
-      }
-      if item.ocrLength > current.ocrLength || (item.ocrLength == current.ocrLength && item.id > current.id) {
-        winners[key] = item
-      }
-    }
-    return winners.values.sorted { $0.id < $1.id }
   }
 
   // MARK: - Backfill

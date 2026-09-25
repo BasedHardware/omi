@@ -53,13 +53,12 @@ final class BetaDogfoodRolloutTests: XCTestCase {
   }
 
   func testEveryBetaDogfoodedFeatureSharesOneDecision() {
-    // Meeting identity, on-device identity, and lossless screen sync all reach beta the same
-    // way. If a future feature ships dark past this helper it will be invisible on beta, which
+    // Meeting identity and on-device identity reach beta the same way. If a
+    // future feature ships dark past this helper it will be invisible on beta, which
     // is the failure this asserts against: the names must stay paired with the kill switches.
     let features: [(String, String)] = [
       (SystemCalendarMeetingContextFeature.flagName, SystemCalendarMeetingContextFeature.killSwitchFlagName),
       (OnDeviceMeetingIdentityFeature.flagName, OnDeviceMeetingIdentityFeature.killSwitchFlagName),
-      (ScreenActivityLosslessSyncFeature.flagName, ScreenActivityLosslessSyncFeature.killSwitchFlagName),
       (InterjectFeature.flagName, InterjectFeature.killSwitchFlagName),
     ]
     for (flag, kill) in features {
