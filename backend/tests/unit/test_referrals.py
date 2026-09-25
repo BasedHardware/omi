@@ -55,11 +55,7 @@ def test_referral_claim_grants_exactly_30_days_of_operator():
     assert patch["subscription"]["plan"] == "operator"
     assert patch["subscription"]["status"] == "active"
     assert patch["subscription"]["cancel_at_period_end"] is True
-    assert (
-        patch["subscription"]["current_period_end"]
-        - patch["subscription"]["current_period_start"]
-        == 30 * 86400
-    )
+    assert patch["subscription"]["current_period_end"] - patch["subscription"]["current_period_start"] == 30 * 86400
     assert patch["referral"]["program"] == "desktop_operator_month_v1"
     assert patch["referral"]["referrer_uid"] == "referrer"
 
@@ -96,12 +92,8 @@ def test_referral_claim_grants_exactly_30_days_of_operator():
         ),
     ],
 )
-def test_referral_claim_rejects_already_claimed_or_ineligible_users(
-    user_data, is_new_user, expected_reason
-):
-    referrer_uid = (
-        "same-user" if expected_reason == "self_refer" else "different-referrer"
-    )
+def test_referral_claim_rejects_already_claimed_or_ineligible_users(user_data, is_new_user, expected_reason):
+    referrer_uid = "same-user" if expected_reason == "self_refer" else "different-referrer"
     patch, reason = referral_claim_patch(
         referred_uid="same-user",
         referrer_uid=referrer_uid,
@@ -133,19 +125,11 @@ def test_referral_claim_emits_ineligible_reason(monkeypatch, uid, referrer_uid, 
         monkeypatch.setattr(
             referrals.firebase_admin.auth,
             "get_user",
-            lambda _uid: SimpleNamespace(
-                user_metadata=SimpleNamespace(creation_timestamp=now_ms)
-            ),
+            lambda _uid: SimpleNamespace(user_metadata=SimpleNamespace(creation_timestamp=now_ms)),
         )
-        monkeypatch.setattr(
-            referrals, "claim_referral_trial", lambda *_args, **_kwargs: (False, reason)
-        )
-        monkeypatch.setattr(
-            referrals, "emit_posthog_event", lambda *event: events.append(event)
-        )
-        response = referrals.claim_referral(
-            referrals.ReferralClaimRequest(code=code), uid
-        )
+        monkeypatch.setattr(referrals, "claim_referral_trial", lambda *_args, **_kwargs: (False, reason))
+        monkeypatch.setattr(referrals, "emit_posthog_event", lambda *event: events.append(event))
+        response = referrals.claim_referral(referrals.ReferralClaimRequest(code=code), uid)
 
     assert response.claimed is False
     assert events == [
@@ -169,9 +153,7 @@ def test_referral_claim_rejects_an_invalid_code_before_loading_the_user(monkeypa
         monkeypatch.setattr(referrals.firebase_admin.auth, "get_user", get_user)
 
         with pytest.raises(HTTPException) as error:
-            referrals.claim_referral(
-                referrals.ReferralClaimRequest(code="invalid"), "new-user"
-            )
+            referrals.claim_referral(referrals.ReferralClaimRequest(code="invalid"), "new-user")
 
     assert error.value.status_code == 404
     assert error.value.detail == "Referral link not found"
@@ -181,9 +163,7 @@ def test_referral_claim_rejects_empty_or_whitespace_code():
     with _loaded_referrals_router() as referrals:
         for empty_code in ["", "   ", "\t\n"]:
             with pytest.raises(HTTPException) as error:
-                referrals.claim_referral(
-                    referrals.ReferralClaimRequest(code=empty_code), "new-user"
-                )
+                referrals.claim_referral(referrals.ReferralClaimRequest(code=empty_code), "new-user")
             assert error.value.status_code == 400
             assert error.value.detail == "Referral code cannot be empty"
 
@@ -195,21 +175,15 @@ def test_referral_claim_sanitizes_auth_lookup_failure_to_503(monkeypatch):
     with _loaded_referrals_router() as referrals:
 
         def auth_failure(_uid):
-            raise RuntimeError(
-                "firebase_admin.exceptions.FirebaseError: Connection reset"
-            )
+            raise RuntimeError("firebase_admin.exceptions.FirebaseError: Connection reset")
 
         monkeypatch.setattr(referrals.firebase_admin.auth, "get_user", auth_failure)
 
         with pytest.raises(HTTPException) as error:
-            referrals.claim_referral(
-                referrals.ReferralClaimRequest(code=code), "new-user"
-            )
+            referrals.claim_referral(referrals.ReferralClaimRequest(code=code), "new-user")
 
         assert error.value.status_code == 503
-        assert (
-            error.value.detail == "User authentication metadata temporarily unavailable"
-        )
+        assert error.value.detail == "User authentication metadata temporarily unavailable"
         assert "firebase_admin" not in str(error.value.detail)
 
 
@@ -222,22 +196,16 @@ def test_referral_claim_sanitizes_trial_grant_storage_failure_to_503(monkeypatch
         monkeypatch.setattr(
             referrals.firebase_admin.auth,
             "get_user",
-            lambda _uid: SimpleNamespace(
-                user_metadata=SimpleNamespace(creation_timestamp=now_ms)
-            ),
+            lambda _uid: SimpleNamespace(user_metadata=SimpleNamespace(creation_timestamp=now_ms)),
         )
 
         def store_failure(*_args, **_kwargs):
-            raise RuntimeError(
-                "google.cloud.exceptions.GoogleCloudError: 503 Deadline Exceeded"
-            )
+            raise RuntimeError("google.cloud.exceptions.GoogleCloudError: 503 Deadline Exceeded")
 
         monkeypatch.setattr(referrals, "claim_referral_trial", store_failure)
 
         with pytest.raises(HTTPException) as error:
-            referrals.claim_referral(
-                referrals.ReferralClaimRequest(code=code), "new-user"
-            )
+            referrals.claim_referral(referrals.ReferralClaimRequest(code=code), "new-user")
 
         assert error.value.status_code == 503
         assert error.value.detail == "Referral claim service temporarily unavailable"
@@ -261,9 +229,7 @@ def test_referral_new_user_window_rejects_missing_future_and_old_timestamps():
     assert is_new_referral_account(int(now.timestamp() * 1000), now=now) is True
     assert is_new_referral_account(None, now=now) is False
     assert is_new_referral_account(int((now.timestamp() + 1) * 1000), now=now) is False
-    assert (
-        is_new_referral_account(int((now.timestamp() - 901) * 1000), now=now) is False
-    )
+    assert is_new_referral_account(int((now.timestamp() - 901) * 1000), now=now) is False
 
 
 def test_authenticated_referrer_receives_a_stable_unique_https_link(monkeypatch):
@@ -272,9 +238,7 @@ def test_authenticated_referrer_receives_a_stable_unique_https_link(monkeypatch)
 
     with _loaded_referrals_router() as referrals:
         events = []
-        monkeypatch.setattr(
-            referrals, "emit_posthog_event", lambda *event: events.append(event)
-        )
+        monkeypatch.setattr(referrals, "emit_posthog_event", lambda *event: events.append(event))
         first = referrals.get_referral_link("referrer-123").referral_url
         second = referrals.get_referral_link("referrer-123").referral_url
         other = referrals.get_referral_link("another-user").referral_url
@@ -335,9 +299,7 @@ def test_capture_referral_redirects_to_signup_with_cookie(monkeypatch):
 
     with _loaded_referrals_router() as referrals:
         events = []
-        monkeypatch.setattr(
-            referrals, "emit_posthog_event", lambda *event: events.append(event)
-        )
+        monkeypatch.setattr(referrals, "emit_posthog_event", lambda *event: events.append(event))
         response = referrals.capture_referral(code)
 
     assert response.status_code == 302
@@ -419,9 +381,7 @@ async def test_google_auth_with_new_user_redeems_referral(monkeypatch):
         raising=False,
     )
 
-    token = await auth._generate_custom_token(
-        "google", "provider-token", referral_code=referral_code
-    )
+    token = await auth._generate_custom_token("google", "provider-token", referral_code=referral_code)
 
     assert token == "custom-token"
     assert claims == [("new-user", "referrer-123", True)]
@@ -475,8 +435,6 @@ async def test_existing_user_auth_does_not_redeem_referral(monkeypatch):
         raising=False,
     )
 
-    await auth._generate_custom_token(
-        "google", "provider-token", referral_code=referral_code
-    )
+    await auth._generate_custom_token("google", "provider-token", referral_code=referral_code)
 
     assert claims == []
