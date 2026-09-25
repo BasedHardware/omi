@@ -3,6 +3,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:omi/backend/schema/capture_group.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/gen/action_items_folders_wire.g.dart';
 import 'package:omi/backend/schema/memory.dart';
@@ -11,6 +12,7 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/models/chat_evidence_reference.dart';
 import 'package:omi/pages/action_items/task_categorization.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/utils/conversations/capture_groups.dart';
 
 /// Flutter conformance suite for the shared cross-platform parity contracts
 /// (contracts/parity/README.md). Runs the repo-root fixture vectors through the
@@ -105,6 +107,21 @@ void main() {
       test(c['name'] as String, () {
         final conversation = _durationConversation(c);
         expect(conversation.getDurationInSeconds(), c['expected_seconds']);
+      });
+    }
+  });
+
+  group('capture group collapse (parity contract)', () {
+    final fixture = _fixture(root, 'capture_group_collapse.json');
+    final groups = fixture['groups'] as Map<String, dynamic>;
+    for (final raw in fixture['cases'] as List<dynamic>) {
+      final c = raw as Map<String, dynamic>;
+      test(c['name'] as String, () {
+        final rows = [
+          for (final row in (c['rows'] as List<dynamic>).cast<Map<String, dynamic>>())
+            _captureRow(row['id'] as String, row['group'] as String?, groups),
+        ];
+        expect(CaptureGroupPresentation.collapse(rows).map((row) => row.id).toList(), c['expected_ids']);
       });
     }
   });
@@ -207,5 +224,21 @@ ServerConversation _durationConversation(Map<String, dynamic> c) {
     transcriptSegments: segments,
     startedAt: c['started_at'] == null ? null : DateTime.parse(c['started_at'] as String),
     finishedAt: c['finished_at'] == null ? null : DateTime.parse(c['finished_at'] as String),
+  );
+}
+
+ServerConversation _captureRow(String id, String? groupName, Map<String, dynamic> groups) {
+  final spec = groupName == null ? null : groups[groupName] as Map<String, dynamic>;
+  return ServerConversation(
+    id: id,
+    createdAt: DateTime.utc(2026, 9, 23, 12),
+    structured: Structured(id, ''),
+    captureGroup: spec == null
+        ? null
+        : CaptureGroup(
+            id: groupName!,
+            primaryId: spec['primary_id'] as String,
+            members: [for (final member in spec['members'] as List<dynamic>) CaptureGroupMember(id: member as String)],
+          ),
   );
 }

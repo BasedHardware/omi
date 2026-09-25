@@ -22,7 +22,9 @@ from utils.stt.live_metrics import (
     WINDOW_ADMISSION,
     WINDOW_CAP,
     WINDOW_CONTEXT,
+    WINDOW_DECODER_LOOPS,
     WINDOW_FORCED_CUTS,
+    WINDOW_HEAD_RECOVERIES,
     WINDOW_LATENCY,
     WINDOW_POSTS,
 )
@@ -33,6 +35,7 @@ from utils.stt.window_anchor import (
     SILENCE_FLUSH_SECONDS,
     RawSegment,
     buffer_cap_seconds,
+    collapse_decoder_loops,
     decide_window,
     parse_tdt_segments,
     read_max_context_seconds,
@@ -65,6 +68,20 @@ WINDOW_AGC_DEADBAND_PEAK = 0.4
 # estimate, short enough not to be dominated by an earlier louder speaker.
 WINDOW_AGC_TAIL_SECONDS = 10.0
 _INT16_ABS_MAX = 32767.0
+# TDT sometimes skips a whole leading utterance of a long window: on a public
+# earnings clip, [34.9 s, 58.9 s] came back with text only from 15.1 s in, while
+# [34.9 s, 50.0 s] and [36.0 s, 58.9 s] both transcribed that utterance in full.
+# The leg would then emit the later text and anchor past the skipped speech, losing
+# it for good. When the first segment starts this late AND the VAD saw at least
+# HEAD_RECOVERY_MIN_SPEECH_SECONDS of speech before it, the head is posted again on
+# its own — it still starts at the anchor's sentence boundary, the case TDT handles.
+# Normal leading gaps are the 0.3 s lead-in plus a breath, far under 3 s.
+HEAD_RECOVERY_MIN_GAP_SECONDS = 3.0
+HEAD_RECOVERY_MIN_SPEECH_SECONDS = 2.0
+# How far an empty window at max context slides. It was the pace, which was 6 s;
+# with window size now set by a 15 s pace, sliding by pace would discard 15 s of
+# speech the model returned nothing for. Keep the slide at the measured 6 s.
+EMPTY_CAP_SLIDE_SECONDS = 6.0
 
 
 def pcm16_peak(pcm: bytes) -> float:
@@ -427,13 +444,16 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         segments = await self._post_and_parse(job.pcm, job.duration)
         if self._dead:
             return
+        segments = await self._recover_skipped_head(job, segments)
+        if self._dead:
+            return
         decision = decide_window(
             segments,
             job.duration,
             self._max_context_seconds,
             force=job.force,
             pause=job.pause,
-            empty_cap_slide=self._pace_seconds,
+            empty_cap_slide=EMPTY_CAP_SLIDE_SECONDS,
         )
         if decision.forced_cut:
             WINDOW_FORCED_CUTS.inc()
@@ -447,6 +467,29 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
         if decision.new_anchor is not None:
             rel_bytes = min(job.end_bytes - job.start_bytes, max(0, self._to_bytes(decision.new_anchor)))
             self._advance_anchor(job.start_bytes + rel_bytes)
+
+    async def _recover_skipped_head(self, job: _WindowJob, segments: list[RawSegment]) -> list[RawSegment]:
+        if not segments or segments[0].start < HEAD_RECOVERY_MIN_GAP_SECONDS:
+            return segments
+        head = min(job.duration, segments[0].start)
+        head_bytes = self._to_bytes(head)
+        with self._lock:
+            speech = self._to_seconds(self._speech_bytes_locked(job.start_bytes, job.start_bytes + head_bytes))
+        if speech < HEAD_RECOVERY_MIN_SPEECH_SECONDS:
+            return segments
+        # One attempt, never recursive: a head that is skipped again stays skipped.
+        recovered = await self._post_and_parse(job.pcm[:head_bytes], head)
+        kept = [s for s in recovered if s.start < head]
+        WINDOW_HEAD_RECOVERIES.labels(outcome='recovered' if kept else 'empty').inc()
+        return [*kept, *segments]
+
+    def _speech_bytes_locked(self, start: int, end: int) -> int:
+        total = 0
+        for a, b in self._speech_spans:
+            lo, hi = max(a, start), min(b, end)
+            if hi > lo:
+                total += hi - lo
+        return total
 
     def _idle_wait_timeout(self) -> float | None:
         if self._closed or self._dead or self._idle_flushed:
@@ -632,7 +675,7 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             if not isinstance(data, dict) or ('text' not in data and 'segments' not in data):
                 self.fail('provider_5xx')
                 raise ValueError('Invalid TDT response')
-            segments = parse_tdt_segments(cast(dict[str, Any], data), dur)
+            segments = [self._without_loops(seg) for seg in parse_tdt_segments(cast(dict[str, Any], data), dur)]
             outcome = 'success' if segments else 'empty'
             self._health_success()
             return segments
@@ -655,6 +698,14 @@ class WindowedParakeetSocket(ParakeetStreamingSocket):
             WINDOW_POSTS.labels(outcome=outcome).inc()
             WINDOW_LATENCY.observe(time.monotonic() - started)
             WINDOW_CONTEXT.observe(dur)
+
+    @staticmethod
+    def _without_loops(segment: RawSegment) -> RawSegment:
+        text, collapsed = collapse_decoder_loops(segment.text)
+        if not collapsed:
+            return segment
+        WINDOW_DECODER_LOOPS.inc(collapsed)
+        return RawSegment(text=text, start=segment.start, end=segment.end)
 
     async def _materialize(
         self, segments: tuple[RawSegment, ...] | list[RawSegment], pcm: bytes, start: float, dur: float

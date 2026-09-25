@@ -23,6 +23,13 @@ from database.firestore_index_registry import (
     MEETING_RECEIPTS_DUE_QUERY,
 )
 from models.client_processing import PROJECTION_FAMILY_FIELDS
+from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger
+from utils.conversations.recovery import (
+    TERMINAL_NO_DERIVED_EFFECTS_FIELD,
+    raw_transcript_bytes,
+    recovery_audio_file_ids,
+    structured_has_protected_content,
+)
 
 CONVERSATIONS_COLLECTION = 'conversations'
 FINALIZATION_JOBS_COLLECTION = 'conversation_finalization_jobs'
@@ -282,6 +289,60 @@ def _conversation_has_finalization_content(
     return next(iter(conversation_ref.collection('photos').limit(1).stream(transaction=transaction)), None) is not None
 
 
+def recovery_admission_refusal(
+    uid: str,
+    conversation: Mapping[str, Any],
+    recovery_cutoff: datetime | None,
+) -> str | None:
+    """Bounded refusal reason for one SERVER_RECOVERY admission, or ``None``.
+
+    Evaluated inside the outbox transaction against its authoritative snapshot,
+    before any write, and again by the sweep for action-log reasons. Every
+    reason is a closed vocabulary safe for structured logs.
+
+    The one-attempt policy is structural: a row carrying any
+    ``finalization_job_id`` (including a dead-lettered one) is refused rather
+    than minting a second finalization revision, because the deterministic
+    ``(uid, conversation_id, revision)`` identity cannot safely re-admit a
+    terminal generation. Those rows page for manual review instead.
+    """
+    if recovery_cutoff is None:
+        return 'no_cutoff'
+    status = getattr(conversation.get('status'), 'value', conversation.get('status'))
+    if status != 'in_progress':
+        return 'status'
+    if conversation.get('deleted') or conversation.get('discarded'):
+        return 'tombstoned'
+    if conversation.get('deferred'):
+        return 'deferred'
+    if conversation.get('is_locked'):
+        return 'locked'
+    processing_state = getattr(conversation.get('processing_state'), 'value', conversation.get('processing_state'))
+    if processing_state == 'local_pending':
+        return 'local_pending'
+    if conversation.get(TERMINAL_NO_DERIVED_EFFECTS_FIELD):
+        return 'terminal_no_derived'
+    source = getattr(conversation.get('source'), 'value', conversation.get('source'))
+    if source != 'omi':
+        return 'source'
+    if structured_has_protected_content(conversation.get('structured'), conversation.get('user_title')):
+        return 'protected_content'
+    if conversation.get('finalization_job_id'):
+        return 'has_job'
+    finished_at = conversation.get('finished_at')
+    if not isinstance(finished_at, datetime):
+        return 'no_finished_at'
+    if finished_at.tzinfo is None and recovery_cutoff.tzinfo is not None:
+        finished_at = finished_at.replace(tzinfo=timezone.utc)
+    if finished_at > recovery_cutoff:
+        return 'not_stale'
+    if not (conversation.get('audio_files') or conversations_db.raw_conversation_has_content(uid, dict(conversation))):
+        return 'no_content'
+    if recovery_audio_file_ids(conversation) is None:
+        return 'oversized_audio_files'
+    return None
+
+
 def _snapshot_bound_projection_updates(
     uid: str,
     conversation: Mapping[str, Any],
@@ -350,8 +411,9 @@ def _create_or_get_finalization_intent_txn(
     now: datetime,
     *,
     projection_collection: Any | None = None,
-    force_process: bool = False,
+    trigger: ProcessingTrigger = ProcessingTrigger.CAPTURE_END,
     extra_updates: Mapping[str, Any] | None = None,
+    recovery_cutoff: datetime | None = None,
 ) -> FinalizationIntent:
     """Persist finalization ownership before any pusher or task handoff.
 
@@ -370,10 +432,17 @@ def _create_or_get_finalization_intent_txn(
 
         loaded: dict[str, Any] = conversation_snapshot.to_dict() or {}
         conversation = loaded
+        if trigger is ProcessingTrigger.SERVER_RECOVERY:
+            refusal = recovery_admission_refusal(uid, loaded, recovery_cutoff)
+            if refusal is not None:
+                intent = _no_finalization_intent(f'refused_{refusal}')
+                return intent
         if loaded.get('deferred'):
             intent = _no_finalization_intent('deferred')
             return intent
-        if not _conversation_has_finalization_content(uid, loaded, conversation_ref, transaction):
+        if trigger is not ProcessingTrigger.SERVER_RECOVERY and not _conversation_has_finalization_content(
+            uid, loaded, conversation_ref, transaction
+        ):
             intent = _no_finalization_intent('no_content')
             return intent
 
@@ -426,10 +495,12 @@ def _create_or_get_finalization_intent_txn(
             'status': status,
             'requires_byok': requires_byok,
             'client_platform': loaded.get('client_platform'),
-            # REST finalization has historically forced enrichment while the listen
-            # pipeline retains its existing default. Persist the choice with the
-            # immutable finalization generation so a replay cannot change it.
-            'force_process': force_process,
+            # Persist why this generation is processed with the immutable
+            # finalization generation so a replay cannot change it.
+            'processing_trigger': trigger.value,
+            # Legacy mirror so a worker from before processing_trigger (a
+            # rollback) still runs the same mode; drop after one release.
+            'force_process': PROCESSING_MODES[trigger].run_now,
             'fanout_key': admission['fanout_key'],
             'fanout_status': 'pending',
             'dispatch_generation': 1,
@@ -441,6 +512,11 @@ def _create_or_get_finalization_intent_txn(
             'updated_at': now,
             'dispatch_requested_at': now,
         }
+        if trigger is ProcessingTrigger.SERVER_RECOVERY:
+            job['selfheal_attempt'] = 1
+            job['selfheal_enqueued_at'] = now
+            job['selfheal_transcript_bytes'] = raw_transcript_bytes(loaded)
+            job['selfheal_audio_file_ids'] = recovery_audio_file_ids(loaded) or []
         if not requires_byok:
             job['reconcile_after_at'] = now + get_finalization_reconcile_stale_after()
         transaction.set(job_ref, job)
@@ -501,8 +577,9 @@ def create_or_get_finalization_intent(
     *,
     requires_byok: bool,
     finalization_admission: Callable[[Mapping[str, Any]], FinalizationAdmission],
-    force_process: bool = False,
+    trigger: ProcessingTrigger = ProcessingTrigger.CAPTURE_END,
     extra_updates: Mapping[str, Any] | None = None,
+    recovery_cutoff: datetime | None = None,
     firestore_client: Any = None,
 ) -> FinalizationIntent:
     client = _client(firestore_client)
@@ -525,8 +602,9 @@ def create_or_get_finalization_intent(
             finalization_admission,
             _now(),
             projection_collection=projection_collection,
-            force_process=force_process,
+            trigger=trigger,
             extra_updates=extra_updates,
+            recovery_cutoff=recovery_cutoff,
         )
 
     return run_with_transaction_contention_retry(
@@ -1157,6 +1235,7 @@ def _record_meeting_receipt_txn(
                 'finalization_revision': revision,
                 'status': 'completed',
                 'requires_byok': False,
+                'processing_trigger': ProcessingTrigger.CAPTURE_END.value,
                 'force_process': False,
                 'fanout_key': f'conversation:{conversation_id}:finalization',
                 'fanout_status': 'completed',
@@ -1561,6 +1640,171 @@ STALE_PROCESSING_SWEEP_STATE_COLLECTION = 'conversation_recovery_state'
 STALE_PROCESSING_SWEEP_STATE_DOC = 'stale_processing_sweep'
 MEETING_RECEIPT_SWEEP_STATE_DOC = 'meeting_receipt_backfill_sweep'
 BYOK_ABANDONMENT_SWEEP_STATE_DOC = 'byok_abandonment_sweep'
+IN_PROGRESS_CONTENT_SWEEP_STATE_DOC = 'in_progress_content_sweep'
+SELFHEAL_MAX_PENDING_VERIFICATIONS = 100
+
+
+def scan_in_progress_conversations(
+    *,
+    page_size: int = 100,
+    max_scan: int = 2000,
+    resume_after_path: str | None = None,
+    firestore_client: Any = None,
+) -> dict[str, Any]:
+    """Return a bounded window of ``status == 'in_progress'`` conversation rows.
+
+    The query shape is fixed: a single-equality ``collection_group`` on
+    ``conversations.status == 'in_progress'``, limited per page, optionally
+    resuming after the persisted cursor snapshot. Every recovery predicate is
+    evaluated Python-side by the caller; no extra Firestore predicate may be
+    added here.
+
+    Returns ``{'rows', 'scanned', 'resume_after_path', 'exhausted'}`` where each
+    row is ``{'uid', 'conversation_id', 'path', 'data'}``.
+    """
+    client = _client(firestore_client)
+    page_size = max(1, min(page_size, 100))
+    rows: list[dict[str, Any]] = []
+    scanned = 0
+    last_path: str | None = None
+    exhausted = False
+
+    cursor_snapshot: Any = None
+    if resume_after_path:
+        fetched = client.document(resume_after_path).get()
+        if getattr(fetched, 'exists', False):
+            cursor_snapshot = fetched
+
+    while scanned < max_scan:
+        query = (
+            client.collection_group(CONVERSATIONS_COLLECTION)
+            .where(filter=firestore.FieldFilter('status', '==', 'in_progress'))
+            .limit(page_size)
+        )
+        if cursor_snapshot is not None:
+            query = query.start_after(cursor_snapshot)
+        page = list(query.stream())
+        if not page:
+            exhausted = True
+            break
+        for snapshot in page:
+            scanned += 1
+            if scanned > max_scan:
+                break
+            last_path = snapshot.reference.path
+            uid = _uid_from_conversation_path(snapshot.reference.path)
+            if uid is None:
+                continue
+            rows.append(
+                {
+                    'uid': uid,
+                    'conversation_id': snapshot.id,
+                    'path': snapshot.reference.path,
+                    'data': snapshot.to_dict() or {},
+                }
+            )
+        if scanned > max_scan:
+            break
+        if len(page) < page_size:
+            exhausted = True
+            break
+        cursor_snapshot = page[-1]
+
+    return {
+        'rows': rows,
+        'scanned': scanned,
+        'resume_after_path': None if exhausted else last_path,
+        'exhausted': exhausted,
+    }
+
+
+def get_in_progress_content_sweep_cursor(*, firestore_client: Any = None) -> dict[str, Any]:
+    """Return the self-heal sweep cursor, its CAS generation, and pending verifications.
+
+    Returns ``{'resume_after_path', 'generation', 'pending_verifications'}``.
+    ``pending_verifications`` is a bounded list of
+    ``{'uid', 'conversation_id', 'job_id'}`` entries the follow-up tick
+    re-checks before the job's own dead-letter workflow would own a failure.
+    """
+    client = _client(firestore_client)
+    snapshot = (
+        client.collection(STALE_PROCESSING_SWEEP_STATE_COLLECTION).document(IN_PROGRESS_CONTENT_SWEEP_STATE_DOC).get()
+    )
+    if not getattr(snapshot, 'exists', False):
+        return {'resume_after_path': None, 'generation': 0, 'pending_verifications': []}
+    data = snapshot.to_dict() or {}
+    path = data.get('resume_after_path')
+    pending = data.get('pending_verifications')
+    if not isinstance(pending, list):
+        pending = []
+    entries: list[dict[str, Any]] = []
+    for entry in pending[:SELFHEAL_MAX_PENDING_VERIFICATIONS]:
+        if not isinstance(entry, Mapping):
+            continue
+        uid = entry.get('uid')
+        conversation_id = entry.get('conversation_id')
+        job_id = entry.get('job_id')
+        if isinstance(uid, str) and isinstance(conversation_id, str) and isinstance(job_id, str):
+            entries.append({'uid': uid, 'conversation_id': conversation_id, 'job_id': job_id})
+    return {
+        'resume_after_path': path if isinstance(path, str) else None,
+        'generation': int(data.get('generation', 0)),
+        'pending_verifications': entries,
+    }
+
+
+def _advance_in_progress_content_sweep_cursor_txn(
+    transaction: Any,
+    doc_ref: Any,
+    expected_generation: int,
+    new_resume_after_path: str | None,
+    pending_verifications: list[dict[str, Any]],
+    now: datetime,
+) -> bool:
+    """CAS-update the self-heal sweep cursor and pending-verification list atomically.
+
+    Same generation fence as ``_advance_stale_processing_sweep_cursor_txn``; a
+    losing writer returns ``False`` and its pending list is not persisted, so
+    the next tick re-admits nothing the winner already claimed (the admission
+    transaction itself is the real fence — this list is verification state).
+    """
+    snapshot = doc_ref.get(transaction=transaction)
+    current_generation = 0
+    if getattr(snapshot, 'exists', False):
+        current_generation = int((snapshot.to_dict() or {}).get('generation', 0))
+    if current_generation != expected_generation:
+        return False
+    transaction.set(
+        doc_ref,
+        {
+            'resume_after_path': new_resume_after_path,
+            'generation': current_generation + 1,
+            'updated_at': now,
+            'pending_verifications': pending_verifications[:SELFHEAL_MAX_PENDING_VERIFICATIONS],
+        },
+    )
+    return True
+
+
+def advance_in_progress_content_sweep_cursor(
+    expected_generation: int,
+    new_resume_after_path: str | None,
+    *,
+    pending_verifications: list[dict[str, Any]] | None = None,
+    firestore_client: Any = None,
+) -> bool:
+    """Atomically advance the self-heal sweep cursor; ``False`` on a CAS loss."""
+    client = _client(firestore_client)
+    transaction = client.transaction()
+    transactional = firestore.transactional(_advance_in_progress_content_sweep_cursor_txn)
+    return transactional(
+        transaction,
+        client.collection(STALE_PROCESSING_SWEEP_STATE_COLLECTION).document(IN_PROGRESS_CONTENT_SWEEP_STATE_DOC),
+        expected_generation,
+        new_resume_after_path,
+        pending_verifications or [],
+        _now(),
+    )
 
 
 def get_stale_processing_sweep_cursor(*, firestore_client: Any = None) -> dict[str, Any]:

@@ -1,12 +1,15 @@
 import 'package:flutter/material.dart';
 
-import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/dev_api_key.dart';
 import 'package:omi/providers/dev_api_key_provider.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
+/// One developer API key: name, prefix and creation date, its scopes, and Revoke.
+///
+/// A row inside the Developer API group (the group draws the card and the separators).
 class DevApiKeyListItem extends StatelessWidget {
   final DevApiKey apiKey;
 
@@ -14,129 +17,94 @@ class DevApiKeyListItem extends StatelessWidget {
 
   List<Widget> _buildScopeChips(BuildContext context, List<String>? scopes) {
     if (scopes == null || scopes.isEmpty) {
-      return [_buildChip(context.l10n.readOnlyScope, const Color(0xFF3B82F6))];
+      return [_buildChip(context.l10n.readOnlyScope)];
     }
 
     final hasRead = scopes.any((s) => s.endsWith(':read'));
     final hasWrite = scopes.any((s) => s.endsWith(':write'));
 
     if (hasRead && hasWrite && scopes.length == 8) {
-      return [_buildChip(context.l10n.fullAccessScope, const Color(0xFF10B981))];
+      return [_buildChip(context.l10n.fullAccessScope)];
     }
 
     final chips = <Widget>[];
-    if (hasRead) chips.add(_buildChip(context.l10n.readScope, const Color(0xFF3B82F6)));
-    if (hasWrite) chips.add(_buildChip(context.l10n.writeScope, const Color(0xFF8B5CF6)));
+    if (hasRead) chips.add(_buildChip(context.l10n.readScope));
+    if (hasWrite) chips.add(_buildChip(context.l10n.writeScope));
 
     return chips;
   }
 
-  Widget _buildChip(String label, Color color) {
+  Widget _buildChip(String label) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: BorderRadius.circular(6)),
+      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xs, vertical: OmiSpacing.xxs),
+      decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
       child: Text(
         label,
-        style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.w600),
+        style: OmiType.caption.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w600),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1A1A1A),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFF2C2C2E), width: 1),
-      ),
+    return Padding(
+      padding: const EdgeInsets.all(OmiSpacing.md),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF8B5CF6).withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: const Icon(Icons.key, color: Color(0xFF8B5CF6), size: 18),
+                padding: const EdgeInsets.all(OmiSpacing.xs),
+                decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
+                child: const Icon(Icons.key, color: OmiColors.textTertiary, size: 18),
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: OmiSpacing.sm),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       apiKey.name,
-                      style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
+                      style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600),
                       overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 4),
+                    const SizedBox(height: OmiSpacing.xxs),
                     Text(
-                      '${apiKey.keyPrefix}***  •  ${DateFormat.yMMMd().format(apiKey.createdAt)}',
-                      style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 13),
+                      '${apiKey.keyPrefix}***  •  ${OmiDateFormat.of(context).date(apiKey.createdAt)}',
+                      style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
                     ),
                   ],
                 ),
               ),
-              GestureDetector(
-                onTap: () => _showDeleteConfirmation(context, apiKey),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEF4444).withValues(alpha: 0.1),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Text(
-                    context.l10n.revoke,
-                    style: const TextStyle(color: Color(0xFFEF4444), fontSize: 12, fontWeight: FontWeight.w500),
-                  ),
-                ),
+              const SizedBox(width: OmiSpacing.xs),
+              OmiButton.destructive(
+                label: context.l10n.revoke,
+                size: OmiButtonSize.compact,
+                // Not `=>`: a returned future would spin the button while the dialog is open.
+                onPressed: () {
+                  _confirmRevoke(context);
+                },
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          Wrap(spacing: 8, runSpacing: 8, children: _buildScopeChips(context, apiKey.scopes)),
+          const SizedBox(height: OmiSpacing.sm),
+          Wrap(spacing: OmiSpacing.xs, runSpacing: OmiSpacing.xs, children: _buildScopeChips(context, apiKey.scopes)),
         ],
       ),
     );
   }
 
-  void _showDeleteConfirmation(BuildContext context, DevApiKey apiKey) {
-    showDialog(
-      context: context,
-      builder: (BuildContext dialogContext) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF1C1C1E),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Text(
-            context.l10n.revokeKeyQuestion,
-            style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-          ),
-          content: Text(context.l10n.revokeKeyConfirmation(apiKey.name), style: TextStyle(color: Colors.grey.shade400)),
-          actions: <Widget>[
-            TextButton(
-              child: Text(context.l10n.cancel, style: TextStyle(color: Colors.grey.shade400)),
-              onPressed: () => Navigator.of(dialogContext).pop(),
-            ),
-            TextButton(
-              child: Text(
-                context.l10n.revoke,
-                style: const TextStyle(color: Colors.redAccent, fontWeight: FontWeight.w600),
-              ),
-              onPressed: () {
-                Provider.of<DevApiKeyProvider>(context, listen: false).deleteKey(apiKey.id);
-                Navigator.of(dialogContext).pop();
-              },
-            ),
-          ],
-        );
-      },
+  /// Revoking a key cannot be undone, so it is confirmed every time (docs/ux-contract.md §4).
+  Future<void> _confirmRevoke(BuildContext context) async {
+    final provider = Provider.of<DevApiKeyProvider>(context, listen: false);
+    final confirmed = await showOmiConfirm(
+      context,
+      title: context.l10n.revokeKeyQuestion,
+      message: context.l10n.revokeKeyConfirmation(apiKey.name),
+      confirmLabel: context.l10n.revoke,
+      destructive: true,
     );
+    if (confirmed) provider.deleteKey(apiKey.id);
   }
 }

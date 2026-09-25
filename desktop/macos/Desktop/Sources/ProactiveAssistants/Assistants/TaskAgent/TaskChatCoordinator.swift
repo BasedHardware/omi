@@ -1014,11 +1014,11 @@ final class TaskChatCoordinator: ObservableObject {
 
   private func runtimeStatusLabel(_ status: AgentRunProjectionStatus) -> String {
     switch status {
-    case .queued, .starting: return "Starting..."
+    case .queued, .starting: return "Starting…"
     case .waitingApproval: return "Needs approval"
     case .waitingInput: return "Needs input"
-    case .cancelling: return "Stopping..."
-    case .running: return "Working..."
+    case .cancelling: return "Stopping…"
+    case .running: return "Working…"
     default: return ""
     }
   }

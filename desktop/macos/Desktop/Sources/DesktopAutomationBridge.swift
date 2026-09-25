@@ -817,6 +817,7 @@ final class DesktopAutomationActionRegistry {
     registerCloseAskOmiActions()
     registerPTTRecoveryActions()
     registerFirstUsePopupActions()
+    registerConversationRecordingActions()
     register(
       name: "refresh_all_data",
       summary: "Refresh conversations, chat, tasks, and memories (same as Cmd+R)"
@@ -1007,14 +1008,12 @@ final class DesktopAutomationActionRegistry {
       name: "configure_contextual_task_interruptions",
       summary: "Configure the non-production contextual task interruption gate",
       params: [
-        "enabled", "shipped_cohorts_enabled", "daily_limit", "minimum_spacing_seconds",
+        "enabled", "daily_limit", "minimum_spacing_seconds",
         "notifications_enabled", "frequency", "task_notifications_enabled",
       ]
     ) { params in
       var configuration = ProactiveTaskInterruptionSettings.load()
       configuration.userOptedIn = boolParam(params["enabled"], default: false)
-      configuration.shippedCohortsEnabled = boolParam(
-        params["shipped_cohorts_enabled"], default: false)
       configuration.dailyLimit = max(0, intParam(params["daily_limit"], default: configuration.dailyLimit))
       configuration.minimumSpacing = TimeInterval(
         max(
@@ -1038,7 +1037,6 @@ final class DesktopAutomationActionRegistry {
       }
       return [
         "enabled": configuration.userOptedIn ? "true" : "false",
-        "shipped_cohorts_enabled": configuration.shippedCohortsEnabled ? "true" : "false",
         "cohort": ProactiveTaskCohort.current.rawValue,
       ]
     }
@@ -3860,22 +3858,24 @@ final class DesktopAutomationActionRegistry {
     registerRewindArtifactRecoveryGauntlet()
     register(
       name: "navigate_via_shortcut",
-      summary: "Post the same sidebar navigation notification as Cmd+1..6 / Cmd+, shortcuts",
+      summary: "Post the same navigation notification as the Cmd+1..4 / Cmd+, shortcuts",
       params: ["shortcut"]
     ) { params in
       let shortcut = (params["shortcut"] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         .lowercased()
       guard !shortcut.isEmpty else {
-        return ["error": "missing shortcut (1-6 or comma)"]
+        return ["error": "missing shortcut (1-4 or comma)"]
       }
       let item: SidebarNavItem?
+      // ⌘1…⌘4 are the top bar's pills; ⌘2 opens Memories on Activity. Hub pages also by name.
+      let hub: MemoryHubDestination? = shortcut == "2" ? .activity : nil
       switch shortcut {
-      case "1", "home", "dashboard": item = .dashboard
+      case "1", "home", "dashboard", "chat": item = .dashboard
       case "2", "conversations": item = .conversations
-      case "3", "memories": item = .memories
-      case "4", "tasks": item = .tasks
-      case "5", "rewind": item = .rewind
-      case "6", "apps": item = .apps
+      case "memories": item = .memories
+      case "3", "tasks": item = .tasks
+      case "rewind": item = .rewind
+      case "4", "apps": item = .apps
       case ",", "comma", "settings": item = .settings
       // Settings sub-sections ride the same notifications the app already posts
       // for its own deep-links (the Tasks gear, the floating-bar context menu),
@@ -3891,11 +3891,9 @@ final class DesktopAutomationActionRegistry {
       guard let item else {
         return ["error": "unsupported shortcut '\(shortcut)'"]
       }
-      NotificationCenter.default.post(
-        name: .navigateToSidebarItem,
-        object: nil,
-        userInfo: ["rawValue": item.rawValue]
-      )
+      var info: [String: Any] = ["rawValue": item.rawValue]
+      if let hub { info["hubDestination"] = hub.rawValue }
+      NotificationCenter.default.post(name: .navigateToSidebarItem, object: nil, userInfo: info)
       return [
         "navigated": item.title,
         "selected_tab_index": "\(item.rawValue)",
@@ -3919,7 +3917,6 @@ final class DesktopAutomationActionRegistry {
         "screen_analysis_enabled": assistant.screenAnalysisEnabled ? "true" : "false",
         "transcription_enabled": assistant.audioRecordingMode != .off ? "true" : "false",
         "audio_recording_mode": assistant.audioRecordingMode.rawValue,
-        "multi_chat_enabled": UserDefaults.standard.bool(forKey: .multiChatEnabled) ? "true" : "false",
       ]
     }
 
@@ -3930,11 +3927,9 @@ final class DesktopAutomationActionRegistry {
     ) { _ in
       let bridgeMode = UserDefaults.standard.string(forKey: .chatBridgeMode) ?? "piMono"
       let workingDirectory = UserDefaults.standard.string(forKey: .aiChatWorkingDirectory) ?? ""
-      let multiChat = UserDefaults.standard.bool(forKey: .multiChatEnabled)
       return [
         "bridge_mode": bridgeMode,
         "working_directory_set": workingDirectory.isEmpty ? "false" : "true",
-        "multi_chat_enabled": multiChat ? "true" : "false",
       ]
     }
 

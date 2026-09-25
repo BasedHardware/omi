@@ -208,6 +208,35 @@ def test_canonical_failure_does_not_fall_back_to_historical_writer(monkeypatch, 
     legacy_create.assert_not_called()
 
 
+def test_evidence_identity_conflict_is_a_client_conflict_not_a_server_fault(service_mod):
+    conflict = service_mod.EvidenceIdentityConflict("conflict")
+    service = service_mod.MemoryService(db_client=_FirestoreFake())
+    service._canonical_write = MagicMock(side_effect=conflict)
+    service._canonical.write_batch = MagicMock(side_effect=conflict)
+    memory_db = service_mod.MemoryDB.model_validate(_sample_memory_dict())
+    service.ensure_canonical_mutation_ready = MagicMock()
+
+    with pytest.raises(service_mod.HTTPException) as single:
+        service.create_external_memory(
+            "uid-test",
+            memory_db,
+            memory_system=service_mod.MemorySystem.CANONICAL,
+            consumer="developer_api",
+            operation="create_memory",
+        )
+    with pytest.raises(service_mod.HTTPException) as batch:
+        service.create_external_memory_batch(
+            "uid-test",
+            [memory_db],
+            memory_system=service_mod.MemorySystem.CANONICAL,
+            consumer="developer_api",
+            operation="batch_create_memories",
+        )
+
+    assert single.value.status_code == 409
+    assert batch.value.status_code == 409
+
+
 def test_manual_memory_without_route_capability_stays_on_external_contract(service_mod):
     service = service_mod.MemoryService(db_client=_FirestoreFake())
     memory_db = service_mod.MemoryDB.model_validate(

@@ -1,9 +1,12 @@
-const body = async (z, bundle) => {
-  {
-    {
-      bundle.inputData.source;
-    }
-  }
+// Body field names must match ZapierActionCreateConversation
+// (plugins/zapier/models.py) — that is the contract the POST lands on.
+const body = {
+  text: '{{bundle.inputData.text}}',
+  source: '{{bundle.inputData.source}}',
+  language: '{{bundle.inputData.language}}',
+  started_at: '{{bundle.inputData.started_at}}',
+  finished_at: '{{bundle.inputData.finished_at}}',
+  geolocation: '{{bundle.inputData.geolocation}}',
 };
 
 module.exports = {
@@ -32,8 +35,8 @@ module.exports = {
         type: 'string',
         helpText: 'This will help Omi get to know you better.',
         default: 'audio_transcript',
-        choices: ['audio_transcript', 'other_text'],
-        required: false,
+        choices: ['audio_transcript', 'message', 'other_text'],
+        required: true,
         list: false,
         altersDynamicFields: false,
       },
@@ -77,7 +80,7 @@ module.exports = {
             key: 'latitude',
             label: 'Latitude',
             type: 'number',
-            required: false,
+            required: true,
             list: false,
             altersDynamicFields: false,
           },
@@ -85,7 +88,7 @@ module.exports = {
             key: 'longitude',
             label: 'Longitude',
             type: 'number',
-            required: false,
+            required: true,
             list: false,
             altersDynamicFields: false,
           },

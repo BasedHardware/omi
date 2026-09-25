@@ -6,7 +6,9 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Optional
 
 import typer
+from rich.markup import escape
 
+from omi_cli.client import path_segment
 from omi_cli.datetime_options import ISO_DATETIME_FORMATS
 from omi_cli.errors import NotFoundError, UsageError
 from omi_cli.output import shorten
@@ -143,8 +145,8 @@ def update_action_item(
             detail="Provide --description, --completed/--open, or --due-at/--clear-due-at.",
         )
     with ctx.make_client() as client:
-        result = client.patch(f"/v1/dev/user/action-items/{action_item_id}", json_body=body)
-    ctx.renderer.success(f"Updated action item [bold]{action_item_id}[/bold].")
+        result = client.patch(f"/v1/dev/user/action-items/{path_segment(action_item_id)}", json_body=body)
+    ctx.renderer.success(f"Updated action item [bold]{escape(action_item_id)}[/bold].")
     ctx.renderer.emit(result)
 
 
@@ -155,8 +157,10 @@ def complete_action_item(
 ) -> None:
     ctx = _ctx(typer_ctx)
     with ctx.make_client() as client:
-        result = client.patch(f"/v1/dev/user/action-items/{action_item_id}", json_body={"completed": True})
-    ctx.renderer.success(f"Completed action item [bold]{action_item_id}[/bold].")
+        result = client.patch(
+            f"/v1/dev/user/action-items/{path_segment(action_item_id)}", json_body={"completed": True}
+        )
+    ctx.renderer.success(f"Completed action item [bold]{escape(action_item_id)}[/bold].")
     ctx.renderer.emit(result)
 
 
@@ -170,7 +174,7 @@ def delete_action_item(
     if not confirm:
         typer.confirm(f"Delete action item {action_item_id}?", abort=True)
     with ctx.make_client() as client:
-        result = client.delete(f"/v1/dev/user/action-items/{action_item_id}")
+        result = client.delete(f"/v1/dev/user/action-items/{path_segment(action_item_id)}")
     if ctx.renderer.json_mode:
         ctx.renderer.emit(result)
-    ctx.renderer.success(f"Deleted action item [bold]{action_item_id}[/bold].")
+    ctx.renderer.success(f"Deleted action item [bold]{escape(action_item_id)}[/bold].")
