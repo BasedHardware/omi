@@ -1,7 +1,6 @@
 import logging
 import os
 import re
-import traceback
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
