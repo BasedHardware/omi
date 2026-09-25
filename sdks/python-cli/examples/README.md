@@ -12,6 +12,8 @@
   agents (French agent guide).
 * [`agent_quickstart.pt.md`](agent_quickstart.pt.md) — omi-cli para agentes
   (Portuguese agent guide).
+* [`agent_quickstart.gn.md`](agent_quickstart.gn.md) — omi-cli agente kuérape guarã
+  (Guarani agent guide).
 * [`shell_examples.sh`](shell_examples.sh) — runnable shell snippets covering
   the most common verbs.
 * [`conversations_ics.md`](conversations_ics.md) — put conversation history on a
