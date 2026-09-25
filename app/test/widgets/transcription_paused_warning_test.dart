@@ -215,7 +215,8 @@ void main() {
 
       final context = tester.element(find.byType(ConversationCaptureWidget));
       final listeningText = AppLocalizations.of(context).listening;
-      final mutedText = AppLocalizations.of(context).muted;
+      // Paused, not "Muted": one word for a pause on every source (the control is Pause/Resume).
+      final pausedText = AppLocalizations.of(context).paused;
 
       // Initially should show Listening
       expect(find.text(listeningText), findsWidgets);
@@ -224,8 +225,8 @@ void main() {
       await tester.runAsync(() => captureProvider.pauseDeviceRecording());
       await tester.pump();
 
-      // Muted/Paused should override Listening for device recording
-      expect(find.text(mutedText), findsWidgets);
+      // Paused should override Listening for device recording
+      expect(find.text(pausedText), findsWidgets);
     });
   });
 }

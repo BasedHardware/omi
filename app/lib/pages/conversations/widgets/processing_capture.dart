@@ -375,7 +375,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
       liveCaptureDisplayState(
         audioInterrupted: isAudioInterrupted,
         paused: isPaused,
-        deviceMuted: isDeviceRecording,
+        // One word for a pause, whatever the source: the control is Pause/Resume.
         transcriptionUnavailable: hasTerminalTranscriptionFailure,
         bufferingFor: bufferingFor,
         capturingPhotos: hasPhotos,

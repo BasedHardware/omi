@@ -53,25 +53,27 @@ class LiveCaptureCard extends StatelessWidget {
     final secondary = OmiType.subhead.copyWith(color: OmiColors.textSecondary);
     final separator = Text('  ·  ', style: OmiType.subhead.copyWith(color: OmiColors.textTertiary));
     final statusRow = Row(children: [
-      Icon(isCall ? Icons.call_rounded : CaptureSources.icon(source), size: 18, color: OmiColors.textPrimary),
-      const SizedBox(width: OmiSpacing.xs),
-      Flexible(
-        child: Text(label,
-            maxLines: 1, overflow: TextOverflow.ellipsis, style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600)),
+      Expanded(
+        child: Row(children: [
+          Icon(isCall ? Icons.call_rounded : CaptureSources.icon(source), size: 18, color: OmiColors.textPrimary),
+          const SizedBox(width: OmiSpacing.xs),
+          Text(label, maxLines: 1, style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600)),
+          separator,
+          Container(
+            width: 8,
+            height: 8,
+            decoration: BoxDecoration(color: paused ? OmiColors.warning : OmiColors.danger, shape: BoxShape.circle),
+          ),
+          const SizedBox(width: OmiSpacing.xs),
+          // The state gives way first on a narrow screen or in a long language.
+          Flexible(child: Text(stateLabel, maxLines: 1, overflow: TextOverflow.ellipsis, style: secondary)),
+          if (elapsed != null) ...[
+            separator,
+            Text(formatElapsed(elapsed!),
+                style: secondary.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
+          ],
+        ]),
       ),
-      separator,
-      Container(
-        width: 8,
-        height: 8,
-        decoration: BoxDecoration(color: paused ? OmiColors.warning : OmiColors.danger, shape: BoxShape.circle),
-      ),
-      const SizedBox(width: OmiSpacing.xs),
-      Flexible(child: Text(stateLabel, maxLines: 1, overflow: TextOverflow.ellipsis, style: secondary)),
-      if (elapsed != null) ...[
-        separator,
-        Text(formatElapsed(elapsed!), style: secondary.copyWith(fontFeatures: const [FontFeature.tabularFigures()])),
-      ],
-      const Spacer(),
       if (isCall)
         const Icon(Icons.chevron_right_rounded, size: 22, color: OmiColors.textTertiary)
       else if (onPauseToggle != null)
