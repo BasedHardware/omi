@@ -11,11 +11,12 @@
 // connects direct to `wss://api.openai.com/v1/live/sessions` with the user's key in
 // the `openai-insecure-api-key.<key>` subprotocol.
 //
-// The protocol exposes no per-turn completion event, so assistant transcript text
-// is accumulated and reported to the capture record as one source utterance when
-// the session ends (manual stop or `session.closed`) — matching the web client's
-// `flushExchange`. A server turn-complete event (or a text-input frame for
-// `sendUserText`) is a follow-up.
+// The per-turn completion arrives as a `response.event` envelope (nested
+// `response.done` / `response.completed`): each completed assistant reply is
+// flushed to the capture record as its own source utterance, with manual stop /
+// `session.closed` as the tail fallback — matching the web client's
+// `flushExchange` and the hub's `handleResponseEvent`. A server turn-complete
+// event (or a text-input frame for `sendUserText`) is a follow-up.
 
 import { acquireMicStream } from '../audio'
 import { makePipelineHandle } from '../capture/pipelineHandle'
@@ -61,6 +62,8 @@ type GptLiveServerMessage = {
   error?: string | Record<string, unknown>
   interrupted?: boolean
   usage?: Parameters<typeof mapGptLiveUsage>[0]
+  /** Nested event for a `response.event` envelope (turn lifecycle). */
+  event?: { type?: string }
 }
 
 export type GptLiveMessageHandler = {
@@ -124,6 +127,21 @@ export function createGptLiveMessageHandler(deps: {
       case 'session.output_transcript.delta':
         if (typeof msg.delta === 'string') aiText += msg.delta
         return
+      case 'response.event': {
+        // Per-turn boundary (mirrors the hub's `handleResponseEvent` and the web
+        // client): without it, a multi-turn continuous session concatenates every
+        // reply into one utterance at stop, and an interruption of a later turn
+        // discards the earlier completed replies. Tool-call envelopes are not
+        // turn completions — leave the buffer for the follow-up response.
+        const nestedType = msg.event?.type ?? ''
+        if (nestedType.includes('function_call') || nestedType.includes('tool_call')) {
+          return
+        }
+        if (nestedType === 'response.done' || nestedType === 'response.completed') {
+          flush()
+        }
+        return
+      }
       case 'session.interrupted':
         player?.clear()
         aiText = ''

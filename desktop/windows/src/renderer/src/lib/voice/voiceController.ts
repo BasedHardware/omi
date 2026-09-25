@@ -290,40 +290,47 @@ export async function startVoiceSession(preferred?: VoiceProvider): Promise<void
 
   const headset = await refreshHeadsetState()
 
+  // BYOK is selected BEFORE the managed mint: the mint deliberately enforces
+  // managed quota and requires the platform OPENAI_API_KEY, so it would block or
+  // fail over a BYOK user whose direct OpenAI session is actually fine (the REST
+  // mint's key can't reach the WebSocket anyway — the cached key connects direct).
+  const byokKey = preferredProvider === 'gpt_live' ? openAiByokKeyCached() : undefined
   // Mint, falling back to the other lane when THIS provider is down/unconfigured.
   let provider = preferredProvider
-  let token: string
-  try {
+  let token = ''
+  if (byokKey === undefined) {
     try {
-      token = (await mintRealtimeToken(provider)).token
+      try {
+        token = (await mintRealtimeToken(provider)).token
+      } catch (e) {
+        const failure = e instanceof MintError ? e.failure : null
+        if (!failure?.tryOtherProvider) throw e
+        // GPT-Live is the default lane and always falls over to Gemini (the available
+        // alternate); Gemini falls to GPT-Live; the legacy OpenAI lane keeps Gemini.
+        const other: VoiceProvider =
+          provider === 'openai' ? 'gemini' : provider === 'gemini' ? 'gpt_live' : 'gemini'
+        trackEvent('fallback_triggered', {
+          component: 'realtime_mint',
+          from: provider,
+          to: other,
+          reason: 'provider_unavailable',
+          outcome: 'recovered'
+        })
+        provider = other
+        if (mySeq === startSeq) dispatch({ type: 'provider-changed', provider })
+        token = (await mintRealtimeToken(provider)).token
+      }
     } catch (e) {
+      if (mySeq !== startSeq) return // user stopped while minting
       const failure = e instanceof MintError ? e.failure : null
-      if (!failure?.tryOtherProvider) throw e
-      // GPT-Live is the default lane and always falls over to Gemini (the available
-      // alternate); Gemini falls to GPT-Live; the legacy OpenAI lane keeps Gemini.
-      const other: VoiceProvider =
-        provider === 'openai' ? 'gemini' : provider === 'gemini' ? 'gpt_live' : 'gemini'
-      trackEvent('fallback_triggered', {
-        component: 'realtime_mint',
-        from: provider,
-        to: other,
-        reason: 'provider_unavailable',
-        outcome: 'recovered'
+      record('mint-failed', failure?.message ?? (e as Error)?.message)
+      dispatch({
+        type: 'fail',
+        message: failure?.message ?? `voice session failed: ${(e as Error)?.message ?? e}`,
+        retryable: failure?.retryable ?? true
       })
-      provider = other
-      if (mySeq === startSeq) dispatch({ type: 'provider-changed', provider })
-      token = (await mintRealtimeToken(provider)).token
+      return
     }
-  } catch (e) {
-    if (mySeq !== startSeq) return // user stopped while minting
-    const failure = e instanceof MintError ? e.failure : null
-    record('mint-failed', failure?.message ?? (e as Error)?.message)
-    dispatch({
-      type: 'fail',
-      message: failure?.message ?? `voice session failed: ${(e as Error)?.message ?? e}`,
-      retryable: failure?.retryable ?? true
-    })
-    return
   }
   if (mySeq !== startSeq) return
 
@@ -341,13 +348,13 @@ export async function startVoiceSession(preferred?: VoiceProvider): Promise<void
   let session: ProviderSessionHandle
   try {
     if (provider === 'gpt_live') {
-      // BYOK: a cached OpenAI key routes GPT-Live direct to OpenAI (the REST
-      // mint's request-local key can't reach the WebSocket). Otherwise the Omi
-      // relay injects the platform key server-side.
-      const byokKey = openAiByokKeyCached()
+      // BYOK: a cached OpenAI key routes GPT-Live direct to OpenAI (selected
+      // before the mint above). Otherwise the Omi relay injects the platform
+      // key server-side. A fallback into gpt_live consults the cache here too.
+      const key = byokKey ?? openAiByokKeyCached()
       session = await startGptLiveSession({
-        token: byokKey ?? token,
-        byok: byokKey !== undefined,
+        token: key ?? token,
+        byok: key !== undefined,
         instructions,
         sinkId: sinkId || undefined,
         cb

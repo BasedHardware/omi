@@ -3,15 +3,21 @@
 // and building it must never block session start on a network fetch.
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 
-const { get, startOpenAiSession, startGeminiSession, startGptLiveSession, mintRealtimeToken, openAiByokKeyCached } =
-  vi.hoisted(() => ({
-    get: vi.fn(),
-    startOpenAiSession: vi.fn(),
-    startGeminiSession: vi.fn(),
-    startGptLiveSession: vi.fn(),
-    mintRealtimeToken: vi.fn(),
-    openAiByokKeyCached: vi.fn()
-  }))
+const {
+  get,
+  startOpenAiSession,
+  startGeminiSession,
+  startGptLiveSession,
+  mintRealtimeToken,
+  openAiByokKeyCached
+} = vi.hoisted(() => ({
+  get: vi.fn(),
+  startOpenAiSession: vi.fn(),
+  startGeminiSession: vi.fn(),
+  startGptLiveSession: vi.fn(),
+  mintRealtimeToken: vi.fn(),
+  openAiByokKeyCached: vi.fn()
+}))
 
 vi.mock('../byokKeys', () => ({ openAiByokKeyCached }))
 vi.mock('../analytics', () => ({ trackEvent: vi.fn() }))
@@ -103,6 +109,19 @@ describe('startVoiceSession — system instruction', () => {
   it('routes GPT-Live direct to OpenAI with the cached BYOK key', async () => {
     openAiByokKeyCached.mockReturnValue('sk-user-openai')
     await startVoiceSession('gpt_live')
+    expect(startGptLiveSession).toHaveBeenCalledTimes(1)
+    const args = startGptLiveSession.mock.calls[0][0]
+    expect(args.byok).toBe(true)
+    expect(args.token).toBe('sk-user-openai')
+  })
+
+  it('selects BYOK before the managed mint: a failing mint cannot block a direct session', async () => {
+    openAiByokKeyCached.mockReturnValue('sk-user-openai')
+    mintRealtimeToken.mockRejectedValue(new Error('managed quota exhausted'))
+    await startVoiceSession('gpt_live')
+    // The managed mint (quota + platform key) was never attempted, and the
+    // direct OpenAI session still started with the user's key.
+    expect(mintRealtimeToken).not.toHaveBeenCalled()
     expect(startGptLiveSession).toHaveBeenCalledTimes(1)
     const args = startGptLiveSession.mock.calls[0][0]
     expect(args.byok).toBe(true)

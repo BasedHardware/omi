@@ -97,6 +97,36 @@ describe('createGptLiveMessageHandler', () => {
     expect(cb.onUtterance).toHaveBeenCalledTimes(1)
   })
 
+  it('flushes each completed response at its response.event boundary', () => {
+    handler.handle(
+      JSON.stringify({ type: 'session.output_transcript.delta', delta: 'First reply' })
+    )
+    handler.handle(JSON.stringify({ type: 'response.event', event: { type: 'response.done' } }))
+    handler.handle(JSON.stringify({ type: 'session.output_transcript.delta', delta: 'Second' }))
+    handler.handle(
+      JSON.stringify({ type: 'response.event', event: { type: 'response.completed' } })
+    )
+    expect(cb.onUtterance).toHaveBeenNthCalledWith(1, 'gpt-live-turn-0', 'First reply')
+    expect(cb.onUtterance).toHaveBeenNthCalledWith(2, 'gpt-live-turn-1', 'Second')
+    // A later interruption drops only the pending partial, not the flushed turns.
+    handler.handle(JSON.stringify({ type: 'session.output_transcript.delta', delta: 'partial' }))
+    handler.handle(JSON.stringify({ type: 'session.interrupted' }))
+    expect(cb.onUtterance).toHaveBeenCalledTimes(2)
+  })
+
+  it('does not treat tool-call response events as turn completions', () => {
+    handler.handle(JSON.stringify({ type: 'session.output_transcript.delta', delta: 'Calling ' }))
+    handler.handle(
+      JSON.stringify({
+        type: 'response.event',
+        event: { type: 'response.function_call_arguments.delta' }
+      })
+    )
+    expect(cb.onUtterance).not.toHaveBeenCalled()
+    handler.flush()
+    expect(cb.onUtterance).toHaveBeenCalledExactlyOnceWith('gpt-live-turn-0', 'Calling')
+  })
+
   it('interrupt clears playback and drops the partial reply', () => {
     handler.handle(JSON.stringify({ type: 'session.output_transcript.delta', delta: 'Half' }))
     handler.handle(JSON.stringify({ type: 'session.interrupted' }))
