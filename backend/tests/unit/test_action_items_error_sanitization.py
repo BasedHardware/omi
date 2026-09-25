@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 from pydantic import BaseModel
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
-ACTION_ITEMS_ROUTER_FILE = BACKEND_DIR / "backend" / "routers" / "action_items.py"
+ACTION_ITEMS_ROUTER_FILE = BACKEND_DIR / "routers" / "action_items.py"
 
 
 class ActionItemsErrorSanitizationTests(unittest.TestCase):
@@ -16,8 +16,7 @@ class ActionItemsErrorSanitizationTests(unittest.TestCase):
         cls._stubbed_modules = {}
 
         class StubModel(BaseModel):
-            class Config:
-                extra = "allow"
+            model_config = {"extra": "allow"}
 
             def storage_payload(self):
                 return {}
@@ -142,7 +141,13 @@ class ActionItemsErrorSanitizationTests(unittest.TestCase):
     def test_no_raw_str_exc_in_task_relationship_handlers(self):
         target_path = ACTION_ITEMS_ROUTER_FILE
         if not target_path.exists():
-            target_path = Path(__file__).parent / "action_items.py"
+            target_path = Path(__file__).resolve().parents[1] / "routers" / "action_items.py"
+        if not target_path.exists():
+            target_path = Path(__file__).resolve().parents[0] / "action_items.py"
+        if not target_path.exists():
+            target_path = Path.cwd() / "backend" / "routers" / "action_items.py"
+        if not target_path.exists():
+            target_path = Path.cwd() / "action_items.py"
         source = target_path.read_text(encoding="utf-8")
 
         self.assertIn("_sanitize_task_relationship_error", source)
