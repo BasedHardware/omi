@@ -939,9 +939,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'Προσθήκη στο claude_desktop_config.json';
-
-  @override
   String get copyConfig => 'Αντιγραφή Διαμόρφωσης';
 
   @override
@@ -2496,13 +2493,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get clearAllNodesAndConnections => 'Εκκαθάριση όλων των κόμβων και συνδέσεων';
 
   @override
-  String get addToClaudeDesktopConfig => 'Προσθήκη στο claude_desktop_config.json';
-
-  @override
   String get connectAiAssistantsToData => 'Συνδέστε βοηθούς AI με τα δεδομένα σας';
-
-  @override
-  String get useYourMcpApiKey => 'Χρησιμοποιήστε το κλειδί MCP API σας';
 
   @override
   String get realTimeTranscript => 'Μεταγραφή σε πραγματικό χρόνο';
@@ -10038,7 +10029,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get transcriptionNoAudio => 'Η μεταγραφή δεν λαμβάνει ήχο';
 
   @override
-  String get tapPlusToStartRecording => 'Πατήστε + για να ξεκινήσετε την εγγραφή';
+  String get tapPlusToStartRecording => 'Πατήστε το κουμπί εγγραφής για να ξεκινήσετε την εγγραφή';
 
   @override
   String get chatBlockTask => 'Εργασία';
@@ -10281,7 +10272,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'Οι συνομιλίες που ηχογραφείτε εμφανίζονται εδώ. Πατήστε + στην Αρχική για να ηχογραφήσετε την πρώτη.';
+      'Οι συνομιλίες που ηχογραφείτε εμφανίζονται εδώ. Πατήστε το κουμπί εγγραφής στην Αρχική για να ηχογραφήσετε την πρώτη.';
 
   @override
   String get conversationMap => 'Χάρτης συνομιλιών';
@@ -10760,7 +10751,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get deviceConnecting => 'Σύνδεση…';
 
   @override
-  String get recordOptionsTip => 'Συμβουλή: πατήστε παρατεταμένα το κουμπί εγγραφής για να καταγράψετε μια κλήση.';
+  String get recordOptionsTip => 'Συμβουλή: πατήστε το βέλος στο κουμπί εγγραφής για να καταγράψετε μια κλήση.';
 
   @override
   String get firmwareUpdateFailedTitle => 'Η ενημέρωση απέτυχε';
@@ -11156,4 +11147,167 @@ class AppLocalizationsEl extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get recordingAndTranscription => 'Εγγραφή & απομαγνητοφώνηση';
+
+  @override
+  String get notificationsAndDisplay => 'Ειδοποιήσεις & εμφάνιση';
+
+  @override
+  String get helpAndAbout => 'Βοήθεια & σχετικά';
+
+  @override
+  String get speakerTagPromptTitle => 'Βοηθήστε το Omi να αναγνωρίζει φωνές';
+
+  @override
+  String get speakerTagPromptSubtitle => 'Γρήγορος έλεγχος φωνών από τις δύο τελευταίες ημέρες';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'Είστε εσείς;';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'Είναι ο/η $name;';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'Ποιος είναι αυτός;';
+
+  @override
+  String get speakerTagPromptThatsMe => 'Είμαι εγώ';
+
+  @override
+  String get speakerTagPromptNotMe => 'Δεν είμαι εγώ';
+
+  @override
+  String get speakerTagPromptSomeoneNew => 'Κάποιος νέος';
+
+  @override
+  String get speakerTagPromptDontKnow => 'Κάποιος που δεν γνωρίζω';
+
+  @override
+  String get speakerTagPromptNotSure => 'Δεν είμαι σίγουρος';
+
+  @override
+  String get speakerTagPromptPlayClip => 'Αναπαραγωγή αποσπάσματος';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current από $total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => 'Απομνημόνευση φωνών των ατόμων που ονομάζετε';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody =>
+      'Το Omi κρατά ένα σύντομο δείγμα φωνής για να τους αναγνωρίσει την επόμενη φορά. Μπορείτε να το αλλάξετε ανά πάσα στιγμή στις Ρυθμίσεις.';
+
+  @override
+  String get speakerTagPromptThanks => 'Ευχαριστούμε! Το Omi θα αναγνωρίζει τις φωνές όλο και καλύτερα.';
+
+  @override
+  String get speakerTagPromptNameHint => 'Το όνομά του/της';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'Δεν ήταν δυνατή η αναπαραγωγή αυτού του αποσπάσματος';
+
+  @override
+  String get speakerTagPromptAnswerFailed => 'Δεν ήταν δυνατή η αποθήκευση. Δοκιμάστε ξανά.';
+
+  @override
+  String get voiceSettingsAskToTag => 'Να μου ζητείται να επισημαίνω φωνές';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle => 'Κάθε τόσο, το Omi ρωτά ποιος μιλούσε στις πρόσφατες συνομιλίες σας';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle =>
+      'Όταν ονομάζετε κάποιον, το Omi κρατά ένα σύντομο δείγμα φωνής για να τον αναγνωρίσει την επόμενη φορά';
+
+  @override
+  String get leaveBlank => 'Αφήστε το κενό';
+
+  @override
+  String get mcpOAuthSetup =>
+      'Στο claude.ai, προσθέστε έναν προσαρμοσμένο σύνδεσμο και επικολλήστε το URL του διακομιστή. Αν το Claude ζητήσει ένα σύνθετο OAuth Client ID, χρησιμοποιήστε την τιμή παρακάτω και αφήστε το μυστικό κενό — μην χρησιμοποιείτε ποτέ το κλειδί MCP API σας ως μυστικό OAuth.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'Προσθήκη στο ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'Στο Claude Desktop → Settings → Connectors, προσθέστε έναν προσαρμοσμένο σύνδεσμο και επικολλήστε το URL του διακομιστή. Αν το Claude ζητήσει ένα σύνθετο OAuth Client ID, χρησιμοποιήστε την τιμή παρακάτω και αφήστε το μυστικό κενό — μην χρησιμοποιείτε ποτέ το κλειδί MCP API σας ως μυστικό OAuth.';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Οι απομαγνητοφωνήσεις δεν είναι διαθέσιμες, η ηχογράφηση συνεχίζεται στη συσκευή και θα επεξεργαστεί αργότερα';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice =>
+      'Η απομαγνητοφώνηση δεν είναι διαθέσιμη · αποθήκευση στη συσκευή';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Αναμενόμενες απομαγνητοφωνήσεις $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Αναμενόμενες απομαγνητοφωνήσεις $count';
+  }
+
+  @override
+  String get captureSourceCall => 'Κλήση';
+
+  @override
+  String get captureSourcePhoneMic => 'Μικρόφωνο τηλεφώνου';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Συνέχεια';
+
+  @override
+  String get finish => 'Ολοκλήρωση';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Μενταγιόν σε παύση · συνεχίζει όταν τελειώσετε';
+
+  @override
+  String get pendantIsListeningTitle => 'Το μενταγιόν σας ακούει';
+
+  @override
+  String get oneSourceAtATime => 'Το Omi ηχογραφεί από μία μόνο πηγή κάθε φορά.';
+
+  @override
+  String get recordWithPhoneInstead => 'Εγγραφή με το τηλέφωνο αντ\' αυτού';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'Το μενταγιόν σε παύση μέχρι να τελειώσετε';
+
+  @override
+  String get pendantPausesDuringCall => 'Το μενταγιόν σε παύση κατά την κλήση';
+
+  @override
+  String get keepUsingPendant => 'Συνέχεια με το μενταγιόν';
+
+  @override
+  String get recordWith => 'Εγγραφή με';
+
+  @override
+  String get moreWaysToRecord => 'Περισσότεροι τρόποι εγγραφής';
+
+  @override
+  String get openCall => 'Άνοιγμα κλήσης';
+
+  @override
+  String get captureRecoveryBanner => 'Ο ήχος του μενταγιόν δεν φτάνει στην εφαρμογή — πατήστε για επισκευή';
 }

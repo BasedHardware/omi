@@ -935,9 +935,6 @@ class AppLocalizationsPl extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'Dodaj do claude_desktop_config.json';
-
-  @override
   String get copyConfig => 'Kopiuj konfigurację';
 
   @override
@@ -2480,13 +2477,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get clearAllNodesAndConnections => 'Wyczyść wszystkie węzły i połączenia';
 
   @override
-  String get addToClaudeDesktopConfig => 'Dodaj do claude_desktop_config.json';
-
-  @override
   String get connectAiAssistantsToData => 'Połącz asystentów AI z danymi';
-
-  @override
-  String get useYourMcpApiKey => 'Użyj swojego klucza API MCP';
 
   @override
   String get realTimeTranscript => 'Transkrypcja w czasie rzeczywistym';
@@ -9997,7 +9988,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get transcriptionNoAudio => 'Transkrypcja nie odbiera dźwięku';
 
   @override
-  String get tapPlusToStartRecording => 'Dotknij +, aby rozpocząć nagrywanie';
+  String get tapPlusToStartRecording => 'Dotknij przycisku nagrywania, aby rozpocząć nagrywanie';
 
   @override
   String get chatBlockTask => 'Zadanie';
@@ -10240,7 +10231,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'Nagrane rozmowy pojawiają się tutaj. Stuknij + na ekranie głównym, aby nagrać pierwszą.';
+      'Nagrane rozmowy pojawiają się tutaj. Stuknij przycisk nagrywania na ekranie głównym, aby nagrać pierwszą.';
 
   @override
   String get conversationMap => 'Mapa rozmów';
@@ -10719,7 +10710,8 @@ class AppLocalizationsPl extends AppLocalizations {
   String get deviceConnecting => 'Łączenie…';
 
   @override
-  String get recordOptionsTip => 'Wskazówka: przytrzymaj przycisk nagrywania, aby nagrać rozmowę telefoniczną.';
+  String get recordOptionsTip =>
+      'Wskazówka: stuknij strzałkę na przycisku nagrywania, aby nagrać rozmowę telefoniczną.';
 
   @override
   String get firmwareUpdateFailedTitle => 'Aktualizacja nie powiodła się';
@@ -11114,4 +11106,166 @@ class AppLocalizationsPl extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get recordingAndTranscription => 'Nagrywanie i transkrypcja';
+
+  @override
+  String get notificationsAndDisplay => 'Powiadomienia i wyświetlanie';
+
+  @override
+  String get helpAndAbout => 'Pomoc i informacje';
+
+  @override
+  String get speakerTagPromptTitle => 'Pomóż Omi rozpoznawać głosy';
+
+  @override
+  String get speakerTagPromptSubtitle => 'Szybkie sprawdzenie głosów z ostatnich dwóch dni';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'Czy to Ty?';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'Czy to $name?';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'Kto to jest?';
+
+  @override
+  String get speakerTagPromptThatsMe => 'To ja';
+
+  @override
+  String get speakerTagPromptNotMe => 'To nie ja';
+
+  @override
+  String get speakerTagPromptSomeoneNew => 'Ktoś nowy';
+
+  @override
+  String get speakerTagPromptDontKnow => 'Ktoś, kogo nie znam';
+
+  @override
+  String get speakerTagPromptNotSure => 'Nie wiem';
+
+  @override
+  String get speakerTagPromptPlayClip => 'Odtwórz fragment';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current z $total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => 'Zapamiętuj głosy osób, które nazwiesz';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody =>
+      'Omi zachowuje krótką próbkę głosu, aby następnym razem rozpoznać tę osobę. Możesz to zmienić w dowolnym momencie w Ustawieniach.';
+
+  @override
+  String get speakerTagPromptThanks => 'Dzięki! Omi będzie coraz lepiej rozpoznawać głosy.';
+
+  @override
+  String get speakerTagPromptNameHint => 'Imię';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'Nie udało się odtworzyć tego fragmentu';
+
+  @override
+  String get speakerTagPromptAnswerFailed => 'Nie udało się zapisać. Spróbuj ponownie.';
+
+  @override
+  String get voiceSettingsAskToTag => 'Proś mnie o oznaczanie głosów';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle => 'Od czasu do czasu Omi zapyta, kto mówił w Twoich ostatnich rozmowach';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle =>
+      'Gdy nazwiesz osobę, Omi zachowa krótką próbkę jej głosu, aby następnym razem ją rozpoznać';
+
+  @override
+  String get leaveBlank => 'Pozostaw puste';
+
+  @override
+  String get mcpOAuthSetup =>
+      'W claude.ai dodaj niestandardowy konektor i wklej adres URL serwera. Jeśli Claude poprosi o zaawansowane OAuth Client ID, użyj wartości poniżej i pozostaw sekret pusty — nigdy nie używaj klucza MCP API jako sekretu OAuth.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'Dodaj do ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'W Claude Desktop → Settings → Connectors dodaj niestandardowy konektor i wklej adres URL serwera. Jeśli Claude poprosi o zaawansowane OAuth Client ID, użyj wartości poniżej i pozostaw sekret pusty — nigdy nie używaj klucza MCP API jako sekretu OAuth.';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Transkrypcje są niedostępne, nagrywanie jest kontynuowane na urządzeniu i zostanie przetworzone później';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Transkrypcja niedostępna · zapisywanie na urządzeniu';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Transkrypcje w kolejce $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Transkrypcje w kolejce $count';
+  }
+
+  @override
+  String get captureSourceCall => 'Połączenie';
+
+  @override
+  String get captureSourcePhoneMic => 'Mikrofon telefonu';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Wznów';
+
+  @override
+  String get finish => 'Zakończ';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Wisiorek wstrzymany · wznowi po zakończeniu';
+
+  @override
+  String get pendantIsListeningTitle => 'Twój wisiorek słucha';
+
+  @override
+  String get oneSourceAtATime => 'Omi nagrywa jednocześnie tylko z jednego źródła.';
+
+  @override
+  String get recordWithPhoneInstead => 'Nagraj zamiast tego telefonem';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'Wisiorek jest wstrzymany do zakończenia';
+
+  @override
+  String get pendantPausesDuringCall => 'Wisiorek jest wstrzymany podczas połączenia';
+
+  @override
+  String get keepUsingPendant => 'Używaj dalej wisiorka';
+
+  @override
+  String get recordWith => 'Nagraj za pomocą';
+
+  @override
+  String get moreWaysToRecord => 'Więcej sposobów nagrywania';
+
+  @override
+  String get openCall => 'Otwórz połączenie';
+
+  @override
+  String get captureRecoveryBanner => 'Dźwięk z zawieszki nie dociera do aplikacji — dotknij, aby naprawić';
 }

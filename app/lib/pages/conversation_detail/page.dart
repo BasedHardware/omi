@@ -886,8 +886,9 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // Ask about this conversation (#4515), the page's primary action. Chat is a pushed page (D1).
-          OmiButton(
+          // Ask about this conversation (#4515). Chat is a pushed page (D1). Same fill and colours as the
+          // Star and Share circles beside it (David, 2026-09-24): one calm row, no white primary.
+          OmiButton.toolbar(
             key: const Key('conversation_ask_omi'),
             label: l10n.askOmi,
             // The bottom nav's two-bubbles glyph (FontAwesome comments, regular), so Ask Omi reads as
