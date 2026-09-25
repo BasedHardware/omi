@@ -1708,6 +1708,11 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
             continue
 
         current_data = doc_snapshot.to_dict() or {}
+        # `has_photos` is read from the pre-transaction get_all projection, while photo writes set it
+        # transactionally (conversation store path here, frame promotion in frame_requests.py). A photo
+        # landing between the projection and the fetch on a conversation whose snapshot said False keeps
+        # its old protection level while the conversation migrates; the migration is re-runnable, so a
+        # later pass re-encrypts it. Absent flag (legacy docs) conservatively queries anyway.
         if current_data.get('has_photos', True):
             photos_ref = doc_snapshot.reference.collection('photos')
             photo_queries.append(photos_ref.select(['data_protection_level', 'base64']))

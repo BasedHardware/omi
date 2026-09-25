@@ -7,8 +7,13 @@ from unittest.mock import MagicMock
 import pytest
 
 from database import conversations as db
-from tests.unit.fixtures.strict_firestore_transaction import StrictFirestoreCollection
+from tests.unit.fixtures.strict_firestore_transaction import (
+    StrictFirestoreCollection,
+    StrictFirestoreDocument,
+    StrictFirestoreSnapshot,
+)
 from tests.unit.test_manual_speaker_assignments import world, read
+from utils import encryption
 
 
 @pytest.mark.parametrize('level', ['standard', 'enhanced'])
@@ -84,6 +89,100 @@ def test_migration_reencodes_receipt_and_transcript_from_current_transaction(
     )
     db.migrate_conversations_level_batch('u', ['c'], target)
     assert store.rows[path] == before
+
+
+def test_migration_skips_photo_query_when_has_photos_false(world, monkeypatch):
+    store, path, _ = world
+    legacy_path = ('users', 'u', 'conversations', 'c2')
+    store.rows[path]['data_protection_level'] = 'standard'
+    store.rows[path]['has_photos'] = False
+    # Legacy doc without the flag; both conversations hold a photo doc.
+    store.rows[legacy_path] = dict(
+        id='c2', status='completed', transcript_segments=[], data_protection_level='standard'
+    )
+    for conv_id in ('c', 'c2'):
+        store.rows[('users', 'u', 'conversations', conv_id, 'photos', 'p1')] = dict(
+            data_protection_level='standard', base64='cGhvdG8='
+        )
+
+    projections = []
+
+    def get_all(refs, field_paths):
+        projections.append(list(field_paths))
+        for ref in refs:
+            snap = ref.get()
+            snap.reference = ref
+            snap.id = ref.path[-1]
+            yield snap
+
+    selected = []
+
+    def fake_select(self, fields):
+        selected.append(self._path)
+        return SimpleNamespace(stream=lambda: iter([]))
+
+    batch = MagicMock()
+    monkeypatch.setattr(store, 'get_all', get_all, raising=False)
+    monkeypatch.setattr(store, 'batch', lambda: batch, raising=False)
+    monkeypatch.setattr(StrictFirestoreCollection, 'select', fake_select, raising=False)
+    monkeypatch.setattr(db, 'db', store)
+
+    db.migrate_conversations_level_batch('u', ['c', 'c2'], 'enhanced')
+
+    # The gate reads has_photos from the get_all projection.
+    assert 'has_photos' in projections[0]
+    # has_photos=False never queries photos; the legacy doc without the flag still does.
+    assert selected == [('users', 'u', 'conversations', 'c2', 'photos')]
+    assert batch.update.call_args_list == []
+    assert store.rows[path]['data_protection_level'] == 'enhanced'
+    assert store.rows[legacy_path]['data_protection_level'] == 'enhanced'
+
+
+@pytest.mark.parametrize('source,target', [('standard', 'enhanced'), ('enhanced', 'standard')])
+def test_migration_reencrypts_fetched_photos_to_target_level(world, monkeypatch, source, target):
+    store, path, _ = world
+    plain = 'cGhvdG8tcGF5bG9hZA=='
+    stored = plain if source == 'standard' else encryption.encrypt(plain, 'u')
+    store.rows[path]['data_protection_level'] = source
+    store.rows[path]['has_photos'] = True
+    photo_paths = {f'p{i}': ('users', 'u', 'conversations', 'c', 'photos', f'p{i}') for i in (1, 2)}
+    for photo_path in photo_paths.values():
+        store.rows[photo_path] = dict(data_protection_level=source, base64=stored)
+
+    def get_all(refs, field_paths):
+        for ref in refs:
+            snap = ref.get()
+            snap.reference = ref
+            snap.id = ref.path[-1]
+            yield snap
+
+    def fake_select(self, fields):
+        def stream():
+            for photo_path in sorted(photo_paths.values()):
+                snap = StrictFirestoreSnapshot(store.rows[photo_path])
+                snap.reference = StrictFirestoreDocument(store, photo_path)
+                yield snap
+
+        return SimpleNamespace(stream=stream)
+
+    batch = MagicMock()
+    monkeypatch.setattr(store, 'get_all', get_all, raising=False)
+    monkeypatch.setattr(store, 'batch', lambda: batch, raising=False)
+    monkeypatch.setattr(StrictFirestoreCollection, 'select', fake_select, raising=False)
+    monkeypatch.setattr(db, 'db', store)
+
+    db.migrate_conversations_level_batch('u', ['c'], target)
+
+    updates = {call.args[0].path: call.args[1] for call in batch.update.call_args_list}
+    assert set(updates) == set(photo_paths.values())
+    for payload in updates.values():
+        assert payload['data_protection_level'] == target
+        if target == 'enhanced':
+            assert encryption.decrypt(payload['base64'], 'u') == plain
+        else:
+            assert payload['base64'] == plain
+    batch.commit.assert_called()
+    assert store.rows[path]['data_protection_level'] == target
 
 
 @pytest.mark.parametrize('level', ['standard', 'enhanced'])

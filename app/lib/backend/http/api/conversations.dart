@@ -553,8 +553,9 @@ Future<CaptureGroupSeparationResult> separateConversationFromCaptureGroup(String
   );
   if (response == null || response.statusCode != 200) return CaptureGroupSeparationResult.failed;
   try {
-    final statusResponse = wire.GeneratedStatusResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-    return statusResponse.status == 'unchanged' ? CaptureGroupSeparationResult.unchanged : CaptureGroupSeparationResult.separated;
+    final body = jsonDecode(response.body);
+    final status = body is Map ? body['status'] : null;
+    return status == 'unchanged' ? CaptureGroupSeparationResult.unchanged : CaptureGroupSeparationResult.separated;
   } catch (_) {
     return CaptureGroupSeparationResult.separated;
   }
