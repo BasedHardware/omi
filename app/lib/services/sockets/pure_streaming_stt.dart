@@ -497,18 +497,37 @@ class GptLiveStreamingSttSocket implements IPureSocket {
   IPureSocketListener? _listener;
 
   late final SttAudioTimeline _timeline = SttAudioTimeline(sampleRate: sampleRate);
+
   /// True once the server confirms `session.started`; audio is buffered, never
   /// dropped, until then.
   bool _sessionStarted = false;
+
   /// True once the `session.start` frame has been written (guards re-send).
   bool _sessionStartSent = false;
 
   final List<Uint8List> _frameBuffer = [];
   int _bufferedBytes = 0;
   static const int _minBytesBeforeSend = 16000;
+
   /// Bound on pre-ack buffering so a provider that never sends `session.started`
   /// can't grow memory without limit; oldest frames are dropped first.
-  static const int _maxBufferedBytes = 1_920_000;
+  static const int _maxBufferedBytes = 1920000;
+
+  /// How long [connect] waits for the provider's `session.started` ack before
+  /// refusing to report the socket as connected.
+  static const Duration _sessionStartTimeout = Duration(seconds: 10);
+
+  /// Resolved (true) by the `session.started` ack or (false) by a server error,
+  /// socket error/close, or the bounded timeout — never left dangling.
+  Completer<bool>? _sessionStartCompleter;
+
+  /// Stable nonempty id for the GPT-Live input utterance in flight. Deltas are
+  /// fragments of one utterance (sometimes split mid-word); emitted with the
+  /// cumulative text under one id so `TranscriptSegment.updateSegments` replaces
+  /// the segment in place instead of dropping all earlier fragments.
+  String _utteranceId = '';
+  String _utteranceText = '';
+  int _utteranceSeq = 0;
 
   GptLiveStreamingSttSocket({
     required this.apiKey,
@@ -547,6 +566,7 @@ class GptLiveStreamingSttSocket implements IPureSocket {
       _status = PureSocketStatus.connected;
       _sessionStarted = false;
       _sessionStartSent = false;
+      _sessionStartCompleter = Completer<bool>();
       DebugLogManager.logEvent('gpt_live_streaming_connected', {
         'model': model,
         'language': language,
@@ -565,6 +585,24 @@ class GptLiveStreamingSttSocket implements IPureSocket {
         // composite service treat a dead session as live and never recover.
         CustomSttLogService.instance.error('GptLive', 'Session start failed; not reporting connected');
         DebugLogManager.logWarning('gpt_live_streaming_session_start_failed', {});
+        _status = PureSocketStatus.notConnected;
+        return false;
+      }
+
+      // Resolve connected only through the provider's `session.started` ack: a
+      // start frame the provider rejects, or a server that never acknowledges,
+      // must not be advertised as a live socket by the composite service.
+      final acknowledged = await _sessionStartCompleter!.future.timeout(
+        _sessionStartTimeout,
+        onTimeout: () => false,
+      );
+      if (!acknowledged) {
+        CustomSttLogService.instance.error('GptLive', 'Session start not acknowledged; not reporting connected');
+        DebugLogManager.logWarning('gpt_live_streaming_session_start_unacked', {});
+        try {
+          await _channel?.sink.close();
+        } catch (_) {}
+        _channel = null;
         _status = PureSocketStatus.notConnected;
         return false;
       }
@@ -591,6 +629,14 @@ class GptLiveStreamingSttSocket implements IPureSocket {
       DebugLogManager.logWarning('gpt_live_streaming_connect_error', {'error': e.toString()});
       _status = PureSocketStatus.notConnected;
       return false;
+    }
+  }
+
+  /// Resolve the pending `session.started` handshake, if any (idempotent).
+  void _resolveSessionStart(bool acknowledged) {
+    final completer = _sessionStartCompleter;
+    if (completer != null && !completer.isCompleted) {
+      completer.complete(acknowledged);
     }
   }
 
@@ -644,6 +690,7 @@ class GptLiveStreamingSttSocket implements IPureSocket {
       if (type == 'session.started') {
         CustomSttLogService.instance.info('GptLive', 'Session started');
         _sessionStarted = true;
+        _resolveSessionStart(true);
         // Audio captured during the handshake was buffered, not dropped — send it
         // now that the provider accepts input.
         _flushBufferedAudio();
@@ -652,14 +699,31 @@ class GptLiveStreamingSttSocket implements IPureSocket {
 
       if (type == 'error') {
         final raw = json['error'] ?? json['message'];
-        final errorMessage = raw is Map
-            ? (raw['message'] ?? raw.toString())
-            : (raw?.toString() ?? 'GPT-Live server error');
+        final errorMessage =
+            raw is Map ? (raw['message'] ?? raw.toString()) : (raw?.toString() ?? 'GPT-Live server error');
         CustomSttLogService.instance.error('GptLive', 'Server error: $errorMessage');
+        // A rejected `session.start` must fail the pending connect handshake,
+        // not leave it to the timeout.
+        _resolveSessionStart(false);
         // The socket may stay open after an error frame; surface it so the
         // composite transcription service can tear down and recover instead of
         // hanging until the idle timeout.
         onError(StateError('GPT-Live server error: $errorMessage'), StackTrace.current);
+        return;
+      }
+
+      if (type == 'response.event') {
+        // The assistant's reply finished: the input utterance whose deltas were
+        // accumulating is complete. Rotate the accumulator so the next utterance
+        // gets a fresh segment id instead of replacing the finished one.
+        final nested = json['event'];
+        if (nested is Map) {
+          final nestedType = nested['type'];
+          if (nestedType == 'response.done' || nestedType == 'response.completed') {
+            _utteranceId = '';
+            _utteranceText = '';
+          }
+        }
         return;
       }
 
@@ -668,12 +732,20 @@ class GptLiveStreamingSttSocket implements IPureSocket {
       if (type != 'session.input_transcript.delta') return;
 
       final delta = json['delta'] as String?;
-      final text = delta?.trim();
-      if (text == null || text.isEmpty) return;
+      if (delta == null || delta.isEmpty) return;
+
+      if (_utteranceId.isEmpty) {
+        _utteranceSeq += 1;
+        _utteranceId = 'gpt-live-$_utteranceSeq';
+      }
+      // Deltas concatenate verbatim (a word can split across frames) and are
+      // re-emitted cumulatively under the utterance id.
+      _utteranceText += delta;
 
       final bounds = _timeline.nextSegment();
       final segment = {
-        'text': text,
+        'id': _utteranceId,
+        'text': _utteranceText,
         'speaker': 'SPEAKER_0',
         'speaker_id': 0,
         'is_user': false,
@@ -828,6 +900,9 @@ class GptLiveStreamingSttSocket implements IPureSocket {
     _timeline.reset();
     _sessionStarted = false;
     _sessionStartSent = false;
+    _sessionStartCompleter = null;
+    _utteranceId = '';
+    _utteranceText = '';
   }
 
   @override
@@ -843,6 +918,8 @@ class GptLiveStreamingSttSocket implements IPureSocket {
 
   @override
   void onClosed([int? closeCode]) {
+    // A close before the ack must fail the pending connect handshake.
+    _resolveSessionStart(false);
     _status = PureSocketStatus.disconnected;
     CustomSttLogService.instance.warning('GptLive', 'Closed with code: $closeCode');
     DebugLogManager.logEvent('gpt_live_streaming_closed', {'close_code': closeCode ?? -1});
@@ -851,6 +928,8 @@ class GptLiveStreamingSttSocket implements IPureSocket {
 
   @override
   void onError(Object err, StackTrace trace) {
+    // A socket error before the ack must fail the pending connect handshake.
+    _resolveSessionStart(false);
     CustomSttLogService.instance.error('GptLive', 'Error: $err');
     DebugLogManager.logError(err, trace, 'gpt_live_streaming_error');
     _listener?.onError(err, trace);
