@@ -18,8 +18,8 @@ in the first two sections below; the additional tools are hosted-server tools.
     | Name | Type | Required | Description |
     |------|------|----------|-------------|
     | `categories` | array | No | Categories to filter by |
-    | `limit` | number | No | Maximum number of memories (default: 100) |
-    | `offset` | number | No | Offset for pagination (default: 0) |
+    | `limit` | number | No | Maximum number of memories (default: 20, max: 100) |
+    | `offset`/`cursor` | number/string | No | Offset for pagination, or opaque `next_cursor` from a previous page (mutually exclusive) |
     | `sort` | string | No | `scoring_desc`, `created_desc`, `updated_desc`, or `manual_first` |
     | `reviewed` | boolean | No | Filter by reviewed state |
     | `manually_added` | boolean | No | Filter by manually-added state |
@@ -72,6 +72,20 @@ in the first two sections below; the additional tools are hosted-server tools.
     **Returns:** `{ "success": true, "memory": { ... } }`
   </Accordion>
 
+  <Accordion title="create_memories" icon="layer-plus">
+    Create up to **25** memories in one call — prefer this over repeated
+    `create_memory` calls when saving several facts.
+
+    **Parameters:**
+    | Name | Type | Required | Description |
+    |------|------|----------|-------------|
+    | `items` | array | Yes | 1–25 objects of `{ "content": string, "category"?: string }` |
+
+    **Returns:** `{ "results": [...] }` — every item is rate-limited
+    individually and returns its own status: `created`, `duplicate` (exact
+    content+category already created earlier in the same batch), or `error`.
+  </Accordion>
+
   <Accordion title="edit_memory" icon="pen">
     Edit an existing memory's content.
 
@@ -111,7 +125,7 @@ in the first two sections below; the additional tools are hosted-server tools.
     | `end_date` | string | No | Filter before this date (YYYY-MM-DD) |
     | `categories` | array | No | Categories to filter by |
     | `limit` | number | No | Maximum number of conversations (default: 20) |
-    | `offset` | number | No | Offset for pagination (default: 0) |
+    | `offset`/`cursor` | number/string | No | Offset for pagination, or opaque `next_cursor` from a previous page (mutually exclusive) |
 
     **Returns:** `{ "conversations": [...] }` — metadata only. Use `get_conversation_by_id` for full transcripts.
 
@@ -151,8 +165,30 @@ in the first two sections below; the additional tools are hosted-server tools.
     | Name | Type | Required | Description |
     |------|------|----------|-------------|
     | `conversation_id` | string | Yes | The ID of the conversation |
+    | `max_segments` | number | No | Max transcript segments (default 120, max 500) |
+    | `max_chars` | number | No | Max transcript characters (default 24000, max 100000) |
 
     **Returns:** Full conversation object with transcript segments, timestamps, structured summary, and metadata.
+  </Accordion>
+
+  <Accordion title="get_conversations_by_ids" icon="files">
+    Deep-read up to **20** conversations in one call — the preferred follow-up
+    after `get_conversations` or `search_conversations` returns several
+    relevant ids.
+
+    **Parameters:**
+    | Name | Type | Required | Description |
+    |------|------|----------|-------------|
+    | `conversation_ids` | array | Yes | 1–20 conversation IDs (duplicates fetched once) |
+    | `max_segments` | number | No | Max transcript segments per conversation (same bounds as `get_conversation_by_id`) |
+    | `max_chars` | number | No | Max transcript characters per conversation (same bounds) |
+
+    **Returns:** `{ "conversations": [...], "not_found": [...], "truncated": false }`
+    — each item carries the same bounded card and transcript as
+    `get_conversation_by_id` with its own `truncated` flag; ids that resolve to
+    nothing are listed in `not_found`. When the response budget is hit, later
+    items are omitted and top-level `truncated` is `true` — retry them with
+    smaller `max_segments`/`max_chars`.
   </Accordion>
 </AccordionGroup>
 
@@ -166,13 +202,15 @@ in the first two sections below; the additional tools are hosted-server tools.
 | `get_x_posts` | `kind?` (`tweet` or `bookmark`), `limit?` (default 50) | List imported X posts and bookmarks, newest first |
 | `search_x_posts` | `query`, `limit?` (default 10) | Semantic search over imported X posts and bookmarks |
 | `get_goals` | `include_inactive?` (default false) | List goals, active by default |
-| `get_chat_messages` | `limit?` (default 50), `offset?` | List recent Omi chat messages, newest first |
+| `get_chat_messages` | `limit?` (default 50), `offset?`/`cursor?` | List recent Omi chat messages, newest first |
 | `get_people` | None | List recognized people with speaker samples |
-| `get_screen_activity` | `start_date?`, `end_date?`, `app?`, `summary?`, `limit?` | List synced screen activity or return a per-app summary |
+| `get_screen_activity` | `start_date?`, `end_date?`, `app?`, `group_by?` (`none`\|`app`\|`hour`\|`day`, default `none`), `summary?`, `limit?`, `cursor?` | List synced screen activity rows, aggregate them into buckets, or return the legacy per-app summary |
 | `get_daily_summaries` | `start_date?`, `end_date?`, `limit?` (default 30), `offset?` | List Omi's daily summaries, newest first |
 
-Dates use `YYYY-MM-DD`. `get_screen_activity` defaults to 200 raw rows; `limit` is ignored
-when `summary` is true.
+Dates use `YYYY-MM-DD`. `get_screen_activity` defaults to 200 raw rows per page
+(max 1000); `limit` is ignored when `summary` is true. `group_by` buckets rows
+by app, hour, or day with counts, estimated observation seconds (bounded
+capture gaps — never actual usage duration), and top window titles.
 
 Screen summaries count **synced observations**, not elapsed app usage. OCR gating,
 frame deduplication, privacy exclusions, and sync compaction mean a row cannot be
@@ -197,11 +235,40 @@ views of screen evidence; they do not create or promote semantic memories.
 
 ---
 
+## Pagination and cursors
+
+List tools that can return more results emit an opaque `next_cursor` in the
+response. Pass it back as the `cursor` argument — together with the **same**
+filters — to fetch the next page (`cursor` and a non-zero `offset` are mutually
+exclusive). The field is absent when no further page exists.
+
+The same key authenticates the REST `/v1/mcp/*` list endpoints; they carry the
+cursor in the **`X-Next-Cursor`** response header instead of the body.
+
+## Incremental sync (`updated_since`)
+
+`GET /v1/mcp/action-items` accepts `updated_since`, a strict ISO-8601 timestamp
+with an explicit timezone offset. It switches the feed to an incremental
+`(updated_at ASC, id ASC)` keyset — combine it with the `X-Next-Cursor` cursor
+to page through updates. On each sync pass, re-read starting from
+`watermark − 60 seconds` and deduplicate by `id`: `updated_at` is a timestamp,
+not a transaction sequence, and the overlap covers delayed-commit visibility.
+Note that action-item deletes are **hard deletes** — a deleted item leaves no
+row and is not emitted by the feed.
+
+`GET /v1/mcp/conversations` and `GET /v1/mcp/memories` do **not** support
+`updated_since`: a valid timestamp returns HTTP `400` with detail
+`incremental_sync_unsupported` (permanent capability gap — no `Retry-After`,
+do not retry). For conversations, page instead with the
+`(created_at DESC, id)` keyset cursor.
+
+---
+
 ## Action Item Tools
 
 | Tool | Required parameters | Optional parameters | Description |
 | --- | --- | --- | --- |
-| `get_action_items` | None | `completed`, `due_start_date`, `due_end_date`, `limit` (default 100), `offset` | List tasks and to-dos |
+| `get_action_items` | None | `completed`, `due_start_date`, `due_end_date`, `limit` (default 100), `offset`/`cursor` | List tasks and to-dos |
 | `search_action_items` | `query` | `limit` (default 10) | Semantic search over tasks |
 | `create_action_item` | `description` | `due_at`, `completed` (default false) | Create a task; identical retries do not duplicate it |
 | `complete_action_item` | `action_item_id` | `completed` (default true) | Complete or reopen a task |
@@ -214,26 +281,34 @@ Due dates accept `YYYY-MM-DD` or an ISO 8601 date-time where noted by the client
 
 ## Error Handling
 
-All tools return JSON-RPC 2.0 errors when something goes wrong:
+A `tools/call` result always carries `structuredContent` (a JSON value) plus a
+matching text block for compatibility. **Tool execution failures** come back as
+a tool result — visible to the model — with `isError: true` and
+`structuredContent.error` of `{ "code": string, "message": string }`; `code` is
+one of:
 
-| Code | Meaning |
+| `structuredContent.error.code` | Meaning |
 |------|---------|
-| `-32602` | Invalid parameters (bad date format, unknown category) |
-| `-32001` | Resource not found (memory or conversation doesn't exist) |
-| `-32002` | Locked content (paid plan required) |
-| `-32003` | The OAuth grant is missing the tool's required scope |
-| `-32009` | Authorization or serving policy denied the operation |
-| `-32601` | Unknown tool name |
+| `invalid_arguments` | Bad parameter (bad date format, unknown category, malformed ID) |
+| `not_found` | Resource not found (memory or conversation doesn't exist) |
+| `paid_plan_required` | Locked content (paid plan required) |
+| `authorization_denied` | The OAuth grant is missing the tool's required scope, or policy denied the operation |
+| `rate_limited` | Per-user rate limit hit — retry after the current window |
+| `unavailable` | Temporarily unavailable (e.g. a search index still building) |
+| `internal` | Unexpected server-side failure |
 
-**Example error response:**
+**Protocol failures** stay JSON-RPC errors: unknown method/tool (`-32601`),
+malformed params (`-32602`), unsupported protocol version (`-32022`), and
+header/body mismatches (`-32020`) never reach the tool result.
+
+**Example tool failure** — the text block mirrors the serialized
+`structuredContent`, so both forms carry the same error:
+
 ```json
 {
-  "jsonrpc": "2.0",
-  "id": 1,
-  "error": {
-    "code": -32001,
-    "message": "Memory not found"
-  }
+  "isError": true,
+  "content": [{"type": "text", "text": "{\"error\":{\"code\":\"not_found\",\"message\":\"Memory not found\"}}"}],
+  "structuredContent": {"error": {"code": "not_found", "message": "Memory not found"}}
 }
 ```
 
@@ -245,4 +320,5 @@ Memories and conversations behind the paid plan are handled gracefully:
 
 - **Memories:** Content is truncated to 70 characters with `...`
 - **Conversations:** Action items and events are hidden from the structured data
-- **Direct access:** Returns error `-32002` with a clear message
+- **Direct access:** Returns a tool result with `isError: true` and
+  `structuredContent.error.code` of `paid_plan_required`, with a clear message

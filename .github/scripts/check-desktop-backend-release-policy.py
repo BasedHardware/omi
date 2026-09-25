@@ -84,26 +84,27 @@ def _validate_production_python_runtime(text: str, *, workflow: str) -> list[str
         "Preflight production desktop secret resource names",
         'gcloud secrets describe "$secret"',
         "--format='none'",
-        "SERVICE_ACCOUNT_JSON",
-        "GOOGLE_APPLICATION_CREDENTIALS=/secrets/firebase/service-account.json",
+        "--service-account=desktop-backend-runtime@based-hardware.iam.gserviceaccount.com",
         "USE_VERTEX_AI=true",
         "GOOGLE_CLOUD_PROJECT=${{ vars.GCP_PROJECT_ID }}",
         "GCP_LOCATION=us-central1",
-        "/secrets/firebase/service-account.json=SERVICE_ACCOUNT_JSON:latest",
         "POSTHOG_PROJECT_API_KEY=POSTHOG_PROJECT_API_KEY:latest",
         "GEMINI_API_KEY=DESKTOP_GEMINI_API_KEY:latest",
         "FIREBASE_API_KEY=DESKTOP_FIREBASE_API_KEY:latest",
         "REDIS_DB_PASSWORD=DESKTOP_REDIS_DB_PASSWORD:latest",
         "REDIS_DB_HOST=DESKTOP_REDIS_DB_HOST:latest",
         "REDIS_DB_PORT=DESKTOP_REDIS_DB_PORT:latest",
-        "--remove-secrets=PINECONE_API_KEY,PINECONE_HOST",
+        "--remove-secrets=PINECONE_API_KEY,PINECONE_HOST,/secrets/firebase/service-account.json",
+        "--remove-env-vars=GOOGLE_APPLICATION_CREDENTIALS,",
     ):
         if fragment not in text:
             errors.append(f"{workflow}: missing Python production runtime contract {fragment!r}")
     for forbidden in (
         "Rust -> Python",
         "Rust → Python",
-        "--remove-env-vars=GOOGLE_APPLICATION_CREDENTIALS",
+        # Keyless since WS-B (2026-09-23): the nik-164 JSON key must never be mounted again.
+        "SERVICE_ACCOUNT_JSON:latest",
+        "GOOGLE_APPLICATION_CREDENTIALS=/secrets/firebase/service-account.json",
         f"context: {retired_desktop_context}",
         f"file: {retired_desktop_context}/Dockerfile",
         "GEMINI_API_KEY=GEMINI_API_KEY:latest",

@@ -936,9 +936,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String get claudeDesktop => 'Claude డెస్క్‌టాప్';
 
   @override
-  String get addToClaudeConfig => 'claude_desktop_config.json కు జోడించండి';
-
-  @override
   String get copyConfig => 'కాన్ఫిగ్ కాపీ చేయండి';
 
   @override
@@ -2492,13 +2489,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get clearAllNodesAndConnections => 'సమస్త నోడ్‌లు మరియు కనెక్షన్‌లను క్లియర్ చేయండి';
 
   @override
-  String get addToClaudeDesktopConfig => 'claude_desktop_config.json కు జోడించండి';
-
-  @override
   String get connectAiAssistantsToData => 'AI సహాయకులను మీ డేటాకు కనెక్ట్ చేయండి';
-
-  @override
-  String get useYourMcpApiKey => 'మీ MCP API కీని ఉపయోగించండి';
 
   @override
   String get realTimeTranscript => 'రియల్-టైమ్ ట్రాన్‌స్క్రిప్ట్';
@@ -10014,7 +10005,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get transcriptionNoAudio => 'ట్రాన్స్‌క్రిప్షన్ ఆడియో స్వీకరించడం లేదు';
 
   @override
-  String get tapPlusToStartRecording => 'రికార్డింగ్ ప్రారంభించడానికి + నొక్కండి';
+  String get tapPlusToStartRecording => 'రికార్డింగ్ ప్రారంభించడానికి రికార్డ్ బటన్ నొక్కండి';
 
   @override
   String get chatBlockTask => 'పని';
@@ -10257,7 +10248,7 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'మీరు రికార్డ్ చేసిన సంభాషణలు ఇక్కడ కనిపిస్తాయి. మొదటిదాన్ని రికార్డ్ చేయడానికి హోమ్‌లో + నొక్కండి.';
+      'మీరు రికార్డ్ చేసిన సంభాషణలు ఇక్కడ కనిపిస్తాయి. మొదటిదాన్ని రికార్డ్ చేయడానికి హోమ్‌లో రికార్డ్ బటన్ నొక్కండి.';
 
   @override
   String get conversationMap => 'సంభాషణల మ్యాప్';
@@ -10735,7 +10726,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String get deviceConnecting => 'కనెక్ట్ అవుతోంది…';
 
   @override
-  String get recordOptionsTip => 'చిట్కా: ఫోన్ కాల్ రికార్డ్ చేయడానికి రికార్డ్ బటన్‌ను నొక్కి పట్టుకోండి.';
+  String get recordOptionsTip => 'చిట్కా: ఫోన్ కాల్ రికార్డ్ చేయడానికి రికార్డ్ బటన్‌పై ఉన్న బాణం గుర్తును నొక్కండి.';
 
   @override
   String get firmwareUpdateFailedTitle => 'అప్‌డేట్ విఫలమైంది';
@@ -11206,4 +11197,88 @@ class AppLocalizationsTe extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'మీరు ఎవరికైనా పేరు పెట్టినప్పుడు, తదుపరిసారి గుర్తించడానికి Omi ఒక చిన్న గొంతు నమూనాను ఉంచుకుంటుంది';
+
+  @override
+  String get leaveBlank => 'ఖాళీగా ఉంచండి';
+
+  @override
+  String get mcpOAuthSetup =>
+      'claude.ai లో కస్టమ్ కనెక్టర్‌ను జోడించి, సర్వర్ URL ను పేస్ట్ చేయండి. Claude అడ్వాన్స్డ్ OAuth Client ID అడిగితే, కింది విలువను ఉపయోగించి, సీక్రెట్‌ను ఖాళీగా ఉంచండి — మీ MCP API కీని OAuth సీక్రెట్‌గా ఎప్పుడూ ఉపయోగించకండి.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => '~/.claude.json కు జోడించండి';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'Claude Desktop → Settings → Connectors లో కస్టమ్ కనెక్టర్‌ను జోడించి, సర్వర్ URL ను పేస్ట్ చేయండి. Claude అడ్వాన్స్డ్ OAuth Client ID అడిగితే, కింది విలువను ఉపయోగించి, సీక్రెట్‌ను ఖాళీగా ఉంచండి — మీ MCP API కీని OAuth సీక్రెట్‌గా ఎప్పుడూ ఉపయోగించకండి.';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'ట్రాన్స్‌క్రిప్షన్‌లు అందుబాటులో లేవు, రికార్డింగ్ పరికరంలో కొనసాగుతుంది మరియు తర్వాత ప్రాసెస్ చేయబడుతుంది';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'ట్రాన్స్‌క్రిప్షన్ అందుబాటులో లేదు · పరికరంలో సేవ్ చేయబడుతోంది';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'పెండింగ్‌లో ఉన్న ట్రాన్స్‌క్రిప్షన్‌లు $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'పెండింగ్‌లో ఉన్న ట్రాన్స్‌క్రిప్షన్‌లు $count';
+  }
+
+  @override
+  String get captureSourceCall => 'కాల్';
+
+  @override
+  String get captureSourcePhoneMic => 'ఫోన్ మైక్';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'కొనసాగించు';
+
+  @override
+  String get finish => 'ముగించు';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'పెండెంట్ పాజ్‌లో ఉంది · మీరు ముగించాక కొనసాగుతుంది';
+
+  @override
+  String get pendantIsListeningTitle => 'మీ పెండెంట్ వింటోంది';
+
+  @override
+  String get oneSourceAtATime => 'Omi ఒకేసారి ఒక మూలం నుండి మాత్రమే రికార్డ్ చేస్తుంది.';
+
+  @override
+  String get recordWithPhoneInstead => 'బదులుగా ఫోన్‌తో రికార్డ్ చేయండి';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'మీరు ముగించే వరకు పెండెంట్ పాజ్‌లో ఉంటుంది';
+
+  @override
+  String get pendantPausesDuringCall => 'కాల్ సమయంలో పెండెంట్ పాజ్‌లో ఉంటుంది';
+
+  @override
+  String get keepUsingPendant => 'పెండెంట్‌నే ఉపయోగించండి';
+
+  @override
+  String get recordWith => 'రికార్డ్ చేసే విధానం';
+
+  @override
+  String get moreWaysToRecord => 'రికార్డ్ చేయడానికి మరిన్ని మార్గాలు';
+
+  @override
+  String get openCall => 'కాల్‌ను తెరవండి';
+
+  @override
+  String get captureRecoveryBanner => 'పెండెంట్ ఆడియో యాప్‌కు చేరడం లేదు — రిపేర్ చేయడానికి ట్యాప్ చేయండి';
 }

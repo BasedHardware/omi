@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Literal, Optional, Tuple, Type
 from pydantic import BaseModel, Field, ValidationError, field_validator, model_validator
 
 from models.conversation_enums import CategoryEnum
-from models.structured import ActionItem, Event, Section, Structured
+from models.structured import ActionItem, Event, Insight, MeetingType, Participant, Section, Structured
 
 logger = logging.getLogger(__name__)
 
@@ -236,6 +236,51 @@ class ExtractedSection(BaseModel):
         )
 
 
+class ExtractedRichSection(ExtractedSection):
+    kind: Literal['main', 'side_notes'] = Field(
+        default='main', description='Whether the section is primary recap or the closing side-notes section'
+    )
+
+    def to_section(self) -> Section:
+        return Section(
+            heading=self.heading,
+            body_markdown=self.body_markdown,
+            source_segment_ids=self.source_segment_ids,
+            kind=self.kind,
+        )
+
+
+class ExtractedParticipant(BaseModel):
+    name: Optional[str] = Field(default=None, description="Participant's display name")
+    email: Optional[str] = Field(default=None, description="Participant's email address")
+    organization: Optional[str] = Field(default=None, description="Participant's organization when known")
+    role: Optional[str] = Field(default=None, description="Participant's role or relationship when known")
+    is_ai_agent: bool = Field(default=False, description='True for AI notetakers and assistants, never people')
+    source: Literal['roster', 'transcript'] = Field(
+        description="Whether meeting metadata ('roster') or only the conversation evidences this participant"
+    )
+
+    def to_participant(self) -> Participant:
+        return Participant(
+            name=self.name,
+            email=self.email,
+            organization=self.organization,
+            role=self.role,
+            is_ai_agent=self.is_ai_agent,
+            source=self.source,
+        )
+
+
+class ExtractedInsight(BaseModel):
+    text: str = Field(description='One insight connecting background context to this conversation')
+    kind: Literal['prior_meeting', 'goal', 'memory', 'person'] = Field(
+        description='Which background source the insight draws on'
+    )
+
+    def to_insight(self) -> Insight:
+        return Insight(text=self.text, kind=self.kind)
+
+
 class StructuredExtraction(BaseModel):
     title: str = Field(description="A title/name for this conversation", default='')
     overview: str = Field(
@@ -284,3 +329,73 @@ class StructuredExtraction(BaseModel):
             action_items=[item.to_action_item() for item in self.action_items],
             events=[event.to_event() for event in self.events],
         )
+
+
+class RichStructuredExtraction(StructuredExtraction):
+    """Notes-v2 schema extension parsed only when rich meeting context is on.
+
+    The base ``StructuredExtraction`` format instructions are embedded in the
+    shared static prompt prefix, so the flag-off prompt stays byte-identical
+    only while this richer schema lives on a subclass the legacy path never
+    parses.
+    """
+
+    sections: List[ExtractedRichSection] = Field(
+        description='Detailed, free-form note sections in the model-chosen structure', default_factory=list
+    )
+    meeting_type: Optional[MeetingType] = Field(
+        default=None, description='The kind of meeting, when the capture is a meeting'
+    )
+    participants: List[ExtractedParticipant] = Field(
+        default_factory=list,
+        description='People and AI agents evidenced by the meeting roster or the transcript; never the account owner',
+    )
+    insights: List[ExtractedInsight] = Field(
+        default_factory=list,
+        description='Insights connecting supplied background context to this conversation; empty without background',
+    )
+
+    @model_validator(mode='before')
+    @classmethod
+    def keep_usable_rich_content(cls, data: Any) -> Any:
+        data = _keep_usable_content(
+            data,
+            {
+                'sections': ExtractedRichSection,
+                'action_items': ExtractedActionItem,
+                'events': ExtractedEvent,
+                'participants': ExtractedParticipant,
+                'insights': ExtractedInsight,
+            },
+        )
+        if not isinstance(data, dict):
+            return data
+        coerced = dict(data)
+        # meeting_type has a fixed vocabulary like the other optional literals;
+        # an out-of-vocabulary answer must not cost the whole note.
+        value = coerced.get('meeting_type')
+        if value is not None and value not in MeetingType.__args__:
+            normalized = value.strip().lower() if isinstance(value, str) else None
+            coerced['meeting_type'] = normalized if normalized in MeetingType.__args__ else None
+        return coerced
+
+    def to_structured(self) -> Structured:
+        structured = Structured(
+            title=self.title,
+            overview=self.overview,
+            emoji=self.emoji,
+            category=self.category,
+            sections=[section.to_section() for section in self.sections],
+            action_items=[item.to_action_item() for item in self.action_items],
+            events=[event.to_event() for event in self.events],
+        )
+        # Only mark the rich fields as set when the model actually answered
+        # them — unset fields serialize away, so non-meeting notes keep the
+        # baseline document shape even with the flag on.
+        if self.meeting_type is not None:
+            structured.meeting_type = self.meeting_type
+        if self.participants:
+            structured.participants = [participant.to_participant() for participant in self.participants]
+        if self.insights:
+            structured.insights = [insight.to_insight() for insight in self.insights]
+        return structured

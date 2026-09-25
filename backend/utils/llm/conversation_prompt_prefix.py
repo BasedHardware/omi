@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 
 from models.calendar_context import CalendarMeetingContext
 from models.conversation_photo import ConversationPhoto
+from utils.conversations.meeting_participants import MeetingRoster
 from utils.llm.prompt_cache import EXPLICIT_CACHE_BREAKPOINT, has_cacheable_prefix
 from utils.llm.gateway_client import should_route_features_through_gateway
 from utils.llm.model_config import get_model_config, uses_explicit_cache_and_chat_sanitizer
@@ -68,6 +69,79 @@ class ConversationPromptPrefix:
         ]
 
 
+_ROSTER_KIND_LABELS = {'owner': 'owner', 'human': 'human', 'ai_agent': 'ai agent'}
+
+
+def _bind_speakers_with_roster(
+    speaker_names: dict[int, Optional[str]],
+    roster: MeetingRoster,
+    desktop_meeting_capture: bool,
+) -> None:
+    """Mutate ``speaker_names`` per the roster binding rules.
+
+    On a desktop meeting capture the remote channel is mixed audio: when more
+    than one remote participant could share it, every remote-bound cluster is
+    demoted to ``?`` first and no binding runs — the channel can carry several
+    people, so any remote attribution would be a guess.
+
+    Otherwise a cluster earns a name only under the strict guard: exactly one
+    unresolved cluster AND exactly one unbound named non-owner human AND no AI
+    agent and no nameless human on the roster (either could be the cluster's
+    true identity).
+    """
+    remote = [entry for entry in roster.entries if entry.kind != 'owner']
+    if desktop_meeting_capture and len(remote) > 1:
+        owner_name = next(
+            (entry.display_name for entry in roster.entries if entry.kind == 'owner' and entry.display_name),
+            None,
+        )
+        owner_label = owner_name.casefold() if owner_name else ''
+        remote_names = {entry.display_name.casefold() for entry in remote if entry.display_name}
+        for key, name in list(speaker_names.items()):
+            if name and name.casefold() != owner_label and name.casefold() in remote_names:
+                speaker_names[key] = None
+        return
+    bound_names = {name.casefold() for name in speaker_names.values() if name}
+    unresolved_keys = [key for key, name in speaker_names.items() if not name]
+    unbound_named_humans = [
+        entry
+        for entry in remote
+        if entry.kind == 'human' and entry.display_name and entry.display_name.casefold() not in bound_names
+    ]
+    has_ai = any(entry.kind == 'ai_agent' for entry in remote)
+    has_nameless_human = any(entry.kind == 'human' and not entry.display_name for entry in remote)
+    if len(unresolved_keys) == 1 and len(unbound_named_humans) == 1 and not has_ai and not has_nameless_human:
+        speaker_names[unresolved_keys[0]] = unbound_named_humans[0].display_name
+
+
+def _speaker_metadata_lines(
+    speaker_names: Mapping[int, Optional[str]],
+    roster: MeetingRoster,
+    desktop_meeting_capture: bool,
+) -> List[str]:
+    bound_names = {name.casefold() for name in speaker_names.values() if name}
+    remote = [entry for entry in roster.entries if entry.kind != 'owner']
+    unbound_remote_labels = [
+        entry.display_name or entry.email or 'unknown'
+        for entry in remote
+        if not (entry.display_name and entry.display_name.casefold() in bound_names)
+        and not (entry.email and entry.email.casefold() in bound_names)
+    ]
+    annotate_remote = desktop_meeting_capture and len(remote) > 1 and bool(unbound_remote_labels)
+    lines: List[str] = []
+    for key, name in speaker_names.items():
+        if name:
+            lines.append(f'spk {key} {name}')
+        elif annotate_remote:
+            lines.append(
+                f'spk {key} ? (remote audio channel; may contain several people: '
+                f'{", ".join(unbound_remote_labels)})'
+            )
+        else:
+            lines.append(f'spk {key} ?')
+    return lines
+
+
 def build_conversation_prompt_prefix(
     *,
     conversation_id: str,
@@ -79,6 +153,8 @@ def build_conversation_prompt_prefix(
     photos: Optional[List[ConversationPhoto]] = None,
     speaker_map: Optional[Mapping[int, Optional[str]]] = None,
     transcript_segment_ids: Optional[Iterable[str]] = None,
+    roster: Optional[MeetingRoster] = None,
+    desktop_meeting_capture: bool = False,
 ) -> ConversationPromptPrefix:
     """Render the shared context prefix for conversation-wide LLM tasks.
 
@@ -86,6 +162,13 @@ def build_conversation_prompt_prefix(
     once as compact ``spk <cluster> <name|?>`` metadata lines, so the transcript
     below it can key turns by cluster instead of carrying ``Speaker N:`` labels the
     model copies into titles (SCA-454).
+
+    ``roster`` (the normalized ``MeetingRoster``) is the rich-meeting-notes path:
+    it replaces the calendar participant line with a factual PARTICIPANTS block
+    and uses the stricter speaker-binding guard. ``None`` renders the original
+    metadata byte-identically. ``desktop_meeting_capture`` marks the remote
+    audio channel as mixed, so a bound cluster is demoted to ``?`` when several
+    remote participants could share it.
     """
     try:
         user_tz = ZoneInfo(timezone_name) if timezone_name else timezone.utc
@@ -97,7 +180,27 @@ def build_conversation_prompt_prefix(
     metadata_lines = [
         f'- Captured at: {started_at_local} ({timezone_name or "UTC"})',
     ]
-    if calendar_context:
+    if roster is not None:
+        if roster.display_title:
+            metadata_lines.append(f'- Meeting title: {roster.display_title}')
+        if calendar_context:
+            metadata_lines.extend(
+                [
+                    f'- Platform: {calendar_context.platform or "Not specified"}',
+                    f'- Meeting notes: {calendar_context.notes or "Not specified"}',
+                ]
+            )
+        _bind_speakers_with_roster(speaker_names, roster, desktop_meeting_capture)
+        if speaker_names:
+            metadata_lines.extend(_speaker_metadata_lines(speaker_names, roster, desktop_meeting_capture))
+        if roster.entries:
+            metadata_lines.append('PARTICIPANTS')
+            metadata_lines.extend(
+                f'- {entry.display_name or entry.email or "unknown"} | {entry.organization or "-"} '
+                f'| {_ROSTER_KIND_LABELS.get(entry.kind, entry.kind)} | via {entry.source}'
+                for entry in roster.entries
+            )
+    elif calendar_context:
         participants = ', '.join(
             filter(
                 None,
@@ -134,7 +237,7 @@ def build_conversation_prompt_prefix(
         if len(unresolved_keys) == 1 and len(remaining_names) == 1:
             speaker_names[unresolved_keys[0]] = remaining_names[0]
 
-    if speaker_names:
+    if roster is None and speaker_names:
         metadata_lines.extend(f'spk {key} {name}' if name else f'spk {key} ?' for key, name in speaker_names.items())
 
     context_parts = ['CONVERSATION METADATA\n' + '\n'.join(metadata_lines), f'FULL TRANSCRIPT\n{transcript.strip()}']
