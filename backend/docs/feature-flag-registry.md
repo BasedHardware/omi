@@ -95,7 +95,7 @@ and an explicit empty literal renders as `''`.
 
 | key | summary | surfaces | kind | fail | _base | dev | prod | PostHog row | decision | review_by | owner |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `DAY3_REENGAGEMENT_EMAIL_ENABLED` | Send randomized day-three re-engagement email | backend | env | closed | false | false | false | — | pending | 2026-10-15 | unowned |
+| `DAY3_REENGAGEMENT_EMAIL_ENABLED` | Send randomized day-three re-engagement email | backend | env | closed | false | false | true | — | pending | 2026-10-15 | unowned |
 | `OMI_LLM_GATEWAY_OUTPUT_BUDGET_EXPERIMENTS` | Select gateway output-budget experiments | llm-gateway | env | closed | — | public_shared_conversation_chat (llm-gateway (chart)) | public_shared_conversation_chat (llm-gateway (chart)) | — | pending | 2026-10-15 | unowned |
 | `mobile-experiments-enabled` | Master gate for mobile experiment enrollment | mobile | posthog | closed | — | — | — | absent (enable) | pending | 2026-10-15 | unowned |
 | `mobile-summary-feedback-layout-v1` | Compare summary feedback layouts | mobile | posthog | closed | — | — | — | absent (exposure) | pending | 2026-10-15 | unowned |
