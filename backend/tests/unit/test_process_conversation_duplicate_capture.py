@@ -210,7 +210,7 @@ def _mac_row(*, text: str = ROOM_TEXT, status: str = 'completed', created_at: da
     }
 
 
-def _run(conversation, *, rows=None, lookup_error=None, force_process=False, trigger=None):
+def _run(conversation, *, rows=None, lookup_error=None, trigger=None):
     """Run `_get_structured` with the LLM gates mocked and the capture lookup controlled.
 
     Returns `(structured, discarded, lookup_mock, discard_gate_mock, fallback_mock)`.
@@ -227,6 +227,9 @@ def _run(conversation, *, rows=None, lookup_error=None, force_process=False, tri
         patch.object(pc.conversations_db, 'get_conversations_finished_after', lookup),
         patch.object(pc, 'should_discard_conversation', discard_gate),
         patch.object(pc, '_calendar_overlap_retains_conversation', MagicMock(return_value=False)),
+        # The relevance neighbor lookup shares the finished-after query; this harness
+        # pins that duplicate-capture detection never runs inside the content gate.
+        patch.object(pc, 'adjacent_conversation', MagicMock(return_value=None)),
         patch.object(pc, 'record_fallback', fallback),
         patch.object(pc, 'get_transcript_structure', MagicMock(return_value=Structured(title='Summarized'))),
         patch.object(pc, 'get_reprocess_transcript_structure', MagicMock(return_value=Structured(title='Reprocessed'))),
@@ -238,7 +241,6 @@ def _run(conversation, *, rows=None, lookup_error=None, force_process=False, tri
             'uid-3244',
             'en',
             conversation,
-            force_process=force_process,
             trigger=trigger or pc.ProcessingTrigger.CAPTURE_END,
         )
     return structured, discarded, lookup, discard_gate, fallback
@@ -256,9 +258,7 @@ def test_cross_device_overlap_does_not_short_circuit_content_gate():
 
 def test_reprocessing_still_never_discards():
     conversation = _pendant_conversation()
-    structured, discarded, lookup, _, _ = _run(
-        conversation, force_process=True, trigger=pc.ProcessingTrigger.USER_REPROCESS
-    )
+    structured, discarded, lookup, _, _ = _run(conversation, trigger=pc.ProcessingTrigger.USER_REPROCESS)
     assert discarded is False
     assert structured.title == 'Reprocessed'
     lookup.assert_not_called()
@@ -266,15 +266,13 @@ def test_reprocessing_still_never_discards():
 
 @pytest.mark.parametrize('trigger_name', ['SYNC_UPDATE', 'CLIENT_FINALIZE'])
 def test_forced_capture_processing_still_reaches_the_content_gate(trigger_name):
-    """`force_process` means "run now", never "skip discard".
+    """Running now never means skipping discard.
 
     Offline sync and the client finalize route both force processing; before the
     relevance step they also bypassed the discard gate, so every one-word sync
     fragment ("Oh") got a full summary.
     """
     conversation = _pendant_conversation()
-    _, discarded, _, discard_gate, _ = _run(
-        conversation, force_process=True, trigger=getattr(pc.ProcessingTrigger, trigger_name)
-    )
+    _, discarded, _, discard_gate, _ = _run(conversation, trigger=getattr(pc.ProcessingTrigger, trigger_name))
     discard_gate.assert_called_once()
     assert discarded is True

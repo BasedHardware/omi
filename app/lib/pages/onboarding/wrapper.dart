@@ -1,10 +1,7 @@
-import 'dart:math';
-
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/knowledge_graph_api.dart';
@@ -23,15 +20,16 @@ import 'package:omi/pages/onboarding/primary_language/primary_language_widget.da
 import 'package:omi/pages/onboarding/complete_screen.dart';
 import 'package:omi/pages/onboarding/speech_profile_widget.dart';
 import 'package:omi/providers/home_provider.dart';
-import 'package:omi/providers/onboarding_provider.dart';
-import 'package:omi/providers/speech_profile_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/analytics/product_telemetry.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
-import 'package:omi/widgets/device_widget.dart';
+import 'package:omi/app_globals.dart';
+import 'package:omi/core/app_shell.dart';
+import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/auth/clear_user_state.dart';
 
 class OnboardingWrapper extends StatefulWidget {
   const OnboardingWrapper({super.key, this.forceAuthPage = false});
@@ -50,15 +48,21 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   static const int kPrimaryLanguagePage = 3;
   static const int kFoundOmiPage = 4;
   static const int kPermissionsPage = 5;
-  static const int kUserReviewPage = 6; // "Loving Omi?" screen
-  static const int kWelcomePage = 7;
-  static const int kFindDevicesPage = 8;
-  static const int kSpeechProfilePage = 9; // Speech profile with questions (requires device)
-  static const int kKnowledgeGraphPage = 10; // Memory graph preview
-  static const int kCompletePage = 11; // "You're all set" completion screen
+  static const int kSpeechProfilePage = 6; // Guided voice introduction
+  static const int kKnowledgeGraphPage = 7; // Memory graph preview
+  static const int kCompletePage = 8; // "You're all set" completion screen
+  static const int kPageCount = 9;
 
-  // Special index values used in comparisons
-  static const List<int> kHiddenHeaderPages = [-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11];
+  /// The steps the progress dots count, in order. Auth, consent and the completion screen are not
+  /// steps: they are shown without dots.
+  static const List<int> kProgressSteps = [
+    kNamePage,
+    kPrimaryLanguagePage,
+    kFoundOmiPage,
+    kPermissionsPage,
+    kSpeechProfilePage,
+    kKnowledgeGraphPage,
+  ];
 
   TabController? _controller;
   late AnimationController _backgroundAnimationController;
@@ -77,13 +81,12 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         surface: ProductSurface.onboarding,
       );
     }
-    _controller = TabController(
-      length: 12,
-      vsync: this,
-    ); // Auth, AiConsent, Name, Lang, FoundOmi, Permissions, Review, Welcome, FindDevices, SpeechProfile, KnowledgeGraph, Complete
+    // Auth, AiConsent, Name, Lang, FoundOmi, Permissions, SpeechProfile, KnowledgeGraph, Complete
+    _controller = TabController(length: kPageCount, vsync: this);
     _controller!.addListener(() {
       if (!mounted) return;
       setState(() {});
+      _rememberStep(_controller!.index);
       // Update background image when page changes
       _updateBackgroundImage(_controller!.index);
       // Precache next image for smoother transitions
@@ -124,7 +127,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           } else if (SharedPreferencesUtil().onboardingCompleted) {
             await _routeWithPermissionsCheck(context);
           } else {
-            _controller!.animateTo(kNamePage);
+            _controller!.animateTo(_resumeStep());
           }
         }
       }
@@ -161,10 +164,57 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     }
   }
 
-  _goNext() {
+  void _goNext() {
     if (_controller!.index < _controller!.length - 1) {
       _controller!.animateTo(_controller!.index + 1);
     }
+  }
+
+  // ---- Resume and back ----------------------------------------------------------------------
+
+  /// Per-account key so a different account signing in on this phone starts at the Name step.
+  String get _resumeKey => 'onboarding/resumeStep/${SharedPreferencesUtil().uid}';
+
+  void _rememberStep(int index) {
+    if (widget.forceAuthPage || !kProgressSteps.contains(index)) return;
+    SharedPreferencesUtil().saveInt(_resumeKey, index);
+  }
+
+  /// The step to reopen after the app was killed mid-onboarding: the last step the reader reached,
+  /// or Name.
+  int _resumeStep() {
+    final saved = SharedPreferencesUtil().getInt(_resumeKey, defaultValue: kNamePage);
+    return kProgressSteps.contains(saved) ? saved : kNamePage;
+  }
+
+  /// The step before the current one, or null when there is nothing to go back to (Auth, consent,
+  /// Name, completion).
+  int? get _previousStep {
+    final position = kProgressSteps.indexOf(_controller!.index);
+    if (position <= 0) return null;
+    return kProgressSteps[position - 1];
+  }
+
+  bool _speechStepBusy = false;
+
+  /// Back — the on-screen control, Android system back and the iOS swipe all land here.
+  void _goBack() {
+    final previous = _previousStep;
+    if (previous == null) return;
+    // Never leave while the introduction is saving; its own PopScope blocks too.
+    if (_controller!.index == kSpeechProfilePage && _speechStepBusy) return;
+    OmiHaptics.selection();
+    _controller!.animateTo(previous);
+  }
+
+  /// "Use a Different Account" on the consent step: sign out and start again from the beginning.
+  Future<void> _useDifferentAccount() async {
+    final navigator = Navigator.of(context, rootNavigator: true);
+    final rootContext = globalNavigatorKey.currentContext;
+    if (rootContext != null && rootContext.mounted) clearAllUserState(rootContext);
+    await SharedPreferencesUtil().clear();
+    await AuthService.instance.signOut();
+    navigator.pushAndRemoveUntil(omiPageRoute(builder: (_) => const AppShell()), (_) => false);
   }
 
   Future<void> _prebuildKnowledgeGraph() async {
@@ -186,44 +236,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   }
 
   void _updateBackgroundImage(int pageIndex) {
-    String newImage = _currentBackgroundImage;
-
-    switch (pageIndex) {
-      case kAuthPage:
-        newImage = Assets.images.onboardingBg2.path;
-        break;
-      case kAiConsentPage:
-        newImage = Assets.images.onboardingBg2.path;
-        break;
-      case kNamePage:
-        newImage = Assets.images.onboardingBg1.path;
-        break;
-      case kPrimaryLanguagePage:
-        newImage = Assets.images.onboardingBg4.path;
-        break;
-      case kFoundOmiPage:
-        newImage = Assets.images.onboardingBg1.path;
-        break;
-      case kPermissionsPage:
-        newImage = Assets.images.onboardingBg3.path;
-        break;
-      case kUserReviewPage:
-        newImage = Assets.images.onboardingBg6.path;
-        break;
-      case kSpeechProfilePage:
-        newImage = Assets.images.onboardingBg3.path;
-        break;
-      case kKnowledgeGraphPage:
-        newImage = Assets.images.onboardingBg6.path;
-        break;
-      case kCompletePage:
-        newImage = Assets.images.onboardingBg6.path;
-        break;
-      default:
-        newImage = Assets.images.onboardingBg1.path;
-        break;
-    }
-
+    final newImage = _getBackgroundImageForIndex(pageIndex) ?? Assets.images.onboardingBg1.path;
     if (_currentBackgroundImage != newImage) {
       setState(() {
         _currentBackgroundImage = newImage;
@@ -252,23 +265,17 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
   String? _getBackgroundImageForIndex(int pageIndex) {
     switch (pageIndex) {
       case kAuthPage:
-        return Assets.images.onboardingBg2.path;
       case kAiConsentPage:
         return Assets.images.onboardingBg2.path;
       case kNamePage:
+      case kFoundOmiPage:
         return Assets.images.onboardingBg1.path;
       case kPrimaryLanguagePage:
         return Assets.images.onboardingBg4.path;
-      case kFoundOmiPage:
-        return Assets.images.onboardingBg1.path;
       case kPermissionsPage:
-        return Assets.images.onboardingBg3.path;
-      case kUserReviewPage:
-        return Assets.images.onboardingBg6.path;
       case kSpeechProfilePage:
         return Assets.images.onboardingBg3.path;
       case kKnowledgeGraphPage:
-        return Assets.images.onboardingBg6.path;
       case kCompletePage:
         return Assets.images.onboardingBg6.path;
       default:
@@ -276,8 +283,29 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
     }
   }
 
+  Widget _background() {
+    final media = MediaQuery.of(context);
+    return FadeTransition(
+      opacity: _backgroundFadeAnimation,
+      child: Container(
+        height: media.size.height,
+        decoration: BoxDecoration(
+          image: DecorationImage(
+            image: ResizeImage(
+              AssetImage(_currentBackgroundImage),
+              width: (media.size.width * media.devicePixelRatio).round(),
+              height: (media.size.height * media.devicePixelRatio).round(),
+            ),
+            fit: BoxFit.cover,
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final index = _controller!.index;
     List<Widget> pages = [
       AuthComponent(
         onSignIn: () async {
@@ -297,7 +325,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           } else if (SharedPreferencesUtil().onboardingCompleted) {
             await _routeWithPermissionsCheck(context);
           } else {
-            _controller!.animateTo(kNamePage);
+            _controller!.animateTo(_resumeStep());
           }
         },
       ),
@@ -312,9 +340,10 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
           if (SharedPreferencesUtil().onboardingCompleted) {
             await _routeWithPermissionsCheck(context);
           } else {
-            _controller!.animateTo(kNamePage);
+            _controller!.animateTo(_resumeStep());
           }
         },
+        onUseDifferentAccount: _useDifferentAccount,
       ),
       NameWidget(
         goNext: () {
@@ -341,23 +370,20 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       ),
       PermissionsWidget(
         goNext: () {
-          // Go directly to Speech Profile (skip device steps - we use phone mic now).
-          // The review step was removed from onboarding to comply with App Store
-          // Guideline 5.6.3 (no rating prompts during onboarding).
-          _controller!.animateTo(kSpeechProfilePage);
+          // Straight to the voice introduction (phone mic; no device step). The review step was
+          // removed from onboarding to comply with App Store Guideline 5.6.3 (no rating prompts
+          // during onboarding).
+          _goNext();
           PlatformManager.instance.analytics.onboardingStepCompleted('Permissions');
         },
       ),
-      // Placeholder pages - not used in new flow but kept for index consistency
-      Container(), // UserReviewPage placeholder (removed for App Store Guideline 5.6.3)
-      Container(), // WelcomePage placeholder
-      Container(), // FindDevicesPage placeholder
       widget.forceAuthPage
           ? const SizedBox.shrink()
           // The guided introduction owns its transcription-only session and
           // reviews statements before explicitly saving them as memories.
           : SpeechProfileWidget(
               flowSource: 'first_run',
+              onBusyChanged: (busy) => _speechStepBusy = busy,
               goNext: () {
                 // All Done is not enroll success (#12765). Upload/embedding
                 // events fire only from the guided I/O upload receipt.
@@ -379,6 +405,7 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
         onComplete: () {
           SharedPreferencesUtil().onboardingCompleted = true;
           SharedPreferencesUtil().permissionsCompleted = true;
+          SharedPreferencesUtil().remove(_resumeKey);
           _completeOnboardingTelemetry();
           updateUserOnboardingState(completed: true);
           PlatformManager.instance.analytics.onboardingCompleted();
@@ -388,243 +415,95 @@ class _OnboardingWrapperState extends State<OnboardingWrapper> with TickerProvid
       ),
     ];
 
-    return GestureDetector(
-      onTap: () => FocusScope.of(context).unfocus(),
-      child: Scaffold(
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        body: _controller!.index == kAuthPage
-            ? Stack(
-                children: [
-                  // Animated background image for auth page
-                  FadeTransition(
-                    opacity: _backgroundFadeAnimation,
-                    child: Container(
-                      height: MediaQuery.of(context).size.height,
-                      decoration: BoxDecoration(
-                        image: DecorationImage(
-                          image: ResizeImage(
-                            AssetImage(_currentBackgroundImage),
-                            width:
-                                (MediaQuery.of(context).size.width * MediaQuery.of(context).devicePixelRatio).round(),
-                            height:
-                                (MediaQuery.of(context).size.height * MediaQuery.of(context).devicePixelRatio).round(),
-                          ),
-                          fit: BoxFit.cover,
-                        ),
-                      ),
+    // The speech step draws the Omi device with a mic-level glow instead of a background image,
+    // matching the Settings redo page; the completion screen draws its own.
+    final showBackground = index != kCompletePage && index != kSpeechProfilePage;
+    final previous = _previousStep;
+
+    return PopScope(
+      // System back and the iOS swipe step back one step, like the on-screen back button. On the
+      // first step (and Auth / consent) back leaves onboarding as usual.
+      canPop: previous == null,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _goBack();
+      },
+      child: GestureDetector(
+        onTap: () => FocusScope.of(context).unfocus(),
+        child: Scaffold(
+          backgroundColor: OmiColors.surface0,
+          body: Stack(
+            children: [
+              if (index == kAuthPage || showBackground) _background(),
+              // Page component (no transition for content)
+              pages[index],
+              if (kProgressSteps.contains(index))
+                SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.only(top: OmiSpacing.md),
+                    child: OnboardingProgressDots(
+                      current: kProgressSteps.indexOf(index),
+                      total: kProgressSteps.length,
                     ),
                   ),
-                  // Auth component (no transition for content)
-                  pages[kAuthPage],
-                ],
-              )
-            : _controller!.index == kAiConsentPage ||
-                    _controller!.index == kNamePage ||
-                    _controller!.index == kPrimaryLanguagePage ||
-                    _controller!.index == kFoundOmiPage ||
-                    _controller!.index == kPermissionsPage ||
-                    _controller!.index == kUserReviewPage ||
-                    _controller!.index == kWelcomePage ||
-                    _controller!.index == kSpeechProfilePage ||
-                    _controller!.index == kKnowledgeGraphPage ||
-                    _controller!.index == kCompletePage
-                ? Stack(
-                    children: [
-                      // Animated background image (skip for welcome, complete, and speech
-                      // profile pages — the speech profile step shows the Omi device
-                      // graphic with a mic-level glow instead, matching the Settings redo page).
-                      if (_controller!.index != kWelcomePage &&
-                          _controller!.index != kCompletePage &&
-                          _controller!.index != kSpeechProfilePage)
-                        FadeTransition(
-                          opacity: _backgroundFadeAnimation,
-                          child: Container(
-                            height: MediaQuery.of(context).size.height,
-                            decoration: BoxDecoration(
-                              image: DecorationImage(
-                                image: ResizeImage(
-                                  AssetImage(_currentBackgroundImage),
-                                  width: (MediaQuery.of(context).size.width * MediaQuery.of(context).devicePixelRatio)
-                                      .round(),
-                                  height: (MediaQuery.of(context).size.height * MediaQuery.of(context).devicePixelRatio)
-                                      .round(),
-                                ),
-                                fit: BoxFit.cover,
-                              ),
-                            ),
-                          ),
-                        ),
-                      // Page component (no transition for content)
-                      pages[_controller!.index],
-                      // Progress dots (hidden on AI consent and complete pages)
-                      if (_controller!.index != kCompletePage && _controller!.index != kAiConsentPage)
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 56, 16, 0),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: List.generate(9, (index) {
-                              int pageIndex = index + 2; // Name=2, Lang=3, ..., KnowledgeGraph=10
-                              return Container(
-                                margin: const EdgeInsets.symmetric(horizontal: 4.0),
-                                width: pageIndex == _controller!.index ? 12.0 : 8.0,
-                                height: pageIndex == _controller!.index ? 12.0 : 8.0,
-                                decoration: BoxDecoration(
-                                  color: pageIndex <= _controller!.index
-                                      ? Theme.of(context).colorScheme.secondary
-                                      : Colors.grey.shade400,
-                                  shape: BoxShape.circle,
-                                ),
-                              );
-                            }),
-                          ),
-                        ),
-                      // Back button (hidden on complete page)
-                      if (_controller!.index > kNamePage && _controller!.index != kCompletePage)
-                        Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 40, 0, 0),
-                          child: Align(
-                            alignment: Alignment.topLeft,
-                            child: Container(
-                              width: 36,
-                              height: 36,
-                              margin: const EdgeInsets.all(8),
-                              decoration:
-                                  BoxDecoration(color: Colors.grey.withValues(alpha: 0.3), shape: BoxShape.circle),
-                              child: IconButton(
-                                padding: EdgeInsets.zero,
-                                onPressed: () {
-                                  if (_controller!.index == kSpeechProfilePage) {
-                                    context.read<SpeechProfileProvider>().close();
-                                    _controller!.animateTo(kPermissionsPage);
-                                  } else if (_controller!.index > kNamePage) {
-                                    _controller!.animateTo(_controller!.index - 1);
-                                  }
-                                },
-                                icon: const FaIcon(FontAwesomeIcons.arrowLeft, size: 16.0, color: Colors.white),
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
-                  )
-                : SingleChildScrollView(
-                    child: Stack(
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          child: ListView(
-                            shrinkWrap: true,
-                            physics: const NeverScrollableScrollPhysics(),
-                            children: [
-                              Consumer<OnboardingProvider>(
-                                builder: (context, onboardingProvider, child) {
-                                  return DeviceAnimationWidget(
-                                    animatedBackground: _controller!.index != -1 && onboardingProvider.isConnected,
-                                    isConnected: onboardingProvider.isConnected,
-                                    deviceName: onboardingProvider.deviceName,
-                                  );
-                                },
-                              ),
-                              const SizedBox(height: 24),
-                              kHiddenHeaderPages.contains(_controller?.index)
-                                  ? const SizedBox.shrink()
-                                  : Padding(
-                                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                                      child: Text(
-                                        context.l10n.personalGrowthJourney,
-                                        style: TextStyle(color: Colors.grey.shade300, fontSize: 24),
-                                        textAlign: TextAlign.center,
-                                      ),
-                                    ),
-                              SizedBox(
-                                height:
-                                    (_controller!.index == kFindDevicesPage || _controller!.index == kSpeechProfilePage)
-                                        ? max(
-                                            MediaQuery.of(context).size.height - 500 - 10,
-                                            maxHeightWithTextScale(context, _controller!.index),
-                                          )
-                                        : max(
-                                            MediaQuery.of(context).size.height - 500 - 30,
-                                            maxHeightWithTextScale(context, _controller!.index),
-                                          ),
-                                child: Padding(
-                                  padding: EdgeInsets.only(bottom: MediaQuery.sizeOf(context).height <= 700 ? 10 : 64),
-                                  child: TabBarView(
-                                    controller: _controller,
-                                    physics: const NeverScrollableScrollPhysics(),
-                                    children: pages,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        if (_controller!.index > kNamePage)
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 40, 0, 0),
-                            child: Align(
-                              alignment: Alignment.topLeft,
-                              child: Container(
-                                width: 36,
-                                height: 36,
-                                margin: const EdgeInsets.all(8),
-                                decoration: BoxDecoration(
-                                  color: Colors.grey.withValues(alpha: 0.3),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: IconButton(
-                                  padding: EdgeInsets.zero,
-                                  onPressed: () {
-                                    if (_controller!.index == kSpeechProfilePage) {
-                                      context.read<SpeechProfileProvider>().close();
-                                      _controller!.animateTo(kPermissionsPage);
-                                    } else if (_controller!.index > kNamePage) {
-                                      _controller!.animateTo(_controller!.index - 1);
-                                    }
-                                  },
-                                  icon: const FaIcon(FontAwesomeIcons.arrowLeft, size: 16.0, color: Colors.white),
-                                ),
-                              ),
-                            ),
-                          ),
-                        if (_controller!.index != kAuthPage && _controller!.index != kAiConsentPage)
-                          Padding(
-                            padding: const EdgeInsets.fromLTRB(16, 56, 16, 0),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: List.generate(7, (index) {
-                                int pageIndex = index + 2; // Name=2, Lang=3, ..., Speech=8
-                                return Container(
-                                  margin: const EdgeInsets.symmetric(horizontal: 4.0),
-                                  width: pageIndex == _controller!.index ? 12.0 : 8.0,
-                                  height: pageIndex == _controller!.index ? 12.0 : 8.0,
-                                  decoration: BoxDecoration(
-                                    color: pageIndex <= _controller!.index
-                                        ? Theme.of(context).colorScheme.secondary
-                                        : Colors.grey.shade400,
-                                    shape: BoxShape.circle,
-                                  ),
-                                );
-                              }),
-                            ),
-                          ),
-                      ],
+                ),
+              if (previous != null)
+                SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.only(left: OmiSpacing.xs, top: OmiSpacing.xxs),
+                    child: Align(
+                      alignment: Alignment.topLeft,
+                      child: OmiBackButton.circled(key: const Key('onboarding_back'), onPressed: _goBack),
                     ),
                   ),
+                ),
+            ],
+          ),
+        ),
       ),
     );
   }
 }
 
-double maxHeightWithTextScale(BuildContext context, int index) {
-  double textScaleFactor = MediaQuery.of(context).textScaleFactor;
-  if (textScaleFactor > 1.0) {
-    if (index == _OnboardingWrapperState.kAuthPage) {
-      return 200;
-    } else {
-      return 405;
-    }
-  } else {
-    return 305;
+/// Exposes the counted steps to tests without widening the wrapper's state class.
+@visibleForTesting
+abstract final class OnboardingProgressStepsForTest {
+  static List<int> get steps => _OnboardingWrapperState.kProgressSteps;
+}
+
+/// The first-run progress: one dot per real step, the current one larger, with a spoken
+/// "Step N of M".
+class OnboardingProgressDots extends StatelessWidget {
+  const OnboardingProgressDots({super.key, required this.current, required this.total});
+
+  /// Zero-based position of the current step.
+  final int current;
+  final int total;
+
+  @override
+  Widget build(BuildContext context) {
+    final motion = OmiMotion.of(context);
+    return Semantics(
+      label: context.l10n.onboardingStepOf(current + 1, total),
+      excludeSemantics: true,
+      child: SizedBox(
+        height: kOmiMinTapTarget,
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: List.generate(total, (i) {
+            final isCurrent = i == current;
+            return AnimatedContainer(
+              duration: motion.quick,
+              margin: const EdgeInsets.symmetric(horizontal: OmiSpacing.xxs),
+              width: isCurrent ? 12.0 : 8.0,
+              height: isCurrent ? 12.0 : 8.0,
+              decoration: BoxDecoration(
+                color: i <= current ? OmiColors.textPrimary : OmiColors.textTertiary,
+                shape: BoxShape.circle,
+              ),
+            );
+          }),
+        ),
+      ),
+    );
   }
 }

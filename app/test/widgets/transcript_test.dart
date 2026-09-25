@@ -62,7 +62,8 @@ void main() {
           home: Scaffold(body: TranscriptWidget(segments: [segment])),
         )));
     await tester.pumpAndSettle();
-    expect(find.text('Speaker 3'), findsOneWidget);
+    // SPEAKER_02 is the conversation's only anonymous speaker, so it reads "Speaker 1" (dense numbering).
+    expect(find.text('Speaker 1'), findsOneWidget);
     loaded = [Person(id: 'later', name: 'Alex', createdAt: DateTime(2026), updatedAt: DateTime(2026))];
     await people.setPeople();
     await tester.pumpAndSettle();
@@ -74,7 +75,8 @@ void main() {
     people.clearUserData();
     await tester.pumpAndSettle();
     expect(find.text('Sam'), findsNothing);
-    expect(find.text('Speaker 3'), findsOneWidget);
+    // SPEAKER_02 is the conversation's only anonymous speaker, so it reads "Speaker 1" (dense numbering).
+    expect(find.text('Speaker 1'), findsOneWidget);
   });
 
   group('Speaker label display', () {

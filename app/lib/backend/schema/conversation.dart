@@ -6,6 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:collection/collection.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import 'package:omi/backend/schema/capture_group.dart';
+import 'package:omi/backend/schema/conversation_speakers.dart';
 import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/utils/audio/audio_timeline_mapper.dart';
@@ -444,6 +446,13 @@ class ServerConversation {
   /// Search-only transcript evidence for find-and-play.
   final List<TranscriptMatchSnippet> matchSnippets;
 
+  /// The event this recording belongs to when other devices recorded it too;
+  /// null for a conversation captured by one surface.
+  final CaptureGroup? captureGroup;
+
+  /// Whether and which speaker ids are people; null on conversations processed before it existed.
+  final ConversationSpeakers? speakerResolution;
+
   // local label
   bool isNew = false;
 
@@ -472,6 +481,8 @@ class ServerConversation {
     this.folderId,
     this.visibility = ConversationVisibility.private_,
     this.matchSnippets = const [],
+    this.captureGroup,
+    this.speakerResolution,
   });
 
   factory ServerConversation.fromJson(Map<String, dynamic> json) {
@@ -550,6 +561,9 @@ class ServerConversation {
       folderId: generated.folderId,
       visibility: ConversationVisibility.fromString(generated.visibility),
       matchSnippets: snippets,
+      captureGroup: generated.captureGroup == null ? null : CaptureGroup.fromGenerated(generated.captureGroup!),
+      speakerResolution:
+          generated.speakerResolution == null ? null : ConversationSpeakers.fromGenerated(generated.speakerResolution!),
     );
   }
 
@@ -581,6 +595,8 @@ class ServerConversation {
       'starred': starred,
       'folder_id': folderId,
       'visibility': visibility.value,
+      'capture_group': captureGroup?.toJson(),
+      'speaker_resolution': speakerResolution?.toJson(),
     };
   }
 
@@ -610,6 +626,8 @@ class ServerConversation {
       starred: starred,
       folderId: folderId,
       visibility: visibility.value,
+      captureGroup: captureGroup?.toGenerated(),
+      speakerResolution: speakerResolution?.toGenerated(),
     );
   }
 
@@ -680,19 +698,29 @@ class ServerConversation {
     return _getDurationInSecondsByTranscripts();
   }
 
-  /// Calculates the conversation duration in seconds based on transcript segments
+  /// Calculates the conversation duration in seconds based on transcript segments.
+  ///
+  /// Computes the speech span (lastEndTime - firstStartTime) so that speech
+  /// recorded late in an ongoing continuous audio stream is not inflated by the
+  /// stream's session start offset (#18520).
   int _getDurationInSecondsByTranscripts() {
     if (transcriptSegments.isEmpty) return 0;
 
-    // Find the last segment's end time
-    double lastEndTime = 0;
+    double firstStartTime = transcriptSegments.first.start;
+    double lastEndTime = transcriptSegments.first.end;
+
     for (var segment in transcriptSegments) {
+      if (segment.start < firstStartTime) {
+        firstStartTime = segment.start;
+      }
       if (segment.end > lastEndTime) {
         lastEndTime = segment.end;
       }
     }
 
-    return lastEndTime.toInt();
+    if (firstStartTime < 0) firstStartTime = 0;
+    final duration = lastEndTime - firstStartTime;
+    return duration > 0 ? duration.toInt() : 0;
   }
 
   /// Matches desktop's recoverable-content heuristic: one transcript segment
