@@ -682,11 +682,11 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
       return false
     }
 
-    if let lastSpeech = VADGateService.lastSpeechAt {
-      let secondsSinceSpeech = Date().timeIntervalSince(lastSpeech)
-      if secondsSinceSpeech < UpdaterDelegate.activeCallSilenceWindow {
+    if let lastActivity = UpdateInstallActivity.lastActivityAt() {
+      let secondsSinceActivity = Date().timeIntervalSince(lastActivity)
+      if secondsSinceActivity < UpdaterDelegate.activeCallSilenceWindow {
         logSync(
-          "Sparkle: Deferring update v\(version) — speech detected \(Int(secondsSinceSpeech))s ago (active recording)"
+          "Sparkle: Deferring update v\(version) — capture active \(Int(secondsSinceActivity))s ago (meeting or speech)"
         )
         // Replace any prior quiet-moment wait so only one deferred install owns the flags.
         discardDeferredInstall()
@@ -699,7 +699,8 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
         deferredInstall = DeferredUpdateInstall(
           version: version,
           silenceWindow: UpdaterDelegate.activeCallSilenceWindow,
-          lastSpeechProvider: { VADGateService.lastSpeechAt },
+          maximumDeferral: UpdaterDelegate.maximumActiveCaptureDeferral,
+          lastActivityProvider: { UpdateInstallActivity.lastActivityAt() },
           install: { [weak self] in
             self?.deferredInstall = nil
             Task { @MainActor in
@@ -726,9 +727,12 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
     return true
   }
 
-  /// Minimum seconds of VAD silence required before an auto-install is allowed.
+  /// Minimum seconds without capture activity before an auto-install is allowed.
   /// Matches the typical pause threshold at which a real conversation has wound down.
   fileprivate static let activeCallSilenceWindow: TimeInterval = 120
+
+  /// Upper bound on one deferral, so a meeting detector stuck "on" cannot block updates forever.
+  fileprivate static let maximumActiveCaptureDeferral: TimeInterval = 3 * 60 * 60
 
   /// Drop any quiet-moment wait so a later abort / superseding update / install
   /// cannot leave `updateDeferredForActiveRecording` stuck or fire after cancel.
@@ -743,20 +747,24 @@ final class DeferredUpdateInstall {
 
   private let version: String
   private let silenceWindow: TimeInterval
-  private let lastSpeechProvider: () -> Date?
+  private let maximumDeferral: TimeInterval?
+  private let lastActivityProvider: () -> Date?
   private let install: () -> Void
   private var pendingWorkItem: DispatchWorkItem?
+  private var deferredSince: Date?
   private var didInstall = false
 
   init(
     version: String,
     silenceWindow: TimeInterval,
-    lastSpeechProvider: @escaping () -> Date?,
+    maximumDeferral: TimeInterval? = nil,
+    lastActivityProvider: @escaping () -> Date?,
     install: @escaping () -> Void
   ) {
     self.version = version
     self.silenceWindow = silenceWindow
-    self.lastSpeechProvider = lastSpeechProvider
+    self.maximumDeferral = maximumDeferral
+    self.lastActivityProvider = lastActivityProvider
     self.install = install
   }
 
@@ -766,6 +774,7 @@ final class DeferredUpdateInstall {
 
   func start(now: Date = Date()) {
     pendingWorkItem?.cancel()
+    deferredSince = deferredSince ?? now
     scheduleNextCheck(now: now)
   }
 
@@ -781,9 +790,11 @@ final class DeferredUpdateInstall {
 
     if let delay = Self.nextDelay(
       now: now,
-      lastSpeechAt: lastSpeechProvider(),
+      lastActivityAt: lastActivityProvider(),
       silenceWindow: silenceWindow,
-      minimumRetryDelay: Self.minimumRetryDelay
+      minimumRetryDelay: Self.minimumRetryDelay,
+      deferredSince: deferredSince,
+      maximumDeferral: maximumDeferral
     ) {
       logSync(
         "Sparkle: Deferred install for v\(version) will retry after \(Int(ceil(delay)))s of remaining silence"
@@ -798,22 +809,27 @@ final class DeferredUpdateInstall {
 
     didInstall = true
     pendingWorkItem = nil
-    logSync("Sparkle: Silence window satisfied, installing deferred update v\(version)")
+    logSync("Sparkle: Capture quiet or deferral cap reached, installing deferred update v\(version)")
     install()
   }
 
   static func nextDelay(
     now: Date,
-    lastSpeechAt: Date?,
+    lastActivityAt: Date?,
     silenceWindow: TimeInterval,
-    minimumRetryDelay: TimeInterval = minimumRetryDelay
+    minimumRetryDelay: TimeInterval = minimumRetryDelay,
+    deferredSince: Date? = nil,
+    maximumDeferral: TimeInterval? = nil
   ) -> TimeInterval? {
-    guard let lastSpeechAt else { return nil }
+    guard let lastActivityAt else { return nil }
+    if let deferredSince, let maximumDeferral, now.timeIntervalSince(deferredSince) >= maximumDeferral {
+      return nil
+    }
 
-    let secondsSinceSpeech = now.timeIntervalSince(lastSpeechAt)
-    guard secondsSinceSpeech < silenceWindow else { return nil }
+    let secondsSinceActivity = now.timeIntervalSince(lastActivityAt)
+    guard secondsSinceActivity < silenceWindow else { return nil }
 
-    return max(minimumRetryDelay, silenceWindow - secondsSinceSpeech)
+    return max(minimumRetryDelay, silenceWindow - secondsSinceActivity)
   }
 }
 
