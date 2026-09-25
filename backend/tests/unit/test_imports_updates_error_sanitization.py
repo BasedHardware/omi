@@ -10,85 +10,106 @@ Verifies that:
 from __future__ import annotations
 
 import os
+from pathlib import Path
 import sys
 from types import ModuleType
 import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
-os.environ.setdefault("ENCRYPTION_SECRET", "01234567890123456789012345678901")
-
-# Stub external dependencies if not present in the environment
-google_mod = ModuleType("google")
-google_mod.__path__ = []
-google_cloud = ModuleType("google.cloud")
-google_cloud.__path__ = []
-google_cloud_firestore = ModuleType("google.cloud.firestore")
-google_cloud_firestore.transactional = lambda fn: fn
-google_cloud_firestore_v1 = ModuleType("google.cloud.firestore_v1")
-google_cloud_firestore_v1.FieldFilter = MagicMock()
-google_cloud_firestore_v1.transactional = lambda fn: fn
-google_api_core = sys.modules.get("google.api_core") or ModuleType("google.api_core")
-google_api_core.__path__ = []
-google_api_core_exceptions = sys.modules.get("google.api_core.exceptions") or ModuleType("google.api_core.exceptions")
-for exc_name in ["InvalidArgument", "NotFound", "AlreadyExists", "Conflict", "GoogleAPICallError"]:
-    if not hasattr(google_api_core_exceptions, exc_name):
-        setattr(google_api_core_exceptions, exc_name, type(exc_name, (Exception,), {}))
-
-google_cloud_exceptions = sys.modules.get("google.cloud.exceptions") or ModuleType("google.cloud.exceptions")
-google_cloud_exceptions.NotFound = type("NotFound", (Exception,), {})
-google_auth = sys.modules.get("google.auth") or ModuleType("google.auth")
-google_auth_transport = sys.modules.get("google.auth.transport") or ModuleType("google.auth.transport")
-google_auth_transport_requests = sys.modules.get("google.auth.transport.requests") or ModuleType(
-    "google.auth.transport.requests"
-)
-google_auth_transport_requests.Request = MagicMock()
-
-google_cloud_tasks_v2 = ModuleType("google.cloud.tasks_v2")
-google_cloud.tasks_v2 = google_cloud_tasks_v2
-google_oauth2 = ModuleType("google.oauth2")
-google_oauth2.id_token = MagicMock()
-
-sys.modules["google"] = google_mod
-sys.modules["google.cloud"] = google_cloud
-sys.modules["google.cloud.tasks_v2"] = google_cloud_tasks_v2
-sys.modules["google.cloud.exceptions"] = google_cloud_exceptions
-sys.modules["google.cloud.firestore"] = google_cloud_firestore
-sys.modules["google.cloud.firestore_v1"] = google_cloud_firestore_v1
-sys.modules["google.api_core"] = google_api_core
-sys.modules["google.api_core.exceptions"] = google_api_core_exceptions
-sys.modules["google.auth"] = google_auth
-sys.modules["google.auth.transport"] = google_auth_transport
-sys.modules["google.auth.transport.requests"] = google_auth_transport_requests
-sys.modules["google.oauth2"] = google_oauth2
-sys.modules["google.oauth2.id_token"] = google_oauth2.id_token
-sys.modules.setdefault("google.protobuf", MagicMock())
-sys.modules.setdefault("google.protobuf.duration_pb2", MagicMock())
-firebase_admin = ModuleType("firebase_admin")
-firebase_admin.__path__ = []
-firebase_admin_auth = ModuleType("firebase_admin.auth")
-for exc_name in ["CertificateFetchError", "ExpiredIdTokenError", "InvalidIdTokenError", "RevokedIdTokenError"]:
-    setattr(firebase_admin_auth, exc_name, type(exc_name, (Exception,), {}))
-sys.modules["firebase_admin"] = firebase_admin
-sys.modules["firebase_admin.auth"] = firebase_admin_auth
-sys.modules.setdefault("cachetools", MagicMock())
-prom = sys.modules.get("prometheus_client")
-if prom is None or not hasattr(prom, "start_http_server"):
-    sys.modules["prometheus_client"] = MagicMock()
-
-limitless_mock = ModuleType("utils.imports.limitless")
-limitless_mock.create_import_job = MagicMock()
-limitless_mock.process_limitless_import = MagicMock()
-sys.modules["utils.imports.limitless"] = limitless_mock
-
-from fastapi import HTTPException
-
+BACKEND_DIR = Path(__file__).resolve().parents[2]
 SECRET_PATH = "/srv/omi/storage/appcasts/private_key.pem"
 FILESYSTEM_PATH = "/tmp/omi_imports_secret_user_dir/upload.zip"
 LEAK_MARKERS = ("/srv/omi", "private_key", "/tmp/omi_imports", "RuntimeError", "Traceback")
 
 
 class ImportsUpdatesErrorSanitizationTests(unittest.IsolatedAsyncioTestCase):
+    _stubbed_modules: dict = {}
+
+    @classmethod
+    def setUpClass(cls):
+        os.environ.setdefault("ENCRYPTION_SECRET", "01234567890123456789012345678901")
+
+        google_mod = ModuleType("google")
+        google_mod.__path__ = []
+        google_cloud = ModuleType("google.cloud")
+        google_cloud.__path__ = []
+        google_cloud_firestore = ModuleType("google.cloud.firestore")
+        google_cloud_firestore.transactional = lambda fn: fn
+        google_cloud_firestore_v1 = ModuleType("google.cloud.firestore_v1")
+        google_cloud_firestore_v1.FieldFilter = MagicMock()
+        google_cloud_firestore_v1.transactional = lambda fn: fn
+        google_api_core = sys.modules.get("google.api_core") or ModuleType("google.api_core")
+        google_api_core.__path__ = []
+        google_api_core_exceptions = sys.modules.get("google.api_core.exceptions") or ModuleType(
+            "google.api_core.exceptions"
+        )
+        for exc_name in ["InvalidArgument", "NotFound", "AlreadyExists", "Conflict", "GoogleAPICallError"]:
+            if not hasattr(google_api_core_exceptions, exc_name):
+                setattr(google_api_core_exceptions, exc_name, type(exc_name, (Exception,), {}))
+
+        google_cloud_exceptions = sys.modules.get("google.cloud.exceptions") or ModuleType("google.cloud.exceptions")
+        google_cloud_exceptions.NotFound = type("NotFound", (Exception,), {})
+        google_auth = sys.modules.get("google.auth") or ModuleType("google.auth")
+        google_auth_transport = sys.modules.get("google.auth.transport") or ModuleType("google.auth.transport")
+        google_auth_transport_requests = sys.modules.get("google.auth.transport.requests") or ModuleType(
+            "google.auth.transport.requests"
+        )
+        google_auth_transport_requests.Request = MagicMock()
+
+        google_cloud_tasks_v2 = ModuleType("google.cloud.tasks_v2")
+        google_cloud.tasks_v2 = google_cloud_tasks_v2
+        google_oauth2 = ModuleType("google.oauth2")
+        google_oauth2.id_token = MagicMock()
+
+        firebase_admin = ModuleType("firebase_admin")
+        firebase_admin.__path__ = []
+        firebase_admin_auth = ModuleType("firebase_admin.auth")
+        for exc_name in ["CertificateFetchError", "ExpiredIdTokenError", "InvalidIdTokenError", "RevokedIdTokenError"]:
+            setattr(firebase_admin_auth, exc_name, type(exc_name, (Exception,), {}))
+
+        limitless_mock = ModuleType("utils.imports.limitless")
+        limitless_mock.create_import_job = MagicMock()
+        limitless_mock.process_limitless_import = MagicMock()
+
+        stubs = {
+            "google": google_mod,
+            "google.cloud": google_cloud,
+            "google.cloud.tasks_v2": google_cloud_tasks_v2,
+            "google.cloud.exceptions": google_cloud_exceptions,
+            "google.cloud.firestore": google_cloud_firestore,
+            "google.cloud.firestore_v1": google_cloud_firestore_v1,
+            "google.api_core": google_api_core,
+            "google.api_core.exceptions": google_api_core_exceptions,
+            "google.auth": google_auth,
+            "google.auth.transport": google_auth_transport,
+            "google.auth.transport.requests": google_auth_transport_requests,
+            "google.oauth2": google_oauth2,
+            "google.oauth2.id_token": google_oauth2.id_token,
+            "google.protobuf": MagicMock(),
+            "google.protobuf.duration_pb2": MagicMock(),
+            "firebase_admin": firebase_admin,
+            "firebase_admin.auth": firebase_admin_auth,
+            "cachetools": MagicMock(),
+            "redis": MagicMock(),
+            "prometheus_client": MagicMock(),
+            "utils.imports.limitless": limitless_mock,
+        }
+
+        for name, mod in stubs.items():
+            if name not in sys.modules:
+                cls._stubbed_modules[name] = mod
+                sys.modules[name] = mod
+
+        if str(BACKEND_DIR) not in sys.path:
+            sys.path.insert(0, str(BACKEND_DIR))
+
+    @classmethod
+    def tearDownClass(cls):
+        for name in cls._stubbed_modules:
+            sys.modules.pop(name, None)
+
     async def test_appcast_generation_error_sanitized(self):
+        from fastapi import HTTPException
         from routers import updates
 
         dummy_entry = {
@@ -128,6 +149,7 @@ class ImportsUpdatesErrorSanitizationTests(unittest.IsolatedAsyncioTestCase):
                 self.assertNotIn(marker, str(ctx.exception.detail))
 
     async def test_import_file_save_error_sanitized(self):
+        from fastapi import HTTPException
         from routers import imports
         from models.import_job import ImportJobStatus
 
