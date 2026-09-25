@@ -16,19 +16,29 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 
 def aql_quote(val: Any) -> str:
-    """Format and escape a scalar value as an AQL literal."""
+    """Format and escape a scalar value as an AQL literal.
+
+    Escapes backslashes, single quotes, newlines, and control characters
+    to prevent syntax errors or unterminated string literals in ArangoDB.
+    """
     if val is None:
         return "null"
     if isinstance(val, bool):
         return "true" if val else "false"
     if isinstance(val, (int, float)):
         return str(val)
-    # Escape backslashes and single quotes for AQL string literals
-    text = str(val).replace("\\", "\\\\").replace("'", "\\'")
+    text = (
+        str(val)
+        .replace("\\", "\\\\")
+        .replace("'", "\\'")
+        .replace("\r", "\\r")
+        .replace("\n", "\\n")
+        .replace("\t", "\\t")
+    )
     return f"'{text}'"
 
 
@@ -36,7 +46,7 @@ def aql_array_literal(items: Sequence[str]) -> str:
     """Format a sequence of strings into an AQL array literal."""
     if not items:
         return "[]"
-    escaped_items = ["'" + str(x).replace("\\", "\\\\").replace("'", "\\'") + "'" for x in items]
+    escaped_items = [aql_quote(str(x)) for x in items]
     return f"[{', '.join(escaped_items)}]"
 
 
@@ -99,7 +109,12 @@ def generate_aql(
     inputs: Sequence[str],
     collection_name: str = "memories",
 ) -> Tuple[str, int]:
-    """Load, deduplicate by ID, and generate ArangoDB AQL ingestion statements."""
+    """Load, deduplicate by ID, and generate ArangoDB AQL ingestion statements.
+
+    Note: AQL statements do NOT use semicolons as statement terminators.
+    Each statement is emitted on its own line for individual execution via
+    ArangoShell (db._query) or batch runners.
+    """
     dedup: Dict[str, Dict[str, Any]] = {}
 
     for inp in inputs:
@@ -120,12 +135,12 @@ def generate_aql(
     normalized = [format_memory_for_arango(m) for m in dedup.values()]
 
     aql_lines: List[str] = [
-        f"// ArangoDB AQL Ingestion Script for Omi Memories",
+        "// ArangoDB AQL Ingestion Script for Omi Memories",
         f"// Total records: {len(normalized)}",
         f"// Target collection: {collection_name}",
         "",
-        f"// Ensure collection exists (or create via Web UI / arangosh):",
-        f"// db._createDocumentCollection('{collection_name}');",
+        "// Ensure collection exists (run in arangosh or Web UI before ingesting):",
+        f"// if (!db._collection('{collection_name}')) {{ db._createDocumentCollection('{collection_name}'); }}",
         "",
     ]
 
@@ -157,103 +172,95 @@ def generate_aql(
             f"updated_at: {updated_val} }}"
         )
 
+        # In ArangoDB AQL, statements do not have trailing semicolons
         aql_lines.append(
             f"UPSERT {{ _key: {key_val} }} "
             f"INSERT {doc_fields} "
             f"UPDATE {update_fields} "
-            f"IN {collection_name};"
+            f"IN {collection_name}"
         )
 
     aql_lines.extend([
         "",
-        f"// Sample Analytical Queries in AQL:",
-        f"// 1. Tag frequency analysis (unnesting tags):",
+        "// Sample Analytical Queries in AQL:",
+        "// 1. Tag frequency analysis (unnesting tags):",
         f"// FOR m IN {collection_name}",
-        f"//   FOR t IN m.tags",
-        f"//     COLLECT tag = t WITH COUNT INTO count",
-        f"//     SORT count DESC",
-        f"//     LIMIT 10",
-        f"//     RETURN {{ tag, count }};",
+        "//   FOR t IN m.tags",
+        "//     COLLECT tag = t WITH COUNT INTO count",
+        "//     SORT count DESC",
+        "//     LIMIT 10",
+        "//     RETURN { tag, count }",
         "",
-        f"// 2. Count memories by category:",
+        "// 2. Count memories by category:",
         f"// FOR m IN {collection_name}",
-        f"//   COLLECT cat = m.category WITH COUNT INTO total",
-        f"//   SORT total DESC",
-        f"//   RETURN {{ category: cat, total }};",
-        "",
-        f"// 3. Search memories by content substring:",
-        f"// FOR m IN {collection_name}",
-        f"//   FILTER CONTAINS(LOWER(m.content), 'meeting')",
-        f"//   SORT m.created_at DESC",
-        f"//   RETURN m;",
-        "",
+        "//   COLLECT cat = m.category WITH COUNT INTO total",
+        "//   SORT total DESC",
+        "//   RETURN { category: cat, total }",
     ])
 
-    return "\n".join(aql_lines), len(normalized)
+    return "\n".join(aql_lines) + "\n", len(normalized)
 
 
-def main() -> None:
+def build_parser() -> argparse.ArgumentParser:
+    """Build command line argument parser."""
     parser = argparse.ArgumentParser(
         description="Convert Omi memory JSON exports to an ArangoDB AQL ingestion script.",
-        epilog="""\
-examples:
-  omi --json memory list --limit 100 | python memories_to_arangodb.py - -o memories.aql
-  python memories_to_arangodb.py export.json -o memories.aql --collection user_memories
-  python memories_to_arangodb.py day1.json day2.json -o memories.aql --force
-""",
         formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  omi --json memory list --limit 100 > memories.json
+  python memories_to_arangodb.py memories.json -o memories.aql
+  cat memories.json | python memories_to_arangodb.py - -o memories.aql --collection user_memories
+        """,
     )
     parser.add_argument(
         "inputs",
-        metavar="INPUT",
         nargs="+",
-        help="Path(s) to Omi memory JSON file(s), or '-' to read from standard input.",
+        metavar="INPUT",
+        help="Input JSON file path(s), or '-' for standard input",
     )
     parser.add_argument(
         "-o",
         "--output",
-        metavar="FILE",
-        default="-",
-        help="Path to write the output .aql script (default: '-' for stdout).",
+        type=Path,
+        required=True,
+        help="Destination AQL script file path (.aql)",
     )
     parser.add_argument(
         "--collection",
         default="memories",
-        help="Target ArangoDB collection name (default: memories).",
+        help="Target ArangoDB collection name (default: memories)",
     )
     parser.add_argument(
         "-f",
         "--force",
         action="store_true",
-        help="Overwrite output file if it already exists.",
+        help="Overwrite destination file if it already exists",
     )
+    return parser
 
-    args = parser.parse_args()
 
-    if args.output != "-":
-        out_path = Path(args.output)
-        if out_path.exists() and not args.force:
-            sys.stderr.write(
-                f"Error: Output file already exists: {args.output} (use --force to overwrite)\n"
-            )
-            sys.exit(1)
+def main(argv: Optional[Sequence[str]] = None) -> int:
+    """CLI entry point."""
+    parser = build_parser()
+    args = parser.parse_args(argv)
+
+    dest: Path = args.output
+    if dest.exists() and not args.force:
+        sys.stderr.write(f"Error: Output file already exists: {dest} (use --force to overwrite)\n")
+        return 1
 
     try:
         aql_content, count = generate_aql(args.inputs, collection_name=args.collection)
-    except Exception as e:
-        sys.stderr.write(f"Error: {e}\n")
-        sys.exit(1)
+    except Exception as exc:
+        sys.stderr.write(f"Error generating AQL: {exc}\n")
+        return 1
 
-    if args.output == "-":
-        sys.stdout.write(aql_content + "\n")
-    else:
-        out_path = Path(args.output)
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(aql_content, encoding="utf-8")
-        sys.stderr.write(
-            f"Successfully generated ArangoDB AQL script: {args.output} ({count} memories)\n"
-        )
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    dest.write_text(aql_content, encoding="utf-8")
+    print(f"Generated ArangoDB AQL script with {count} unique record(s) -> {dest}")
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

@@ -56,11 +56,13 @@ docker run -d --name arangodb -p 8529:8529 -e ARANGO_NO_AUTH=1 arangodb/arangodb
 
 ### Execute the script via ArangoShell (`arangosh`)
 
+ArangoDB AQL statements do not use semicolons as statement terminators, and `db._query()` processes one statement at a time. The command below ensures the target collection exists and runs each generated `UPSERT` statement:
+
 ```sh
 arangosh --server.endpoint tcp://127.0.0.1:8529 --javascript.execute-string "
+if (!db._collection('memories')) { db._createDocumentCollection('memories'); }
 const fs = require('fs');
-const aql = fs.read('memories.aql');
-db._query(aql);
+fs.read('memories.aql').split('\n').filter(l => l.startsWith('UPSERT')).forEach(q => db._query(q));
 "
 ```
 
