@@ -121,6 +121,18 @@ for _mode in ('legacy', 'v2'):
     for _outcome in ('covered', 'missing', 'pending_upload', 'no_audio', 'unsupported'):
         OMI_AUDIO_TIMELINE_COVERAGE_TOTAL.labels(mode=_mode, outcome=_outcome)
 
+# Live speaker-ID match exits: every early return before a match decision, by
+# bounded reason (enumerated in routers/listen/speakers.py). The reason is the
+# only label — never uid, session, or conversation identifiers; those travel on
+# the paired log line instead, which is how a single user report is attributed.
+OMI_SPEAKER_ID_MATCH_EXITS_TOTAL = Counter(
+    'omi_speaker_id_match_exits_total',
+    'Live speaker-ID detections that returned before a match decision, by bounded reason',
+    ['reason'],
+)
+for _reason in ('window_outside_buffer', 'too_short', 'no_pcm', 'stale_generation', 'already_mapped'):
+    OMI_SPEAKER_ID_MATCH_EXITS_TOTAL.labels(reason=_reason)
+
 # Export zero-valued children from a healthy but idle process. This lets
 # Prometheus/Grafana distinguish no user traffic from an absent scrape target.
 for _journey in ('chat_response', 'pusher_session', 'capture_finalization'):
