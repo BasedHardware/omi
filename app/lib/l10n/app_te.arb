@@ -1114,7 +1114,6 @@
     "daySummary": "రోజు సారాంశం",
     "summaryGenerated": "సారాంశం రూపొందించబడింది",
     "claudeDesktop": "Claude డెస్క్‌టాప్",
-    "addToClaudeConfig": "claude_desktop_config.json కు జోడించండి",
     "copyConfig": "కాన్ఫిగ్ కాపీ చేయండి",
     "configCopied": "కాన్ఫిగ్ క్లిప్‌బోర్డ్‌కు కాపీ చేయబడింది",
     "listeningMins": "వినుట (నిమిషాలు)",
@@ -2636,10 +2635,6 @@
     "@claudeDesktop": {
         "description": "Claude Desktop integration section"
     },
-    "addToClaudeDesktopConfig": "claude_desktop_config.json కు జోడించండి",
-    "@addToClaudeDesktopConfig": {
-        "description": "Description for Claude Desktop config"
-    },
     "@configCopiedToClipboard": {
         "description": "Confirmation when config is copied"
     },
@@ -2673,10 +2668,6 @@
     },
     "@clientSecret": {
         "description": "OAuth client secret label"
-    },
-    "useYourMcpApiKey": "మీ MCP API కీని ఉపయోగించండి",
-    "@useYourMcpApiKey": {
-        "description": "Hint for client secret value"
     },
     "@webhooks": {
         "description": "Webhooks section header"
@@ -11097,6 +11088,11 @@
     "voiceSettingsAskToTag": "గొంతులను ట్యాగ్ చేయమని నన్ను అడగండి",
     "voiceSettingsAskToTagSubtitle": "అప్పుడప్పుడు, మీ ఇటీవలి సంభాషణల్లో ఎవరు మాట్లాడారో Omi అడుగుతుంది",
     "voiceSettingsSaveOthersSubtitle": "మీరు ఎవరికైనా పేరు పెట్టినప్పుడు, తదుపరిసారి గుర్తించడానికి Omi ఒక చిన్న గొంతు నమూనాను ఉంచుకుంటుంది",
+    "leaveBlank": "ఖాళీగా ఉంచండి",
+    "mcpOAuthSetup": "claude.ai లో కస్టమ్ కనెక్టర్‌ను జోడించి, సర్వర్ URL ను పేస్ట్ చేయండి. Claude అడ్వాన్స్డ్ OAuth Client ID అడిగితే, కింది విలువను ఉపయోగించి, సీక్రెట్‌ను ఖాళీగా ఉంచండి — మీ MCP API కీని OAuth సీక్రెట్‌గా ఎప్పుడూ ఉపయోగించకండి.",
+    "claudeCode": "Claude Code",
+    "addToClaudeCodeConfig": "~/.claude.json కు జోడించండి",
+    "claudeDesktopConnectorSetup": "Claude Desktop → Settings → Connectors లో కస్టమ్ కనెక్టర్‌ను జోడించి, సర్వర్ URL ను పేస్ట్ చేయండి. Claude అడ్వాన్స్డ్ OAuth Client ID అడిగితే, కింది విలువను ఉపయోగించి, సీక్రెట్‌ను ఖాళీగా ఉంచండి — మీ MCP API కీని OAuth సీక్రెట్‌గా ఎప్పుడూ ఉపయోగించకండి.",
     "transcriptionUnavailableRecordingContinues": "ట్రాన్స్‌క్రిప్షన్‌లు అందుబాటులో లేవు, రికార్డింగ్ పరికరంలో కొనసాగుతుంది మరియు తర్వాత ప్రాసెస్ చేయబడుతుంది",
     "transcriptionUnavailableSavingOnDevice": "ట్రాన్స్‌క్రిప్షన్ అందుబాటులో లేదు · పరికరంలో సేవ్ చేయబడుతోంది",
     "transcriptionsPendingFraction": "పెండింగ్‌లో ఉన్న ట్రాన్స్‌క్రిప్షన్‌లు {pending}/{total}",

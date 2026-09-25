@@ -936,9 +936,6 @@ class AppLocalizationsUk extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'Додати до claude_desktop_config.json';
-
-  @override
   String get copyConfig => 'Копіювати конфігурацію';
 
   @override
@@ -2480,13 +2477,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get clearAllNodesAndConnections => 'Очистити всі вузли та з\'єднання';
 
   @override
-  String get addToClaudeDesktopConfig => 'Додати до claude_desktop_config.json';
-
-  @override
   String get connectAiAssistantsToData => 'Підключіть AI-помічників до ваших даних';
-
-  @override
-  String get useYourMcpApiKey => 'Використовуйте свій MCP API-ключ';
 
   @override
   String get realTimeTranscript => 'Транскрипція в реальному часі';
@@ -11179,6 +11170,23 @@ class AppLocalizationsUk extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'Коли ви називаєте когось, Omi зберігає короткий зразок голосу, щоб наступного разу впізнати цю людину';
+
+  @override
+  String get leaveBlank => 'Залиште порожнім';
+
+  @override
+  String get mcpOAuthSetup =>
+      'На claude.ai додайте користувацький конектор і вставте URL сервера. Якщо Claude попросить розширений OAuth Client ID, використайте значення нижче і залиште секрет порожнім — ніколи не використовуйте свій MCP API ключ як секрет OAuth.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'Додати до ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'На Claude Desktop → Settings → Connectors додайте користувацький конектор і вставте URL сервера. Якщо Claude попросить розширений OAuth Client ID, використайте значення нижче і залиште секрет порожнім — ніколи не використовуйте свій MCP API ключ як секрет OAuth.';
 
   @override
   String get transcriptionUnavailableRecordingContinues =>

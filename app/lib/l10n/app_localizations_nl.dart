@@ -937,9 +937,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'Toevoegen aan claude_desktop_config.json';
-
-  @override
   String get copyConfig => 'Configuratie kopiëren';
 
   @override
@@ -2485,13 +2482,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get clearAllNodesAndConnections => 'Alle knooppunten en verbindingen wissen';
 
   @override
-  String get addToClaudeDesktopConfig => 'Toevoegen aan claude_desktop_config.json';
-
-  @override
   String get connectAiAssistantsToData => 'Verbind AI-assistenten met je gegevens';
-
-  @override
-  String get useYourMcpApiKey => 'Gebruik je MCP API-sleutel';
 
   @override
   String get realTimeTranscript => 'Realtime transcriptie';
@@ -11192,6 +11183,23 @@ class AppLocalizationsNl extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'Als je iemand een naam geeft, bewaart Omi een kort stemfragment om diegene de volgende keer te herkennen';
+
+  @override
+  String get leaveBlank => 'Leeg laten';
+
+  @override
+  String get mcpOAuthSetup =>
+      'Voeg op claude.ai een aangepaste connector toe en plak de server-URL. Als Claude om een geavanceerde OAuth Client ID vraagt, gebruik dan de waarde hieronder en laat het geheim leeg — gebruik je MCP API-sleutel nooit als OAuth-geheim.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'Toevoegen aan ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'Voeg op Claude Desktop → Settings → Connectors een aangepaste connector toe en plak de server-URL. Als Claude om een geavanceerde OAuth Client ID vraagt, gebruik dan de waarde hieronder en laat het geheim leeg — gebruik je MCP API-sleutel nooit als OAuth-geheim.';
 
   @override
   String get transcriptionUnavailableRecordingContinues =>

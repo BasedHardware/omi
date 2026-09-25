@@ -1114,7 +1114,6 @@
     "daySummary": "দিনের সারসংক্ষেপ",
     "summaryGenerated": "সারসংক্ষেপ তৈরি হয়েছে",
     "claudeDesktop": "Claude ডেস্কটপ",
-    "addToClaudeConfig": "claude_desktop_config.json এ যোগ করুন",
     "copyConfig": "কনফিগ কপি করুন",
     "configCopied": "কনফিগ ক্লিপবোর্ডে কপি হয়েছে",
     "listeningMins": "শোনা (মিনিট)",
@@ -2636,10 +2635,6 @@
     "@claudeDesktop": {
         "description": "Claude Desktop integration section"
     },
-    "addToClaudeDesktopConfig": "claude_desktop_config.json এ যোগ করুন",
-    "@addToClaudeDesktopConfig": {
-        "description": "Description for Claude Desktop config"
-    },
     "@configCopiedToClipboard": {
         "description": "Confirmation when config is copied"
     },
@@ -2673,10 +2668,6 @@
     },
     "@clientSecret": {
         "description": "OAuth client secret label"
-    },
-    "useYourMcpApiKey": "আপনার MCP API চাবি ব্যবহার করুন",
-    "@useYourMcpApiKey": {
-        "description": "Hint for client secret value"
     },
     "@webhooks": {
         "description": "Webhooks section header"
@@ -11097,6 +11088,11 @@
     "voiceSettingsAskToTag": "আমাকে কণ্ঠস্বর চিহ্নিত করতে বলুন",
     "voiceSettingsAskToTagSubtitle": "মাঝে মাঝে Omi জিজ্ঞাসা করবে আপনার সাম্প্রতিক কথোপকথনে কে কথা বলছিল",
     "voiceSettingsSaveOthersSubtitle": "আপনি কারও নাম দিলে, পরের বার চিনতে Omi একটি ছোট কণ্ঠস্বরের নমুনা রাখে",
+    "leaveBlank": "খালি রাখুন",
+    "mcpOAuthSetup": "claude.ai-এ একটি কাস্টম কানেক্টর যোগ করুন এবং সার্ভার URL পেস্ট করুন। Claude যদি অ্যাডভান্সড OAuth Client ID চায়, নিচের মানটি ব্যবহার করুন এবং সিক্রেট খালি রাখুন — OAuth সিক্রেট হিসেবে আপনার MCP API কী কখনোই ব্যবহার করবেন না।",
+    "claudeCode": "Claude Code",
+    "addToClaudeCodeConfig": "~/.claude.json এ যোগ করুন",
+    "claudeDesktopConnectorSetup": "Claude Desktop → Settings → Connectors-এ একটি কাস্টম কানেক্টর যোগ করুন এবং সার্ভার URL পেস্ট করুন। Claude যদি অ্যাডভান্সড OAuth Client ID চায়, নিচের মানটি ব্যবহার করুন এবং সিক্রেট খালি রাখুন — OAuth সিক্রেট হিসেবে আপনার MCP API কী কখনোই ব্যবহার করবেন না।",
     "transcriptionUnavailableRecordingContinues": "ট্রান্সক্রিপশন অনুপলব্ধ, ডিভাইসে রেকর্ডিং চলছে এবং পরে প্রসেস করা হবে",
     "transcriptionUnavailableSavingOnDevice": "ট্রান্সক্রিপশন অনুপলব্ধ · ডিভাইসে সংরক্ষণ হচ্ছে",
     "transcriptionsPendingFraction": "অপেক্ষমাণ ট্রান্সক্রিপশন {pending}/{total}",

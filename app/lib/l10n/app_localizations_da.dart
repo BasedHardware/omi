@@ -934,9 +934,6 @@ class AppLocalizationsDa extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'Tilføj til claude_desktop_config.json';
-
-  @override
   String get copyConfig => 'Kopier konfiguration';
 
   @override
@@ -2461,13 +2458,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get clearAllNodesAndConnections => 'Ryd alle noder og forbindelser';
 
   @override
-  String get addToClaudeDesktopConfig => 'Tilføj til claude_desktop_config.json';
-
-  @override
   String get connectAiAssistantsToData => 'Forbind AI-assistenter til dine data';
-
-  @override
-  String get useYourMcpApiKey => 'Brug din MCP API-nøgle';
 
   @override
   String get realTimeTranscript => 'Realtidstranskription';
@@ -11144,6 +11135,23 @@ class AppLocalizationsDa extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'Når du navngiver nogen, gemmer Omi en kort stemmeprøve, så den kan genkende dem næste gang';
+
+  @override
+  String get leaveBlank => 'Lad stå tomt';
+
+  @override
+  String get mcpOAuthSetup =>
+      'På claude.ai skal du tilføje en brugerdefineret connector og indsætte server-URL\'en. Hvis Claude beder om et avanceret OAuth Client ID, skal du bruge værdien nedenfor og lade hemmeligheden stå tom — brug aldrig din MCP API-nøgle som OAuth-hemmelighed.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'Tilføj til ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'På Claude Desktop → Settings → Connectors skal du tilføje en brugerdefineret connector og indsætte server-URL\'en. Hvis Claude beder om et avanceret OAuth Client ID, skal du bruge værdien nedenfor og lade hemmeligheden stå tom — brug aldrig din MCP API-nøgle som OAuth-hemmelighed.';
 
   @override
   String get transcriptionUnavailableRecordingContinues =>

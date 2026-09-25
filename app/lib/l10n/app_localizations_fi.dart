@@ -932,9 +932,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'Lisää claude_desktop_config.json-tiedostoon';
-
-  @override
   String get copyConfig => 'Kopioi kokoonpano';
 
   @override
@@ -2476,13 +2473,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String get clearAllNodesAndConnections => 'Tyhjennä kaikki solmut ja yhteydet';
 
   @override
-  String get addToClaudeDesktopConfig => 'Lisää claude_desktop_config.json-tiedostoon';
-
-  @override
   String get connectAiAssistantsToData => 'Yhdistä AI-avustajat tietoihisi';
-
-  @override
-  String get useYourMcpApiKey => 'Käytä MCP API -avaintasi';
 
   @override
   String get realTimeTranscript => 'Reaaliaikainen litterointi';
@@ -11161,6 +11152,23 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'Kun nimeät jonkun, Omi tallentaa lyhyen ääninäytteen tunnistaakseen hänet ensi kerralla';
+
+  @override
+  String get leaveBlank => 'Jätä tyhjäksi';
+
+  @override
+  String get mcpOAuthSetup =>
+      'Lisää claude.ai-palvelussa mukautettu liitin ja liitä palvelimen URL-osoite. Jos Claude pyytää edistynyttä OAuth Client ID:tä, käytä alla olevaa arvoa ja jätä salaisuus tyhjäksi — älä koskaan käytä MCP API -avaintasi OAuth-salaisuuksena.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'Lisää ~/.claude.json-tiedostoon';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'Lisää Claude Desktop → Settings → Connectors-palvelussa mukautettu liitin ja liitä palvelimen URL-osoite. Jos Claude pyytää edistynyttä OAuth Client ID:tä, käytä alla olevaa arvoa ja jätä salaisuus tyhjäksi — älä koskaan käytä MCP API -avaintasi OAuth-salaisuuksena.';
 
   @override
   String get transcriptionUnavailableRecordingContinues =>

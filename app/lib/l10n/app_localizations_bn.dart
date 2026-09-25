@@ -934,9 +934,6 @@ class AppLocalizationsBn extends AppLocalizations {
   String get claudeDesktop => 'Claude ডেস্কটপ';
 
   @override
-  String get addToClaudeConfig => 'claude_desktop_config.json এ যোগ করুন';
-
-  @override
   String get copyConfig => 'কনফিগ কপি করুন';
 
   @override
@@ -2482,13 +2479,7 @@ class AppLocalizationsBn extends AppLocalizations {
   String get clearAllNodesAndConnections => 'সমস্ত নোড এবং সংযোগ পরিষ্কার করুন';
 
   @override
-  String get addToClaudeDesktopConfig => 'claude_desktop_config.json এ যোগ করুন';
-
-  @override
   String get connectAiAssistantsToData => 'AI সহায়কদের আপনার ডেটার সাথে সংযুক্ত করুন';
-
-  @override
-  String get useYourMcpApiKey => 'আপনার MCP API চাবি ব্যবহার করুন';
 
   @override
   String get realTimeTranscript => 'রিয়েল-টাইম ট্রান্সক্রিপ্ট';
@@ -11159,6 +11150,23 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get voiceSettingsSaveOthersSubtitle => 'আপনি কারও নাম দিলে, পরের বার চিনতে Omi একটি ছোট কণ্ঠস্বরের নমুনা রাখে';
+
+  @override
+  String get leaveBlank => 'খালি রাখুন';
+
+  @override
+  String get mcpOAuthSetup =>
+      'claude.ai-এ একটি কাস্টম কানেক্টর যোগ করুন এবং সার্ভার URL পেস্ট করুন। Claude যদি অ্যাডভান্সড OAuth Client ID চায়, নিচের মানটি ব্যবহার করুন এবং সিক্রেট খালি রাখুন — OAuth সিক্রেট হিসেবে আপনার MCP API কী কখনোই ব্যবহার করবেন না।';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => '~/.claude.json এ যোগ করুন';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'Claude Desktop → Settings → Connectors-এ একটি কাস্টম কানেক্টর যোগ করুন এবং সার্ভার URL পেস্ট করুন। Claude যদি অ্যাডভান্সড OAuth Client ID চায়, নিচের মানটি ব্যবহার করুন এবং সিক্রেট খালি রাখুন — OAuth সিক্রেট হিসেবে আপনার MCP API কী কখনোই ব্যবহার করবেন না।';
 
   @override
   String get transcriptionUnavailableRecordingContinues =>

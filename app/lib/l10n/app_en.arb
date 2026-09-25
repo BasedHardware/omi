@@ -1132,7 +1132,6 @@
     "daySummary": "Day Summary",
     "summaryGenerated": "Summary generated",
     "claudeDesktop": "Claude Desktop",
-    "addToClaudeConfig": "Add to claude_desktop_config.json",
     "copyConfig": "Copy Config",
     "configCopied": "Config copied to clipboard",
     "listeningMins": "Listening (mins)",
@@ -2686,10 +2685,6 @@
     "@claudeDesktop": {
         "description": "Claude Desktop integration section"
     },
-    "addToClaudeDesktopConfig": "Add to claude_desktop_config.json",
-    "@addToClaudeDesktopConfig": {
-        "description": "Description for Claude Desktop config"
-    },
     "@configCopiedToClipboard": {
         "description": "Confirmation when config is copied"
     },
@@ -2723,10 +2718,6 @@
     },
     "@clientSecret": {
         "description": "OAuth client secret label"
-    },
-    "useYourMcpApiKey": "Use your MCP API key",
-    "@useYourMcpApiKey": {
-        "description": "Hint for client secret value"
     },
     "@webhooks": {
         "description": "Webhooks section header"
@@ -13233,6 +13224,26 @@
     "voiceSettingsSaveOthersSubtitle": "When you name someone, Omi keeps a short voice sample so it can recognize them next time",
     "@voiceSettingsSaveOthersSubtitle": {
         "description": "Settings switch explanation for remembering voices of people the user names"
+    },
+    "leaveBlank": "Leave blank",
+    "@leaveBlank": {
+        "description": "Hint for an intentionally empty field (e.g. OAuth client secret)"
+    },
+    "mcpOAuthSetup": "On claude.ai, add a custom connector and paste the server URL. If Claude asks for an advanced OAuth Client ID, use the value below and leave the secret blank — never use your MCP API key as an OAuth secret.",
+    "@mcpOAuthSetup": {
+        "description": "OAuth connector setup instructions for the hosted MCP server"
+    },
+    "claudeCode": "Claude Code",
+    "@claudeCode": {
+        "description": "Claude Code (CLI) integration section"
+    },
+    "addToClaudeCodeConfig": "Add to ~/.claude.json",
+    "@addToClaudeCodeConfig": {
+        "description": "Subtitle under the Claude Code section: add the snippet to ~/.claude.json"
+    },
+    "claudeDesktopConnectorSetup": "On Claude Desktop → Settings → Connectors, add a custom connector and paste the server URL. If Claude asks for an advanced OAuth Client ID, use the value below and leave the secret blank — never use your MCP API key as an OAuth secret.",
+    "@claudeDesktopConnectorSetup": {
+        "description": "Claude Desktop connector setup instructions for the hosted MCP server"
     },
     "transcriptionUnavailableRecordingContinues": "Transcriptions are unavailable, recording continues on device and will process later",
     "@transcriptionUnavailableRecordingContinues": {

@@ -937,9 +937,6 @@ class AppLocalizationsBg extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'Добавете към claude_desktop_config.json';
-
-  @override
   String get copyConfig => 'Копирай конфигурация';
 
   @override
@@ -2482,13 +2479,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get clearAllNodesAndConnections => 'Изчистване на всички възли и връзки';
 
   @override
-  String get addToClaudeDesktopConfig => 'Добавяне към claude_desktop_config.json';
-
-  @override
   String get connectAiAssistantsToData => 'Свържете AI асистенти с вашите данни';
-
-  @override
-  String get useYourMcpApiKey => 'Използвайте вашия MCP API ключ';
 
   @override
   String get realTimeTranscript => 'Транскрипция в реално време';
@@ -11200,6 +11191,23 @@ class AppLocalizationsBg extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'Когато назовете някого, Omi пази кратък гласов образец, за да го разпознае следващия път';
+
+  @override
+  String get leaveBlank => 'Оставете празно';
+
+  @override
+  String get mcpOAuthSetup =>
+      'В claude.ai добавете персонализиран конектор и поставете URL адреса на сървъра. Ако Claude поиска разширен OAuth Client ID, използвайте стойността по-долу и оставете тайната празна — никога не използвайте вашия MCP API ключ като OAuth тайна.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'Добавяне към ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'В Claude Desktop → Settings → Connectors добавете персонализиран конектор и поставете URL адреса на сървъра. Ако Claude поиска разширен OAuth Client ID, използвайте стойността по-долу и оставете тайната празна — никога не използвайте вашия MCP API ключ като OAuth тайна.';
 
   @override
   String get transcriptionUnavailableRecordingContinues =>

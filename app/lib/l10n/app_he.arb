@@ -1114,7 +1114,6 @@
     "daySummary": "סיכום יום",
     "summaryGenerated": "סיכום נוצר",
     "claudeDesktop": "Claude Desktop",
-    "addToClaudeConfig": "הוסף ל-claude_desktop_config.json",
     "copyConfig": "העתק קונפיגורציה",
     "configCopied": "קונפיגורציה הועתקה ללוח הגזוזים",
     "listeningMins": "הקשבה (דקות)",
@@ -2636,10 +2635,6 @@
     "@claudeDesktop": {
         "description": "Claude Desktop integration section"
     },
-    "addToClaudeDesktopConfig": "הוסף ל-claude_desktop_config.json",
-    "@addToClaudeDesktopConfig": {
-        "description": "Description for Claude Desktop config"
-    },
     "@configCopiedToClipboard": {
         "description": "Confirmation when config is copied"
     },
@@ -2673,10 +2668,6 @@
     },
     "@clientSecret": {
         "description": "OAuth client secret label"
-    },
-    "useYourMcpApiKey": "השתמש במפתח ה-API של MCP שלך",
-    "@useYourMcpApiKey": {
-        "description": "Hint for client secret value"
     },
     "@webhooks": {
         "description": "Webhooks section header"
@@ -11097,6 +11088,11 @@
     "voiceSettingsAskToTag": "בקשו ממני לתייג קולות",
     "voiceSettingsAskToTagSubtitle": "מדי פעם Omi ישאל מי דיבר בשיחות האחרונות שלכם",
     "voiceSettingsSaveOthersSubtitle": "כשאתם נותנים שם למישהו, Omi שומר דגימת קול קצרה כדי לזהות אותו בפעם הבאה",
+    "leaveBlank": "השאר ריק",
+    "mcpOAuthSetup": "ב-claude.ai הוסף מחבר מותאם אישית והדבק את כתובת השרת. אם Claude מבקש Client ID מתקדם של OAuth, השתמש בערך שלמטה והשאיר את הסוד ריק — לעולם אל תשתמש במפתח ה-API של MCP שלך כסוד OAuth.",
+    "claudeCode": "Claude Code",
+    "addToClaudeCodeConfig": "הוסף ל-~/.claude.json",
+    "claudeDesktopConnectorSetup": "ב-Claude Desktop → Settings → Connectors הוסף מחבר מותאם אישית והדבק את כתובת השרת. אם Claude מבקש Client ID מתקדם של OAuth, השתמש בערך שלמטה והשאיר את הסוד ריק — לעולם אל תשתמש במפתח ה-API של MCP שלך כסוד OAuth.",
     "transcriptionUnavailableRecordingContinues": "התמלילים אינם זמינים, ההקלטה ממשיכה במכשיר ותעובד מאוחר יותר",
     "transcriptionUnavailableSavingOnDevice": "תמליל לא זמין · נשמר במכשיר",
     "transcriptionsPendingFraction": "תמלילים ממתינים {pending}/{total}",

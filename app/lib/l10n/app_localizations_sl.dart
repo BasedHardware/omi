@@ -933,9 +933,6 @@ class AppLocalizationsSl extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'Dodaj v claude_desktop_config.json';
-
-  @override
   String get copyConfig => 'Kopiraj konfigurацију';
 
   @override
@@ -2484,13 +2481,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String get clearAllNodesAndConnections => 'Počisti vse vozlišča in povezave';
 
   @override
-  String get addToClaudeDesktopConfig => 'Dodaj v claude_desktop_config.json';
-
-  @override
   String get connectAiAssistantsToData => 'Povežite AI asistente s svojimi podatki';
-
-  @override
-  String get useYourMcpApiKey => 'Uporabite svoj MCP API ključ';
 
   @override
   String get realTimeTranscript => 'Prepis v realnem času';
@@ -11190,6 +11181,23 @@ class AppLocalizationsSl extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'Ko nekoga poimenujete, Omi shrani kratek vzorec glasu, da ga naslednjič prepozna';
+
+  @override
+  String get leaveBlank => 'Pustite prazno';
+
+  @override
+  String get mcpOAuthSetup =>
+      'Na claude.ai dodajte prirojeni konektor in prilepite URL strežnika. Če Claude zahteva napredni OAuth Client ID, uporabite spodnjo vrednost in pustite skrivnost prazno — nikoli ne uporabljajte svojega MCP API ključa kot OAuth skrivnost.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'Dodaj v ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'Na Claude Desktop → Settings → Connectors dodajte prirojeni konektor in prilepite URL strežnika. Če Claude zahteva napredni OAuth Client ID, uporabite spodnjo vrednost in pustite skrivnost prazno — nikoli ne uporabljajte svojega MCP API ključa kot OAuth skrivnost.';
 
   @override
   String get transcriptionUnavailableRecordingContinues =>

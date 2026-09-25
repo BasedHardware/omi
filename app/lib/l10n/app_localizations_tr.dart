@@ -936,9 +936,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get claudeDesktop => 'Claude Masaüstü';
 
   @override
-  String get addToClaudeConfig => 'claude_desktop_config.json\'a ekle';
-
-  @override
   String get copyConfig => 'Yapılandırmayı Kopyala';
 
   @override
@@ -2483,13 +2480,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get clearAllNodesAndConnections => 'Tüm düğümleri ve bağlantıları temizle';
 
   @override
-  String get addToClaudeDesktopConfig => 'claude_desktop_config.json dosyasına ekle';
-
-  @override
   String get connectAiAssistantsToData => 'AI asistanlarını verilerinize bağlayın';
-
-  @override
-  String get useYourMcpApiKey => 'MCP API anahtarınızı kullanın';
 
   @override
   String get realTimeTranscript => 'Gerçek Zamanlı Transkript';
@@ -11170,6 +11161,23 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'Birine ad verdiğinde Omi, onu bir dahaki sefere tanıyabilmek için kısa bir ses örneği saklar';
+
+  @override
+  String get leaveBlank => 'Boş bırakın';
+
+  @override
+  String get mcpOAuthSetup =>
+      'claude.ai\'de özel bir bağlayıcı ekleyin ve sunucu URL\'sini yapıştırın. Claude gelişmiş bir OAuth Client ID isterse aşağıdaki değeri kullanın ve gizli anahtarı boş bırakın — MCP API anahtarınızı asla OAuth gizli anahtarı olarak kullanmayın.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => '~/.claude.json dosyasına ekle';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'Claude Desktop → Settings → Connectors\'de özel bir bağlayıcı ekleyin ve sunucu URL\'sini yapıştırın. Claude gelişmiş bir OAuth Client ID isterse aşağıdaki değeri kullanın ve gizli anahtarı boş bırakın — MCP API anahtarınızı asla OAuth gizli anahtarı olarak kullanmayın.';
 
   @override
   String get transcriptionUnavailableRecordingContinues =>

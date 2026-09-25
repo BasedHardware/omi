@@ -941,9 +941,6 @@ class AppLocalizationsDe extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'Zu claude_desktop_config.json hinzufügen';
-
-  @override
   String get copyConfig => 'Konfiguration kopieren';
 
   @override
@@ -2499,13 +2496,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get clearAllNodesAndConnections => 'Alle Knoten und Verbindungen löschen';
 
   @override
-  String get addToClaudeDesktopConfig => 'Zu claude_desktop_config.json hinzufügen';
-
-  @override
   String get connectAiAssistantsToData => 'KI-Assistenten mit Ihren Daten verbinden';
-
-  @override
-  String get useYourMcpApiKey => 'Verwenden Sie Ihren MCP-API-Schlüssel';
 
   @override
   String get realTimeTranscript => 'Echtzeit-Transkript';
@@ -11250,6 +11241,23 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'Wenn du jemanden benennst, speichert Omi eine kurze Stimmprobe, um die Person beim nächsten Mal zu erkennen';
+
+  @override
+  String get leaveBlank => 'Leer lassen';
+
+  @override
+  String get mcpOAuthSetup =>
+      'Fügen Sie auf claude.ai einen benutzerdefinierten Konnektor hinzu und fügen Sie die Server-URL ein. Wenn Claude nach einer erweiterten OAuth-Client-ID fragt, verwenden Sie den untenstehenden Wert und lassen Sie das Secret leer — verwenden Sie niemals Ihren MCP-API-Schlüssel als OAuth-Secret.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'Zu ~/.claude.json hinzufügen';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'Fügen Sie auf Claude Desktop → Settings → Connectors einen benutzerdefinierten Konnektor hinzu und fügen Sie die Server-URL ein. Wenn Claude nach einer erweiterten OAuth-Client-ID fragt, verwenden Sie den untenstehenden Wert und lassen Sie das Secret leer — verwenden Sie niemals Ihren MCP-API-Schlüssel als OAuth-Secret.';
 
   @override
   String get transcriptionUnavailableRecordingContinues =>

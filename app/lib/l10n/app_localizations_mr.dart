@@ -935,9 +935,6 @@ class AppLocalizationsMr extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'claude_desktop_config.json मध्ये जोडा';
-
-  @override
   String get copyConfig => 'कॉन्फिग कॉपी करा';
 
   @override
@@ -2484,13 +2481,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get clearAllNodesAndConnections => 'सर्व नोड्स आणि कनेक्शन साफ करा';
 
   @override
-  String get addToClaudeDesktopConfig => 'claude_desktop_config.json मध्ये जोडा';
-
-  @override
   String get connectAiAssistantsToData => 'AI सहायकांना आपल्या डेटाशी कनेक्ट करा';
-
-  @override
-  String get useYourMcpApiKey => 'आपली MCP API की वापरा';
 
   @override
   String get realTimeTranscript => 'रिअल-टाइम ट्रान्सक्रिप्ट';
@@ -11167,6 +11158,23 @@ class AppLocalizationsMr extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'तुम्ही एखाद्याला नाव दिल्यावर, पुढच्या वेळी ओळखता यावे म्हणून Omi आवाजाचा एक छोटा नमुना ठेवतो';
+
+  @override
+  String get leaveBlank => 'रिक्त ठेवा';
+
+  @override
+  String get mcpOAuthSetup =>
+      'claude.ai वर कस्टम कनेक्टर जोडा आणि सर्व्हर URL पेस्ट करा. Claude ने अ‍ॅडव्हान्स्ड OAuth Client ID मागितल्यास, खालील मूल्य वापरा आणि सीक्रेट रिक्त ठेवा — तुमची MCP API की कधीही OAuth सीक्रेट म्हणून वापरू नका.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => '~/.claude.json मध्ये जोडा';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'Claude Desktop → Settings → Connectors वर कस्टम कनेक्टर जोडा आणि सर्व्हर URL पेस्ट करा. Claude ने अ‍ॅडव्हान्स्ड OAuth Client ID मागितल्यास, खालील मूल्य वापरा आणि सीक्रेट रिक्त ठेवा — तुमची MCP API की कधीही OAuth सीक्रेट म्हणून वापरू नका.';
 
   @override
   String get transcriptionUnavailableRecordingContinues =>

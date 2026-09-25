@@ -935,9 +935,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'Tambahkan ke claude_desktop_config.json';
-
-  @override
   String get copyConfig => 'Salin Konfigurasi';
 
   @override
@@ -2481,13 +2478,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get clearAllNodesAndConnections => 'Hapus semua node dan koneksi';
 
   @override
-  String get addToClaudeDesktopConfig => 'Tambahkan ke claude_desktop_config.json';
-
-  @override
   String get connectAiAssistantsToData => 'Hubungkan asisten AI ke data Anda';
-
-  @override
-  String get useYourMcpApiKey => 'Gunakan kunci API MCP Anda';
 
   @override
   String get realTimeTranscript => 'Transkrip Real-time';
@@ -11168,6 +11159,23 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'Saat Anda memberi nama seseorang, Omi menyimpan sampel suara singkat agar bisa mengenalinya lain kali';
+
+  @override
+  String get leaveBlank => 'Biarkan kosong';
+
+  @override
+  String get mcpOAuthSetup =>
+      'Di claude.ai, tambahkan konektor kustom dan tempel URL server. Jika Claude meminta OAuth Client ID tingkat lanjut, gunakan nilai di bawah ini dan biarkan secret kosong — jangan pernah menggunakan kunci API MCP Anda sebagai secret OAuth.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'Tambahkan ke ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'Di Claude Desktop → Settings → Connectors, tambahkan konektor kustom dan tempel URL server. Jika Claude meminta OAuth Client ID tingkat lanjut, gunakan nilai di bawah ini dan biarkan secret kosong — jangan pernah menggunakan kunci API MCP Anda sebagai secret OAuth.';
 
   @override
   String get transcriptionUnavailableRecordingContinues =>

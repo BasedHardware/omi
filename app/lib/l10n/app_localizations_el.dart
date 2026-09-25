@@ -939,9 +939,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'Προσθήκη στο claude_desktop_config.json';
-
-  @override
   String get copyConfig => 'Αντιγραφή Διαμόρφωσης';
 
   @override
@@ -2496,13 +2493,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get clearAllNodesAndConnections => 'Εκκαθάριση όλων των κόμβων και συνδέσεων';
 
   @override
-  String get addToClaudeDesktopConfig => 'Προσθήκη στο claude_desktop_config.json';
-
-  @override
   String get connectAiAssistantsToData => 'Συνδέστε βοηθούς AI με τα δεδομένα σας';
-
-  @override
-  String get useYourMcpApiKey => 'Χρησιμοποιήστε το κλειδί MCP API σας';
 
   @override
   String get realTimeTranscript => 'Μεταγραφή σε πραγματικό χρόνο';
@@ -11234,6 +11225,23 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'Όταν ονομάζετε κάποιον, το Omi κρατά ένα σύντομο δείγμα φωνής για να τον αναγνωρίσει την επόμενη φορά';
+
+  @override
+  String get leaveBlank => 'Αφήστε το κενό';
+
+  @override
+  String get mcpOAuthSetup =>
+      'Στο claude.ai, προσθέστε έναν προσαρμοσμένο σύνδεσμο και επικολλήστε το URL του διακομιστή. Αν το Claude ζητήσει ένα σύνθετο OAuth Client ID, χρησιμοποιήστε την τιμή παρακάτω και αφήστε το μυστικό κενό — μην χρησιμοποιείτε ποτέ το κλειδί MCP API σας ως μυστικό OAuth.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'Προσθήκη στο ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'Στο Claude Desktop → Settings → Connectors, προσθέστε έναν προσαρμοσμένο σύνδεσμο και επικολλήστε το URL του διακομιστή. Αν το Claude ζητήσει ένα σύνθετο OAuth Client ID, χρησιμοποιήστε την τιμή παρακάτω και αφήστε το μυστικό κενό — μην χρησιμοποιείτε ποτέ το κλειδί MCP API σας ως μυστικό OAuth.';
 
   @override
   String get transcriptionUnavailableRecordingContinues =>

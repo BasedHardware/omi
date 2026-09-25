@@ -190,7 +190,7 @@ def prepare_for_write(
     return decorator
 
 
-def prepare_for_read(decrypt_func: Callable[[Dict[str, Any], str], Dict[str, Any]]) -> Callable[[F], F]:
+def prepare_for_read(decrypt_func: Callable[[Dict[str, Any], str], Optional[Dict[str, Any]]]) -> Callable[[F], F]:
     """
     Decorator to decrypt data after reading from the database.
     It processes the return value of the decorated function. If the return value is a dict or

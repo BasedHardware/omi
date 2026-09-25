@@ -1114,7 +1114,6 @@
     "daySummary": "Povzetek dneva",
     "summaryGenerated": "Povzetek je generiran",
     "claudeDesktop": "Claude Desktop",
-    "addToClaudeConfig": "Dodaj v claude_desktop_config.json",
     "copyConfig": "Kopiraj konfigurацију",
     "configCopied": "Konfiguracija kopirana v odložišče",
     "listeningMins": "Poslušanje (min)",
@@ -2636,10 +2635,6 @@
     "@claudeDesktop": {
         "description": "Claude Desktop integration section"
     },
-    "addToClaudeDesktopConfig": "Dodaj v claude_desktop_config.json",
-    "@addToClaudeDesktopConfig": {
-        "description": "Description for Claude Desktop config"
-    },
     "@configCopiedToClipboard": {
         "description": "Confirmation when config is copied"
     },
@@ -2673,10 +2668,6 @@
     },
     "@clientSecret": {
         "description": "OAuth client secret label"
-    },
-    "useYourMcpApiKey": "Uporabite svoj MCP API ključ",
-    "@useYourMcpApiKey": {
-        "description": "Hint for client secret value"
     },
     "@webhooks": {
         "description": "Webhooks section header"
@@ -11097,6 +11088,11 @@
     "voiceSettingsAskToTag": "Prosi me za označevanje glasov",
     "voiceSettingsAskToTagSubtitle": "Občasno vas Omi vpraša, kdo je govoril v vaših nedavnih pogovorih",
     "voiceSettingsSaveOthersSubtitle": "Ko nekoga poimenujete, Omi shrani kratek vzorec glasu, da ga naslednjič prepozna",
+    "leaveBlank": "Pustite prazno",
+    "mcpOAuthSetup": "Na claude.ai dodajte prirojeni konektor in prilepite URL strežnika. Če Claude zahteva napredni OAuth Client ID, uporabite spodnjo vrednost in pustite skrivnost prazno — nikoli ne uporabljajte svojega MCP API ključa kot OAuth skrivnost.",
+    "claudeCode": "Claude Code",
+    "addToClaudeCodeConfig": "Dodaj v ~/.claude.json",
+    "claudeDesktopConnectorSetup": "Na Claude Desktop → Settings → Connectors dodajte prirojeni konektor in prilepite URL strežnika. Če Claude zahteva napredni OAuth Client ID, uporabite spodnjo vrednost in pustite skrivnost prazno — nikoli ne uporabljajte svojega MCP API ključa kot OAuth skrivnost.",
     "transcriptionUnavailableRecordingContinues": "Transkripcije niso na voljo, snemanje se nadaljuje v napravi in bo obdelano pozneje",
     "transcriptionUnavailableSavingOnDevice": "Transkripcija ni na voljo · shranjevanje v napravi",
     "transcriptionsPendingFraction": "Transkripcije v čakanju {pending}/{total}",

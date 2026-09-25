@@ -934,9 +934,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'Přidat do claude_desktop_config.json';
-
-  @override
   String get copyConfig => 'Kopírovat konfiguraci';
 
   @override
@@ -2478,13 +2475,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get clearAllNodesAndConnections => 'Vymazat všechny uzly a spojení';
 
   @override
-  String get addToClaudeDesktopConfig => 'Přidat do claude_desktop_config.json';
-
-  @override
   String get connectAiAssistantsToData => 'Připojte AI asistenty k vašim datům';
-
-  @override
-  String get useYourMcpApiKey => 'Použijte svůj MCP API klíč';
 
   @override
   String get realTimeTranscript => 'Přepis v reálném čase';
@@ -11155,6 +11146,23 @@ class AppLocalizationsCs extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'Když někoho pojmenujete, Omi si uchová krátkou ukázku hlasu, aby ho příště poznal';
+
+  @override
+  String get leaveBlank => 'Nechte prázdné';
+
+  @override
+  String get mcpOAuthSetup =>
+      'Na claude.ai přidejte vlastní konektor a vložte URL serveru. Pokud Claude požádá o pokročilé OAuth Client ID, použijte hodnotu níže a nechte tajný klíč prázdný — nikdy nepoužívejte svůj MCP API klíč jako OAuth secret.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'Přidat do ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'Na Claude Desktop → Settings → Connectors přidejte vlastní konektor a vložte URL serveru. Pokud Claude požádá o pokročilé OAuth Client ID, použijte hodnotu níže a nechte tajný klíč prázdný — nikdy nepoužívejte svůj MCP API klíč jako OAuth secret.';
 
   @override
   String get transcriptionUnavailableRecordingContinues =>

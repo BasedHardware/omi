@@ -936,9 +936,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'Thêm vào claude_desktop_config.json';
-
-  @override
   String get copyConfig => 'Sao chép cấu hình';
 
   @override
@@ -2479,13 +2476,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get clearAllNodesAndConnections => 'Xóa tất cả các nút và kết nối';
 
   @override
-  String get addToClaudeDesktopConfig => 'Thêm vào claude_desktop_config.json';
-
-  @override
   String get connectAiAssistantsToData => 'Kết nối trợ lý AI với dữ liệu của bạn';
-
-  @override
-  String get useYourMcpApiKey => 'Sử dụng khóa API MCP của bạn';
 
   @override
   String get realTimeTranscript => 'Bản ghi âm Thời gian thực';
@@ -11153,6 +11144,23 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'Khi bạn đặt tên cho ai đó, Omi lưu một mẫu giọng ngắn để nhận ra họ vào lần sau';
+
+  @override
+  String get leaveBlank => 'Để trống';
+
+  @override
+  String get mcpOAuthSetup =>
+      'Trên claude.ai, thêm trình kết nối tùy chỉnh và dán URL máy chủ. Nếu Claude yêu cầu OAuth Client ID nâng cao, hãy dùng giá trị bên dưới và để trống phần bí mật — không bao giờ dùng khóa API MCP của bạn làm bí mật OAuth.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'Thêm vào ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'Trên Claude Desktop → Settings → Connectors, thêm trình kết nối tùy chỉnh và dán URL máy chủ. Nếu Claude yêu cầu OAuth Client ID nâng cao, hãy dùng giá trị bên dưới và để trống phần bí mật — không bao giờ dùng khóa API MCP của bạn làm bí mật OAuth.';
 
   @override
   String get transcriptionUnavailableRecordingContinues =>

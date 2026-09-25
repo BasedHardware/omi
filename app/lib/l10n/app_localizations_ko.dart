@@ -922,9 +922,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'claude_desktop_config.json에 추가';
-
-  @override
   String get copyConfig => '구성 복사';
 
   @override
@@ -2436,13 +2433,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get clearAllNodesAndConnections => '모든 노드와 연결 지우기';
 
   @override
-  String get addToClaudeDesktopConfig => 'claude_desktop_config.json에 추가';
-
-  @override
   String get connectAiAssistantsToData => 'AI 어시스턴트를 데이터에 연결';
-
-  @override
-  String get useYourMcpApiKey => 'MCP API 키 사용';
 
   @override
   String get realTimeTranscript => '실시간 대화 내용';
@@ -10978,6 +10969,23 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get voiceSettingsSaveOthersSubtitle => '누군가에게 이름을 붙이면, 다음에 알아볼 수 있도록 Omi가 짧은 음성 샘플을 보관해요';
+
+  @override
+  String get leaveBlank => '비워 두세요';
+
+  @override
+  String get mcpOAuthSetup =>
+      'claude.ai에서 사용자 지정 커넥터를 추가하고 서버 URL을 붙여넣으세요. Claude가 고급 OAuth Client ID를 요청하면 아래 값을 사용하고 시크릿은 비워 두세요. MCP API 키를 OAuth 시크릿으로 절대 사용하지 마세요.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => '~/.claude.json에 추가';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'Claude Desktop → Settings → Connectors에서 사용자 지정 커넥터를 추가하고 서버 URL을 붙여넣으세요. Claude가 고급 OAuth Client ID를 요청하면 아래 값을 사용하고 시크릿은 비워 두세요. MCP API 키를 OAuth 시크릿으로 절대 사용하지 마세요.';
 
   @override
   String get transcriptionUnavailableRecordingContinues => '전사를 이용할 수 없습니다. 기기에서 녹음이 계속되며 나중에 처리됩니다';

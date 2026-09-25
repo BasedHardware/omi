@@ -1114,7 +1114,6 @@
     "daySummary": "दिवस सारांश",
     "summaryGenerated": "सारांश तयार केला",
     "claudeDesktop": "Claude Desktop",
-    "addToClaudeConfig": "claude_desktop_config.json मध्ये जोडा",
     "copyConfig": "कॉन्फिग कॉपी करा",
     "configCopied": "कॉन्फिग क्लिपबोर्डला कॉपी केला",
     "listeningMins": "ऐकत आहे (मिनिटे)",
@@ -2636,10 +2635,6 @@
     "@claudeDesktop": {
         "description": "Claude Desktop integration section"
     },
-    "addToClaudeDesktopConfig": "claude_desktop_config.json मध्ये जोडा",
-    "@addToClaudeDesktopConfig": {
-        "description": "Description for Claude Desktop config"
-    },
     "@configCopiedToClipboard": {
         "description": "Confirmation when config is copied"
     },
@@ -2673,10 +2668,6 @@
     },
     "@clientSecret": {
         "description": "OAuth client secret label"
-    },
-    "useYourMcpApiKey": "आपली MCP API की वापरा",
-    "@useYourMcpApiKey": {
-        "description": "Hint for client secret value"
     },
     "@webhooks": {
         "description": "Webhooks section header"
@@ -11097,6 +11088,11 @@
     "voiceSettingsAskToTag": "मला आवाज टॅग करायला सांगा",
     "voiceSettingsAskToTagSubtitle": "अधूनमधून Omi विचारेल की तुमच्या अलीकडील संभाषणांमध्ये कोण बोलत होते",
     "voiceSettingsSaveOthersSubtitle": "तुम्ही एखाद्याला नाव दिल्यावर, पुढच्या वेळी ओळखता यावे म्हणून Omi आवाजाचा एक छोटा नमुना ठेवतो",
+    "leaveBlank": "रिक्त ठेवा",
+    "mcpOAuthSetup": "claude.ai वर कस्टम कनेक्टर जोडा आणि सर्व्हर URL पेस्ट करा. Claude ने अ‍ॅडव्हान्स्ड OAuth Client ID मागितल्यास, खालील मूल्य वापरा आणि सीक्रेट रिक्त ठेवा — तुमची MCP API की कधीही OAuth सीक्रेट म्हणून वापरू नका.",
+    "claudeCode": "Claude Code",
+    "addToClaudeCodeConfig": "~/.claude.json मध्ये जोडा",
+    "claudeDesktopConnectorSetup": "Claude Desktop → Settings → Connectors वर कस्टम कनेक्टर जोडा आणि सर्व्हर URL पेस्ट करा. Claude ने अ‍ॅडव्हान्स्ड OAuth Client ID मागितल्यास, खालील मूल्य वापरा आणि सीक्रेट रिक्त ठेवा — तुमची MCP API की कधीही OAuth सीक्रेट म्हणून वापरू नका.",
     "transcriptionUnavailableRecordingContinues": "ट्रान्सक्रिप्शन उपलब्ध नाही, रेकॉर्डिंग डिव्हाइसवर सुरू आहे आणि नंतर प्रोसेस होईल",
     "transcriptionUnavailableSavingOnDevice": "ट्रान्सक्रिप्शन अनुपलब्ध · डिव्हाइसवर जतन केले जात आहे",
     "transcriptionsPendingFraction": "प्रलंबित ट्रान्सक्रिप्शन {pending}/{total}",

@@ -1114,7 +1114,6 @@
     "daySummary": "நாள் சாரம்",
     "summaryGenerated": "சாரம் உருவாக்கப்பட்டது",
     "claudeDesktop": "Claude Desktop",
-    "addToClaudeConfig": "claude_desktop_config.json க்கு சேர்க்கவும்",
     "copyConfig": "ஆட்டு நகலெடுக்கவும்",
     "configCopied": "ஆட்டு கிளிப்போர்டுக்கு நகலெடுக்கப்பட்டது",
     "listeningMins": "கேட்கிறது (நிமிடங்கள்)",
@@ -2636,10 +2635,6 @@
     "@claudeDesktop": {
         "description": "Claude Desktop integration section"
     },
-    "addToClaudeDesktopConfig": "claude_desktop_config.json இல் சேர்க்கவும்",
-    "@addToClaudeDesktopConfig": {
-        "description": "Description for Claude Desktop config"
-    },
     "@configCopiedToClipboard": {
         "description": "Confirmation when config is copied"
     },
@@ -2673,10 +2668,6 @@
     },
     "@clientSecret": {
         "description": "OAuth client secret label"
-    },
-    "useYourMcpApiKey": "உங்கள் MCP API விசையைப் பயன்படுத்தவும்",
-    "@useYourMcpApiKey": {
-        "description": "Hint for client secret value"
     },
     "@webhooks": {
         "description": "Webhooks section header"
@@ -11097,6 +11088,11 @@
     "voiceSettingsAskToTag": "குரல்களைக் குறிக்க என்னிடம் கேள்",
     "voiceSettingsAskToTagSubtitle": "அவ்வப்போது, உங்கள் சமீபத்திய உரையாடல்களில் யார் பேசினார்கள் என்று Omi கேட்கும்",
     "voiceSettingsSaveOthersSubtitle": "நீங்கள் ஒருவருக்குப் பெயரிடும்போது, அடுத்த முறை அடையாளம் காண Omi ஒரு சிறிய குரல் மாதிரியை வைத்திருக்கும்",
+    "leaveBlank": "வெற்றாக விடவும்",
+    "mcpOAuthSetup": "claude.ai இல் தனிப்பயன் கனெக்டரைச் சேர்த்து, சர்வர் URL ஐ ஒட்டவும். Claude மேம்பட்ட OAuth Client ID கேட்டால், கீழே உள்ள மதிப்பைப் பயன்படுத்தி, ரகசியத்தை வெற்றாக விடவும் — உங்கள் MCP API திறவுகோலை OAuth ரகசியமாக ஒருபோதும் பயன்படுத்த வேண்டாம்.",
+    "claudeCode": "Claude Code",
+    "addToClaudeCodeConfig": "~/.claude.json இல் சேர்க்கவும்",
+    "claudeDesktopConnectorSetup": "Claude Desktop → Settings → Connectors இல் தனிப்பயன் கனெக்டரைச் சேர்த்து, சர்வர் URL ஐ ஒட்டவும். Claude மேம்பட்ட OAuth Client ID கேட்டால், கீழே உள்ள மதிப்பைப் பயன்படுத்தி, ரகசியத்தை வெற்றாக விடவும் — உங்கள் MCP API திறவுகோலை OAuth ரகசியமாக ஒருபோதும் பயன்படுத்த வேண்டாம்.",
     "transcriptionUnavailableRecordingContinues": "நகலெடுப்புகள் கிடைக்கவில்லை, பதிவு சாதனத்தில் தொடர்கிறது, பின்னர் செயலாக்கப்படும்",
     "transcriptionUnavailableSavingOnDevice": "நகலெடுப்பு இல்லை · சாதனத்தில் சேமிக்கப்படுகிறது",
     "transcriptionsPendingFraction": "நிலுவையில் உள்ள நகலெடுப்புகள் {pending}/{total}",

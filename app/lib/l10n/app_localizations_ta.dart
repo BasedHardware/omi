@@ -938,9 +938,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'claude_desktop_config.json க்கு சேர்க்கவும்';
-
-  @override
   String get copyConfig => 'ஆட்டு நகலெடுக்கவும்';
 
   @override
@@ -2496,13 +2493,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get clearAllNodesAndConnections => 'அனைத்து முனைகள் மற்றும் இணைப்புகளைத் தெளிவு செய்';
 
   @override
-  String get addToClaudeDesktopConfig => 'claude_desktop_config.json இல் சேர்க்கவும்';
-
-  @override
   String get connectAiAssistantsToData => 'AI உதவிக்காரர்களை உங்கள் தரவுக்கு இணைக்கவும்';
-
-  @override
-  String get useYourMcpApiKey => 'உங்கள் MCP API விசையைப் பயன்படுத்தவும்';
 
   @override
   String get realTimeTranscript => 'நிகழ்நேர மொழிபெயர்ப்பு';
@@ -11235,6 +11226,23 @@ class AppLocalizationsTa extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'நீங்கள் ஒருவருக்குப் பெயரிடும்போது, அடுத்த முறை அடையாளம் காண Omi ஒரு சிறிய குரல் மாதிரியை வைத்திருக்கும்';
+
+  @override
+  String get leaveBlank => 'வெற்றாக விடவும்';
+
+  @override
+  String get mcpOAuthSetup =>
+      'claude.ai இல் தனிப்பயன் கனெக்டரைச் சேர்த்து, சர்வர் URL ஐ ஒட்டவும். Claude மேம்பட்ட OAuth Client ID கேட்டால், கீழே உள்ள மதிப்பைப் பயன்படுத்தி, ரகசியத்தை வெற்றாக விடவும் — உங்கள் MCP API திறவுகோலை OAuth ரகசியமாக ஒருபோதும் பயன்படுத்த வேண்டாம்.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => '~/.claude.json இல் சேர்க்கவும்';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'Claude Desktop → Settings → Connectors இல் தனிப்பயன் கனெக்டரைச் சேர்த்து, சர்வர் URL ஐ ஒட்டவும். Claude மேம்பட்ட OAuth Client ID கேட்டால், கீழே உள்ள மதிப்பைப் பயன்படுத்தி, ரகசியத்தை வெற்றாக விடவும் — உங்கள் MCP API திறவுகோலை OAuth ரகசியமாக ஒருபோதும் பயன்படுத்த வேண்டாம்.';
 
   @override
   String get transcriptionUnavailableRecordingContinues =>
