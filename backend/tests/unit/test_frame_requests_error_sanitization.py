@@ -11,9 +11,38 @@ from __future__ import annotations
 
 from pathlib import Path
 import re
+import sys
 import unittest
+from unittest.mock import MagicMock
 
-FRAME_REQUESTS_ROUTER_FILE = Path(__file__).resolve().parents[2] / "routers" / "frame_requests.py"
+# Stub heavy external and database dependencies for fast, hermetic unit testing
+for mod in [
+    "google",
+    "google.cloud",
+    "google.cloud.firestore",
+    "google.cloud.firestore_v1",
+    "google.cloud.storage",
+    "firebase_admin",
+    "firebase_admin.auth",
+    "database.frame_requests",
+    "database.conversations",
+    "services.conversation_frame_evidence",
+    "utils.executors",
+    "utils.integration_telemetry",
+    "utils.jit_rollout",
+    "utils.other.endpoints",
+    "utils.retrieval.frame_request_authority",
+    "utils.retrieval.frame_request_storage",
+]:
+    sys.modules.setdefault(mod, MagicMock())
+
+BACKEND_DIR = Path(__file__).resolve().parents[2]
+if str(BACKEND_DIR) not in sys.path:
+    sys.path.insert(0, str(BACKEND_DIR))
+
+from routers.frame_requests import _sanitize_frame_request_error
+
+FRAME_REQUESTS_ROUTER_FILE = BACKEND_DIR / "routers" / "frame_requests.py"
 
 
 def _get_function_source(function_name: str) -> str:
@@ -26,6 +55,51 @@ def _get_function_source(function_name: str) -> str:
 
 
 class FrameRequestsErrorSanitizationTests(unittest.TestCase):
+    def test_sanitize_frame_request_error_behavior(self):
+        fallback = "frame_request_invalid_parameters"
+
+        # 1. Clean structured error key returned as-is
+        self.assertEqual(
+            _sanitize_frame_request_error(ValueError("clean_error_code"), fallback),
+            "clean_error_code",
+        )
+
+        # 2. Raw traceback filtered to fallback
+        self.assertEqual(
+            _sanitize_frame_request_error(
+                ValueError("Traceback (most recent call last):\n  File 'x.py', line 1\nZeroDivisionError"),
+                fallback,
+            ),
+            fallback,
+        )
+
+        # 3. Firestore / google.cloud internals filtered to fallback
+        self.assertEqual(
+            _sanitize_frame_request_error(
+                ValueError("google.cloud.exceptions.NotFound: 404 Document not found in Firestore"),
+                fallback,
+            ),
+            fallback,
+        )
+
+        # 4. Multiline error text filtered to fallback
+        self.assertEqual(
+            _sanitize_frame_request_error(ValueError("line 1\nline 2 error details"), fallback),
+            fallback,
+        )
+
+        # 5. Generic 'Error:' prefix filtered to fallback
+        self.assertEqual(
+            _sanitize_frame_request_error(ValueError("Error: invalid internal token state"), fallback),
+            fallback,
+        )
+
+        # 6. Empty exception detail falls back
+        self.assertEqual(
+            _sanitize_frame_request_error(ValueError(""), fallback),
+            fallback,
+        )
+
     def test_create_frame_request_sanitizes_errors(self):
         source = _get_function_source("create_frame_request")
         self.assertNotIn("detail=str(exc)", source)
@@ -64,3 +138,4 @@ class FrameRequestsErrorSanitizationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+

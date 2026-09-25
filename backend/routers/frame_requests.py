@@ -56,7 +56,7 @@ logger = logging.getLogger(__name__)
 
 
 def _sanitize_frame_request_error(exc: Exception, fallback: str) -> str:
-    logger.warning(f"Frame request operation failed: {type(exc).__name__}")
+    logger.warning(f"Frame request operation failed: {type(exc).__name__}: {exc}")
     detail = str(exc)
     if any(marker in detail for marker in ("Traceback", "Exception", "Error:", "Firestore", "google.cloud", "\n")):
         return fallback
