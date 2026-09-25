@@ -34,6 +34,7 @@ from run_checks import (
     resolve_explicit_checks,
     run_git,
     skipped_platform_checks,
+    trigger_matches,
     validate_manifest,
 )
 
@@ -1096,6 +1097,40 @@ class PlatformTests(unittest.TestCase):
         self.assertEqual(selections[0].check.id, "target")
         self.assertEqual(selections[0].matched_paths, ("desktop/macos/Desktop/Sources/App.swift",))
         self.assertEqual(selections[0].check.reason, "desktop source changed")
+
+    def test_globstar_prefix_trigger_matches_repository_root(self):
+        """`**/x` covers depth 0. A root-level file is not a different file type."""
+        for pattern, path in (
+            ("**/*.json", "firebase.json"),
+            ("**/*.yaml", "codemagic.yaml"),
+            ("**/*.swift", "Package.swift"),
+            ("**/Dockerfile*", "Dockerfile"),
+            ("**/AGENTS.md", "AGENTS.md"),
+        ):
+            with self.subTest(pattern=pattern, path=path):
+                self.assertTrue(trigger_matches(pattern, path))
+
+    def test_globstar_prefix_trigger_still_matches_nested_and_rejects_others(self):
+        self.assertTrue(trigger_matches("**/*.json", "backend/config/plan_catalog.json"))
+        self.assertFalse(trigger_matches("**/*.json", "firebase.yaml"))
+        self.assertFalse(trigger_matches("**/AGENTS.md", "AGENTS.md.bak"))
+
+    def test_root_level_source_change_selects_plan_catalog_contract(self):
+        """The Stripe-literal scan walks from the root, so selection must too.
+
+        `plan-catalog-contract` is triggered only by `**/*.<ext>` patterns. Before
+        the leading-`**/` collapse, a production Stripe object ID committed to a
+        root-level source file -- `firebase.json`, `omi.json`, `codemagic.yaml` --
+        changed no path the guard could see, and the exhaustiveness contract it
+        exists to enforce reported success without running.
+        """
+        manifest = load_manifest(MANIFEST_PATH)
+        for path in ("firebase.json", "codemagic.yaml", "Package.swift"):
+            with self.subTest(path=path):
+                selected = {
+                    selection.check.id for selection in resolve_check_selections(manifest, [path], "ci")
+                }
+                self.assertIn("plan-catalog-contract", selected)
 
     def test_explicit_check_ids_preserve_manifest_commands(self):
         manifest = Manifest(

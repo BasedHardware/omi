@@ -28,6 +28,7 @@ EVENTS = frozenset(
         'conversation_created',
         'conversation_finalized',
         'duplicate_capture_detected',
+        'capture_group_joined',
         'sync_job_enqueued',
         'chat_message_sent',
         'desktop_chat_completion',

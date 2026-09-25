@@ -20,6 +20,10 @@ SENTENCE_FINDALL_RE = re.compile(
     r'[^' + re.escape(''.join(SENTENCE_ENDERS)) + r']+(?:' + SENTENCE_ENDERS_CLASS + r'\s*|\s*$)'
 )
 
+# Maximum gap between the end of one segment and the start of the next for the two to still be
+# treated as one continuing utterance. Mirrors the window _should_merge_same_speaker uses.
+CROSS_SPEAKER_REPAIR_MAX_GAP_SECONDS = 3
+
 
 def legacy_conversation_segment_id(conversation_id: str, index: int) -> str:
     """Stable IDs for legacy stored transcripts, shared by reads and manual writes."""
@@ -202,6 +206,15 @@ class TranscriptSegment(BaseModel):
                 return False
             return len(first_sentence) < len(last_incomplete)
 
+        def _is_chronological_continuation(a: 'TranscriptSegment', b: 'TranscriptSegment') -> bool:
+            # Cross-speaker sentence repair rewrites timestamps and can delete a segment, so it
+            # must only run when b really is a's successor. Segments arrive out of order across
+            # batches (a late arrival from an earlier batch is appended after a newer tail), and
+            # without this guard such a pair is "repaired" into a segment whose end precedes its
+            # start, or the older segment is dropped and its words reattributed to the newer
+            # speaker. Same-speaker merging already uses the same 3 second continuity window.
+            return b.start >= a.start and b.end >= a.end and (b.start - a.end) < CROSS_SPEAKER_REPAIR_MAX_GAP_SECONDS
+
         def _should_merge_same_speaker(a: 'TranscriptSegment', b: 'TranscriptSegment') -> bool:
             return (
                 (a.speaker == b.speaker or (a.is_user and b.is_user))
@@ -246,7 +259,13 @@ class TranscriptSegment(BaseModel):
             if b.speaker_id_scope != a.speaker_id_scope:
                 return a, b
 
-            if a.speaker != b.speaker and not (a.is_user and b.is_user) and a.text and b.text:
+            if (
+                a.speaker != b.speaker
+                and not (a.is_user and b.is_user)
+                and a.text
+                and b.text
+                and _is_chronological_continuation(a, b)
+            ):
                 last_incomplete, prefix = _extract_last_incomplete_sentence(a.text)
                 if last_incomplete:
                     first_sentence, rest = _split_first_sentence(b.text)

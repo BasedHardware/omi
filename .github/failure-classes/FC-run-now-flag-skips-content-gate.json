@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "id": "FC-run-now-flag-skips-content-gate",
+  "violated_contract": "A content decision that every processed record must pass (keep versus discard) cannot be skipped as a side effect of an unrelated caller flag. `process_conversation(force_process=True)` meant both \"run enrichment now, do not defer\" and \"skip the discard gate\", and four of six production callers pass it on a conversation's FIRST processing: the offline-sync append, POST /v1/conversations, POST /v1/conversations/{id}/finalize, and desktop first-open enrichment. Nothing fails: the flag was documented as a reprocess switch, each caller's tests stay green, and the skipped gate leaves no trace. Measured on a real account 2026-09-23, 12 of 13 junk conversations in two days (\"Brief Acknowledgment\", a 0.32 s \"Oh\") came from the sync path with full LLM summaries, and the read-side fragment filter then treated those generated summaries as evidence the user cared.",
+  "canonical_prevention": "Callers state why they process (`ProcessingTrigger`), and one policy table (`backend/utils/conversations/relevance.py::RELEVANCE_POLICY`) decides whether that trigger assesses relevance; only user actions (first open, reprocess, merge) keep without assessment. The decision is one tiered function (user restore, stdlib-only rules, then the model) whose outcome is stored on the conversation and counted by trigger and deciding tier, so a path that skips the gate shows up in `conversation_relevance_decision_total{decided_by=\"policy\"}` instead of in a user's list. Visibility protection comes only from user actions, never from generated output.",
+  "canonical_prevention_artifact": [
+    "backend/utils/conversations/relevance.py",
+    "backend/tests/unit/test_conversation_relevance.py",
+    "backend/tests/unit/test_process_conversation_duplicate_capture.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/conversations/relevance.py",
+    "backend/utils/conversations/relevance_rules.py",
+    "backend/utils/conversations/process_conversation.py",
+    "backend/utils/conversations/fragment_visibility.py",
+    "backend/utils/sync/pipeline.py",
+    "backend/utils/sync/assignment.py"
+  ],
+  "status": "open"
+}

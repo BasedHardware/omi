@@ -145,5 +145,5 @@ def test_lazy_enrichment_uses_non_user_usage_attribution(monkeypatch, partial_pr
         result = conv_router._enrich_deferred_conversation('u1', conversation)
 
     assert result['deferred'] is False
-    assert process.call_args.kwargs['is_reprocess'] is False
+    assert process.call_args.kwargs['trigger'] is conv_router.ProcessingTrigger.FIRST_OPEN
     assert process.call_args.kwargs['app_usage_attribution'] is AppUsageAttribution.NON_USER_REPROCESS

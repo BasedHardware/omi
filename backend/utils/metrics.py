@@ -1,4 +1,5 @@
 import os
+import re
 import threading
 from typing import Any
 
@@ -224,6 +225,101 @@ def record_lazy_desktop_deferral(*, event: str) -> None:
         label = 'other'
     try:
         LAZY_DESKTOP_DEFERRAL_TOTAL.labels(event=label).inc()
+    except Exception:
+        pass
+
+
+# Conversation relevance (utils/conversations/relevance.py): one increment per
+# processed conversation. `decided_by="policy"` counts triggers that never
+# assess; a share of them that grows is a path skipping the gate by design,
+# and `reason="model_error"` is the model tier failing open to keep.
+CONVERSATION_RELEVANCE_LABELS = {
+    'trigger': frozenset(
+        {'capture_end', 'client_finalize', 'sync_update', 'first_open', 'user_reprocess', 'merge', 'sync_intake'}
+    ),
+    'verdict': frozenset({'keep', 'discard'}),
+    'decided_by': frozenset({'policy', 'user', 'rule', 'model', 'jev', 'override'}),
+}
+
+CONVERSATION_RELEVANCE_DECISION_TOTAL = Counter(
+    # `omi_` prefix: the Cloud Run metrics sidecar keeps only omi_.* (deploy/cloud_run_gmp_sidecar.yaml).
+    'omi_conversation_relevance_decision_total',
+    (
+        'Conversation relevance decisions by processing trigger, verdict, deciding tier, and '
+        'bounded reason (a rule id, model_keep/model_discard/model_error, jev_keep/jev_discard/jev_error, a policy trigger, '
+        'restored, or calendar_overlap). Never labeled by uid. Per-pod; sum() across jobs.'
+    ),
+    ['trigger', 'verdict', 'decided_by', 'reason'],
+)
+
+_RELEVANCE_REASON = re.compile(r'^[a-z][a-z0-9_]{0,39}$')
+
+
+def record_conversation_relevance(*, trigger: str, verdict: str, decided_by: str, reason: str) -> None:
+    """Never raises: observability must not change a processing outcome."""
+    try:
+        labels = {
+            name: value if value in CONVERSATION_RELEVANCE_LABELS[name] else 'other'
+            for name, value in (('trigger', trigger), ('verdict', verdict), ('decided_by', decided_by))
+        }
+        labels['reason'] = reason if _RELEVANCE_REASON.match(reason) else 'other'
+        CONVERSATION_RELEVANCE_DECISION_TOTAL.labels(**labels).inc()
+    except Exception:
+        pass
+
+
+# Jev decision model (utils/llm/jev_client.py, #14835). One increment per
+# caller-visible Jev question, after its retry. `lane` names the product
+# decision, never a user; every non-success outcome means the caller kept its
+# safe default.
+JEV_DECISION_LABELS = {
+    'lane': frozenset({'conversation_relevance', 'memory_owner'}),
+    'outcome': frozenset({'success', 'unconfigured', 'timeout', 'transport_error', 'http_error', 'malformed'}),
+}
+
+JEV_DECISION_TOTAL = Counter(
+    # `omi_` prefix: the Cloud Run metrics sidecar keeps only omi_.* (deploy/cloud_run_gmp_sidecar.yaml).
+    'omi_jev_decision_total',
+    'Jev decision-model questions by product lane and outcome. Never labeled by uid. Per-pod; sum() across jobs.',
+    ['lane', 'outcome'],
+)
+
+JEV_DECISION_LATENCY_SECONDS = Histogram(
+    'omi_jev_decision_latency_seconds',
+    'Wall time of one Jev question including its single retry, by product lane and outcome.',
+    ['lane', 'outcome'],
+    buckets=(0.1, 0.25, 0.5, 0.75, 1, 1.5, 2, 3, 5, 7.5),
+)
+
+# Capture-time owner re-attribution (process_conversation, MEMORY_OWNER_JEV_FLIP_ENABLED).
+# `flipped` re-attributed a third-party candidate to the user; `kept_third_party`
+# asked and stayed below the threshold; `unavailable` got no answer.
+MEMORY_OWNER_JEV_OUTCOMES = frozenset({'flipped', 'kept_third_party', 'unavailable', 'skipped_budget'})
+
+MEMORY_OWNER_JEV_TOTAL = Counter(
+    'omi_memory_owner_jev_total',
+    'Third-party memory candidates checked by the Jev owner question, by outcome. Never labeled by uid.',
+    ['outcome'],
+)
+
+
+def record_jev_decision(*, lane: str, outcome: str, latency_seconds: float) -> None:
+    """Never raises: observability must not change a decision."""
+    try:
+        labels = {
+            name: value if value in JEV_DECISION_LABELS[name] else 'other'
+            for name, value in (('lane', lane), ('outcome', outcome))
+        }
+        JEV_DECISION_TOTAL.labels(**labels).inc()
+        JEV_DECISION_LATENCY_SECONDS.labels(**labels).observe(max(0.0, latency_seconds))
+    except Exception:
+        pass
+
+
+def record_memory_owner_jev(outcome: str) -> None:
+    """Never raises: observability must not change a capture outcome."""
+    try:
+        MEMORY_OWNER_JEV_TOTAL.labels(outcome=outcome if outcome in MEMORY_OWNER_JEV_OUTCOMES else 'other').inc()
     except Exception:
         pass
 
@@ -596,6 +692,15 @@ OMI_LISTEN_ACCEPTED_TOTAL = Counter(
     ['transcription_source', 'client_platform', 'app_build'],
 )
 
+# Wall seconds of live /v4/listen sessions by who could have watched them in real
+# time (routers/listen/realtime_demand.py). The input for routing background
+# capture off real-time vendor streams; seconds, never session identifiers.
+OMI_LISTEN_REALTIME_DEMAND_SECONDS_TOTAL = Counter(
+    'omi_listen_realtime_demand_seconds_total',
+    'Live listen session wall seconds by real-time demand bucket, bounded source and client platform',
+    ['transcription_source', 'client_platform', 'realtime_demand'],
+)
+
 OMI_LISTEN_AUDIO_OUTCOME_TOTAL = Counter(
     'omi_listen_audio_outcome_total',
     'Per-session listen audio outcomes by bounded transcription source, outcome, and client platform',
@@ -605,6 +710,24 @@ OMI_LISTEN_AUDIO_OUTCOME_TOTAL = Counter(
 OMI_LISTEN_UNKNOWN_CHANNEL_PREFIX_TOTAL = Counter(
     'omi_listen_unknown_channel_prefix_total',
     'Multi-channel frames dropped for an unknown channel prefix, by bounded source and client platform',
+    ['transcription_source', 'client_platform'],
+)
+
+OMI_LISTEN_ZERO_BYTE_SESSION_TOTAL = Counter(
+    'omi_listen_zero_byte_session_total',
+    (
+        'VAD-gated /v4/listen sessions that tore down after receiving literally no audio '
+        '(bytes_received==0, chunks_total==0, session_duration_sec==0.0)'
+    ),
+    ['transcription_source', 'client_platform'],
+)
+
+OMI_LISTEN_NO_AUDIO_TEARDOWN_TOTAL = Counter(
+    'omi_listen_no_audio_teardown_total',
+    (
+        'Accepted /v4/listen sessions that tore down before any first audio byte, '
+        'complementing outcome="first_audio" on omi_listen_audio_outcome_total'
+    ),
     ['transcription_source', 'client_platform'],
 )
 

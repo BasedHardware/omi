@@ -11,7 +11,7 @@ from datetime import datetime, timezone
 from unittest.mock import patch, MagicMock
 import os
 import sys
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
@@ -70,6 +70,7 @@ _stubs = [
     'database._client',
     'database.redis_db',
     'database.conversations',
+    'database.mcp_conversation_pages',
     'database.memories',
     'database.action_items',
     'database.folders',
@@ -158,29 +159,40 @@ def _conversation(conv_id='conv-good', category='technology'):
     }
 
 
+def _response():
+    return SimpleNamespace(headers={})
+
+
+def _card_page(conversations):
+    """Patch the shared card-page seam the REST list now reads through."""
+    return patch.object(
+        rest.mcp_conversation_handlers.mcp_conversation_pages,
+        'get_mcp_conversation_cards_page',
+        return_value=(conversations, None),
+    )
+
+
 class TestGetConversationsPoisonPage:
     """One malformed conversation record must not 500 the whole MCP list page."""
 
-    @patch('routers.mcp.redact_conversations_for_list', side_effect=lambda convs: convs)
-    @patch('routers.mcp.conversations_db')
-    def test_skips_malformed_returns_only_valid(self, mock_db, _mock_redact):
+    def test_skips_malformed_returns_only_valid(self):
         # First record is valid; second has a category that is NOT in CategoryEnum.
-        mock_db.get_conversations.return_value = [
+        conversations = [
             _conversation('conv-good', category='technology'),
             _conversation('conv-poison', category='not_a_real_category'),
         ]
-        result = rest.get_conversations(uid=UID)
+        with _card_page(conversations):
+            result = rest.get_conversations(_response(), uid=UID)
         # Without the per-record guard, response_model coercion would 500 the page.
         assert len(result) == 1
         assert result[0].id == 'conv-good'
         assert result[0].structured.category.value == 'technology'
 
-    @patch('routers.mcp.redact_conversations_for_list', side_effect=lambda convs: convs)
-    @patch('routers.mcp.conversations_db')
-    def test_all_valid_returned(self, mock_db, _mock_redact):
-        mock_db.get_conversations.return_value = [
+    def test_all_valid_returned(self):
+        conversations = [
             _conversation('conv-1', category='technology'),
             _conversation('conv-2', category='work'),
         ]
-        result = rest.get_conversations(uid=UID)
+        with _card_page(conversations):
+            result = rest.get_conversations(_response(), uid=UID)
         assert [c.id for c in result] == ['conv-1', 'conv-2']

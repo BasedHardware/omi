@@ -16,6 +16,7 @@ import 'package:omi/services/experiments/experiment_registry.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/experiments/experiment_builder.dart';
 import 'package:omi/widgets/app_review_prompt.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:visibility_detector/visibility_detector.dart';
 import 'package:uuid/uuid.dart';
 
@@ -92,7 +93,8 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
                 CustomScrollView(
                   keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.manual,
                   slivers: [
-                    const SliverToBoxAdapter(child: GetSummaryWidgets()),
+                    // Title and facts live in the page header, shared by every tab.
+                    const SliverToBoxAdapter(child: SizedBox(height: 4)),
                     discarded
                         ? const SliverToBoxAdapter(child: ReprocessDiscardedWidget())
                         : GetAppsWidgets(
@@ -329,7 +331,7 @@ class _RecordingQualityFeedbackPromptState extends State<RecordingQualityFeedbac
           padding: const EdgeInsets.fromLTRB(20, 8, 20, 4),
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            decoration: BoxDecoration(color: const Color(0xFF27272E), borderRadius: BorderRadius.circular(16)),
+            decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
             child: Row(
               children: [
                 Expanded(
@@ -338,12 +340,12 @@ class _RecordingQualityFeedbackPromptState extends State<RecordingQualityFeedbac
                     children: [
                       Text(
                         context.l10n.feedbackTitleAudioQuality,
-                        style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
+                        style: OmiType.footnote.copyWith(fontWeight: FontWeight.w500),
                       ),
                       const SizedBox(height: 2),
                       Text(
                         context.l10n.feedbackSubtitleAudioQuality,
-                        style: const TextStyle(color: Colors.white60, fontSize: 12),
+                        style: OmiType.caption.copyWith(color: OmiColors.textSecondary),
                       ),
                     ],
                   ),
@@ -584,12 +586,12 @@ class _SummaryFeedbackPromptState extends State<SummaryFeedbackPrompt> {
   }
 
   Widget _buildLoadingPrompt(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
+    return const Padding(
+      padding: EdgeInsets.fromLTRB(20, 12, 20, 8),
       child: SizedBox(
         height: 48,
         child: DecoratedBox(
-          decoration: BoxDecoration(color: const Color(0xFF27272E), borderRadius: BorderRadius.circular(16)),
+          decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
         ),
       ),
     );
@@ -606,7 +608,7 @@ class _SummaryFeedbackPromptState extends State<SummaryFeedbackPrompt> {
       child: Container(
         padding: EdgeInsets.symmetric(horizontal: compact ? 10 : 16, vertical: compact ? 6 : 12),
         decoration: BoxDecoration(
-          color: const Color(0xFF27272E),
+          color: OmiColors.surface1,
           borderRadius: BorderRadius.circular(compact ? 12 : 16),
         ),
         child: Row(

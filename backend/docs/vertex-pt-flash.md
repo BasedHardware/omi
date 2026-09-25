@@ -173,10 +173,13 @@ Three invariants, each enforced by a test rather than by convention:
   chain at resolution time, at both PT states
   (FC-degraded-fallback-consumes-protected-budget). Degraded traffic must not
   consume the budget the quota exists to protect.
-- **Never upward in price.** Each chain is non-increasing in output price
-  (`PRICE_PER_MTOK_OUT`), so a degraded request cannot cost more than the one
-  it replaces. This is also why `gemini-2.5-flash-lite` is terminal: it is the
-  floor of the ladder and the model the desktop clients pin directly.
+- **Never upward in price.** Each chain is non-increasing in input and output
+  price (`PRICE_PER_MTOK_IN`, `PRICE_PER_MTOK_OUT`), so a degraded request
+  cannot cost more than the one it replaces. This is also why
+  `gemini-2.5-flash-lite` is terminal: it is the floor of the ladder and the
+  model the desktop clients pin directly. A lane admitted to a costlier model
+  on behalf of a cheaper origin has a second ceiling — see "Moving a lane onto
+  PT".
 - **Never onto itself.** A chain never contains its own head, so a dead model
   cannot retry itself.
 
@@ -275,6 +278,33 @@ on-demand for every token — strictly worse than either alone. This is why the
 flash remap is gated on observed capacity rather than shipped as a constant.
 `test_flash_stays_on_the_current_reservation_until_target_capacity_exists`
 holds that gate.
+
+## Moving a lane onto PT
+
+The reservation is a flat prepay, so a latency-tolerant lane that today runs
+PayGo on a cheaper model can be admitted to `gemini-2.5-flash` at ~$0 marginal
+cost while the order is idle. That admission is a cost trap the moment the
+reservation is full: the flash overflow ladder prefers `gemini-3.1-flash-lite`
+PayGo ($0.25 in / $1.50 out), 3.75x the output price of `gemini-2.5-flash-lite`
+($0.10 / $0.40).
+
+A lane that moves declares its **origin model** in `LANE_OVERFLOW_ORIGINS`
+(`FEATURE_PT_OVERFLOW_ORIGIN` in `model_config.py`), keyed by feature name.
+The gateway stamps that origin onto the route (`pt_overflow_origin`); the
+desktop kill-switch reads the same table by the requested model. Overflow and
+fallback candidates are then kept only when both `PRICE_PER_MTOK_IN` and
+`PRICE_PER_MTOK_OUT` are at or below the origin
+(FC-degraded-fallback-exceeds-origin-price). No origin declared means the
+ladder is unchanged — that is every lane today. Do not change a feature's
+route without declaring the origin in the same change.
+
+Before moving any lane, re-read the hourly headroom table (C020, weekdays
+2026-09-12…09-23 UTC). Every hour had at least ~8,490 tok/s free of the 13,450
+tok/s cap, and flash-lite's steady load fits after the output-burn conversion
+(lite burns 4x, flash 9x). Its bursts do not: a ~25k lite-unit burst is on the
+order of 50k flash units, above the cap. Bursts must keep a
+`gemini-2.5-flash-lite` overflow. The move itself stays eval-gated, per lane,
+and is not this policy.
 
 ## Overflow is resolved against the live reservation
 
