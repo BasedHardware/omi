@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:omi/ui/ui.dart';
+
 /// Compact "Latest" chip. Sized to its child so a Stack can place it over the
 /// transcript without a full-width hit-test absorber covering citation cards.
 class ChatJumpToLatestButton extends StatelessWidget {
@@ -20,13 +22,14 @@ class ChatJumpToLatestButton extends StatelessWidget {
           child: Material(
             color: Colors.transparent,
             child: InkWell(
-              borderRadius: BorderRadius.circular(24),
+              borderRadius: OmiRadius.pillAll,
               onTap: onTap,
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                // 11 + 22pt glyph + 11 keeps the chip at the 44pt minimum target.
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF1F1F25).withValues(alpha: 0.95),
-                  borderRadius: BorderRadius.circular(24),
+                  color: OmiColors.surface2.withValues(alpha: 0.95),
+                  borderRadius: OmiRadius.pillAll,
                   border: Border.all(color: Colors.white.withValues(alpha: 0.18), width: 1),
                   boxShadow: [
                     BoxShadow(color: Colors.black.withValues(alpha: 0.28), blurRadius: 12, offset: const Offset(0, 4)),
@@ -35,11 +38,11 @@ class ChatJumpToLatestButton extends StatelessWidget {
                 child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.keyboard_arrow_down_rounded, color: Colors.white, size: 22),
+                    const Icon(Icons.keyboard_arrow_down_rounded, color: OmiColors.textPrimary, size: 22),
                     const SizedBox(width: 6),
                     Text(
                       label,
-                      style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w600),
+                      style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600),
                     ),
                   ],
                 ),

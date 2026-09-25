@@ -9,6 +9,7 @@ from pathlib import Path
 import pytest
 
 import scripts.jit_cost_evidence_driver as driver
+from utils.llm.model_config import LUNA_MODEL
 
 FIXTURE = (
     Path(__file__).parents[2] / "testing" / "jit_processing" / "fixtures" / "jit_architecture_quality_cost_v2.json"
@@ -1177,8 +1178,8 @@ def test_export_durable_jit_receipt_rebuilds_attempts_and_aggregate() -> None:
             "jit_contract_version": "jit-cloud-qa-v1",
             "user_uid": driver.QA_OWNER_UID,
             "provider": "openai",
-            "configured_model": "gpt-5.6-luna",
-            "actual_model_version": "gpt-5.6-luna-2026-01-01",
+            "configured_model": LUNA_MODEL,
+            "actual_model_version": f"{LUNA_MODEL}-2026-01-01",
             "rate_card_id": "test-card",
             "cost_basis": "test",
             "usage_status": "confirmed",
@@ -1254,8 +1255,8 @@ def test_export_durable_jit_receipt_preserves_unknown_cost() -> None:
                 "jit_contract_version": "jit-cloud-qa-v1",
                 "user_uid": driver.QA_OWNER_UID,
                 "provider": "openai",
-                "configured_model": "gpt-5.6-luna",
-                "actual_model_version": "gpt-5.6-luna-2026-01-01",
+                "configured_model": LUNA_MODEL,
+                "actual_model_version": f"{LUNA_MODEL}-2026-01-01",
                 "rate_card_id": "test-card",
                 "cost_basis": "usage_unknown",
                 "usage_status": "indeterminate",

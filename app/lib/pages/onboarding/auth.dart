@@ -2,12 +2,13 @@ import 'dart:io';
 
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
+import 'package:omi/pages/onboarding/widgets/onboarding_card.dart';
 import 'package:omi/providers/auth_provider.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class AuthComponent extends StatefulWidget {
@@ -24,177 +25,152 @@ class _AuthComponentState extends State<AuthComponent> {
   Widget build(BuildContext context) {
     return Consumer<AuthenticationProvider>(
       builder: (context, provider, child) {
-        return Column(
-          children: [
-            // Background image area - takes remaining space
-            Expanded(
-              child: Container(), // Just takes up space for background image
-            ),
-
-            // Bottom drawer card - wraps content
-            Container(
-              width: double.infinity,
-              // The SafeArea below adds the system inset; adding it here as well left
-              // twice the inset of dead space under the content on inset devices.
-              padding: const EdgeInsets.fromLTRB(32, 26, 32, 8),
-              decoration: const BoxDecoration(
-                color: Colors.black,
-                borderRadius: BorderRadius.only(topLeft: Radius.circular(40), topRight: Radius.circular(40)),
+        return OnboardingStep(
+          card: OnboardingCard(
+            padding: const EdgeInsets.fromLTRB(OmiSpacing.xxl, 26, OmiSpacing.xxl, OmiSpacing.xs),
+            content: [
+              // Loading indicator or spacing
+              SizedBox(
+                height: 20,
+                child: provider.loading ? const Center(child: OmiSpinner(size: OmiSpinnerSize.small)) : null,
               ),
-              child: SafeArea(
-                top: false,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
+
+              // Title text
+              Text(
+                context.l10n.speakTranscribeSummarize,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                  height: 1.2,
+                  fontFamily: 'Manrope',
+                ),
+                textAlign: TextAlign.center,
+              ),
+
+              const SizedBox(height: 32),
+
+              // Sign in buttons
+              if (Platform.isIOS || Platform.isAndroid) ...[
+                SizedBox(
+                  width: double.infinity,
+                  height: 56,
+                  child: ElevatedButton(
+                    onPressed: () {
+                      OmiHaptics.selection();
+                      provider.onAppleSignIn(widget.onSignIn);
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      foregroundColor: Colors.black,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const FaIcon(FontAwesomeIcons.apple, size: 24),
+                        const SizedBox(width: 8),
+                        Text(
+                          context.l10n.signInWithApple,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                            fontFamily: 'Manrope',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+              ],
+
+              // Google sign in button
+              SizedBox(
+                width: double.infinity,
+                height: 56,
+                child: ElevatedButton(
+                  onPressed: () {
+                    OmiHaptics.selection();
+                    provider.onGoogleSignIn(widget.onSignIn);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.white,
+                    foregroundColor: Colors.black,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const FaIcon(FontAwesomeIcons.google, size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        context.l10n.signInWithGoogle,
+                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, fontFamily: 'Manrope'),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // Local development sign-in. Only rendered for a local_dev
+              // build: community builds cannot complete a real OAuth flow,
+              // because provider OAuth clients are bound to the official
+              // bundle id and a community build is signed with a suffixed
+              // one. Never shown in a production-family build.
+              if (provider.isLocalDevProfile) ...[
+                const SizedBox(height: 12),
+                SizedBox(
+                  width: double.infinity,
+                  height: 56,
+                  child: OutlinedButton(
+                    onPressed: () {
+                      OmiHaptics.selection();
+                      provider.onLocalDevSignIn(widget.onSignIn);
+                    },
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      side: BorderSide(color: Colors.white.withValues(alpha: 0.4)),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
+                    ),
+                    child: const Text(
+                      'Sign in (local dev)',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, fontFamily: 'Manrope'),
+                    ),
+                  ),
+                ),
+              ],
+
+              const SizedBox(height: 24),
+
+              // Privacy policy text (same as welcome page)
+              RichText(
+                textAlign: TextAlign.center,
+                text: TextSpan(
+                  style: TextStyle(
+                    color: Colors.white.withValues(alpha: 0.6),
+                    fontSize: 11,
+                    fontFamily: 'Manrope',
+                  ),
                   children: [
-                    // Loading indicator or spacing
-                    SizedBox(
-                      height: 20,
-                      child: provider.loading
-                          ? const Center(
-                              child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation(Colors.white)),
-                            )
-                          : null,
+                    TextSpan(text: context.l10n.byContinuingAgree),
+                    TextSpan(
+                      text: context.l10n.privacyPolicy,
+                      style: const TextStyle(decoration: TextDecoration.underline),
+                      recognizer: TapGestureRecognizer()..onTap = provider.openPrivacyPolicy,
                     ),
-
-                    // Title text
-                    Text(
-                      context.l10n.speakTranscribeSummarize,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 32,
-                        fontWeight: FontWeight.bold,
-                        height: 1.2,
-                        fontFamily: 'Manrope',
-                      ),
-                      textAlign: TextAlign.center,
+                    const TextSpan(text: ' & '),
+                    TextSpan(
+                      text: context.l10n.termsOfUse,
+                      style: const TextStyle(decoration: TextDecoration.underline),
+                      recognizer: TapGestureRecognizer()..onTap = provider.openTermsOfService,
                     ),
-
-                    const SizedBox(height: 32),
-
-                    // Sign in buttons
-                    if (Platform.isIOS || Platform.isAndroid) ...[
-                      SizedBox(
-                        width: double.infinity,
-                        height: 56,
-                        child: ElevatedButton(
-                          onPressed: () {
-                            HapticFeedback.mediumImpact();
-                            provider.onAppleSignIn(widget.onSignIn);
-                          },
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white,
-                            foregroundColor: Colors.black,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const FaIcon(FontAwesomeIcons.apple, size: 24),
-                              const SizedBox(width: 8),
-                              Text(
-                                context.l10n.signInWithApple,
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w600,
-                                  fontFamily: 'Manrope',
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 16),
-                    ],
-
-                    // Google sign in button
-                    SizedBox(
-                      width: double.infinity,
-                      height: 56,
-                      child: ElevatedButton(
-                        onPressed: () {
-                          HapticFeedback.mediumImpact();
-                          provider.onGoogleSignIn(widget.onSignIn);
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.white,
-                          foregroundColor: Colors.black,
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const FaIcon(FontAwesomeIcons.google, size: 20),
-                            const SizedBox(width: 8),
-                            Text(
-                              context.l10n.signInWithGoogle,
-                              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, fontFamily: 'Manrope'),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-
-                    // Local development sign-in. Only rendered for a local_dev
-                    // build: community builds cannot complete a real OAuth flow,
-                    // because provider OAuth clients are bound to the official
-                    // bundle id and a community build is signed with a suffixed
-                    // one. Never shown in a production-family build.
-                    if (provider.isLocalDevProfile) ...[
-                      const SizedBox(height: 12),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 56,
-                        child: OutlinedButton(
-                          onPressed: () {
-                            HapticFeedback.mediumImpact();
-                            provider.onLocalDevSignIn(widget.onSignIn);
-                          },
-                          style: OutlinedButton.styleFrom(
-                            foregroundColor: Colors.white,
-                            side: BorderSide(color: Colors.white.withValues(alpha: 0.4)),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                          ),
-                          child: const Text(
-                            'Sign in (local dev)',
-                            style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600, fontFamily: 'Manrope'),
-                          ),
-                        ),
-                      ),
-                    ],
-
-                    const SizedBox(height: 24),
-
-                    // Privacy policy text (same as welcome page)
-                    RichText(
-                      textAlign: TextAlign.center,
-                      text: TextSpan(
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.6),
-                          fontSize: 11,
-                          fontFamily: 'Manrope',
-                        ),
-                        children: [
-                          TextSpan(text: context.l10n.byContinuingAgree),
-                          TextSpan(
-                            text: context.l10n.privacyPolicy,
-                            style: const TextStyle(decoration: TextDecoration.underline),
-                            recognizer: TapGestureRecognizer()..onTap = provider.openPrivacyPolicy,
-                          ),
-                          const TextSpan(text: ' & '),
-                          TextSpan(
-                            text: context.l10n.termsOfUse,
-                            style: const TextStyle(decoration: TextDecoration.underline),
-                            recognizer: TapGestureRecognizer()..onTap = provider.openTermsOfService,
-                          ),
-                          const TextSpan(text: '.'),
-                        ],
-                      ),
-                    ),
+                    const TextSpan(text: '.'),
                   ],
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         );
       },
     );

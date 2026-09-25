@@ -190,6 +190,17 @@ extension AppState {
     )) ?? conversation
   }
 
+  /// Loads a conversation by id through the repository, for callers that hold
+  /// only an id (a capture-group member the list has not loaded). Nil on failure.
+  func loadConversation(id: String) async -> ServerConversation? {
+    do {
+      return try await conversationRepository.detail(id: id)
+    } catch {
+      logError("Conversations: Failed to load conversation by id", error: error)
+      return nil
+    }
+  }
+
   func searchConversations(_ query: String) async throws -> [ServerConversation] {
     try await conversationRepository.search(text: query)
   }
@@ -204,6 +215,19 @@ extension AppState {
       return true
     } catch {
       logError("Conversations: Failed to delete conversation", error: error)
+      return false
+    }
+  }
+
+  /// Splits a recording out of the event it was grouped into, then refetches so
+  /// every member's membership reflects the server.
+  func separateConversationFromCaptureGroup(_ conversationId: String) async -> Bool {
+    do {
+      try await APIClient.shared.separateConversationFromCaptureGroup(id: conversationId)
+      await refreshConversations()
+      return true
+    } catch {
+      logError("Conversations: Failed to separate conversation from its capture group", error: error)
       return false
     }
   }

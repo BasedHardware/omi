@@ -6,51 +6,67 @@ import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/services/capture/freemium_threshold_tracker.dart';
 import 'package:omi/services/freemium_transcription_service.dart';
+import 'package:omi/ui/ui.dart';
+
+/// Prompt id of the plans sheet offered when the Plus meter runs low.
+const String kFreemiumPlansPromptId = 'freemium-plans';
 
 /// Handler for freemium transcription switching
-/// Manages when to show the plans sheet and navigation
+/// Decides when to offer the plans sheet; the sheet itself goes through [PromptQueue].
 class FreemiumSwitchHandler {
+  FreemiumSwitchHandler({PromptQueue? queue}) : _queue = queue ?? PromptQueue.instance;
+
   final FreemiumTranscriptionService _freemiumService = FreemiumTranscriptionService();
+  final PromptQueue _queue;
+  bool _wasEligible = false;
 
   FreemiumTranscriptionService get service => _freemiumService;
 
-  /// Check and show plans sheet if freemium threshold reached
-  /// Returns true if plans sheet was shown
-  Future<bool> checkAndShowPaywall(BuildContext context, CaptureProvider captureProvider) async {
-    if (_freemiumService.dialogShownThisSession) return false;
-
-    if (!context.read<UsageProvider>().showSubscriptionUI) return false;
-
-    if (FreemiumThresholdTracker.shouldShowPlusMeterPaywall(
+  /// Whether the Plus meter warning applies right now.
+  bool _eligible(BuildContext context, CaptureProvider captureProvider) {
+    if (!context.mounted) return false;
+    final usage = context.read<UsageProvider>();
+    if (!usage.showSubscriptionUI) return false;
+    return FreemiumThresholdTracker.shouldShowPlusMeterPaywall(
       reached: captureProvider.freemiumThresholdReached,
       requiresUserAction: captureProvider.freemiumRequiresUserAction,
-      plan: context.read<UsageProvider>().subscription?.subscription.plan,
-    )) {
-      _freemiumService.markDialogShown();
+      plan: usage.subscription?.subscription.plan,
+    );
+  }
 
-      if (!context.mounted) return false;
+  /// Call on every capture change. Offers the plans sheet once per session, only when the meter
+  /// actually crosses the threshold (not on every capture notification), and never over a recording:
+  /// the sheet is queued, and [PromptQueue] holds it until capture stops. Returns true when it was
+  /// queued.
+  bool checkAndShowPaywall(BuildContext context, CaptureProvider captureProvider) {
+    final eligible = _eligible(context, captureProvider);
+    final crossed = eligible && !_wasEligible;
+    _wasEligible = eligible;
+    if (!crossed || _freemiumService.dialogShownThisSession) return false;
 
-      // Show plans sheet directly
-      await showModalBottomSheet(
-        context: context,
-        isScrollControlled: true,
-        backgroundColor: Colors.black,
-        builder: (sheetContext) => _PlansSheetWrapper(),
-      );
-
-      return true;
-    }
-    return false;
+    _freemiumService.markDialogShown();
+    return _queue.enqueue(
+      kFreemiumPlansPromptId,
+      PromptPriority.low,
+      // Still relevant when it is finally shown (the plan may have changed meanwhile).
+      canShowNow: () => _eligible(context, captureProvider),
+      show: (promptContext) => showOmiSheet<void>(
+        context: promptContext,
+        padding: EdgeInsets.zero,
+        builder: (_) => _PlansSheetWrapper(),
+      ),
+    );
   }
 
   /// Legacy method name for backward compatibility
-  Future<bool> checkAndShowDialog(BuildContext context, CaptureProvider captureProvider) async {
+  bool checkAndShowDialog(BuildContext context, CaptureProvider captureProvider) {
     return checkAndShowPaywall(context, captureProvider);
   }
 
   /// Clean up resources
   void dispose() {
     _freemiumService.onAutoSwitch = null;
+    _queue.remove(kFreemiumPlansPromptId);
   }
 
   /// Reset for new session (call when recording starts)
