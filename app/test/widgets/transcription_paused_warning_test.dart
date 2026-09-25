@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -9,6 +8,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -16,7 +16,6 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/services/services.dart';
-import 'package:omi/ui/omi_tokens.dart';
 import 'package:omi/utils/enums.dart';
 
 class _StubDeviceProvider extends ChangeNotifier implements DeviceProvider {
@@ -138,7 +137,8 @@ void main() {
 
       expect(find.text(pausedText), findsWidgets);
       expect(find.text(listeningText), findsNothing);
-      // Phone-mic paused affordance: warning (orange) status dot + play (resume) control.
+      // Paused affordance: the warning (amber) status dot. The OS owns an audio interruption and
+      // resumes capture itself, so the card offers no Pause/Resume control for it.
       expect(
         find.byWidgetPredicate((w) {
           if (w is! Container) return false;
@@ -146,14 +146,11 @@ void main() {
           return d is BoxDecoration &&
               d.color == OmiColors.warning &&
               d.shape == BoxShape.circle &&
-              w.constraints?.maxWidth == 6;
+              w.constraints?.maxWidth == 8;
         }),
         findsOneWidget,
       );
-      expect(
-        find.byWidgetPredicate((w) => w is FaIcon && w.icon?.codePoint == FontAwesomeIcons.play.codePoint),
-        findsOneWidget,
-      );
+      expect(find.byType(OmiIconButton), findsNothing);
     });
 
     testWidgets('shows Listening during phone mic recording when transcription is down', (tester) async {

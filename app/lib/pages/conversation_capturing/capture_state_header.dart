@@ -9,7 +9,10 @@ import 'package:omi/utils/l10n_extensions.dart';
 /// title with a status dot (or a spinner while processing). The state is announced when it
 /// changes.
 class ConversationStateAppBar extends StatelessWidget implements PreferredSizeWidget {
-  const ConversationStateAppBar({super.key, required this.state, this.backKey, this.bufferingFor});
+  const ConversationStateAppBar({super.key, required this.state, this.backKey, this.bufferingFor, this.sourceLabel});
+
+  /// What is recording ("Pendant", "Phone mic"), shown after the state: "Listening · Pendant".
+  final String? sourceLabel;
 
   /// The state, named from the shared table in `capture_state_labels.dart` so the live page, the
   /// processing page and the conversation list's capture card never give one moment two names.
@@ -63,7 +66,10 @@ class ConversationStateAppBar extends StatelessWidget implements PreferredSizeWi
             const SizedBox(width: OmiSpacing.xs),
             Flexible(
               child: Text(
-                captureStateLabel(context.l10n, state, bufferingFor: bufferingFor),
+                sourceLabel == null
+                    ? captureStateLabel(context.l10n, state, bufferingFor: bufferingFor)
+                    : context.l10n.captureStatusWithSource(
+                        captureStateLabel(context.l10n, state, bufferingFor: bufferingFor), sourceLabel!),
                 style: sentenceStatus
                     ? OmiType.footnote.copyWith(fontWeight: FontWeight.w600, height: 1.25)
                     : OmiType.headline,
