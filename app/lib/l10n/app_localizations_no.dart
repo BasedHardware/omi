@@ -11172,9 +11172,6 @@ class AppLocalizationsNo extends AppLocalizations {
       'Transkripsjoner er utilgjengelige, opptaket fortsetter på enheten og behandles senere';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'Transkripsjon utilgjengelig · lagres på enheten';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'Transkripsjoner i kø $pending/$total';
   }
@@ -11233,4 +11230,42 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Lyden fra anhenget når ikke frem til appen — trykk for å reparere';
+
+  @override
+  String get captureNotTranscribing => 'Transkriberer ikke';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Lyd lagret, transkriberes senere';
+
+  @override
+  String get captureStillRecording => 'Tar fortsatt opp';
+
+  @override
+  String get captureMicInUseElsewhere => 'Mikrofonen brukes av en annen app';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'En samtale eller en annen app tok mikrofonen, så Omi kan ikke høre akkurat nå. Omi fortsetter av seg selv når mikrofonen er ledig. Alt som ble tatt opp før dette, er trygt.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Din egen tale-til-tekst-tjeneste kan ikke nås. Omi beholder lyden på denne telefonen og sender den når tjenesten er tilbake. Ingenting går tapt.';
+
+  @override
+  String get captureStarting => 'Starter…';
+
+  @override
+  String get capturePhoneStorageFull => 'Telefonlagringen er full';
+
+  @override
+  String get captureStorageAlmostFull => 'Lagringen er nesten full';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Anhenget mistet forbindelsen til denne telefonen. Omi kobler til igjen av seg selv når anhenget er på og i nærheten. Alt som ble tatt opp før dette, er trygt.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name og andre';
+  }
 }

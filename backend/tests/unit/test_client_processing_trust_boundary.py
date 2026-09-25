@@ -653,6 +653,10 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         # transactional pin. Never client-authored, carries no text — not
         # projection-family (§1.7 precedent).
         'audio_timeline',
+        # Server-authored by speaker resolution during processing: a status and
+        # the participant speaker ids. No client-authored text, so not
+        # projection-family.
+        'speaker_resolution',
     }
 )
 

@@ -6,7 +6,7 @@ description: "Sequence diagrams and finalization policy for the /v4/listen WebSo
 
 # Listen + Pusher Pipeline — Sequence Diagrams
 
-> Last updated: 2026-09-25 (Cloud Run sync shares the diarizer ILB via `HOSTED_SPEAKER_EMBEDDING_API_URL`; cross-device overlap linked without discard at finalization; provider-scoped speaker identity and bounded clustering; durable meeting receipt; bounded client-kind propagation; end-of-conversation wake-word command adjudication; private conversation start-location provenance; explicit finalization capability admission; semantic release probes; identity-bound Pusher promotion receipts; bounded sync empty-retry with phase-attributed failure telemetry)
+> Last updated: 2026-09-26 (conversation-wide speaker resolution for sync-captured conversations; Cloud Run sync shares the diarizer ILB via `HOSTED_SPEAKER_EMBEDDING_API_URL`; cross-device overlap linked without discard at finalization; provider-scoped speaker identity and bounded clustering; durable meeting receipt; bounded client-kind propagation; end-of-conversation wake-word command adjudication; private conversation start-location provenance; explicit finalization capability admission; semantic release probes; identity-bound Pusher promotion receipts; bounded sync empty-retry with phase-attributed failure telemetry)
 >
 > These diagrams document the real behavior observed during E2E testing with
 > live services (backend, pusher, STT providers, embedding API). Update when the
@@ -71,6 +71,39 @@ new for every client reconnect. A conversation-local allocator hydrates the
 persisted IDs, then maps `(speaker_id_scope, speaker label)` to the next small
 integer `speaker_id`. Therefore Deepgram `SPEAKER_0`, Modulate `SPEAKER_00`, and
 a reconnect that restarts either provider's numbering cannot share an identity.
+
+The same boundaries also split one person into many ids: every reconnect,
+failover, and uploaded sync chunk (`sync:{segment_id}`) restarts numbering, so a
+3.6h pendant dinner measured 1874 ids for about five voices. Processing
+therefore resolves speakers for the whole conversation before it summarizes
+(`utils/conversations/speaker_resolution.py`, called from `process_conversation`
+on every trigger). When every capture scope is a sync chunk, it embeds each
+segment of at least 1s from the stored private cloud sync audio (each chunk blob
+decoded on its own; merging chunks drifts where they overlap). Live scopes are not
+resolved yet: live `started_at` can drift minutes from the arrival-stamped chunks
+until the capture-position clock lands, and misplaced audio would merge the wrong
+voices. It caches the embeddings, encrypted, at
+`audio/{uid}/{conversation_id}/speaker-embeddings.v1.enc`, so sync updates embed
+only new segments and conversation/account deletion purges the cache with the
+audio. `utils/stt/conversation_speakers.py` then clusters the embeddings
+(average-linkage AHC at cosine 0.70, then fragments within 0.60 of a voice with at
+least 30s of speech are absorbed into it; calibrated on real pendant audio against
+the owner's voiceprint), matches each voice's pooled centroid against enrolled
+voiceprints at 0.50 + 0.10 margin (pooled owner voices measured 0.24-0.33, other
+voices 0.63+, so the per-clip 0.65 would name a companion the owner), and merges
+voices that match the same identity. Manual receipts constrain it: a
+labeled `speaker_id` keeps its id and is one voice with every other id labeled as
+the same person; two different labeled identities never merge. Every covered
+segment gets `speaker_id_scope = conversation:{id}`, `speaker = SPEAKER_{id}`, and,
+for a voiceprint match, `speaker_match_source = conversation_voice`. The result
+rides the normal processing write (fenced by `sync_content_revision`), and the
+conversation's `speaker_resolution` tells clients whether ids are people:
+`resolved` (above), `capture` (one scope, no audio: capture's ids stand), or
+`unavailable` (restarted numbering and no audio: count no ids). Its
+`participant_speaker_ids` are voices with at least 10s of speech. The stage fails
+open onto capture's ids; `CONVERSATION_SPEAKER_RESOLUTION_ENABLED=false` disables
+it, and `CONVERSATION_SPEAKER_RESOLUTION_BUDGET_SECONDS` (45) and
+`..._MAX_EMBEDDINGS` (1500) bound one run, which resumes from the cache next time.
 
 Pre-recorded STT results from providers such as Modulate and Parakeet are
 normalized before they are written as transcript segments. Consecutive entries

@@ -2,6 +2,20 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.393",
+      "date": "2026-09-25",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.392",
+      "date": "2026-09-25",
+      "changes": [
+        "Back-to-back calls are now saved as separate conversations, even when you join the next Google Meet or switch call apps within seconds"
+      ]
+    },
+    {
       "version": "0.12.391",
       "date": "2026-09-25",
       "changes": [
