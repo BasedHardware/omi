@@ -11112,5 +11112,6 @@
     "recordWith": "Snemaj z",
     "moreWaysToRecord": "Več načinov snemanja",
     "openCall": "Odpri klic",
-    "captureRecoveryBanner": "Zvuk obeska ne prihaja v aplikacijo — tapnite za popravilo"
+    "captureRecoveryBanner": "Zvuk obeska ne prihaja v aplikacijo — tapnite za popravilo",
+    "participantsSummaryUncounted": "{name} in drugi"
 }

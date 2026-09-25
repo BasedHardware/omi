@@ -11297,4 +11297,9 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'L\'àudio del penjoll no arriba a l\'aplicació — toca\'l per reparar';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name i altres';
+  }
 }

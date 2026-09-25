@@ -3581,5 +3581,6 @@
     "recordWith": "Rekam dengan",
     "moreWaysToRecord": "Cara lain untuk merekam",
     "openCall": "Buka panggilan",
-    "captureRecoveryBanner": "Audio pendant tidak sampai ke aplikasi — ketuk untuk memperbaiki"
+    "captureRecoveryBanner": "Audio pendant tidak sampai ke aplikasi — ketuk untuk memperbaiki",
+    "participantsSummaryUncounted": "{name} dan lainnya"
 }

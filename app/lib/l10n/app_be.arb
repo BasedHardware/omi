@@ -11112,5 +11112,6 @@
     "recordWith": "Запісаць праз",
     "moreWaysToRecord": "Іншыя спосабы запісу",
     "openCall": "Адкрыць званок",
-    "captureRecoveryBanner": "Гук кулона не даходзіць да праграмы — націсніце, каб выправіць"
+    "captureRecoveryBanner": "Гук кулона не даходзіць да праграмы — націсніце, каб выправіць",
+    "participantsSummaryUncounted": "{name} і іншыя"
 }

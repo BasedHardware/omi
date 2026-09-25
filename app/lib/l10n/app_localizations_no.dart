@@ -11233,4 +11233,9 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Lyden fra anhenget når ikke frem til appen — trykk for å reparere';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name og andre';
+  }
 }

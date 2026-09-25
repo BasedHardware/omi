@@ -3546,5 +3546,6 @@
     "recordWith": "Aufnehmen mit",
     "moreWaysToRecord": "Weitere Aufnahmeoptionen",
     "openCall": "Anruf öffnen",
-    "captureRecoveryBanner": "Der Ton des Pendants erreicht die App nicht — zum Reparieren tippen"
+    "captureRecoveryBanner": "Der Ton des Pendants erreicht die App nicht — zum Reparieren tippen",
+    "participantsSummaryUncounted": "{name} und weitere"
 }

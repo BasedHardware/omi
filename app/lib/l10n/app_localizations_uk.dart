@@ -11254,4 +11254,9 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Звук кулона не надходить до застосунку — натисніть, щоб виправити';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name та інші';
+  }
 }

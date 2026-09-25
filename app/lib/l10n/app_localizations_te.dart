@@ -11281,4 +11281,9 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'పెండెంట్ ఆడియో యాప్‌కు చేరడం లేదు — రిపేర్ చేయడానికి ట్యాప్ చేయండి';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name మరియు ఇతరులు';
+  }
 }

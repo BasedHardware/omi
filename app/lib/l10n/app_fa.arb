@@ -11112,5 +11112,6 @@
     "recordWith": "ضبط با",
     "moreWaysToRecord": "روش‌های دیگر ضبط",
     "openCall": "باز کردن تماس",
-    "captureRecoveryBanner": "صدای آویز به برنامه نمی‌رسد — برای تعمیر ضربه بزنید"
+    "captureRecoveryBanner": "صدای آویز به برنامه نمی‌رسد — برای تعمیر ضربه بزنید",
+    "participantsSummaryUncounted": "{name} و دیگران"
 }

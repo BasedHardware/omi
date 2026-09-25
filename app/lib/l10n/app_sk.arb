@@ -3546,5 +3546,6 @@
     "recordWith": "Nahrať pomocou",
     "moreWaysToRecord": "Ďalšie spôsoby nahrávania",
     "openCall": "Otvoriť hovor",
-    "captureRecoveryBanner": "Zvuk prívesku sa do aplikácie nedostáva — opravte klepnutím"
+    "captureRecoveryBanner": "Zvuk prívesku sa do aplikácie nedostáva — opravte klepnutím",
+    "participantsSummaryUncounted": "{name} a ďalší"
 }

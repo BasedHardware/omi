@@ -11260,4 +11260,9 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Kulona audio nesasniedz lietotni — pieskarieties, lai salabotu';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name un citi';
+  }
 }

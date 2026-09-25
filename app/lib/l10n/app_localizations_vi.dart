@@ -11228,4 +11228,9 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Âm thanh từ mặt dây chuyền không đến được ứng dụng — chạm để sửa chữa';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name và những người khác';
+  }
 }

@@ -11275,4 +11275,9 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Звукът от висулката не достига до приложението — докоснете, за да поправите';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name и други';
+  }
 }

@@ -11230,4 +11230,9 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Ripatsi heli ei jõua rakendusse — parandamiseks puudutage';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name ja teised';
+  }
 }

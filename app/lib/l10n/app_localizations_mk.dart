@@ -11294,4 +11294,9 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Аудиото од привезокот не стигнува до апликацијата — допрете за поправка';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name и други';
+  }
 }

@@ -11224,4 +11224,9 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Zvuk prívesku sa do aplikácie nedostáva — opravte klepnutím';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name a ďalší';
+  }
 }

@@ -11112,5 +11112,6 @@
     "recordWith": "Mag-record gamit ang",
     "moreWaysToRecord": "Iba pang paraan ng pag-record",
     "openCall": "Buksan ang tawag",
-    "captureRecoveryBanner": "Hindi nakakarating sa app ang audio ng pendant — i-tap para ayusin"
+    "captureRecoveryBanner": "Hindi nakakarating sa app ang audio ng pendant — i-tap para ayusin",
+    "participantsSummaryUncounted": "{name} at iba pa"
 }

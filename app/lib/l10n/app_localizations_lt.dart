@@ -11252,4 +11252,9 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Pakabuko garsas nepasiekia programėlės — palieskite, kad ištaisytumėte';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name ir kiti';
+  }
 }

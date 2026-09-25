@@ -11236,4 +11236,9 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Riipuksen ääni ei tule perille sovellukseen — korjaa napauttamalla';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name ja muut';
+  }
 }

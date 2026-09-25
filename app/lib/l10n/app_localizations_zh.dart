@@ -11029,4 +11029,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => '吊坠音频未送达应用 — 轻点以修复';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name等人';
+  }
 }

@@ -11048,4 +11048,9 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'ペンダントの音声がアプリに届いていません — タップして修復';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$nameほか';
+  }
 }

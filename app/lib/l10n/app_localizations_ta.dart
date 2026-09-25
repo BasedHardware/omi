@@ -11310,4 +11310,9 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'பென்டன்ட் ஆடியோ செயலியை அடையவில்லை — சரிசெய்ய தட்டவும்';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name மற்றும் மற்றவர்கள்';
+  }
 }

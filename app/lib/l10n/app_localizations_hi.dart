@@ -11213,4 +11213,9 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'पेंडेंट का ऑडियो ऐप तक नहीं पहुंच रहा है — ठीक करने के लिए टैप करें';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name और अन्य';
+  }
 }

@@ -3546,5 +3546,6 @@
     "recordWith": "Ierakstīt ar",
     "moreWaysToRecord": "Citi ierakstīšanas veidi",
     "openCall": "Atvērt zvanu",
-    "captureRecoveryBanner": "Kulona audio nesasniedz lietotni — pieskarieties, lai salabotu"
+    "captureRecoveryBanner": "Kulona audio nesasniedz lietotni — pieskarieties, lai salabotu",
+    "participantsSummaryUncounted": "{name} un citi"
 }

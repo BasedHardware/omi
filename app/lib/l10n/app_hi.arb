@@ -3546,5 +3546,6 @@
     "recordWith": "रिकॉर्ड करने का तरीका",
     "moreWaysToRecord": "रिकॉर्ड करने के और तरीके",
     "openCall": "कॉल खोलें",
-    "captureRecoveryBanner": "पेंडेंट का ऑडियो ऐप तक नहीं पहुंच रहा है — ठीक करने के लिए टैप करें"
+    "captureRecoveryBanner": "पेंडेंट का ऑडियो ऐप तक नहीं पहुंच रहा है — ठीक करने के लिए टैप करें",
+    "participantsSummaryUncounted": "{name} और अन्य"
 }

@@ -11242,4 +11242,9 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'पेंडंटचे ऑडिओ ॲपपर्यंत पोहोचत नाही — दुरुस्त करण्यासाठी टॅप करा';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name आणि इतर';
+  }
 }

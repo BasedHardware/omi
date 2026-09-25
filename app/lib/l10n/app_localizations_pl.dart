@@ -11268,4 +11268,9 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Dźwięk z zawieszki nie dociera do aplikacji — dotknij, aby naprawić';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name i inni';
+  }
 }

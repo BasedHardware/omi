@@ -11243,4 +11243,9 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'پینڈنٹ کی آواز ایپ تک نہیں پہنچ رہی — درست کرنے کے لیے ٹیپ کریں';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name اور دیگر';
+  }
 }

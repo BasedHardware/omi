@@ -11234,4 +11234,9 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'পেন্ডেন্টের অডিও অ্যাপে পৌঁছাচ্ছে না — মেরামত করতে ট্যাপ করুন';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name ও অন্যরা';
+  }
 }

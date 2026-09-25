@@ -11169,4 +11169,9 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'เสียงจากจี้ไม่ถึงแอป — แตะเพื่อซ่อมแซม';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name และคนอื่นๆ';
+  }
 }

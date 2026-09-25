@@ -3581,5 +3581,6 @@
     "recordWith": "Записать через",
     "moreWaysToRecord": "Другие способы записи",
     "openCall": "Открыть звонок",
-    "captureRecoveryBanner": "Звук кулона не доходит до приложения — нажмите, чтобы исправить"
+    "captureRecoveryBanner": "Звук кулона не доходит до приложения — нажмите, чтобы исправить",
+    "participantsSummaryUncounted": "{name} и другие"
 }

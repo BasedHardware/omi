@@ -13347,5 +13347,14 @@
     "captureRecoveryBanner": "Pendant audio is not reaching the app — tap to repair",
     "@captureRecoveryBanner": {
         "description": "Persistent repair banner shown when a connected pendant's audio is not reaching the app; tapping opens device repair settings"
+    },
+    "participantsSummaryUncounted": "{name} + others",
+    "@participantsSummaryUncounted": {
+        "description": "Conversation header people chip when other voices spoke but could not be counted reliably, e.g. 'David + others'",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
     }
 }

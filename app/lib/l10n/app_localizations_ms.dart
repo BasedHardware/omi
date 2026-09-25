@@ -11262,4 +11262,9 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Audio loket tidak sampai ke aplikasi — ketik untuk membaiki';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name dan lain-lain';
+  }
 }

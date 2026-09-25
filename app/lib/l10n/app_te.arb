@@ -11112,5 +11112,6 @@
     "recordWith": "రికార్డ్ చేసే విధానం",
     "moreWaysToRecord": "రికార్డ్ చేయడానికి మరిన్ని మార్గాలు",
     "openCall": "కాల్‌ను తెరవండి",
-    "captureRecoveryBanner": "పెండెంట్ ఆడియో యాప్‌కు చేరడం లేదు — రిపేర్ చేయడానికి ట్యాప్ చేయండి"
+    "captureRecoveryBanner": "పెండెంట్ ఆడియో యాప్‌కు చేరడం లేదు — రిపేర్ చేయడానికి ట్యాప్ చేయండి",
+    "participantsSummaryUncounted": "{name} మరియు ఇతరులు"
 }

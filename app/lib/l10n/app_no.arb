@@ -3546,5 +3546,6 @@
     "recordWith": "Ta opp med",
     "moreWaysToRecord": "Flere måter å ta opp på",
     "openCall": "Åpne anrop",
-    "captureRecoveryBanner": "Lyden fra anhenget når ikke frem til appen — trykk for å reparere"
+    "captureRecoveryBanner": "Lyden fra anhenget når ikke frem til appen — trykk for å reparere",
+    "participantsSummaryUncounted": "{name} og andre"
 }

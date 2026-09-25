@@ -11265,4 +11265,9 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Zvuk obeska ne prihaja v aplikacijo — tapnite za popravilo';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name in drugi';
+  }
 }

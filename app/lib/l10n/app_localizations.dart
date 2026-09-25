@@ -20468,6 +20468,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Pendant audio is not reaching the app — tap to repair'**
   String get captureRecoveryBanner;
+
+  /// Conversation header people chip when other voices spoke but could not be counted reliably, e.g. 'David + others'
+  ///
+  /// In en, this message translates to:
+  /// **'{name} + others'**
+  String participantsSummaryUncounted(String name);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

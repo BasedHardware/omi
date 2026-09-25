@@ -11242,4 +11242,9 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Ljudet från hänget når inte appen — tryck för att reparera';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name och andra';
+  }
 }

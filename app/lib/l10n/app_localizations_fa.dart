@@ -11230,4 +11230,9 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'صدای آویز به برنامه نمی‌رسد — برای تعمیر ضربه بزنید';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name و دیگران';
+  }
 }

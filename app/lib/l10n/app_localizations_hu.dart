@@ -11276,4 +11276,9 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'A medál hangja nem érkezik meg az alkalmazásba — a javításhoz koppintson';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name és mások';
+  }
 }

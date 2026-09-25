@@ -11165,4 +11165,9 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'صوت القلادة لا يصل إلى التطبيق — انقر للإصلاح';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name وآخرون';
+  }
 }

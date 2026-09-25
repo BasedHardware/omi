@@ -11325,4 +11325,9 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Der Ton des Pendants erreicht die App nicht — zum Reparieren tippen';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name und weitere';
+  }
 }

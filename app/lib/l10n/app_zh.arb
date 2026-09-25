@@ -3546,5 +3546,6 @@
     "recordWith": "录音方式",
     "moreWaysToRecord": "更多录音方式",
     "openCall": "打开通话",
-    "captureRecoveryBanner": "吊坠音频未送达应用 — 轻点以修复"
+    "captureRecoveryBanner": "吊坠音频未送达应用 — 轻点以修复",
+    "participantsSummaryUncounted": "{name}等人"
 }

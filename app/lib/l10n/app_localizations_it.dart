@@ -11296,4 +11296,9 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'L\'audio del ciondolo non arriva all\'app — tocca per riparare';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name e altri';
+  }
 }

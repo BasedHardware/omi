@@ -3581,5 +3581,6 @@
     "recordWith": "Enregistrer avec",
     "moreWaysToRecord": "Autres façons d'enregistrer",
     "openCall": "Ouvrir l'appel",
-    "captureRecoveryBanner": "Le son du pendentif n'arrive pas à l'application — touchez pour réparer"
+    "captureRecoveryBanner": "Le son du pendentif n'arrive pas à l'application — touchez pour réparer",
+    "participantsSummaryUncounted": "{name} et d'autres"
 }

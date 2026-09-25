@@ -11268,4 +11268,9 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'De audio van de hanger komt niet aan in de app — tik om te repareren';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name en anderen';
+  }
 }

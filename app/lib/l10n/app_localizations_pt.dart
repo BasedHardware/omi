@@ -11248,4 +11248,9 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'O áudio do pingente não chega à aplicação — toque para reparar';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name e outros';
+  }
 }

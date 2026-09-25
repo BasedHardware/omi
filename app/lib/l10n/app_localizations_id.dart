@@ -11243,4 +11243,9 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Audio pendant tidak sampai ke aplikasi — ketuk untuk memperbaiki';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name dan lainnya';
+  }
 }

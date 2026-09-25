@@ -3581,5 +3581,6 @@
     "recordWith": "Kayıt yöntemi",
     "moreWaysToRecord": "Diğer kayıt yöntemleri",
     "openCall": "Aramayı aç",
-    "captureRecoveryBanner": "Kolye sesi uygulamaya ulaşmıyor — onarmak için dokunun"
+    "captureRecoveryBanner": "Kolye sesi uygulamaya ulaşmıyor — onarmak için dokunun",
+    "participantsSummaryUncounted": "{name} ve diğerleri"
 }

@@ -11052,4 +11052,9 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => '펜던트 오디오가 앱에 도달하지 않습니다 — 탭하여 복구';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name 외 여러 명';
+  }
 }

@@ -11331,4 +11331,9 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Hindi nakakarating sa app ang audio ng pendant — i-tap para ayusin';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name at iba pa';
+  }
 }
