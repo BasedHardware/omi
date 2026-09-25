@@ -1,7 +1,7 @@
 /// GATT UUIDs mirrored from the Omi Flutter app (`app/lib/services/devices/models.dart`).
 library;
 
-const String omiServiceUuid = '19b10000-e8f2-537e-4f6c-d104768a1214';
+const String omiServiceUuid = '814b9b7c-25fd-4acd-8604-d28877beee6d';
 const String audioDataStreamCharacteristicUuid = '19b10001-e8f2-537e-4f6c-d104768a1214';
 const String audioCodecCharacteristicUuid = '19b10002-e8f2-537e-4f6c-d104768a1214';
 const String imageDataStreamCharacteristicUuid = '19b10005-e8f2-537e-4f6c-d104768a1214';

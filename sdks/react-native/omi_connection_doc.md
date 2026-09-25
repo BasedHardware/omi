@@ -9,7 +9,7 @@ The Omi connection module provides functionality to connect to Omi devices via B
 ## Key Service and Characteristic UUIDs
 
 ```
-Omi Service UUID: 19b10000-e8f2-537e-4f6c-d104768a1214
+Omi Service UUID: 814b9b7c-25fd-4acd-8604-d28877beee6d
 
 Audio Data Stream Characteristic: 19b10001-e8f2-537e-4f6c-d104768a1214
 Audio Codec Characteristic: 19b10002-e8f2-537e-4f6c-d104768a1214
