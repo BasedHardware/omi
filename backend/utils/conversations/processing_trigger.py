@@ -43,7 +43,8 @@ class ProcessingMode:
     reprocess: bool
     # Run derived work eagerly even when JIT first-open would defer it.
     bypass_jit_first_open: bool
-    # KEEP only for triggers that are themselves a user action on this row.
+    # KEEP for triggers that are themselves a user action on this row, plus
+    # SERVER_RECOVERY: the repair run must never discard the recovered copy.
     relevance: RelevancePolicy
 
 
