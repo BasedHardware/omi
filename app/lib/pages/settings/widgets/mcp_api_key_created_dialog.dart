@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import 'package:omi/backend/schema/mcp_api_key.dart';
-import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
+/// Shows a newly created MCP key once, with Copy and Done.
 class McpApiKeyCreatedDialog extends StatelessWidget {
   final McpApiKeyCreated apiKey;
 
@@ -12,42 +12,25 @@ class McpApiKeyCreatedDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(context.l10n.keyCreated),
-      content: SingleChildScrollView(
-        child: ListBody(
-          children: <Widget>[
-            Text(context.l10n.keyCreatedMessage),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Theme.of(context).colorScheme.surface,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: SelectableText(apiKey.key, style: const TextStyle(fontFamily: 'monospace')),
-            ),
-          ],
+    return OmiAlertDialog(
+      title: context.l10n.keyCreated,
+      message: context.l10n.keyCreatedMessage,
+      // SelectableText needs a Material ancestor inside the Cupertino dialog.
+      content: Material(
+        type: MaterialType.transparency,
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(OmiSpacing.sm),
+          decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
+          child: SelectableText(apiKey.key, style: OmiType.footnote.copyWith(fontFamily: 'monospace')),
         ),
       ),
-      actions: <Widget>[
-        TextButton(
-          child: Text(context.l10n.done),
-          onPressed: () {
-            Navigator.of(context).pop();
-          },
+      actions: [
+        OmiDialogAction(
+          label: context.l10n.copy,
+          onPressed: () => OmiClipboard.copy(context, apiKey.key, what: context.l10n.keyWord),
         ),
-        ElevatedButton(
-          child: Text(context.l10n.copy),
-          style: ElevatedButton.styleFrom(
-            foregroundColor: Colors.white,
-            backgroundColor: Theme.of(context).colorScheme.secondary,
-          ),
-          onPressed: () {
-            Clipboard.setData(ClipboardData(text: apiKey.key));
-            AppSnackbar.showSnackbar(context.l10n.copiedToClipboard(context.l10n.keyWord));
-          },
-        ),
+        OmiDialogAction(label: context.l10n.done, isDefault: true, onPressed: () => Navigator.of(context).pop()),
       ],
     );
   }

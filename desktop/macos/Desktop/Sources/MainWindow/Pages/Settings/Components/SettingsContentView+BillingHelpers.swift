@@ -48,7 +48,7 @@ extension SettingsContentView {
 
   var currentPlanTitle: String {
     guard let subscription = userSubscription?.subscription else {
-      return isLoadingSubscription ? "Loading plan..." : "Free"
+      return isLoadingSubscription ? "Loading plan…" : "Free"
     }
     // BYOK users: the backend returns plan=unlimited to turn off metering
     // but that's an implementation detail — to the user, they're on the
@@ -99,7 +99,7 @@ extension SettingsContentView {
 
   var currentPlanSubtitle: String {
     if isLoadingSubscription {
-      return "Fetching subscription details from omi."
+      return "Fetching subscription details from Omi."
     }
     if let detail = currentPlanBillingDetail {
       return detail

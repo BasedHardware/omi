@@ -4,8 +4,8 @@ import 'package:provider/provider.dart';
 import 'package:omi/models/local_recording.dart';
 import 'package:omi/pages/conversations/recording_detail/recording_detail_sheet.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/utils/other/temp.dart';
 
 /// A row in the conversations list for a batch/offline-mode recording captured
 /// locally. Unlike a conversation it has no title/icon yet — it shows the
@@ -17,12 +17,6 @@ class RecordingListItem extends StatelessWidget {
 
   const RecordingListItem({super.key, required this.recording});
 
-  String _formatDuration(int seconds) {
-    final m = seconds ~/ 60;
-    final s = seconds % 60;
-    return '$m:${s.toString().padLeft(2, '0')}';
-  }
-
   (Color, String) _status(BuildContext context) {
     final l = context.l10n;
     switch (recording.state) {
@@ -31,7 +25,7 @@ class RecordingListItem extends StatelessWidget {
       case LocalRecordingState.processing:
         return (Colors.grey.shade400, l.syncStatusUploaded);
       case LocalRecordingState.failed:
-        return (Colors.redAccent, l.failedStatus);
+        return (OmiColors.danger, l.failedStatus);
       case LocalRecordingState.pending:
         return (Colors.grey.shade500, l.privateAndSecureOnDevice);
     }
@@ -43,27 +37,32 @@ class RecordingListItem extends StatelessWidget {
       builder: (context, provider, _) {
         final (statusColor, statusLabel) = _status(context);
         final isPlaying = provider.isPlaying(recording);
-        final timeStr = dateTimeFormat(
-          'h:mm a',
-          recording.startedAt,
-          locale: Localizations.localeOf(context).languageCode,
-        );
+        final timeStr = OmiDateFormat.of(context).time(recording.startedAt);
 
         return Padding(
           padding: const EdgeInsets.only(top: 12, left: 16, right: 16),
           child: Container(
             width: double.maxFinite,
-            decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(24.0)),
+            decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.xlAll),
             child: ClipRRect(
-              borderRadius: BorderRadius.circular(24.0),
+              borderRadius: OmiRadius.xlAll,
               child: Dismissible(
                 key: ValueKey('rec_${recording.id}'),
                 direction: recording.isBusy ? DismissDirection.none : DismissDirection.endToStart,
                 background: Container(
                   alignment: Alignment.centerRight,
-                  color: Colors.red,
+                  color: OmiColors.danger,
                   padding: const EdgeInsets.only(right: 20),
                   child: const Icon(Icons.delete, color: Colors.white),
+                ),
+                // The file on this phone may be the only copy of the audio: deleting it cannot be
+                // undone, so the swipe always confirms (tokens audit #1, docs/ux-contract.md §4).
+                confirmDismiss: (_) => showOmiConfirm(
+                  context,
+                  title: context.l10n.deleteRecording,
+                  message: context.l10n.thisCannotBeUndone,
+                  confirmLabel: context.l10n.delete,
+                  destructive: true,
                 ),
                 onDismissed: (_) => provider.delete(recording),
                 child: GestureDetector(
@@ -76,10 +75,7 @@ class RecordingListItem extends StatelessWidget {
                         Container(
                           width: 40,
                           height: 40,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF35343B),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
+                          decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
                           child: Icon(Icons.graphic_eq, color: Colors.grey.shade400, size: 20),
                         ),
                         const SizedBox(width: 14),
@@ -88,10 +84,10 @@ class RecordingListItem extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                '$timeStr · ${_formatDuration(recording.seconds)}',
+                                '$timeStr · ${OmiDuration.compact(recording.seconds, context.l10n)}',
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
+                                style: OmiType.callout.copyWith(fontWeight: FontWeight.w600),
                               ),
                               const SizedBox(height: 3),
                               Text(
@@ -104,14 +100,13 @@ class RecordingListItem extends StatelessWidget {
                           ),
                         ),
                         const SizedBox(width: 10),
-                        GestureDetector(
-                          onTap: () => provider.togglePlayback(recording),
-                          child: Container(
-                            width: 44,
-                            height: 44,
-                            decoration: const BoxDecoration(color: Color(0xFF35343B), shape: BoxShape.circle),
-                            child: Icon(isPlaying ? Icons.pause : Icons.play_arrow, color: Colors.white, size: 24),
-                          ),
+                        OmiIconButton.filled(
+                          key: ValueKey('rec_play_${recording.id}'),
+                          icon: Icon(isPlaying ? Icons.pause : Icons.play_arrow, size: 24),
+                          label: isPlaying ? context.l10n.pause : context.l10n.play,
+                          diameter: kOmiMinTapTarget,
+                          fillColor: OmiColors.surface2,
+                          onPressed: () => provider.togglePlayback(recording),
                         ),
                       ],
                     ),

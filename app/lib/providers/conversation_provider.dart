@@ -13,6 +13,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/services/auth_service.dart';
 import 'package:omi/services/notifications/merge_notification_handler.dart';
+import 'package:omi/utils/conversations/capture_groups.dart';
 import 'package:omi/utils/logger.dart';
 
 typedef ConversationListFetcher = Future<({List<ServerConversation> items, bool ok})> Function();
@@ -75,7 +76,9 @@ class ConversationProvider extends ChangeNotifier {
   bool showShortConversations = false;
   int shortConversationThreshold = 0; // in seconds
   bool showStarredOnly = false; // filter to show only starred conversations
-  bool showDailySummaries = false; // filter to show daily summaries instead of conversations
+  /// Daily Recaps is its own pushed page (`DailyRecapsPage`); the list never enters a recap mode.
+  /// Kept (always false) only for home/page.dart's tab-tap reset until that call site is removed.
+  bool get showDailySummaries => false;
   bool hasDailySummaries = false; // whether user has any daily summaries
   DateTime? selectedStartDate;
   DateTime? selectedEndDate;
@@ -291,7 +294,6 @@ class ConversationProvider extends ChangeNotifier {
     mergingConversationIds = {};
     selectedConversationIds = {};
     isSelectionModeActive = false;
-    showDailySummaries = false;
     hasDailySummaries = false;
     selectedStartDate = null;
     selectedEndDate = null;
@@ -312,7 +314,7 @@ class ConversationProvider extends ChangeNotifier {
     _initialFetchRetryTimer = null;
     _initialFetchRetryCount = 0;
     memoriesToDelete = {};
-    deleteTimestamps = {};
+    _cancelPendingDeleteTimers();
     _refreshDebounceTimer?.cancel();
     _refreshDebounceTimer = null;
     _lastRefreshTime = null;
@@ -588,10 +590,6 @@ class ConversationProvider extends ChangeNotifier {
 
   void toggleStarredFilter() {
     showStarredOnly = !showStarredOnly;
-    // Clear daily summaries filter when toggling starred
-    if (showStarredOnly) {
-      showDailySummaries = false;
-    }
 
     // Clear and refetch conversations to get starred from server
     groupedConversations = {};
@@ -599,15 +597,8 @@ class ConversationProvider extends ChangeNotifier {
     fetchConversations();
   }
 
-  void toggleDailySummaries() {
-    showDailySummaries = !showDailySummaries;
-    // Clear other filters when showing daily summaries
-    if (showDailySummaries) {
-      showStarredOnly = false;
-      selectedFolderId = null;
-    }
-    notifyListeners();
-  }
+  /// No-op: see [showDailySummaries].
+  void toggleDailySummaries() {}
 
   /// Check if user has any daily summaries
   Future<bool> checkHasDailySummaries() async {
@@ -626,9 +617,6 @@ class ConversationProvider extends ChangeNotifier {
   Future<void> filterByFolder(String? folderId) async {
     if (selectedFolderId == folderId) return;
     selectedFolderId = folderId;
-
-    // Clear daily summaries filter when selecting a folder
-    showDailySummaries = false;
 
     // Clear search when applying folder filter
     previousQuery = "";
@@ -970,6 +958,7 @@ class ConversationProvider extends ChangeNotifier {
 
   List<ServerConversation> _filterOutConvos(List<ServerConversation> convos) {
     return convos.where((convo) {
+      if (memoriesToDelete.containsKey(convo.id)) return false;
       // Filter by discarded status
       // When showDiscardedConversations is true, show all conversations (including discarded)
       // When showDiscardedConversations is false, hide discarded conversations
@@ -1033,48 +1022,57 @@ class ConversationProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Filter conversations by a date range (inclusive of both start and end day)
-  Future<void> filterConversationsByDateRange(DateTime start, DateTime end) async {
+  /// The one conversation date filter (docs/ux-contract.md; hub audit #23): it narrows the list and,
+  /// while a search is active, the search too, so the calendar button never switches what it filters.
+  /// Applying or clearing it keeps the current search. Inclusive of both the start and end day.
+  Future<void> filterConversationsByDateRange(DateTime? start, DateTime? end) async {
     selectedStartDate = start;
-    selectedEndDate = end;
-
-    // Clear search when applying date filter
-    selectedSpeakerId = null;
-    previousQuery = "";
-    currentSearchPage = 0;
-    totalSearchPages = 0;
-    searchedConversations = [];
-
+    selectedEndDate = start == null ? null : (end ?? start);
+    setSearchDateRange(selectedStartDate, selectedEndDate);
+    if (hasActiveSearch) {
+      await searchConversations(previousQuery, showShimmer: true);
+      return;
+    }
     groupedConversations = {};
     notifyListeners();
-
     await fetchConversations();
   }
 
-  /// Clear the date filter
-  Future<void> clearDateFilter() async {
-    selectedStartDate = null;
-    selectedEndDate = null;
-
-    // Clear search when clearing date filter
-    selectedSpeakerId = null;
-    previousQuery = "";
-    currentSearchPage = 0;
-    totalSearchPages = 0;
-    searchedConversations = [];
-
-    groupedConversations = {};
-    notifyListeners();
-
-    await fetchConversations();
-  }
+  /// Clears the date filter (list and search).
+  Future<void> clearDateFilter() => filterConversationsByDateRange(null, null);
 
   void _groupSearchConvosByDateWithoutNotify() {
-    groupedConversations = groupSearchResultsPreservingRank(_filterOutConvos(searchedConversations));
+    groupedConversations = groupSearchResultsPreservingRank(_visibleRows(searchedConversations));
   }
 
   void _groupConversationsByDateWithoutNotify() {
-    groupedConversations = _buildGroupedByDate(_filterOutConvos(conversations));
+    groupedConversations = _buildGroupedByDate(_visibleRows(conversations));
+  }
+
+  /// The rows the list shows: client-side filters, then one row per recorded
+  /// event ([CaptureGroupPresentation.collapse]). A row hidden behind its
+  /// event's row leaves the merge selection, so a merge never acts on a
+  /// conversation the user can no longer see.
+  List<ServerConversation> _visibleRows(List<ServerConversation> source) {
+    final filtered = _filterOutConvos(source);
+    final shown = CaptureGroupPresentation.collapse(filtered);
+    if (shown.length != filtered.length && selectedConversationIds.isNotEmpty) {
+      final shownIds = shown.map((conversation) => conversation.id).toSet();
+      selectedConversationIds.removeWhere((id) => !shownIds.contains(id));
+      if (selectedConversationIds.isEmpty) isSelectionModeActive = false;
+    }
+    return shown;
+  }
+
+  /// A loaded conversation by id, including a recording hidden behind its
+  /// event's row (the list keeps every server row; only the display collapses).
+  ServerConversation? loadedConversationById(String id) {
+    for (final source in [conversations, searchedConversations]) {
+      for (final conversation in source) {
+        if (conversation.id == id) return conversation;
+      }
+    }
+    return null;
   }
 
   /// Buckets conversations into day-keyed groups, sorted newest-first both
@@ -1459,48 +1457,57 @@ class ConversationProvider extends ChangeNotifier {
     notifyListeners();
   }
 
-  /////////////////////////////////////////////////////////////////
-  ////////// Delete Memory With Undo Functionality ///////////////
+  ////////// Delete with Undo (docs/ux-contract.md §4, D5) ///////////////
 
+  /// Conversations removed in the UI whose server DELETE has not settled: first held for
+  /// [pendingDeleteWindow] so Undo can restore them, then kept as tombstones through the in-flight
+  /// request so a concurrent refresh cannot reinsert them.
   Map<String, ServerConversation> memoriesToDelete = {};
-  String? lastDeletedConversationId;
-  Map<String, DateTime> deleteTimestamps = {};
+  final Map<String, Timer> _pendingDeleteTimers = {};
 
-  // Hide conversations whose server-side DELETE is still pending (3s undo window
-  // or in-flight HTTP). Without this, a pull-to-refresh during that window
-  // re-surfaces the just-deleted conversation, which users read as "delete didn't work".
+  /// How long a deleted conversation stays restorable. Well past the 5 s Undo toast
+  /// (`OmiFeedbackTiming.undo`) so a toast that starts late behind other snack bars still gets its
+  /// full time; the toast commits early via [commitPendingDelete] when it closes, so the usual
+  /// delete still reaches the server about 5 s after the swipe.
+  static const pendingDeleteWindow = Duration(seconds: 10);
+
   List<ServerConversation> _filterPendingDeletes(List<ServerConversation> items) {
     if (memoriesToDelete.isEmpty) return items;
     return items.where((c) => !memoriesToDelete.containsKey(c.id)).toList();
   }
 
-  void deleteConversationLocally(ServerConversation conversation, DateTime date) {
-    if (lastDeletedConversationId != null &&
-        memoriesToDelete.containsKey(lastDeletedConversationId) &&
-        DateTime.now().difference(deleteTimestamps[lastDeletedConversationId]!) < const Duration(seconds: 3)) {
-      deleteConversationOnServer(lastDeletedConversationId!);
-    }
-
+  /// Hides [conversation] now and deletes it on the server after [pendingDeleteWindow], unless
+  /// [undoDeletedConversation] restores it first. The one delete path for list, bulk and detail.
+  void deleteConversationLocally(ServerConversation conversation, [DateTime? date]) {
     memoriesToDelete[conversation.id] = conversation;
-    lastDeletedConversationId = conversation.id;
-    deleteTimestamps[conversation.id] = DateTime.now();
+    _pendingDeleteTimers.remove(conversation.id)?.cancel();
+    _pendingDeleteTimers[conversation.id] = Timer(pendingDeleteWindow, () => commitPendingDelete(conversation.id));
     conversations.removeWhere((element) => element.id == conversation.id);
-    final group = groupedConversations[date];
-    if (group != null) {
+    for (final group in groupedConversations.values) {
       group.removeWhere((e) => e.id == conversation.id);
-      if (group.isEmpty) {
-        groupedConversations.remove(date);
-      }
     }
+    groupedConversations.removeWhere((_, group) => group.isEmpty);
     notifyListeners();
-    Future.delayed(const Duration(seconds: 3), () {
-      if (memoriesToDelete.containsKey(conversation.id) && lastDeletedConversationId == conversation.id) {
-        deleteConversationOnServer(conversation.id);
-      }
-    });
+  }
+
+  /// Whether [conversationId] was deleted in the UI and can still be restored.
+  bool isDeletePending(String conversationId) => _pendingDeleteTimers.containsKey(conversationId);
+
+  /// Sends a pending delete now (its Undo toast closed without Undo). No-op once sent or restored.
+  void commitPendingDelete(String conversationId) {
+    if (!isDeletePending(conversationId)) return;
+    deleteConversationOnServer(conversationId);
+  }
+
+  void _cancelPendingDeleteTimers() {
+    for (final timer in _pendingDeleteTimers.values) {
+      timer.cancel();
+    }
+    _pendingDeleteTimers.clear();
   }
 
   void deleteConversationOnServer(String conversationId) {
+    _pendingDeleteTimers.remove(conversationId)?.cancel();
     final generation = _sessionGeneration;
     final wasLoadedFromServer = _conversationServerLoadedIds.contains(conversationId);
     final deleteFuture =
@@ -1549,42 +1556,24 @@ class ConversationProvider extends ChangeNotifier {
     );
   }
 
-  void _clearDeleteTombstone(String conversationId) {
-    memoriesToDelete.remove(conversationId);
-    deleteTimestamps.remove(conversationId);
-    if (lastDeletedConversationId == conversationId) {
-      lastDeletedConversationId = null;
-    }
-  }
+  void _clearDeleteTombstone(String conversationId) => memoriesToDelete.remove(conversationId);
 
+  /// Restores a conversation whose delete is still pending. Does nothing once the DELETE was sent.
   void undoDeletedConversation(ServerConversation conversation) {
+    final timer = _pendingDeleteTimers.remove(conversation.id);
+    if (timer == null) return;
+    timer.cancel();
+    memoriesToDelete.remove(conversation.id);
     if (!conversations.any((e) => e.id == conversation.id)) {
       conversations.add(conversation);
       conversations.sort((a, b) => (b.startedAt ?? b.createdAt).compareTo(a.startedAt ?? a.createdAt));
-      _groupConversationsByDateWithoutNotify();
     }
-    memoriesToDelete.remove(conversation.id);
-    deleteTimestamps.remove(conversation.id);
-    if (lastDeletedConversationId == conversation.id) {
-      lastDeletedConversationId = null;
-    }
-    notifyListeners();
-  }
-
-  /////////////////////////////////////////////////////////////////
-
-  void deleteConversation(ServerConversation conversation) {
-    conversations.removeWhere((element) => element.id == conversation.id);
-    searchedConversations.removeWhere((element) => element.id == conversation.id);
-    // Keep a tombstone through the in-flight DELETE so a concurrent list
-    // response cannot reinsert the just-removed row before confirmation.
-    memoriesToDelete[conversation.id] = conversation;
-    deleteConversationOnServer(conversation.id);
     groupConversationsByDate();
   }
 
   @override
   void dispose() {
+    _cancelPendingDeleteTimers();
     _refreshDebounceTimer?.cancel();
     _initialFetchRetryTimer?.cancel();
     _mergeCompletedSubscription?.cancel();

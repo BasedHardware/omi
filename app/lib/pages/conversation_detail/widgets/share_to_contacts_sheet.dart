@@ -14,6 +14,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/share_links.dart';
+import 'package:omi/ui/ui.dart';
 
 /// Contact with phone number for sharing
 class ShareableContact {
@@ -27,11 +28,11 @@ class ShareableContact {
 
 /// Show the share to contacts bottom sheet
 void showShareToContactsBottomSheet(BuildContext context, ServerConversation conversation) {
-  showModalBottomSheet(
+  showOmiSheet<void>(
     context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    builder: (ctx) => ShareToContactsBottomSheet(conversation: conversation),
+    title: context.l10n.shareViaSms,
+    padding: EdgeInsets.zero,
+    builder: (_) => ShareToContactsBottomSheet(conversation: conversation),
   );
 }
 
@@ -230,223 +231,121 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
 
   @override
   Widget build(BuildContext context) {
-    return DraggableScrollableSheet(
-      initialChildSize: 0.75,
-      minChildSize: 0.5,
-      maxChildSize: 0.95,
-      builder: (context, scrollController) {
-        return Container(
-          decoration: const BoxDecoration(
-            color: Color(0xFF1A1A1A),
-            borderRadius: BorderRadius.only(topLeft: Radius.circular(20), topRight: Radius.circular(20)),
+    final selectedCount = _selectedContacts.length;
+    return SizedBox(
+      height: MediaQuery.sizeOf(context).height * 0.75,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(OmiSpacing.md, 0, OmiSpacing.md, OmiSpacing.sm),
+            child: Text(
+              context.l10n.selectContactsToShareSummary,
+              style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+            ),
           ),
-          child: Column(
-            children: [
-              // Handle bar
-              Container(
-                margin: const EdgeInsets.only(top: 12),
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(color: Colors.grey.shade600, borderRadius: BorderRadius.circular(2)),
-              ),
-              // Header
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          context.l10n.shareViaSms,
-                          style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
-                        ),
-                        IconButton(
-                          icon: const Icon(Icons.close, color: Colors.grey),
-                          onPressed: () => Navigator.of(context).pop(),
-                        ),
-                      ],
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
+            child: OmiSearchField(
+              placeholder: context.l10n.searchContactsHint,
+              controller: _searchController,
+              onChanged: _filterContacts,
+            ),
+          ),
+          const SizedBox(height: OmiSpacing.xs),
+          if (selectedCount > 0)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.xxs),
+              child: Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: 6),
+                    decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.pillAll),
+                    child: Text(
+                      context.l10n.contactsSelectedCount(selectedCount),
+                      style: OmiType.footnote.copyWith(fontWeight: FontWeight.w600),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      context.l10n.selectContactsToShareSummary,
-                      style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
+                  ),
+                  const Spacer(),
+                  OmiButton.tertiary(
+                    label: context.l10n.clearAllSelection,
+                    size: OmiButtonSize.compact,
+                    onPressed: () => setState(() {
+                      for (var contact in _contacts) {
+                        contact.isSelected = false;
+                      }
+                    }),
+                  ),
+                ],
+              ),
+            ),
+          if (_errorMessage != null)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.xs),
+              child: Container(
+                padding: const EdgeInsets.all(OmiSpacing.sm),
+                decoration: const BoxDecoration(color: OmiColors.dangerSurface, borderRadius: OmiRadius.smAll),
+                child: Row(
+                  children: [
+                    const Icon(Icons.error_outline, color: OmiColors.danger, size: 20),
+                    const SizedBox(width: OmiSpacing.xs),
+                    Expanded(
+                      child: Text(_errorMessage!, style: OmiType.footnote.copyWith(color: OmiColors.textPrimary)),
                     ),
                   ],
                 ),
               ),
-              // Search bar
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: TextField(
-                  controller: _searchController,
-                  onChanged: _filterContacts,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    hintText: context.l10n.searchContactsHint,
-                    hintStyle: TextStyle(color: Colors.grey.shade500),
-                    prefixIcon: const Icon(Icons.search, color: Colors.grey),
-                    filled: true,
-                    fillColor: const Color(0xFF2A2A2A),
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  ),
-                ),
+            ),
+          Expanded(child: _buildContactsList(null)),
+          if (!_permissionDenied)
+            Padding(
+              padding: const EdgeInsets.all(OmiSpacing.md),
+              child: OmiButton(
+                expand: true,
+                isLoading: _isPreparingShare,
+                label: selectedCount == 0
+                    ? context.l10n.selectContactsToShare
+                    : selectedCount > 1
+                        ? context.l10n.shareWithContactsCount(selectedCount)
+                        : context.l10n.shareWithContactCount(selectedCount),
+                onPressed: selectedCount == 0 ? null : _openNativeSms,
               ),
-              const SizedBox(height: 8),
-              // Selected count
-              if (_selectedContacts.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: Colors.deepPurple.withValues(alpha: 0.3),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          context.l10n.contactsSelectedCount(_selectedContacts.length),
-                          style: const TextStyle(color: Colors.deepPurple, fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                      const Spacer(),
-                      TextButton(
-                        onPressed: () {
-                          setState(() {
-                            for (var contact in _contacts) {
-                              contact.isSelected = false;
-                            }
-                          });
-                        },
-                        child: Text(context.l10n.clearAllSelection, style: const TextStyle(color: Colors.grey)),
-                      ),
-                    ],
-                  ),
-                ),
-              // Error message
-              if (_errorMessage != null)
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.red.withValues(alpha: 0.2),
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.error_outline, color: Colors.red, size: 20),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(_errorMessage!, style: const TextStyle(color: Colors.red, fontSize: 13)),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              // Contacts list
-              Expanded(child: _buildContactsList(scrollController)),
-              // Send button
-              if (!_permissionDenied)
-                SafeArea(
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: _selectedContacts.isEmpty || _isPreparingShare ? null : _openNativeSms,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.deepPurple,
-                          disabledBackgroundColor: Colors.grey.shade800,
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                        child: _isPreparingShare
-                            ? const SizedBox(
-                                width: 24,
-                                height: 24,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                                ),
-                              )
-                            : Text(
-                                _selectedContacts.isEmpty
-                                    ? context.l10n.selectContactsToShare
-                                    : _selectedContacts.length > 1
-                                        ? context.l10n.shareWithContactsCount(_selectedContacts.length)
-                                        : context.l10n.shareWithContactCount(_selectedContacts.length),
-                                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white),
-                              ),
-                      ),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-        );
-      },
+            ),
+        ],
+      ),
     );
   }
 
-  Widget _buildContactsList(ScrollController scrollController) {
+  Widget _buildContactsList(ScrollController? scrollController) {
     if (_isLoading) {
-      return const Center(child: CircularProgressIndicator(color: Colors.deepPurple));
+      return const OmiLoadingState();
     }
 
     if (_permissionDenied) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.contacts, size: 64, color: Colors.grey.shade600),
-            const SizedBox(height: 16),
-            Text(
-              context.l10n.contactsPermissionRequired,
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.grey.shade400),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              context.l10n.grantContactsPermissionForSms,
-              style: TextStyle(color: Colors.grey.shade500),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: () async {
-                // Open app settings
-                if (Platform.isIOS) {
-                  await launchUrl(Uri.parse('app-settings:'));
-                } else {
-                  await launchUrl(Uri.parse('package:com.friend.ios'));
-                }
-              },
-              style: ElevatedButton.styleFrom(backgroundColor: Colors.deepPurple),
-              child: Text(context.l10n.openSettings),
-            ),
-          ],
+      return OmiEmptyState(
+        icon: Icons.contacts,
+        title: context.l10n.contactsPermissionRequired,
+        message: context.l10n.grantContactsPermissionForSms,
+        action: OmiButton(
+          label: context.l10n.openSettings,
+          size: OmiButtonSize.compact,
+          onPressed: () async {
+            if (Platform.isIOS) {
+              await launchUrl(Uri.parse('app-settings:'));
+            } else {
+              await launchUrl(Uri.parse('package:com.friend.ios'));
+            }
+          },
         ),
       );
     }
 
     if (_filteredContacts.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.search_off, size: 64, color: Colors.grey.shade600),
-            const SizedBox(height: 16),
-            Text(
-              _searchController.text.isEmpty
-                  ? context.l10n.noContactsWithPhoneNumbers
-                  : context.l10n.noContactsMatchSearch,
-              style: TextStyle(fontSize: 16, color: Colors.grey.shade400),
-            ),
-          ],
-        ),
+      return OmiEmptyState(
+        icon: Icons.search_off,
+        title: _searchController.text.isEmpty
+            ? context.l10n.noContactsWithPhoneNumbers
+            : context.l10n.noContactsMatchSearch,
       );
     }
 
@@ -464,23 +363,24 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
   Widget _buildContactTile(ShareableContact contact) {
     return ListTile(
       onTap: () => _toggleContactSelection(contact),
+      selected: contact.isSelected,
       leading: CircleAvatar(
-        backgroundColor: contact.isSelected ? Colors.deepPurple : Colors.grey.shade800,
+        backgroundColor: contact.isSelected ? OmiColors.accent : OmiColors.surface3,
         child: contact.isSelected
-            ? const Icon(Icons.check, color: Colors.white, size: 20)
+            ? const Icon(Icons.check, color: OmiColors.onAccent, size: 20)
             : Text(
                 contact.displayName.isNotEmpty ? contact.displayName[0].toUpperCase() : '?',
-                style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                style: OmiType.headline,
               ),
       ),
       title: Text(
         contact.displayName,
-        style: TextStyle(color: Colors.white, fontWeight: contact.isSelected ? FontWeight.w600 : FontWeight.normal),
+        style: OmiType.subhead.copyWith(fontWeight: contact.isSelected ? FontWeight.w600 : FontWeight.normal),
       ),
-      subtitle: Text(contact.phoneNumber, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
+      subtitle: Text(contact.phoneNumber, style: OmiType.caption.copyWith(color: OmiColors.textTertiary)),
       trailing: contact.isSelected
-          ? const Icon(Icons.check_circle, color: Colors.deepPurple)
-          : Icon(Icons.circle_outlined, color: Colors.grey.shade600),
+          ? const Icon(Icons.check_circle, color: OmiColors.accent)
+          : const Icon(Icons.circle_outlined, color: OmiColors.textTertiary),
     );
   }
 }

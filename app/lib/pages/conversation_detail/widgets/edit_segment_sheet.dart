@@ -1,48 +1,60 @@
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
-void showEditSegmentBottomSheet(
+/// Opens the sheet that corrects one transcript line's text.
+///
+/// Titled with the line's speaker ([speakerName] comes from `SpeakerNames`, so the reader's own
+/// lines say "You"). Save and Cancel are explicit; leaving with unsaved text (Cancel, swipe-down,
+/// the scrim or system back) asks before discarding it.
+Future<void> showEditSegmentBottomSheet(
   BuildContext context, {
   required TranscriptSegment segment,
   required String speakerName,
   required Function(String newText) onSave,
   VoidCallback? onDismissed,
 }) {
-  showModalBottomSheet(
+  return showOmiSheet<void>(
     context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.grey.shade900,
-    shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-    builder: (context) => _EditSegmentSheet(segment: segment, speakerName: speakerName, onSave: onSave),
+    title: speakerName,
+    builder: (_) => EditSegmentSheet(segment: segment, onSave: onSave),
   ).whenComplete(() => onDismissed?.call());
 }
 
-class _EditSegmentSheet extends StatefulWidget {
+/// Body of the edit-segment sheet; present it with [showEditSegmentBottomSheet].
+class EditSegmentSheet extends StatefulWidget {
   final TranscriptSegment segment;
-  final String speakerName;
   final Function(String newText) onSave;
 
-  const _EditSegmentSheet({required this.segment, required this.speakerName, required this.onSave});
+  const EditSegmentSheet({super.key, required this.segment, required this.onSave});
 
   @override
-  State<_EditSegmentSheet> createState() => _EditSegmentSheetState();
+  State<EditSegmentSheet> createState() => _EditSegmentSheetState();
 }
 
-class _EditSegmentSheetState extends State<_EditSegmentSheet> {
+class _EditSegmentSheetState extends State<EditSegmentSheet> {
   late final TextEditingController _controller;
+  bool _dirty = false;
 
   @override
   void initState() {
     super.initState();
     _controller = TextEditingController(text: widget.segment.text);
+    _controller.addListener(_onChanged);
   }
 
   @override
   void dispose() {
+    _controller.removeListener(_onChanged);
     _controller.dispose();
     super.dispose();
+  }
+
+  void _onChanged() {
+    final dirty = _controller.text.trim() != widget.segment.text.trim();
+    if (dirty != _dirty) setState(() => _dirty = dirty);
   }
 
   void _save() {
@@ -50,70 +62,73 @@ class _EditSegmentSheetState extends State<_EditSegmentSheet> {
     if (newText.isNotEmpty && newText != widget.segment.text) {
       widget.onSave(newText);
     }
+    _dirty = false;
+    Navigator.of(context).pop();
+  }
+
+  Future<void> _confirmDiscard() async {
+    final l10n = context.l10n;
+    final discard = await showOmiConfirm(
+      context,
+      title: l10n.discardChangesTitle,
+      message: l10n.discardChangesMessage,
+      confirmLabel: l10n.discard,
+      cancelLabel: l10n.keepEditing,
+      destructive: true,
+    );
+    if (!discard || !mounted) return;
+    setState(() => _dirty = false);
     Navigator.of(context).pop();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: MediaQuery.of(context).viewInsets,
+    return PopScope(
+      canPop: !_dirty,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _confirmDiscard();
+      },
       child: SingleChildScrollView(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
+          padding: const EdgeInsets.only(bottom: OmiSpacing.md),
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(color: Colors.grey.shade600, borderRadius: BorderRadius.circular(2)),
-                ),
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      widget.speakerName,
-                      style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
-                    ),
+              if (widget.segment.start > 0)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: OmiSpacing.xs),
+                  child: Text(
+                    OmiDuration.offset(widget.segment.start),
+                    style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
                   ),
-                  if (widget.segment.start > 0)
-                    Text(
-                      widget.segment.getTimestampString(),
-                      style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 12),
+                ),
               TextField(
                 controller: _controller,
                 autofocus: true,
                 maxLines: null,
                 minLines: 3,
-                style: const TextStyle(color: Colors.white, fontSize: 15, height: 1.5),
-                decoration: InputDecoration(
+                style: OmiType.subhead.copyWith(height: 1.5),
+                decoration: const InputDecoration(
                   filled: true,
-                  fillColor: Colors.grey.shade800,
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                  contentPadding: const EdgeInsets.all(14),
+                  fillColor: OmiColors.surface2,
+                  border: OutlineInputBorder(borderRadius: OmiRadius.mdAll, borderSide: BorderSide.none),
+                  contentPadding: EdgeInsets.all(14),
                 ),
               ),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: _save,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+              const SizedBox(height: OmiSpacing.md),
+              Row(
+                children: [
+                  Expanded(
+                    child: OmiButton.secondary(
+                      label: context.l10n.cancel,
+                      expand: true,
+                      onPressed: () => Navigator.of(context).maybePop(),
+                    ),
                   ),
-                  child: Text(context.l10n.save, style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600)),
-                ),
+                  const SizedBox(width: OmiSpacing.sm),
+                  Expanded(child: OmiButton(label: context.l10n.save, expand: true, onPressed: _save)),
+                ],
               ),
             ],
           ),
