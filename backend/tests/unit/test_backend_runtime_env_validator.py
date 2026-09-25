@@ -419,15 +419,15 @@ def test_conversation_finalization_capability_inventory_explicitly_covers_pusher
 
 
 @pytest.fixture(scope='module')
-def capability_env():
+def cap_env():
     validator = load_validator()
     manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
     return lambda env: (validator, copy.deepcopy(manifest['environments'][env]))
 
 
 @pytest.mark.parametrize('env', ['dev', 'prod'])
-def test_conversation_finalization_capability_contract_rejects_omitted_pusher(env, capability_env):
-    validator, env_config = capability_env(env)
+def test_conversation_finalization_capability_contract_rejects_omitted_pusher(env, cap_env):
+    validator, env_config = cap_env(env)
     del env_config['gke']['pusher']
 
     errors = validator.validate_conversation_finalization_capabilities(env, env_config)
@@ -441,8 +441,8 @@ def test_conversation_finalization_capability_contract_rejects_omitted_pusher(en
     )
 
 
-def test_conversation_finalization_capability_contract_rejects_missing_declared_capability(capability_env):
-    validator, env_config = capability_env('prod')
+def test_conversation_finalization_capability_contract_rejects_missing_declared_capability(cap_env):
+    validator, env_config = cap_env('prod')
     env_config['gke']['pusher']['capabilities'].remove('memory.canonical.mutate')
 
     errors = validator.validate_conversation_finalization_capabilities('prod', env_config)
@@ -457,10 +457,8 @@ def test_conversation_finalization_capability_contract_rejects_missing_declared_
 
 
 @pytest.mark.parametrize('memory_enabled', [None, 'off', 'invalid'])
-def test_conversation_finalization_capability_contract_rejects_non_writable_memory_fence(
-    memory_enabled, capability_env
-):
-    validator, env_config = capability_env('prod')
+def test_conversation_finalization_capability_contract_rejects_non_writable_memory_fence(memory_enabled, cap_env):
+    validator, env_config = cap_env('prod')
     pusher_env = env_config['gke']['pusher']['env']
     if memory_enabled is None:
         del pusher_env['MEMORY_ENABLED']
@@ -479,9 +477,9 @@ def test_conversation_finalization_capability_contract_rejects_non_writable_memo
 
 
 def test_conversation_finalization_capability_contract_rejects_missing_summary_pipeline_flag_on_backend_sync(
-    capability_env,
+    cap_env,
 ):
-    validator, env_config = capability_env('prod')
+    validator, env_config = cap_env('prod')
     del env_config['cloud_run']['services']['backend-sync']['env']['CONVERSATION_NOTES_V2_ENABLED']
 
     errors = validator.validate_conversation_finalization_capabilities('prod', env_config)
@@ -495,8 +493,8 @@ def test_conversation_finalization_capability_contract_rejects_missing_summary_p
     )
 
 
-def test_conversation_finalization_capability_contract_rejects_summary_pipeline_flag_disagreement(capability_env):
-    validator, env_config = capability_env('prod')
+def test_conversation_finalization_capability_contract_rejects_summary_pipeline_flag_disagreement(cap_env):
+    validator, env_config = cap_env('prod')
     env_config['cloud_run']['services']['backend-sync']['env']['CONVERSATION_NOTES_V2_ENABLED']['value'] = 'false'
 
     errors = validator.validate_conversation_finalization_capabilities('prod', env_config)
@@ -509,10 +507,8 @@ def test_conversation_finalization_capability_contract_rejects_summary_pipeline_
     )
 
 
-def test_conversation_finalization_capability_contract_rejects_normalized_but_not_identical_flag_literals(
-    capability_env,
-):
-    validator, env_config = capability_env('prod')
+def test_conversation_finalization_capability_contract_rejects_normalized_but_not_identical_flag_literals(cap_env):
+    validator, env_config = cap_env('prod')
     # ' TRUE ' resolves to the same runtime boolean as 'true', but the pusher
     # co-host gate compares raw literals; admission must not be weaker than it.
     env_config['cloud_run']['services']['backend-sync']['env']['CONVERSATION_NOTES_V2_ENABLED']['value'] = ' TRUE '
@@ -529,8 +525,8 @@ def test_conversation_finalization_capability_contract_rejects_normalized_but_no
 
 
 @pytest.mark.parametrize('literal', ['on', '1', 'yes', ' true ', 'True', ''])
-def test_basic_plan_gate_switch_admits_only_the_spellings_its_reader_accepts(literal, capability_env):
-    validator, env_config = capability_env('dev')
+def test_basic_plan_gate_switch_admits_only_the_spellings_its_reader_accepts(literal, cap_env):
+    validator, env_config = cap_env('dev')
     # utils.free_tier_basic_gates lights a gate only on an untrimmed,
     # case-insensitive 'true'. A uniform 'on' would pass co-host agreement and
     # the loose summary-flag literal set while every host ran ungated.
@@ -545,8 +541,8 @@ def test_basic_plan_gate_switch_admits_only_the_spellings_its_reader_accepts(lit
     assert any(f"{flag} must be exactly 'true' or 'false'" in error.message for error in errors)
 
 
-def test_conversation_finalization_capability_contract_rejects_empty_summary_pipeline_flag_literal(capability_env):
-    validator, env_config = capability_env('prod')
+def test_conversation_finalization_capability_contract_rejects_empty_summary_pipeline_flag_literal(cap_env):
+    validator, env_config = cap_env('prod')
     # '' parses as literal-present so it dodges the omission check, and an
     # all-empty fleet would also dodge disagreement — yet runtime treats it as
     # False, the exact silent-off case this contract exists to reject.
@@ -565,8 +561,8 @@ def test_conversation_finalization_capability_contract_rejects_empty_summary_pip
     assert not any('disagrees' in error.message for error in errors)
 
 
-def test_conversation_finalization_capability_contract_rejects_unknown_and_uncovered_declarations(capability_env):
-    validator, env_config = capability_env('dev')
+def test_conversation_finalization_capability_contract_rejects_unknown_and_uncovered_declarations(cap_env):
+    validator, env_config = cap_env('dev')
     env_config['gke']['pusher']['capabilities'].append('conversation.finalize.unknown')
     env_config['gke']['uncovered-finalizer'] = {
         'capabilities': ['conversation.finalize.persisted'],
