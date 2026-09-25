@@ -118,6 +118,8 @@ def with_conversation_notes_v2_env(payload: str) -> str:
         r'\1\n        {"name": "CONVERSATION_NOTES_V2_ENABLED", "value": "true"},'
         r'\n        {"name": "CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED", "value": "true"},'
         r'\n        {"name": "CONVERSATION_OCR_CONTEXT_ENABLED", "value": "true"},'
+        r'\n        {"name": "MEETING_NOTES_RICH_CONTEXT_ENABLED", "value": "true"},'
+        r'\n        {"name": "MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED", "value": "true"},'
         r'\n        {"name": "BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED", "value": "true"},'
     )
     payload = re.sub(
@@ -246,6 +248,26 @@ GOOGLE_OAUTH_SECRETS = '''\
         {"name": "MODULATE_API_KEY", "valueFrom": {"secretKeyRef": {"name": "MODULATE_API_KEY", "key": "latest"}}},
         {"name": "GOOGLE_MAPS_API_KEY", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_MAPS_API_KEY", "key": "latest"}}},'''
 
+# POSTHOG_EVENTS_API_KEY is only declared for backend-integration in
+# deploy/runtime_env; deployed-state fixtures must scope it the same way.
+INTEGRATION_EVENTS_SECRET = (
+    '        {"name": "POSTHOG_EVENTS_API_KEY", "valueFrom": {"secretKeyRef": '
+    '{"name": "POSTHOG_EVENTS_API_KEY", "key": "latest"}}}'
+)
+
+
+def with_backend_integration_events_secret(payload: str) -> str:
+    marker = '"backend-integration": {'
+    head, sep, tail = payload.partition(marker)
+    assert sep, "fixture payload is missing a backend-integration block"
+    needle = (
+        '{"name": "GOOGLE_MAPS_API_KEY", "valueFrom": {"secretKeyRef": '
+        '{"name": "GOOGLE_MAPS_API_KEY", "key": "latest"}}}'
+    )
+    assert needle in tail, "backend-integration block is missing the shared secrets tail"
+    tail = tail.replace(needle, needle + ",\n" + INTEGRATION_EVENTS_SECRET, 1)
+    return head + sep + tail
+
 
 def with_belief_model_env(payload: str) -> str:
     """Belief processing and its deployment-wide pause are declared together.
@@ -303,12 +325,13 @@ def with_cloud_run_oauth_secrets(payload: str) -> str:
         )
     )
     payload = with_screen_frame_egress_env(payload)
-    return re.sub(
+    payload = re.sub(
         r'^(\s*\{"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN".*\}\s*\})\s*,?\s*$',
         r'\1,\n' + GOOGLE_OAUTH_SECRETS.rstrip(','),
         payload,
         flags=re.MULTILINE,
     )
+    return with_backend_integration_events_secret(payload)
 
 
 def validate_cloud_run_workflows_only(validator, *, env: str, manifest_path: Path, workflow_root: Path | None = None):
@@ -395,10 +418,16 @@ def test_conversation_finalization_capability_inventory_explicitly_covers_pusher
         assert validator.validate_conversation_finalization_capabilities(env, manifest['environments'][env]) == []
 
 
-@pytest.mark.parametrize('env', ['dev', 'prod'])
-def test_conversation_finalization_capability_contract_rejects_omitted_pusher(env):
+@pytest.fixture(scope='module')
+def cap_env():
     validator = load_validator()
-    env_config = copy.deepcopy(validator._load_yaml(validator.DEFAULT_MANIFEST)['environments'][env])
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    return lambda env: (validator, copy.deepcopy(manifest['environments'][env]))
+
+
+@pytest.mark.parametrize('env', ['dev', 'prod'])
+def test_conversation_finalization_capability_contract_rejects_omitted_pusher(env, cap_env):
+    validator, env_config = cap_env(env)
     del env_config['gke']['pusher']
 
     errors = validator.validate_conversation_finalization_capabilities(env, env_config)
@@ -412,9 +441,8 @@ def test_conversation_finalization_capability_contract_rejects_omitted_pusher(en
     )
 
 
-def test_conversation_finalization_capability_contract_rejects_missing_declared_capability():
-    validator = load_validator()
-    env_config = copy.deepcopy(validator._load_yaml(validator.DEFAULT_MANIFEST)['environments']['prod'])
+def test_conversation_finalization_capability_contract_rejects_missing_declared_capability(cap_env):
+    validator, env_config = cap_env('prod')
     env_config['gke']['pusher']['capabilities'].remove('memory.canonical.mutate')
 
     errors = validator.validate_conversation_finalization_capabilities('prod', env_config)
@@ -429,9 +457,8 @@ def test_conversation_finalization_capability_contract_rejects_missing_declared_
 
 
 @pytest.mark.parametrize('memory_enabled', [None, 'off', 'invalid'])
-def test_conversation_finalization_capability_contract_rejects_non_writable_memory_fence(memory_enabled):
-    validator = load_validator()
-    env_config = copy.deepcopy(validator._load_yaml(validator.DEFAULT_MANIFEST)['environments']['prod'])
+def test_conversation_finalization_capability_contract_rejects_non_writable_memory_fence(memory_enabled, cap_env):
+    validator, env_config = cap_env('prod')
     pusher_env = env_config['gke']['pusher']['env']
     if memory_enabled is None:
         del pusher_env['MEMORY_ENABLED']
@@ -449,9 +476,10 @@ def test_conversation_finalization_capability_contract_rejects_non_writable_memo
     )
 
 
-def test_conversation_finalization_capability_contract_rejects_missing_summary_pipeline_flag_on_backend_sync():
-    validator = load_validator()
-    env_config = copy.deepcopy(validator._load_yaml(validator.DEFAULT_MANIFEST)['environments']['prod'])
+def test_conversation_finalization_capability_contract_rejects_missing_summary_pipeline_flag_on_backend_sync(
+    cap_env,
+):
+    validator, env_config = cap_env('prod')
     del env_config['cloud_run']['services']['backend-sync']['env']['CONVERSATION_NOTES_V2_ENABLED']
 
     errors = validator.validate_conversation_finalization_capabilities('prod', env_config)
@@ -465,9 +493,8 @@ def test_conversation_finalization_capability_contract_rejects_missing_summary_p
     )
 
 
-def test_conversation_finalization_capability_contract_rejects_summary_pipeline_flag_disagreement():
-    validator = load_validator()
-    env_config = copy.deepcopy(validator._load_yaml(validator.DEFAULT_MANIFEST)['environments']['prod'])
+def test_conversation_finalization_capability_contract_rejects_summary_pipeline_flag_disagreement(cap_env):
+    validator, env_config = cap_env('prod')
     env_config['cloud_run']['services']['backend-sync']['env']['CONVERSATION_NOTES_V2_ENABLED']['value'] = 'false'
 
     errors = validator.validate_conversation_finalization_capabilities('prod', env_config)
@@ -480,9 +507,8 @@ def test_conversation_finalization_capability_contract_rejects_summary_pipeline_
     )
 
 
-def test_conversation_finalization_capability_contract_rejects_normalized_but_not_identical_flag_literals():
-    validator = load_validator()
-    env_config = copy.deepcopy(validator._load_yaml(validator.DEFAULT_MANIFEST)['environments']['prod'])
+def test_conversation_finalization_capability_contract_rejects_normalized_but_not_identical_flag_literals(cap_env):
+    validator, env_config = cap_env('prod')
     # ' TRUE ' resolves to the same runtime boolean as 'true', but the pusher
     # co-host gate compares raw literals; admission must not be weaker than it.
     env_config['cloud_run']['services']['backend-sync']['env']['CONVERSATION_NOTES_V2_ENABLED']['value'] = ' TRUE '
@@ -499,9 +525,8 @@ def test_conversation_finalization_capability_contract_rejects_normalized_but_no
 
 
 @pytest.mark.parametrize('literal', ['on', '1', 'yes', ' true ', 'True', ''])
-def test_basic_plan_gate_switch_admits_only_the_spellings_its_reader_accepts(literal):
-    validator = load_validator()
-    env_config = copy.deepcopy(validator._load_yaml(validator.DEFAULT_MANIFEST)['environments']['dev'])
+def test_basic_plan_gate_switch_admits_only_the_spellings_its_reader_accepts(literal, cap_env):
+    validator, env_config = cap_env('dev')
     # utils.free_tier_basic_gates lights a gate only on an untrimmed,
     # case-insensitive 'true'. A uniform 'on' would pass co-host agreement and
     # the loose summary-flag literal set while every host ran ungated.
@@ -516,9 +541,8 @@ def test_basic_plan_gate_switch_admits_only_the_spellings_its_reader_accepts(lit
     assert any(f"{flag} must be exactly 'true' or 'false'" in error.message for error in errors)
 
 
-def test_conversation_finalization_capability_contract_rejects_empty_summary_pipeline_flag_literal():
-    validator = load_validator()
-    env_config = copy.deepcopy(validator._load_yaml(validator.DEFAULT_MANIFEST)['environments']['prod'])
+def test_conversation_finalization_capability_contract_rejects_empty_summary_pipeline_flag_literal(cap_env):
+    validator, env_config = cap_env('prod')
     # '' parses as literal-present so it dodges the omission check, and an
     # all-empty fleet would also dodge disagreement — yet runtime treats it as
     # False, the exact silent-off case this contract exists to reject.
@@ -537,9 +561,8 @@ def test_conversation_finalization_capability_contract_rejects_empty_summary_pip
     assert not any('disagrees' in error.message for error in errors)
 
 
-def test_conversation_finalization_capability_contract_rejects_unknown_and_uncovered_declarations():
-    validator = load_validator()
-    env_config = copy.deepcopy(validator._load_yaml(validator.DEFAULT_MANIFEST)['environments']['dev'])
+def test_conversation_finalization_capability_contract_rejects_unknown_and_uncovered_declarations(cap_env):
+    validator, env_config = cap_env('dev')
     env_config['gke']['pusher']['capabilities'].append('conversation.finalize.unknown')
     env_config['gke']['uncovered-finalizer'] = {
         'capabilities': ['conversation.finalize.persisted'],
@@ -2411,19 +2434,12 @@ def test_memory_maintenance_job_contract_rejects_notifications_job_maintenance_c
     assert expected <= actual
 
 
-def test_memory_maintenance_job_contract_rejects_read_mode_without_job_cron(tmp_path):
+def test_memory_maintenance_job_contract_rejects_enabled_surface_without_enabled_job(tmp_path):
     validator = load_validator()
     manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
     job = manifest['environments']['prod']['cloud_run']['jobs']['memory-maintenance-job']
-    # Leftover Gate 3 alias: surface MEMORY_MODE=read while the job stays off.
-    backend_env = manifest['environments']['prod']['cloud_run']['services']['backend']['env']
-    backend_env.pop('MEMORY_ENABLED', None)
-    backend_env['MEMORY_MODE'] = {
-        'value': 'read',
-        'category': 'memory_rollout',
-    }
-    job['env'].pop('MEMORY_ENABLED', None)
-    job['env']['MEMORY_MODE'] = {'value': 'off', 'category': 'memory_rollout'}
+    # A request-path surface stays on while the maintenance job is off.
+    job['env']['MEMORY_ENABLED'] = {'value': 'off', 'category': 'memory_rollout'}
     job['env']['MEMORY_CANONICAL_MAINTENANCE_ENABLED'] = {'value': 'false', 'category': 'memory_rollout'}
 
     path = tmp_path / 'runtime_env.yaml'
