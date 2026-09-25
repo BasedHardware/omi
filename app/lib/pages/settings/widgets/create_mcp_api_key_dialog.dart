@@ -4,9 +4,10 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/pages/settings/widgets/mcp_api_key_created_dialog.dart';
 import 'package:omi/providers/mcp_provider.dart';
-import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
+/// Names and creates an MCP key. Shown with `showDialog(builder: (_) => const CreateMcpApiKeyDialog())`.
 class CreateMcpApiKeyDialog extends StatefulWidget {
   const CreateMcpApiKeyDialog({super.key});
 
@@ -15,71 +16,83 @@ class CreateMcpApiKeyDialog extends StatefulWidget {
 }
 
 class _CreateMcpApiKeyDialogState extends State<CreateMcpApiKeyDialog> {
-  final _formKey = GlobalKey<FormState>();
   final _nameController = TextEditingController();
   bool _isCreating = false;
 
   @override
+  void initState() {
+    super.initState();
+    _nameController.addListener(_onNameChanged);
+  }
+
+  @override
   void dispose() {
+    _nameController.removeListener(_onNameChanged);
     _nameController.dispose();
     super.dispose();
   }
 
-  Future<void> _createKey() async {
-    if (_formKey.currentState!.validate()) {
-      setState(() => _isCreating = true);
-      final provider = Provider.of<McpProvider>(context, listen: false);
-      final newKey = await provider.createKey(_nameController.text.trim());
+  void _onNameChanged() => setState(() {});
 
-      if (mounted) {
-        Navigator.of(context).pop(); // Close this dialog
-        if (newKey != null) {
-          showDialog(
-            context: context,
-            barrierDismissible: false,
-            builder: (context) => McpApiKeyCreatedDialog(apiKey: newKey),
-          );
-        } else {
-          final error = Provider.of<McpProvider>(context, listen: false).error;
-          if (error != null) {
-            AppSnackbar.showSnackbarError(context.l10n.failedToCreateKeyWithError(error));
-          } else {
-            AppSnackbar.showSnackbarError(context.l10n.failedToCreateKeyTryAgain);
-          }
-        }
-      }
+  bool get _canCreate => !_isCreating && _nameController.text.trim().isNotEmpty;
+
+  Future<void> _createKey() async {
+    if (!_canCreate) return;
+    setState(() => _isCreating = true);
+    final provider = Provider.of<McpProvider>(context, listen: false);
+    final newKey = await provider.createKey(_nameController.text.trim());
+
+    if (!mounted) return;
+    Navigator.of(context).pop(); // Close this dialog
+    if (newKey != null) {
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => McpApiKeyCreatedDialog(apiKey: newKey),
+      );
+    } else {
+      final error = provider.error;
+      OmiFeedback.error(
+        context,
+        error != null ? context.l10n.failedToCreateKeyWithError(error) : context.l10n.failedToCreateKeyTryAgain,
+      );
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
-      title: Text(context.l10n.createNewKey),
-      content: Form(
-        key: _formKey,
-        child: TextFormField(
+    return OmiAlertDialog(
+      title: context.l10n.createNewKey,
+      // The Cupertino dialog has no Material ancestor; the text field needs one.
+      content: Material(
+        type: MaterialType.transparency,
+        child: TextField(
           controller: _nameController,
           autofocus: true,
-          decoration: InputDecoration(labelText: context.l10n.name, hintText: context.l10n.keyNameHint),
-          validator: (value) {
-            if (value == null || value.trim().isEmpty) {
-              return context.l10n.pleaseEnterAName;
-            }
-            return null;
-          },
+          enabled: !_isCreating,
+          textInputAction: TextInputAction.done,
+          onSubmitted: (_) => _createKey(),
+          style: OmiType.body,
+          decoration: InputDecoration(
+            labelText: context.l10n.name,
+            hintText: context.l10n.keyNameHint,
+            hintStyle: OmiType.body.copyWith(color: OmiColors.textTertiary),
+            filled: true,
+            fillColor: OmiColors.surface2,
+            isDense: true,
+            border: const OutlineInputBorder(borderRadius: OmiRadius.smAll, borderSide: BorderSide.none),
+          ),
         ),
       ),
-      actions: <Widget>[
-        TextButton(onPressed: _isCreating ? null : () => Navigator.of(context).pop(), child: Text(context.l10n.cancel)),
-        ElevatedButton(
-          onPressed: _isCreating ? null : _createKey,
-          style: ElevatedButton.styleFrom(
-            foregroundColor: Colors.white,
-            backgroundColor: Theme.of(context).colorScheme.secondary,
-          ),
-          child: _isCreating
-              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-              : Text(context.l10n.create),
+      actions: [
+        OmiDialogAction(
+          label: context.l10n.cancel,
+          onPressed: _isCreating ? null : () => Navigator.of(context).pop(),
+        ),
+        OmiDialogAction(
+          label: _isCreating ? context.l10n.creating : context.l10n.create,
+          isDefault: true,
+          onPressed: _canCreate ? _createKey : null,
         ),
       ],
     );

@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Optional
 import typer
 from rich.markup import escape
 
+from omi_cli.client import path_segment
 from omi_cli.datetime_options import ISO_DATETIME_FORMATS
 from omi_cli.errors import UsageError
 from omi_cli.json_input import load_json_input
@@ -112,7 +113,7 @@ def get_conversation(
     ctx = _ctx(typer_ctx)
     with ctx.make_client() as client:
         result = client.get(
-            f"/v1/dev/user/conversations/{conversation_id}",
+            f"/v1/dev/user/conversations/{path_segment(conversation_id)}",
             params={"include_transcript": include_transcript},
         )
     ctx.renderer.emit(result, title="conversation")
@@ -228,7 +229,7 @@ def update_conversation(
     if not body:
         raise UsageError(message="No fields to update", detail="Provide --title or --discarded/--no-discarded.")
     with ctx.make_client() as client:
-        result = client.patch(f"/v1/dev/user/conversations/{conversation_id}", json_body=body)
+        result = client.patch(f"/v1/dev/user/conversations/{path_segment(conversation_id)}", json_body=body)
     ctx.renderer.success(f"Updated conversation [bold]{escape(conversation_id)}[/bold].")
     ctx.renderer.emit(result)
 
@@ -243,7 +244,7 @@ def delete_conversation(
     if not confirm:
         typer.confirm(f"Delete conversation {conversation_id}?", abort=True)
     with ctx.make_client() as client:
-        result = client.delete(f"/v1/dev/user/conversations/{conversation_id}")
+        result = client.delete(f"/v1/dev/user/conversations/{path_segment(conversation_id)}")
     if ctx.renderer.json_mode:
         ctx.renderer.emit(result)
     ctx.renderer.success(f"Deleted conversation [bold]{escape(conversation_id)}[/bold].")

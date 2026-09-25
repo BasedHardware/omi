@@ -8,9 +8,38 @@ import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/settings/people.dart';
+import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/widgets/person_chip.dart';
+import 'package:omi/ui/ui.dart';
+
+/// Opens the sheet that names the speaker of [segmentId] (a person, a new person, or "You"),
+/// titled with the conversation's dense speaker number.
+Future<void> showNameSpeakerSheet(
+  BuildContext context, {
+  required int speakerId,
+  required String segmentId,
+  required List<TranscriptSegment> segments,
+  required Future<bool> Function(
+          int speakerId, String personId, String personName, List<String> segmentIds, bool applyToSpeaker)
+      onSpeakerAssigned,
+  SpeakerLabelSuggestionEvent? suggestion,
+  bool defaultApplyToSpeaker = false,
+}) {
+  return showOmiSheet<void>(
+    context: context,
+    title: context.l10n.tagSpeaker(TranscriptSegment.getDisplaySpeakerId(speakerId, segments)),
+    builder: (_) => NameSpeakerBottomSheet(
+      speakerId: speakerId,
+      segmentId: segmentId,
+      segments: segments,
+      suggestion: suggestion,
+      defaultApplyToSpeaker: defaultApplyToSpeaker,
+      onSpeakerAssigned: onSpeakerAssigned,
+    ),
+  );
+}
 
 class NameSpeakerBottomSheet extends StatefulWidget {
   final int speakerId;
@@ -163,40 +192,37 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
     final people = peopleProvider.people;
     final userName = SharedPreferencesUtil().givenName;
 
-    return Padding(
-      padding: MediaQuery.of(context).viewInsets,
-      child: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              loading
-                  ? const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 40),
-                      child: Center(child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation(Colors.white))),
-                    )
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildHeader(),
-                        const SizedBox(height: 16),
-                        if (_isCreatingNewPerson)
-                          _buildNewPersonInput(people, userName)
-                        else
-                          _buildPersonSelector(people, userName),
-                        const SizedBox(height: 16),
-                        _buildUntaggedSegments(),
-                        const SizedBox(height: 8),
-                        if (_saveFailed)
-                          Text(context.l10n.somethingWentWrong, style: const TextStyle(color: Colors.white70)),
-                        _buildSaveButton(),
-                        const SizedBox(height: 28),
-                      ],
-                    ),
-            ],
-          ),
+    return SingleChildScrollView(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: OmiSpacing.xs),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            loading
+                ? const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 40),
+                    child: Center(child: OmiSpinner()),
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildHeader(),
+                      const SizedBox(height: 16),
+                      if (_isCreatingNewPerson)
+                        _buildNewPersonInput(people, userName)
+                      else
+                        _buildPersonSelector(people, userName),
+                      const SizedBox(height: 16),
+                      _buildUntaggedSegments(),
+                      const SizedBox(height: 8),
+                      if (_saveFailed)
+                        Text(context.l10n.somethingWentWrong, style: const TextStyle(color: Colors.white70)),
+                      _buildSaveButton(),
+                      const SizedBox(height: OmiSpacing.md),
+                    ],
+                  ),
+          ],
         ),
       ),
     );
@@ -204,27 +230,13 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
 
   Widget _buildHeader() {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Expanded(
-              child: Text(
-                context.l10n.tagSpeaker(TranscriptSegment.getDisplaySpeakerId(widget.speakerId, widget.segments)),
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-            ),
-            IconButton(
-              icon: const Icon(Icons.close, color: Colors.grey),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-          ],
-        ),
         if (speakerTextSample != null && speakerTextSample!.isNotEmpty) ...[
           const SizedBox(height: 8),
           Text(
             speakerTextSample!,
-            style: TextStyle(color: Colors.grey.shade400, fontStyle: FontStyle.italic),
+            style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, fontStyle: FontStyle.italic),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
@@ -267,7 +279,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
             filled: true,
             contentPadding: const EdgeInsets.symmetric(horizontal: 16),
             fillColor: Colors.grey[900],
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+            border: const OutlineInputBorder(borderRadius: OmiRadius.smAll, borderSide: BorderSide.none),
             hintStyle: const TextStyle(color: Colors.grey),
             errorText: _duplicateNameError,
           ),
@@ -365,7 +377,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
             _isSegmentsExpanded && untaggedSegments.isNotEmpty
                 ? context.l10n.tagOtherSegmentsFromSpeaker(selectedUntaggedSegmentsCount, untaggedSegments.length)
                 : context.l10n.tagSpeakerIncludingLaterSpeech,
-            style: const TextStyle(fontSize: 14, color: Colors.white),
+            style: OmiType.footnote,
           ),
           value: _applyToSpeaker,
           onChanged: (value) {
@@ -387,17 +399,16 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
           contentPadding: EdgeInsets.zero,
           secondary: InkWell(
             onTap: () {
-              Navigator.of(context).push(MaterialPageRoute(builder: (context) => const UserPeoplePage()));
+              routeToPage(context, const UserPeoplePage());
             },
             child: Padding(
               padding: const EdgeInsets.only(right: 8.0),
               child: Text(
                 context.l10n.managePeople,
-                style: const TextStyle(
-                  color: Colors.white70,
-                  fontSize: 14,
+                style: OmiType.footnote.copyWith(
+                  color: OmiColors.textSecondary,
                   decoration: TextDecoration.underline,
-                  decorationColor: Colors.white70,
+                  decorationColor: OmiColors.textSecondary,
                 ),
               ),
             ),
@@ -419,10 +430,11 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
                         segment.text,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 12, color: Colors.white),
+                        style: OmiType.caption,
                       ),
                       const SizedBox(height: 4),
-                      Text(segment.getTimestampString(), style: TextStyle(fontSize: 10, color: Colors.grey.shade400)),
+                      Text(OmiDuration.offset(segment.start),
+                          style: OmiType.caption.copyWith(color: OmiColors.textTertiary)),
                     ],
                   ),
                   value: _selectedSegmentIds.contains(segment.id),
@@ -449,51 +461,45 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
   }
 
   Widget _buildSaveButton() {
-    return SizedBox(
-      width: double.infinity,
-      child: ElevatedButton(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.white,
-          foregroundColor: Colors.black,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        ),
-        onPressed: !allowSave || loading
-            ? null
-            : () async {
-                setLoading(true);
-                String personIdToAssign = selectedPerson;
-                String personNameToAssign = selectedPersonName;
+    return OmiButton(
+      label: context.l10n.save,
+      expand: true,
+      isLoading: loading,
+      onPressed: !allowSave || loading
+          ? null
+          : () async {
+              setLoading(true);
+              String personIdToAssign = selectedPerson;
+              String personNameToAssign = selectedPersonName;
 
-                if (_controller.text.isNotEmpty && selectedPerson.isEmpty) {
-                  personNameToAssign =
-                      _controller.text.toString()[0].toUpperCase() + _controller.text.toString().substring(1);
-                  personIdToAssign = ''; // Indicates a new person
-                }
+              if (_controller.text.isNotEmpty && selectedPerson.isEmpty) {
+                personNameToAssign =
+                    _controller.text.toString()[0].toUpperCase() + _controller.text.toString().substring(1);
+                personIdToAssign = ''; // Indicates a new person
+              }
 
-                bool saved = false;
-                try {
-                  saved = await widget.onSpeakerAssigned(
-                    widget.speakerId,
-                    personIdToAssign,
-                    personNameToAssign,
-                    List<String>.of(_selectedSegmentIds),
-                    _applyToSpeaker,
-                  );
-                } catch (_) {
-                  saved = false;
-                }
+              bool saved = false;
+              try {
+                saved = await widget.onSpeakerAssigned(
+                  widget.speakerId,
+                  personIdToAssign,
+                  personNameToAssign,
+                  List<String>.of(_selectedSegmentIds),
+                  _applyToSpeaker,
+                );
+              } catch (_) {
+                saved = false;
+              }
 
-                setLoading(false);
-                if (mounted) {
-                  if (saved) {
-                    Navigator.pop(context);
-                  } else {
-                    setState(() => _saveFailed = true);
-                  }
+              setLoading(false);
+              if (mounted) {
+                if (saved) {
+                  Navigator.pop(context);
+                } else {
+                  setState(() => _saveFailed = true);
                 }
-              },
-        child: Center(child: Text(context.l10n.save)),
-      ),
+              }
+            },
     );
   }
 }

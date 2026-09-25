@@ -203,6 +203,29 @@ def create_storage_client():
 
 _signing_token_lock = threading.Lock()
 
+# IAM ``signBlob`` accepts only a token carrying the cloud-platform (or iam)
+# scope. The storage client's own credentials are scoped to the devstorage
+# scopes, and the Cloud Run metadata server honours that request, so reusing
+# the client's token fails with ACCESS_TOKEN_SCOPE_INSUFFICIENT (measured on
+# Cloud Run 2026-09-24; every keyless signed URL failed). Signing therefore uses
+# a cloud-platform-scoped copy of the same identity.
+_IAM_SIGNING_SCOPES = ('https://www.googleapis.com/auth/cloud-platform',)
+_signing_credentials_by_source: dict[int, tuple[Any, Any]] = {}
+
+
+def _iam_signing_credentials(credentials: Any) -> Any:
+    """The same identity as ``credentials`` with a scope IAM ``signBlob`` accepts."""
+    from google.auth import credentials as google_auth_credentials
+
+    if not isinstance(credentials, google_auth_credentials.Scoped):
+        return credentials
+    cached = _signing_credentials_by_source.get(id(credentials))
+    if cached is not None and cached[0] is credentials:
+        return cached[1]
+    scoped = credentials.with_scopes(list(_IAM_SIGNING_SCOPES))
+    _signing_credentials_by_source[id(credentials)] = (credentials, scoped)
+    return scoped
+
 
 def iam_signing_kwargs(client: Any) -> dict[str, str]:
     """Signer arguments that let ``Blob.generate_signed_url`` work on a keyless identity.
@@ -211,9 +234,11 @@ def iam_signing_kwargs(client: Any) -> dict[str, str]:
     GKE Workload Identity holds only an access token, and ``generate_signed_url``
     raises unless it is handed ``service_account_email`` + ``access_token``, in
     which case it signs through IAM ``signBlob`` (the identity needs
-    ``iam.serviceAccounts.signBlob`` on itself). Returns ``{}`` whenever the
-    credentials can already sign, or are not real Google credentials (local
-    harness, test fakes), so the key path and fakes are unchanged.
+    ``iam.serviceAccounts.signBlob`` on itself, and the token needs the
+    cloud-platform scope, which the storage client's own token lacks). Returns
+    ``{}`` whenever the credentials can already sign, or are not real Google
+    credentials (local harness, test fakes), so the key path and fakes are
+    unchanged.
     """
     credentials = getattr(client, '_credentials', None)
     from google.auth import credentials as google_auth_credentials
@@ -225,10 +250,11 @@ def iam_signing_kwargs(client: Any) -> dict[str, str]:
     from google.auth.transport import requests as google_auth_requests
 
     with _signing_token_lock:
-        if not credentials.valid:
-            credentials.refresh(google_auth_requests.Request())
-        token = credentials.token
-    email = getattr(credentials, 'service_account_email', None)
+        signing_credentials = _iam_signing_credentials(credentials)
+        if not signing_credentials.valid:
+            signing_credentials.refresh(google_auth_requests.Request())
+        token = signing_credentials.token
+    email = getattr(signing_credentials, 'service_account_email', None)
     if not token or not isinstance(email, str) or '@' not in email:
         return {}
     return {'service_account_email': email, 'access_token': token}
