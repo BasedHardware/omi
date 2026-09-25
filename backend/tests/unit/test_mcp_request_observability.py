@@ -381,9 +381,13 @@ class TestToolCallUserSampling:
 @pytest.fixture(autouse=True)
 def _reset_mcp_active_local_seen():
     """The process-local uid/day cache survives across tests in one process."""
-    mcp_analytics._mcp_active_seen_reset()
+    with mcp_analytics._mcp_active_seen_lock:
+        mcp_analytics._mcp_active_seen_uids.clear()
+        mcp_analytics._mcp_active_seen_day = None
     yield
-    mcp_analytics._mcp_active_seen_reset()
+    with mcp_analytics._mcp_active_seen_lock:
+        mcp_analytics._mcp_active_seen_uids.clear()
+        mcp_analytics._mcp_active_seen_day = None
 
 
 class TestMcpActiveMarker:

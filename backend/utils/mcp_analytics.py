@@ -86,13 +86,6 @@ def _mcp_active_mark_local(uid: str, *, now: Optional[datetime] = None) -> None:
             _mcp_active_seen_uids.popitem(last=False)
 
 
-def _mcp_active_seen_reset() -> None:
-    global _mcp_active_seen_day
-    with _mcp_active_seen_lock:
-        _mcp_active_seen_uids.clear()
-        _mcp_active_seen_day = None
-
-
 _CHATGPT_CLIENT_IDS = frozenset(
     client_id
     for client_id in {
