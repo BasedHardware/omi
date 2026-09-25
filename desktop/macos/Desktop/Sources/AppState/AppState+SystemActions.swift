@@ -506,7 +506,7 @@ extension AppState {
     guard isTranscribing else { return false }
 
     let stoppedCapture = audioCaptureService
-    let stopCompletion = stopTranscription()
+    let stopCompletion = stopTranscription(finalizationReason: .settingsChange)
     let restartGeneration = recordingGeneration
     await stopCompletion?.value
     await stoppedCapture?.waitForPhysicalStop()

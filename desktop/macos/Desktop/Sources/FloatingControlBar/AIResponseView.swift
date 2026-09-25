@@ -75,7 +75,7 @@ struct AIResponseView: View {
     .padding(.top, 0)
     .padding(.bottom, OmiSpacing.lg)
     .frame(maxWidth: .infinity, maxHeight: .infinity)
-    .omiAnimation(.spring(response: 0.28, dampingFraction: 0.85), value: showShareFeedback)
+    .omiAnimation(FloatingBarMotion.inlineFeedback, value: showShareFeedback)
     .onExitCommand {
       onEscape?()
     }
@@ -173,25 +173,25 @@ struct AIResponseView: View {
           .scaledFont(size: OmiType.body)
           .foregroundColor(.secondary)
       } else {
-        Text("omi says")
+        Text("Omi says")
           .scaledFont(size: OmiType.body)
           .foregroundColor(.secondary)
       }
 
       Spacer()
 
-      if canClearVisibleConversation {
-        HStack(spacing: OmiSpacing.xxs) {
-          Text("esc")
-            .scaledFont(size: OmiType.caption)
+      if canClearVisibleConversation, let onClearVisibleConversation {
+        Button(action: onClearVisibleConversation) {
+          Text("Clear")
+            .scaledFont(size: OmiType.caption, weight: .medium)
             .foregroundColor(.secondary)
-            .frame(width: 30, height: 16)
-            .background(NotchGlass.ink(.w1))
-            .cornerRadius(OmiChrome.stripRadius)
-          Text("to clear")
-            .scaledFont(size: OmiType.caption)
-            .foregroundColor(.secondary)
+            .padding(.horizontal, OmiSpacing.sm)
+            .frame(height: 20)
+            .background(Capsule().fill(NotchGlass.ink(.w1)))
         }
+        .buttonStyle(.plain)
+        .help("Clear this conversation")
+        .accessibilityLabel("Clear conversation")
       }
     }
   }
@@ -568,7 +568,10 @@ struct AIResponseView: View {
       }
     }
     shareFeedbackHideWorkItem = workItem
-    DispatchQueue.main.asyncAfter(deadline: .now() + 1.8, execute: workItem)
+    Task { @MainActor in
+      try? await Task.sleep(for: .seconds(FloatingBarNoticePolicy.confirmation))
+      if !workItem.isCancelled { workItem.perform() }
+    }
   }
 
 }
@@ -612,13 +615,13 @@ struct MessageHoverOverlay<Content: View>: View {
         // Show immediately
         hideWorkItem?.cancel()
         hideWorkItem = nil
-        OmiMotion.withGated(.easeInOut(duration: 0.15)) {
+        OmiMotion.withGated(.easeInOut(duration: FloatingBarMotion.hoverFade)) {
           isHovered = true
         }
       } else {
         // Delay hide by 1.5s so user can move cursor to the buttons
         let work = DispatchWorkItem {
-          OmiMotion.withGated(.easeInOut(duration: 0.15)) {
+          OmiMotion.withGated(.easeInOut(duration: FloatingBarMotion.hoverFade)) {
             isHovered = false
           }
         }
@@ -717,7 +720,7 @@ struct MessageHoverOverlay<Content: View>: View {
         }
       }
     }
-    .omiAnimation(.easeInOut(duration: 0.2), value: showRatingFeedback)
+    .omiAnimation(.easeInOut(duration: FloatingBarMotion.stateFade), value: showRatingFeedback)
     .frame(maxWidth: .infinity, alignment: .trailing)
     .onHover { hovering in
       isBarHovered = hovering
@@ -731,7 +734,8 @@ struct MessageHoverOverlay<Content: View>: View {
 
   private func showRatingFeedbackBriefly() {
     showRatingFeedback = true
-    DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+    Task { @MainActor in
+      try? await Task.sleep(for: .seconds(FloatingBarNoticePolicy.confirmation))
       showRatingFeedback = false
     }
   }
@@ -741,12 +745,11 @@ struct MessageHoverOverlay<Content: View>: View {
   /// clicking Copy on a historical message writes the correct content to the
   /// pasteboard even when SwiftUI has reused the overlay view across renders.
   private func copyText(_ text: String) {
-    guard !text.isEmpty else { return }
-    NSPasteboard.general.clearContents()
-    NSPasteboard.general.setString(text, forType: .string)
+    guard OmiClipboard.copy(text) else { return }
     AnalyticsManager.shared.shareAction(category: "floating_bar_response_copy")
     OmiMotion.withGated { showCopied = true }
-    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) {
+    Task { @MainActor in
+      try? await Task.sleep(for: .seconds(FloatingBarNoticePolicy.confirmation))
       OmiMotion.withGated { showCopied = false }
     }
   }

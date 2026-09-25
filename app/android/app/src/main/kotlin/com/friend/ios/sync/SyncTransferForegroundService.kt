@@ -19,8 +19,8 @@ import com.friend.ios.fgs.ForegroundStartContract
 
 /**
  * Thin lifecycle shell that keeps Dart WAL file transfers alive when the
- * screen turns off. It owns only the dataSync foreground-service promotion,
- * notification, and a PARTIAL_WAKE_LOCK. BLE GATT stays with
+ * screen turns off. It owns the immediate shortService promotion, the
+ * dataSync upgrade, notification, and a PARTIAL_WAKE_LOCK. BLE GATT stays with
  * [com.friend.ios.ble.OmiBleForegroundService]; upload/drain loops stay in Dart.
  *
  * Dart [SyncTransferKeepAlive] starts this for the transfer lifetime and
@@ -65,14 +65,37 @@ class SyncTransferForegroundService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        createNotificationChannel()
+        // startForegroundService's deadline also runs on a background cold
+        // start. Satisfy it before intent extras, the launch intent, or the
+        // transfer notification can delay the first promotion.
+        promoteColdStart()
         Log.d(TAG, "Service created")
     }
 
+    private fun promoteColdStart() {
+        try {
+            createNotificationChannel()
+            val notification = Notification.Builder(this, SyncTransferKeepAlivePolicy.NOTIFICATION_CHANNEL_ID)
+                .setSmallIcon(android.R.drawable.stat_notify_sync)
+                .setContentTitle(SyncTransferKeepAlivePolicy.DEFAULT_NOTIFICATION_TITLE)
+                .setContentText(SyncTransferKeepAlivePolicy.DEFAULT_NOTIFICATION_TEXT)
+                .setOngoing(true)
+                .build()
+            val type = ForegroundStartContract.coldStartType(Build.VERSION.SDK_INT)
+            if (type != null) {
+                startForeground(SyncTransferKeepAlivePolicy.NOTIFICATION_ID, notification, type)
+            } else {
+                startForeground(SyncTransferKeepAlivePolicy.NOTIFICATION_ID, notification)
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Cold-start startForeground failed", e)
+        }
+    }
+
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        // Promote before any other work. On Android 14+ a thrown startForeground
-        // does not clear the startForegroundService timeout; stopSelf() alone
-        // still crashes with ForegroundServiceDidNotStartInTimeException.
+        // Replace the immediate shortService notification with dataSync for
+        // the transfer lifetime. A rejected type retries shortService before
+        // stopping, including when the early promotion could not complete.
         val notification = buildNotification(intent?.getStringExtra(EXTRA_TEXT))
         if (!promoteToForeground(notification)) {
             stopSelf()

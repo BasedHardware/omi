@@ -24,8 +24,10 @@ subprojects {
     project.evaluationDependsOn(':app')
 }
 
-// flutter_foreground_task 10.0.0 stops a rejected location promotion without
-// a successful startForeground(). Android 14+ then crashes the process.
+// flutter_foreground_task 10.0.0 loads preferences and builds its notification
+// before promotion. Its rejected background location start can also leave the
+// Android 14+ foreground-service deadline armed. Patch a native onCreate
+// promotion before those paths, plus the stop-path guard from round 1.
 // evaluationDependsOn(':app') has already evaluated that plugin, so
 // Project.afterEvaluate throws. projectsEvaluated still runs before compile.
 def foregroundTaskPatchScript = new File(rootProject.projectDir, '../scripts/patch_flutter_foreground_task.py')

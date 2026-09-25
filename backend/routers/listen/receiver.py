@@ -83,9 +83,11 @@ from utils.log_sanitizer import sanitize
 from utils.listen_audio import ChannelConfig, mix_n_channel_buffers, resample_pcm
 from utils.observability.fallback import record_fallback
 from utils.observability.transcription import (
+    emit_listen_vad_gate_metrics,
     record_listen_audio_outcome,
     record_listen_realtime_demand,
     record_listen_unknown_channel_prefix,
+    record_listen_zero_byte_session,
     record_live_stt_failover_accepted,
 )
 from utils.product_telemetry import emit_product_event
@@ -1038,7 +1040,26 @@ class ListenReceiver:
                 )
             if self.vad_gate is not None:
                 vad_metrics = self.vad_gate.get_metrics()
-                logger.info(json.dumps(self.vad_gate.to_json_log()))
+                vad_payload = self.vad_gate.to_json_log()
+                onboarding_session_id = getattr(self.host, 'onboarding_session_id', None)
+                if onboarding_session_id:
+                    vad_payload['onboarding_session_id'] = onboarding_session_id
+                if self.host.is_multi_channel:
+                    vad_payload['multi_channel'] = True
+                vad_log = emit_listen_vad_gate_metrics(
+                    vad_payload,
+                    source=getattr(request, 'source', None),
+                    platform=self._telemetry_platform(),
+                )
+                if (
+                    vad_metrics.get('bytes_received') == 0
+                    and vad_metrics.get('chunks_total') == 0
+                    and vad_log.get('session_duration_sec') == 0.0
+                ):
+                    record_listen_zero_byte_session(
+                        source=getattr(request, 'source', None),
+                        platform=self._telemetry_platform(),
+                    )
                 speech_ms = max(0, int(vad_metrics.get('speech_ms_total') or 0))
                 if speech_ms:
                     emit_product_event(

@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import 'package:omi/ui/ui.dart';
+
 import 'package:omi/utils/l10n_extensions.dart';
 
 class OnboardingCompleteScreen extends StatefulWidget {
@@ -52,7 +54,7 @@ class _OnboardingCompleteScreenState extends State<OnboardingCompleteScreen> wit
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: Colors.black,
+      color: OmiColors.surface0,
       width: double.infinity,
       height: double.infinity,
       child: SafeArea(
@@ -73,75 +75,36 @@ class _OnboardingCompleteScreenState extends State<OnboardingCompleteScreen> wit
                         child: Container(
                           width: 72,
                           height: 72,
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF1A1A1A),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: const Icon(Icons.check_rounded, color: Colors.white, size: 36),
+                          decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.xlAll),
+                          child: const Icon(Icons.check_rounded, color: OmiColors.textPrimary, size: 36),
                         ),
                       ),
-                      const SizedBox(height: 32),
-                      const Text(
-                        'You are all set!',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 30,
-                          fontWeight: FontWeight.bold,
-                          height: 1.2,
-                          fontFamily: 'Manrope',
+                      const SizedBox(height: OmiSpacing.xxl),
+                      Semantics(
+                        header: true,
+                        child: Text(
+                          context.l10n.onboardingYoureAllSet,
+                          style: OmiType.title1.copyWith(height: 1.2),
+                          textAlign: TextAlign.center,
                         ),
-                        textAlign: TextAlign.center,
                       ),
-                      const SizedBox(height: 16),
-                      RichText(
+                      const SizedBox(height: OmiSpacing.md),
+                      Text(
+                        context.l10n.onboardingCompleteMessage,
                         textAlign: TextAlign.center,
-                        text: TextSpan(
-                          style: TextStyle(
-                            color: Colors.white.withValues(alpha: 0.5),
-                            fontSize: 17,
-                            height: 1.5,
-                            fontFamily: 'Manrope',
-                          ),
-                          children: const [
-                            TextSpan(text: 'Just use Omi in the background for '),
-                            TextSpan(
-                              text: '2\u00A0days',
-                              style: TextStyle(color: Color(0xFF9B59B6)),
-                            ),
-                            TextSpan(text: ' and you\'ll start getting useful feedback after!'),
-                          ],
-                        ),
+                        style: OmiType.body.copyWith(color: OmiColors.textSecondary, height: 1.5),
                       ),
                       const Spacer(flex: 3),
-                      SizedBox(
-                        width: double.infinity,
-                        height: 56,
-                        child: ElevatedButton(
-                          onPressed: widget.onComplete,
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: Colors.white,
-                            foregroundColor: Colors.black,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                            elevation: 0,
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Text(
-                                context.l10n.startUsingOmi,
-                                style: const TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.w600,
-                                  fontFamily: 'Manrope',
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              const Icon(Icons.arrow_forward_rounded, size: 20),
-                            ],
-                          ),
-                        ),
+                      OmiButton(
+                        key: const Key('onboarding_complete_start'),
+                        label: context.l10n.startUsingOmi,
+                        expand: true,
+                        onPressed: () {
+                          OmiHaptics.success();
+                          widget.onComplete();
+                        },
                       ),
-                      const SizedBox(height: 32),
+                      const SizedBox(height: OmiSpacing.xxl),
                     ],
                   ),
                 ),
