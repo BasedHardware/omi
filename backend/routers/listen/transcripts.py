@@ -8,7 +8,7 @@ import time
 import uuid
 from collections import deque
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Sequence, cast
+from typing import Any, Dict, List, Optional, Sequence, Tuple, cast
 
 from fastapi.websockets import WebSocketDisconnect
 
@@ -355,12 +355,25 @@ class TranscriptProcessor:
             self.photo_buffer.clear()
             if not self.host.state.first_audio_byte_timestamp:
                 continue
-            if getattr(self.host.state, 'capture_timeline', None) is not None:
-                # Audio-timeline v2: segments already carry absolute projected
-                # wall times and their owning conversation from the capture
-                # span; offsets are computed against the pinned origin below.
+            if getattr(self.host.state, 'capture_timeline_v2', False):
+                # Audio-timeline v2 persistence: segments already carry
+                # absolute projected wall times and their owning conversation
+                # from the capture span; offsets are computed against the
+                # pinned origin below.
                 await self._process_v2_batches(raw_segments, photos)
                 continue
+            # Legacy persistence (flag off, resumed rows, custom/multi channel).
+            # Segments may still carry a capture-clock window attached by the
+            # receiver: the transcript math below is byte-identical to the
+            # flag-off baseline, and the window only relocates speaker-ID
+            # clips so they survive provider failovers that restart provider
+            # time at zero.
+            capture_windows: Dict[str, Tuple[float, float]] = {}
+            for raw in raw_segments:
+                abs_start = raw.pop('_capture_abs_start', None)
+                abs_end = raw.pop('_capture_abs_end', None)
+                if abs_start is not None and abs_end is not None:
+                    capture_windows[cast(str, raw.get('id'))] = (float(abs_start), float(abs_end))
             data = await self.cache.get(self.host.state.current_conversation_id)
             if not data:
                 continue
@@ -446,7 +459,9 @@ class TranscriptProcessor:
                     [segment.model_dump() for segment in transcript_segments]
                 )
             await self._translate(updated, conversation.id, removed)
-            await self._speaker_detection(updated, self.host.state.first_audio_byte_timestamp - offset)
+            await self._speaker_detection(
+                updated, self.host.state.first_audio_byte_timestamp - offset, capture_windows=capture_windows
+            )
         if self.host.speakers.tasks:
             try:
                 await asyncio.wait_for(self.host.state.speaker_id_done.wait(), timeout=15.0)
@@ -641,13 +656,24 @@ class TranscriptProcessor:
             else None
         )
 
-    async def _speaker_detection(self, segments: List[TranscriptSegment], abs_base: float) -> None:
-        """Queue speaker embedding work at absolute projected wall seconds.
+    async def _speaker_detection(
+        self,
+        segments: List[TranscriptSegment],
+        abs_base: float,
+        capture_windows: Optional[Dict[str, Tuple[float, float]]] = None,
+    ) -> None:
+        """Queue speaker embedding work at absolute wall seconds.
 
         abs_base is the wall second of offset 0 for these segments: for v1 it
         is first_audio_byte_timestamp - offset (== started_at), for v2 the
         pinned conversation origin. Speaker clips cut from the ring buffer use
         the same projection as the stored offsets.
+
+        capture_windows override that projection per segment id: when the
+        receiver located the segment's audio on the capture clock (every
+        server-STT session, flag or not), the clip window is that position,
+        which stays correct across provider failovers whose timestamps restart
+        at zero — the legacy first-audio + provider-time formula does not.
         """
         speaker = self.host.speakers
         for segment in segments:
@@ -677,14 +703,20 @@ class TranscriptProcessor:
                 has_person_embeddings=bool(speaker.person_embeddings),
                 speaker_already_mapped=segment.speaker_id in speaker.speaker_to_person,
             ):
+                window = (capture_windows or {}).get(segment_id)
+                if window is not None:
+                    abs_start, abs_end = window
+                else:
+                    abs_start = abs_base + segment.start
+                    abs_end = abs_base + segment.end
                 try:
                     speaker.queue.put_nowait(
                         {
                             'id': segment.id,
                             'conversation_id': self.host.state.current_conversation_id,
                             'speaker_id': segment.speaker_id,
-                            'abs_start': abs_base + segment.start,
-                            'abs_end': abs_base + segment.end,
+                            'abs_start': abs_start,
+                            'abs_end': abs_end,
                             'duration': segment.end - segment.start,
                         }
                     )

@@ -161,21 +161,30 @@ class ListenReceiver:
         self.decode_stream_reported = False
         self._unknown_prefix_streak = 0
         self.speaker_provider_epoch = SpeakerProviderEpoch()
-        # Audio-timeline v2: admitted only for single-channel, server-STT live
-        # capture on an entirely new recording. Multi-channel mixes only the
+        # The capture sample clock runs for EVERY single-channel server-STT
+        # session: it is internal to this listen socket (sample cursor,
+        # per-provider-epoch translators, capture-positioned ring buffer,
+        # speaker-ID window location) and changes no persisted field, wire
+        # format or client-visible coordinate. Only the v2 *persistence*
+        # (projected times, started_at pin, marker, pusher projection) is
+        # admitted separately by the flag. Multi-channel mixes only the
         # minimum available channel buffers, and custom-STT segments carry a
-        # client clock; both stay legacy and never claim alignment.
+        # client clock; both stay without the clock entirely.
         self.capture_timeline: Any = None
+        self.capture_timeline_v2 = False
         if (
-            audio_timeline_v2_enabled()
-            and not host.is_multi_channel
+            not host.is_multi_channel
             and not host.use_custom_stt
             and int(getattr(host.request, 'sample_rate', 0) or 0) > 0
         ):
             from utils.audio_timeline import CaptureTimeline
 
             self.capture_timeline = CaptureTimeline(sample_rate=int(host.request.sample_rate))
+            # Pin the persistence mode for the recording's life; the flag is
+            # never re-read per message or per callback.
+            self.capture_timeline_v2 = audio_timeline_v2_enabled()
             host.state.capture_timeline = self.capture_timeline
+            host.state.capture_timeline_v2 = self.capture_timeline_v2
             # Conversation ownership of recent capture ranges, bounded by
             # capture time (provider callbacks can trail their audio by tens
             # of seconds) with a hard entry cap.
@@ -238,6 +247,24 @@ class ListenReceiver:
         if kept:
             self._enqueue_stt_segments(kept, provider=provider)
 
+    def _enqueue_clock_positioned_segments(self, segments: List[Dict[str, Any]]) -> None:
+        """Attach each segment's capture-projected window for speaker ID only.
+
+        Clock-only mode (capture clock on, v2 persistence off): the transcript
+        keeps exactly the legacy pipeline — provider-native times, current
+        conversation, no owner fencing — so persisted fields and WebSocket
+        output stay byte-identical to the flag-off baseline. The only addition
+        is the private absolute window the ring buffer can actually locate,
+        which survives provider failovers whose timestamps restart at zero.
+        """
+        for segment in segments:
+            start_sample = segment.pop('_capture_start_sample', None)
+            end_sample = segment.pop('_capture_end_sample', None)
+            if start_sample is not None and end_sample is not None and end_sample >= start_sample:
+                segment['_capture_abs_start'] = self.capture_timeline.wall(start_sample)
+                segment['_capture_abs_end'] = self.capture_timeline.wall(end_sample)
+        self._enqueue_stt_segments(segments)
+
     def _build_stt_callbacks(self) -> Tuple[Any, Any, Optional[ProviderEpochTranslator]]:
         """Fresh legacy callbacks bound to one provider epoch's translator.
 
@@ -261,14 +288,26 @@ class ListenReceiver:
             )
 
         def record_reject(reason: str) -> None:
-            OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode='v2', outcome='rejected').inc()
+            OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(
+                mode='v2' if self.capture_timeline_v2 else 'legacy', outcome='rejected'
+            ).inc()
 
-        epoch = ProviderEpochTranslator(timeline, int(self.host.request.sample_rate), on_reject=record_reject)
+        epoch = ProviderEpochTranslator(
+            timeline,
+            int(self.host.request.sample_rate),
+            on_reject=record_reject,
+            project_times=self.capture_timeline_v2,
+        )
+
+        if self.capture_timeline_v2:
+            enqueue = self._enqueue_translated_segments
+        else:
+            enqueue = self._enqueue_clock_positioned_segments
 
         def translate_and_enqueue(segments: List[Dict[str, Any]]) -> None:
             translated = epoch.translate(segments)
             if translated:
-                self._enqueue_translated_segments(translated)
+                enqueue(translated)
 
         return (translate_and_enqueue, translate_and_enqueue, epoch)
 
@@ -1140,9 +1179,11 @@ class ListenReceiver:
                     decoded_audio_bytes += len(decoded)
                     self._capture('capture_client_audio', decoded)
                     if self.capture_timeline is not None:
-                        # v2: the decoded frame occupies an exact capture sample
+                        # The decoded frame occupies an exact capture sample
                         # range; ring buffer, STT buffer and pusher runs all
-                        # carry that position forward.
+                        # carry that position forward. The pusher projection
+                        # (opcode-101 start) is v2-only: with the flag off the
+                        # wire must stay byte-identical to the legacy session.
                         start_sample, end_sample, _ = self.capture_timeline.accept(decoded, now, time.monotonic())
                         self._note_accepted_frame(start_sample, end_sample)
                         if self.host.state.audio_ring_buffer is not None:
@@ -1155,12 +1196,15 @@ class ListenReceiver:
                             buffer.extend(decoded)
                             await self._flush_stt_buffer(buffer)
                         if self.host.audio_bytes_send is not None:
-                            self.host.audio_bytes_send(
-                                decoded,
-                                now,
-                                conversation_id=self.host.state.current_conversation_id,
-                                start_wall=self.capture_timeline.wall(start_sample),
-                            )
+                            if self.capture_timeline_v2:
+                                self.host.audio_bytes_send(
+                                    decoded,
+                                    now,
+                                    conversation_id=self.host.state.current_conversation_id,
+                                    start_wall=self.capture_timeline.wall(start_sample),
+                                )
+                            else:
+                                self.host.audio_bytes_send(decoded, now)
                         continue
                     if self.host.state.audio_ring_buffer is not None:
                         self.host.state.audio_ring_buffer.write(decoded, now)

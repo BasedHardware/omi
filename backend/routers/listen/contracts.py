@@ -65,12 +65,16 @@ class ListenSessionState:
     speaker_id_done: asyncio.Event = field(default_factory=asyncio.Event)
     speaker_map_dirty: bool = False
     first_audio_byte_timestamp: Optional[float] = None
-    # Audio-timeline v2 (single-channel server-STT live capture only): the
-    # per-socket capture sample cursor, per-conversation pinned first-audio
-    # origins (wall seconds), fresh conversations still awaiting their first
-    # accepted frame, and the recent capture ranges that resolve a mapped
-    # provider segment's owning conversation. All None/empty on v1 sessions.
+    # Capture sample clock (single-channel server-STT sessions): the per-socket
+    # sample cursor, per-conversation pinned first-audio origins (wall seconds),
+    # fresh conversations still awaiting their first accepted frame, and the
+    # recent capture ranges that resolve a mapped provider segment's owning
+    # conversation. The clock itself is internal to the socket; capture_timeline
+    # is None only for multi-channel and custom-STT sessions. capture_timeline_v2
+    # admits the v2 *persistence* (projected times, started_at pin, marker,
+    # pusher projection) for this recording only.
     capture_timeline: Any = None
+    capture_timeline_v2: bool = False
     conversation_capture_origins: Dict[str, float] = field(default_factory=dict)
     conversations_awaiting_capture_origin: set = field(default_factory=set)
     conversation_sample_ranges: Any = None

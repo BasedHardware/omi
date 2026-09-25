@@ -161,6 +161,29 @@ class TestSendMap:
         assert translated == []
         assert translator.rejected_segments == 1
 
+    def test_clock_only_mode_keeps_provider_times_and_unmapped_segments(self):
+        """project_times=False (flag-off sessions): persistence stays legacy.
+
+        A mapped segment keeps its provider-native start/end untouched and
+        gains only the private capture interval; a segment whose provider
+        time falls outside accepted sends is still delivered (origin/main
+        persisted it too) but carries no capture interval, so only its
+        speaker-ID window falls back.
+        """
+        timeline = CaptureTimeline(sample_rate=RATE)
+        timeline.accept(_pcm(RATE), arrival_wall=100.0, arrival_monotonic=0.0)
+        translator = ProviderEpochTranslator(timeline, RATE, project_times=False)
+        translator.note_accepted(0, RATE)
+        mapped, unmapped = {'start': 0.25, 'end': 0.75, 'text': 'a'}, {'start': 9.0, 'end': 9.5, 'text': 'b'}
+        translated = translator.translate([dict(mapped), dict(unmapped)])
+        assert [segment['text'] for segment in translated] == ['a', 'b']
+        assert translated[0]['start'] == 0.25 and translated[0]['end'] == 0.75
+        assert translated[0]['_capture_start_sample'] == int(0.25 * RATE)
+        assert translated[0]['_capture_end_sample'] == int(0.75 * RATE)
+        assert '_capture_start_sample' not in translated[1]
+        assert translated[1]['start'] == 9.0
+        assert translator.rejected_segments == 1
+
     def test_edge_tolerance_accepts_provider_tail_overshoot(self):
         sm = SendMap(RATE)
         sm.add_accepted_spans([(0, RATE)])

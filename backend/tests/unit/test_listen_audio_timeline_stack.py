@@ -699,7 +699,13 @@ async def test_legacy_calculation_misplaces_burst_audio(monkeypatch, gcs, pusher
     points far away from the phrase."""
 
     result = await _run_scenario(monkeypatch, gcs, pusher_env, v2=False)
-    assert result['stack'].receiver.capture_timeline is None
+    # The capture clock runs for every single-channel server-STT session; with
+    # the flag off only the v2 persistence/projection is absent, and the wire
+    # stays legacy (no capability ack, no projected 101 starts).
+    assert result['stack'].receiver.capture_timeline is not None
+    assert result['stack'].receiver.capture_timeline_v2 is False
+    assert result['stack'].session.config.audio_timeline_v2 is False
+    assert not result['stack'].session.audio_timeline_active
 
     session = result['stack'].session
     last_received = session.audio_buffer_last_received

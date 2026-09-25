@@ -353,16 +353,29 @@ class ProviderEpochTranslator:
     failover). Legacy and managed callbacks wrap their segment emission with
     the same translator; timestamps are converted here, before persistence,
     so stored and emitted times are identical.
+
+    ``project_times=False`` is the clock-only mode used for sessions whose
+    persistence stays legacy (AUDIO_TIMELINE_V2 off, resumed-v1, custom/multi
+    channel excluded earlier): provider-native segment times pass through
+    untouched and only the private capture interval is attached, so live
+    speaker ID can locate the audio on the capture clock without changing any
+    persisted or wire-visible field.
     """
 
     def __init__(
-        self, timeline: CaptureTimeline, provider_sample_rate: int, *, on_reject: Optional[Callable[[str], None]] = None
+        self,
+        timeline: CaptureTimeline,
+        provider_sample_rate: int,
+        *,
+        on_reject: Optional[Callable[[str], None]] = None,
+        project_times: bool = True,
     ):
         self.timeline = timeline
         self.provider_sample_rate = provider_sample_rate
         self.send_map = SendMap(provider_sample_rate)
         self.rejected_segments = 0
         self._on_reject = on_reject
+        self._project_times = project_times
 
     def note_accepted(self, capture_start_sample: int, length_samples: int) -> None:
         """Record one accepted send of contiguous capture audio."""
@@ -376,7 +389,10 @@ class ProviderEpochTranslator:
 
         Segments whose provider timestamps cannot be proven to fall inside
         accepted send spans are dropped (fail closed), never clamped onto a
-        neighboring epoch.
+        neighboring epoch — unless ``project_times`` is off, where persistence
+        must stay byte-identical to the legacy behavior: such a segment keeps
+        its provider-native times and simply carries no capture interval, so
+        only its speaker-ID window falls back, never its transcript.
         """
         translated: List[Dict] = []
         for segment in segments:
@@ -392,9 +408,12 @@ class ProviderEpochTranslator:
             interval = self.send_map.map_interval(int(start * rate), int(end * rate))
             if interval is None:
                 self._reject(segment, 'outside_accepted_sends')
+                if not self._project_times:
+                    translated.append(segment)
                 continue
-            segment['start'] = self.timeline.wall(interval[0])
-            segment['end'] = max(segment['start'], self.timeline.wall(interval[1]))
+            if self._project_times:
+                segment['start'] = self.timeline.wall(interval[0])
+                segment['end'] = max(segment['start'], self.timeline.wall(interval[1]))
             # Private capture interval for owner resolution; the receiver pops
             # these keys before the segment enters any buffer.
             segment['_capture_start_sample'] = interval[0]
