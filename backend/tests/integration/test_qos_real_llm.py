@@ -24,6 +24,7 @@ from dotenv import load_dotenv
 
 load_dotenv(os.path.join(os.path.dirname(__file__), '..', '..', '.env'))
 
+from utils.llm.model_config import LUNA_MODEL
 from utils.llm.clients import (
     MODEL_QOS_PROFILES,
     get_model,
@@ -81,7 +82,7 @@ class TestPremiumFlagship:
     @pytest.mark.parametrize("feature", FLAGSHIP_FEATURES)
     def test_flagship_feature_responds(self, feature):
         model = get_model(feature)
-        assert model == 'gpt-5.6-luna', f"{feature} should be gpt-5.6-luna in premium, got {model}"
+        assert model == LUNA_MODEL, f"{feature} should be {LUNA_MODEL} in premium, got {model}"
         llm = get_llm(feature)
         response = llm.invoke(SIMPLE_PROMPT)
         assert response.content.strip(), f"{feature} ({model}) returned empty response"
@@ -108,7 +109,7 @@ class TestPremiumMini:
     @pytest.mark.parametrize("feature", MINI_FEATURES)
     def test_mini_feature_responds(self, feature):
         model = get_model(feature)
-        assert model == 'gpt-5.6-luna', f"{feature} should be gpt-5.6-luna in premium, got {model}"
+        assert model == LUNA_MODEL, f"{feature} should be {LUNA_MODEL} in premium, got {model}"
         llm = get_llm(feature)
         response = llm.invoke(SIMPLE_PROMPT)
         assert response.content.strip(), f"{feature} ({model}) returned empty response"
@@ -149,7 +150,7 @@ class TestPremiumVision:
 
     def test_openglass_feature_responds(self):
         model = get_model('openglass')
-        assert model == 'gpt-5.6-luna', f"openglass should be gpt-5.6-luna, got {model}"
+        assert model == LUNA_MODEL, f"openglass should be {LUNA_MODEL}, got {model}"
         llm = get_llm('openglass')
         response = llm.invoke(SIMPLE_PROMPT)
         assert response.content.strip(), f"openglass ({model}) returned empty response"
@@ -204,7 +205,7 @@ class TestPremiumChatAgent:
 
     def test_chat_agent_luna(self):
         model = get_model('chat_agent')
-        assert model == 'gpt-5.6-luna', f"chat_agent should be gpt-5.6-luna, got {model}"
+        assert model == LUNA_MODEL, f"chat_agent should be {LUNA_MODEL}, got {model}"
         assert model == ANTHROPIC_AGENT_MODEL
 
         llm = get_llm('chat_agent')

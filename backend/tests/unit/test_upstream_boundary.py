@@ -255,7 +255,7 @@ class TestExtractionSeamFanOut:
             patch.object(pc, "submit_with_context", side_effect=_capture_submit),
             patch.object(pc, "TRANSCRIPT_CHUNK_INDEXING_ENABLED", False),
         ):
-            pc.process_conversation("uid-boundary", "en", conversation, is_reprocess=True)
+            pc.process_conversation("uid-boundary", "en", conversation, trigger=pc.ProcessingTrigger.USER_REPROCESS)
 
         submitted_fns = {fn.__name__ for fn, _ in submitted if callable(fn) and hasattr(fn, "__name__")}
         extract_memories.assert_called_once_with("uid-boundary", conversation)

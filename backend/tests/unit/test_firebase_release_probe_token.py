@@ -493,6 +493,7 @@ REPOSITORY_ROOT = Path(__file__).resolve().parents[3]
 PROBE_ACTION = REPOSITORY_ROOT / '.github/actions/transcription-release-candidate-probe/action.yml'
 DEPLOY_BACKEND_STACK_ACTION = REPOSITORY_ROOT / '.github/actions/deploy-backend-stack/action.yml'
 GCP_BACKEND_WORKFLOW = REPOSITORY_ROOT / '.github/workflows/gcp_backend.yml'
+SYNC_LEDGER_WORKFLOW = REPOSITORY_ROOT / '.github/workflows/sync_ledger_fence_cutover.yml'
 
 
 def test_development_backend_deploy_supplies_a_firebase_project_signer():
@@ -500,14 +501,31 @@ def test_development_backend_deploy_supplies_a_firebase_project_signer():
 
     A development deploy identity cannot sign for that project, so the lane
     failed at custom_token_signing until it named its own signer. Losing this
-    wiring silently re-blocks every development backend deploy.
+    wiring silently re-blocks every development backend deploy. The signer is
+    the named no-role service account reached through IAM signJwt; the lane no
+    longer stages the GCP_SERVICE_ACCOUNT key, which was a production Owner
+    key (credential incident 2026-09-23).
     """
     workflow = GCP_BACKEND_WORKFLOW.read_text(encoding='utf-8')
-    assert 'firebase_probe_signer_credentials:' in workflow
-    assert 'secrets.GCP_SERVICE_ACCOUNT' in workflow
+    assert 'firebase_probe_signer_service_account: ${{ vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT }}' in workflow
+    assert 'firebase_probe_signer_credentials:' not in workflow
+    assert 'secrets.GCP_SERVICE_ACCOUNT' not in workflow
 
     stack = DEPLOY_BACKEND_STACK_ACTION.read_text(encoding='utf-8')
-    assert 'firebase_signer_credentials: ${{ inputs.firebase_probe_signer_credentials }}' in stack
+    assert (
+        "firebase_signer_service_account: ${{ inputs.firebase_probe_signer_credentials == '' "
+        "&& inputs.firebase_probe_signer_service_account || '' }}"
+    ) in stack
+
+
+def test_sync_ledger_cutover_signs_the_development_probe_without_a_key():
+    workflow = SYNC_LEDGER_WORKFLOW.read_text(encoding='utf-8')
+    assert (
+        "firebase_signer_service_account: ${{ github.event.inputs.environment == 'prod' && '' "
+        "|| vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT }}"
+    ) in workflow
+    assert 'firebase_signer_credentials:' not in workflow
+    assert 'secrets.GCP_SERVICE_ACCOUNT' not in workflow
 
 
 def test_probe_action_stages_the_signer_key_as_transient_owner_only_material():

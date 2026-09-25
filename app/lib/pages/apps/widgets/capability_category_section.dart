@@ -13,6 +13,8 @@ import 'package:omi/pages/apps/providers/add_app_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/utils/app_localizations_helper.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/pages/apps/widgets/app_actions.dart';
+import 'package:omi/ui/ui.dart';
 
 /// A category section widget with unlimited horizontal scrolling for capability pages.
 /// Unlike CategorySection which shows max 9 items, this shows all apps in the category.
@@ -68,15 +70,15 @@ class CapabilityCategorySection extends StatelessWidget {
               children: [
                 Text(
                   categoryName,
-                  style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w600, color: Colors.white),
+                  style: OmiType.title3,
                 ),
                 const Spacer(),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(color: Colors.grey.shade700, borderRadius: BorderRadius.circular(8)),
+                  decoration: const BoxDecoration(color: OmiColors.surface3, borderRadius: OmiRadius.smAll),
                   child: Text(
                     '${apps.length}',
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade300, fontWeight: FontWeight.w500),
+                    style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
                   ),
                 ),
               ],
@@ -120,122 +122,94 @@ class CapabilitySectionAppItemCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Use Selector instead of Consumer to only rebuild when this specific app's enabled state changes
-    return Selector<AppProvider, bool>(
-      selector: (context, provider) {
-        // Only select the enabled state of this specific app
-        final currentApp = provider.apps.firstWhere((a) => a.id == app.id, orElse: () => app);
-        return currentApp.enabled;
-      },
-      builder: (context, isEnabled, child) {
-        return GestureDetector(
-          onTap: () async {
-            PlatformManager.instance.analytics.pageOpened('App Detail');
-            // Capture before navigating; this card can be disposed while AppDetailPage is open.
-            final appProvider = context.read<AppProvider>();
-            await routeToPage(context, AppDetailPage(app: app));
-            appProvider.filterApps();
-          },
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
-            decoration: BoxDecoration(borderRadius: BorderRadius.circular(12.0)),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                CachedNetworkImage(
-                  imageUrl: app.getImageUrl(),
-                  httpHeaders: const {
-                    "User-Agent":
-                        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
-                  },
-                  imageBuilder: (context, imageProvider) => Container(
-                    width: 60,
-                    height: 60,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.rectangle,
-                      borderRadius: BorderRadius.circular(8),
-                      image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
-                    ),
-                  ),
-                  placeholder: (context, url) => Container(
-                    width: 60,
-                    height: 60,
-                    decoration: BoxDecoration(color: const Color(0xFF35343B), borderRadius: BorderRadius.circular(8)),
-                  ),
-                  errorWidget: (context, url, error) => Container(
-                    width: 60,
-                    height: 60,
-                    decoration: BoxDecoration(color: const Color(0xFF35343B), borderRadius: BorderRadius.circular(8)),
-                    child: const Icon(Icons.error_outline, color: Colors.white54, size: 24),
-                  ),
+    return GestureDetector(
+      onTap: () => _openDetail(context),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8.0, horizontal: 4.0),
+        decoration: const BoxDecoration(borderRadius: OmiRadius.mdAll),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            CachedNetworkImage(
+              imageUrl: app.getImageUrl(),
+              httpHeaders: const {
+                "User-Agent":
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36",
+              },
+              imageBuilder: (context, imageProvider) => Container(
+                width: 60,
+                height: 60,
+                decoration: BoxDecoration(
+                  shape: BoxShape.rectangle,
+                  borderRadius: OmiRadius.smAll,
+                  image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
                 ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        app.name,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontWeight: FontWeight.w500, color: Colors.white, fontSize: 17),
-                      ),
-                      Padding(
-                        padding: const EdgeInsets.only(top: 2.0),
-                        child: Text(
-                          categoryTitle,
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                          style: const TextStyle(color: Colors.grey, fontSize: 13),
-                        ),
-                      ),
-                      if (app.ratingAvg != null) ...[
-                        const SizedBox(height: 2),
-                        Row(
-                          children: [
-                            const FaIcon(FontAwesomeIcons.solidStar, color: Colors.white, size: 9),
-                            const SizedBox(width: 4),
-                            Text(
-                              app.getRatingAvg()!,
-                              style: TextStyle(fontSize: 11, fontWeight: FontWeight.w500, color: Colors.grey.shade300),
-                            ),
-                            const SizedBox(width: 4),
-                            Text('(${app.ratingCount})', style: TextStyle(fontSize: 11, color: Colors.grey.shade500)),
-                          ],
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-
-                const SizedBox(width: 8),
-
-                // Action button - Apple style
-                Container(
-                  width: 60,
-                  height: 28,
-                  decoration: BoxDecoration(
-                    color: isEnabled ? Colors.grey.shade700 : Colors.white,
-                    borderRadius: BorderRadius.circular(14),
-                  ),
-                  child: Center(
-                    child: Text(
-                      isEnabled ? 'Open' : 'Install',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
-                        color: isEnabled ? Colors.white : Colors.black,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+              ),
+              placeholder: (context, url) => Container(
+                width: 60,
+                height: 60,
+                decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
+              ),
+              errorWidget: (context, url, error) => Container(
+                width: 60,
+                height: 60,
+                decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
+                child: const Icon(Icons.error_outline, color: OmiColors.textTertiary, size: 24),
+              ),
             ),
-          ),
-        );
-      },
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    app.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: OmiType.body.copyWith(fontWeight: FontWeight.w500),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(top: 2.0),
+                    child: Text(
+                      categoryTitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
+                    ),
+                  ),
+                  if (app.ratingAvg != null) ...[
+                    const SizedBox(height: 2),
+                    Row(
+                      children: [
+                        const FaIcon(FontAwesomeIcons.solidStar, color: Colors.white, size: 9),
+                        const SizedBox(width: 4),
+                        Text(
+                          app.getRatingAvg()!,
+                          style: OmiType.caption.copyWith(fontWeight: FontWeight.w500, color: OmiColors.textSecondary),
+                        ),
+                        const SizedBox(width: 4),
+                        Text('(${app.ratingCount})', style: OmiType.caption.copyWith(color: OmiColors.textTertiary)),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            AppListActionButton(app: app, onOpen: () => _openDetail(context)),
+          ],
+        ),
+      ),
     );
+  }
+
+  Future<void> _openDetail(BuildContext context) async {
+    PlatformManager.instance.analytics.pageOpened('App Detail');
+    // Capture before navigating; this card can be disposed while AppDetailPage is open.
+    final appProvider = context.read<AppProvider>();
+    await routeToPage(context, AppDetailPage(app: app));
+    appProvider.filterApps();
   }
 }

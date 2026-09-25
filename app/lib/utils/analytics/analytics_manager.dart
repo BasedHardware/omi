@@ -12,6 +12,7 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/env/physical_qualification.dart';
 import 'package:omi/utils/analytics/adapters/posthog_adapter.dart';
 import 'package:omi/utils/analytics/analytics_adapter.dart';
 import 'package:omi/utils/analytics/intercom.dart';
@@ -83,6 +84,8 @@ class AnalyticsManager {
   static bool get identityKnown => _identityKnown;
   static bool get trackingEnabled => _trackingEnabled;
   static String? get currentIdentity => _boundIdentity;
+  static String get appBuild => _globalEventProperties['app_build']?.toString() ?? 'unknown';
+  static String get mobilePlatform => _mobilePlatformName;
   static Map<String, Object> get healthSnapshot => {
         'ready': _analyticsReady,
         'queue_depth': _queuedEvents.length,
@@ -145,6 +148,7 @@ class AnalyticsManager {
   }
 
   static Future<void> _settleIdentity() async {
+    if (PhysicalQualification.enabled) return;
     final adapter = _adapter;
     if (adapter == null || !adapter.isInitialized || !_trackingEnabled) return;
     if (adapter is AnalyticsIdentityAdapter && !_identityKnown) return;
@@ -181,6 +185,7 @@ class AnalyticsManager {
   }
 
   Future<void> refreshExperiments() async {
+    if (PhysicalQualification.enabled) return;
     if (!_analyticsReady) await init();
     if (_settledDistinctId == null) await _settleIdentity();
     await _experiments?.refresh();
@@ -221,6 +226,7 @@ class AnalyticsManager {
   }
 
   static Future<void> init({Duration timeout = _initTimeout}) async {
+    if (PhysicalQualification.enabled) return;
     _initStarted = true;
     if (_adapter == null && Env.posthogApiKey != null) {
       _adapter = PostHogAnalyticsAdapter(apiKey: Env.posthogApiKey!);
@@ -546,6 +552,25 @@ class AnalyticsManager {
 
   void setNameAndEmail() {
     _setUserPropertiesBatch({'\$name': _preferences.fullName, '\$email': _preferences.email});
+  }
+
+  Future<bool> isFeatureEnabled(String key) async {
+    final adapter = _adapter;
+    if (adapter == null || !adapter.isInitialized || !_trackingEnabled || _settledDistinctId == null) {
+      return false;
+    }
+    if (adapter is! AnalyticsFeatureFlagAdapter) return false;
+    final epoch = _identityEpoch;
+    final identity = _settledDistinctId;
+    try {
+      final enabled = await (adapter as AnalyticsFeatureFlagAdapter).isFeatureEnabled(key).timeout(_initTimeout);
+      if (epoch != _identityEpoch || !identical(identity, _settledDistinctId) || !_trackingEnabled) {
+        return false;
+      }
+      return enabled;
+    } catch (_) {
+      return false;
+    }
   }
 
   void track(String eventName, {Map<String, dynamic>? properties}) =>
@@ -937,7 +962,10 @@ class AnalyticsManager {
   void deviceConnected(BtDevice device) {
     final vendor = device.type.analyticsVendor;
     final hardwareFamily = DeviceUtils.analyticsHardwareFamily(device);
-    track('Device Connected', properties: _deviceConnectionEventProperties(device));
+    track('Device Connected', properties: {
+      ..._deviceConnectionEventProperties(device),
+      if (device.rssi < 0) 'rssi': device.rssi,
+    });
     setUserProperty('device_vendor', vendor);
     setUserProperty('hardware_family', hardwareFamily);
   }

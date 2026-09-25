@@ -88,7 +88,7 @@
         <service
             android:name="com.pravera.flutter_foreground_task.service.ForegroundService"
             android:exported="false"
-            android:foregroundServiceType="location"
+            android:foregroundServiceType="location|shortService"
             android:stopWithTask="true" />
          <service
             android:name="id.flutter.flutter_background_service.BackgroundService"
@@ -220,7 +220,7 @@
         <!-- Recording file-transfer keep-alive — dataSync FGS + wake lock for BLE/cloud sync (#5221) -->
         <service
             android:name="com.friend.ios.sync.SyncTransferForegroundService"
-            android:foregroundServiceType="dataSync"
+            android:foregroundServiceType="dataSync|shortService"
             android:stopWithTask="false"
             android:exported="false" />
 
