@@ -54,6 +54,8 @@ def world(monkeypatch):
         lambda uid: [deepcopy(v) for k, v in store.rows.items() if k[:3] == ('users', uid, 'people')],
     )
     monkeypatch.setattr(users, 'get_user_speaker_embedding', lambda uid: None)
+    voice_settings = {'speaker_tag_prompts_enabled': True, 'save_other_voice_profiles': True}
+    monkeypatch.setattr(teaching.voice_profiles_db, 'get_voice_profile_settings', lambda uid: dict(voice_settings))
     monkeypatch.setattr(
         teaching.conversations_db,
         'get_conversation',
@@ -85,11 +87,35 @@ def world(monkeypatch):
         uploads=uploads,
         deleted=deleted,
         vector=vector,
+        voice_settings=voice_settings,
     )
 
 
 def teach():
     asyncio.run(teaching.extract_speaker_samples('account-a', 'person-1', 'teach-1', ['s1', 's2']))
+
+
+def test_user_opt_out_skips_saving_other_voices(world):
+    world.voice_settings['save_other_voice_profiles'] = False
+    teach()
+    saved = world.store.rows[world.person_path]
+    assert not saved.get('speech_samples'), 'opting out must stop new voice samples for other people'
+    assert not saved.get('speaker_embedding')
+    assert world.uploads == []
+
+
+def test_opt_out_during_inflight_teaching_discards_the_upload(world, monkeypatch):
+    def embed(*args):
+        world.store.rows[('users', 'account-a')] = {'save_other_voice_profiles': False}
+        return world.vector
+
+    monkeypatch.setattr(teaching, 'extract_embedding_from_bytes', embed)
+    teach()
+    saved = world.store.rows[world.person_path]
+    assert not saved.get('speaker_embedding')
+    assert not saved.get('speech_samples'), 'the publish transaction must re-check the opt-out atomically'
+    assert world.uploads[-1] in world.deleted
+    assert not world.store.transactions[-1].has_written, 'preference and person reads precede the first write'
 
 
 def test_expanded_audio_is_verified_against_all_contributing_text(world):

@@ -18,6 +18,7 @@ from services.conversation_finalization import (
 from utils.cloud_tasks import verify_listen_finalization_cloud_tasks_oidc
 from utils.account_cutover.access import should_skip_background_account_mutation
 from utils.conversations import lifecycle as lifecycle_service
+from utils.conversations.processing_trigger import trigger_for_finalization_job
 from utils.conversations.finalizer import (
     ConversationFinalizationDisposition,
     ConversationFinalizationError,
@@ -165,7 +166,7 @@ async def run_listen_finalization_job(
                 finalization_job_id=job_id,
                 dispatch_generation=dispatch_generation,
                 lease_epoch=claimed_lease_epoch,
-                force_process=bool(job.get('force_process')),
+                trigger=trigger_for_finalization_job(job),
                 final_attempt=task_retry_count >= get_listen_finalization_tasks_max_attempts_for_worker() - 1,
             )
         except ConversationFinalizationError:

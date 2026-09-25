@@ -18,7 +18,7 @@ import database.memories as memories_db
 import database.vector_db as vector_db
 from database._client import db as default_db_client
 from database.memory_collections import MemoryCollections
-from database.memory_apply_store import privacy_deletion_receipt_id
+from database.memory_apply_store import EvidenceIdentityConflict, privacy_deletion_receipt_id
 from database.memory_ledger import purge_source_replacement_receipts_for_memories
 from database.legal_holds import destructive_operation_gate
 from database.review_queue import purge_stale_review_conflicts_for_memories
@@ -1648,6 +1648,12 @@ class _CanonicalCursorStream:
         self._peek_keyset = None
         self._peek_scan = None
         self._advance_raw_slot()
+
+
+def _evidence_identity_conflict_http() -> HTTPException:
+    # The caller reused a source identity for a different source. That is a
+    # client-visible conflict, not a server fault (#17296).
+    return HTTPException(status_code=409, detail="Memory source conflicts with an existing memory source")
 
 
 class MemoryService:
@@ -4217,16 +4223,19 @@ class MemoryService:
         direct_user_authority: object | None = None,
     ) -> MemoryDB:
         del memory_system, operation, upsert_vector, require_canonical_promotion
-        if memory_db.manually_added and self._direct_user_ledger_admitted(uid, direct_user_authority):
-            assert direct_user_authority is not None
-            result = self._write_direct_user_fact(
-                uid,
-                memory_db,
-                consumer=consumer,
-                authority=direct_user_authority,
-            )
-        else:
-            result = self._canonical_write(uid, memory_db.model_dump(mode="python"), source_surface=consumer)
+        try:
+            if memory_db.manually_added and self._direct_user_ledger_admitted(uid, direct_user_authority):
+                assert direct_user_authority is not None
+                result = self._write_direct_user_fact(
+                    uid,
+                    memory_db,
+                    consumer=consumer,
+                    authority=direct_user_authority,
+                )
+            else:
+                result = self._canonical_write(uid, memory_db.model_dump(mode="python"), source_surface=consumer)
+        except EvidenceIdentityConflict as exc:
+            raise _evidence_identity_conflict_http() from exc
         self._invalidate_prompt_cache(uid)
         return result
 
@@ -4254,22 +4263,28 @@ class MemoryService:
                     )
                 for memory in memory_dbs:
                     self._validate_direct_user_fact(memory, consumer=consumer)
-                results = [
-                    self._write_direct_user_fact(
-                        uid,
-                        memory,
-                        consumer=consumer,
-                        authority=direct_user_authority,
-                    )
-                    for memory in memory_dbs
-                ]
+                try:
+                    results = [
+                        self._write_direct_user_fact(
+                            uid,
+                            memory,
+                            consumer=consumer,
+                            authority=direct_user_authority,
+                        )
+                        for memory in memory_dbs
+                    ]
+                except EvidenceIdentityConflict as exc:
+                    raise _evidence_identity_conflict_http() from exc
                 self._invalidate_prompt_cache(uid)
                 return results
         payloads = [
             required_processing_payload(memory.model_dump(mode="python"), source_surface=consumer)
             for memory in memory_dbs
         ]
-        ids = self._canonical.write_batch(uid, payloads)
+        try:
+            ids = self._canonical.write_batch(uid, payloads)
+        except EvidenceIdentityConflict as exc:
+            raise _evidence_identity_conflict_http() from exc
         results: List[MemoryDB] = []
         for memory_id in ids:
             item = read_canonical_memory_item(uid, memory_id, db_client=self.db_client)
@@ -4312,13 +4327,8 @@ class MemoryService:
         upsert_vector: bool = True,
     ) -> MemoryDB:
         del memory_system, consumer, operation, upsert_vector
-        self.ensure_canonical_mutation_ready(uid)
-        materialized = self._ensure_canonical_target(uid, memory_id)
-        try:
-            updated = self._canonical.update_content(uid, memory_id, content)
-        except ValueError as exc:
-            raise HTTPException(status_code=404, detail="Memory not found") from exc
-        if materialized:
-            HistoricalMemoryAdapter.cleanup(uid, memory_id, db_client=self.db_client)
-        self._invalidate_prompt_cache(uid)
-        return updated
+        # Route through ``update_content`` so ledger-schema memories are
+        # corrected through the ledger path rather than a blind canonical
+        # content overwrite; it performs the same readiness/materialization and
+        # historical cleanup internally.
+        return self.update_content(uid, memory_id, content)

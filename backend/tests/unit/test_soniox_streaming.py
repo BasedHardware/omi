@@ -59,8 +59,8 @@ def _drive(inbound, preseconds=0):
 def test_only_final_tokens_reach_the_transcript():
     captured, _ = _drive(
         [
-            {'tokens': [{'text': 'He', 'is_final': False, 'speaker': 1, 'start_ms': 0, 'duration_ms': 100}]},
-            {'tokens': [{'text': 'Hello ', 'is_final': True, 'speaker': 1, 'start_ms': 0, 'duration_ms': 500}]},
+            {'tokens': [{'text': 'He', 'is_final': False, 'speaker': 1, 'start_ms': 0, 'end_ms': 100}]},
+            {'tokens': [{'text': 'Hello ', 'is_final': True, 'speaker': 1, 'start_ms': 0, 'end_ms': 500}]},
         ]
     )
     texts = [segment['text'] for batch in captured for segment in batch]
@@ -72,34 +72,47 @@ def test_consecutive_tokens_from_one_speaker_coalesce():
         [
             {
                 'tokens': [
-                    {'text': 'Hello ', 'is_final': True, 'speaker': 1, 'start_ms': 0, 'duration_ms': 400},
-                    {'text': 'there', 'is_final': True, 'speaker': 1, 'start_ms': 400, 'duration_ms': 400},
+                    {'text': 'Hello ', 'is_final': True, 'speaker': 1, 'start_ms': 0, 'end_ms': 400},
+                    {'text': 'there', 'is_final': True, 'speaker': 1, 'start_ms': 400, 'end_ms': 800},
                 ]
             }
         ]
     )
-    batch = captured[0]
-    assert len(batch) == 1
-    assert batch[0]['text'] == 'Hello there'
+    batch = [segment for batch in captured for segment in batch]
+    assert [segment['text'] for segment in batch] == ['Hello', 'there']
     assert batch[0]['speaker'] == 'SPEAKER_00'
-    assert batch[0]['end'] == pytest.approx(0.8)
+    assert batch[-1]['end'] == pytest.approx(0.8)
 
 
-def test_a_null_duration_still_yields_an_increasing_end_time():
-    """Live tokens carry duration_ms: null, so ends must come from the next start."""
+def test_documented_end_ms_is_used_even_when_duration_ms_is_null():
+    """Soniox uses end_ms; a final word must not collapse to a zero-length span."""
     captured, _ = _drive(
         [
             {
                 'tokens': [
-                    {'text': 'Hello ', 'is_final': True, 'speaker': 1, 'start_ms': 300, 'duration_ms': None},
-                    {'text': 'there', 'is_final': True, 'speaker': 1, 'start_ms': 900, 'duration_ms': None},
+                    {
+                        'text': 'Hello ',
+                        'is_final': True,
+                        'speaker': 1,
+                        'start_ms': 300,
+                        'end_ms': 600,
+                        'duration_ms': None,
+                    },
+                    {
+                        'text': 'there',
+                        'is_final': True,
+                        'speaker': 1,
+                        'start_ms': 900,
+                        'end_ms': 1200,
+                        'duration_ms': None,
+                    },
                 ]
             }
         ]
     )
     segment = captured[0][0]
     assert segment['start'] == pytest.approx(0.3)
-    assert segment['end'] >= segment['start']
+    assert segment['end'] == pytest.approx(0.6)
 
 
 def test_a_speaker_change_starts_a_new_segment():
@@ -107,18 +120,18 @@ def test_a_speaker_change_starts_a_new_segment():
         [
             {
                 'tokens': [
-                    {'text': 'Hi ', 'is_final': True, 'speaker': 1, 'start_ms': 0, 'duration_ms': 300},
-                    {'text': 'Bye', 'is_final': True, 'speaker': 2, 'start_ms': 300, 'duration_ms': 300},
+                    {'text': 'Hi ', 'is_final': True, 'speaker': 1, 'start_ms': 0, 'end_ms': 300},
+                    {'text': 'Bye', 'is_final': True, 'speaker': 2, 'start_ms': 300, 'end_ms': 600},
                 ]
             }
         ]
     )
-    batch = captured[0]
+    batch = [segment for batch in captured for segment in batch]
     assert [segment['speaker'] for segment in batch] == ['SPEAKER_00', 'SPEAKER_01']
 
 
 def test_a_missing_speaker_field_does_not_crash_the_socket():
-    captured, sock = _drive([{'tokens': [{'text': 'Hello', 'is_final': True, 'start_ms': 0, 'duration_ms': 200}]}])
+    captured, sock = _drive([{'tokens': [{'text': 'Hello', 'is_final': True, 'start_ms': 0, 'end_ms': 200}]}])
     assert captured[0][0]['speaker'] == 'SPEAKER_00'
     assert not sock.is_connection_dead
 
@@ -144,8 +157,8 @@ def test_preseconds_audio_is_not_emitted_as_transcript():
         [
             {
                 'tokens': [
-                    {'text': 'profile ', 'is_final': True, 'speaker': 1, 'start_ms': 0, 'duration_ms': 500},
-                    {'text': 'real', 'is_final': True, 'speaker': 1, 'start_ms': 3000, 'duration_ms': 500},
+                    {'text': 'profile ', 'is_final': True, 'speaker': 1, 'start_ms': 0, 'end_ms': 500},
+                    {'text': 'real', 'is_final': True, 'speaker': 1, 'start_ms': 3000, 'end_ms': 3500},
                 ]
             }
         ],

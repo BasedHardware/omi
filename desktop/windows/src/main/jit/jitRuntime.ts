@@ -163,18 +163,6 @@ export class WindowsJitRuntime {
       ownerId,
       accountGeneration,
       authorizationCurrent,
-      calendarObservation: async () => {
-        const { isConnected } = await import('../integrations/oauth')
-        if (!isConnected()) return { authorized: false, events: [] }
-        const { fetchCalendar } = await import('../integrations/google')
-        const events = await fetchCalendar()
-        return {
-          authorized: true,
-          events: events
-            .slice(0, 32)
-            .map((event) => ({ title: event.title, eventType: 'calendar_event' }))
-        }
-      },
       frameExists: (frameId) =>
         Boolean(db.prepare('SELECT id FROM rewind_frames WHERE id = ?').get(frameId))
     })

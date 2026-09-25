@@ -8,6 +8,8 @@ overlay:
   gke:
     backend-listen:
       env:
+        OMI_CUSTOMER_DATA_PROJECT:
+          value: based-hardware
         FREE_TIER_LOCAL_PROCESSING:
           value: 'false'
         FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -17,6 +19,10 @@ overlay:
         CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
           value: 'false'
         CONVERSATION_OCR_CONTEXT_ENABLED:
+          value: 'false'
+        MEETING_NOTES_RICH_CONTEXT_ENABLED:
+          value: 'false'
+        MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
           value: 'false'
         BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
           value: 'false'
@@ -87,6 +93,8 @@ overlay:
             key: MCP_OAUTH_CLIENTS_JSON
     pusher:
       env:
+        OMI_CUSTOMER_DATA_PROJECT:
+          value: based-hardware
         FREE_TIER_LOCAL_PROCESSING:
           value: 'false'
         FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -96,6 +104,10 @@ overlay:
         CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
           value: 'false'
         CONVERSATION_OCR_CONTEXT_ENABLED:
+          value: 'false'
+        MEETING_NOTES_RICH_CONTEXT_ENABLED:
+          value: 'false'
+        MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
           value: 'false'
         BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
           value: 'false'
@@ -192,6 +204,8 @@ overlay:
             secret: MCP_OAUTH_CLIENTS_JSON
             version: latest
         env:
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
           FREE_TIER_LOCAL_PROCESSING:
             value: 'false'
           FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -201,6 +215,10 @@ overlay:
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
             value: 'false'
           CONVERSATION_OCR_CONTEXT_ENABLED:
+            value: 'false'
+          MEETING_NOTES_RICH_CONTEXT_ENABLED:
+            value: 'false'
+          MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
             value: 'false'
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             value: 'false'
@@ -285,6 +303,8 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
           FREE_TIER_LOCAL_PROCESSING:
             value: 'false'
           FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -302,6 +322,10 @@ overlay:
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
             value: 'false'
           CONVERSATION_OCR_CONTEXT_ENABLED:
+            value: 'false'
+          MEETING_NOTES_RICH_CONTEXT_ENABLED:
+            value: 'false'
+          MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
             value: 'false'
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             value: 'false'
@@ -356,6 +380,8 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
           FREE_TIER_LOCAL_PROCESSING:
             value: 'false'
           FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -423,6 +449,8 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
           FREE_TIER_LOCAL_PROCESSING:
             value: 'false'
           FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -465,11 +493,23 @@ overlay:
             category: rollout
     jobs:
       notifications-job:
+        secrets:
+          SERVICE_ACCOUNT_JSON:
+            secret: SERVICE_ACCOUNT_JSON
+            version: latest
         env:
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
           PINECONE_INDEX_NAME:
             value: memories-backend
       memory-maintenance-job:
+        secrets:
+          SERVICE_ACCOUNT_JSON:
+            secret: SERVICE_ACCOUNT_JSON
+            version: latest
         env:
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
           PINECONE_INDEX_NAME:
             value: memories-backend
           MEMORY_BELIEF_MODEL_ENABLED:
@@ -480,11 +520,23 @@ overlay:
             value: 'true'
             category: rollout
       frame-request-retention-job:
+        secrets:
+          SERVICE_ACCOUNT_JSON:
+            secret: SERVICE_ACCOUNT_JSON
+            version: latest
         env:
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
       daily-memory-sweep-job:
+        secrets:
+          SERVICE_ACCOUNT_JSON:
+            secret: SERVICE_ACCOUNT_JSON
+            version: latest
         env:
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
           MEMORY_BELIEF_MODEL_ENABLED:
@@ -506,15 +558,33 @@ overlay:
           MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED:
             value: 'false'
       knowledge-ledger-drain-job:
+        secrets:
+          SERVICE_ACCOUNT_JSON:
+            secret: SERVICE_ACCOUNT_JSON
+            version: latest
         env:
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
           KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST:
             value: ''
       day3-reengagement-email-job:
+        secrets:
+          SERVICE_ACCOUNT_JSON:
+            secret: SERVICE_ACCOUNT_JSON
+            version: latest
         env:
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
           BASE_API_URL:
             value: https://api.omi.me
+          # EXP-001 is live in prod only (David, 2026-09-25). Dev stays 'false':
+          # the dev job reads the same production users, so enabling both would
+          # race two senders over one cohort. Stop with the kill switch.
+          DAY3_REENGAGEMENT_EMAIL_ENABLED:
+            value: 'true'
+            category: lifecycle_email
     workflow_files:
     - .github/workflows/gcp_backend.yml
     - .github/workflows/gcp_notifications_job.yml
