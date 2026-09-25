@@ -1,7 +1,15 @@
 import { memo, createElement } from 'react'
 import type { ComponentType, ReactElement } from 'react'
 import type { LucideIcon } from 'lucide-react'
-import { House, GanttChartSquare, ListChecks, History, LayoutGrid, Lightbulb } from 'lucide-react'
+import {
+  House,
+  GanttChartSquare,
+  ListChecks,
+  History,
+  LayoutGrid,
+  Lightbulb,
+  Search as SearchIcon
+} from 'lucide-react'
 import { Home } from '../pages/Home'
 import { Conversations } from '../pages/Conversations'
 import { Memories } from '../pages/Memories'
@@ -12,6 +20,7 @@ import { Goals } from '../pages/Goals'
 import { Apps } from '../pages/Apps'
 import { Rewind } from '../pages/Rewind'
 import { Insights } from '../pages/Insights'
+import { Search } from '../pages/Search'
 import { LiveConversation } from '../pages/LiveConversation'
 import { KnowledgeGraph } from '../pages/KnowledgeGraph'
 import { CONVERSATIONS_PATH } from '../lib/conversations/conversationsPanelActivity'
@@ -79,6 +88,7 @@ const GoalsPanel = memo(Goals)
 const AppsPanel = memo(Apps)
 const RewindPanel = memo(Rewind)
 const InsightsPanel = memo(Insights)
+const SearchPanel = memo(Search)
 
 // Shared path constants — keep panel activity predicates and the manifest in sync.
 export const HOME_PATH = '/home'
@@ -184,6 +194,17 @@ export const routeManifest: RouteEntry[] = [
     path: '/insights',
     Component: InsightsPanel,
     nav: { label: 'Insights', Icon: Lightbulb, order: 5 },
+    escapeToHome: true
+  },
+  {
+    // Appended rather than placed near Home so the existing rail order is
+    // unchanged; '7' is the next free shortcut after Insights.
+    id: 'search',
+    kind: 'panel',
+    path: '/search',
+    Component: SearchPanel,
+    nav: { label: 'Search', Icon: SearchIcon, order: 6 },
+    shortcut: '7',
     escapeToHome: true
   }
 ]
