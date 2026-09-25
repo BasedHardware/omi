@@ -96,14 +96,19 @@ def test_cancel_app_subscription_masks_stripe_error(monkeypatch):
     monkeypatch.setattr(
         payment_routes,
         "find_app_subscription",
-        lambda app_id, uid, status_filter='active': {"subscription_id": "sub_app_777", "customer_id": "cus_123"},
+        lambda app_id, uid, status_filter='active': {"id": "sub_app_777", "customer_id": "cus_123"},
     )
 
     leak_msg = "No such subscription: 'sub_app_777'; live mode key used in test environment"
 
-    with patch.object(payment_routes.stripe.Subscription, "modify", side_effect=_FakeStripeError(leak_msg)):
-        with pytest.raises(HTTPException) as exc_info:
-            payment_routes.cancel_app_subscription(app_id="app_123", uid="user_123")
+    monkeypatch.setattr(
+        payment_routes.stripe_utils,
+        "modify_subscription",
+        MagicMock(side_effect=_FakeStripeError(leak_msg)),
+    )
+
+    with pytest.raises(HTTPException) as exc_info:
+        payment_routes.cancel_app_subscription(app_id="app_123", uid="user_123")
 
     assert exc_info.value.status_code == 400
     assert "sub_app_777" not in exc_info.value.detail
@@ -113,6 +118,9 @@ def test_cancel_app_subscription_masks_stripe_error(monkeypatch):
 
 def test_checkout_session_fallback_masks_invalid_request_error(monkeypatch):
     """Checkout session InvalidRequestError without user_message must return sanitized detail."""
+    monkeypatch.setattr(payment_routes, "_validate_price_id", lambda pid: None)
+    monkeypatch.setattr(payment_routes.subscription_utils, "can_user_make_payment", lambda uid, pid: (True, None))
+    monkeypatch.setattr(payment_routes, "_try_reactivate_subscription", lambda uid, pid: None)
     monkeypatch.setattr(payment_routes.users_db, "get_stripe_customer_id", lambda uid: "cus_123")
     monkeypatch.setattr(payment_routes.stripe.error, "InvalidRequestError", _FakeInvalidRequestError)
 
@@ -125,7 +133,7 @@ def test_checkout_session_fallback_masks_invalid_request_error(monkeypatch):
 
     fake_req = MagicMock()
     fake_req.price_id = "price_premium_monthly"
-    fake_req.promotion_code_id = None
+    fake_req.promotion_code = None
 
     with pytest.raises(HTTPException) as exc_info:
         payment_routes.create_checkout_session_endpoint(request=fake_req, uid="user_123")
@@ -133,4 +141,4 @@ def test_checkout_session_fallback_masks_invalid_request_error(monkeypatch):
     assert exc_info.value.status_code == 400
     assert "sk_test_51" not in exc_info.value.detail
     assert "Invalid API key" not in exc_info.value.detail
-    assert exc_info.value.detail == "Invalid payment configuration. Please try again."
+    assert exc_info.value.detail == "Invalid payment request. Please check your payment details."
