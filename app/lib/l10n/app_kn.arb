@@ -11096,5 +11096,7 @@
     "speakerTagPromptAnswerFailed": "ಉಳಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
     "voiceSettingsAskToTag": "ಧ್ವನಿಗಳನ್ನು ಟ್ಯಾಗ್ ಮಾಡಲು ನನ್ನನ್ನು ಕೇಳಿ",
     "voiceSettingsAskToTagSubtitle": "ಆಗಾಗ, ನಿಮ್ಮ ಇತ್ತೀಚಿನ ಸಂಭಾಷಣೆಗಳಲ್ಲಿ ಯಾರು ಮಾತನಾಡುತ್ತಿದ್ದರು ಎಂದು Omi ಕೇಳುತ್ತದೆ",
-    "voiceSettingsSaveOthersSubtitle": "ನೀವು ಯಾರಿಗಾದರೂ ಹೆಸರಿಸಿದಾಗ, ಮುಂದಿನ ಬಾರಿ ಗುರುತಿಸಲು Omi ಒಂದು ಚಿಕ್ಕ ಧ್ವನಿ ಮಾದರಿಯನ್ನು ಇಟ್ಟುಕೊಳ್ಳುತ್ತದೆ"
+    "voiceSettingsSaveOthersSubtitle": "ನೀವು ಯಾರಿಗಾದರೂ ಹೆಸರಿಸಿದಾಗ, ಮುಂದಿನ ಬಾರಿ ಗುರುತಿಸಲು Omi ಒಂದು ಚಿಕ್ಕ ಧ್ವನಿ ಮಾದರಿಯನ್ನು ಇಟ್ಟುಕೊಳ್ಳುತ್ತದೆ",
+    "transcriptionUnavailableRecordingContinues": "ಲಿಪ್ಯಂತರಗಳು ಲಭ್ಯವಿಲ್ಲ, ಧ್ವನಿಮುದ್ರಣ ಸಾಧನದಲ್ಲಿ ಮುಂದುವರಿಯುತ್ತದೆ ಮತ್ತು ನಂತರ ಪ್ರಕ್ರಿಯೆಗೊಳ್ಳುತ್ತದೆ",
+    "transcriptionUnavailableSavingOnDevice": "ಲಿಪ್ಯಂತರ ಲಭ್ಯವಿಲ್ಲ · ಸಾಧನದಲ್ಲಿ ಉಳಿಸಲಾಗುತ್ತಿದೆ"
 }

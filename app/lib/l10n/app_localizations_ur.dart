@@ -11168,4 +11168,11 @@ class AppLocalizationsUr extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'جب آپ کسی کا نام دیتے ہیں تو Omi اگلی بار پہچاننے کے لیے آواز کا ایک مختصر نمونہ رکھتا ہے';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'ٹرانسکرپشن دستیاب نہیں، ریکارڈنگ ڈیوائس پر جاری ہے اور بعد میں پروسیس ہوگی';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'ٹرانسکرپشن دستیاب نہیں · ڈیوائس پر محفوظ ہو رہی ہے';
 }

@@ -11149,4 +11149,11 @@ class AppLocalizationsSk extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'Keď niekoho pomenujete, Omi si uchová krátku ukážku hlasu, aby ho nabudúce spoznal';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Transkripcie sú nedostupné, nahrávanie pokračuje v zariadení a neskôr sa spracuje';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Transkripcia nedostupná · ukladá sa v zariadení';
 }

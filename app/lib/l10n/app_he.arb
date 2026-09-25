@@ -11096,5 +11096,7 @@
     "speakerTagPromptAnswerFailed": "לא ניתן לשמור. נסו שוב.",
     "voiceSettingsAskToTag": "בקשו ממני לתייג קולות",
     "voiceSettingsAskToTagSubtitle": "מדי פעם Omi ישאל מי דיבר בשיחות האחרונות שלכם",
-    "voiceSettingsSaveOthersSubtitle": "כשאתם נותנים שם למישהו, Omi שומר דגימת קול קצרה כדי לזהות אותו בפעם הבאה"
+    "voiceSettingsSaveOthersSubtitle": "כשאתם נותנים שם למישהו, Omi שומר דגימת קול קצרה כדי לזהות אותו בפעם הבאה",
+    "transcriptionUnavailableRecordingContinues": "התמלילים אינם זמינים, ההקלטה ממשיכה במכשיר ותעובד מאוחר יותר",
+    "transcriptionUnavailableSavingOnDevice": "תמליל לא זמין · נשמר במכשיר"
 }

@@ -11250,4 +11250,11 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'Wenn du jemanden benennst, speichert Omi eine kurze Stimmprobe, um die Person beim nächsten Mal zu erkennen';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Transkriptionen sind nicht verfügbar, die Aufnahme läuft auf dem Gerät weiter und wird später verarbeitet';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Transkription nicht verfügbar · wird auf dem Gerät gespeichert';
 }

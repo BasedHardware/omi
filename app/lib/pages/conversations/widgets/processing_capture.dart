@@ -288,7 +288,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
       if (captureProvider.terminalTranscriptionFailure != null) {
         // Audio remains in the WAL while reconnecting, but the server has
         // explicitly said live STT is unavailable. Do not claim "Listening".
-        stateText = captureStateLabel(l10n, CaptureDisplayState.transcriptionUnavailable);
+        stateText = captureStateLabel(l10n, CaptureDisplayState.transcriptionUnavailable, compact: true);
         statusIndicator = const PausedStatusIndicator();
       } else if (bufferingFor != null) {
         // Custom STT endpoint unreachable. Audio keeps recording
@@ -393,6 +393,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         capturingPhotos: hasPhotos,
       ),
       bufferingFor: bufferingFor,
+      compact: true,
     );
 
     // When recording is active, show the unified UI design

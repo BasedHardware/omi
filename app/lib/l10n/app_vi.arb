@@ -3524,5 +3524,7 @@
     "speakerTagPromptAnswerFailed": "Không thể lưu. Vui lòng thử lại.",
     "voiceSettingsAskToTag": "Nhắc tôi gắn thẻ giọng nói",
     "voiceSettingsAskToTagSubtitle": "Thỉnh thoảng, Omi sẽ hỏi ai đã nói trong các cuộc trò chuyện gần đây của bạn",
-    "voiceSettingsSaveOthersSubtitle": "Khi bạn đặt tên cho ai đó, Omi lưu một mẫu giọng ngắn để nhận ra họ vào lần sau"
+    "voiceSettingsSaveOthersSubtitle": "Khi bạn đặt tên cho ai đó, Omi lưu một mẫu giọng ngắn để nhận ra họ vào lần sau",
+    "transcriptionUnavailableRecordingContinues": "Bản chép âm không khả dụng, quá trình ghi âm tiếp tục trên thiết bị và sẽ được xử lý sau",
+    "transcriptionUnavailableSavingOnDevice": "Bản chép âm không khả dụng · đang lưu trên thiết bị"
 }

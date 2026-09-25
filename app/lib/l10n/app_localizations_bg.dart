@@ -11200,4 +11200,11 @@ class AppLocalizationsBg extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'Когато назовете някого, Omi пази кратък гласов образец, за да го разпознае следващия път';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Транскрипциите са недостъпни, записването продължава на устройството и ще бъде обработено по-късно';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Транскрипцията е недостъпна · записва се на устройството';
 }

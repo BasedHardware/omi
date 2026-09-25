@@ -3559,5 +3559,7 @@
     "speakerTagPromptAnswerFailed": "Не удалось сохранить. Попробуйте ещё раз.",
     "voiceSettingsAskToTag": "Просить меня отмечать голоса",
     "voiceSettingsAskToTagSubtitle": "Время от времени Omi спрашивает, кто говорил в ваших недавних разговорах",
-    "voiceSettingsSaveOthersSubtitle": "Когда вы называете человека, Omi сохраняет короткий образец голоса, чтобы узнать его в следующий раз"
+    "voiceSettingsSaveOthersSubtitle": "Когда вы называете человека, Omi сохраняет короткий образец голоса, чтобы узнать его в следующий раз",
+    "transcriptionUnavailableRecordingContinues": "Транскрипция недоступна, запись продолжается на устройстве и будет обработана позже",
+    "transcriptionUnavailableSavingOnDevice": "Транскрипция недоступна · сохраняется на устройстве"
 }

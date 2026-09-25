@@ -11167,4 +11167,11 @@ class AppLocalizationsSv extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'När du namnger någon sparar Omi ett kort röstprov så att den känner igen personen nästa gång';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Transkriptioner är inte tillgängliga, inspelningen fortsätter på enheten och bearbetas senare';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Transkription inte tillgänglig · sparas på enheten';
 }

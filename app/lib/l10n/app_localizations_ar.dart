@@ -11090,4 +11090,11 @@ class AppLocalizationsAr extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'عندما تسمّي شخصًا، يحتفظ Omi بعيّنة صوتية قصيرة ليتعرّف عليه في المرة القادمة';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'النسخ غير متوفر حاليًا، يستمر التسجيل على الجهاز وستتم المعالجة لاحقًا';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'النسخ غير متوفر · يتم الحفظ على الجهاز';
 }

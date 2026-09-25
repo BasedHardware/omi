@@ -11173,4 +11173,11 @@ class AppLocalizationsSr extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'Када некога именујете, Omi чува кратак узорак гласа да би га следећи пут препознао';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Транскрипције нису доступне, снимање се наставља на уређају и биће обрађено касније';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Транскрипција недоступна · чува се на уређају';
 }

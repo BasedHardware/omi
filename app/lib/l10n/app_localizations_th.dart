@@ -11093,4 +11093,11 @@ class AppLocalizationsTh extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'เมื่อคุณตั้งชื่อให้ใครสักคน Omi จะเก็บตัวอย่างเสียงสั้นๆ ไว้เพื่อจดจำเขาได้ในครั้งถัดไป';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'การถอดเสียงไม่พร้อมใช้งาน การบันทึกยังดำเนินต่อในอุปกรณ์และจะประมวลผลในภายหลัง';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'การถอดเสียงไม่พร้อมใช้งาน · กำลังบันทึกในอุปกรณ์';
 }

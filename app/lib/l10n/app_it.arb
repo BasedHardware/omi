@@ -3524,5 +3524,7 @@
     "speakerTagPromptAnswerFailed": "Impossibile salvare. Riprova.",
     "voiceSettingsAskToTag": "Chiedimi di etichettare le voci",
     "voiceSettingsAskToTagSubtitle": "Ogni tanto Omi ti chiede chi stava parlando nelle tue conversazioni recenti",
-    "voiceSettingsSaveOthersSubtitle": "Quando dai un nome a qualcuno, Omi conserva un breve campione vocale per riconoscerlo la prossima volta"
+    "voiceSettingsSaveOthersSubtitle": "Quando dai un nome a qualcuno, Omi conserva un breve campione vocale per riconoscerlo la prossima volta",
+    "transcriptionUnavailableRecordingContinues": "Trascrizioni non disponibili, la registrazione continua sul dispositivo e verrà elaborata più tardi",
+    "transcriptionUnavailableSavingOnDevice": "Trascrizione non disponibile · salvataggio sul dispositivo"
 }

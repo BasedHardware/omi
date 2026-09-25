@@ -3524,5 +3524,7 @@
     "speakerTagPromptAnswerFailed": "Nu s-a putut salva. Încearcă din nou.",
     "voiceSettingsAskToTag": "Cere-mi să etichetez vocile",
     "voiceSettingsAskToTagSubtitle": "Din când în când, Omi te întreabă cine vorbea în conversațiile tale recente",
-    "voiceSettingsSaveOthersSubtitle": "Când numești pe cineva, Omi păstrează o scurtă mostră de voce pentru a-l recunoaște data viitoare"
+    "voiceSettingsSaveOthersSubtitle": "Când numești pe cineva, Omi păstrează o scurtă mostră de voce pentru a-l recunoaște data viitoare",
+    "transcriptionUnavailableRecordingContinues": "Transcrierile nu sunt disponibile, înregistrarea continuă pe dispozitiv și va fi procesată mai târziu",
+    "transcriptionUnavailableSavingOnDevice": "Transcriere indisponibilă · se salvează pe dispozitiv"
 }

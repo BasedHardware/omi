@@ -11222,4 +11222,11 @@ class AppLocalizationsCa extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'Quan anomenes algú, l’Omi guarda una mostra de veu breu per reconèixer-lo la propera vegada';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Les transcripcions no estan disponibles, l\'enregistrament continua al dispositiu i es processarà més tard';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Transcripció no disponible · s\'està desant al dispositiu';
 }

@@ -10955,4 +10955,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get voiceSettingsSaveOthersSubtitle => '当你为某人命名时，Omi 会保留一小段声音样本，以便下次认出对方';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues => '转录暂不可用，录音仍在设备上继续，稍后会进行处理';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => '转录不可用 · 正在设备上保存';
 }

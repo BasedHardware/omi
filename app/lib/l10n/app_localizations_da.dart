@@ -11144,4 +11144,11 @@ class AppLocalizationsDa extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'Når du navngiver nogen, gemmer Omi en kort stemmeprøve, så den kan genkende dem næste gang';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Transskriptioner er utilgængelige, optagelsen fortsætter på enheden og behandles senere';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Transskription utilgængelig · gemmes på enheden';
 }

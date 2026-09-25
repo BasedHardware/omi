@@ -3559,5 +3559,7 @@
     "speakerTagPromptAnswerFailed": "Nie udało się zapisać. Spróbuj ponownie.",
     "voiceSettingsAskToTag": "Proś mnie o oznaczanie głosów",
     "voiceSettingsAskToTagSubtitle": "Od czasu do czasu Omi zapyta, kto mówił w Twoich ostatnich rozmowach",
-    "voiceSettingsSaveOthersSubtitle": "Gdy nazwiesz osobę, Omi zachowa krótką próbkę jej głosu, aby następnym razem ją rozpoznać"
+    "voiceSettingsSaveOthersSubtitle": "Gdy nazwiesz osobę, Omi zachowa krótką próbkę jej głosu, aby następnym razem ją rozpoznać",
+    "transcriptionUnavailableRecordingContinues": "Transkrypcje są niedostępne, nagrywanie jest kontynuowane na urządzeniu i zostanie przetworzone później",
+    "transcriptionUnavailableSavingOnDevice": "Transkrypcja niedostępna · zapisywanie na urządzeniu"
 }

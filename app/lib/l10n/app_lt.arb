@@ -3524,5 +3524,7 @@
     "speakerTagPromptAnswerFailed": "Nepavyko išsaugoti. Bandykite dar kartą.",
     "voiceSettingsAskToTag": "Prašyti manęs pažymėti balsus",
     "voiceSettingsAskToTagSubtitle": "Kartais Omi paklaus, kas kalbėjo jūsų naujausiuose pokalbiuose",
-    "voiceSettingsSaveOthersSubtitle": "Kai ką nors pavadinate, Omi išsaugo trumpą balso pavyzdį, kad kitą kartą jį atpažintų"
+    "voiceSettingsSaveOthersSubtitle": "Kai ką nors pavadinate, Omi išsaugo trumpą balso pavyzdį, kad kitą kartą jį atpažintų",
+    "transcriptionUnavailableRecordingContinues": "Transkripcijos neprieinamos, įrašymas tęsiamas įrenginyje ir bus apdorotas vėliau",
+    "transcriptionUnavailableSavingOnDevice": "Transkripcija neprieinama · saugoma įrenginyje"
 }

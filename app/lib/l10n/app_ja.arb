@@ -3524,5 +3524,7 @@
     "speakerTagPromptAnswerFailed": "保存できませんでした。もう一度お試しください。",
     "voiceSettingsAskToTag": "声のタグ付けを依頼する",
     "voiceSettingsAskToTagSubtitle": "ときどき、最近の会話で誰が話していたかをOmiが尋ねます",
-    "voiceSettingsSaveOthersSubtitle": "誰かに名前を付けると、次回聞き分けられるようOmiが短い音声サンプルを保存します"
+    "voiceSettingsSaveOthersSubtitle": "誰かに名前を付けると、次回聞き分けられるようOmiが短い音声サンプルを保存します",
+    "transcriptionUnavailableRecordingContinues": "文字起こしは利用できません。録音は端末上で続き、後で処理されます",
+    "transcriptionUnavailableSavingOnDevice": "文字起こし不可 · 端末に保存中"
 }

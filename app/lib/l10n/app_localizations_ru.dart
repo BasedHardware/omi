@@ -11195,4 +11195,11 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'Когда вы называете человека, Omi сохраняет короткий образец голоса, чтобы узнать его в следующий раз';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Транскрипция недоступна, запись продолжается на устройстве и будет обработана позже';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Транскрипция недоступна · сохраняется на устройстве';
 }

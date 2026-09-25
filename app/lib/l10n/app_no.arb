@@ -3524,5 +3524,7 @@
     "speakerTagPromptAnswerFailed": "Kunne ikke lagre. Prøv igjen.",
     "voiceSettingsAskToTag": "Be meg om å merke stemmer",
     "voiceSettingsAskToTagSubtitle": "Av og til spør Omi hvem som snakket i de siste samtalene dine",
-    "voiceSettingsSaveOthersSubtitle": "Når du navngir noen, lagrer Omi en kort stemmeprøve for å kjenne dem igjen neste gang"
+    "voiceSettingsSaveOthersSubtitle": "Når du navngir noen, lagrer Omi en kort stemmeprøve for å kjenne dem igjen neste gang",
+    "transcriptionUnavailableRecordingContinues": "Transkripsjoner er utilgjengelige, opptaket fortsetter på enheten og behandles senere",
+    "transcriptionUnavailableSavingOnDevice": "Transkripsjon utilgjengelig · lagres på enheten"
 }

@@ -11155,4 +11155,11 @@ class AppLocalizationsEt extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'Kui annad kellelegi nime, hoiab Omi alles lühikese häälenäidise, et teda järgmine kord ära tunda';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Transkriptsioonid pole saadaval, salvestamine jätkub seadmel ja töödeldakse hiljem';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Transkriptsioon pole saadaval · salvestatakse seadmesse';
 }

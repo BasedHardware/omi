@@ -20336,6 +20336,18 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'When you name someone, Omi keeps a short voice sample so it can recognize them next time'**
   String get voiceSettingsSaveOthersSubtitle;
+
+  /// Live capture status while the transcription service is down; audio keeps recording locally.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcriptions are unavailable, recording continues on device and will process later'**
+  String get transcriptionUnavailableRecordingContinues;
+
+  /// Compact transcription-outage status for the in-progress capture card.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcription unavailable · saving on device'**
+  String get transcriptionUnavailableSavingOnDevice;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

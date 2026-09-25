@@ -11234,4 +11234,11 @@ class AppLocalizationsTa extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'நீங்கள் ஒருவருக்குப் பெயரிடும்போது, அடுத்த முறை அடையாளம் காண Omi ஒரு சிறிய குரல் மாதிரியை வைத்திருக்கும்';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'நகலெடுப்புகள் கிடைக்கவில்லை, பதிவு சாதனத்தில் தொடர்கிறது, பின்னர் செயலாக்கப்படும்';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'நகலெடுப்பு இல்லை · சாதனத்தில் சேமிக்கப்படுகிறது';
 }

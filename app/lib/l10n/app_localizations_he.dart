@@ -11068,4 +11068,11 @@ class AppLocalizationsHe extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'כשאתם נותנים שם למישהו, Omi שומר דגימת קול קצרה כדי לזהות אותו בפעם הבאה';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'התמלילים אינם זמינים, ההקלטה ממשיכה במכשיר ותעובד מאוחר יותר';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'תמליל לא זמין · נשמר במכשיר';
 }

@@ -11192,4 +11192,12 @@ class AppLocalizationsNl extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'Als je iemand een naam geeft, bewaart Omi een kort stemfragment om diegene de volgende keer te herkennen';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Transcripties zijn niet beschikbaar, de opname gaat door op het apparaat en wordt later verwerkt';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice =>
+      'Transcriptie niet beschikbaar · wordt op het apparaat opgeslagen';
 }

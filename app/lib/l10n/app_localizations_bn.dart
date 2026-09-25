@@ -11159,4 +11159,11 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get voiceSettingsSaveOthersSubtitle => 'আপনি কারও নাম দিলে, পরের বার চিনতে Omi একটি ছোট কণ্ঠস্বরের নমুনা রাখে';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'ট্রান্সক্রিপশন অনুপলব্ধ, ডিভাইসে রেকর্ডিং চলছে এবং পরে প্রসেস করা হবে';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'ট্রান্সক্রিপশন অনুপলব্ধ · ডিভাইসে সংরক্ষণ হচ্ছে';
 }
