@@ -8,6 +8,7 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversation_detail/widgets/name_speaker_sheet.dart';
 import 'package:omi/providers/people_provider.dart';
+import 'package:omi/ui/ui.dart';
 
 void main() {
   setUp(() async {
@@ -56,7 +57,7 @@ void main() {
         )));
     await tester.pumpAndSettle();
     expect(find.text('Alex'), findsOneWidget);
-    final save = find.byType(ElevatedButton);
+    final save = find.byType(OmiButton);
     await tester.ensureVisible(save);
     await tester.tap(save);
     await tester.pumpAndSettle();
@@ -110,8 +111,8 @@ void main() {
     final checkbox = tester.widget<CheckboxListTile>(find.byType(CheckboxListTile).first);
     expect(checkbox.value, isTrue);
     expect(checkbox.onChanged, isNotNull);
-    await tester.ensureVisible(find.byType(ElevatedButton));
-    await tester.tap(find.byType(ElevatedButton));
+    await tester.ensureVisible(find.byType(OmiButton));
+    await tester.tap(find.byType(OmiButton));
     await tester.pumpAndSettle();
     expect(calls.single.ids, ['only']);
     expect(calls.single.whole, isTrue);
@@ -146,8 +147,8 @@ void main() {
                   })),
         )));
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byType(ElevatedButton));
-    await tester.tap(find.byType(ElevatedButton));
+    await tester.ensureVisible(find.byType(OmiButton));
+    await tester.tap(find.byType(OmiButton));
     await tester.pumpAndSettle();
     expect(calls.single, isFalse);
   });

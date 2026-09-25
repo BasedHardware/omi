@@ -599,7 +599,8 @@ before publishing or promoting an image. The protected `MONITOR_GRAFANA_TOKEN`
 secret (repo-scoped for dest `monitor.omiapi.com`, `prod` environment-scoped
 for `monitor.omi.me`) must be able to read provisioned alert rules, datasource
 health and queries, and contact points. Do not reuse `GRAFANA_TOKEN` here; that
-secret belongs to the TV Cloud Run Grafana. The gate fails closed unless the committed memory-admission
+secret belongs to the TV Cloud Run Grafana. The default invocation is the
+Pusher release gate: it fails closed unless the committed memory-admission
 and capture-outcome pager set is live and unpaused, Prometheus reports healthy,
 both Pusher and backend-listen scrape targets are currently healthy, and the
 exact Telegram receiver exists with resolve notifications enabled. After each
@@ -608,6 +609,17 @@ both jobs; zero-valued labeled failure children are initialized at process
 startup so absence is unambiguously a source failure. Production repeats this
 check after rollout so an hours-long release cannot finish on stale evidence.
 It never prints contact-point settings or token material.
+
+The same script can classify every committed rule in `alerts/*.json` against
+live Grafana provisioning (`--mode fleet`). That run prints committed-but-absent,
+live-but-uncommitted, present-but-paused, and present-but-divergent UIDs. Default
+`--fail-on none` reports drift without failing; `--fail-on gated` fails only on
+UIDs listed in `live-alert-gate.json`, which starts as the proven Pusher set and
+widens only after a token-backed proof. Do not wire `--fail-on all` into a
+backend or Pusher deploy until that proof exists: a large unimported set would
+block every release. Nothing in CI or deploy currently POSTs these JSON files to
+Grafana; they remain a manual import until that write path is an explicit
+decision. Split-vs-combined equality in unit tests is not evidence a rule is live.
 
 Every rule carries these notification fields:
 

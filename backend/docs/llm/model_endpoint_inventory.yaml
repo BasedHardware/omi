@@ -117,6 +117,20 @@ surfaces:
   gateway_lane_capability_needed: dedicated non-streaming no-tools omi:auto:public-shared-conversation-chat lane
   migration_status: gateway_only_trusted_frontend_bff
   test_guardrail_coverage: backend/tests/unit/test_public_shared_conversation_chat.py and web/frontend/src/__tests__/shared-conversation-chat-contract.test.mjs
+- surface: jev_decisions
+  code_path: backend/utils/llm/jev_client.py:ask_jev
+  entrypoint: conversation relevance model tier and capture-time memory owner check (flagged, default off)
+  feature: jev_decisions
+  plan_gating: basic_not_entitled
+  funding_owner: omi
+  fallback_on_deny: gateway_fail_closed
+  call_sites: []
+  current_provider_model: gateway-only openrouter/typesafe/jev-1.13 (pinned) on omi:auto:jev-decisions
+  request_shape: decision-model state plus typed noul/choice questions; typed probabilities back, no generated text
+  gateway_lane_capability_needed: dedicated omi:auto:jev-decisions lane on the gateway /v1/systemone surface
+  migration_status: gateway_only; the relevance tier inherits the conv_discard plan gate, and every failure keeps the caller's
+    safe default
+  test_guardrail_coverage: backend/tests/unit/test_jev_client.py and backend/tests/unit/test_llm_gateway_systemone_route.py
 - surface: langchain_feature_routing
   code_path: backend/utils/llm/clients.py:get_llm
   entrypoint: get_llm central feature router

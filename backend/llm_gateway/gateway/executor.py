@@ -44,6 +44,7 @@ from llm_gateway.gateway.jit_budget import (
 from llm_gateway.gateway.resolver import (
     ResolvedEmbeddingRoute,
     ResolvedRoute,
+    ResolvedSystemOneRoute,
     is_lkg_eligible,
     select_lkg_route_for_failure,
 )
@@ -270,6 +271,64 @@ async def execute_embedding(
         return dict(response.response)
     assert last_error is not None
     raise last_error
+
+
+async def execute_systemone(
+    resolved_route: ResolvedSystemOneRoute,
+    credential_context: CredentialContext,
+    provider_registry: 'ProviderRegistry',
+    *,
+    attempt_trace: AttemptTrace | None = None,
+) -> dict[str, Any]:
+    """Run one decision-model request through its lane's single provider attempt.
+
+    No fallback and no gateway retry: the route pins ``retry.max_attempts=1``
+    and callers own their one retry, so a slow provider costs at most one
+    gateway deadline per caller attempt.
+    """
+    route = resolved_route.route
+    _validate_credential_mode(route, credential_context)
+    provider_ref = route.primary
+    provider = provider_registry.provider_for(provider_ref.provider)
+    create_systemone_attr = getattr(provider, 'create_systemone', None) if provider is not None else None
+    if provider is None or not callable(create_systemone_attr):
+        raise _unsupported_provider_error(provider_ref, credential_context)
+    create_systemone = cast('Callable[..., Awaitable[ProviderResponse]]', create_systemone_attr)
+
+    validated = resolved_route.validated_request
+    request: dict[str, Any] = {'state': validated.state, 'questions': dict(validated.questions)}
+    try:
+        response = await create_systemone(
+            request,
+            provider_ref=provider_ref,
+            credentials=credential_context,
+            timeout_ms=route.timeouts.request_ms,
+        )
+    except ProviderFailure as exc:
+        if attempt_trace is not None:
+            attempt_trace.record(
+                provider=provider_ref.provider,
+                configured_model=provider_ref.model,
+                route_artifact_id=route.route_artifact_id,
+                fallback_reason=None,
+                retry_ordinal=1,
+                outcome='error',
+                error_class=exc.failure_class.value,
+                usage_status=UsageStatus.INDETERMINATE,
+            )
+        raise _map_provider_failure(exc, credential_context, provider_ref) from exc
+    if attempt_trace is not None:
+        attempt_trace.record(
+            provider=provider_ref.provider,
+            configured_model=provider_ref.model,
+            route_artifact_id=route.route_artifact_id,
+            fallback_reason=None,
+            retry_ordinal=1,
+            outcome='success',
+            error_class='none',
+            metadata=response.accounting,
+        )
+    return dict(response.response)
 
 
 def _select_serving_route(resolved_route: ResolvedRoute) -> RouteArtifact:

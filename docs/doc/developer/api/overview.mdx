@@ -143,7 +143,7 @@ Authorization: Bearer omi_dev_your_api_key_here
 ```
 
 <Warning>
-MCP keys (`omi_mcp_...`) only authenticate MCP clients against `/v1/mcp/sse`. They do not authenticate
+MCP keys (`omi_mcp_...`) only authenticate MCP clients against `/v1/mcp`. They do not authenticate
 REST Developer API calls. For memories, conversations, folders, and action items over HTTP, create a
 Developer API key (`omi_dev_...`) and call endpoints under `/v1/dev/user/...` such as
 `/v1/dev/user/memories`. Never commit API keys to version control or share them publicly.
