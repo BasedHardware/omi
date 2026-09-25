@@ -849,7 +849,9 @@ def build_person_embeddings_cache(uid: str) -> Dict[str, dict]:
         emb = person.get('speaker_embedding')
         # Only load embedding if person has speech samples — contacts without
         # samples may have stale embeddings from a pre-v3 model (#6238)
-        if emb and person.get('speech_samples') and person.get('speech_samples_version', 1) >= 3:
+        v = person.get('speech_samples_version')
+        version = v if isinstance(v, int) and not isinstance(v, bool) else 1
+        if emb and person.get('speech_samples') and version >= 3:
             cache[person['id']] = {
                 'embedding': np.array(emb, dtype=np.float32).reshape(1, -1),
                 'name': person['name'],

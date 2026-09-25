@@ -942,7 +942,8 @@ async def extract_speaker_samples(
             # segments used to reach the duration floor. Comparing expanded audio
             # to only the last segment rejects valid speech as text_mismatch.
             contributing = [
-                s for s in ordered_segments if s.get('start', 0) < sample_end and s.get('end', 0) > sample_start
+                s for s in ordered_segments
+                if (s.get('start') or 0.0) < sample_end and (s.get('end') or 0.0) > sample_start
             ]
             if any(
                 s.get('person_id') != person_id or s.get('is_user') or s.get('speaker_id') != speaker_id

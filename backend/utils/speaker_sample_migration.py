@@ -9,7 +9,7 @@ Provides functions for migrating speaker samples across versions:
 Uses in-process locking to prevent concurrent migrations.
 """
 
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Mapping, Optional
 
 import asyncio
 
@@ -31,6 +31,16 @@ logger = logging.getLogger(__name__)
 _migration_locks: dict[tuple[str, str], asyncio.Lock] = {}
 _migration_lock_holders: dict[tuple[str, str], int] = {}
 _locks_lock = asyncio.Lock()
+
+
+def _get_samples_version(person: Optional[Mapping[str, Any]], default: int = 1) -> int:
+    """Extract integer speech_samples_version safely, protecting against explicit None, booleans, or non-int values."""
+    if not person:
+        return default
+    v = person.get('speech_samples_version')
+    if isinstance(v, int) and not isinstance(v, bool):
+        return v
+    return default
 
 
 async def _get_migration_lock(uid: str, person_id: str) -> asyncio.Lock:
@@ -81,7 +91,7 @@ async def migrate_person_samples_v1_to_v2(uid: str, person: Dict[str, Any]) -> D
     Returns:
         Updated person dict with migrated fields
     """
-    version = person.get('speech_samples_version', 1)
+    version = _get_samples_version(person)
     if version >= 2:
         return person
 
@@ -92,7 +102,7 @@ async def migrate_person_samples_v1_to_v2(uid: str, person: Dict[str, Any]) -> D
         async with lock:
             # Re-check version inside lock (another call may have migrated)
             fresh_person = await run_blocking(db_executor, users_db.get_person, uid, person_id)
-            if fresh_person and fresh_person.get('speech_samples_version', 1) >= 2:
+            if fresh_person and _get_samples_version(fresh_person) >= 2:
                 return fresh_person
 
             samples = person.get('speech_samples', [])
@@ -204,7 +214,7 @@ async def migrate_person_samples_v2_to_v3(uid: str, person: Dict[str, Any]) -> D
     Returns:
         Updated person dict with migrated fields
     """
-    version = person.get('speech_samples_version', 1)
+    version = _get_samples_version(person)
     if version >= 3:
         return person
     if version < 2:
@@ -218,7 +228,7 @@ async def migrate_person_samples_v2_to_v3(uid: str, person: Dict[str, Any]) -> D
         async with lock:
             # Re-check version inside lock (another call may have migrated)
             fresh_person = await run_blocking(db_executor, users_db.get_person, uid, person_id)
-            if fresh_person and fresh_person.get('speech_samples_version', 1) >= 3:
+            if fresh_person and _get_samples_version(fresh_person) >= 3:
                 return fresh_person
 
             samples = person.get('speech_samples', [])
@@ -291,7 +301,7 @@ async def migrate_person_samples_v1_to_v3(uid: str, person: Dict[str, Any]) -> D
     Returns:
         Updated person dict with migrated fields
     """
-    version = person.get('speech_samples_version', 1)
+    version = _get_samples_version(person)
     if version >= 3:
         return person
 
@@ -299,7 +309,7 @@ async def migrate_person_samples_v1_to_v3(uid: str, person: Dict[str, Any]) -> D
     if version < 2:
         person = await migrate_person_samples_v1_to_v2(uid, person)
         # Check if v1→v2 succeeded
-        if person.get('speech_samples_version', 1) < 2:
+        if _get_samples_version(person) < 2:
             return person  # Transient failure, retry later
 
     # Now do v2→v3
@@ -321,7 +331,7 @@ async def maybe_migrate_person_samples(uid: str, person: Dict[str, Any]) -> Dict
     Returns:
         Updated person dict (may be unchanged if already v3 or migration fails)
     """
-    version = person.get('speech_samples_version', 1)
+    version = _get_samples_version(person)
     if version >= 3:
         return person
 

@@ -124,7 +124,9 @@ class SpeakerMatcher:
                 if person.get('speech_samples'):
                     person = await maybe_migrate_person_samples(self.host.request.uid, person)
                 stored = person.get('speaker_embedding')
-                verified_samples = bool(person.get('speech_samples')) and (person.get('speech_samples_version', 1) >= 3)
+                v = person.get('speech_samples_version')
+                version = v if isinstance(v, int) and not isinstance(v, bool) else 1
+                verified_samples = bool(person.get('speech_samples')) and (version >= 3)
                 vector: Optional[Any] = None
                 if verified_samples:
                     if stored:
