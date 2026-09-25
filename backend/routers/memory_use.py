@@ -122,9 +122,7 @@ def use_memory(
             )
         except MemoryUseConflict as exc:
             if "different action" in str(exc):
-                detail = _sanitize_memory_use_error(
-                    exc, "feedback action conflicts with existing memory use record"
-                )
+                detail = _sanitize_memory_use_error(exc, "feedback action conflicts with existing memory use record")
                 raise HTTPException(status_code=409, detail=detail) from exc
             raise
         if expected_revision is not None and item.item_revision != expected_revision:

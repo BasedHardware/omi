@@ -77,9 +77,7 @@ class MemoryUseErrorSanitizationTests(unittest.TestCase):
         sys.modules["database.memory_apply_store"].CanonicalMemoryIntakePausedError = (
             StubCanonicalMemoryIntakePausedError
         )
-        sys.modules["database.memory_apply_store"].MemoryFirestoreApplyError = (
-            StubMemoryFirestoreApplyError
-        )
+        sys.modules["database.memory_apply_store"].MemoryFirestoreApplyError = StubMemoryFirestoreApplyError
         sys.modules["utils.memory.memory_use"].MemoryUseAction = StubMemoryUseAction
         sys.modules["utils.memory.memory_use"].MemoryUseConflict = StubMemoryUseConflict
         sys.modules["utils.memory.memory_use"].MAX_FEEDBACK_ID_LENGTH = 128
@@ -119,9 +117,7 @@ class MemoryUseErrorSanitizationTests(unittest.TestCase):
         # 2. Raw traceback filtered to fallback
         self.assertEqual(
             sanitize(
-                ValueError(
-                    "Traceback (most recent call last):\n  File 'x.py', line 1\nZeroDivisionError"
-                ),
+                ValueError("Traceback (most recent call last):\n  File 'x.py', line 1\nZeroDivisionError"),
                 fallback,
             ),
             fallback,
@@ -187,36 +183,50 @@ class MemoryUseErrorSanitizationTests(unittest.TestCase):
         mock_response = MagicMock()
 
         # 1. MemoryFirestoreApplyError sanitization
-        with patch.object(router_mod, "belief_model_enabled", return_value=True), \
-             patch.object(router_mod, "get_data_plane_firestore_client", return_value=MagicMock()), \
-             patch.object(router_mod, "_apply_canonical_user_mutation", side_effect=self._StubMemoryFirestoreApplyError("internal db lock failed")):
+        with patch.object(router_mod, "belief_model_enabled", return_value=True), patch.object(
+            router_mod, "get_data_plane_firestore_client", return_value=MagicMock()
+        ), patch.object(
+            router_mod,
+            "_apply_canonical_user_mutation",
+            side_effect=self._StubMemoryFirestoreApplyError("internal db lock failed"),
+        ):
             with self.assertRaises(HTTPException) as ctx:
                 use_memory("mem-1", mock_request, mock_response, uid="user-1")
             self.assertEqual(ctx.exception.status_code, 409)
             self.assertEqual(ctx.exception.detail, "memory update could not be committed")
 
         # 2. MemoryUseConflict sanitization
-        with patch.object(router_mod, "belief_model_enabled", return_value=True), \
-             patch.object(router_mod, "get_data_plane_firestore_client", return_value=MagicMock()), \
-             patch.object(router_mod, "_apply_canonical_user_mutation", side_effect=self._StubMemoryUseConflict("conflict with prior feedback")):
+        with patch.object(router_mod, "belief_model_enabled", return_value=True), patch.object(
+            router_mod, "get_data_plane_firestore_client", return_value=MagicMock()
+        ), patch.object(
+            router_mod,
+            "_apply_canonical_user_mutation",
+            side_effect=self._StubMemoryUseConflict("conflict with prior feedback"),
+        ):
             with self.assertRaises(HTTPException) as ctx:
                 use_memory("mem-1", mock_request, mock_response, uid="user-1")
             self.assertEqual(ctx.exception.status_code, 409)
             self.assertEqual(ctx.exception.detail, "memory use feedback conflict")
 
         # 3. RuntimeError sanitization
-        with patch.object(router_mod, "belief_model_enabled", return_value=True), \
-             patch.object(router_mod, "get_data_plane_firestore_client", return_value=MagicMock()), \
-             patch.object(router_mod, "_apply_canonical_user_mutation", side_effect=RuntimeError("unexpected runtime failure in ledger worker")):
+        with patch.object(router_mod, "belief_model_enabled", return_value=True), patch.object(
+            router_mod, "get_data_plane_firestore_client", return_value=MagicMock()
+        ), patch.object(
+            router_mod,
+            "_apply_canonical_user_mutation",
+            side_effect=RuntimeError("unexpected runtime failure in ledger worker"),
+        ):
             with self.assertRaises(HTTPException) as ctx:
                 use_memory("mem-1", mock_request, mock_response, uid="user-1")
             self.assertEqual(ctx.exception.status_code, 409)
             self.assertEqual(ctx.exception.detail, "internal memory use operation error")
 
         # 4. Unhandled ValueError sanitization
-        with patch.object(router_mod, "belief_model_enabled", return_value=True), \
-             patch.object(router_mod, "get_data_plane_firestore_client", return_value=MagicMock()), \
-             patch.object(router_mod, "_apply_canonical_user_mutation", side_effect=ValueError("malformed internal payload syntax")):
+        with patch.object(router_mod, "belief_model_enabled", return_value=True), patch.object(
+            router_mod, "get_data_plane_firestore_client", return_value=MagicMock()
+        ), patch.object(
+            router_mod, "_apply_canonical_user_mutation", side_effect=ValueError("malformed internal payload syntax")
+        ):
             with self.assertRaises(HTTPException) as ctx:
                 use_memory("mem-1", mock_request, mock_response, uid="user-1")
             self.assertEqual(ctx.exception.status_code, 409)
