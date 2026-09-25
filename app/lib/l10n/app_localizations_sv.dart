@@ -11174,4 +11174,14 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get transcriptionUnavailableSavingOnDevice => 'Transkription inte tillgänglig · sparas på enheten';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Transkriptioner i kö $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Transkriptioner i kö $count';
+  }
 }

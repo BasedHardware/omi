@@ -11207,4 +11207,14 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get transcriptionUnavailableSavingOnDevice => 'Транскрипцията е недостъпна · записва се на устройството';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Чакащи транскрипции $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Чакащи транскрипции $count';
+  }
 }

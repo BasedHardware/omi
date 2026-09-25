@@ -11168,4 +11168,14 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get transcriptionUnavailableSavingOnDevice => 'Transkriptio ei käytettävissä · tallennetaan laitteelle';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Jonossa olevat transkriptiot $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Jonossa olevat transkriptiot $count';
+  }
 }

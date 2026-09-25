@@ -11199,4 +11199,14 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get transcriptionUnavailableSavingOnDevice => 'Transkrypcja niedostępna · zapisywanie na urządzeniu';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Transkrypcje w kolejce $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Transkrypcje w kolejce $count';
+  }
 }

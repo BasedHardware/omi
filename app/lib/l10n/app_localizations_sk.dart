@@ -11156,4 +11156,14 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get transcriptionUnavailableSavingOnDevice => 'Transkripcia nedostupná · ukladá sa v zariadení';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Čakajúce transkripcie $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Čakajúce transkripcie $count';
+  }
 }

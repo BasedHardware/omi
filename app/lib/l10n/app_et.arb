@@ -3526,5 +3526,7 @@
     "voiceSettingsAskToTagSubtitle": "Aeg-ajalt küsib Omi, kes sinu hiljutistes vestlustes rääkis",
     "voiceSettingsSaveOthersSubtitle": "Kui annad kellelegi nime, hoiab Omi alles lühikese häälenäidise, et teda järgmine kord ära tunda",
     "transcriptionUnavailableRecordingContinues": "Transkriptsioonid pole saadaval, salvestamine jätkub seadmel ja töödeldakse hiljem",
-    "transcriptionUnavailableSavingOnDevice": "Transkriptsioon pole saadaval · salvestatakse seadmesse"
+    "transcriptionUnavailableSavingOnDevice": "Transkriptsioon pole saadaval · salvestatakse seadmesse",
+    "transcriptionsPendingFraction": "Ootel transkriptsioonid {pending}/{total}",
+    "transcriptionsPendingCount": "Ootel transkriptsioonid {count}"
 }

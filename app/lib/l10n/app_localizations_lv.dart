@@ -11192,4 +11192,14 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get transcriptionUnavailableSavingOnDevice => 'Transkripcija nav pieejama · tiek saglabāta ierīcē';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Gaidošas transkripcijas $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Gaidošas transkripcijas $count';
+  }
 }

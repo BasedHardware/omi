@@ -11100,4 +11100,14 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get transcriptionUnavailableSavingOnDevice => 'การถอดเสียงไม่พร้อมใช้งาน · กำลังบันทึกในอุปกรณ์';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'การถอดเสียงที่รออยู่ $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'การถอดเสียงที่รออยู่ $count';
+  }
 }

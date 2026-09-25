@@ -11162,4 +11162,14 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get transcriptionUnavailableSavingOnDevice => 'Transkriptsioon pole saadaval · salvestatakse seadmesse';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Ootel transkriptsioonid $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Ootel transkriptsioonid $count';
+  }
 }

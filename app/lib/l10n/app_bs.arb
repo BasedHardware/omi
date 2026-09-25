@@ -11098,5 +11098,7 @@
     "voiceSettingsAskToTagSubtitle": "Povremeno Omi pita ko je govorio u vašim nedavnim razgovorima",
     "voiceSettingsSaveOthersSubtitle": "Kada nekoga imenujete, Omi čuva kratak uzorak glasa kako bi ga sljedeći put prepoznao",
     "transcriptionUnavailableRecordingContinues": "Transkripcije nisu dostupne, snimanje se nastavlja na uređaju i biće obrađeno kasnije",
-    "transcriptionUnavailableSavingOnDevice": "Transkripcija nedostupna · čuva se na uređaju"
+    "transcriptionUnavailableSavingOnDevice": "Transkripcija nedostupna · čuva se na uređaju",
+    "transcriptionsPendingFraction": "Transkripcije na čekanju {pending}/{total}",
+    "transcriptionsPendingCount": "Transkripcije na čekanju {count}"
 }

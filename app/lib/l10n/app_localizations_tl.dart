@@ -11263,4 +11263,14 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get transcriptionUnavailableSavingOnDevice => 'Hindi available ang transcript · naka-save sa device';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Mga transcript na naghihintay $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Mga transcript na naghihintay $count';
+  }
 }

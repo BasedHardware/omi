@@ -10984,4 +10984,14 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get transcriptionUnavailableSavingOnDevice => '전사 불가 · 기기에 저장 중';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return '대기 중인 전사 $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return '대기 중인 전사 $count';
+  }
 }

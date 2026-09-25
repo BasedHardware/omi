@@ -11194,4 +11194,14 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get transcriptionUnavailableSavingOnDevice => 'Transkripsi tidak tersedia · disimpan pada peranti';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Transkripsi tertunggak $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Transkripsi tertunggak $count';
+  }
 }

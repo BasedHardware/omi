@@ -11164,4 +11164,14 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get transcriptionUnavailableSavingOnDevice => 'Transkripsjon utilgjengelig · lagres på enheten';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Transkripsjoner i kø $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Transkripsjoner i kø $count';
+  }
 }

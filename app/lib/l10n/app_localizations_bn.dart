@@ -11166,4 +11166,14 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get transcriptionUnavailableSavingOnDevice => 'ট্রান্সক্রিপশন অনুপলব্ধ · ডিভাইসে সংরক্ষণ হচ্ছে';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'অপেক্ষমাণ ট্রান্সক্রিপশন $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'অপেক্ষমাণ ট্রান্সক্রিপশন $count';
+  }
 }

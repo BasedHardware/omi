@@ -577,6 +577,11 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
     final seconds = totalSeconds % 60;
     final label = minutes > 0 ? '${minutes}m ${seconds}s' : '${seconds}s';
 
+    // Queued-recordings count ("pending X/Y"): only meaningful once there is a
+    // queue — a single unsynced recording is already named by the duration line.
+    final backlog = provider.sessionTranscriptionBacklogCounts;
+    final showBacklogCount = backlog.total >= 2 && backlog.pending >= 1;
+
     // The indicator names the worst outcome across the session's WALs so it
     // can say what happens next, instead of always claiming a healthy local
     // save next to a spinner that never resolves (#14473).
@@ -610,23 +615,37 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
         borderRadius: OmiRadius.mdAll,
         border: Border.all(color: OmiColors.border, width: 0.5),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
+      child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 7,
-            height: 7,
-            decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 7,
+                height: 7,
+                decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                text,
+                style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
+              ),
+              if (!failed && !retrying && uploading) ...[
+                const SizedBox(width: 8),
+                const OmiSpinner(size: OmiSpinnerSize.small, color: OmiColors.textTertiary),
+              ],
+            ],
           ),
-          const SizedBox(width: 8),
-          Text(
-            text,
-            style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
-          ),
-          if (!failed && !retrying && uploading) ...[
-            const SizedBox(width: 8),
-            const OmiSpinner(size: OmiSpinnerSize.small, color: OmiColors.textTertiary),
+          // How many queued recordings are still waiting for transcription out
+          // of the session's total, so a drain after an outage reads as progress.
+          if (showBacklogCount) ...[
+            const SizedBox(height: 4),
+            Text(
+              context.l10n.transcriptionsPendingFraction(backlog.pending, backlog.total),
+              style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
+            ),
           ],
         ],
       ),

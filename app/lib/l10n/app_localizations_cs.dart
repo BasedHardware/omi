@@ -11162,4 +11162,14 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get transcriptionUnavailableSavingOnDevice => 'Přepis není k dispozici · ukládá se v zařízení';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Čekající přepisy $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Čekající přepisy $count';
+  }
 }

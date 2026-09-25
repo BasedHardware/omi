@@ -11186,4 +11186,14 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get transcriptionUnavailableSavingOnDevice => 'Транскрипція недоступна · зберігається на пристрої';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Транскрипцій у черзі $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Транскрипцій у черзі $count';
+  }
 }

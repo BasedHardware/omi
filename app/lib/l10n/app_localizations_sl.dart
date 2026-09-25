@@ -11197,4 +11197,14 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get transcriptionUnavailableSavingOnDevice => 'Transkripcija ni na voljo · shranjevanje v napravi';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Transkripcije v čakanju $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Transkripcije v čakanju $count';
+  }
 }

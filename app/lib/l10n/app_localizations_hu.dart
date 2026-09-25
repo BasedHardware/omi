@@ -11208,4 +11208,14 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get transcriptionUnavailableSavingOnDevice => 'Átirat nem érhető el · mentés az eszközön';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Függő átiratok $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Függő átiratok $count';
+  }
 }

@@ -11075,4 +11075,14 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get transcriptionUnavailableSavingOnDevice => 'תמליל לא זמין · נשמר במכשיר';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'תמלילים ממתינים $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'תמלילים ממתינים $count';
+  }
 }

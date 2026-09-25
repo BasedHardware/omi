@@ -11160,4 +11160,14 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get transcriptionUnavailableSavingOnDevice => 'Bản chép âm không khả dụng · đang lưu trên thiết bị';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Bản chép âm đang chờ $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Bản chép âm đang chờ $count';
+  }
 }

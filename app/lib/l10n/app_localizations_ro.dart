@@ -11217,4 +11217,14 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get transcriptionUnavailableSavingOnDevice => 'Transcriere indisponibilă · se salvează pe dispozitiv';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Transcrieri în așteptare $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Transcrieri în așteptare $count';
+  }
 }

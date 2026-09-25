@@ -3526,5 +3526,7 @@
     "voiceSettingsAskToTagSubtitle": "Kartais Omi paklaus, kas kalbėjo jūsų naujausiuose pokalbiuose",
     "voiceSettingsSaveOthersSubtitle": "Kai ką nors pavadinate, Omi išsaugo trumpą balso pavyzdį, kad kitą kartą jį atpažintų",
     "transcriptionUnavailableRecordingContinues": "Transkripcijos neprieinamos, įrašymas tęsiamas įrenginyje ir bus apdorotas vėliau",
-    "transcriptionUnavailableSavingOnDevice": "Transkripcija neprieinama · saugoma įrenginyje"
+    "transcriptionUnavailableSavingOnDevice": "Transkripcija neprieinama · saugoma įrenginyje",
+    "transcriptionsPendingFraction": "Laukiančios transkripcijos {pending}/{total}",
+    "transcriptionsPendingCount": "Laukiančios transkripcijos {count}"
 }

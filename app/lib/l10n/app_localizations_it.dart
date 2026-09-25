@@ -11228,4 +11228,14 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get transcriptionUnavailableSavingOnDevice => 'Trascrizione non disponibile · salvataggio sul dispositivo';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Trascrizioni in attesa $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Trascrizioni in attesa $count';
+  }
 }

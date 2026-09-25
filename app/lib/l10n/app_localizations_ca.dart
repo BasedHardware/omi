@@ -11229,4 +11229,14 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get transcriptionUnavailableSavingOnDevice => 'Transcripció no disponible · s\'està desant al dispositiu';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Transcripcions pendents $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Transcripcions pendents $count';
+  }
 }

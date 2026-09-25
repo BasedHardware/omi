@@ -11200,4 +11200,14 @@ class AppLocalizationsNl extends AppLocalizations {
   @override
   String get transcriptionUnavailableSavingOnDevice =>
       'Transcriptie niet beschikbaar · wordt op het apparaat opgeslagen';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Transcripties in behandeling $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Transcripties in behandeling $count';
+  }
 }

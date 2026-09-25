@@ -3526,5 +3526,7 @@
     "voiceSettingsAskToTagSubtitle": "Då och då frågar Omi vem som pratade i dina senaste samtal",
     "voiceSettingsSaveOthersSubtitle": "När du namnger någon sparar Omi ett kort röstprov så att den känner igen personen nästa gång",
     "transcriptionUnavailableRecordingContinues": "Transkriptioner är inte tillgängliga, inspelningen fortsätter på enheten och bearbetas senare",
-    "transcriptionUnavailableSavingOnDevice": "Transkription inte tillgänglig · sparas på enheten"
+    "transcriptionUnavailableSavingOnDevice": "Transkription inte tillgänglig · sparas på enheten",
+    "transcriptionsPendingFraction": "Transkriptioner i kö {pending}/{total}",
+    "transcriptionsPendingCount": "Transkriptioner i kö {count}"
 }

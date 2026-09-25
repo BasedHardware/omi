@@ -11098,5 +11098,7 @@
     "voiceSettingsAskToTagSubtitle": "Од време на време, Omi прашува кој зборувал во вашите неодамнешни разговори",
     "voiceSettingsSaveOthersSubtitle": "Кога ќе именувате некого, Omi чува краток примерок од гласот за да го препознае следниот пат",
     "transcriptionUnavailableRecordingContinues": "Транскрипциите се недостапни, снимањето продолжува на уредот и ќе биде обработено подоцна",
-    "transcriptionUnavailableSavingOnDevice": "Транскрипцијата е недостапна · се зачувува на уредот"
+    "transcriptionUnavailableSavingOnDevice": "Транскрипцијата е недостапна · се зачувува на уредот",
+    "transcriptionsPendingFraction": "Чекаат транскрипции {pending}/{total}",
+    "transcriptionsPendingCount": "Чекаат транскрипции {count}"
 }

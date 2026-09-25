@@ -3526,5 +3526,7 @@
     "voiceSettingsAskToTagSubtitle": "Laiku pa laikam Omi jautās, kurš runāja jūsu nesenajās sarunās",
     "voiceSettingsSaveOthersSubtitle": "Kad kādu nosaucat, Omi saglabā īsu balss paraugu, lai nākamreiz viņu atpazītu",
     "transcriptionUnavailableRecordingContinues": "Transkripcijas nav pieejamas, ierakstīšana turpinās ierīcē un tiks apstrādāta vēlāk",
-    "transcriptionUnavailableSavingOnDevice": "Transkripcija nav pieejama · tiek saglabāta ierīcē"
+    "transcriptionUnavailableSavingOnDevice": "Transkripcija nav pieejama · tiek saglabāta ierīcē",
+    "transcriptionsPendingFraction": "Gaidošas transkripcijas {pending}/{total}",
+    "transcriptionsPendingCount": "Gaidošas transkripcijas {count}"
 }

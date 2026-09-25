@@ -11174,4 +11174,14 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get transcriptionUnavailableSavingOnDevice => 'ट्रान्सक्रिप्शन अनुपलब्ध · डिव्हाइसवर जतन केले जात आहे';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'प्रलंबित ट्रान्सक्रिप्शन $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'प्रलंबित ट्रान्सक्रिप्शन $count';
+  }
 }

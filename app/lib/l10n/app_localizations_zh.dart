@@ -10961,4 +10961,14 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get transcriptionUnavailableSavingOnDevice => '转录不可用 · 正在设备上保存';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return '待处理转录 $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return '待处理转录 $count';
+  }
 }

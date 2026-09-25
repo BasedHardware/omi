@@ -11200,4 +11200,14 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get transcriptionUnavailableSavingOnDevice => 'ಲಿಪ್ಯಂತರ ಲಭ್ಯವಿಲ್ಲ · ಸಾಧನದಲ್ಲಿ ಉಳಿಸಲಾಗುತ್ತಿದೆ';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'ಬಾಕಿ ಇರುವ ಲಿಪ್ಯಂತರಗಳು $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'ಬಾಕಿ ಇರುವ ಲಿಪ್ಯಂತರಗಳು $count';
+  }
 }

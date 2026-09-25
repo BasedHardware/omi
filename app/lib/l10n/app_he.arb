@@ -11098,5 +11098,7 @@
     "voiceSettingsAskToTagSubtitle": "מדי פעם Omi ישאל מי דיבר בשיחות האחרונות שלכם",
     "voiceSettingsSaveOthersSubtitle": "כשאתם נותנים שם למישהו, Omi שומר דגימת קול קצרה כדי לזהות אותו בפעם הבאה",
     "transcriptionUnavailableRecordingContinues": "התמלילים אינם זמינים, ההקלטה ממשיכה במכשיר ותעובד מאוחר יותר",
-    "transcriptionUnavailableSavingOnDevice": "תמליל לא זמין · נשמר במכשיר"
+    "transcriptionUnavailableSavingOnDevice": "תמליל לא זמין · נשמר במכשיר",
+    "transcriptionsPendingFraction": "תמלילים ממתינים {pending}/{total}",
+    "transcriptionsPendingCount": "תמלילים ממתינים {count}"
 }

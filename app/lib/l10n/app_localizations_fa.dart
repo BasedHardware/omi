@@ -11162,4 +11162,14 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get transcriptionUnavailableSavingOnDevice => 'رونویسی در دسترس نیست · در حال ذخیره روی دستگاه';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'رونویسی‌های در انتظار $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'رونویسی‌های در انتظار $count';
+  }
 }

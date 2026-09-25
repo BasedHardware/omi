@@ -3561,5 +3561,7 @@
     "voiceSettingsAskToTagSubtitle": "De vez em quando, o Omi pergunta quem estava falando nas suas conversas recentes",
     "voiceSettingsSaveOthersSubtitle": "Quando você nomeia alguém, o Omi guarda uma pequena amostra de voz para reconhecer a pessoa da próxima vez",
     "transcriptionUnavailableRecordingContinues": "As transcrições estão indisponíveis, a gravação continua no dispositivo e será processada mais tarde",
-    "transcriptionUnavailableSavingOnDevice": "Transcrição indisponível · salvando no dispositivo"
+    "transcriptionUnavailableSavingOnDevice": "Transcrição indisponível · salvando no dispositivo",
+    "transcriptionsPendingFraction": "Transcrições pendentes {pending}/{total}",
+    "transcriptionsPendingCount": "Transcrições pendentes {count}"
 }

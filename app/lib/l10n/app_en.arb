@@ -13241,5 +13241,26 @@
     "transcriptionUnavailableSavingOnDevice": "Transcription unavailable · saving on device",
     "@transcriptionUnavailableSavingOnDevice": {
         "description": "Compact transcription-outage status for the in-progress capture card."
+    },
+    "transcriptionsPendingFraction": "Transcriptions pending {pending}/{total}",
+    "@transcriptionsPendingFraction": {
+        "description": "Queued recordings still waiting for transcription (pending) out of the session total, on the live-capture WAL indicator.",
+        "placeholders": {
+            "pending": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
+    "transcriptionsPendingCount": "Transcriptions pending {count}",
+    "@transcriptionsPendingCount": {
+        "description": "Phone-local recordings still waiting to be uploaded for transcription, on the conversations list banner.",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
     }
 }

@@ -11175,4 +11175,14 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get transcriptionUnavailableSavingOnDevice => 'ٹرانسکرپشن دستیاب نہیں · ڈیوائس پر محفوظ ہو رہی ہے';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'زیرِ التوا ٹرانسکرپشن $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'زیرِ التوا ٹرانسکرپشن $count';
+  }
 }

@@ -11241,4 +11241,14 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get transcriptionUnavailableSavingOnDevice => 'நகலெடுப்பு இல்லை · சாதனத்தில் சேமிக்கப்படுகிறது';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'நிலுவையில் உள்ள நகலெடுப்புகள் $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'நிலுவையில் உள்ள நகலெடுப்புகள் $count';
+  }
 }

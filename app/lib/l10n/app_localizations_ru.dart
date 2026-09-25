@@ -11202,4 +11202,14 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get transcriptionUnavailableSavingOnDevice => 'Транскрипция недоступна · сохраняется на устройстве';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Транскрипций в ожидании $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Транскрипций в ожидании $count';
+  }
 }

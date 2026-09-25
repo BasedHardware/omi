@@ -3526,5 +3526,7 @@
     "voiceSettingsAskToTagSubtitle": "가끔 Omi가 최근 대화에서 누가 말했는지 물어봐요",
     "voiceSettingsSaveOthersSubtitle": "누군가에게 이름을 붙이면, 다음에 알아볼 수 있도록 Omi가 짧은 음성 샘플을 보관해요",
     "transcriptionUnavailableRecordingContinues": "전사를 이용할 수 없습니다. 기기에서 녹음이 계속되며 나중에 처리됩니다",
-    "transcriptionUnavailableSavingOnDevice": "전사 불가 · 기기에 저장 중"
+    "transcriptionUnavailableSavingOnDevice": "전사 불가 · 기기에 저장 중",
+    "transcriptionsPendingFraction": "대기 중인 전사 {pending}/{total}",
+    "transcriptionsPendingCount": "대기 중인 전사 {count}"
 }

@@ -3526,5 +3526,7 @@
     "voiceSettingsAskToTagSubtitle": "Af en toe vraagt Omi wie er sprak in je recente gesprekken",
     "voiceSettingsSaveOthersSubtitle": "Als je iemand een naam geeft, bewaart Omi een kort stemfragment om diegene de volgende keer te herkennen",
     "transcriptionUnavailableRecordingContinues": "Transcripties zijn niet beschikbaar, de opname gaat door op het apparaat en wordt later verwerkt",
-    "transcriptionUnavailableSavingOnDevice": "Transcriptie niet beschikbaar · wordt op het apparaat opgeslagen"
+    "transcriptionUnavailableSavingOnDevice": "Transcriptie niet beschikbaar · wordt op het apparaat opgeslagen",
+    "transcriptionsPendingFraction": "Transcripties in behandeling {pending}/{total}",
+    "transcriptionsPendingCount": "Transcripties in behandeling {count}"
 }

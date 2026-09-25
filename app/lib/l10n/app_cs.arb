@@ -3526,5 +3526,7 @@
     "voiceSettingsAskToTagSubtitle": "Omi se občas zeptá, kdo mluvil ve vašich nedávných konverzacích",
     "voiceSettingsSaveOthersSubtitle": "Když někoho pojmenujete, Omi si uchová krátkou ukázku hlasu, aby ho příště poznal",
     "transcriptionUnavailableRecordingContinues": "Přepisy nejsou k dispozici, nahrávání pokračuje v zařízení a později se zpracuje",
-    "transcriptionUnavailableSavingOnDevice": "Přepis není k dispozici · ukládá se v zařízení"
+    "transcriptionUnavailableSavingOnDevice": "Přepis není k dispozici · ukládá se v zařízení",
+    "transcriptionsPendingFraction": "Čekající přepisy {pending}/{total}",
+    "transcriptionsPendingCount": "Čekající přepisy {count}"
 }

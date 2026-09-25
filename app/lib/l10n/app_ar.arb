@@ -3526,5 +3526,7 @@
     "voiceSettingsAskToTagSubtitle": "من حين لآخر، يسألك Omi عمّن كان يتحدث في محادثاتك الأخيرة",
     "voiceSettingsSaveOthersSubtitle": "عندما تسمّي شخصًا، يحتفظ Omi بعيّنة صوتية قصيرة ليتعرّف عليه في المرة القادمة",
     "transcriptionUnavailableRecordingContinues": "النسخ غير متوفر حاليًا، يستمر التسجيل على الجهاز وستتم المعالجة لاحقًا",
-    "transcriptionUnavailableSavingOnDevice": "النسخ غير متوفر · يتم الحفظ على الجهاز"
+    "transcriptionUnavailableSavingOnDevice": "النسخ غير متوفر · يتم الحفظ على الجهاز",
+    "transcriptionsPendingFraction": "نسخ معلّق {pending}/{total}",
+    "transcriptionsPendingCount": "نسخ معلّق {count}"
 }

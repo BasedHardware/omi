@@ -11213,4 +11213,14 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get transcriptionUnavailableSavingOnDevice => 'ట్రాన్స్‌క్రిప్షన్ అందుబాటులో లేదు · పరికరంలో సేవ్ చేయబడుతోంది';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'పెండింగ్‌లో ఉన్న ట్రాన్స్‌క్రిప్షన్‌లు $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'పెండింగ్‌లో ఉన్న ట్రాన్స్‌క్రిప్షన్‌లు $count';
+  }
 }

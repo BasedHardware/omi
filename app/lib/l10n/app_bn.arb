@@ -11098,5 +11098,7 @@
     "voiceSettingsAskToTagSubtitle": "মাঝে মাঝে Omi জিজ্ঞাসা করবে আপনার সাম্প্রতিক কথোপকথনে কে কথা বলছিল",
     "voiceSettingsSaveOthersSubtitle": "আপনি কারও নাম দিলে, পরের বার চিনতে Omi একটি ছোট কণ্ঠস্বরের নমুনা রাখে",
     "transcriptionUnavailableRecordingContinues": "ট্রান্সক্রিপশন অনুপলব্ধ, ডিভাইসে রেকর্ডিং চলছে এবং পরে প্রসেস করা হবে",
-    "transcriptionUnavailableSavingOnDevice": "ট্রান্সক্রিপশন অনুপলব্ধ · ডিভাইসে সংরক্ষণ হচ্ছে"
+    "transcriptionUnavailableSavingOnDevice": "ট্রান্সক্রিপশন অনুপলব্ধ · ডিভাইসে সংরক্ষণ হচ্ছে",
+    "transcriptionsPendingFraction": "অপেক্ষমাণ ট্রান্সক্রিপশন {pending}/{total}",
+    "transcriptionsPendingCount": "অপেক্ষমাণ ট্রান্সক্রিপশন {count}"
 }

@@ -10980,4 +10980,14 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get transcriptionUnavailableSavingOnDevice => '文字起こし不可 · 端末に保存中';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return '文字起こし待ち $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return '文字起こし待ち $count';
+  }
 }

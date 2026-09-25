@@ -11151,4 +11151,14 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get transcriptionUnavailableSavingOnDevice => 'Transskription utilgængelig · gemmes på enheden';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Transskriptioner i kø $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Transskriptioner i kø $count';
+  }
 }
