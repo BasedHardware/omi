@@ -136,9 +136,7 @@ def test_post_persists_platform_scoped_rating_and_second_post_conflicts(monkeypa
     assert stored["created_at"] > 0
 
     # Resubmit (client retry, double-tap): 409, and the first answer stands.
-    again = client.post(
-        "/v1/csat/ratings", json={**payload, "score": 5, "comment": "changed my mind"}
-    )
+    again = client.post("/v1/csat/ratings", json={**payload, "score": 5, "comment": "changed my mind"})
     assert again.status_code == 409
     assert again.json() == {"id": f"macos_{UID}", "created": False}
     unchanged = firestore._collections[csat_db.RATINGS_COLLECTION][f"macos_{UID}"]
@@ -186,36 +184,16 @@ def test_post_drops_comment_above_comment_max_score(monkeypatch):
 
 def test_post_rejects_invalid_platform_and_score(monkeypatch):
     client = _client(monkeypatch)
-    assert (
-        client.post(
-            "/v1/csat/ratings", json={"platform": "web", "score": 3}
-        ).status_code
-        == 400
-    )
-    assert (
-        client.post(
-            "/v1/csat/ratings", json={"platform": "macos", "score": 0}
-        ).status_code
-        == 400
-    )
-    assert (
-        client.post(
-            "/v1/csat/ratings", json={"platform": "macos", "score": 6}
-        ).status_code
-        == 400
-    )
-    assert (
-        client.post(
-            "/v1/csat/ratings", json={"platform": "macos", "score": 3, "revision": -1}
-        ).status_code
-        == 400
-    )
+    assert client.post("/v1/csat/ratings", json={"platform": "web", "score": 3}).status_code == 400
+    assert client.post("/v1/csat/ratings", json={"platform": "macos", "score": 0}).status_code == 400
+    assert client.post("/v1/csat/ratings", json={"platform": "macos", "score": 6}).status_code == 400
+    assert client.post("/v1/csat/ratings", json={"platform": "macos", "score": 3, "revision": -1}).status_code == 400
     assert (
         client.post(
             "/v1/csat/ratings",
             json={"platform": "macos", "score": 3, "revision": 1_000_000_001},
         ).status_code
-        == 422
+        == 400
     )
 
 
@@ -226,9 +204,7 @@ def test_post_trims_and_lowercases_platform(monkeypatch):
     app.dependency_overrides[csat_router.auth.get_current_user_uid] = lambda: UID
     client = TestClient(app)
 
-    response = client.post(
-        "/v1/csat/ratings", json={"platform": "  MacOS  ", "score": 4, "revision": 0}
-    )
+    response = client.post("/v1/csat/ratings", json={"platform": "  MacOS  ", "score": 4, "revision": 0})
     assert response.status_code == 201
     stored = firestore._collections[csat_db.RATINGS_COLLECTION][f"macos_{UID}"]
     assert stored["platform"] == "macos"
