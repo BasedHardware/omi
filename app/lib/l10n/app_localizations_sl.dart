@@ -11190,4 +11190,21 @@ class AppLocalizationsSl extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'Ko nekoga poimenujete, Omi shrani kratek vzorec glasu, da ga naslednjič prepozna';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Transkripcije niso na voljo, snemanje se nadaljuje v napravi in bo obdelano pozneje';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Transkripcija ni na voljo · shranjevanje v napravi';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Transkripcije v čakanju $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Transkripcije v čakanju $count';
+  }
 }

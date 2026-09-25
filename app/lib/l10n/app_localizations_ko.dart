@@ -10978,4 +10978,20 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get voiceSettingsSaveOthersSubtitle => '누군가에게 이름을 붙이면, 다음에 알아볼 수 있도록 Omi가 짧은 음성 샘플을 보관해요';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues => '전사를 이용할 수 없습니다. 기기에서 녹음이 계속되며 나중에 처리됩니다';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => '전사 불가 · 기기에 저장 중';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return '대기 중인 전사 $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return '대기 중인 전사 $count';
+  }
 }

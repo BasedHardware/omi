@@ -11147,4 +11147,21 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'When you name someone, Omi keeps a short voice sample so it can recognize them next time';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Transcriptions are unavailable, recording continues on device and will process later';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Transcription unavailable · saving on device';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Transcriptions pending $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Transcriptions pending $count';
+  }
 }

@@ -3524,5 +3524,9 @@
     "speakerTagPromptAnswerFailed": "Δεν ήταν δυνατή η αποθήκευση. Δοκιμάστε ξανά.",
     "voiceSettingsAskToTag": "Να μου ζητείται να επισημαίνω φωνές",
     "voiceSettingsAskToTagSubtitle": "Κάθε τόσο, το Omi ρωτά ποιος μιλούσε στις πρόσφατες συνομιλίες σας",
-    "voiceSettingsSaveOthersSubtitle": "Όταν ονομάζετε κάποιον, το Omi κρατά ένα σύντομο δείγμα φωνής για να τον αναγνωρίσει την επόμενη φορά"
+    "voiceSettingsSaveOthersSubtitle": "Όταν ονομάζετε κάποιον, το Omi κρατά ένα σύντομο δείγμα φωνής για να τον αναγνωρίσει την επόμενη φορά",
+    "transcriptionUnavailableRecordingContinues": "Οι απομαγνητοφωνήσεις δεν είναι διαθέσιμες, η ηχογράφηση συνεχίζεται στη συσκευή και θα επεξεργαστεί αργότερα",
+    "transcriptionUnavailableSavingOnDevice": "Η απομαγνητοφώνηση δεν είναι διαθέσιμη · αποθήκευση στη συσκευή",
+    "transcriptionsPendingFraction": "Αναμενόμενες απομαγνητοφωνήσεις {pending}/{total}",
+    "transcriptionsPendingCount": "Αναμενόμενες απομαγνητοφωνήσεις {count}"
 }

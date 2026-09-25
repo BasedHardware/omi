@@ -11161,4 +11161,21 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'Kun nimeät jonkun, Omi tallentaa lyhyen ääninäytteen tunnistaakseen hänet ensi kerralla';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Transkriptiot eivät ole käytettävissä, tallennus jatkuu laitteella ja käsitellään myöhemmin';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Transkriptio ei käytettävissä · tallennetaan laitteelle';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Jonossa olevat transkriptiot $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Jonossa olevat transkriptiot $count';
+  }
 }

@@ -11096,5 +11096,9 @@
     "speakerTagPromptAnswerFailed": "Не ўдалося захаваць. Паспрабуйце яшчэ раз.",
     "voiceSettingsAskToTag": "Прасіць мяне пазначаць галасы",
     "voiceSettingsAskToTagSubtitle": "Час ад часу Omi пытаецца, хто гаварыў у вашых нядаўніх размовах",
-    "voiceSettingsSaveOthersSubtitle": "Калі вы называеце кагосьці, Omi захоўвае кароткі ўзор голасу, каб пазнаць яго наступным разам"
+    "voiceSettingsSaveOthersSubtitle": "Калі вы называеце кагосьці, Omi захоўвае кароткі ўзор голасу, каб пазнаць яго наступным разам",
+    "transcriptionUnavailableRecordingContinues": "Транскрыпцыя недаступная, запіс працягваецца на прыладзе і будзе апрацаваны пазней",
+    "transcriptionUnavailableSavingOnDevice": "Транскрыпцыя недаступная · захоўваецца на прыладзе",
+    "transcriptionsPendingFraction": "Транскрыпцый у чаканні {pending}/{total}",
+    "transcriptionsPendingCount": "Транскрыпцый у чаканні {count}"
 }

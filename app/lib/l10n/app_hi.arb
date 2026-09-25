@@ -3524,5 +3524,9 @@
     "speakerTagPromptAnswerFailed": "सहेजा नहीं जा सका। कृपया फिर से कोशिश करें।",
     "voiceSettingsAskToTag": "मुझसे आवाज़ें टैग करने को कहें",
     "voiceSettingsAskToTagSubtitle": "कभी-कभी Omi पूछेगा कि आपकी हाल की बातचीत में कौन बोल रहा था",
-    "voiceSettingsSaveOthersSubtitle": "जब आप किसी का नाम बताते हैं, तो अगली बार पहचानने के लिए Omi आवाज़ का एक छोटा नमूना रखता है"
+    "voiceSettingsSaveOthersSubtitle": "जब आप किसी का नाम बताते हैं, तो अगली बार पहचानने के लिए Omi आवाज़ का एक छोटा नमूना रखता है",
+    "transcriptionUnavailableRecordingContinues": "ट्रांसक्रिप्शन उपलब्ध नहीं हैं, रिकॉर्डिंग डिवाइस पर जारी है और बाद में प्रोसेस होगी",
+    "transcriptionUnavailableSavingOnDevice": "ट्रांसक्रिप्शन अनुपलब्ध · डिवाइस पर सहेजा जा रहा है",
+    "transcriptionsPendingFraction": "लंबित ट्रांसक्रिप्शन {pending}/{total}",
+    "transcriptionsPendingCount": "लंबित ट्रांसक्रिप्शन {count}"
 }

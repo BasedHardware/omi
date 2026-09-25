@@ -11234,4 +11234,22 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'Όταν ονομάζετε κάποιον, το Omi κρατά ένα σύντομο δείγμα φωνής για να τον αναγνωρίσει την επόμενη φορά';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Οι απομαγνητοφωνήσεις δεν είναι διαθέσιμες, η ηχογράφηση συνεχίζεται στη συσκευή και θα επεξεργαστεί αργότερα';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice =>
+      'Η απομαγνητοφώνηση δεν είναι διαθέσιμη · αποθήκευση στη συσκευή';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Αναμενόμενες απομαγνητοφωνήσεις $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Αναμενόμενες απομαγνητοφωνήσεις $count';
+  }
 }

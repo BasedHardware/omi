@@ -3566,5 +3566,9 @@
     "speakerTagPromptAnswerFailed": "Kunne ikke gemme. Prøv igen.",
     "voiceSettingsAskToTag": "Bed mig om at tagge stemmer",
     "voiceSettingsAskToTagSubtitle": "En gang imellem spørger Omi, hvem der talte i dine seneste samtaler",
-    "voiceSettingsSaveOthersSubtitle": "Når du navngiver nogen, gemmer Omi en kort stemmeprøve, så den kan genkende dem næste gang"
+    "voiceSettingsSaveOthersSubtitle": "Når du navngiver nogen, gemmer Omi en kort stemmeprøve, så den kan genkende dem næste gang",
+    "transcriptionUnavailableRecordingContinues": "Transskriptioner er utilgængelige, optagelsen fortsætter på enheden og behandles senere",
+    "transcriptionUnavailableSavingOnDevice": "Transskription utilgængelig · gemmes på enheden",
+    "transcriptionsPendingFraction": "Transskriptioner i kø {pending}/{total}",
+    "transcriptionsPendingCount": "Transskriptioner i kø {count}"
 }

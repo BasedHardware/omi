@@ -11187,4 +11187,21 @@ class AppLocalizationsMs extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'Apabila anda menamakan seseorang, Omi menyimpan sampel suara pendek supaya dapat mengenalinya lain kali';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Transkripsi tidak tersedia, rakaman diteruskan pada peranti dan akan diproses kemudian';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Transkripsi tidak tersedia · disimpan pada peranti';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Transkripsi tertunggak $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Transkripsi tertunggak $count';
+  }
 }

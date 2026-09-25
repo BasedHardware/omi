@@ -10974,4 +10974,20 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get voiceSettingsSaveOthersSubtitle => '誰かに名前を付けると、次回聞き分けられるようOmiが短い音声サンプルを保存します';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues => '文字起こしは利用できません。録音は端末上で続き、後で処理されます';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => '文字起こし不可 · 端末に保存中';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return '文字起こし待ち $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return '文字起こし待ち $count';
+  }
 }

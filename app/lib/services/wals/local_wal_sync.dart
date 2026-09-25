@@ -601,6 +601,16 @@ class LocalWalSyncImpl implements LocalWalSync {
         .toList();
   }
 
+  /// All disk WALs of the session window — synced ones included — so callers
+  /// can render a pending/total backlog count that drains as uploads finish.
+  /// Same window and storage scope as [getSessionUnsyncedWals].
+  List<Wal> getSessionWals(int sessionStartSeconds) {
+    final now = _now().millisecondsSinceEpoch ~/ 1000;
+    return _wals
+        .where((w) => w.storage == WalStorage.disk && w.timerStart >= sessionStartSeconds && w.timerStart <= now)
+        .toList();
+  }
+
   /// Mark a WAL as synced and persist the change to disk.
   Future<void> markWalSyncedAndPersist(Wal wal) async {
     final generation = _sessionGeneration;

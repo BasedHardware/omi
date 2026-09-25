@@ -145,6 +145,8 @@ class InertSyncProvider extends ChangeNotifier implements SyncProvider {
   @override
   List<Wal> get allWals => const [];
   @override
+  List<Wal> get pendingLocalTranscriptionWals => const [];
+  @override
   List<Wal> walsForDisplayFilter(WalDisplayFilter filter) => const [];
   @override
   Future<void> discoverDeviceWals({String? firmwareVersion}) async {}

@@ -11185,4 +11185,21 @@ class AppLocalizationsLv extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'Kad kādu nosaucat, Omi saglabā īsu balss paraugu, lai nākamreiz viņu atpazītu';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Transkripcijas nav pieejamas, ierakstīšana turpinās ierīcē un tiks apstrādāta vēlāk';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Transkripcija nav pieejama · tiek saglabāta ierīcē';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Gaidošas transkripcijas $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Gaidošas transkripcijas $count';
+  }
 }

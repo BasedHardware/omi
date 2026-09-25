@@ -11188,4 +11188,21 @@ class AppLocalizationsBe extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'Калі вы называеце кагосьці, Omi захоўвае кароткі ўзор голасу, каб пазнаць яго наступным разам';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Транскрыпцыя недаступная, запіс працягваецца на прыладзе і будзе апрацаваны пазней';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Транскрыпцыя недаступная · захоўваецца на прыладзе';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Транскрыпцый у чаканні $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Транскрыпцый у чаканні $count';
+  }
 }

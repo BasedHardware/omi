@@ -11096,5 +11096,9 @@
     "speakerTagPromptAnswerFailed": "Shranjevanje ni uspelo. Poskusite znova.",
     "voiceSettingsAskToTag": "Prosi me za označevanje glasov",
     "voiceSettingsAskToTagSubtitle": "Občasno vas Omi vpraša, kdo je govoril v vaših nedavnih pogovorih",
-    "voiceSettingsSaveOthersSubtitle": "Ko nekoga poimenujete, Omi shrani kratek vzorec glasu, da ga naslednjič prepozna"
+    "voiceSettingsSaveOthersSubtitle": "Ko nekoga poimenujete, Omi shrani kratek vzorec glasu, da ga naslednjič prepozna",
+    "transcriptionUnavailableRecordingContinues": "Transkripcije niso na voljo, snemanje se nadaljuje v napravi in bo obdelano pozneje",
+    "transcriptionUnavailableSavingOnDevice": "Transkripcija ni na voljo · shranjevanje v napravi",
+    "transcriptionsPendingFraction": "Transkripcije v čakanju {pending}/{total}",
+    "transcriptionsPendingCount": "Transkripcije v čakanju {count}"
 }

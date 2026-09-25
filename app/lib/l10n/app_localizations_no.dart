@@ -11157,4 +11157,21 @@ class AppLocalizationsNo extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'Når du navngir noen, lagrer Omi en kort stemmeprøve for å kjenne dem igjen neste gang';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Transkripsjoner er utilgjengelige, opptaket fortsetter på enheten og behandles senere';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Transkripsjon utilgjengelig · lagres på enheten';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Transkripsjoner i kø $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Transkripsjoner i kø $count';
+  }
 }

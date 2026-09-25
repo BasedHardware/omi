@@ -11170,4 +11170,21 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'Birine ad verdiğinde Omi, onu bir dahaki sefere tanıyabilmek için kısa bir ses örneği saklar';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Transkriptler kullanılamıyor, kayıt cihazda devam ediyor ve daha sonra işlenecek';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Transkript kullanılamıyor · cihaza kaydediliyor';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Bekleyen transkriptler $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Bekleyen transkriptler $count';
+  }
 }

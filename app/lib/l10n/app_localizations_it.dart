@@ -11221,4 +11221,21 @@ class AppLocalizationsIt extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'Quando dai un nome a qualcuno, Omi conserva un breve campione vocale per riconoscerlo la prossima volta';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Trascrizioni non disponibili, la registrazione continua sul dispositivo e verrà elaborata più tardi';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Trascrizione non disponibile · salvataggio sul dispositivo';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Trascrizioni in attesa $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Trascrizioni in attesa $count';
+  }
 }

@@ -110,12 +110,15 @@ void main() {
       expect(captureProvider.recordingState, RecordingState.record);
       expect(captureProvider.terminalTranscriptionFailure?.status, 'stt_failed');
       final context = tester.element(find.byType(ConversationCaptureWidget));
-      expect(find.text(AppLocalizations.of(context).transcriptionUnavailable), findsWidgets);
+      // The compact card carries the short "saving on device" variant; the full
+      // recording-continues sentence belongs to the capturing page.
+      expect(find.text(AppLocalizations.of(context).transcriptionUnavailableSavingOnDevice), findsWidgets);
+      expect(find.text(AppLocalizations.of(context).transcriptionUnavailableRecordingContinues), findsNothing);
 
       captureProvider.onMessageEventReceived(MessageServiceStatusEvent(status: 'ready'));
       await tester.pump();
 
-      expect(find.text(AppLocalizations.of(context).transcriptionUnavailable), findsNothing);
+      expect(find.text(AppLocalizations.of(context).transcriptionUnavailableSavingOnDevice), findsNothing);
       expect(find.text(AppLocalizations.of(context).listening), findsWidgets);
     });
 
