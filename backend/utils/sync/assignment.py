@@ -79,9 +79,17 @@ def auto_mergeable(row: dict) -> bool:
     )
 
 
-def _find_matching_records(index, load, incoming, candidate_id, own_id, target_id, target, target_hint, receipt_owner):
-    from copy import deepcopy
-
+def _find_matching_records(
+    index: AssignmentIndex,
+    load: Callable[[str], dict | None],
+    incoming: dict,
+    candidate_id: Optional[str],
+    own_id: Optional[str],
+    target_id: Optional[str],
+    target: Optional[dict],
+    target_hint: Optional[str],
+    receipt_owner: Optional[str],
+) -> tuple[dict, dict, Optional[str]]:
     matched = {}
     extent = deepcopy(incoming)
     if target_id and target:
@@ -116,9 +124,15 @@ def _find_matching_records(index, load, incoming, candidate_id, own_id, target_i
     return matched, extent, receipt_owner
 
 
-def _merge_transcripts(incoming, records, canonical, origin, target, result, current):
-    from copy import deepcopy
-
+def _merge_transcripts(
+    incoming: dict,
+    records: list[dict],
+    canonical: str,
+    origin: float,
+    target: Optional[dict],
+    result: dict,
+    current: Optional[dict],
+) -> tuple[list[dict], list[dict]]:
     existing = []
     allocator = ConversationSpeakerIdAllocator()
     allocator.hydrate(result.get('transcript_segments', []) if current else [])
