@@ -2,6 +2,8 @@
  * @format
  */
 
+/* global globalThis */
+
 /**
  * macOS Release/JS runtime may lack a Performance API; RN startup timing
  * and some deps call performance.now during AppRegistry.runApplication.
