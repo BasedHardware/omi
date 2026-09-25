@@ -11262,4 +11262,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get openCall => 'Odpri klic';
+
+  @override
+  String get captureRecoveryBanner => 'Zvuk obeska ne prihaja v aplikacijo — tapnite za popravilo';
 }

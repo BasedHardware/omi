@@ -11242,4 +11242,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get openCall => 'Aramayı aç';
+
+  @override
+  String get captureRecoveryBanner => 'Kolye sesi uygulamaya ulaşmıyor — onarmak için dokunun';
 }

@@ -3545,5 +3545,6 @@
     "keepUsingPendant": "Anhänger weiter nutzen",
     "recordWith": "Aufnehmen mit",
     "moreWaysToRecord": "Weitere Aufnahmeoptionen",
-    "openCall": "Anruf öffnen"
+    "openCall": "Anruf öffnen",
+    "captureRecoveryBanner": "Der Ton des Pendants erreicht die App nicht — zum Reparieren tippen"
 }

@@ -11307,4 +11307,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get openCall => 'Άνοιγμα κλήσης';
+
+  @override
+  String get captureRecoveryBanner => 'Ο ήχος του μενταγιόν δεν φτάνει στην εφαρμογή — πατήστε για επισκευή';
 }

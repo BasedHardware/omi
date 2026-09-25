@@ -11251,4 +11251,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get openCall => 'Відкрити дзвінок';
+
+  @override
+  String get captureRecoveryBanner => 'Звук кулона не надходить до застосунку — натисніть, щоб виправити';
 }

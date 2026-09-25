@@ -3545,5 +3545,6 @@
     "keepUsingPendant": "Fortsätt med hänget",
     "recordWith": "Spela in med",
     "moreWaysToRecord": "Fler sätt att spela in",
-    "openCall": "Öppna samtal"
+    "openCall": "Öppna samtal",
+    "captureRecoveryBanner": "Ljudet från hänget når inte appen — tryck för att reparera"
 }

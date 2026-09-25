@@ -3545,5 +3545,6 @@
     "keepUsingPendant": "ใช้จี้ต่อ",
     "recordWith": "บันทึกด้วย",
     "moreWaysToRecord": "วิธีบันทึกเพิ่มเติม",
-    "openCall": "เปิดการโทร"
+    "openCall": "เปิดการโทร",
+    "captureRecoveryBanner": "เสียงจากจี้ไม่ถึงแอป — แตะเพื่อซ่อมแซม"
 }
