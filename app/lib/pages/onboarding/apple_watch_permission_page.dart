@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
 
 import 'package:omi/services/devices/connectors/apple_watch_connection.dart';
-import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/error_message.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/utils/responsive/responsive_helper.dart';
 
 class AppleWatchPermissionPage extends StatefulWidget {
   final AppleWatchDeviceConnection connection;
@@ -17,122 +16,56 @@ class AppleWatchPermissionPage extends StatefulWidget {
 }
 
 class _AppleWatchPermissionPageState extends State<AppleWatchPermissionPage> {
-  bool _isRequestingPermission = false;
   bool _permissionRequested = false;
 
   @override
   Widget build(BuildContext context) {
-    final responsive = ResponsiveHelper(context);
-
     return Scaffold(
-      backgroundColor: ResponsiveHelper.backgroundPrimary,
+      backgroundColor: OmiColors.surface0,
       appBar: AppBar(
-        backgroundColor: ResponsiveHelper.backgroundPrimary,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: ResponsiveHelper.textPrimary),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        title: Text(context.l10n.appleWatchSetup, style: const TextStyle(color: ResponsiveHelper.textPrimary)),
+        leading: const OmiBackButton(),
+        title: Text(context.l10n.appleWatchSetup),
       ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(32.0),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(OmiSpacing.xxl),
           child: Column(
             children: [
-              const Spacer(),
-
+              const SizedBox(height: OmiSpacing.xxl),
               // Apple Watch image
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 300),
-                height: 160,
-                width: 160,
-                decoration: BoxDecoration(borderRadius: BorderRadius.circular(24), boxShadow: responsive.mediumShadow),
+              ExcludeSemantics(
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(24),
-                  child: Image.asset('assets/images/apple_watch.png', fit: BoxFit.cover),
+                  borderRadius: OmiRadius.xlAll,
+                  child: Image.asset('assets/images/apple_watch.png', width: 160, height: 160, fit: BoxFit.cover),
                 ),
               ),
               const SizedBox(height: 48),
-
-              // Title
-              Text(
-                _permissionRequested ? context.l10n.permissionRequestedExclaim : context.l10n.microphonePermission,
-                style: responsive.titleLarge.copyWith(fontSize: 28, height: 1.2),
-                textAlign: TextAlign.center,
+              Semantics(
+                header: true,
+                child: Text(
+                  _permissionRequested ? context.l10n.permissionRequestedExclaim : context.l10n.microphonePermission,
+                  style: OmiType.title1.copyWith(height: 1.2),
+                  textAlign: TextAlign.center,
+                ),
               ),
-              const SizedBox(height: 24),
-
-              // Instructions
+              const SizedBox(height: OmiSpacing.xl),
               Text(
                 _permissionRequested ? context.l10n.permissionGrantedNow : context.l10n.needMicrophonePermission,
-                style: responsive.bodyLarge.copyWith(height: 1.6),
+                style: OmiType.body.copyWith(color: OmiColors.textSecondary, height: 1.6),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 48),
-
-              // Action buttons
-              if (!_permissionRequested) ...[
-                // Grant Permission Button
-                SizedBox(
-                  width: double.infinity,
-                  height: 56,
-                  child: ElevatedButton(
-                    onPressed: _isRequestingPermission ? null : _requestPermission,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: ResponsiveHelper.purplePrimary,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      elevation: 0,
-                    ),
-                    child: _isRequestingPermission
-                        ? const SizedBox(
-                            height: 24,
-                            width: 24,
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                            ),
-                          )
-                        : Text(
-                            context.l10n.grantPermissionButton,
-                            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                          ),
-                  ),
-                ),
-              ] else ...[
-                // Continue Button (after permission was requested)
-                SizedBox(
-                  width: double.infinity,
-                  height: 56,
-                  child: ElevatedButton(
-                    onPressed: _continueAndStartRecording,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: ResponsiveHelper.purplePrimary,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                      elevation: 0,
-                    ),
-                    child: Text(
-                      context.l10n.continueButton,
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 24),
-
-                // Need Help Button
-                TextButton(
-                  onPressed: _showHelpDialog,
-                  style: TextButton.styleFrom(
-                    foregroundColor: ResponsiveHelper.purplePrimary,
-                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                  ),
-                  child: Text(context.l10n.needHelp, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500)),
-                ),
+              if (!_permissionRequested)
+                OmiButton(
+                  label: context.l10n.grantPermissionButton,
+                  expand: true,
+                  onPressed: _requestPermission,
+                )
+              else ...[
+                OmiButton(label: context.l10n.continueButton, expand: true, onPressed: _continueAndStartRecording),
+                const SizedBox(height: OmiSpacing.md),
+                OmiButton.tertiary(label: context.l10n.needHelp, onPressed: _showHelpDialog),
               ],
-
-              const Spacer(),
             ],
           ),
         ),
@@ -140,29 +73,13 @@ class _AppleWatchPermissionPageState extends State<AppleWatchPermissionPage> {
     );
   }
 
+  /// The button shows its own spinner while this runs.
   Future<void> _requestPermission() async {
-    setState(() {
-      _isRequestingPermission = true;
-    });
-
     try {
       await widget.connection.requestPermissionAndStartRecording();
-
-      setState(() {
-        _isRequestingPermission = false;
-        _permissionRequested = true;
-      });
+      if (mounted) setState(() => _permissionRequested = true);
     } catch (e) {
-      setState(() {
-        _isRequestingPermission = false;
-      });
-
-      if (mounted) {
-        AppSnackbar.showSnackbar(
-          context.l10n.errorRequestingPermission(readableError(e)),
-          duration: const Duration(seconds: 3),
-        );
-      }
+      if (mounted) OmiFeedback.error(context, context.l10n.errorRequestingPermission(readableError(e)));
     }
   }
 
@@ -171,50 +88,26 @@ class _AppleWatchPermissionPageState extends State<AppleWatchPermissionPage> {
       final bool recordingStarted = await widget.connection.checkPermissionAndStartRecording();
 
       if (recordingStarted) {
-        if (mounted) {
-          AppSnackbar.showSnackbar(context.l10n.recordingStartedSuccessfully, duration: const Duration(seconds: 3));
-        }
+        if (mounted) OmiFeedback.confirm(context, context.l10n.recordingStartedSuccessfully);
 
         widget.onPermissionGranted?.call();
         if (mounted) {
           Navigator.of(context).pop();
         }
       } else {
-        if (mounted) {
-          AppSnackbar.showSnackbar(context.l10n.permissionNotGrantedYet, duration: const Duration(seconds: 5));
-        }
+        if (mounted) OmiFeedback.info(context, context.l10n.permissionNotGrantedYet);
       }
     } catch (e) {
-      if (mounted) {
-        AppSnackbar.showSnackbar(
-          context.l10n.errorStartingRecording(readableError(e)),
-          duration: const Duration(seconds: 3),
-        );
-      }
+      if (mounted) OmiFeedback.error(context, context.l10n.errorStartingRecording(readableError(e)));
     }
   }
 
   void _showHelpDialog() {
-    final responsive = ResponsiveHelper(context);
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: ResponsiveHelper.backgroundSecondary,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(context.l10n.needHelp, style: responsive.titleLarge.copyWith(fontSize: 20)),
-        content: Text(context.l10n.troubleshootingSteps, style: responsive.bodyMedium),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            style: TextButton.styleFrom(
-              foregroundColor: ResponsiveHelper.purplePrimary,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            ),
-            child: Text(context.l10n.gotIt, style: const TextStyle(fontWeight: FontWeight.w500)),
-          ),
-        ],
-      ),
+    showOmiAlert(
+      context,
+      title: context.l10n.needHelp,
+      message: context.l10n.troubleshootingSteps,
+      okLabel: context.l10n.gotIt,
     );
   }
 }

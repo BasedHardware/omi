@@ -8,7 +8,9 @@ so tests are fully reproducible.
 
 import json
 
-from utils.llm.model_config import LUNA_MODEL
+# The dev harness loads this module by path in its own interpreter, without the
+# backend package on sys.path, so it must not import backend runtime modules.
+FAKE_CHAT_MODEL = "omi-fake-e2e-chat-model"
 
 # Deterministic LLM responses — these are returned for every LLM call
 DEFAULT_STRUCTURED_RESPONSE = {
@@ -46,7 +48,7 @@ def make_openai_chat_response(content: str = None) -> dict:
     return {
         "id": "chatcmpl-fake-e2e-test",
         "object": "chat.completion",
-        "model": LUNA_MODEL,
+        "model": FAKE_CHAT_MODEL,
         "choices": [
             {
                 "index": 0,

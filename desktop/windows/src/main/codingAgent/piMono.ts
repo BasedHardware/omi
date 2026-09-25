@@ -39,6 +39,7 @@
 //     the port stays self-contained and does not widen the shared contract.
 
 import { ChildProcess, spawn } from 'child_process'
+import { app } from 'electron'
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'fs'
 import { tmpdir } from 'os'
 import { dirname, join } from 'path'
@@ -569,10 +570,11 @@ export class PiMonoAdapter {
     delete env.ANTHROPIC_API_KEY
 
     // SECURITY: OMI_YOLO_MODE bypasses the extension's entire tool denylist.
-    // Scrub it from the subprocess env, then only re-inject when explicitly
-    // set in the parent. Log when active so usage is auditable.
+    // Scrub it from the subprocess env, then only re-inject in unpackaged
+    // (dev) builds when explicitly set in the parent — a packaged build must
+    // never inherit a denylist bypass. Log when active so usage is auditable.
     delete env.OMI_YOLO_MODE
-    if (process.env.OMI_YOLO_MODE === '1') {
+    if (!app.isPackaged && process.env.OMI_YOLO_MODE === '1') {
       env.OMI_YOLO_MODE = '1'
       process.stderr.write('[pi-mono] WARNING: OMI_YOLO_MODE=1 — denylist bypass active\n')
     }

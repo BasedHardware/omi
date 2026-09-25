@@ -59,7 +59,7 @@ class _Firestore:
 def test_iter_all_conversations_uses_snapshot_cursor_pages(monkeypatch):
     client = _Firestore(5)
     monkeypatch.setattr(conversations_db, 'db', client)
-    monkeypatch.setattr(conversations_db, '_prepare_conversation_for_read', lambda data, _uid: data)
+    monkeypatch.setattr(conversations_db, 'prepare_conversation_for_read', lambda data, _uid: data)
 
     rows = list(conversations_db.iter_all_conversations('uid', batch_size=2))
 
