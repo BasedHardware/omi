@@ -145,8 +145,8 @@ class LiveChainSession:
             def callback(segments: list[dict[str, Any]]) -> None:
                 if generation != self.generation:
                     return
-                if epoch is not None:
-                    # Audio-timeline epochs: the translator maps provider
+                if epoch is not None and epoch.project_times:
+                    # Audio-timeline v2: the translator maps provider
                     # times through its accepted send spans onto the capture
                     # timeline's wall axis. It replaces this leg's own
                     # offset/last_end clock, so no generation offset is added.
@@ -161,6 +161,29 @@ class LiveChainSession:
                             self.receiver._enqueue_epoch_segments(translated, provider=service.value)
 
                     self.receiver._run_on_listen_loop(translate_on_loop, segments)
+                    return
+                if epoch is not None:
+                    # Clock-only capture clock: attach the window from the
+                    # provider's own timestamps, then keep this leg's legacy
+                    # offset/last_end rebase (and gate remap) exactly as the
+                    # pre-timeline managed chain did — flag-off emitted times
+                    # stay monotonic across legs and byte-identical to main.
+                    def attach_then_rebase(seg_list: list[dict[str, Any]]) -> None:
+                        translated = epoch.translate(seg_list)
+                        if not translated:
+                            return
+                        if gate is not None and not passthrough:
+                            gate.remap_segments(translated)
+                        translated.sort(key=lambda item: item['start'])
+                        for segment in translated:
+                            start = max(self.last_end, offset + max(0.0, float(segment['start'])))
+                            end = max(start, offset + max(0.0, float(segment['end'])))
+                            segment['start'], segment['end'] = start, end
+                            self.last_end = end
+                        leg.note_selection_transcript(translated)
+                        self.receiver._enqueue_epoch_segments(translated, provider=service.value)
+
+                    self.receiver._run_on_listen_loop(attach_then_rebase, segments)
                     return
                 if gate is not None and not passthrough:
                     gate.remap_segments(segments)

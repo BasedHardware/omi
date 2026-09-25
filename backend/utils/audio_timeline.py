@@ -413,6 +413,11 @@ class ProviderEpochTranslator:
         """Record one accepted send of contiguous capture audio."""
         self.send_map.add_accepted_spans([(capture_start_sample, length_samples)])
 
+    @property
+    def project_times(self) -> bool:
+        """Whether translate() rewrites start/end onto the capture wall axis."""
+        return self._project_times
+
     def note_accepted_spans(self, spans: Sequence[Tuple[int, int]]) -> None:
         self.send_map.add_accepted_spans(spans)
 
