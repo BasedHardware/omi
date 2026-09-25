@@ -77,4 +77,4 @@ def traverse_knowledge_graph_tool(
         return format_traversal_result(result)
     except Exception as exc:
         logger.exception("traverse_knowledge_graph_tool failed uid=%s: %s", uid, exc)
-        return f"Error traversing knowledge graph: {exc}"
+        return "Error traversing knowledge graph"
