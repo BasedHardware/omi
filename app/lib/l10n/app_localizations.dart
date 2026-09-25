@@ -109,7 +109,8 @@ import 'app_localizations_zh.dart';
 /// be consistent with the languages listed in the AppLocalizations.supportedLocales
 /// property.
 abstract class AppLocalizations {
-  AppLocalizations(String locale) : localeName = intl.Intl.canonicalizedLocale(locale.toString());
+  AppLocalizations(String locale)
+    : localeName = intl.Intl.canonicalizedLocale(locale.toString());
 
   final String localeName;
 
@@ -117,7 +118,8 @@ abstract class AppLocalizations {
     return Localizations.of<AppLocalizations>(context, AppLocalizations)!;
   }
 
-  static const LocalizationsDelegate<AppLocalizations> delegate = _AppLocalizationsDelegate();
+  static const LocalizationsDelegate<AppLocalizations> delegate =
+      _AppLocalizationsDelegate();
 
   /// A list of this localizations delegate along with the default localizations
   /// delegates.
@@ -129,12 +131,13 @@ abstract class AppLocalizations {
   /// Additional delegates can be added by appending to this list in
   /// MaterialApp. This list does not have to be used at all if a custom list
   /// of delegates is preferred or required.
-  static const List<LocalizationsDelegate<dynamic>> localizationsDelegates = <LocalizationsDelegate<dynamic>>[
-    delegate,
-    GlobalMaterialLocalizations.delegate,
-    GlobalCupertinoLocalizations.delegate,
-    GlobalWidgetsLocalizations.delegate,
-  ];
+  static const List<LocalizationsDelegate<dynamic>> localizationsDelegates =
+      <LocalizationsDelegate<dynamic>>[
+        delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+      ];
 
   /// A list of this localizations delegate's supported locales.
   static const List<Locale> supportedLocales = <Locale>[
@@ -186,7 +189,7 @@ abstract class AppLocalizations {
     Locale('uk'),
     Locale('ur'),
     Locale('vi'),
-    Locale('zh')
+    Locale('zh'),
   ];
 
   /// Message shown after an expired authenticated session returns the user to sign-in
@@ -1964,12 +1967,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Claude Desktop'**
   String get claudeDesktop;
-
-  /// No description provided for @addToClaudeConfig.
-  ///
-  /// In en, this message translates to:
-  /// **'Add to claude_desktop_config.json'**
-  String get addToClaudeConfig;
 
   /// Button text to copy configuration
   ///
@@ -4797,23 +4794,11 @@ abstract class AppLocalizations {
   /// **'Clear all nodes and connections'**
   String get clearAllNodesAndConnections;
 
-  /// Description for Claude Desktop config
-  ///
-  /// In en, this message translates to:
-  /// **'Add to claude_desktop_config.json'**
-  String get addToClaudeDesktopConfig;
-
   /// Description for MCP Server feature
   ///
   /// In en, this message translates to:
   /// **'Connect AI assistants to your data'**
   String get connectAiAssistantsToData;
-
-  /// Hint for client secret value
-  ///
-  /// In en, this message translates to:
-  /// **'Use your MCP API key'**
-  String get useYourMcpApiKey;
 
   /// Webhook type for real-time transcript
   ///
@@ -8923,7 +8908,10 @@ abstract class AppLocalizations {
   ///
   /// In en, this message translates to:
   /// **'{accessDescription} and is {triggerDescription}.'**
-  String accessesAndTriggeredBy(String accessDescription, String triggerDescription);
+  String accessesAndTriggeredBy(
+    String accessDescription,
+    String triggerDescription,
+  );
 
   /// Sentence starting with 'Is' for trigger description
   ///
@@ -18537,10 +18525,10 @@ abstract class AppLocalizations {
   /// **'Transcription not receiving audio'**
   String get transcriptionNoAudio;
 
-  /// Empty-home hint pointing at the + record button
+  /// Empty-home hint pointing at the round record button
   ///
   /// In en, this message translates to:
-  /// **'Tap + to start recording'**
+  /// **'Tap the record button to start recording'**
   String get tapPlusToStartRecording;
 
   /// Eyebrow label on a chat task card block
@@ -18810,7 +18798,7 @@ abstract class AppLocalizations {
   /// Empty state message on the Conversations tab for a new user
   ///
   /// In en, this message translates to:
-  /// **'Conversations you record show up here. Tap + on Home to record your first one.'**
+  /// **'Conversations you record show up here. Tap the record button on Home to record your first one.'**
   String get noConversationsHeroMessage;
 
   /// Title of the page (and the button label) that shows conversations on a map
@@ -19548,7 +19536,7 @@ abstract class AppLocalizations {
   /// One-time hint after the first phone-mic recording
   ///
   /// In en, this message translates to:
-  /// **'Tip: press and hold the record button to record a phone call.'**
+  /// **'Tip: tap the arrow on the record button to record a phone call.'**
   String get recordOptionsTip;
 
   /// Title of the firmware update failed state
@@ -20337,6 +20325,36 @@ abstract class AppLocalizations {
   /// **'When you name someone, Omi keeps a short voice sample so it can recognize them next time'**
   String get voiceSettingsSaveOthersSubtitle;
 
+  /// Hint for an intentionally empty field (e.g. OAuth client secret)
+  ///
+  /// In en, this message translates to:
+  /// **'Leave blank'**
+  String get leaveBlank;
+
+  /// OAuth connector setup instructions for the hosted MCP server
+  ///
+  /// In en, this message translates to:
+  /// **'On claude.ai, add a custom connector and paste the server URL. If Claude asks for an advanced OAuth Client ID, use the value below and leave the secret blank — never use your MCP API key as an OAuth secret.'**
+  String get mcpOAuthSetup;
+
+  /// Claude Code (CLI) integration section
+  ///
+  /// In en, this message translates to:
+  /// **'Claude Code'**
+  String get claudeCode;
+
+  /// Subtitle under the Claude Code section: add the snippet to ~/.claude.json
+  ///
+  /// In en, this message translates to:
+  /// **'Add to ~/.claude.json'**
+  String get addToClaudeCodeConfig;
+
+  /// Claude Desktop connector setup instructions for the hosted MCP server
+  ///
+  /// In en, this message translates to:
+  /// **'On Claude Desktop → Settings → Connectors, add a custom connector and paste the server URL. If Claude asks for an advanced OAuth Client ID, use the value below and leave the secret blank — never use your MCP API key as an OAuth secret.'**
+  String get claudeDesktopConnectorSetup;
+
   /// Live capture status while the transcription service is down; audio keeps recording locally.
   ///
   /// In en, this message translates to:
@@ -20360,6 +20378,96 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Transcriptions pending {count}'**
   String transcriptionsPendingCount(int count);
+
+  /// Capture source label when an Omi phone call is being recorded, on the live card (e.g. 'Call · Listening · 3:10'). A noun.
+  ///
+  /// In en, this message translates to:
+  /// **'Call'**
+  String get captureSourceCall;
+
+  /// The phone's microphone as a capture source: live page title ('Listening · Phone mic') and the first row of the 'Record with' sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'Phone mic'**
+  String get captureSourcePhoneMic;
+
+  /// Live page title: recording status followed by the capture source, e.g. 'Listening · Pendant'.
+  ///
+  /// In en, this message translates to:
+  /// **'{status} · {source}'**
+  String captureStatusWithSource(String status, String source);
+
+  /// Button that resumes a paused recording.
+  ///
+  /// In en, this message translates to:
+  /// **'Resume'**
+  String get resume;
+
+  /// Button that ends the live recording and processes the conversation.
+  ///
+  /// In en, this message translates to:
+  /// **'Finish'**
+  String get finish;
+
+  /// Small note on the live card while the phone records instead of the pendant.
+  ///
+  /// In en, this message translates to:
+  /// **'Pendant paused · resumes when you finish'**
+  String get pendantPausedResumesWhenYouFinish;
+
+  /// Sheet title shown when the user taps the phone record button while the pendant is recording.
+  ///
+  /// In en, this message translates to:
+  /// **'Your pendant is listening'**
+  String get pendantIsListeningTitle;
+
+  /// Explanation line under the 'Your pendant is listening' sheet title.
+  ///
+  /// In en, this message translates to:
+  /// **'Omi records from one source at a time.'**
+  String get oneSourceAtATime;
+
+  /// Option in the 'Your pendant is listening' sheet that switches recording to the phone microphone.
+  ///
+  /// In en, this message translates to:
+  /// **'Record with phone instead'**
+  String get recordWithPhoneInstead;
+
+  /// Subtitle of the 'Record with phone instead' option.
+  ///
+  /// In en, this message translates to:
+  /// **'Pendant pauses until you finish'**
+  String get pendantPausesUntilYouFinish;
+
+  /// Subtitle of the Phone call option in the 'Your pendant is listening' sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'Pendant pauses during the call'**
+  String get pendantPausesDuringCall;
+
+  /// Button that dismisses the 'Your pendant is listening' sheet and keeps the pendant recording.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep using pendant'**
+  String get keepUsingPendant;
+
+  /// Title of the sheet listing ways to record (Phone mic, Phone call).
+  ///
+  /// In en, this message translates to:
+  /// **'Record with'**
+  String get recordWith;
+
+  /// Accessibility label of the small arrow badge on the record button that opens the 'Record with' sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'More ways to record'**
+  String get moreWaysToRecord;
+
+  /// Accessibility hint on the live card during a call; tapping opens the call screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Open call'**
+  String get openCall;
 
   /// Section title on the device page for the device paired next to the primary one (Omi + OmiGlass)
   ///
@@ -20386,7 +20494,8 @@ abstract class AppLocalizations {
   String get forgetSecondDevice;
 }
 
-class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
+class _AppLocalizationsDelegate
+    extends LocalizationsDelegate<AppLocalizations> {
   const _AppLocalizationsDelegate();
 
   @override
@@ -20396,56 +20505,56 @@ class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> 
 
   @override
   bool isSupported(Locale locale) => <String>[
-        'ar',
-        'be',
-        'bg',
-        'bn',
-        'bs',
-        'ca',
-        'cs',
-        'da',
-        'de',
-        'el',
-        'en',
-        'es',
-        'et',
-        'fa',
-        'fi',
-        'fr',
-        'he',
-        'hi',
-        'hr',
-        'hu',
-        'id',
-        'it',
-        'ja',
-        'kn',
-        'ko',
-        'lt',
-        'lv',
-        'mk',
-        'mr',
-        'ms',
-        'nl',
-        'no',
-        'pl',
-        'pt',
-        'ro',
-        'ru',
-        'sk',
-        'sl',
-        'sr',
-        'sv',
-        'ta',
-        'te',
-        'th',
-        'tl',
-        'tr',
-        'uk',
-        'ur',
-        'vi',
-        'zh'
-      ].contains(locale.languageCode);
+    'ar',
+    'be',
+    'bg',
+    'bn',
+    'bs',
+    'ca',
+    'cs',
+    'da',
+    'de',
+    'el',
+    'en',
+    'es',
+    'et',
+    'fa',
+    'fi',
+    'fr',
+    'he',
+    'hi',
+    'hr',
+    'hu',
+    'id',
+    'it',
+    'ja',
+    'kn',
+    'ko',
+    'lt',
+    'lv',
+    'mk',
+    'mr',
+    'ms',
+    'nl',
+    'no',
+    'pl',
+    'pt',
+    'ro',
+    'ru',
+    'sk',
+    'sl',
+    'sr',
+    'sv',
+    'ta',
+    'te',
+    'th',
+    'tl',
+    'tr',
+    'uk',
+    'ur',
+    'vi',
+    'zh',
+  ].contains(locale.languageCode);
 
   @override
   bool shouldReload(_AppLocalizationsDelegate old) => false;
@@ -20554,8 +20663,10 @@ AppLocalizations lookupAppLocalizations(Locale locale) {
       return AppLocalizationsZh();
   }
 
-  throw FlutterError('AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
-      'an issue with the localizations generation tool. Please file an issue '
-      'on GitHub with a reproducible sample app and the gen-l10n configuration '
-      'that was used.');
+  throw FlutterError(
+    'AppLocalizations.delegate failed to load unsupported locale "$locale". This is likely '
+    'an issue with the localizations generation tool. Please file an issue '
+    'on GitHub with a reproducible sample app and the gen-l10n configuration '
+    'that was used.',
+  );
 }

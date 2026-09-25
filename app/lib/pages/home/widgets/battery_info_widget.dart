@@ -1,7 +1,6 @@
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/preferences.dart';
@@ -18,7 +17,11 @@ import 'package:omi/utils/device.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/pages/phone_calls/active_call_page.dart';
+import 'package:omi/providers/phone_call_provider.dart';
+import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/widgets/capture_sources.dart';
 import 'package:omi/widgets/header_circle_button.dart';
 
 /// The header pills paint 36pt tall; this transparent margin, inside an opaque
@@ -28,6 +31,8 @@ const EdgeInsets _pillTargetMargin = EdgeInsets.symmetric(vertical: (kMinTapTarg
 
 /// Battery at or below this shows a low-battery glyph and a warning colour, not just a dot.
 const int kLowBatteryPercent = 20;
+
+const _stopGlyphRadius = BorderRadius.all(Radius.circular(4)); // omi-ux-allow: radius-literal -- a glyph
 
 class BatteryInfoWidget extends StatefulWidget {
   const BatteryInfoWidget({super.key});
@@ -96,20 +101,13 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                   // Only show battery indicator and percentage when battery level is valid (> 0)
                   if (hasBattery) ...[
                     const SizedBox(width: 6.0),
-                    if (isCharging)
-                      const Icon(Icons.bolt, color: OmiColors.success, size: 14)
-                    else if (low)
-                      // Low battery reads as a glyph and a colour, not a colour alone.
-                      const Icon(Icons.battery_alert, color: OmiColors.danger, size: 14)
-                    else
-                      Container(
-                        width: 8,
-                        height: 8,
-                        decoration: BoxDecoration(
-                          color: batteryLevel > 75 ? OmiColors.success : OmiColors.warning,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
+                    // Battery only: a bar glyph, never a coloured dot (live status lives on the
+                    // capture card). Red appears only when critically low.
+                    if (isCharging) ...[
+                      const Icon(Icons.bolt, color: OmiColors.textSecondary, size: 13),
+                      const SizedBox(width: 1),
+                    ],
+                    BatteryGlyph(level: batteryLevel, critical: low),
                     const SizedBox(width: 4.0),
                     Text(
                       '$batteryLevel%',
@@ -273,6 +271,7 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
     SharedPreferencesUtil().saveBool(_optionsTipKey, true);
     showOmiSheet<void>(
       context: context,
+      title: context.l10n.recordWith,
       builder: (sheetContext) => RecordOptionsSheet(
         onPickPhoneMic: () {
           Navigator.pop(sheetContext);
@@ -295,16 +294,58 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
     OmiFeedback.info(context, context.l10n.recordOptionsTip);
   }
 
+  static bool _callInProgress(BuildContext context) {
+    final state = context.read<PhoneCallProvider>().callState;
+    return state == PhoneCallState.connecting || state == PhoneCallState.ringing || state == PhoneCallState.active;
+  }
+
+  /// The pendant is recording (or paused) in realtime mode: explain, and let the user choose.
+  static bool _pendantHasCapture(CaptureProvider capture) {
+    final source = capture.liveCaptureSource;
+    return source != null && source != 'phone' && !SharedPreferencesUtil().batchModeEnabled;
+  }
+
+  void _showPendantListening(BuildContext context) {
+    OmiHaptics.light();
+    showOmiSheet<void>(
+      context: context,
+      title: context.l10n.pendantIsListeningTitle,
+      builder: (sheetContext) => PendantListeningSheet(
+        onRecordWithPhone: () {
+          Navigator.pop(sheetContext);
+          _startPhoneRecording(context);
+        },
+        onPhoneCall: () {
+          Navigator.pop(sheetContext);
+          if (context.mounted) routeToPage(context, const PhoneCallsPage());
+        },
+        onKeepPendant: () => Navigator.pop(sheetContext),
+      ),
+    );
+  }
+
   Future<void> _startRecording(BuildContext context) async {
     final captureProvider = context.read<CaptureProvider>();
     if (captureProvider.recordingState == RecordingState.initialising) return;
+    // An Omi call owns the capture while it runs: the button opens the call, never a recording.
+    if (_callInProgress(context)) {
+      routeToPage(context, const ActiveCallPage());
+      return;
+    }
+    if (_pendantHasCapture(captureProvider) && !captureProvider.isPhoneMicPaused) {
+      _showPendantListening(context);
+      return;
+    }
+    await _startPhoneRecording(context);
+  }
+
+  Future<void> _startPhoneRecording(BuildContext context) async {
+    final captureProvider = context.read<CaptureProvider>();
     OmiHaptics.medium();
-    if (captureProvider.recordingState == RecordingState.record) {
-      // Batch reports RecordingState.record too, but has no in-progress conversation
-      // to force-process — stopStreamRecording finalizes the local .bin on its own.
-      final wasBatch = captureProvider.isPhoneMicBatchRecording;
-      await captureProvider.stopStreamRecording();
-      if (!wasBatch) captureProvider.forceProcessingCurrentConversation();
+    if (captureProvider.recordingState == RecordingState.record || captureProvider.isPhoneMicPaused) {
+      // The phone recording is this button's own: finish it (processed, except Transcribe Later,
+      // whose local file is finalized on stop), then any pendant it paused resumes.
+      await captureProvider.finishCapture();
       PlatformManager.instance.analytics.phoneMicRecordingStopped();
       if (context.mounted) _maybeShowOptionsTip(context);
       return;
@@ -328,11 +369,12 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
   Widget build(BuildContext context) {
     return Consumer<CaptureProvider>(
       builder: (context, captureProvider, _) {
-        final isRecording = captureProvider.recordingState == RecordingState.record;
+        // The phone recording is this button's own (live or paused); anything else is idle here.
+        final isRecording = captureProvider.recordingState == RecordingState.record || captureProvider.isPhoneMicPaused;
         final isInitialising = captureProvider.recordingState == RecordingState.initialising;
         final canShowOptions = !isRecording && !isInitialising;
         final l10n = context.l10n;
-        return Semantics(
+        final circle = Semantics(
           button: true,
           label: isRecording ? l10n.stopRecording : l10n.startRecording,
           enabled: !isInitialising,
@@ -346,23 +388,73 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
             behavior: HitTestBehavior.opaque,
             onTap: () => _startRecording(context),
             onLongPress: canShowOptions ? () => _showRecordOptions(context) : null,
-            child: AnimatedContainer(
-              duration: OmiMotion.of(context).quick,
+            // "Record with this phone": a neutral circle with a white dot, a stop square while the
+            // phone records. The ⌄ badge opens the other ways to record.
+            child: Container(
               width: 62,
               height: 62,
               alignment: Alignment.center,
               decoration: BoxDecoration(
-                // Idle is the neutral accent (INV-UI-1); red is the recording state.
-                color: isRecording ? OmiColors.danger : OmiColors.accent,
+                color: OmiColors.surface1,
                 shape: BoxShape.circle,
+                border: Border.all(color: OmiColors.border, width: 1),
               ),
               child: isRecording
-                  ? const Icon(Icons.stop_rounded, size: 26, color: OmiColors.textPrimary)
+                  ? Container(
+                      width: 18,
+                      height: 18,
+                      decoration: const BoxDecoration(
+                        color: OmiColors.textPrimary,
+                        borderRadius: _stopGlyphRadius,
+                      ),
+                    )
                   : isInitialising
-                      ? const OmiSpinner(size: OmiSpinnerSize.small, color: OmiColors.onAccent)
-                      : const Icon(Icons.fiber_manual_record, size: 26, color: OmiColors.danger),
+                      ? const OmiSpinner(size: OmiSpinnerSize.small)
+                      : Container(
+                          width: 20,
+                          height: 20,
+                          decoration: const BoxDecoration(color: OmiColors.textPrimary, shape: BoxShape.circle),
+                        ),
             ),
           ),
+        );
+        // The badge is its own control (and its own accessibility node) beside the circle's.
+        return SizedBox(
+          width: 62,
+          height: 62,
+          child: Stack(clipBehavior: Clip.none, children: [
+            circle,
+            if (canShowOptions)
+              Positioned(
+                right: 0,
+                bottom: 0,
+                child: Semantics(
+                  button: true,
+                  label: l10n.moreWaysToRecord,
+                  child: GestureDetector(
+                    behavior: HitTestBehavior.opaque,
+                    onTap: () => _showRecordOptions(context),
+                    // A 30pt hit area around the 22pt badge, inside the button's 62pt box (a Stack
+                    // does not hit-test outside its bounds, and 44pt would cover the circle's
+                    // centre). Screen readers also get the options as the circle's long-press action.
+                    child: Padding(
+                      padding: const EdgeInsets.all(4),
+                      child: Container(
+                        width: 22,
+                        height: 22,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: OmiColors.surface3,
+                          shape: BoxShape.circle,
+                          border: Border.all(color: OmiColors.surface0, width: 2),
+                        ),
+                        child: const Icon(Icons.keyboard_arrow_down_rounded, size: 16, color: OmiColors.textPrimary),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ]),
         );
       },
     );
@@ -418,14 +510,14 @@ class RecordOptionsSheet extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _RecordOption(
-            icon: FontAwesomeIcons.microphone,
-            title: context.l10n.recordWithPhoneMic,
+            icon: CaptureSources.icon('phone'),
+            title: context.l10n.captureSourcePhoneMic,
             subtitle: context.l10n.recordWithPhoneMicSubtitle,
             onTap: onPickPhoneMic,
           ),
           const SizedBox(height: 10),
           _RecordOption(
-            icon: FontAwesomeIcons.phone,
+            icon: Icons.call_rounded,
             title: context.l10n.phoneCall,
             subtitle: context.l10n.phoneCallSubtitle,
             onTap: onPickPhoneCall,
@@ -437,7 +529,7 @@ class RecordOptionsSheet extends StatelessWidget {
 }
 
 class _RecordOption extends StatelessWidget {
-  final FaIconData icon;
+  final IconData icon;
   final String title;
   final String subtitle;
   final VoidCallback onTap;
@@ -469,7 +561,7 @@ class _RecordOption extends StatelessWidget {
                   height: 44,
                   alignment: Alignment.center,
                   decoration: const BoxDecoration(shape: BoxShape.circle, color: OmiColors.surface3),
-                  child: FaIcon(icon, color: OmiColors.textPrimary, size: 18),
+                  child: Icon(icon, color: OmiColors.textPrimary, size: 20),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -488,6 +580,99 @@ class _RecordOption extends StatelessWidget {
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// A small horizontal battery: outline, nub and a fill proportional to [level]. Neutral unless
+/// [critical], when the fill is red.
+class BatteryGlyph extends StatelessWidget {
+  const BatteryGlyph({super.key, required this.level, required this.critical});
+
+  final int level;
+  final bool critical;
+
+  @override
+  Widget build(BuildContext context) =>
+      CustomPaint(size: const Size(20, 10), painter: _BatteryGlyphPainter(level.clamp(0, 100) / 100, critical));
+}
+
+class _BatteryGlyphPainter extends CustomPainter {
+  _BatteryGlyphPainter(this.fraction, this.critical);
+  final double fraction;
+  final bool critical;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    const nub = 2.0;
+    final body = Rect.fromLTWH(0.5, 0.5, size.width - nub - 1.5, size.height - 1);
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(body, const Radius.circular(2.5)),
+      Paint()
+        ..color = OmiColors.textSecondary
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1,
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(Rect.fromLTWH(body.right + 0.5, size.height / 2 - 2, nub, 4), const Radius.circular(1)),
+      Paint()..color = OmiColors.textSecondary,
+    );
+    final inner = body.deflate(1.75);
+    if (fraction <= 0) return;
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(
+          Rect.fromLTWH(inner.left, inner.top, inner.width * fraction, inner.height), const Radius.circular(1)),
+      Paint()..color = critical ? OmiColors.danger : OmiColors.textPrimary,
+    );
+  }
+
+  @override
+  bool shouldRepaint(_BatteryGlyphPainter old) => old.fraction != fraction || old.critical != critical;
+}
+
+/// Shown when the phone record button is tapped while the pendant is recording: Omi records from
+/// one source at a time, so the phone offers to take over (the pendant pauses and resumes after),
+/// a call (the pendant pauses during it), or to leave the pendant as it is.
+class PendantListeningSheet extends StatelessWidget {
+  const PendantListeningSheet({
+    super.key,
+    required this.onRecordWithPhone,
+    required this.onPhoneCall,
+    required this.onKeepPendant,
+  });
+
+  final VoidCallback onRecordWithPhone;
+  final VoidCallback onPhoneCall;
+  final VoidCallback onKeepPendant;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return Padding(
+      padding: const EdgeInsets.only(bottom: OmiSpacing.md),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(l10n.oneSourceAtATime, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
+          const SizedBox(height: OmiSpacing.md),
+          _RecordOption(
+            icon: CaptureSources.icon('phone'),
+            title: l10n.recordWithPhoneInstead,
+            subtitle: l10n.pendantPausesUntilYouFinish,
+            onTap: onRecordWithPhone,
+          ),
+          const SizedBox(height: 10),
+          _RecordOption(
+            icon: Icons.call_rounded,
+            title: l10n.phoneCall,
+            subtitle: l10n.pendantPausesDuringCall,
+            onTap: onPhoneCall,
+          ),
+          const SizedBox(height: OmiSpacing.md),
+          OmiButton.secondary(label: l10n.keepUsingPendant, onPressed: onKeepPendant),
+        ],
       ),
     );
   }
