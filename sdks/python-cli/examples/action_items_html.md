@@ -26,7 +26,6 @@ Save the following as `action_items_html.py`:
 ```python
 import json
 import sys
-from collections import defaultdict
 from datetime import datetime, timedelta, timezone
 from html import escape
 from pathlib import Path
