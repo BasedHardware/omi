@@ -56,13 +56,13 @@ def parse_time(value):
 
 
 def parse_offset(value):
-    """Turn '+09:00' / '-05:30' into a timedelta for localized timestamps."""
+    """Turn '+09:00' / '-05:30' into a timezone for localized timestamps."""
     if len(value) != 6 or value[0] not in "+-" or value[3] != ":" or not (value[1:3] + value[4:]).isdigit():
         raise ValueError(f"UTC offset must look like +09:00, got {value!r}")
     delta = timedelta(hours=int(value[1:3]), minutes=int(value[4:]))
     if int(value[4:]) > 59 or delta > timedelta(hours=14):
         raise ValueError(f"UTC offset must be between -14:00 and +14:00, got {value!r}")
-    return -delta if value[0] == "-" else delta
+    return timezone(-delta if value[0] == "-" else delta)
 
 
 def extract_transcript(item):
@@ -86,7 +86,7 @@ def extract_transcript(item):
     return None
 
 
-def build_record(item, offset):
+def build_record(item, tz):
     """Build a normalized dictionary suitable for JSON Lines AI dataset ingestion."""
     structured = item.get("structured") or {}
     if not isinstance(structured, dict):
@@ -99,8 +99,8 @@ def build_record(item, offset):
     if start_dt and end_dt and end_dt >= start_dt:
         duration = int((end_dt - start_dt).total_seconds())
 
-    start_str = (start_dt + offset).isoformat() if start_dt else None
-    end_str = (end_dt + offset).isoformat() if end_dt else None
+    start_str = start_dt.astimezone(tz).isoformat() if start_dt else None
+    end_str = end_dt.astimezone(tz).isoformat() if end_dt else None
 
     action_items_raw = structured.get("action_items") or item.get("action_items") or []
     action_items = []
@@ -145,12 +145,12 @@ def load(sources):
     return list(conversations.values())
 
 
-def convert(sources, destination, offset):
+def convert(sources, destination, tz):
     """Convert source exports into a JSON Lines dataset."""
     items = load(sources)
     buffer = io.StringIO()
     for item in items:
-        record = build_record(item, offset)
+        record = build_record(item, tz)
         line = json.dumps(record, ensure_ascii=False)
         buffer.write(line + "\n")
 
@@ -170,17 +170,17 @@ def convert(sources, destination, offset):
 
 if __name__ == "__main__":
     args = sys.argv[1:]
-    offset = timedelta(0)
+    tz = timezone.utc
     if len(args) >= 2 and args[0] == "--utc-offset":
         try:
-            offset = parse_offset(args[1])
+            tz = parse_offset(args[1])
         except ValueError as exc:
             sys.exit(f"JSONL export failed: {exc}")
         args = args[2:]
     if len(args) < 2:
         sys.exit("Usage: python conversations_to_jsonl.py [--utc-offset +09:00] OUTPUT.jsonl INPUT.json [INPUT.json ...]")
     try:
-        convert(args[1:], args[0], offset)
+        convert(args[1:], args[0], tz)
     except (OSError, ValueError) as exc:
         sys.exit(f"JSONL export failed: {exc}")
     print(f"JSON Lines dataset written to {args[0]}")
@@ -226,4 +226,4 @@ Each row in the resulting `.jsonl` file is a complete JSON object with the follo
 }
 ```
 
-The output file is written atomically with exclusive creation (`xb`), so existing datasets will not be accidentally overwritten.
+The output file is written with exclusive creation (`xb`), so it refuses to overwrite existing datasets.
