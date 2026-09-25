@@ -11086,7 +11086,6 @@
     "addToClaudeCodeConfig": "~/.claude.json இல் சேர்க்கவும்",
     "claudeDesktopConnectorSetup": "Claude Desktop → Settings → Connectors இல் தனிப்பயன் கனெக்டரைச் சேர்த்து, சர்வர் URL ஐ ஒட்டவும். Claude மேம்பட்ட OAuth Client ID கேட்டால், கீழே உள்ள மதிப்பைப் பயன்படுத்தி, ரகசியத்தை வெற்றாக விடவும் — உங்கள் MCP API திறவுகோலை OAuth ரகசியமாக ஒருபோதும் பயன்படுத்த வேண்டாம்.",
     "transcriptionUnavailableRecordingContinues": "நகலெடுப்புகள் கிடைக்கவில்லை, பதிவு சாதனத்தில் தொடர்கிறது, பின்னர் செயலாக்கப்படும்",
-    "transcriptionUnavailableSavingOnDevice": "நகலெடுப்பு இல்லை · சாதனத்தில் சேமிக்கப்படுகிறது",
     "transcriptionsPendingFraction": "நிலுவையில் உள்ள நகலெடுப்புகள் {pending}/{total}",
     "transcriptionsPendingCount": "நிலுவையில் உள்ள நகலெடுப்புகள் {count}",
     "captureSourceCall": "அழைப்பு",
@@ -11104,5 +11103,15 @@
     "recordWith": "பதிவுசெய்யும் முறை",
     "moreWaysToRecord": "பதிவுசெய்ய மேலும் வழிகள்",
     "openCall": "அழைப்பைத் திறக்கவும்",
-    "captureRecoveryBanner": "பென்டன்ட் ஆடியோ செயலியை அடையவில்லை — சரிசெய்ய தட்டவும்"
+    "captureRecoveryBanner": "பென்டன்ட் ஆடியோ செயலியை அடையவில்லை — சரிசெய்ய தட்டவும்",
+    "captureNotTranscribing": "எழுத்தாக்கம் இல்லை",
+    "captureAudioSavedTranscribesLater": "ஆடியோ சேமிக்கப்பட்டது, பின்னர் எழுத்தாக்கம்",
+    "captureStillRecording": "இன்னும் பதிவாகிறது",
+    "captureMicInUseElsewhere": "மைக்கை வேறு ஆப் பயன்படுத்துகிறது",
+    "captureMicInterruptedDetail": "ஒரு அழைப்பு அல்லது வேறு ஆப் மைக்ரோஃபோனை எடுத்துக்கொண்டதால் Omi இப்போது கேட்க முடியாது. மைக்ரோஃபோன் காலியானதும் Omi தானாகவே தொடரும். இதற்கு முன் பதிவானவை அனைத்தும் பாதுகாப்பாக உள்ளன.",
+    "captureCustomSttUnreachableDetail": "உங்கள் தனிப்பயன் பேச்சு-உரை சேவையை அடைய முடியவில்லை. Omi ஆடியோவை இந்த ஃபோனில் வைத்திருந்து சேவை திரும்பியதும் அனுப்பும். எதுவும் இழக்கப்படாது.",
+    "captureStarting": "தொடங்குகிறது…",
+    "capturePhoneStorageFull": "ஃபோன் சேமிப்பகம் நிரம்பியது",
+    "captureStorageAlmostFull": "சேமிப்பகம் கிட்டத்தட்ட நிரம்பியது",
+    "capturePendantDisconnectedDetail": "உங்கள் பதக்கம் இந்த ஃபோனுடனான இணைப்பை இழந்தது. பதக்கம் இயக்கத்தில் இருந்து அருகில் இருக்கும்போது Omi தானாகவே மீண்டும் இணையும். இதற்கு முன் பதிவானவை அனைத்தும் பாதுகாப்பாக உள்ளன."
 }

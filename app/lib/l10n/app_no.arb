@@ -3526,7 +3526,6 @@
     "addToClaudeCodeConfig": "Legg til i ~/.claude.json",
     "claudeDesktopConnectorSetup": "På Claude Desktop → Settings → Connectors legger du til en egendefinert connector og limer inn server-URL-en. Hvis Claude ber om en avansert OAuth Client ID, bruker du verdien nedenfor og lar hemmeligheten stå tom — bruk aldri MCP API-nøkkelen din som OAuth-hemmelighet.",
     "transcriptionUnavailableRecordingContinues": "Transkripsjoner er utilgjengelige, opptaket fortsetter på enheten og behandles senere",
-    "transcriptionUnavailableSavingOnDevice": "Transkripsjon utilgjengelig · lagres på enheten",
     "transcriptionsPendingFraction": "Transkripsjoner i kø {pending}/{total}",
     "transcriptionsPendingCount": "Transkripsjoner i kø {count}",
     "captureSourceCall": "Anrop",
@@ -3544,5 +3543,15 @@
     "recordWith": "Ta opp med",
     "moreWaysToRecord": "Flere måter å ta opp på",
     "openCall": "Åpne anrop",
-    "captureRecoveryBanner": "Lyden fra anhenget når ikke frem til appen — trykk for å reparere"
+    "captureRecoveryBanner": "Lyden fra anhenget når ikke frem til appen — trykk for å reparere",
+    "captureNotTranscribing": "Transkriberer ikke",
+    "captureAudioSavedTranscribesLater": "Lyd lagret, transkriberes senere",
+    "captureStillRecording": "Tar fortsatt opp",
+    "captureMicInUseElsewhere": "Mikrofonen brukes av en annen app",
+    "captureMicInterruptedDetail": "En samtale eller en annen app tok mikrofonen, så Omi kan ikke høre akkurat nå. Omi fortsetter av seg selv når mikrofonen er ledig. Alt som ble tatt opp før dette, er trygt.",
+    "captureCustomSttUnreachableDetail": "Din egen tale-til-tekst-tjeneste kan ikke nås. Omi beholder lyden på denne telefonen og sender den når tjenesten er tilbake. Ingenting går tapt.",
+    "captureStarting": "Starter…",
+    "capturePhoneStorageFull": "Telefonlagringen er full",
+    "captureStorageAlmostFull": "Lagringen er nesten full",
+    "capturePendantDisconnectedDetail": "Anhenget mistet forbindelsen til denne telefonen. Omi kobler til igjen av seg selv når anhenget er på og i nærheten. Alt som ble tatt opp før dette, er trygt."
 }

@@ -11146,9 +11146,6 @@ class AppLocalizationsHi extends AppLocalizations {
       'ट्रांसक्रिप्शन उपलब्ध नहीं हैं, रिकॉर्डिंग डिवाइस पर जारी है और बाद में प्रोसेस होगी';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'ट्रांसक्रिप्शन अनुपलब्ध · डिवाइस पर सहेजा जा रहा है';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'लंबित ट्रांसक्रिप्शन $pending/$total';
   }
@@ -11207,4 +11204,37 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'पेंडेंट का ऑडियो ऐप तक नहीं पहुंच रहा है — ठीक करने के लिए टैप करें';
+
+  @override
+  String get captureNotTranscribing => 'ट्रांसक्राइब नहीं हो रहा';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'ऑडियो सहेजा गया, बाद में ट्रांसक्राइब होगा';
+
+  @override
+  String get captureStillRecording => 'अभी भी रिकॉर्ड हो रहा है';
+
+  @override
+  String get captureMicInUseElsewhere => 'माइक किसी और ऐप में इस्तेमाल हो रहा है';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'किसी कॉल या दूसरे ऐप ने माइक्रोफ़ोन ले लिया है, इसलिए Omi अभी सुन नहीं पा रहा। माइक्रोफ़ोन खाली होते ही Omi अपने आप फिर शुरू हो जाएगा। इससे पहले रिकॉर्ड की गई हर चीज़ सुरक्षित है।';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'आपकी कस्टम स्पीच-टू-टेक्स्ट सेवा तक नहीं पहुँचा जा सकता। Omi ऑडियो को इसी फ़ोन पर रखता है और सेवा वापस आने पर भेज देगा। कुछ भी नहीं खोएगा।';
+
+  @override
+  String get captureStarting => 'शुरू हो रहा है…';
+
+  @override
+  String get capturePhoneStorageFull => 'फ़ोन स्टोरेज भर गया';
+
+  @override
+  String get captureStorageAlmostFull => 'स्टोरेज लगभग भर गया';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'आपके पेंडेंट का इस फ़ोन से कनेक्शन टूट गया। पेंडेंट चालू और पास होने पर Omi अपने आप फिर से कनेक्ट हो जाएगा। इससे पहले रिकॉर्ड की गई हर चीज़ सुरक्षित है।';
 }

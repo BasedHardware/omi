@@ -11201,9 +11201,6 @@ class AppLocalizationsKn extends AppLocalizations {
       'ಲಿಪ್ಯಂತರಗಳು ಲಭ್ಯವಿಲ್ಲ, ಧ್ವನಿಮುದ್ರಣ ಸಾಧನದಲ್ಲಿ ಮುಂದುವರಿಯುತ್ತದೆ ಮತ್ತು ನಂತರ ಪ್ರಕ್ರಿಯೆಗೊಳ್ಳುತ್ತದೆ';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'ಲಿಪ್ಯಂತರ ಲಭ್ಯವಿಲ್ಲ · ಸಾಧನದಲ್ಲಿ ಉಳಿಸಲಾಗುತ್ತಿದೆ';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'ಬಾಕಿ ಇರುವ ಲಿಪ್ಯಂತರಗಳು $pending/$total';
   }
@@ -11262,4 +11259,37 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'ಪೆಂಡೆಂಟ್‌ನ ಆಡಿಯೊ ಆ್ಯಪ್‌ಗೆ ತಲುಪುತ್ತಿಲ್ಲ — ಸರಿಪಡಿಸಲು ಟ್ಯಾಪ್ ಮಾಡಿ';
+
+  @override
+  String get captureNotTranscribing => 'ಪ್ರತಿಲೇಖನ ಆಗುತ್ತಿಲ್ಲ';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'ಆಡಿಯೋ ಉಳಿಸಲಾಗಿದೆ, ನಂತರ ಪ್ರತಿಲೇಖನ';
+
+  @override
+  String get captureStillRecording => 'ಇನ್ನೂ ರೆಕಾರ್ಡ್ ಆಗುತ್ತಿದೆ';
+
+  @override
+  String get captureMicInUseElsewhere => 'ಮೈಕ್ ಅನ್ನು ಬೇರೆ ಆ್ಯಪ್ ಬಳಸುತ್ತಿದೆ';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'ಒಂದು ಕರೆ ಅಥವಾ ಬೇರೆ ಆ್ಯಪ್ ಮೈಕ್ರೊಫೋನ್ ಅನ್ನು ತೆಗೆದುಕೊಂಡಿದೆ, ಆದ್ದರಿಂದ Omi ಈಗ ಕೇಳಲು ಸಾಧ್ಯವಿಲ್ಲ. ಮೈಕ್ರೊಫೋನ್ ಮುಕ್ತವಾದಾಗ Omi ತಾನಾಗಿಯೇ ಮುಂದುವರಿಯುತ್ತದೆ. ಇದಕ್ಕೂ ಮೊದಲು ರೆಕಾರ್ಡ್ ಆದದ್ದೆಲ್ಲ ಸುರಕ್ಷಿತವಾಗಿದೆ.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'ನಿಮ್ಮ ಕಸ್ಟಮ್ ಸ್ಪೀಚ್-ಟು-ಟೆಕ್ಸ್ಟ್ ಸೇವೆಯನ್ನು ತಲುಪಲು ಸಾಧ್ಯವಾಗುತ್ತಿಲ್ಲ. Omi ಆಡಿಯೋವನ್ನು ಈ ಫೋನ್‌ನಲ್ಲಿ ಇರಿಸಿಕೊಂಡು ಸೇವೆ ಮರಳಿದಾಗ ಕಳುಹಿಸುತ್ತದೆ. ಏನೂ ಕಳೆದುಹೋಗುವುದಿಲ್ಲ.';
+
+  @override
+  String get captureStarting => 'ಪ್ರಾರಂಭವಾಗುತ್ತಿದೆ…';
+
+  @override
+  String get capturePhoneStorageFull => 'ಫೋನ್ ಸಂಗ್ರಹಣೆ ತುಂಬಿದೆ';
+
+  @override
+  String get captureStorageAlmostFull => 'ಸಂಗ್ರಹಣೆ ಬಹುತೇಕ ತುಂಬಿದೆ';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'ನಿಮ್ಮ ಪೆಂಡೆಂಟ್ ಈ ಫೋನ್‌ನೊಂದಿಗೆ ಸಂಪರ್ಕ ಕಳೆದುಕೊಂಡಿದೆ. ಪೆಂಡೆಂಟ್ ಆನ್ ಆಗಿದ್ದು ಹತ್ತಿರದಲ್ಲಿದ್ದಾಗ Omi ತಾನಾಗಿಯೇ ಮರುಸಂಪರ್ಕಿಸುತ್ತದೆ. ಇದಕ್ಕೂ ಮೊದಲು ರೆಕಾರ್ಡ್ ಆದದ್ದೆಲ್ಲ ಸುರಕ್ಷಿತವಾಗಿದೆ.';
 }

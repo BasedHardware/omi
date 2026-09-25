@@ -11086,7 +11086,6 @@
     "addToClaudeCodeConfig": "افزودن به ~/.claude.json",
     "claudeDesktopConnectorSetup": "در Claude Desktop → Settings → Connectors یک کانکتور سفارشی اضافه کنید و URL سرور را جای‌گذاری کنید. اگر Claude یک Client ID پیشرفته OAuth خواست، از مقدار زیر استفاده کنید و secret را خالی بگذارید — هرگز کلید MCP API خود را به‌عنوان secret OAuth استفاده نکنید.",
     "transcriptionUnavailableRecordingContinues": "رونویسی‌ها در دسترس نیستند، ضبط در دستگاه ادامه دارد و بعداً پردازش می‌شود",
-    "transcriptionUnavailableSavingOnDevice": "رونویسی در دسترس نیست · در حال ذخیره روی دستگاه",
     "transcriptionsPendingFraction": "رونویسی‌های در انتظار {pending}/{total}",
     "transcriptionsPendingCount": "رونویسی‌های در انتظار {count}",
     "captureSourceCall": "تماس",
@@ -11104,5 +11103,15 @@
     "recordWith": "ضبط با",
     "moreWaysToRecord": "روش‌های دیگر ضبط",
     "openCall": "باز کردن تماس",
-    "captureRecoveryBanner": "صدای آویز به برنامه نمی‌رسد — برای تعمیر ضربه بزنید"
+    "captureRecoveryBanner": "صدای آویز به برنامه نمی‌رسد — برای تعمیر ضربه بزنید",
+    "captureNotTranscribing": "رونویسی انجام نمی‌شود",
+    "captureAudioSavedTranscribesLater": "صدا ذخیره شد، بعداً رونویسی می‌شود",
+    "captureStillRecording": "ضبط ادامه دارد",
+    "captureMicInUseElsewhere": "میکروفون در اختیار برنامه دیگری است",
+    "captureMicInterruptedDetail": "یک تماس یا برنامه دیگر میکروفون را گرفته است، بنابراین Omi اکنون نمی‌شنود. وقتی میکروفون آزاد شود، Omi خودش ادامه می‌دهد. هر آنچه پیش از این ضبط شده محفوظ است.",
+    "captureCustomSttUnreachableDetail": "به سرویس سفارشی تبدیل گفتار به متن شما دسترسی نیست. Omi صدا را روی همین تلفن نگه می‌دارد و وقتی سرویس برگشت آن را ارسال می‌کند. چیزی از دست نمی‌رود.",
+    "captureStarting": "در حال شروع…",
+    "capturePhoneStorageFull": "حافظه تلفن پر است",
+    "captureStorageAlmostFull": "حافظه تقریباً پر است",
+    "capturePendantDisconnectedDetail": "آویز شما اتصالش را با این تلفن از دست داد. وقتی آویز روشن و نزدیک باشد، Omi خودش دوباره وصل می‌شود. هر آنچه پیش از این ضبط شده محفوظ است."
 }

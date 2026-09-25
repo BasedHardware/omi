@@ -1325,16 +1325,33 @@ class TestOutputSchemaTimestampFormats:
 
 
 class TestClientCapabilities2026:
-    """Explicit 2026-07-28 declarations must carry the clientCapabilities
-    ``_meta`` object — both official SDKs stamp it on every modern call."""
+    """Explicit 2026-07-28 requests must carry the clientCapabilities
+    ``_meta`` object — both official SDKs stamp it on every modern call.
+    Notifications are exempt: the spec requirement is on requests."""
 
     @pytest.mark.parametrize("path", ["/v1/mcp", "/v1/mcp/sse"])
     def test_2026_header_without_capabilities_rejected(self, client, authed, path):
         response = _post(client, path, _msg("tools/list"), **{"mcp-protocol-version": PROTOCOL_VERSION_2026})
         assert response.status_code == 400
-        error = response.json()["error"]
+        body = response.json()
+        error = body["error"]
         assert error["code"] == -32602
         assert META_CLIENT_CAPABILITIES in error["message"]
+        assert body["id"] == 1
+
+    @pytest.mark.parametrize("path", ["/v1/mcp", "/v1/mcp/sse"])
+    @pytest.mark.parametrize("method", ["notifications/initialized", "notifications/cancelled"])
+    def test_2026_notification_without_capabilities_accepted(self, client, authed, path, method):
+        # Prod regression: a 2026 Go client sends notifications with no id and
+        # no clientCapabilities _meta. Those must be 202, not -32602 / HTTP 400.
+        response = _post(
+            client,
+            path,
+            {"jsonrpc": "2.0", "method": method},
+            **{"mcp-protocol-version": PROTOCOL_VERSION_2026},
+        )
+        assert response.status_code == 202
+        assert response.content == b""
 
     @pytest.mark.parametrize("path", ["/v1/mcp", "/v1/mcp/sse"])
     def test_2026_meta_without_capabilities_rejected(self, client, authed, path):

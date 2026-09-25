@@ -3526,7 +3526,6 @@
     "addToClaudeCodeConfig": "Adaugă la ~/.claude.json",
     "claudeDesktopConnectorSetup": "Pe Claude Desktop → Settings → Connectors, adăugați un conector personalizat și lipiți URL-ul serverului. Dacă Claude solicită un Client ID OAuth avansat, utilizați valoarea de mai jos și lăsați secretul gol — nu folosiți niciodată cheia API MCP drept secret OAuth.",
     "transcriptionUnavailableRecordingContinues": "Transcrierile nu sunt disponibile, înregistrarea continuă pe dispozitiv și va fi procesată mai târziu",
-    "transcriptionUnavailableSavingOnDevice": "Transcriere indisponibilă · se salvează pe dispozitiv",
     "transcriptionsPendingFraction": "Transcrieri în așteptare {pending}/{total}",
     "transcriptionsPendingCount": "Transcrieri în așteptare {count}",
     "captureSourceCall": "Apel",
@@ -3544,5 +3543,15 @@
     "recordWith": "Înregistrează cu",
     "moreWaysToRecord": "Mai multe moduri de înregistrare",
     "openCall": "Deschide apelul",
-    "captureRecoveryBanner": "Sunetul pandantivului nu ajunge în aplicație — atinge pentru a repara"
+    "captureRecoveryBanner": "Sunetul pandantivului nu ajunge în aplicație — atinge pentru a repara",
+    "captureNotTranscribing": "Fără transcriere",
+    "captureAudioSavedTranscribesLater": "Audio salvat, transcris mai târziu",
+    "captureStillRecording": "Înregistrarea continuă",
+    "captureMicInUseElsewhere": "Microfonul e folosit de altă aplicație",
+    "captureMicInterruptedDetail": "Un apel sau altă aplicație a preluat microfonul, așa că Omi nu poate asculta acum. Omi va relua singur când microfonul devine liber. Tot ce s-a înregistrat înainte este în siguranță.",
+    "captureCustomSttUnreachableDetail": "Serviciul tău personalizat de transformare a vorbirii în text nu poate fi accesat. Omi păstrează sunetul pe acest telefon și îl trimite când serviciul revine. Nu se pierde nimic.",
+    "captureStarting": "Se pornește…",
+    "capturePhoneStorageFull": "Spațiul telefonului e plin",
+    "captureStorageAlmostFull": "Spațiul e aproape plin",
+    "capturePendantDisconnectedDetail": "Pandantivul a pierdut conexiunea cu acest telefon. Omi se va reconecta singur când pandantivul este pornit și în apropiere. Tot ce s-a înregistrat înainte este în siguranță."
 }

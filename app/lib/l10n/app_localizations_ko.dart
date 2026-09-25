@@ -10985,9 +10985,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get transcriptionUnavailableRecordingContinues => '전사를 이용할 수 없습니다. 기기에서 녹음이 계속되며 나중에 처리됩니다';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => '전사 불가 · 기기에 저장 중';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return '대기 중인 전사 $pending/$total';
   }
@@ -11046,4 +11043,37 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => '펜던트 오디오가 앱에 도달하지 않습니다 — 탭하여 복구';
+
+  @override
+  String get captureNotTranscribing => '받아쓰기 중단됨';
+
+  @override
+  String get captureAudioSavedTranscribesLater => '오디오 저장됨, 나중에 받아쓰기';
+
+  @override
+  String get captureStillRecording => '녹음 계속 중';
+
+  @override
+  String get captureMicInUseElsewhere => '다른 앱이 마이크 사용 중';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      '통화나 다른 앱이 마이크를 사용 중이라 지금은 Omi가 들을 수 없어요. 마이크가 비면 Omi가 자동으로 다시 시작해요. 그 전에 녹음된 내용은 안전하게 보관돼요.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      '사용자 지정 음성-텍스트 서비스에 연결할 수 없어요. Omi가 오디오를 이 휴대폰에 보관했다가 서비스가 복구되면 보내요. 잃어버리는 건 없어요.';
+
+  @override
+  String get captureStarting => '시작하는 중…';
+
+  @override
+  String get capturePhoneStorageFull => '휴대폰 저장 공간 부족';
+
+  @override
+  String get captureStorageAlmostFull => '저장 공간 거의 참';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      '펜던트와 이 휴대폰의 연결이 끊겼어요. 펜던트가 켜져 있고 가까이 있으면 Omi가 자동으로 다시 연결해요. 그 전에 녹음된 내용은 안전하게 보관돼요.';
 }
