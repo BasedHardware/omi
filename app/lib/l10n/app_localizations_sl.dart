@@ -11204,9 +11204,6 @@ class AppLocalizationsSl extends AppLocalizations {
       'Transkripcije niso na voljo, snemanje se nadaljuje v napravi in bo obdelano pozneje';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'Transkripcija ni na voljo · shranjevanje v napravi';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'Transkripcije v čakanju $pending/$total';
   }
@@ -11265,4 +11262,37 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Zvuk obeska ne prihaja v aplikacijo — tapnite za popravilo';
+
+  @override
+  String get captureNotTranscribing => 'Ni prepisa';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Zvok shranjen, prepis pozneje';
+
+  @override
+  String get captureStillRecording => 'Snemanje se nadaljuje';
+
+  @override
+  String get captureMicInUseElsewhere => 'Mikrofon uporablja druga aplikacija';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Klic ali druga aplikacija je prevzela mikrofon, zato Omi trenutno ne sliši. Omi bo sam nadaljeval, ko bo mikrofon prost. Vse, kar je bilo posneto prej, je varno.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Vaša storitev za pretvorbo govora v besedilo ni dosegljiva. Omi hrani zvok v tem telefonu in ga pošlje, ko bo storitev spet na voljo. Nič se ne izgubi.';
+
+  @override
+  String get captureStarting => 'Zaganjanje…';
+
+  @override
+  String get capturePhoneStorageFull => 'Pomnilnik telefona je poln';
+
+  @override
+  String get captureStorageAlmostFull => 'Pomnilnik je skoraj poln';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Obesek je izgubil povezavo s tem telefonom. Omi se bo sam znova povezal, ko bo obesek vklopljen in v bližini. Vse, kar je bilo posneto prej, je varno.';
 }

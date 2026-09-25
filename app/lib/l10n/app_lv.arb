@@ -3528,7 +3528,6 @@
     "addToClaudeCodeConfig": "Pievienot ~/.claude.json",
     "claudeDesktopConnectorSetup": "Vietnē Claude Desktop → Settings → Connectors pievienojiet pielāgotu savienotāju un ielīmējiet servera URL. Ja Claude pieprasa uzlabotu OAuth Client ID, izmantojiet tālāk norādīto vērtību un atstājiet noslēpumu tukšu — nekad neizmantojiet savu MCP API atslēgu kā OAuth noslēpumu.",
     "transcriptionUnavailableRecordingContinues": "Transkripcijas nav pieejamas, ierakstīšana turpinās ierīcē un tiks apstrādāta vēlāk",
-    "transcriptionUnavailableSavingOnDevice": "Transkripcija nav pieejama · tiek saglabāta ierīcē",
     "transcriptionsPendingFraction": "Gaidošas transkripcijas {pending}/{total}",
     "transcriptionsPendingCount": "Gaidošas transkripcijas {count}",
     "captureSourceCall": "Zvans",
@@ -3546,5 +3545,15 @@
     "recordWith": "Ierakstīt ar",
     "moreWaysToRecord": "Citi ierakstīšanas veidi",
     "openCall": "Atvērt zvanu",
-    "captureRecoveryBanner": "Kulona audio nesasniedz lietotni — pieskarieties, lai salabotu"
+    "captureRecoveryBanner": "Kulona audio nesasniedz lietotni — pieskarieties, lai salabotu",
+    "captureNotTranscribing": "Netiek transkribēts",
+    "captureAudioSavedTranscribesLater": "Audio saglabāts, tiks transkribēts vēlāk",
+    "captureStillRecording": "Ierakstīšana turpinās",
+    "captureMicInUseElsewhere": "Mikrofonu izmanto cita lietotne",
+    "captureMicInterruptedDetail": "Zvans vai cita lietotne aizņēma mikrofonu, tāpēc Omi pašlaik nedzird. Omi turpinās pats, kad mikrofons būs brīvs. Viss, kas ierakstīts līdz šim, ir drošībā.",
+    "captureCustomSttUnreachableDetail": "Jūsu pielāgotais runas pārveides tekstā pakalpojums nav sasniedzams. Omi glabā audio šajā tālrunī un nosūtīs to, kad pakalpojums atjaunosies. Nekas netiek zaudēts.",
+    "captureStarting": "Sāk…",
+    "capturePhoneStorageFull": "Tālruņa krātuve ir pilna",
+    "captureStorageAlmostFull": "Krātuve gandrīz pilna",
+    "capturePendantDisconnectedDetail": "Kulons zaudēja savienojumu ar šo tālruni. Omi pats atjaunos savienojumu, kad kulons būs ieslēgts un tuvumā. Viss, kas ierakstīts līdz šim, ir drošībā."
 }

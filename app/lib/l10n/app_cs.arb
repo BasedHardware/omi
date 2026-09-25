@@ -3528,7 +3528,6 @@
     "addToClaudeCodeConfig": "Přidat do ~/.claude.json",
     "claudeDesktopConnectorSetup": "Na Claude Desktop → Settings → Connectors přidejte vlastní konektor a vložte URL serveru. Pokud Claude požádá o pokročilé OAuth Client ID, použijte hodnotu níže a nechte tajný klíč prázdný — nikdy nepoužívejte svůj MCP API klíč jako OAuth secret.",
     "transcriptionUnavailableRecordingContinues": "Přepisy nejsou k dispozici, nahrávání pokračuje v zařízení a později se zpracuje",
-    "transcriptionUnavailableSavingOnDevice": "Přepis není k dispozici · ukládá se v zařízení",
     "transcriptionsPendingFraction": "Čekající přepisy {pending}/{total}",
     "transcriptionsPendingCount": "Čekající přepisy {count}",
     "captureSourceCall": "Hovor",
@@ -3546,5 +3545,15 @@
     "recordWith": "Nahrát pomocí",
     "moreWaysToRecord": "Další způsoby nahrávání",
     "openCall": "Otevřít hovor",
-    "captureRecoveryBanner": "Zvuk přívěsku se do aplikace nedostává — opravte klepnutím"
+    "captureRecoveryBanner": "Zvuk přívěsku se do aplikace nedostává — opravte klepnutím",
+    "captureNotTranscribing": "Nepřepisuje se",
+    "captureAudioSavedTranscribesLater": "Zvuk uložen, přepíše se později",
+    "captureStillRecording": "Stále se nahrává",
+    "captureMicInUseElsewhere": "Mikrofon používá jiná aplikace",
+    "captureMicInterruptedDetail": "Hovor nebo jiná aplikace převzala mikrofon, takže Omi teď neslyší. Omi bude pokračovat sám, jakmile se mikrofon uvolní. Vše nahrané předtím je v bezpečí.",
+    "captureCustomSttUnreachableDetail": "Vaše vlastní služba převodu řeči na text není dostupná. Omi uchovává zvuk v tomto telefonu a odešle ho, až bude služba opět k dispozici. Nic se neztratí.",
+    "captureStarting": "Spouštění…",
+    "capturePhoneStorageFull": "Úložiště telefonu je plné",
+    "captureStorageAlmostFull": "Úložiště je téměř plné",
+    "capturePendantDisconnectedDetail": "Přívěsek ztratil spojení s tímto telefonem. Omi se znovu připojí sám, až bude přívěsek zapnutý a poblíž. Vše nahrané předtím je v bezpečí."
 }

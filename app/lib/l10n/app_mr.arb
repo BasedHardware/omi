@@ -11094,7 +11094,6 @@
     "addToClaudeCodeConfig": "~/.claude.json मध्ये जोडा",
     "claudeDesktopConnectorSetup": "Claude Desktop → Settings → Connectors वर कस्टम कनेक्टर जोडा आणि सर्व्हर URL पेस्ट करा. Claude ने अ‍ॅडव्हान्स्ड OAuth Client ID मागितल्यास, खालील मूल्य वापरा आणि सीक्रेट रिक्त ठेवा — तुमची MCP API की कधीही OAuth सीक्रेट म्हणून वापरू नका.",
     "transcriptionUnavailableRecordingContinues": "ट्रान्सक्रिप्शन उपलब्ध नाही, रेकॉर्डिंग डिव्हाइसवर सुरू आहे आणि नंतर प्रोसेस होईल",
-    "transcriptionUnavailableSavingOnDevice": "ट्रान्सक्रिप्शन अनुपलब्ध · डिव्हाइसवर जतन केले जात आहे",
     "transcriptionsPendingFraction": "प्रलंबित ट्रान्सक्रिप्शन {pending}/{total}",
     "transcriptionsPendingCount": "प्रलंबित ट्रान्सक्रिप्शन {count}",
     "captureSourceCall": "कॉल",
@@ -11112,5 +11111,15 @@
     "recordWith": "रेकॉर्ड करण्याची पद्धत",
     "moreWaysToRecord": "रेकॉर्ड करण्याचे आणखी मार्ग",
     "openCall": "कॉल उघडा",
-    "captureRecoveryBanner": "पेंडंटचे ऑडिओ ॲपपर्यंत पोहोचत नाही — दुरुस्त करण्यासाठी टॅप करा"
+    "captureRecoveryBanner": "पेंडंटचे ऑडिओ ॲपपर्यंत पोहोचत नाही — दुरुस्त करण्यासाठी टॅप करा",
+    "captureNotTranscribing": "लिप्यंतरण होत नाही",
+    "captureAudioSavedTranscribesLater": "ऑडिओ जतन केला, नंतर लिप्यंतरण होईल",
+    "captureStillRecording": "अजूनही रेकॉर्डिंग सुरू आहे",
+    "captureMicInUseElsewhere": "माइक दुसरे ॲप वापरत आहे",
+    "captureMicInterruptedDetail": "एखाद्या कॉलने किंवा दुसऱ्या ॲपने मायक्रोफोन घेतला आहे, त्यामुळे Omi आत्ता ऐकू शकत नाही. मायक्रोफोन मोकळा झाल्यावर Omi आपोआप पुन्हा सुरू होईल. याआधी रेकॉर्ड झालेले सर्व सुरक्षित आहे.",
+    "captureCustomSttUnreachableDetail": "तुमच्या कस्टम स्पीच-टू-टेक्स्ट सेवेपर्यंत पोहोचता येत नाही. Omi ऑडिओ या फोनवर ठेवतो आणि सेवा परत आल्यावर पाठवेल. काहीही गमावले जात नाही.",
+    "captureStarting": "सुरू होत आहे…",
+    "capturePhoneStorageFull": "फोन स्टोरेज भरले",
+    "captureStorageAlmostFull": "स्टोरेज जवळजवळ भरले",
+    "capturePendantDisconnectedDetail": "तुमच्या पेंडंटचा या फोनशी संपर्क तुटला. पेंडंट चालू आणि जवळ असल्यावर Omi आपोआप पुन्हा कनेक्ट होईल. याआधी रेकॉर्ड झालेले सर्व सुरक्षित आहे."
 }

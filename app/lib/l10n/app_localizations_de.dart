@@ -3702,7 +3702,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String get preparingSystemAudioCapture => 'Systemtonaufnahme wird vorbereitet';
 
   @override
-  String get reconnecting => 'Verbindung wird wiederhergestellt…';
+  String get reconnecting => 'Verbinde neu…';
 
   @override
   String get recordingPaused => 'Aufnahme pausiert';
@@ -11264,9 +11264,6 @@ class AppLocalizationsDe extends AppLocalizations {
       'Transkriptionen sind nicht verfügbar, die Aufnahme läuft auf dem Gerät weiter und wird später verarbeitet';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'Transkription nicht verfügbar · wird auf dem Gerät gespeichert';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'Offene Transkriptionen $pending/$total';
   }
@@ -11325,4 +11322,37 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Der Ton des Pendants erreicht die App nicht — zum Reparieren tippen';
+
+  @override
+  String get captureNotTranscribing => 'Kein Transkript';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Audio gespeichert, wird später transkribiert';
+
+  @override
+  String get captureStillRecording => 'Nimmt weiter auf';
+
+  @override
+  String get captureMicInUseElsewhere => 'Mikrofon von anderer App belegt';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Ein Anruf oder eine andere App nutzt das Mikrofon, daher kann Omi gerade nicht zuhören. Omi macht von selbst weiter, sobald das Mikrofon frei ist. Alles bisher Aufgenommene ist sicher.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Dein eigener Sprache-zu-Text-Dienst ist nicht erreichbar. Omi behält das Audio auf diesem Telefon und sendet es, sobald der Dienst wieder da ist. Nichts geht verloren.';
+
+  @override
+  String get captureStarting => 'Startet…';
+
+  @override
+  String get capturePhoneStorageFull => 'Telefonspeicher voll';
+
+  @override
+  String get captureStorageAlmostFull => 'Speicher fast voll';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Dein Anhänger hat die Verbindung zu diesem Telefon verloren. Omi verbindet sich von selbst neu, sobald der Anhänger eingeschaltet und in der Nähe ist. Alles bisher Aufgenommene ist sicher.';
 }

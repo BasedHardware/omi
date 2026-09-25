@@ -3528,7 +3528,6 @@
     "addToClaudeCodeConfig": "Lägg till i ~/.claude.json",
     "claudeDesktopConnectorSetup": "På Claude Desktop → Settings → Connectors lägger du till en anpassad connector och klistrar in server-URL:en. Om Claude ber om ett avancerat OAuth Client ID använder du värdet nedan och lämnar hemligheten tom — använd aldrig din MCP API-nyckel som OAuth-hemlighet.",
     "transcriptionUnavailableRecordingContinues": "Transkriptioner är inte tillgängliga, inspelningen fortsätter på enheten och bearbetas senare",
-    "transcriptionUnavailableSavingOnDevice": "Transkription inte tillgänglig · sparas på enheten",
     "transcriptionsPendingFraction": "Transkriptioner i kö {pending}/{total}",
     "transcriptionsPendingCount": "Transkriptioner i kö {count}",
     "captureSourceCall": "Samtal",
@@ -3546,5 +3545,15 @@
     "recordWith": "Spela in med",
     "moreWaysToRecord": "Fler sätt att spela in",
     "openCall": "Öppna samtal",
-    "captureRecoveryBanner": "Ljudet från hänget når inte appen — tryck för att reparera"
+    "captureRecoveryBanner": "Ljudet från hänget når inte appen — tryck för att reparera",
+    "captureNotTranscribing": "Transkriberar inte",
+    "captureAudioSavedTranscribesLater": "Ljud sparat, transkriberas senare",
+    "captureStillRecording": "Spelar fortfarande in",
+    "captureMicInUseElsewhere": "Mikrofonen används av en annan app",
+    "captureMicInterruptedDetail": "Ett samtal eller en annan app tog mikrofonen, så Omi kan inte höra just nu. Omi fortsätter av sig själv när mikrofonen är ledig. Allt som spelats in innan är säkert.",
+    "captureCustomSttUnreachableDetail": "Din egen tal-till-text-tjänst går inte att nå. Omi behåller ljudet på den här telefonen och skickar det när tjänsten är tillbaka. Inget går förlorat.",
+    "captureStarting": "Startar…",
+    "capturePhoneStorageFull": "Telefonens lagring är full",
+    "captureStorageAlmostFull": "Lagringen är nästan full",
+    "capturePendantDisconnectedDetail": "Hängsmycket tappade anslutningen till den här telefonen. Omi ansluter igen av sig själv när hängsmycket är på och i närheten. Allt som spelats in innan är säkert."
 }

@@ -3528,7 +3528,6 @@
     "addToClaudeCodeConfig": "~/.claude.jsonに追加",
     "claudeDesktopConnectorSetup": "Claude Desktop → Settings → Connectorsでカスタムコネクタを追加し、サーバーURLを貼り付けてください。Claudeが高度なOAuth Client IDを求めてきた場合は、以下の値を使用し、シークレットは空欄のままにしてください。MCP APIキーをOAuthシークレットとして使用しないでください。",
     "transcriptionUnavailableRecordingContinues": "文字起こしは利用できません。録音は端末上で続き、後で処理されます",
-    "transcriptionUnavailableSavingOnDevice": "文字起こし不可 · 端末に保存中",
     "transcriptionsPendingFraction": "文字起こし待ち {pending}/{total}",
     "transcriptionsPendingCount": "文字起こし待ち {count}",
     "captureSourceCall": "通話",
@@ -3546,5 +3545,15 @@
     "recordWith": "録音方法",
     "moreWaysToRecord": "その他の録音方法",
     "openCall": "通話を開く",
-    "captureRecoveryBanner": "ペンダントの音声がアプリに届いていません — タップして修復"
+    "captureRecoveryBanner": "ペンダントの音声がアプリに届いていません — タップして修復",
+    "captureNotTranscribing": "文字起こし停止中",
+    "captureAudioSavedTranscribesLater": "音声は保存済み、後で文字起こし",
+    "captureStillRecording": "録音は継続中",
+    "captureMicInUseElsewhere": "別のアプリがマイクを使用中",
+    "captureMicInterruptedDetail": "通話または別のアプリがマイクを使用しているため、Omiは今は聞き取れません。マイクが空くとOmiは自動で再開します。それまでに録音した内容は保存されています。",
+    "captureCustomSttUnreachableDetail": "カスタムの音声認識サービスに接続できません。Omiは音声をこのスマートフォンに保持し、サービスが復旧したら送信します。何も失われません。",
+    "captureStarting": "開始中…",
+    "capturePhoneStorageFull": "端末の空き容量なし",
+    "captureStorageAlmostFull": "空き容量わずか",
+    "capturePendantDisconnectedDetail": "ペンダントとこのスマートフォンの接続が切れました。ペンダントの電源が入っていて近くにあれば、Omiは自動で再接続します。それまでに録音した内容は保存されています。"
 }

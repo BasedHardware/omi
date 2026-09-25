@@ -11248,10 +11248,6 @@ class AppLocalizationsEl extends AppLocalizations {
       'Οι απομαγνητοφωνήσεις δεν είναι διαθέσιμες, η ηχογράφηση συνεχίζεται στη συσκευή και θα επεξεργαστεί αργότερα';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice =>
-      'Η απομαγνητοφώνηση δεν είναι διαθέσιμη · αποθήκευση στη συσκευή';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'Αναμενόμενες απομαγνητοφωνήσεις $pending/$total';
   }
@@ -11310,4 +11306,37 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Ο ήχος του μενταγιόν δεν φτάνει στην εφαρμογή — πατήστε για επισκευή';
+
+  @override
+  String get captureNotTranscribing => 'Χωρίς μεταγραφή';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Ο ήχος αποθηκεύτηκε, μεταγραφή αργότερα';
+
+  @override
+  String get captureStillRecording => 'Η εγγραφή συνεχίζεται';
+
+  @override
+  String get captureMicInUseElsewhere => 'Το μικρόφωνο χρησιμοποιείται από άλλη εφαρμογή';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Μια κλήση ή άλλη εφαρμογή πήρε το μικρόφωνο, οπότε το Omi δεν ακούει αυτή τη στιγμή. Το Omi θα συνεχίσει μόνο του όταν ελευθερωθεί το μικρόφωνο. Ό,τι ηχογραφήθηκε πριν είναι ασφαλές.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Η προσαρμοσμένη υπηρεσία μετατροπής ομιλίας σε κείμενο δεν είναι προσβάσιμη. Το Omi κρατά τον ήχο σε αυτό το τηλέφωνο και θα τον στείλει όταν επανέλθει η υπηρεσία. Δεν χάνεται τίποτα.';
+
+  @override
+  String get captureStarting => 'Έναρξη…';
+
+  @override
+  String get capturePhoneStorageFull => 'Ο χώρος του τηλεφώνου γέμισε';
+
+  @override
+  String get captureStorageAlmostFull => 'Ο χώρος σχεδόν γέμισε';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Το μενταγιόν έχασε τη σύνδεση με αυτό το τηλέφωνο. Το Omi θα επανασυνδεθεί μόνο του όταν το μενταγιόν είναι αναμμένο και κοντά. Ό,τι ηχογραφήθηκε πριν είναι ασφαλές.';
 }

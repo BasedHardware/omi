@@ -3528,7 +3528,6 @@
     "addToClaudeCodeConfig": "Afegeix a ~/.claude.json",
     "claudeDesktopConnectorSetup": "A Claude Desktop → Settings → Connectors, afegeix un connector personalitzat i enganxa l'URL del servidor. Si Claude demana un Client ID d'OAuth avançat, utilitza el valor següent i deixa el secret en blanc — mai utilitzis la teva clau d'API MCP com a secret d'OAuth.",
     "transcriptionUnavailableRecordingContinues": "Les transcripcions no estan disponibles, l'enregistrament continua al dispositiu i es processarà més tard",
-    "transcriptionUnavailableSavingOnDevice": "Transcripció no disponible · s'està desant al dispositiu",
     "transcriptionsPendingFraction": "Transcripcions pendents {pending}/{total}",
     "transcriptionsPendingCount": "Transcripcions pendents {count}",
     "captureSourceCall": "Trucada",
@@ -3546,5 +3545,15 @@
     "recordWith": "Grava amb",
     "moreWaysToRecord": "Més maneres de gravar",
     "openCall": "Obre la trucada",
-    "captureRecoveryBanner": "L'àudio del penjoll no arriba a l'aplicació — toca'l per reparar"
+    "captureRecoveryBanner": "L'àudio del penjoll no arriba a l'aplicació — toca'l per reparar",
+    "captureNotTranscribing": "Sense transcripció",
+    "captureAudioSavedTranscribesLater": "Àudio desat, es transcriurà més tard",
+    "captureStillRecording": "Encara s'està gravant",
+    "captureMicInUseElsewhere": "Una altra app fa servir el micròfon",
+    "captureMicInterruptedDetail": "Una trucada o una altra app ha agafat el micròfon, així que ara Omi no pot escoltar. Omi es reprendrà sol quan el micròfon estigui lliure. Tot el que s'ha gravat abans és segur.",
+    "captureCustomSttUnreachableDetail": "No es pot accedir al teu servei personalitzat de veu a text. Omi guarda l'àudio en aquest telèfon i l'enviarà quan el servei torni. No es perd res.",
+    "captureStarting": "S'està iniciant…",
+    "capturePhoneStorageFull": "Emmagatzematge del telèfon ple",
+    "captureStorageAlmostFull": "Emmagatzematge gairebé ple",
+    "capturePendantDisconnectedDetail": "El penjoll ha perdut la connexió amb aquest telèfon. Omi es tornarà a connectar sol quan el penjoll estigui encès i a prop. Tot el que s'ha gravat abans és segur."
 }
