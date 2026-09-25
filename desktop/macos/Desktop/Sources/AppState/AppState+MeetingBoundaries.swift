@@ -36,12 +36,16 @@ extension AppState {
     }
     let detector = MeetingDetector(
       isMeetingNow: meetingProbe,
+      callIdentities: { ConferencingApps.currentCallIdentities() },
       onInitialStateObserved: { [weak self] in
         Task { @MainActor in
           guard let self, let active = self.meetingDetector?.isMeetingActive else { return }
           await self.handleMeetingObservation(active: active)
           await self.reconcileCapture()
         }
+      },
+      onCallChanged: { [weak self] in
+        Task { @MainActor in await self?.handleMeetingObservation(active: true) }
       },
       onChange: { [weak self] active in
         Task { @MainActor in
@@ -84,14 +88,18 @@ extension AppState {
       pendingMeetingState = active
       return
     }
+    let callChanged = active && meetingDetector?.hasPendingCallChange == true
     guard
       let transition = MeetingConversationBoundaryPolicy.transition(
         previousRole: currentConversationRole,
-        meetingActive: active)
+        meetingActive: active,
+        callChanged: callChanged)
     else { return }
 
+    // Starting a meeting already opens a fresh conversation for whichever call is on.
+    if active { meetingDetector?.hasPendingCallChange = false }
     meetingBoundaryInProgress = true
-    log("Transcription: meeting boundary — role=\(transition.nextRole.rawValue)")
+    log("Transcription: meeting boundary — role=\(transition.nextRole.rawValue)\(callChanged ? " (call changed)" : "")")
     let result = await finishConversation(
       finalizationReason: transition.finalizationReason,
       allowEmptyRotation: true,
@@ -102,6 +110,7 @@ extension AppState {
       // session-creation task replays `pendingMeetingState` when it installs the
       // new session id, so nothing is lost.
       pendingMeetingState = active
+      if callChanged { meetingDetector?.hasPendingCallChange = true }
       meetingBoundaryInProgress = false
       return
     }
