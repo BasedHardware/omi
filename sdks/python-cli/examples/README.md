@@ -26,6 +26,7 @@
   JSON export to CSV for spreadsheets.
 * [`conversations_digest.md`](conversations_digest.md) — summarise conversation-list
   exports into a digest: per-day totals, categories and longest sessions.
+* [`memories_joplin.md`](memories_joplin.md) — export memories to Joplin offline Markdown notes or portable JEX archive.
 * [`conversations_xlsx.md`](conversations_xlsx.md) — convert a conversation-list
   JSON export to an Excel workbook with datetime cells, duration and filters.
 * [`conversations_sqlite.md`](conversations_sqlite.md) — import conversation-list
