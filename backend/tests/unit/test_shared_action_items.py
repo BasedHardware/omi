@@ -144,12 +144,23 @@ def test_accept_shared_tasks_success_creates_and_wakes(
     result = accept_shared_action_items(request=sample_request, uid="recipient-user-456")
 
     assert result == {"created": ["new-1", "new-2"], "count": 2}
-    # Each copy carries provenance back to the sender's original, and is indexed.
-    copied = mock_db.create_action_item.call_args_list[0].args[1]
-    assert copied["shared_from"]["sender_uid"] == share_data["uid"]
-    assert copied["shared_from"]["original_task_id"] == "task-1"
-    assert copied["completed"] is False
-    assert mock_vector.call_count == 2
+    # Every copy -- not just the first -- lands on the recipient and carries
+    # provenance back to its own original, and every copy is indexed.
+    assert [c.args[0] for c in mock_db.create_action_item.call_args_list] == [
+        "recipient-user-456",
+        "recipient-user-456",
+    ]
+    for original_task_id, copied in zip(
+        share_data["task_ids"], [c.args[1] for c in mock_db.create_action_item.call_args_list]
+    ):
+        assert copied["shared_from"]["sender_uid"] == share_data["uid"]
+        assert copied["shared_from"]["original_task_id"] == original_task_id
+        assert copied["shared_from"]["token"] == sample_request.token
+        assert copied["completed"] is False
+    assert [c.args[:2] for c in mock_vector.call_args_list] == [
+        ("recipient-user-456", "new-1"),
+        ("recipient-user-456", "new-2"),
+    ]
     mock_redis.undo_accept_task_share.assert_not_called()
     mock_wake.assert_called_once()
     assert mock_wake.call_args.args[:2] == ("recipient-user-456", ["new-1", "new-2"])
