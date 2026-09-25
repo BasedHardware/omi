@@ -1494,7 +1494,15 @@ CaptureTransition _reducePhoneStart(CaptureCoordinatorState state, PhoneStartReq
   }
   // A batch pendant's native writer owns its file under the shared policy; no
   // per-source gate exists to deny it, so the takeover is refused outright.
-  if (state.phase == CapturePhase.pendantBatchLive || state.phase == CapturePhase.pendantBatchPaused) {
+  if (state.phase == CapturePhase.pendantBatchLive ||
+      state.phase == CapturePhase.pendantBatchPaused ||
+      state.pendantSuspension?.mode == CaptureTransport.batch) {
+    return CaptureTransition(state, const []);
+  }
+  // resumePolicy:false leaves the shared policy as it stands; under a muted
+  // policy the mic body would refuse admission, so reject before minting or
+  // suspending rather than publish an owner no physical effect can open.
+  if (!event.resumePolicy && env.policyMuted) {
     return CaptureTransition(state, const []);
   }
   final mode = env.phoneTransport();
@@ -1565,6 +1573,10 @@ CapturePhase _pendantResumePhase(CaptureTransport mode, bool wasPaused) => switc
     };
 
 CaptureTransition _reducePhoneStop(CaptureCoordinatorState state, PhoneStopRequested event) {
+  if (!state.phoneOwns) {
+    // An unowned phone stop must not tear down a pendant or a call's capture.
+    return CaptureTransition(state, const []);
+  }
   final effects = <CaptureEffect>[];
   final suspended = List<SuspendedCapture>.of(state.suspended);
   final mutedBefore = event.userStop ? state.mutedBeforePhone : null;
@@ -1572,8 +1584,6 @@ CaptureTransition _reducePhoneStop(CaptureCoordinatorState state, PhoneStopReque
   if (event.userStop) effects.add(const PolicyWrite(true));
 
   final pendantSuspension = state.pendantSuspension;
-  final resumePendant =
-      event.userStop && pendantSuspension?.reason == SuspendReason.phone && event.resumeSuspendedPendant;
 
   if (state.phase == CapturePhase.phoneBatchLive || state.phase == CapturePhase.phoneBatchPaused) {
     effects.add(RunStage(StopPhoneBatchStage(reason: event.reason)));
@@ -1581,8 +1591,36 @@ CaptureTransition _reducePhoneStop(CaptureCoordinatorState state, PhoneStopReque
     effects.add(RunStage(StopPhoneLiveStage(reason: event.reason)));
   }
 
-  CapturePhase nextPhase = CapturePhase.idle;
-  ActiveCaptureSession? nextActive;
+  if (state.callActive) {
+    // The call keeps the channel: no pendant resume and no shared-policy
+    // restore until the call ends. A phone-suspended pendant becomes a call
+    // suspension with its conversation already ended by the takeover, so its
+    // session identity is cleared and the call-end resume mints fresh.
+    if (pendantSuspension != null && pendantSuspension.reason == SuspendReason.phone) {
+      suspended.remove(pendantSuspension);
+      suspended.add(SuspendedCapture(
+        source: CaptureSource.pendant,
+        reason: SuspendReason.call,
+        wasPaused: pendantSuspension.wasPaused,
+        mode: pendantSuspension.mode,
+        deviceId: pendantSuspension.deviceId ?? state.connectedDevice?.id,
+        deviceType: pendantSuspension.deviceType ?? state.connectedDevice?.type,
+      ));
+    }
+    return CaptureTransition(
+      state.copyWith(
+        phase: CapturePhase.callActive,
+        active: () => null,
+        suspended: suspended,
+        // The deferred policy restore lands when the call ends.
+        micInterrupted: false,
+      ),
+      effects,
+    );
+  }
+
+  final resumePendant =
+      event.userStop && pendantSuspension?.reason == SuspendReason.phone && event.resumeSuspendedPendant;
   if (resumePendant) {
     suspended.remove(pendantSuspension);
     if (state.connectedDevice == null) {
@@ -1593,7 +1631,7 @@ CaptureTransition _reducePhoneStop(CaptureCoordinatorState state, PhoneStopReque
           phase: CapturePhase.idle,
           active: () => null,
           suspended: suspended,
-          mutedBeforePhone: () => event.userStop ? null : state.mutedBeforePhone,
+          mutedBeforePhone: () => null,
           micInterrupted: false,
         ),
         effects,
@@ -1601,8 +1639,8 @@ CaptureTransition _reducePhoneStop(CaptureCoordinatorState state, PhoneStopReque
     }
     final seq = state.sessionSeq + 1;
     final key = 'pendant-$seq';
-    nextPhase = _pendantResumePhase(pendantSuspension!.mode, pendantSuspension.wasPaused);
-    nextActive = ActiveCaptureSession(
+    final nextPhase = _pendantResumePhase(pendantSuspension!.mode, pendantSuspension.wasPaused);
+    final nextActive = ActiveCaptureSession(
       source: CaptureSource.pendant,
       mode: pendantSuspension.mode,
       sessionKey: key,
@@ -1621,13 +1659,18 @@ CaptureTransition _reducePhoneStop(CaptureCoordinatorState state, PhoneStopReque
         phase: nextPhase,
         active: () => nextActive,
         suspended: suspended,
-        mutedBeforePhone: () => event.userStop ? null : state.mutedBeforePhone,
+        mutedBeforePhone: () => null,
         micInterrupted: false,
         sessionSeq: seq,
       ),
       effects,
     );
   }
+
+  // A suspension with no live taker (no call holding it, no resume requested)
+  // is dropped rather than stranded: the pendant's conversation already ended
+  // when the phone took over.
+  if (pendantSuspension != null) suspended.remove(pendantSuspension);
 
   effects.add(RunStage(StopPhonePolicyRestoreStage(
     mutedBefore: mutedBefore,
@@ -1637,8 +1680,9 @@ CaptureTransition _reducePhoneStop(CaptureCoordinatorState state, PhoneStopReque
 
   return CaptureTransition(
     state.copyWith(
-      phase: nextPhase,
+      phase: CapturePhase.idle,
       active: () => null,
+      suspended: suspended,
       mutedBeforePhone: () => event.userStop ? null : state.mutedBeforePhone,
       micInterrupted: false,
     ),
@@ -1662,6 +1706,28 @@ CaptureTransition _reduceFinish(CaptureCoordinatorState state) {
   if (pendantSuspension?.reason == SuspendReason.phone) {
     suspended.remove(pendantSuspension);
     if (!wasBatch) effects.add(const RunStage(ProcessConversationStage()));
+    if (state.callActive) {
+      // Same rule as a phone stop mid-call: the call keeps the channel, the
+      // pendant's conversation already ended, so only its pre-handoff identity
+      // survives to the call-end resume.
+      suspended.add(SuspendedCapture(
+        source: CaptureSource.pendant,
+        reason: SuspendReason.call,
+        wasPaused: pendantSuspension!.wasPaused,
+        mode: pendantSuspension.mode,
+        deviceId: pendantSuspension.deviceId ?? state.connectedDevice?.id,
+        deviceType: pendantSuspension.deviceType ?? state.connectedDevice?.type,
+      ));
+      return CaptureTransition(
+        state.copyWith(
+          phase: CapturePhase.callActive,
+          active: () => null,
+          suspended: suspended,
+          micInterrupted: false,
+        ),
+        effects,
+      );
+    }
     effects.add(PolicyWrite(pendantSuspension!.wasPaused));
     if (state.connectedDevice == null) {
       effects.add(RunStage(ResumeSuspendedPendantStage(wasPaused: pendantSuspension.wasPaused)));
@@ -1705,6 +1771,17 @@ CaptureTransition _reduceFinish(CaptureCoordinatorState state) {
   }
 
   if (!wasBatch) effects.add(const RunStage(ProcessConversationStage()));
+  if (state.callActive) {
+    return CaptureTransition(
+      state.copyWith(
+        phase: CapturePhase.callActive,
+        active: () => null,
+        suspended: suspended,
+        micInterrupted: false,
+      ),
+      effects,
+    );
+  }
   effects.add(RunStage(StopPhonePolicyRestoreStage(
     mutedBefore: mutedBefore,
     pendantResumeFollows: false,
@@ -1714,6 +1791,7 @@ CaptureTransition _reduceFinish(CaptureCoordinatorState state) {
     state.copyWith(
       phase: CapturePhase.idle,
       active: () => null,
+      suspended: suspended,
       mutedBeforePhone: () => null,
       micInterrupted: false,
     ),
@@ -1795,6 +1873,22 @@ CaptureTransition _reduceResume(CaptureCoordinatorState state, CaptureEnvironmen
   };
 }
 
+void _refreshPendantSuspensionDevice(List<SuspendedCapture> suspended, ConnectedDevice connected) {
+  final index = suspended.lastIndexWhere((e) => e.source == CaptureSource.pendant);
+  if (index < 0) return;
+  final entry = suspended[index];
+  suspended[index] = SuspendedCapture(
+    source: entry.source,
+    reason: entry.reason,
+    wasPaused: entry.wasPaused,
+    mode: entry.mode,
+    sessionKey: entry.sessionKey,
+    recordingId: entry.recordingId,
+    deviceId: connected.id,
+    deviceType: connected.type,
+  );
+}
+
 List<SuspendedCapture> _withPendantWasPaused(List<SuspendedCapture> suspended, bool wasPaused) {
   final next = List<SuspendedCapture>.of(suspended);
   for (var i = next.length - 1; i >= 0; i--) {
@@ -1818,7 +1912,13 @@ List<SuspendedCapture> _withPendantWasPaused(List<SuspendedCapture> suspended, b
 
 CaptureTransition _reduceOfflineMuteToggle(CaptureCoordinatorState state, CaptureEnvironment env) {
   if (env.paused) {
-    if (state.connectedDevice != null) return _reduceResume(state, env);
+    // Unmuting routes through the phase-correct resume: a paused owner really
+    // resumes, a suspended pendant only records its resume intent, and the
+    // shared policy is never flipped under another owner or a call.
+    if (state.connectedDevice != null || state.phoneOwns || state.pendantSuspension != null) {
+      return _reduceResume(state, env);
+    }
+    if (state.callActive) return CaptureTransition(state, const []);
     return CaptureTransition(state, const [PolicyWrite(false)]);
   }
   return _reduceDevicePause(state);
@@ -1837,15 +1937,21 @@ CaptureTransition _reduceDeviceStart(
   if (state.phoneOwns || state.callActive) {
     // The phone or a call has the capture: remember the pendant and start it
     // when that ends. Its transcript and session stay intact.
-    if (connected != null && state.pendantSuspension == null) {
-      suspended.add(SuspendedCapture(
-        source: CaptureSource.pendant,
-        reason: state.phoneOwns ? SuspendReason.phone : SuspendReason.call,
-        wasPaused: state.phoneOwns ? (state.mutedBeforePhone ?? false) : env.paused,
-        mode: env.batchModeEnabled ? CaptureTransport.batch : CaptureTransport.live,
-        deviceId: connected.id,
-        deviceType: connected.type,
-      ));
+    if (connected != null) {
+      if (state.pendantSuspension == null) {
+        suspended.add(SuspendedCapture(
+          source: CaptureSource.pendant,
+          reason: state.phoneOwns ? SuspendReason.phone : SuspendReason.call,
+          wasPaused: state.phoneOwns ? (state.mutedBeforePhone ?? false) : env.paused,
+          mode: env.batchModeEnabled ? CaptureTransport.batch : CaptureTransport.live,
+          deviceId: connected.id,
+          deviceType: connected.type,
+        ));
+      } else {
+        // No duplicate debt: a repeated start only refreshes the resume target
+        // to the device the user actually asked for.
+        _refreshPendantSuspensionDevice(suspended, connected);
+      }
     }
     return CaptureTransition(
       state.copyWith(
@@ -1863,12 +1969,36 @@ CaptureTransition _reduceDeviceStart(
   }
 
   if (state.pendantSuspension != null) {
-    // A suspended pendant stays quiet until its owner releases it; publish no
-    // new owner for a start whose open effects the stage would skip.
-    return CaptureTransition(
-      state.copyWith(connectedDevice: () => connected),
-      effects,
-    );
+    // No owner holds the channel (phone and call were both excluded above), so
+    // the debt has no taker: a preserved call session resumes as-is, anything
+    // else is dropped and the start below opens a fresh session.
+    final index = suspended.lastIndexWhere((e) => e.source == CaptureSource.pendant);
+    final entry = suspended[index];
+    suspended.removeAt(index);
+    // A call suspension preserves its conversation; a phone suspension's
+    // conversation already ended at takeover, so it starts fresh.
+    if (entry.reason == SuspendReason.call && entry.sessionKey != null) {
+      if (entry.wasPaused != env.policyMuted) {
+        effects.add(PolicyWrite(entry.wasPaused));
+      }
+      effects.add(RunStage(ResumeSuspendedPendantStage(wasPaused: entry.wasPaused)));
+      return CaptureTransition(
+        state.copyWith(
+          phase: _pendantResumePhase(entry.mode, entry.wasPaused),
+          active: () => ActiveCaptureSession(
+            source: CaptureSource.pendant,
+            mode: entry.mode,
+            sessionKey: entry.sessionKey!,
+            recordingId: entry.recordingId,
+            deviceId: connected.id,
+            deviceType: connected.type,
+          ),
+          suspended: suspended,
+          connectedDevice: () => connected,
+        ),
+        effects,
+      );
+    }
   }
 
   final seq = state.sessionSeq + 1;
@@ -1894,6 +2024,7 @@ CaptureTransition _reduceDeviceStart(
         deviceId: connected.id,
         deviceType: connected.type,
       ),
+      suspended: suspended,
       connectedDevice: () => connected,
       sessionSeq: seq,
       lastFailure: () => null,
@@ -1947,32 +2078,25 @@ CaptureTransition _reduceDeviceUpdated(CaptureCoordinatorState state, DeviceUpda
       if (state.phase == CapturePhase.pendantBatchLive || state.phase == CapturePhase.pendantBatchPaused) {
         effects.add(const PolicyWrite(true));
       }
+      // The full pendant teardown (BLE streams, WAL finalize, recording state,
+      // device identity, telemetry) runs in the stage; the socket close stays
+      // an ordered effect so no stage duplicates it.
       effects
         ..add(const NativeWriterGate(source: CaptureSource.pendant, admitted: false))
-        ..add(const BleStreamStop(disableNativeBackground: true))
-        ..add(const SocketClose('device disconnected'));
+        ..add(const RunStage(StopDeviceSessionStage(cleanDevice: true)))
+        ..add(const SocketClose('device disconnected'))
+        ..add(const RunStage(DeviceStopTelemetryStage(cleanDevice: true)));
+    } else {
+      effects.add(RunStage(UpdateRecordingDeviceStage(device)));
     }
   } else {
     if (active != null && active.source == CaptureSource.pendant) {
       active = active.copyWith(deviceId: connected.id, deviceType: connected.type);
     }
-    final index = suspended.lastIndexWhere((e) => e.source == CaptureSource.pendant);
-    if (index >= 0) {
-      final entry = suspended[index];
-      suspended[index] = SuspendedCapture(
-        source: entry.source,
-        reason: entry.reason,
-        wasPaused: entry.wasPaused,
-        mode: entry.mode,
-        sessionKey: entry.sessionKey,
-        recordingId: entry.recordingId,
-        deviceId: connected.id,
-        deviceType: connected.type,
-      );
-    }
+    _refreshPendantSuspensionDevice(suspended, connected);
+    effects.add(RunStage(UpdateRecordingDeviceStage(device)));
   }
 
-  effects.add(RunStage(UpdateRecordingDeviceStage(device)));
   return CaptureTransition(
     state.copyWith(
       phase: phase,
@@ -2030,10 +2154,15 @@ CaptureTransition _reduceDeviceResume(CaptureCoordinatorState state, CaptureEnvi
 
 CaptureTransition _reduceCall(CaptureCoordinatorState state, CaptureEnvironment env) {
   if (env.callActive) {
-    if (!state.pendantHoldsCapture) {
+    if (state.callActive) {
+      // A repeated call-start or reconnect while the call already holds adds
+      // no suspension debt.
+      return CaptureTransition(state, const []);
+    }
+    if (!state.pendantOwns) {
       return CaptureTransition(state.copyWith(callActive: true), const []);
     }
-    final wasPaused = state.phase == CapturePhase.pendantPaused;
+    final wasPaused = state.phase == CapturePhase.pendantPaused || state.phase == CapturePhase.pendantBatchPaused;
     final suspended = List<SuspendedCapture>.of(state.suspended)
       ..add(SuspendedCapture(
         source: CaptureSource.pendant,
@@ -2045,6 +2174,12 @@ CaptureTransition _reduceCall(CaptureCoordinatorState state, CaptureEnvironment 
         deviceId: state.active?.deviceId ?? state.connectedDevice?.id,
         deviceType: state.active?.deviceType ?? state.connectedDevice?.type,
       ));
+    final effects = <CaptureEffect>[
+      if (state.active?.mode == CaptureTransport.batch) const PolicyWrite(true),
+      const NativeWriterGate(source: CaptureSource.pendant, admitted: false),
+      const BleStreamStop(disableNativeBackground: true),
+    ];
+    effects.add(RunStage(SuspendPendantStage(reason: SuspendReason.call, wasPaused: wasPaused)));
     return CaptureTransition(
       state.copyWith(
         phase: CapturePhase.callActive,
@@ -2052,50 +2187,96 @@ CaptureTransition _reduceCall(CaptureCoordinatorState state, CaptureEnvironment 
         suspended: suspended,
         callActive: true,
       ),
-      [
-        const NativeWriterGate(source: CaptureSource.pendant, admitted: false),
-        const BleStreamStop(disableNativeBackground: true),
-        RunStage(SuspendPendantStage(reason: SuspendReason.call, wasPaused: wasPaused)),
-      ],
+      effects,
     );
   }
 
   final suspended = List<SuspendedCapture>.of(state.suspended);
+  final mutedBeforePhone = state.mutedBeforePhone;
   final index = suspended.lastIndexWhere((e) => e.source == CaptureSource.pendant && e.reason == SuspendReason.call);
-  if (index < 0) {
-    return CaptureTransition(state.copyWith(callActive: false), const []);
+  // A call that ends while the phone still owns capture releases nothing —
+  // any suspension stays until the phone itself stops.
+  if (index < 0 || state.phoneOwns) {
+    return CaptureTransition(
+      state.copyWith(
+        phase: state.phase == CapturePhase.callActive ? CapturePhase.idle : state.phase,
+        callActive: false,
+        // The phone's deferred policy restore is still owned by its stop.
+        mutedBeforePhone: () => state.phoneOwns ? mutedBeforePhone : null,
+      ),
+      [
+        if (!state.phoneOwns && mutedBeforePhone != null) PolicyWrite(mutedBeforePhone),
+      ],
+    );
   }
   final entry = suspended.removeAt(index);
+  // A phone suspension only lives while the phone owns capture; clear any
+  // straggler so an idle result never carries debt with no taker.
+  suspended.removeWhere((e) => e.source == CaptureSource.pendant && e.reason == SuspendReason.phone);
   final effects = <CaptureEffect>[];
-  if (entry.wasPaused != env.paused) {
+  if (entry.wasPaused != env.policyMuted) {
     effects.add(PolicyWrite(entry.wasPaused));
   }
-  effects.add(RunStage(ResumeSuspendedPendantStage(wasPaused: entry.wasPaused)));
 
   if (state.connectedDevice == null) {
+    effects.add(RunStage(ResumeSuspendedPendantStage(wasPaused: entry.wasPaused)));
     return CaptureTransition(
       state.copyWith(
         phase: CapturePhase.idle,
         active: () => null,
         suspended: suspended,
         callActive: false,
+        mutedBeforePhone: () => null,
       ),
       effects,
     );
   }
+
+  if (entry.sessionKey == null) {
+    // The phone ended this pendant's conversation when it took over during the
+    // call, so the resume starts a fresh session with a newly minted id.
+    final seq = state.sessionSeq + 1;
+    final key = 'pendant-$seq';
+    effects
+      ..add(MintRecording(
+        sessionKey: key,
+        telemetrySource: entry.mode == CaptureTransport.batch ? 'pendant_batch' : 'pendant_live',
+      ))
+      ..add(const RunStage(StartDeviceSessionStage(deviceRequested: true, promptLocation: false)));
+    return CaptureTransition(
+      state.copyWith(
+        phase: _pendantResumePhase(entry.mode, entry.wasPaused),
+        active: () => ActiveCaptureSession(
+          source: CaptureSource.pendant,
+          mode: entry.mode,
+          sessionKey: key,
+          deviceId: entry.deviceId ?? state.connectedDevice?.id,
+          deviceType: entry.deviceType ?? state.connectedDevice?.type,
+        ),
+        suspended: suspended,
+        callActive: false,
+        mutedBeforePhone: () => null,
+        sessionSeq: seq,
+      ),
+      effects,
+    );
+  }
+
+  effects.add(RunStage(ResumeSuspendedPendantStage(wasPaused: entry.wasPaused)));
   return CaptureTransition(
     state.copyWith(
       phase: _pendantResumePhase(entry.mode, entry.wasPaused),
       active: () => ActiveCaptureSession(
         source: CaptureSource.pendant,
         mode: entry.mode,
-        sessionKey: entry.sessionKey ?? 'pendant-${state.sessionSeq}',
+        sessionKey: entry.sessionKey!,
         recordingId: entry.recordingId,
-        deviceId: entry.deviceId,
-        deviceType: entry.deviceType,
+        deviceId: entry.deviceId ?? state.connectedDevice?.id,
+        deviceType: entry.deviceType ?? state.connectedDevice?.type,
       ),
       suspended: suspended,
       callActive: false,
+      mutedBeforePhone: () => null,
     ),
     effects,
   );

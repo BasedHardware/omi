@@ -3,7 +3,12 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/backend/schema/phone_call.dart';
+import 'package:omi/gen/phone_mic_pigeon.g.dart';
 import 'package:omi/services/capture/capture_coordinator.dart';
+
+import '../../support/capture/capture_replay_world.dart';
+import '../../support/capture/scripted_device_connection.dart';
 
 final pendant = BtDevice(id: 'pendant-1', name: 'Omi', type: DeviceType.omi, rssi: -40);
 
@@ -41,6 +46,7 @@ class HarnessPorts {
   String? recordingId;
   Completer<void>? hold;
   bool failNextOpen = false;
+  bool failNextSnapshot = false;
   final log = <String>[];
 
   Future<void> _record(String name) async {
@@ -96,6 +102,10 @@ class HarnessPorts {
         readSnapshot: () => snapshot,
         persistSnapshot: (encoded) async {
           await _record('snapshot');
+          if (failNextSnapshot) {
+            failNextSnapshot = false;
+            throw StateError('synthetic snapshot failure');
+          }
           snapshot = encoded;
         },
         runStage: (stage) async {
@@ -364,6 +374,18 @@ void main() {
       steps: [16, 0, 2],
       phase: CapturePhase.pendantBatchLive
     ),
+    (
+      name: 'batch pendant suspended for call cannot be taken by phone without native gate',
+      steps: [16, 0, 6, 0, 2, 7],
+      phase: CapturePhase.pendantBatchLive
+    ),
+    (
+      name: 'call end while phone owns does not resume pendant early',
+      steps: [0, 6, 2, 7],
+      phase: CapturePhase.phoneLive
+    ),
+    (name: 'phone stop resumes a pendant connected during capture', steps: [2, 0, 3], phase: CapturePhase.pendantLive),
+    (name: 'deferred Omi call does not pause a live phone mic', steps: [2, 6], phase: CapturePhase.phoneLive),
     (name: 'phone interruption restores the same owner', steps: [2, 13, 14], phase: CapturePhase.phoneLive),
     (name: 'no resumed pendant after disconnect during phone handoff', steps: [0, 2, 1, 3], phase: CapturePhase.idle),
   ]) {
@@ -417,6 +439,118 @@ void main() {
             CaptureCoordinatorState.idle().encode().replaceFirst('"phase":"idle"', '"phase":"phoneLive"')),
         isNull);
   });
+
+  test('socket error during a delayed pause cannot restart the mic', () async {
+    final fake = HarnessPorts();
+    late CaptureCoordinator coordinator;
+    coordinator = CaptureCoordinator(
+      ports: fake.ports,
+      readEnvironment: () => environment(coordinator.state, muted: fake.muted),
+    );
+    expect((await coordinator.dispatch(const PhoneStartRequested())).failed, isFalse);
+    final held = fake.hold = Completer<void>();
+    final pause = coordinator.dispatch(const PauseCaptureRequested());
+    final socketError = coordinator.dispatch(SocketError(StateError('socket dropped during pause')));
+    final reconnect = coordinator.dispatch(const SocketConnected());
+    await Future<void>.delayed(Duration.zero);
+    expect(fake.log.last, 'policy:true');
+    held.complete();
+    expect((await pause).failed, isFalse);
+    expect((await socketError).failed, isFalse);
+    expect((await reconnect).failed, isFalse);
+    expect(coordinator.state.phase, CapturePhase.phonePaused);
+    expect(fake.mic, isFalse);
+    expect(fake.log.where((line) => line == 'mic:start'), hasLength(0));
+    expect(fake.socket, isTrue);
+    coordinator.dispose();
+  });
+
+  test('failed socket reopen and failed snapshot both deny physical capture before idle', () async {
+    final fake = HarnessPorts();
+    late CaptureCoordinator coordinator;
+    coordinator = CaptureCoordinator(
+      ports: fake.ports,
+      readEnvironment: () => environment(coordinator.state, muted: fake.muted),
+    );
+    await coordinator.dispatch(const PhoneStartRequested());
+    await coordinator.dispatch(const PauseCaptureRequested());
+    fake.socket = false;
+    fake.failNextOpen = true;
+    final failedSocket = await coordinator.dispatch(const ResumeCaptureRequested());
+    expect(failedSocket.failed, isTrue);
+    expect(coordinator.state.phase, CapturePhase.idle);
+    expect(fake.mic, isFalse);
+    expect(fake.ble, isFalse);
+    expect(fake.socket, isFalse);
+    expect(CaptureCoordinatorState.tryParse(fake.snapshot)?.phase, CapturePhase.idle);
+    fake.failNextSnapshot = true;
+    final failedSnapshot = await coordinator.dispatch(const PhoneStartRequested());
+    expect(failedSnapshot.failed, isTrue);
+    expect(coordinator.state.phase, CapturePhase.idle);
+    expect(fake.mic, isFalse);
+    expect(fake.socket, isFalse);
+    expect(CaptureCoordinatorState.tryParse(fake.snapshot)?.phase, CapturePhase.idle);
+    coordinator.dispose();
+  });
+
+  for (final episode in <({String name, List<int> steps})>[
+    (name: 'phone-pause', steps: [2, 4, 5, 3]),
+    (name: 'pendant-handoff', steps: [0, 2, 3]),
+    (name: 'call-suspension', steps: [0, 6, 7]),
+    (name: 'reconnect-under-phone', steps: [2, 0, 3]),
+  ]) {
+    test('real CaptureController agrees with reducer: ${episode.name}', () async {
+      final directory = await Directory.systemTemp.createTemp('capture_coordinator_conformance_');
+      final world = await CaptureReplayWorld.boot(tempDir: directory);
+      final model = SequenceModel();
+      try {
+        for (final code in episode.steps) {
+          switch (code) {
+            case 0:
+              world.deviceConnection = ScriptedDeviceConnection();
+              await world.controller.streamDeviceRecording(device: pendant);
+            case 2:
+              await world.startLiveCapture();
+              world.emitNativeState(PhoneMicCaptureState.running);
+            case 3:
+              await world.stopLiveCapture();
+            case 4:
+              await world.controller.pauseCapture();
+            case 5:
+              await world.controller.resumeCapture();
+            case 6:
+              world.omiCall.value = PhoneCallState.active;
+              await world.controller.pendingSourceSwitch;
+            case 7:
+              world.omiCall.value = PhoneCallState.ended;
+              await world.controller.pendingSourceSwitch;
+          }
+          await world.settle();
+          model.step(ScriptStep(code));
+          final state = model.state;
+          expect(
+              world.controller.liveCaptureSource,
+              state.phoneOwns
+                  ? 'phone'
+                  : state.pendantOwns
+                      ? 'omi'
+                      : null,
+              reason: '${episode.name} after ${ScriptStep(code)}');
+          expect(world.controller.pendantPausedForPhone, state.pendantSuspension?.reason == SuspendReason.phone,
+              reason: '${episode.name} after ${ScriptStep(code)}');
+          expect(world.controller.pendantPausedForCall, state.pendantSuspension?.reason == SuspendReason.call,
+              reason: '${episode.name} after ${ScriptStep(code)}');
+          if (state.phase == CapturePhase.phonePaused) {
+            expect(world.controller.isPhoneMicPaused, isTrue);
+            expect(world.hostApi.stopCalls, greaterThan(0));
+          }
+        }
+      } finally {
+        await world.dispose();
+        if (directory.existsSync()) directory.deleteSync(recursive: true);
+      }
+    });
+  }
 
   test('serialized dispatch waits for the earlier effect and survives a failing port', () async {
     final fake = HarnessPorts();

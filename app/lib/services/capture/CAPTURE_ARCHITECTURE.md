@@ -51,6 +51,16 @@ A pendant suspended for the phone processes its conversation **before** the
 phone session opens; a pendant suspended for a call preserves its conversation
 id and only resumes if the user had not paused it.
 
+If the phone stops or finishes while a call is still active, its phone-reason
+suspension converts to a call suspension: `wasPaused`, device identity and
+mode are preserved, but the session identity is cleared — the phone takeover
+already ended that conversation — so the call-end resume mints a fresh
+recording id. A call suspension that was never taken over keeps its session
+identity and resumes without a roll. Repeated call-start or reconnect events
+while a call already holds add no debt, a repeated pendant start under an
+owner only refreshes the suspended entry's device identity, and a suspension
+with no live taker is dropped rather than stranded on idle.
+
 ### Flags
 
 - `connectedDevice` — last pendant identity reported by the device provider.
@@ -185,16 +195,46 @@ fresh launch (the launch-marker path recovers it deliberately). Only
   "paused source has no active transport", enforced by also stopping the
   native mic and flushing frames so no audio crosses while paused.
 - A call during active pendant capture suspends the pendant; a call ending
-  while the phone owns capture does not resume it.
-- A pendant reconnect during a call preserves the conversation id; `finish`
-  processes the phone conversation before the pendant reopens.
-- A pendant disconnect while the pendant owns capture emits physical teardown
-  (writer-gate deny, BLE stop, socket close) before the idle commit; while the
-  phone owns capture the phone session is untouched.
+  while the phone owns capture does not resume it — the phone suspension
+  survives until the phone itself stops.
+- While a call is active, `PhoneStopRequested`/`FinishRequested` stop and
+  process the phone but do not reopen the pendant or restore the shared
+  policy: the target is `callActive` with no owner, and the pendant's
+  suspension converts to call-reason debt. The call-end transition pops
+  exactly one suspension and resumes it.
+- A pendant suspended purely for a call keeps its conversation id across a
+  reconnect; one whose conversation a phone takeover already ended resumes
+  post-call under a fresh minted id. `finish` always processes the phone
+  conversation before the pendant may reopen.
+- A pendant disconnect while the pendant owns capture runs the full physical
+  teardown — writer-gate deny, `StopDeviceSessionStage` (BLE streams, WAL
+  finalize, recording state, device identity), socket close, then telemetry
+  completion — before the idle commit; while the phone or a call owns capture
+  only the pendant identity is cleared and the owner is untouched.
 - Phone-stop/-finish policy: the stop's forced mute is always followed by a
   restore of the suspended pendant's prior policy (`wasPaused`), ordered after
   the phone teardown, so a previously-live pendant comes back unmuted and a
-  previously-paused one stays muted.
+  previously-paused one stays muted — unless a call still holds the channel,
+  in which case no restore runs and the call-end resume applies `wasPaused`.
+- `PhoneStopRequested`/`FinishRequested` with no phone owner is a no-op: it
+  never runs a stop stage or a policy write against a pendant or a call.
+  (`FinishRequested` still runs `ProcessConversationStage` — finishing a
+  pendant conversation is a processing request, not an ownership claim.)
+- `OfflineMuteToggled` routes through the phase-correct pause/resume
+  reducers: it cannot flip the shared policy under a paused or batch phone
+  owner, another owner, or a call; the bare `PolicyWrite(false)` remains only
+  for the idle offline-unmute case.
+- `PhoneStartRequested` with `resumePolicy: false` under a muted shared
+  policy is rejected before minting, so no owner is published for a start
+  whose mic body would refuse admission.
+- Recording ids are minted only through the `MintRecording` effect /
+  `mintRecordingId` port; staged session bodies no longer call
+  `RecordingLifecycleTelemetry.prepare`, so the minted id folded into the
+  session is never replaced mid-transition. `mode_changed` rolls mint their
+  replacement id in the same transition.
+- A failed `mode_changed` session roll inside `BatchModeStage` reports the
+  failure (`CaptureStageFailure` or throw) so the transition fails closed
+  instead of publishing a new owner under hardware that never started.
 - Batch pendants never hand off until a native per-source writer gate exists:
   a phone start over `pendantBatchLive`/`pendantBatchPaused` is refused, and a
   batch-capable pendant connecting during phone capture does not activate a

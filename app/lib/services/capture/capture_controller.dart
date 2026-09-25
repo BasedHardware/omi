@@ -828,7 +828,7 @@ class CaptureController extends ChangeNotifier
     return outcome.result as bool? ?? outcome.admitted;
   }
 
-  Future<bool> _setBatchModeBody({required bool enabled, required CaptureTransport? rolledPhoneMode}) async {
+  Future<Object?> _setBatchModeBody({required bool enabled, required CaptureTransport? rolledPhoneMode}) async {
     if (_preferences.batchModeEnabled == enabled) return true;
     // With batch on the realtime socket is suppressed for every device type, so a
     // device without a batch capture path would record nothing at all.
@@ -852,6 +852,8 @@ class CaptureController extends ChangeNotifier
     // silently diverted to the offline WAL) and the UI keeps the Live card.
     // A paused phone recording keeps the mode it started in; rolling it would restart capture
     // under the pause's mute and strand it. The new mode applies to the next recording.
+    // A failed roll is reported so the transition fails closed instead of
+    // publishing a new owner under hardware that never started.
     if (rolledPhoneMode != null) {
       try {
         if (rolledPhoneMode == CaptureTransport.batch) {
@@ -859,9 +861,11 @@ class CaptureController extends ChangeNotifier
         } else {
           await _stopPhoneLiveBody(reason: 'mode_changed');
         }
-        await _startPhoneSessionBody(mode: _readCaptureEnvironment().phoneTransport());
+        final started = await _startPhoneSessionBody(mode: _readCaptureEnvironment().phoneTransport());
+        if (started is CaptureStageFailure) return started;
       } catch (e, st) {
         Logger.error('[CaptureProvider] mode-switch session roll failed: $e\n$st');
+        return CaptureStageFailure(e);
       }
       return true;
     }
@@ -1779,7 +1783,10 @@ class CaptureController extends ChangeNotifier
   }
 
   Future<void> _ensureDeviceSocketConnection() async {
-    if (_recordingDevice == null || _pendantSuspension != null) {
+    if (_recordingDevice == null ||
+        _pendantSuspension != null ||
+        _phoneOwnsCapture ||
+        _capture.stagedReadModel.callActive) {
       return;
     }
     BleAudioCodec codec = await _getAudioCodec(_recordingDevice!.id);
@@ -1815,7 +1822,7 @@ class CaptureController extends ChangeNotifier
 
   Future<void> _initiateDeviceAudioStreaming() async {
     final device = _recordingDevice;
-    if (device == null || _pendantSuspension != null) {
+    if (device == null || _pendantSuspension != null || _phoneOwnsCapture || _capture.stagedReadModel.callActive) {
       return;
     }
     final deviceId = device.id;
@@ -2216,9 +2223,12 @@ class CaptureController extends ChangeNotifier
 
   Future<Object?> _startPhoneSessionBody({required CaptureTransport mode}) async {
     final revision = _preferences.capturePolicy.revision;
-    if (!_admitsCapture(revision)) return null;
+    // Returning null here would publish a phone owner whose mic never opened.
+    if (!_admitsCapture(revision)) return const CaptureStageFailure('not_admitted');
     await _setCaptureForegroundRequired(true);
-    if (_sessionOwner != null && !_sessionOwner!.foregroundRunning) return null;
+    if (_sessionOwner != null && !_sessionOwner!.foregroundRunning) {
+      return const CaptureStageFailure('foreground_not_running');
+    }
     _sessionRecordingDevice = null;
     // Drain any tail from the preceding phone session before replacing its
     // location. A stale session snapshot must never be applied to a later WAL.
@@ -2230,13 +2240,8 @@ class CaptureController extends ChangeNotifier
     // enabled it, or automatically as an offline fallback when there is no
     // network. Both write .bin files natively instead of opening the realtime socket.
     if (mode == CaptureTransport.batch) {
-      _recordingTelemetry.prepare(
-        source: _preferences.batchModeEnabled ? 'phone_mic_batch' : 'phone_mic_batch_auto',
-      );
       return _startPhoneMicBatchBody(auto: !_preferences.batchModeEnabled);
     }
-
-    _recordingTelemetry.prepare(source: 'phone_mic_live');
 
     updateRecordingState(RecordingState.initialising);
     final micPermissionGranted =
@@ -2551,13 +2556,6 @@ class CaptureController extends ChangeNotifier
       await _restoreBatchAfterOnboardingBody();
     }
     _sessionRecordingDevice = _recordingDevice;
-
-    // HomePage calls this with device == null on every entry as a check-only
-    // path. That must not mint a recording ID or emit Recording Start Failed —
-    // a missing pendant is not a failed start.
-    if (deviceRequested) {
-      _recordingTelemetry.prepare(source: _preferences.batchModeEnabled ? 'pendant_batch' : 'pendant_live');
-    }
 
     // Product: recording is the tap; location is metadata. Do not block
     // device connect/start on the OS location dialog. Location still PATCHes
