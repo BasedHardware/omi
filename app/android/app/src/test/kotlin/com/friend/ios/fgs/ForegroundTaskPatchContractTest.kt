@@ -9,6 +9,8 @@ import org.junit.Test
 class ForegroundTaskPatchContractTest {
     private val stockService = """
         class ForegroundService : Service() {
+            private var isTimeout: Boolean = false
+
             override fun onCreate() {
                 super.onCreate()
                 registerBroadcastReceiver()
@@ -45,6 +47,8 @@ class ForegroundTaskPatchContractTest {
                 RestartReceiver.cancelRestartAlarm(this)
                 stopForeground(true)
                 stopSelf()
+
+                _isRunningServiceState.update { false }
             }
 
             private fun startForegroundService() {
@@ -108,5 +112,15 @@ class ForegroundTaskPatchContractTest {
         val coldStart = source.substringAfter("private fun promoteColdStart()").substringBefore("private fun startForegroundService()")
         assertTrue(coldStart.indexOf("fallbackContractNotification()") < coldStart.indexOf("startForeground("))
         assertTrue(!coldStart.contains("notificationOptions"))
+    }
+
+    @Test
+    fun `stop preserves a newer pending foreground start`() {
+        val source = patchedService()
+        val start = source.substringAfter("override fun onStartCommand").substringBefore("override fun onTaskRemoved")
+        assertTrue(start.indexOf("promoteColdStart()") < start.indexOf("lastDeliveredStartId = startId"))
+        val stop = source.substringAfter("private fun stopForegroundService()").substringBefore("private fun promoteForeground(")
+        assertTrue(stop.contains("stopSelf(lastDeliveredStartId)"))
+        assertTrue(!stop.contains("\n        stopSelf()"))
     }
 }
