@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 
-import 'package:omi/utils/ui_guidelines.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 /// Placeholder rows shown while an app search is running.
@@ -46,15 +46,15 @@ class _SearchProgressBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: AppStyles.spacingL),
+    return const Padding(
+      padding: EdgeInsets.only(bottom: OmiSpacing.md),
       child: LinearProgressIndicator(
         // Indeterminate: a search has no known duration, and a determinate bar
         // would have to invent a percentage that then appears to stall.
         minHeight: 3,
-        backgroundColor: AppStyles.backgroundSecondary,
-        valueColor: const AlwaysStoppedAnimation<Color>(AppStyles.textPrimary),
-        borderRadius: BorderRadius.circular(AppStyles.radiusSmall),
+        backgroundColor: OmiColors.surface1,
+        valueColor: AlwaysStoppedAnimation<Color>(OmiColors.textPrimary),
+        borderRadius: OmiRadius.smAll,
       ),
     );
   }
@@ -66,20 +66,20 @@ class _ShimmerListItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ShimmerWithTimeout(
-      baseColor: AppStyles.backgroundSecondary,
-      highlightColor: AppStyles.backgroundTertiary,
+      baseColor: OmiColors.surface1,
+      highlightColor: OmiColors.surface2,
       child: Container(
-        padding: const EdgeInsets.all(16),
-        margin: const EdgeInsets.only(bottom: 8),
-        decoration: BoxDecoration(color: AppStyles.backgroundSecondary, borderRadius: BorderRadius.circular(16)),
+        padding: const EdgeInsets.all(OmiSpacing.md),
+        margin: const EdgeInsets.only(bottom: OmiSpacing.xs),
+        decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
         child: Row(
           children: [
             Container(
               width: 60,
               height: 60,
-              decoration: BoxDecoration(color: AppStyles.backgroundTertiary, borderRadius: BorderRadius.circular(12)),
+              decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
             ),
-            const SizedBox(width: 16),
+            const SizedBox(width: OmiSpacing.md),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -87,28 +87,22 @@ class _ShimmerListItem extends StatelessWidget {
                   Container(
                     width: double.infinity,
                     height: 18,
-                    decoration: BoxDecoration(
-                      color: AppStyles.backgroundTertiary,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
+                    decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
                   ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: OmiSpacing.xs),
                   Container(
                     width: 150,
                     height: 14,
-                    decoration: BoxDecoration(
-                      color: AppStyles.backgroundTertiary,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
+                    decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
                   ),
                 ],
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: OmiSpacing.sm),
             Container(
               width: 72,
               height: 32,
-              decoration: BoxDecoration(color: AppStyles.backgroundTertiary, borderRadius: BorderRadius.circular(16)),
+              decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.lgAll),
             ),
           ],
         ),

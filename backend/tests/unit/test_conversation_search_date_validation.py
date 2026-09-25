@@ -704,7 +704,7 @@ def test_finalize_conversation_persists_durable_work_and_returns_without_process
         'test-uid',
         'conv-1',
         has_byok_keys=False,
-        force_process=True,
+        trigger=conv.ProcessingTrigger.CLIENT_FINALIZE,
         extra_updates=None,
         require_cloud_tasks=True,
         client_kind='mobile_ios',

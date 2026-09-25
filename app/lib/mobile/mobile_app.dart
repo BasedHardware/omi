@@ -10,6 +10,7 @@ import 'package:omi/pages/onboarding/wrapper.dart';
 import 'package:omi/providers/auth_provider.dart';
 import 'package:omi/services/account_cutover/account_cutover_blocking_gate.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class MobileApp extends StatefulWidget {
@@ -101,10 +102,7 @@ class _PermissionsGateState extends State<_PermissionsGate> {
   @override
   Widget build(BuildContext context) {
     if (_permissionsGranted == null) {
-      return const Scaffold(
-        backgroundColor: Colors.black,
-        body: Center(child: CircularProgressIndicator(color: Colors.white)),
-      );
+      return const Scaffold(backgroundColor: OmiColors.surface0, body: Center(child: OmiSpinner()));
     }
     if (_permissionsGranted!) {
       return const HomePageWrapper();

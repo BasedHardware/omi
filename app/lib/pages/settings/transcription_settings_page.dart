@@ -6,7 +6,6 @@ import 'package:omi/utils/error_message.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import 'package:device_info_plus/device_info_plus.dart';
 import 'package:disk_space_2/disk_space_2.dart';
@@ -19,14 +18,21 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/models/custom_stt_config.dart';
 import 'package:omi/models/stt_provider.dart';
+import 'package:omi/pages/settings/transcription/json_editor_page.dart';
+import 'package:omi/pages/settings/transcription/stt_language.dart';
+import 'package:omi/pages/settings/transcription/transcription_dialogs.dart';
+import 'package:omi/pages/settings/transcription/transcription_fields.dart';
+import 'package:omi/pages/settings/transcription/transcription_sections.dart';
 import 'package:omi/pages/settings/usage_page.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/home_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
-import 'package:omi/services/custom_stt_log_service.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/sockets/transcription_service.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/other/temp.dart';
 
 /// Top-level transcription source the user picks from the single dropdown.
 enum TranscriptionMode { omi, onDevice, cloudProvider, omiParakeet }
@@ -45,7 +51,6 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   bool _omiParakeet = false;
   SttProvider _selectedProvider = SttProvider.openai;
   bool _showAdvanced = false;
-  bool _showLogs = true;
   bool _isSaving = false;
   bool _sendRawAudioToOmi = true;
   String? _validationError;
@@ -79,9 +84,24 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
 
   bool _showApiKey = false;
 
+  // Per-provider language override; a provider without one follows the primary language.
+  final Map<SttProvider, bool> _languageOverridden = {};
+
   SttProviderConfig get _currentConfig => SttProviderConfig.get(_selectedProvider);
   CustomSttConfig? get _currentProviderConfig => _configsPerProvider[_selectedProvider];
-  String get _currentLanguage => _currentProviderConfig?.language ?? _currentConfig.defaultLanguage;
+  String get _currentLanguage => _languageFor(_selectedProvider);
+  String get _primaryLanguage => SharedPreferencesUtil().userPrimaryLanguage;
+
+  bool _isLanguageOverridden(SttProvider provider) =>
+      _languageOverridden[provider] ??= SttLanguage.isOverridden(provider, saved: _configsPerProvider[provider]);
+
+  /// The provider's own language when overridden, else the primary language in its codes.
+  String _languageFor(SttProvider provider) {
+    final derived = SttLanguage.derived(provider, _primaryLanguage);
+    if (!_isLanguageOverridden(provider)) return derived;
+    return _configsPerProvider[provider]?.language ?? derived;
+  }
+
   String get _currentModel => _currentProviderConfig?.model ?? _currentConfig.defaultModel;
   String get _currentRequestJson => _requestJsonPerProvider[_selectedProvider] ?? '{}';
   String get _currentSchemaJson => _schemaJsonPerProvider[_selectedProvider] ?? '{}';
@@ -207,46 +227,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       _hasShownDebugWarning = true;
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Row(
-                children: [
-                  const Icon(Icons.warning_amber_rounded, color: Colors.white, size: 28),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          context.l10n.debugModeDetected,
-                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                        ),
-                        const SizedBox(height: 2),
-                        Text(context.l10n.performanceReduced, style: const TextStyle(fontSize: 12)),
-                        const SizedBox(height: 4),
-                        TweenAnimationBuilder<double>(
-                          tween: Tween(begin: 10.0, end: 0.0),
-                          duration: const Duration(seconds: 10),
-                          builder: (context, value, child) {
-                            return Text(
-                              context.l10n.autoClosingInSeconds(value.toInt()),
-                              style: const TextStyle(fontSize: 10, color: Colors.white70),
-                            );
-                          },
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-              backgroundColor: Colors.orange.shade900,
-              duration: const Duration(seconds: 10),
-              behavior: SnackBarBehavior.floating,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              margin: const EdgeInsets.all(16),
-            ),
-          );
+          OmiFeedback.info(context, '${context.l10n.debugModeDetected}. ${context.l10n.performanceReduced}');
         }
       });
     }
@@ -261,7 +242,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       if (hasCustomRequest) {
         final defaults = providerDefaults.buildRequestConfig(
           apiKey: config.apiKey,
-          language: config.language ?? providerDefaults.defaultLanguage,
+          language: _languageFor(_selectedProvider),
           model: config.model ?? providerDefaults.defaultModel,
         );
 
@@ -342,7 +323,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     final savedConfig = _configsPerProvider[provider];
 
     final apiKey = savedConfig?.apiKey ?? _apiKeyController.text;
-    final language = savedConfig?.language ?? providerDefaults.defaultLanguage;
+    final language = _languageFor(provider);
     final model = savedConfig?.model ?? providerDefaults.defaultModel;
     final host = savedConfig?.host ?? _hostController.text;
     final port = savedConfig?.port ?? int.tryParse(_portController.text);
@@ -383,10 +364,15 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     final current = _configsPerProvider[_selectedProvider];
     final providerDefaults = SttProviderConfig.get(_selectedProvider);
 
+    // Picking a language other than the primary one (in the picker or the request JSON) overrides it.
+    if (language != null && language != SttLanguage.derived(_selectedProvider, _primaryLanguage)) {
+      _languageOverridden[_selectedProvider] = true;
+    }
+
     _configsPerProvider[_selectedProvider] = CustomSttConfig(
       provider: _selectedProvider,
       apiKey: apiKey ?? current?.apiKey ?? _apiKeyController.text,
-      language: language ?? current?.language ?? providerDefaults.defaultLanguage,
+      language: language ?? _languageFor(_selectedProvider),
       model: model ?? current?.model ?? providerDefaults.defaultModel,
       url: url ?? current?.url ?? _urlController.text,
       host: host ?? current?.host ?? _hostController.text,
@@ -404,6 +390,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     // Build complete config from current UI state
     final config = _buildCurrentConfig();
     _configsPerProvider[_selectedProvider] = config;
+    await SttLanguage.setOverridden(_selectedProvider, _isLanguageOverridden(_selectedProvider));
     await SharedPreferencesUtil().saveConfigForProvider(_selectedProvider, config);
   }
 
@@ -454,7 +441,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     return CustomSttConfig(
       provider: _selectedProvider,
       apiKey: _apiKeyController.text.isNotEmpty ? _apiKeyController.text : null,
-      language: current?.language ?? providerDefaults.defaultLanguage,
+      language: _languageFor(_selectedProvider),
       model: current?.model ?? providerDefaults.defaultModel,
       url: url,
       host: _selectedProvider == SttProvider.localWhisper ? _hostController.text : null,
@@ -529,9 +516,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   Future<void> _saveConfig() async {
     _validateAndSetError();
     if (_validationError != null) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(_validationError!), backgroundColor: Colors.red.shade700));
+      OmiFeedback.error(context, _validationError!);
       return;
     }
 
@@ -541,20 +526,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       final hasModel = modelPath.isNotEmpty && await File(modelPath).exists();
       if (!hasModel) {
         if (!mounted) return;
-        showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            backgroundColor: const Color(0xFF1A1A1A),
-            title: Text(context.l10n.modelRequired, style: const TextStyle(color: Colors.white)),
-            content: Text(context.l10n.downloadWhisperModel, style: const TextStyle(color: Colors.white70)),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: Text(context.l10n.ok, style: const TextStyle(color: Colors.blue)),
-              ),
-            ],
-          ),
-        );
+        await showOmiAlert(context, title: context.l10n.modelRequired, message: context.l10n.downloadWhisperModel);
         return;
       }
     }
@@ -592,8 +564,11 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.l10n.errorSaving(readableError(e))), backgroundColor: Colors.red.shade700),
+        OmiFeedback.error(
+          context,
+          context.l10n.errorSaving(readableError(e)),
+          actionLabel: context.l10n.tryAgain,
+          onAction: _saveConfig,
         );
       }
     } finally {
@@ -622,12 +597,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
 
     final jsonString = const JsonEncoder.withIndent('  ').convert(exportableConfig);
 
-    await Clipboard.setData(ClipboardData(text: jsonString));
-    if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.configCopiedToClipboard), duration: const Duration(seconds: 2)),
-      );
-    }
+    if (!mounted) return;
+    await OmiClipboard.copy(context, jsonString, what: context.l10n.configuration);
   }
 
   Map<String, String> _sanitizeHeaders(Map<String, String> headers) {
@@ -642,86 +613,8 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   }
 
   Future<void> _importConfig() async {
-    final controller = TextEditingController();
-
-    try {
-      final result = await showDialog<String>(
-        context: context,
-        builder: (context) => AlertDialog(
-          backgroundColor: const Color(0xFF1A1A1A),
-          title: Text(context.l10n.importConfiguration, style: const TextStyle(color: Colors.white, fontSize: 18)),
-          content: SizedBox(
-            width: double.maxFinite,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(context.l10n.pasteJsonConfig, style: TextStyle(color: Colors.grey.shade400, fontSize: 14)),
-                const SizedBox(height: 12),
-                Container(
-                  height: 200,
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF0D0D0D),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.grey.shade800),
-                  ),
-                  child: TextField(
-                    controller: controller,
-                    maxLines: null,
-                    expands: true,
-                    style: const TextStyle(color: Colors.white, fontFamily: 'monospace', fontSize: 12),
-                    decoration: InputDecoration(
-                      hintText: context.l10n.transcriptionJsonPlaceholder,
-                      hintStyle: TextStyle(color: Colors.grey.shade700),
-                      border: InputBorder.none,
-                      contentPadding: const EdgeInsets.all(12),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Icon(Icons.info_outline, size: 14, color: Colors.grey.shade600),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(
-                        context.l10n.addApiKeyAfterImport,
-                        style: TextStyle(color: Colors.grey.shade600, fontSize: 11),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: Text(context.l10n.cancel, style: TextStyle(color: Colors.grey.shade400)),
-            ),
-            TextButton(
-              onPressed: () async {
-                final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
-                if (clipboardData?.text != null) {
-                  controller.text = clipboardData!.text!;
-                }
-              },
-              child: Text(context.l10n.paste, style: const TextStyle(color: Colors.white)),
-            ),
-            TextButton(
-              onPressed: () => Navigator.pop(context, controller.text),
-              child: Text(context.l10n.import, style: const TextStyle(color: Colors.white)),
-            ),
-          ],
-        ),
-      );
-
-      if (result != null && result.isNotEmpty) {
-        _parseAndApplyConfig(result);
-      }
-    } finally {
-      controller.dispose();
-    }
+    final result = await showImportConfigDialog(context);
+    if (result != null && result.isNotEmpty && mounted) _parseAndApplyConfig(result);
   }
 
   void _parseAndApplyConfig(String jsonString) {
@@ -731,15 +624,16 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
 
       // Validate provider
       if (config.provider == SttProvider.omi) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(context.l10n.invalidProviderInConfig), backgroundColor: Colors.red.shade700),
-        );
+        OmiFeedback.error(context, context.l10n.invalidProviderInConfig);
         return;
       }
 
       setState(() {
         _selectedProvider = config.provider;
         _configsPerProvider[_selectedProvider] = config;
+        final language = config.language;
+        _languageOverridden[_selectedProvider] =
+            language != null && language != SttLanguage.derived(_selectedProvider, _primaryLanguage);
 
         // Update UI fields
         _apiKeyController.text = config.apiKey ?? '';
@@ -771,44 +665,28 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
         _configSyncVersion++;
       });
 
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(context.l10n.importedConfig(SttProviderConfig.get(_selectedProvider).displayName)),
-          duration: const Duration(seconds: 2),
-        ),
-      );
+      OmiFeedback.confirm(context, context.l10n.importedConfig(SttProviderConfig.get(_selectedProvider).displayName));
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(context.l10n.invalidJson(e.toString().split('\n').first)),
-          backgroundColor: Colors.red.shade700,
-        ),
-      );
+      OmiFeedback.error(context, context.l10n.invalidJson(e.toString().split('\n').first));
     }
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0D0D0D),
       appBar: AppBar(
-        title: Text(context.l10n.transcription, style: const TextStyle(fontWeight: FontWeight.w600)),
-        backgroundColor: const Color(0xFF0D0D0D),
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, size: 20),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
+        leading: const OmiBackButton(),
+        title: Text(context.l10n.transcription),
         actions: [
           if (_useCustomStt) ...[
-            IconButton(
+            OmiIconButton(
               icon: const Icon(Icons.file_download_outlined, size: 20),
-              tooltip: context.l10n.importConfiguration,
+              label: context.l10n.importConfiguration,
               onPressed: _importConfig,
             ),
-            IconButton(
+            OmiIconButton(
               icon: const Icon(Icons.file_upload_outlined, size: 20),
-              tooltip: context.l10n.exportConfiguration,
+              label: context.l10n.exportConfiguration,
               onPressed: _exportConfig,
             ),
           ],
@@ -818,30 +696,45 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
         children: [
           Expanded(
             child: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg, vertical: OmiSpacing.xs),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   _buildSourceSelector(),
-                  const SizedBox(height: 24),
+                  const SizedBox(height: OmiSpacing.xl),
                   if (_useCustomStt) ...[
                     _buildProviderSection(),
-                    const SizedBox(height: 20),
+                    const SizedBox(height: OmiSpacing.lg),
                     _buildConfigSection(),
-                    const SizedBox(height: 20),
-                    _buildRawAudioForwardingSetting(),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: OmiSpacing.lg),
+                    OmiSettingsGroup(
+                      children: [
+                        OmiSettingsRow.toggle(
+                          leading: const Icon(Icons.cloud_upload_outlined),
+                          title: context.l10n.sendRawAudioToOmi,
+                          subtitle: context.l10n.sendRawAudioToOmiDescription,
+                          value: _sendRawAudioToOmi,
+                          onChanged: (value) => setState(() {
+                            _sendRawAudioToOmi = value;
+                            _updateCurrentProviderConfig(sendRawAudioToOmi: value);
+                          }),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: OmiSpacing.xs),
                     _buildAdvancedSection(),
-                    _buildLogsSection(),
-                  ] else ...[
-                    _buildOmiFeatures(),
-                  ],
+                    const CustomSttLogsSection(),
+                  ] else
+                    Text(
+                      context.l10n.omiTranscriptionOptimized,
+                      style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.5),
+                    ),
                   const SizedBox(height: 100),
                 ],
               ),
             ),
           ),
-          _buildBottomBar(),
+          TranscriptionSaveBar(onPressed: _isSaving ? null : _saveConfig, isLoading: _isSaving),
         ],
       ),
     );
@@ -853,6 +746,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     bool isIOS = Platform.isIOS;
 
     final deviceInfo = DeviceInfoPlugin();
+    final l10n = context.l10n;
 
     if (Platform.isAndroid) {
       // Check RAM using /proc/meminfo as reliable fallback
@@ -867,7 +761,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
               final gb = kb / 1024 / 1024;
               if (gb < 3.5) {
                 isLowSpec = true;
-                specDetails = 'Detected RAM: ${gb.toStringAsFixed(1)} GB. Minimum recommended: 4 GB.';
+                specDetails = l10n.deviceRamBelowMinimum(gb.toStringAsFixed(1));
               }
             }
           }
@@ -886,157 +780,19 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           final version = int.tryParse(match.group(1) ?? '0') ?? 0;
           if (version < 11) {
             isLowSpec = true;
-            specDetails = 'Detected Model: $machine (Older than iPhone XS). On-device recognition may be slower.';
+            specDetails = l10n.olderIphoneModelDetected(machine);
           }
         }
       }
     }
 
     if (!mounted) return;
-
-    // 2. Show appropriate dialog
-    bool proceed = false;
-
-    if (isLowSpec && !isIOS) {
-      // Android low-spec: "Not Compatible" Dialog (Whisper may crash)
-      proceed = await showDialog<bool>(
-            context: context,
-            builder: (context) => AlertDialog(
-              backgroundColor: const Color(0xFF1A1A1A),
-              title: Row(
-                children: [
-                  const Icon(Icons.error_outline, color: Colors.red, size: 24),
-                  const SizedBox(width: 8),
-                  Text(
-                    context.l10n.deviceNotCompatibleTitle,
-                    style: const TextStyle(color: Colors.white, fontSize: 18),
-                  ),
-                ],
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(context.l10n.deviceNotMeetRequirements, style: const TextStyle(color: Colors.white70)),
-                  const SizedBox(height: 8),
-                  Text(specDetails, style: const TextStyle(color: Colors.white38, fontSize: 12)),
-                  const SizedBox(height: 12),
-                  Text(
-                    context.l10n.willLikelyCrash,
-                    style: const TextStyle(color: Colors.white70, fontWeight: FontWeight.bold),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(context.l10n.transcriptionSlowerLessAccurate, style: const TextStyle(color: Colors.white70)),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context, true),
-                  child: Text(context.l10n.proceedAnyway, style: const TextStyle(color: Colors.white12, fontSize: 10)),
-                ),
-                ElevatedButton(
-                  onPressed: () => Navigator.pop(context, false),
-                  style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                  child: Text(context.l10n.close, style: const TextStyle(color: Colors.white)),
-                ),
-              ],
-              actionsAlignment: MainAxisAlignment.spaceBetween,
-            ),
-          ) ??
-          false;
-    } else if (isLowSpec && isIOS) {
-      // iOS low-spec: Milder "Performance Warning" (Apple Speech won't crash)
-      proceed = await showDialog<bool>(
-            context: context,
-            builder: (context) => AlertDialog(
-              backgroundColor: const Color(0xFF1A1A1A),
-              title: Row(
-                children: [
-                  const Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 24),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      context.l10n.olderDeviceDetected,
-                      style: const TextStyle(color: Colors.white, fontSize: 18),
-                    ),
-                  ),
-                ],
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(specDetails, style: const TextStyle(color: Colors.white38, fontSize: 12)),
-                  const SizedBox(height: 12),
-                  Text(context.l10n.transcriptionSlowerOnDevice, style: const TextStyle(color: Colors.white70)),
-                  const SizedBox(height: 8),
-                  Text('• ${context.l10n.batteryUsageHigher}', style: const TextStyle(color: Colors.white70)),
-                  Text('• ${context.l10n.considerOmiCloud}', style: const TextStyle(color: Colors.white70)),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context, false),
-                  child: Text(context.l10n.cancel, style: const TextStyle(color: Colors.grey)),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.pop(context, true),
-                  child: Text(
-                    context.l10n.continueButton,
-                    style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ],
-            ),
-          ) ??
-          false;
-    } else {
-      // Standard "High Resource Usage" Warning for capable devices
-      proceed = await showDialog<bool>(
-            context: context,
-            builder: (context) => AlertDialog(
-              backgroundColor: const Color(0xFF1A1A1A),
-              title: Row(
-                children: [
-                  const Icon(Icons.battery_alert, color: Colors.orange, size: 24),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      context.l10n.highResourceUsage,
-                      style: const TextStyle(color: Colors.white, fontSize: 18),
-                    ),
-                  ),
-                ],
-              ),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(context.l10n.computationallyIntensive, style: const TextStyle(color: Colors.white70)),
-                  const SizedBox(height: 12),
-                  Text('• ${context.l10n.batteryDrainSignificantly}', style: const TextStyle(color: Colors.white70)),
-                  Text('• ${context.l10n.deviceMayWarmUp}', style: const TextStyle(color: Colors.white70)),
-                  Text('• ${context.l10n.speedAccuracyLower}', style: const TextStyle(color: Colors.white70)),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context, false),
-                  child: Text(context.l10n.cancel, style: const TextStyle(color: Colors.grey)),
-                ),
-                TextButton(
-                  onPressed: () => Navigator.pop(context, true),
-                  child: Text(
-                    context.l10n.iUnderstand,
-                    style: const TextStyle(color: Colors.blue, fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ],
-            ),
-          ) ??
-          false;
-    }
-
+    final proceed = await confirmOnDeviceTranscription(
+      context,
+      lowSpec: isLowSpec,
+      isIOS: isIOS,
+      specDetails: specDetails,
+    );
     if (!proceed) return;
 
     await _saveCurrentProviderConfig();
@@ -1114,68 +870,62 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
 
   Widget _buildSourceSelector() {
     final mode = _currentMode;
+    final l10n = context.l10n;
+    final secondary = OmiType.footnote.copyWith(color: OmiColors.textTertiary);
+
+    Widget? description;
+    if (mode == TranscriptionMode.omi && context.watch<UsageProvider>().showSubscriptionUI) {
+      description = Semantics(
+        link: true,
+        child: InkWell(
+          onTap: () => routeToPage(context, const UsagePage(showUpgradeDialog: true)),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 44),
+            child: Align(
+              alignment: Alignment.centerLeft,
+              child: Text.rich(
+                TextSpan(
+                  children: [
+                    TextSpan(text: l10n.premiumMinutesMonth, style: secondary),
+                    TextSpan(
+                      text: l10n.viewUsage,
+                      style: secondary.copyWith(
+                        color: OmiColors.textSecondary,
+                        decoration: TextDecoration.underline,
+                      ),
+                    ),
+                    TextSpan(text: '.', style: secondary),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    } else if (mode == TranscriptionMode.onDevice) {
+      description = TranscriptionHelpText(l10n.audioProcessedLocally);
+    } else if (mode == TranscriptionMode.omiParakeet) {
+      description = TranscriptionHelpText(SttProviderConfig.get(SttProvider.omiParakeet).description);
+    } else if (mode == TranscriptionMode.cloudProvider) {
+      description = TranscriptionHelpText(l10n.payYourSttProvider);
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         const SizedBox(height: 10),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1A1A1A),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: Colors.grey.shade800),
-          ),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<TranscriptionMode>(
-              value: mode,
-              isExpanded: true,
-              dropdownColor: const Color(0xFF1A1A1A),
-              style: const TextStyle(color: Colors.white, fontSize: 15),
-              icon: Icon(Icons.keyboard_arrow_down, color: Colors.grey.shade500),
-              items: TranscriptionMode.values
-                  .map((m) => DropdownMenuItem<TranscriptionMode>(value: m, child: Text(_modeLabel(m))))
-                  .toList(),
-              onChanged: (m) async {
-                if (m != null && m != mode) await _selectMode(m);
-              },
-            ),
-          ),
+        TranscriptionDropdown<TranscriptionMode>(
+          value: mode,
+          items: [
+            for (final m in TranscriptionMode.values)
+              DropdownMenuItem<TranscriptionMode>(value: m, child: Text(_modeLabel(m))),
+          ],
+          onChanged: (m) async {
+            if (m != null && m != mode) await _selectMode(m);
+          },
         ),
-        const SizedBox(height: 12),
-        if (mode == TranscriptionMode.omi && context.watch<UsageProvider>().showSubscriptionUI)
-          GestureDetector(
-            onTap: () => Navigator.of(
-              context,
-            ).push(MaterialPageRoute(builder: (context) => const UsagePage(showUpgradeDialog: true))),
-            child: Text.rich(
-              TextSpan(
-                children: [
-                  TextSpan(
-                    text: context.l10n.premiumMinutesMonth,
-                    style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-                  ),
-                  TextSpan(
-                    text: context.l10n.viewUsage,
-                    style: TextStyle(color: Colors.grey.shade400, fontSize: 12, decoration: TextDecoration.underline),
-                  ),
-                  TextSpan(
-                    text: '.',
-                    style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-                  ),
-                ],
-              ),
-            ),
-          )
-        else if (mode == TranscriptionMode.onDevice)
-          Text(context.l10n.audioProcessedLocally, style: TextStyle(color: Colors.grey.shade600, fontSize: 12))
-        else if (mode == TranscriptionMode.omiParakeet)
-          Text(
-            SttProviderConfig.get(SttProvider.omiParakeet).description,
-            style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-          )
-        else if (mode == TranscriptionMode.cloudProvider)
-          Text(context.l10n.payYourSttProvider, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+        const SizedBox(height: OmiSpacing.sm),
+        if (description != null) description,
       ],
     );
   }
@@ -1188,17 +938,42 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
         ? context.l10n.deviceUsesCodec(_connectedDeviceName ?? context.l10n.device, codecReason)
         : context.l10n.transcriptionUnavailable;
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: OmiSpacing.sm),
       child: Row(
         children: [
-          Icon(Icons.warning_amber_rounded, color: Colors.orange.shade700, size: 14),
+          const Icon(Icons.warning_amber_rounded, color: OmiColors.warning, size: 14),
           const SizedBox(width: 6),
-          Expanded(
-            child: Text(warningText, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
-          ),
+          Expanded(child: TranscriptionHelpText(warningText)),
         ],
       ),
     );
+  }
+
+  Future<void> _selectProvider(SttProvider provider) async {
+    // Save current provider's complete config before switching
+    await _saveCurrentProviderConfig();
+
+    setState(() {
+      _selectedProvider = provider;
+
+      // Load saved config for new provider
+      _populateUIFromConfig(_configsPerProvider[provider]);
+
+      // Regenerate JSON if not customized
+      if (_requestJsonCustomized[provider] != true) {
+        _regenerateRequestJson(provider);
+      }
+
+      // Auto-expand advanced if provider has custom config or is custom type
+      if (provider == SttProvider.custom || _requestJsonCustomized[provider] == true) {
+        _showAdvanced = true;
+      }
+    });
+
+    // Track which provider was selected (name only, no keys/URLs)
+    PlatformManager.instance.analytics.transcriptionProviderSelected(provider: provider.name);
+
+    _validateAndSetError();
   }
 
   Widget _buildProviderSection() {
@@ -1212,90 +987,31 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildCodecWarning(),
-        Text(context.l10n.provider, style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
-        const SizedBox(height: 10),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1A1A1A),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: Colors.grey.shade800),
-          ),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<SttProvider>(
-              value: _selectedProvider,
-              isExpanded: true,
-              dropdownColor: const Color(0xFF1A1A1A),
-              style: const TextStyle(color: Colors.white, fontSize: 15),
-              icon: Icon(Icons.keyboard_arrow_down, color: Colors.grey.shade500),
-              items: [
-                ...SttProviderConfig.allProviders.where((config) => config.provider != SttProvider.onDeviceWhisper).map(
-                  (config) {
-                    return DropdownMenuItem<SttProvider>(
-                      value: config.provider,
-                      child: Row(
-                        children: [
-                          Expanded(child: Text(config.displayName)),
-                          if (config.isLive)
-                            Container(
-                              margin: const EdgeInsets.only(left: 8),
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: Colors.green.withValues(alpha: 0.2),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Text(
-                                context.l10n.live,
-                                style: const TextStyle(color: Colors.green, fontSize: 10, fontWeight: FontWeight.w600),
-                              ),
-                            ),
-                        ],
-                      ),
-                    );
-                  },
+        TranscriptionFieldLabel(context.l10n.provider),
+        TranscriptionDropdown<SttProvider>(
+          value: _selectedProvider,
+          items: [
+            for (final config in SttProviderConfig.allProviders)
+              if (config.provider != SttProvider.onDeviceWhisper)
+                DropdownMenuItem<SttProvider>(
+                  value: config.provider,
+                  child: TranscriptionOptionLabel(config.displayName, isLive: config.isLive),
                 ),
-              ],
-              onChanged: (provider) async {
-                if (provider != null) {
-                  // Save current provider's complete config before switching
-                  await _saveCurrentProviderConfig();
-
-                  setState(() {
-                    _selectedProvider = provider;
-
-                    // Load saved config for new provider
-                    _populateUIFromConfig(_configsPerProvider[provider]);
-
-                    // Regenerate JSON if not customized
-                    if (_requestJsonCustomized[provider] != true) {
-                      _regenerateRequestJson(provider);
-                    }
-
-                    // Auto-expand advanced if provider has custom config or is custom type
-                    if (provider == SttProvider.custom || _requestJsonCustomized[provider] == true) {
-                      _showAdvanced = true;
-                    }
-                  });
-
-                  // Track which provider was selected (name only, no keys/URLs)
-                  PlatformManager.instance.analytics.transcriptionProviderSelected(provider: provider.name);
-
-                  _validateAndSetError();
-                }
-              },
-            ),
-          ),
+          ],
+          onChanged: (provider) async {
+            if (provider != null) await _selectProvider(provider);
+          },
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: OmiSpacing.xxs),
         Row(
           children: [
-            Expanded(
-              child: Text(_currentConfig.description, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
-            ),
+            Expanded(child: TranscriptionHelpText(_currentConfig.description)),
             if (_currentConfig.docsUrl != null)
-              GestureDetector(
-                onTap: () => _launchUrl(_currentConfig.docsUrl!),
-                child: Icon(Icons.open_in_new, color: Colors.grey.shade500, size: 14),
+              OmiIconButton(
+                icon: const Icon(Icons.open_in_new, size: 16),
+                label: context.l10n.openProviderDocs,
+                color: OmiColors.textTertiary,
+                onPressed: () => _launchUrl(_currentConfig.docsUrl!),
               ),
           ],
         ),
@@ -1309,96 +1025,58 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     } else if (_selectedProvider == SttProvider.onDeviceWhisper) {
       return _buildOnDeviceWhisperConfig();
     } else if (_selectedProvider == SttProvider.custom) {
-      return _buildCustomPollingConfig();
+      return _buildUrlConfig(
+          context.l10n.apiUrl, 'https://your-stt-api.com/transcribe', context.l10n.enterSttHttpEndpoint);
     } else if (_selectedProvider == SttProvider.customLive) {
-      return _buildCustomLiveConfig();
+      return _buildUrlConfig(
+          context.l10n.websocketUrl, 'wss://your-stt-api.com/live', context.l10n.enterLiveSttWebsocket);
     } else if (_selectedProvider == SttProvider.omiParakeet) {
       // Omi-hosted — no API key needed, just language.
       return _buildLanguageSelector();
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
-      children: [_buildApiKeyInput(), const SizedBox(height: 20), _buildLanguageSelector()],
-    );
-  }
-
-  Widget _buildRawAudioForwardingSetting() {
-    return Material(
-      color: const Color(0xFF1A1A1A),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-        side: BorderSide(color: Colors.grey.shade800),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: SwitchListTile(
-        value: _sendRawAudioToOmi,
-        onChanged: (value) {
-          setState(() {
-            _sendRawAudioToOmi = value;
-            _updateCurrentProviderConfig(sendRawAudioToOmi: value);
-          });
-        },
-        secondary: const Icon(Icons.cloud_upload_outlined, color: Colors.white70),
-        title: Text(context.l10n.sendRawAudioToOmi, style: const TextStyle(color: Colors.white, fontSize: 14)),
-        subtitle: Text(
-          context.l10n.sendRawAudioToOmiDescription,
-          style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
-        ),
-      ),
+      children: [_buildApiKeyInput(), const SizedBox(height: OmiSpacing.lg), _buildLanguageSelector()],
     );
   }
 
   Widget _buildLanguageSelector() {
-    var languages = _currentConfig.supportedLanguages;
-    if (Platform.isIOS) {
-      languages = languages.where((lang) => lang != 'multi').toList();
-    }
-
-    final suggestions = languages.map((lang) {
-      final name = SttLanguages.common[lang];
-      return name != null ? '$lang ($name)' : lang;
-    }).toList();
-
-    return _buildAutocompleteField(
-      label: context.l10n.languageLabel,
-      hint: 'en (English)',
-      value: _formatLanguageDisplay(_currentLanguage),
-      suggestions: suggestions,
-      onChanged: (value) {
-        // Extract language code from "en (English)" format
-        final code = value.split(' ').first.trim();
-        setState(() {
-          _onLanguageOrModelChanged(code, null);
-        });
-      },
+    final primary = _primaryLanguage;
+    final overridden = _isLanguageOverridden(_selectedProvider);
+    return SttLanguageSection(
+      provider: _selectedProvider,
+      overridden: overridden,
+      language: _currentLanguage,
+      primaryLanguage: primary,
+      primaryLanguageName:
+          primary.isEmpty ? context.l10n.notSet : context.read<HomeProvider>().getLanguageName(primary),
+      pickerKey: ValueKey('${_selectedProvider.name}_language_$_configSyncVersion'),
+      onOverride: () => setState(() {
+        // Start the picker from the language in use.
+        _updateCurrentProviderConfig(language: _currentLanguage);
+        _languageOverridden[_selectedProvider] = true;
+        _configSyncVersion++;
+      }),
+      onUsePrimary: () => setState(() {
+        _languageOverridden[_selectedProvider] = false;
+        _onLanguageOrModelChanged(SttLanguage.derived(_selectedProvider, primary), null);
+        _configSyncVersion++;
+      }),
+      onChanged: (code) => setState(() => _onLanguageOrModelChanged(code, null)),
     );
   }
 
   Widget _buildModelSelector() {
-    final models = _currentConfig.supportedModels;
-
-    return _buildAutocompleteField(
+    return TranscriptionAutocompleteField(
+      key: ValueKey('${_selectedProvider.name}_model_$_configSyncVersion'),
       label: context.l10n.modelLabel,
       hint: _currentConfig.defaultModel,
       value: _currentModel,
-      suggestions: models,
+      suggestions: _currentConfig.supportedModels,
       onChanged: (value) {
         final newModel = value.trim();
         if (_selectedProvider == SttProvider.onDeviceWhisper && ['medium', 'large-v1', 'large-v2'].contains(newModel)) {
-          showDialog(
-            context: context,
-            builder: (context) => AlertDialog(
-              backgroundColor: const Color(0xFF1A1A1A),
-              title: Text(context.l10n.performanceWarning, style: const TextStyle(color: Colors.white)),
-              content: Text(context.l10n.modelTooLargeWarning, style: const TextStyle(color: Colors.white70)),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context),
-                  child: Text(context.l10n.ok, style: const TextStyle(color: Colors.blue)),
-                ),
-              ],
-            ),
-          );
+          showOmiAlert(context, title: context.l10n.performanceWarning, message: context.l10n.modelTooLargeWarning);
         }
         setState(() {
           _onLanguageOrModelChanged(null, newModel);
@@ -1407,115 +1085,18 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     );
   }
 
-  String _formatLanguageDisplay(String code) {
-    final name = SttLanguages.common[code];
-    return name != null ? '$code ($name)' : code;
-  }
-
-  Widget _buildAutocompleteField({
-    required String label,
-    required String hint,
-    required String value,
-    required List<String> suggestions,
-    required ValueChanged<String> onChanged,
-  }) {
+  Widget _buildUrlConfig(String label, String hint, String help) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
-        const SizedBox(height: 10),
-        Autocomplete<String>(
-          key: ValueKey('${_selectedProvider.name}_${label}_$_configSyncVersion'),
-          initialValue: TextEditingValue(text: value),
-          optionsBuilder: (TextEditingValue textEditingValue) {
-            if (textEditingValue.text.isEmpty) {
-              return suggestions;
-            }
-            return suggestions.where((option) => option.toLowerCase().contains(textEditingValue.text.toLowerCase()));
-          },
-          optionsViewBuilder: (context, onSelected, options) {
-            return Align(
-              alignment: Alignment.topLeft,
-              child: Material(
-                elevation: 4,
-                color: const Color(0xFF1A1A1A),
-                borderRadius: BorderRadius.circular(10),
-                child: ConstrainedBox(
-                  constraints: const BoxConstraints(maxHeight: 200, maxWidth: 300),
-                  child: ListView.builder(
-                    padding: EdgeInsets.zero,
-                    shrinkWrap: true,
-                    itemCount: options.length,
-                    itemBuilder: (context, index) {
-                      final option = options.elementAt(index);
-                      return ListTile(
-                        dense: true,
-                        title: Text(option, style: const TextStyle(color: Colors.white, fontSize: 14)),
-                        onTap: () => onSelected(option),
-                      );
-                    },
-                  ),
-                ),
-              ),
-            );
-          },
-          fieldViewBuilder: (context, controller, focusNode, onFieldSubmitted) {
-            return TextField(
-              controller: controller,
-              focusNode: focusNode,
-              style: const TextStyle(color: Colors.white, fontSize: 15),
-              onChanged: onChanged,
-              onSubmitted: (_) => onFieldSubmitted(),
-              decoration: InputDecoration(
-                hintText: hint,
-                hintStyle: TextStyle(color: Colors.grey.shade700),
-                filled: true,
-                fillColor: const Color(0xFF1A1A1A),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide(color: Colors.grey.shade800),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: const BorderSide(color: Colors.white),
-                ),
-              ),
-            );
-          },
-          onSelected: onChanged,
-        ),
-      ],
-    );
-  }
-
-  Widget _buildCustomPollingConfig() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildTextField(
+        TranscriptionTextField(
           controller: _urlController,
-          label: context.l10n.apiUrl,
-          hint: 'https://your-stt-api.com/transcribe',
+          label: label,
+          hint: hint,
+          onChanged: (_) => setState(() {}),
         ),
-        const SizedBox(height: 8),
-        Text(context.l10n.enterSttHttpEndpoint, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
-      ],
-    );
-  }
-
-  Widget _buildCustomLiveConfig() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        _buildTextField(
-          controller: _urlController,
-          label: context.l10n.websocketUrl,
-          hint: 'wss://your-stt-api.com/live',
-        ),
-        const SizedBox(height: 8),
-        Text(context.l10n.enterLiveSttWebsocket, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+        const SizedBox(height: OmiSpacing.xs),
+        TranscriptionHelpText(help),
       ],
     );
   }
@@ -1524,46 +1105,34 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Text(context.l10n.apiKey, style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
-            const Spacer(),
-            if (_currentConfig.apiKeyUrl != null)
-              GestureDetector(
-                onTap: () => _launchUrl(_currentConfig.apiKeyUrl!),
-                child: Icon(Icons.open_in_new, color: Colors.grey.shade500, size: 14),
-              ),
-          ],
+        TranscriptionFieldLabel(
+          context.l10n.apiKey,
+          trailing: _currentConfig.apiKeyUrl == null
+              ? null
+              : OmiIconButton(
+                  icon: const Icon(Icons.open_in_new, size: 16),
+                  label: context.l10n.getApiKey,
+                  color: OmiColors.textTertiary,
+                  onPressed: () => _launchUrl(_currentConfig.apiKeyUrl!),
+                ),
         ),
-        const SizedBox(height: 10),
         TextField(
           controller: _apiKeyController,
           obscureText: !_showApiKey,
-          style: const TextStyle(color: Colors.white, fontSize: 15),
+          style: OmiType.subhead,
           onChanged: (_) => _validateAndSetError(),
-          decoration: InputDecoration(
-            hintText: context.l10n.enterApiKey,
-            hintStyle: TextStyle(color: Colors.grey.shade700),
-            filled: true,
-            fillColor: const Color(0xFF1A1A1A),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(color: Colors.grey.shade800),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: Colors.white),
-            ),
-            suffixIcon: IconButton(
-              icon: Icon(_showApiKey ? Icons.visibility_off : Icons.visibility, color: Colors.grey.shade600, size: 20),
+          decoration: transcriptionInputDecoration(
+            hint: context.l10n.enterApiKey,
+            suffixIcon: OmiIconButton(
+              icon: Icon(_showApiKey ? Icons.visibility_off : Icons.visibility, size: 20),
+              label: _showApiKey ? context.l10n.hideApiKey : context.l10n.showApiKey,
+              color: OmiColors.textTertiary,
               onPressed: () => setState(() => _showApiKey = !_showApiKey),
             ),
           ),
         ),
-        const SizedBox(height: 8),
-        Text(context.l10n.storedLocallyNeverShared, style: TextStyle(color: Colors.grey.shade600, fontSize: 12)),
+        const SizedBox(height: OmiSpacing.xs),
+        TranscriptionHelpText(context.l10n.storedLocallyNeverShared),
       ],
     );
   }
@@ -1573,67 +1142,34 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Expanded(
               flex: 3,
-              child: _buildTextField(controller: _hostController, label: context.l10n.host, hint: '127.0.0.1'),
+              child: TranscriptionTextField(
+                controller: _hostController,
+                label: context.l10n.host,
+                hint: '127.0.0.1',
+                onChanged: (_) => setState(() {}),
+              ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: OmiSpacing.sm),
             Expanded(
               flex: 2,
-              child: _buildTextField(
+              child: TranscriptionTextField(
                 controller: _portController,
                 label: context.l10n.port,
                 hint: '8080',
                 keyboardType: TextInputType.number,
+                onChanged: (_) => setState(() {}),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 12),
-        Text(
-          'http://${_hostController.text}:${_portController.text}/inference',
-          style: TextStyle(color: Colors.grey.shade600, fontSize: 12, fontFamily: 'monospace'),
-        ),
-        const SizedBox(height: 20),
+        const SizedBox(height: OmiSpacing.sm),
+        TranscriptionHelpText('http://${_hostController.text}:${_portController.text}/inference', monospace: true),
+        const SizedBox(height: OmiSpacing.lg),
         _buildLanguageSelector(),
-      ],
-    );
-  }
-
-  Widget _buildTextField({
-    required TextEditingController controller,
-    required String label,
-    required String hint,
-    TextInputType? keyboardType,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(label, style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
-        const SizedBox(height: 10),
-        TextField(
-          controller: controller,
-          keyboardType: keyboardType,
-          style: const TextStyle(color: Colors.white, fontSize: 15),
-          onChanged: (_) => setState(() {}),
-          decoration: InputDecoration(
-            hintText: hint,
-            hintStyle: TextStyle(color: Colors.grey.shade700),
-            filled: true,
-            fillColor: const Color(0xFF1A1A1A),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(10), borderSide: BorderSide.none),
-            enabledBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide(color: Colors.grey.shade800),
-            ),
-            focusedBorder: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: const BorderSide(color: Colors.white),
-            ),
-          ),
-        ),
       ],
     );
   }
@@ -1646,120 +1182,46 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
-            padding: const EdgeInsets.all(12),
+            padding: const EdgeInsets.all(OmiSpacing.sm),
             decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.2)),
+              color: OmiColors.surface1,
+              borderRadius: OmiRadius.smAll,
+              border: Border.all(color: OmiColors.border),
             ),
             child: Row(
               children: [
-                const Icon(Icons.apple, color: Colors.white, size: 24),
-                const SizedBox(width: 12),
+                const Icon(Icons.apple, color: OmiColors.textPrimary, size: 24),
+                const SizedBox(width: OmiSpacing.sm),
                 Expanded(
-                  child: Text(
-                    context.l10n.usingNativeIosSpeech,
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 14),
-                  ),
+                  child: Text(context.l10n.usingNativeIosSpeech,
+                      style: OmiType.subhead.copyWith(fontWeight: FontWeight.w500)),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 12),
-          Text(context.l10n.nativeEngineNoDownload, style: const TextStyle(color: Colors.grey, fontSize: 12)),
-          const SizedBox(height: 20),
+          const SizedBox(height: OmiSpacing.sm),
+          TranscriptionHelpText(context.l10n.nativeEngineNoDownload),
+          const SizedBox(height: OmiSpacing.lg),
           _buildLanguageSelector(),
         ],
       );
     }
 
-    final hasModel = _isModelFilePresent;
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (hasModel && !_isDownloadingModel)
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: Colors.green.withValues(alpha: 0.1),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.green.withValues(alpha: 0.3)),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.check_circle, color: Colors.green, size: 20),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Text(
-                    context.l10n.modelReadyWithName('ggml-${_currentModel.isEmpty ? 'tiny' : _currentModel}.bin'),
-                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500, fontSize: 14),
-                  ),
-                ),
-                TextButton(
-                  onPressed: _downloadModel,
-                  child: Text(context.l10n.reDownload, style: TextStyle(color: Colors.grey.shade400, fontSize: 12)),
-                ),
-              ],
-            ),
-          )
-        else if (_isDownloadingModel)
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              LinearProgressIndicator(
-                value: _downloadProgress,
-                backgroundColor: Colors.grey.shade800,
-                color: Colors.blue,
-              ),
-              const SizedBox(height: 8),
-              Center(
-                child: Text(context.l10n.doNotCloseApp, style: TextStyle(color: Colors.orange.shade300, fontSize: 11)),
-              ),
-              const SizedBox(height: 8),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    _modelDownloadStatus ?? context.l10n.downloading,
-                    style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
-                  ),
-                  TextButton(
-                    onPressed: _cancelDownload,
-                    style: TextButton.styleFrom(
-                      padding: EdgeInsets.zero,
-                      minimumSize: const Size(50, 24),
-                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                    ),
-                    child: Text(context.l10n.cancel, style: TextStyle(color: Colors.red.shade400, fontSize: 12)),
-                  ),
-                ],
-              ),
-            ],
-          )
-        else
-          Row(
-            children: [
-              Expanded(
-                child: ElevatedButton.icon(
-                  onPressed: _downloadModel,
-                  icon: const Icon(Icons.download, size: 16),
-                  label: Text(
-                    context.l10n.downloadModelWithName('ggml-${_currentModel.isEmpty ? 'tiny' : _currentModel}.bin'),
-                  ),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        const SizedBox(height: 20),
+        WhisperModelStatus(
+          modelFile: 'ggml-${_currentModel.isEmpty ? 'tiny' : _currentModel}.bin',
+          hasModel: _isModelFilePresent,
+          isDownloading: _isDownloadingModel,
+          progress: _downloadProgress,
+          status: _modelDownloadStatus,
+          onDownload: _downloadModel,
+          onCancel: _cancelDownload,
+        ),
+        const SizedBox(height: OmiSpacing.lg),
         _buildModelSelector(),
-        const SizedBox(height: 20),
+        const SizedBox(height: OmiSpacing.lg),
         _buildLanguageSelector(),
       ],
     );
@@ -1797,53 +1259,14 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
     double? freeSpaceMB = await DiskSpace.getFreeDiskSpaceForPath(appDir.path);
 
     if (!mounted) return;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        backgroundColor: const Color(0xFF1A1A1A),
-        title: Text(context.l10n.downloadModel, style: const TextStyle(color: Colors.white)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(context.l10n.modelNameWithFile('ggml-$modelName.bin'), style: const TextStyle(color: Colors.white70)),
-            const SizedBox(height: 8),
-            Text(
-              context.l10n.estimatedSizeWithValue(estimatedSizeMB.toStringAsFixed(0)),
-              style: const TextStyle(color: Colors.white70),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              context.l10n.availableSpaceWithValue(
-                freeSpaceMB != null ? '${freeSpaceMB.toStringAsFixed(0)} MB' : context.l10n.unknown,
-              ),
-              style: TextStyle(
-                color: (freeSpaceMB != null && freeSpaceMB < estimatedSizeMB) ? Colors.red : Colors.white70,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            if (freeSpaceMB != null && freeSpaceMB < estimatedSizeMB)
-              Padding(
-                padding: const EdgeInsets.only(top: 10),
-                child: Text(context.l10n.notEnoughSpace, style: const TextStyle(color: Colors.red)),
-              ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: Text(context.l10n.cancel, style: const TextStyle(color: Colors.grey)),
-          ),
-          TextButton(
-            onPressed:
-                (freeSpaceMB != null && freeSpaceMB < estimatedSizeMB) ? null : () => Navigator.pop(context, true),
-            child: Text(context.l10n.download, style: const TextStyle(color: Colors.blue)),
-          ),
-        ],
-      ),
+    final confirmed = await confirmModelDownload(
+      context,
+      modelName: modelName,
+      estimatedSizeMB: estimatedSizeMB,
+      freeSpaceMB: freeSpaceMB,
     );
 
-    if (confirmed != true) return;
+    if (!confirmed || !mounted) return;
 
     setState(() {
       _isDownloadingModel = true;
@@ -1938,9 +1361,11 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
             _isDownloadingModel = false;
             _modelDownloadStatus = context.l10n.errorWithMessage(readableError(e));
           });
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-                content: Text(context.l10n.downloadErrorWithMessage(readableError(e))), backgroundColor: Colors.red),
+          OmiFeedback.error(
+            context,
+            context.l10n.downloadErrorWithMessage(readableError(e)),
+            actionLabel: context.l10n.tryAgain,
+            onAction: _downloadModel,
           );
         }
       }
@@ -1961,199 +1386,103 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
   Widget _buildAdvancedSection() {
     // Show advanced section for all providers except Omi
     if (_selectedProvider == SttProvider.omi) return const SizedBox.shrink();
+    final isCustomized = _requestJsonCustomized[_selectedProvider] == true;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () => setState(() => _showAdvanced = !_showAdvanced),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Row(
-              children: [
-                Text(context.l10n.advanced, style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
-                const SizedBox(width: 8),
-                Icon(
-                  _showAdvanced ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-                  color: Colors.grey.shade500,
-                  size: 18,
-                ),
-                const Spacer(),
-              ],
-            ),
-          ),
+        TranscriptionDisclosureHeader(
+          title: context.l10n.advanced,
+          expanded: _showAdvanced,
+          onToggle: () => setState(() => _showAdvanced = !_showAdvanced),
         ),
         if (_showAdvanced) ...[
-          const SizedBox(height: 4),
+          const SizedBox(height: OmiSpacing.xxs),
           // Hide generic model selector for OnDeviceWhisper as it has a specific UI
           if (_currentConfig.supportedModels.isNotEmpty && _selectedProvider != SttProvider.onDeviceWhisper) ...[
             _buildModelSelector(),
-            const SizedBox(height: 16),
+            const SizedBox(height: OmiSpacing.md),
           ],
-          _buildJsonEditors(),
-          if (_requestJsonCustomized[_selectedProvider] == true) ...[
-            const SizedBox(height: 12),
-            _buildResetToDefaultButton(),
-          ],
-        ],
-      ],
-    );
-  }
-
-  Widget _buildJsonEditors() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(context.l10n.configuration, style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
-        const SizedBox(height: 10),
-        _buildJsonEditorButton(
-          title: context.l10n.requestConfiguration,
-          jsonContent: _currentRequestJson,
-          isCustomized: _requestJsonCustomized[_selectedProvider] == true,
-          onTap: () => _openJsonEditor(
+          TranscriptionFieldLabel(context.l10n.configuration),
+          TranscriptionJsonCard(
             title: context.l10n.requestConfiguration,
             jsonContent: _currentRequestJson,
-            isRequest: true,
+            isCustomized: isCustomized,
+            onTap: () => _openJsonEditor(
+              title: context.l10n.requestConfiguration,
+              jsonContent: _currentRequestJson,
+              isRequest: true,
+            ),
           ),
-        ),
-        const SizedBox(height: 12),
-        _buildJsonEditorButton(
-          title: context.l10n.responseSchema,
-          jsonContent: _currentSchemaJson,
-          onTap: () =>
-              _openJsonEditor(title: context.l10n.responseSchema, jsonContent: _currentSchemaJson, isRequest: false),
-        ),
+          const SizedBox(height: OmiSpacing.sm),
+          TranscriptionJsonCard(
+            title: context.l10n.responseSchema,
+            jsonContent: _currentSchemaJson,
+            onTap: () =>
+                _openJsonEditor(title: context.l10n.responseSchema, jsonContent: _currentSchemaJson, isRequest: false),
+          ),
+          if (isCustomized) ...[
+            const SizedBox(height: OmiSpacing.xs),
+            OmiButton.tertiary(
+              label: context.l10n.resetRequestConfig,
+              icon: Icons.refresh,
+              size: OmiButtonSize.compact,
+              onPressed: _resetRequestConfig,
+            ),
+          ],
+        ],
       ],
     );
   }
 
-  Widget _buildResetToDefaultButton() {
-    return GestureDetector(
-      onTap: () {
-        setState(() {
-          _requestJsonCustomized[_selectedProvider] = false;
-          // Clear customized request fields from stored config
-          final current = _configsPerProvider[_selectedProvider];
-          if (current != null) {
-            _configsPerProvider[_selectedProvider] = CustomSttConfig(
-              provider: _selectedProvider,
-              apiKey: current.apiKey,
-              language: current.language,
-              model: current.model,
-              url: current.url,
-              host: current.host,
-              port: current.port,
-              // Clear the customized fields
-              requestType: null,
-              headers: null,
-              params: null,
-              audioFieldName: null,
-              schemaJson: current.schemaJson,
-              sendRawAudioToOmi: current.sendRawAudioToOmi,
-            );
-          }
-          _regenerateRequestJson(_selectedProvider);
-        });
-      },
-      child: Row(
-        children: [
-          Icon(Icons.refresh, color: Colors.grey.shade500, size: 16),
-          const SizedBox(width: 6),
-          Text(context.l10n.resetRequestConfig, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
-        ],
-      ),
-    );
+  void _resetRequestConfig() {
+    setState(() {
+      _requestJsonCustomized[_selectedProvider] = false;
+      // Clear customized request fields from stored config
+      final current = _configsPerProvider[_selectedProvider];
+      if (current != null) {
+        _configsPerProvider[_selectedProvider] = CustomSttConfig(
+          provider: _selectedProvider,
+          apiKey: current.apiKey,
+          language: current.language,
+          model: current.model,
+          url: current.url,
+          host: current.host,
+          port: current.port,
+          // Clear the customized fields
+          requestType: null,
+          headers: null,
+          params: null,
+          audioFieldName: null,
+          schemaJson: current.schemaJson,
+          sendRawAudioToOmi: current.sendRawAudioToOmi,
+        );
+      }
+      _regenerateRequestJson(_selectedProvider);
+    });
   }
 
-  Widget _buildJsonEditorButton({
-    required String title,
-    required String jsonContent,
-    required VoidCallback onTap,
-    bool isCustomized = false,
-  }) {
-    String preview = '';
-    try {
-      final parsed = jsonDecode(jsonContent);
-      if (parsed is Map) {
-        preview = parsed.keys.take(3).join(', ');
-        if (parsed.keys.length > 3) preview += '...';
-      }
-    } catch (_) {
-      preview = 'Invalid JSON';
-    }
-
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1A1A1A),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: isCustomized ? Colors.white : Colors.grey.shade800),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(
-                        title,
-                        style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w500),
-                      ),
-                      if (isCustomized) ...[
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(context.l10n.modified, style: const TextStyle(color: Colors.white, fontSize: 10)),
-                        ),
-                      ],
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    preview,
-                    style: TextStyle(color: Colors.grey.shade600, fontSize: 12, fontFamily: 'monospace'),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ],
-              ),
-            ),
-            Icon(Icons.chevron_right, color: Colors.grey.shade600),
-          ],
-        ),
-      ),
+  Map<String, dynamic> _defaultRequestConfig() {
+    final providerDefaults = SttProviderConfig.get(_selectedProvider);
+    final savedConfig = _configsPerProvider[_selectedProvider];
+    return providerDefaults.buildRequestConfig(
+      apiKey: savedConfig?.apiKey ?? _apiKeyController.text,
+      language: _languageFor(_selectedProvider),
+      model: savedConfig?.model ?? providerDefaults.defaultModel,
     );
   }
 
   Future<void> _openJsonEditor({required String title, required String jsonContent, bool isRequest = false}) async {
     final result = await Navigator.of(context).push<String>(
-      MaterialPageRoute(
-        builder: (context) => _JsonEditorPage(
+      omiPageRoute(
+        builder: (context) => TranscriptionJsonEditorPage(
           title: title,
           initialJson: jsonContent,
           provider: _selectedProvider,
           isResponseSchema: !isRequest,
-          onReset: () {
-            if (isRequest) {
-              final providerDefaults = SttProviderConfig.get(_selectedProvider);
-              final savedConfig = _configsPerProvider[_selectedProvider];
-              return providerDefaults.buildRequestConfig(
-                apiKey: savedConfig?.apiKey ?? _apiKeyController.text,
-                language: savedConfig?.language ?? providerDefaults.defaultLanguage,
-                model: savedConfig?.model ?? providerDefaults.defaultModel,
-              );
-            }
-            return CustomSttConfig.getFullTemplateJson(_selectedProvider)['response_schema'];
-          },
+          onReset: () => isRequest
+              ? _defaultRequestConfig()
+              : CustomSttConfig.getFullTemplateJson(_selectedProvider)['response_schema'],
         ),
       ),
     );
@@ -2184,14 +1513,7 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
           }
 
           // Mark as customized if it differs from auto-generated
-          final providerDefaults = SttProviderConfig.get(_selectedProvider);
-          final savedConfig = _configsPerProvider[_selectedProvider];
-          final autoGenerated = providerDefaults.buildRequestConfig(
-            apiKey: savedConfig?.apiKey ?? _apiKeyController.text,
-            language: savedConfig?.language ?? providerDefaults.defaultLanguage,
-            model: savedConfig?.model ?? providerDefaults.defaultModel,
-          );
-          final autoGeneratedJson = const JsonEncoder.withIndent('  ').convert(autoGenerated);
+          final autoGeneratedJson = const JsonEncoder.withIndent('  ').convert(_defaultRequestConfig());
           _requestJsonCustomized[_selectedProvider] = result != autoGeneratedJson;
         } else {
           _schemaJsonPerProvider[_selectedProvider] = result;
@@ -2221,422 +1543,5 @@ class _TranscriptionSettingsPageState extends State<TranscriptionSettingsPage> {
       });
       _validateAndSetError();
     }
-  }
-
-  Widget _buildLogsSection() {
-    final logService = CustomSttLogService.instance;
-    final logs = logService.logs;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        GestureDetector(
-          behavior: HitTestBehavior.opaque,
-          onTap: () => setState(() => _showLogs = !_showLogs),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Row(
-              children: [
-                Text(context.l10n.logs, style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
-                const SizedBox(width: 8),
-                Icon(
-                  _showLogs ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-                  color: Colors.grey.shade500,
-                  size: 18,
-                ),
-                const Spacer(),
-                if (_showLogs && logs.isNotEmpty) ...[
-                  GestureDetector(
-                    onTap: () {
-                      Clipboard.setData(ClipboardData(text: logService.logsAsText));
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(context.l10n.logsCopied), duration: const Duration(seconds: 1)),
-                      );
-                    },
-                    child: Icon(Icons.copy, color: Colors.grey.shade500, size: 16),
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ),
-        if (_showLogs)
-          Container(
-            constraints: const BoxConstraints(maxHeight: 200),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1A1A1A),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.grey.shade800),
-            ),
-            child: logs.isEmpty
-                ? Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Center(
-                      child: Text(
-                        context.l10n.noLogsYet,
-                        style: TextStyle(color: Colors.grey.shade600, fontSize: 12),
-                        textAlign: TextAlign.center,
-                      ),
-                    ),
-                  )
-                : ListView.builder(
-                    shrinkWrap: true,
-                    padding: const EdgeInsets.all(8),
-                    itemCount: logs.length,
-                    itemBuilder: (context, index) {
-                      final log = logs[index];
-                      final isError = log.level == CustomSttLogLevel.error;
-                      final isWarning = log.level == CustomSttLogLevel.warning;
-                      return Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 2),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              log.formattedTime,
-                              style: TextStyle(color: Colors.grey.shade600, fontSize: 10, fontFamily: 'monospace'),
-                            ),
-                            const SizedBox(width: 6),
-                            Icon(
-                              isError
-                                  ? Icons.error_outline
-                                  : isWarning
-                                      ? Icons.warning_amber_outlined
-                                      : Icons.info_outline,
-                              size: 12,
-                              color: isError
-                                  ? Colors.red.shade400
-                                  : isWarning
-                                      ? Colors.orange.shade400
-                                      : Colors.grey.shade500,
-                            ),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Text(
-                                '[${log.source}] ${log.message}',
-                                style: TextStyle(
-                                  color: isError
-                                      ? Colors.red.shade300
-                                      : isWarning
-                                          ? Colors.orange.shade300
-                                          : Colors.grey.shade400,
-                                  fontSize: 11,
-                                  fontFamily: 'monospace',
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                  ),
-          ),
-      ],
-    );
-  }
-
-  Widget _buildOmiFeatures() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          context.l10n.omiTranscriptionOptimized,
-          style: TextStyle(color: Colors.grey.shade500, fontSize: 14, height: 1.5),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildBottomBar() {
-    return Container(
-      // The SafeArea below adds the system inset; adding it here as well left
-      // twice the inset of dead space under the content on inset devices.
-      padding: const EdgeInsets.only(left: 20, right: 20, top: 16, bottom: 16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0D0D0D),
-        border: Border(top: BorderSide(color: Colors.grey.shade900)),
-      ),
-      child: SafeArea(
-        top: false,
-        child: SizedBox(
-          width: double.infinity,
-          height: 50,
-          child: ElevatedButton(
-            onPressed: _isSaving ? null : _saveConfig,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.white,
-              disabledBackgroundColor: Colors.grey.shade800,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              elevation: 0,
-            ),
-            child: _isSaving
-                ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
-                  )
-                : Text(
-                    context.l10n.save,
-                    style: const TextStyle(color: Colors.black, fontSize: 16, fontWeight: FontWeight.w600),
-                  ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-class _JsonEditorPage extends StatefulWidget {
-  final String title;
-  final String initialJson;
-  final SttProvider provider;
-  final Map<String, dynamic> Function() onReset;
-  final bool isResponseSchema;
-
-  const _JsonEditorPage({
-    required this.title,
-    required this.initialJson,
-    required this.provider,
-    required this.onReset,
-    this.isResponseSchema = false,
-  });
-
-  @override
-  State<_JsonEditorPage> createState() => _JsonEditorPageState();
-}
-
-class _JsonEditorPageState extends State<_JsonEditorPage> {
-  late TextEditingController _controller;
-  String? _parseError;
-
-  @override
-  void initState() {
-    super.initState();
-    _controller = TextEditingController(text: widget.initialJson);
-    _parseJson();
-  }
-
-  void _parseJson() {
-    try {
-      jsonDecode(_controller.text);
-      _parseError = null;
-    } catch (e) {
-      _parseError = e.toString();
-    }
-    setState(() {});
-  }
-
-  void _resetToTemplate() {
-    final template = widget.onReset();
-    _controller.text = const JsonEncoder.withIndent('  ').convert(template);
-    _parseJson();
-  }
-
-  void _applySchemaTemplate(String templateName) {
-    final schema = SttResponseSchema.templates[templateName];
-    if (schema != null) {
-      _controller.text = const JsonEncoder.withIndent('  ').convert(schema.toJson());
-      _parseJson();
-    }
-  }
-
-  void _applyRequestTemplate(String templateName) {
-    final template = SttProviderConfig.requestTemplates[templateName];
-    if (template != null) {
-      _controller.text = const JsonEncoder.withIndent('  ').convert(template);
-      _parseJson();
-    }
-  }
-
-  bool get _showTemplateSelector => widget.provider == SttProvider.custom || widget.provider == SttProvider.customLive;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: const Color(0xFF0D0D0D),
-      appBar: AppBar(
-        title: Text(widget.title, style: const TextStyle(fontWeight: FontWeight.w600)),
-        backgroundColor: const Color(0xFF0D0D0D),
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios, size: 20),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-        actions: [
-          TextButton(
-            onPressed: _resetToTemplate,
-            child: Text(context.l10n.reset, style: TextStyle(color: Colors.grey.shade400)),
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          Expanded(child: _buildEditorTab()),
-          _buildBottomBar(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTemplateSelector() {
-    final isResponseSchema = widget.isResponseSchema;
-    final templates =
-        isResponseSchema ? SttResponseSchema.templates.keys.toList() : SttProviderConfig.requestTemplates.keys.toList();
-    final description = isResponseSchema ? context.l10n.quicklyPopulateResponse : context.l10n.quicklyPopulateRequest;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(context.l10n.useTemplateFrom, style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
-        const SizedBox(height: 8),
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1A1A1A),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: Colors.grey.shade800),
-          ),
-          child: DropdownButtonHideUnderline(
-            child: DropdownButton<String>(
-              value: null,
-              hint: Text(
-                context.l10n.selectProviderTemplate,
-                style: TextStyle(color: Colors.grey.shade600, fontSize: 14),
-              ),
-              isExpanded: true,
-              dropdownColor: const Color(0xFF1A1A1A),
-              style: const TextStyle(color: Colors.white, fontSize: 14),
-              icon: Icon(Icons.keyboard_arrow_down, color: Colors.grey.shade500),
-              items: templates.map((name) {
-                final isLive = isResponseSchema
-                    ? SttResponseSchema.liveTemplates.contains(name)
-                    : SttProviderConfig.liveRequestTemplates.contains(name);
-                return DropdownMenuItem<String>(
-                  value: name,
-                  child: Row(
-                    children: [
-                      Expanded(child: Text(name)),
-                      if (isLive)
-                        Container(
-                          margin: const EdgeInsets.only(left: 8),
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.green.withValues(alpha: 0.2),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            context.l10n.live,
-                            style: const TextStyle(color: Colors.green, fontSize: 10, fontWeight: FontWeight.w600),
-                          ),
-                        ),
-                    ],
-                  ),
-                );
-              }).toList(),
-              onChanged: (templateName) {
-                if (templateName != null) {
-                  if (isResponseSchema) {
-                    _applySchemaTemplate(templateName);
-                  } else {
-                    _applyRequestTemplate(templateName);
-                  }
-                }
-              },
-            ),
-          ),
-        ),
-        const SizedBox(height: 4),
-        Text(description, style: TextStyle(color: Colors.grey.shade700, fontSize: 11)),
-      ],
-    );
-  }
-
-  Widget _buildEditorTab() {
-    return Padding(
-      padding: const EdgeInsets.all(16),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (_showTemplateSelector) ...[_buildTemplateSelector(), const SizedBox(height: 16)],
-          if (_parseError != null)
-            Container(
-              margin: const EdgeInsets.only(bottom: 12),
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.red.shade900.withValues(alpha: 0.3),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.red.shade700),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.error_outline, color: Colors.red.shade400, size: 18),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      context.l10n.invalidJsonError,
-                      style: TextStyle(color: Colors.red.shade400, fontSize: 13),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          Expanded(
-            child: Container(
-              decoration: BoxDecoration(
-                color: const Color(0xFF1A1A1A),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: Colors.grey.shade800),
-              ),
-              child: TextField(
-                controller: _controller,
-                maxLines: null,
-                expands: true,
-                style: const TextStyle(color: Colors.white, fontFamily: 'monospace', fontSize: 13),
-                onChanged: (_) => _parseJson(),
-                decoration: const InputDecoration(border: InputBorder.none, contentPadding: EdgeInsets.all(16)),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBottomBar() {
-    return Container(
-      // The SafeArea below adds the system inset; adding it here as well left
-      // twice the inset of dead space under the content on inset devices.
-      padding: const EdgeInsets.only(left: 20, right: 20, top: 16, bottom: 16),
-      decoration: BoxDecoration(
-        color: const Color(0xFF0D0D0D),
-        border: Border(top: BorderSide(color: Colors.grey.shade900)),
-      ),
-      child: SafeArea(
-        top: false,
-        child: SizedBox(
-          width: double.infinity,
-          height: 50,
-          child: ElevatedButton(
-            onPressed: _parseError != null ? null : () => Navigator.of(context).pop(_controller.text),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.white,
-              disabledBackgroundColor: Colors.grey.shade800,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              elevation: 0,
-            ),
-            child: Text(
-              context.l10n.save,
-              style: const TextStyle(color: Colors.black, fontSize: 16, fontWeight: FontWeight.w600),
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
   }
 }

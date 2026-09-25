@@ -2654,6 +2654,8 @@ actor AgentRuntimeProcess {
     try assertStartupAuthority(
       authorizationSnapshot,
       expectedAuthorityEpoch: admissionAuthorityEpoch)
+    env = AgentRuntimeCredentialPolicy.agentEnvironment(
+      env, isNonProduction: AppBuild.isNonProduction)
     proc.environment = env
 
     let stdin = Pipe()
