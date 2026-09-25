@@ -550,7 +550,7 @@ class GptLiveStreamingSttSocket implements IPureSocket {
       return false;
     }
 
-    CustomSttLogService.instance.info('GptLive', 'Connecting...');
+    CustomSttLogService.instance.info('GptLive', 'Connecting…');
     _status = PureSocketStatus.connecting;
 
     try {
