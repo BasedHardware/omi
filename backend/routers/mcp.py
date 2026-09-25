@@ -237,7 +237,9 @@ def create_memory(
     uid = auth_context.uid
     memory.category = identify_category_for_memory(memory.content)
     # Shared write core with the MCP memory tools; REST keeps its released
-    # operation label and the vector upsert the legacy path performed.
+    # operation label. `upsert_vector` is wire-compat only — the canonical
+    # write path deletes the flag, so this passes no extra behavior beyond
+    # what the MCP tools' create_memory already performs.
     memory_db = mcp_memory_handlers._create_one_memory(
         uid,
         memory,
