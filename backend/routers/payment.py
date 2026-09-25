@@ -67,6 +67,15 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
+def _sanitize_payment_error(error: Exception, fallback_code: str) -> str:
+    """Sanitize payment gateway errors to prevent internal details, account IDs, or tokens from leaking to clients."""
+    user_msg = getattr(error, 'user_message', None)
+    if user_msg and isinstance(user_msg, str) and user_msg.strip():
+        return user_msg.strip()
+    return fallback_code
+
+
 router = APIRouter()
 
 
@@ -885,7 +894,10 @@ def cancel_subscription_endpoint(
 
     except stripe.error.StripeError as e:
         logger.error(f"Stripe error canceling subscription: {e}")
-        raise HTTPException(status_code=500, detail=f"Could not cancel subscription: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=_sanitize_payment_error(e, "stripe_subscription_cancellation_failed"),
+        ) from e
     except Exception as e:
         logger.error(f"Error canceling subscription: {e}")
         raise HTTPException(status_code=500, detail="Could not cancel subscription. Please try again.")
@@ -1311,9 +1323,12 @@ def create_connect_account_endpoint(
             account = create_connect_account(uid, country)
             set_stripe_connect_account_id(uid, account['account_id'])
 
-        return account
     except stripe.error.StripeError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.warning(f"Stripe error creating connect account for user {uid}: {e}")
+        raise HTTPException(
+            status_code=400,
+            detail=_sanitize_payment_error(e, "stripe_connect_account_creation_failed"),
+        ) from e
 
 
 @router.get('/v1/stripe/supported-countries', response_model=List[StripeSupportedCountryResponse])
@@ -1332,7 +1347,11 @@ def check_onboarding_status(uid: str = Depends(auth.get_current_user_uid)):
             return {"onboarding_complete": False}
         return {"onboarding_complete": is_onboarding_complete(account_id)}
     except stripe.error.StripeError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.warning(f"Stripe error checking onboarding status for user {uid}: {e}")
+        raise HTTPException(
+            status_code=400,
+            detail=_sanitize_payment_error(e, "stripe_onboarding_status_check_failed"),
+        ) from e
 
 
 @router.post("/v1/stripe/refresh/{account_id}", response_model=StripeConnectAccountResponse)
@@ -1344,7 +1363,11 @@ def refresh_account_link_endpoint(request: Request, account_id: str, uid: str = 
         account = refresh_connect_account_link(account_id)
         return account
     except stripe.error.StripeError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.warning(f"Stripe error refreshing account link for {account_id}: {e}")
+        raise HTTPException(
+            status_code=400,
+            detail=_sanitize_payment_error(e, "stripe_account_link_refresh_failed"),
+        ) from e
 
 
 @router.get("/v1/stripe/return/{account_id}", response_class=HTMLResponse)
@@ -1606,7 +1629,10 @@ def cancel_app_subscription(app_id: str, uid: str = Depends(auth.get_current_use
         }
     except stripe.error.StripeError as e:
         logger.error(f"Stripe error canceling app subscription: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(
+            status_code=400,
+            detail=_sanitize_payment_error(e, "stripe_app_subscription_cancellation_failed"),
+        ) from e
     except Exception as e:
         logger.error(f"Error canceling app subscription: {e}")
         raise HTTPException(status_code=500, detail="Could not cancel subscription")
