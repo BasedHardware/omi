@@ -1442,11 +1442,32 @@ def test_gpt_live_observer_counts_each_response_on_a_warm_session() -> None:
     )
     assert len(second) == 1
     assert observer.flush() == ()
-    # The closing row still carries the session usage, but a response already
-    # counted on its boundary is not counted as a fresh start.
+    # The boundary rows already carried provider-vouched usage, so the close
+    # must not emit an extra response row (double-charge / N+1 attempts) — and
+    # a response already counted on its boundary is not counted as a fresh start.
     closing = observer.observe_upstream_frame(_frame({'type': 'session.closed', 'usage': {}}))
-    assert len(closing) == 1
+    assert closing == ()
     assert observer.starts == 2
+
+
+def test_gpt_live_close_row_survives_when_boundaries_carried_no_usage() -> None:
+    """Clients whose response boundaries carry no usage (the web relay shape)
+    still get their one ledger row from `session.closed`."""
+    observer = RealtimeRelayObserver(GPT_LIVE_PROVIDER, model='gpt-live-1')
+    assert observer.observe_upstream_frame(_frame({'type': 'session.started'})) == ()
+    assert observer.observe_upstream_frame(_frame({'type': 'session.output_audio.delta', 'delta': 'AA=='})) == ()
+    boundary = observer.observe_upstream_frame(
+        _frame({'type': 'response.event', 'event': {'type': 'response.completed'}})
+    )
+    assert len(boundary) == 1
+    assert boundary[0].usage_reported is False
+    closing = observer.observe_upstream_frame(
+        _frame({'type': 'session.closed', 'usage': {'input_tokens': 10, 'output_tokens': 4}})
+    )
+    assert len(closing) == 1
+    assert closing[0].usage_reported is True
+    assert closing[0].input_text_tokens == 10
+    assert observer.starts == 1
 
 
 def test_gpt_live_session_started_counts_a_session_that_disconnects_before_output() -> None:
@@ -1469,9 +1490,7 @@ def test_gpt_live_next_response_start_clears_a_stale_interruption() -> None:
     observer.observe_upstream_frame(_frame({'type': 'session.interrupted'}))
     # ...must not mark the response that begins afterwards as interrupted.
     observer.observe_upstream_frame(_frame({'type': 'session.output_transcript.delta', 'delta': 'hi'}))
-    done = observer.observe_upstream_frame(
-        _frame({'type': 'response.event', 'event': {'type': 'response.completed'}})
-    )
+    done = observer.observe_upstream_frame(_frame({'type': 'response.event', 'event': {'type': 'response.completed'}}))
     assert len(done) == 1
     assert done[0].outcome == OUTCOME_SUCCESS
     assert done[0].error_class == 'none'

@@ -481,11 +481,14 @@ class RealtimeRelayObserver:
         # boundary that closes it (`response.event` done) or the session close.
         # `_gpt_live_boundary_seen` records that a response was closed on its own
         # boundary, so a warm session's final `session.closed` does not count an
-        # extra start. `session.closed` also carries the session-scoped usage.
+        # extra start. `session.closed` also carries the session-scoped usage;
+        # `_gpt_live_usage_reported` records that a boundary row already carried
+        # provider-vouched tokens, so the close must not bill them a second time.
         self._gpt_live_started = False
         self._gpt_live_interrupted = False
         self._gpt_live_closed = False
         self._gpt_live_boundary_seen = False
+        self._gpt_live_usage_reported = False
 
     # -- client → upstream ---------------------------------------------------------
 
@@ -693,12 +696,17 @@ class RealtimeRelayObserver:
             return ()
         self._gpt_live_closed = True
         # `session.closed` carries the session-scoped usage (GPT-Live bills by
-        # duration), so it always emits the closing row. It counts a start only
-        # when no response/activity was seen: a response already closed on its
-        # own `response.event` boundary was counted there.
+        # duration), so it emits the closing row — unless response boundaries
+        # already emitted rows vouching tokens for this session, in which case a
+        # closing row would double-charge that usage and count one response too
+        # many (N+1). It counts a start only when no response/activity was seen:
+        # a response already closed on its own `response.event` boundary was
+        # counted there.
         if not self._gpt_live_started and not self._gpt_live_boundary_seen:
             self.starts += 1
         self._gpt_live_started = False
+        if self._gpt_live_usage_reported:
+            return ()
         return (self._emit(self._gpt_live_turn(payload)),)
 
     def _observe_gpt_live_response(self, payload: Mapping[str, Any]) -> tuple[RealtimeTurnUsage, ...]:
@@ -731,6 +739,16 @@ class RealtimeRelayObserver:
         if isinstance(usage, Mapping):
             # Live usage mirrors OpenAI-style modality details when present.
             turn = replace(turn, **_openai_counts(usage), usage_reported=True)
+            if (
+                turn.input_text_tokens
+                + turn.input_audio_tokens
+                + turn.input_image_tokens
+                + turn.output_text_tokens
+                + turn.output_audio_tokens
+                + turn.reasoning_tokens
+                > 0
+            ):
+                self._gpt_live_usage_reported = True
         return turn
 
     # -- Gemini ------------------------------------------------------------------
