@@ -51,8 +51,8 @@ def _sanitize_update_error(exc: ValueError) -> str:
         return "invalid_update_generation_state"
     if "expected current release_id" in msg:
         return "invalid_update_release_state"
-    if "release_id already exists" in msg:
-        return "invalid_update_release_conflict"
+    if "release_id already exists" in msg or "immutable metadata" in msg:
+        return "invalid_update_immutable_conflict"
     if "invalid platform" in msg or "invalid channel" in msg:
         return "invalid_update_target"
     if "must be a" in msg or "is required" in msg or "is invalid" in msg or "must be 40" in msg or "must be ISO" in msg:
