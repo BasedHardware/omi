@@ -598,6 +598,10 @@ class TestPrivateCloudQueueCap:
         ``private_cloud_queue`` must sit inside a function that logs the
         'private_cloud_queue full' warning, and inline appends outside that
         helper are rejected (they would drop the oldest chunk silently).
+        The warning must also *guard* each enqueue — a call that appends on a
+        path the fullness check never runs on (before it, or in an early
+        return above it) drops the oldest chunk silently even though the
+        function warns elsewhere.
         """
         import ast
         import os
@@ -605,9 +609,6 @@ class TestPrivateCloudQueueCap:
         backend_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         with open(os.path.join(backend_dir, 'routers', 'pusher.py'), encoding='utf-8') as f:
             tree = ast.parse(f.read())
-
-        enqueue_functions = []
-        offending_enqueues = []
 
         def enqueue_targets(node: ast.AST) -> set:
             """Queues a call appends/bounds into, by name."""
@@ -629,6 +630,60 @@ class TestPrivateCloudQueueCap:
                 targets.add(node.args[0].id)
             return targets
 
+        def unguarded_private_cloud_enqueues(source_tree: ast.AST) -> list[str]:
+            """Enqueues into private_cloud_queue no fullness check precedes on their path.
+
+            A guard is an `if` whose test compares the queue's length and whose
+            branch logs the 'private_cloud_queue full' warning. An enqueue is
+            guarded when such a guard encloses it or precedes it in one of the
+            statement lists on its way up to the function body — the textual
+            approximation of the check dominating the enqueue.
+            """
+            parents: dict[ast.AST, ast.AST] = {
+                child: parent for parent in ast.walk(source_tree) for child in ast.iter_child_nodes(parent)
+            }
+            findings: list[str] = []
+            for function in ast.walk(source_tree):
+                if not isinstance(function, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                    continue
+                guards = [
+                    node
+                    for node in ast.walk(function)
+                    if isinstance(node, ast.If)
+                    and isinstance(node.test, ast.Compare)
+                    and any(
+                        isinstance(item, ast.Name) and item.id == 'private_cloud_queue' for item in ast.walk(node.test)
+                    )
+                    and any(
+                        isinstance(item, ast.Constant)
+                        and isinstance(item.value, str)
+                        and 'private_cloud_queue full' in item.value
+                        for item in ast.walk(node)
+                    )
+                ]
+                for call in (node for node in ast.walk(function) if 'private_cloud_queue' in enqueue_targets(node)):
+                    guarded = False
+                    child: ast.AST = call
+                    while not guarded:
+                        parent = parents.get(child)
+                        if parent is None:
+                            break
+                        for field in ('body', 'orelse', 'finalbody'):
+                            stmts = getattr(parent, field, None)
+                            if isinstance(stmts, list) and child in stmts:
+                                if any(guard in stmts[: stmts.index(child)] for guard in guards):
+                                    guarded = True
+                                break
+                        if parent is function:
+                            break
+                        child = parent
+                    if not guarded:
+                        findings.append(f'{function.name}:{call.lineno}')
+            return findings
+
+        enqueue_functions = []
+        offending_enqueues = []
+
         for function in ast.walk(tree):
             if not isinstance(function, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
@@ -647,6 +702,22 @@ class TestPrivateCloudQueueCap:
 
         assert enqueue_functions, 'no function both enqueues into private_cloud_queue and warns on overflow'
         assert not offending_enqueues, f'private_cloud_queue enqueues without an overflow warning: {offending_enqueues}'
+        unguarded = unguarded_private_cloud_enqueues(tree)
+        assert not unguarded, f'private_cloud_queue enqueues no fullness check precedes: {unguarded}'
+
+        # The structural check has teeth: an enqueue above the fullness check
+        # (or on an early-return path that skips it) is flagged even though
+        # the same function warns.
+        sneaky = ast.parse(
+            'def helper(chunk):\n'
+            '    if fast_path:\n'
+            '        private_cloud_queue.append(chunk)\n'
+            '        return\n'
+            '    if len(private_cloud_queue) >= PRIVATE_CLOUD_QUEUE_MAX_SIZE:\n'
+            "        logger.warning('private_cloud_queue full, dropping oldest')\n"
+            '    append_bounded(private_cloud_queue, chunk)\n'
+        )
+        assert unguarded_private_cloud_enqueues(sneaky) == ['helper:3']
 
     def test_deque_maxlen_drops_oldest(self):
         """Verify deque(maxlen=N) drops oldest item when full."""
