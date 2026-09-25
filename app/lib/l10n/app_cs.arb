@@ -3549,5 +3549,6 @@
     "secondDevice": "Druhé zařízení",
     "pairSecondDevice": "Spárovat druhé zařízení",
     "pairSecondDeviceDescription": "Připojte OmiGlass k vašemu Omi, aby fotky a zvuk šly do stejné konverzace.",
-    "forgetSecondDevice": "Zapomenout druhé zařízení"
+    "forgetSecondDevice": "Zapomenout druhé zařízení",
+    "captureRecoveryBanner": "Zvuk přívěsku se do aplikace nedostává — opravte klepnutím"
 }

@@ -11115,5 +11115,6 @@
     "secondDevice": "دوسرا ڈیوائس",
     "pairSecondDevice": "دوسرا ڈیوائس جوڑیں",
     "pairSecondDeviceDescription": "اپنے Omi کے ساتھ OmiGlass کو کنیکٹ کریں تاکہ تصاویر اور آڈیو ایک ہی گفتگو میں جائیں۔",
-    "forgetSecondDevice": "دوسرا ڈیوائس بھول جائیں"
+    "forgetSecondDevice": "دوسرا ڈیوائس بھول جائیں",
+    "captureRecoveryBanner": "پینڈنٹ کی آواز ایپ تک نہیں پہنچ رہی — درست کرنے کے لیے ٹیپ کریں"
 }

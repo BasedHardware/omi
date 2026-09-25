@@ -3549,5 +3549,6 @@
     "secondDevice": "Al doilea dispozitiv",
     "pairSecondDevice": "Asociază un al doilea dispozitiv",
     "pairSecondDeviceDescription": "Conectează OmiGlass alături de Omi, astfel încât fotografiile și sunetul să ajungă în aceeași conversație.",
-    "forgetSecondDevice": "Uită al doilea dispozitiv"
+    "forgetSecondDevice": "Uită al doilea dispozitiv",
+    "captureRecoveryBanner": "Sunetul pandantivului nu ajunge în aplicație — atinge pentru a repara"
 }

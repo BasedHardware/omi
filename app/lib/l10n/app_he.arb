@@ -11115,5 +11115,6 @@
     "secondDevice": "מכשיר שני",
     "pairSecondDevice": "צימוד מכשיר שני",
     "pairSecondDeviceDescription": "חברו את OmiGlass לצד ה-Omi שלכם כדי שתמונות ואודיו ייכנסו לאותה שיחה.",
-    "forgetSecondDevice": "שכח את המכשיר השני"
+    "forgetSecondDevice": "שכח את המכשיר השני",
+    "captureRecoveryBanner": "השמע מהתליון לא מגיע לאפליקציה — הקישו לתיקון"
 }

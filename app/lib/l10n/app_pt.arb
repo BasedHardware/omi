@@ -3584,5 +3584,6 @@
     "secondDevice": "Segundo dispositivo",
     "pairSecondDevice": "Emparelhar um segundo dispositivo",
     "pairSecondDeviceDescription": "Conecte o OmiGlass junto ao seu Omi para que fotos e áudio entrem na mesma conversa.",
-    "forgetSecondDevice": "Esquecer segundo dispositivo"
+    "forgetSecondDevice": "Esquecer segundo dispositivo",
+    "captureRecoveryBanner": "O áudio do pingente não chega à aplicação — toque para reparar"
 }

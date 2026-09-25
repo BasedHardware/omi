@@ -3549,5 +3549,6 @@
     "secondDevice": "Secondo dispositivo",
     "pairSecondDevice": "Associa un secondo dispositivo",
     "pairSecondDeviceDescription": "Collega OmiGlass insieme al tuo Omi così foto e audio finiscono nella stessa conversazione.",
-    "forgetSecondDevice": "Dimentica il secondo dispositivo"
+    "forgetSecondDevice": "Dimentica il secondo dispositivo",
+    "captureRecoveryBanner": "L'audio del ciondolo non arriva all'app — tocca per riparare"
 }

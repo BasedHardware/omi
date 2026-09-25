@@ -11115,5 +11115,6 @@
     "secondDevice": "ಎರಡನೇ ಸಾಧನ",
     "pairSecondDevice": "ಎರಡನೇ ಸಾಧನವನ್ನು ಜೋಡಿಸಿ",
     "pairSecondDeviceDescription": "ಫೋಟೋಗಳು ಮತ್ತು ಆಡಿಯೊ ಒಂದೇ ಸಂವಾದಕ್ಕೆ ಹೋಗಲು ನಿಮ್ಮ Omi ಜೊತೆಗೆ OmiGlass ಅನ್ನು ಸಂಪರ್ಕಿಸಿ.",
-    "forgetSecondDevice": "ಎರಡನೇ ಸಾಧನವನ್ನು ಮರೆತುಬಿಡಿ"
+    "forgetSecondDevice": "ಎರಡನೇ ಸಾಧನವನ್ನು ಮರೆತುಬಿಡಿ",
+    "captureRecoveryBanner": "ಪೆಂಡೆಂಟ್‌ನ ಆಡಿಯೊ ಆ್ಯಪ್‌ಗೆ ತಲುಪುತ್ತಿಲ್ಲ — ಸರಿಪಡಿಸಲು ಟ್ಯಾಪ್ ಮಾಡಿ"
 }

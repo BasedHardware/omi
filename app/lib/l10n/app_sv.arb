@@ -3549,5 +3549,6 @@
     "secondDevice": "Andra enhet",
     "pairSecondDevice": "Para ihop en andra enhet",
     "pairSecondDeviceDescription": "Anslut OmiGlass tillsammans med din Omi så att bilder och ljud hamnar i samma konversation.",
-    "forgetSecondDevice": "Glöm andra enhet"
+    "forgetSecondDevice": "Glöm andra enhet",
+    "captureRecoveryBanner": "Ljudet från hänget når inte appen — tryck för att reparera"
 }

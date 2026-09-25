@@ -11115,5 +11115,6 @@
     "secondDevice": "दुसरे डिव्हाइस",
     "pairSecondDevice": "दुसरे डिव्हाइस जोडा",
     "pairSecondDeviceDescription": "फोटो आणि ऑडिओ एकाच संभाषणात जाण्यासाठी तुमच्या Omi सोबत OmiGlass कनेक्ट करा.",
-    "forgetSecondDevice": "दुसरे डिव्हाइस विसरा"
+    "forgetSecondDevice": "दुसरे डिव्हाइस विसरा",
+    "captureRecoveryBanner": "पेंडंटचे ऑडिओ ॲपपर्यंत पोहोचत नाही — दुरुस्त करण्यासाठी टॅप करा"
 }

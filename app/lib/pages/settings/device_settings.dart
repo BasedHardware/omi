@@ -339,6 +339,9 @@ class _DeviceSettingsState extends State<DeviceSettings> {
 
     // Read the id before forget promotes a paired companion into the primary slot.
     final deviceId = provider.connectedDevice?.id ?? SharedPreferencesUtil().btDevice.id;
+    if (deviceId.isNotEmpty) provider.markDisconnectIntentional(deviceId);
+    await _clearStoredDevice();
+    // Fully tear down the connection, transport and native service.
     if (deviceId.isNotEmpty) {
       await provider.forgetDevice(deviceId);
     }
@@ -362,6 +365,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     await _clearStoredDevice();
     final device = provider.connectedDevice;
     if (device != null) {
+      provider.markDisconnectIntentional(device.id);
       final connection = await ServiceManager.instance().device.ensureConnection(device.id);
       if (connection != null) {
         await connection.unpair();

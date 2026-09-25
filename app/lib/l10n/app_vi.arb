@@ -3549,5 +3549,6 @@
     "secondDevice": "Thiết bị thứ hai",
     "pairSecondDevice": "Ghép nối thiết bị thứ hai",
     "pairSecondDeviceDescription": "Kết nối OmiGlass cùng với Omi để ảnh và âm thanh đi vào cùng một cuộc trò chuyện.",
-    "forgetSecondDevice": "Quên thiết bị thứ hai"
+    "forgetSecondDevice": "Quên thiết bị thứ hai",
+    "captureRecoveryBanner": "Âm thanh từ mặt dây chuyền không đến được ứng dụng — chạm để sửa chữa"
 }

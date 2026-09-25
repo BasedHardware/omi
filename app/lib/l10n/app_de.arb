@@ -3549,5 +3549,6 @@
     "secondDevice": "Zweites Gerät",
     "pairSecondDevice": "Zweites Gerät koppeln",
     "pairSecondDeviceDescription": "Verbinde OmiGlass zusätzlich zu deinem Omi, damit Fotos und Audio in dieselbe Unterhaltung fließen.",
-    "forgetSecondDevice": "Zweites Gerät vergessen"
+    "forgetSecondDevice": "Zweites Gerät vergessen",
+    "captureRecoveryBanner": "Der Ton des Pendants erreicht die App nicht — zum Reparieren tippen"
 }

@@ -3591,5 +3591,6 @@
     "secondDevice": "Anden enhed",
     "pairSecondDevice": "Par en anden enhed",
     "pairSecondDeviceDescription": "Forbind OmiGlass sammen med din Omi, så billeder og lyd ender i samme samtale.",
-    "forgetSecondDevice": "Glem anden enhed"
+    "forgetSecondDevice": "Glem anden enhed",
+    "captureRecoveryBanner": "Lyden fra vedhænget når ikke frem til appen — tryk for at reparere"
 }

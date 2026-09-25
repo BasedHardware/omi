@@ -3549,5 +3549,6 @@
     "secondDevice": "อุปกรณ์เครื่องที่สอง",
     "pairSecondDevice": "จับคู่อุปกรณ์เครื่องที่สอง",
     "pairSecondDeviceDescription": "เชื่อมต่อ OmiGlass ควบคู่กับ Omi ของคุณ เพื่อให้รูปภาพและเสียงอยู่ในบทสนทนาเดียวกัน",
-    "forgetSecondDevice": "ลืมอุปกรณ์เครื่องที่สอง"
+    "forgetSecondDevice": "ลืมอุปกรณ์เครื่องที่สอง",
+    "captureRecoveryBanner": "เสียงจากจี้ไม่ถึงแอป — แตะเพื่อซ่อมแซม"
 }

@@ -35,11 +35,7 @@ import {
   Mic,
   Radio,
   FileText,
-  FlaskConical,
-  Activity,
-  UserPlus,
   Lightbulb,
-  Target,
   ArrowLeft,
   Crown,
   ChevronRight,
@@ -106,6 +102,7 @@ import type {
   UsageHistoryPoint,
   PricingOption,
 } from '@/types/user';
+import { clearRetiredExperimentalFeaturesStorage } from './retiredExperimentalFeatures';
 
 // ============================================================================
 // Types
@@ -1934,40 +1931,6 @@ function DeveloperSection({
   const [showApiKeyDialog, setShowApiKeyDialog] = useState(false);
   const [showDeleteGraphDialog, setShowDeleteGraphDialog] = useState(false);
 
-  // Experimental features (stored in localStorage)
-  const [experimentalFeatures, setExperimentalFeatures] = useState({
-    transcriptionDiagnostics: false,
-    autoCreateSpeakers: false,
-    followUpQuestions: false,
-    goalTracker: false,
-  });
-
-  // Load experimental features from localStorage on mount
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('omi_experimental_features');
-      if (saved) {
-        try {
-          setExperimentalFeatures(JSON.parse(saved));
-        } catch {
-          // Ignore parse errors
-        }
-      }
-    }
-  }, []);
-
-  // Save experimental features to localStorage when they change
-  const updateExperimentalFeature = (
-    key: keyof typeof experimentalFeatures,
-    value: boolean,
-  ) => {
-    const updated = { ...experimentalFeatures, [key]: value };
-    setExperimentalFeatures(updated);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('omi_experimental_features', JSON.stringify(updated));
-    }
-  };
-
   // Parse audio_bytes URL which may contain comma-separated URL and delay (e.g., "https://example.com,5")
   const parseAudioBytesUrl = (rawUrl: string) => {
     if (!rawUrl) return { url: '', delay: '5' };
@@ -2254,101 +2217,6 @@ function DeveloperSection({
         </Card>
       </div>
 
-      {/* Experimental Features */}
-      <div id="experimental" className="scroll-mt-4 space-y-3">
-        <div className="flex items-center gap-2">
-          <h3 className="text-sm font-semibold uppercase tracking-wider text-text-tertiary">
-            Experimental
-          </h3>
-          <FlaskConical className="h-4 w-4 text-text-secondary" />
-        </div>
-        <Card>
-          <div className="space-y-1">
-            {/* Transcription Diagnostics */}
-            <div className="flex items-center justify-between border-b border-white/[0.06] py-3">
-              <div className="flex items-center gap-3">
-                <div className="rounded-lg bg-bg-tertiary p-2">
-                  <Activity className="h-4 w-4 text-text-tertiary" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-text-primary">
-                    Transcription Diagnostics
-                  </p>
-                  <p className="text-xs text-text-tertiary">
-                    Detailed diagnostic messages
-                  </p>
-                </div>
-              </div>
-              <Toggle
-                enabled={experimentalFeatures.transcriptionDiagnostics}
-                onChange={(v) => updateExperimentalFeature('transcriptionDiagnostics', v)}
-              />
-            </div>
-
-            {/* Auto-create Speakers */}
-            <div className="flex items-center justify-between border-b border-white/[0.06] py-3">
-              <div className="flex items-center gap-3">
-                <div className="rounded-lg bg-bg-tertiary p-2">
-                  <UserPlus className="h-4 w-4 text-text-tertiary" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-text-primary">
-                    Auto-create Speakers
-                  </p>
-                  <p className="text-xs text-text-tertiary">
-                    Auto-create when name detected
-                  </p>
-                </div>
-              </div>
-              <Toggle
-                enabled={experimentalFeatures.autoCreateSpeakers}
-                onChange={(v) => updateExperimentalFeature('autoCreateSpeakers', v)}
-              />
-            </div>
-
-            {/* Follow-up Questions */}
-            <div className="flex items-center justify-between border-b border-white/[0.06] py-3">
-              <div className="flex items-center gap-3">
-                <div className="rounded-lg bg-bg-tertiary p-2">
-                  <Lightbulb className="h-4 w-4 text-text-tertiary" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-text-primary">
-                    Follow-up Questions
-                  </p>
-                  <p className="text-xs text-text-tertiary">
-                    Suggest questions after conversations
-                  </p>
-                </div>
-              </div>
-              <Toggle
-                enabled={experimentalFeatures.followUpQuestions}
-                onChange={(v) => updateExperimentalFeature('followUpQuestions', v)}
-              />
-            </div>
-
-            {/* Goal Tracker */}
-            <div className="flex items-center justify-between border-b border-white/[0.06] py-3">
-              <div className="flex items-center gap-3">
-                <div className="rounded-lg bg-bg-tertiary p-2">
-                  <Target className="h-4 w-4 text-text-tertiary" />
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-text-primary">Goal Tracker</p>
-                  <p className="text-xs text-text-tertiary">
-                    Track your personal goals on homepage
-                  </p>
-                </div>
-              </div>
-              <Toggle
-                enabled={experimentalFeatures.goalTracker}
-                onChange={(v) => updateExperimentalFeature('goalTracker', v)}
-              />
-            </div>
-          </div>
-        </Card>
-      </div>
-
       {/* Links */}
       <Card>
         <a
@@ -2575,6 +2443,12 @@ export function SettingsPage() {
   const [showSignOutDialog, setShowSignOutDialog] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      clearRetiredExperimentalFeaturesStorage(() => window.localStorage);
+    }
+  }, []);
 
   // Load section data on demand
   useEffect(() => {
@@ -2984,7 +2858,6 @@ export function SettingsPage() {
           { id: 'mcp', label: 'MCP' },
           { id: 'webhooks', label: 'Webhooks' },
           { id: 'data-management', label: 'Data' },
-          { id: 'experimental', label: 'Experimental' },
         ];
       default:
         return [];

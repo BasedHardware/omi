@@ -3549,5 +3549,6 @@
     "secondDevice": "두 번째 기기",
     "pairSecondDevice": "두 번째 기기 페어링",
     "pairSecondDeviceDescription": "Omi와 함께 OmiGlass를 연결하면 사진과 오디오가 같은 대화에 담깁니다.",
-    "forgetSecondDevice": "두 번째 기기 삭제"
+    "forgetSecondDevice": "두 번째 기기 삭제",
+    "captureRecoveryBanner": "펜던트 오디오가 앱에 도달하지 않습니다 — 탭하여 복구"
 }

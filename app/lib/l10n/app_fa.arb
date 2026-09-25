@@ -11115,5 +11115,6 @@
     "secondDevice": "دستگاه دوم",
     "pairSecondDevice": "جفت‌کردن دستگاه دوم",
     "pairSecondDeviceDescription": "OmiGlass را در کنار Omi خود متصل کنید تا عکس‌ها و صدا در همان گفتگو قرار بگیرند.",
-    "forgetSecondDevice": "فراموش‌کردن دستگاه دوم"
+    "forgetSecondDevice": "فراموش‌کردن دستگاه دوم",
+    "captureRecoveryBanner": "صدای آویز به برنامه نمی‌رسد — برای تعمیر ضربه بزنید"
 }

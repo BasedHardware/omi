@@ -11115,5 +11115,6 @@
     "secondDevice": "দ্বিতীয় ডিভাইস",
     "pairSecondDevice": "দ্বিতীয় ডিভাইস যুক্ত করুন",
     "pairSecondDeviceDescription": "আপনার Omi-এর পাশে OmiGlass সংযুক্ত করুন, যাতে ছবি ও অডিও একই কথোপকথনে যায়।",
-    "forgetSecondDevice": "দ্বিতীয় ডিভাইস ভুলে যান"
+    "forgetSecondDevice": "দ্বিতীয় ডিভাইস ভুলে যান",
+    "captureRecoveryBanner": "পেন্ডেন্টের অডিও অ্যাপে পৌঁছাচ্ছে না — মেরামত করতে ট্যাপ করুন"
 }

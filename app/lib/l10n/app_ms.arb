@@ -3549,5 +3549,6 @@
     "secondDevice": "Peranti kedua",
     "pairSecondDevice": "Pasangkan peranti kedua",
     "pairSecondDeviceDescription": "Sambungkan OmiGlass bersama Omi anda supaya foto dan audio masuk ke perbualan yang sama.",
-    "forgetSecondDevice": "Lupakan peranti kedua"
+    "forgetSecondDevice": "Lupakan peranti kedua",
+    "captureRecoveryBanner": "Audio loket tidak sampai ke aplikasi — ketik untuk membaiki"
 }

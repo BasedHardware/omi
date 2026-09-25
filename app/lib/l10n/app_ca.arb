@@ -3549,5 +3549,6 @@
     "secondDevice": "Segon dispositiu",
     "pairSecondDevice": "Vincula un segon dispositiu",
     "pairSecondDeviceDescription": "Connecta les OmiGlass al costat del teu Omi perquè les fotos i l'àudio vagin a la mateixa conversa.",
-    "forgetSecondDevice": "Oblida el segon dispositiu"
+    "forgetSecondDevice": "Oblida el segon dispositiu",
+    "captureRecoveryBanner": "L'àudio del penjoll no arriba a l'aplicació — toca'l per reparar"
 }

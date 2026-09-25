@@ -3584,5 +3584,6 @@
     "secondDevice": "İkinci cihaz",
     "pairSecondDevice": "İkinci cihazı eşleştir",
     "pairSecondDeviceDescription": "Fotoğraflar ve ses aynı sohbete gitsin diye OmiGlass'ı Omi'nizin yanına bağlayın.",
-    "forgetSecondDevice": "İkinci cihazı unut"
+    "forgetSecondDevice": "İkinci cihazı unut",
+    "captureRecoveryBanner": "Kolye sesi uygulamaya ulaşmıyor — onarmak için dokunun"
 }

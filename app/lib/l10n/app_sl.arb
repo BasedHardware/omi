@@ -11115,5 +11115,6 @@
     "secondDevice": "Druga naprava",
     "pairSecondDevice": "Seznani drugo napravo",
     "pairSecondDeviceDescription": "Povežite OmiGlass ob svojem Omi, da gredo fotografije in zvok v isti pogovor.",
-    "forgetSecondDevice": "Pozabi drugo napravo"
+    "forgetSecondDevice": "Pozabi drugo napravo",
+    "captureRecoveryBanner": "Zvuk obeska ne prihaja v aplikacijo — tapnite za popravilo"
 }

@@ -2,6 +2,20 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.391",
+      "date": "2026-09-25",
+      "changes": [
+        "Fixed macOS dev app launches that could stay stuck without a window after resetting a profile"
+      ]
+    },
+    {
+      "version": "0.12.390",
+      "date": "2026-09-25",
+      "changes": [
+        "Fixed automatic updates restarting Omi in the middle of a call, which split one meeting into two conversations"
+      ]
+    },
+    {
       "version": "0.12.389",
       "date": "2026-09-25",
       "changes": [

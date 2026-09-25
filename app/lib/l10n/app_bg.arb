@@ -3549,5 +3549,6 @@
     "secondDevice": "Второ устройство",
     "pairSecondDevice": "Сдвояване на второ устройство",
     "pairSecondDeviceDescription": "Свържете OmiGlass заедно с вашия Omi, така че снимките и звукът да влизат в един и същ разговор.",
-    "forgetSecondDevice": "Забрави второто устройство"
+    "forgetSecondDevice": "Забрави второто устройство",
+    "captureRecoveryBanner": "Звукът от висулката не достига до приложението — докоснете, за да поправите"
 }

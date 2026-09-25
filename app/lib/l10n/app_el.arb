@@ -3549,5 +3549,6 @@
     "secondDevice": "Δεύτερη συσκευή",
     "pairSecondDevice": "Σύζευξη δεύτερης συσκευής",
     "pairSecondDeviceDescription": "Συνδέστε τα OmiGlass μαζί με το Omi σας, ώστε φωτογραφίες και ήχος να πηγαίνουν στην ίδια συζήτηση.",
-    "forgetSecondDevice": "Διαγραφή δεύτερης συσκευής"
+    "forgetSecondDevice": "Διαγραφή δεύτερης συσκευής",
+    "captureRecoveryBanner": "Ο ήχος του μενταγιόν δεν φτάνει στην εφαρμογή — πατήστε για επισκευή"
 }
