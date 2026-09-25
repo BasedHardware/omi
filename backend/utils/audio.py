@@ -1,8 +1,16 @@
-from typing import Optional, Tuple
+from collections import deque
+from typing import Deque, Optional, Tuple
 
 
 class AudioRingBuffer:
-    """Circular buffer storing last N seconds of PCM16 mono audio with timestamp tracking."""
+    """Circular buffer storing last N seconds of PCM16 mono audio.
+
+    Positions are tracked with a per-write span ledger: each buffered chunk
+    remembers the wall time of its first sample (``write_positioned``, the
+    audio-timeline v2 path) or its end-of-arrival approximation (``write``,
+    the legacy path), so ``get_time_range``/``extract`` never assume that a
+    long arrival gap means continuous audio.
+    """
 
     def __init__(self, duration_seconds: float, sample_rate: int):
         self.sample_rate = sample_rate
@@ -17,28 +25,61 @@ class AudioRingBuffer:
         self.write_pos = 0
         self.total_bytes_written = 0
         self.last_write_timestamp: Optional[float] = None
+        # Logical spans of the audio currently retained: (first-sample wall
+        # time, byte count), oldest first.
+        self._spans: Deque[Tuple[float, int]] = deque()
+        self._buffered_bytes = 0
+
+    def _append_bytes(self, data: bytes) -> None:
+        for byte in data:
+            self.buffer[self.write_pos] = byte
+            self.write_pos = (self.write_pos + 1) % self.capacity
+        self.total_bytes_written += len(data)
+
+    def _record_span(self, start_ts: float, n_bytes: int) -> None:
+        if n_bytes <= 0:
+            return
+        self._spans.append((start_ts, n_bytes))
+        self._buffered_bytes += n_bytes
+        excess = self._buffered_bytes - self.capacity
+        while excess > 0 and self._spans:
+            front_ts, front_bytes = self._spans[0]
+            if front_bytes > excess:
+                self._spans[0] = (front_ts + excess / self.bytes_per_second, front_bytes - excess)
+                self._buffered_bytes -= excess
+                excess = 0
+            else:
+                self._spans.popleft()
+                self._buffered_bytes -= front_bytes
+                excess -= front_bytes
 
     def write(self, data: bytes, timestamp: float):
-        """Append audio data with timestamp."""
+        """Append audio data; ``timestamp`` is the chunk's arrival (its end)."""
         if self.capacity <= 0:
             # Zero-capacity buffer (non-positive sample_rate/duration): skip rather than IndexError
             # on buffer[0] or ZeroDivisionError on % capacity when the first audio frame arrives.
             # last_write_timestamp stays None, so get_time_range()/extract() report nothing buffered
             # and speaker matching handles that, keeping the live session alive.
             return
-        for byte in data:
-            self.buffer[self.write_pos] = byte
-            self.write_pos = (self.write_pos + 1) % self.capacity
-        self.total_bytes_written += len(data)
+        self._append_bytes(data)
         self.last_write_timestamp = timestamp
+        self._record_span(timestamp - len(data) / self.bytes_per_second, len(data))
+
+    def write_positioned(self, data: bytes, start_ts: float):
+        """Append audio whose first sample is at ``start_ts`` (capture projection)."""
+        if self.capacity <= 0:
+            return
+        self._append_bytes(data)
+        self.last_write_timestamp = start_ts + len(data) / self.bytes_per_second
+        self._record_span(start_ts, len(data))
 
     def get_time_range(self) -> Optional[Tuple[float, float]]:
         """Return (start_ts, end_ts) of audio currently in buffer."""
-        if self.last_write_timestamp is None:
+        if not self._spans:
             return None
-        bytes_in_buffer = min(self.total_bytes_written, self.capacity)
-        buffer_duration = bytes_in_buffer / self.bytes_per_second
-        return (self.last_write_timestamp - buffer_duration, self.last_write_timestamp)
+        front_ts, _ = self._spans[0]
+        back_ts, back_bytes = self._spans[-1]
+        return (front_ts, back_ts + back_bytes / self.bytes_per_second)
 
     def extract(self, start_ts: float, end_ts: float) -> Optional[bytes]:
         """Extract audio for absolute timestamp range."""

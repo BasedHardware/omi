@@ -10,7 +10,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Optional
+from typing import Any, Dict, Optional
 
 from routers.listen.realtime_demand import RealtimeDemandTracker
 from utils.client_device import ClientDeviceContext
@@ -65,6 +65,15 @@ class ListenSessionState:
     speaker_id_done: asyncio.Event = field(default_factory=asyncio.Event)
     speaker_map_dirty: bool = False
     first_audio_byte_timestamp: Optional[float] = None
+    # Audio-timeline v2 (single-channel server-STT live capture only): the
+    # per-socket capture sample cursor, per-conversation pinned first-audio
+    # origins (wall seconds), fresh conversations still awaiting their first
+    # accepted frame, and the recent capture ranges that resolve a mapped
+    # provider segment's owning conversation. All None/empty on v1 sessions.
+    capture_timeline: Any = None
+    conversation_capture_origins: Dict[str, float] = field(default_factory=dict)
+    conversations_awaiting_capture_origin: set = field(default_factory=set)
+    conversation_sample_ranges: Any = None
     live_transcription_attempt: Any = None
     client_live_transcription_attempt: Any = None
     live_transcription_failed: bool = False

@@ -269,11 +269,13 @@ def test_bounded_audio_and_transcript_buffers():
 
     session.audio_bytes_send(b"abc", received_at=1.0)
     session.audio_bytes_send(b"def", received_at=2.0)
-    assert b"".join(session.audio_chunks) == b"def"
+    # Audio runs (not bare chunks) since audio-timeline v2: each run carries
+    # its conversation binding and projected start alongside the bytes.
+    assert b"".join(run.data for run in session.audio_runs) == b"def"
     assert session.audio_total_size == 3
 
     session.audio_bytes_send(b"123456789", received_at=3.0)
-    assert b"".join(session.audio_chunks) == b"56789"
+    assert b"".join(run.data for run in session.audio_runs) == b"56789"
     assert session.audio_total_size == 5
 
 
@@ -301,11 +303,11 @@ async def test_failed_audio_send_retains_buffer_for_retry():
     session.audio_bytes_send(b"abcd", received_at=100.0)
 
     await session._audio_bytes_flush()
-    assert b"".join(session.audio_chunks) == b"abcd"
+    assert b"".join(run.data for run in session.audio_runs) == b"abcd"
     assert session.audio_total_size == 4
 
     await session._audio_bytes_flush()
-    assert list(session.audio_chunks) == []
+    assert list(session.audio_runs) == []
     assert session.audio_total_size == 0
     assert ws.sent[-1][12:] == b"abcd"
 
@@ -325,7 +327,7 @@ async def test_cancelled_send_retains_buffer(flush):
         session.audio_bytes_send(b"abcd", received_at=100.0)
         with pytest.raises(asyncio.CancelledError):
             await session._audio_bytes_flush()
-        assert b"".join(session.audio_chunks) == b"abcd"
+        assert b"".join(run.data for run in session.audio_runs) == b"abcd"
         assert session.audio_total_size == 4
 
 

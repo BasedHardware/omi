@@ -695,6 +695,9 @@ class ListenSessionRuntime:
                 max_pending_requests=self.limits.max_pending_requests,
                 max_pending_speaker_sample_requests=self.limits.max_pending_speaker_sample_requests,
                 client_kind=self.client_kind,
+                # v2 audio requires the capture timeline (flag on, single
+                # channel, server STT) AND a pusher capability acknowledgment.
+                audio_timeline_v2=self.state.capture_timeline is not None,
             ),
             ListenPusherSessionDeps(
                 get_current_conversation_id=lambda: self.state.current_conversation_id,
