@@ -33,7 +33,7 @@ from utils.task_intelligence.rollout import (
     resolve_task_intelligence_for_user,
 )
 from utils.task_intelligence import chat_first_e2e_fixture
-from utils.task_intelligence.task_links import TaskLinkValidationError
+from utils.task_intelligence.task_links import TaskLinkResolverUnavailableError, TaskLinkValidationError
 from utils.task_intelligence.staged_migration import migrate_staged_tasks
 
 logger = logging.getLogger(__name__)
@@ -335,8 +335,10 @@ def accept_candidate(
     try:
         return candidate_service.accept_candidate(uid, candidate_id, account_generation=account_generation)
     except TaskLinkValidationError as exc:
-        detail = _sanitize_candidate_error(exc, 'Invalid candidate task link parameters')
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail) from exc
+        if isinstance(exc, TaskLinkResolverUnavailableError):
+            detail = _sanitize_candidate_error(exc, 'Task link resolver is temporarily unavailable')
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail) from exc
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except candidates_db.CandidateStoreError as exc:
         _raise_store_error(exc)
 

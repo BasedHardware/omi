@@ -2,10 +2,9 @@
 
 Verifies that:
 1. WorkstreamCandidateResolverUnavailableError, generic CandidateStoreError, and
-   TaskLinkValidationError route through _sanitize_candidate_error.
-2. The _sanitize_candidate_error helper filters raw exception details and returns clean,
-   structured fallback messages to external callers.
-3. No raw detail=str(exc), detail=str(e), or detail=str(error) leaks remain across candidates.py.
+   internal TaskLinkResolverUnavailableError route through _sanitize_candidate_error.
+2. Domain validation messages on TaskLinkValidationError remain client-facing for UX compatibility.
+3. No store-error reflections remain and only allowlisted domain validation reflections exist in candidates.py.
 4. Behavioral executions for candidate error paths return sanitized responses.
 """
 
@@ -47,6 +46,9 @@ class CandidatesErrorSanitizationTests(unittest.TestCase):
             pass
 
         class StubTaskLinkValidationError(Exception):
+            pass
+
+        class StubTaskLinkResolverUnavailableError(StubTaskLinkValidationError):
             pass
 
         class StubModel(BaseModel):
@@ -123,6 +125,9 @@ class CandidatesErrorSanitizationTests(unittest.TestCase):
         sys.modules["database.candidates"].SUGGESTION_TTL = 3600
         sys.modules["utils.task_intelligence.capture_policy"].MINIMUM_CAPTURE_CONFIDENCE = 0.5
         sys.modules["utils.task_intelligence.task_links"].TaskLinkValidationError = StubTaskLinkValidationError
+        sys.modules["utils.task_intelligence.task_links"].TaskLinkResolverUnavailableError = (
+            StubTaskLinkResolverUnavailableError
+        )
 
         if str(BACKEND_DIR) not in sys.path:
             sys.path.insert(0, str(BACKEND_DIR))
@@ -141,6 +146,7 @@ class CandidatesErrorSanitizationTests(unittest.TestCase):
         cls._StubCandidateGenerationMismatchError = StubCandidateGenerationMismatchError
         cls._StubWorkstreamCandidateResolverUnavailableError = StubWorkstreamCandidateResolverUnavailableError
         cls._StubTaskLinkValidationError = StubTaskLinkValidationError
+        cls._StubTaskLinkResolverUnavailableError = StubTaskLinkResolverUnavailableError
 
     @classmethod
     def tearDownClass(cls):
@@ -187,9 +193,19 @@ class CandidatesErrorSanitizationTests(unittest.TestCase):
         source = target_path.read_text(encoding="utf-8")
 
         self.assertIn("_sanitize_candidate_error", source)
-        self.assertNotIn("detail=str(exc)", source)
-        self.assertNotIn("detail=str(e)", source)
-        self.assertNotIn("detail=str(error)", source)
+
+        # Scans the entire file for detail=str(...) reflections
+        lines = source.splitlines()
+        raw_detail_lines = [(i + 1, line.strip()) for i, line in enumerate(lines) if "detail=str(" in line]
+        # Only line allowing raw reflection must be the intentional domain TaskLinkValidationError passthrough
+        self.assertEqual(len(raw_detail_lines), 1)
+        line_num, line_str = raw_detail_lines[0]
+        self.assertEqual(
+            line_str, "raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc"
+        )
+        context_block = "\n".join(lines[max(0, line_num - 5) : line_num])
+        self.assertIn("TaskLinkValidationError", context_block)
+        self.assertIn("TaskLinkResolverUnavailableError", context_block)
 
     def test_raise_store_error_sanitization(self):
         from fastapi import HTTPException
@@ -238,21 +254,35 @@ class CandidatesErrorSanitizationTests(unittest.TestCase):
             self.assertEqual(ctx.exception.status_code, 409)
             self.assertEqual(ctx.exception.detail, "Candidate operation could not be completed")
 
-    def test_accept_candidate_task_link_validation_error_sanitization(self):
+    def test_accept_candidate_task_link_error_handling(self):
         from fastapi import HTTPException
 
         router_mod = self._router_mod
         accept_candidate = router_mod.accept_candidate
 
+        # 1. Internal resolver unavailable is sanitized
         with patch.object(router_mod, "_require_candidate_write_control"), patch.object(
             router_mod.candidate_service,
             "accept_candidate",
-            side_effect=self._StubTaskLinkValidationError("internal resolver failed with secret state"),
+            side_effect=self._StubTaskLinkResolverUnavailableError(
+                "Ticket 04 workstream goal resolver is not registered"
+            ),
         ):
             with self.assertRaises(HTTPException) as ctx:
                 accept_candidate(candidate_id="c-1", account_generation=1, uid="u-1")
             self.assertEqual(ctx.exception.status_code, 409)
-            self.assertEqual(ctx.exception.detail, "Invalid candidate task link parameters")
+            self.assertEqual(ctx.exception.detail, "Task link resolver is temporarily unavailable")
+
+        # 2. Client-facing domain validation message is preserved
+        with patch.object(router_mod, "_require_candidate_write_control"), patch.object(
+            router_mod.candidate_service,
+            "accept_candidate",
+            side_effect=self._StubTaskLinkValidationError("workstream and goal do not match"),
+        ):
+            with self.assertRaises(HTTPException) as ctx:
+                accept_candidate(candidate_id="c-1", account_generation=1, uid="u-1")
+            self.assertEqual(ctx.exception.status_code, 409)
+            self.assertEqual(ctx.exception.detail, "workstream and goal do not match")
 
 
 if __name__ == "__main__":
