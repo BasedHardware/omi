@@ -44,6 +44,25 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
+def _sanitize_update_error(exc: ValueError) -> str:
+    """Sanitize internal ValueError strings to prevent API state leaks."""
+    msg = str(exc)
+    if "generation mismatch:" in msg:
+        return "invalid_update_generation_state"
+    if "expected current release_id" in msg:
+        return "invalid_update_release_state"
+    if "release_id already exists" in msg:
+        return "invalid_update_release_conflict"
+    if "invalid platform" in msg or "invalid channel" in msg:
+        return "invalid_update_target"
+    if "must be a" in msg or "is required" in msg or "is invalid" in msg or "must be 40" in msg or "must be ISO" in msg:
+        return "invalid_update_parameter"
+    if "missing" in msg or "does not exist" in msg or "unavailable" in msg or "disabled" in msg:
+        return "invalid_update_precondition"
+    return "invalid_update_state"
+
+
+
 class DesktopUpdatePolicyResponse(BaseModel):
     """Server-controlled desktop update banner policy."""
 
@@ -1116,7 +1135,7 @@ async def publish_desktop_preview(request: DesktopPreviewPublishRequest, secret_
             expected_generation=request.expected_generation,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise HTTPException(status_code=409, detail=_sanitize_update_error(exc)) from exc
     return {"success": True, **result}
 
 
@@ -1137,7 +1156,7 @@ async def delist_desktop_preview(
             expected_generation=request.expected_generation,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise HTTPException(status_code=409, detail=_sanitize_update_error(exc)) from exc
     return {"success": True, **result}
 
 
@@ -1194,7 +1213,7 @@ async def register_desktop_release(request: Dict[str, Any], secret_key: str = He
     try:
         manifest = await run_blocking(db_executor, register_release_manifest, request)
     except ValueError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise HTTPException(status_code=409, detail=_sanitize_update_error(exc)) from exc
     return {"success": True, "manifest": manifest}
 
 
@@ -1260,7 +1279,7 @@ async def mutate_broken_beta(
         raise HTTPException(status_code=422, detail="Emergency Beta candidate rejected") from None
     except ValueError as exc:
         logger.info("beta_breakglass operation=%s result=conflict", request.operation)
-        raise HTTPException(status_code=409, detail=str(exc)) from None
+        raise HTTPException(status_code=409, detail=_sanitize_update_error(exc)) from None
     await run_blocking(db_executor, delete_generic_cache, live_cache_key("macos", "beta"))
     logger.warning(
         "beta_breakglass operation=%s request_id=%s actor=%s", request.operation, request.request_id, request.actor
@@ -1283,7 +1302,7 @@ async def reserve_beta_candidate_endpoint(
     try:
         control = await run_blocking(db_executor, reserve_beta_candidate, request.tag)
     except ValueError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise HTTPException(status_code=409, detail=_sanitize_update_error(exc)) from exc
     logger.info("beta_candidate_reservation tag=%s generation=%s", request.tag, control["control_generation"])
     return {"tag": control["latest_reserved_tag"], "generation": control["control_generation"]}
 
@@ -1299,7 +1318,7 @@ async def set_beta_admission(
     try:
         control = await run_blocking(db_executor, set_beta_admission_enabled, request.promotion_enabled)
     except ValueError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise HTTPException(status_code=409, detail=_sanitize_update_error(exc)) from exc
     # The established admin-key surface has no principal header. Record only its
     # bounded actor class, never the supplied credential.
     logger.info(
@@ -1346,7 +1365,7 @@ async def promote_desktop_channel(request: DesktopChannelPromotionRequest, secre
             ),
         )
     except ValueError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        raise HTTPException(status_code=409, detail=_sanitize_update_error(exc)) from exc
     await run_blocking(
         db_executor,
         delete_generic_cache,
