@@ -1,9 +1,12 @@
+import logging
 import os
 import re
 import traceback
 import uuid
 from datetime import datetime, timezone
 from typing import Any, Dict, Optional
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import Response
@@ -144,11 +147,11 @@ def verify_phone_number(
                     status_code=409,
                     detail="A verification call is already in progress for this number. Please answer the call and enter the code.",
                 )
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Failed to start verification: {str(e)}")
+        logger.error(f"Twilio error starting verification: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to start phone verification. Please try again later.")
     except Exception as e:
-        traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Failed to start verification: {str(e)}")
+        logger.error(f"Unexpected error starting phone verification: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to start phone verification. Please try again later.")
 
 
 @router.post("/v1/phone/numbers/verify/check", response_model=CheckVerificationResponse, tags=['phone-calls'])
@@ -239,7 +242,8 @@ def get_phone_token(uid: str = Depends(auth.get_current_user_uid)):
         token_data = generate_access_token(uid)
         return TokenResponse(**token_data)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to generate token: {str(e)}")
+        logger.error(f"Error generating phone token for user {uid}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail="Failed to generate phone token. Please try again later.")
 
 
 # ************************************************
