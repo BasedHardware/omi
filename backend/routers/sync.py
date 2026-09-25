@@ -1502,10 +1502,8 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
                                 type(error).__name__,
                             )
             except SyncJobRunLeaseLost:
-                # A newer epoch owns the durable ledger. Polling is a
-                # read-side recovery path, so it must leave that owner's
-                # retry material and Redis state untouched rather than turn
-                # the ownership handoff into a client-visible 500.
+                # A newer epoch owns the durable ledger; polling must leave its
+                # retry material and Redis state untouched rather than 500.
                 logger.warning('event=sync_stale_finalize outcome=lease_lost retry_material=preserved')
             finally:
                 release_job_run_lock(job_id, stale_lock_token)
@@ -1515,19 +1513,13 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
         and sync_job_uses_ledger_fence(job)
         and isinstance(job.get('content_id'), str)
     ):
-        # A fenced terminal write can land before its exact-job ledger release
-        # transiently fails (notably for inline/stale recovery, which has no
-        # Cloud Tasks duplicate delivery). Do not expose an ACKable terminal
-        # result until the retry claim is recoverable again: otherwise a WAL
-        # re-upload receives ``busy`` for the ledger stale window and looks
-        # permanently stuck to the client.
+        # Do not expose an ACKable terminal result until the retry claim is
+        # recoverable again: otherwise a WAL re-upload receives ``busy`` for
+        # the ledger stale window and looks permanently stuck to the client.
         try:
             release_sync_content_claim_after_job_retired(uid, job['content_id'], job_id)
         except Exception as error:
-            logger.error(
-                'event=sync_terminal_cleanup outcome=retrying exception_type=%s',
-                type(error).__name__,
-            )
+            logger.error('event=sync_terminal_cleanup outcome=retrying exception_type=%s', type(error).__name__)
             raise HTTPException(
                 status_code=503,
                 detail='Sync recovery finalization is retrying; local audio remains available.',
@@ -1541,10 +1533,7 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
         try:
             dead_letter = sync_dead_letters.get_dead_letter(job_id)
         except Exception as error:
-            logger.error(
-                'event=sync_dead_letter_check outcome=read_failed exception_type=%s',
-                type(error).__name__,
-            )
+            logger.error('event=sync_dead_letter_check outcome=read_failed exception_type=%s', type(error).__name__)
             dead_letter = None
         if (
             dead_letter is None
@@ -1556,6 +1545,13 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
                 status_code=503,
                 detail='Sync recovery finalization is retrying; local audio remains available.',
                 headers={'Retry-After': '10'},
+            )
+        try:
+            release_backfill_slot(uid, job_id)
+        except Exception as error:
+            logger.error(
+                'event=sync_stale_finalize outcome=release_slot_failed exception_type=%s',
+                type(error).__name__,
             )
 
     # Build response — include result only when terminal
