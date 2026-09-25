@@ -312,7 +312,8 @@ jobs:
             --project "${{ vars.GCP_PROJECT_ID }}" \
             --region "$REGION" \
             --scheduler-job "$LEDGER_DRAIN_SCHEDULER_JOB" \
-            --cloud-run-job "$LEDGER_DRAIN_SERVICE"
+            --cloud-run-job "$LEDGER_DRAIN_SERVICE" \
+            --scheduler-service-account "$SCHEDULER_SERVICE_ACCOUNT"
 
       - name: Show Output
         run: echo ${{ steps.deploy.outputs.url }}

@@ -334,7 +334,8 @@ jobs:
             --project "${{ vars.GCP_PROJECT_ID }}" \
             --region "$REGION" \
             --scheduler-job "$LEDGER_DRAIN_SCHEDULER_JOB" \
-            --cloud-run-job "$LEDGER_DRAIN_SERVICE"
+            --cloud-run-job "$LEDGER_DRAIN_SERVICE" \
+            --scheduler-service-account "$SCHEDULER_SERVICE_ACCOUNT"
 
       # If required, use the Cloud Run url output in later steps
       - name: Show Output
