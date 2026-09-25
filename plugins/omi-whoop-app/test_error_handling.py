@@ -191,6 +191,56 @@ class TestWhoopErrorSanitization(unittest.TestCase):
             self.assertNotIn("oauth.whoop.com:443", res.content)
             self.assertIn("Authentication error: An unexpected error occurred during authentication.", res.content)
 
+    def test_whoop_api_request_network_exception_sanitized(self):
+        sensitive_msg = "HTTPSConnectionPool(host='api.prod.whoop.internal', port=443): Max retries exceeded"
+        with patch.object(app.requests, "get", side_effect=Exception(sensitive_msg)):
+            result = app.whoop_api_request("user123", "GET", "/recovery")
+            self.assertIsInstance(result, dict)
+            self.assertIn("error", result)
+            self.assertNotIn("api.prod.whoop.internal", result["error"])
+            self.assertNotIn("HTTPSConnectionPool", result["error"])
+            self.assertEqual(result["error"], "Whoop API request failed")
+
+    def test_tool_handlers_network_failure_sanitized(self):
+        sensitive_msg = "HTTPSConnectionPool(host='api.prod.whoop.internal', port=443): Max retries exceeded"
+        with patch.object(app.requests, "get", side_effect=Exception(sensitive_msg)):
+            req = FakeChatRequest({"uid": "user123"})
+
+            # Recovery
+            res_rec = asyncio.run(app.tool_get_recovery(req))
+            self.assertIsNotNone(res_rec.error)
+            self.assertNotIn("api.prod.whoop.internal", res_rec.error)
+            self.assertNotIn("HTTPSConnectionPool", res_rec.error)
+            self.assertEqual(res_rec.error, "Failed to get recovery. Please try again.")
+
+            # Strain
+            res_str = asyncio.run(app.tool_get_strain(req))
+            self.assertIsNotNone(res_str.error)
+            self.assertNotIn("api.prod.whoop.internal", res_str.error)
+            self.assertNotIn("HTTPSConnectionPool", res_str.error)
+            self.assertEqual(res_str.error, "Failed to get strain. Please try again.")
+
+            # Sleep
+            res_slp = asyncio.run(app.tool_get_sleep(req))
+            self.assertIsNotNone(res_slp.error)
+            self.assertNotIn("api.prod.whoop.internal", res_slp.error)
+            self.assertNotIn("HTTPSConnectionPool", res_slp.error)
+            self.assertEqual(res_slp.error, "Failed to get sleep. Please try again.")
+
+            # Workouts
+            res_wkt = asyncio.run(app.tool_get_workouts(req))
+            self.assertIsNotNone(res_wkt.error)
+            self.assertNotIn("api.prod.whoop.internal", res_wkt.error)
+            self.assertNotIn("HTTPSConnectionPool", res_wkt.error)
+            self.assertEqual(res_wkt.error, "Failed to get workouts. Please try again.")
+
+            # Measurements
+            res_msr = asyncio.run(app.tool_get_body_measurements(req))
+            self.assertIsNotNone(res_msr.error)
+            self.assertNotIn("api.prod.whoop.internal", res_msr.error)
+            self.assertNotIn("HTTPSConnectionPool", res_msr.error)
+            self.assertEqual(res_msr.error, "Failed to get measurements. Please try again.")
+
 
 if __name__ == "__main__":
     unittest.main()

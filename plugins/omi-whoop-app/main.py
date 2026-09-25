@@ -127,7 +127,7 @@ def get_valid_access_token(uid: str) -> Optional[str]:
                 else:
                     return None
         except Exception as e:
-            log(f"Error checking token expiry: {e}")
+            log(f"Error checking token expiry: {type(e).__name__}")
 
     return access_token
 
@@ -152,7 +152,7 @@ def refresh_access_token(refresh_token: str) -> Optional[dict]:
             log(f"Token refresh failed: {response.status_code}")
             return None
     except Exception as e:
-        log(f"Error refreshing token: {e}")
+        log(f"Error refreshing token: {type(e).__name__}")
         return None
 
 
@@ -178,8 +178,8 @@ def whoop_api_request(uid: str, method: str, endpoint: str, params: dict = None)
             return {"error": f"HTTP {response.status_code}", "status_code": response.status_code}
 
     except Exception as e:
-        log(f"Whoop API request error: {e}")
-        return {"error": str(e)}
+        log(f"Whoop API request error: {type(e).__name__}")
+        return {"error": "Whoop API request failed"}
 
 
 # Safety cap on continuation pages per collection; a real Whoop week of data
@@ -199,7 +199,7 @@ def whoop_fetch_all_records(uid: str, endpoint: str, params: dict) -> Tuple[Opti
     for _ in range(MAX_COLLECTION_PAGES):
         result = whoop_api_request(uid, "GET", endpoint, params=page_params)
         if not result or "error" in result:
-            return None, result.get("error", "Unknown error") if result else "No response from Whoop"
+            return None, "Whoop API request failed"
 
         records.extend(result.get("records", []))
         next_token = result.get("next_token")
@@ -618,7 +618,7 @@ async def tool_get_recovery(request: Request):
         result = whoop_api_request(uid, "GET", "/recovery", params=params)
 
         if not result or "error" in result:
-            return ChatToolResponse(error=f"Failed to get recovery: {result.get('error', 'Unknown error')}")
+            return ChatToolResponse(error="Failed to get recovery. Please try again.")
 
         records = result.get("records", [])
 
@@ -665,7 +665,7 @@ async def tool_get_strain(request: Request):
         result = whoop_api_request(uid, "GET", "/cycle", params=params)
 
         if not result or "error" in result:
-            return ChatToolResponse(error=f"Failed to get strain: {result.get('error', 'Unknown error')}")
+            return ChatToolResponse(error="Failed to get strain. Please try again.")
 
         records = result.get("records", [])
 
@@ -711,7 +711,7 @@ async def tool_get_sleep(request: Request):
         result = whoop_api_request(uid, "GET", "/activity/sleep", params=params)
 
         if not result or "error" in result:
-            return ChatToolResponse(error=f"Failed to get sleep: {result.get('error', 'Unknown error')}")
+            return ChatToolResponse(error="Failed to get sleep. Please try again.")
 
         records = result.get("records", [])
 
@@ -770,7 +770,7 @@ async def tool_get_workouts(request: Request):
         result = whoop_api_request(uid, "GET", "/activity/workout", params=params)
 
         if not result or "error" in result:
-            return ChatToolResponse(error=f"Failed to get workouts: {result.get('error', 'Unknown error')}")
+            return ChatToolResponse(error="Failed to get workouts. Please try again.")
 
         workouts = result.get("records", [])
 
@@ -926,7 +926,7 @@ async def tool_get_body_measurements(request: Request):
         result = whoop_api_request(uid, "GET", "/user/measurement/body")
 
         if not result or "error" in result:
-            return ChatToolResponse(error=f"Failed to get measurements: {result.get('error', 'Unknown error')}")
+            return ChatToolResponse(error="Failed to get measurements. Please try again.")
 
         height_m = result.get("height_meter")
         weight_kg = result.get("weight_kilogram")
