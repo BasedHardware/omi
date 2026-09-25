@@ -21,7 +21,7 @@ from utils.memory.universal_list_cursor import (
 
 @pytest.fixture
 def service_mod(monkeypatch):
-    monkeypatch.setenv("MEMORY_MODE", "read")
+    monkeypatch.setenv("MEMORY_ENABLED", "on")
     monkeypatch.setenv("MEMORY_V3_CURSOR_SECRET", "unit-test-universal-list-cursor-secret")
     module = _load_memory_service(monkeypatch)
     missing = object()
