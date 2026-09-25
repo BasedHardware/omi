@@ -2,6 +2,7 @@
 
 from collections.abc import Callable
 from typing import Optional, TYPE_CHECKING
+
 if TYPE_CHECKING:
     from google.cloud.firestore_v1.client import Client as FirestoreClient
 
