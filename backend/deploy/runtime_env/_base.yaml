@@ -152,6 +152,10 @@ environment_shared:
           config_map:
             name: '{env}-omi-backend-config'
             key: MCP_AUTHORIZATION_SERVER_URL
+        OPENAI_APPS_CHALLENGE_TOKEN:
+          config_map:
+            name: '{env}-omi-backend-config'
+            key: OPENAI_APPS_CHALLENGE_TOKEN
         X_OAUTH_CLIENT_ID:
           config_map:
             name: '{env}-omi-backend-config'
@@ -264,6 +268,8 @@ environment_shared:
         GOOGLE_CLIENT_ID:
           source: environment
         MCP_AUTHORIZATION_SERVER_URL:
+          source: environment
+        OPENAI_APPS_CHALLENGE_TOKEN:
           source: environment
         MCP_OAUTH_CHATGPT_CLIENT_ID:
           source: environment
