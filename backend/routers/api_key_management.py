@@ -37,9 +37,7 @@ developer_router = APIRouter()
 )
 def get_mcp_keys(uid: str = Depends(get_current_user_id)):
     keys, repairs = mcp_api_key_db.get_mcp_keys_for_user_with_repair_info(uid)
-    record_api_key_repairs(
-        key_kind="mcp", operation="list", repairs=repairs, log=logger
-    )
+    record_api_key_repairs(key_kind="mcp", operation="list", repairs=repairs, log=logger)
     return keys
 
 
@@ -55,13 +53,9 @@ def create_mcp_key(key_data: McpApiKeyCreate, uid: str = Depends(get_current_use
         raise HTTPException(status_code=422, detail="Key name cannot be empty")
 
     try:
-        raw_key, api_key_data = mcp_api_key_db.create_mcp_key(
-            uid, key_data.name.strip()
-        )
+        raw_key, api_key_data = mcp_api_key_db.create_mcp_key(uid, key_data.name.strip())
     except ApiKeyValidationError as exc:
-        logger.warning(
-            f"MCP API key validation failed for user {uid}: {sanitize(str(exc))}"
-        )
+        logger.warning(f"MCP API key validation failed for user {uid}: {sanitize(str(exc))}")
         raise HTTPException(status_code=422, detail=sanitize(str(exc))) from exc
     return McpApiKeyCreated(**api_key_data.model_dump(), key=raw_key)
 
@@ -78,9 +72,7 @@ def delete_mcp_key(key_id: str, uid: str = Depends(get_current_user_id)):
         mcp_api_key_db.delete_mcp_key(uid, key_id)
     except ApiKeyRevocationUnavailableError as exc:
         record_api_key_revocation_exhausted(key_kind="mcp", log=logger)
-        raise HTTPException(
-            status_code=503, detail="API key revocation temporarily unavailable"
-        ) from exc
+        raise HTTPException(status_code=503, detail="API key revocation temporarily unavailable") from exc
     return
 
 
@@ -93,9 +85,7 @@ def delete_mcp_key(key_id: str, uid: str = Depends(get_current_user_id)):
 )
 def get_developer_keys(uid: str = Depends(get_current_user_id)):
     keys, repairs = dev_api_key_db.get_dev_keys_for_user_with_repair_info(uid)
-    record_api_key_repairs(
-        key_kind="dev", operation="list", repairs=repairs, log=logger
-    )
+    record_api_key_repairs(key_kind="dev", operation="list", repairs=repairs, log=logger)
     return keys
 
 
@@ -106,9 +96,7 @@ def get_developer_keys(uid: str = Depends(get_current_user_id)):
     summary="Create Key",
     operation_id="createApiKey",
 )
-def create_developer_key(
-    key_data: DevApiKeyCreate, uid: str = Depends(get_current_user_id)
-):
+def create_developer_key(key_data: DevApiKeyCreate, uid: str = Depends(get_current_user_id)):
     """
     Create a new Developer API key with optional scopes.
 
@@ -128,18 +116,12 @@ def create_developer_key(
         raise HTTPException(status_code=422, detail="Key name cannot be empty")
 
     if key_data.scopes is not None and not validate_scopes(key_data.scopes):
-        raise HTTPException(
-            status_code=400, detail=f"Invalid scopes. Available: {AVAILABLE_SCOPES}"
-        )
+        raise HTTPException(status_code=400, detail=f"Invalid scopes. Available: {AVAILABLE_SCOPES}")
 
     try:
-        raw_key, api_key_data = dev_api_key_db.create_dev_key(
-            uid, key_data.name.strip(), scopes=key_data.scopes
-        )
+        raw_key, api_key_data = dev_api_key_db.create_dev_key(uid, key_data.name.strip(), scopes=key_data.scopes)
     except ApiKeyValidationError as exc:
-        logger.warning(
-            f"Developer API key validation failed for user {uid}: {sanitize(str(exc))}"
-        )
+        logger.warning(f"Developer API key validation failed for user {uid}: {sanitize(str(exc))}")
         raise HTTPException(status_code=422, detail=sanitize(str(exc))) from exc
     # Developer status changes affect proactive-notification limits immediately.
     invalidate_developer_cache(uid)
@@ -158,8 +140,6 @@ def delete_developer_key(key_id: str, uid: str = Depends(get_current_user_id)):
         dev_api_key_db.delete_dev_key(uid, key_id)
     except ApiKeyRevocationUnavailableError as exc:
         record_api_key_revocation_exhausted(key_kind="dev", log=logger)
-        raise HTTPException(
-            status_code=503, detail="API key revocation temporarily unavailable"
-        ) from exc
+        raise HTTPException(status_code=503, detail="API key revocation temporarily unavailable") from exc
     invalidate_developer_cache(uid)
     return

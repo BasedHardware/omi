@@ -55,9 +55,7 @@ def test_lifecycle_route_metadata_and_auth_dependencies_are_stable(router, expec
     for route in router.routes:
         method = next(iter(route.methods))
         actual[(route.path, method)] = (route.tags[0], route.unique_id, route.summary)
-        assert [dependency.call for dependency in route.dependant.dependencies] == [
-            routes.get_current_user_id
-        ]
+        assert [dependency.call for dependency in route.dependant.dependencies] == [routes.get_current_user_id]
 
     assert actual == expected
 
@@ -69,9 +67,7 @@ def test_lifecycle_routers_are_composed_only_at_main_boundary():
     assert "app.include_router(api_key_management.developer_router)" in main_source
 
     for leaf_router in ("mcp.py", "developer.py"):
-        leaf_source = (BACKEND_DIR / "routers" / leaf_router).read_text(
-            encoding="utf-8"
-        )
+        leaf_source = (BACKEND_DIR / "routers" / leaf_router).read_text(encoding="utf-8")
         assert "api_key_management" not in leaf_source
 
 
@@ -89,9 +85,7 @@ def test_delete_routes_map_only_typed_revocation_failures_to_one_exhausted_503(
     delete_name,
     key_kind,
 ):
-    delete = MagicMock(
-        side_effect=ApiKeyRevocationUnavailableError("internal cache detail")
-    )
+    delete = MagicMock(side_effect=ApiKeyRevocationUnavailableError("internal cache detail"))
     exhausted = MagicMock()
     monkeypatch.setattr(database_module, delete_name, delete)
     monkeypatch.setattr(routes, "record_api_key_revocation_exhausted", exhausted)
@@ -195,9 +189,7 @@ def test_create_routes_sanitize_pii_and_tokens_in_validation_error(
     payload,
 ):
     create = MagicMock(
-        side_effect=ApiKeyValidationError(
-            "Token tok_secret123456789 invalid for user alice@example.com"
-        )
+        side_effect=ApiKeyValidationError("Token tok_secret123456789 invalid for user alice@example.com")
     )
     monkeypatch.setattr(database_module, create_name, create)
 
