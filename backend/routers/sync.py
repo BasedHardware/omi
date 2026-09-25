@@ -1689,7 +1689,7 @@ async def run_sync_job(request: Request, task_retry_count: int = Depends(verify_
                     job_id,
                     uid=job.get('uid'),
                     conversation_id=job.get('conversation_id'),
-                    failure_code=sync_dead_letters.dead_letter_failure_code(job.get('reason_code')),
+                    failure_code=job.get('reason_code') or 'unknown',
                 )
             else:
                 await _delete_staged_blobs_async(blob_paths)

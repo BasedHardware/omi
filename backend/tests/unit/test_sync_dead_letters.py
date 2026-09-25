@@ -173,6 +173,22 @@ def test_ensure_confirms_pending_and_self_heals_missing(firestore, capsys):
     assert 'sync_backfill_dead_letter' in capsys.readouterr().out
 
 
+def test_ensure_bounds_raw_failure_code_when_recreating(firestore):
+    confirmed = ledger.ensure_dead_letter_confirmed(
+        'job-10', uid='u1', failure_code='sync_decode_failed', firestore_client=firestore
+    )
+    assert confirmed['failure_code'] == 'unknown'
+    assert firestore.doc('job-10')['failure_code'] == 'unknown'
+
+
+def test_ensure_keeps_known_failure_code_when_recreating(firestore):
+    confirmed = ledger.ensure_dead_letter_confirmed(
+        'job-11', uid='u1', failure_code='stt_failed', firestore_client=firestore
+    )
+    assert confirmed['failure_code'] == 'stt_failed'
+    assert firestore.doc('job-11')['failure_code'] == 'stt_failed'
+
+
 def test_ensure_missing_doc_without_uid_fails_closed(firestore):
     with pytest.raises(RuntimeError):
         ledger.ensure_dead_letter_confirmed('job-x', firestore_client=firestore)
@@ -570,6 +586,22 @@ def test_terminal_delivery_uses_persisted_lane_not_payload_lane(monkeypatch):
 
     assert resp.status_code == 200
     assert calls == ['ensure', 'release_slot', 'release_claim']
+
+
+def test_terminal_delivery_passes_raw_reason_code_to_ledger(monkeypatch):
+    job = _backfill_job(status='failed', ledger_fence_mode='legacy', reason_code='sync_decode_failed')
+    _run_job_harness(monkeypatch, job)
+    captured: dict = {}
+
+    def ensure(job_id, **kwargs):
+        captured.update(kwargs)
+
+    monkeypatch.setattr(sync_router.sync_dead_letters, 'ensure_dead_letter_confirmed', ensure)
+
+    resp = asyncio.run(sync_router.run_sync_job(_FakeRequest(_terminal_run_payload()), task_retry_count=0))
+
+    assert resp.status_code == 200
+    assert captured['failure_code'] == 'sync_decode_failed'
 
 
 def test_terminal_delivery_skips_ledger_for_completed(monkeypatch):
