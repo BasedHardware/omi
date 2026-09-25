@@ -120,8 +120,11 @@ void main() {
     test('while the phone records, pendant audio never reaches the phone socket', () async {
       final link = await connectPendant();
       expect(await pendantBytesReaching(link), greaterThan(0), reason: 'the pendant streams before the switch');
+      final pendantRecording = world.controller.activeRecordingId;
 
       await startPhone();
+      expect(world.controller.activeRecordingId, isNot(pendantRecording),
+          reason: 'the phone recording is its own conversation, not a continuation of the pendant\'s');
       expect(world.sockets.last.source, isNot('omi'), reason: 'the phone opens its own socket');
       expect(link.openAudioSubscriptions, 0, reason: 'the pendant stream is paused during the phone recording');
       expect(await pendantBytesReaching(link), 0);
@@ -194,6 +197,57 @@ void main() {
     });
   });
 
+  group('pause survives the paths that used to restart or strand it', () {
+    test('turning Transcribe Later on while paused keeps the paused recording resumable', () async {
+      final session = await startPhone();
+      final c = world.controller;
+      final recording = c.activeRecordingId;
+      await c.pauseCapture();
+      await world.settle();
+      await c.setBatchMode(true);
+      await world.settle();
+      expect(c.isPhoneMicPaused, isTrue);
+
+      await c.resumeCapture();
+      await world.settle();
+      world.emitNativeState(PhoneMicCaptureState.running);
+      world.injectAudioFrames(10, sessionId: world.hostApi.lastStartSessionId!, firstFrameIndex: 50);
+      await world.settle();
+      expect(c.activeRecordingId, recording);
+      expect(c.recordingState, RecordingState.record);
+      expect(session, isNot(world.hostApi.lastStartSessionId), reason: 'only the mic restarted');
+    });
+
+    test('a process death during a phone pause does not leave the next launch muted', () async {
+      await startPhone();
+      await world.controller.pauseCapture();
+      await world.settle();
+      expect(world.controller.isPaused, isTrue);
+
+      world.killProcess();
+      await world.reconstructProcess();
+      expect(world.controller.isPaused, isFalse);
+    });
+  });
+
+  group('the live source the UI shows', () {
+    test('names the phone, including while paused, and the pendant otherwise', () async {
+      final c = world.controller;
+      expect(c.liveCaptureSource, isNull);
+      await connectPendant();
+      expect(c.liveCaptureSource, 'omi');
+      await startPhone();
+      expect(c.liveCaptureSource, 'phone', reason: 'the pendant is connected but handed off');
+      expect(c.liveCaptureStartedAt, isNotNull);
+      await c.pauseCapture();
+      await world.settle();
+      expect(c.liveCaptureSource, 'phone');
+      await c.finishCapture();
+      await world.settle();
+      expect(c.liveCaptureSource, 'omi');
+    });
+  });
+
   group('(d) an Omi call pauses the pendant and gives it back', () {
     test('pendant audio stops during the call and flows again after it', () async {
       final link = await connectPendant();
@@ -210,6 +264,37 @@ void main() {
       expect(link.openAudioSubscriptions, 1);
       expect(world.controller.recordingState, RecordingState.deviceRecord);
       expect(await pendantBytesReaching(link), greaterThan(0));
+    });
+
+    test('a pendant that drops and reconnects during the call stays off, with its transcript', () async {
+      final link = await connectPendant();
+      world.omiCall.value = PhoneCallState.active;
+      await callSwitch();
+      final recording = world.controller.activeRecordingId;
+
+      world.controller.updateRecordingDevice(null);
+      await world.controller.streamDeviceRecording(device: pendant);
+      await world.settle();
+
+      expect(world.controller.pendantPausedForCall, isTrue);
+      expect(link.openAudioSubscriptions, 0);
+      expect(world.controller.activeRecordingId, recording, reason: 'the reconnect must not start a new session');
+
+      world.omiCall.value = PhoneCallState.idle;
+      await callSwitch();
+      expect(link.openAudioSubscriptions, 1);
+    });
+
+    test('a call that ends while the phone takes over does not resume the pendant under it', () async {
+      final link = await connectPendant();
+      world.omiCall.value = PhoneCallState.active;
+      await startPhone();
+      world.omiCall.value = PhoneCallState.idle;
+      await callSwitch();
+      expect(link.openAudioSubscriptions, 0, reason: 'the phone still owns the capture');
+      await world.stopLiveCapture();
+      await callSwitch();
+      expect(link.openAudioSubscriptions, 1);
     });
 
     test('a call does not unpause a pendant the user paused', () async {
