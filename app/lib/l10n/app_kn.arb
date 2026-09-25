@@ -14,7 +14,7 @@
     "@transcriptTab": {
         "description": "Tab label for transcript view"
     },
-    "actionItemsTab": "ಕ್ರಿಯಾ ಪದಗಳು",
+    "actionItemsTab": "ಕಾರ್ಯಗಳು",
     "@actionItemsTab": {
         "description": "Tab label for action items"
     },
@@ -22,7 +22,7 @@
     "@deleteConversationTitle": {
         "description": "Title for delete confirmation dialog"
     },
-    "deleteConversationMessage": "ಇದು ಸಂಬಂಧಿತ ಸ್ಮೃತಿಗಳು, ಕಾರ್ಯಗಳು ಮತ್ತು ಆಡಿಯೋ ಫೈಲ್‌ಗಳನ್ನೂ ಅಳಿಸುತ್ತದೆ. ಈ ಕ್ರಿಯೆಯನ್ನು ಹಿಂತೆಗೆದುಕೊಳ್ಳಲಾಗುವುದಿಲ್ಲ.",
+    "deleteConversationMessage": "ಇದು ಸಂಬಂಧಿತ ಸ್ಮೃತಿಗಳು, ಕಾರ್ಯಗಳು ಮತ್ತು ಆಡಿಯೋ ಫೈಲ್‌ಗಳನ್ನೂ ಅಳಿಸುತ್ತದೆ.",
     "@deleteConversationMessage": {
         "description": "Message for delete confirmation dialog"
     },
@@ -128,11 +128,11 @@
     "@remaining": {
         "description": "Label showing time remaining for SD card transfer"
     },
-    "loading": "ಲೋಡ್ ಆಗುತ್ತಿದೆ...",
+    "loading": "ಲೋಡ್ ಆಗುತ್ತಿದೆ…",
     "@loading": {
         "description": "Loading indicator text"
     },
-    "loadingDuration": "ಅವಧಿ ಲೋಡ್ ಆಗುತ್ತಿದೆ...",
+    "loadingDuration": "ಅವಧಿ ಲೋಡ್ ಆಗುತ್ತಿದೆ…",
     "@loadingDuration": {
         "description": "Loading duration indicator"
     },
@@ -162,7 +162,7 @@
     "@createPersonHint": {
         "description": "Hint text for creating a person"
     },
-    "speechProfile": "ಭಾಷಣ ಪ್ರೊಫೈಲ್",
+    "speechProfile": "ಧ್ವನಿ ಪ್ರೊಫೈಲ್",
     "@speechProfile": {
         "description": "Speech profile setting"
     },
@@ -188,7 +188,7 @@
     "@selectLanguage": {
         "description": "Title for language selection"
     },
-    "deleting": "ಅಳಿಸುತ್ತಿದೆ...",
+    "deleting": "ಅಳಿಸುತ್ತಿದೆ…",
     "@deleting": {
         "description": "Deleting in progress indicator"
     },
@@ -224,7 +224,7 @@
     "@disconnected": {
         "description": "Status text when device is disconnected"
     },
-    "searching": "ಹುಡುಕುತ್ತಿದೆ...",
+    "searching": "ಹುಡುಕುತ್ತಿದೆ",
     "@searching": {
         "description": "Loading text displayed while search is in progress"
     },
@@ -304,7 +304,7 @@
     "@starConversationHint": {
         "description": "Hint explaining how to star conversations"
     },
-    "searchConversations": "ಸಂವಾದ ಹುಡುಕಿ...",
+    "searchConversations": "ಸಂವಾದ ಹುಡುಕಿ",
     "@searchConversations": {
         "description": "Placeholder text for conversation search field"
     },
@@ -350,7 +350,7 @@
     "@noMessagesYet": {
         "description": "Empty chat state message"
     },
-    "deletingMessages": "ಓಮಿಯ ಸ್ಮೃತಿಯಿಂದ ನಿಮ್ಮ ಸಂದೇಶಗಳನ್ನು ಅಳಿಸುತ್ತಿದೆ...",
+    "deletingMessages": "ಓಮಿಯ ಸ್ಮೃತಿಯಿಂದ ನಿಮ್ಮ ಸಂದೇಶಗಳನ್ನು ಅಳಿಸುತ್ತಿದೆ…",
     "@deletingMessages": {
         "description": "Loading text when clearing chat"
     },
@@ -414,7 +414,7 @@
     "@buildAndShareApp": {
         "description": "Create app button subtitle"
     },
-    "searchApps": "ಅಪ್ಲಿಕೇಶನ ಹುಡುಕಿ...",
+    "searchApps": "ಅಪ್ಲಿಕೇಶನ ಹುಡುಕಿ",
     "@searchApps": {
         "description": "Placeholder text for search input"
     },
@@ -609,7 +609,7 @@
     "@privacyIntro": {
         "description": "Data privacy page introduction"
     },
-    "learnMore": "ಹೆಚ್ಚಿನ ತಿಳಿ...",
+    "learnMore": "ಹೆಚ್ಚಿನ ತಿಳಿ…",
     "@learnMore": {
         "description": "Learn more link"
     },
@@ -833,7 +833,7 @@
     "@developerSettingsTitle": {
         "description": "Developer settings page title"
     },
-    "saving": "ಉಳಿತಾಯ...",
+    "saving": "ಉಳಿತಾಯ…",
     "@saving": {
         "description": "Text shown while saving settings"
     },
@@ -937,7 +937,7 @@
     "@providing": {
         "description": "Providing stat title"
     },
-    "providingSubtitle": "ಕ್ರಿಯಾ ವಸ್ತುಗಳು, ಮತ್ತು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಅರ್ಥೈಸಿಕೊಂಡ ಟಿಪ್ಪಣಿಗಳು.",
+    "providingSubtitle": "ಕಾರ್ಯಗಳು ಮತ್ತು ಟಿಪ್ಪಣಿಗಳು, ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಸೆರೆಹಿಡಿಯಲಾಗಿದೆ.",
     "@providingSubtitle": {
         "description": "Providing stat subtitle"
     },
@@ -1007,19 +1007,19 @@
     "@shareStatsMessage": {
         "description": "Share stats base message"
     },
-    "sharePeriodToday": "ಇಂದು, omi ಮೂಲಕ:",
+    "sharePeriodToday": "ಇಂದು, Omi ಮೂಲಕ:",
     "@sharePeriodToday": {
         "description": "Share stats period: Today"
     },
-    "sharePeriodMonth": "ಈ ತಿಂಗಳು, omi ಮೂಲಕ:",
+    "sharePeriodMonth": "ಈ ತಿಂಗಳು, Omi ಮೂಲಕ:",
     "@sharePeriodMonth": {
         "description": "Share stats period: Month"
     },
-    "sharePeriodYear": "ಈ ವರ್ಷ, omi ಮೂಲಕ:",
+    "sharePeriodYear": "ಈ ವರ್ಷ, Omi ಮೂಲಕ:",
     "@sharePeriodYear": {
         "description": "Share stats period: Year"
     },
-    "sharePeriodAllTime": "ಇಲ್ಲೊ ಹೊಂದಿ, omi ಮೂಲಕ:",
+    "sharePeriodAllTime": "ಇಲ್ಲೊ ಹೊಂದಿ, Omi ಮೂಲಕ:",
     "@sharePeriodAllTime": {
         "description": "Share stats period: All Time"
     },
@@ -1072,7 +1072,7 @@
     "selectLogFile": "ಲಾಗ್ ಫೈಲ್ ಆಯ್ಕೆ ಮಾಡಿ",
     "shareLogs": "ಲಾಗ್ ಹಂಚಿಕೆ",
     "debugLogCleared": "ಡೀಬಗ್ ಲಾಗ್ ತೆರವುಗೊಳಿಸಲಾಗಿದೆ",
-    "exportStarted": "ರಫ್ತೀಕರಣ ಪ್ರಾರಂಭವಾಯಿತು. ಇದು ಕೆಲವು ಸೆಕೆಂಡುಗಳ ತೆಗೆದುಕೊಳ್ಳಬಹುದು...",
+    "exportStarted": "ರಫ್ತೀಕರಣ ಪ್ರಾರಂಭವಾಯಿತು. ಇದು ಕೆಲವು ಸೆಕೆಂಡುಗಳ ತೆಗೆದುಕೊಳ್ಳಬಹುದು…",
     "exportAllData": "ಎಲ್ಲಾ ಡೇಟಾ ರಫ್ತಿ",
     "exportDataDesc": "ಸಂವಾದ JSON ಫೈಲ್‌ಗೆ ರಫ್ತಿ",
     "exportedConversations": "ಓಮಿ ನಿಂದ ಸಂವಾದ ಸರಬರಾಜು",
@@ -1359,7 +1359,7 @@
         }
     },
     "account": "ಖಾತೆ",
-    "actionItemsSyncedTo": "ನಿಮ್ಮ ಕ್ರಿಯಾ ಐಟಂಗಳನ್ನು ನಿಮ್ಮ {appName} ಖಾತೆಗೆ ಸಿಂಕ್ ಮಾಡಲಾಗುತ್ತದೆ",
+    "actionItemsSyncedTo": "ನಿಮ್ಮ ಕಾರ್ಯಗಳನ್ನು ನಿಮ್ಮ {appName} ಖಾತೆಗೆ ಸಿಂಕ್ ಮಾಡಲಾಗುತ್ತದೆ",
     "@actionItemsSyncedTo": {
         "placeholders": {
             "appName": {
@@ -1556,7 +1556,7 @@
     "saveChanges": "ಬದಲಾವಣೆಗಳನ್ನು ಸಂರಕ್ಷಿಸಿ",
     "resetToDefault": "ಡಿಫಾಲ್ಟಕ್ಕೆ ಪುನಃ ಹೊಂದಿಸಿ",
     "viewTemplate": "ಟೆಂಪ್ಲೇಟ್ ನೋಡಿ",
-    "trySomethingLike": "ಇದಕ್ಕೆ ಹೋಲಿಸಿದಂತೆ ಪ್ರಯತ್ನಿಸಿ...",
+    "trySomethingLike": "ಇದಕ್ಕೆ ಹೋಲಿಸಿದಂತೆ ಪ್ರಯತ್ನಿಸಿ…",
     "tryIt": "ಪ್ರಯತ್ನಿಸಿ",
     "creatingPlan": "ಯೋಜನೆ ರಚಿಸಲಾಗುತ್ತಿದೆ",
     "developingLogic": "ತರ್ಕ ವಿಕಸನೆ ಮಾಡಲಾಗುತ್ತಿದೆ",
@@ -1565,8 +1565,8 @@
     "finalTouches": "ಅಂತಿಮ ಸ್ಪರ್ಶ",
     "processing": "ಪ್ರಕ್ರಿಯೆ ನಡೆಯುತ್ತಿದೆ",
     "features": "ವೈಶಿಷ್ಟ್ಯಗಳು",
-    "creatingYourApp": "ನಿಮ್ಮ ಅ್ಯಪ್ ರಚಿಸಲಾಗುತ್ತಿದೆ...",
-    "generatingIcon": "ಐಕನ್ ರಚಿಸುತ್ತಿದೆ...",
+    "creatingYourApp": "ನಿಮ್ಮ ಅ್ಯಪ್ ರಚಿಸಲಾಗುತ್ತಿದೆ…",
+    "generatingIcon": "ಐಕನ್ ರಚಿಸುತ್ತಿದೆ…",
     "whatShouldWeMake": "ನಾವು ಏನು ರಚಿಸಬೇಕು?",
     "appName": "ಅ್ಯಪ್ ಹೆಸರು",
     "description": "ವಿವರಣೆ",
@@ -1583,7 +1583,7 @@
     "usersPayToUse": "ಬಳಕೆದಾರರು ನಿಮ್ಮ ಅ್ಯಪ್ ಬಳಸಲು ಪಾವತಿ ಮಾಡುತ್ತಾರೆ",
     "freeForEveryone": "ಎಲ್ಲರ ಜೊತೆಗೆ ಅವಿರತ",
     "perMonthLabel": "/ ತಿಂಗಳು",
-    "creating": "ರಚಿಸಲಾಗುತ್ತಿದೆ...",
+    "creating": "ರಚಿಸಲಾಗುತ್ತಿದೆ…",
     "@creating": {
         "description": "Loading state text when app generation is in progress"
     },
@@ -1594,7 +1594,7 @@
     "@connect": {
         "description": "Title for device connection page"
     },
-    "searchingForDevices": "ಸಾಧನಗಳನ್ನು ಹುಡುಕಲಾಗುತ್ತಿದೆ...",
+    "searchingForDevices": "ಸಾಧನಗಳನ್ನು ಹುಡುಕಲಾಗುತ್ತಿದೆ",
     "@searchingForDevices": {
         "description": "Status text while scanning for Bluetooth devices"
     },
@@ -1647,7 +1647,7 @@
     "@backgroundActivity": {
         "description": "Title for background activity permission"
     },
-    "backgroundActivityDesc": "ಉತ್ತಮ ಸ್ಥಿರತೆಗಾಗಿ Omi ಅನ್ನು ಹಿನ್ನಿಲೆಯಲ್ಲಿ ಚಲಾಯಿಸುವಂತೆ ಅನುಮತಿ ನೀಡಿ",
+    "backgroundActivityDesc": "ಸ್ಕ್ರೀನ್ ಆಫ್ ಆಗಿರುವಾಗ ಅಥವಾ ಆ್ಯಪ್ ಬದಲಾಯಿಸಿದಾಗಲೂ Omi ರೆಕಾರ್ಡ್ ಮಾಡುತ್ತಲೇ ಇರಲು.",
     "@backgroundActivityDesc": {
         "description": "Description for background activity permission"
     },
@@ -1655,7 +1655,7 @@
     "@locationAccess": {
         "description": "Title for location access permission"
     },
-    "locationAccessDesc": "ಸಂಪೂರ್ಣ ಅನುಭವಕ್ಕಾಗಿ ಹಿನ್ನಿಲೆ ಸ್ಥಾನ ಸಕ್ರಿಯಗೊಳಿಸಿ",
+    "locationAccessDesc": "ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳು ಎಲ್ಲಿ ನಡೆದವು ಎಂದು Omi ಗುರುತಿಸಲು.",
     "@locationAccessDesc": {
         "description": "Description for location access permission"
     },
@@ -1663,7 +1663,7 @@
     "@notifications": {
         "description": "AppBar title for notifications settings page"
     },
-    "notificationsDesc": "ತಿಳುವಳಿಕೆಗಾಗಿ ಅಧಿಸೂಚನೆಗಳನ್ನು ಸಕ್ರಿಯಗೊಳಿಸಿ",
+    "notificationsDesc": "Omi ನಿಮಗೆ ಸಂಭಾಷಣೆ ಸಾರಾಂಶಗಳು, ಕಾರ್ಯ ಜ್ಞಾಪನೆಗಳು ಮತ್ತು ನಿಮ್ಮ ಆ್ಯಪ್‌ಗಳ ಪ್ರತ್ಯುತ್ತರಗಳನ್ನು ಕಳುಹಿಸಲು.",
     "@notificationsDesc": {
         "description": "Description for notifications permission"
     },
@@ -1674,7 +1674,7 @@
     "@locationServiceDisabled": {
         "description": "Title for dialog when location services are off"
     },
-    "locationServiceDisabledDesc": "ಸ್ಥಾನ ಸೇವೆ ನಿಷ್ಕ್ರಿಯ. ದಯವಿಟ್ಟು ಸೆಟ್ಟಿಂಗ್‌ಗಳು > ಗೌಪ್ಯತೆ ಮತ್ತು ಸುರಕ್ಷೆ > ಸ್ಥಾನ ಸೇವೆಗಳು ಗಿಕೆ ಮತ್ತು ಸಕ್ರಿಯಗೊಳಿಸಿ",
+    "locationServiceDisabledDesc": "ಈ ಸಾಧನದಲ್ಲಿ ಸ್ಥಳ ಸೇವೆಗಳು ಆಫ್ ಆಗಿವೆ. ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಆನ್ ಮಾಡಿ.",
     "@locationServiceDisabledDesc": {
         "description": "Instructions to enable location services"
     },
@@ -1904,7 +1904,7 @@
     "@personalGrowthJourney": {
         "description": "Subtitle describing Omi on auth screen"
     },
-    "actionItemsTitle": "To-Do's",
+    "actionItemsTitle": "ಕಾರ್ಯಗಳು",
     "@actionItemsTitle": {
         "description": "Title for the Action Items page"
     },
@@ -1924,7 +1924,7 @@
     "@tabOld": {
         "description": "Label for Old tab"
     },
-    "emptyTodoMessage": "🎉 ಎಲ್ಲಾ ಹೆಚ್ಚಾಯಿತು!\nಯಾವುದೇ ಬಾಕಿ ಕ್ರಿಯಾ ಐಟಂ ಇಲ್ಲ",
+    "emptyTodoMessage": "🎉 ಎಲ್ಲಾ ಮುಗಿದಿದೆ!\nಯಾವುದೇ ಬಾಕಿ ಕಾರ್ಯಗಳಿಲ್ಲ",
     "@emptyTodoMessage": {
         "description": "Message when To Do list is empty"
     },
@@ -1940,19 +1940,19 @@
     "@noItems": {
         "description": "Generic no items message"
     },
-    "actionItemMarkedIncomplete": "ಕ್ರಿಯಾ ಐಟಂ ಅಪೂರ್ಣವೆಂದು ಗುರುತಿಸಲಾಗಿದೆ",
+    "actionItemMarkedIncomplete": "ಕಾರ್ಯವನ್ನು ಅಪೂರ್ಣವೆಂದು ಗುರುತಿಸಲಾಗಿದೆ",
     "@actionItemMarkedIncomplete": {
         "description": "Snackbar message when item marked incomplete"
     },
-    "actionItemCompleted": "ಕ್ರಿಯಾ ಐಟಂ ಪೂರ್ಣವಾಯಿತು",
+    "actionItemCompleted": "ಕಾರ್ಯ ಪೂರ್ಣಗೊಂಡಿದೆ",
     "@actionItemCompleted": {
         "description": "Snackbar message when item completed"
     },
-    "deleteActionItemTitle": "ಕ್ರಿಯಾ ಐಟಂ ಅಳಿಸಿ",
+    "deleteActionItemTitle": "ಕಾರ್ಯ ಅಳಿಸಿ",
     "@deleteActionItemTitle": {
         "description": "Dialog title for delete confirmation"
     },
-    "deleteActionItemMessage": "ಈ ಕ್ರಿಯಾ ಐಟಂ ಅಳಿಸಲು ನೀವು ಖಚಿತವೆ?",
+    "deleteActionItemMessage": "ಈ ಕಾರ್ಯವನ್ನು ಅಳಿಸಲು ನೀವು ಖಚಿತವೆ?",
     "@deleteActionItemMessage": {
         "description": "Dialog message for delete confirmation"
     },
@@ -1960,7 +1960,7 @@
     "@deleteSelectedItemsTitle": {
         "description": "Title for bulk delete dialog"
     },
-    "deleteSelectedItemsMessage": "ನೀವು {count} ಆಯ್ಕೆ ಪಡೆದ ಕ್ರಿಯಾ ಐಟಂ{s} ಅಳಿಸಲು ಖಚಿತವೆ?",
+    "deleteSelectedItemsMessage": "ನೀವು {count} ಆಯ್ಕೆಮಾಡಿದ ಕಾರ್ಯ{s} ಅಳಿಸಲು ಖಚಿತವೆ?",
     "@deleteSelectedItemsMessage": {
         "description": "Confirmation message for bulk delete",
         "placeholders": {
@@ -1973,7 +1973,7 @@
             }
         }
     },
-    "actionItemDeletedResult": "ಕ್ರಿಯಾ ಐಟಂ \"{description}\" ಅಳಿಸಲಾಗಿದೆ",
+    "actionItemDeletedResult": "ಕಾರ್ಯ \"{description}\" ಅಳಿಸಲಾಗಿದೆ",
     "@actionItemDeletedResult": {
         "description": "Snackbar message after deleting single item",
         "placeholders": {
@@ -1982,7 +1982,7 @@
             }
         }
     },
-    "itemsDeletedResult": "{count} ಕ್ರಿಯಾ ಐಟಂ{s} ಅಳಿಸಲಾಗಿದೆ",
+    "itemsDeletedResult": "{count} ಕಾರ್ಯ{s} ಅಳಿಸಲಾಗಿದೆ",
     "@itemsDeletedResult": {
         "description": "Snackbar message after bulk delete",
         "placeholders": {
@@ -1994,7 +1994,7 @@
             }
         }
     },
-    "failedToDeleteItem": "ಕ್ರಿಯಾ ಐಟಂ ಅಳಿಸಲು ವಿಫಲವಾಗಿದೆ",
+    "failedToDeleteItem": "ಕಾರ್ಯ ಅಳಿಸಲು ವಿಫಲವಾಗಿದೆ",
     "@failedToDeleteItem": {
         "description": "Error message when deletion fails"
     },
@@ -2006,11 +2006,11 @@
     "@failedToDeleteSomeItems": {
         "description": "Error message when partial deletion failure"
     },
-    "welcomeActionItemsTitle": "ಕ್ರಿಯಾ ಐಟಂಗಳಿಗೆ ಸಿದ್ಧ",
+    "welcomeActionItemsTitle": "ಕಾರ್ಯಗಳಿಗೆ ಸಿದ್ಧ",
     "@welcomeActionItemsTitle": {
         "description": "Heading for empty state welcome"
     },
-    "welcomeActionItemsDescription": "ನಿಮ್ಮ AI ಸ್ವಯಂಚಾಲಿತವಾಗಿ ನಿಮ್ಮ ಸಂವಾದಗಳಿಂದ ಕಾರ್ಯಗಳು ಮತ್ತು to-do's ಹೊರತೆಗೆಯುತ್ತದೆ. ರಚಿಸಲಾದ ಸಮಯ ಇಲ್ಲಿ ಕಾಣಿಸುತ್ತವೆ.",
+    "welcomeActionItemsDescription": "ನಿಮ್ಮ AI ನಿಮ್ಮ ಸಂವಾದಗಳಿಂದ ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಕಾರ್ಯಗಳನ್ನು ಹೊರತೆಗೆಯುತ್ತದೆ. ರಚಿಸಿದಾಗ ಅವು ಇಲ್ಲಿ ಕಾಣಿಸುತ್ತವೆ.",
     "@welcomeActionItemsDescription": {
         "description": "Description for empty state welcome"
     },
@@ -2039,11 +2039,11 @@
     "@deleteSelected": {
         "description": "Tooltip for delete selected"
     },
-    "searchMemories": "ಸ್ಮೃತಿಗಳನ್ನು ಹುಡುಕಿ...",
+    "searchMemories": "ಸ್ಮೃತಿಗಳನ್ನು ಹುಡುಕಿ",
     "@searchMemories": {
         "description": "Search input hint text"
     },
-    "memoryDeleted": "ಸ್ಮೃತಿ ಅಳಿಸಲಾಗಿದೆ.",
+    "memoryDeleted": "ಸ್ಮೃತಿ ಅಳಿಸಲಾಗಿದೆ",
     "@memoryDeleted": {
         "description": "Notification when memory deleted"
     },
@@ -2099,7 +2099,7 @@
     "@createMemoryTooltip": {
         "description": "Tooltip for create memory FAB"
     },
-    "createActionItemTooltip": "ಹೊಸ ಕ್ರಿಯಾ ಐಟಂ ರಚಿಸಿ",
+    "createActionItemTooltip": "ಹೊಸ ಕಾರ್ಯ ರಚಿಸಿ",
     "@createActionItemTooltip": {
         "description": "Tooltip for create action item FAB"
     },
@@ -2172,11 +2172,11 @@
     "@retry": {
         "description": "Button label to retry an action"
     },
-    "createActionItem": "ಕ್ರಿಯಾ ಐಟಂ ರಚಿಸಿ",
+    "createActionItem": "ಕಾರ್ಯ ರಚಿಸಿ",
     "@createActionItem": {
         "description": "Dialog title for creating action item"
     },
-    "editActionItem": "ಕ್ರಿಯಾ ಐಟಂ ಸಂಪಾದಿಸಿ",
+    "editActionItem": "ಕಾರ್ಯ ಸಂಪಾದಿಸಿ",
     "@editActionItem": {
         "description": "Dialog title for editing action item"
     },
@@ -2184,23 +2184,23 @@
     "@actionItemDescriptionHint": {
         "description": "Input hint"
     },
-    "actionItemDescriptionEmpty": "ಕ್ರಿಯಾ ಐಟಂ ವಿವರಣೆ ಖಾಲಿ ಆಗಲಾಗುವುದಿಲ್ಲ.",
+    "actionItemDescriptionEmpty": "ಕಾರ್ಯದ ವಿವರಣೆ ಖಾಲಿ ಇರಬಾರದು.",
     "@actionItemDescriptionEmpty": {
         "description": "Error message"
     },
-    "actionItemUpdated": "ಕ್ರಿಯಾ ಐಟಂ ನವೀಕರಣ ಮಾಡಲಾಗಿದೆ",
+    "actionItemUpdated": "ಕಾರ್ಯ ನವೀಕರಿಸಲಾಗಿದೆ",
     "@actionItemUpdated": {
         "description": "Snackbar"
     },
-    "failedToUpdateActionItem": "ಕ್ರಿಯಾ ಐಟಂ ನವೀಕರಣ ಮಾಡಲು ವಿಫಲವಾಗಿದೆ",
+    "failedToUpdateActionItem": "ಕಾರ್ಯ ನವೀಕರಿಸಲು ವಿಫಲವಾಗಿದೆ",
     "@failedToUpdateActionItem": {
         "description": "Error message when updating action item fails"
     },
-    "actionItemCreated": "ಕ್ರಿಯಾ ಐಟಂ ರಚಿಸಲಾಗಿದೆ",
+    "actionItemCreated": "ಕಾರ್ಯ ರಚಿಸಲಾಗಿದೆ",
     "@actionItemCreated": {
         "description": "Snackbar"
     },
-    "failedToCreateActionItem": "ಕ್ರಿಯಾ ಐಟಂ ರಚಿಸಲು ವಿಫಲವಾಗಿದೆ",
+    "failedToCreateActionItem": "ಕಾರ್ಯ ರಚಿಸಲು ವಿಫಲವಾಗಿದೆ",
     "@failedToCreateActionItem": {
         "description": "Error message when creating action item fails"
     },
@@ -2248,19 +2248,19 @@
     "@markComplete": {
         "description": "Menu item to mark action item as complete"
     },
-    "actionItemDeleted": "ಕ್ರಿಯಾ ಐಟಂ ಅಳಿಸಲಾಗಿದೆ",
+    "actionItemDeleted": "ಕಾರ್ಯ ಅಳಿಸಲಾಗಿದೆ",
     "@actionItemDeleted": {
         "description": "Message shown when action item is deleted"
     },
-    "failedToDeleteActionItem": "ಕ್ರಿಯಾ ಐಟಂ ಅಳಿಸಲು ವಿಫಲವಾಗಿದೆ",
+    "failedToDeleteActionItem": "ಕಾರ್ಯ ಅಳಿಸಲು ವಿಫಲವಾಗಿದೆ",
     "@failedToDeleteActionItem": {
         "description": "Error message when deleting action item fails"
     },
-    "deleteActionItemConfirmTitle": "ಕ್ರಿಯಾ ಐಟಂ ಅಳಿಸಿ",
+    "deleteActionItemConfirmTitle": "ಕಾರ್ಯ ಅಳಿಸಿ",
     "@deleteActionItemConfirmTitle": {
         "description": "Dialog title"
     },
-    "deleteActionItemConfirmMessage": "ಈ ಕ್ರಿಯಾ ಐಟಂ ಅಳಿಸಲು ನೀವು ಖಚಿತವೆ?",
+    "deleteActionItemConfirmMessage": "ಈ ಕಾರ್ಯವನ್ನು ಅಳಿಸಲು ನೀವು ಖಚಿತವೆ?",
     "@deleteActionItemConfirmMessage": {
         "description": "Dialog message"
     },
@@ -2296,7 +2296,7 @@
     "@pleaseSelectReason": {
         "description": "Validation message prompting user to select a reason for their feedback"
     },
-    "tellUsMoreWhatWentWrong": "ಏನು ಸಮಸ್ಯೆ ಆಗಿತ್ತು ಎಂದು ನಮಗೆ ಹೆಚ್ಚು ಹೇಳಿ...",
+    "tellUsMoreWhatWentWrong": "ಏನು ಸಮಸ್ಯೆ ಆಗಿತ್ತು ಎಂದು ನಮಗೆ ಹೆಚ್ಚು ಹೇಳಿ…",
     "@tellUsMoreWhatWentWrong": {
         "description": "Hint text for feedback textarea asking user to provide more details"
     },
@@ -2377,7 +2377,7 @@
     "@exportButton": {
         "description": "Export button text"
     },
-    "actionItemsCopiedToClipboard": "ಕ್ರಿಯೆ ಪದಗಳು ಕ್ಲಿಪ್‌ಬೋರ್ಡ್‌ಗೆ ನಕಲಿಸಲಾಯಿತು",
+    "actionItemsCopiedToClipboard": "ಕಾರ್ಯಗಳನ್ನು ಕ್ಲಿಪ್‌ಬೋರ್ಡ್‌ಗೆ ನಕಲಿಸಲಾಯಿತು",
     "@actionItemsCopiedToClipboard": {
         "description": "Success message when action items are copied"
     },
@@ -2593,7 +2593,7 @@
     "@debugLogCleared": {
         "description": "Confirmation message after clearing debug logs"
     },
-    "exportStartedMessage": "ರಫ್ತು ಪ್ರಾರಂಭವಾಯಿತು. ಇದು ಕೆಲವು ಸೆಕೆಂಡುಗಳು ತೆಗೆದುಕೊಳ್ಳಬಹುದು...",
+    "exportStartedMessage": "ರಫ್ತು ಪ್ರಾರಂಭವಾಯಿತು. ಇದು ಕೆಲವು ಸೆಕೆಂಡುಗಳು ತೆಗೆದುಕೊಳ್ಳಬಹುದು…",
     "@exportStartedMessage": {
         "description": "Snackbar message when export starts"
     },
@@ -2745,7 +2745,7 @@
     "@trackPersonalGoalsOnHomepage": {
         "description": "Description for goal tracker"
     },
-    "actionItemDescriptionCannotBeEmpty": "ಕ್ರಿಯೆ ಪದ ವಿವರಣೆ ಖಾಲಿ ಇರಬಾರದು",
+    "actionItemDescriptionCannotBeEmpty": "ಕಾರ್ಯದ ವಿವರಣೆ ಖಾಲಿ ಇರಬಾರದು",
     "@actionItemDescriptionCannotBeEmpty": {
         "description": "Error message when action item description is empty"
     },
@@ -2862,7 +2862,7 @@
     "@resetToDefault": {
         "description": "Reset keyboard shortcut to default value"
     },
-    "pressKeys": "ಕೀಗಳನ್ನು ಒತ್ತಿರಿ...",
+    "pressKeys": "ಕೀಗಳನ್ನು ಒತ್ತಿರಿ…",
     "@pressKeys": {
         "description": "Placeholder text when recording keyboard shortcut"
     },
@@ -2882,7 +2882,7 @@
     "@search": {
         "description": "Search button and label"
     },
-    "searchPlaceholder": "ಹುಡುಕಿ...",
+    "searchPlaceholder": "ಹುಡುಕಿ",
     "@searchPlaceholder": {
         "description": "Search input placeholder text"
     },
@@ -2952,10 +2952,6 @@
     "@reviewAndManageConversations": {
         "description": "Subtitle explaining what users can do on conversations page"
     },
-    "startCapturingConversations": "ಇಲ್ಲಿ ನೋಡಲು ನಿಮ್ಮ Omi ಯಂತ್ರದೊಂದಿಗೆ ಸಂವಾದಗಳನ್ನು ಕ್ಯಾಪ್ಚರ್ ಮಾಡಲು ಪ್ರಾರಂಭಿಸಿ.",
-    "@startCapturingConversations": {
-        "description": "Message explaining how to get started with conversations"
-    },
     "useMobileAppToCapture": "ಆಡಿಯೋ ಕ್ಯಾಪ್ಚರ್ ಮಾಡಲು ನಿಮ್ಮ ಮೊಬೈಲ್ ಅ್ಯಾಪ್ ಬಳಸಿ",
     "@useMobileAppToCapture": {
         "description": "Tip about using mobile app for audio capture"
@@ -2988,7 +2984,7 @@
     "@searchResults": {
         "description": "Badge label for search results section"
     },
-    "actionItems": "ಕ್ರಿಯೆ ಪದಗಳು",
+    "actionItems": "ಕಾರ್ಯಗಳು",
     "@actionItems": {
         "description": "Section header for action items"
     },
@@ -3008,7 +3004,7 @@
     "@tasksLater": {
         "description": "Category label for tasks due later"
     },
-    "loadingTasks": "ಕಾರ್ಯಗಳನ್ನು ಲೋಡ್ ಮಾಡುತ್ತಿದೆ...",
+    "loadingTasks": "ಕಾರ್ಯಗಳನ್ನು ಲೋಡ್ ಮಾಡುತ್ತಿದೆ…",
     "@loadingTasks": {
         "description": "Message shown while tasks are being loaded"
     },
@@ -3088,30 +3084,30 @@
     "@timeAM": {
         "description": "AM time indicator"
     },
-    "actionItemUpdatedSuccessfully": "ಕ್ರಿಯೆ ಪದ ಯಶಸ್ವಿಯಾಗಿ ನವೀಕರಿಸಲಾಯಿತು",
+    "actionItemUpdatedSuccessfully": "ಕಾರ್ಯ ಯಶಸ್ವಿಯಾಗಿ ನವೀಕರಿಸಲಾಯಿತು",
     "@actionItemUpdatedSuccessfully": {
         "description": "Success message when action item is updated"
     },
-    "actionItemCreatedSuccessfully": "ಕ್ರಿಯೆ ಪದ ಯಶಸ್ವಿಯಾಗಿ ರಚಿಸಲಾಯಿತು",
+    "actionItemCreatedSuccessfully": "ಕಾರ್ಯ ಯಶಸ್ವಿಯಾಗಿ ರಚಿಸಲಾಯಿತು",
     "@actionItemCreatedSuccessfully": {
         "description": "Success message when action item is created"
     },
-    "actionItemDeletedSuccessfully": "ಕ್ರಿಯೆ ಪದ ಯಶಸ್ವಿಯಾಗಿ ಅಳಿಸಲಾಯಿತು",
+    "actionItemDeletedSuccessfully": "ಕಾರ್ಯ ಯಶಸ್ವಿಯಾಗಿ ಅಳಿಸಲಾಯಿತು",
     "@actionItemDeletedSuccessfully": {
         "description": "Success message when action item is deleted"
     },
-    "deleteActionItem": "ಕ್ರಿಯೆ ಪದ ಅಳಿಸಿ",
+    "deleteActionItem": "ಕಾರ್ಯ ಅಳಿಸಿ",
     "@deleteActionItem": {
         "description": "Dialog title for delete confirmation"
     },
-    "deleteActionItemConfirmation": "ನೀವು ಖಚಿತವಾಗಿ ಈ ಕ್ರಿಯೆ ಪದ ಅಳಿಸಲು ಬಯಸುವಿರಿ? ಈ ಕ್ರಿಯೆ ರದ್ದುಗೊಳಿಸಲಿಲ್ಲ.",
+    "deleteActionItemConfirmation": "ನೀವು ಖಚಿತವಾಗಿ ಈ ಕಾರ್ಯವನ್ನು ಅಳಿಸಲು ಬಯಸುವಿರಾ? ಈ ಕ್ರಿಯೆಯನ್ನು ರದ್ದುಗೊಳಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ.",
     "@deleteActionItemConfirmation": {
         "description": "Confirmation message for deleting action item"
     },
     "@description": {
         "description": "Label for description field"
     },
-    "enterActionItemDescription": "ಕ್ರಿಯೆ ಪದ ವಿವರಣೆ ನಮೂದಿಸಿ...",
+    "enterActionItemDescription": "ಕಾರ್ಯದ ವಿವರಣೆ ನಮೂದಿಸಿ",
     "@enterActionItemDescription": {
         "description": "Placeholder text for action item description field"
     },
@@ -3123,11 +3119,11 @@
     "@setDueDateAndTime": {
         "description": "Placeholder for due date picker button"
     },
-    "reloadingApps": "ಅ್ಯಾಪ್‌ಗಳನ್ನು ಮರುಲೋಡ್ ಮಾಡುತ್ತಿದೆ...",
+    "reloadingApps": "ಅ್ಯಾಪ್‌ಗಳನ್ನು ಮರುಲೋಡ್ ಮಾಡುತ್ತಿದೆ…",
     "@reloadingApps": {
         "description": "Loading message shown when reloading apps list"
     },
-    "loadingApps": "ಅ್ಯಾಪ್‌ಗಳನ್ನು ಲೋಡ್ ಮಾಡುತ್ತಿದೆ...",
+    "loadingApps": "ಅ್ಯಾಪ್‌ಗಳನ್ನು ಲೋಡ್ ಮಾಡುತ್ತಿದೆ…",
     "@loadingApps": {
         "description": "Loading message shown when apps are being loaded"
     },
@@ -3175,11 +3171,11 @@
     "@buildSubmitCustomOmiApp": {
         "description": "Subtitle describing the purpose of the create app page"
     },
-    "submittingYourApp": "ನಿಮ್ಮ ಅ್ಯಾಪ್ ಸಲ್ಲಿಕೆ ಮಾಡುತ್ತಿದೆ...",
+    "submittingYourApp": "ನಿಮ್ಮ ಅ್ಯಾಪ್ ಸಲ್ಲಿಕೆ ಮಾಡುತ್ತಿದೆ…",
     "@submittingYourApp": {
         "description": "Loading message shown while app is being submitted"
     },
-    "preparingFormForYou": "ನಿಮ್ಮ ಫಾರ್ಮ್ ತಯಾರಿ ಮಾಡುತ್ತಿದೆ...",
+    "preparingFormForYou": "ನಿಮ್ಮ ಫಾರ್ಮ್ ತಯಾರಿ ಮಾಡುತ್ತಿದೆ…",
     "@preparingFormForYou": {
         "description": "Loading message shown while form is being prepared"
     },
@@ -3207,7 +3203,7 @@
     "@chatPrompt": {
         "description": "Label for chat prompt text field"
     },
-    "chatPromptPlaceholder": "ನೀವು ಅದ್ಭುತ ಅ್ಯಾಪ್, ನಿಮ್ಮ ಕೆಲಸವು ಬಳಕೆದಾರರ ಪ್ರಶ್ನೆಗಳಿಗೆ ಪ್ರತಿಕ್ರಿಯಿಸುವುದು ಮತ್ತು ಅವರನ್ನು ಸಂತೋಷಿಸುವುದು...",
+    "chatPromptPlaceholder": "ನೀವು ಅದ್ಭುತ ಅ್ಯಾಪ್, ನಿಮ್ಮ ಕೆಲಸವು ಬಳಕೆದಾರರ ಪ್ರಶ್ನೆಗಳಿಗೆ ಪ್ರತಿಕ್ರಿಯಿಸುವುದು ಮತ್ತು ಅವರನ್ನು ಸಂತೋಷಿಸುವುದು…",
     "@chatPromptPlaceholder": {
         "description": "Placeholder text for chat prompt field"
     },
@@ -3215,7 +3211,7 @@
     "@conversationPrompt": {
         "description": "Section title for conversation prompt"
     },
-    "conversationPromptPlaceholder": "ನೀವು ಅದ್ಭುತ ಅ್ಯಾಪ್, ನಿಮಗೆ ಸಂವಾದದ ಪ್ರತಿಲೇಖನ ಮತ್ತು ಸಾರಾಂಶ ನೀಡಲಾಗುತ್ತದೆ...",
+    "conversationPromptPlaceholder": "ನೀವು ಅದ್ಭುತ ಅ್ಯಾಪ್, ನಿಮಗೆ ಸಂವಾದದ ಪ್ರತಿಲೇಖನ ಮತ್ತು ಸಾರಾಂಶ ನೀಡಲಾಗುತ್ತದೆ…",
     "@conversationPromptPlaceholder": {
         "description": "Placeholder text for conversation prompt field"
     },
@@ -3420,7 +3416,7 @@
     "@pricingPaid": {
         "description": "Paid pricing option"
     },
-    "loadingCapabilities": "ಸಾಮರ್ಥ್ಯಗಳನ್ನು ಲೋಡ್ ಮಾಡುತ್ತಿದೆ...",
+    "loadingCapabilities": "ಸಾಮರ್ಥ್ಯಗಳನ್ನು ಲೋಡ್ ಮಾಡುತ್ತಿದೆ…",
     "@loadingCapabilities": {
         "description": "Loading state message while fetching app capabilities"
     },
@@ -3610,13 +3606,9 @@
     "@failedToTranscribeAudio": {
         "description": "Error message when audio transcription fails"
     },
-    "transcribing": "ಪ್ರತಿಲೇಖನ ಮಾಡುತ್ತಿದೆ...",
+    "transcribing": "ಪ್ರತಿಲೇಖನ ಮಾಡುತ್ತಿದೆ…",
     "@transcribing": {
         "description": "Loading message while transcribing audio"
-    },
-    "transcriptionFailed": "ಪ್ರತಿಲೇಖನ ವಿಫಲವಾಯಿತು",
-    "@transcriptionFailed": {
-        "description": "Error message when transcription fails"
     },
     "discardedConversation": "ಅಸ್ವೀಕೃತ ಸಂವಾದ",
     "@discardedConversation": {
@@ -3630,7 +3622,7 @@
     "@from": {
         "description": "Preposition for time range in conversation"
     },
-    "copied": "ನಕಲಿಸಲಾಯಿತು!",
+    "copied": "ನಕಲಿಸಲಾಯಿತು",
     "@copied": {
         "description": "Button label after copying link"
     },
@@ -3683,7 +3675,7 @@
     "@failedToGenerateShareLink": {
         "description": "Error when share link generation fails"
     },
-    "reloadingConversations": "ಸಂವಾದಗಳನ್ನು ಮರುಲೋಡ್ ಮಾಡುತ್ತಿದೆ...",
+    "reloadingConversations": "ಸಂವಾದಗಳನ್ನು ಮರುಲೋಡ್ ಮಾಡುತ್ತಿದೆ…",
     "@reloadingConversations": {
         "description": "Loading message when refreshing conversations"
     },
@@ -3767,7 +3759,7 @@
     "@wearableAiCompanion": {
         "description": "Widget subtitle for device promotion"
     },
-    "loadingMemories": "ಸ್ಮರಣೆಗಳನ್ನು ಲೋಡ್ ಮಾಡುತ್ತಿದೆ...",
+    "loadingMemories": "ಸ್ಮರಣೆಗಳನ್ನು ಲೋಡ್ ಮಾಡುತ್ತಿದೆ…",
     "@loadingMemories": {
         "description": "Loading overlay message when reloading memories"
     },
@@ -3786,7 +3778,7 @@
     "@manual": {
         "description": "Filter option for manual memories"
     },
-    "loadingYourMemories": "ನಿಮ್ಮ ಸ್ಮರಣೆಗಳನ್ನು ಲೋಡ್ ಮಾಡುತ್ತಿದೆ...",
+    "loadingYourMemories": "ನಿಮ್ಮ ಸ್ಮರಣೆಗಳನ್ನು ಲೋಡ್ ಮಾಡುತ್ತಿದೆ…",
     "@loadingYourMemories": {
         "description": "Loading state message"
     },
@@ -3946,7 +3938,7 @@
     "pleaseSelectYourPrimaryLanguage": "ದಯವಿಟ್ಟು ನಿಮ್ಮ ಪ್ರಾಥಮಿಕ ಭಾಷೆಯನ್ನು ಆಯ್ಕೆ ಮಾಡಿ",
     "chooseYourLanguage": "ನಿಮ್ಮ ಭಾಷೆಯನ್ನು ಆಯ್ಕೆ ಮಾಡಿ",
     "selectPreferredLanguageForBestExperience": "ಸಿ Omi ಅನುಭವಕ್ಕೆ ಸಾಮಾನ್ಯವಾಗಿ ನಿಮ್ಮ ಆದ್ಯತೆಯ ಭಾಷೆಯನ್ನು ಆಯ್ಕೆ ಮಾಡಿ",
-    "searchLanguages": "ಭಾಷೆಗಳನ್ನು ಹುಡುಕಿ...",
+    "searchLanguages": "ಭಾಷೆಗಳನ್ನು ಹುಡುಕಿ",
     "selectALanguage": "ಭಾಷೆಯನ್ನು ಆಯ್ಕೆ ಮಾಡಿ",
     "tryDifferentSearchTerm": "ವಿಭಿನ್ನ ಹುಡುಕಾಟ ಪದವನ್ನು ಪ್ರಯತ್ನಿಸಿ",
     "pleaseEnterYourName": "ದಯವಿಟ್ಟು ನಿಮ್ಮ ಹೆಸರನ್ನು ನಮೂದಿಸಿ",
@@ -3970,9 +3962,9 @@
     "accessibility": "ಪ್ರವೇಶ್ಯತೆ",
     "detectBrowserBasedMeetings": "ಬ್ರೌಜರ್-ಆಧಾರಿತ ಸಭೆಗಳನ್ನು ಪತ್ತೆ ಮಾಡಿ",
     "accessibilityDescription": "ನಿಮ್ಮ ಬ್ರೌಜರ್‌ನಲ್ಲಿ Zoom, Meet ಅಥವಾ Teams ಸಭೆಗಳಿಗೆ ಚಾಲನ ಮಾಡುವ ಸಮಯ ಪತ್ತೆ ಮಾಡಲು Omi ಪ್ರವೇಶ್ಯತೆ ಅನುಮತಿ ಅಗತ್ಯವಿದೆ.",
-    "pleaseWait": "ದಯವಿಟ್ಟು ಕಾಯಿರಿ...",
+    "pleaseWait": "ದಯವಿಟ್ಟು ಕಾಯಿರಿ…",
     "joinTheCommunity": "ಸಮುದಾಯವನ್ನು ಸೇರಿ!",
-    "loadingProfile": "ಪ್ರೊಫೈಲ್ ಲೋಡ್ ಆಗುತ್ತಿದೆ...",
+    "loadingProfile": "ಪ್ರೊಫೈಲ್ ಲೋಡ್ ಆಗುತ್ತಿದೆ…",
     "profileSettings": "ಪ್ರೊಫೈಲ್ ಸೆಟ್ಟಿಂಗ್‌ಗಳು",
     "noEmailSet": "ಇಮೇಲ್ ಹೊಂದಿಸಿಲ್ಲ",
     "userIdCopiedToClipboard": "ಬಳಕೆದಾರ ID ಕ್ಲಿಪ್‌ಬೋರ್ಡ್‌ಗೆ ನಕಲಿಸಿದೆ",
@@ -4020,7 +4012,7 @@
     "pilotFeaturesDescription": "ಈ ವೈಶಿಷ್ಟ್ಯಗಳು ಪರೀಕ್ಷೆಗಳು ಮತ್ತು ಯಾವುದೇ ಬೆಂಬಲ ನಿಶ್ಚಿತವಲ್ಲ.",
     "suggestFollowUpQuestion": "ಸ್ವಲ್ಪ ಪ್ರಶ್ನೆ ಸೂಚಿಸಿ",
     "saveSettings": "ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು ಉಳಿಸಿ",
-    "syncingDeveloperSettings": "ಡೆವೆಲಪರ್ ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು ಸಿಂಕ್ ಮಾಡುತ್ತಿದೆ...",
+    "syncingDeveloperSettings": "ಡೆವೆಲಪರ್ ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು ಸಿಂಕ್ ಮಾಡುತ್ತಿದೆ…",
     "summary": "ಸಾರಾಂಶ",
     "auto": "ಸ್ವಯಂ",
     "noSummaryForApp": "ಈ ಅಪ್ಲಿಕೇಶನ್‌ಗೆ ಸಾರಾಂಶ ಲಭ್ಯವಿಲ್ಲ. ಉತ್ತಮ ಫಲಿತಾಂಶಗಳಿಗೆ ಇತರ ಅಪ್ಲಿಕೇಶನ್ ಪ್ರಯತ್ನಿಸಿ.",
@@ -4050,18 +4042,18 @@
     "letOmiChooseAutomatically": "Omi ಅನ್ನು ಸಿ ಉತ್ತಮ ಅಪ್ಲಿಕೇಶನ ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಆಯ್ಕೆ ಮಾಡಲು ನಿರ್ಬಂಧಿತಕ್ಕೆ ಗೊತ್ತಪಡಿಸಿ",
     "deleteConversationConfirmation": "ನೀವು ಖಚಿತವಾಗಿ ಈ ಸಂವಾದವನ್ನು ಅಳಿಸಲು ಬಯಸುವಿರಾ? ಈ ಕ್ರಿಯೆಯನ್ನು ರದ್ದುಗೊಳಿಸಲಾಗುವುದಿಲ್ಲ.",
     "conversationDeleted": "ಸಂವಾದ ಅಳಿಸಲಾಗಿದೆ",
-    "generatingLink": "ಲಿಂಕ್ ರಚಿಸುತ್ತಿದೆ...",
+    "generatingLink": "ಲಿಂಕ್ ರಚಿಸುತ್ತಿದೆ…",
     "editConversation": "ಸಂವಾದವನ್ನು ಸಂಪಾದಿಸಿ",
     "conversationLinkCopiedToClipboard": "ಸಂವಾದ ಲಿಂಕ್ ಕ್ಲಿಪ್‌ಬೋರ್ಡ್‌ಗೆ ನಕಲಿಸಿದೆ",
     "conversationTranscriptCopiedToClipboard": "ಸಂವಾದ ಪ್ರತಿಲೇಖನ ಕ್ಲಿಪ್‌ಬೋರ್ಡ್‌ಗೆ ನಕಲಿಸಿದೆ",
     "editConversationDialogTitle": "ಸಂವಾದವನ್ನು ಸಂಪಾದಿಸಿ",
     "changeTheConversationTitle": "ಸಂವಾದ ಶೀರ್ಷಿಕೆಯನ್ನು ಬದಲಿಸಿ",
     "conversationTitle": "ಸಂವಾದ ಶೀರ್ಷಿಕೆ",
-    "enterConversationTitle": "ಸಂವಾದ ಶೀರ್ಷಿಕೆ ನಮೂದಿಸಿ...",
+    "enterConversationTitle": "ಸಂವಾದ ಶೀರ್ಷಿಕೆ ನಮೂದಿಸಿ…",
     "conversationTitleUpdatedSuccessfully": "ಸಂವಾದ ಶೀರ್ಷಿಕೆ ಯಶಸ್ವಿಯಾಗಿ ಅಪ್ಡೇಟ್ ಮಾಡಲಾಗಿದೆ",
     "failedToUpdateConversationTitle": "ಸಂವಾದ ಶೀರ್ಷಿಕೆಯನ್ನು ಅಪ್ಡೇಟ್ ಮಾಡಲು ವಿಫಲವಾಗಿದೆ",
     "errorUpdatingConversationTitle": "ಸಂವಾದ ಶೀರ್ಷಿಕೆಯನ್ನು ಅಪ್ಡೇಟ್ ಮಾಡಲು ದೋಷ",
-    "settingUp": "ಸೆಟಪ್ ಮಾಡುತ್ತಿದೆ...",
+    "settingUp": "ಸೆಟಪ್ ಮಾಡುತ್ತಿದೆ…",
     "@settingUp": {
         "description": "Status message when initializing recording"
     },
@@ -4073,11 +4065,7 @@
     "@preparingSystemAudioCapture": {
         "description": "Status when preparing audio capture"
     },
-    "clickTheButtonToCaptureAudio": "ಲೈವ್ ಪ್ರತಿಲೇಖನ, AI ಒಳನೋಟಗಳು ಮತ್ತು ಸ್ವಯಂಚಾಲಿತ ಉಳಿತಾಯಿಗಾಗಿ ಆಡಿಯೋ ಹಿಡಿಯಲು ಬಟನ್ ನೀಡಿ.",
-    "@clickTheButtonToCaptureAudio": {
-        "description": "Instructions for starting recording"
-    },
-    "reconnecting": "ಮರುಸಂಪರ್ಕ ಸಾಧನೆ...",
+    "reconnecting": "ಮರುಸಂಪರ್ಕ ಸಾಧನೆ…",
     "@reconnecting": {
         "description": "Status when reconnecting to audio"
     },
@@ -4106,7 +4094,7 @@
     "@tapPlayToResume": {
         "description": "Instruction when paused"
     },
-    "listeningForAudio": "ಆಡಿಯೋವನ್ನು ಆಲಿಸುತ್ತಿದೆ...",
+    "listeningForAudio": "ಆಡಿಯೋವನ್ನು ಆಲಿಸುತ್ತಿದೆ…",
     "@listeningForAudio": {
         "description": "Status when listening for audio"
     },
@@ -4144,15 +4132,11 @@
             }
         }
     },
-    "startRecordingToSeeTranscript": "ಲೈವ್ ಪ್ರತಿಲೇಖನವನ್ನು ನೋಡಲು ರೆಕಾರ್ಡಿಂಗ್ ಪ್ರಾರಂಭ ಮಾಡಿ",
-    "@startRecordingToSeeTranscript": {
-        "description": "Empty state message for transcript"
-    },
     "paused": "ಸ್ಥಗಿತ",
     "@paused": {
         "description": "Recording status: paused"
     },
-    "initializing": "ಆರಂಭಿಸಲಾಗುತ್ತಿದೆ...",
+    "initializing": "ಆರಂಭಿಸಲಾಗುತ್ತಿದೆ…",
     "@initializing": {
         "description": "Recording status: initializing"
     },
@@ -4177,10 +4161,6 @@
     "@settingUpSystemAudioCapture": {
         "description": "Status when setting up audio capture"
     },
-    "capturingAudioAndGeneratingTranscript": "ಆಡಿಯೋ ಹಿಡಿಯುತ್ತಿದೆ ಮತ್ತು ಪ್ರತಿಲೇಖನ ರಚಿಸುತ್ತಿದೆ",
-    "@capturingAudioAndGeneratingTranscript": {
-        "description": "Status when actively recording"
-    },
     "clickToBeginRecordingSystemAudio": "ಸಿಸ್ಟಮ್ ಆಡಿಯೋ ರೆಕಾರ್ಡಿಂಗ್ ಪ್ರಾರಂಭಿಸಲು ಕ್ಲಿಕ್ ಮಾಡಿ",
     "@clickToBeginRecordingSystemAudio": {
         "description": "Instruction to start system audio recording"
@@ -4198,7 +4178,7 @@
             }
         }
     },
-    "translatedByOmi": "omi ಸಾಕಾಂಶಾಕಾರಕ",
+    "translatedByOmi": "Omi ಸಾಕಾಂಶಾಕಾರಕ",
     "@translatedByOmi": {
         "description": "Credit line for translations"
     },
@@ -4236,7 +4216,7 @@
     "@selectAudioInput": {
         "description": "Dropdown header for audio device selection"
     },
-    "loadingDevices": "ಸಾಧನಗಳನ್ನು ಲೋಡ್ ಮಾಡುತ್ತಿದೆ...",
+    "loadingDevices": "ಸಾಧನಗಳನ್ನು ಲೋಡ್ ಮಾಡುತ್ತಿದೆ…",
     "@loadingDevices": {
         "description": "Status when loading audio devices"
     },
@@ -4306,7 +4286,7 @@
     "@signOutQuestion": {
         "description": "Dialog title asking user to confirm sign out"
     },
-    "signOutConfirmation": "ನೀವು ಖಚಿತವಾಗಿ ಆರೋಹಣ ಔಟ್ ಮಾಡಲು ಬಯಸುವಿರಾ?",
+    "signOutConfirmation": "ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳನ್ನು ನೋಡಲು ಮತ್ತೆ ಸೈನ್ ಇನ್ ಮಾಡಬೇಕು. ಜೋಡಿಸಿದ ಸಾಧನ ಮತ್ತು ಆ್ಯಪ್ ಆದ್ಯತೆಗಳು ಈ ಫೋನ್‌ನಲ್ಲೇ ಉಳಿಯುತ್ತವೆ.",
     "@signOutConfirmation": {
         "description": "Confirmation message in sign out dialog"
     },
@@ -4371,7 +4351,7 @@
     "setConversationEndDescription": "ಸಂವಾದಗಳು ಸ್ವಯಂಚಾಲಿತವಾಗಿ ಕೊನೆಗೊಳ್ಳುವ ಸಮಯ ಹೊಂದಿಸಿ",
     "importDataDescription": "ಇತರ ಮೂಲಗಳು ಪೈಶನ್ ಆಮದು",
     "exportConversationsDescription": "ಸಂವಾದಗಳನ್ನು JSON ಗೆ ರಫ್ತು ಮಾಡಿ",
-    "exportingConversations": "ಸಂವಾದಗಳನ್ನು ರಫ್ತು ಮಾಡುತ್ತಿದೆ...",
+    "exportingConversations": "ಸಂವಾದಗಳನ್ನು ರಫ್ತು ಮಾಡುತ್ತಿದೆ…",
     "clearNodesDescription": "ಎಲ್ಲಾ ನೋಡ್‌ಗಳು ಮತ್ತು ಸಂಪರ್ಕಗಳನ್ನು ತೆರವುಗೊಳಿಸಿ",
     "deleteKnowledgeGraphQuestion": "ಜ್ಞಾನ ಗ್ರಾಫ್ ಅಳಿಸಿ?",
     "deleteKnowledgeGraphWarning": "ಇದು ಪಡೆದ ಜ್ಞಾನ ಗ್ರಾಫ್ ಡೇಟಾವನ್ನು ಅಳಿಸುತ್ತದೆ. ನಿಮ್ಮ ಮೂಲ ಆಲೋಚನೆಗಳು ಸುರಕ್ಷಿತವಾಗಿ ಉಳಿಯುತ್ತವೆ.",
@@ -4459,7 +4439,7 @@
             }
         }
     },
-    "newVersionAvailable": "ಹೊಸ ಆವೃತ್ತಿ ಲಭ್ಯವಿದೆ 🎉",
+    "newVersionAvailable": "ಹೊಸ ಆವೃತ್ತಿ ಲಭ್ಯವಿದೆ",
     "@newVersionAvailable": {
         "description": "Dialog title when a new app version is available"
     },
@@ -4523,7 +4503,7 @@
     "@cancelSubscriptionButton": {
         "description": "Button text to cancel subscription"
     },
-    "cancelling": "ರದ್ದುಗೊಳಿಸುತ್ತಿದೆ...",
+    "cancelling": "ರದ್ದುಗೊಳಿಸುತ್ತಿದೆ…",
     "@cancelling": {
         "description": "Loading text while cancelling"
     },
@@ -4682,7 +4662,7 @@
             }
         }
     },
-    "addingToService": "{serviceName} ಗೆ ಸೇರಿಸುತ್ತಿದೆ...",
+    "addingToService": "{serviceName} ಗೆ ಸೇರಿಸುತ್ತಿದೆ…",
     "@addingToService": {
         "description": "Loading message when adding task to a service",
         "placeholders": {
@@ -4743,7 +4723,7 @@
     "@omiApiKeys": {
         "description": "Dialog title for API keys info"
     },
-    "apiKeysDescription": "API ಕೀಲಿಗಳು ನಿಮ್ಮ ಅಪ್ಲಿಕೇಶನ OMI ಸರ್ವರೊಂದಿಗೆ ಸಂವಹನ ಮಾಡುವಾಗ ಪ್ರಮಾಣೀಕರಣ ಮಾಡಲು ಬಳಸಲಾಗುತ್ತದೆ. ಅವರು ನಿಮ್ಮ ಅಪ್ಲಿಕೇಶನ ಸ್ಮೃತಿಶಾಸ್ತ್ರ ರಚಿಸಲು ಮತ್ತು ಇತರ OMI ಸೇವಾಗಳನ್ನು ಸುರಕ್ಷಿತವಾಗಿ ಪ್ರವೇಶಿಸಲು ನಿರ್ಬಂಧಿತ ಮಾಡುತ್ತದೆ.",
+    "apiKeysDescription": "API ಕೀಲಿಗಳು ನಿಮ್ಮ ಅಪ್ಲಿಕೇಶನ Omi ಸರ್ವರೊಂದಿಗೆ ಸಂವಹನ ಮಾಡುವಾಗ ಪ್ರಮಾಣೀಕರಣ ಮಾಡಲು ಬಳಸಲಾಗುತ್ತದೆ. ಅವರು ನಿಮ್ಮ ಅಪ್ಲಿಕೇಶನ ಸ್ಮೃತಿಶಾಸ್ತ್ರ ರಚಿಸಲು ಮತ್ತು ಇತರ Omi ಸೇವಾಗಳನ್ನು ಸುರಕ್ಷಿತವಾಗಿ ಪ್ರವೇಶಿಸಲು ನಿರ್ಬಂಧಿತ ಮಾಡುತ್ತದೆ.",
     "@apiKeysDescription": {
         "description": "Description of what API keys are used for"
     },
@@ -5422,7 +5402,7 @@
     "@knowledgeGraphDeletedSuccessfully": {
         "description": "Developer settings - knowledgeGraphDeletedSuccessfully"
     },
-    "exportStartedMayTakeFewSeconds": "ರಫ್ತೆ ಪ್ರಾರಂಭವಾಗಿದೆ. ಇದು ಕೆಲವು ಸೆಕೆಂಡ ತೆಗೆದುಕೊಳ್ಳಬಹುದು...",
+    "exportStartedMayTakeFewSeconds": "ರಫ್ತೆ ಪ್ರಾರಂಭವಾಗಿದೆ. ಇದು ಕೆಲವು ಸೆಕೆಂಡ ತೆಗೆದುಕೊಳ್ಳಬಹುದು…",
     "@exportStartedMayTakeFewSeconds": {
         "description": "Developer settings - exportStartedMayTakeFewSeconds"
     },
@@ -5430,7 +5410,7 @@
     "@knowledgeGraphDeleteDescription": {
         "description": "Developer settings - knowledgeGraphDeleteDescription"
     },
-    "configureDailySummaryDigest": "ನಿಮ್ಮ ದೈನಿಕ ಕಾರ್ಯ ಪಟ್ಟಿ ಸಂಕ್ಷೇಪಣ ಸಂರೂಪಿಸಿ",
+    "configureDailySummaryDigest": "ನಿಮ್ಮ ದೈನಿಕ ಕಾರ್ಯಗಳ ಸಂಕ್ಷೇಪವನ್ನು ಕಾನ್ಫಿಗರ್ ಮಾಡಿ",
     "@configureDailySummaryDigest": {
         "description": "Subtitle for Daily Summary menu item in profile settings"
     },
@@ -5756,7 +5736,7 @@
     "@checkingForUpdates": {
         "description": "Title shown while checking for updates"
     },
-    "checkingFirmwareVersion": "ಫರ್ಮ್‌ವೇರ್ ಆವೃತ್ತಿ ಪರಿಶೀಲಿಸುತ್ತಿದೆ...",
+    "checkingFirmwareVersion": "ಫರ್ಮ್‌ವೇರ್ ಆವೃತ್ತಿ ಪರಿಶೀಲಿಸುತ್ತಿದೆ…",
     "@checkingFirmwareVersion": {
         "description": "Status text while checking firmware version"
     },
@@ -5991,7 +5971,7 @@
     "@showLess": {
         "description": "Text shown to collapse expanded content, with up arrow"
     },
-    "loadingYourRecording": "ನಿಮ್ಮ ರೆಕಾರ್ಡಿಂಗ್ ಲೋಡ್ ಮಾಡುತ್ತಿದೆ...",
+    "loadingYourRecording": "ನಿಮ್ಮ ರೆಕಾರ್ಡಿಂಗ್ ಲೋಡ್ ಮಾಡುತ್ತಿದೆ…",
     "@loadingYourRecording": {
         "description": "Loading message shown while audio waveform is being processed"
     },
@@ -5999,7 +5979,7 @@
     "@photoDiscardedMessage": {
         "description": "Message shown when a photo was discarded as not significant"
     },
-    "analyzing": "ವಿಶ್ಲೇಷಣೆ ಮಾಡುತ್ತಿದೆ...",
+    "analyzing": "ವಿಶ್ಲೇಷಣೆ ಮಾಡುತ್ತಿದೆ…",
     "@analyzing": {
         "description": "Loading text shown while analyzing a photo"
     },
@@ -6007,7 +5987,7 @@
     "@searchCountries": {
         "description": "Placeholder text for country search field"
     },
-    "checkingAppleWatch": "Apple Watch ಪರಿಶೀಲಿಸುತ್ತಿದೆ...",
+    "checkingAppleWatch": "Apple Watch ಪರಿಶೀಲಿಸುತ್ತಿದೆ…",
     "@checkingAppleWatch": {
         "description": "Loading text while checking Apple Watch status"
     },
@@ -6095,7 +6075,7 @@
     "@dontAskAgain": {
         "description": "Checkbox label to not show confirmation dialog again"
     },
-    "waitingForTranscriptOrPhotos": "ಪ್ರತಿಲೇಖ ಅಥವಾ ಫೋಟೋಗಳಿಗಾಗಿ ಕಾಯುತ್ತಿದೆ...",
+    "waitingForTranscriptOrPhotos": "ಪ್ರತಿಲೇಖ ಅಥವಾ ಫೋಟೋಗಳಿಗಾಗಿ ಕಾಯುತ್ತಿದೆ…",
     "@waitingForTranscriptOrPhotos": {
         "description": "Placeholder text shown while waiting for content"
     },
@@ -6161,7 +6141,7 @@
     "@noSummary": {
         "description": "Message when no summary is available"
     },
-    "updateOmiFirmware": "omi ಫರ್ಮ್‌ವೇರ್ ನವೀಕರಣ ಮಾಡಿ",
+    "updateOmiFirmware": "Omi ಫರ್ಮ್‌ವೇರ್ ನವೀಕರಣ ಮಾಡಿ",
     "@updateOmiFirmware": {
         "description": "Button text to update Omi device firmware"
     },
@@ -6257,7 +6237,7 @@
     "@wrappedYouTalkedAbout": {
         "description": "Badge for top categories in Wrapped"
     },
-    "wrappedActionItems": "ಕಾರ್ಯ ಪಟ್ಟಿಗಳು",
+    "wrappedActionItems": "ಕಾರ್ಯಗಳು",
     "@wrappedActionItems": {
         "description": "Badge for action items in Wrapped"
     },
@@ -6382,11 +6362,11 @@
     "@wrappedGenerateMyWrapped": {
         "description": "Button text to start generating the 2025 wrapped"
     },
-    "wrappedProcessingDefault": "ಪ್ರಕ್ರಿಯೆ ಮಾಡುತ್ತಿದೆ...",
+    "wrappedProcessingDefault": "ಪ್ರಕ್ರಿಯೆ ಮಾಡುತ್ತಿದೆ…",
     "@wrappedProcessingDefault": {
         "description": "Default processing status text"
     },
-    "wrappedCreatingYourStory": "ನಿಮ್ಮ\n2025 ಕಥೆಯನ್ನು ರಚಿಸುತ್ತಿದೆ...",
+    "wrappedCreatingYourStory": "ನಿಮ್ಮ\n2025 ಕಥೆಯನ್ನು ರಚಿಸುತ್ತಿದೆ…",
     "@wrappedCreatingYourStory": {
         "description": "Text shown while generating the wrapped, includes newline"
     },
@@ -6426,7 +6406,7 @@
     "@wrappedFailedToStartGeneration": {
         "description": "Error message when generation fails to start"
     },
-    "wrappedStarting": "ಪ್ರಾರಂಭವಾಗುತ್ತಿದೆ...",
+    "wrappedStarting": "ಪ್ರಾರಂಭವಾಗುತ್ತಿದೆ…",
     "@wrappedStarting": {
         "description": "Initial processing step text"
     },
@@ -6698,15 +6678,15 @@
     "@somethingWentWrongTryAgain": {
         "description": "Generic error message shown in snackbar when an error occurs"
     },
-    "uploadingVoiceProfile": "ನಿಮ್ಮ ವಾಯಿಸ್ ಪ್ರೋಫೈಲ್ ಅಪ್‌ಲೋಡ್ ಮಾಡುತ್ತಿದೆ....",
+    "uploadingVoiceProfile": "ನಿಮ್ಮ ವಾಯಿಸ್ ಪ್ರೋಫೈಲ್ ಅಪ್‌ಲೋಡ್ ಮಾಡುತ್ತಿದೆ….",
     "@uploadingVoiceProfile": {
         "description": "Loading message shown while uploading voice profile"
     },
-    "memorizingYourVoice": "ನಿಮ್ಮ ಸ್ವರ ನೆನೆದುಕೊಳ್ಳುತ್ತಿದೆ...",
+    "memorizingYourVoice": "ನಿಮ್ಮ ಸ್ವರ ನೆನೆದುಕೊಳ್ಳುತ್ತಿದೆ…",
     "@memorizingYourVoice": {
         "description": "Loading message shown while processing voice profile"
     },
-    "personalizingExperience": "ನಿಮ್ಮ ಅನುಭವವನ್ನು ವೈಯಕ್ತಿಕಗೊಳಿಸುತ್ತಿದೆ...",
+    "personalizingExperience": "ನಿಮ್ಮ ಅನುಭವವನ್ನು ವೈಯಕ್ತಿಕಗೊಳಿಸುತ್ತಿದೆ…",
     "@personalizingExperience": {
         "description": "Loading message shown while personalizing user experience"
     },
@@ -6877,7 +6857,7 @@
     "@clearChatQuestion": {
         "description": "Dialog title asking to clear chat"
     },
-    "syncingMessages": "ಸರ್ವರ್‌ನೊಂದಿಗೆ ಸಂದೇಶಗಳನ್ನು ಸಿಂಕ್ ಮಾಡುತ್ತಿದೆ...",
+    "syncingMessages": "ಸರ್ವರ್‌ನೊಂದಿಗೆ ಸಂದೇಶಗಳನ್ನು ಸಿಂಕ್ ಮಾಡುತ್ತಿದೆ…",
     "@syncingMessages": {
         "description": "Loading text when syncing messages"
     },
@@ -7113,11 +7093,11 @@
             }
         }
     },
-    "summarizingConversation": "ಸಂಭಾಷಣೆ ಸಾರಾಂಶಗೊಳಿಸುತ್ತಿದೆ...\nಇದು ಕೆಲವು ಸೆಕೆಂಡ್‌ಗಳ ತೆಗೆದುಕೊಳ್ಳಬಹುದು",
+    "summarizingConversation": "ಸಂಭಾಷಣೆ ಸಾರಾಂಶಗೊಳಿಸುತ್ತಿದೆ…\nಇದು ಕೆಲವು ಸೆಕೆಂಡ್‌ಗಳ ತೆಗೆದುಕೊಳ್ಳಬಹುದು",
     "@summarizingConversation": {
         "description": "Loading text while summarizing a conversation"
     },
-    "resummarizingConversation": "ಸಂಭಾಷಣೆ ಪುನರಾ ಸಾರಾಂಶಗೊಳಿಸುತ್ತಿದೆ...\nಇದು ಕೆಲವು ಸೆಕೆಂಡ್‌ಗಳ ತೆಗೆದುಕೊಳ್ಳಬಹುದು",
+    "resummarizingConversation": "ಸಂಭಾಷಣೆ ಪುನರಾ ಸಾರಾಂಶಗೊಳಿಸುತ್ತಿದೆ…\nಇದು ಕೆಲವು ಸೆಕೆಂಡ್‌ಗಳ ತೆಗೆದುಕೊಳ್ಳಬಹುದು",
     "@resummarizingConversation": {
         "description": "Loading text while re-summarizing a conversation"
     },
@@ -7296,7 +7276,7 @@
     "@doNotCloseApp": {
         "description": "Warning during download"
     },
-    "downloading": "ಡೌನ್‌ಲೋಡ್ ಮಾಡುತ್ತಿದೆ...",
+    "downloading": "ಡೌನ್‌ಲೋಡ್ ಮಾಡುತ್ತಿದೆ…",
     "@downloading": {
         "description": "Status during download"
     },
@@ -7415,7 +7395,7 @@
             }
         }
     },
-    "preparingModel": "{model} ಸಿದ್ಧಪಡಿಸುತ್ತಿದೆ...",
+    "preparingModel": "{model} ಸಿದ್ಧಪಡಿಸುತ್ತಿದೆ…",
     "@preparingModel": {
         "description": "Status when preparing model",
         "placeholders": {
@@ -7463,7 +7443,7 @@
     "@useTemplateFrom": {
         "description": "Label for template selector"
     },
-    "selectProviderTemplate": "ಒಂದು ಪೂರೈತೆ ಟೆಂಪ್ಲೇಟ್ ಆರಿಸಿ...",
+    "selectProviderTemplate": "ಒಂದು ಪೂರೈತೆ ಟೆಂಪ್ಲೇಟ್ ಆರಿಸಿ…",
     "@selectProviderTemplate": {
         "description": "Placeholder for template dropdown"
     },
@@ -7737,7 +7717,7 @@
     "@signUpSuccess": {
         "description": "Success message after signing up"
     },
-    "loadingKnowledgeGraph": "ಜ್ಞಾನ ಗ್ರಾಫ್ ಲೋಡ್ ಮಾಡುತ್ತಿದೆ...",
+    "loadingKnowledgeGraph": "ಜ್ಞಾನ ಗ್ರಾಫ್ ಲೋಡ್ ಮಾಡುತ್ತಿದೆ…",
     "@loadingKnowledgeGraph": {
         "description": "Loading text for knowledge graph"
     },
@@ -7745,7 +7725,7 @@
     "@noKnowledgeGraphYet": {
         "description": "Title when knowledge graph is empty"
     },
-    "buildingKnowledgeGraphFromMemories": "ಸ್ಮೃತಿಗಳಿಂದ ನಿಮ್ಮ ಜ್ಞಾನ ಗ್ರಾಫ್ ನಿರ್ಮಾಣ ಮಾಡುತ್ತಿದೆ...",
+    "buildingKnowledgeGraphFromMemories": "ಸ್ಮೃತಿಗಳಿಂದ ನಿಮ್ಮ ಜ್ಞಾನ ಗ್ರಾಫ್ ನಿರ್ಮಾಣ ಮಾಡುತ್ತಿದೆ…",
     "@buildingKnowledgeGraphFromMemories": {
         "description": "Message while building knowledge graph"
     },
@@ -7765,7 +7745,7 @@
     "@getButton": {
         "description": "Button text to get/install an app"
     },
-    "openingApp": "{appName} ತೆರೆಯುತ್ತಿದೆ...",
+    "openingApp": "{appName} ತೆರೆಯುತ್ತಿದೆ…",
     "@openingApp": {
         "description": "Snackbar message when opening an app",
         "placeholders": {
@@ -7815,7 +7795,7 @@
     "@moneyEarned": {
         "description": "Label for money earned from app"
     },
-    "writeYourReply": "ನಿಮ್ಮ ತಿರುಗುಮಾತ್ರ ಬರೆಯಿರಿ...",
+    "writeYourReply": "ನಿಮ್ಮ ತಿರುಗುಮಾತ್ರ ಬರೆಯಿರಿ…",
     "@writeYourReply": {
         "description": "Hint text for reply input field"
     },
@@ -7954,7 +7934,7 @@
     "@selectContactsToShareSummary": {
         "description": "Subtitle for share to contacts sheet"
     },
-    "searchContactsHint": "ಸಂಪರ್ಕಗಳನ್ನು ಖೋಜಿ...",
+    "searchContactsHint": "ಸಂಪರ್ಕಗಳನ್ನು ಖೋಜಿ",
     "@searchContactsHint": {
         "description": "Hint text for contacts search field"
     },
@@ -8093,7 +8073,7 @@
             }
         }
     },
-    "transferring": "ವರ್ಗಾವಣೆಗೊಳಿಸುತ್ತಿದೆ...",
+    "transferring": "ವರ್ಗಾವಣೆಗೊಳಿಸುತ್ತಿದೆ…",
     "@transferring": {
         "description": "Status text shown during file transfer"
     },
@@ -8125,7 +8105,7 @@
     "@recordingInfo": {
         "description": "Menu item to view recording information"
     },
-    "transferInProgress": "ವರ್ಗಾವಣೆ ಪ್ರಗತಿಯಲ್ಲಿದೆ...",
+    "transferInProgress": "ವರ್ಗಾವಣೆ ಪ್ರಗತಿಯಲ್ಲಿದೆ…",
     "@transferInProgress": {
         "description": "Menu item text when transfer is ongoing"
     },
@@ -8283,7 +8263,7 @@
     "@errorUpdatingAppStatus": {
         "description": "Error message when updating app status fails"
     },
-    "calculatingETA": "ಲೆಕ್ಕ ಹಾಕಿಕೊಳ್ಳುತ್ತಿದೆ...",
+    "calculatingETA": "ಲೆಕ್ಕ ಹಾಕಿಕೊಳ್ಳುತ್ತಿದೆ…",
     "@calculatingETA": {
         "description": "Migration ETA calculation in progress message"
     },
@@ -8300,19 +8280,19 @@
     "@aboutAMinuteRemaining": {
         "description": "Migration time remaining is about a minute"
     },
-    "almostDone": "ಬಿದ್ದೇ ಕೊನೆಗೆ...",
+    "almostDone": "ಬಿದ್ದೇ ಕೊನೆಗೆ…",
     "@almostDone": {
         "description": "Migration is almost complete"
     },
-    "omiSays": "omi ಹೇಳುತ್ತದೆ",
+    "omiSays": "Omi ಹೇಳುತ್ತದೆ",
     "@omiSays": {
         "description": "Notification title for omi app messages"
     },
-    "analyzingYourData": "ನಿಮ್ಮ ಡೇಟಾ ವಿಶ್ಲೇಷಣ ಮಾಡಿಕೊಳ್ಳುತ್ತಿದೆ...",
+    "analyzingYourData": "ನಿಮ್ಮ ಡೇಟಾ ವಿಶ್ಲೇಷಣ ಮಾಡಿಕೊಳ್ಳುತ್ತಿದೆ…",
     "@analyzingYourData": {
         "description": "Migration start message when analyzing data"
     },
-    "migratingToProtection": "{level} ಸುರಕ್ಷೆಗೆ ಸ್ಥಳಾಂತರಿತ ಮಾಡುತ್ತಿದೆ...",
+    "migratingToProtection": "{level} ಸುರಕ್ಷೆಗೆ ಸ್ಥಳಾಂತರಿತ ಮಾಡುತ್ತಿದೆ…",
     "@migratingToProtection": {
         "description": "Notification body when migration starts",
         "placeholders": {
@@ -8321,11 +8301,11 @@
             }
         }
     },
-    "noDataToMigrateFinalizing": "ಸ್ಥಳಾಂತರಿತ ಮಾಡಲು ಡೇಟಾ ಇಲ್ಲ. ಅಂತಿಮೀಕರಣ ಕಾರ್ಯ...",
+    "noDataToMigrateFinalizing": "ಸ್ಥಳಾಂತರಿತ ಮಾಡಲು ಡೇಟಾ ಇಲ್ಲ. ಅಂತಿಮೀಕರಣ ಕಾರ್ಯ…",
     "@noDataToMigrateFinalizing": {
         "description": "Migration message when no data needs to be migrated"
     },
-    "migratingItemsProgress": "{itemType} ಸ್ಥಳಾಂತರಿತ ಮಾಡುತ್ತಿದೆ... {percentage}%",
+    "migratingItemsProgress": "{itemType} ಸ್ಥಳಾಂತರಿತ ಮಾಡುತ್ತಿದೆ… {percentage}%",
     "@migratingItemsProgress": {
         "description": "Migration progress message with item type and percentage",
         "placeholders": {
@@ -8337,7 +8317,7 @@
             }
         }
     },
-    "allObjectsMigratedFinalizing": "ಎಲ್ಲಾ ವಸ್ತುಗಳು ಸ್ಥಳಾಂತರಿತ ಮಾಡಲಾಗಿದೆ. ಅಂತಿಮೀಕರಣ ಕಾರ್ಯ...",
+    "allObjectsMigratedFinalizing": "ಎಲ್ಲಾ ವಸ್ತುಗಳು ಸ್ಥಳಾಂತರಿತ ಮಾಡಲಾಗಿದೆ. ಅಂತಿಮೀಕರಣ ಕಾರ್ಯ…",
     "@allObjectsMigratedFinalizing": {
         "description": "Migration message when all objects have been migrated"
     },
@@ -8386,7 +8366,7 @@
     "@templateName": {
         "description": "Label for template name field"
     },
-    "templateNameHint": "ಉದಾಹರಣೆ, ಮೀಟಿಂಗ್ ಆಕ್ಷನ್ ಐಟಮ್ಸ್ ಎಕ್ಸ್‌ಟ್ರಾಕ್ಟರ್",
+    "templateNameHint": "ಉದಾಹರಣೆ, ಮೀಟಿಂಗ್ ಕಾರ್ಯ ಎಕ್ಸ್‌ಟ್ರಾಕ್ಟರ್",
     "@templateNameHint": {
         "description": "Hint text for template name field"
     },
@@ -8394,7 +8374,7 @@
     "@nameMustBeAtLeast3Characters": {
         "description": "Validation error when name is too short"
     },
-    "conversationPromptHint": "ಉದಾಹರಣೆ, ಕ್ರಿಯಾ ಐಟಮ್ಗಳು, ನೆರವೆತರಿಸಿದ ನಿರ್ಣಯಗಳು ಮತ್ತು ಸಾಲಿಸಿದ ಪ್ರದಾನಗಳನ್ನು ಪಡೆಯಿರಿ.",
+    "conversationPromptHint": "ಉದಾಹರಣೆ, ಒದಗಿಸಿದ ಸಂಭಾಷಣೆಯಿಂದ ಕಾರ್ಯಗಳು, ತೆಗೆದುಕೊಂಡ ನಿರ್ಧಾರಗಳು ಮತ್ತು ಪ್ರಮುಖ ಅಂಶಗಳನ್ನು ಹೊರತೆಗೆಯಿರಿ.",
     "@conversationPromptHint": {
         "description": "Hint text for conversation prompt field"
     },
@@ -8414,15 +8394,15 @@
     "@onlyYouCanUseTemplate": {
         "description": "Description when template is private"
     },
-    "generatingDescription": "ವರ್ಣನೆ ಉತ್ಪನ್ನ ಮಾಡುತ್ತಿದೆ...",
+    "generatingDescription": "ವರ್ಣನೆ ಉತ್ಪನ್ನ ಮಾಡುತ್ತಿದೆ…",
     "@generatingDescription": {
         "description": "Status message during app creation"
     },
-    "creatingAppIcon": "ಅ್ಯಪ್ ಪ್ರತಿಕೆ ರಚಿಸುತ್ತಿದೆ...",
+    "creatingAppIcon": "ಅ್ಯಪ್ ಪ್ರತಿಕೆ ರಚಿಸುತ್ತಿದೆ…",
     "@creatingAppIcon": {
         "description": "Status message during app creation"
     },
-    "installingApp": "ಅ್ಯಪ್ ಇನ್‌ಸ್ಟಾಲ್ ಮಾಡುತ್ತಿದೆ...",
+    "installingApp": "ಅ್ಯಪ್ ಇನ್‌ಸ್ಟಾಲ್ ಮಾಡುತ್ತಿದೆ…",
     "@installingApp": {
         "description": "Status message during app creation"
     },
@@ -8601,7 +8581,7 @@
     "@aiGenPleaseEnterDescription": {
         "description": "Validation error when app description is empty in AI app generator"
     },
-    "aiGenCreatingAppIcon": "ಅ್ಯಪ್ ಪ್ರತಿಕೆ ರಚಿಸುತ್ತಿದೆ...",
+    "aiGenCreatingAppIcon": "ಅ್ಯಪ್ ಪ್ರತಿಕೆ ರಚಿಸುತ್ತಿದೆ…",
     "@aiGenCreatingAppIcon": {
         "description": "Status message shown while generating app icon"
     },
@@ -8680,7 +8660,7 @@
     "@couldNotLaunchUpgradePage": {
         "description": "Error when upgrade page cannot be launched"
     },
-    "transcriptionJsonPlaceholder": "ನಿಮ್ಮ JSON ಸಂರಚನಾ ಇಲ್ಲಿ ಅಂಟಿಸಿ...",
+    "transcriptionJsonPlaceholder": "ನಿಮ್ಮ JSON ಸಂರಚನಾ ಇಲ್ಲಿ ಅಂಟಿಸಿ…",
     "@transcriptionJsonPlaceholder": {
         "description": "JSON configuration placeholder hint text in transcription settings"
     },
@@ -8790,7 +8770,7 @@
     "@onboardingYoureAllSet": {
         "description": "Onboarding step description for completion"
     },
-    "searchTranscriptOrSummary": "ಟ್ರಾನ್ಸ್‌ಕ್ರಿಪ್ಟ್ ಅಥವಾ ಸಾರಾಂಶವನ್ನು ಹುಡುಕಿ...",
+    "searchTranscriptOrSummary": "ಟ್ರಾನ್ಸ್‌ಕ್ರಿಪ್ಟ್ ಅಥವಾ ಸಾರಾಂಶವನ್ನು ಹುಡುಕಿ",
     "@searchTranscriptOrSummary": {
         "description": "Placeholder text for search field in conversation detail page"
     },
@@ -9128,11 +9108,11 @@
     "@msgUploadFileFailed": {
         "description": "Error when file upload fails"
     },
-    "msgReadingMemories": "ನಿಮ್ಮ ಸ್ಮೃತಿಗಳನ್ನು ಓದಿಕೊಳ್ಳುತ್ತಿದೆ...",
+    "msgReadingMemories": "ನಿಮ್ಮ ಸ್ಮೃತಿಗಳನ್ನು ಓದಿಕೊಳ್ಳುತ್ತಿದೆ…",
     "@msgReadingMemories": {
         "description": "Loading text while reading memories"
     },
-    "msgLearningMemories": "ನಿಮ್ಮ ಸ್ಮೃತಿಗಳನ್ನು ಕಲಿಯುತ್ತಿದೆ...",
+    "msgLearningMemories": "ನಿಮ್ಮ ಸ್ಮೃತಿಗಳನ್ನು ಕಲಿಯುತ್ತಿದೆ…",
     "@msgLearningMemories": {
         "description": "Loading text while learning from memories"
     },
@@ -9202,7 +9182,7 @@
             }
         }
     },
-    "conversationNewIndicator": "ಹೊಸ 🚀",
+    "conversationNewIndicator": "ಹೊಸ",
     "@conversationNewIndicator": {
         "description": "Indicator shown when a conversation is newly created"
     },
@@ -9215,7 +9195,7 @@
             }
         }
     },
-    "mergingStatus": "ಸಮ್ಮಿಳನ...",
+    "mergingStatus": "ಸಮ್ಮಿಳನ…",
     "@mergingStatus": {
         "description": "Status indicator shown when conversations are being merged"
     },
@@ -9388,11 +9368,11 @@
     },
     "newFolder": "ಹೊಸ ಫೋಲ್ಡರ್",
     "color": "ಬಣ್ಣ",
-    "waitingForDevice": "ಸಾಧನಕ್ಕಾಗಿ ಕಾಯುತ್ತಿದೆ...",
+    "waitingForDevice": "ಸಾಧನಕ್ಕಾಗಿ ಕಾಯುತ್ತಿದೆ…",
     "@waitingForDevice": {
         "description": "Status message while waiting for device connection"
     },
-    "saySomething": "ಏನಾದರೂ ಹೇಳಿ...",
+    "saySomething": "ಏನಾದರೂ ಹೇಳಿ…",
     "@saySomething": {
         "description": "Prompt for user to start speaking"
     },
@@ -9444,15 +9424,15 @@
     "downloadAudio": "ಆಡಿಯೋ ಡೌನ್‌ಲೋಡ್ ಮಾಡಿ",
     "audioDownloadSuccess": "ಆಡಿಯೋ ಯಶಸ್ವಿಯಾಗಿ ಡೌನ್‌ಲೋಡ್ ಆಯಿತು",
     "audioDownloadFailed": "ಆಡಿಯೋ ಡೌನ್‌ಲೋಡ್ ಮಾಡಲು ವಿಫಲವಾಗಿದೆ",
-    "downloadingAudio": "ಆಡಿಯೋ ಡೌನ್‌ಲೋಡ್ ಮಾಡಿಕೊಳ್ಳುತ್ತಿದೆ...",
+    "downloadingAudio": "ಆಡಿಯೋ ಡೌನ್‌ಲೋಡ್ ಮಾಡಿಕೊಳ್ಳುತ್ತಿದೆ…",
     "shareAudio": "ಆಡಿಯೋ ಹಂಚಿಕೊಳ್ಳಿ",
     "preparingAudio": "ಆಡಿಯೋ ತಯಾರಿಸಿಕೊಳ್ಳುತ್ತಿದೆ",
-    "gettingAudioFiles": "ಆಡಿಯೋ ಫೈಲ್ಗಳನ್ನು ಪಡೆಯುತ್ತಿದೆ...",
+    "gettingAudioFiles": "ಆಡಿಯೋ ಫೈಲ್ಗಳನ್ನು ಪಡೆಯುತ್ತಿದೆ…",
     "downloadingAudioProgress": "ಆಡಿಯೋ ಡೌನ್‌ಲೋಡ್ ಮಾಡಿಕೊಳ್ಳುತ್ತಿದೆ",
     "processingAudio": "ಆಡಿಯೋ ಪ್ರಕ್ರಿಯೆ ಮಾಡಿಕೊಳ್ಳುತ್ತಿದೆ",
-    "combiningAudioFiles": "ಆಡಿಯೋ ಫೈಲ್ಗಳನ್ನು ಸಂಯೋಜಿತ ಮಾಡುತ್ತಿದೆ...",
+    "combiningAudioFiles": "ಆಡಿಯೋ ಫೈಲ್ಗಳನ್ನು ಸಂಯೋಜಿತ ಮಾಡುತ್ತಿದೆ…",
     "audioReady": "ಆಡಿಯೋ ಸಿದ್ಧವಾಗಿದೆ",
-    "openingShareSheet": "ಹಂಚಿಕೊಳ್ಳುವುದು ಶೀಟ್ ತೆರೆಯುತ್ತಿದೆ...",
+    "openingShareSheet": "ಹಂಚಿಕೊಳ್ಳುವುದು ಶೀಟ್ ತೆರೆಯುತ್ತಿದೆ…",
     "audioShareFailed": "ಹಂಚಿಕೊಳ್ಳುವುದು ವಿಫಲವಾಗಿದೆ",
     "dailyRecaps": "ದೈನಿಕ ಸಾರಾಂಶಗಳು",
     "removeFilter": "ಫಿಲ್ಟರ್ ತೆಗೆದುಹಾಕಿ",
@@ -9529,7 +9509,7 @@
         }
     },
     "mcpConnectionFailed": "MCP ಸರ್ವರ್‌ಗೆ ಸಂಪರ್ಕಿಸಲು ವಿಫಲ",
-    "authorizingMcpServer": "ಪ್ರಮಾಣೀಕರಣ ನಡೆಯುತ್ತಿದೆ...",
+    "authorizingMcpServer": "ಪ್ರಮಾಣೀಕರಣ ನಡೆಯುತ್ತಿದೆ…",
     "whereDidYouHearAboutOmi": "ಆಪ್ತಾ ನಿಮ್ಮನ್ನು ಎಲ್ಲಿಂದ ಕಂಡುಕೊಂಡಿರಿ?",
     "tiktok": "TikTok",
     "youtube": "YouTube",
@@ -9632,7 +9612,7 @@
         "description": "Pairing description for Neo One device"
     },
     "downloadingFromDevice": "ಸಾಧನದಿಂದ ಡೌನ್‌ಲೋಡ್ ಮಾಡಲಾಗುತ್ತಿದೆ",
-    "reconnectingToInternet": "ಇಂಟರನೆಟ್‌ಗೆ ಮರು ಸಂಪರ್ಕಿಸುತ್ತಿದೆ...",
+    "reconnectingToInternet": "ಇಂಟರನೆಟ್‌ಗೆ ಮರು ಸಂಪರ್ಕಿಸುತ್ತಿದೆ…",
     "uploadingToCloud": "{current} ಯಿಂದ {total} ಅನ್ನು ಅಪ್‌ಲೋಡ್ ಮಾಡಲಾಗುತ್ತಿದೆ",
     "@uploadingToCloud": {
         "placeholders": {
@@ -9644,8 +9624,8 @@
             }
         }
     },
-    "processingOnServer": "ಸರ್ವರ ಉದ್ದಿಂದ ಪ್ರಕ್ರಿಯೆ ಮಾಡಲಾಗುತ್ತಿದೆ...",
-    "processingOnServerProgress": "ಪ್ರಕ್ರಿಯೆ ಮಾಡುತ್ತಿದೆ... {current}/{total} ವಿಭಾಗಗಳು",
+    "processingOnServer": "ಸರ್ವರ ಉದ್ದಿಂದ ಪ್ರಕ್ರಿಯೆ ಮಾಡಲಾಗುತ್ತಿದೆ…",
+    "processingOnServerProgress": "ಪ್ರಕ್ರಿಯೆ ಮಾಡುತ್ತಿದೆ… {current}/{total} ವಿಭಾಗಗಳು",
     "@processingOnServerProgress": {
         "placeholders": {
             "current": {
@@ -9790,7 +9770,7 @@
     "answerTheCallFrom": "ಇದಕ್ಕೆ ಕರೆಗೆ ಪ್ರತ್ಯುತ್ತರ ಮಾಡಿ",
     "onTheCallEnterThisCode": "ಕರೆ ಉದ್ದಿಂದ ಈ ಕೋಡ್ ನಿರ್ಬಂಧಿಸಿ",
     "followTheVoiceInstructions": "ಧ್ವನಿ ಸೂಚನೆ ಅನುಸರಿಸಿ",
-    "statusCalling": "ಕರೆ ಮಾಡುತ್ತಿದೆ...",
+    "statusCalling": "ಕರೆ ಮಾಡುತ್ತಿದೆ…",
     "statusCallInProgress": "ಕರೆ ನಡೆಯುತ್ತಿದೆ",
     "statusVerifiedLabel": "ಪರಿಶೀಲಿತ",
     "statusCallMissed": "ಕರೆ ಆನುವಾದ",
@@ -9805,11 +9785,11 @@
     "phoneNoContactsFound": "ಯಾವುದೇ ಸಂಪರ್ಕ ದೂಸಿಕೂಗಲಾಗಲಿಲ್ಲ",
     "phoneEnterNumber": "ಸಂಖ್ಯೆ ನಿರ್ಬಂಧಿಸಿ",
     "failedToStartCall": "ಕರೆ ಪ್ರಾರಂಭಿಸಲು ವಿಫಲ",
-    "callStateConnecting": "ಸಂಪರ್ಕಿಸುತ್ತಿದೆ...",
+    "callStateConnecting": "ಸಂಪರ್ಕಿಸುತ್ತಿದೆ…",
     "callStateRinging": "ನಿನ್ನುವ ಮಾದ",
     "callStateEnded": "ಕರೆ ಆನುವಾದ",
     "callStateFailed": "ಕರೆ ವಿಫಲ",
-    "transcriptPlaceholder": "ಪ್ರತಿಲೇಖನ ಇಲ್ಲಿ ಕಾಣಿಸುತ್ತದೆ...",
+    "transcriptPlaceholder": "ಪ್ರತಿಲೇಖನ ಇಲ್ಲಿ ಕಾಣಿಸುತ್ತದೆ…",
     "phoneUnmute": "ಅನ್ಥ ಮುಕ್ತ ಮಾಡಿ",
     "phoneMute": "ಶಬ್ದ ತಾಯುತ್ತವೇ",
     "phoneSpeaker": "ಸ್ಪೀಕರ್",
@@ -9888,7 +9868,7 @@
     "@phoneCallsUpsellFeature1": {
         "description": "Phone calls upsell feature 1"
     },
-    "phoneCallsUpsellFeature2": "ಸ್ವಯಂಚಾಲಿತ ಕರೆ ಸಾರಾಂಶಗಳು ಮತ್ತು ಸಾರ ವಸ್ತುಗಳು",
+    "phoneCallsUpsellFeature2": "ಸ್ವಯಂಚಾಲಿತ ಕರೆ ಸಾರಾಂಶಗಳು ಮತ್ತು ಕಾರ್ಯಗಳು",
     "@phoneCallsUpsellFeature2": {
         "description": "Phone calls upsell feature 2"
     },
@@ -10033,7 +10013,7 @@
         }
     },
     "transcriptionPaused": "ರೆಕಾರ್ಡಿಂಗ್, ಮರು ಸಂಪರ್ಕಿಸುತ್ತಿದೆ",
-    "transcriptionPausedReconnecting": "ಇನ್ನೂ ರೆಕಾರ್ಡಿಂಗ್ — ಪ್ರತಿಲೇಖನ ಮರು ಸಂಪರ್ಕಿಸುತ್ತಿದೆ...",
+    "transcriptionPausedReconnecting": "ಇನ್ನೂ ರೆಕಾರ್ಡಿಂಗ್ — ಪ್ರತಿಲೇಖನ ಮರು ಸಂಪರ್ಕಿಸುತ್ತಿದೆ…",
     "fairUseBannerStatus": "ನ್ಯಾಯಯುಕ್ತ ಬಳಕೆ: {status}",
     "@fairUseBannerStatus": {
         "placeholders": {
@@ -10214,7 +10194,7 @@
     "@tellUsMore": {
         "description": "Label for optional details text field"
     },
-    "cancelReasonDetailHint": "ನಾವು ಯಾವುದೇ ಪ್ರತಿಕ್ರಿಯೆ ಮೌಲ್ಯ...",
+    "cancelReasonDetailHint": "ನಾವು ಯಾವುದೇ ಪ್ರತಿಕ್ರಿಯೆ ಮೌಲ್ಯ…",
     "@cancelReasonDetailHint": {
         "description": "Hint for cancel reason detail text field"
     },
@@ -10322,10 +10302,10 @@
     "disconnectHistory": "ವಿಚ್ಛೇದನ ಇತಿಹಾಸ",
     "noDisconnectsRecorded": "ಯಾವುದೇ ವಿಚ್ಛೇದನ ರೆಕಾರ್ಡ ಮಾಡಲಾಗಲಿಲ್ಲ",
     "diagnostics": "ರೋಗನಿರ್ಣಯಗಳು",
-    "waitingForData": "ವಿಷಯ ಅಂತ್ಯದ ಕಾಯುತ್ತಿದೆ...",
+    "waitingForData": "ವಿಷಯ ಅಂತ್ಯದ ಕಾಯುತ್ತಿದೆ…",
     "liveRssiOverTime": "ಸಮಯ ಅನುಸಾರ ನೈಜ RSSI",
     "noRssiDataYet": "ಇನ್ನೂ ಯಾವುದೇ RSSI ವಿಷಯ",
-    "collectingData": "ವಿಷಯ ಸಂಗ್ರಹ ಮಾಡುತ್ತಿದೆ...",
+    "collectingData": "ವಿಷಯ ಸಂಗ್ರಹ ಮಾಡುತ್ತಿದೆ…",
     "cleanDisconnect": "ಸ್ವಚ್ಛ ವಿಚ್ಛೇದನ",
     "connectionTimeout": "ಸಂಪರ್ಕ ಸಮಯ ಪೂರ್ಣ",
     "remoteDeviceTerminated": "ದೂರ ಸಾಧನವನ್ನು ಸಮಾಪ್ತ",
@@ -10377,7 +10357,7 @@
     "@stableFirmware": {
         "description": "Title for the stable firmware rollback page"
     },
-    "fetchingStableFirmware": "ಕಾಳಾವಧಿ ಸ್ಥಿರ ಫರ್ಮ್‌ವೇರ್ ನಿವಾರಣೆ ಮಾಡುತ್ತಿದೆ...",
+    "fetchingStableFirmware": "ಕಾಳಾವಧಿ ಸ್ಥಿರ ಫರ್ಮ್‌ವೇರ್ ನಿವಾರಣೆ ಮಾಡುತ್ತಿದೆ…",
     "@fetchingStableFirmware": {
         "description": "Loading text while fetching stable firmware version"
     },
@@ -10405,11 +10385,11 @@
     "enableLocationTitle": "ನಿಲುವು ಸಕ್ರಿಯ ಮಾಡಿ",
     "enableLocationDescription": "ಹತುತ್ಕೆ Bluetooth ಸಾಧನ ಕಂಡುಕೊಳ್ಳಲು ನಿಲುವು ಪ್ರದೇಶ ಅಗತ್ಯ.",
     "voiceRecordingFound": "ರೆಕಾರ್ಡಿಂಗ್ ಕಂಡುಕೊಂಡೆ",
-    "transcriptionConnecting": "ಪ್ರತಿಲೇಖನ ಸಂಪರ್ಕಿಸುತ್ತಿದೆ...",
+    "transcriptionConnecting": "ಪ್ರತಿಲೇಖನ ಸಂಪರ್ಕಿಸುತ್ತಿದೆ…",
     "@transcriptionConnecting": {
         "description": "Status when transcription WebSocket is connecting"
     },
-    "transcriptionReconnecting": "ಪ್ರತಿಲೇಖನ ಮರು ಸಂಪರ್ಕಿಸುತ್ತಿದೆ...",
+    "transcriptionReconnecting": "ಪ್ರತಿಲೇಖನ ಮರು ಸಂಪರ್ಕಿಸುತ್ತಿದೆ…",
     "@transcriptionReconnecting": {
         "description": "Status when transcription WebSocket is reconnecting"
     },
@@ -10464,10 +10444,6 @@
     "planUpdate": "ಯೋಜನೆ ನವೀಕರಣ",
     "@planUpdate": {
         "description": "Header for plan deprecation notice"
-    },
-    "planDeprecationMessage": "ನಿಮ್ಮ Unlimited ಯೋಜನೆಯನ್ನು ನಿಲ್ಲಿಸಲಾಗುತ್ತಿದೆ. Operator ಯೋಜನೆಗೆ ಬದಲಾಯಿಸಿ — ಅದೇ ಅದ್ಭುತ ವೈಶಿಷ್ಟ್ಯಗಳು $49/ತಿಂಗಳಿಗೆ. ನಿಮ್ಮ ಪ್ರಸ್ತುತ ಯೋಜನೆ ಈ ಮಧ್ಯೆ ಕಾರ್ಯನಿರ್ವಹಿಸುತ್ತಲೇ ಇರುತ್ತದೆ.",
-    "@planDeprecationMessage": {
-        "description": "Deprecation notice for legacy Unlimited subscribers"
     },
     "upgradeYourPlan": "ನಿಮ್ಮ ಯೋಜನೆಯನ್ನು ಅಪ್‌ಗ್ರೇಡ್ ಮಾಡಿ",
     "@upgradeYourPlan": {
@@ -10535,7 +10511,7 @@
     "connectTaskAppToExport": "ರಫ್ತು ಮಾಡಲು ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಕಾರ್ಯ ಅಪ್ಲಿಕೇಶನ್ ಸಂಪರ್ಕಿಸಿ",
     "deselectAllTasksMenu": "ಎಲ್ಲವನ್ನೂ ಆಯ್ಕೆ ರದ್ದು ಮಾಡಿ",
     "hideCompletedTasks": "ಪೂರ್ಣಗೊಂಡವು ಮರೆಮಾಡಿ",
-    "searchActionItems": "ಕ್ರಿಯಾ ಐಟಂಗಳನ್ನು ಹುಡುಕಿ",
+    "searchActionItems": "ಕಾರ್ಯಗಳನ್ನು ಹುಡುಕಿ",
     "selectActionItems": "ಬಹು ಆಯ್ಕೆ",
     "selectAllTasksMenu": "ಎಲ್ಲವನ್ನೂ ಆಯ್ಕೆ ಮಾಡಿ",
     "showCompletedTasks": "ಪೂರ್ಣಗೊಂಡವು ತೋರಿಸಿ",
@@ -10625,11 +10601,11 @@
     "deviceOnboardingTranscriptionTitle": "ನಿಮ್ಮ Omi ಜೊತೆ ಮಾತನಾಡಿ",
     "deviceOnboardingTranscriptionSubtitle": "ಕೆಲವು ಪದಗಳನ್ನು ಹೇಳಿ, ಅವು ತಕ್ಷಣವೇ ಕಾಣಿಸುವುದನ್ನು ನೋಡಿ",
     "deviceOnboardingGoodJob": "ಭೇಷ್‌!",
-    "deviceOnboardingStartSpeaking": "ಮಾತನಾಡಲು ಆರಂಭಿಸಿ...",
+    "deviceOnboardingStartSpeaking": "ಮಾತನಾಡಲು ಆರಂಭಿಸಿ…",
     "deviceOnboardingAskQuestionTitle": "Omi ಗೆ ಪ್ರಶ್ನೆ ಕೇಳಿ",
     "deviceOnboardingAskQuestionSubtitle": "ಬಟನ್ ಒಮ್ಮೆ ಒತ್ತಿ, ನಿಮ್ಮ ಪ್ರಶ್ನೆ ಕೇಳಿ, ಮುಗಿದ ಮೇಲೆ ಮತ್ತೆ ಒತ್ತಿ",
-    "deviceOnboardingProcessingQuestion": "ನಿಮ್ಮ ಪ್ರಶ್ನೆಯನ್ನು ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಲಾಗುತ್ತಿದೆ...",
-    "deviceOnboardingListening": "ಆಲಿಸುತ್ತಿದೆ...",
+    "deviceOnboardingProcessingQuestion": "ನಿಮ್ಮ ಪ್ರಶ್ನೆಯನ್ನು ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಲಾಗುತ್ತಿದೆ…",
+    "deviceOnboardingListening": "ಆಲಿಸುತ್ತಿದೆ…",
     "deviceOnboardingTurnOffTitle": "ಆಫ್ ಮಾಡಿ",
     "deviceOnboardingTurnOnTitle": "ಆನ್ ಮಾಡಿ",
     "deviceOnboardingTurnOffSubtitle": "ಬಟನ್ ಅನ್ನು 3 ಸೆಕೆಂಡ್ ಒತ್ತಿ ಹಿಡಿಯಿರಿ",
@@ -10638,7 +10614,7 @@
     "deviceOnboardingStatusConnected": "ಸಂಪರ್ಕಗೊಂಡಿದೆ",
     "deviceOnboardingStatusConnectedDone": "ಸಂಪರ್ಕಗೊಂಡಿದೆ!",
     "deviceOnboardingStatusDisconnected": "ಸಂಪರ್ಕ ಕಡಿತಗೊಂಡಿದೆ",
-    "deviceOnboardingStatusTurningOff": "ಆಫ್ ಆಗುತ್ತಿದೆ...",
+    "deviceOnboardingStatusTurningOff": "ಆಫ್ ಆಗುತ್ತಿದೆ…",
     "deviceOnboardingDoubleTapTitle": "ಡಬಲ್ ಟ್ಯಾಪ್ ಕಸ್ಟಮೈಸ್ ಮಾಡಿ",
     "deviceOnboardingEndConversation": "ಸಂಭಾಷಣೆ ಮುಗಿಸಿ",
     "deviceOnboardingEndConversationDesc": "ಪ್ರಸ್ತುತ ಸಂಭಾಷಣೆಯನ್ನು ಉಳಿಸಿ ಮುಗಿಸಿ",
@@ -10731,7 +10707,7 @@
     "onDeviceModelSize": "ಮಾದರಿಯ ಗಾತ್ರ",
     "onDeviceTranscription": "ಸಾಧನದಲ್ಲಿ ಪ್ರತಿಲೇಖನ",
     "onDeviceTranscriptionDesc": "ಪ್ರತಿಲೇಖನವನ್ನು ನಿಮ್ಮ ಸಾಧನದಲ್ಲಿಯೇ ಸ್ಥಳೀಯವಾಗಿ ಸಂಸ್ಕರಿಸಲಾಗುತ್ತದೆ",
-    "searchSettings": "ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು ಹುಡುಕಿ…",
+    "searchSettings": "ಸೆಟ್ಟಿಂಗ್‌ಗಳನ್ನು ಹುಡುಕಿ",
     "speechToTextProvider": "ಮಾತಿನಿಂದ ಪಠ್ಯ ಸೇವಾ ಪೂರೈಕೆದಾರ",
     "speechToTextProviderDesc": "ಪ್ರತಿಲೇಖನಕ್ಕೆ ಬಳಸುವ ಸೇವೆಯನ್ನು ಆಯ್ಕೆಮಾಡಿ",
     "sttFilterAuto": "ಸ್ವಯಂ",
@@ -10834,7 +10810,7 @@
     "moreOptions": "ಹೆಚ್ಚಿನ ಆಯ್ಕೆಗಳು",
     "filterByDate": "ದಿನಾಂಕದ ಪ್ರಕಾರ ಫಿಲ್ಟರ್ ಮಾಡಿ",
     "memoryGraph": "ಸ್ಮೃತಿ ಗ್ರಾಫ್",
-    "voiceIntroduction": "{part, select, title{Let Omi get to know you} intro{Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.} hint{Say the whole sentence and finish it in your own words.} name{My name is ___, and I spend most of my time ___.} work{Right now, I am working on ___.} enjoy{Outside of that, I really enjoy ___.} food{My favorite food is ___.} remember{Something I would like help remembering is ___.} day{A good day for me includes ___.} another{Try another prompt} start{Start speaking} skipPrompt{Skip this prompt} captured{Voice sample captured} silence{Take your time. Speak toward your phone microphone.} audio{Audio detected} review{Here is what I heard} reviewHint{Edit or uncheck anything below. Personal details become memories; your goal is saved separately.} saveVoice{Save voice profile} savingVoice{Saving your voice profile…} savedVoice{Voice profile saved} voiceLater{Set up my voice later} keep{Save selected answers} without{Continue without saving answers} savedMemories{Your memories are saved} short{We need a little more audio. Add one more sentence; your earlier answers are safe.} addSample{Add another sentence} uploadError{Your voice profile could not be saved. Retry with the same recording, or set it up later.} memoryError{Some answers could not be saved. Saved items are safe; retry to save the rest.} transcriptionError{We could not transcribe that answer. Retry, keep speaking, or skip this prompt.} noMemories{You can tell Omi more about yourself whenever you like.} voiceOnlyHint{You can skip any personal prompt and talk about something else.} goalPrompt{Right now my number one goal is to ___.} savedGoal{Your goal is saved} goalError{Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.} goalLong{Shorten your goal to 500 characters or fewer, then try again.} voiceUnavailable{Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.} saveFinish{Save and finish} retryRemaining{Retry remaining} saveHint{Saves your voice profile and checked answers.} savedAll{Your introduction is saved.} continueSaved{Continue with what is saved} reviewAnswers{Review answers} originalGoal{Use original wording} savingAnswers{Saving your answers…} other{}}",
+    "voiceIntroduction": "{part, select, title{Let Omi get to know you} intro{Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.} hint{Say the whole sentence and finish it in your own words.} name{My name is ___, and I spend most of my time ___.} work{Right now, I am working on ___.} enjoy{Outside of that, I really enjoy ___.} food{My favorite food is ___.} remember{Something I would like help remembering is ___.} day{A good day for me includes ___.} another{Try another prompt} start{Start speaking} skipPrompt{Skip Question} captured{Voice sample captured} silence{Take your time. Speak toward your phone microphone.} audio{Audio detected} review{Here is what I heard} reviewHint{Edit or uncheck anything below. Personal details become memories; your goal is saved separately.} saveVoice{Save voice profile} savingVoice{Saving your voice profile…} savedVoice{Voice profile saved} voiceLater{Set up my voice later} keep{Save selected answers} without{Continue without saving answers} savedMemories{Your memories are saved} short{We need a little more audio. Add one more sentence; your earlier answers are safe.} addSample{Add another sentence} uploadError{Your voice profile could not be saved. Retry with the same recording, or set it up later.} memoryError{Some answers could not be saved. Saved items are safe; retry to save the rest.} transcriptionError{We could not transcribe that answer. Try again, keep speaking, or skip this question.} noMemories{You can tell Omi more about yourself whenever you like.} voiceOnlyHint{You can skip any personal prompt and talk about something else.} goalPrompt{Right now my number one goal is to ___.} savedGoal{Your goal is saved} goalError{Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.} goalLong{Shorten your goal to 500 characters or fewer, then try again.} voiceUnavailable{Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.} saveFinish{Save and finish} retryRemaining{Retry remaining} saveHint{Saves your voice profile and checked answers.} savedAll{Your introduction is saved.} continueSaved{Continue with what is saved} reviewAnswers{Review answers} originalGoal{Use original wording} savingAnswers{Saving your answers…} other{}}",
     "voiceRecognitionStatus": "{status, select, ready{ಧ್ವನಿ ಗುರುತಿಸುವಿಕೆಗೆ ಸಿದ್ಧವಾಗಿದೆ} saved_sample_awaiting_embedding{ಮಾದರಿ ಉಳಿಸಲಾಗಿದೆ; ಧ್ವನಿ ಸಂಸ್ಕರಣೆ ಇನ್ನೂ ಅಗತ್ಯವಿದೆ} not_learned{ಧ್ವನಿಯನ್ನು ಕಲಿತಿಲ್ಲ} other{ಧ್ವನಿಯ ಸ್ಥಿತಿ ತಿಳಿದಿಲ್ಲ}}",
     "tagSpeakerIncludingLaterSpeech": "ಈ ಮಾತುಗಾರನ ನಂತರದ ಮಾತನ್ನು ಕೂಡ ಟ್ಯಾಗ್ ಮಾಡಿ",
     "updateSummaryWithNewNames": "ಹೊಸ ಹೆಸರುಗಳೊಂದಿಗೆ ಸಾರಾಂಶವನ್ನು ನವೀಕರಿಸಿ",
@@ -10843,5 +10819,286 @@
     "conversationReprocess": "Reprocess",
     "chatStarterPrompt": "{kind, select, capabilities{ನೀನು ನನಗಾಗಿ ಏನು ಮಾಡಬಲ್ಲೆ?} goal{ಗುರಿಯನ್ನು ಹೊಂದಿಸಲು ನನಗೆ ಸಹಾಯ ಮಾಡು} activity{ನನ್ನ ಇತ್ತೀಚಿನ ಚಟುವಟಿಕೆಗಳನ್ನು ಸಂಕ್ಷಿಪ್ತಗೊಳಿಸು} improve{ನಾನು ಹೇಗೆ ಸುಧಾರಿಸಬಹುದು?} other{}}",
     "nextWeek": "ಮುಂದಿನ ವಾರ",
-    "clearSearch": "ಹುಡುಕಾಟವನ್ನು ತೆರವುಗೊಳಿಸಿ"
+    "clearSearch": "ಹುಡುಕಾಟವನ್ನು ತೆರವುಗೊಳಿಸಿ",
+    "audioUploadFailedKeptLocal": "ಅಪ್‌ಲೋಡ್ ವಿಫಲವಾಗಿದೆ — {duration} ಆಡಿಯೊ ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲಿ ಉಳಿಸಲಾಗಿದೆ.",
+    "audioUploadFailedTapRetry": "ಅಪ್‌ಲೋಡ್ ವಿಫಲವಾಗಿದೆ — {duration} ಆಡಿಯೊ ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲಿ ಉಳಿಸಲಾಗಿದೆ. ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಲು ಟ್ಯಾಪ್ ಮಾಡಿ.",
+    "audioUploadRetrying": "ಅಪ್‌ಲೋಡ್ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಲಾಗುತ್ತಿದೆ… {duration} ಆಡಿಯೊ ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲಿ ಉಳಿಸಲಾಗಿದೆ",
+    "capturing": "ಸೆರೆಹಿಡಿಯಲಾಗುತ್ತಿದೆ",
+    "capturingPhotos": "ಫೋಟೋಗಳನ್ನು ಸೆರೆಹಿಡಿಯಲಾಗುತ್ತಿದೆ",
+    "listeningTranscriptWillAppear": "ಆಲಿಸಲಾಗುತ್ತಿದೆ… ಪ್ರತಿಲಿಪಿ ಇಲ್ಲಿ ಕಾಣಿಸುತ್ತದೆ.",
+    "recordingOfflineTranscriptWillCatchUp": "ಆಫ್‌ಲೈನ್‌ನಲ್ಲಿ ರೆಕಾರ್ಡ್ ಆಗುತ್ತಿದೆ — ನೀವು ಮತ್ತೆ ಆನ್‌ಲೈನ್‌ಗೆ ಬಂದಾಗ ಪ್ರತಿಲಿಪಿ ಅಪ್‌ಡೇಟ್ ಆಗುತ್ತದೆ.",
+    "transcriptionUnavailableRecordingSaved": "ಪ್ರತಿಲೇಖನ ಲಭ್ಯವಿಲ್ಲ — ರೆಕಾರ್ಡಿಂಗ್ ಮುಂದುವರಿಯುತ್ತದೆ ಮತ್ತು ನಿಮ್ಮ ಆಡಿಯೊ ಉಳಿಸಲಾಗುತ್ತದೆ.",
+    "uploadingAudioForTranscription": "ಪ್ರತಿಲೇಖನಕ್ಕಾಗಿ {duration} ಆಡಿಯೊ ಅಪ್‌ಲೋಡ್ ಆಗುತ್ತಿದೆ…",
+    "filterBySpeaker": "ಮಾತನಾಡುವವರ ಪ್ರಕಾರ ಫಿಲ್ಟರ್ ಮಾಡಿ",
+    "notNow": "ಈಗ ಬೇಡ",
+    "discard": "ತ್ಯಜಿಸಿ",
+    "keepEditing": "ಸಂಪಾದನೆ ಮುಂದುವರಿಸಿ",
+    "discardChangesTitle": "ಬದಲಾವಣೆಗಳನ್ನು ತ್ಯಜಿಸುವುದೇ?",
+    "discardChangesMessage": "ನಿಮ್ಮ ಉಳಿಸದ ಬದಲಾವಣೆಗಳು ಕಳೆದುಹೋಗುತ್ತವೆ.",
+    "pause": "ವಿರಾಮ",
+    "deleteConversationsTitle": "{count, plural, =1{1 ಸಂಭಾಷಣೆಯನ್ನು ಅಳಿಸುವುದೇ?} other{{count} ಸಂಭಾಷಣೆಗಳನ್ನು ಅಳಿಸುವುದೇ?}}",
+    "deleteConversationsMessage": "ಇದು ಅವುಗಳ ಸ್ಮೃತಿಗಳು, ಕಾರ್ಯಗಳು ಮತ್ತು ಆಡಿಯೋ ಫೈಲ್‌ಗಳನ್ನೂ ಅಳಿಸುತ್ತದೆ.",
+    "conversationsDeletedCount": "{count, plural, =1{1 ಸಂಭಾಷಣೆ ಅಳಿಸಲಾಗಿದೆ} other{{count} ಸಂಭಾಷಣೆಗಳನ್ನು ಅಳಿಸಲಾಗಿದೆ}}",
+    "conversationsMovedCount": "{count, plural, =1{1 ಸಂಭಾಷಣೆ ಸರಿಸಲಾಗಿದೆ} other{{count} ಸಂಭಾಷಣೆಗಳನ್ನು ಸರಿಸಲಾಗಿದೆ}}",
+    "failedToMoveConversations": "ಸಂಭಾಷಣೆಗಳನ್ನು ಸರಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ",
+    "discardedConversationTitle": "ತಿರಸ್ಕರಿಸಲಾಗಿದೆ · {duration}",
+    "noConversationsHeroMessage": "ನೀವು ರೆಕಾರ್ಡ್ ಮಾಡಿದ ಸಂಭಾಷಣೆಗಳು ಇಲ್ಲಿ ಕಾಣಿಸುತ್ತವೆ. ಮೊದಲನೆಯದನ್ನು ರೆಕಾರ್ಡ್ ಮಾಡಲು ಮುಖಪುಟದಲ್ಲಿ + ಟ್ಯಾಪ್ ಮಾಡಿ.",
+    "conversationMap": "ಸಂಭಾಷಣೆ ನಕ್ಷೆ",
+    "conversationCount": "{count, plural, =1{1 ಸಂಭಾಷಣೆ} other{{count} ಸಂಭಾಷಣೆಗಳು}}",
+    "taskCount": "{count, plural, =1{1 ಕಾರ್ಯ} other{{count} ಕಾರ್ಯಗಳು}}",
+    "skipBack10Seconds": "10 ಸೆಕೆಂಡ್ ಹಿಂದೆ",
+    "skipForward10Seconds": "10 ಸೆಕೆಂಡ್ ಮುಂದೆ",
+    "failedToShareRecap": "ಸಾರಾಂಶವನ್ನು ಹಂಚಿಕೊಳ್ಳಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ",
+    "captureOfflineBuffering": "ಆಫ್‌ಲೈನ್, ಬಫರ್ ಆಗುತ್ತಿದೆ",
+    "captureOfflineBufferingFor": "ಆಫ್‌ಲೈನ್, ಬಫರ್ ಆಗುತ್ತಿದೆ · {minutes} ನಿಮಿಷ",
+    "memoryDetailsTitle": "ನೆನಪು",
+    "editMemoryTitle": "ನೆನಪನ್ನು ಸಂಪಾದಿಸಿ",
+    "newMemoryTitle": "ಹೊಸ ನೆನಪು",
+    "memoryReadOnlyHint": "ಈ ನೆನಪನ್ನು ಇತಿಹಾಸವಾಗಿ ಇರಿಸಲಾಗಿದೆ ಮತ್ತು ಸಂಪಾದಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ.",
+    "openConversation": "ಸಂಭಾಷಣೆ ತೆರೆಯಿರಿ",
+    "memoryGraphTitle": "ನೆನಪಿನ ಗ್ರಾಫ್",
+    "memoryReviewTitle": "ಇಂದು ನಾನು ಕಲಿತದ್ದು",
+    "memoryReviewRight": "ಸರಿ",
+    "memoryReviewWrong": "ತಪ್ಪು",
+    "memoryReviewFix": "ಸರಿಪಡಿಸಿ",
+    "memoryReviewConfirmed": "ದೃಢಪಡಿಸಲಾಗಿದೆ. ಇದರಂತೆ ನಡೆದುಕೊಳ್ಳುತ್ತೇನೆ.",
+    "memoryReviewDropped": "ಕೈಬಿಡಲಾಗಿದೆ. ಇಂತಹ ಸಂಗತಿಗಳನ್ನು ತಪ್ಪಿಸುತ್ತೇನೆ.",
+    "memoryReviewUpdated": "ನವೀಕರಿಸಲಾಗಿದೆ.",
+    "memoryReviewSaveFailed": "ಉಳಿಸಲಾಗಲಿಲ್ಲ, ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ",
+    "indentTask": "ಒಳಸರಿಸಿ",
+    "outdentTask": "ಹೊರಸರಿಸಿ",
+    "goalDeleted": "ಗುರಿ ಅಳಿಸಲಾಗಿದೆ",
+    "sharedTasksAcceptFailed": "ಈ ಕಾರ್ಯಗಳನ್ನು ಸ್ವೀಕರಿಸಲಾಗಲಿಲ್ಲ. ನೀವು ಈಗಾಗಲೇ ಈ ಹಂಚಿಕೆಯನ್ನು ಸ್ವೀಕರಿಸಿರಬಹುದು.",
+    "pausePlayback": "ವಿರಾಮ",
+    "deleteSample": "ಮಾದರಿಯನ್ನು ಅಳಿಸಿ",
+    "deletePersonTitle": "ವ್ಯಕ್ತಿಯನ್ನು ಅಳಿಸುವುದೇ?",
+    "deletePersonLabel": "ವ್ಯಕ್ತಿಯನ್ನು ಅಳಿಸಿ",
+    "noPeopleYet": "ಇನ್ನೂ ಯಾವುದೇ ವ್ಯಕ್ತಿಗಳಿಲ್ಲ",
+    "deleteTasksTitle": "{count, plural, =1{1 ಕಾರ್ಯವನ್ನು ಅಳಿಸುವುದೇ?} other{{count} ಕಾರ್ಯಗಳನ್ನು ಅಳಿಸುವುದೇ?}}",
+    "tasksCountLabel": "{count, plural, =1{1 ಕಾರ್ಯ} other{{count} ಕಾರ್ಯಗಳು}}",
+    "sharedTasksAdded": "{count, plural, =1{ನಿಮ್ಮ ಪಟ್ಟಿಗೆ 1 ಕಾರ್ಯವನ್ನು ಸೇರಿಸಲಾಗಿದೆ} other{ನಿಮ್ಮ ಪಟ್ಟಿಗೆ {count} ಕಾರ್ಯಗಳನ್ನು ಸೇರಿಸಲಾಗಿದೆ}}",
+    "sharedTasksAddButton": "{count, plural, =1{1 ಕಾರ್ಯ ಸೇರಿಸಿ} other{{count} ಕಾರ್ಯಗಳನ್ನು ಸೇರಿಸಿ}}",
+    "sharedTasksTitle": "{name} {count, plural, =1{1 ಕಾರ್ಯವನ್ನು ಹಂಚಿಕೊಂಡಿದ್ದಾರೆ} other{{count} ಕಾರ್ಯಗಳನ್ನು ಹಂಚಿಕೊಂಡಿದ್ದಾರೆ}}",
+    "exportedToPlatform": "{platform} ಗೆ ರಫ್ತು ಮಾಡಲಾಗಿದೆ",
+    "taskDueDate": "ಅಂತಿಮ ದಿನಾಂಕ {date}",
+    "linkEvent": "ಈವೆಂಟ್ ಲಿಂಕ್ ಮಾಡಿ",
+    "noCalendarEventsNearby": "ಈ ಸಮಯದ ಸುತ್ತ ಯಾವುದೇ ಕ್ಯಾಲೆಂಡರ್ ಈವೆಂಟ್‌ಗಳು ಕಂಡುಬಂದಿಲ್ಲ.",
+    "suggestedEvent": "ಸೂಚಿಸಲಾಗಿದೆ",
+    "openInGoogleCalendar": "Google Calendar ನಲ್ಲಿ ತೆರೆಯಿರಿ",
+    "shareWithAttendees": "ಭಾಗವಹಿಸುವವರೊಂದಿಗೆ ಹಂಚಿಕೊಳ್ಳಿ",
+    "unlinkCalendarEvent": "ಕ್ಯಾಲೆಂಡರ್ ಈವೆಂಟ್ ಅನ್‌ಲಿಂಕ್ ಮಾಡಿ",
+    "meetingNotesSubject": "ಟಿಪ್ಪಣಿಗಳು: {title}",
+    "previousResult": "ಹಿಂದಿನ ಫಲಿತಾಂಶ",
+    "nextResult": "ಮುಂದಿನ ಫಲಿತಾಂಶ",
+    "playFromHere": "ಇಲ್ಲಿಂದ ಪ್ಲೇ ಮಾಡಿ",
+    "shareConversationQuestion": "ಸಂಭಾಷಣೆ ಹಂಚಿಕೊಳ್ಳುವುದೇ?",
+    "conversationTasksEmptyMessage": "ಈ ಸಂಭಾಷಣೆಯ ಕಾರ್ಯಗಳು ಇಲ್ಲಿ ಕಾಣಿಸುತ್ತವೆ.",
+    "noPendingTasks": "ಬಾಕಿ ಕಾರ್ಯಗಳಿಲ್ಲ",
+    "nCompleted": "{count} ಪೂರ್ಣಗೊಂಡಿದೆ",
+    "identifySpeaker": "ಮಾತನಾಡುವವರನ್ನು ಗುರುತಿಸಿ",
+    "couldNotLoadCheckout": "ಚೆಕ್‌ಔಟ್ ಪುಟವನ್ನು ಲೋಡ್ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ನಿಮ್ಮ ಸಂಪರ್ಕವನ್ನು ಪರಿಶೀಲಿಸಿ ಮತ್ತು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    "phoneFreeCallLimitReached": "ಮಾಸಿಕ ಉಚಿತ ಕರೆ ಮಿತಿ ತಲುಪಿದೆ. ಮುಂದಿನ ತಿಂಗಳು ಮರುಹೊಂದಿಸಲಾಗುತ್ತದೆ.",
+    "couldNotLoadImportHistory": "ಆಮದು ಇತಿಹಾಸವನ್ನು ಲೋಡ್ ಮಾಡಲಾಗಲಿಲ್ಲ",
+    "phoneCallButton": "ಕರೆ ಮಾಡಿ",
+    "searchContacts": "ಸಂಪರ್ಕಗಳನ್ನು ಹುಡುಕಿ",
+    "phoneContactsAccessTitle": "ಸಂಪರ್ಕಗಳ ಪ್ರವೇಶಕ್ಕೆ ಅನುಮತಿಸಿ",
+    "phoneSelectCountryTitle": "ದೇಶವನ್ನು ಆಯ್ಕೆಮಾಡಿ",
+    "phoneNoVerifiedNumbersTitle": "ಪರಿಶೀಲಿಸಿದ ಸಂಖ್ಯೆಗಳಿಲ್ಲ",
+    "phoneNoVerifiedNumbersMessage": "Omi ಮೂಲಕ ಕರೆ ಮಾಡಲು ನಿಮ್ಮ ಸಂಖ್ಯೆಯನ್ನು ಪರಿಶೀಲಿಸಿ.",
+    "phoneDeleteNumberFailed": "ಈ ಸಂಖ್ಯೆಯನ್ನು ಅಳಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ",
+    "forgetDeviceConfirmTitle": "ಸಾಧನವನ್ನು ಮರೆಯಬೇಕೆ?",
+    "forgetDeviceConfirmMessage": "Omi ಈ ಸಾಧನಕ್ಕೆ ಸಂಪರ್ಕಿಸುವುದನ್ನು ನಿಲ್ಲಿಸುತ್ತದೆ. ಮತ್ತೆ ಬಳಸಲು, ನೀವು ಅದನ್ನು ಮತ್ತೆ ಜೋಡಿಸಬೇಕಾಗುತ್ತದೆ.",
+    "deviceForgottenMessage": "ಸಾಧನವನ್ನು ಮರೆಯಲಾಗಿದೆ",
+    "unpairDeviceConfirmTitle": "ಸಾಧನದ ಜೋಡಣೆ ರದ್ದುಮಾಡಬೇಕೆ?",
+    "rollBack": "ಹಿಂದಕ್ಕೆ ತರಿಸಿ",
+    "dataRateKbps": "{rate} kbps",
+    "diagnosticsExportTitle": "Omi ಸಾಧನ ರೋಗನಿರ್ಣಯ",
+    "diagnosticsFailBadge": "ವಿಫಲ",
+    "diagnosticsReconnectedIn": "{duration} ನಲ್ಲಿ ಮರುಸಂಪರ್ಕಿಸಲಾಗಿದೆ",
+    "timeCompactDays": "{count}d",
+    "durationAgo": "{duration} ಹಿಂದೆ",
+    "sttLanguageFollowsPrimary": "ನಿಮ್ಮ ಪ್ರಾಥಮಿಕ ಭಾಷೆಯನ್ನು ಅನುಸರಿಸುತ್ತದೆ",
+    "creatorPayouts": "ರಚನೆಕಾರರ ಪಾವತಿಗಳು",
+    "sttLanguageOverride": "ಬದಲಿಸಿ",
+    "sttUsePrimaryLanguage": "ಪ್ರಾಥಮಿಕ ಭಾಷೆ ಬಳಸಿ",
+    "sttPrimaryLanguageUnsupported": "ಈ ಪೂರೈಕೆದಾರರು {language} ಬೆಂಬಲಿಸುವುದಿಲ್ಲ, ಆದ್ದರಿಂದ {fallback} ಬಳಸುತ್ತದೆ.",
+    "deviceRamBelowMinimum": "ಪತ್ತೆಯಾದ RAM: {ram} GB. ಶಿಫಾರಸು ಮಾಡಿದ ಕನಿಷ್ಠ: 4 GB.",
+    "olderIphoneModelDetected": "ಪತ್ತೆಯಾದ ಮಾದರಿ: {model} (iPhone XS ಗಿಂತ ಹಳೆಯದು). ಸಾಧನದಲ್ಲಿನ ಗುರುತಿಸುವಿಕೆ ನಿಧಾನವಾಗಿರಬಹುದು.",
+    "copyLogs": "ಲಾಗ್‌ಗಳನ್ನು ನಕಲಿಸಿ",
+    "openProviderDocs": "ದಾಖಲೆ ತೆರೆಯಿರಿ",
+    "getApiKey": "API ಕೀ ಪಡೆಯಿರಿ",
+    "showApiKey": "API ಕೀ ತೋರಿಸಿ",
+    "hideApiKey": "API ಕೀ ಮರೆಮಾಡಿ",
+    "removeVocabularyWord": "{word} ತೆಗೆದುಹಾಕಿ",
+    "vocabularyWordCount": "{count, plural, =1{1 ಪದ} other{{count} ಪದಗಳು}}",
+    "phoneFreeCallsRemaining": "ಈ ತಿಂಗಳು {remaining} ಉಚಿತ ಕರೆಗಳು ಉಳಿದಿವೆ ({limit} ರಲ್ಲಿ)",
+    "phoneFreeCallsRemainingWithMax": "ಈ ತಿಂಗಳು {remaining} ಉಚಿತ ಕರೆಗಳು ಉಳಿದಿವೆ ({limit} ರಲ್ಲಿ) · ಪ್ರತಿಯೊಂದೂ {minutes} ನಿಮಿಷಗಳವರೆಗೆ",
+    "appCreators": "ಆ್ಯಪ್ ರಚನೆಕಾರರು",
+    "homeScreen": "ಮುಖಪುಟ ಪರದೆ",
+    "phoneCalls": "ಫೋನ್ ಕರೆಗಳು",
+    "vadGate": "VAD Gate",
+    "vadGateDescription": "ಭಾಷಣದಿಂದ ಪಠ್ಯ ವೆಚ್ಚ ಕಡಿಮೆ ಮಾಡಲು ಸರ್ವರ್‌ನಲ್ಲಿ ಧ್ವನಿ ಫಿಲ್ಟರ್",
+    "flashCustomFirmware": "ಕಸ್ಟಮ್ ಫರ್ಮ್‌ವೇರ್ ಫ್ಲ್ಯಾಶ್ ಮಾಡಿ",
+    "flashCustomFirmwareDescription": "ಕಸ್ಟಮ್ ಫರ್ಮ್‌ವೇರ್ ಬಿಲ್ಡ್‌ಗಳನ್ನು ಫ್ಲ್ಯಾಶ್ ಮಾಡಿ",
+    "selectFirmwareZip": "ಫರ್ಮ್‌ವೇರ್ ZIP ಫೈಲ್ ಆಯ್ಕೆಮಾಡಿ",
+    "customFirmwareWarning": "ಕಸ್ಟಮ್ ಫರ್ಮ್‌ವೇರ್ ನಿಮ್ಮ ಸಾಧನವನ್ನು ಹಾಳುಮಾಡಬಹುದು. ಇದು ಮಾನ್ಯ Omi ಫರ್ಮ್‌ವೇರ್ ಬಿಲ್ಡ್ ಎಂದು ಖಚಿತಪಡಿಸಿಕೊಳ್ಳಿ ಮತ್ತು ನವೀಕರಣದ ಸಮಯದಲ್ಲಿ ಸಂಪರ್ಕ ಕಡಿತಗೊಳಿಸಬೇಡಿ.",
+    "firmwareFlashed": "ಫರ್ಮ್‌ವೇರ್ ಫ್ಲ್ಯಾಶ್ ಆಗಿದೆ",
+    "deviceWillRestart": "ನಿಮ್ಮ ಸಾಧನ ಮರುಪ್ರಾರಂಭವಾಗುತ್ತದೆ.",
+    "exportFailedTryAgain": "ರಫ್ತು ವಿಫಲವಾಗಿದೆ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    "firmwareFlashTarget": "ಸಾಧನ: {deviceName}",
+    "keepSubscription": "ಚಂದಾದಾರಿಕೆ ಉಳಿಸಿಕೊಳ್ಳಿ",
+    "couldNotLoadPage": "ಈ ಪುಟವನ್ನು ಲೋಡ್ ಮಾಡಲಾಗಲಿಲ್ಲ. ನಿಮ್ಮ ಸಂಪರ್ಕವನ್ನು ಪರಿಶೀಲಿಸಿ ಮತ್ತು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    "leaveFlowStepOf": "ಹಂತ {current} / {total}",
+    "sharedTasksLinkExpired": "ಈ ಹಂಚಿಕೊಂಡ ಕಾರ್ಯಗಳು ಸಿಗಲಿಲ್ಲ, ಅಥವಾ ಲಿಂಕ್ ಅವಧಿ ಮುಗಿದಿದೆ.",
+    "sharedTasksUnknownSender": "ಯಾರೋ",
+    "allow": "ಅನುಮತಿಸಿ",
+    "permissionAllowed": "ಅನುಮತಿಸಲಾಗಿದೆ",
+    "permissionBlockedHint": "ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಆಫ್ ಆಗಿದೆ. ಇದನ್ನು ಬಳಸಲು ಅಲ್ಲಿ ಅನುಮತಿಸಿ.",
+    "useDifferentAccount": "ಬೇರೆ ಖಾತೆ ಬಳಸಿ",
+    "onboardingStepOf": "ಹಂತ {current} / {total}",
+    "onboardingCompleteMessage": "Omi ಅನ್ನು 2 ದಿನ ಹಿನ್ನೆಲೆಯಲ್ಲಿ ಚಾಲನೆಯಲ್ಲಿಡಿ, ನಂತರ ಅದು ಉಪಯುಕ್ತ ಪ್ರತಿಕ್ರಿಯೆ ನೀಡಲು ಆರಂಭಿಸುತ್ತದೆ.",
+    "cantFindDeviceHint": "ನಿಮ್ಮ ಸಾಧನ ಸಿಗುತ್ತಿಲ್ಲವೇ? ಅದು ಆನ್ ಆಗಿದೆ ಮತ್ತು ಫೋನ್ ಹತ್ತಿರವಿದೆ ಎಂದು ಖಚಿತಪಡಿಸಿ, ನಂತರ ಮತ್ತೆ ಸ್ಕ್ಯಾನ್ ಮಾಡಿ.",
+    "scanAgain": "ಮತ್ತೆ ಸ್ಕ್ಯಾನ್ ಮಾಡಿ",
+    "howToPair": "ಜೋಡಿಸುವುದು ಹೇಗೆ",
+    "contactSupportAction": "ಬೆಂಬಲವನ್ನು ಸಂಪರ್ಕಿಸಿ",
+    "deviceOfflineWakeHint": "{deviceName} ಆಫ್‌ಲೈನ್ ಆಗಿದೆ. ಎಚ್ಚರಗೊಳಿಸಲು ಅದರ ಬಟನ್ ಒತ್ತಿ, ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    "batteryLevelSemantics": "ಬ್ಯಾಟರಿ {level}%",
+    "updateOmiGlassFirmware": "OmiGlass ಫರ್ಮ್‌ವೇರ್ ಅಪ್‌ಡೇಟ್ ಮಾಡಿ",
+    "deviceConnecting": "ಸಂಪರ್ಕಿಸಲಾಗುತ್ತಿದೆ…",
+    "recordOptionsTip": "ಸಲಹೆ: ಫೋನ್ ಕರೆ ರೆಕಾರ್ಡ್ ಮಾಡಲು ರೆಕಾರ್ಡ್ ಬಟನ್ ಒತ್ತಿ ಹಿಡಿಯಿರಿ.",
+    "firmwareUpdateFailedTitle": "ಅಪ್‌ಡೇಟ್ ವಿಫಲವಾಗಿದೆ",
+    "firmwareUpdateFailedMessage": "ಅಪ್‌ಡೇಟ್ ಪೂರ್ಣಗೊಂಡಿಲ್ಲ. ನಿಮ್ಮ ಸಾಧನ ಈಗಲೂ ಪ್ರಸ್ತುತ ಫರ್ಮ್‌ವೇರ್‌ನಲ್ಲಿದೆ ಮತ್ತು ಬಳಸಲು ಸುರಕ್ಷಿತವಾಗಿದೆ. ಚಾರ್ಜ್ ಮಾಡಿ ಫೋನ್ ಹತ್ತಿರ ಇಡಿ, ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    "firmwareDownloadFailedMessage": "ಅಪ್‌ಡೇಟ್ ಡೌನ್‌ಲೋಡ್ ಆಗಲಿಲ್ಲ, ನಿಮ್ಮ ಸಾಧನ ಬದಲಾಗಿಲ್ಲ. ಇಂಟರ್ನೆಟ್ ಸಂಪರ್ಕ ಪರಿಶೀಲಿಸಿ, ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    "firmwareBatteryTooLow": "ಬ್ಯಾಟರಿ {level}% ಇದೆ. ಅಪ್‌ಡೇಟ್ ಮಾಡುವ ಮೊದಲು ಸಾಧನವನ್ನು ಕನಿಷ್ಠ 15% ಚಾರ್ಜ್ ಮಾಡಿ.",
+    "startUpdate": "ಅಪ್‌ಡೇಟ್ ಪ್ರಾರಂಭಿಸಿ",
+    "otaNotSupported": "ಈ ಫರ್ಮ್‌ವೇರ್ ಅನ್ನು Wi-Fi ಮೂಲಕ ಅಪ್‌ಡೇಟ್ ಮಾಡಲು ಸಾಧ್ಯವಿಲ್ಲ.",
+    "otaConnectFailed": "{deviceName} ಗೆ ಸಂಪರ್ಕಿಸಲು ಆಗಲಿಲ್ಲ. ಅದನ್ನು ಆನ್ ಆಗಿ ಹತ್ತಿರ ಇಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    "otaUpdateUnavailable": "ಈ ಅಪ್‌ಡೇಟ್ ಈಗ ಲಭ್ಯವಿಲ್ಲ. ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    "otaStarting": "ಅಪ್‌ಡೇಟ್ ಪ್ರಾರಂಭವಾಗುತ್ತಿದೆ…",
+    "otaStartFailed": "ಅಪ್‌ಡೇಟ್ ಪ್ರಾರಂಭಿಸಲು ಆಗಲಿಲ್ಲ. Wi-Fi ಹೆಸರು ಮತ್ತು ಪಾಸ್‌ವರ್ಡ್ ಪರಿಶೀಲಿಸಿ, ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    "otaRebooting": "ಹೊಸ ಫರ್ಮ್‌ವೇರ್‌ನೊಂದಿಗೆ {deviceName} ಮರುಪ್ರಾರಂಭವಾಗುತ್ತಿದೆ.",
+    "otaUpdateCancelled": "ಅಪ್‌ಡೇಟ್ ರದ್ದುಗೊಂಡಿದೆ",
+    "cancelUpdate": "ಅಪ್‌ಡೇಟ್ ರದ್ದುಮಾಡಿ",
+    "otaKeepNearby": "ಅಪ್‌ಡೇಟ್ ಸಮಯದಲ್ಲಿ ಸಾಧನವನ್ನು ಆನ್ ಆಗಿ ಹತ್ತಿರ ಇಡಿ ಮತ್ತು ಆ್ಯಪ್ ಮುಚ್ಚಬೇಡಿ.",
+    "otaWifiConnecting": "Wi-Fi ಗೆ ಸಂಪರ್ಕಿಸಲಾಗುತ್ತಿದೆ…",
+    "otaWifiConnected": "Wi-Fi ಗೆ ಸಂಪರ್ಕಗೊಂಡಿದೆ",
+    "otaWifiFailed": "Wi-Fi ಸೇರಲು ಆಗಲಿಲ್ಲ. ನೆಟ್‌ವರ್ಕ್ ಹೆಸರು ಮತ್ತು ಪಾಸ್‌ವರ್ಡ್ ಪರಿಶೀಲಿಸಿ.",
+    "otaDownloadFailed": "ಫರ್ಮ್‌ವೇರ್ ಡೌನ್‌ಲೋಡ್ ವಿಫಲವಾಗಿದೆ. Wi-Fi ಸಂಪರ್ಕ ಪರಿಶೀಲಿಸಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    "otaInstallFailed": "ಇನ್‌ಸ್ಟಾಲ್ ವಿಫಲವಾಗಿದೆ. ನಿಮ್ಮ ಸಾಧನ ಈಗಲೂ ಪ್ರಸ್ತುತ ಫರ್ಮ್‌ವೇರ್‌ನಲ್ಲಿದೆ.",
+    "otaUpdatedMessage": "{deviceName} ಅಪ್‌ಡೇಟ್ ಆಗಿದೆ ಮತ್ತು ತಾನಾಗಿಯೇ ಮರುಪ್ರಾರಂಭವಾಗುತ್ತದೆ.",
+    "showPassword": "ಪಾಸ್‌ವರ್ಡ್ ತೋರಿಸಿ",
+    "hidePassword": "ಪಾಸ್‌ವರ್ಡ್ ಮರೆಮಾಡಿ",
+    "appNotFoundOrRemoved": "ಈ ಆ್ಯಪ್ ಇನ್ನು ಮುಂದೆ ಲಭ್ಯವಿಲ್ಲ",
+    "startupFailedTitle": "Omi ಪ್ರಾರಂಭಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ",
+    "startupFailedMessage": "Omi ಪ್ರಾರಂಭವಾಗುತ್ತಿರುವಾಗ ಏನೋ ತಪ್ಪಾಗಿದೆ. ನಿಮ್ಮ ಸಂಪರ್ಕವನ್ನು ಪರಿಶೀಲಿಸಿ, ನಂತರ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    "startupFailedConfigMessage": "Omi ನ ಈ ಬಿಲ್ಡ್‌ನಲ್ಲಿ ಕಾನ್ಫಿಗರೇಶನ್ ಸಮಸ್ಯೆ ಇದೆ. ಇದು ನಿಮ್ಮ ಸಾಧನದ ಸಮಸ್ಯೆಯಲ್ಲ. ಬೆಂಬಲವನ್ನು ಸಂಪರ್ಕಿಸಿ ಮತ್ತು ಕೆಳಗಿನ ವಿವರಗಳನ್ನು ಸೇರಿಸಿ.",
+    "discardRecordingTitle": "ರೆಕಾರ್ಡಿಂಗ್ ಅನ್ನು ತ್ಯಜಿಸುವುದೇ?",
+    "discardRecordingMessage": "ನಿಮ್ಮ ಧ್ವನಿ ಮಾದರಿ ಇನ್ನೂ ಉಳಿಸಲಾಗಿಲ್ಲ. ನೀವು ಈಗ ಬಿಟ್ಟರೆ, ಅದನ್ನು ತ್ಯಜಿಸಲಾಗುತ್ತದೆ.",
+    "keepRecording": "ರೆಕಾರ್ಡಿಂಗ್ ಮುಂದುವರಿಸಿ",
+    "view": "ವೀಕ್ಷಿಸಿ",
+    "appDataAccessTitle": "{appName} ಗೆ ಪ್ರವೇಶ ನೀಡುವುದೇ?",
+    "appDataAccessMessage": "{appName} ನಿಮ್ಮ ಸಂಭಾಷಣೆಗಳು, ನೆನಪುಗಳು ಮತ್ತು ರೆಕಾರ್ಡಿಂಗ್‌ಗಳನ್ನು ತನ್ನ ಡೆವಲಪರ್‌ನ ಸರ್ವರ್‌ನಲ್ಲಿ ಪಡೆಯುತ್ತದೆ. ಅಲ್ಲಿ ಆ ಡೇಟಾವನ್ನು ಹೇಗೆ ಬಳಸಲಾಗುತ್ತದೆ ಎಂಬುದಕ್ಕೆ Omi ಜವಾಬ್ದಾರವಲ್ಲ.",
+    "appDisabledNamed": "{appName} ನಿಷ್ಕ್ರಿಯಗೊಳಿಸಲಾಗಿದೆ",
+    "appRatingCount": "{count, plural, =1{1 ರೇಟಿಂಗ್} other{{count} ರೇಟಿಂಗ್‌ಗಳು}}",
+    "previewImageLabel": "ಸ್ಕ್ರೀನ್‌ಶಾಟ್ {index}/{total}",
+    "chatWithApp": "{appName} ಜೊತೆ ಚಾಟ್",
+    "appSettingsLabel": "{appName} ಸೆಟ್ಟಿಂಗ್‌ಗಳು",
+    "appOptions": "ಆ್ಯಪ್ ಆಯ್ಕೆಗಳು",
+    "cancelSubscriptionKeepAccessMessage": "ಪ್ರಸ್ತುತ ಬಿಲ್ಲಿಂಗ್ ಅವಧಿಯ ಕೊನೆಯವರೆಗೆ ನಿಮ್ಮ ಪ್ರವೇಶ ಉಳಿಯುತ್ತದೆ.",
+    "chatSendMessage": "ಸಂದೇಶ ಕಳುಹಿಸಿ",
+    "chatAddAttachment": "ಲಗತ್ತು ಸೇರಿಸಿ",
+    "removeAttachment": "ಲಗತ್ತು ತೆಗೆದುಹಾಕಿ",
+    "chatRemoveSelectedText": "ಉಲ್ಲೇಖಿತ ಪಠ್ಯ ತೆಗೆದುಹಾಕಿ",
+    "chatOfflineHint": "ನೀವು ಆಫ್‌ಲೈನ್‌ನಲ್ಲಿದ್ದೀರಿ. ಸಂದೇಶ ಕಳುಹಿಸಲು ಮತ್ತೆ ಸಂಪರ್ಕಿಸಿ.",
+    "chatReplyFailed": "Omi ಉತ್ತರಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ನಿಮ್ಮ ಸಂಪರ್ಕ ಪರಿಶೀಲಿಸಿ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    "disableAppNamed": "{appName} ನಿಷ್ಕ್ರಿಯಗೊಳಿಸಿ",
+    "whatWentWrong": "ಏನು ತಪ್ಪಾಯಿತು?",
+    "selectAReason": "ಕಾರಣವನ್ನು ಆಯ್ಕೆಮಾಡಿ",
+    "submit": "ಸಲ್ಲಿಸಿ",
+    "feedbackReasonTooVerbose": "ತುಂಬಾ ಉದ್ದವಾಗಿದೆ",
+    "feedbackReasonIncorrect": "ತಪ್ಪು ಅಥವಾ ಕಲ್ಪಿತ",
+    "feedbackReasonNotHelpful": "ಉಪಯುಕ್ತವಲ್ಲ ಅಥವಾ ಅಸಂಬದ್ಧ",
+    "feedbackReasonIgnoredInstructions": "ಸೂಚನೆಗಳನ್ನು ಪಾಲಿಸಲಿಲ್ಲ",
+    "additionalFeedbackOptional": "ಹೆಚ್ಚುವರಿ ಪ್ರತಿಕ್ರಿಯೆ (ಐಚ್ಛಿಕ)",
+    "helpful": "ಉಪಯುಕ್ತ",
+    "daySummaryForDate": "ದಿನದ ಸಾರಾಂಶ · {date}",
+    "chatStarterYesterday": "ನಾನು ನಿನ್ನೆ ಏನು ಮಾಡಿದೆ?",
+    "chatStarterDoDifferently": "ಇಂದು ನಾನು ಏನನ್ನು ಬೇರೆ ರೀತಿಯಲ್ಲಿ ಮಾಡಬಹುದು?",
+    "chatStarterTeachMe": "ನನಗೆ ಹೊಸದನ್ನು ಕಲಿಸಬಹುದೇ?",
+    "thinking": "ಯೋಚಿಸುತ್ತಿದೆ",
+    "couldNotLoadWhatsNew": "ಹೊಸದನ್ನು ಲೋಡ್ ಮಾಡಲಾಗಲಿಲ್ಲ",
+    "githubRepositoryUrl": "GitHub ರೆಪೊಸಿಟರಿ URL",
+    "githubRepositoryUrlHint": "ನಿಮ್ಮ ಆ್ಯಪ್‌ನ ಸೋರ್ಸ್ ಕೋಡ್ ರೆಪೊಸಿಟರಿಗೆ ಲಿಂಕ್",
+    "triggerEvents": "ಟ್ರಿಗರ್ ಈವೆಂಟ್‌ಗಳು",
+    "noAppsInCategoryYet": "ಈ ವರ್ಗದಲ್ಲಿ ಇನ್ನೂ ಆ್ಯಪ್‌ಗಳಿಲ್ಲ",
+    "scopes": "ವ್ಯಾಪ್ತಿಗಳು",
+    "aiAppGeneratorBannerTitle": "ಒಂದೇ ಟ್ಯಾಪ್‌ನಲ್ಲಿ AI ಮೂಲಕ ಆ್ಯಪ್ ನಿರ್ಮಿಸಿ",
+    "refreshManifest": "ಮ್ಯಾನಿಫೆಸ್ಟ್ ರಿಫ್ರೆಶ್ ಮಾಡಿ",
+    "versionLabel": "ಆವೃತ್ತಿ {version}",
+    "appUsersCount": "{count}+ ಬಳಕೆದಾರರು",
+    "discovery": "ಅನ್ವೇಷಣೆ",
+    "chatBlockShowMore": "ಇನ್ನಷ್ಟು ತೋರಿಸಿ",
+    "chatBlockShowLess": "ಕಡಿಮೆ ತೋರಿಸಿ",
+    "triggerEvent": "ಟ್ರಿಗರ್ ಈವೆಂಟ್",
+    "webhookUrl": "ವೆಬ್‌ಹುಕ್ URL",
+    "appHomeUrl": "ಆ್ಯಪ್ ಹೋಮ್ URL",
+    "authUrl": "ದೃಢೀಕರಣ URL",
+    "setupCompletedUrl": "ಸೆಟಪ್ ಪೂರ್ಣಗೊಂಡ URL",
+    "chatToolsManifestUrl": "ಚಾಟ್ ಪರಿಕರಗಳ ಮ್ಯಾನಿಫೆಸ್ಟ್ URL",
+    "invalidWebhookUrlError": "ದಯವಿಟ್ಟು ಮಾನ್ಯವಾದ ವೆಬ್‌ಹುಕ್ URL ನಮೂದಿಸಿ",
+    "githubRepositoryUrlRequired": "GitHub ರೆಪೊಸಿಟರಿ URL ಅಗತ್ಯವಿದೆ",
+    "removeScreenshot": "ಸ್ಕ್ರೀನ್‌ಶಾಟ್ ತೆಗೆದುಹಾಕಿ",
+    "addScreenshot": "ಸ್ಕ್ರೀನ್‌ಶಾಟ್ ಸೇರಿಸಿ",
+    "aiGenRegenerateIcon": "ಐಕಾನ್ ಮರುರಚಿಸಿ",
+    "categoryAppCount": "{count, plural, =1{1 ಆ್ಯಪ್} other{{count} ಆ್ಯಪ್‌ಗಳು}}",
+    "generateDescription": "ವಿವರಣೆ ರಚಿಸಿ",
+    "selectImageFileTitle": "ಚಿತ್ರ ಫೈಲ್ ಆಯ್ಕೆಮಾಡಿ",
+    "selectThumbnailImageTitle": "ಥಂಬ್‌ನೇಲ್ ಚಿತ್ರ ಆಯ್ಕೆಮಾಡಿ",
+    "appIdNotFoundError": "ಅ್ಯಾಪ್ ID ಕಂಡುಬಂದಿಲ್ಲ",
+    "manifestRefreshedSuccess": "ಮ್ಯಾನಿಫೆಸ್ಟ್ ಯಶಸ್ವಿಯಾಗಿ ರಿಫ್ರೆಶ್ ಆಗಿದೆ",
+    "manifestRefreshFailed": "ಮ್ಯಾನಿಫೆಸ್ಟ್ ರಿಫ್ರೆಶ್ ಮಾಡಲು ವಿಫಲವಾಗಿದೆ",
+    "captureRecordingsSheetTitle": "ಈ ಸಂಭಾಷಣೆಯ ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು",
+    "captureRecordingSeparate": "ಬೇರ್ಪಡಿಸಿ…",
+    "captureRecordingSeparateTitle": "ಈ ರೆಕಾರ್ಡಿಂಗ್ ಅನ್ನು ಬೇರ್ಪಡಿಸುವುದೇ?",
+    "captureRecordingSeparateMessage": "{recording} ಪ್ರತ್ಯೇಕ ಸಂಭಾಷಣೆಯಾಗಿ ತೋರಿಸಲಾಗುತ್ತದೆ ಮತ್ತು ಈ ಈವೆಂಟ್‌ನೊಂದಿಗೆ ಮತ್ತೆ ಗುಂಪುಗೊಳ್ಳುವುದಿಲ್ಲ.",
+    "captureRecordingSeparateConfirm": "ಬೇರ್ಪಡಿಸಿ",
+    "captureRecordingSeparateFailed": "ಬೇರ್ಪಡಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    "captureRecordingOpenFailed": "ಈ ರೆಕಾರ್ಡಿಂಗ್ ತೆರೆಯಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ.",
+    "captureRecordingViewing": "ನೀವು ಈ ರೆಕಾರ್ಡಿಂಗ್ ನೋಡುತ್ತಿದ್ದೀರಿ",
+    "captureRecordedBy": "{devices} ರೆಕಾರ್ಡ್ ಮಾಡಿದೆ",
+    "captureSourceDesktop": "ಡೆಸ್ಕ್‌ಟಾಪ್",
+    "renameConversation": "ಮರುಹೆಸರಿಸಿ",
+    "captureRecordingsCount": "{count, plural, =1{1 ರೆಕಾರ್ಡಿಂಗ್} other{{count} ರೆಕಾರ್ಡಿಂಗ್‌ಗಳು}}",
+    "captureSourcePendant": "ಪೆಂಡೆಂಟ್",
+    "conversationDeveloperTools": "ಸಂಭಾಷಣೆಗಳಲ್ಲಿ ಡೆವಲಪರ್ ಪರಿಕರಗಳು",
+    "conversationDeveloperToolsDescription": "ಸಂಭಾಷಣೆಯ ಮೆನುವಿನಲ್ಲಿ ಸಂಭಾಷಣೆ ಐಡಿ ನಕಲಿಸಿ ಮತ್ತು ಪ್ರಾಂಪ್ಟ್ ಪರೀಕ್ಷಿಸಿ ತೋರಿಸಿ",
+    "participantsSummary": "{name} + {count, plural, =1{1 ಇತರರು} few{{count} ಇತರರು} many{{count} ಇತರರು} other{{count} ಇತರರು}}",
+    "recordingAndTranscription": "ರೆಕಾರ್ಡಿಂಗ್ ಮತ್ತು ಪ್ರತಿಲಿಪಿ",
+    "notificationsAndDisplay": "ಅಧಿಸೂಚನೆಗಳು ಮತ್ತು ಪ್ರದರ್ಶನ",
+    "helpAndAbout": "ಸಹಾಯ ಮತ್ತು ಮಾಹಿತಿ",
+    "speakerTagPromptTitle": "ಧ್ವನಿಗಳನ್ನು ಗುರುತಿಸಲು Omi ಗೆ ಸಹಾಯ ಮಾಡಿ",
+    "speakerTagPromptSubtitle": "ಕಳೆದ ಎರಡು ದಿನಗಳ ಧ್ವನಿಗಳ ತ್ವರಿತ ಪರಿಶೀಲನೆ",
+    "speakerTagPromptIsThisYou": "ಇದು ನೀವೇನಾ?",
+    "speakerTagPromptIsThisPerson": "ಇದು {name} ಅವರೇನಾ?",
+    "speakerTagPromptWhoIsThis": "ಇದು ಯಾರು?",
+    "speakerTagPromptThatsMe": "ಇದು ನಾನೇ",
+    "speakerTagPromptNotMe": "ನಾನಲ್ಲ",
+    "speakerTagPromptSomeoneNew": "ಹೊಸ ವ್ಯಕ್ತಿ",
+    "speakerTagPromptDontKnow": "ನನಗೆ ಪರಿಚಯವಿಲ್ಲದವರು",
+    "speakerTagPromptNotSure": "ಖಚಿತವಿಲ್ಲ",
+    "speakerTagPromptPlayClip": "ಕ್ಲಿಪ್ ಪ್ಲೇ ಮಾಡಿ",
+    "speakerTagPromptProgress": "{current}/{total}",
+    "speakerTagPromptSaveVoicesTitle": "ನೀವು ಹೆಸರಿಸುವ ಜನರ ಧ್ವನಿಗಳನ್ನು ನೆನಪಿಡಿ",
+    "speakerTagPromptSaveVoicesBody": "ಮುಂದಿನ ಬಾರಿ ಗುರುತಿಸಲು Omi ಒಂದು ಚಿಕ್ಕ ಧ್ವನಿ ಮಾದರಿಯನ್ನು ಇಟ್ಟುಕೊಳ್ಳುತ್ತದೆ. ಸೆಟ್ಟಿಂಗ್‌ಗಳಲ್ಲಿ ಯಾವಾಗ ಬೇಕಾದರೂ ಇದನ್ನು ಬದಲಾಯಿಸಬಹುದು.",
+    "speakerTagPromptThanks": "ಧನ್ಯವಾದಗಳು! Omi ಧ್ವನಿಗಳನ್ನು ಇನ್ನಷ್ಟು ಚೆನ್ನಾಗಿ ಗುರುತಿಸುತ್ತದೆ.",
+    "speakerTagPromptNameHint": "ಅವರ ಹೆಸರು",
+    "speakerTagPromptClipUnavailable": "ಈ ಕ್ಲಿಪ್ ಪ್ಲೇ ಮಾಡಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ",
+    "speakerTagPromptAnswerFailed": "ಉಳಿಸಲು ಸಾಧ್ಯವಾಗಲಿಲ್ಲ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ.",
+    "voiceSettingsAskToTag": "ಧ್ವನಿಗಳನ್ನು ಟ್ಯಾಗ್ ಮಾಡಲು ನನ್ನನ್ನು ಕೇಳಿ",
+    "voiceSettingsAskToTagSubtitle": "ಆಗಾಗ, ನಿಮ್ಮ ಇತ್ತೀಚಿನ ಸಂಭಾಷಣೆಗಳಲ್ಲಿ ಯಾರು ಮಾತನಾಡುತ್ತಿದ್ದರು ಎಂದು Omi ಕೇಳುತ್ತದೆ",
+    "voiceSettingsSaveOthersSubtitle": "ನೀವು ಯಾರಿಗಾದರೂ ಹೆಸರಿಸಿದಾಗ, ಮುಂದಿನ ಬಾರಿ ಗುರುತಿಸಲು Omi ಒಂದು ಚಿಕ್ಕ ಧ್ವನಿ ಮಾದರಿಯನ್ನು ಇಟ್ಟುಕೊಳ್ಳುತ್ತದೆ",
+    "transcriptionUnavailableRecordingContinues": "ಲಿಪ್ಯಂತರಗಳು ಲಭ್ಯವಿಲ್ಲ, ಧ್ವನಿಮುದ್ರಣ ಸಾಧನದಲ್ಲಿ ಮುಂದುವರಿಯುತ್ತದೆ ಮತ್ತು ನಂತರ ಪ್ರಕ್ರಿಯೆಗೊಳ್ಳುತ್ತದೆ",
+    "transcriptionUnavailableSavingOnDevice": "ಲಿಪ್ಯಂತರ ಲಭ್ಯವಿಲ್ಲ · ಸಾಧನದಲ್ಲಿ ಉಳಿಸಲಾಗುತ್ತಿದೆ",
+    "transcriptionsPendingFraction": "ಬಾಕಿ ಇರುವ ಲಿಪ್ಯಂತರಗಳು {pending}/{total}",
+    "transcriptionsPendingCount": "ಬಾಕಿ ಇರುವ ಲಿಪ್ಯಂತರಗಳು {count}"
 }

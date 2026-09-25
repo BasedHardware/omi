@@ -757,18 +757,17 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
       return
     }
 
-    guard state.showingAIConversation else { return }
+    guard state.showingAIConversation else {
+      if state.currentNotification != nil { FloatingControlBarManager.shared.dismissCurrentNotification(kind: .user) }
+      return
+    }
 
     if !state.aiInputText.isEmpty {
       state.aiInputText = ""
       return
     }
 
-    if state.hasVisibleConversation {
-      clearVisibleConversationFromUI()
-    } else {
-      closeAIConversation()
-    }
+    closeAIConversation()  // Closes and keeps the chat, like the header control; Clear is explicit.
   }
 
   private func setupViews() {
@@ -1802,7 +1801,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     responseHeightCancellable = nil
     cancelInputHeightObserver()
 
-    OmiMotion.withGated(.spring(response: 0.22, dampingFraction: 0.9)) {
+    OmiMotion.withGated(FloatingBarMotion.responseSurface) {
       state.hideConversationSurface()
     }
     if notchModeEnabled {
@@ -1890,7 +1889,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     switch type {
     case "data":
       if state.isAILoading {
-        OmiMotion.withGated(.spring(response: 0.24, dampingFraction: 0.9)) {
+        OmiMotion.withGated(FloatingBarMotion.responseSurface) {
           state.isAILoading = false
           state.present(.mainResponse)
         }
@@ -3491,8 +3490,8 @@ class FloatingControlBarManager {
   private var reachRetryAction: (() -> Void)?
 
   /// Show an actionable "Couldn't reach Omi" card on the bar once transient
-  /// retries are exhausted. Retry re-runs `onRetry` (restarting the backoff);
-  /// Skip abandons the turn and returns the bar to idle. Unlike passive hints
+  /// retries are exhausted. Try Again re-runs `onRetry` (restarting the backoff);
+  /// Dismiss (or Esc) abandons the turn and returns the bar to idle. Unlike passive hints
   /// it persists until the user chooses, since it needs a decision.
   func showReachError(
     message: String = "",
@@ -3765,6 +3764,10 @@ class FloatingControlBarManager {
       onDropped?()
       return .rejectedOwnerChange
     }
+    // Resolve persistence once: main's policy promotes `.trial` to persistent even
+    // when the caller did not request it, and a persistent card must never also be
+    // treated as notch-only, so both arguments read the same resolved value.
+    let persists = FloatingBarNoticePolicy.persists(kind: kind, requestedPersistent: isPersistent)
     let notification = FloatingBarNotification(
       ownerID: ownerID,
       title: title,
@@ -3778,11 +3781,11 @@ class FloatingControlBarManager {
       suggestionTelemetryIdentity: suggestionTelemetryIdentity ?? jitAmbientFeedbackContext?.suggestionIdentity,
       insightDeliveryID: insightDeliveryID,
       screenshotData: screenshotData,
-      isPersistent: isPersistent,
+      isPersistent: persists,
       staysInNotch: FloatingBarNotchOnlyCardPolicy.staysInNotch(
         spokenAloud: spokenAloud,
         hasAction: action != nil,
-        isPersistent: isPersistent
+        isPersistent: persists
       )
     )
     guard let window else {
@@ -3908,31 +3911,19 @@ class FloatingControlBarManager {
     cancelNotificationDismissTimer()
     interjectCardDidHover = false
     interjectHoverRecordedForID = nil
+    // One timing table (FloatingBarNoticePolicy): Interject only changes the duration; both
+    // paths pause while the bar is hovered, and persistent cards never start a timer.
+    guard
+      case .timed(let duration) = FloatingBarNoticePolicy.lifetime(
+        for: notification, interjectEnabled: InterjectFeature.isEnabled)
+    else { return }
     let dismissWorkItem = DispatchWorkItem { [weak self] in
       self?.dismissNotificationAndAdvanceQueue(trackDismissal: true, kind: .timeout)
     }
     notificationDismissWorkItem = dismissWorkItem
-
-    let enabled = InterjectFeature.isEnabled
-    if enabled {
-      let duration = InterjectDisplayDuration.timeout(
-        title: notification.title,
-        message: notification.message,
-        kind: notification.kind,
-        enabled: true
-      )
-      interjectDisplayTimer = InterjectDisplayTimer.start(duration: duration, now: Date())
-      interjectTimerTask = Task { @MainActor [weak self] in
-        await self?.runInterjectDismissLoop(workItem: dismissWorkItem)
-      }
-    } else {
-      let nanos = UInt64(InterjectDisplayDuration.legacyTimeout * 1_000_000_000)
-      interjectTimerTask = Task { @MainActor [weak self] in
-        _ = self
-        try? await Task.sleep(nanoseconds: nanos)
-        guard !Task.isCancelled, !dismissWorkItem.isCancelled else { return }
-        dismissWorkItem.perform()
-      }
+    interjectDisplayTimer = InterjectDisplayTimer.start(duration: duration, now: Date())
+    interjectTimerTask = Task { @MainActor [weak self] in
+      await self?.runInterjectDismissLoop(workItem: dismissWorkItem)
     }
   }
 
@@ -3988,7 +3979,12 @@ class FloatingControlBarManager {
   }
 
   func interjectBarHoverChanged(_ hovering: Bool) {
-    guard InterjectFeature.isEnabled else { return }
+    guard InterjectFeature.isEnabled else {
+      // Flag off: no grace re-show or hover telemetry, but the card's countdown still pauses.
+      interjectBarHovering = hovering
+      if hovering { pauseInterjectTimer() } else { resumeInterjectTimerIfIdle() }
+      return
+    }
     interjectBarHovering = hovering
     window?.state.interjectBarHovering = hovering
     if hovering {
@@ -4255,7 +4251,7 @@ class FloatingControlBarManager {
           if let barWindow, !hasSetUpResponseHeight {
             hasSetUpResponseHeight = true
             if !barWindow.state.showingAIResponse {
-              OmiMotion.withGated(.spring(response: 0.24, dampingFraction: 0.9)) {
+              OmiMotion.withGated(FloatingBarMotion.responseSurface) {
                 barWindow.state.present(.mainResponse)
               }
             }
@@ -5573,7 +5569,7 @@ class FloatingControlBarManager {
           if let barWindow = barWindow, !hasSetUpResponseHeight {
             hasSetUpResponseHeight = true
             if !barWindow.state.showingAIResponse {
-              OmiMotion.withGated(.spring(response: 0.24, dampingFraction: 0.9)) {
+              OmiMotion.withGated(FloatingBarMotion.responseSurface) {
                 barWindow.state.present(.mainResponse)
               }
             }
@@ -5714,7 +5710,7 @@ class FloatingControlBarManager {
     // Ensure the response view is visible and resized (handles the case where
     // the sink never fired because no streaming data arrived before the error)
     if !barWindow.state.showingAIResponse {
-      OmiMotion.withGated(.spring(response: 0.24, dampingFraction: 0.9)) {
+      OmiMotion.withGated(FloatingBarMotion.responseSurface) {
         barWindow.state.present(.mainResponse)
       }
       barWindow.resizeToResponseHeightPublic(animated: true)

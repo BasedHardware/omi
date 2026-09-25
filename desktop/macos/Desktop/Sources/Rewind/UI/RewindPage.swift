@@ -9,6 +9,8 @@ struct RewindPage: View {
   var appState: AppState? = nil
   var brainDestination: MemoryHubDestination? = nil
   var onSelectBrainDestination: ((MemoryHubDestination) -> Void)? = nil
+  /// Set when Rewind was opened in place of another page (task evidence, a citation).
+  @Environment(\.drillInBack) private var drillInBack
 
   @StateObject private var viewModel = RewindViewModel()
 
@@ -62,7 +64,7 @@ struct RewindPage: View {
   }
 
   private var finishButtonText: String {
-    if isFinishing { return "Saving..." }
+    if isFinishing { return "Saving…" }
     if showSavedSuccess { return "Saved!" }
     if showDiscarded { return "Too Short" }
     if showError { return "Failed" }
@@ -458,7 +460,7 @@ struct RewindPage: View {
         .foregroundColor(Ink.secondary)
 
       if viewModel.isSearching {
-        Text("Searching...")
+        Text("Searching…")
           .scaledFont(size: OmiType.subheading, weight: .medium)
           .foregroundColor(Ink.secondary)
       } else {
@@ -483,7 +485,7 @@ struct RewindPage: View {
         QuerySearchBar(
           text: $viewModel.searchQuery,
           accessibilityID: "rewind-search-field",
-          placeholder: "Search rewind",
+          placeholder: "Search Rewind",
           focus: $isSearchFocused, searchSurface: .rewind
         )
         .onChange(of: viewModel.searchQuery) { _, query in
@@ -514,6 +516,9 @@ struct RewindPage: View {
   private var brainNavigationRow: some View {
     if let brainDestination, let onSelectBrainDestination {
       HStack(spacing: OmiSpacing.md) {
+        if let drillInBack {
+          BackChip(drillInBack.title, accessibilityIdentifier: "rewind-drill-in-back", action: drillInBack.action)
+        }
         BrainSectionNavigation(
           selected: brainDestination,
           onSelect: onSelectBrainDestination
@@ -569,21 +574,13 @@ struct RewindPage: View {
   }
 
   private var rewindMoreMenu: some View {
-    Menu {
+    PageMoreMenu(help: "More Rewind actions", accessibilityIdentifier: "rewind-more-actions") {
       Button {
         NotificationCenter.default.post(name: .navigateToRewindSettings, object: nil)
       } label: {
         Label("Rewind settings…", systemImage: "gearshape")
       }
-    } label: {
-      PageQueryActionLabel(icon: "ellipsis", title: "More")
     }
-    .menuStyle(.borderlessButton)
-    .menuIndicator(.hidden)
-    .fixedSize()
-    .help("More Rewind actions")
-    .accessibilityLabel("More Rewind actions")
-    .accessibilityIdentifier("rewind-more-actions")
   }
 
   /// The switch still owns the capture action, but the surrounding control names its state so it
@@ -630,18 +627,9 @@ struct RewindPage: View {
     HStack(spacing: OmiSpacing.md) {
       // Left side: Back button (search timeline mode) or Rewind logo (other modes)
       if isInSearchMode && searchViewMode == .timeline {
-        Button {
+        BackChip("Results") {
           searchViewMode = .results
-        } label: {
-          Image(systemName: "chevron.left")
-            .scaledFont(size: OmiType.caption, weight: .semibold)
-            .foregroundColor(Ink.secondary)
-            .frame(width: 28, height: 28)
-            .background(Ink.rowFill)
-            .clipShape(Circle())
         }
-        .buttonStyle(.plain)
-        .help("Back to results")
       } else {
         // Rewind title
         HStack(spacing: OmiSpacing.sm) {
@@ -868,7 +856,7 @@ struct RewindPage: View {
   private func searchField(showResultsCount: Bool = false) -> some View {
     RewindSearchBar(
       query: $viewModel.searchQuery,
-      placeholder: "Search rewind",
+      placeholder: "Search Rewind",
       isSearching: viewModel.isSearching,
       countLabel: showResultsCount && viewModel.activeSearchQuery != nil
         ? RewindSearchResultsPanel.countLabel(
@@ -881,6 +869,7 @@ struct RewindPage: View {
         searchViewMode = nil
       }
     )
+    .focusesOnFind($isSearchFocused)
     .frame(maxWidth: RewindSearchLayout.panelWidth * 0.6)
   }
 
@@ -992,8 +981,7 @@ struct RewindPage: View {
     GeometryReader { geometry in
       if isLoadingFrame && currentImage == nil {
         ProgressView()
-          .progressViewStyle(.circular)
-          .scaleEffect(1.2)
+          .controlSize(.regular)
           .tint(Ink.surface)
           .frame(width: geometry.size.width, height: geometry.size.height)
       } else if let image = currentImage, image.size.height > 0, image.size.width > 0, geometry.size.height > 0,
@@ -1415,16 +1403,9 @@ struct RewindPage: View {
         .disabled(viewModel.isRebuilding)
       }
 
-      Button {
-        OmiMotion.withGated(.easeOut(duration: 0.2)) {
-          viewModel.dismissRecoveryBanner()
-        }
-      } label: {
-        Image(systemName: "xmark")
-          .scaledFont(size: OmiType.caption, weight: .medium)
-          .foregroundColor(Ink.secondary)
-      }
-      .buttonStyle(.plain)
+      DismissButton(
+        action: { viewModel.dismissRecoveryBanner() }, showBackground: false, accessibilityLabel: "Dismiss",
+        size: .compact)
     }
     .padding(.horizontal, OmiSpacing.lg)
     .padding(.vertical, OmiSpacing.sm)
@@ -1459,56 +1440,18 @@ struct RewindPage: View {
 
   private var loadingView: some View {
     TransparentWindowStatusPanel {
-      VStack(spacing: OmiSpacing.md) {
-        ProgressView()
-          .progressViewStyle(.circular)
-          .scaleEffect(1.2)
-          .tint(Ink.surface)
-
-        Text("Loading screenshots...")
-          .scaledFont(size: OmiType.body)
-          .foregroundColor(Ink.secondary)
-      }
+      GlassLoadingState(label: "Loading screenshots…", placement: .panel)
     }
   }
 
   private func errorView(_: String) -> some View {
     TransparentWindowStatusPanel {
-      VStack(spacing: OmiSpacing.lg) {
-        ZStack {
-          Circle()
-            .fill(Ink.errorRed.opacity(0.1))
-            .frame(width: 80, height: 80)
-
-          Image(systemName: "exclamationmark.triangle")
-            .scaledFont(size: 36)
-            .foregroundColor(Ink.errorRed)
-        }
-
-        Text("Failed to Load Screenshots")
-          .scaledFont(size: OmiType.heading, weight: .semibold)
-          .foregroundColor(Ink.primary)
-
-        Text("Try again. If this continues, restart Omi.")
-          .scaledFont(size: OmiType.body)
-          .foregroundColor(Ink.secondary)
-
-        Button {
-          Task { await viewModel.loadInitialData() }
-        } label: {
-          HStack(spacing: OmiSpacing.xs) {
-            Image(systemName: "arrow.clockwise")
-            Text("Retry")
-          }
-          .scaledFont(size: OmiType.body, weight: .medium)
-          .foregroundColor(PageGlass.primaryActionLabel)
-          .padding(.horizontal, OmiSpacing.xl)
-          .padding(.vertical, OmiSpacing.sm)
-          .background(Ink.primary)
-          .cornerRadius(OmiChrome.elementRadius)
-        }
-        .buttonStyle(.plain)
-      }
+      GlassErrorState(
+        title: "Couldn't Load Screenshots",
+        message: "Try again. If this continues, restart Omi.",
+        placement: .panel,
+        retry: { Task { await viewModel.loadInitialData() } }
+      )
     }
   }
 
@@ -1519,35 +1462,20 @@ struct RewindPage: View {
 
   private var expandedTranscriptView: some View {
     VStack(spacing: 0) {
-      // Show a back bar only when the recording bar is not visible
-      if appState?.isTranscribing != true && appState?.isSavingConversation != true {
-        HStack(spacing: OmiSpacing.sm) {
-          Button {
-            OmiMotion.withGated(.easeInOut(duration: 0.2)) {
-              isTranscriptExpanded = false
-              LiveTranscriptMonitor.shared.clearSaved()
-            }
-          } label: {
-            HStack(spacing: OmiSpacing.xxs) {
-              Image(systemName: "chevron.up")
-                .scaledFont(size: OmiType.caption, weight: .semibold)
-              Text("Back to Rewind")
-                .scaledFont(size: OmiType.body, weight: .medium)
-            }
-            .foregroundColor(Ink.secondary)
-            .padding(.horizontal, OmiSpacing.sm)
-            .padding(.vertical, OmiSpacing.xs)
-            .background(Ink.rowFill)
-            .cornerRadius(OmiChrome.badgeRadius)
+      // The expanded transcript replaced the timeline, so it leaves the way every drill-in does —
+      // and the way out stays visible while recording too, instead of hiding behind the bar.
+      HStack(spacing: OmiSpacing.sm) {
+        BackChip("Rewind") {
+          OmiMotion.withGated(.easeInOut(duration: 0.2)) {
+            isTranscriptExpanded = false
+            LiveTranscriptMonitor.shared.clearSaved()
           }
-          .buttonStyle(.plain)
-
-          Spacer()
         }
-        .padding(.horizontal, OmiSpacing.lg)
-        .padding(.vertical, OmiSpacing.sm)
-        .background(Ink.rowFillHover.opacity(0.8))
+
+        Spacer()
       }
+      .padding(.horizontal, OmiSpacing.lg)
+      .padding(.vertical, OmiSpacing.sm)
 
       // Split panel: transcript (left) + notes (right)
       GeometryReader { geometry in
@@ -1662,12 +1590,12 @@ struct RewindPage: View {
         .onAppear { isSavingPulsing = true }
         .onDisappear { isSavingPulsing = false }
 
-        Text("Saving conversation...")
+        Text("Saving conversation…")
           .scaledFont(size: OmiType.body, weight: .medium)
           .foregroundColor(Ink.primary)
 
         ProgressView()
-          .scaleEffect(0.7)
+          .controlSize(.small)
       }
 
       Spacer()
@@ -1680,8 +1608,7 @@ struct RewindPage: View {
           HStack(spacing: OmiSpacing.xs) {
             if isFinishing {
               ProgressView()
-                .scaleEffect(0.5)
-                .frame(width: 12, height: 12)
+                .controlSize(.small)
             } else if showSavedSuccess {
               Image(systemName: "checkmark")
                 .scaledFont(size: OmiType.caption, weight: .bold)
@@ -1742,7 +1669,7 @@ struct RewindPage: View {
       let result = await appState.finishConversation()
       isFinishing = false
       switch result {
-      case .saved:
+      case .saved, .busy:  // .busy: an in-flight rotation already owns the finish
         OmiMotion.withGated(.easeInOut(duration: 0.3)) {
           showSavedSuccess = true
         }

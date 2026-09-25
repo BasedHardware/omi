@@ -146,10 +146,12 @@ def test_rest_intent_persists_its_force_mode_and_calendar_context_atomically():
         False,
         _admit_finalization,
         _now(),
-        force_process=True,
+        trigger=jobs.ProcessingTrigger.CLIENT_FINALIZE,
         extra_updates={'external_data': {'calendar_meeting_context': {'event_id': 'event-1'}}},
     )
 
+    assert transaction.sets[0][1]['processing_trigger'] == 'client_finalize'
+    # Mirrored so a worker from before processing_trigger runs the same mode.
     assert transaction.sets[0][1]['force_process'] is True
     assert transaction.updates == [
         (

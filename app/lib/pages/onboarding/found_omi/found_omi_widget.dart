@@ -5,6 +5,8 @@ import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/pages/onboarding/widgets/onboarding_card.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class _SourceOption {
@@ -58,145 +60,136 @@ class _FoundOmiWidgetState extends State<FoundOmiWidget> {
     super.dispose();
   }
 
+  void _submit() {
+    FocusManager.instance.primaryFocus?.unfocus();
+    final source = _selectedSource == context.l10n.otherSource ? _otherController.text.trim() : _selectedSource!;
+    SharedPreferencesUtil().foundOmiSource = source;
+    updateUserOnboardingState(acquisitionSource: source);
+    PlatformManager.instance.analytics.onboardingUserAcquisitionSource(source);
+    OmiHaptics.selection();
+    widget.goNext();
+  }
+
+  /// The survey is optional: Skip moves on without recording a source.
+  void _skip() {
+    FocusManager.instance.primaryFocus?.unfocus();
+    OmiHaptics.selection();
+    widget.goNext();
+  }
+
   @override
   Widget build(BuildContext context) {
     final sources = _getSources(context);
-
-    return Column(
-      children: [
-        // Background area - takes remaining space for background image
-        Expanded(child: Container()),
-
-        // Bottom drawer card
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.fromLTRB(32, 20, 32, 0),
-          decoration: const BoxDecoration(
-            color: Colors.black,
-            borderRadius: BorderRadius.only(topLeft: Radius.circular(40), topRight: Radius.circular(40)),
+    return OnboardingStep(
+      card: OnboardingCard(
+        padding: const EdgeInsets.fromLTRB(OmiSpacing.xxl, OmiSpacing.xl, OmiSpacing.xxl, 0),
+        content: [
+          Semantics(
+            header: true,
+            child: Text(context.l10n.whereDidYouHearAboutOmi, style: OmiType.title1, textAlign: TextAlign.center),
           ),
-          child: SafeArea(
-            top: false,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const SizedBox(height: 10),
-                Text(
-                  context.l10n.whereDidYouHearAboutOmi,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    height: 1.2,
-                    fontFamily: 'Manrope',
-                  ),
-                  textAlign: TextAlign.center,
+          const SizedBox(height: OmiSpacing.xl),
+          for (final source in sources) ...[
+            _SourceTile(
+              option: source,
+              selected: _selectedSource == source.label,
+              onTap: () {
+                OmiHaptics.light();
+                setState(() {
+                  _selectedSource = _selectedSource == source.label ? null : source.label;
+                  if (_selectedSource != context.l10n.otherSource) {
+                    _otherController.clear();
+                  }
+                });
+              },
+            ),
+            const SizedBox(height: 10),
+          ],
+          if (_selectedSource == context.l10n.otherSource) ...[
+            const SizedBox(height: OmiSpacing.xxs),
+            Container(
+              decoration: BoxDecoration(
+                color: OmiColors.surface1,
+                borderRadius: OmiRadius.lgAll,
+                border: Border.all(color: OmiColors.border),
+              ),
+              child: TextField(
+                controller: _otherController,
+                style: OmiType.callout,
+                textAlign: TextAlign.center,
+                decoration: InputDecoration(
+                  hintText: context.l10n.pleaseSpecify,
+                  hintStyle: OmiType.callout.copyWith(color: OmiColors.textTertiary),
+                  border: InputBorder.none,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xl, vertical: OmiSpacing.md),
                 ),
-                const SizedBox(height: 24),
-                SizedBox(
-                  height: 250,
-                  child: ListView.separated(
-                    padding: EdgeInsets.zero,
-                    itemCount: sources.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 10),
-                    itemBuilder: (context, index) {
-                      final source = sources[index];
-                      final isSelected = _selectedSource == source.label;
-                      return GestureDetector(
-                        onTap: () {
-                          setState(() {
-                            _selectedSource = isSelected ? null : source.label;
-                            if (_selectedSource != context.l10n.otherSource) {
-                              _otherController.clear();
-                            }
-                          });
-                        },
-                        child: Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                          decoration: BoxDecoration(
-                            color: isSelected ? Colors.white : Colors.grey[900],
-                            borderRadius: BorderRadius.circular(40),
-                            border: Border.all(color: isSelected ? Colors.white : Colors.grey[700]!, width: 1),
-                          ),
-                          child: Row(
-                            children: [
-                              FaIcon(source.icon, size: 18, color: isSelected ? Colors.black : Colors.white),
-                              const SizedBox(width: 14),
-                              Text(
-                                source.label,
-                                style: TextStyle(
-                                  color: isSelected ? Colors.black : Colors.white,
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w500,
-                                  fontFamily: 'Manrope',
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-                if (_selectedSource == context.l10n.otherSource) ...[
-                  const SizedBox(height: 12),
-                  Container(
-                    decoration: BoxDecoration(
-                      color: Colors.grey[900],
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: Colors.grey[700]!, width: 1),
-                    ),
-                    child: TextField(
-                      controller: _otherController,
-                      style: const TextStyle(color: Colors.white, fontSize: 16, fontFamily: 'Manrope'),
-                      textAlign: TextAlign.center,
-                      decoration: InputDecoration(
-                        hintText: context.l10n.pleaseSpecify,
-                        hintStyle: TextStyle(color: Colors.grey[500], fontSize: 16, fontFamily: 'Manrope'),
-                        border: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
-                      ),
-                      onChanged: (_) => setState(() {}),
+                onChanged: (_) => setState(() {}),
+              ),
+            ),
+          ],
+        ],
+        footer: [
+          const SizedBox(height: OmiSpacing.sm),
+          OmiButton(
+            key: const Key('found_omi_continue'),
+            label: context.l10n.continueButton,
+            expand: true,
+            onPressed: _canContinue ? _submit : null,
+          ),
+          OmiButton.tertiary(
+            key: const Key('found_omi_skip'),
+            label: context.l10n.skip,
+            expand: true,
+            onPressed: _skip,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SourceTile extends StatelessWidget {
+  const _SourceTile({required this.option, required this.selected, required this.onTap});
+
+  final _SourceOption option;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final foreground = selected ? OmiColors.onAccent : OmiColors.textPrimary;
+    return Semantics(
+      button: true,
+      selected: selected,
+      child: Material(
+        color: selected ? OmiColors.accent : OmiColors.surface1,
+        shape: RoundedRectangleBorder(
+          borderRadius: OmiRadius.pillAll,
+          side: BorderSide(color: selected ? OmiColors.accent : OmiColors.border),
+        ),
+        child: InkWell(
+          customBorder: const StadiumBorder(),
+          onTap: onTap,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(minHeight: 48),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg, vertical: OmiSpacing.sm),
+              child: Row(
+                children: [
+                  ExcludeSemantics(child: FaIcon(option.icon, size: 18, color: foreground)),
+                  const SizedBox(width: 14),
+                  Expanded(
+                    child: Text(
+                      option.label,
+                      style: OmiType.subhead.copyWith(color: foreground, fontWeight: FontWeight.w500),
                     ),
                   ),
                 ],
-                const SizedBox(height: 12),
-                SizedBox(
-                  width: double.infinity,
-                  height: 56,
-                  child: ElevatedButton(
-                    onPressed: _canContinue
-                        ? () {
-                            FocusManager.instance.primaryFocus?.unfocus();
-                            final source = _selectedSource == context.l10n.otherSource
-                                ? _otherController.text.trim()
-                                : _selectedSource!;
-                            SharedPreferencesUtil().foundOmiSource = source;
-                            updateUserOnboardingState(acquisitionSource: source);
-                            PlatformManager.instance.analytics.onboardingUserAcquisitionSource(source);
-                            widget.goNext();
-                          }
-                        : null,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: _canContinue ? Colors.white : Colors.grey[800],
-                      foregroundColor: _canContinue ? Colors.black : Colors.grey[600],
-                      disabledBackgroundColor: Colors.grey[800],
-                      disabledForegroundColor: Colors.grey[600],
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                      elevation: 0,
-                    ),
-                    child: Text(
-                      context.l10n.continueButton,
-                      style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, fontFamily: 'Manrope'),
-                    ),
-                  ),
-                ),
-              ],
+              ),
             ),
           ),
         ),
-      ],
+      ),
     );
   }
 }

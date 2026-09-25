@@ -40,7 +40,7 @@ from models.conversation import (
     project_shared_conversation,
 )
 from utils.conversations.factory import deserialize_conversation
-from utils.conversations.relevance import ProcessingTrigger
+from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.conversations.analytics import build_conversation_analytics
 from utils.conversations.render import redact_conversations_for_list
 from utils.conversations.mcp_transcript_search import (
@@ -210,8 +210,6 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
                     uid,
                     conv_obj.language or 'en',
                     conv_obj,
-                    force_process=True,
-                    is_reprocess=False,
                     app_usage_attribution=AppUsageAttribution.NON_USER_REPROCESS,
                     trigger=ProcessingTrigger.FIRST_OPEN,
                 )
@@ -571,7 +569,6 @@ def process_in_progress_conversation(
             uid,
             conversation.language,
             conversation,
-            force_process=True,
             persistence_observer=record_persistence,
             derived_effects_disposition_observer=record_derived_effects_disposition,
             client_projection=client_projection,
@@ -660,7 +657,7 @@ def finalize_conversation(
             uid,
             conversation.id,
             has_byok_keys=False,
-            force_process=True,
+            trigger=ProcessingTrigger.CLIENT_FINALIZE,
             extra_updates=extra_updates or None,
             require_cloud_tasks=True,
             client_kind=resolve_client_kind(x_app_platform=conversation.client_platform, user_agent=None),
@@ -754,7 +751,7 @@ def reprocess_conversation(
     # on the raw doc because the Conversation model does not carry `deleted`.
     if conversations_db.is_soft_deleted(conversation):
         raise HTTPException(status_code=404, detail="Conversation not found")
-    was_sync_review = conversation.get('sync_relevance') == 'review'
+    was_discarded = bool(conversation.get('discarded'))
     conversation = deserialize_conversation(conversation)
     if not language_code:
         language_code = conversation.language or 'en'
@@ -765,10 +762,7 @@ def reprocess_conversation(
         uid,
         language_code,
         conversation,
-        force_process=True,
-        is_reprocess=True,
         trigger=ProcessingTrigger.USER_REPROCESS,
-        bypass_jit_first_open=True,
         app_id=app_id,
         explicit_app=explicit_app,
         app_usage_attribution=(
@@ -776,10 +770,12 @@ def reprocess_conversation(
         ),
     )
 
-    # Successful explicit recovery is a durable user choice, including when
-    # the selected app supplies the summary rather than the default overview.
-    if was_sync_review and not processed_conversation.discarded:
-        if lifecycle_service.restore_discarded(uid, conversation_id):
+    # Reprocessing a hidden conversation is an explicit recovery: persist it as
+    # the user's choice (``restore_discarded``) so no later reassessment hides it
+    # again, including when the selected app supplies the summary.
+    if was_discarded and not processed_conversation.discarded:
+        restored = lifecycle_service.restore_discarded(uid, conversation_id)
+        if restored and processed_conversation.sync_relevance == 'review':
             processed_conversation.sync_relevance = 'keep'
 
     return processed_conversation
@@ -1145,6 +1141,21 @@ async def auto_link_calendar_event(conversation_id: str, uid: str = Depends(auth
     await write_conversation_link_to_calendar_event(uid, calendar_event.event_id, conversation_id)
 
     return calendar_event
+
+
+@router.post(
+    "/v1/conversations/{conversation_id}/capture-group/separate",
+    response_model=StatusResponse,
+    tags=['conversations'],
+    description=(
+        "Separate this conversation from the capture group (one event recorded by several devices) it belongs to. "
+        "The decision is sticky: this capture is never regrouped with the members it left. Idempotent."
+    ),
+)
+def separate_conversation_from_capture_group(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    _get_valid_conversation_by_id(uid, conversation_id)
+    changed = conversations_db.leave_capture_group(uid, conversation_id, sticky=True)
+    return StatusResponse(status='ok' if changed else 'unchanged')
 
 
 @router.patch(

@@ -21,13 +21,13 @@ class AppLocalizationsKo extends AppLocalizations {
   String get transcriptTab => '녹취록';
 
   @override
-  String get actionItemsTab => '할 일';
+  String get actionItemsTab => '작업';
 
   @override
   String get deleteConversationTitle => '대화를 삭제하시겠습니까?';
 
   @override
-  String get deleteConversationMessage => '관련된 기억, 작업 및 오디오 파일도 삭제됩니다. 이 작업은 되돌릴 수 없습니다.';
+  String get deleteConversationMessage => '관련된 기억, 작업 및 오디오 파일도 삭제됩니다.';
 
   @override
   String get confirm => '확인';
@@ -111,10 +111,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get remaining => '남음';
 
   @override
-  String get loading => '로딩 중...';
+  String get loading => '로딩 중…';
 
   @override
-  String get loadingDuration => '지속 시간 로딩 중...';
+  String get loadingDuration => '지속 시간 로딩 중…';
 
   @override
   String secondsCount(int count) {
@@ -151,7 +151,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get selectLanguage => '언어 선택';
 
   @override
-  String get deleting => '삭제 중...';
+  String get deleting => '삭제 중…';
 
   @override
   String get pleaseCompleteAuthentication => '브라우저에서 인증을 완료해 주세요. 완료되면 앱으로 돌아가세요.';
@@ -178,7 +178,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get disconnected => '연결 끊김';
 
   @override
-  String get searching => '검색 중...';
+  String get searching => '검색 중';
 
   @override
   String get connectDevice => '기기 연결';
@@ -238,7 +238,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get starConversationHint => '대화를 즐겨찾기하려면 대화를 열고 헤더의 별 아이콘을 탭하세요.';
 
   @override
-  String get searchConversations => '대화 검색...';
+  String get searchConversations => '대화 검색';
 
   @override
   String selectedCount(int count) {
@@ -269,7 +269,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get noMessagesYet => '아직 메시지가 없습니다!\n대화를 시작해보는 건 어떨까요?';
 
   @override
-  String get deletingMessages => 'Omi의 메모리에서 메시지를 삭제하는 중...';
+  String get deletingMessages => 'Omi의 메모리에서 메시지를 삭제하는 중…';
 
   @override
   String get messageCopied => '✨ 메시지가 클립보드에 복사되었습니다';
@@ -317,7 +317,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get buildAndShareApp => '맞춤형 앱을 만들고 공유하세요';
 
   @override
-  String get searchApps => '앱 검색...';
+  String get searchApps => '앱 검색';
 
   @override
   String get myApps => '내가 만듦';
@@ -470,7 +470,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get privacyIntro => 'Omi는 귀하의 개인정보 보호에 최선을 다하고 있습니다. 이 페이지에서 데이터 저장 및 사용 방법을 제어할 수 있습니다.';
 
   @override
-  String get learnMore => '자세히 알아보기...';
+  String get learnMore => '자세히 알아보기…';
 
   @override
   String get dataProtectionLevel => '데이터 보호 수준';
@@ -638,7 +638,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get developerSettingsTitle => '개발자 설정';
 
   @override
-  String get saving => '저장 중...';
+  String get saving => '저장 중…';
 
   @override
   String get beta => '베타';
@@ -716,7 +716,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get providing => '제공';
 
   @override
-  String get providingSubtitle => '자동으로 캡처된 할 일 및 메모입니다.';
+  String get providingSubtitle => '작업 및 메모가 자동으로 캡처됩니다.';
 
   @override
   String get remembering => '기억';
@@ -817,7 +817,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get debugLogCleared => '디버그 로그가 지워졌습니다';
 
   @override
-  String get exportStarted => '내보내기가 시작되었습니다. 몇 초 정도 걸릴 수 있습니다...';
+  String get exportStarted => '내보내기가 시작되었습니다. 몇 초 정도 걸릴 수 있습니다…';
 
   @override
   String get exportAllData => '모든 데이터 내보내기';
@@ -1309,7 +1309,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String actionItemsSyncedTo(String appName) {
-    return '할 일 항목이 $appName 계정과 동기화됩니다';
+    return '작업이 $appName 계정과 동기화됩니다';
   }
 
   @override
@@ -1602,7 +1602,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get viewTemplate => '템플릿 보기';
 
   @override
-  String get trySomethingLike => '다음과 같이 시도해 보세요...';
+  String get trySomethingLike => '다음과 같이 시도해 보세요…';
 
   @override
   String get tryIt => '시도해 보기';
@@ -1629,10 +1629,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get features => '기능';
 
   @override
-  String get creatingYourApp => '앱을 만드는 중...';
+  String get creatingYourApp => '앱을 만드는 중…';
 
   @override
-  String get generatingIcon => '아이콘 생성 중...';
+  String get generatingIcon => '아이콘 생성 중…';
 
   @override
   String get whatShouldWeMake => '무엇을 만들까요?';
@@ -1683,13 +1683,13 @@ class AppLocalizationsKo extends AppLocalizations {
   String get perMonthLabel => '/ 월';
 
   @override
-  String get creating => '생성 중...';
+  String get creating => '생성 중…';
 
   @override
   String get createApp => '앱 만들기';
 
   @override
-  String get searchingForDevices => '기기 검색 중...';
+  String get searchingForDevices => '기기 검색 중';
 
   @override
   String devicesFoundNearby(int count) {
@@ -1729,25 +1729,25 @@ class AppLocalizationsKo extends AppLocalizations {
   String get backgroundActivity => '백그라운드 활동';
 
   @override
-  String get backgroundActivityDesc => '더 나은 안정성을 위해 Omi가 백그라운드에서 실행되도록 허용';
+  String get backgroundActivityDesc => '화면이 꺼져 있거나 다른 앱으로 전환해도 Omi가 계속 기록하도록 합니다.';
 
   @override
   String get locationAccess => '위치 접근';
 
   @override
-  String get locationAccessDesc => '완전한 경험을 위해 백그라운드 위치 활성화';
+  String get locationAccessDesc => 'Omi가 대화가 이루어진 장소를 기록할 수 있도록 합니다.';
 
   @override
   String get notifications => '알림';
 
   @override
-  String get notificationsDesc => '정보를 받기 위해 알림 활성화';
+  String get notificationsDesc => 'Omi가 대화 요약, 작업 알림, 앱의 답장을 보낼 수 있도록 합니다.';
 
   @override
   String get locationServiceDisabled => '위치 서비스 비활성화됨';
 
   @override
-  String get locationServiceDisabledDesc => '위치 서비스가 비활성화되어 있습니다. 설정 > 개인정보 보호 및 보안 > 위치 서비스로 이동하여 활성화하세요';
+  String get locationServiceDisabledDesc => '이 기기의 위치 서비스가 꺼져 있습니다. 설정에서 켜 주세요.';
 
   @override
   String get backgroundLocationDenied => '백그라운드 위치 접근 거부됨';
@@ -1909,7 +1909,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get personalGrowthJourney => '모든 말을 듣는 AI와 함께하는 개인 성장 여정.';
 
   @override
-  String get actionItemsTitle => '할 일';
+  String get actionItemsTitle => '작업';
 
   @override
   String get actionItemsDescription => '탭하여 편집 • 길게 눌러 선택 • 스와이프하여 작업';
@@ -1924,7 +1924,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get tabOld => '이전';
 
   @override
-  String get emptyTodoMessage => '🎉 모두 완료!\n대기 중인 작업 항목이 없습니다';
+  String get emptyTodoMessage => '🎉 모두 완료!\n대기 중인 작업이 없습니다';
 
   @override
   String get emptyDoneMessage => '아직 완료된 항목이 없습니다';
@@ -1936,37 +1936,37 @@ class AppLocalizationsKo extends AppLocalizations {
   String get noItems => '항목 없음';
 
   @override
-  String get actionItemMarkedIncomplete => '작업 항목이 미완료로 표시되었습니다';
+  String get actionItemMarkedIncomplete => '작업이 미완료로 표시되었습니다';
 
   @override
-  String get actionItemCompleted => '작업 항목이 완료되었습니다';
+  String get actionItemCompleted => '작업이 완료되었습니다';
 
   @override
-  String get deleteActionItemTitle => '실행 항목 삭제';
+  String get deleteActionItemTitle => '작업 삭제';
 
   @override
-  String get deleteActionItemMessage => '이 실행 항목을 삭제하시겠습니까?';
+  String get deleteActionItemMessage => '이 작업을 삭제하시겠습니까?';
 
   @override
   String get deleteSelectedItemsTitle => '선택한 항목 삭제';
 
   @override
   String deleteSelectedItemsMessage(int count, String s) {
-    return '선택한 $count개의 작업 항목$s을(를) 삭제하시겠습니까?';
+    return '선택한 $count개의 작업$s을(를) 삭제하시겠습니까?';
   }
 
   @override
   String actionItemDeletedResult(String description) {
-    return '작업 항목 \"$description\"이(가) 삭제되었습니다';
+    return '작업 \"$description\"이(가) 삭제되었습니다';
   }
 
   @override
   String itemsDeletedResult(int count, String s) {
-    return '$count개의 작업 항목$s이(가) 삭제되었습니다';
+    return '$count개의 작업$s이(가) 삭제되었습니다';
   }
 
   @override
-  String get failedToDeleteItem => '작업 항목 삭제 실패';
+  String get failedToDeleteItem => '작업 삭제 실패';
 
   @override
   String get failedToDeleteItems => '항목 삭제 실패';
@@ -1975,10 +1975,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get failedToDeleteSomeItems => '일부 항목 삭제 실패';
 
   @override
-  String get welcomeActionItemsTitle => '작업 항목 준비 완료';
+  String get welcomeActionItemsTitle => '작업 준비 완료';
 
   @override
-  String get welcomeActionItemsDescription => 'AI가 대화에서 작업과 할 일을 자동으로 추출합니다. 생성되면 여기에 표시됩니다.';
+  String get welcomeActionItemsDescription => 'AI가 대화에서 작업을 자동으로 추출합니다. 생성되면 여기에 표시됩니다.';
 
   @override
   String get autoExtractionFeature => '대화에서 자동 추출';
@@ -1998,10 +1998,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get deleteSelected => '선택 항목 삭제';
 
   @override
-  String get searchMemories => '추억 검색...';
+  String get searchMemories => '추억 검색';
 
   @override
-  String get memoryDeleted => '기억이 삭제되었습니다.';
+  String get memoryDeleted => '기억이 삭제되었습니다';
 
   @override
   String get memoryHistoryPartial => '기억 기록의 일부를 불러올 수 없습니다. 지금까지 받은 기록을 표시합니다.';
@@ -2055,7 +2055,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get createMemoryTooltip => '새 기억 만들기';
 
   @override
-  String get createActionItemTooltip => '새 작업 항목 만들기';
+  String get createActionItemTooltip => '새 작업 만들기';
 
   @override
   String get memoryManagement => '메모리 관리';
@@ -2120,28 +2120,28 @@ class AppLocalizationsKo extends AppLocalizations {
   String get retry => '재시도';
 
   @override
-  String get createActionItem => '작업 항목 생성';
+  String get createActionItem => '작업 생성';
 
   @override
-  String get editActionItem => '작업 항목 편집';
+  String get editActionItem => '작업 편집';
 
   @override
   String get actionItemDescriptionHint => '무엇을 해야 하나요?';
 
   @override
-  String get actionItemDescriptionEmpty => '작업 항목 설명은 비워둘 수 없습니다.';
+  String get actionItemDescriptionEmpty => '작업 설명은 비워둘 수 없습니다.';
 
   @override
-  String get actionItemUpdated => '작업 항목이 업데이트되었습니다';
+  String get actionItemUpdated => '작업이 업데이트되었습니다';
 
   @override
-  String get failedToUpdateActionItem => '작업 항목 업데이트 실패';
+  String get failedToUpdateActionItem => '작업 업데이트 실패';
 
   @override
-  String get actionItemCreated => '작업 항목이 생성되었습니다';
+  String get actionItemCreated => '작업이 생성되었습니다';
 
   @override
-  String get failedToCreateActionItem => '작업 항목 생성 실패';
+  String get failedToCreateActionItem => '작업 생성 실패';
 
   @override
   String get dueDate => '마감일';
@@ -2177,16 +2177,16 @@ class AppLocalizationsKo extends AppLocalizations {
   String get markComplete => '완료로 표시';
 
   @override
-  String get actionItemDeleted => '실행 항목이 삭제되었습니다';
+  String get actionItemDeleted => '작업이 삭제되었습니다';
 
   @override
-  String get failedToDeleteActionItem => '작업 항목 삭제 실패';
+  String get failedToDeleteActionItem => '작업 삭제 실패';
 
   @override
-  String get deleteActionItemConfirmTitle => '작업 항목 삭제';
+  String get deleteActionItemConfirmTitle => '작업 삭제';
 
   @override
-  String get deleteActionItemConfirmMessage => '이 작업 항목을 삭제하시겠습니까?';
+  String get deleteActionItemConfirmMessage => '이 작업을 삭제하시겠습니까?';
 
   @override
   String get appLanguage => '앱 언어';
@@ -2213,7 +2213,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get pleaseSelectReason => '이유를 선택해주세요';
 
   @override
-  String get tellUsMoreWhatWentWrong => '무엇이 잘못되었는지 자세히 알려주세요...';
+  String get tellUsMoreWhatWentWrong => '무엇이 잘못되었는지 자세히 알려주세요…';
 
   @override
   String get selectText => '텍스트 선택';
@@ -2272,7 +2272,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get exportButton => '내보내기';
 
   @override
-  String get actionItemsCopiedToClipboard => '작업 항목이 클립보드에 복사되었습니다';
+  String get actionItemsCopiedToClipboard => '작업이 클립보드에 복사되었습니다';
 
   @override
   String get summarize => '요약';
@@ -2419,7 +2419,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get helpsDiagnoseIssues => '문제 진단에 도움';
 
   @override
-  String get exportStartedMessage => '내보내기가 시작되었습니다. 몇 초 정도 걸릴 수 있습니다...';
+  String get exportStartedMessage => '내보내기가 시작되었습니다. 몇 초 정도 걸릴 수 있습니다…';
 
   @override
   String get exportConversationsToJson => '대화를 JSON 파일로 내보내기';
@@ -2475,7 +2475,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get trackPersonalGoalsOnHomepage => '홈페이지에서 개인 목표 추적';
 
   @override
-  String get actionItemDescriptionCannotBeEmpty => '실행 항목 설명은 비워둘 수 없습니다';
+  String get actionItemDescriptionCannotBeEmpty => '작업 설명은 비워둘 수 없습니다';
 
   @override
   String get saved => '저장됨';
@@ -2556,7 +2556,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get toggleControlBar => '제어 표시줄 전환';
 
   @override
-  String get pressKeys => '키를 누르세요...';
+  String get pressKeys => '키를 누르세요…';
 
   @override
   String get cmdRequired => '⌘ 필요';
@@ -2571,7 +2571,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get search => '검색';
 
   @override
-  String get searchPlaceholder => '검색...';
+  String get searchPlaceholder => '검색';
 
   @override
   String get untitledConversation => '제목 없는 대화';
@@ -2644,7 +2644,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get searchResults => '검색 결과';
 
   @override
-  String get actionItems => '작업 항목';
+  String get actionItems => '작업';
 
   @override
   String get tasksToday => '오늘';
@@ -2659,7 +2659,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get tasksLater => '나중에';
 
   @override
-  String get loadingTasks => '작업 로드 중...';
+  String get loadingTasks => '작업 로드 중…';
 
   @override
   String get tasks => '작업';
@@ -2719,22 +2719,22 @@ class AppLocalizationsKo extends AppLocalizations {
   String get timeAM => '오전';
 
   @override
-  String get actionItemUpdatedSuccessfully => '작업 항목이 성공적으로 업데이트되었습니다';
+  String get actionItemUpdatedSuccessfully => '작업이 성공적으로 업데이트되었습니다';
 
   @override
-  String get actionItemCreatedSuccessfully => '작업 항목이 성공적으로 생성되었습니다';
+  String get actionItemCreatedSuccessfully => '작업이 성공적으로 생성되었습니다';
 
   @override
-  String get actionItemDeletedSuccessfully => '작업 항목이 성공적으로 삭제되었습니다';
+  String get actionItemDeletedSuccessfully => '작업이 성공적으로 삭제되었습니다';
 
   @override
-  String get deleteActionItem => '작업 항목 삭제';
+  String get deleteActionItem => '작업 삭제';
 
   @override
-  String get deleteActionItemConfirmation => '이 작업 항목을 삭제하시겠습니까? 이 작업은 취소할 수 없습니다.';
+  String get deleteActionItemConfirmation => '이 작업을 삭제하시겠습니까? 이 작업은 취소할 수 없습니다.';
 
   @override
-  String get enterActionItemDescription => '작업 항목 설명 입력...';
+  String get enterActionItemDescription => '작업 설명 입력';
 
   @override
   String get markAsCompleted => '완료로 표시';
@@ -2743,10 +2743,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get setDueDateAndTime => '마감일 및 시간 설정';
 
   @override
-  String get reloadingApps => '앱 다시 로드 중...';
+  String get reloadingApps => '앱 다시 로드 중…';
 
   @override
-  String get loadingApps => '앱 로드 중...';
+  String get loadingApps => '앱 로드 중…';
 
   @override
   String get browseInstallCreateApps => '앱 탐색, 설치 및 생성';
@@ -2782,10 +2782,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get buildSubmitCustomOmiApp => '사용자 정의 Omi 앱을 빌드하고 제출하세요';
 
   @override
-  String get submittingYourApp => '앱을 제출하는 중...';
+  String get submittingYourApp => '앱을 제출하는 중…';
 
   @override
-  String get preparingFormForYou => '양식을 준비하는 중...';
+  String get preparingFormForYou => '양식을 준비하는 중…';
 
   @override
   String get appDetails => '앱 세부정보';
@@ -2806,13 +2806,13 @@ class AppLocalizationsKo extends AppLocalizations {
   String get chatPrompt => '채팅 프롬프트';
 
   @override
-  String get chatPromptPlaceholder => '당신은 멋진 앱입니다. 사용자 질문에 응답하고 기분 좋게 만드는 것이 당신의 일입니다...';
+  String get chatPromptPlaceholder => '당신은 멋진 앱입니다. 사용자 질문에 응답하고 기분 좋게 만드는 것이 당신의 일입니다…';
 
   @override
   String get conversationPrompt => '대화 프롬프트';
 
   @override
-  String get conversationPromptPlaceholder => '당신은 멋진 앱입니다. 대화의 전사 및 요약이 제공됩니다...';
+  String get conversationPromptPlaceholder => '당신은 멋진 앱입니다. 대화의 전사 및 요약이 제공됩니다…';
 
   @override
   String get notificationScopes => '알림 범위';
@@ -2964,7 +2964,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get pricingPaid => '유료';
 
   @override
-  String get loadingCapabilities => '기능 로드 중...';
+  String get loadingCapabilities => '기능 로드 중…';
 
   @override
   String get filterInstalled => '설치됨';
@@ -3103,7 +3103,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get failedToTranscribeAudio => '오디오 텍스트 변환 실패';
 
   @override
-  String get transcribing => '텍스트 변환 중...';
+  String get transcribing => '텍스트 변환 중…';
 
   @override
   String get discardedConversation => '삭제된 대화';
@@ -3115,7 +3115,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get from => '부터';
 
   @override
-  String get copied => '복사됨!';
+  String get copied => '복사됨';
 
   @override
   String get copyLink => '링크 복사';
@@ -3153,7 +3153,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get failedToGenerateShareLink => '공유 링크 생성 실패';
 
   @override
-  String get reloadingConversations => '대화 다시 로드 중...';
+  String get reloadingConversations => '대화 다시 로드 중…';
 
   @override
   String get user => '사용자';
@@ -3212,7 +3212,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get wearableAiCompanion => '웨어러블 AI 컴패니언';
 
   @override
-  String get loadingMemories => '추억 로드 중...';
+  String get loadingMemories => '추억 로드 중…';
 
   @override
   String get allMemories => '모든 추억';
@@ -3224,7 +3224,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get manual => '수동';
 
   @override
-  String get loadingYourMemories => '추억을 로드하는 중...';
+  String get loadingYourMemories => '추억을 로드하는 중…';
 
   @override
   String get createYourFirstMemory => '첫 추억을 만들어 시작하세요';
@@ -3340,7 +3340,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get selectPreferredLanguageForBestExperience => '최고의 Omi 경험을 위해 선호하는 언어를 선택하세요';
 
   @override
-  String get searchLanguages => '언어 검색...';
+  String get searchLanguages => '언어 검색';
 
   @override
   String get selectALanguage => '언어 선택';
@@ -3393,13 +3393,13 @@ class AppLocalizationsKo extends AppLocalizations {
   String get accessibilityDescription => 'Omi는 브라우저에서 Zoom, Meet 또는 Teams 회의에 참여할 때를 감지하기 위해 접근성 권한이 필요합니다.';
 
   @override
-  String get pleaseWait => '잠시만 기다려 주세요...';
+  String get pleaseWait => '잠시만 기다려 주세요…';
 
   @override
   String get joinTheCommunity => '커뮤니티에 참여하세요!';
 
   @override
-  String get loadingProfile => '프로필 로딩 중...';
+  String get loadingProfile => '프로필 로딩 중…';
 
   @override
   String get profileSettings => '프로필 설정';
@@ -3524,7 +3524,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get saveSettings => '설정 저장';
 
   @override
-  String get syncingDeveloperSettings => '개발자 설정 동기화 중...';
+  String get syncingDeveloperSettings => '개발자 설정 동기화 중…';
 
   @override
   String get summary => '요약';
@@ -3576,7 +3576,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get conversationDeleted => '대화가 삭제되었습니다';
 
   @override
-  String get generatingLink => '링크 생성 중...';
+  String get generatingLink => '링크 생성 중…';
 
   @override
   String get editConversation => '대화 편집';
@@ -3597,7 +3597,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get conversationTitle => '대화 제목';
 
   @override
-  String get enterConversationTitle => '대화 제목 입력...';
+  String get enterConversationTitle => '대화 제목 입력…';
 
   @override
   String get conversationTitleUpdatedSuccessfully => '대화 제목이 성공적으로 업데이트되었습니다';
@@ -3609,7 +3609,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get errorUpdatingConversationTitle => '대화 제목 업데이트 중 오류 발생';
 
   @override
-  String get settingUp => '설정 중...';
+  String get settingUp => '설정 중…';
 
   @override
   String get startYourFirstRecording => '첫 번째 녹음 시작';
@@ -3618,7 +3618,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get preparingSystemAudioCapture => '시스템 오디오 캡처 준비 중';
 
   @override
-  String get reconnecting => '재연결 중...';
+  String get reconnecting => '재연결 중…';
 
   @override
   String get recordingPaused => '녹음 일시중지됨';
@@ -3631,14 +3631,14 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String resumingInCountdown(String countdown) {
-    return '$countdown초 후 재개...';
+    return '$countdown초 후 재개…';
   }
 
   @override
   String get tapPlayToResume => '재개하려면 재생을 탭하세요';
 
   @override
-  String get listeningForAudio => '오디오 듣는 중...';
+  String get listeningForAudio => '오디오 듣는 중…';
 
   @override
   String get preparingAudioCapture => '오디오 캡처 준비 중';
@@ -3666,7 +3666,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get paused => '일시중지됨';
 
   @override
-  String get initializing => '초기화 중...';
+  String get initializing => '초기화 중…';
 
   @override
   String get recording => '녹음 중';
@@ -3694,7 +3694,7 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get translatedByOmi => 'omi가 번역함';
+  String get translatedByOmi => 'Omi가 번역함';
 
   @override
   String get backToConversations => '대화로 돌아가기';
@@ -3719,7 +3719,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get selectAudioInput => '오디오 입력 선택';
 
   @override
-  String get loadingDevices => '장치 로드 중...';
+  String get loadingDevices => '장치 로드 중…';
 
   @override
   String get settingsHeader => '설정';
@@ -3749,7 +3749,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get signOutQuestion => '로그아웃하시겠습니까?';
 
   @override
-  String get signOutConfirmation => '로그아웃하시겠습니까?';
+  String get signOutConfirmation => '대화를 보려면 다시 로그인해야 합니다. 페어링된 기기와 앱 설정은 이 휴대폰에 그대로 남습니다.';
 
   @override
   String get customVocabularyHeader => '사용자 정의 어휘';
@@ -3827,7 +3827,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get exportConversationsDescription => '대화를 JSON으로 내보내기';
 
   @override
-  String get exportingConversations => '대화 내보내는 중...';
+  String get exportingConversations => '대화 내보내는 중…';
 
   @override
   String get clearNodesDescription => '모든 노드와 연결 지우기';
@@ -3917,7 +3917,7 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get newVersionAvailable => '새 버전 사용 가능  🎉';
+  String get newVersionAvailable => '새 버전 사용 가능';
 
   @override
   String get no => '아니요';
@@ -3965,7 +3965,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get cancelSubscriptionButton => '구독 취소';
 
   @override
-  String get cancelling => '취소 중...';
+  String get cancelling => '취소 중…';
 
   @override
   String get betaTesterMessage => '이 앱의 베타 테스터입니다. 아직 공개되지 않았습니다. 승인 후 공개됩니다.';
@@ -4080,7 +4080,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String addingToService(String serviceName) {
-    return '$serviceName에 추가 중...';
+    return '$serviceName에 추가 중…';
   }
 
   @override
@@ -4117,7 +4117,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get apiKeysDescription =>
-      'API 키는 앱이 OMI 서버와 통신할 때 인증에 사용됩니다. 애플리케이션이 메모리를 생성하고 다른 OMI 서비스에 안전하게 접근할 수 있게 합니다.';
+      'API 키는 앱이 Omi 서버와 통신할 때 인증에 사용됩니다. 애플리케이션이 메모리를 생성하고 다른 Omi 서비스에 안전하게 접근할 수 있게 합니다.';
 
   @override
   String get aboutOmiApiKeys => 'Omi API 키 정보';
@@ -4584,7 +4584,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get knowledgeGraphDeletedSuccessfully => '지식 그래프가 성공적으로 삭제됨';
 
   @override
-  String get exportStartedMayTakeFewSeconds => '내보내기가 시작되었습니다. 몇 초 정도 걸릴 수 있습니다...';
+  String get exportStartedMayTakeFewSeconds => '내보내기가 시작되었습니다. 몇 초 정도 걸릴 수 있습니다…';
 
   @override
   String get knowledgeGraphDeleteDescription =>
@@ -4817,7 +4817,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get checkingForUpdates => '업데이트 확인 중';
 
   @override
-  String get checkingFirmwareVersion => '펌웨어 버전 확인 중...';
+  String get checkingFirmwareVersion => '펌웨어 버전 확인 중…';
 
   @override
   String get firmwareUpdate => '펌웨어 업데이트';
@@ -4993,19 +4993,19 @@ class AppLocalizationsKo extends AppLocalizations {
   String get showLess => '접기 ↑';
 
   @override
-  String get loadingYourRecording => '녹음을 불러오는 중...';
+  String get loadingYourRecording => '녹음을 불러오는 중…';
 
   @override
   String get photoDiscardedMessage => '이 사진은 중요하지 않아 삭제되었습니다.';
 
   @override
-  String get analyzing => '분석 중...';
+  String get analyzing => '분석 중…';
 
   @override
   String get searchCountries => '국가 검색...';
 
   @override
-  String get checkingAppleWatch => 'Apple Watch 확인 중...';
+  String get checkingAppleWatch => 'Apple Watch 확인 중…';
 
   @override
   String get installOmiOnAppleWatch => 'Apple Watch에\nOmi 설치';
@@ -5064,7 +5064,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get dontAskAgain => '다시 묻지 않기';
 
   @override
-  String get waitingForTranscriptOrPhotos => '녹취록 또는 사진 대기 중...';
+  String get waitingForTranscriptOrPhotos => '녹취록 또는 사진 대기 중…';
 
   @override
   String get noSummaryYet => '아직 요약 없음';
@@ -5111,7 +5111,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get noSummary => '요약 없음';
 
   @override
-  String get updateOmiFirmware => 'omi 펌웨어 업데이트';
+  String get updateOmiFirmware => 'Omi 펌웨어 업데이트';
 
   @override
   String get anErrorOccurredTryAgain => '오류가 발생했습니다. 다시 시도해 주세요.';
@@ -5171,7 +5171,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get wrappedYouTalkedAbout => '이야기한 주제';
 
   @override
-  String get wrappedActionItems => '할 일';
+  String get wrappedActionItems => '작업';
 
   @override
   String get wrappedTasksCreated => '생성된 작업';
@@ -5263,10 +5263,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get wrappedGenerateMyWrapped => '내 Wrapped 생성';
 
   @override
-  String get wrappedProcessingDefault => '처리 중...';
+  String get wrappedProcessingDefault => '처리 중…';
 
   @override
-  String get wrappedCreatingYourStory => '당신의\n2025 이야기 만드는 중...';
+  String get wrappedCreatingYourStory => '당신의\n2025 이야기 만드는 중…';
 
   @override
   String get wrappedSomethingWentWrong => '문제가\n발생했어요';
@@ -5296,7 +5296,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get wrappedFailedToStartGeneration => '생성 시작에 실패했습니다. 다시 시도해주세요.';
 
   @override
-  String get wrappedStarting => '시작 중...';
+  String get wrappedStarting => '시작 중…';
 
   @override
   String get wrappedShare => '공유';
@@ -5501,13 +5501,13 @@ class AppLocalizationsKo extends AppLocalizations {
   String get somethingWentWrongTryAgain => '문제가 발생했습니다! 나중에 다시 시도해 주세요.';
 
   @override
-  String get uploadingVoiceProfile => '음성 프로필 업로드 중....';
+  String get uploadingVoiceProfile => '음성 프로필 업로드 중….';
 
   @override
-  String get memorizingYourVoice => '목소리를 기억하는 중...';
+  String get memorizingYourVoice => '목소리를 기억하는 중…';
 
   @override
-  String get personalizingExperience => '경험을 맞춤 설정하는 중...';
+  String get personalizingExperience => '경험을 맞춤 설정하는 중…';
 
   @override
   String get keepSpeakingUntil100 => '100%가 될 때까지 계속 말씀하세요.';
@@ -5630,7 +5630,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get clearChatQuestion => '채팅을 삭제하시겠습니까?';
 
   @override
-  String get syncingMessages => '서버와 메시지 동기화 중...';
+  String get syncingMessages => '서버와 메시지 동기화 중…';
 
   @override
   String get chatAppsTitle => '채팅 앱';
@@ -5789,10 +5789,10 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get summarizingConversation => '대화 요약 중...\n몇 초 정도 걸릴 수 있습니다';
+  String get summarizingConversation => '대화 요약 중…\n몇 초 정도 걸릴 수 있습니다';
 
   @override
-  String get resummarizingConversation => '대화 재요약 중...\n몇 초 정도 걸릴 수 있습니다';
+  String get resummarizingConversation => '대화 재요약 중…\n몇 초 정도 걸릴 수 있습니다';
 
   @override
   String get nothingInterestingRetry => '흥미로운 내용을 찾지 못했습니다.\n다시 시도하시겠습니까?';
@@ -5920,7 +5920,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get doNotCloseApp => '앱을 닫지 마세요.';
 
   @override
-  String get downloading => '다운로드 중...';
+  String get downloading => '다운로드 중…';
 
   @override
   String get downloadModel => '모델 다운로드';
@@ -5997,7 +5997,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String preparingModel(String model) {
-    return '$model 준비 중...';
+    return '$model 준비 중…';
   }
 
   @override
@@ -6025,7 +6025,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get useTemplateFrom => '템플릿 사용';
 
   @override
-  String get selectProviderTemplate => '제공자 템플릿 선택...';
+  String get selectProviderTemplate => '제공자 템플릿 선택…';
 
   @override
   String get quicklyPopulateResponse => '알려진 제공자 응답 형식으로 빠르게 채우기';
@@ -6227,13 +6227,13 @@ class AppLocalizationsKo extends AppLocalizations {
   String get signUpSuccess => '가입 성공!';
 
   @override
-  String get loadingKnowledgeGraph => '지식 그래프 로딩 중...';
+  String get loadingKnowledgeGraph => '지식 그래프 로딩 중…';
 
   @override
   String get noKnowledgeGraphYet => '아직 지식 그래프가 없습니다';
 
   @override
-  String get buildingKnowledgeGraphFromMemories => '기억에서 지식 그래프를 구축 중...';
+  String get buildingKnowledgeGraphFromMemories => '기억에서 지식 그래프를 구축 중…';
 
   @override
   String get knowledgeGraphWillBuildAutomatically => '새로운 기억을 만들면 지식 그래프가 자동으로 구축됩니다.';
@@ -6249,7 +6249,7 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String openingApp(String appName) {
-    return '$appName 열는 중...';
+    return '$appName 열는 중…';
   }
 
   @override
@@ -6283,7 +6283,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get moneyEarned => '수익';
 
   @override
-  String get writeYourReply => '답글을 작성하세요...';
+  String get writeYourReply => '답글을 작성하세요…';
 
   @override
   String get replySentSuccessfully => '답글이 성공적으로 전송되었습니다';
@@ -6430,7 +6430,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get selectContactsToShareSummary => '대화 요약을 공유할 연락처 선택';
 
   @override
-  String get searchContactsHint => '연락처 검색...';
+  String get searchContactsHint => '연락처 검색';
 
   @override
   String contactsSelectedCount(int count) {
@@ -6518,7 +6518,7 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get transferring => '전송 중...';
+  String get transferring => '전송 중…';
 
   @override
   String get transferRequired => '전송 필요';
@@ -6542,7 +6542,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get recordingInfo => '녹음 정보';
 
   @override
-  String get transferInProgress => '전송 중...';
+  String get transferInProgress => '전송 중…';
 
   @override
   String get shareRecording => '녹음 공유';
@@ -6659,7 +6659,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get errorUpdatingAppStatus => '앱 상태 업데이트 중 오류가 발생했습니다.';
 
   @override
-  String get calculatingETA => '계산 중...';
+  String get calculatingETA => '계산 중…';
 
   @override
   String aboutMinutesRemaining(int minutes) {
@@ -6670,29 +6670,29 @@ class AppLocalizationsKo extends AppLocalizations {
   String get aboutAMinuteRemaining => '약 1분 남음';
 
   @override
-  String get almostDone => '거의 완료되었습니다...';
+  String get almostDone => '거의 완료되었습니다…';
 
   @override
-  String get omiSays => 'omi가 말합니다';
+  String get omiSays => 'Omi가 말합니다';
 
   @override
-  String get analyzingYourData => '데이터 분석 중...';
+  String get analyzingYourData => '데이터 분석 중…';
 
   @override
   String migratingToProtection(String level) {
-    return '$level 보호로 마이그레이션 중...';
+    return '$level 보호로 마이그레이션 중…';
   }
 
   @override
-  String get noDataToMigrateFinalizing => '마이그레이션할 데이터가 없습니다. 마무리 중...';
+  String get noDataToMigrateFinalizing => '마이그레이션할 데이터가 없습니다. 마무리 중…';
 
   @override
   String migratingItemsProgress(String itemType, int percentage) {
-    return '$itemType 마이그레이션 중... $percentage%';
+    return '$itemType 마이그레이션 중… $percentage%';
   }
 
   @override
-  String get allObjectsMigratedFinalizing => '모든 객체가 마이그레이션되었습니다. 마무리 중...';
+  String get allObjectsMigratedFinalizing => '모든 객체가 마이그레이션되었습니다. 마무리 중…';
 
   @override
   String get migrationErrorOccurred => '마이그레이션 중 오류가 발생했습니다. 다시 시도해 주세요.';
@@ -6727,13 +6727,13 @@ class AppLocalizationsKo extends AppLocalizations {
   String get templateName => '템플릿 이름';
 
   @override
-  String get templateNameHint => '예: 회의 액션 항목 추출기';
+  String get templateNameHint => '예: 회의 작업 추출기';
 
   @override
   String get nameMustBeAtLeast3Characters => '이름은 최소 3자 이상이어야 합니다';
 
   @override
-  String get conversationPromptHint => '예: 제공된 대화에서 실행 항목, 결정 사항 및 주요 내용을 추출합니다.';
+  String get conversationPromptHint => '예: 제공된 대화에서 작업, 결정 사항 및 주요 내용을 추출합니다.';
 
   @override
   String get pleaseEnterAppPrompt => '앱의 프롬프트를 입력하세요';
@@ -6748,13 +6748,13 @@ class AppLocalizationsKo extends AppLocalizations {
   String get onlyYouCanUseTemplate => '이 템플릿은 본인만 사용할 수 있습니다';
 
   @override
-  String get generatingDescription => '설명 생성 중...';
+  String get generatingDescription => '설명 생성 중…';
 
   @override
-  String get creatingAppIcon => '앱 아이콘 생성 중...';
+  String get creatingAppIcon => '앱 아이콘 생성 중…';
 
   @override
-  String get installingApp => '앱 설치 중...';
+  String get installingApp => '앱 설치 중…';
 
   @override
   String get appCreatedAndInstalled => '앱이 생성되고 설치되었습니다!';
@@ -6883,7 +6883,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get aiGenPleaseEnterDescription => '앱에 대한 설명을 입력해 주세요';
 
   @override
-  String get aiGenCreatingAppIcon => '앱 아이콘 생성 중...';
+  String get aiGenCreatingAppIcon => '앱 아이콘 생성 중…';
 
   @override
   String aiGenErrorOccurredWithDetails(String message) {
@@ -6938,7 +6938,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get couldNotLaunchUpgradePage => '업그레이드 페이지를 열 수 없습니다. 다시 시도해 주세요.';
 
   @override
-  String get transcriptionJsonPlaceholder => 'JSON 구성을 여기에 붙여넣으세요...';
+  String get transcriptionJsonPlaceholder => 'JSON 구성을 여기에 붙여넣으세요…';
 
   @override
   String get transcriptionSourceOmi => 'Omi';
@@ -7008,7 +7008,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get onboardingYoureAllSet => '모든 준비가 완료되었습니다';
 
   @override
-  String get searchTranscriptOrSummary => '대본 또는 요약 검색...';
+  String get searchTranscriptOrSummary => '대본 또는 요약 검색';
 
   @override
   String get myGoal => '내 목표';
@@ -7233,10 +7233,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get msgUploadFileFailed => '파일 업로드 실패, 나중에 다시 시도해 주세요';
 
   @override
-  String get msgReadingMemories => '추억을 읽는 중...';
+  String get msgReadingMemories => '추억을 읽는 중…';
 
   @override
-  String get msgLearningMemories => '추억에서 배우는 중...';
+  String get msgLearningMemories => '추억에서 배우는 중…';
 
   @override
   String get msgUploadAttachedFileFailed => '첨부 파일 업로드에 실패했습니다.';
@@ -7293,7 +7293,7 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get conversationNewIndicator => '새로운 🚀';
+  String get conversationNewIndicator => '새로운';
 
   @override
   String conversationPhotosCount(int count) {
@@ -7301,7 +7301,7 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get mergingStatus => '병합 중...';
+  String get mergingStatus => '병합 중…';
 
   @override
   String timeSecsSingular(int count) {
@@ -7396,10 +7396,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get color => '색상';
 
   @override
-  String get waitingForDevice => '기기 대기 중...';
+  String get waitingForDevice => '기기 대기 중…';
 
   @override
-  String get saySomething => '말해보세요...';
+  String get saySomething => '말해보세요…';
 
   @override
   String get initialisingSystemAudio => '시스템 오디오 초기화 중';
@@ -7448,7 +7448,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get audioDownloadFailed => '오디오 다운로드 실패';
 
   @override
-  String get downloadingAudio => '오디오 다운로드 중...';
+  String get downloadingAudio => '오디오 다운로드 중…';
 
   @override
   String get shareAudio => '오디오 공유';
@@ -7457,7 +7457,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get preparingAudio => '오디오 준비 중';
 
   @override
-  String get gettingAudioFiles => '오디오 파일 가져오는 중...';
+  String get gettingAudioFiles => '오디오 파일 가져오는 중…';
 
   @override
   String get downloadingAudioProgress => '오디오 다운로드 중';
@@ -7466,13 +7466,13 @@ class AppLocalizationsKo extends AppLocalizations {
   String get processingAudio => '오디오 처리 중';
 
   @override
-  String get combiningAudioFiles => '오디오 파일 결합 중...';
+  String get combiningAudioFiles => '오디오 파일 결합 중…';
 
   @override
   String get audioReady => '오디오 준비 완료';
 
   @override
-  String get openingShareSheet => '공유 시트 여는 중...';
+  String get openingShareSheet => '공유 시트 여는 중…';
 
   @override
   String get audioShareFailed => '공유 실패';
@@ -7657,7 +7657,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get mcpConnectionFailed => 'MCP 서버 연결에 실패했습니다';
 
   @override
-  String get authorizingMcpServer => '인증 중...';
+  String get authorizingMcpServer => '인증 중…';
 
   @override
   String get whereDidYouHearAboutOmi => '어떻게 알게 되셨나요?';
@@ -7786,7 +7786,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get downloadingFromDevice => '기기에서 다운로드 중';
 
   @override
-  String get reconnectingToInternet => '인터넷에 다시 연결 중...';
+  String get reconnectingToInternet => '인터넷에 다시 연결 중…';
 
   @override
   String uploadingToCloud(int current, int total) {
@@ -7794,11 +7794,11 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get processingOnServer => '서버에서 처리 중...';
+  String get processingOnServer => '서버에서 처리 중…';
 
   @override
   String processingOnServerProgress(int current, int total) {
-    return '처리 중... $current/$total 세그먼트';
+    return '처리 중… $current/$total 세그먼트';
   }
 
   @override
@@ -7978,7 +7978,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get followTheVoiceInstructions => '음성 안내를 따르세요';
 
   @override
-  String get statusCalling => '전화 중...';
+  String get statusCalling => '전화 중…';
 
   @override
   String get statusCallInProgress => '통화 진행 중';
@@ -8023,10 +8023,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get failedToStartCall => '통화를 시작하지 못했습니다';
 
   @override
-  String get callStateConnecting => '연결 중...';
+  String get callStateConnecting => '연결 중…';
 
   @override
-  String get callStateRinging => '벨 울리는 중...';
+  String get callStateRinging => '벨 울리는 중…';
 
   @override
   String get callStateEnded => '통화 종료';
@@ -8035,7 +8035,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get callStateFailed => '통화 실패';
 
   @override
-  String get transcriptPlaceholder => '전사가 여기에 표시됩니다...';
+  String get transcriptPlaceholder => '전사가 여기에 표시됩니다…';
 
   @override
   String get phoneUnmute => '음소거 해제';
@@ -8132,7 +8132,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get phoneCallsUpsellFeature1 => '모든 통화의 실시간 텍스트 변환';
 
   @override
-  String get phoneCallsUpsellFeature2 => '자동 통화 요약 및 액션 아이템';
+  String get phoneCallsUpsellFeature2 => '자동 통화 요약 및 작업';
 
   @override
   String get phoneCallsUpsellFeature3 => '수신자는 임의 번호가 아닌 실제 번호를 봅니다';
@@ -8270,7 +8270,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get transcriptionPaused => '녹음 중, 재연결 중';
 
   @override
-  String get transcriptionPausedReconnecting => '계속 녹음 중 — 음성 인식에 재연결하는 중...';
+  String get transcriptionPausedReconnecting => '계속 녹음 중 — 음성 인식에 재연결하는 중…';
 
   @override
   String fairUseBannerStatus(String status) {
@@ -8418,7 +8418,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get tellUsMore => '더 알려주세요 (선택사항)';
 
   @override
-  String get cancelReasonDetailHint => '모든 피드백을 감사히 여깁니다...';
+  String get cancelReasonDetailHint => '모든 피드백을 감사히 여깁니다…';
 
   @override
   String get justAMoment => '잠시만요';
@@ -8513,7 +8513,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get diagnostics => '진단';
 
   @override
-  String get waitingForData => '데이터 대기 중...';
+  String get waitingForData => '데이터 대기 중…';
 
   @override
   String get liveRssiOverTime => '실시간 RSSI 추이';
@@ -8522,7 +8522,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get noRssiDataYet => '아직 RSSI 데이터 없음';
 
   @override
-  String get collectingData => '데이터 수집 중...';
+  String get collectingData => '데이터 수집 중…';
 
   @override
   String get cleanDisconnect => '정상 연결 해제';
@@ -8603,7 +8603,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get stableFirmware => '안정 펌웨어';
 
   @override
-  String get fetchingStableFirmware => '최신 안정 펌웨어를 가져오는 중...';
+  String get fetchingStableFirmware => '최신 안정 펌웨어를 가져오는 중…';
 
   @override
   String get noStableFirmwareFound => '기기에 맞는 안정 펌웨어 버전을 찾을 수 없습니다.';
@@ -8621,40 +8621,38 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String uploadingAudioForTranscription(String duration) {
-    return 'Uploading $duration of audio for transcription...';
+    return '텍스트 변환을 위해 $duration 분량의 오디오 업로드 중…';
   }
 
   @override
   String audioUploadRetrying(String duration) {
-    return 'Retrying upload... $duration of audio kept on your phone';
+    return '업로드 재시도 중… $duration 분량의 오디오가 휴대폰에 보관되어 있습니다';
   }
 
   @override
   String audioUploadFailedTapRetry(String duration) {
-    return 'Upload failed — $duration of audio kept on your phone. Tap to retry.';
+    return '업로드 실패 — $duration 분량의 오디오가 휴대폰에 보관되어 있습니다. 탭하여 다시 시도하세요.';
   }
 
   @override
   String audioUploadFailedKeptLocal(String duration) {
-    return 'Upload failed — $duration of audio kept on your phone.';
+    return '업로드 실패 — $duration 분량의 오디오가 휴대폰에 보관되어 있습니다.';
   }
 
   @override
-  String get listeningTranscriptWillAppear => 'Listening… a transcript will appear here.';
+  String get listeningTranscriptWillAppear => '듣는 중… 여기에 대화 기록이 표시됩니다.';
 
   @override
-  String get recordingOfflineTranscriptWillCatchUp =>
-      'Recording offline — the transcript will catch up when you\'re back online.';
+  String get recordingOfflineTranscriptWillCatchUp => '오프라인으로 녹음 중 — 다시 온라인이 되면 대화 기록이 따라잡습니다.';
 
   @override
-  String get transcriptionUnavailableRecordingSaved =>
-      'Transcription is unavailable — recording continues and your audio is saved.';
+  String get transcriptionUnavailableRecordingSaved => '텍스트 변환을 사용할 수 없습니다 — 녹음은 계속되며 오디오는 저장됩니다.';
 
   @override
-  String get capturing => 'Capturing';
+  String get capturing => '캡처 중';
 
   @override
-  String get capturingPhotos => 'Capturing photos';
+  String get capturingPhotos => '사진 캡처 중';
 
   @override
   String get willSyncAutomatically => '자동으로 동기화됩니다';
@@ -8669,10 +8667,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get voiceRecordingFound => '녹음 발견됨';
 
   @override
-  String get transcriptionConnecting => '전사 연결 중...';
+  String get transcriptionConnecting => '전사 연결 중…';
 
   @override
-  String get transcriptionReconnecting => '전사 재연결 중...';
+  String get transcriptionReconnecting => '전사 재연결 중…';
 
   @override
   String get transcriptionUnavailable => '전사를 사용할 수 없습니다';
@@ -8806,10 +8804,6 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get planUpdate => '플랜 업데이트';
-
-  @override
-  String get planDeprecationMessage =>
-      'Unlimited 플랜이 중단됩니다. Operator 플랜으로 전환하세요 — 동일한 훌륭한 기능을 월 \$49에 이용할 수 있습니다. 현재 플랜은 당분간 계속 사용할 수 있습니다.';
 
   @override
   String get upgradeYourPlan => '플랜 업그레이드';
@@ -8979,7 +8973,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get phoneCallSubtitle => '실시간 전사로 통화 녹음';
 
   @override
-  String get searchActionItems => '실행 항목 검색';
+  String get searchActionItems => '작업 검색';
 
   @override
   String get selectActionItems => '여러 개 선택';
@@ -9279,7 +9273,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get deviceOnboardingGoodJob => '잘했어요!';
 
   @override
-  String get deviceOnboardingStartSpeaking => '말해보세요...';
+  String get deviceOnboardingStartSpeaking => '말해보세요…';
 
   @override
   String get deviceOnboardingAskQuestionTitle => 'Omi에게 질문하기';
@@ -9288,10 +9282,10 @@ class AppLocalizationsKo extends AppLocalizations {
   String get deviceOnboardingAskQuestionSubtitle => '버튼을 한 번 누르고 질문한 뒤, 끝나면 다시 누르세요';
 
   @override
-  String get deviceOnboardingProcessingQuestion => '질문을 처리하는 중...';
+  String get deviceOnboardingProcessingQuestion => '질문을 처리하는 중…';
 
   @override
-  String get deviceOnboardingListening => '듣는 중...';
+  String get deviceOnboardingListening => '듣는 중…';
 
   @override
   String get deviceOnboardingTurnOffTitle => '전원 끄기';
@@ -9318,7 +9312,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get deviceOnboardingStatusDisconnected => '연결 끊김';
 
   @override
-  String get deviceOnboardingStatusTurningOff => '끄는 중...';
+  String get deviceOnboardingStatusTurningOff => '끄는 중…';
 
   @override
   String get deviceOnboardingDoubleTapTitle => '더블 탭 설정하기';
@@ -9620,7 +9614,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get copyMessage => '메시지 복사';
 
   @override
-  String get searchSettings => '설정 검색…';
+  String get searchSettings => '설정 검색';
 
   @override
   String get errorLoadingAudio => '오디오를 불러오지 못했습니다';
@@ -9887,7 +9881,7 @@ class AppLocalizationsKo extends AppLocalizations {
         'day': 'A good day for me includes ___.',
         'another': 'Try another prompt',
         'start': 'Start speaking',
-        'skipPrompt': 'Skip this prompt',
+        'skipPrompt': 'Skip Question',
         'captured': 'Voice sample captured',
         'silence': 'Take your time. Speak toward your phone microphone.',
         'audio': 'Audio detected',
@@ -9905,7 +9899,7 @@ class AppLocalizationsKo extends AppLocalizations {
         'addSample': 'Add another sentence',
         'uploadError': 'Your voice profile could not be saved. Retry with the same recording, or set it up later.',
         'memoryError': 'Some answers could not be saved. Saved items are safe; retry to save the rest.',
-        'transcriptionError': 'We could not transcribe that answer. Retry, keep speaking, or skip this prompt.',
+        'transcriptionError': 'We could not transcribe that answer. Try again, keep speaking, or skip this question.',
         'noMemories': 'You can tell Omi more about yourself whenever you like.',
         'voiceOnlyHint': 'You can skip any personal prompt and talk about something else.',
         'goalPrompt': 'Right now my number one goal is to ___.',
@@ -9978,4 +9972,1026 @@ class AppLocalizationsKo extends AppLocalizations {
 
   @override
   String get clearSearch => '검색 지우기';
+
+  @override
+  String get filterBySpeaker => '화자별 필터';
+
+  @override
+  String get notNow => '나중에';
+
+  @override
+  String get discard => '삭제';
+
+  @override
+  String get keepEditing => '계속 편집';
+
+  @override
+  String get discardChangesTitle => '변경 사항을 삭제할까요?';
+
+  @override
+  String get discardChangesMessage => '저장하지 않은 변경 사항이 사라집니다.';
+
+  @override
+  String get pause => '일시정지';
+
+  @override
+  String deleteConversationsTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '대화 $count개를 삭제할까요?',
+      one: '대화 1개를 삭제할까요?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get deleteConversationsMessage => '해당 기억, 작업 및 오디오 파일도 삭제됩니다.';
+
+  @override
+  String conversationsDeletedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '대화 $count개 삭제됨',
+      one: '대화 1개 삭제됨',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String conversationsMovedCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '대화 $count개 이동됨',
+      one: '대화 1개 이동됨',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get failedToMoveConversations => '대화를 이동하지 못했습니다';
+
+  @override
+  String discardedConversationTitle(String duration) {
+    return '삭제 대기 · $duration';
+  }
+
+  @override
+  String get noConversationsHeroMessage => '녹음한 대화가 여기에 표시됩니다. 홈에서 +를 눌러 첫 대화를 녹음하세요.';
+
+  @override
+  String get conversationMap => '대화 지도';
+
+  @override
+  String conversationCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '대화 $count개',
+      one: '대화 1개',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String taskCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '작업 $count개',
+      one: '작업 1개',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get skipBack10Seconds => '10초 뒤로';
+
+  @override
+  String get skipForward10Seconds => '10초 앞으로';
+
+  @override
+  String get failedToShareRecap => '요약을 공유하지 못했습니다';
+
+  @override
+  String get captureOfflineBuffering => '오프라인, 버퍼링 중';
+
+  @override
+  String captureOfflineBufferingFor(int minutes) {
+    return '오프라인, 버퍼링 중 · $minutes분';
+  }
+
+  @override
+  String get memoryDetailsTitle => '기억';
+
+  @override
+  String get editMemoryTitle => '기억 편집';
+
+  @override
+  String get newMemoryTitle => '새 기억';
+
+  @override
+  String get memoryReadOnlyHint => '이 기억은 기록으로 보관되며 편집할 수 없습니다.';
+
+  @override
+  String get openConversation => '대화 열기';
+
+  @override
+  String get memoryGraphTitle => '기억 그래프';
+
+  @override
+  String get memoryReviewTitle => '오늘 알게 된 것';
+
+  @override
+  String get memoryReviewRight => '맞아요';
+
+  @override
+  String get memoryReviewWrong => '틀려요';
+
+  @override
+  String get memoryReviewFix => '수정';
+
+  @override
+  String get memoryReviewConfirmed => '확인했어요. 이를 반영할게요.';
+
+  @override
+  String get memoryReviewDropped => '삭제했어요. 이런 정보는 피할게요.';
+
+  @override
+  String get memoryReviewUpdated => '업데이트했어요.';
+
+  @override
+  String get memoryReviewSaveFailed => '저장하지 못했어요. 다시 시도하세요';
+
+  @override
+  String get indentTask => '들여쓰기';
+
+  @override
+  String get outdentTask => '내어쓰기';
+
+  @override
+  String get goalDeleted => '목표를 삭제했어요';
+
+  @override
+  String get sharedTasksAcceptFailed => '이 작업을 받을 수 없어요. 이미 이 공유를 수락했을 수 있어요.';
+
+  @override
+  String get pausePlayback => '일시정지';
+
+  @override
+  String get deleteSample => '샘플 삭제';
+
+  @override
+  String get deletePersonTitle => '사람을 삭제할까요?';
+
+  @override
+  String get deletePersonLabel => '사람 삭제';
+
+  @override
+  String get noPeopleYet => '아직 사람이 없어요';
+
+  @override
+  String deleteTasksTitle(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '작업 $count개를 삭제할까요?',
+      one: '작업 1개를 삭제할까요?',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String tasksCountLabel(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '작업 $count개',
+      one: '작업 1개',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAdded(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '목록에 작업 $count개를 추가했어요',
+      one: '목록에 작업 1개를 추가했어요',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksAddButton(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '작업 $count개 추가',
+      one: '작업 1개 추가',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String sharedTasksTitle(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '작업 $count개를 공유했어요',
+      one: '작업 1개를 공유했어요',
+    );
+    return '$name님이 $_temp0';
+  }
+
+  @override
+  String exportedToPlatform(String platform) {
+    return '$platform(으)로 내보냄';
+  }
+
+  @override
+  String taskDueDate(String date) {
+    return '마감 $date';
+  }
+
+  @override
+  String get linkEvent => '일정 연결';
+
+  @override
+  String get noCalendarEventsNearby => '이 시간대의 캘린더 일정이 없습니다.';
+
+  @override
+  String get suggestedEvent => '추천';
+
+  @override
+  String get openInGoogleCalendar => 'Google 캘린더에서 열기';
+
+  @override
+  String get shareWithAttendees => '참석자와 공유';
+
+  @override
+  String get unlinkCalendarEvent => '일정 연결 해제';
+
+  @override
+  String meetingNotesSubject(String title) {
+    return '메모: $title';
+  }
+
+  @override
+  String get previousResult => '이전 결과';
+
+  @override
+  String get nextResult => '다음 결과';
+
+  @override
+  String get playFromHere => '여기부터 재생';
+
+  @override
+  String get shareConversationQuestion => '대화를 공유할까요?';
+
+  @override
+  String get conversationTasksEmptyMessage => '이 대화의 작업이 여기에 표시됩니다.';
+
+  @override
+  String get noPendingTasks => '대기 중인 작업이 없습니다';
+
+  @override
+  String nCompleted(int count) {
+    return '$count개 완료';
+  }
+
+  @override
+  String get identifySpeaker => '화자 지정';
+
+  @override
+  String get couldNotLoadCheckout => '결제 페이지를 불러오지 못했습니다. 연결을 확인하고 다시 시도하세요.';
+
+  @override
+  String get phoneFreeCallLimitReached => '이번 달 무료 통화 한도에 도달했습니다. 다음 달에 초기화됩니다.';
+
+  @override
+  String get couldNotLoadImportHistory => '가져오기 기록을 불러올 수 없습니다';
+
+  @override
+  String get phoneCallButton => '전화 걸기';
+
+  @override
+  String get searchContacts => '연락처 검색';
+
+  @override
+  String get phoneContactsAccessTitle => '연락처 접근 허용';
+
+  @override
+  String get phoneSelectCountryTitle => '국가 선택';
+
+  @override
+  String get phoneNoVerifiedNumbersTitle => '인증된 번호 없음';
+
+  @override
+  String get phoneNoVerifiedNumbersMessage => 'Omi로 전화를 걸려면 번호를 인증하세요.';
+
+  @override
+  String get phoneDeleteNumberFailed => '이 번호를 삭제하지 못했습니다';
+
+  @override
+  String get forgetDeviceConfirmTitle => '기기를 삭제할까요?';
+
+  @override
+  String get forgetDeviceConfirmMessage => 'Omi가 이 기기에 더 이상 연결하지 않습니다. 다시 사용하려면 다시 페어링해야 합니다.';
+
+  @override
+  String get deviceForgottenMessage => '기기를 삭제했습니다';
+
+  @override
+  String get unpairDeviceConfirmTitle => '기기 페어링을 해제할까요?';
+
+  @override
+  String get rollBack => '롤백';
+
+  @override
+  String dataRateKbps(String rate) {
+    return '$rate kbps';
+  }
+
+  @override
+  String get diagnosticsExportTitle => 'Omi 기기 진단';
+
+  @override
+  String get diagnosticsFailBadge => '실패';
+
+  @override
+  String diagnosticsReconnectedIn(String duration) {
+    return '$duration 만에 재연결됨';
+  }
+
+  @override
+  String timeCompactDays(int count) {
+    return '$count일';
+  }
+
+  @override
+  String durationAgo(String duration) {
+    return '$duration 전';
+  }
+
+  @override
+  String get sttLanguageFollowsPrimary => '기본 언어를 따릅니다';
+
+  @override
+  String get creatorPayouts => '크리에이터 정산';
+
+  @override
+  String get sttLanguageOverride => '재정의';
+
+  @override
+  String get sttUsePrimaryLanguage => '기본 언어 사용';
+
+  @override
+  String sttPrimaryLanguageUnsupported(String language, String fallback) {
+    return '이 제공업체는 $language을(를) 지원하지 않아 $fallback을(를) 사용합니다.';
+  }
+
+  @override
+  String deviceRamBelowMinimum(String ram) {
+    return '감지된 RAM: ${ram}GB. 권장 최소: 4GB.';
+  }
+
+  @override
+  String olderIphoneModelDetected(String model) {
+    return '감지된 모델: $model (iPhone XS보다 오래됨). 기기 내 인식이 느릴 수 있습니다.';
+  }
+
+  @override
+  String get copyLogs => '로그 복사';
+
+  @override
+  String get openProviderDocs => '문서 열기';
+
+  @override
+  String get getApiKey => 'API 키 받기';
+
+  @override
+  String get showApiKey => 'API 키 표시';
+
+  @override
+  String get hideApiKey => 'API 키 숨기기';
+
+  @override
+  String removeVocabularyWord(String word) {
+    return '$word 제거';
+  }
+
+  @override
+  String vocabularyWordCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '단어 $count개',
+      one: '단어 1개',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String phoneFreeCallsRemaining(int remaining, int limit) {
+    return '이번 달 무료 통화 $remaining회 남음 (총 $limit회)';
+  }
+
+  @override
+  String phoneFreeCallsRemainingWithMax(int remaining, int limit, int minutes) {
+    return '이번 달 무료 통화 $remaining회 남음 (총 $limit회) · 통화당 최대 $minutes분';
+  }
+
+  @override
+  String get appCreators => '앱 제작자';
+
+  @override
+  String get homeScreen => '홈 화면';
+
+  @override
+  String get phoneCalls => '전화 통화';
+
+  @override
+  String get vadGate => 'VAD 게이트';
+
+  @override
+  String get vadGateDescription => '음성 인식 비용을 줄이기 위한 서버 측 음성 게이트';
+
+  @override
+  String get flashCustomFirmware => '사용자 지정 펌웨어 설치';
+
+  @override
+  String get flashCustomFirmwareDescription => '사용자 지정 펌웨어 빌드 설치';
+
+  @override
+  String get selectFirmwareZip => '펌웨어 ZIP 파일 선택';
+
+  @override
+  String get customFirmwareWarning =>
+      '사용자 지정 펌웨어를 설치하면 기기가 작동하지 않을 수 있습니다. 올바른 Omi 펌웨어 빌드인지 확인하고, 업데이트 중에는 연결을 끊지 마세요.';
+
+  @override
+  String get firmwareFlashed => '펌웨어 설치 완료';
+
+  @override
+  String get deviceWillRestart => '기기가 다시 시작됩니다.';
+
+  @override
+  String get exportFailedTryAgain => '내보내기에 실패했습니다. 다시 시도하세요.';
+
+  @override
+  String firmwareFlashTarget(String deviceName) {
+    return '기기: $deviceName';
+  }
+
+  @override
+  String get keepSubscription => '구독 유지';
+
+  @override
+  String get couldNotLoadPage => '이 페이지를 불러올 수 없습니다. 연결을 확인하고 다시 시도하세요.';
+
+  @override
+  String leaveFlowStepOf(int current, int total) {
+    return '$current/$total단계';
+  }
+
+  @override
+  String get sharedTasksLinkExpired => '공유된 작업을 찾을 수 없거나 링크가 만료되었습니다.';
+
+  @override
+  String get sharedTasksUnknownSender => '누군가';
+
+  @override
+  String get allow => '허용';
+
+  @override
+  String get permissionAllowed => '허용됨';
+
+  @override
+  String get permissionBlockedHint => '설정에서 꺼져 있습니다. 사용하려면 설정에서 허용하세요.';
+
+  @override
+  String get useDifferentAccount => '다른 계정 사용';
+
+  @override
+  String onboardingStepOf(int current, int total) {
+    return '$current/$total단계';
+  }
+
+  @override
+  String get onboardingCompleteMessage => 'Omi를 2일 동안 백그라운드에서 실행해 두면 유용한 피드백을 드리기 시작합니다.';
+
+  @override
+  String get cantFindDeviceHint => '기기를 찾을 수 없나요? 전원이 켜져 있고 휴대폰 가까이에 있는지 확인한 후 다시 검색하세요.';
+
+  @override
+  String get scanAgain => '다시 검색';
+
+  @override
+  String get howToPair => '페어링 방법';
+
+  @override
+  String get contactSupportAction => '지원팀에 문의';
+
+  @override
+  String deviceOfflineWakeHint(String deviceName) {
+    return '$deviceName이(가) 오프라인입니다. 버튼을 눌러 깨운 후 다시 시도하세요.';
+  }
+
+  @override
+  String batteryLevelSemantics(int level) {
+    return '배터리 $level%';
+  }
+
+  @override
+  String get updateOmiGlassFirmware => 'OmiGlass 펌웨어 업데이트';
+
+  @override
+  String get deviceConnecting => '연결 중…';
+
+  @override
+  String get recordOptionsTip => '팁: 녹음 버튼을 길게 누르면 전화 통화를 녹음할 수 있습니다.';
+
+  @override
+  String get firmwareUpdateFailedTitle => '업데이트 실패';
+
+  @override
+  String get firmwareUpdateFailedMessage =>
+      '업데이트가 완료되지 않았습니다. 기기는 현재 펌웨어를 그대로 사용하며 안전하게 쓸 수 있습니다. 충전한 상태로 휴대폰 가까이에 두고 다시 시도하세요.';
+
+  @override
+  String get firmwareDownloadFailedMessage => '업데이트를 다운로드하지 못했으며 기기는 변경되지 않았습니다. 인터넷 연결을 확인한 후 다시 시도하세요.';
+
+  @override
+  String firmwareBatteryTooLow(int level) {
+    return '배터리가 $level%입니다. 업데이트 전에 기기를 15% 이상 충전하세요.';
+  }
+
+  @override
+  String get startUpdate => '업데이트 시작';
+
+  @override
+  String get otaNotSupported => '이 펌웨어는 Wi-Fi로 업데이트할 수 없습니다.';
+
+  @override
+  String otaConnectFailed(String deviceName) {
+    return '$deviceName에 연결하지 못했습니다. 전원을 켠 채 가까이에 두고 다시 시도하세요.';
+  }
+
+  @override
+  String get otaUpdateUnavailable => '이 업데이트는 지금 사용할 수 없습니다. 나중에 다시 시도하세요.';
+
+  @override
+  String get otaStarting => '업데이트 시작 중…';
+
+  @override
+  String get otaStartFailed => '업데이트를 시작하지 못했습니다. Wi-Fi 이름과 비밀번호를 확인한 후 다시 시도하세요.';
+
+  @override
+  String otaRebooting(String deviceName) {
+    return '$deviceName이(가) 새 펌웨어로 다시 시작하는 중입니다.';
+  }
+
+  @override
+  String get otaUpdateCancelled => '업데이트가 취소됨';
+
+  @override
+  String get cancelUpdate => '업데이트 취소';
+
+  @override
+  String get otaKeepNearby => '업데이트하는 동안 기기를 켜 두고 가까이에 두며 앱을 닫지 마세요.';
+
+  @override
+  String get otaWifiConnecting => 'Wi-Fi에 연결 중…';
+
+  @override
+  String get otaWifiConnected => 'Wi-Fi에 연결됨';
+
+  @override
+  String get otaWifiFailed => 'Wi-Fi에 연결하지 못했습니다. 네트워크 이름과 비밀번호를 확인하세요.';
+
+  @override
+  String get otaDownloadFailed => '펌웨어 다운로드에 실패했습니다. Wi-Fi 연결을 확인한 후 다시 시도하세요.';
+
+  @override
+  String get otaInstallFailed => '설치에 실패했습니다. 기기는 현재 펌웨어를 그대로 사용합니다.';
+
+  @override
+  String otaUpdatedMessage(String deviceName) {
+    return '$deviceName이(가) 업데이트되었으며 자동으로 다시 시작됩니다.';
+  }
+
+  @override
+  String get showPassword => '비밀번호 표시';
+
+  @override
+  String get hidePassword => '비밀번호 숨기기';
+
+  @override
+  String get appNotFoundOrRemoved => '이 앱은 더 이상 사용할 수 없습니다';
+
+  @override
+  String get startupFailedTitle => 'Omi를 시작할 수 없습니다';
+
+  @override
+  String get startupFailedMessage => 'Omi를 시작하는 동안 문제가 발생했습니다. 연결 상태를 확인한 후 다시 시도하세요.';
+
+  @override
+  String get startupFailedConfigMessage => '이 Omi 빌드에 구성 문제가 있습니다. 기기 문제가 아닙니다. 아래 세부 정보를 포함하여 지원팀에 문의하세요.';
+
+  @override
+  String get discardRecordingTitle => '녹음을 삭제할까요?';
+
+  @override
+  String get discardRecordingMessage => '음성 샘플이 아직 저장되지 않았습니다. 지금 나가면 삭제됩니다.';
+
+  @override
+  String get keepRecording => '계속 녹음';
+
+  @override
+  String get view => '보기';
+
+  @override
+  String appDataAccessTitle(String appName) {
+    return '$appName에 접근을 허용할까요?';
+  }
+
+  @override
+  String appDataAccessMessage(String appName) {
+    return '$appName은(는) 개발자 서버에서 대화, 메모리, 녹음을 받게 됩니다. 그곳에서 데이터가 어떻게 사용되는지에 대해 Omi는 책임지지 않습니다.';
+  }
+
+  @override
+  String appDisabledNamed(String appName) {
+    return '$appName 비활성화됨';
+  }
+
+  @override
+  String appRatingCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '평가 $count개',
+      one: '평가 1개',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String previewImageLabel(int index, int total) {
+    return '스크린샷 $index/$total';
+  }
+
+  @override
+  String chatWithApp(String appName) {
+    return '$appName와(과) 채팅';
+  }
+
+  @override
+  String appSettingsLabel(String appName) {
+    return '$appName 설정';
+  }
+
+  @override
+  String get appOptions => '앱 옵션';
+
+  @override
+  String get cancelSubscriptionKeepAccessMessage => '현재 결제 기간이 끝날 때까지 계속 이용할 수 있습니다.';
+
+  @override
+  String get chatSendMessage => '메시지 보내기';
+
+  @override
+  String get chatAddAttachment => '첨부 파일 추가';
+
+  @override
+  String get removeAttachment => '첨부 파일 제거';
+
+  @override
+  String get chatRemoveSelectedText => '인용한 텍스트 제거';
+
+  @override
+  String get chatOfflineHint => '오프라인 상태입니다. 메시지를 보내려면 다시 연결하세요.';
+
+  @override
+  String get chatReplyFailed => 'Omi가 답장하지 못했습니다. 연결을 확인하고 다시 시도하세요.';
+
+  @override
+  String disableAppNamed(String appName) {
+    return '$appName 비활성화';
+  }
+
+  @override
+  String get whatWentWrong => '무엇이 문제였나요?';
+
+  @override
+  String get selectAReason => '이유를 선택하세요';
+
+  @override
+  String get submit => '제출';
+
+  @override
+  String get feedbackReasonTooVerbose => '너무 장황함';
+
+  @override
+  String get feedbackReasonIncorrect => '틀리거나 지어낸 내용';
+
+  @override
+  String get feedbackReasonNotHelpful => '도움이 안 되거나 관련 없음';
+
+  @override
+  String get feedbackReasonIgnoredInstructions => '지시를 따르지 않음';
+
+  @override
+  String get additionalFeedbackOptional => '추가 의견(선택 사항)';
+
+  @override
+  String get helpful => '도움이 됨';
+
+  @override
+  String daySummaryForDate(String date) {
+    return '하루 요약 · $date';
+  }
+
+  @override
+  String get chatStarterYesterday => '어제 나는 무엇을 했나요?';
+
+  @override
+  String get chatStarterDoDifferently => '오늘은 무엇을 다르게 할 수 있을까요?';
+
+  @override
+  String get chatStarterTeachMe => '새로운 것을 가르쳐 줄 수 있나요?';
+
+  @override
+  String get thinking => '생각 중';
+
+  @override
+  String get couldNotLoadWhatsNew => '새로운 기능을 불러오지 못했습니다';
+
+  @override
+  String get githubRepositoryUrl => 'GitHub 저장소 URL';
+
+  @override
+  String get githubRepositoryUrlHint => '앱 소스 코드 저장소 링크';
+
+  @override
+  String get triggerEvents => '트리거 이벤트';
+
+  @override
+  String get noAppsInCategoryYet => '이 카테고리에 아직 앱이 없습니다';
+
+  @override
+  String get scopes => '범위';
+
+  @override
+  String get aiAppGeneratorBannerTitle => '탭 한 번으로 AI로 앱 만들기';
+
+  @override
+  String get refreshManifest => '매니페스트 새로 고침';
+
+  @override
+  String versionLabel(String version) {
+    return '버전 $version';
+  }
+
+  @override
+  String appUsersCount(int count) {
+    return '사용자 $count명 이상';
+  }
+
+  @override
+  String get discovery => '발견';
+
+  @override
+  String get chatBlockShowMore => '더 보기';
+
+  @override
+  String get chatBlockShowLess => '간략히 보기';
+
+  @override
+  String get triggerEvent => '트리거 이벤트';
+
+  @override
+  String get webhookUrl => '웹훅 URL';
+
+  @override
+  String get appHomeUrl => '앱 홈 URL';
+
+  @override
+  String get authUrl => '인증 URL';
+
+  @override
+  String get setupCompletedUrl => '설정 완료 URL';
+
+  @override
+  String get chatToolsManifestUrl => '채팅 도구 매니페스트 URL';
+
+  @override
+  String get invalidWebhookUrlError => '올바른 웹훅 URL을 입력하세요';
+
+  @override
+  String get githubRepositoryUrlRequired => 'GitHub 저장소 URL이 필요합니다';
+
+  @override
+  String get removeScreenshot => '스크린샷 제거';
+
+  @override
+  String get addScreenshot => '스크린샷 추가';
+
+  @override
+  String get aiGenRegenerateIcon => '아이콘 다시 생성';
+
+  @override
+  String categoryAppCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '앱 $count개',
+      one: '앱 1개',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get generateDescription => '설명 생성';
+
+  @override
+  String get selectImageFileTitle => '이미지 파일 선택';
+
+  @override
+  String get selectThumbnailImageTitle => '썸네일 이미지 선택';
+
+  @override
+  String get appIdNotFoundError => '앱 ID를 찾을 수 없음';
+
+  @override
+  String get manifestRefreshedSuccess => '매니페스트가 성공적으로 새로 고쳐졌습니다';
+
+  @override
+  String get manifestRefreshFailed => '매니페스트 새로 고침 실패';
+
+  @override
+  String get captureRecordingsSheetTitle => '이 대화의 녹음';
+
+  @override
+  String get captureRecordingSeparate => '분리…';
+
+  @override
+  String get captureRecordingSeparateTitle => '이 녹음을 분리할까요?';
+
+  @override
+  String captureRecordingSeparateMessage(String recording) {
+    return '$recording은(는) 별도의 대화로 표시되며 이 이벤트와 다시 묶이지 않습니다.';
+  }
+
+  @override
+  String get captureRecordingSeparateConfirm => '분리';
+
+  @override
+  String get captureRecordingSeparateFailed => '분리하지 못했습니다. 다시 시도하세요.';
+
+  @override
+  String get captureRecordingOpenFailed => '이 녹음을 열 수 없습니다.';
+
+  @override
+  String get captureRecordingViewing => '이 녹음을 보고 있습니다';
+
+  @override
+  String captureRecordedBy(String devices) {
+    return '$devices에서 녹음됨';
+  }
+
+  @override
+  String get captureSourceDesktop => '데스크톱';
+
+  @override
+  String get renameConversation => '이름 변경';
+
+  @override
+  String captureRecordingsCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '녹음 $count개',
+      one: '녹음 1개',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get captureSourcePendant => '펜던트';
+
+  @override
+  String get conversationDeveloperTools => '대화의 개발자 도구';
+
+  @override
+  String get conversationDeveloperToolsDescription => '대화 메뉴에 대화 ID 복사와 프롬프트 테스트 표시';
+
+  @override
+  String participantsSummary(String name, int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count명',
+      many: '$count명',
+      few: '$count명',
+      one: '1명',
+    );
+    return '$name + $_temp0';
+  }
+
+  @override
+  String get recordingAndTranscription => '녹음 및 음성 변환';
+
+  @override
+  String get notificationsAndDisplay => '알림 및 표시';
+
+  @override
+  String get helpAndAbout => '도움말 및 정보';
+
+  @override
+  String get speakerTagPromptTitle => 'Omi가 목소리를 알아보도록 도와주세요';
+
+  @override
+  String get speakerTagPromptSubtitle => '최근 이틀간의 목소리를 빠르게 확인해요';
+
+  @override
+  String get speakerTagPromptIsThisYou => '본인인가요?';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return '$name 님인가요?';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => '누구인가요?';
+
+  @override
+  String get speakerTagPromptThatsMe => '저예요';
+
+  @override
+  String get speakerTagPromptNotMe => '제가 아니에요';
+
+  @override
+  String get speakerTagPromptSomeoneNew => '새로운 사람';
+
+  @override
+  String get speakerTagPromptDontKnow => '모르는 사람';
+
+  @override
+  String get speakerTagPromptNotSure => '잘 모르겠어요';
+
+  @override
+  String get speakerTagPromptPlayClip => '클립 재생';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current/$total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => '이름을 붙인 사람의 목소리 기억하기';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody => '다음에 알아볼 수 있도록 Omi가 짧은 음성 샘플을 보관해요. 설정에서 언제든지 변경할 수 있어요.';
+
+  @override
+  String get speakerTagPromptThanks => '감사합니다! Omi가 목소리를 더 잘 알아보게 될 거예요.';
+
+  @override
+  String get speakerTagPromptNameHint => '이름';
+
+  @override
+  String get speakerTagPromptClipUnavailable => '이 클립을 재생할 수 없어요';
+
+  @override
+  String get speakerTagPromptAnswerFailed => '저장하지 못했어요. 다시 시도해 주세요.';
+
+  @override
+  String get voiceSettingsAskToTag => '목소리 태그 요청 받기';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle => '가끔 Omi가 최근 대화에서 누가 말했는지 물어봐요';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle => '누군가에게 이름을 붙이면, 다음에 알아볼 수 있도록 Omi가 짧은 음성 샘플을 보관해요';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues => '전사를 이용할 수 없습니다. 기기에서 녹음이 계속되며 나중에 처리됩니다';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => '전사 불가 · 기기에 저장 중';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return '대기 중인 전사 $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return '대기 중인 전사 $count';
+  }
 }
