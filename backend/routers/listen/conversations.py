@@ -109,6 +109,7 @@ class LiveConversationController:
         self.host.recording_session_id = pointer['recording_session_id']
         self.host.state.current_conversation_id = binding['conversation_id']
         self.host.recording_session_ids_by_conversation[binding['conversation_id']] = self.host.recording_session_id
+        self._adopt_capture_timeline(binding['conversation_id'], (existing or {}).get('started_at'))
         if self.host.use_custom_stt and not existing.get('uses_custom_stt', False):
             await self.host.persistence.call(
                 conversations_db.update_conversation,
@@ -190,6 +191,26 @@ class LiveConversationController:
         self.host.spawn(
             self.emit_recording_lifecycle_event(conversation_id, 'completed'), name='recording_session_completed'
         )
+
+    def _adopt_capture_timeline(self, conversation_id: str, started_at: Any) -> None:
+        """Track the audio-timeline v2 origin for a conversation this session owns.
+
+        A resumed conversation reuses its persisted ``started_at`` as the
+        projection origin (a resumed v1 row is never marked v2); a conversation
+        created fresh by this v2 session waits for its first accepted audio
+        frame, which the receiver pins as the origin.
+        """
+        state = getattr(self.host, 'state', None)
+        if state is None or getattr(state, 'capture_timeline', None) is None:
+            return
+        if started_at is None:
+            state.conversations_awaiting_capture_origin.add(conversation_id)
+            return
+        timestamp = started_at.timestamp() if hasattr(started_at, 'timestamp') else None
+        if timestamp is None:
+            state.conversations_awaiting_capture_origin.add(conversation_id)
+            return
+        state.conversation_capture_origins[conversation_id] = timestamp
 
     def on_conversation_processing_started(self, conversation_id: str) -> None:
         self.host.spawn(
@@ -352,6 +373,7 @@ class LiveConversationController:
                     await self.create_new_in_progress_conversation(rollover=True)
                     return
                 self.host.state.current_conversation_id = conversation_id
+                self._adopt_capture_timeline(conversation_id, existing.get('started_at'))
                 # Persist the custom-STT marker on resume so a conversation that
                 # started under normal STT but continues under custom STT keeps
                 # accurate provenance: once any session was custom-STT, the
@@ -438,6 +460,9 @@ class LiveConversationController:
                 closest = min(meetings, key=lambda meeting: abs((meeting['start_time'] - now).total_seconds()))
                 await self.host.persistence.call(redis_db.set_conversation_meeting_id, conversation_id, closest['id'])
         self.host.state.current_conversation_id = conversation_id
+        # Fresh v2 generation: the origin is pinned by the receiver at the
+        # first accepted audio frame associated with this conversation.
+        self._adopt_capture_timeline(conversation_id, None)
         await self.host.speakers.refresh_for_conversation(conversation_id)
         self.send_conversation_session(binding, self.host.recording_session_id)
 
@@ -506,6 +531,7 @@ class LiveConversationController:
             return None
         self.host.state.current_conversation_id = existing['id']
         self.host.recording_session_ids_by_conversation[existing['id']] = self.host.recording_session_id
+        self._adopt_capture_timeline(existing['id'], existing.get('started_at'))
         self.send_conversation_session(binding, self.host.recording_session_id)
         return None
 
