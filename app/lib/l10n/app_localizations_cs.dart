@@ -934,9 +934,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'Přidat do claude_desktop_config.json';
-
-  @override
   String get copyConfig => 'Kopírovat konfiguraci';
 
   @override
@@ -2478,13 +2475,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get clearAllNodesAndConnections => 'Vymazat všechny uzly a spojení';
 
   @override
-  String get addToClaudeDesktopConfig => 'Přidat do claude_desktop_config.json';
-
-  @override
   String get connectAiAssistantsToData => 'Připojte AI asistenty k vašim datům';
-
-  @override
-  String get useYourMcpApiKey => 'Použijte svůj MCP API klíč';
 
   @override
   String get realTimeTranscript => 'Přepis v reálném čase';
@@ -9967,7 +9958,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get transcriptionNoAudio => 'Transkripce nepřijímá zvuk';
 
   @override
-  String get tapPlusToStartRecording => 'Klepnutím na + začnete nahrávat';
+  String get tapPlusToStartRecording => 'Klepnutím na tlačítko nahrávání začnete nahrávat';
 
   @override
   String get chatBlockTask => 'Úkol';
@@ -10209,7 +10200,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'Nahrané konverzace se zobrazí tady. První nahrajete klepnutím na + na domovské obrazovce.';
+      'Nahrané konverzace se zobrazí tady. První nahrajete klepnutím na tlačítko nahrávání na domovské obrazovce.';
 
   @override
   String get conversationMap => 'Mapa konverzací';
@@ -10685,7 +10676,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get deviceConnecting => 'Připojování…';
 
   @override
-  String get recordOptionsTip => 'Tip: podržením tlačítka nahrávání nahrajete telefonní hovor.';
+  String get recordOptionsTip => 'Tip: klepnutím na šipku na tlačítku nahrávání nahrajete telefonní hovor.';
 
   @override
   String get firmwareUpdateFailedTitle => 'Aktualizace se nezdařila';
@@ -11155,4 +11146,88 @@ class AppLocalizationsCs extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'Když někoho pojmenujete, Omi si uchová krátkou ukázku hlasu, aby ho příště poznal';
+
+  @override
+  String get leaveBlank => 'Nechte prázdné';
+
+  @override
+  String get mcpOAuthSetup =>
+      'Na claude.ai přidejte vlastní konektor a vložte URL serveru. Pokud Claude požádá o pokročilé OAuth Client ID, použijte hodnotu níže a nechte tajný klíč prázdný — nikdy nepoužívejte svůj MCP API klíč jako OAuth secret.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'Přidat do ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'Na Claude Desktop → Settings → Connectors přidejte vlastní konektor a vložte URL serveru. Pokud Claude požádá o pokročilé OAuth Client ID, použijte hodnotu níže a nechte tajný klíč prázdný — nikdy nepoužívejte svůj MCP API klíč jako OAuth secret.';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Přepisy nejsou k dispozici, nahrávání pokračuje v zařízení a později se zpracuje';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Přepis není k dispozici · ukládá se v zařízení';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Čekající přepisy $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Čekající přepisy $count';
+  }
+
+  @override
+  String get captureSourceCall => 'Hovor';
+
+  @override
+  String get captureSourcePhoneMic => 'Mikrofon telefonu';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Pokračovat';
+
+  @override
+  String get finish => 'Dokončit';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Přívěsek pozastaven · po dokončení pokračuje';
+
+  @override
+  String get pendantIsListeningTitle => 'Váš přívěsek poslouchá';
+
+  @override
+  String get oneSourceAtATime => 'Omi nahrává vždy jen z jednoho zdroje.';
+
+  @override
+  String get recordWithPhoneInstead => 'Nahrávat raději telefonem';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'Přívěsek se pozastaví, dokud neskončíte';
+
+  @override
+  String get pendantPausesDuringCall => 'Přívěsek se během hovoru pozastaví';
+
+  @override
+  String get keepUsingPendant => 'Dál používat přívěsek';
+
+  @override
+  String get recordWith => 'Nahrát pomocí';
+
+  @override
+  String get moreWaysToRecord => 'Další způsoby nahrávání';
+
+  @override
+  String get openCall => 'Otevřít hovor';
+
+  @override
+  String get captureRecoveryBanner => 'Zvuk přívěsku se do aplikace nedostává — opravte klepnutím';
 }

@@ -937,9 +937,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'Toevoegen aan claude_desktop_config.json';
-
-  @override
   String get copyConfig => 'Configuratie kopiëren';
 
   @override
@@ -2485,13 +2482,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get clearAllNodesAndConnections => 'Alle knooppunten en verbindingen wissen';
 
   @override
-  String get addToClaudeDesktopConfig => 'Toevoegen aan claude_desktop_config.json';
-
-  @override
   String get connectAiAssistantsToData => 'Verbind AI-assistenten met je gegevens';
-
-  @override
-  String get useYourMcpApiKey => 'Gebruik je MCP API-sleutel';
 
   @override
   String get realTimeTranscript => 'Realtime transcriptie';
@@ -9995,7 +9986,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get transcriptionNoAudio => 'Transcriptie ontvangt geen audio';
 
   @override
-  String get tapPlusToStartRecording => 'Tik op + om de opname te starten';
+  String get tapPlusToStartRecording => 'Tik op de opnameknop om de opname te starten';
 
   @override
   String get chatBlockTask => 'Taak';
@@ -10238,7 +10229,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'Gesprekken die je opneemt verschijnen hier. Tik op + op Home om je eerste op te nemen.';
+      'Gesprekken die je opneemt verschijnen hier. Tik op Home op de opnameknop om je eerste op te nemen.';
 
   @override
   String get conversationMap => 'Gesprekskaart';
@@ -10718,7 +10709,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get deviceConnecting => 'Verbinden…';
 
   @override
-  String get recordOptionsTip => 'Tip: houd de opnameknop ingedrukt om een telefoongesprek op te nemen.';
+  String get recordOptionsTip => 'Tip: tik op de pijl op de opnameknop om een telefoongesprek op te nemen.';
 
   @override
   String get firmwareUpdateFailedTitle => 'Update mislukt';
@@ -11192,4 +11183,89 @@ class AppLocalizationsNl extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'Als je iemand een naam geeft, bewaart Omi een kort stemfragment om diegene de volgende keer te herkennen';
+
+  @override
+  String get leaveBlank => 'Leeg laten';
+
+  @override
+  String get mcpOAuthSetup =>
+      'Voeg op claude.ai een aangepaste connector toe en plak de server-URL. Als Claude om een geavanceerde OAuth Client ID vraagt, gebruik dan de waarde hieronder en laat het geheim leeg — gebruik je MCP API-sleutel nooit als OAuth-geheim.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'Toevoegen aan ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'Voeg op Claude Desktop → Settings → Connectors een aangepaste connector toe en plak de server-URL. Als Claude om een geavanceerde OAuth Client ID vraagt, gebruik dan de waarde hieronder en laat het geheim leeg — gebruik je MCP API-sleutel nooit als OAuth-geheim.';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Transcripties zijn niet beschikbaar, de opname gaat door op het apparaat en wordt later verwerkt';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice =>
+      'Transcriptie niet beschikbaar · wordt op het apparaat opgeslagen';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Transcripties in behandeling $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Transcripties in behandeling $count';
+  }
+
+  @override
+  String get captureSourceCall => 'Gesprek';
+
+  @override
+  String get captureSourcePhoneMic => 'Telefoonmicrofoon';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Hervatten';
+
+  @override
+  String get finish => 'Afronden';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Hanger gepauzeerd · gaat verder als je klaar bent';
+
+  @override
+  String get pendantIsListeningTitle => 'Je hanger luistert';
+
+  @override
+  String get oneSourceAtATime => 'Omi neemt steeds van één bron tegelijk op.';
+
+  @override
+  String get recordWithPhoneInstead => 'In plaats daarvan met telefoon opnemen';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'Hanger pauzeert tot je klaar bent';
+
+  @override
+  String get pendantPausesDuringCall => 'Hanger pauzeert tijdens het gesprek';
+
+  @override
+  String get keepUsingPendant => 'Hanger blijven gebruiken';
+
+  @override
+  String get recordWith => 'Opnemen met';
+
+  @override
+  String get moreWaysToRecord => 'Meer manieren om op te nemen';
+
+  @override
+  String get openCall => 'Gesprek openen';
+
+  @override
+  String get captureRecoveryBanner => 'De audio van de hanger komt niet aan in de app — tik om te repareren';
 }

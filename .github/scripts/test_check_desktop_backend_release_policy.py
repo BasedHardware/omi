@@ -315,10 +315,11 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
                 self.assertTrue(any(f"{pinecone_key}=" in error for error in errors), errors)
 
         missing_removal = self.prod.replace(
-            "            --remove-secrets=PINECONE_API_KEY,PINECONE_HOST\n",
+            "            --remove-secrets=PINECONE_API_KEY,PINECONE_HOST,/secrets/firebase/service-account.json\n",
             "",
             1,
         )
+        self.assertNotEqual(missing_removal, self.prod)
         errors = POLICY.validate_deploy_workflow(missing_removal, production=True)
         self.assertTrue(any("--remove-secrets=PINECONE_API_KEY,PINECONE_HOST" in error for error in errors), errors)
 
@@ -430,6 +431,24 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
                         mutated = self.dev[:start] + commented_block + unnamed_peer + self.dev[start + len(block):]
                         errors = POLICY.validate_deploy_workflow(mutated, production=False)
                         self.assertTrue(any(step in error and env_var in error for error in errors), errors)
+
+    def test_production_runs_keyless_and_rejects_a_remounted_key(self) -> None:
+        self.assertEqual(POLICY.validate_deploy_workflow(self.prod, production=True), [])
+        without_identity = self.prod.replace(
+            "            --service-account=desktop-backend-runtime@based-hardware.iam.gserviceaccount.com\n", "", 1
+        )
+        self.assertNotEqual(without_identity, self.prod)
+        errors = POLICY.validate_deploy_workflow(without_identity, production=True)
+        self.assertTrue(any("desktop-backend-runtime" in error for error in errors), errors)
+        remounted = self.prod.replace(
+            "            GEMINI_API_KEY=DESKTOP_GEMINI_API_KEY:latest\n",
+            "            /secrets/firebase/service-account.json=SERVICE_ACCOUNT_JSON:latest\n"
+            "            GEMINI_API_KEY=DESKTOP_GEMINI_API_KEY:latest\n",
+            1,
+        )
+        self.assertNotEqual(remounted, self.prod)
+        errors = POLICY.validate_deploy_workflow(remounted, production=True)
+        self.assertTrue(any("SERVICE_ACCOUNT_JSON:latest" in error for error in errors), errors)
 
     def test_requires_the_keyless_dev_runtime_identity(self) -> None:
         self.assertEqual(POLICY.validate_deploy_workflow(self.dev, production=False), [])
