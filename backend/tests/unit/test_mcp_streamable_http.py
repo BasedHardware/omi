@@ -736,6 +736,21 @@ class TestToolResultContract:
             for hint in ("title", "readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint"):
                 assert hint in tool["annotations"]
 
+    @pytest.mark.parametrize("spec", TOOL_SPECS, ids=lambda spec: spec.name)
+    def test_pagination_properties_advertise_enforced_bounds(self, spec):
+        """Every advertised limit/offset declares the bounds the handler clamps to.
+
+        ``parse_mcp_int`` clamps silently instead of erroring, so the advertised
+        schema is the only place a client can learn the effective ceiling — a
+        bound-less property invites arguments the server will quietly shrink.
+        """
+        for name in ("limit", "offset"):
+            prop = spec.input_schema.get("properties", {}).get(name)
+            if prop is None:
+                continue
+            assert "minimum" in prop, f"{spec.name}.{name} must advertise minimum"
+            assert "maximum" in prop, f"{spec.name}.{name} must advertise maximum"
+
     def test_annotation_hints_match_operation_kind(self):
         by_name = {tool["name"]: tool for tool in MCP_TOOLS}
         assert by_name["get_memories"]["annotations"]["readOnlyHint"] is True
