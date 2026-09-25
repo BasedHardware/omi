@@ -70,8 +70,7 @@ def _account_deletion_status(uid: str) -> str | None:
         return get_user_deletion_wipe_status(uid)
     except Exception as error:
         logger.error(
-            'Account-deletion auth fence unavailable for uid=%s error_type=%s',
-            uid,
+            'Account-deletion auth fence unavailable error_type=%s',
             type(error).__name__,
         )
         raise HTTPException(

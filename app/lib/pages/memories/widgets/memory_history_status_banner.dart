@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:omi/ui/omi_tokens.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/ui_guidelines.dart';
 
@@ -34,7 +35,7 @@ class MemoryHistoryStatusBanner extends StatelessWidget {
             Expanded(
               child: Text(
                 context.l10n.memoryHistoryPartial,
-                style: TextStyle(color: AppStyles.textSecondary, fontSize: 12),
+                style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
               ),
             ),
             if (onLoadMore != null)

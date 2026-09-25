@@ -3,7 +3,6 @@ import 'dart:async';
 import 'dart:ui';
 // trigger rebuild
 
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -68,7 +67,7 @@ import 'package:omi/providers/memories_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/providers/people_provider.dart';
-import 'package:omi/providers/speech_profile_provider.dart';
+import 'package:omi/providers/speaker_tag_prompts_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/providers/task_integration_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
@@ -76,6 +75,7 @@ import 'package:omi/providers/user_provider.dart';
 import 'package:omi/providers/voice_recorder_provider.dart';
 import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/services/auth_service.dart';
+import 'package:omi/ui/omi_theme.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/notifications/action_item_notification_handler.dart';
 import 'package:omi/services/notifications/chat_answer_notification_handler.dart';
@@ -164,21 +164,32 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
   }
 }
 
+/// Set once [ServiceManager.init] has run: it refuses a second call, and Try Again on the startup
+/// failure screen re-runs [_init].
+bool _serviceManagerInitialized = false;
+
 Future _init() async {
-  // Env
-  if (F.env == Environment.prod) {
-    Env.init(ProdEnv());
-  } else {
-    Env.init(DevEnv());
+  // Env. A rejected configuration cannot be fixed by retrying; the failure screen says so.
+  try {
+    if (F.env == Environment.prod) {
+      Env.init(ProdEnv());
+    } else {
+      Env.init(DevEnv());
+    }
+    Env.validateProfilePairing();
+    validateApplicationStartupRouting();
+  } catch (error) {
+    throw StartupConfigurationError(error);
   }
-  Env.validateProfilePairing();
-  validateApplicationStartupRouting();
   await PhysicalQualification.startupStage('isolation', PhysicalQualification.install);
 
   FlutterForegroundTask.initCommunicationPort();
 
   // Service manager
-  await PhysicalQualification.startupStage('service_manager_init', () => ServiceManager.init());
+  if (!_serviceManagerInitialized) {
+    await PhysicalQualification.startupStage('service_manager_init', () => ServiceManager.init());
+    _serviceManagerInitialized = true;
+  }
   LimitlessDeviceConnection.realtimeSuppressionPolicy = () => SharedPreferencesUtil().batchModeEnabled;
 
   // Firebase
@@ -285,6 +296,39 @@ Future _init() async {
   return;
 }
 
+/// Runs start-up and shows the app, or the failure screen (whose Try Again calls this again).
+Future<void> _start() async {
+  try {
+    await _init();
+  } catch (error, stack) {
+    if (PhysicalQualification.enabled) {
+      unawaited(PhysicalQualification.runtimeEvent('startup_error', error: error, stack: stack));
+    }
+    // Startup failed before the first frame. Without this the launch
+    // storyboard stays on screen forever: runApp() is never reached, and the
+    // zone handler below only calls debugPrint, which goes nowhere in
+    // profile/release builds. A misconfigured OMI_API_BASE_URL cost about a
+    // day of investigation for exactly this reason — the app looked hung
+    // when it had in fact thrown a precise, actionable StateError.
+    if (!PhysicalQualification.enabled && Firebase.apps.isNotEmpty) {
+      unawaited(FirebaseCrashlytics.instance.recordError(error, stack, fatal: true).catchError((Object _) {}));
+    }
+    if (!PhysicalQualification.enabled) {
+      AnalyticsManager().recordProductError(ProductErrorKind.startup);
+    }
+    runApp(StartupFailureApp(error: error, stack: stack, onRetry: _start));
+    return;
+  }
+  if (PhysicalQualification.enabled) {
+    unawaited(PhysicalQualification.runtimeEvent('run_app_scheduled'));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(PhysicalQualification.runtimeEvent('first_frame_callback'));
+    });
+  }
+  runApp(const MyApp());
+  if (PhysicalQualification.enabled) unawaited(PhysicalQualification.runtimeEvent('run_app_returned'));
+}
+
 void main() {
   runZonedGuarded(
     () async {
@@ -299,35 +343,7 @@ void main() {
       } else {
         WidgetsFlutterBinding.ensureInitialized();
       }
-      try {
-        await _init();
-      } catch (error, stack) {
-        if (PhysicalQualification.enabled) {
-          unawaited(PhysicalQualification.runtimeEvent('startup_error', error: error, stack: stack));
-        }
-        // Startup failed before the first frame. Without this the launch
-        // storyboard stays on screen forever: runApp() is never reached, and the
-        // zone handler below only calls debugPrint, which goes nowhere in
-        // profile/release builds. A misconfigured OMI_API_BASE_URL cost about a
-        // day of investigation for exactly this reason — the app looked hung
-        // when it had in fact thrown a precise, actionable StateError.
-        if (!PhysicalQualification.enabled && Firebase.apps.isNotEmpty) {
-          unawaited(FirebaseCrashlytics.instance.recordError(error, stack, fatal: true).catchError((Object _) {}));
-        }
-        if (!PhysicalQualification.enabled) {
-          AnalyticsManager().recordProductError(ProductErrorKind.startup);
-        }
-        runApp(StartupFailureApp(error: error, stack: stack));
-        return;
-      }
-      if (PhysicalQualification.enabled) {
-        unawaited(PhysicalQualification.runtimeEvent('run_app_scheduled'));
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          unawaited(PhysicalQualification.runtimeEvent('first_frame_callback'));
-        });
-      }
-      runApp(const MyApp());
-      if (PhysicalQualification.enabled) unawaited(PhysicalQualification.runtimeEvent('run_app_returned'));
+      await _start();
     },
     (error, stack) {
       if (PhysicalQualification.enabled) {
@@ -445,6 +461,7 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
         ChangeNotifierProvider(create: (context) => createProductionConversationProvider()),
         ListenableProvider(create: (context) => AppProvider()),
         ChangeNotifierProvider(create: (context) => PeopleProvider()),
+        ChangeNotifierProvider(create: (context) => SpeakerTagPromptsProvider()),
         ChangeNotifierProvider(create: (context) => UsageProvider()),
         ChangeNotifierProxyProvider<AppProvider, MessageProvider>(
           create: (context) => MessageProvider(),
@@ -484,11 +501,6 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               (previous?..setDeviceProvider(value)) ?? OnboardingProvider(),
         ),
         ListenableProvider(create: (context) => HomeProvider()),
-        ChangeNotifierProxyProvider<DeviceProvider, SpeechProfileProvider>(
-          create: (context) => SpeechProfileProvider(),
-          update: (BuildContext context, device, SpeechProfileProvider? previous) =>
-              (previous?..setProviders(device)) ?? SpeechProfileProvider(),
-        ),
         ChangeNotifierProxyProvider2<AppProvider, ConversationProvider, ConversationDetailProvider>(
           create: (context) => ConversationDetailProvider(),
           update: (BuildContext context, app, conversation, ConversationDetailProvider? previous) =>
@@ -533,34 +545,10 @@ class _MyAppState extends State<MyApp> with WidgetsBindingObserver {
               GlobalCupertinoLocalizations.delegate,
             ],
             supportedLocales: AppLocalizations.supportedLocales,
-            theme: ThemeData(
-              useMaterial3: false,
-              colorScheme: const ColorScheme.dark(
-                primary: Colors.black,
-                secondary: Color(0xFF35343B),
-                surface: Colors.black38,
-              ),
-              snackBarTheme: const SnackBarThemeData(
-                backgroundColor: Color(0xFF1F1F25),
-                contentTextStyle: TextStyle(fontSize: 16, color: Colors.white, fontWeight: FontWeight.w500),
-              ),
-              textTheme: TextTheme(
-                titleLarge: const TextStyle(fontSize: 18, color: Colors.white),
-                titleMedium: const TextStyle(fontSize: 16, color: Colors.white),
-                bodyMedium: const TextStyle(fontSize: 14, color: Colors.white),
-                labelMedium: TextStyle(fontSize: 12, color: Colors.grey.shade200),
-              ),
-              textSelectionTheme: const TextSelectionThemeData(
-                cursorColor: Colors.white,
-                selectionColor: Colors.white24,
-                selectionHandleColor: Colors.white,
-              ),
-              cupertinoOverrideTheme: const CupertinoThemeData(
-                primaryColor: Colors.white, // Controls the selection handles on iOS
-              ),
-            ),
+            theme: buildOmiTheme(),
             themeMode: ThemeMode.dark,
             builder: (context, child) {
+              syncIntlDefaultLocale(Localizations.localeOf(context));
               ErrorWidget.builder = (errorDetails) {
                 return CustomErrorWidget(errorMessage: errorDetails.exceptionAsString());
               };

@@ -25,6 +25,20 @@ def anyio_backend():
     return 'asyncio'
 
 
+@pytest.fixture(autouse=True)
+def _fresh_circuits(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Isolate the module-level breakers per test.
+
+    The breakers are singletons; leg-level circuit gating now makes cross-test
+    state consequential (an earlier file's serve-death opened the Deepgram
+    circuit, and later files' fallback legs were filtered by it).
+    """
+    from utils.stt.provider_resilience import ProviderCircuitBreaker
+
+    for name in ('_deepgram_circuit', '_modulate_circuit', '_parakeet_circuit', '_soniox_circuit'):
+        monkeypatch.setattr(streaming, name, ProviderCircuitBreaker(failure_threshold=3, cooldown_seconds=30.0))
+
+
 def _deepgram_receiver():
     """Duck-typed receiver exposing only what `_create_stt_socket` touches."""
     host = SimpleNamespace(

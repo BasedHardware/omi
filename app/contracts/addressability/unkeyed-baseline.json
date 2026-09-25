@@ -167,7 +167,6 @@
   "app/lib/pages/settings/widgets/plans_sheet.dart": 30,
   "app/lib/pages/settings/widgets/profile_settings_tile.dart": 2,
   "app/lib/pages/settings/wrapped_2025_page.dart": 5,
-  "app/lib/pages/speech_profile/page.dart": 3,
   "app/lib/providers/device_provider.dart": 1,
   "app/lib/services/account_cutover/account_cutover_blocking_gate.dart": 3,
   "app/lib/services/app_review_service.dart": 3,

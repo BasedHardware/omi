@@ -123,6 +123,36 @@ final class SpeakerAssignmentPersistenceTests: XCTestCase {
     XCTAssertNil(segments[2].personId)
   }
 
+  /// Unassign is `personId: nil, isUser: false` through the same write: it must clear both a named
+  /// person and a "You" back to an anonymous speaker, and the clear must survive a reload.
+  func testUnassignClearsPersonAndUserThroughSQLite() async throws {
+    let sessionId = try await TranscriptionStorage.shared.startSession(source: "desktop")
+    for i in 0..<2 {
+      try await TranscriptionStorage.shared.appendSegment(
+        sessionId: sessionId, speaker: i, text: "segment \(i)",
+        startTime: Double(i), endTime: Double(i) + 1)
+    }
+    try await TranscriptionStorage.shared.finishSession(id: sessionId)
+    _ = try await TranscriptionStorage.shared.markSessionCompleted(
+      id: sessionId, backendId: "backend-conv-unassign")
+    _ = try await TranscriptionStorage.shared.updateSpeakerAssignmentByBackendId(
+      "backend-conv-unassign", segmentIds: [], fallbackSegmentOrders: [0], isUser: false, personId: "person-dana")
+    _ = try await TranscriptionStorage.shared.updateSpeakerAssignmentByBackendId(
+      "backend-conv-unassign", segmentIds: [], fallbackSegmentOrders: [1], isUser: true, personId: nil)
+
+    let cleared = try await TranscriptionStorage.shared.updateSpeakerAssignmentByBackendId(
+      "backend-conv-unassign", segmentIds: [], fallbackSegmentOrders: [0, 1], isUser: false, personId: nil)
+    XCTAssertEqual(cleared, 2)
+
+    await RewindDatabase.shared.close()
+    await TranscriptionStorage.shared.invalidateCache()
+    try await RewindDatabase.shared.initialize()
+
+    let segments = try await TranscriptionStorage.shared.getSegments(sessionId: sessionId)
+    XCTAssertEqual(segments.map(\.personId), [nil, nil])
+    XCTAssertEqual(segments.map(\.isUser), [false, false])
+  }
+
   func testAssignmentAgainstUnknownConversationReportsNothingPersisted() async throws {
     let updated = try await TranscriptionStorage.shared.updateSpeakerAssignmentByBackendId(
       "no-such-conversation",
