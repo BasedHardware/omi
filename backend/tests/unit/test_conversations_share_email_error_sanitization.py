@@ -14,23 +14,7 @@ import re
 import sys
 from types import ModuleType
 import unittest
-from unittest.mock import MagicMock, patch
-
-os.environ.setdefault("ENCRYPTION_SECRET", "01234567890123456789012345678901")
-
-# Ensure required modules are stubbed for hermetic standalone execution
-firebase_admin = sys.modules.get("firebase_admin") or ModuleType("firebase_admin")
-firebase_admin.__path__ = []
-firebase_admin_auth = sys.modules.get("firebase_admin.auth") or ModuleType("firebase_admin.auth")
-for exc_name in ["CertificateFetchError", "ExpiredIdTokenError", "InvalidIdTokenError", "RevokedIdTokenError"]:
-    if not hasattr(firebase_admin_auth, exc_name):
-        setattr(firebase_admin_auth, exc_name, type(exc_name, (Exception,), {}))
-sys.modules["firebase_admin"] = firebase_admin
-sys.modules["firebase_admin.auth"] = firebase_admin_auth
-sys.modules.setdefault("cachetools", MagicMock())
-prom = sys.modules.get("prometheus_client")
-if prom is None or not hasattr(prom, "start_http_server"):
-    sys.modules["prometheus_client"] = MagicMock()
+from unittest.mock import MagicMock
 
 CONVERSATIONS_SOURCE_FILE = Path(__file__).resolve().parents[2] / "routers" / "conversations.py"
 
@@ -45,6 +29,36 @@ def _get_endpoint_source(endpoint_name: str) -> str:
 
 
 class ConversationsShareEmailErrorSanitizationTests(unittest.TestCase):
+    _stubbed_modules: dict = {}
+
+    @classmethod
+    def setUpClass(cls):
+        os.environ.setdefault("ENCRYPTION_SECRET", "01234567890123456789012345678901")
+
+        firebase_admin = sys.modules.get("firebase_admin") or ModuleType("firebase_admin")
+        firebase_admin.__path__ = []
+        firebase_admin_auth = sys.modules.get("firebase_admin.auth") or ModuleType("firebase_admin.auth")
+        for exc_name in ["CertificateFetchError", "ExpiredIdTokenError", "InvalidIdTokenError", "RevokedIdTokenError"]:
+            if not hasattr(firebase_admin_auth, exc_name):
+                setattr(firebase_admin_auth, exc_name, type(exc_name, (Exception,), {}))
+
+        stubs = {
+            "firebase_admin": firebase_admin,
+            "firebase_admin.auth": firebase_admin_auth,
+            "cachetools": MagicMock(),
+            "prometheus_client": MagicMock(),
+        }
+
+        for name, mod in stubs.items():
+            if name not in sys.modules:
+                cls._stubbed_modules[name] = mod
+                sys.modules[name] = mod
+
+    @classmethod
+    def tearDownClass(cls):
+        for name in cls._stubbed_modules:
+            sys.modules.pop(name, None)
+
     def test_share_email_sanitizes_delivery_errors(self):
         source = _get_endpoint_source("send_conversation_share_email")
         self.assertNotIn("detail=str(e)", source)
