@@ -657,6 +657,8 @@ struct DesktopHomeView: View {
       isSidebarCollapsed: chatFirstNavigation.isSidebarCollapsed,
       hasCompletedOnboarding: appState.hasCompletedOnboarding,
       isSignedIn: authState.isSignedIn,
+      accountUserID: AuthState.automationAccountUserID(),
+      accountEmail: authState.userEmail,
       isRestoringAuth: authState.isRestoringAuth,
       isAppActive: NSApp.isActive,
       mainWindowTitle: currentWindow?.title,
@@ -701,8 +703,12 @@ struct DesktopHomeView: View {
     }
     highlightedSettingId = settingId
 
-    if target.lowercased().replacingOccurrences(of: "-", with: "_") == "rewind" {
-      navigateToLegacyDestination(.rewind)
+    // Sidebar-named targets (including Conversations/Memories/Rewind) must go
+    // through the same hub-view adapter as the menu and keyboard. Selecting only
+    // the chat-first route leaves the hub on its remembered page — default
+    // Memories — so `navigate conversations` opened Memories.
+    if let item = SidebarNavItem.automationDestination(named: target) {
+      navigateToLegacyDestination(item, automationTarget: target)
       reportAutomationState()
       return
     }
@@ -716,6 +722,11 @@ struct DesktopHomeView: View {
       selectedSettingsSection = .about
     }
     if let route = ChatFirstRoute.automationVisibilityDestination(named: target) {
+      // Conversations and Memories share the one `.memories` shell route; the
+      // hub's persisted sub-destination decides which page actually mounts.
+      if let hubDestination = MemoryHubDestination.destination(forAutomationTarget: target) {
+        memoryDestinationRawValue = hubDestination.rawValue
+      }
       switch route {
       case .more(let page):
         chatFirstNavigation.selectMore(page)
@@ -1059,13 +1070,19 @@ struct DesktopHomeView: View {
   /// Existing menu, keyboard, and automation callers retain their legacy
   /// names. This is the sole root adapter between those callers and typed
   /// Chat-first navigation.
-  private func navigateToLegacyDestination(_ item: SidebarNavItem) {
+  private func navigateToLegacyDestination(
+    _ item: SidebarNavItem,
+    automationTarget: String? = nil
+  ) {
     if item == .permissions {
       selectedSettingsSection = .permissions
       chatFirstNavigation.selectMore(.settings)
       return
     }
-    if let destination = MemoryHubDestination.destination(for: item) {
+    if let destination =
+      automationTarget.flatMap(MemoryHubDestination.destination(forAutomationTarget:))
+      ?? MemoryHubDestination.destination(for: item)
+    {
       memoryDestinationRawValue = destination.rawValue
     }
     chatFirstNavigation.selectLegacyDestination(item)
@@ -1178,7 +1195,11 @@ struct DesktopHomeView: View {
           // labelled "Conversations" and the hub's remembered view defaults to Memories, so
           // without this the menu item lands you somewhere it did not name. The two automation
           // routes below already did this by hand; the menu and keyboard path did not.
-          if let destination = MemoryHubDestination.destination(for: item) {
+          if let hubRaw = notification.userInfo?["hubDestination"] as? Int,
+            let destination = MemoryHubDestination(rawValue: hubRaw)
+          {
+            memoryDestinationRawValue = destination.rawValue
+          } else if let destination = MemoryHubDestination.destination(for: item) {
             memoryDestinationRawValue = destination.rawValue
           }
           // Settings owns pages now, not only preference rows, so a caller that names Settings can
@@ -1234,6 +1255,8 @@ struct ConversationsPageHost: View {
   let appState: AppState
   var brainDestination: MemoryHubDestination? = nil
   var onSelectBrainDestination: ((MemoryHubDestination) -> Void)? = nil
+  /// The hub page an open conversation came from; its Back returns there.
+  var detailOrigin: MemoryHubDestination? = nil
   /// Optional exact record supplied by a Chat-first conversation deep-link.
   /// The normal Conversations page still owns list loading and row selection;
   /// this value only seeds selection when a link fetched a record that is not
@@ -1263,6 +1286,7 @@ struct ConversationsPageHost: View {
       selectedConversation: $selectedConversation,
       brainDestination: brainDestination,
       onSelectBrainDestination: onSelectBrainDestination,
+      detailOrigin: detailOrigin,
       initialCaptureMomentTimestamp: initialCaptureMomentTimestamp,
       onCaptureFocusResolved: onCaptureFocusResolved,
       onDiscussInChat: onDiscussInChat,

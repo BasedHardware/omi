@@ -15,6 +15,8 @@
 # One full _proxy round trip (metering -> sanitize -> dispatch -> terminal telemetry) with an
 # in-process capturing client; hermetic, but the end-to-end path costs ~0.15-0.19s CPU.
 tests/unit/test_desktop_proxy.py::test_proxy_dispatches_server_paid_bodies_with_the_2048_cap
+# First test in the file: get_llm('conv_structure') pays the gateway client graph under file isolation (~0.22-0.30s CPU).
+tests/unit/test_pusher_conversation_ledger_instrument.py::test_conversation_lane_gateway_client_is_attributed
 # Renders all eight first-party charts in dev and prod; still hermetic and required in the unit lane.
 tests/unit/test_llm_gateway_deploy_contract.py::test_gateway_deploy_workflows_bind_identity_and_gate_serving_static_contract
 tests/unit/test_rendered_deployment_contract.py::test_repository_charts_render_the_full_contract_when_helm_is_available
@@ -118,6 +120,7 @@ tests/unit/test_backend_runtime_env_validator.py::test_repo_rendered_cloud_run_m
 tests/unit/test_verify_llm_gateway_serving.py::test_gateway_promotion_intent_tracks_runtime_and_helm_listener_surfaces
 tests/unit/test_byok_security_enrollment.py::TestBYOKActivationValidation::test_valid_activation_persists_fingerprints
 tests/unit/test_verify_pusher_config_references.py::test_dev_pusher_contract_requires_typesense_host_secret_clear
+tests/unit/test_verify_pusher_config_references.py::test_dev_pusher_literal_policy_rejects_stale_deepgram_model
 tests/unit/test_verify_pusher_config_references.py::test_rendered_dev_pusher_direct_bindings_match_source_contract
 tests/unit/test_byok_security_credentials.py::TestCacheKeyHashing::test_hash_key_returns_sha256
 tests/unit/test_byok_security_quota.py::TestChatQuotaBYOKBypass::test_enforce_chat_quota_bypasses_for_byok_with_openai_key
@@ -310,6 +313,7 @@ tests/unit/test_bounded_firestore_list_reads.py::test_legacy_get_memories_no_fir
 tests/unit/test_replay_llm_gateway_fake_upstream_oracle.py::test_loopback_oracle_bypasses_ambient_proxy_configuration
 # File-isolation amortizes the merge_conversations import (models/database graph) into the first call.
 tests/unit/test_merge_audio_chunk_copy_failure.py::test_merge_propagates_custom_stt_marker_from_any_source
+tests/unit/test_merge_photo_read_failure.py::test_photo_read_failure_keeps_the_sources
 tests/unit/test_agent_proxy_async_boundaries.py::test_persistent_lease_heartbeat_failure_fails_closed_before_ttl_expires
 # First test amortizes the file-isolated utils.llm.clients import into its call phase.
 tests/unit/test_prompt_cache_wire_payload.py::test_get_llm_forwards_explicit_cache_options_and_production_cache_key
@@ -337,6 +341,24 @@ tests/unit/test_llm_gateway_vertex_provider.py::test_gateway_registry_uses_nativ
 # File-level: red-proof AST walks of production sources exceed 0.30s CPU per
 # test under saturated pre-push once this file is in the changed set.
 tests/unit/test_client_processing_trust_boundary.py
+# Saturated full-suite measurements (2026-09-10, 1126-file file-isolation fanout,
+# 10 cores): only these pre-existing contract tests crossed the 0.10s warn target
+# (0.19-0.26s CPU), so they keep guard suppression against a busier host. Every
+# other runtime_env validator and rollout test touched by this change measured
+# under 0.10s CPU even saturated and stays guard-visible.
+tests/unit/test_backend_runtime_env_validator.py::test_jit_admission_surface_omission_fails_compose[dev]
+tests/unit/test_backend_runtime_env_validator.py::test_jit_admission_surface_omission_fails_compose[prod]
+tests/unit/test_backend_runtime_env_validator.py::test_jit_admission_surfaces_require_posthog_and_listen_data_plane[dev]
+tests/unit/test_backend_runtime_env_validator.py::test_jit_admission_surfaces_require_posthog_and_listen_data_plane[prod]
+tests/unit/test_backend_runtime_env_validator.py::test_memory_maintenance_job_contract_rejects_daily_sweep_host_and_requires_posthog[dev]
+tests/unit/test_backend_runtime_env_validator.py::test_memory_maintenance_job_contract_rejects_daily_sweep_host_and_requires_posthog[prod]
 # First route test in its file: amortizes the routers.users FastAPI/pydantic import into its call
 # phase. Structural (the file-isolation runner model), not a per-test regression.
 tests/unit/test_daily_summary_generation.py::test_create_route_happy_path
+# D2 plan-quota retirement: drives the real runtime-env workflow validator over the repository's own
+# manifest and composite deploy actions (parses ~2k lines of YAML per environment); hermetic, required
+# in the unit lane so a dropped --remove-env-vars entry fails before the deploy does.
+tests/unit/test_plan_quota_env_retirement.py::test_deploy_actions_strip_the_overlays_from_every_cloud_run_service[dev]
+tests/unit/test_plan_quota_env_retirement.py::test_deploy_actions_strip_the_overlays_from_every_cloud_run_service[prod]
+tests/unit/test_verify_backend_release_vector.py::test_legacy_binding_migration_rejects_multi_container_services_without_mutation
+tests/unit/test_selfheal_recovery.py::test_recovery_minimum_structure_raises_before_persist_or_fanout

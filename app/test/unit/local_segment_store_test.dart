@@ -86,9 +86,49 @@ void main() {
     provider.testSessionStartSeconds = 1700000000;
     provider.segments = [_seg('a', 'I agree', speaker: 'Alice'), _seg('b', 'I refuse', speaker: 'Bob')];
     provider.notifyListeners();
-    await pumpEventQueue();
+    await provider.pendingLiveSegmentWrite;
 
     final loaded = await LocalSegmentStore.at(dir).loadSession('live-1700000000');
     expect(transcriptSha256(loaded), '6698e08ad93c92100b75e3ab279d15bfa3a70288b1693377841759a26e588d40');
+  });
+
+  test('the live segment write can be awaited and lands the last update', () async {
+    final store = LocalSegmentStore.at(dir);
+    final provider = CaptureProvider(localSegmentStore: store);
+    addTearDown(provider.dispose);
+    provider.testSessionStartSeconds = 1700000001;
+
+    provider.segments = [_seg('a', 'first')];
+    provider.notifyListeners();
+    provider.segments = [_seg('a', 'second')];
+    provider.notifyListeners();
+    await provider.pendingLiveSegmentWrite;
+
+    final loaded = await LocalSegmentStore.at(dir).loadSession('live-1700000001');
+
+    expect(loaded.map((s) => s.text), ['second']);
+  });
+
+  test('a failed write is retried on the next identical update', () async {
+    final blocked = File('${dir.path}/blocked');
+    await blocked.writeAsString('not a directory');
+    final store = LocalSegmentStore.at(Directory(blocked.path));
+    final provider = CaptureProvider(localSegmentStore: store);
+    addTearDown(provider.dispose);
+    provider.testSessionStartSeconds = 1700000002;
+
+    provider.segments = [_seg('a', 'only')];
+    provider.notifyListeners();
+    await provider.pendingLiveSegmentWrite;
+
+    expect(await LocalSegmentStore.at(Directory(blocked.path)).loadSession('live-1700000002'), isEmpty);
+
+    await blocked.delete();
+    provider.notifyListeners();
+    await provider.pendingLiveSegmentWrite;
+
+    final loaded = await LocalSegmentStore.at(Directory(blocked.path)).loadSession('live-1700000002');
+
+    expect(loaded.map((s) => s.text), ['only']);
   });
 }

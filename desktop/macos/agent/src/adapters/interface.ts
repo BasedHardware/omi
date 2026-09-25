@@ -14,7 +14,6 @@ export interface HarnessConfig {
   /** Omi API base URL for pi-mono provider */
   omiApiBaseUrl?: string;
   /** Firebase auth token for Omi API authentication */
-  authToken?: string;
 }
 
 /**
@@ -404,6 +403,11 @@ export interface AdapterAttemptResult {
   jitEstimatedCostUsd?: number | null;
   jitProviderAttempts?: number;
   jitReceiptAttemptIDs?: string[];
+  /** Provider identities observed on completion events (for example
+   *  `openai-codex`). These are response facts, never requested aliases. */
+  providerTargets?: string[];
+  /** Served model identities observed on completion events. */
+  modelsUsed?: string[];
   /** Adapter-owned native session id for request-scoped tool relays. */
   adapterSessionId: string;
   terminalStatus: "succeeded" | "failed" | "cancelled";

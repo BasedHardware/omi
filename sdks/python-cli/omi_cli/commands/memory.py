@@ -5,7 +5,9 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Optional
 
 import typer
+from rich.markup import escape
 
+from omi_cli.client import path_segment
 from omi_cli.errors import NotFoundError, UsageError
 from omi_cli.models import MemoryCategory, MemoryVisibility
 from omi_cli.output import shorten
@@ -51,7 +53,7 @@ def list_memories(
     for m in items or []:
         rows.append(
             {
-                "id": shorten(m.get("id"), 14),
+                "id": m.get("id"),
                 "category": m.get("category"),
                 "visibility": m.get("visibility"),
                 "content": shorten(m.get("content"), 60),
@@ -85,8 +87,9 @@ def get_memory(
                 if item.get("id") == memory_id:
                     ctx.renderer.emit(item, title="memory")
                     return
-            if len(page) < page_size:
-                raise NotFoundError(message=f"Memory not found: {memory_id}")
+            # The API validates records after applying its database offset, so
+            # malformed historical rows can make a non-final page short.
+            # Keep scanning at the next database offset in that case.
             offset += page_size
 
 
@@ -132,8 +135,8 @@ def update_memory(
             message="No fields to update", detail="Provide at least one of --content/--category/--visibility/--tag."
         )
     with ctx.make_client() as client:
-        result = client.patch(f"/v1/dev/user/memories/{memory_id}", json_body=body)
-    ctx.renderer.success(f"Memory updated: [bold]{memory_id}[/bold]")
+        result = client.patch(f"/v1/dev/user/memories/{path_segment(memory_id)}", json_body=body)
+    ctx.renderer.success(f"Memory updated: [bold]{escape(memory_id)}[/bold]")
     ctx.renderer.emit(result, title="memory")
 
 
@@ -147,7 +150,7 @@ def delete_memory(
     if not confirm:
         typer.confirm(f"Delete memory {memory_id}?", abort=True)
     with ctx.make_client() as client:
-        result = client.delete(f"/v1/dev/user/memories/{memory_id}")
+        result = client.delete(f"/v1/dev/user/memories/{path_segment(memory_id)}")
     if ctx.renderer.json_mode:
         ctx.renderer.emit(result)
-    ctx.renderer.success(f"Deleted memory [bold]{memory_id}[/bold].")
+    ctx.renderer.success(f"Deleted memory [bold]{escape(memory_id)}[/bold].")

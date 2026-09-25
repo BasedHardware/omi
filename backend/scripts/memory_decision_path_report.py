@@ -51,6 +51,12 @@ SPEAKER_BUCKETS = ('0', '1-3', '4-6', '7-10', '11-15', '16+')
 # and reads as shattered speaker clustering. 'absent' is telemetry emitted before
 # owner_speaker_ids shipped; it is kept visible rather than folded into a real state.
 OWNER_HEALTH_BUCKETS = ('owner_silent', 'single_owner', 'multi_owner', 'absent')
+SWEEP_COUNTERS = (
+    'dropped_subjectless',
+    'dropped_basis_proposed',
+    'demoted_owner_untrusted',
+    'skipped_duplicate_lookup',
+)
 
 Event = dict[str, Any]
 Rate = dict[str, Any]
@@ -145,7 +151,7 @@ def _decode_event(entry: Any, ordinal: int) -> tuple[Event | None, str | None]:
     if not isinstance(entry, Mapping):
         return None, 'entry_not_object'
 
-    if entry.get('stage') in {'capture', 'promotion'}:
+    if entry.get('stage') in {'capture', 'promotion', 'sweep'}:
         event = dict(entry)
         timestamp = event.pop('timestamp', None)
     else:
@@ -176,10 +182,23 @@ def _nonempty_string(event: Mapping[str, Any], field: str) -> bool:
     return isinstance(event.get(field), str) and bool(str(event[field]).strip())
 
 
+def _nonneg_int(value: Any) -> bool:
+    return not isinstance(value, bool) and isinstance(value, int) and value >= 0
+
+
 def _validate_event(event: Mapping[str, Any]) -> str | None:
     stage = event.get('stage')
-    if stage not in {'capture', 'promotion'}:
+    if stage not in {'capture', 'promotion', 'sweep'}:
         return 'stage_invalid'
+    if stage == 'sweep':
+        if not _nonempty_string(event, 'uid'):
+            return 'sweep_uid_invalid'
+        if not _nonempty_string(event, 'local_date'):
+            return 'sweep_local_date_invalid'
+        for field in SWEEP_COUNTERS:
+            if not _nonneg_int(event.get(field)):
+                return f'sweep_{field}_invalid'
+        return None
     for field in ('uid', 'memory_id'):
         if not _nonempty_string(event, field):
             return f'{stage}_{field}_invalid'
@@ -388,6 +407,7 @@ def build_report(
 ) -> dict[str, Any]:
     capture_raw = [event for event in events if event['stage'] == 'capture']
     promotion_raw = [event for event in events if event['stage'] == 'promotion']
+    sweep_raw = [event for event in events if event['stage'] == 'sweep']
     captures = _latest_by(capture_raw, lambda event: (event['uid'], event['memory_id']))
     conversations, inconsistent_conversations = _conversation_rows(captures)
     applied = _latest_by(
@@ -395,6 +415,8 @@ def build_report(
         lambda event: (event['uid'], event['memory_id']),
     )
     failures = [event for event in promotion_raw if event['status'] != 'applied']
+    sweeps = _latest_by(sweep_raw, lambda event: (event['uid'], event['local_date']))
+    sweep_counts = {field: sum(int(event[field]) for event in sweeps) for field in SWEEP_COUNTERS}
     truncated = query_limit is not None and input_entries >= query_limit
     invalid_total = sum(invalid_entries.values())
 
@@ -451,6 +473,7 @@ def build_report(
             'Clean/degraded diarization is still not a labelled outcome; speaker counts are not a health label.',
             'Capture disagreement is a per-memory comparison of model_about with resolved subject_attribution.',
             'Promotion failures are attempts, not rejection decisions; repeated retries can appear more than once.',
+            'Sweep counters are per completed local day after the candidate gate; they carry no memory text.',
         ],
         'quality': {
             'input_entries': input_entries,
@@ -464,6 +487,7 @@ def build_report(
                 1 for event in promotion_raw if event['status'] == 'applied'
             )
             - len(applied),
+            'duplicate_sweep_events_removed': len(sweep_raw) - len(sweeps),
             'inconsistent_capture_conversations': inconsistent_conversations,
         },
         'totals': {
@@ -474,6 +498,10 @@ def build_report(
             'promotion_applied_decisions': len(applied),
             'promotion_failure_attempts': len(failures),
             'promotion_users': len({event['uid'] for event in promotion_raw}),
+            'sweep_days': len({event['local_date'] for event in sweeps}),
+            'sweep_user_days': len(sweeps),
+            'sweep_users': len({event['uid'] for event in sweeps}),
+            **{f'sweep_{field}': sweep_counts[field] for field in SWEEP_COUNTERS},
         },
         'capture': {
             'regime_memory_share': _distribution(captures, lambda event: str(event['capture_regime']), unit='memories'),
@@ -527,6 +555,9 @@ def build_report(
             'failure_reason_codes': _distribution(
                 failures, lambda event: str(event['reason_code']), unit='failure attempts'
             ),
+        },
+        'sweep': {
+            'counters': {field: {'count': sweep_counts[field], 'unit': 'candidates'} for field in SWEEP_COUNTERS}
         },
     }
     return report
@@ -620,6 +651,15 @@ def render_human(report: Mapping[str, Any]) -> str:
     _render_section(lines, 'Applied rejection reason codes', promotion['rejection_reason_codes'])
     _render_section(lines, 'Operational failure statuses (attempt grain)', promotion['failure_statuses'])
     _render_section(lines, 'Operational failure reason codes (attempt grain)', promotion['failure_reason_codes'])
+    lines.append('')
+    lines.append('Sweep candidate-gate drops')
+    sweep_counters = report.get('sweep', {}).get('counters', {})
+    if totals.get('sweep_user_days', 0) == 0:
+        lines.append('  no eligible observations (denominator 0)')
+    else:
+        for field in SWEEP_COUNTERS:
+            metric = sweep_counters.get(field) or {}
+            lines.append(f"  {field}: {metric.get('count', 0)} candidates across {totals['sweep_user_days']} user-days")
     lines.append('')
     owner_covered = totals['capture_conversations_with_owner_counts']
     if owner_covered:

@@ -2,7 +2,6 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import 'package:flutter_foreground_task/flutter_foreground_task.dart';
 import 'package:geolocator/geolocator.dart';
@@ -12,35 +11,25 @@ import 'package:provider/provider.dart';
 import 'package:pull_down_button/pull_down_button.dart';
 import 'package:upgrader/upgrader.dart';
 
-import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/geolocation.dart';
 import 'package:omi/gen/pigeon_communicator.g.dart';
-import 'package:omi/app_globals.dart';
 import 'package:omi/pages/action_items/action_items_page.dart';
-import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/apps/page.dart';
 import 'package:omi/pages/chat/page.dart';
-import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/conversations/conversations_page.dart';
 import 'package:omi/pages/conversations/auto_sync_page.dart';
 import 'package:omi/pages/conversations/sync_page.dart';
 import 'package:omi/pages/action_items/widgets/task_selection_action_bar.dart';
 import 'package:omi/pages/conversations/widgets/merge_action_bar.dart';
 import 'package:omi/pages/home/home_content.dart';
-import 'package:omi/pages/memories/page.dart';
 import 'package:omi/pages/phone_calls/active_call_banner.dart';
-import 'package:omi/providers/usage_provider.dart';
-import 'package:omi/pages/settings/daily_summary_detail_page.dart';
-import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/apps/add_app.dart';
 import 'package:omi/pages/apps/add_mcp_server_page.dart';
 import 'package:omi/pages/settings/settings_drawer.dart';
 import 'package:omi/pages/settings/task_integrations_page.dart';
-import 'package:omi/pages/settings/wrapped_2025_page.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/capture_provider.dart';
@@ -64,6 +53,8 @@ import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/audio/foreground.dart';
 import 'package:omi/utils/analytics/background_resource_telemetry.dart';
+import 'package:omi/utils/analytics/background_checkpoint_store.dart';
+import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
@@ -72,7 +63,13 @@ import 'package:omi/widgets/freemium_switch_dialog.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
 import 'package:omi/widgets/upgrade_alert.dart';
 import 'package:omi/widgets/bottom_nav_bar.dart';
+import 'package:omi/widgets/header_circle_button.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/interactive_device_onboarding_wrapper.dart';
+import 'package:omi/services/sockets/listen_client_state.dart';
+import 'package:omi/ui/ui.dart';
+import 'home_deep_links.dart';
+import 'home_navigation.dart';
+import 'home_prompt_gate.dart';
 import 'widgets/battery_info_widget.dart';
 
 class HomePageWrapper extends StatefulWidget {
@@ -115,6 +112,7 @@ class _HomePageProductState extends State<_HomePageProduct> {
       // Check actual system permission state — the SharedPreferences flag may
       // be stale (e.g. user granted via Settings > Permissions, or reinstall).
       final notifGranted = await Permission.notification.isGranted;
+      if (!mounted) return;
       if (notifGranted) {
         SharedPreferencesUtil().notificationsEnabled = true;
         NotificationService.instance.register();
@@ -159,13 +157,22 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   // Freemium switch handler for auto-switch dialogs
   final FreemiumSwitchHandler _freemiumHandler = FreemiumSwitchHandler();
 
+  // Holds startup prompts while recording, on a call or during a firmware update.
+  final HomePromptGate _promptGate = HomePromptGate();
+
   late final BackgroundResourceTelemetry _backgroundResourceTelemetry = BackgroundResourceTelemetry(
+    checkpointStore: PreferencesBackgroundCheckpointStore(),
+    ownerKey: () => AnalyticsManager.currentIdentity ?? '',
+    identityEpoch: () => AnalyticsManager.identityEpoch,
+    enabled: () => AnalyticsManager.identityKnown && AnalyticsManager.trackingEnabled,
     emit: (eventName, properties) => PlatformManager.instance.analytics.track(eventName, properties: properties),
   );
 
   CaptureProvider? _captureProvider;
   DeviceProvider? _deviceProviderForQuickActions;
   CaptureProvider? _captureProviderForQuickActions;
+  Timer? _announcementTimer;
+  final List<Timer> _prewarmTimers = [];
 
   void _ensurePageInitialized(int pageIndex) {
     if (pageIndex < 0 || pageIndex >= _pages.length || _pages[pageIndex] != null) return;
@@ -201,14 +208,20 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   }
 
   void _prewarmRemainingTabs(int selectedIndex) {
+    for (final timer in _prewarmTimers) {
+      timer.cancel();
+    }
+    _prewarmTimers.clear();
     var delay = const Duration(milliseconds: 350);
     for (var index = 0; index < _pages.length; index++) {
       if (index == selectedIndex) continue;
       final pageIndex = index;
-      Timer(delay, () {
-        if (!mounted) return;
-        _schedulePageInitialization(pageIndex);
-      });
+      _prewarmTimers.add(
+        Timer(delay, () {
+          if (!mounted) return;
+          _schedulePageInitialization(pageIndex);
+        }),
+      );
       delay += const Duration(milliseconds: 180);
     }
   }
@@ -369,6 +382,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     super.didChangeAppLifecycleState(state);
+    ListenClientState.instance.onLifecycle(state);
     String event = '';
     if (state == AppLifecycleState.paused) {
       event = 'App is paused';
@@ -414,8 +428,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     PlatformManager.instance.crashReporter.logInfo(event);
   }
 
-  ///Screens with respect to subpage
-  final Map<String, Widget> screensWithRespectToPath = {'/facts': const MemoriesPage()};
   bool? previousConnection;
 
   void _onReceiveTaskData(dynamic data) async {
@@ -434,42 +446,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   @override
   void initState() {
+    unawaited(_backgroundResourceTelemetry.recoverInterrupted());
     SharedPreferencesUtil().onboardingCompleted = true;
     if (!SharedPreferencesUtil().permissionsCompleted) {
       SharedPreferencesUtil().permissionsCompleted = true;
     }
     updateUserOnboardingState(completed: true);
 
-    // Navigate uri
-    Uri? navigateToUri;
-    var pageAlias = "home";
-    var homePageIdx = 0;
-    String? detailPageId;
-
-    if (widget.navigateToRoute != null && widget.navigateToRoute!.isNotEmpty) {
-      navigateToUri = Uri.tryParse("http://localhost.com${widget.navigateToRoute!}");
-      Logger.debug("initState ${navigateToUri?.pathSegments.join("...")}");
-      var segments = navigateToUri?.pathSegments ?? [];
-      if (segments.isNotEmpty) {
-        pageAlias = segments[0];
-      }
-      if (segments.length > 1) {
-        detailPageId = segments[1];
-      }
-
-      switch (pageAlias) {
-        case "action-items":
-          homePageIdx = 2;
-          break;
-        case "memories":
-        case "facts":
-          homePageIdx = 0;
-          break;
-        case "apps":
-          homePageIdx = 3;
-          break;
-      }
-    }
+    // A link the shell was opened with: select its tab now (parent), open its page after start-up.
+    final initialLink = HomeDeepLink.parse(widget.navigateToRoute);
+    final homePageIdx = initialLink?.tabIndex ?? 0;
 
     // Home controller
     context.read<HomeProvider>().selectedIndex = homePageIdx;
@@ -499,160 +485,100 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         await Provider.of<CaptureProvider>(
           context,
           listen: false,
-        ).streamDeviceRecording(device: Provider.of<DeviceProvider>(context, listen: false).connectedDevice);
+        ).streamDeviceRecording(device: Provider.of<DeviceProvider>(context, listen: false).capabilityNormalizedDevice);
       }
 
-      // Navigate
-      if (!mounted) return;
-      switch (pageAlias) {
-        case "apps":
-          if (detailPageId != null && detailPageId.isNotEmpty) {
-            final appProvider = context.read<AppProvider>();
-            var app = await appProvider.getAppFromId(detailPageId);
-            if (app != null && mounted) {
-              Navigator.push(context, MaterialPageRoute(builder: (context) => AppDetailPage(app: app)));
-            }
-          }
-          break;
-        case "chat":
-          Logger.debug('inside chat alias $detailPageId');
-          if (detailPageId != null && detailPageId.isNotEmpty) {
-            var appId = detailPageId != "omi" ? detailPageId : ''; // omi ~ no select
-            if (mounted) {
-              var appProvider = Provider.of<AppProvider>(context, listen: false);
-              var messageProvider = Provider.of<MessageProvider>(context, listen: false);
-              App? selectedApp;
-              if (appId.isNotEmpty) {
-                selectedApp = await appProvider.getAppFromId(appId);
-              }
-              appProvider.setSelectedChatAppId(appId);
-              await messageProvider.refreshMessages();
-              if (messageProvider.messages.isEmpty) {
-                messageProvider.sendInitialAppMessage(selectedApp);
-              }
-            }
-          } else {
-            if (mounted) {
-              await Provider.of<MessageProvider>(context, listen: false).refreshMessages();
-            }
-          }
-          // Navigate to chat page directly since it's no longer in the tab bar
-          // All async setup (streamDeviceRecording, refreshMessages) is already awaited above,
-          // so the widget tree is fully settled — push directly.
-          if (mounted) {
-            Navigator.push(context, MaterialPageRoute(builder: (context) => const ChatPage(isPivotBottom: false)));
-          }
-          break;
-        case "settings":
-          // Use context from the current widget instead of navigator key for bottom sheet
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) {
-              SettingsDrawer.show(context);
-            }
-          });
-          if (detailPageId == 'data-privacy') {
-            globalNavigatorKey.currentState?.push(MaterialPageRoute(builder: (context) => const DataPrivacyPage()));
-          }
-          break;
-        case "memories":
-        case "facts":
-          globalNavigatorKey.currentState?.push(MaterialPageRoute(builder: (context) => const MemoriesPage()));
-          break;
-        case "conversation":
-          // Handle conversation deep link: /conversation/{id}?share=1
-          if (detailPageId != null && detailPageId.isNotEmpty) {
-            // Check for share query param
-            final shouldOpenShare = navigateToUri?.queryParameters['share'] == '1';
-            final conversationId = detailPageId; // Capture non-null value
-
-            WidgetsBinding.instance.addPostFrameCallback((_) async {
-              if (!mounted) return;
-
-              // Fetch conversation from server
-              final conversation = await getConversationById(conversationId);
-              if (conversation != null && mounted) {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) =>
-                        ConversationDetailPage(conversation: conversation, openShareToContactsOnLoad: shouldOpenShare),
-                  ),
-                );
-              } else {
-                Logger.debug('Conversation not found: $conversationId');
-              }
-            });
-          }
-          break;
-        case "daily-summary":
-          if (detailPageId != null && detailPageId.isNotEmpty) {
-            // Track notification opened
-            PlatformManager.instance.analytics.dailySummaryNotificationOpened(
-              summaryId: detailPageId,
-              date: '', // Date not available in navigate_to, will be fetched when detail page loads
-            );
-
-            WidgetsBinding.instance.addPostFrameCallback((_) {
-              if (mounted) {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(builder: (context) => DailySummaryDetailPage(summaryId: detailPageId!)),
-                );
-              }
-            });
-          }
-          break;
-        case "wrapped":
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted) {
-              Navigator.push(context, MaterialPageRoute(builder: (context) => const Wrapped2025Page()));
-            }
-          });
-          break;
-        case "action-items":
-          // Tab index already set to 2 (ActionItemsPage) above
-          break;
-        default:
-      }
+      if (!mounted || initialLink == null) return;
+      await openHomeDeepLink(context, initialLink, openSettings: _openSettings);
     });
 
+    HomeNavigation.register(_openRoute);
     _listenToMessagesFromNotification();
     _listenToFreemiumThreshold();
     _checkForAnnouncements();
     _registerAutoSyncCallback();
     _initQuickActions();
+    // Toasts float above the tab bar (and the chat bar on Home) while this shell is the visible route.
+    OmiFeedback.bottomClearance = (ctx) {
+      final onHome = ctx.read<HomeProvider>().selectedIndex == 0;
+      final clearance = onHome ? homeChatBarClearance(ctx) : bottomNavBarClearance(ctx);
+      return clearance - bottomNavBarReservedInset(ctx);
+    };
     super.initState();
 
     // After init
     FlutterForegroundTask.addTaskDataCallback(_onReceiveTaskData);
   }
 
+  /// Opens a link inside this shell (notification taps, quick actions, app links): its tab first,
+  /// then its page — never a second Home (nav #3, #18).
+  Future<void> _openRoute(String route) async {
+    final link = HomeDeepLink.parse(route);
+    if (link == null || !mounted) return;
+    final tab = link.tabIndex;
+    if (tab != null) {
+      _ensurePageInitialized(tab);
+      context.read<HomeProvider>().setIndex(tab);
+    }
+    await openHomeDeepLink(context, link, openSettings: _openSettings);
+  }
+
+  /// Opens Settings, and once the reader is back on Home restarts capture if they changed the
+  /// language, speech profile or transcription model (onboarding-home #25: compare after the sheet
+  /// closes, not the moment it opens).
+  Future<void> _openSettings() async {
+    final prefs = SharedPreferencesUtil();
+    final language = prefs.userPrimaryLanguage;
+    final hasSpeech = prefs.hasSpeakerProfile;
+    final transcriptModel = prefs.transcriptionModel;
+    await SettingsDrawer.show(context);
+    if (!mounted) return;
+    if (language != prefs.userPrimaryLanguage ||
+        hasSpeech != prefs.hasSpeakerProfile ||
+        transcriptModel != prefs.transcriptionModel) {
+      context.read<CaptureProvider>().onRecordProfileSettingChanged();
+    }
+  }
+
+  /// Startup prompts (changelog, announcements, device tutorial, firmware notices) go through
+  /// [PromptQueue]: one at a time, never while recording, on a call or during a firmware update.
   void _checkForAnnouncements() {
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
-
-      await Future.delayed(const Duration(seconds: 2));
-
-      if (!mounted) return;
-
-      final announcementProvider = Provider.of<AnnouncementProvider>(context, listen: false);
-      final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
-      await AnnouncementService().checkAndShowAnnouncements(
-        context,
-        announcementProvider,
-        connectedDevice: deviceProvider.connectedDevice,
+      _promptGate.attach(
+        capture: Provider.of<CaptureProvider>(context, listen: false),
+        device: Provider.of<DeviceProvider>(context, listen: false),
       );
+      _announcementTimer?.cancel();
+      _announcementTimer = Timer(const Duration(seconds: 2), () {
+        if (!mounted) return;
 
-      // Register callback for device connection to check firmware announcements and device onboarding
-      deviceProvider.onDeviceConnected = (BtDevice device) {
-        _onDeviceConnectedForAnnouncements(device);
-        _checkDeviceOnboarding(device);
-      };
+        final announcementProvider = Provider.of<AnnouncementProvider>(context, listen: false);
+        final deviceProvider = Provider.of<DeviceProvider>(context, listen: false);
+        PromptQueue.instance.enqueue(
+          'home-announcements',
+          PromptPriority.normal,
+          show: (_) async {
+            if (!mounted) return;
+            await AnnouncementService().checkAndShowAnnouncements(
+              context,
+              announcementProvider,
+              connectedDevice: deviceProvider.connectedDevice,
+            );
+          },
+        );
 
-      // Also check if already connected right now
-      if (deviceProvider.isConnected && deviceProvider.connectedDevice != null) {
-        _checkDeviceOnboarding(deviceProvider.connectedDevice!);
-      }
+        // Register callback for device connection to check firmware announcements and device onboarding
+        deviceProvider.onDeviceConnected = (BtDevice device) {
+          _onDeviceConnectedForAnnouncements(device);
+          _checkDeviceOnboarding(device);
+        };
+
+        // Also check if already connected right now
+        if (deviceProvider.isConnected && deviceProvider.connectedDevice != null) {
+          _checkDeviceOnboarding(deviceProvider.connectedDevice!);
+        }
+      });
     });
   }
 
@@ -680,7 +606,16 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
     if (!mounted || _deviceOnboardingShown) return;
     _deviceOnboardingShown = true;
-    routeToPage(context, const InteractiveDeviceOnboardingWrapper());
+    PromptQueue.instance.enqueue(
+      'device-tutorial',
+      PromptPriority.normal,
+      // The tutorial needs the pendant in hand; wait while it is disconnected.
+      canShowNow: () => mounted && context.read<DeviceProvider>().isConnected,
+      show: (_) async {
+        if (!mounted || SharedPreferencesUtil().deviceOnboardingCompleted) return;
+        await routeToPage(context, const InteractiveDeviceOnboardingWrapper());
+      },
+    );
   }
 
   void _registerAutoSyncCallback() {
@@ -724,15 +659,22 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     QuickActionsService.instance.updateShortcuts(context);
   }
 
-  void _onDeviceConnectedForAnnouncements(BtDevice device) async {
+  void _onDeviceConnectedForAnnouncements(BtDevice device) {
     if (!mounted) return;
 
     final announcementProvider = Provider.of<AnnouncementProvider>(context, listen: false);
-    await AnnouncementService().showFirmwareUpdateAnnouncements(
-      context,
-      announcementProvider,
-      device.firmwareRevision,
-      device.modelNumber,
+    PromptQueue.instance.enqueue(
+      'firmware-announcements',
+      PromptPriority.high,
+      show: (_) async {
+        if (!mounted) return;
+        await AnnouncementService().showFirmwareUpdateAnnouncements(
+          context,
+          announcementProvider,
+          device.firmwareRevision,
+          device.modelNumber,
+        );
+      },
     );
   }
 
@@ -753,12 +695,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
   void _onCaptureProviderChanged() {
     if (!mounted || _captureProvider == null) return;
 
-    if (!context.read<UsageProvider>().showSubscriptionUI) return;
-
-    _freemiumHandler.checkAndShowDialog(context, _captureProvider!).catchError((e) {
-      Logger.debug('[Freemium] Error checking dialog: $e');
-      return false;
-    });
+    _freemiumHandler.checkAndShowPaywall(context, _captureProvider!);
   }
 
   void _listenToMessagesFromNotification() {
@@ -814,88 +751,92 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         child: Selector<HomeProvider, int>(
           selector: (_, homeProvider) => homeProvider.selectedIndex,
           builder: (context, selectedIndex, _) {
-            return Scaffold(
-              backgroundColor: Theme.of(context).colorScheme.primary,
-              resizeToAvoidBottomInset: false,
-              appBar: selectedIndex == 5 ? null : _buildAppBar(context),
-              body: GestureDetector(
-                onTap: () {
-                  primaryFocus?.unfocus();
-                  // context.read<HomeProvider>().memoryFieldFocusNode.unfocus();
-                  // context.read<HomeProvider>().chatFieldFocusNode.unfocus();
-                },
-                child: Stack(
-                  children: [
-                    Column(
-                      children: [
-                        // Show slim green call bar on non-home/conversations tabs when a call is active
-                        if (selectedIndex > 1) const ActiveCallTopBar(),
-                        Expanded(
-                          child: IndexedStack(index: selectedIndex, children: _buildPages(selectedIndex)),
-                        ),
-                      ],
-                    ),
-                    Consumer<HomeProvider>(
-                      builder: (context, home, child) {
-                        if (home.isChatFieldFocused ||
-                            home.isAppsSearchFieldFocused ||
-                            home.isMemoriesSearchFieldFocused) {
-                          return const SizedBox.shrink();
-                        }
+            // D6: Android back on another tab returns to Home before it leaves the app.
+            return PopScope(
+              canPop: selectedIndex == 0,
+              onPopInvokedWithResult: (didPop, _) {
+                if (didPop || selectedIndex == 0) return;
+                OmiHaptics.selection();
+                context.read<HomeProvider>().setIndex(0);
+                _schedulePageInitialization(0);
+              },
+              child: Scaffold(
+                backgroundColor: OmiColors.surface0,
+                resizeToAvoidBottomInset: false,
+                appBar: selectedIndex == 5 ? null : _buildAppBar(context),
+                body: GestureDetector(
+                  onTap: () {
+                    primaryFocus?.unfocus();
+                    // context.read<HomeProvider>().memoryFieldFocusNode.unfocus();
+                    // context.read<HomeProvider>().chatFieldFocusNode.unfocus();
+                  },
+                  child: Stack(
+                    children: [
+                      Column(
+                        children: [
+                          // Show slim green call bar on non-home/conversations tabs when a call is active
+                          if (selectedIndex > 1) const ActiveCallTopBar(),
+                          Expanded(
+                            child: IndexedStack(index: selectedIndex, children: _buildPages(selectedIndex)),
+                          ),
+                        ],
+                      ),
+                      Consumer<HomeProvider>(
+                        builder: (context, home, child) {
+                          if (home.isChatFieldFocused ||
+                              home.isAppsSearchFieldFocused ||
+                              home.isMemoriesSearchFieldFocused) {
+                            return const SizedBox.shrink();
+                          }
 
-                        return Stack(
-                          children: [
-                            BottomNavBar(
-                              // Queue page construction after the current
-                              // gesture frame. Building a destination directly
-                              // in onTapDown makes the tap itself feel stuck.
-                              onTabWarmup: _schedulePageInitialization,
-                              onTabTap: (index, isRepeat) {
-                                if (isRepeat) {
-                                  _scrollToTop(index);
-                                } else {
-                                  // When tapping Conversations directly, reset to conversations view
-                                  if (index == 1) {
-                                    final cp = context.read<ConversationProvider>();
-                                    if (cp.showDailySummaries) cp.toggleDailySummaries();
+                          return Stack(
+                            children: [
+                              BottomNavBar(
+                                // Queue page construction after the current
+                                // gesture frame. Building a destination directly
+                                // in onTapDown makes the tap itself feel stuck.
+                                onTabWarmup: _schedulePageInitialization,
+                                onTabTap: (index, isRepeat) {
+                                  if (isRepeat) {
+                                    _scrollToTop(index);
+                                  } else {
+                                    // Change tabs immediately. If background
+                                    // prewarming has not completed yet, the
+                                    // destination paints a skeleton for one frame
+                                    // and mounts its real content afterwards.
+                                    home.setIndex(index);
+                                    _schedulePageInitialization(index);
                                   }
-                                  // Change tabs immediately. If background
-                                  // prewarming has not completed yet, the
-                                  // destination paints a skeleton for one frame
-                                  // and mounts its real content afterwards.
-                                  home.setIndex(index);
-                                  _schedulePageInitialization(index);
-                                }
-                              },
-                            ),
-                            if (home.selectedIndex == 0)
-                              Positioned(
-                                left: 16,
-                                right: 16,
-                                // Derived from the nav row's own geometry so the
-                                // two cannot drift: changing the row's height or
-                                // the inset it reserves moves this with it,
-                                // instead of silently closing the gap.
-                                bottom: kBottomNavBarHeight - kBottomNavChatBarGap + bottomNavBarReservedInset(context),
-                                child: Row(
-                                  children: [
-                                    Expanded(child: _buildChatBar(context)),
-                                    const SizedBox(width: 10),
-                                    const HomeRecordButton(),
-                                  ],
-                                ),
+                                },
                               ),
-                          ],
-                        );
-                      },
-                    ),
-                    // Merge action bar - floats above bottom nav when in selection mode
-                    if (selectedIndex == 1) const Positioned(left: 0, right: 0, bottom: 0, child: MergeActionBar()),
-                    // Task selection action bar - floats above bottom nav on the
-                    // tasks tab when selection mode is active in ActionItemsProvider.
-                    if (selectedIndex == 2)
-                      const Positioned(left: 0, right: 0, bottom: 0, child: TaskSelectionActionBar()),
-                  ],
+                              if (home.selectedIndex == 0)
+                                Positioned(
+                                  left: 16,
+                                  right: 16,
+                                  // Derived from the nav row's own geometry so the
+                                  // two cannot drift: changing the row's height or
+                                  // the inset it reserves moves this with it.
+                                  bottom: bottomNavChatBarOffset(context),
+                                  child: Row(
+                                    children: [
+                                      Expanded(child: _buildChatBar(context)),
+                                      const SizedBox(width: 10),
+                                      const HomeRecordButton(),
+                                    ],
+                                  ),
+                                ),
+                            ],
+                          );
+                        },
+                      ),
+                      // Merge action bar - floats above bottom nav when in selection mode
+                      if (selectedIndex == 1) const Positioned(left: 0, right: 0, bottom: 0, child: MergeActionBar()),
+                      // Task selection action bar - floats above bottom nav on the
+                      // tasks tab when selection mode is active in ActionItemsProvider.
+                      if (selectedIndex == 2)
+                        const Positioned(left: 0, right: 0, bottom: 0, child: TaskSelectionActionBar()),
+                    ],
+                  ),
                 ),
               ),
             );
@@ -905,52 +846,67 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     );
   }
 
+  /// D1: chat is a normal pushed page everywhere (back chevron, edge swipe), not a full-screen modal.
+  void _openChat({bool voice = false}) {
+    OmiHaptics.selection();
+    PlatformManager.instance.analytics.bottomNavigationTabClicked(voice ? 'Chat Voice' : 'Chat');
+    routeToPage(context, ChatPage(isPivotBottom: false, autoStartVoice: voice));
+  }
+
   Widget _buildChatBar(BuildContext context) {
-    return GestureDetector(
-      onTap: () {
-        HapticFeedback.lightImpact();
-        PlatformManager.instance.analytics.bottomNavigationTabClicked('Chat');
-        Navigator.push(context,
-            MaterialPageRoute(fullscreenDialog: true, builder: (context) => const ChatPage(isPivotBottom: false)));
-      },
-      child: Container(
-        height: 62,
-        decoration: BoxDecoration(
-          color: const Color(0xFF1F1F25),
-          borderRadius: BorderRadius.circular(32),
-          border: Border.all(color: const Color(0xFF35343B), width: 1),
-        ),
-        child: Row(
-          children: [
-            const SizedBox(width: 18),
-            Expanded(
-              child: Text(
-                context.l10n.askOmi,
-                style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 15),
-                overflow: TextOverflow.ellipsis,
+    return Semantics(
+      container: true,
+      button: true,
+      label: context.l10n.askOmi,
+      onTap: _openChat,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: _openChat,
+        child: Container(
+          height: kHomeChatBarHeight,
+          decoration: BoxDecoration(
+            color: OmiColors.surface1,
+            borderRadius: OmiRadius.pillAll,
+            border: Border.all(color: OmiColors.border, width: 1),
+          ),
+          child: Row(
+            children: [
+              const SizedBox(width: 18),
+              Expanded(
+                child: ExcludeSemantics(
+                  child: Text(
+                    context.l10n.askOmi,
+                    style: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
               ),
-            ),
-            GestureDetector(
-              onTap: () {
-                HapticFeedback.lightImpact();
-                PlatformManager.instance.analytics.bottomNavigationTabClicked('Chat Voice');
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                      fullscreenDialog: true,
-                      builder: (context) => const ChatPage(isPivotBottom: false, autoStartVoice: true)),
-                );
-              },
-              child: Container(
-                width: 42,
-                height: 42,
-                margin: const EdgeInsets.only(right: 6),
-                alignment: Alignment.center,
-                decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                child: const FaIcon(FontAwesomeIcons.microphone, size: 15, color: Colors.black),
+              GestureDetector(
+                // The mic sits inside the chat bar's own tap target, so a near miss
+                // does not do nothing: it opens text chat instead of voice. Own the
+                // bar's full height and its rounded end, not just the 42pt circle.
+                behavior: HitTestBehavior.opaque,
+                onTap: () => _openChat(voice: true),
+                child: Semantics(
+                  container: true,
+                  button: true,
+                  label: context.l10n.voiceMode,
+                  child: Container(
+                    height: kHomeChatBarHeight,
+                    padding: const EdgeInsets.only(left: 8, right: 6),
+                    alignment: Alignment.center,
+                    child: Container(
+                      width: 42,
+                      height: 42,
+                      alignment: Alignment.center,
+                      decoration: const BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
+                      child: const FaIcon(FontAwesomeIcons.microphone, size: 15, color: OmiColors.onAccent),
+                    ),
+                  ),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -960,11 +916,18 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     return AppBar(
       automaticallyImplyLeading: false,
       backgroundColor: Theme.of(context).colorScheme.surface,
+      // The trailing buttons paint 36pt circles inside 44pt touch targets, so the
+      // title gives up the 4pt the last target overhangs by. The circles stay on
+      // the 16pt margin the rest of the screen uses.
+      titleSpacing: NavigationToolbar.kMiddleSpacing - (kMinTapTarget - kHeaderCircleDiameter) / 2,
       title: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          const BatteryInfoWidget(),
+          const Padding(
+            padding: EdgeInsets.only(left: (kMinTapTarget - kHeaderCircleDiameter) / 2),
+            child: BatteryInfoWidget(),
+          ),
           const SizedBox.shrink(),
           Row(
             children: [
@@ -979,33 +942,27 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
                   // Show sync icon only on Conversations tab and if there's a paired device OR if there are pending files on device
                   if (homeProvider.selectedIndex == 1 && (device != null || hasPendingOnDevice)) {
-                    return GestureDetector(
+                    return HeaderCircleButton(
+                      semanticLabel: context.l10n.sync,
                       onTap: () {
-                        HapticFeedback.mediumImpact();
+                        OmiHaptics.selection();
                         final page = deviceProvider.supportsMultiFileSync ? const AutoSyncPage() : const SyncPage();
-                        Navigator.push(context, MaterialPageRoute(builder: (context) => page));
+                        routeToPage(context, page);
                       },
-                      child: Container(
-                        width: 36,
-                        height: 36,
-                        margin: const EdgeInsets.only(right: 8),
-                        decoration: BoxDecoration(
-                          color: isSyncing
-                              ? Colors.deepPurple.withValues(alpha: 0.2)
-                              : hasPendingOnDevice
-                                  ? Colors.orange.withValues(alpha: 0.15)
-                                  : const Color(0xFF1F1F25),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(
-                          Icons.cloud_rounded,
-                          size: 18,
-                          color: isSyncing
-                              ? Colors.deepPurpleAccent
-                              : hasPendingOnDevice
-                                  ? Colors.orangeAccent
-                                  : Colors.white70,
-                        ),
+                      // Neutral while syncing (INV-UI-1); warning tint while files wait on the device.
+                      color: isSyncing
+                          ? OmiColors.surface3
+                          : hasPendingOnDevice
+                              ? OmiColors.warning.withValues(alpha: 0.15)
+                              : OmiColors.surface1,
+                      icon: Icon(
+                        Icons.cloud_rounded,
+                        size: 18,
+                        color: isSyncing
+                            ? OmiColors.textPrimary
+                            : hasPendingOnDevice
+                                ? OmiColors.warning
+                                : OmiColors.textSecondary,
                       ),
                     );
                   }
@@ -1026,45 +983,26 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                     children: [
                       // Search button - show when no active search, clicking closes search bar
                       if (shouldShowSearchButton)
-                        Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            color: homeProvider.showConvoSearchBar
-                                ? Colors.deepPurple.withValues(alpha: 0.5)
-                                : const Color(0xFF1F1F25),
-                            shape: BoxShape.circle,
-                          ),
-                          child: IconButton(
-                            padding: EdgeInsets.zero,
-                            icon: const Icon(Icons.search, size: 18, color: Colors.white70),
-                            onPressed: () {
-                              HapticFeedback.mediumImpact();
-                              homeProvider.toggleConvoSearchBar();
-                            },
-                          ),
+                        HeaderCircleButton(
+                          semanticLabel: context.l10n.search,
+                          color: homeProvider.showConvoSearchBar ? OmiColors.surface3 : OmiColors.surface1,
+                          icon: const Icon(Icons.search, size: 18, color: OmiColors.textSecondary),
+                          onTap: () {
+                            OmiHaptics.light();
+                            homeProvider.toggleConvoSearchBar();
+                          },
                         ),
                       // Calendar button - only show when date filter is active
-                      if (convoProvider.selectedStartDate != null) ...[
-                        const SizedBox(width: 8),
-                        Container(
-                          width: 36,
-                          height: 36,
-                          decoration: BoxDecoration(
-                            color: Colors.deepPurple.withValues(alpha: 0.5),
-                            shape: BoxShape.circle,
-                          ),
-                          child: IconButton(
-                            padding: EdgeInsets.zero,
-                            icon: const FaIcon(FontAwesomeIcons.calendarDay, size: 16, color: Colors.white),
-                            onPressed: () async {
-                              HapticFeedback.mediumImpact();
-                              await showConversationDateRangePicker(context);
-                            },
-                          ),
+                      if (convoProvider.selectedStartDate != null)
+                        HeaderCircleButton(
+                          semanticLabel: context.l10n.filters,
+                          color: OmiColors.surface3,
+                          icon: const FaIcon(FontAwesomeIcons.calendarDay, size: 16, color: OmiColors.textPrimary),
+                          onTap: () async {
+                            OmiHaptics.selection();
+                            await showConversationDateRangePicker(context);
+                          },
                         ),
-                      ],
-                      const SizedBox(width: 8),
                     ],
                   );
                 },
@@ -1079,45 +1017,33 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   return Row(
                     children: [
                       // Export button
-                      Container(
-                        width: 36,
-                        height: 36,
-                        decoration: const BoxDecoration(color: Color(0xFF1F1F25), shape: BoxShape.circle),
-                        child: IconButton(
-                          padding: EdgeInsets.zero,
-                          icon: const FaIcon(FontAwesomeIcons.arrowUpFromBracket, size: 16, color: Colors.white70),
-                          onPressed: () {
-                            HapticFeedback.mediumImpact();
-                            PlatformManager.instance.analytics.exportTasksBannerClicked();
-                            Navigator.of(
-                              context,
-                            ).push(MaterialPageRoute(builder: (context) => const TaskIntegrationsPage()));
-                          },
+                      HeaderCircleButton(
+                        semanticLabel: context.l10n.exportButton,
+                        icon: const FaIcon(
+                          FontAwesomeIcons.arrowUpFromBracket,
+                          size: 16,
+                          color: OmiColors.textSecondary,
                         ),
+                        onTap: () {
+                          OmiHaptics.selection();
+                          PlatformManager.instance.analytics.exportTasksBannerClicked();
+                          routeToPage(context, const TaskIntegrationsPage());
+                        },
                       ),
-                      const SizedBox(width: 8),
                       // Completed toggle
-                      Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: showCompleted ? Colors.deepPurple.withValues(alpha: 0.5) : const Color(0xFF1F1F25),
-                          shape: BoxShape.circle,
+                      HeaderCircleButton(
+                        semanticLabel: context.l10n.completed,
+                        color: showCompleted ? OmiColors.surface3 : OmiColors.surface1,
+                        icon: FaIcon(
+                          FontAwesomeIcons.solidCircleCheck,
+                          size: 16,
+                          color: showCompleted ? OmiColors.textPrimary : OmiColors.textSecondary,
                         ),
-                        child: IconButton(
-                          padding: EdgeInsets.zero,
-                          icon: FaIcon(
-                            FontAwesomeIcons.solidCircleCheck,
-                            size: 16,
-                            color: showCompleted ? Colors.white : Colors.white70,
-                          ),
-                          onPressed: () {
-                            HapticFeedback.mediumImpact();
-                            actionItemsProvider.toggleShowCompletedView();
-                          },
-                        ),
+                        onTap: () {
+                          OmiHaptics.light();
+                          actionItemsProvider.toggleShowCompletedView();
+                        },
                       ),
-                      const SizedBox(width: 8),
                     ],
                   );
                 },
@@ -1126,69 +1052,47 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
               Consumer<HomeProvider>(
                 builder: (context, homeProvider, _) {
                   if (homeProvider.selectedIndex != 3) return const SizedBox.shrink();
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: PullDownButton(
-                      itemBuilder: (context) => [
-                        PullDownMenuItem(
-                          title: context.l10n.createAnApp,
-                          subtitle: context.l10n.createAndShareYourApp,
-                          iconWidget: const Icon(Icons.apps, size: 18),
-                          onTap: () {
-                            PlatformManager.instance.analytics.pageOpened('Submit App');
-                            routeToPage(context, const AddAppPage());
-                          },
-                        ),
-                        PullDownMenuItem(
-                          title: context.l10n.addMcpServer,
-                          subtitle: context.l10n.connectExternalAiTools,
-                          iconWidget: const Icon(Icons.cable, size: 18),
-                          onTap: () {
-                            PlatformManager.instance.analytics.pageOpened('Add MCP Server');
-                            routeToPage(context, const AddMcpServerPage());
-                          },
-                        ),
-                      ],
-                      buttonBuilder: (context, showMenu) => GestureDetector(
+                  return PullDownButton(
+                    itemBuilder: (context) => [
+                      PullDownMenuItem(
+                        title: context.l10n.createAnApp,
+                        subtitle: context.l10n.createAndShareYourApp,
+                        iconWidget: const Icon(Icons.apps, size: 18),
                         onTap: () {
-                          HapticFeedback.mediumImpact();
-                          showMenu();
+                          PlatformManager.instance.analytics.pageOpened('Submit App');
+                          routeToPage(context, const AddAppPage());
                         },
-                        child: Container(
-                          width: 36,
-                          height: 36,
-                          decoration: const BoxDecoration(color: Color(0xFF1F1F25), shape: BoxShape.circle),
-                          child: const Icon(Icons.add, size: 18, color: Colors.white70),
-                        ),
                       ),
+                      PullDownMenuItem(
+                        title: context.l10n.addMcpServer,
+                        subtitle: context.l10n.connectExternalAiTools,
+                        iconWidget: const Icon(Icons.cable, size: 18),
+                        onTap: () {
+                          PlatformManager.instance.analytics.pageOpened('Add MCP Server');
+                          routeToPage(context, const AddMcpServerPage());
+                        },
+                      ),
+                    ],
+                    buttonBuilder: (context, showMenu) => HeaderCircleButton(
+                      semanticLabel: context.l10n.createAnApp,
+                      icon: const Icon(Icons.add, size: 18, color: OmiColors.textSecondary),
+                      onTap: () {
+                        OmiHaptics.selection();
+                        showMenu();
+                      },
                     ),
                   );
                 },
               ),
               // Settings button - always visible
-              Container(
-                width: 36,
-                height: 36,
-                decoration: const BoxDecoration(color: Color(0xFF1F1F25), shape: BoxShape.circle),
-                child: IconButton(
-                  padding: EdgeInsets.zero,
-                  icon: const FaIcon(FontAwesomeIcons.gear, size: 16, color: Colors.white70),
-                  onPressed: () {
-                    HapticFeedback.mediumImpact();
-                    PlatformManager.instance.analytics.pageOpened('Settings');
-                    String language = SharedPreferencesUtil().userPrimaryLanguage;
-                    bool hasSpeech = SharedPreferencesUtil().hasSpeakerProfile;
-                    String transcriptModel = SharedPreferencesUtil().transcriptionModel;
-                    SettingsDrawer.show(context);
-                    if (language != SharedPreferencesUtil().userPrimaryLanguage ||
-                        hasSpeech != SharedPreferencesUtil().hasSpeakerProfile ||
-                        transcriptModel != SharedPreferencesUtil().transcriptionModel) {
-                      if (context.mounted) {
-                        context.read<CaptureProvider>().onRecordProfileSettingChanged();
-                      }
-                    }
-                  },
-                ),
+              HeaderCircleButton(
+                semanticLabel: context.l10n.settings,
+                icon: const FaIcon(FontAwesomeIcons.gear, size: 16, color: OmiColors.textSecondary),
+                onTap: () {
+                  OmiHaptics.selection();
+                  PlatformManager.instance.analytics.pageOpened('Settings');
+                  unawaited(_openSettings());
+                },
               ),
             ],
           ),
@@ -1201,6 +1105,19 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
 
   @override
   void dispose() {
+    HomeNavigation.unregister(_openRoute);
+    _promptGate.detach();
+    // These prompts close over this Home; a later Home (after sign-out and sign-in) enqueues its own.
+    for (final id in const ['home-announcements', 'device-tutorial', 'firmware-announcements']) {
+      PromptQueue.instance.remove(id);
+    }
+    OmiFeedback.bottomClearance = null;
+    _announcementTimer?.cancel();
+    _announcementTimer = null;
+    for (final timer in _prewarmTimers) {
+      timer.cancel();
+    }
+    _prewarmTimers.clear();
     WidgetsBinding.instance.removeObserver(this);
     // Cancel stream subscription to prevent memory leak
     _notificationStreamSubscription?.cancel();
@@ -1248,12 +1165,12 @@ class _TabLoadingSkeleton extends StatelessWidget {
         itemBuilder: (context, index) => Padding(
           padding: const EdgeInsets.only(bottom: 14),
           child: ShimmerWithTimeout(
-            baseColor: const Color(0xFF1F1F25),
-            highlightColor: const Color(0xFF303038),
+            baseColor: OmiColors.surface1,
+            highlightColor: OmiColors.surface2,
             child: Container(
               height: index == 0 ? 34 : 76,
               width: double.infinity,
-              decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(18)),
+              decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
             ),
           ),
         ),

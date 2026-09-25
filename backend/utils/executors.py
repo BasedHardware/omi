@@ -15,6 +15,13 @@ Provides shared executors with strict separation (bulkhead pattern):
   Firestore subcollections). Bulkheaded so bursts of account deletions cannot
   starve normal post-processing.
 - storage_executor: audio file precaching, GCS operations.
+- cimd_executor: hosted-MCP OAuth client-metadata (CIMD) lookups — DNS,
+  connect, and body reads to arbitrary unauthenticated-supplied hosts, all
+  inside one hard monotonic deadline. Bulkheaded so hostile client_id floods
+  cannot starve Firestore or any shared pool.
+- cimd_dns (module-local in database/mcp_client_metadata.py): the getaddrinfo
+  hop inside a CIMD lookup, split out so a
+  stalled resolver cannot hold a fetch worker hostage.
 
 These replace ad-hoc ThreadPoolExecutor creation throughout the codebase,
 preventing thread proliferation and providing bounded concurrency.
@@ -35,21 +42,48 @@ P = ParamSpec("P")
 T = TypeVar("T")
 
 
-class MonitoredThreadPoolExecutor(ThreadPoolExecutor):
-    """ThreadPoolExecutor with active-task tracking for observability."""
+class ExecutorSaturatedError(RuntimeError):
+    """Raised when a bounded executor has no worker or queue capacity left."""
 
-    def __init__(self, name: str, **kwargs: Any):
+
+class MonitoredThreadPoolExecutor(ThreadPoolExecutor):
+    """ThreadPoolExecutor with active-task tracking and optional backpressure."""
+
+    def __init__(self, name: str, *, max_queue_size: int | None = None, **kwargs: Any):
         super().__init__(**kwargs)
         self.name = name
         self._active_count = 0
         self._active_lock = threading.Lock()
+        self.max_queue_size = max_queue_size
+        max_workers = self._max_workers
+        self._submission_slots = (
+            threading.BoundedSemaphore(max_workers + max_queue_size) if max_queue_size is not None else None
+        )
 
     @property
     def active_count(self) -> int:
         return self._active_count
 
     def submit(self, fn: Callable[..., T], /, *args: Any, **kwargs: Any) -> Future[T]:
-        future = super().submit(self._tracked, fn, *args, **kwargs)
+        slots = self._submission_slots
+        if slots is not None and not slots.acquire(blocking=False):
+            logger.warning(
+                'executor_saturated executor=%s workers=%s queue_capacity=%s',
+                self.name,
+                self._max_workers,
+                self.max_queue_size,
+            )
+            raise ExecutorSaturatedError(
+                f'{self.name} executor is saturated ({self._max_workers} workers, {self.max_queue_size} queued)'
+            )
+        try:
+            future = super().submit(self._tracked, fn, *args, **kwargs)
+        except BaseException:
+            if slots is not None:
+                slots.release()
+            raise
+        if slots is not None:
+            future.add_done_callback(lambda _future: slots.release())
         return future
 
     def _tracked(self, fn: Callable[..., T], *args: Any, **kwargs: Any) -> T:
@@ -62,7 +96,12 @@ class MonitoredThreadPoolExecutor(ThreadPoolExecutor):
                 self._active_count -= 1
 
 
-critical_executor = MonitoredThreadPoolExecutor(name="critical", max_workers=8, thread_name_prefix="critical")
+# Authentication and rate-limit work gates every request. Bound the outstanding
+# work so a slow identity provider cannot turn a burst into an unbounded memory
+# queue (#6753); callers receive an explicit saturation failure instead.
+critical_executor = MonitoredThreadPoolExecutor(
+    name="critical", max_workers=8, max_queue_size=64, thread_name_prefix="critical"
+)
 db_executor = MonitoredThreadPoolExecutor(name="db", max_workers=24, thread_name_prefix="db")
 llm_executor = MonitoredThreadPoolExecutor(name="llm", max_workers=6, thread_name_prefix="llm")
 stripe_executor = MonitoredThreadPoolExecutor(name="stripe", max_workers=4, thread_name_prefix="stripe")
@@ -70,6 +109,12 @@ sync_executor = MonitoredThreadPoolExecutor(name="sync", max_workers=16, thread_
 postprocess_executor = MonitoredThreadPoolExecutor(name="postprocess", max_workers=24, thread_name_prefix="postproc")
 cleanup_executor = MonitoredThreadPoolExecutor(name="cleanup", max_workers=4, thread_name_prefix="cleanup")
 storage_executor = MonitoredThreadPoolExecutor(name="storage", max_workers=128, thread_name_prefix="storage")
+# URL-form OAuth client_ids let an unauthenticated caller name an arbitrary
+# host to fetch. The pool stays tiny and strictly queued so a flood fails
+# fast with ExecutorSaturatedError instead of holding shared workers. The DNS
+# hop inside a lookup lives on a module-local pool in
+# database/mcp_client_metadata.py — database must not import this module.
+cimd_executor = MonitoredThreadPoolExecutor(name="cimd", max_workers=4, max_queue_size=8, thread_name_prefix="cimd")
 
 _ALL_EXECUTORS = [
     critical_executor,
@@ -80,6 +125,7 @@ _ALL_EXECUTORS = [
     postprocess_executor,
     cleanup_executor,
     storage_executor,
+    cimd_executor,
 ]
 
 
@@ -128,6 +174,7 @@ def get_executor_metrics() -> List[Dict[str, Any]]:
                 'max_workers': max_w,
                 'active_count': active,
                 'queue_depth': queue_depth,
+                'queue_capacity': executor.max_queue_size,
                 'utilization_pct': utilization,
             }
         )

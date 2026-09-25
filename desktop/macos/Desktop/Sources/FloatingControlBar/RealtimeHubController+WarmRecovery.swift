@@ -2,6 +2,28 @@ import Foundation
 import OmiSupport
 import VoiceTurnDomain
 
+/// Connect-path authorization for a warm realtime session. The plan gate and
+/// `ensureWarm` share this so a stored-but-unusable voice key cannot skip the
+/// gate and then fall through to a managed mint.
+enum RealtimeWarmCredential: Equatable {
+  case clientDirect(key: String)
+  /// Current provider's stored key is known-bad, but failover has not been used
+  /// and the alternate has a usable client-direct key. The gate must not skip:
+  /// `ensureWarm` runs `failoverToAlternateProvider` and reconnects at $0.
+  case failoverToClientDirect
+  case unusableBYOK(key: String, fingerprint: String)
+  case none
+
+  /// Automatic warming is exempt only when this session can connect client-direct
+  /// on the current provider or via the one failover the connect path would run.
+  var hasUsableClientDirectRoute: Bool {
+    switch self {
+    case .clientDirect, .failoverToClientDirect: return true
+    case .unusableBYOK, .none: return false
+    }
+  }
+}
+
 /// Recovery for the two *expected* warm-session lifecycle closes: provider
 /// idle teardowns (presence-gated re-warm) and provider session rotation.
 extension RealtimeHubController {
@@ -60,16 +82,216 @@ extension RealtimeHubController {
           elapsedSincePreviousSample) + RealtimeHubWarmPresencePolicy.presencePollSlack)
     else { return false }
     log("RealtimeHub: user input resumed — re-warming deferred hub session")
-    ensureWarm(userInitiated: true)
+    // Presence return is not a key press. Clear the away deferral so a later
+    // PTT is not stuck, then keep-warm (plan-gated accounts skip the mint).
+    clearPresenceWarmDeferral()
+    ensureWarm()
     return true
   }
 
+  /// Skip idle/reconnect/launch mint when the cached decision is `.planGated`
+  /// or after a typed server `plan_gated`. User-initiated PTT still attempts.
+  /// Same latch as LiveNotes `shouldSkipManagedAINotes`.
+  ///
+  /// Text-lane `APIKeyService.isByokActive` (selected LLM provider enrolled and
+  /// fingerprint-matched) is NOT the hub's BYOK test. A basic user can keep
+  /// OpenRouter as the text provider, hold `dev_gemini_api_key`, and pick Gemini
+  /// as Voice Model: `isByokActive` is false so the subscription decision is
+  /// `.planGated`, but `selectedRealtimeBYOKKey(chosenForVoice:)` is non-nil and
+  /// the hub connects client-direct at our $0. Warming is governed by that
+  /// realtime key: exempt when this session can connect client-direct on the
+  /// current provider *or* via the one failover `ensureWarm` would run. A
+  /// known-bad current key with a healthy alternate is not a skip — that is
+  /// `$0` BYOK on the failover path. Only when no usable route exists does a
+  /// known-bad key fall through to managed mint, which the gate then skips.
+  func shouldSkipAutomaticManagedWarm() -> Bool {
+    if resolvedRealtimeWarmCredential().hasUsableClientDirectRoute { return false }
+    let decision = entitlementDecision()
+    let skip = managedPlanGateLatch.shouldSkipAutomaticManagedWork(
+      decision: decision,
+      now: entitlementNow(),
+      ownerID: managedPlanGateOwnerID())
+    if decision == .allowManagedProactivity, !managedPlanGateLatch.serverDenied {
+      didLogPlanGateSkip = false
+    }
+    if skip {
+      logPlanGateSkipOnce()
+      requestEntitlementRefresh()
+    }
+    return skip
+  }
+
+  /// Same key `ensureWarm` will pass to `startSession` for `provider`.
+  func realtimeBYOKKey(for provider: RealtimeHubProvider) -> String? {
+    if let realtimeBYOKKeyResolver {
+      return realtimeBYOKKeyResolver(provider)
+    }
+    return APIKeyService.selectedRealtimeBYOKKey(
+      for: provider.byokProvider,
+      chosenForVoice: RealtimeHubSettings.shared.isVoiceModelChoice(provider))
+  }
+
+  /// Same key `ensureWarm` will pass to `startSession` for the effective provider.
+  func resolvedRealtimeBYOKKey() -> String? {
+    realtimeBYOKKey(for: effectiveProvider)
+  }
+
+  /// Authorization the connect path will make. A stored key is not enough;
+  /// known-bad fingerprints are `.unusableBYOK` unless failover can still reach
+  /// a usable alternate (`fallbackProvider == nil` and that key `canUseBYOK`).
+  func resolvedRealtimeWarmCredential() -> RealtimeWarmCredential {
+    let provider = effectiveProvider
+    if let key = clientDirectKeyIfUsable(for: provider) {
+      return .clientDirect(key: key)
+    }
+    guard let key = realtimeBYOKKey(for: provider) else { return .none }
+    let fingerprint = APIKeyService.byokFingerprint(key)
+    if fallbackProvider == nil,
+      clientDirectKeyIfUsable(for: RealtimeHubSettings.shared.provider.alternate) != nil
+    {
+      return .failoverToClientDirect
+    }
+    return .unusableBYOK(key: key, fingerprint: fingerprint)
+  }
+
+  /// Usable client-direct key for `provider`, or nil if missing / known-bad.
+  func clientDirectKeyIfUsable(for provider: RealtimeHubProvider) -> String? {
+    guard let key = realtimeBYOKKey(for: provider) else { return nil }
+    let fingerprint = APIKeyService.byokFingerprint(key)
+    guard canUseRealtimeBYOK(provider.byokProvider, fingerprint) else { return nil }
+    return key
+  }
+
+  /// Launch / re-entrant `PushToTalkManager.setup`: not a key press, so the plan
+  /// gate still applies, but an existing away deferral must not block an entitled
+  /// user the way a passive `ensureWarm()` would.
+  func prepareAutomaticWarm() {
+    clearPresenceWarmDeferral()
+    ensureWarm()
+  }
+
+  func resetManagedPlanGateForOwnerChange() {
+    planGateRetryTask?.cancel()
+    planGateRetryTask = nil
+    entitlementRefreshGeneration &+= 1
+    entitlementRefreshTask?.cancel()
+    entitlementRefreshTask = nil
+    entitlementRefreshInFlight = false
+    managedPlanGateLatch.reset()
+    didLogPlanGateSkip = false
+  }
+
+  func noteManagedPlanGateFromWarmFailure(_ error: Error) {
+    guard ManagedPlanGateHTTP.isPlanGatedWarmFailure(error) else { return }
+    managedPlanGateLatch.latchServerDenial(at: entitlementNow(), ownerID: managedPlanGateOwnerID())
+    logPlanGateSkipOnce()
+    requestEntitlementRefresh()
+    scheduleBoundedManagedWarmRetry()
+    log("RealtimeHub: server plan_gated — stopping automatic managed re-warm")
+  }
+
+  /// One delayed `ensureWarm` after a typed server denial. Without this, the
+  /// plan-gated close path tears down and never observes latch expiry.
+  func scheduleBoundedManagedWarmRetry() {
+    planGateRetryTask?.cancel()
+    guard let delay = planGateRetryDelayNanoseconds else {
+      planGateRetryTask = nil
+      return
+    }
+    let ownerAtLatch = managedPlanGateOwnerID()
+    planGateRetryTask = Task { @MainActor [weak self] in
+      if delay > 0 {
+        try? await Task.sleep(nanoseconds: delay)
+      }
+      guard let self, !Task.isCancelled else { return }
+      self.planGateRetryTask = nil
+      guard self.managedPlanGateOwnerID() == ownerAtLatch else { return }
+      self.performScheduledManagedWarmRetry()
+    }
+  }
+
+  func performScheduledManagedWarmRetry() {
+    ensureWarm()
+  }
+
+  /// After an expected idle/lifecycle close: skip (plan gated), defer (user
+  /// away), or replace the socket. Tests drive this instead of a live WS.
+  @discardableResult
+  func continueWarmAfterLifecycleClose(
+    closeCategory: RealtimeHubCloseCategory?
+  ) -> RealtimeProviderCloseRecoveryResult {
+    if shouldSkipAutomaticManagedWarm() {
+      teardownSession()
+      return .deferredPlanGated
+    }
+    if deferIdleRewarmIfUserAway(closeCategory: closeCategory) {
+      return .deferredUserAway
+    }
+    guard !reconnectPending, hubReconnectStrikes < Self.maxReconnectStrikes else {
+      teardownSession()
+      return .exhausted
+    }
+    hubReconnectStrikes += 1
+    reconnectPending = true
+    replaceSessionAfterDrain(reconnectDelayNanoseconds: lifecycleRewarmDelayNanoseconds)
+    return .started
+  }
+
+  private func logPlanGateSkipOnce() {
+    guard !didLogPlanGateSkip else { return }
+    didLogPlanGateSkip = true
+    log("RealtimeHub: managed realtime unavailable on this plan; skipping automatic warm")
+  }
+
+  private func requestEntitlementRefresh() {
+    guard let refreshEntitlement, !entitlementRefreshInFlight else { return }
+    entitlementRefreshInFlight = true
+    entitlementRefreshGeneration &+= 1
+    let generation = entitlementRefreshGeneration
+    let ownerAtStart = managedPlanGateOwnerID()
+    let timeout = entitlementRefreshTimeoutNanoseconds
+    entitlementRefreshTask = Task { [weak self] in
+      await withTaskGroup(of: Void.self) { group in
+        group.addTask { await refreshEntitlement() }
+        group.addTask {
+          if timeout > 0 {
+            try? await Task.sleep(nanoseconds: timeout)
+          }
+        }
+        await group.next()
+        group.cancelAll()
+      }
+      await MainActor.run {
+        guard let self else { return }
+        self.planGateRefreshDidFinish?()
+        guard self.entitlementRefreshGeneration == generation else { return }
+        self.entitlementRefreshInFlight = false
+        self.entitlementRefreshTask = nil
+        guard !Task.isCancelled, self.managedPlanGateOwnerID() == ownerAtStart else { return }
+        self.completeEntitlementRefresh()
+      }
+    }
+  }
+
+  /// Refresh finished. If the decision is now allow (upgrade, BYOK, or a
+  /// newly populated cache), drop a stale skip and re-drive one warm. Does
+  /// not call `shouldSkipAutomaticManagedWarm` so it cannot loop a refresh.
+  func completeEntitlementRefresh() {
+    let decision = entitlementDecision()
+    let skip = managedPlanGateLatch.shouldSkipAutomaticManagedWork(
+      decision: decision,
+      now: entitlementNow(),
+      ownerID: managedPlanGateOwnerID())
+    guard !skip else { return }
+    didLogPlanGateSkip = false
+    ensureWarm()
+  }
+
   /// Gate on every `ensureWarm` entry. A path carrying direct user intent
-  /// (PTT press, app launch, the presence poll's input-return) always clears
-  /// an away deferral. Passive lifecycle callers (mint completions,
-  /// owner-change recovery, barge-in cleanup) keep it unless the HID sample
-  /// shows the user actually returned — otherwise background churn would
-  /// silently defeat the quota gate.
+  /// (PTT press, automation) always clears an away deferral. Passive
+  /// lifecycle callers (mint completions, owner-change recovery, barge-in
+  /// cleanup) keep it unless the HID sample shows the user actually returned
+  /// — otherwise background churn would silently defeat the quota gate.
   func admitWarmRequest(userInitiated: Bool) -> Bool {
     guard warmDeferredForUserAway else { return true }
     guard

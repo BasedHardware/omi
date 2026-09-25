@@ -37,6 +37,17 @@ workflows:
           - 'app/**'
     working_directory: app
     scripts:
+      - name: Verify dispatcher source pin
+        script: |
+          set -euo pipefail
+          if [[ -n "${OMI_RELEASE_SOURCE_SHA:-}" ]]; then
+            CHECKED_OUT_SHA="$(git rev-parse HEAD)"
+            [[ "$CHECKED_OUT_SHA" == "$OMI_RELEASE_SOURCE_SHA" ]] || {
+              echo "dispatcher source pin does not match checked-out HEAD" >&2
+              exit 1
+            }
+          fi
+
       - name: Installing Opus
         script: |
           brew install opus
@@ -44,33 +55,9 @@ workflows:
 
       - name: Set up Firebase
         script: |
-          dart pub global activate flutterfire_cli
-
-          echo "$FIREBASE_SERVICE_ACCOUNT_KEY" > ./firebase_key.json
-          flutterfire config \
-            --platforms="android,ios" \
-            --out=lib/firebase_options_prod.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12 \
-            --android-package-name=com.friend.ios \
-            --android-out=android/app/src/prod/  \
-            --ios-out=ios/Config/Prod/ \
-            --service-account="./firebase_key.json" \
-            --project="based-hardware" \
-            --ios-target="Runner" \
-            --yes
-
-          echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
-          flutterfire config \
-            --platforms="android,ios" \
-            --out=lib/firebase_options_dev.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12.development \
-            --android-package-name=com.friend.ios.dev \
-            --android-out=android/app/src/dev/  \
-            --ios-out=ios/Config/Dev/ \
-            --service-account="./firebase_dev_key.json" \
-            --project="based-hardware-dev" \
-            --ios-target="Runner" \
-            --yes
+          # Committed Firebase client config; no service-account key is needed.
+          # See setup/release-firebase/README.md to refresh it.
+          bash scripts/install_release_firebase_config.sh
 
       - name: Set up App .env
         script: |
@@ -108,56 +95,37 @@ workflows:
 
       - name: Resolve next version from TestFlight + App Store
         script: |
-          set -e
+          set -euo pipefail
 
-          EMPTY='{"version":"0.0.0","buildNumber":"0"}'
-          TF_RAW=$(app-store-connect get-latest-testflight-build-number "$APP_ID" --include-version --json 2>/dev/null) || TF_RAW=""
-          AS_RAW=$(app-store-connect get-latest-app-store-build-number "$APP_ID" --include-version --json 2>/dev/null) || AS_RAW=""
-          [ -z "$TF_RAW" ] && TF_RAW="$EMPTY"
-          [ -z "$AS_RAW" ] && AS_RAW="$EMPTY"
-
-          TF_V=$(echo "$TF_RAW" | jq -r '.version // "0.0.0"')
-          TF_B=$(echo "$TF_RAW" | jq -r '.buildNumber // "0"')
-          AS_V=$(echo "$AS_RAW" | jq -r '.version // "0.0.0"')
-          AS_B=$(echo "$AS_RAW" | jq -r '.buildNumber // "0"')
-
-          echo "TestFlight latest: ${TF_V}+${TF_B}"
-          echo "App Store latest:  ${AS_V}+${AS_B}"
-
-          if [ "$TF_V" = "0.0.0" ] && [ "$AS_V" = "0.0.0" ]; then
-            echo "WARNING: No TestFlight or App Store history. Seeding from pubspec.yaml."
-            PUBSPEC_VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | tr -d ' ')
-            BUILD_NAME=$(echo "$PUBSPEC_VERSION" | cut -d'+' -f1)
-            BUILD_NUMBER=$(echo "$PUBSPEC_VERSION" | cut -d'+' -f2)
-          else
-            semver_gt() {
-              IFS='.' read -r a1 a2 a3 <<< "$1"
-              IFS='.' read -r b1 b2 b3 <<< "$2"
-              [ "$a1" -gt "$b1" ] && return 0
-              [ "$a1" -lt "$b1" ] && return 1
-              [ "$a2" -gt "$b2" ] && return 0
-              [ "$a2" -lt "$b2" ] && return 1
-              [ "$a3" -gt "$b3" ] && return 0
-              return 1
-            }
-
-            if semver_gt "$TF_V" "$AS_V"; then
-              BUILD_NAME="$TF_V"
-              echo "TF ahead of App Store -> reusing TF version $BUILD_NAME"
-            else
-              IFS='.' read -r MAJ MIN PATCH <<< "$AS_V"
-              BUILD_NAME="${MAJ}.${MIN}.$((PATCH + 1))"
-              if [ "$TF_V" = "0.0.0" ]; then
-                echo "No TestFlight history -> bumping App Store patch to $BUILD_NAME"
-              else
-                echo "TF (${TF_V}) <= AS (${AS_V}) -> bumping patch to $BUILD_NAME"
-              fi
-            fi
-
-            MAX_B=$TF_B
-            [ "$AS_B" -gt "$MAX_B" ] && MAX_B=$AS_B
-            BUILD_NUMBER=$((MAX_B + 1))
+          if ! TF_RAW=$(app-store-connect get-latest-testflight-build-number "$APP_ID" --include-version --json 2>/dev/null); then
+            echo "TestFlight version lookup failed; refusing to guess a release version." >&2
+            exit 1
           fi
+          if ! AS_RAW=$(app-store-connect get-latest-app-store-build-number "$APP_ID" --include-version --json 2>/dev/null); then
+            echo "App Store version lookup failed; refusing to guess a release version." >&2
+            exit 1
+          fi
+          STORE_INPUT="$(mktemp)"
+          trap 'rm -f "$STORE_INPUT"' EXIT
+          export TF_RAW AS_RAW
+          python3 - "$STORE_INPUT" <<'PY'
+          import json
+          import os
+          import sys
+          from pathlib import Path
+
+          Path(sys.argv[1]).write_text(json.dumps({
+              "testflight": {"stdout": os.environ["TF_RAW"], "exit_code": 0},
+              "app_store": {"stdout": os.environ["AS_RAW"], "exit_code": 0},
+          }), encoding="utf-8")
+          PY
+          PUBSPEC_VERSION="$(grep '^version:' pubspec.yaml | sed 's/version: //' | tr -d ' ')"
+          RELEASE_PLAN="$(python3 scripts/mobile_store_version.py \
+            --platform ios \
+            --pubspec-version "$PUBSPEC_VERSION" \
+            --input "$STORE_INPUT")"
+          BUILD_NAME="$(jq -er '.version' <<<"$RELEASE_PLAN")"
+          BUILD_NUMBER="$(jq -er '.build_number' <<<"$RELEASE_PLAN")"
 
           echo "Resolved next version: ${BUILD_NAME}+${BUILD_NUMBER}"
           echo BUILD_NAME="$BUILD_NAME" >> $CM_ENV
@@ -169,12 +137,17 @@ workflows:
 
           echo "Building iOS with version $BUILD_NAME ($BUILD_NUMBER)"
 
+          if ! PROVENANCE_ARGS="$(scripts/build_provenance_dart_defines.sh)"; then
+            echo "Build provenance validation failed; refusing to build." >&2
+            exit 1
+          fi
           flutter build ipa \
             --release \
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
             --flavor prod \
-            --export-options-plist=$HOME/export_options.plist
+            --export-options-plist=$HOME/export_options.plist \
+            $PROVENANCE_ARGS
 
     artifacts:
       - build/ios/ipa/*.ipa
@@ -215,8 +188,6 @@ workflows:
       app_store_connect:
         auth: integration
         submit_to_testflight: true
-        beta_groups:
-          - Internal
         submit_to_app_store: false
 
   android-internal-auto:
@@ -252,6 +223,17 @@ workflows:
           - 'app/**'
     working_directory: app
     scripts:
+      - name: Verify dispatcher source pin
+        script: |
+          set -euo pipefail
+          if [[ -n "${OMI_RELEASE_SOURCE_SHA:-}" ]]; then
+            CHECKED_OUT_SHA="$(git rev-parse HEAD)"
+            [[ "$CHECKED_OUT_SHA" == "$OMI_RELEASE_SOURCE_SHA" ]] || {
+              echo "dispatcher source pin does not match checked-out HEAD" >&2
+              exit 1
+            }
+          fi
+
       - name: Installing Android SDK
         script: |
           export ANDROID_HOME="$HOME/opt/android-sdk"
@@ -284,33 +266,9 @@ workflows:
 
       - name: Set up Firebase
         script: |
-          dart pub global activate flutterfire_cli
-
-          echo "$FIREBASE_SERVICE_ACCOUNT_KEY" > ./firebase_key.json
-          flutterfire config \
-            --platforms="android,ios" \
-            --out=lib/firebase_options_prod.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12 \
-            --android-package-name=com.friend.ios \
-            --android-out=android/app/src/prod/  \
-            --ios-out=ios/Config/Prod/ \
-            --service-account="./firebase_key.json" \
-            --project="based-hardware" \
-            --ios-target="Runner" \
-            --yes
-
-          echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
-          flutterfire config \
-            --platforms="android,ios" \
-            --out=lib/firebase_options_dev.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12.development \
-            --android-package-name=com.friend.ios.dev \
-            --android-out=android/app/src/dev/  \
-            --ios-out=ios/Config/Dev/ \
-            --service-account="./firebase_dev_key.json" \
-            --project="based-hardware-dev" \
-            --ios-target="Runner" \
-            --yes
+          # Committed Firebase client config; no service-account key is needed.
+          # See setup/release-firebase/README.md to refresh it.
+          bash scripts/install_release_firebase_config.sh
 
       - name: Set up local.properties
         script: |
@@ -341,61 +299,42 @@ workflows:
 
       - name: Resolve next version from TestFlight + App Store + Play Store
         script: |
-          set -e
+          set -euo pipefail
 
-          EMPTY='{"version":"0.0.0","buildNumber":"0"}'
-          TF_RAW=$(app-store-connect get-latest-testflight-build-number "$APP_ID" --include-version --json 2>/dev/null) || TF_RAW=""
-          AS_RAW=$(app-store-connect get-latest-app-store-build-number "$APP_ID" --include-version --json 2>/dev/null) || AS_RAW=""
-          [ -z "$TF_RAW" ] && TF_RAW="$EMPTY"
-          [ -z "$AS_RAW" ] && AS_RAW="$EMPTY"
-
-          TF_V=$(echo "$TF_RAW" | jq -r '.version // "0.0.0"')
-          TF_B=$(echo "$TF_RAW" | jq -r '.buildNumber // "0"')
-          AS_V=$(echo "$AS_RAW" | jq -r '.version // "0.0.0"')
-          AS_B=$(echo "$AS_RAW" | jq -r '.buildNumber // "0"')
-          PLAY_B=$(google-play get-latest-build-number --package-name "$PACKAGE_NAME" --tracks internal 2>/dev/null || echo "0")
-          PLAY_B="${PLAY_B:-0}"
-
-          echo "TestFlight latest: ${TF_V}+${TF_B}"
-          echo "App Store latest:  ${AS_V}+${AS_B}"
-          echo "Play Store latest: ${PLAY_B}"
-
-          if [ "$TF_V" = "0.0.0" ] && [ "$AS_V" = "0.0.0" ]; then
-            echo "WARNING: No TestFlight or App Store history. Seeding from pubspec.yaml."
-            PUBSPEC_VERSION=$(grep '^version:' pubspec.yaml | sed 's/version: //' | tr -d ' ')
-            BUILD_NAME=$(echo "$PUBSPEC_VERSION" | cut -d'+' -f1)
-            BUILD_NUMBER=$(echo "$PUBSPEC_VERSION" | cut -d'+' -f2)
-            [ "$PLAY_B" -ge "$BUILD_NUMBER" ] && BUILD_NUMBER=$((PLAY_B + 1))
-          else
-            semver_gt() {
-              IFS='.' read -r a1 a2 a3 <<< "$1"
-              IFS='.' read -r b1 b2 b3 <<< "$2"
-              [ "$a1" -gt "$b1" ] && return 0
-              [ "$a1" -lt "$b1" ] && return 1
-              [ "$a2" -gt "$b2" ] && return 0
-              [ "$a2" -lt "$b2" ] && return 1
-              [ "$a3" -gt "$b3" ] && return 0
-              return 1
-            }
-
-            if semver_gt "$TF_V" "$AS_V"; then
-              BUILD_NAME="$TF_V"
-              echo "TF ahead of App Store -> reusing TF version $BUILD_NAME"
-            else
-              IFS='.' read -r MAJ MIN PATCH <<< "$AS_V"
-              BUILD_NAME="${MAJ}.${MIN}.$((PATCH + 1))"
-              if [ "$TF_V" = "0.0.0" ]; then
-                echo "No TestFlight history -> bumping App Store patch to $BUILD_NAME"
-              else
-                echo "TF (${TF_V}) <= AS (${AS_V}) -> bumping patch to $BUILD_NAME"
-              fi
-            fi
-
-            MAX_B=$TF_B
-            [ "$AS_B" -gt "$MAX_B" ] && MAX_B=$AS_B
-            [ "$PLAY_B" -gt "$MAX_B" ] && MAX_B=$PLAY_B
-            BUILD_NUMBER=$((MAX_B + 1))
+          if ! TF_RAW=$(app-store-connect get-latest-testflight-build-number "$APP_ID" --include-version --json 2>/dev/null); then
+            echo "TestFlight version lookup failed; refusing to guess a release version." >&2
+            exit 1
           fi
+          if ! AS_RAW=$(app-store-connect get-latest-app-store-build-number "$APP_ID" --include-version --json 2>/dev/null); then
+            echo "App Store version lookup failed; refusing to guess a release version." >&2
+            exit 1
+          fi
+          if ! PLAY_RAW=$(google-play get-latest-build-number --package-name "$PACKAGE_NAME" --tracks internal 2>/dev/null); then
+            echo "Play version lookup failed; refusing to guess a release version." >&2
+            exit 1
+          fi
+          STORE_INPUT="$(mktemp)"
+          trap 'rm -f "$STORE_INPUT"' EXIT
+          export TF_RAW AS_RAW PLAY_RAW
+          python3 - "$STORE_INPUT" <<'PY'
+          import json
+          import os
+          import sys
+          from pathlib import Path
+
+          Path(sys.argv[1]).write_text(json.dumps({
+              "testflight": {"stdout": os.environ["TF_RAW"], "exit_code": 0},
+              "app_store": {"stdout": os.environ["AS_RAW"], "exit_code": 0},
+              "play": {"stdout": os.environ["PLAY_RAW"], "exit_code": 0},
+          }), encoding="utf-8")
+          PY
+          PUBSPEC_VERSION="$(grep '^version:' pubspec.yaml | sed 's/version: //' | tr -d ' ')"
+          RELEASE_PLAN="$(python3 scripts/mobile_store_version.py \
+            --platform android \
+            --pubspec-version "$PUBSPEC_VERSION" \
+            --input "$STORE_INPUT")"
+          BUILD_NAME="$(jq -er '.version' <<<"$RELEASE_PLAN")"
+          BUILD_NUMBER="$(jq -er '.build_number' <<<"$RELEASE_PLAN")"
 
           echo "Resolved next version: ${BUILD_NAME}+${BUILD_NUMBER}"
           echo BUILD_NAME="$BUILD_NAME" >> $CM_ENV
@@ -405,11 +344,16 @@ workflows:
         script: |
           echo "Building Android with version $BUILD_NAME ($BUILD_NUMBER)"
 
+          if ! PROVENANCE_ARGS="$(scripts/build_provenance_dart_defines.sh)"; then
+            echo "Build provenance validation failed; refusing to build." >&2
+            exit 1
+          fi
           flutter build appbundle \
             --release \
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
-            --flavor prod
+            --flavor prod \
+            $PROVENANCE_ARGS
 
     artifacts:
       - build/**/outputs/**/*.aab
@@ -479,35 +423,9 @@ workflows:
 
       - name: Set up Firebase
         script: |
-          dart pub global activate flutterfire_cli
-
-          # https://github.com/invertase/flutterfire_cli/issues/233
-          echo "$FIREBASE_SERVICE_ACCOUNT_KEY" > ./firebase_key.json
-          flutterfire config \
-            --platforms="android,ios" \
-            --out=lib/firebase_options_prod.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12 \
-            --android-package-name=com.friend.ios \
-            --android-out=android/app/src/prod/  \
-            --ios-out=ios/Config/Prod/ \
-            --service-account="./firebase_key.json" \
-            --project="based-hardware" \
-            --ios-target="Runner" \
-            --yes
-
-          # DEV, should remove
-          echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
-          flutterfire config \
-            --platforms="android,ios" \
-            --out=lib/firebase_options_dev.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12.development \
-            --android-package-name=com.friend.ios.dev \
-            --android-out=android/app/src/dev/  \
-            --ios-out=ios/Config/Dev/ \
-            --service-account="./firebase_dev_key.json" \
-            --project="based-hardware-dev" \
-            --ios-target="Runner" \
-            --yes
+          # Committed Firebase client config; no service-account key is needed.
+          # See setup/release-firebase/README.md to refresh it.
+          bash scripts/install_release_firebase_config.sh
 
       - name: Set up App .env
         script: |
@@ -546,19 +464,54 @@ workflows:
 
       - name: Flutter build ipa
         script: |
+          set -euo pipefail
           # Set up code signing settings on Xcode project
           # -> $HOME/export_options.plist
           xcode-project use-profiles
 
-          # Build
-          BUILD_NAME=$(echo $CM_TAG | sed 's/^v\(.*\)+\(.*\)-mobile-cm$/\1/')
-          BUILD_NUMBER=$(echo $CM_TAG | sed 's/^v\(.*\)+\(.*\)-mobile-cm$/\2/')
+          # The tag is the release identity. Validate its platform, source
+          # commit, version, and build number before invoking Flutter.
+          CHECKED_OUT_SHA="$(git rev-parse HEAD)"
+          TAG_SOURCE_SHA="$(git rev-parse "${CM_TAG:?CM_TAG is required}^{commit}")"
+          if ! IDENTITY_OUTPUT="$(python3 scripts/mobile_release_identity.py \
+            --tag "${CM_TAG}" \
+            --platform ios \
+            --source-sha "${CHECKED_OUT_SHA}" \
+            --tag-source-sha "${TAG_SOURCE_SHA}" \
+            --format shell)"; then
+            echo "Mobile release identity validation failed; refusing to build." >&2
+            exit 1
+          fi
+          eval "$IDENTITY_OUTPUT"
+          export OMI_RELEASE_SOURCE_SHA="$CHECKED_OUT_SHA"
+          export OMI_RELEASE_PLATFORM=ios
+          echo "OMI_RELEASE_SOURCE_SHA=$OMI_RELEASE_SOURCE_SHA" >> "$CM_ENV"
+          echo "OMI_RELEASE_PLATFORM=$OMI_RELEASE_PLATFORM" >> "$CM_ENV"
+
+          ADMISSION_PROOF="$(mktemp)"
+          trap 'rm -f "$ADMISSION_PROOF"' EXIT
+          python3 ../.github/scripts/collect_mobile_release_admission.py \
+            --sha "$CHECKED_OUT_SHA" \
+            --repository "${GITHUB_REPOSITORY:-BasedHardware/omi}" \
+            --token "${GITHUB_TOKEN:-}" \
+            --output "$ADMISSION_PROOF"
+          python3 ../.github/scripts/verify_mobile_release_admission.py \
+            --sha "$CHECKED_OUT_SHA" \
+            --repository "${GITHUB_REPOSITORY:-BasedHardware/omi}" \
+            --proof "$ADMISSION_PROOF"
+
+          echo "Building iOS with version $BUILD_NAME ($BUILD_NUMBER)"
+          if ! PROVENANCE_ARGS="$(scripts/build_provenance_dart_defines.sh)"; then
+            echo "Build provenance validation failed; refusing to build." >&2
+            exit 1
+          fi
           flutter build ipa \
             --release \
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
             --flavor prod \
-            --export-options-plist=$HOME/export_options.plist
+            --export-options-plist=$HOME/export_options.plist \
+            $PROVENANCE_ARGS
 
     artifacts:
       - build/ios/ipa/*.ipa
@@ -620,8 +573,10 @@ workflows:
       app_store_connect:
         auth: integration
         submit_to_testflight: true
+        # Internal-type TestFlight groups auto-receive every processed build;
+        # Apple rejects explicit assignment ("Cannot add internal group to a
+        # build"). Only external groups (Discord Folks) are named here.
         beta_groups:
-          - Internal
           - Discord Folks
         submit_to_app_store: false
 
@@ -656,31 +611,10 @@ workflows:
     scripts:
       - name: Set up Firebase
         script: |
-          dart pub global activate flutterfire_cli
-
-          # https://github.com/invertase/flutterfire_cli/issues/233
-          echo "$FIREBASE_SERVICE_ACCOUNT_KEY" > ./firebase_key.json
-          flutterfire config \
-            --platforms="macos" \
-            --out=lib/firebase_options_prod.dart \
-            --macos-bundle-id=com.friend-app-with-wearable.ios12 \
-            --macos-out=macos/Config/Prod \
-            --service-account="./firebase_key.json" \
-            --project="based-hardware" \
-            --macos-target="Runner" \
-            --yes
-
-          # DEV, should remove
-          echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
-          flutterfire config \
-            --platforms="macos" \
-            --out=lib/firebase_options_dev.dart \
-            --macos-bundle-id=com.friend-app-with-wearable.ios12.development \
-            --macos-out=macos/Config/Dev/ \
-            --service-account="./firebase_dev_key.json" \
-            --project="based-hardware-dev" \
-            --macos-target="Runner" \
-            --yes
+          # The Flutter macOS Xcode project (app/macos/Runner.xcodeproj) was removed; this legacy workflow cannot build.
+          # It no longer generates Firebase config from a service-account key.
+          echo "legacy Flutter macOS workflow: app/macos/Runner.xcodeproj no longer exists" >&2
+          exit 1
 
       - name: Set up Google Service Info
         script: |
@@ -809,8 +743,10 @@ workflows:
       app_store_connect:
         auth: integration
         submit_to_testflight: true
+        # Internal-type TestFlight groups auto-receive every processed build;
+        # Apple rejects explicit assignment ("Cannot add internal group to a
+        # build"). Only external groups (Discord Folks) are named here.
         beta_groups:
-          - Internal
           - Discord Folks
         submit_to_app_store: false
 
@@ -889,35 +825,9 @@ workflows:
 
       - name: Set up Firebase
         script: |
-          dart pub global activate flutterfire_cli
-
-          # https://github.com/invertase/flutterfire_cli/issues/233
-          echo "$FIREBASE_SERVICE_ACCOUNT_KEY" > ./firebase_key.json
-          flutterfire config \
-            --platforms="android,ios" \
-            --out=lib/firebase_options_prod.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12 \
-            --android-package-name=com.friend.ios \
-            --android-out=android/app/src/prod/  \
-            --ios-out=ios/Config/Prod/ \
-            --service-account="./firebase_key.json" \
-            --project="based-hardware" \
-            --ios-target="Runner" \
-            --yes
-
-          # DEV, should remove
-          echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
-          flutterfire config \
-            --platforms="android,ios" \
-            --out=lib/firebase_options_dev.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12.development \
-            --android-package-name=com.friend.ios.dev \
-            --android-out=android/app/src/dev/  \
-            --ios-out=ios/Config/Dev/ \
-            --service-account="./firebase_dev_key.json" \
-            --project="based-hardware-dev" \
-            --ios-target="Runner" \
-            --yes
+          # Committed Firebase client config; no service-account key is needed.
+          # See setup/release-firebase/README.md to refresh it.
+          bash scripts/install_release_firebase_config.sh
 
       - name: Set up local.properties
         script: |
@@ -946,18 +856,73 @@ workflows:
           dart run build_runner build --delete-conflicting-outputs
       - name: Build AAB with Flutter
         script: |
+          set -euo pipefail
           # TODO: Don't tricky
           # Tricky Opus > build.gradle, force use NDK 28 to deal with "ERROR: Unknown host CPU architecture: arm64 and 16kb memory page size support"
           # echo "Z3JvdXAgJ2V1LmVwbncub3B1c19mbHV0dGVyX2FuZHJvaWQnDQp2ZXJzaW9uICcxLjAnDQoNCmJ1aWxkc2NyaXB0IHsNCiAgICByZXBvc2l0b3JpZXMgew0KICAgICAgICBnb29nbGUoKQ0KICAgICAgICBtYXZlbkNlbnRyYWwoKQ0KICAgIH0NCg0KICAgIGRlcGVuZGVuY2llcyB7DQogICAgICAgIGNsYXNzcGF0aCAnY29tLmFuZHJvaWQudG9vbHMuYnVpbGQ6Z3JhZGxlOjcuMy4wJw0KICAgIH0NCn0NCg0Kcm9vdFByb2plY3QuYWxscHJvamVjdHMgew0KICAgIHJlcG9zaXRvcmllcyB7DQogICAgICAgIGdvb2dsZSgpDQogICAgICAgIG1hdmVuQ2VudHJhbCgpDQogICAgfQ0KfQ0KDQphcHBseSBwbHVnaW46ICdjb20uYW5kcm9pZC5saWJyYXJ5Jw0KDQphbmRyb2lkIHsNCiAgICBpZiAocHJvamVjdC5hbmRyb2lkLmhhc1Byb3BlcnR5KCJuYW1lc3BhY2UiKSkgew0KICAgICAgICBuYW1lc3BhY2UgJ2V1LmVwbncub3B1c19mbHV0dGVyX2FuZHJvaWQnDQogICAgfQ0KDQogICAgY29tcGlsZVNka1ZlcnNpb24gMzMNCg0KICAgIGNvbXBpbGVPcHRpb25zIHsNCiAgICAgICAgc291cmNlQ29tcGF0aWJpbGl0eSBKYXZhVmVyc2lvbi5WRVJTSU9OXzFfOA0KICAgICAgICB0YXJnZXRDb21wYXRpYmlsaXR5IEphdmFWZXJzaW9uLlZFUlNJT05fMV84DQogICAgfQ0KDQogICAgZGVmYXVsdENvbmZpZyB7DQogICAgICAgIG1pblNka1ZlcnNpb24gMTkNCiAgICB9DQogICAgZXh0ZXJuYWxOYXRpdmVCdWlsZCB7DQogICAgICAgIG5ka0J1aWxkew0KICAgICAgICAgICAgcGF0aCAiQW5kcm9pZC5tayINCiAgICAgICAgfQ0KICAgIH0NCg0KICAgIGRlcGVuZGVuY2llcyB7DQogICAgICAgIHRlc3RJbXBsZW1lbnRhdGlvbiAnanVuaXQ6anVuaXQ6NC4xMy4yJw0KICAgICAgICB0ZXN0SW1wbGVtZW50YXRpb24gJ29yZy5tb2NraXRvOm1vY2tpdG8tY29yZTo1LjAuMCcNCiAgICB9DQoNCiAgICB0ZXN0T3B0aW9ucyB7DQogICAgICAgIHVuaXRUZXN0cy5hbGwgew0KICAgICAgICAgICAgdGVzdExvZ2dpbmcgew0KICAgICAgICAgICAgICAgZXZlbnRzICJwYXNzZWQiLCAic2tpcHBlZCIsICJmYWlsZWQiLCAic3RhbmRhcmRPdXQiLCAic3RhbmRhcmRFcnJvciINCiAgICAgICAgICAgICAgIG91dHB1dHMudXBUb0RhdGVXaGVuIHtmYWxzZX0NCiAgICAgICAgICAgICAgIHNob3dTdGFuZGFyZFN0cmVhbXMgPSB0cnVlDQogICAgICAgICAgICB9DQogICAgICAgIH0NCiAgICB9DQogICAgbmRrVmVyc2lvbiAnMjcuMC4xMjA3Nzk3MycNCn0NCg==" | base64 -d > "$HOME/.pub-cache/hosted/pub.dev/opus_flutter_android-3.0.1/android/build.gradle"
 
-          # Should use bump version automatically by CI
-          BUILD_NAME=$(echo $CM_TAG | sed 's/^v\(.*\)+\(.*\)-mobile-cm$/\1/')
-          BUILD_NUMBER=$(echo $CM_TAG | sed 's/^v\(.*\)+\(.*\)-mobile-cm$/\2/')
+          # The tag is the release identity. Validate its platform, source
+          # commit, version, and build number before invoking Flutter.
+          CHECKED_OUT_SHA="$(git rev-parse HEAD)"
+          TAG_SOURCE_SHA="$(git rev-parse "${CM_TAG:?CM_TAG is required}^{commit}")"
+          if ! IDENTITY_OUTPUT="$(python3 scripts/mobile_release_identity.py \
+            --tag "${CM_TAG}" \
+            --platform android \
+            --source-sha "${CHECKED_OUT_SHA}" \
+            --tag-source-sha "${TAG_SOURCE_SHA}" \
+            --format shell)"; then
+            echo "Mobile release identity validation failed; refusing to build." >&2
+            exit 1
+          fi
+          eval "$IDENTITY_OUTPUT"
+          export OMI_RELEASE_SOURCE_SHA="$CHECKED_OUT_SHA"
+          export OMI_RELEASE_PLATFORM=android
+          echo "OMI_RELEASE_SOURCE_SHA=$OMI_RELEASE_SOURCE_SHA" >> "$CM_ENV"
+          echo "OMI_RELEASE_PLATFORM=$OMI_RELEASE_PLATFORM" >> "$CM_ENV"
+
+          # Google Play version codes are global and immutable, and the
+          # internal-auto lane keeps allocating them after a release tag
+          # pins its build number. Keep the tag number when it is above the
+          # live floor; otherwise allocate floor + 1 so publishing cannot
+          # collide with an already-used code.
+          PLAY_LOOKUP="$(mktemp)"
+          if ! google-play get-latest-build-number \
+              --package-name "$PACKAGE_NAME" --tracks internal \
+              > "$PLAY_LOOKUP" 2>/dev/null; then
+            echo "Google Play version lookup failed; refusing to guess a build number." >&2
+            exit 1
+          fi
+          PLAY_PLAN="$(python3 scripts/mobile_play_build_number.py \
+            --tag-number "$BUILD_NUMBER" \
+            --play-output "$PLAY_LOOKUP")"
+          rm -f "$PLAY_LOOKUP"
+          TAG_BUILD_NUMBER="$BUILD_NUMBER"
+          BUILD_NUMBER="$(jq -er '.build_number' <<<"$PLAY_PLAN")"
+          echo "Android build number $BUILD_NUMBER (tag $TAG_BUILD_NUMBER, source: $(jq -r '.source' <<<"$PLAY_PLAN"))"
+
+          ADMISSION_PROOF="$(mktemp)"
+          trap 'rm -f "$ADMISSION_PROOF"' EXIT
+          python3 ../.github/scripts/collect_mobile_release_admission.py \
+            --sha "$CHECKED_OUT_SHA" \
+            --repository "${GITHUB_REPOSITORY:-BasedHardware/omi}" \
+            --token "${GITHUB_TOKEN:-}" \
+            --output "$ADMISSION_PROOF"
+          python3 ../.github/scripts/verify_mobile_release_admission.py \
+            --sha "$CHECKED_OUT_SHA" \
+            --repository "${GITHUB_REPOSITORY:-BasedHardware/omi}" \
+            --proof "$ADMISSION_PROOF"
+
+          echo "Building Android with version $BUILD_NAME ($BUILD_NUMBER)"
+          if ! PROVENANCE_ARGS="$(scripts/build_provenance_dart_defines.sh)"; then
+            echo "Build provenance validation failed; refusing to build." >&2
+            exit 1
+          fi
           flutter build appbundle \
             --release \
             --build-name=$BUILD_NAME \
             --build-number=$BUILD_NUMBER \
-            --flavor prod
+            --flavor prod \
+            $PROVENANCE_ARGS
 
 
     artifacts:
@@ -1033,35 +998,9 @@ workflows:
 
       - name: Set up Firebase
         script: |
-          dart pub global activate flutterfire_cli
-
-          # https://github.com/invertase/flutterfire_cli/issues/233
-          echo "$FIREBASE_SERVICE_ACCOUNT_KEY" > ./firebase_key.json
-          flutterfire config \
-            --platforms="android,ios" \
-            --out=lib/firebase_options_prod.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12 \
-            --android-package-name=com.friend.ios \
-            --android-out=android/app/src/prod/  \
-            --ios-out=ios/Config/Prod/ \
-            --service-account="./firebase_key.json" \
-            --project="based-hardware" \
-            --ios-target="Runner" \
-            --yes
-
-          # DEV, should remove
-          echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
-          flutterfire config \
-            --platforms="android,ios" \
-            --out=lib/firebase_options_dev.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12.development \
-            --android-package-name=com.friend.ios.dev \
-            --android-out=android/app/src/dev/  \
-            --ios-out=ios/Config/Dev/ \
-            --service-account="./firebase_dev_key.json" \
-            --project="based-hardware-dev" \
-            --ios-target="Runner" \
-            --yes
+          # Committed Firebase client config; no service-account key is needed.
+          # See setup/release-firebase/README.md to refresh it.
+          bash scripts/install_release_firebase_config.sh
 
       - name: Set up App .env
         script: |
@@ -1101,9 +1040,14 @@ workflows:
           xcode-project use-profiles
 
           # Build
+          if ! PROVENANCE_ARGS="$(scripts/build_provenance_dart_defines.sh)"; then
+            echo "Build provenance validation failed; refusing to patch." >&2
+            exit 1
+          fi
           shorebird patch ios \
             --flavor prod -- \
-            --export-options-plist=$HOME/export_options.plist
+            --export-options-plist=$HOME/export_options.plist \
+            $PROVENANCE_ARGS
     artifacts:
       - build/ios/ipa/*.ipa
       - /tmp/xcodebuild_logs/*.log
@@ -1147,31 +1091,10 @@ workflows:
     scripts:
       - name: Set up Firebase
         script: |
-          dart pub global activate flutterfire_cli
-
-          # https://github.com/invertase/flutterfire_cli/issues/233
-          echo "$FIREBASE_SERVICE_ACCOUNT_KEY" > ./firebase_key.json
-          flutterfire config \
-            --platforms="macos" \
-            --out=lib/firebase_options_prod.dart \
-            --macos-bundle-id=com.friend-app-with-wearable.ios12 \
-            --macos-out=macos/Config/Prod \
-            --service-account="./firebase_key.json" \
-            --project="based-hardware" \
-            --macos-target="Runner" \
-            --yes
-
-          # DEV, should remove
-          echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
-          flutterfire config \
-            --platforms="macos" \
-            --out=lib/firebase_options_dev.dart \
-            --macos-bundle-id=com.friend-app-with-wearable.ios12.development \
-            --macos-out=macos/Config/Dev/ \
-            --service-account="./firebase_dev_key.json" \
-            --project="based-hardware-dev" \
-            --macos-target="Runner" \
-            --yes
+          # The Flutter macOS Xcode project (app/macos/Runner.xcodeproj) was removed; this legacy workflow cannot build.
+          # It no longer generates Firebase config from a service-account key.
+          echo "legacy Flutter macOS workflow: app/macos/Runner.xcodeproj no longer exists" >&2
+          exit 1
 
       - name: Set up Google Service Info
         script: |
@@ -1734,35 +1657,9 @@ workflows:
 
       - name: Set up Firebase
         script: |
-          dart pub global activate flutterfire_cli
-
-          # https://github.com/invertase/flutterfire_cli/issues/233
-          echo "$FIREBASE_SERVICE_ACCOUNT_KEY" > ./firebase_key.json
-          flutterfire config \
-            --platforms="android,ios" \
-            --out=lib/firebase_options_prod.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12 \
-            --android-package-name=com.friend.ios \
-            --android-out=android/app/src/prod/  \
-            --ios-out=ios/Config/Prod/ \
-            --service-account="./firebase_key.json" \
-            --project="based-hardware" \
-            --ios-target="Runner" \
-            --yes
-
-          # DEV, should remove
-          echo "$FIREBASE_SERVICE_ACCOUNT_DEV_KEY" > ./firebase_dev_key.json
-          flutterfire config \
-            --platforms="android,ios" \
-            --out=lib/firebase_options_dev.dart \
-            --ios-bundle-id=com.friend-app-with-wearable.ios12.development \
-            --android-package-name=com.friend.ios.dev \
-            --android-out=android/app/src/dev/  \
-            --ios-out=ios/Config/Dev/ \
-            --service-account="./firebase_dev_key.json" \
-            --project="based-hardware-dev" \
-            --ios-target="Runner" \
-            --yes
+          # Committed Firebase client config; no service-account key is needed.
+          # See setup/release-firebase/README.md to refresh it.
+          bash scripts/install_release_firebase_config.sh
 
       - name: Set up local.properties
         script: |
@@ -1796,8 +1693,13 @@ workflows:
           # echo "Z3JvdXAgJ2V1LmVwbncub3B1c19mbHV0dGVyX2FuZHJvaWQnDQp2ZXJzaW9uICcxLjAnDQoNCmJ1aWxkc2NyaXB0IHsNCiAgICByZXBvc2l0b3JpZXMgew0KICAgICAgICBnb29nbGUoKQ0KICAgICAgICBtYXZlbkNlbnRyYWwoKQ0KICAgIH0NCg0KICAgIGRlcGVuZGVuY2llcyB7DQogICAgICAgIGNsYXNzcGF0aCAnY29tLmFuZHJvaWQudG9vbHMuYnVpbGQ6Z3JhZGxlOjcuMy4wJw0KICAgIH0NCn0NCg0Kcm9vdFByb2plY3QuYWxscHJvamVjdHMgew0KICAgIHJlcG9zaXRvcmllcyB7DQogICAgICAgIGdvb2dsZSgpDQogICAgICAgIG1hdmVuQ2VudHJhbCgpDQogICAgfQ0KfQ0KDQphcHBseSBwbHVnaW46ICdjb20uYW5kcm9pZC5saWJyYXJ5Jw0KDQphbmRyb2lkIHsNCiAgICBpZiAocHJvamVjdC5hbmRyb2lkLmhhc1Byb3BlcnR5KCJuYW1lc3BhY2UiKSkgew0KICAgICAgICBuYW1lc3BhY2UgJ2V1LmVwbncub3B1c19mbHV0dGVyX2FuZHJvaWQnDQogICAgfQ0KDQogICAgY29tcGlsZVNka1ZlcnNpb24gMzMNCg0KICAgIGNvbXBpbGVPcHRpb25zIHsNCiAgICAgICAgc291cmNlQ29tcGF0aWJpbGl0eSBKYXZhVmVyc2lvbi5WRVJTSU9OXzFfOA0KICAgICAgICB0YXJnZXRDb21wYXRpYmlsaXR5IEphdmFWZXJzaW9uLlZFUlNJT05fMV84DQogICAgfQ0KDQogICAgZGVmYXVsdENvbmZpZyB7DQogICAgICAgIG1pblNka1ZlcnNpb24gMTkNCiAgICB9DQogICAgZXh0ZXJuYWxOYXRpdmVCdWlsZCB7DQogICAgICAgIG5ka0J1aWxkew0KICAgICAgICAgICAgcGF0aCAiQW5kcm9pZC5tayINCiAgICAgICAgfQ0KICAgIH0NCg0KICAgIGRlcGVuZGVuY2llcyB7DQogICAgICAgIHRlc3RJbXBsZW1lbnRhdGlvbiAnanVuaXQ6anVuaXQ6NC4xMy4yJw0KICAgICAgICB0ZXN0SW1wbGVtZW50YXRpb24gJ29yZy5tb2NraXRvOm1vY2tpdG8tY29yZTo1LjAuMCcNCiAgICB9DQoNCiAgICB0ZXN0T3B0aW9ucyB7DQogICAgICAgIHVuaXRUZXN0cy5hbGwgew0KICAgICAgICAgICAgdGVzdExvZ2dpbmcgew0KICAgICAgICAgICAgICAgZXZlbnRzICJwYXNzZWQiLCAic2tpcHBlZCIsICJmYWlsZWQiLCAic3RhbmRhcmRPdXQiLCAic3RhbmRhcmRFcnJvciINCiAgICAgICAgICAgICAgIG91dHB1dHMudXBUb0RhdGVXaGVuIHtmYWxzZX0NCiAgICAgICAgICAgICAgIHNob3dTdGFuZGFyZFN0cmVhbXMgPSB0cnVlDQogICAgICAgICAgICB9DQogICAgICAgIH0NCiAgICB9DQogICAgbmRrVmVyc2lvbiAnMjcuMC4xMjA3Nzk3MycNCn0NCg==" | base64 -d > "$HOME/.pub-cache/hosted/pub.dev/opus_flutter_android-3.0.1/android/build.gradle"
 
           # Should use bump version automatically by CI
+          if ! PROVENANCE_ARGS="$(scripts/build_provenance_dart_defines.sh)"; then
+            echo "Build provenance validation failed; refusing to patch." >&2
+            exit 1
+          fi
           shorebird patch android \
-            --flavor prod
+            --flavor prod -- \
+            $PROVENANCE_ARGS
     artifacts:
       - build/**/outputs/**/*.aab
       - build/**/outputs/**/mapping.txt
@@ -1878,7 +1780,10 @@ workflows:
         BACKEND_IMAGE: "gcr.io/based-hardware/desktop-backend"
         GCS_DESKTOP_UPDATES_BUCKET: "gs://omi_macos_updates"
         DMGBUILD_VERSION: "1.6.7"
-      xcode: 16.4
+      # Desktop Swift ship/CI toolchain pin. Keep in sync with
+      # desktop/macos/ci/xcode-pin.json (enforced by the
+      # desktop-swift-ci-contract check); never `latest` or `edge`.
+      xcode: 26.6
     # API-dispatched by desktop_auto_release.yml after its exact tag is pushed.
     # Keeping this workflow manual prevents a webhook/API race from creating
     # duplicate builds for one immutable candidate.
@@ -2884,7 +2789,10 @@ workflows:
         # This registry remains on the production control plane even when the
         # preview artifact itself is configured to use a preview backend.
         DESKTOP_PREVIEW_REGISTRY_URL: "https://api.omi.me"
-      xcode: 16.4
+      # Desktop Swift ship/CI toolchain pin. Keep in sync with
+      # desktop/macos/ci/xcode-pin.json (enforced by the
+      # desktop-swift-ci-contract check); never `latest` or `edge`.
+      xcode: 26.6
     working_directory: desktop/macos
     cache:
       cache_paths:
@@ -2981,3 +2889,30 @@ workflows:
     artifacts:
       - dist/*.dmg
       - dist/*.zip
+
+  mobile-store-promote:
+    name: Promote Existing Mobile Builds to Store Review
+    instance_type: mac_mini_m2
+    max_build_duration: 30
+    integrations:
+      app_store_connect: codemagic_v4
+    environment:
+      groups:
+        - google_play
+      vars:
+        CONFIRM: ""
+        PROMOTE_PLATFORM: ""
+        PROMOTE_VERSION: ""
+        PROMOTE_IOS_BUILD: ""
+        PROMOTE_ANDROID_BUILD: ""
+    working_directory: app
+    scripts:
+      - name: Submit explicitly selected existing builds
+        script: |
+          set -euo pipefail
+          python3 scripts/mobile_store_promote.py \
+            --confirm "${CONFIRM:-}" \
+            --platform "${PROMOTE_PLATFORM:-}" \
+            --version "${PROMOTE_VERSION:-}" \
+            --ios-build "${PROMOTE_IOS_BUILD:-}" \
+            --android-build "${PROMOTE_ANDROID_BUILD:-}"

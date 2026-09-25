@@ -193,6 +193,7 @@ describe("omi tool manifest", () => {
     expect(spawnAgent?.inputSchema.properties.provider).toMatchObject({
       enum: ["openclaw", "hermes"],
     });
+    expect(spawnAgent?.inputSchema.properties).not.toHaveProperty("adapterId");
     expect(spawnAgent?.promptGuidelines?.join("\n")).toContain("provider='openclaw'");
     expect(spawnAgent?.promptGuidelines?.join("\n")).toContain("provider='hermes'");
   });

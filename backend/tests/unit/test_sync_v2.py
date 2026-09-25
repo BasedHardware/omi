@@ -8,6 +8,12 @@ polls GET /v2/sync-local-files/{job_id} until the job reaches a terminal status.
 v1 remains completely unchanged.
 """
 
+from utils import conversation_continuity  # noqa: F401 - retain pure policy across legacy package stubs
+from utils import manual_speaker_assignments  # noqa: F401 - retain pure policy across legacy package stubs
+from utils.stt import speaker_identity  # noqa: F401 - retain allocator across legacy package stubs
+from utils.stt import sync_speaker_evidence  # noqa: F401 - retain pure evidence policy across legacy package stubs
+from utils.observability import speaker_identification  # noqa: F401 - retain telemetry across legacy package stubs
+
 import asyncio
 import json
 import os
@@ -1315,11 +1321,21 @@ class TestAsyncCoordinatorBehavioral:
         prior_speaker_match = sys.modules.get('utils.stt.speaker_match')
         from utils.stt import speaker_match as actual_speaker_match
 
+        prior_speaker_identity = sys.modules.get('utils.stt.speaker_identity')
+        from utils.stt import speaker_identity as actual_speaker_identity
+
+        prior_manual_assignments = sys.modules.get('utils.manual_speaker_assignments')
+        from utils import manual_speaker_assignments as actual_manual_assignments
+
+        prior_sync_lanes = sys.modules.get('utils.sync.lanes')
+        from utils.sync import lanes as actual_sync_lanes
+
         heavy_deps = [
             'redis',
             'database',
             'database.redis_db',
             'database._client',
+            'database.auth',
             'database.conversations',
             'database.users',
             'database.user_usage',
@@ -1347,6 +1363,7 @@ class TestAsyncCoordinatorBehavioral:
             'utils.cloud_tasks',
             'utils.conversations',
             'utils.conversations.process_conversation',
+            'utils.sync.bridge',
             'utils.conversations.factory',
             'utils.conversations.location',
             'utils.other',
@@ -1362,6 +1379,12 @@ class TestAsyncCoordinatorBehavioral:
             'utils.observability.fallback',
             'utils.observability.transcription',
             'utils.metrics',
+            'utils.product_metrics',
+            'utils.journey_metrics_contract',
+            'utils.sync.rate_limit',
+            'utils.sync.lanes',
+            'utils.sync.provenance',
+            'utils.sync.capture_manifest',
             'utils.log_sanitizer',
             'utils.http_client',
             'utils.multipart',
@@ -1380,6 +1403,55 @@ class TestAsyncCoordinatorBehavioral:
         for mod_name in heavy_deps:
             saved_modules[mod_name] = sys.modules.get(mod_name)
             sys.modules[mod_name] = MagicMock()
+
+        # New conversation-assignment seam: pipeline imports the pure
+        # deterministic minimum and the lifecycle intake. The former is
+        # dependency-free production code (exec the real module); the latter
+        # drags in the real database stack, so it stays a stub whose
+        # ingest_sync_conversation attribute auto-mocks per call.
+        import importlib.util as _il
+
+        from testing.import_isolation import AutoMockModule
+
+        _lifecycle_name = 'utils.conversations.lifecycle'
+        saved_modules[_lifecycle_name] = sys.modules.get(_lifecycle_name)
+        sys.modules[_lifecycle_name] = AutoMockModule(_lifecycle_name)
+
+        # deterministic_minimum imports models.conversation_enums.CategoryEnum and
+        # models.structured.Structured at module scope; both would otherwise be
+        # MagicMocks here. Register a minimal real pydantic Structured and the real
+        # enum member BEFORE the exec — the module is pure, so its title logic
+        # then runs for real.
+        from pydantic import BaseModel as _BaseModel
+
+        class _Structured(_BaseModel):
+            title: str = ''
+            overview: str = ''
+            category: str = 'other'
+            sections: list = []
+            action_items: list = []
+            events: list = []
+
+        class _CategoryEnum(str, __import__('enum').Enum):
+            other = 'other'
+
+        _enums_mod = sys.modules['models.conversation_enums']
+        _enums_mod.CategoryEnum = _CategoryEnum
+        _structured_mod = MagicMock()
+        _structured_mod.Structured = _Structured
+        _structured_name = 'models.structured'
+        saved_modules[_structured_name] = sys.modules.get(_structured_name)
+        sys.modules[_structured_name] = _structured_mod
+
+        _dmin_name = 'utils.conversations.deterministic_minimum'
+        _dmin_path = os.path.join(
+            os.path.dirname(__file__), '..', '..', 'utils', 'conversations', 'deterministic_minimum.py'
+        )
+        saved_modules[_dmin_name] = sys.modules.get(_dmin_name)
+        _dmin_spec = _il.spec_from_file_location(_dmin_name, _dmin_path)
+        _dmin_mod = _il.module_from_spec(_dmin_spec)
+        sys.modules[_dmin_name] = _dmin_mod
+        _dmin_spec.loader.exec_module(_dmin_mod)
 
         class _Geolocation:
             def model_dump(self):
@@ -1402,6 +1474,21 @@ class TestAsyncCoordinatorBehavioral:
         # calls select_speaker_match(), and a MagicMock stand-in would return a MagicMock
         # decision whose fields blow up the %.3f log formatting even on an empty match set.
         sys.modules['utils.stt.speaker_match'] = actual_speaker_match
+        saved_modules['utils.stt.speaker_identity'] = prior_speaker_identity
+        # Keep the conversation-local allocator real: assignment.py imports it at
+        # module scope, and a MagicMock parent for utils.stt is not a package.
+        sys.modules['utils.stt.speaker_identity'] = actual_speaker_identity
+        saved_modules['utils.manual_speaker_assignments'] = prior_manual_assignments
+        # Keep receipt apply/remap real: pipeline → assignment imports the policy
+        # module at scope, and a MagicMock parent for utils is not a package.
+        sys.modules['utils.manual_speaker_assignments'] = actual_manual_assignments
+        saved_modules['utils.sync.lanes'] = prior_sync_lanes
+        # Keep SyncLane real: V2 responses serialize lane as a str-enum value, and a
+        # MagicMock lane fails response validation. lanes.py is stdlib-only.
+        sys.modules['utils.sync.lanes'] = actual_sync_lanes
+        from testing.import_isolation import register_pure_relevance_modules
+
+        register_pure_relevance_modules(saved_modules)
         sys.modules['utils.conversations.location'].async_resolve_geolocation = _passthrough_resolve_geolocation
         sys.modules['utils.multipart'].MultipartMaxPartSizeRoute = APIRoute
         sys.modules['utils.multipart'].SYNC_AUDIO_MAX_PART_SIZE = 200 * 1024 * 1024
@@ -1606,6 +1693,9 @@ class TestAsyncCoordinatorBehavioral:
             'new_memories': set(),
         }
         assert checkpointed_fences == [{'fenced': {'replaced-conversation'}, 'updated': {'current-conversation'}}]
+        # `_merged` reprocessing runs for every conversation that gained segments;
+        # created rows enrich through the same update path (the intake already
+        # persisted the deterministic minimum, so the processor must not re-create).
         assert pipeline._reprocess_conversation_after_update.call_args_list == [
             unittest.mock.call('uid', 'replaced-conversation', 'en'),
             unittest.mock.call('uid', 'current-conversation', 'fr'),
@@ -1629,6 +1719,33 @@ class TestAsyncCoordinatorBehavioral:
         pipeline.conversations_db.update_conversation.assert_called_once_with(
             'uid', 'current-conversation', {'audio_files': [{'path': 'current.opus'}]}
         )
+
+    def test_merged_reprocess_destructive_op_fence_is_not_swallowed(self, fenced_worker_module):
+        '''A transient destructive-op fence must fail the batch, not log-and-continue.'''
+        _module, stubs = fenced_worker_module
+        pipeline = stubs['pipeline']
+
+        class DestructiveOperationInProgress(RuntimeError):
+            pass
+
+        pipeline.logger = MagicMock()
+        pipeline._reprocess_conversation_after_update = MagicMock(
+            side_effect=DestructiveOperationInProgress('legal_hold_deletion_gates')
+        )
+        response = {
+            '_merged': {'conv-a': 'en', 'conv-b': 'fr'},
+            'updated_memories': {'conv-a', 'conv-b'},
+            'new_memories': set(),
+        }
+
+        with pytest.raises(DestructiveOperationInProgress):
+            pipeline._reprocess_merged_conversations('uid', response)
+
+        pipeline.logger.error.assert_not_called()
+        assert pipeline._reprocess_conversation_after_update.call_args_list == [
+            unittest.mock.call('uid', 'conv-a', 'en'),
+        ]
+        assert response['updated_memories'] == {'conv-a', 'conv-b'}
 
     def test_limitless_discard_recovery_emits_one_creation_webhook(self, fenced_worker_module):
         """A pendant conversation becomes webhook-visible when merged speech revives it."""
@@ -2258,6 +2375,119 @@ class TestAsyncCoordinatorBehavioral:
             self._cleanup(stubs['saved_modules'])
 
     @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        'vad_error, expected_class',
+        [('ConnectTimeout', 'ConnectTimeout'), ('uid-secret-9f2c detail', 'OtherException')],
+    )
+    async def test_vad_failure_propagates_bounded_class(self, vad_error, expected_class):
+        """The first VAD error's class reaches the terminal log, bounded to the closed set."""
+        module, stubs = self._load_sync_module()
+        try:
+            pipeline = stubs['pipeline']
+            pipeline.decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
+            pipeline._cleanup_files = MagicMock()
+            pipeline.finalize_sync_job_failure_now = MagicMock(return_value={'status': 'failed'})
+
+            def _bad_vad(_path, _segmented_paths, errors):
+                errors.append(vad_error)
+
+            pipeline.retrieve_vad_segments = _bad_vad
+
+            await module._run_full_pipeline_background_async('jv', 'uid', ['/tmp/f.opus'], 'omi', False, '/tmp/jobv')
+
+            kwargs = pipeline.finalize_sync_job_failure_now.call_args.kwargs
+            assert kwargs['error_code'] == 'sync_vad_failed'
+            assert kwargs['failure_phase'] == 'vad'
+            assert kwargs['failure_class'] == expected_class
+        finally:
+            self._cleanup(stubs['saved_modules'])
+
+    @pytest.mark.asyncio
+    async def test_silence_segment_marks_processed_and_is_skipped_on_task_retry(self):
+        """A confirmed-empty segment persists its processed markers, so a Cloud
+        Tasks redelivery skips it while a failed sibling retries."""
+        module, stubs = self._load_sync_module()
+        try:
+            pipeline = stubs['pipeline']
+            pipeline.decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
+            pipeline._cleanup_files = MagicMock()
+
+            def _vad_two_segments(_path, segmented_paths, _errors):
+                segmented_paths.update({'/tmp/seg_1700000001.wav', '/tmp/seg_1700000002.wav'})
+
+            pipeline.retrieve_vad_segments = _vad_two_segments
+            pipeline.get_wav_duration = MagicMock(return_value=5.0)
+            pipeline.get_timestamp_from_path = lambda path: float(path.rsplit('_', 1)[1][:-4])
+            pipeline.get_syncing_file_temporal_signed_url = lambda path: path
+            pipeline.schedule_syncing_temporal_file_deletion = lambda path: None
+            pipeline.compute_sync_segment_id = lambda _uid, path: os.path.basename(path)[:-4]
+            pipeline.users_db.get_user_transcription_preferences = MagicMock(return_value={})
+            pipeline.users_db.get_user_private_cloud_sync_enabled = MagicMock(return_value=False)
+            pipeline.users_db.get_data_protection_level = MagicMock(return_value=None)
+            pipeline.build_person_embeddings_cache = MagicMock(return_value={})
+            pipeline.get_prerecorded_service = MagicMock(return_value=('deepgram', 'multi', 'nova-3'))
+            pipeline.get_processed_segments = MagicMock(return_value=set())
+            pipeline.get_processed_sync_segment_ids = MagicMock(return_value=set())
+            pipeline.add_processed_sync_segment_id = MagicMock(return_value=True)
+            pipeline.record_sync_transcription_outcome = MagicMock()
+
+            def _provider(url, **_kwargs):
+                if '1700000001' in url:
+                    return [], 'en'
+                raise RuntimeError('provider exploded')
+
+            pipeline.prerecorded = MagicMock(side_effect=_provider)
+            stubs['sync_jobs'].finalize_sync_job.side_effect = lambda *_a, **_k: {'status': 'partial_failure'}
+
+            await module._run_full_pipeline_background_async(
+                'j-sil',
+                'uid',
+                ['/tmp/f.opus'],
+                'omi',
+                False,
+                '/tmp/job-sil',
+                content_id='content-sil',
+                task_mode=True,
+            )
+
+            silent_calls = [c for c in pipeline.prerecorded.call_args_list if '1700000001' in c.args[0]]
+            assert len(silent_calls) == 2
+            assert len([c for c in pipeline.prerecorded.call_args_list if '1700000002' in c.args[0]]) == 1
+            pipeline.add_processed_sync_segment_id.assert_called_once()
+            assert pipeline.add_processed_sync_segment_id.call_args.args[3] == 'seg_1700000001'
+            stubs['sync_jobs'].add_processed_segment.assert_called_once_with('j-sil', '/tmp/seg_1700000001.wav')
+            result = stubs['sync_jobs'].finalize_sync_job.call_args[0][1]
+            assert result['failed_segments'] == 1
+            stubs['analytics'].record_usage.assert_not_called()
+
+            pipeline.get_processed_sync_segment_ids = MagicMock(return_value={'seg_1700000001'})
+            pipeline.prerecorded.reset_mock()
+            pipeline.add_processed_sync_segment_id.reset_mock()
+
+            await module._run_full_pipeline_background_async(
+                'j-sil',
+                'uid',
+                ['/tmp/f.opus'],
+                'omi',
+                False,
+                '/tmp/job-sil',
+                content_id='content-sil',
+                task_mode=True,
+            )
+
+            assert all('1700000001' not in c.args[0] for c in pipeline.prerecorded.call_args_list)
+            assert len([c for c in pipeline.prerecorded.call_args_list if '1700000002' in c.args[0]]) == 1
+            pipeline.add_processed_sync_segment_id.assert_not_called()
+            silence_metrics = [
+                c
+                for c in pipeline.record_sync_transcription_outcome.call_args_list
+                if c.kwargs.get('outcome') == pipeline.TranscriptionOutcome.EXPECTED_SILENCE
+            ]
+            assert len(silence_metrics) == 1
+        finally:
+            self._cleanup(stubs['saved_modules'])
+
+    @pytest.mark.asyncio
     async def test_zero_segments_after_vad_completes(self):
         """Zero segmented_paths after VAD must complete with 0 segments."""
         module, stubs = self._load_sync_module()
@@ -2280,11 +2510,12 @@ class TestAsyncCoordinatorBehavioral:
             self._cleanup(stubs['saved_modules'])
 
     @pytest.mark.asyncio
-    async def test_provider_empty_after_vad_completes_as_silence(self):
-        """A provider that returns no words for VAD-admitted audio is reporting
-        silence, not failing. The job completes, the content ledger is marked
-        done rather than left retryable, and no usage is billed — the client
-        stops re-uploading the same noise as a failed recording."""
+    @pytest.mark.parametrize('intake_outcome', ['silence', 'deleted', 'lineage', 'protected'])
+    @pytest.mark.parametrize('task_mode', [False, True])
+    async def test_empty_or_superseded_intake_completes_without_retry(self, intake_outcome, task_mode):
+        """Silence and user-superseded intake finish the ledger without errors or
+        usage in both inline and Cloud Tasks modes; #14337 must not recur as
+        endless client re-upload of an intentionally empty result."""
         module, stubs = self._load_sync_module()
         try:
             stubs['pipeline'].decode_files_to_wav = MagicMock(return_value=['/tmp/w.wav'])
@@ -2301,11 +2532,30 @@ class TestAsyncCoordinatorBehavioral:
             stubs['pipeline'].build_person_embeddings_cache = MagicMock(return_value={})
             stubs['pipeline'].get_prerecorded_service = MagicMock(return_value=('deepgram', 'multi', 'nova-3'))
             stubs['pipeline'].prerecorded = MagicMock(return_value=([], 'en'))
+
+            if intake_outcome != 'silence':
+
+                def payload(**values):
+                    return types.SimpleNamespace(**values, model_dump=lambda: values)
+
+                stubs['pipeline'].CreateConversation = payload
+                stubs['pipeline'].Conversation = payload
+                stubs['pipeline'].ConversationSource = lambda value: value
+                stubs['pipeline'].get_timestamp_from_path = lambda path: 1700000001.0
+                stubs['pipeline'].prerecorded.return_value = ([{'text': 'Speech'}], 'en')
+                stubs['pipeline'].postprocess_words = lambda *a: [types.SimpleNamespace(start=0, end=3)]
+                stubs['pipeline'].identify_speakers_for_segments = lambda *a: None
+
+                def superseded(*a, **kw):
+                    raise stubs['pipeline'].SyncAssignmentSuperseded(intake_outcome)
+
+                sys.modules['utils.conversations.lifecycle'].ingest_sync_conversation = superseded
+
             terminal_events = []
             stubs['pipeline'].mark_sync_content_completed.side_effect = lambda *_a, **_k: (
                 terminal_events.append('content_completed') or True
             )
-            stubs['sync_jobs'].finalize_sync_job.side_effect = lambda *_args: (
+            stubs['sync_jobs'].finalize_sync_job.side_effect = lambda *_args, **_kwargs: (
                 terminal_events.append('job_finalized') or {'status': 'completed'}
             )
 
@@ -2317,6 +2567,7 @@ class TestAsyncCoordinatorBehavioral:
                 False,
                 '/tmp/job-empty',
                 content_id='content-empty',
+                task_mode=task_mode,
             )
 
             result = stubs['sync_jobs'].finalize_sync_job.call_args[0][1]
@@ -3065,11 +3316,21 @@ class TestV2EndpointExecution:
         prior_speaker_match = sys.modules.get('utils.stt.speaker_match')
         from utils.stt import speaker_match as actual_speaker_match
 
+        prior_speaker_identity = sys.modules.get('utils.stt.speaker_identity')
+        from utils.stt import speaker_identity as actual_speaker_identity
+
+        prior_manual_assignments = sys.modules.get('utils.manual_speaker_assignments')
+        from utils import manual_speaker_assignments as actual_manual_assignments
+
+        prior_sync_lanes = sys.modules.get('utils.sync.lanes')
+        from utils.sync import lanes as actual_sync_lanes
+
         heavy_deps = [
             'redis',
             'database',
             'database.redis_db',
             'database._client',
+            'database.auth',
             'database.conversations',
             'database.users',
             'database.user_usage',
@@ -3097,6 +3358,7 @@ class TestV2EndpointExecution:
             'utils.cloud_tasks',
             'utils.conversations',
             'utils.conversations.process_conversation',
+            'utils.sync.bridge',
             'utils.conversations.factory',
             'utils.conversations.location',
             'utils.other',
@@ -3112,6 +3374,12 @@ class TestV2EndpointExecution:
             'utils.observability.fallback',
             'utils.observability.transcription',
             'utils.metrics',
+            'utils.product_metrics',
+            'utils.journey_metrics_contract',
+            'utils.sync.rate_limit',
+            'utils.sync.lanes',
+            'utils.sync.provenance',
+            'utils.sync.capture_manifest',
             'utils.log_sanitizer',
             'utils.http_client',
             'utils.multipart',
@@ -3130,6 +3398,55 @@ class TestV2EndpointExecution:
         for mod_name in heavy_deps:
             saved_modules[mod_name] = sys.modules.get(mod_name)
             sys.modules[mod_name] = MagicMock()
+
+        # New conversation-assignment seam: pipeline imports the pure
+        # deterministic minimum and the lifecycle intake. The former is
+        # dependency-free production code (exec the real module); the latter
+        # drags in the real database stack, so it stays a stub whose
+        # ingest_sync_conversation attribute auto-mocks per call.
+        import importlib.util as _il
+
+        from testing.import_isolation import AutoMockModule
+
+        _lifecycle_name = 'utils.conversations.lifecycle'
+        saved_modules[_lifecycle_name] = sys.modules.get(_lifecycle_name)
+        sys.modules[_lifecycle_name] = AutoMockModule(_lifecycle_name)
+
+        # deterministic_minimum imports models.conversation_enums.CategoryEnum and
+        # models.structured.Structured at module scope; both would otherwise be
+        # MagicMocks here. Register a minimal real pydantic Structured and the real
+        # enum member BEFORE the exec — the module is pure, so its title logic
+        # then runs for real.
+        from pydantic import BaseModel as _BaseModel
+
+        class _Structured(_BaseModel):
+            title: str = ''
+            overview: str = ''
+            category: str = 'other'
+            sections: list = []
+            action_items: list = []
+            events: list = []
+
+        class _CategoryEnum(str, __import__('enum').Enum):
+            other = 'other'
+
+        _enums_mod = sys.modules['models.conversation_enums']
+        _enums_mod.CategoryEnum = _CategoryEnum
+        _structured_mod = MagicMock()
+        _structured_mod.Structured = _Structured
+        _structured_name = 'models.structured'
+        saved_modules[_structured_name] = sys.modules.get(_structured_name)
+        sys.modules[_structured_name] = _structured_mod
+
+        _dmin_name = 'utils.conversations.deterministic_minimum'
+        _dmin_path = os.path.join(
+            os.path.dirname(__file__), '..', '..', 'utils', 'conversations', 'deterministic_minimum.py'
+        )
+        saved_modules[_dmin_name] = sys.modules.get(_dmin_name)
+        _dmin_spec = _il.spec_from_file_location(_dmin_name, _dmin_path)
+        _dmin_mod = _il.module_from_spec(_dmin_spec)
+        sys.modules[_dmin_name] = _dmin_mod
+        _dmin_spec.loader.exec_module(_dmin_mod)
 
         class _Geolocation:
             def model_dump(self):
@@ -3150,6 +3467,21 @@ class TestV2EndpointExecution:
         # calls select_speaker_match(), and a MagicMock stand-in would return a MagicMock
         # decision whose fields blow up the %.3f log formatting even on an empty match set.
         sys.modules['utils.stt.speaker_match'] = actual_speaker_match
+        saved_modules['utils.stt.speaker_identity'] = prior_speaker_identity
+        # Keep the conversation-local allocator real: assignment.py imports it at
+        # module scope, and a MagicMock parent for utils.stt is not a package.
+        sys.modules['utils.stt.speaker_identity'] = actual_speaker_identity
+        saved_modules['utils.manual_speaker_assignments'] = prior_manual_assignments
+        # Keep receipt apply/remap real: pipeline → assignment imports the policy
+        # module at scope, and a MagicMock parent for utils is not a package.
+        sys.modules['utils.manual_speaker_assignments'] = actual_manual_assignments
+        saved_modules['utils.sync.lanes'] = prior_sync_lanes
+        # Keep SyncLane real: V2 responses serialize lane as a str-enum value, and a
+        # MagicMock lane fails response validation. lanes.py is stdlib-only.
+        sys.modules['utils.sync.lanes'] = actual_sync_lanes
+        from testing.import_isolation import register_pure_relevance_modules
+
+        register_pure_relevance_modules(saved_modules)
         sys.modules['utils.conversations.location'].async_resolve_geolocation = _passthrough_resolve_geolocation
         sys.modules['utils.multipart'].MultipartMaxPartSizeRoute = APIRoute
         sys.modules['utils.multipart'].SYNC_AUDIO_MAX_PART_SIZE = 200 * 1024 * 1024

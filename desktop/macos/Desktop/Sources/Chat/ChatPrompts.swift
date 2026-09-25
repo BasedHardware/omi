@@ -614,6 +614,8 @@ struct ChatPrompts {
       "category": "AI-assigned topic category",
       "actionItemsJson": "JSON array of tasks extracted by backend",
       "eventsJson": "JSON array of calendar events detected",
+      "sectionsJson": "JSON array of headed summary sections with transcript evidence ids",
+      "captureGroupJson": "JSON event membership: other devices' recordings of this same conversation",
       "geolocationJson": "Location data if available",
       "photosJson": "Referenced photo metadata",
       "appsResultsJson": "App integrations results",

@@ -31,6 +31,7 @@ actually present in the export at pull time, which is the empirical version of t
 |---|---|---|---|
 | GCP billing export | `gcp_billing_export_resource_v1_01B287_9348DC_02D256` | read-only bot | every GCP component; the pools |
 | LLM gateway ledger | Firestore `llm_gateway_attempts` | read-only bot | measured OpenAI cost per user, Gemini/desktop drivers |
+| LLM gateway user-day rollup | Firestore `llm_gateway_user_days` (hashed uid, dual-written at attempt-record time) | read-only bot | will replace the `llm_gateway_attempts` paging in `pull_ledger.py`; fields mirror `ledger_user_daily.csv` |
 | Users projection | Firestore `users` (field mask) | read-only bot | platform cohort, plan |
 | Transcription seconds | Firestore collection group `hourly_usage` | read-only bot | audio-pipeline driver |
 | VAD-forwarded audio hours | Prometheus via the Grafana proxy on monitor.omi.me | Grafana token | modelled STT vendor volume |
@@ -51,8 +52,12 @@ Firestore reads bill under service `App Engine`, so Firestore is matched by SKU,
   path does not exist on this host and falls through **silently** to owner credentials, so
   `gcpauth.assert_readonly_identity()` re-checks `gcloud config get-value account` after
   sourcing and refuses to pull under any other account.
-* The **BigQuery load** runs as the interactive owner `david@scalingforever.com` and refuses
-  to run under any other account (`gcpauth.assert_writer_identity()`).
+* The **BigQuery load** runs as `finops-writer@based-hardware.iam.gserviceaccount.com`
+  (dataset `omi_finops` WRITER + project `roles/bigquery.jobUser`) and refuses to run
+  under any other account (`gcpauth.assert_writer_identity()`): it verifies the
+  key's `client_email` directly (ADC's credential) and activates the key into the
+  dedicated `WRITER_GCLOUD` config so `bq` uses the same identity. The read-only bot
+  stays read-only. Human ADC is not the cron writer.
 * No token, key or secret is ever printed or written to disk.
 * **No raw uid ever reaches disk.** Uids are hashed `sha256(uid)[:16]` in flight, and
   `run_unit_cost.validate()` scans the outputs for any hex run of 20+ characters before a load.

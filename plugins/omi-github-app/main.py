@@ -5,12 +5,25 @@ This app provides GitHub integration through OAuth2 authentication
 and chat tools for creating and managing GitHub issues.
 """
 import sys
-import json
-from fastapi import FastAPI, Request, HTTPException, Query
-from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 import os
-from dotenv import load_dotenv
+import re
+import time
 import secrets
+import html
+import json
+from urllib.parse import quote, urlparse
+from fastapi import FastAPI, Request, HTTPException, Query
+try:
+    from fastapi import Depends
+except (ImportError, AttributeError):
+    Depends = lambda default=None, **kwargs: default
+
+try:
+    from .github_tools_auth import require_github_tools_auth
+except (ImportError, AttributeError):
+    from github_tools_auth import require_github_tools_auth
+from fastapi.responses import HTMLResponse, RedirectResponse
+from dotenv import load_dotenv
 
 from simple_storage import SimpleUserStorage
 from github_client import GitHubClient
@@ -73,16 +86,212 @@ def _require_uid(request: Request, *, query_uid: str | None = None, body_uid: st
 # Helper Functions
 # ============================================
 
+GITHUB_SEGMENT_RE = re.compile(r"^[a-zA-Z0-9_.-]+$")
+
+
+def _validate_owner_repo(repo: str) -> tuple[str, str]:
+    """
+    Validate and canonicalize a repository string in 'owner/repo' format.
+    Returns (canonical_owner_repo, error_message).
+    """
+    if not isinstance(repo, str):
+        return None, f"Invalid repository format: {repo!r}. Expected 'owner/repo'."
+    if any(c in repo for c in ("\n", "\r", "\t", "\0")):
+        return None, f"Invalid repository format: {repo!r}. Expected 'owner/repo'."
+    cleaned = repo.strip()
+    if "/" not in cleaned:
+        return None, f"Invalid repository format: {repo!r}. Expected 'owner/repo'."
+    parts = cleaned.split("/")
+    if len(parts) != 2:
+        return None, f"Invalid repository format: {repo!r}. Expected 'owner/repo'."
+    owner, name = parts[0].strip(), parts[1].strip()
+    if (
+        not owner
+        or not name
+        or not GITHUB_SEGMENT_RE.match(owner)
+        or not GITHUB_SEGMENT_RE.match(name)
+        or owner in (".", "..")
+        or name in (".", "..")
+    ):
+        return None, f"Invalid repository format: {repo!r}. Expected 'owner/repo'."
+    return f"{owner}/{name}", None
+
+
+def _fallback_to_default_repo(user: dict) -> tuple[str, str]:
+    """Fallback to user's configured default repository with validation."""
+    default_repo = user.get("selected_repo")
+    if not default_repo or not isinstance(default_repo, str) or not default_repo.strip():
+        return None, "No repository specified. Please set a default repository in settings or provide the 'repo' parameter (format: 'owner/repo')."
+    canonical_default, err = _validate_owner_repo(default_repo)
+    if err:
+        return None, f"Configured default repository is invalid ({default_repo!r}): {err}"
+    return canonical_default, None
+
+
 def get_repo_for_request(user: dict, repo_param: str = None) -> tuple[str, str]:
     """
-    Get repository for a request.
+    Get and resolve the target repository for a request.
+    Handles full names ('owner/repo'), URLs, and short names ('repo') against
+    the user's accessible repositories with strict disambiguation and whitelist validation.
     Returns (repo_full_name, error_message).
     If error_message is not None, repo_full_name will be None.
     """
-    repo_full_name = repo_param or user.get("selected_repo")
-    if not repo_full_name:
-        return None, "No repository specified. Please set a default repository in settings or provide the 'repo' parameter (format: 'owner/repo')."
-    return repo_full_name, None
+    if not isinstance(user, dict):
+        user = {}
+
+    raw_repo = repo_param
+    if raw_repo is not None:
+        if not isinstance(raw_repo, str):
+            return None, f"Invalid repository parameter: {raw_repo!r}. Expected 'owner/repo' string."
+        raw_repo = raw_repo.strip()
+
+    # Fall back to selected_repo if parameter is missing or blank
+    if not raw_repo:
+        return _fallback_to_default_repo(user)
+
+    cleaned = raw_repo
+
+    # Robust URL parsing using urlparse
+    if cleaned.lower().startswith(("http://", "https://")):
+        try:
+            parsed = urlparse(cleaned)
+            host = (parsed.hostname or "").lower()
+            if host != "github.com" and not host.endswith(".github.com"):
+                return None, f"Invalid repository URL: {repo_param!r}. Only GitHub URLs are supported."
+            path = parsed.path.strip("/")
+            path_parts = [p for p in path.split("/") if p]
+            if len(path_parts) >= 2:
+                cleaned = f"{path_parts[0]}/{path_parts[1]}"
+            else:
+                return None, f"Invalid GitHub URL: {repo_param!r}. Expected 'https://github.com/owner/repo'."
+        except Exception:
+            return None, f"Invalid repository URL: {repo_param!r}."
+
+    # Strip SSH, common prefixes and extensions
+    if cleaned.lower().startswith("git@github.com:"):
+        cleaned = cleaned[len("git@github.com:"):].strip()
+    for prefix in ("https://github.com/", "http://github.com/", "github.com/"):
+        if cleaned.lower().startswith(prefix):
+            cleaned = cleaned[len(prefix):].strip()
+    if cleaned.lower().endswith(".git"):
+        cleaned = cleaned[:-4].strip()
+    cleaned = cleaned.strip("/")
+
+    if not cleaned:
+        return _fallback_to_default_repo(user)
+
+    # Full name validation ('owner/repo')
+    if "/" in cleaned:
+        return _validate_owner_repo(cleaned)
+
+    # Ensure short name does not contain illegal characters / control chars
+    if not GITHUB_SEGMENT_RE.match(cleaned) or cleaned in (".", ".."):
+        return None, f"Invalid repository name: {repo_param!r}. Expected 'owner/repo' or valid short name."
+
+    # Build known accessible repos: prioritize selected_repo first
+    known_repos = []
+    seen = set()
+
+    selected = user.get("selected_repo")
+    if selected and isinstance(selected, str):
+        c_sel, _ = _validate_owner_repo(selected)
+        if c_sel:
+            known_repos.append(c_sel)
+            seen.add(c_sel)
+
+    raw_avail = user.get("available_repos")
+    if isinstance(raw_avail, list):
+        for item in raw_avail:
+            fn = None
+            if isinstance(item, dict):
+                val = item.get("full_name")
+                if isinstance(val, str):
+                    fn = val.strip()
+            elif isinstance(item, str):
+                fn = item.strip()
+            if fn:
+                c_fn, _ = _validate_owner_repo(fn)
+                if c_fn and c_fn not in seen:
+                    known_repos.append(c_fn)
+                    seen.add(c_fn)
+
+    target = cleaned.lower()
+
+    # 1. Exact match against short repository name
+    exact_matches = [r for r in known_repos if r.split("/")[-1].lower() == target]
+    if len(exact_matches) == 1:
+        return exact_matches[0], None
+    if len(exact_matches) > 1:
+        candidates_str = ", ".join(f"'{m}'" for m in exact_matches)
+        return None, f"Multiple repositories match '{cleaned}': {candidates_str}. Please specify the full 'owner/repo'."
+
+    # 2. Substring match against repository name (only when target length >= 3 to prevent flooding)
+    if len(target) >= 3:
+        partial_matches = [r for r in known_repos if target in r.split("/")[-1].lower()]
+        if len(partial_matches) == 1:
+            return partial_matches[0], None
+        if len(partial_matches) > 1:
+            candidates_str = ", ".join(f"'{m}'" for m in partial_matches[:5])
+            return None, f"Multiple repositories match '{cleaned}': {candidates_str}. Please specify the full 'owner/repo'."
+
+    # 3. No match found
+    return None, f"Repository '{cleaned}' not found in your accessible GitHub repositories. Please specify the full 'owner/repo'."
+
+
+def coerce_issue_number(value) -> tuple[int, str]:
+    """
+    Normalize an issue number from tool input.
+    Accepts ints and strings like "#42" or " 42 ".
+    Returns (issue_number, error_message); error_message is not None on failure.
+    """
+    if value is None:
+        return None, "Issue number is required"
+    if isinstance(value, bool):
+        return None, f"Invalid issue number: {value!r}. Provide a positive integer like 42."
+    if isinstance(value, int):
+        number = value
+    elif isinstance(value, float):
+        if not value.is_integer():
+            return None, f"Invalid issue number: {value!r}. Provide a positive integer like 42."
+        number = int(value)
+    elif isinstance(value, str):
+        text = value.strip().lstrip("#").strip()
+        if not text.isdigit():
+            return None, f"Invalid issue number: {value!r}. Provide a positive integer like 42."
+        number = int(text)
+    else:
+        return None, f"Invalid issue number: {value!r}. Provide a positive integer like 42."
+    if number <= 0:
+        return None, f"Invalid issue number: {value!r}. Issue numbers start at 1."
+    return number, None
+
+
+def coerce_limit(value, default: int = 10, max_value: int = 50) -> tuple[int, str]:
+    """
+    Normalize a result limit from tool input. Optional params arrive as
+    JSON null; strings and floats are coerced when unambiguous.
+    Returns (limit, error_message); error_message is not None on failure.
+    """
+    if value is None:
+        return default, None
+    if isinstance(value, bool):
+        return None, f"Invalid limit: {value!r}. Provide a positive integer."
+    if isinstance(value, int):
+        limit = value
+    elif isinstance(value, float):
+        if not value.is_integer():
+            return None, f"Invalid limit: {value!r}. Provide a positive integer."
+        limit = int(value)
+    elif isinstance(value, str):
+        text = value.strip()
+        if not text.isdigit():
+            return None, f"Invalid limit: {value!r}. Provide a positive integer."
+        limit = int(text)
+    else:
+        return None, f"Invalid limit: {value!r}. Provide a positive integer."
+    if limit <= 0:
+        return None, "Invalid limit: must be a positive integer."
+    return min(limit, max_value), None
 
 
 # ============================================
@@ -273,7 +482,12 @@ async def get_manifest_alias():
 # Chat Tool Endpoints
 # ============================================
 
-@app.post("/tools/create_issue", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post(
+    "/tools/create_issue",
+    tags=["chat_tools"],
+    response_model=ChatToolResponse,
+    dependencies=[Depends(require_github_tools_auth)],
+)
 async def tool_create_issue(request: Request):
     """
     Create a GitHub issue.
@@ -283,14 +497,24 @@ async def tool_create_issue(request: Request):
         raw_body = await request.body()
         body = json.loads(raw_body.decode("utf-8") or "{}")
         log(f"=== CREATE_ISSUE START ===")
-        log(f"Request: {body}")
-
         uid = _require_uid(request, body_uid=body.get("uid"), body=raw_body)
         title = body.get("title")
         issue_body = body.get("body", "")
-        labels = body.get("labels", [])
-        auto_labels = body.get("auto_labels", True)
         repo = body.get("repo")
+        log(f"Request create_issue: uid={uid}, repo={repo}, title={title}")
+
+        raw_labels = body.get("labels")
+        if isinstance(raw_labels, str):
+            labels = [l.strip() for l in raw_labels.split(",") if l.strip()]
+        elif isinstance(raw_labels, list):
+            labels = [str(l).strip() for l in raw_labels if l is not None and str(l).strip()]
+        else:
+            labels = []
+        # The backend sends JSON null for an omitted optional parameter, and
+        # dict.get returns that null rather than the default, so fall back to
+        # the schema's documented default of true only when nothing was sent.
+        raw_auto_labels = body.get("auto_labels")
+        auto_labels = True if raw_auto_labels is None else bool(raw_auto_labels)
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
@@ -359,10 +583,15 @@ async def tool_create_issue(request: Request):
         import traceback
         log(f"EXCEPTION: {e}")
         log(traceback.format_exc())
-        return ChatToolResponse(error=f"Failed to create issue: {str(e)}")
+        return ChatToolResponse(error="Failed to create issue due to an internal error.")
 
 
-@app.post("/tools/list_repos", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post(
+    "/tools/list_repos",
+    tags=["chat_tools"],
+    response_model=ChatToolResponse,
+    dependencies=[Depends(require_github_tools_auth)],
+)
 async def tool_list_repos(request: Request):
     """
     List user's GitHub repositories.
@@ -404,10 +633,15 @@ async def tool_list_repos(request: Request):
 
     except Exception as e:
         log(f"Error listing repos: {e}")
-        return ChatToolResponse(error=f"Failed to list repositories: {str(e)}")
+        return ChatToolResponse(error="Failed to list repositories due to an internal error.")
 
 
-@app.post("/tools/list_issues", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post(
+    "/tools/list_issues",
+    tags=["chat_tools"],
+    response_model=ChatToolResponse,
+    dependencies=[Depends(require_github_tools_auth)],
+)
 async def tool_list_issues(request: Request):
     """
     List issues in a GitHub repository.
@@ -417,11 +651,19 @@ async def tool_list_issues(request: Request):
         body = json.loads(raw_body.decode("utf-8") or "{}")
         uid = _require_uid(request, body_uid=body.get("uid"), body=raw_body)
         repo = body.get("repo")
-        state = body.get("state", "open")
-        limit = min(body.get("limit", 10), 50)
+        state = body.get("state") or "open"
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
+
+        if state not in ("open", "closed", "all"):
+            return ChatToolResponse(
+                error=f"Invalid state: {state!r}. Use 'open', 'closed', or 'all'."
+            )
+
+        limit, error = coerce_limit(body.get("limit"), default=10, max_value=50)
+        if error:
+            return ChatToolResponse(error=error)
 
         user = SimpleUserStorage.get_user(uid)
         if not user or not user.get("access_token"):
@@ -433,13 +675,17 @@ async def tool_list_issues(request: Request):
         if error:
             return ChatToolResponse(error=error)
 
-        issues = github_client.list_issues(
+        result = github_client.list_issues(
             access_token=user["access_token"],
             repo_full_name=repo_full_name,
             state=state,
             per_page=limit
         )
 
+        if result.get("error"):
+            return ChatToolResponse(error=result["error"])
+
+        issues = result["issues"]
         if not issues:
             return ChatToolResponse(result=f"No {state} issues found in {repo_full_name}.")
 
@@ -452,10 +698,15 @@ async def tool_list_issues(request: Request):
 
     except Exception as e:
         log(f"Error listing issues: {e}")
-        return ChatToolResponse(error=f"Failed to list issues: {str(e)}")
+        return ChatToolResponse(error="Failed to list issues due to an internal error.")
 
 
-@app.post("/tools/get_issue", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post(
+    "/tools/get_issue",
+    tags=["chat_tools"],
+    response_model=ChatToolResponse,
+    dependencies=[Depends(require_github_tools_auth)],
+)
 async def tool_get_issue(request: Request):
     """
     Get details of a specific GitHub issue.
@@ -464,14 +715,15 @@ async def tool_get_issue(request: Request):
         raw_body = await request.body()
         body = json.loads(raw_body.decode("utf-8") or "{}")
         uid = _require_uid(request, body_uid=body.get("uid"), body=raw_body)
-        issue_number = body.get("issue_number")
+        raw_issue_number = body.get("issue_number")
         repo = body.get("repo")
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
 
-        if not issue_number:
-            return ChatToolResponse(error="Issue number is required")
+        issue_number, error = coerce_issue_number(raw_issue_number)
+        if error:
+            return ChatToolResponse(error=error)
 
         user = SimpleUserStorage.get_user(uid)
         if not user or not user.get("access_token"):
@@ -483,14 +735,18 @@ async def tool_get_issue(request: Request):
         if error:
             return ChatToolResponse(error=error)
 
-        issue = github_client.get_issue(
+        result = github_client.get_issue(
             access_token=user["access_token"],
             repo_full_name=repo_full_name,
-            issue_number=int(issue_number)
+            issue_number=issue_number
         )
 
-        if not issue:
-            return ChatToolResponse(error=f"Issue #{issue_number} not found in {repo_full_name}")
+        if result.get("error"):
+            if result.get("status") == 404:
+                return ChatToolResponse(error=f"Issue #{issue_number} not found in {repo_full_name}")
+            return ChatToolResponse(error=f"Failed to get issue: {result['error']}")
+
+        issue = result["issue"]
 
         result_parts = [
             f"**Issue #{issue['number']}** - {issue['state'].upper()}",
@@ -519,10 +775,15 @@ async def tool_get_issue(request: Request):
 
     except Exception as e:
         log(f"Error getting issue: {e}")
-        return ChatToolResponse(error=f"Failed to get issue: {str(e)}")
+        return ChatToolResponse(error="Failed to get issue due to an internal error.")
 
 
-@app.post("/tools/list_labels", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post(
+    "/tools/list_labels",
+    tags=["chat_tools"],
+    response_model=ChatToolResponse,
+    dependencies=[Depends(require_github_tools_auth)],
+)
 async def tool_list_labels(request: Request):
     """
     List available labels in a repository.
@@ -563,10 +824,21 @@ async def tool_list_labels(request: Request):
 
     except Exception as e:
         log(f"Error listing labels: {e}")
-        return ChatToolResponse(error=f"Failed to list labels: {str(e)}")
+        return ChatToolResponse(error="Failed to list labels due to an internal error.")
 
 
-@app.post("/tools/add_comment", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post(
+    "/tools/add_issue_comment",
+    tags=["chat_tools"],
+    response_model=ChatToolResponse,
+    dependencies=[Depends(require_github_tools_auth)],
+)
+@app.post(
+    "/tools/add_comment",
+    tags=["chat_tools"],
+    response_model=ChatToolResponse,
+    dependencies=[Depends(require_github_tools_auth)],
+)
 async def tool_add_comment(request: Request):
     """
     Add a comment to a GitHub issue.
@@ -575,15 +847,16 @@ async def tool_add_comment(request: Request):
         raw_body = await request.body()
         body = json.loads(raw_body.decode("utf-8") or "{}")
         uid = _require_uid(request, body_uid=body.get("uid"), body=raw_body)
-        issue_number = body.get("issue_number")
+        raw_issue_number = body.get("issue_number")
         comment_body = body.get("body")
         repo = body.get("repo")
 
         if not uid:
             return ChatToolResponse(error="User ID is required")
 
-        if not issue_number:
-            return ChatToolResponse(error="Issue number is required")
+        issue_number, error = coerce_issue_number(raw_issue_number)
+        if error:
+            return ChatToolResponse(error=error)
 
         if not comment_body:
             return ChatToolResponse(error="Comment body is required")
@@ -601,7 +874,7 @@ async def tool_add_comment(request: Request):
         result = github_client.add_issue_comment(
             access_token=user["access_token"],
             repo_full_name=repo_full_name,
-            issue_number=int(issue_number),
+            issue_number=issue_number,
             body=comment_body
         )
 
@@ -615,7 +888,7 @@ async def tool_add_comment(request: Request):
 
     except Exception as e:
         log(f"Error adding comment: {e}")
-        return ChatToolResponse(error=f"Failed to add comment: {str(e)}")
+        return ChatToolResponse(error="Failed to add comment due to an internal error.")
 
 
 # ============================================
@@ -643,7 +916,8 @@ async def root(uid: str = Query(None)):
 
     if not user or not user.get("access_token"):
         # Not authenticated - show auth page
-        auth_url = f"/auth?uid={uid}"
+        safe_uid = html.escape(quote(str(uid or ""), safe=""), quote=True)
+        auth_url = f"/auth?uid={safe_uid}"
         return HTMLResponse(content=f"""
         <html>
             <head>
@@ -713,9 +987,10 @@ async def root(uid: str = Query(None)):
         """)
 
     # Authenticated - show repo selection page
+    safe_uid = html.escape(quote(str(uid or ""), safe=""), quote=True)
     repos = user.get("available_repos", [])
     selected_repo = user.get("selected_repo", "")
-    github_username = user.get("github_username", "Unknown")
+    github_username = html.escape(str(user.get("github_username", "Unknown")), quote=True)
     agent_provider = user.get("agent_provider") or os.getenv("DEFAULT_AGENT_PROVIDER", "cursor")
     if agent_provider not in PROVIDERS:
         agent_provider = "cursor"
@@ -884,7 +1159,7 @@ async def root(uid: str = Query(None)):
                     }}
 
                     try {{
-                        const response = await fetch('/update-repo?uid={uid}&repo=' + encodeURIComponent(repo), {{
+                        const response = await fetch('/update-repo?uid={safe_uid}&repo=' + encodeURIComponent(repo), {{
                             method: 'POST'
                         }});
 
@@ -904,7 +1179,7 @@ async def root(uid: str = Query(None)):
                     if (!confirm('Refresh your repository list from GitHub?')) return;
 
                     try {{
-                        const response = await fetch('/refresh-repos?uid={uid}', {{
+                        const response = await fetch('/refresh-repos?uid={safe_uid}', {{
                             method: 'POST'
                         }});
 
@@ -931,7 +1206,7 @@ async def root(uid: str = Query(None)):
                     }}
 
                     try {{
-                        const response = await fetch('/check-repo-access?uid={uid}&repo=' + encodeURIComponent(repo), {{
+                        const response = await fetch('/check-repo-access?uid={safe_uid}&repo=' + encodeURIComponent(repo), {{
                             method: 'POST'
                         }});
                         const data = await response.json();
@@ -965,7 +1240,7 @@ async def root(uid: str = Query(None)):
                 async function saveAgentProvider() {{
                     const provider = getSelectedProvider();
                     try {{
-                        const response = await fetch('/save-agent-provider?uid={uid}&provider=' + encodeURIComponent(provider), {{
+                        const response = await fetch('/save-agent-provider?uid={safe_uid}&provider=' + encodeURIComponent(provider), {{
                             method: 'POST'
                         }});
                         const data = await response.json();
@@ -1012,7 +1287,7 @@ async def root(uid: str = Query(None)):
                     if (!confirm('Remove the API key for this provider?')) return;
 
                     try {{
-                        await fetch('/delete-agent-key?uid={uid}&provider=' + encodeURIComponent(provider), {{
+                        await fetch('/delete-agent-key?uid={safe_uid}&provider=' + encodeURIComponent(provider), {{
                             method: 'POST'
                         }});
 
@@ -1044,7 +1319,7 @@ async def root(uid: str = Query(None)):
                                 'Content-Type': 'application/json'
                             }},
                             body: JSON.stringify({{
-                                uid: '{uid}',
+                                uid: '{safe_uid}',
                                 prompt,
                                 provider,
                                 repo,
@@ -1105,7 +1380,7 @@ async def auth_start(uid: str = Query(..., description="User ID from OMI")):
     except Exception as e:
         import traceback
         traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"OAuth initialization failed: {str(e)}")
+        raise HTTPException(status_code=500, detail="OAuth initialization failed")
 
 
 @app.get("/auth/callback")
@@ -1184,6 +1459,9 @@ async def auth_callback(
         if state in oauth_states:
             del oauth_states[state]
 
+        safe_username = html.escape(str(github_username), quote=True)
+        safe_uid = html.escape(quote(str(uid or ""), safe=""), quote=True)
+
         return HTMLResponse(
             content=f"""
             <html>
@@ -1200,14 +1478,14 @@ async def auth_callback(
                             <div class="icon" style="font-size: 72px;">🎉</div>
                             <h2 style="font-size: 28px; margin: 16px 0;">Successfully Connected!</h2>
                             <p style="font-size: 17px; margin: 12px 0;">
-                                Your GitHub account <strong>@{github_username}</strong> is now linked
+                                Your GitHub account <strong>@{safe_username}</strong> is now linked
                             </p>
                             <p style="font-size: 16px; margin: 8px 0;">
                                 Found <strong>{len(repos)}</strong> {('repository' if len(repos) == 1 else 'repositories')}
                             </p>
                         </div>
 
-                        <a href="/?uid={uid}" class="btn btn-primary btn-block" style="font-size: 17px; padding: 16px; margin-top: 24px;">
+                        <a href="/?uid={safe_uid}" class="btn btn-primary btn-block" style="font-size: 17px; padding: 16px; margin-top: 24px;">
                             Continue to Settings
                         </a>
 
@@ -1230,6 +1508,7 @@ async def auth_callback(
     except Exception as e:
         import traceback
         traceback.print_exc()
+        safe_uid = html.escape(quote(str(uid or ""), safe=""), quote=True)
         return HTMLResponse(
             content=f"""
             <html>
@@ -1241,8 +1520,8 @@ async def auth_callback(
                     <div class="container">
                         <div class="error-box" style="margin-top: 40px; padding: 40px 24px;">
                             <h2 style="font-size: 24px; margin-bottom: 12px;">Authentication Error</h2>
-                            <p style="margin-bottom: 16px;">Failed to complete authentication: {str(e)}</p>
-                            <a href="/auth?uid={uid}" class="btn btn-primary">Try again</a>
+                            <p style="margin-bottom: 16px;">Failed to complete authentication. Please try again.</p>
+                            <a href="/auth?uid={safe_uid}" class="btn btn-primary">Try again</a>
                         </div>
                     </div>
                 </body>
@@ -1279,14 +1558,24 @@ async def update_repo(request: Request):
         repo = data.get("repo") or request.query_params.get("repo")
         if not repo:
             return {"success": False, "error": "repo required"}
-        success = SimpleUserStorage.update_repo_selection(uid, repo)
+        user = SimpleUserStorage.get_user(uid)
+        if not user:
+            return {"success": False, "error": "User not found"}
+
+        # Resolve and validate repository format (supports full name, URL, or accessible short name)
+        resolved_repo, error = get_repo_for_request(user, repo)
+        if error:
+            return {"success": False, "error": error}
+
+        success = SimpleUserStorage.update_repo_selection(uid, resolved_repo)
         if success:
-            return {"success": True, "message": f"Repository updated to {repo}"}
-        return {"success": False, "error": "User not found"}
+            return {"success": True, "message": f"Repository updated to {resolved_repo}"}
+        return {"success": False, "error": "Failed to update repository selection"}
     except HTTPException:
         raise
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        log(f"Error updating repository: {e}")
+        return {"success": False, "error": "Failed to update repository"}
 
 
 
@@ -1318,7 +1607,8 @@ async def refresh_repos(request: Request):
     except HTTPException:
         raise
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        log(f"Error refreshing repositories: {e}")
+        return {"success": False, "error": "Failed to refresh repositories"}
 
 
 
@@ -1370,7 +1660,8 @@ async def check_repo_access(request: Request):
     except HTTPException:
         raise
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        log(f"Error checking repo access: {e}")
+        return {"success": False, "error": "Failed to check repository access"}
 
 
 
@@ -1401,7 +1692,8 @@ async def save_agent_provider(request: Request):
     except HTTPException:
         raise
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        log(f"Error saving agent provider: {e}")
+        return {"success": False, "error": "Failed to save agent provider"}
 
 
 
@@ -1438,7 +1730,8 @@ async def save_agent_key(request: Request):
     except HTTPException:
         raise
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        log(f"Error saving agent key: {e}")
+        return {"success": False, "error": "Failed to save agent key"}
 
 
 
@@ -1465,7 +1758,8 @@ async def delete_agent_key(request: Request):
     except HTTPException:
         raise
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        log(f"Error deleting agent key: {e}")
+        return {"success": False, "error": "Failed to delete agent key"}
 
 
 
@@ -1493,13 +1787,19 @@ async def test_agent(request: Request):
             return {"success": False, "error": error}
 
         permissions = github_client.get_repo_permissions(user["access_token"], repo_full_name)
-        if not permissions or not (permissions.get("push") or permissions.get("admin")):
+        if not permissions:
+            return {"success": False, "error": "Could not fetch repo permissions"}
+        if permissions.get("_error"):
+            return {
+                "success": False,
+                "error": f"GitHub permissions check failed ({permissions.get('_status')}): {permissions.get('_error')}"
+            }
+        if not (permissions.get("push") or permissions.get("admin")):
             return {
                 "success": False,
                 "error": "GitHub token does not have write access to this repo."
             }
 
-        import time
         logs = []
 
         providers_to_run = list(PROVIDERS.keys()) if send_all else [provider_override or SimpleUserStorage.get_agent_provider(uid) or os.getenv("DEFAULT_AGENT_PROVIDER", "cursor")]
@@ -1575,10 +1875,16 @@ async def test_agent(request: Request):
         return {"success": True, "logs": logs}
 
     except Exception as e:
-        return {"success": False, "error": str(e)}
+        log(f"Error testing agent: {e}")
+        return {"success": False, "error": "Failed to execute agent test"}
 
 
-@app.post("/tools/code_feature", tags=["chat_tools"], response_model=ChatToolResponse)
+@app.post(
+    "/tools/code_feature",
+    tags=["chat_tools"],
+    response_model=ChatToolResponse,
+    dependencies=[Depends(require_github_tools_auth)],
+)
 async def tool_code_feature(request: Request):
     """
     AI-powered coding tool - implement features using Claude.
@@ -1613,11 +1919,9 @@ async def tool_code_feature(request: Request):
             )
 
         # Determine target repository
-        repo_full_name = repo or user.get("selected_repo")
-        if not repo_full_name:
-            return ChatToolResponse(
-                error="No repository specified. Please set a default repository in settings."
-            )
+        repo_full_name, error = get_repo_for_request(user, repo)
+        if error:
+            return ChatToolResponse(error=error)
 
         permissions = github_client.get_repo_permissions(user["access_token"], repo_full_name)
         if not permissions:
@@ -1642,7 +1946,6 @@ async def tool_code_feature(request: Request):
             merge_pr_with_github_api,
             get_default_branch
         )
-        import time
 
         owner, repo_name = repo_full_name.split('/')
         branch_name = f"{agent_provider}-agent-{int(time.time())}"
@@ -1774,7 +2077,7 @@ async def tool_code_feature(request: Request):
         import traceback
         log(f"Error in code_feature tool: {e}")
         log(traceback.format_exc())
-        return ChatToolResponse(error=f"Failed to implement feature: {str(e)}")
+        return ChatToolResponse(error="Failed to implement feature due to an internal error.")
 
 
 @app.get("/health")

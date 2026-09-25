@@ -9,8 +9,8 @@ chat) — only the displayed body is flattened.
 import re
 
 _FENCE_RE = re.compile(r'^\s*`{3,}[^`\n]*$', re.MULTILINE)
-_IMAGE_RE = re.compile(r'!\[([^\]]*)\]\([^)]*\)')
-_LINK_RE = re.compile(r'\[([^\]]*)\]\([^)]*\)')
+_IMAGE_RE = re.compile(r'!\[([^\]]*)\]\((?:[^()\s]|\([^()]*\))*(?:\s+(?:"[^"]*"|\'[^\']*\'|\([^()]*\)))?\)')
+_LINK_RE = re.compile(r'\[([^\]]*)\]\((?:[^()\s]|\([^()]*\))*(?:\s+(?:"[^"]*"|\'[^\']*\'|\([^()]*\)))?\)')
 _HEADING_RE = re.compile(r'^\s{0,3}#{1,6}\s+', re.MULTILINE)
 _BLOCKQUOTE_RE = re.compile(r'^\s{0,3}>\s?', re.MULTILINE)
 _HORIZONTAL_RULE_RE = re.compile(r'^\s{0,3}([-*_])\s*(?:\1\s*){2,}$', re.MULTILINE)
@@ -27,17 +27,17 @@ def to_plain_text(body: str) -> str:
     if not body:
         return body
 
-    text = _FENCE_RE.sub('', body)
-    text = _IMAGE_RE.sub(r'\1', text)
-    text = _LINK_RE.sub(r'\1', text)
-    text = _HORIZONTAL_RULE_RE.sub('', text)
-    text = _HEADING_RE.sub('', text)
-    text = _BLOCKQUOTE_RE.sub('', text)
-    text = _BULLET_RE.sub(r'\1• ', text)
-    text = _INLINE_CODE_RE.sub(r'\1', text)
-    text = _BOLD_ITALIC_RE.sub(r'\2', text)
-    text = _UNDERSCORE_EMPHASIS_RE.sub(r'\2', text)
-    text = _STRIKETHROUGH_RE.sub(r'\1', text)
-    text = _BLANK_LINES_RE.sub('\n\n', text)
+    text = _FENCE_RE.sub("", body)
+    text = _IMAGE_RE.sub(r"\1", text)
+    text = _LINK_RE.sub(r"\1", text)
+    text = _HORIZONTAL_RULE_RE.sub("", text)
+    text = _HEADING_RE.sub("", text)
+    text = _BLOCKQUOTE_RE.sub("", text)
+    text = _BULLET_RE.sub(r"\1• ", text)
+    text = _INLINE_CODE_RE.sub(r"\1", text)
+    text = _BOLD_ITALIC_RE.sub(r"\2", text)
+    text = _UNDERSCORE_EMPHASIS_RE.sub(r"\2", text)
+    text = _STRIKETHROUGH_RE.sub(r"\1", text)
+    text = _BLANK_LINES_RE.sub("\n\n", text)
 
     return text.strip()

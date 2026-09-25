@@ -44,6 +44,24 @@ SyncJobTerminalPolicy syncJobTerminalPolicy({required String status, required bo
   return status == 'completed' ? SyncJobTerminalPolicy.acknowledge : SyncJobTerminalPolicy.retry;
 }
 
+/// Terminal `reason_code`s the backend only reaches because of the uploaded
+/// audio itself. `sync_invalid_audio` is raised by `decode_files_to_wav` once
+/// *nothing* in the batch decoded, and `stt_invalid_input` is the provider
+/// refusing the decoded audio as invalid — re-sending identical bytes produces
+/// the identical verdict. Keep in sync with `_SYNC_FAILURE_REASON_CODES` in
+/// backend/utils/sync/pipeline.py.
+const _kPermanentInputFailureReasonCodes = {'sync_invalid_audio', 'stt_invalid_input'};
+
+/// Whether a terminal job failed for a reason no re-upload can change.
+///
+/// Only a whole-job `failed` qualifies: `partial_failure` proves some segments
+/// landed, so the batch is not shown to be bad. A permanent verdict therefore
+/// never strands a good sibling — the decoder drops unreadable files
+/// individually and only fails the job when the batch has nothing left.
+@visibleForTesting
+bool syncJobFailureIsPermanent(SyncJobStatusResponse status) =>
+    status.status == 'failed' && _kPermanentInputFailureReasonCodes.contains(status.reasonCode);
+
 @visibleForTesting
 bool syncJobIsBackendBusy(SyncJobStatusResponse status) {
   if ((status.error ?? '').contains(_kBackendBusyErrorHint)) return true;
@@ -67,6 +85,18 @@ String? _walLocationBatchKey(Wal wal) {
   if (geolocation == null) return null;
   return '${geolocation.time?.toUtc().toIso8601String()}|${geolocation.latitude}|${geolocation.longitude}';
 }
+
+/// A recording the automatic drain may still upload.
+///
+/// Spending [walMaxAutoRetries] takes it out of every auto loop for good: the
+/// reconciler spends the whole budget at once for a failure the server can only
+/// reach again, and an unclassified failure still stops after the budget rather
+/// than re-uploading the same bytes forever. The per-recording manual Retry
+/// ([LocalWalSyncImpl.syncWal]) deliberately ignores this budget, so the user
+/// keeps exactly one deliberate attempt per tap.
+@visibleForTesting
+bool isAutoUploadEligible(Wal wal) =>
+    wal.status == WalStatus.miss && wal.storage == WalStorage.disk && wal.retryCount < walMaxAutoRetries;
 
 List<Wal> nextSyncUploadBatch(List<Wal> pending, int nowSeconds) {
   final ordered = List<Wal>.from(pending)..sort((a, b) => b.timerStart.compareTo(a.timerStart));
@@ -99,6 +129,81 @@ class LocalWalSyncImpl implements LocalWalSync {
 
   bool _isCancelled = false;
 
+  /// Session fence. Incremented on logout so in-flight chunk/flush/sync cannot
+  /// publish retired-account WALs into the successor via [listener.onWalUpdated].
+  int _sessionGeneration = 0;
+
+  /// Durable inventory moved off the published list on logout. Saves write
+  /// both this and [_wals] so disk is not wiped; [getAllWals] returns [_wals]
+  /// only. Adopting the current generation is not a fix.
+  final List<Wal> _retiredWals = [];
+
+  /// Durable inventory parked at load: records whose [Wal.ownerUid] names a
+  /// different account. They are excluded from [_wals] (never rendered, never
+  /// uploaded) but included in every persist — the save rewrites the whole
+  /// index from memory, so leaving them out would silently delete the other
+  /// account's recordings from disk.
+  final List<Wal> _foreignWals = [];
+
+  bool _isCurrent(int generation) => generation == _sessionGeneration;
+
+  /// The owner stamp for records created in this session: the signed-in uid,
+  /// or a fixed marker when there is none (anonymous/pre-auth capture).
+  String _currentWalOwnerUid() {
+    final uid = SharedPreferencesUtil().uid;
+    return uid.isEmpty ? 'legacy' : uid;
+  }
+
+  /// Load admission for a disk record: it belongs to this session when it
+  /// predates owner stamping (null — pre-upgrade data), was marked shared
+  /// ('legacy'), or was created by the current account.
+  bool _walAdmittedAtLoad(Wal wal) {
+    final owner = wal.ownerUid;
+    return owner == null || owner == 'legacy' || owner == _currentWalOwnerUid();
+  }
+
+  /// Partitions a freshly-loaded disk index into current-session records and
+  /// foreign-owner records. Foreign records are parked in [_foreignWals] so
+  /// every later persist rewrites them back to disk untouched. Both call
+  /// sites load the full disk index, so parking uses replace semantics.
+  void _admitLoadedWals(List<Wal> loaded) {
+    final admitted = <Wal>[];
+    final foreign = <Wal>[];
+    for (final wal in loaded) {
+      if (_walAdmittedAtLoad(wal)) {
+        admitted.add(wal);
+      } else {
+        foreign.add(wal);
+      }
+    }
+    _wals = admitted;
+    _foreignWals
+      ..clear()
+      ..addAll(foreign);
+  }
+
+  void _notifyUpdated(int generation) {
+    if (!_isCurrent(generation)) return;
+    listener.onWalUpdated();
+  }
+
+  @override
+  void clearUserData() {
+    _sessionGeneration++;
+    cancelSync();
+    // Back-fill the owner on retiring records that predate stamping, while the
+    // logout path still has the signing-out uid available (clearUserData runs
+    // before prefs are cleared). Unstamped records otherwise fall through the
+    // load filter as "shared" and would reappear in the next account.
+    for (final wal in _wals) {
+      wal.ownerUid ??= _currentWalOwnerUid();
+    }
+    _retiredWals.addAll(_wals);
+    _wals = [];
+    _frames = [];
+    _frameSynced = [];
+  }
+
   /// Completes when _initializeWals() finishes loading WALs from disk.
   final Completer<void> _walReady = Completer<void>();
 
@@ -113,7 +218,37 @@ class LocalWalSyncImpl implements LocalWalSync {
   final SyncUploadGate? _uploadGateOverride;
   SyncUploadGate get _uploadGate => _uploadGateOverride ?? SyncUploadGate.instance;
 
-  LocalWalSyncImpl(this.listener, {SyncUploadGate? uploadGate}) : _uploadGateOverride = uploadGate;
+  // Deterministic-replay seams: null means production wall clock, dart:async
+  // periodic timers, and the shared HTTP job-status endpoint.
+  final DateTime Function()? _nowOverride;
+  final Timer Function(Duration, void Function(Timer))? _periodicOverride;
+  final Future<SyncJobFetch> Function(String jobId)? _jobStatusFetcherOverride;
+  final Future<void> Function(List<Wal> wals)? _persistWalsOverride;
+  final Future<List<Wal>> Function()? _loadWalsOverride;
+
+  DateTime _now() => _nowOverride?.call() ?? DateTime.now();
+
+  Timer Function(Duration, void Function(Timer)) get _periodic => _periodicOverride ?? Timer.periodic;
+
+  Future<SyncJobFetch> Function(String jobId) get _jobStatusFetcher => _jobStatusFetcherOverride ?? fetchSyncJobStatus;
+
+  LocalWalSyncImpl(
+    this.listener, {
+    SyncUploadGate? uploadGate,
+    DateTime Function()? now,
+    Timer Function(Duration, void Function(Timer))? periodic,
+    Future<SyncJobFetch> Function(String jobId)? jobStatusFetcher,
+    Future<void> Function(List<Wal> wals)? persistWals,
+    Future<List<Wal>> Function()? loadWals,
+  })  : _uploadGateOverride = uploadGate,
+        _nowOverride = now,
+        _periodicOverride = periodic,
+        _jobStatusFetcherOverride = jobStatusFetcher,
+        _persistWalsOverride = persistWals,
+        _loadWalsOverride = loadWals;
+
+  @override
+  int get sessionGeneration => _sessionGeneration;
 
   @visibleForTesting
   List<WalFrame> get testFrames => _frames;
@@ -133,7 +268,12 @@ class LocalWalSyncImpl implements LocalWalSync {
   }
 
   @override
-  Future<void> addExternalWal(Wal wal) async {
+  Future<void> addExternalWal(Wal wal, {required int admittedGeneration}) async {
+    if (!_isCurrent(admittedGeneration)) return;
+    // Cover all four external callers: any record admitted into this session
+    // is owned by the signed-in account. Stamp only when unstamped so a
+    // record surfaced by native recovery keeps its original owner.
+    wal.ownerUid ??= _currentWalOwnerUid();
     // Native-storage recovery can surface old WALs while a new recording is
     // active. Only inherit the current session's location for WALs that began
     // at (or after) this session, never for historical recordings.
@@ -148,28 +288,41 @@ class LocalWalSyncImpl implements LocalWalSync {
       Logger.debug("LocalWalSync: WAL ${wal.id} already exists, skipping");
       return;
     }
+    if (!_isCurrent(admittedGeneration)) return;
     _wals.add(wal);
-    await _saveWalsToFile();
-    listener.onWalUpdated();
+    await _saveWalsToFile(admittedGeneration);
+    _notifyUpdated(admittedGeneration);
     Logger.debug("LocalWalSync: Added external WAL ${wal.id} (${wal.seconds}s)");
   }
 
   @override
   void start() {
     _initializeWals();
-    _chunkingTimer = Timer.periodic(const Duration(seconds: chunkSizeInSeconds + newFrameSyncDelaySeconds), (t) async {
-      await _chunk();
+    _chunkingTimer = _periodic(const Duration(seconds: chunkSizeInSeconds + newFrameSyncDelaySeconds), (t) async {
+      final generation = _sessionGeneration;
+      await _chunk(generation);
     });
-    _flushingTimer = Timer.periodic(const Duration(seconds: flushIntervalInSeconds + newFrameSyncDelaySeconds), (
+    _flushingTimer = _periodic(const Duration(seconds: flushIntervalInSeconds + newFrameSyncDelaySeconds), (
       t,
     ) async {
-      await _flush();
+      final generation = _sessionGeneration;
+      await _flush(generation);
     });
   }
 
   Future<void> _initializeWals() async {
+    final generation = _sessionGeneration;
     await WalFileManager.init();
-    _wals = await WalFileManager.loadWals();
+    if (!_isCurrent(generation)) {
+      if (!_walReady.isCompleted) _walReady.complete();
+      return;
+    }
+    final loaded = _loadWalsOverride != null ? await _loadWalsOverride!() : await WalFileManager.loadWals();
+    if (!_isCurrent(generation)) {
+      if (!_walReady.isCompleted) _walReady.complete();
+      return;
+    }
+    _admitLoadedWals(loaded);
     Logger.debug("wal service start: ${_wals.length}");
 
     final missingCount = _wals.where((w) => w.status == WalStatus.miss).length;
@@ -182,27 +335,40 @@ class LocalWalSyncImpl implements LocalWalSync {
 
     // Run migrations for legacy Limitless files
     final migratedCount = await WalFileManager.migrateLegacyLimitlessFiles(_wals);
+    if (!_isCurrent(generation)) {
+      if (!_walReady.isCompleted) _walReady.complete();
+      return;
+    }
     if (migratedCount > 0) {
       // Reload WALs after migration
-      _wals = await WalFileManager.loadWals();
+      _admitLoadedWals(_loadWalsOverride != null ? await _loadWalsOverride!() : await WalFileManager.loadWals());
+      if (!_isCurrent(generation)) {
+        if (!_walReady.isCompleted) _walReady.complete();
+        return;
+      }
       Logger.debug("wal service after migration: ${_wals.length}");
       DebugLogManager.logInfo('WAL migration completed', {'migratedCount': migratedCount, 'totalAfter': _wals.length});
     }
 
     // Fix any inconsistent WAL states from old implementations
     await WalFileManager.migrateInconsistentWals(_wals);
+    if (!_isCurrent(generation)) {
+      if (!_walReady.isCompleted) _walReady.complete();
+      return;
+    }
 
     if (!_walReady.isCompleted) _walReady.complete();
-    listener.onWalUpdated();
+    _notifyUpdated(generation);
   }
 
   @override
   Future stop() async {
+    final generation = _sessionGeneration;
     _chunkingTimer?.cancel();
     _flushingTimer?.cancel();
 
-    await _chunk();
-    await _flush();
+    await _chunk(generation);
+    await _flush(generation);
 
     _frames = [];
     _frameSynced = [];
@@ -210,10 +376,11 @@ class LocalWalSyncImpl implements LocalWalSync {
 
   @override
   Future onAudioCodecChanged(BleAudioCodec codec) async {
+    final generation = _sessionGeneration;
     // Always chunk+flush+clear to ensure clean session boundaries.
     // This is safe when frames are empty (_chunk returns immediately).
-    await _chunk();
-    await _flush();
+    await _chunk(generation);
+    await _flush(generation);
     _frames = [];
     _frameSynced = [];
 
@@ -230,20 +397,21 @@ class LocalWalSyncImpl implements LocalWalSync {
   @override
   void setSessionGeolocation(Geolocation? geolocation) {
     _sessionGeolocation = _copyGeolocation(geolocation);
-    _sessionGeolocationSetAt = geolocation == null ? null : DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    _sessionGeolocationSetAt = geolocation == null ? null : _now().millisecondsSinceEpoch ~/ 1000;
   }
 
   Geolocation? _copyGeolocation(Geolocation? geolocation) =>
       geolocation == null ? null : Geolocation.fromJson(geolocation.toJson());
 
-  Future _chunk() async {
+  Future _chunk(int generation) async {
+    if (!_isCurrent(generation)) return;
     if (_frames.isEmpty) {
       Logger.debug("Frames are empty");
       return;
     }
 
     var lossesThreshold = 10 * _framesPerSecond;
-    var timerEnd = DateTime.now().millisecondsSinceEpoch ~/ 1000 - newFrameSyncDelaySeconds;
+    var timerEnd = _now().millisecondsSinceEpoch ~/ 1000 - newFrameSyncDelaySeconds;
     var pivot = _frames.length - newFrameSyncDelaySeconds * _framesPerSecond;
     if (pivot <= 0) {
       return;
@@ -299,6 +467,7 @@ class LocalWalSyncImpl implements LocalWalSync {
           seconds: chunkFrameCount ~/ _framesPerSecond,
           totalFrames: chunkFrameCount,
           syncedFrameOffset: syncedOffset,
+          ownerUid: _currentWalOwnerUid(),
           geolocation: _copyGeolocation(_sessionGeolocation),
         );
         _wals.add(wal);
@@ -312,10 +481,10 @@ class LocalWalSyncImpl implements LocalWalSync {
         _wals[walIdx] = wal;
       }
 
-      if (wal.status == WalStatus.synced) {
+      if (wal.status == WalStatus.synced && _isCurrent(generation)) {
         listener.onWalSynced(wal);
       }
-      listener.onWalUpdated();
+      _notifyUpdated(generation);
     }
 
     Logger.debug("_chunk wals ${_wals.length}");
@@ -324,11 +493,12 @@ class LocalWalSyncImpl implements LocalWalSync {
     _frameSynced.removeRange(0, pivot);
   }
 
-  Future _flush() async {
+  Future _flush(int generation) async {
     Logger.debug("_flushing");
     int flushedCount = 0;
-    for (var i = 0; i < _wals.length; i++) {
-      final wal = _wals[i];
+    final wals = List<Wal>.from(_wals);
+    for (var i = 0; i < wals.length; i++) {
+      final wal = wals[i];
 
       if (wal.storage == WalStorage.mem) {
         String? filePath = await Wal.getFilePath(wal.getFileName());
@@ -358,8 +528,6 @@ class LocalWalSyncImpl implements LocalWalSync {
 
         Logger.debug("_flush file ${wal.filePath}");
         flushedCount++;
-
-        _wals[i] = wal;
       }
     }
 
@@ -367,12 +535,22 @@ class LocalWalSyncImpl implements LocalWalSync {
       DebugLogManager.logInfo('Flushed WALs from memory to disk', {'count': flushedCount});
     }
 
-    await _saveWalsToFile();
+    await _saveWalsToFile(generation);
   }
 
-  Future<void> _saveWalsToFile() async {
+  Future<void> _saveWalsToFile(int generation) async {
+    if (!_isCurrent(generation)) return;
+    // The save rewrites the whole index from memory, so every durable bucket
+    // must be included: retired (logged-out) and foreign-owner (parked at
+    // load) records alike — omitting either would silently delete those
+    // recordings from disk on the next save.
+    final snapshot = [..._retiredWals, ..._foreignWals, ..._wals];
     Logger.debug('Saving WALs to file');
-    await WalFileManager.saveWals(_wals);
+    if (_persistWalsOverride != null) {
+      await _persistWalsOverride!(snapshot);
+      return;
+    }
+    await WalFileManager.saveWals(snapshot);
   }
 
   Future<bool> _deleteWal(Wal wal) async {
@@ -392,13 +570,15 @@ class LocalWalSyncImpl implements LocalWalSync {
     }
 
     _wals.removeWhere((w) => w.id == wal.id);
+    _retiredWals.removeWhere((w) => w.id == wal.id);
     return true;
   }
 
   @override
   Future deleteWal(Wal wal) async {
+    final generation = _sessionGeneration;
     await _deleteWal(wal);
-    listener.onWalUpdated();
+    _notifyUpdated(generation);
   }
 
   @override
@@ -409,7 +589,7 @@ class LocalWalSyncImpl implements LocalWalSync {
   /// Returns unsynced WALs whose timerStart falls within [sessionStartSeconds, now].
   /// Used by the live capture screen to show inline audio safety indicators.
   List<Wal> getSessionUnsyncedWals(int sessionStartSeconds) {
-    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final now = _now().millisecondsSinceEpoch ~/ 1000;
     return _wals
         .where(
           (w) =>
@@ -421,11 +601,22 @@ class LocalWalSyncImpl implements LocalWalSync {
         .toList();
   }
 
+  /// All disk WALs of the session window — synced ones included — so callers
+  /// can render a pending/total backlog count that drains as uploads finish.
+  /// Same window and storage scope as [getSessionUnsyncedWals].
+  List<Wal> getSessionWals(int sessionStartSeconds) {
+    final now = _now().millisecondsSinceEpoch ~/ 1000;
+    return _wals
+        .where((w) => w.storage == WalStorage.disk && w.timerStart >= sessionStartSeconds && w.timerStart <= now)
+        .toList();
+  }
+
   /// Mark a WAL as synced and persist the change to disk.
   Future<void> markWalSyncedAndPersist(Wal wal) async {
+    final generation = _sessionGeneration;
     wal.status = WalStatus.synced;
-    await _saveWalsToFile();
-    listener.onWalUpdated();
+    await _saveWalsToFile(generation);
+    _notifyUpdated(generation);
   }
 
   /// Force-drain all in-flight frames (including the tail buffer that _chunk() normally
@@ -434,11 +625,13 @@ class LocalWalSyncImpl implements LocalWalSync {
   Future<void> finalizeCurrentSession() async {
     if (_frames.isEmpty) return;
 
+    final generation = _sessionGeneration;
+
     final high = _frames.length;
     if (high <= 0) return;
 
     var lossesThreshold = 10 * _framesPerSecond;
-    var timerEnd = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    var timerEnd = _now().millisecondsSinceEpoch ~/ 1000;
     var chunk = _frames.sublist(0, high).map((f) => f.payload).toList();
     var timerStart = timerEnd - high ~/ _framesPerSecond;
     var chunkFrameCount = high;
@@ -486,6 +679,7 @@ class LocalWalSyncImpl implements LocalWalSync {
             seconds: chunkFrameCount ~/ _framesPerSecond,
             totalFrames: chunkFrameCount,
             syncedFrameOffset: syncedOffset,
+            ownerUid: _currentWalOwnerUid(),
             geolocation: _copyGeolocation(_sessionGeolocation),
           ),
         );
@@ -495,15 +689,16 @@ class LocalWalSyncImpl implements LocalWalSync {
     _frameSynced = [];
 
     // Flush all in-memory WALs to disk immediately
-    await _flush();
-    listener.onWalUpdated();
+    await _flush(generation);
+    _notifyUpdated(generation);
     Logger.debug('finalizeCurrentSession: drained $chunkFrameCount frames (stored=$shouldStored), flushed to disk');
   }
 
   /// Stamp all session WALs with the given conversationId and persist to disk.
   /// This makes WAL→conversation linkage survive app kill.
   Future<void> stampConversationId(int sessionStartSeconds, String conversationId) async {
-    final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final generation = _sessionGeneration;
+    final now = _now().millisecondsSinceEpoch ~/ 1000;
     int stamped = 0;
     for (final wal in _wals) {
       if (wal.status == WalStatus.miss &&
@@ -515,7 +710,7 @@ class LocalWalSyncImpl implements LocalWalSync {
       }
     }
     if (stamped > 0) {
-      await _saveWalsToFile();
+      await _saveWalsToFile(generation);
       Logger.debug('stampConversationId: stamped $stamped WALs with conversation $conversationId');
     }
   }
@@ -523,20 +718,13 @@ class LocalWalSyncImpl implements LocalWalSync {
   /// Returns WALs that have a conversationId but haven't been synced yet.
   /// Used for startup recovery after app kill.
   List<Wal> getOrphanedWals() {
-    return _wals
-        .where(
-          (w) =>
-              w.status == WalStatus.miss &&
-              w.storage == WalStorage.disk &&
-              w.conversationId != null &&
-              w.retryCount < 3,
-        )
-        .toList();
+    return _wals.where((w) => isAutoUploadEligible(w) && w.conversationId != null).toList();
   }
 
   /// Persist retry metadata (retryCount, lastRetryAt) for a WAL after failed sync attempts.
   Future<void> persistRetryMetadata(Wal wal) async {
-    await _saveWalsToFile();
+    final generation = _sessionGeneration;
+    await _saveWalsToFile(generation);
   }
 
   /// Returns the approximate duration (in seconds) of UNSYNCED audio frames
@@ -558,22 +746,24 @@ class LocalWalSyncImpl implements LocalWalSync {
 
   @override
   Future<void> deleteAllSyncedWals() async {
+    final generation = _sessionGeneration;
     final syncedWals = _wals.where((w) => w.status == WalStatus.synced).toList();
     for (final wal in syncedWals) {
       await _deleteWal(wal);
     }
-    await _saveWalsToFile();
-    listener.onWalUpdated();
+    await _saveWalsToFile(generation);
+    _notifyUpdated(generation);
   }
 
   @override
   Future<void> deleteAllPendingWals() async {
+    final generation = _sessionGeneration;
     final pendingWals = _wals.where((w) => w.status == WalStatus.miss).toList();
     for (final wal in pendingWals) {
       await _deleteWal(wal);
     }
-    await _saveWalsToFile();
-    listener.onWalUpdated();
+    await _saveWalsToFile(generation);
+    _notifyUpdated(generation);
   }
 
   /// Removes terminally unavailable recordings when the user explicitly
@@ -581,13 +771,20 @@ class LocalWalSyncImpl implements LocalWalSync {
   /// retryable Pending action.
   @override
   Future<void> deleteAllCorruptedWals() async {
-    final corruptedWals =
-        _wals.where((w) => w.status == WalStatus.corrupted || w.status == WalStatus.outsideRecoveryWindow).toList();
+    final generation = _sessionGeneration;
+    final corruptedWals = _wals
+        .where(
+          (w) =>
+              w.status == WalStatus.corrupted ||
+              w.status == WalStatus.outsideRecoveryWindow ||
+              w.status == WalStatus.unsupportedAudio,
+        )
+        .toList();
     for (final wal in corruptedWals) {
       await _deleteWal(wal);
     }
-    await _saveWalsToFile();
-    listener.onWalUpdated();
+    await _saveWalsToFile(generation);
+    _notifyUpdated(generation);
   }
 
   @override
@@ -614,18 +811,15 @@ class LocalWalSyncImpl implements LocalWalSync {
       _syncAll(progress: progress, liveCaptureOnly: true);
 
   Future<SyncLocalFilesResponse?> _syncAll({IWalSyncProgressListener? progress, required bool liveCaptureOnly}) async {
-    await _flush();
+    final generation = _sessionGeneration;
+    await _flush(generation);
+    if (!_isCurrent(generation)) return null;
     _isCancelled = false;
     _accumulatedResponse = null;
 
-    final initialNowSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final initialNowSeconds = _now().millisecondsSinceEpoch ~/ 1000;
     var wals = _wals
-        .where(
-          (wal) =>
-              wal.status == WalStatus.miss &&
-              wal.storage == WalStorage.disk &&
-              (!liveCaptureOnly || isLiveCaptureWal(wal, initialNowSeconds)),
-        )
+        .where((wal) => isAutoUploadEligible(wal) && (!liveCaptureOnly || isLiveCaptureWal(wal, initialNowSeconds)))
         .toList();
     if (wals.isEmpty) {
       Logger.debug("All synced!");
@@ -647,7 +841,6 @@ class LocalWalSyncImpl implements LocalWalSync {
     int batchesCompleted = 0;
     int batchesFailed = 0;
     int corruptedCount = 0;
-    int filesUploaded = 0;
     final totalFilesToUpload = wals.length;
 
     final attemptedWalIds = <String>{};
@@ -658,13 +851,8 @@ class LocalWalSyncImpl implements LocalWalSync {
     while (true) {
       // Re-snapshot between batches so a newly captured WAL can preempt an
       // hours-long historical drain without waiting for the original list.
-      final batchNowSeconds = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-      final candidates = _wals
-          .where(
-            (wal) =>
-                wal.status == WalStatus.miss && wal.storage == WalStorage.disk && !attemptedWalIds.contains(wal.id),
-          )
-          .toList();
+      final batchNowSeconds = _now().millisecondsSinceEpoch ~/ 1000;
+      final candidates = _wals.where((wal) => isAutoUploadEligible(wal) && !attemptedWalIds.contains(wal.id)).toList();
       final pending = candidates.where((wal) => !liveCaptureOnly || isLiveCaptureWal(wal, batchNowSeconds)).toList();
       if (pending.isEmpty) break;
       final batch = nextSyncUploadBatch(pending, batchNowSeconds);
@@ -698,8 +886,8 @@ class LocalWalSyncImpl implements LocalWalSync {
             w.syncEtaSeconds = null;
           }
         }
-        await _saveWalsToFile();
-        listener.onWalUpdated();
+        await _saveWalsToFile(generation);
+        _notifyUpdated(generation);
         break;
       }
       List<File> files = [];
@@ -753,15 +941,20 @@ class LocalWalSyncImpl implements LocalWalSync {
         continue;
       }
 
-      // Report file-count progress
-      progress?.onWalSyncedProgress(
-        filesUploaded / totalFilesToUpload,
-        phase: SyncPhase.uploadingToCloud,
-        currentFile: filesUploaded,
-        totalFiles: totalFilesToUpload,
-      );
+      void reportUploadProgress() {
+        if (!_isCurrent(generation)) return;
+        final done = wals.where((w) => w.status == WalStatus.uploaded || w.status == WalStatus.synced).length;
+        progress?.onWalSyncedProgress(
+          totalFilesToUpload > 0 ? done / totalFilesToUpload : 0.0,
+          phase: SyncPhase.uploadingToCloud,
+          currentFile: done,
+          totalFiles: totalFilesToUpload,
+        );
+      }
 
-      listener.onWalUpdated();
+      reportUploadProgress();
+
+      _notifyUpdated(generation);
       try {
         // Upload only — return as soon as the server acknowledges. We do NOT
         // wait for server-side processing here; the reconciler resolves the
@@ -788,14 +981,14 @@ class LocalWalSyncImpl implements LocalWalSync {
             wal.isSyncing = false;
             wal.syncStartedAt = null;
             wal.syncEtaSeconds = null;
-            listener.onWalSynced(wal);
+            if (_isCurrent(generation)) listener.onWalSynced(wal);
           }
         } else {
           // 202: audio safely received; processing in the background. Stamp the
           // shared job_id and mark uploaded. The reconciler resolves this to
           // synced / miss(retry) / corrupted out of the critical path. The
           // local file is retained until confirmed synced.
-          final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+          final now = _now().millisecondsSinceEpoch ~/ 1000;
           for (final wal in batchWals) {
             wal.status = WalStatus.uploaded;
             wal.jobId = result.jobId;
@@ -804,12 +997,11 @@ class LocalWalSyncImpl implements LocalWalSync {
             wal.syncStartedAt = null;
             wal.syncEtaSeconds = null;
           }
-          listener.onWalUpdated();
+          _notifyUpdated(generation);
         }
 
         batchesCompleted++;
-        // Count WALs no longer needing upload (uploaded or already synced).
-        filesUploaded = wals.where((w) => w.status == WalStatus.uploaded || w.status == WalStatus.synced).length;
+        reportUploadProgress();
       } on SyncRateLimitedException {
         // The cooldown is account-global, so every remaining batch would hit it too.
         DebugLogManager.logEvent('local_upload_rate_limited', {'until': '${SyncRateLimiter.instance.until}'});
@@ -818,8 +1010,8 @@ class LocalWalSyncImpl implements LocalWalSync {
           wal.syncStartedAt = null;
           wal.syncEtaSeconds = null;
         }
-        await _saveWalsToFile();
-        listener.onWalUpdated();
+        await _saveWalsToFile(generation);
+        _notifyUpdated(generation);
         break;
       } on SyncOfflineQueueQuarantinedException {
         // Cutover fence: leave WALs retryable and skip quietly until control allows drain.
@@ -831,8 +1023,8 @@ class LocalWalSyncImpl implements LocalWalSync {
           wal.syncStartedAt = null;
           wal.syncEtaSeconds = null;
         }
-        await _saveWalsToFile();
-        listener.onWalUpdated();
+        await _saveWalsToFile(generation);
+        _notifyUpdated(generation);
         break;
       } on SyncRecoveryWindowExceededException {
         // Clear the in-flight flag on the whole batch first: the members the
@@ -848,8 +1040,8 @@ class LocalWalSyncImpl implements LocalWalSync {
           'batchWalIds': batchWals.map((w) => w.id).toList(),
           'retiredWalIds': retired.map((w) => w.id).toList(),
         });
-        await _saveWalsToFile();
-        listener.onWalUpdated();
+        await _saveWalsToFile(generation);
+        _notifyUpdated(generation);
         continue;
       } catch (e) {
         print('Local WAL upload batch failed: $e, continuing with remaining files');
@@ -872,8 +1064,8 @@ class LocalWalSyncImpl implements LocalWalSync {
         }
       }
 
-      await _saveWalsToFile();
-      listener.onWalUpdated();
+      await _saveWalsToFile(generation);
+      _notifyUpdated(generation);
     }
 
     DebugLogManager.logEvent('local_upload_finished', {
@@ -886,13 +1078,15 @@ class LocalWalSyncImpl implements LocalWalSync {
     });
 
     resp.localUploadFailures = batchesFailed;
-    progress?.onWalSyncedProgress(1.0);
+    if (_isCurrent(generation)) progress?.onWalSyncedProgress(1.0);
     return resp;
   }
 
   @override
   Future<SyncLocalFilesResponse?> syncWal({required Wal wal, IWalSyncProgressListener? progress}) async {
-    await _flush();
+    final generation = _sessionGeneration;
+    await _flush(generation);
+    if (!_isCurrent(generation)) return null;
 
     final matches = _wals.where((w) => w == wal).toList();
     if (matches.isEmpty) {
@@ -900,6 +1094,11 @@ class LocalWalSyncImpl implements LocalWalSync {
       return null;
     }
     final walToSync = matches.first;
+    // A deliberate single-recording retry is a fresh start, so it restores the
+    // auto-upload budget a previous failure spent. It costs at most one extra
+    // upload for a permanently refused recording: the reconciler spends the
+    // whole budget again on the same verdict.
+    walToSync.retryCount = 0;
 
     var resp = SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
 
@@ -941,12 +1140,12 @@ class LocalWalSyncImpl implements LocalWalSync {
       }
     }
 
-    listener.onWalUpdated();
+    _notifyUpdated(generation);
 
     // File unusable — nothing to upload (avoids a LateInit crash on walFile).
     if (walFile == null) {
-      await _saveWalsToFile();
-      listener.onWalUpdated();
+      await _saveWalsToFile(generation);
+      _notifyUpdated(generation);
       return resp;
     }
 
@@ -959,7 +1158,7 @@ class LocalWalSyncImpl implements LocalWalSync {
               (candidate) => candidate.status == WalStatus.miss && candidate.conversationId == walToSync.conversationId,
             )
             .toList(),
-        DateTime.now().millisecondsSinceEpoch ~/ 1000,
+        _now().millisecondsSinceEpoch ~/ 1000,
       );
       final result = await _uploadGate.upload(
         [walFile],
@@ -981,9 +1180,9 @@ class LocalWalSyncImpl implements LocalWalSync {
         walToSync.syncStartedAt = null;
         walToSync.syncEtaSeconds = null;
         DebugLogManager.logInfo('Single WAL upload succeeded (fast-path)', {'walId': wal.id});
-        listener.onWalSynced(wal);
+        if (_isCurrent(generation)) listener.onWalSynced(wal);
       } else {
-        final now = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+        final now = _now().millisecondsSinceEpoch ~/ 1000;
         walToSync.status = WalStatus.uploaded;
         walToSync.jobId = result.jobId;
         walToSync.uploadedAt = now;
@@ -991,7 +1190,7 @@ class LocalWalSyncImpl implements LocalWalSync {
         walToSync.syncStartedAt = null;
         walToSync.syncEtaSeconds = null;
         DebugLogManager.logInfo('Single WAL uploaded; reconciler will finish', {'walId': wal.id});
-        listener.onWalUpdated();
+        _notifyUpdated(generation);
       }
     } on SyncRateLimitedException {
       // Account-level rate limit — leave the WAL pending without consuming its
@@ -1000,16 +1199,16 @@ class LocalWalSyncImpl implements LocalWalSync {
       walToSync.isSyncing = false;
       walToSync.syncStartedAt = null;
       walToSync.syncEtaSeconds = null;
-      await _saveWalsToFile();
-      listener.onWalUpdated();
+      await _saveWalsToFile(generation);
+      _notifyUpdated(generation);
       return resp;
     } on SyncOfflineQueueQuarantinedException {
       DebugLogManager.logEvent('single_wal_cutover_quarantined', {'walId': wal.id});
       walToSync.isSyncing = false;
       walToSync.syncStartedAt = null;
       walToSync.syncEtaSeconds = null;
-      await _saveWalsToFile();
-      listener.onWalUpdated();
+      await _saveWalsToFile(generation);
+      _notifyUpdated(generation);
       return resp;
     } on SyncRecoveryWindowExceededException {
       // Terminal: older than the server's automatic-recovery window. A manual
@@ -1022,8 +1221,8 @@ class LocalWalSyncImpl implements LocalWalSync {
         'walId': wal.id,
         'retiredWalIds': retired.map((w) => w.id).toList(),
       });
-      await _saveWalsToFile();
-      listener.onWalUpdated();
+      await _saveWalsToFile(generation);
+      _notifyUpdated(generation);
       return resp;
     } catch (e) {
       Logger.debug('Single WAL upload failed: $e');
@@ -1034,10 +1233,10 @@ class LocalWalSyncImpl implements LocalWalSync {
       rethrow;
     }
 
-    await _saveWalsToFile();
-    listener.onWalUpdated();
+    await _saveWalsToFile(generation);
+    _notifyUpdated(generation);
 
-    progress?.onWalSyncedProgress(1.0);
+    if (_isCurrent(generation)) progress?.onWalSyncedProgress(1.0);
     return resp;
   }
 
@@ -1081,6 +1280,7 @@ class LocalWalSyncImpl implements LocalWalSync {
   /// `miss` WALs, so the two never contend for the same recording. WALs are
   /// grouped by their shared `jobId` (batched upload → one job : N WALs).
   Future<SyncLocalFilesResponse> reconcileUploadedWals() async {
+    final generation = _sessionGeneration;
     final resp = SyncLocalFilesResponse(newConversationIds: [], updatedConversationIds: []);
 
     final byJob = <String, List<Wal>>{};
@@ -1092,13 +1292,13 @@ class LocalWalSyncImpl implements LocalWalSync {
     if (byJob.isEmpty) return resp;
 
     bool changed = false;
-    final nowSecs = DateTime.now().millisecondsSinceEpoch ~/ 1000;
+    final nowSecs = _now().millisecondsSinceEpoch ~/ 1000;
     const maxConcurrent = 3;
     final entries = byJob.entries.toList();
 
     for (var i = 0; i < entries.length; i += maxConcurrent) {
       final slice = entries.sublist(i, min(i + maxConcurrent, entries.length));
-      final fetched = await Future.wait(slice.map((e) async => (e.value, await fetchSyncJobStatus(e.key))));
+      final fetched = await Future.wait(slice.map((e) async => (e.value, await _jobStatusFetcher(e.key))));
 
       for (final (members, fetch) in fetched) {
         final jobId = members.first.jobId;
@@ -1172,7 +1372,7 @@ class LocalWalSyncImpl implements LocalWalSync {
                 changed = true;
                 w.status = WalStatus.synced;
                 w.jobId = null;
-                listener.onWalSynced(w);
+                if (_isCurrent(generation)) listener.onWalSynced(w);
               }
             } else {
               // status='failed' with totalSegments==0 can only come from the
@@ -1187,24 +1387,39 @@ class LocalWalSyncImpl implements LocalWalSync {
                   reason: RateLimitReason.backendBusy,
                 );
               }
+              // A verdict the audio itself caused cannot change on the next pass,
+              // and it cannot change for a manual retry either — the bytes are the
+              // same. Spending the auto budget only made the row read "Failed — tap
+              // Retry" forever: every tap re-uploaded, re-earned the same verdict,
+              // and re-spent the budget, with the needs-attention banner never
+              // clearing. Retire it to a terminal state instead, the way an
+              // out-of-window rejection already does. The file stays on disk.
+              final permanentInput = !capacityLimited && syncJobFailureIsPermanent(s);
               for (final w in members) {
                 changed = true;
                 final hadJob = w.jobId;
-                w.status = WalStatus.miss;
-                w.jobId = null;
-                if (!capacityLimited) {
-                  w.retryCount += 1;
+                if (permanentInput) {
+                  w.markUnsupportedAudio();
                   w.lastRetryAt = nowSecs;
+                } else {
+                  w.status = WalStatus.miss;
+                  w.jobId = null;
+                  if (!capacityLimited) {
+                    w.retryCount += 1;
+                    w.lastRetryAt = nowSecs;
+                  }
                 }
                 DebugLogManager.logEvent('reconcile_revert', {
                   'walId': w.id,
                   'jobId': hadJob,
                   'outcome': s.status,
                   'serverError': s.error,
+                  'reasonCode': s.reasonCode,
                   'failedSegments': s.failedSegments,
                   'totalSegments': s.totalSegments,
                   'retryCount': w.retryCount,
                   'capacityLimited': capacityLimited,
+                  'permanentInput': permanentInput,
                   'retryCountBumped': !capacityLimited,
                 });
               }
@@ -1215,8 +1430,8 @@ class LocalWalSyncImpl implements LocalWalSync {
     }
 
     if (changed) {
-      await _saveWalsToFile();
-      listener.onWalUpdated();
+      await _saveWalsToFile(generation);
+      _notifyUpdated(generation);
     }
     return resp;
   }

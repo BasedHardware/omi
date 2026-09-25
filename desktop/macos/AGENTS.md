@@ -203,11 +203,12 @@ do not hand-edit those paths to match a specific machine.
 ## Key Architecture Notes
 
 ### Authentication
-- Firebase Auth with Apple/Google Sign-In
-- Desktop apps should use backend OAuth flow: `/v1/auth/authorize`
+- Firebase (Apple/Google); desktop OAuth: `/v1/auth/authorize`
 - Apple Services ID: `me.omi.web` (shared across all apps)
 - iOS apps use native Sign-In, Desktop uses backend OAuth + custom token
 - Session death is owned by `AuthSessionCoordinator` (`INV-AUTH-1`); use `invalidateSession` for expired/revoked Firebase creds, not nuclear `signOut()`.
+
+- [Agent credentials](docs/agent-model-credentials.md).
 
 #### Session 401 vs BYOK/provider 401
 
@@ -226,9 +227,10 @@ do not hand-edit those paths to match a specific machine.
 
 ### Screen activity sync rollout
 
-- `screen_activity_lossless_sync` enables durable per-row delivery, five-minute `(app, window)` compaction, and bounded embedding recovery. Production-family bundles stay on the legacy path until that PostHog flag is true; non-production bundles dogfood it by default and `OMI_FORCE_LOSSLESS_SCREEN_SYNC=0` disables it locally.
+- `screen_activity_lossless_sync` enables durable per-row delivery, five-minute `(app, window)` compaction, and bounded embedding recovery. Production-family bundles wait for that PostHog flag; non-production dogfoods it (`OMI_FORCE_LOSSLESS_SCREEN_SYNC=0` off).
 - OCR-bearing rows sync independently from embeddings. Embeddings are an optional later projection and must never gate capture, OCR, or text delivery.
 - Firestore screen-activity timestamps use the lexicographically sortable UTC form `yyyy-MM-dd HH:mm:ss.SSS`. The backend normalizes ISO-8601 input before storage.
+- Local embeddings (opt-in): [ARCHITECTURE.md](Desktop/Sources/LocalInference/ARCHITECTURE.md).
 
 ### Feature-flag authority
 
@@ -246,8 +248,7 @@ User-managed MCP servers (~/.omi/mcp.json, incl. native OAuth) and skills
 runtime wiring: [`.github/agent-docs/desktop-user-extensions.md`](../../.github/agent-docs/desktop-user-extensions.md).
 
 ### Known Limitations
-- Firestore has no collection group indexes for `source` field
-- Counting users by platform requires iterating all users (slow)
+- Firestore has no collection group indexes for `source`; counting users by platform is a full scan
 - Apple Sign-In: Only one Services ID per Firebase project
 
 ## Development Workflow
@@ -261,7 +262,7 @@ runtime wiring: [`.github/agent-docs/desktop-user-extensions.md`](../../.github/
 - **Focused feedback loop**: `./scripts/dev-feedback.py --once|--watch swift '<XCTest filter>'` or `... python '<pytest path>'` runs exactly the regression you selected and reports each iteration time. It watches only the matching component inputs, keeps watching after a failure, and never replaces the full component suite. A filter that matches no tests fails the iteration (`swift test --filter` exits 0 on zero matches), so a renamed or mistyped filter can never read as PASS. Pre-push deliberately adds only `xcrun swift build -c debug`; never promote it to the full pinned-Xcode suite or release compile, because that push-time budget belongs to CI.
 - **Swift suite throughput**: Local suites default to four workers. CI uses two workers only because each gets a copy-on-write SwiftPM scratch directory and an isolated Foundation runtime home (preferences, Application Support, caches, and temporary files). Do not raise it without evidence that both build and runtime state remain isolated. Set `OMI_SWIFT_TEST_SUITE_WORKERS=1` to diagnose concurrency failures.
 - **Local Python backend**: direct `./run.sh` development reuses a healthy backend that this worktree owns when Python source/config have not changed. Sync dependencies with `cd ../../backend && ./scripts/sync-python-deps.sh` before the first local launch.
-- **Agent runtime preparation cache**: local `./run.sh` calls reuse validated agent packaging from the worktree-local `.harness/agent-runtime` cache when source, locks, preparation logic, pinned runtime, mode, OS/architecture, Node/npm versions, and every file copied from the prepared runtime are unchanged. Hits verify the complete agent `dist`, both packaged dependency trees, their symlinks, and staged Node; working `agent/node_modules` is not hashed. The script logs `Cache HIT`, `MISS`, or `BYPASS`; hits preserve output mtimes but spend roughly a second on a warm local filesystem hashing the packaged outputs for integrity (hardware/filesystem dependent). CI and `--skip-npm` always bypass the stamp. Set `OMI_AGENT_RUNTIME_FORCE_REBUILD=1` for an explicit local rebuild. Do not copy this cache between worktrees or treat it as a release artifact. The checksum-verified universal Node archives are separately shared at `~/Library/Caches/OmiDesktop/node-archives` (override with `OMI_AGENT_RUNTIME_ARCHIVE_CACHE_DIR`), so fresh linked worktrees reuse the download but still validate it before staging.
+- **Agent runtime preparation cache**: local `./run.sh` calls reuse validated agent packaging from the worktree-local `.harness/agent-runtime` cache when source, locks, preparation logic, pinned runtime, mode, OS/architecture, Node/npm versions, and every file copied from the prepared runtime are unchanged. Hits verify the complete agent `dist`, both packaged dependency trees, their symlinks, and staged Node; working `agent/node_modules` is not hashed. The script logs `Cache HIT`, `MISS`, or `BYPASS`; hits preserve output mtimes but spend roughly a second on a warm local filesystem hashing the packaged outputs for integrity (hardware/filesystem dependent). CI and `--skip-npm` always bypass the stamp. Set `OMI_AGENT_RUNTIME_FORCE_REBUILD=1` for an explicit local rebuild. Do not copy this cache between worktrees or treat it as a release artifact. The checksum-verified universal Node archives are shared at `~/Library/Caches/OmiDesktop/node-archives` (override with `OMI_AGENT_RUNTIME_ARCHIVE_CACHE_DIR`). Cached at `~/Library/Caches/OmiDesktop/node-runtime`; see README.
 - **Release builds**: Handled entirely by Codemagic CI (no local release script needed)
 - **DO NOT** use bare `swift build` — it will fail with SDK version mismatch
 - **DO NOT** use `xcodebuild` — there is no `.xcodeproj`
