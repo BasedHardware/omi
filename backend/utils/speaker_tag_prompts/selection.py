@@ -25,6 +25,7 @@ from typing import Any, Dict, Iterable, List, Mapping, Optional, Sequence, Tuple
 
 from models.speaker_tag_prompts import SpeakerTagPrompt, SpeakerTagPromptKind, SpeakerTagPromptOrigin
 from models.transcript_segment import legacy_conversation_segment_id
+from utils.audio_timeline import coverage_outcome, is_audio_timeline_v2
 
 PROMPT_WINDOW = timedelta(hours=48)
 MIN_CLIP_SECONDS = 5.0
@@ -244,6 +245,11 @@ def select_prompts(
             if pid in answered:
                 return
             clip_start, clip_end = _clip_window(run)
+            if is_audio_timeline_v2(conversation):
+                # v2: offer a prompt only when the *actual selected clip
+                # window* has validated coverage; the clip endpoint rechecks.
+                if coverage_outcome(conversation, clip_start, clip_end) != 'covered':
+                    return
             excerpt = ' '.join(
                 (segment.get('text') or '').strip()
                 for segment in segments

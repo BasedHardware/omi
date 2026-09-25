@@ -4,12 +4,19 @@ Audio exists only for conversations recorded with private cloud sync on; the
 chunks live beside the conversation and are listed by ``audio_files``. Times
 are seconds from ``conversation.started_at``, the same frame as transcript
 segments.
+
+For audio-timeline v2 conversations the clip window must be *covered*: the
+union of validated ``chunk_spans`` must contain it (1 ms tolerance). A known
+uncovered window returns None — never a clip of the wrong audio. Legacy
+conversations keep the timestamp-based best-effort behavior.
 """
 
 import io
 import wave
 from typing import Any, List, Mapping, Optional
 
+from utils.audio_timeline import coverage_outcome, segment_wall_window
+from utils.metrics import OMI_AUDIO_TIMELINE_COVERAGE_TOTAL
 from utils.other.storage import download_audio_chunks_and_merge
 
 CLIP_SAMPLE_RATE = 16000
@@ -30,6 +37,20 @@ def _chunk_timestamps(conversation: Mapping[str, Any]) -> List[float]:
     return sorted(set(timestamps))
 
 
+def _v2_relevant_timestamps(conversation: Mapping[str, Any], abs_start: float, abs_end: float) -> List[float]:
+    """Chunk timestamps whose validated span intersects the clip window."""
+    relevant: List[float] = []
+    for audio_file in conversation.get('audio_files') or []:
+        spans = audio_file.get('chunk_spans') or []
+        timestamps = audio_file.get('chunk_timestamps') or []
+        if not spans or len(spans) != len(timestamps):
+            return []
+        for (start, end), timestamp in zip(spans, timestamps):
+            if float(start) < abs_end and float(end) > abs_start:
+                relevant.append(float(timestamp))
+    return sorted(set(relevant))
+
+
 def conversation_clip_pcm(
     uid: str, conversation: Mapping[str, Any], start: float, end: float, sample_rate: int = CLIP_SAMPLE_RATE
 ) -> Optional[bytes]:
@@ -37,8 +58,37 @@ def conversation_clip_pcm(
     if end <= start or end - start > MAX_CLIP_REQUEST_SECONDS:
         raise ValueError('Clip window must be positive and at most 12 seconds')
     started_at = _started_at_seconds(conversation)
+    if started_at is None:
+        return None
+    marker = conversation.get('audio_timeline')
+    if isinstance(marker, Mapping) and marker.get('version') == 2:
+        window = segment_wall_window(conversation, start, end)
+        if window is None:
+            return None
+        outcome = coverage_outcome(conversation, start, end)
+        OMI_AUDIO_TIMELINE_COVERAGE_TOTAL.labels(mode='v2', outcome=outcome).inc()
+        if outcome != 'covered':
+            # Uncovered windows never yield audio: missing/pending/unsupported
+            # storage is unavailable, not a claim of aligned audio.
+            return None
+        abs_start, abs_end = window
+        relevant = _v2_relevant_timestamps(conversation, abs_start, abs_end)
+        if not relevant:
+            return None
+        merged = download_audio_chunks_and_merge(
+            uid, conversation['id'], relevant, fill_gaps=True, sample_rate=sample_rate
+        )
+        spans = [
+            span
+            for audio_file in conversation.get('audio_files') or []
+            for span in (audio_file.get('chunk_spans') or [])
+            if float(span[0]) < abs_end and float(span[1]) > abs_start
+        ]
+        buffer_start = min(float(span[0]) for span in spans)
+        pcm = trim_pcm16(merged, sample_rate, abs_start - buffer_start, abs_end - buffer_start)
+        return pcm or None
     timestamps = _chunk_timestamps(conversation)
-    if started_at is None or not timestamps:
+    if not timestamps:
         return None
     abs_start = started_at + start
     abs_end = started_at + end
