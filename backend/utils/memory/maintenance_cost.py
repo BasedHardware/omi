@@ -1,6 +1,6 @@
 """Luna Flex cost model for canonical short-term maintenance (dreaming).
 
-Rates match ``openai.gpt-6-luna.2026-09-22`` short-context prices: half of
+Rates match the gpt-x-luna card dated 2026-09-22 short-context prices: half of
 gpt-5.6-luna per operator directive (David Zhang, 2026-09-23), pending
 official published rates. Flex is priced at the
 gateway's batch/Flex multiplier (50%). Token defaults are

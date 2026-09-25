@@ -38,11 +38,25 @@ void main() {
     await AnalyticsManager.flushPending(force: true);
 
     final payload = adapter.payloadFor('Device Connected');
-    expectNoWholesaleDeviceDump(device, payload);
+    expectNoWholesaleDeviceDump(device, payload, allowedToJsonKeys: const {'rssi'});
+    expect(payload['rssi'], -50);
     expectHashedIdentity(device, payload);
     expect(payload['type'], 'fieldy');
     expect(payload['device_vendor'], 'fieldlabs');
     expect(payload['hardware_family'], 'fieldy');
+  });
+
+  test('Device Connected payload omits rssi when the stored value is meaningless', () async {
+    final adapter = _FakeAnalyticsAdapter();
+    AnalyticsManager.configure(adapter);
+    await AnalyticsManager.init();
+
+    final device = _wearable()..rssi = 0;
+    AnalyticsManager().deviceConnected(device);
+    await AnalyticsManager.flushPending(force: true);
+
+    final payload = adapter.payloadFor('Device Connected');
+    expect(payload.containsKey('rssi'), isFalse);
   });
 
   test('Device Paired payload keeps hashed identity and drops the BtDevice dump', () async {
@@ -57,6 +71,7 @@ void main() {
 
     final payload = adapter.payloadFor('Device Paired');
     expectNoWholesaleDeviceDump(device, payload);
+    expect(payload.containsKey('rssi'), isFalse);
     expectHashedIdentity(device, payload);
     expect(payload['type'], 'fieldy');
     expect(payload['device_vendor'], 'fieldlabs');
@@ -93,10 +108,16 @@ BtDevice _wearable() => BtDevice(
 /// Fails when a payload copies BtDevice persistence keys. `type` is the one
 /// toJson key the dictionary already names explicitly; every other dump key is
 /// the class, including fields added to toJson later.
-void expectNoWholesaleDeviceDump(BtDevice device, Map<String, Object> properties) {
+void expectNoWholesaleDeviceDump(
+  BtDevice device,
+  Map<String, Object> properties, {
+  Set<String> allowedToJsonKeys = const {},
+}) {
   const namedKeysThatShareToJsonSpelling = {'type'};
   final dumped = device.toJson().keys.toSet();
-  final leaked = properties.keys.toSet().intersection(dumped).difference(namedKeysThatShareToJsonSpelling);
+  final leaked = properties.keys.toSet().intersection(dumped).difference(namedKeysThatShareToJsonSpelling).difference(
+        allowedToJsonKeys,
+      );
   expect(leaked, isEmpty, reason: 'analytics payload copied BtDevice.toJson keys $leaked');
 }
 

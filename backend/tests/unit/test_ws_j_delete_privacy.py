@@ -1071,6 +1071,35 @@ def test_reusing_a_row_id_for_different_content_still_fails(monkeypatch, canonic
     assert canonical_db.docs[f"users/{uid}/memory_items/{first_id}"] == before
 
 
+def test_resending_text_whose_row_was_edited_creates_a_new_memory(monkeypatch, canonical_db):
+    """Prod regression (#17296): the row derived from a text keeps its id after an edit.
+
+    Re-sending the original text then collided with the edited row on every
+    retry. The user no longer has that text, so the resend is a new memory, and
+    retrying it lands on that same new memory.
+    """
+    uid = "uid-canonical-ws-j"
+    _stub_delete_side_effects(monkeypatch)
+
+    first_id = write_canonical_external_memory(
+        uid, _external_memory_payload(uid, "I drink oat milk"), db_client=canonical_db
+    )
+    canonical_db.docs[f"users/{uid}/memory_items/{first_id}"]["content"] = "I drink oat milk with honey"
+    write_canonical_external_memory(uid, _external_memory_payload(uid, "I bike to work"), db_client=canonical_db)
+
+    resent_id = write_canonical_external_memory(
+        uid, _external_memory_payload(uid, "I drink oat milk"), db_client=canonical_db
+    )
+    retried_id = write_canonical_external_memory(
+        uid, _external_memory_payload(uid, "I drink oat milk"), db_client=canonical_db
+    )
+
+    assert resent_id != first_id
+    assert retried_id == resent_id
+    assert canonical_db.docs[f"users/{uid}/memory_items/{first_id}"]["content"] == "I drink oat milk with honey"
+    assert canonical_db.docs[f"users/{uid}/memory_items/{resent_id}"]["content"] == "I drink oat milk"
+
+
 class _LaggingSnapshotDb:
     """Fake Firestore wrapper that hides one document for the first plain reads.
 

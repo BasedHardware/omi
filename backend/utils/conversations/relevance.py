@@ -9,6 +9,10 @@ as data instead of as junk in a user's list.
 
 Discard is always recoverable (Show discarded, restore). A user's restore is
 recorded as ``sync_relevance_user_kept`` and outranks every later assessment.
+
+With ``CONVERSATION_RELEVANCE_JEV_ENABLED`` the model tier asks the Jev decision
+model (``relevance_jev.py``) instead of ``conv_discard`` for transcript-only
+conversations, and discards only above ``JEV_DISCARD_THRESHOLD`` (#14835).
 """
 
 from __future__ import annotations
@@ -17,13 +21,20 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any, Callable, Iterable, Literal, Mapping, Optional, Sequence
 
+from config.jev_decisions import JEV_MODEL
 from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger, RelevancePolicy
 from utils.conversations.relevance_rules import RULES_VERSION, deterministic_relevance
 
 RELEVANCE_DECISION_FIELD = 'relevance_decision'
 
 
-DecidedBy = Literal['policy', 'user', 'rule', 'model', 'override']
+DecidedBy = Literal['policy', 'user', 'rule', 'model', 'jev', 'override']
+
+# Jev discards only when P(discard) = 1 - P(worth keeping) is above this. On the
+# owner's labels (2026-09-23) 0.95 lost none of 20 conversations he kept; on the
+# agent-labelled set the zero-loss point was 0.93, and calibration is poor, so
+# the margin is deliberately above it. Lowering it needs a re-measured set.
+JEV_DISCARD_THRESHOLD = 0.95
 
 
 @dataclass(frozen=True)
@@ -43,6 +54,8 @@ class RelevanceDecision:
     trigger: ProcessingTrigger
     # Set when a discarded fragment belongs to an adjacent kept conversation.
     neighbor_id: Optional[str] = None
+    # Jev's P(discard) when the Jev tier ran, including a calendar override of its discard.
+    jev_p_discard: Optional[float] = None
 
     @property
     def discard(self) -> bool:
@@ -58,6 +71,12 @@ class RelevanceDecision:
         }
         if self.neighbor_id:
             record['neighbor_id'] = self.neighbor_id
+        if self.jev_p_discard is not None:
+            record['jev'] = {
+                'p_discard': round(self.jev_p_discard, 4),
+                'threshold': JEV_DISCARD_THRESHOLD,
+                'model': JEV_MODEL,
+            }
         return record
 
 
@@ -108,6 +127,7 @@ def decide_relevance(
     model_discards: Optional[Callable[[Callable[[Exception], None], Optional[Neighbor]], bool]],
     calendar_retains: Callable[[], bool],
     neighbor: Callable[[], Optional[Neighbor]] = lambda: None,
+    jev_discard_probability: Optional[Callable[[], Optional[float]]] = None,
 ) -> RelevanceDecision:
     """Decide keep/discard. Thunks run only when their tier is reached.
 
@@ -119,15 +139,23 @@ def decide_relevance(
     conversation, and a discard links to it instead of standing alone.
     ``calendar_retains`` is consulted only for a discard verdict: a scrap
     recorded inside a booked meeting is evidence, never noise (SCA-381).
+
+    ``jev_discard_probability`` replaces ``model_discards`` for the model tier
+    when the caller supplies it (flag on and the conversation is transcript
+    only). It returns P(discard), or ``None`` when Jev gave no answer, which
+    keeps. It inherits the model tier's plan gate: with ``model_discards=None``
+    neither runs.
     """
 
     def keep(decided_by: DecidedBy, reason: str) -> RelevanceDecision:
         return RelevanceDecision('keep', decided_by, reason, trigger)
 
-    def discard_unless_calendar(decided_by: DecidedBy, reason: str) -> RelevanceDecision:
+    def discard_unless_calendar(
+        decided_by: DecidedBy, reason: str, jev_p_discard: Optional[float] = None
+    ) -> RelevanceDecision:
         if calendar_retains():
-            return keep('override', 'calendar_overlap')
-        return RelevanceDecision('discard', decided_by, reason, trigger)
+            return RelevanceDecision('keep', 'override', 'calendar_overlap', trigger, jev_p_discard=jev_p_discard)
+        return RelevanceDecision('discard', decided_by, reason, trigger, jev_p_discard=jev_p_discard)
 
     if PROCESSING_MODES[trigger].relevance is RelevancePolicy.KEEP:
         return keep('policy', trigger.value)
@@ -148,6 +176,14 @@ def decide_relevance(
 
     if model_discards is None:
         return keep('policy', 'model_withheld')
+
+    if jev_discard_probability is not None:
+        p_discard = jev_discard_probability()
+        if p_discard is None:
+            return keep('jev', 'jev_error')
+        if p_discard > JEV_DISCARD_THRESHOLD:
+            return discard_unless_calendar('jev', 'jev_discard', p_discard)
+        return RelevanceDecision('keep', 'jev', 'jev_keep', trigger, jev_p_discard=p_discard)
 
     model_failed = False
 

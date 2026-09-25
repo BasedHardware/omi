@@ -1,7 +1,7 @@
 """Lab-local token pricing. Copied rates, not a production import.
 
 Uses the same Luna short-context list prices as the maintenance planner
-(``openai.gpt-6-luna.2026-09-22``, half of gpt-5.6-luna per operator
+(the gpt-x-luna card dated 2026-09-22, half of gpt-5.6-luna per operator
 directive David Zhang 2026-09-23, pending official published rates) so
 harness cost notes stay comparable to other backend planning estimates
 without pulling production modules.
