@@ -34,6 +34,11 @@ class UsersMigrationTimezoneErrorSanitizationTests(unittest.TestCase):
         self.assertNotIn('detail=f"Failed to migrate chat message {request.id}: {e}"', self.router_text)
         self.assertIn("Failed to migrate chat message {request.id}: {type(e).__name__}", self.router_text)
 
+    def test_batch_migration_no_exception_leak(self):
+        self.assertIn('errors.append(f"Failed to migrate batch of type {req_type}")', self.router_text)
+        self.assertNotIn('f"Failed to migrate batch of type {req_type}: {e}"', self.router_text)
+        self.assertIn("Failed to migrate batch of type {req_type}: {type(e).__name__}", self.router_text)
+
     def test_timezone_errors_sanitized(self):
         self.assertIn("detail='Failed to calculate user timezone boundaries'", self.router_text)
         self.assertNotIn("detail=f'Timezone error: {str(e)}'", self.router_text)

@@ -992,9 +992,8 @@ def handle_batch_migration_requests(
             else:
                 errors.append(f"Unknown object type for migration: {req_type}")
         except Exception as e:
-            error_detail = f"Failed to migrate batch of type {req_type}: {e}"
-            logger.info(error_detail)
-            errors.append(error_detail)
+            logger.error(f"Failed to migrate batch of type {req_type}: {type(e).__name__}")
+            errors.append(f"Failed to migrate batch of type {req_type}")
 
     if errors:
         raise HTTPException(status_code=500, detail={"message": "Some objects failed to migrate.", "errors": errors})
