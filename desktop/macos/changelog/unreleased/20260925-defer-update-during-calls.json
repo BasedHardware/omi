@@ -1,3 +1,0 @@
-{
-  "change": "Fixed automatic updates restarting Omi in the middle of a call, which split one meeting into two conversations"
-}
