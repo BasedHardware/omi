@@ -193,7 +193,7 @@ The legacy pipeline introduced **L1/L2 as processing stages** — **not** the sa
 | **Action items / goals** | `action_items`, `goals` | Workflow — unchanged |
 | **Knowledge graph** | `memory_graph_assertions` + shared graph / `knowledge_graph.py` | Per-memory assertions commit with Long-term admission; shared nodes/edges are a referentially closed, bounded read-side projection and legacy merge; public assertion-backed delete/rebuild returns HTTP 409 |
 | **Trends** | `trends_db` | Separate derived index from conversations |
-| **Legacy conversation shims** | `plugins_results`, `processing_memory_id` | Mirrored from `apps_results` / `processing_conversation_id`; **retire** when old clients age out |
+| **Legacy conversation shims** | `plugins_results` | Mirrored from `apps_results`; **retire** when old clients age out (`processing_memory_id` shim **removed** Sept 2026) |
 
 ### API surface consolidation
 
@@ -217,7 +217,8 @@ No active `/v1` or `/v2` memories REST API — `/v3` is the legacy product surfa
 | `context_only` as a user-visible tier | Archive or internal processing outcome only | WS-B, WS-G |
 | Per-UID rollout `off` / `shadow` / `write` / `read` | Universal repository + global incident/readiness controls | INV-MEM-5 |
 | `memory_items` collection name (optional) | `memories` or neutral canonical name (decide in WS-G) | WS-G |
-| `plugins_results`, `processing_memory_id` | Already mirrored — document sunset timeline | WS-D |
+| `plugins_results` | Already mirrored — document sunset timeline | WS-D |
+| `processing_memory_id` | Removed Sept 2026 — read `processing_conversation_id` | WS-D |
 | Legacy `category` values (`core`, `hobbies`, …) | Keep in DB; map to primary four in UI filters | WS-F |
 
 ### Frozen legacy names (do NOT rename)
@@ -229,7 +230,8 @@ externally-observable API strings. WS-G must **not** "correct" them toward the c
 |-------------|-------|---------------------|--------|
 | `WebhookType.memory_created` (+ payload `conversation_to_dict`) | `utils/webhooks.py`, developer webhook config | Developer-facing webhook that fires on **Conversation** creation, ships a Conversation payload | **Keep string**; document as legacy alias of "conversation created"; deprecation path only via versioned webhook, never an in-place rename |
 | `UsageHistoryType.memory_created_external_integration` | `utils/app_integrations.py` | Usage/billing event keyed off Conversation creation | **Keep string**; freeze for analytics/billing continuity |
-| `plugins_results`, `processing_memory_id` | conversation docs | Mirror of `apps_results` / `processing_conversation_id` | **Keep**; sunset only when old clients age out |
+| `plugins_results` | conversation docs | Mirror of `apps_results` | **Keep**; sunset only when old clients age out |
+| `processing_memory_id` | conversation docs | Was a mirror of `processing_conversation_id` | **Removed** (Sept 2026) — no longer served in responses or WS events |
 
 ---
 
@@ -321,7 +323,8 @@ On a Conversation document:
 | `transcript_segments` | Processed STT input to extraction | **No** — upstream processed input |
 | `structured` (`title`, `overview`, `action_items`, `events`, …) | Derived session artifacts from post-processing | **No** — session summary, not extracted facts |
 | `apps_results` | Per-app plugin output on the session | **No** — derived session artifacts |
-| `plugins_results`, `processing_memory_id` | Legacy mirrors of `apps_results` / `processing_conversation_id` | **No** — frozen legacy names (§1.1) |
+| `plugins_results` | Legacy mirror of `apps_results` | **No** — frozen legacy name (§1.1) |
+| `processing_memory_id` | Removed (Sept 2026); was a legacy mirror of `processing_conversation_id` | **No** — legacy mirror, no longer served |
 
 Memories are **extracted facts** written to separate stores (`users/{uid}/memories`, and
 interim shadow `users/{uid}/short_term`) with provenance pointing *back* at the Conversation.

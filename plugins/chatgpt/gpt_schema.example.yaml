@@ -338,11 +338,6 @@ components:
           nullable: true
           title: Language
           description: Language of the conversation
-        processing_memory_id:
-          type: string
-          nullable: true
-          title: Processing Memory Id
-          description: ID of the processing memory related to this conversation
         external_data:
           type: object
           nullable: true

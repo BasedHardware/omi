@@ -713,7 +713,7 @@ class TestPhase4RuntimeBehavior:
         mock_db_module = MagicMock()
         mock_llm_clients = MagicMock()
         saved_modules = {}
-        for mod_name in ['database._client', 'database.users', 'database.auth', 'utils.llm.clients', 'database.llm_usage', 'database.trends']:
+        for mod_name in ['database._client', 'database.users', 'database.auth', 'utils.llm.clients']:
             saved_modules[mod_name] = sys.modules.get(mod_name)
             sys.modules[mod_name] = mock_db_module if 'database' in mod_name else mock_llm_clients
 
@@ -764,8 +764,6 @@ class TestPhase4RuntimeBehavior:
         firebase_admin_stub.firestore = firebase_firestore_stub
         sys.modules['firebase_admin'] = firebase_admin_stub
         sys.modules['firebase_admin.firestore'] = firebase_firestore_stub
-        sys.modules['database.llm_usage'] = MagicMock()
-        sys.modules['database.trends'] = MagicMock()
 
         try:
             sys.modules.pop('database.trends', None)
