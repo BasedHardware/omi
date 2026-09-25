@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:omi/services/dev_controls/addressability_catalog.dart';
 import 'package:omi/services/devices/device_name_policy.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 /// Dialog that renames the connected Omi. [onRename] performs the BLE write
@@ -91,23 +92,23 @@ class _RenameDeviceWidgetState extends State<RenameDeviceWidget> {
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      backgroundColor: const Color(0xFF1C1C1E),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      backgroundColor: OmiColors.surface1,
+      shape: const RoundedRectangleBorder(borderRadius: OmiRadius.lgAll),
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              context.l10n.renameDevice,
-              style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
-            ),
+            Text(context.l10n.renameDevice, style: OmiType.title3),
             const SizedBox(height: 8),
-            Text(context.l10n.renameDeviceDescription, style: TextStyle(color: Colors.grey.shade500, fontSize: 14)),
+            Text(
+              context.l10n.renameDeviceDescription,
+              style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+            ),
             const SizedBox(height: 20),
             Container(
-              decoration: BoxDecoration(color: const Color(0xFF2C2C2E), borderRadius: BorderRadius.circular(10)),
+              decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
               child: TextField(
                 key: OmiKeys.settingsRenameField,
                 controller: _controller,
@@ -118,16 +119,16 @@ class _RenameDeviceWidgetState extends State<RenameDeviceWidget> {
                 onChanged: (_) {
                   if (_errorText != null) setState(() => _errorText = null);
                 },
-                style: const TextStyle(color: Colors.white, fontSize: 16),
+                style: OmiType.callout,
                 decoration: InputDecoration(
                   hintText: context.l10n.deviceName,
-                  hintStyle: TextStyle(color: Colors.grey.shade600, fontSize: 16),
+                  hintStyle: OmiType.callout.copyWith(color: OmiColors.textTertiary),
                   contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                   border: InputBorder.none,
                   enabledBorder: InputBorder.none,
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: const BorderSide(color: Colors.white24, width: 1),
+                  focusedBorder: const OutlineInputBorder(
+                    borderRadius: OmiRadius.mdAll,
+                    borderSide: BorderSide(color: OmiColors.border),
                   ),
                 ),
               ),
@@ -137,52 +138,28 @@ class _RenameDeviceWidgetState extends State<RenameDeviceWidget> {
               Text(
                 _errorText!,
                 key: const Key('rename_device_error'),
-                style: const TextStyle(color: Colors.redAccent, fontSize: 13),
+                style: OmiType.footnote.copyWith(color: OmiColors.danger),
               ),
             ],
             const SizedBox(height: 24),
             Row(
               children: [
                 Expanded(
-                  child: GestureDetector(
+                  child: OmiButton.secondary(
                     key: OmiKeys.settingsRenameCancel,
-                    onTap: _isSaving ? null : () => Navigator.of(context).pop(false),
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF2A2A2E),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Center(
-                        child: Text(
-                          context.l10n.cancel,
-                          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
-                        ),
-                      ),
-                    ),
+                    label: context.l10n.cancel,
+                    expand: true,
+                    onPressed: _isSaving ? null : () => Navigator.of(context).pop(false),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
-                  child: GestureDetector(
+                  child: OmiButton(
                     key: OmiKeys.settingsRenameSave,
-                    onTap: _save,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(10)),
-                      child: Center(
-                        child: _isSaving
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
-                              )
-                            : Text(
-                                context.l10n.save,
-                                style: const TextStyle(color: Colors.black, fontSize: 16, fontWeight: FontWeight.w600),
-                              ),
-                      ),
-                    ),
+                    label: context.l10n.save,
+                    expand: true,
+                    isLoading: _isSaving,
+                    onPressed: _isSaving ? null : _save,
                   ),
                 ),
               ],
