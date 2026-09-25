@@ -134,7 +134,7 @@ cd app && bash setup.sh ios    # or: bash setup.sh android
 | Backend API | [`backend/`](backend/) | Python, FastAPI, Firebase |
 | Firmware | [`omi/`](omi/) | nRF, Zephyr, C |
 | Omi Glass | [`omiGlass/`](omiGlass/) | ESP32-S3, C |
-| SDKs | [`sdks/`](sdks/) | Device (Python/Swift/RN + multi-lang protocol) |
+| SDKs | [`sdks/`](sdks/) | Device (Python/Swift/RN + multi-lang protocol), Integration (TS/Go/Python/Rust/C++/Dart) |
 | AI Personas | [`web/personas-open-source/`](web/personas-open-source/) | Next.js |
 
 </details>
@@ -162,6 +162,7 @@ cd app && bash setup.sh ios    # or: bash setup.sh android
 - [Python device SDK](sdks/python/) — full BLE + Opus + Deepgram
 - [Swift device SDK](sdks/swift/)
 - [React Native device SDK](sdks/react-native/)
+- [Integration API SDKs](sdks/integration/) — OpenAPI-generated TypeScript, Go, Python, Rust, C++, Dart (RN uses TypeScript)
 - [MCP Server](mcp/) — Model Context Protocol integration
 
 ### Architecture
