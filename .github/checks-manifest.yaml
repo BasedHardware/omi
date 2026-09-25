@@ -1535,6 +1535,11 @@ checks:
     triggers: ["plugins/omi-openfoodfacts-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Open Food Facts app must guard _safe_int, sanitize barcodes (4-18 digits, URL extraction), handle 404s gracefully, and test hermetically"
+  - id: subscription-plugin-tests
+    command: ["python3", "plugins/subscription/test_main.py"]
+    triggers: ["plugins/subscription/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Subscription plugin must keep unused imports clean, validate router config, and preserve _sanitize_uid XSS protection from #14478"
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"
