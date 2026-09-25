@@ -11,10 +11,17 @@ import logging
 import os
 from dataclasses import dataclass
 from datetime import timezone
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Collection, Dict, List, Optional, cast
 
-from database._client import db as default_db_client
+from database._client import data_plane_db as default_db_client
 from database.memory_vector_metadata import canonical_memory_provider_id
+from database.legal_holds import external_write_fence
+from models.knowledge_ledger_search import (
+    LEDGER_INDEX_VERSION,
+    LEDGER_SEARCH_KINDS,
+    build_ledger_index_metadata,
+    validate_ledger_kinds,
+)
 from models.memory_evidence import SourceState
 from models.product_memory import (
     RESTRICTED_SENSITIVITY_LABELS,
@@ -34,6 +41,12 @@ logger = logging.getLogger(__name__)
 
 ATOM_KEYWORD_COLLECTION_ENV = "MEMORY_TYPESENSE_COLLECTION"
 MEMORIES_COLLECTION = "canonical_memory_atoms"
+TYPESENSE_PROJECTION_READINESS_REQUIRED_ENV = "MEMORY_TYPESENSE_READINESS_REQUIRED"
+TYPESENSE_PROJECTION_READINESS_COLLECTION_ENV = "MEMORY_TYPESENSE_READINESS_COLLECTION"
+TYPESENSE_PROJECTION_READINESS_SOURCE_SHA_ENV = "MEMORY_TYPESENSE_READINESS_SOURCE_SHA"
+TYPESENSE_PROJECTION_READINESS_COLLECTION = "jit_qa_typesense_readiness"
+TYPESENSE_PROJECTION_READINESS_DOCUMENT_ID = "jit_qa_projection_readiness"
+TYPESENSE_PROJECTION_READINESS_SCHEMA_VERSION = "omi.jit.qa.typesense.readiness.v1"
 _DEFAULT_CATEGORY = "interesting"
 _REQUIRED_SCHEMA_FIELDS = {
     "memory_id",
@@ -47,6 +60,15 @@ _REQUIRED_SCHEMA_FIELDS = {
     "predicate",
     "created_at",
 }
+_LEDGER_FIELD_DEFINITIONS = {
+    "ledger_index_version": {"name": "ledger_index_version", "type": "int32", "facet": True, "optional": True},
+    "ledger_schema_version": {"name": "ledger_schema_version", "type": "string", "facet": True, "optional": True},
+    "ledger_kind": {"name": "ledger_kind", "type": "string", "facet": True, "optional": True},
+    "ledger_row_state": {"name": "ledger_row_state", "type": "string", "facet": True, "optional": True},
+    "ledger_has_slot": {"name": "ledger_has_slot", "type": "bool", "facet": True, "optional": True},
+    "ledger_subject_scope": {"name": "ledger_subject_scope", "type": "string", "facet": True, "optional": True},
+}
+_LEDGER_SCHEMA_FIELDS = set(_LEDGER_FIELD_DEFINITIONS)
 
 
 Payload = Dict[str, Any]
@@ -93,6 +115,71 @@ class AtomKeywordRebuildReport:
     indexed_count: int = 0
     expected_count: int = 0
     verified: bool = False
+
+
+class TypesenseProjectionNotReady(RuntimeError):
+    """The explicitly gated QA Typesense projection has no trusted readiness epoch."""
+
+
+def _typesense_projection_readiness_required() -> bool:
+    return os.getenv(TYPESENSE_PROJECTION_READINESS_REQUIRED_ENV, "").strip().casefold() in {
+        "1",
+        "true",
+        "yes",
+        "on",
+    }
+
+
+def require_typesense_projection_ready(uid: str) -> None:
+    """Require a live projection readiness epoch before current-ledger search.
+
+    The QA Typesense service uses an ephemeral data directory.  A restarted
+    instance can be healthy while its collection is empty, so the backend
+    consumes a marker written after a complete Firestore rebuild and producer
+    proof, immediately before the real consumer proof that exercises this
+    gate.  A successful qualification still requires the final consumer
+    receipt; a process death in that short interval can leave a rebuild-ready
+    marker without a qualified receipt, so operators must keep QA execution
+    idle while running the proof and retry after an interrupted run.  The
+    marker lives in Typesense itself; therefore
+    a fresh instance fails closed until the rehydration proof writes a new
+    epoch.  Normal services leave the gate unset and retain existing behavior.
+    """
+
+    if not _typesense_projection_readiness_required():
+        return
+    collection_name = os.getenv(TYPESENSE_PROJECTION_READINESS_COLLECTION_ENV, "").strip()
+    if not collection_name:
+        raise TypesenseProjectionNotReady("Typesense projection readiness collection is not configured")
+    try:
+        document = (
+            _typesense_client()
+            .collections[collection_name]
+            .documents[TYPESENSE_PROJECTION_READINESS_DOCUMENT_ID]
+            .retrieve()
+        )
+    except Exception as exc:  # noqa: BLE001 - provider errors are one fail-closed boundary
+        raise TypesenseProjectionNotReady("Typesense projection readiness marker is unavailable") from exc
+    if not isinstance(document, dict):
+        raise TypesenseProjectionNotReady("Typesense projection readiness marker is malformed")
+    if document.get("id") != TYPESENSE_PROJECTION_READINESS_DOCUMENT_ID:
+        raise TypesenseProjectionNotReady("Typesense projection readiness marker has the wrong identity")
+    if document.get("userId") != uid:
+        raise TypesenseProjectionNotReady("Typesense projection readiness marker has the wrong owner")
+    if document.get("readiness_schema_version") != TYPESENSE_PROJECTION_READINESS_SCHEMA_VERSION:
+        raise TypesenseProjectionNotReady("Typesense projection readiness marker has the wrong schema")
+    epoch = document.get("projection_epoch")
+    if not isinstance(epoch, str) or not epoch.strip():
+        raise TypesenseProjectionNotReady("Typesense projection readiness marker has no epoch")
+    expected_source_sha = os.getenv(TYPESENSE_PROJECTION_READINESS_SOURCE_SHA_ENV, "").strip()
+    if expected_source_sha and document.get("source_sha") != expected_source_sha:
+        raise TypesenseProjectionNotReady("Typesense projection readiness marker has the wrong source")
+    try:
+        projection_count = int(document.get("projection_count", 0))
+    except (TypeError, ValueError) as exc:
+        raise TypesenseProjectionNotReady("Typesense projection readiness marker has an invalid count") from exc
+    if projection_count <= 0:
+        raise TypesenseProjectionNotReady("Typesense projection readiness marker has no indexed documents")
 
 
 def is_indexable_long_term_atom(item: MemoryItem) -> bool:
@@ -159,7 +246,7 @@ def _predicate_for_item(item: MemoryItem) -> str:
 
 def build_atom_keyword_document(item: MemoryItem) -> Dict[str, Any]:
     """Build a Typesense document for one indexable long-term atom."""
-    return {
+    document = {
         "id": canonical_memory_provider_id(item.uid, item.memory_id),
         "memory_id": item.memory_id,
         "userId": item.uid,
@@ -172,6 +259,11 @@ def build_atom_keyword_document(item: MemoryItem) -> Dict[str, Any]:
         "predicate": _predicate_for_item(item),
         "created_at": _created_at_epoch(item),
     }
+    # Generic atom rows remain backwards compatible.  Ledger rows carry an
+    # explicit version/state discriminator so a ledger query never treats an
+    # unlabelled legacy Typesense hit as canonical ledger evidence.
+    document.update(build_ledger_index_metadata(item))
+    return document
 
 
 def merge_memory_search_ids(keyword_ids: List[str], vector_ids: List[str]) -> List[str]:
@@ -197,6 +289,7 @@ def ensure_memories_collection() -> None:
                 {"name": "schema_version", "type": "int32", "facet": True},
                 {"name": "entity_terms", "type": "string", "optional": True},
                 {"name": "predicate", "type": "string", "optional": True},
+                *[dict(field) for field in _LEDGER_FIELD_DEFINITIONS.values()],
                 {"name": "created_at", "type": "int64"},
             ],
             "default_sorting_field": "created_at",
@@ -211,6 +304,49 @@ def ensure_memories_collection() -> None:
             f"Typesense collection {collection_name!r} is incompatible with canonical memory atoms; "
             f"missing fields: {missing}"
         )
+
+
+def _schema_field_names(schema: Payload) -> set[str]:
+    return {str(field.get("name")) for field in _payload_list(schema.get("fields")) if field.get("name")}
+
+
+def ensure_ledger_keyword_schema() -> None:
+    """Adopt the ledger index fields on a pre-ledger collection; fail closed otherwise.
+
+    ``ensure_memories_collection`` includes the ledger fields only when it
+    creates the collection, so a collection created before those fields
+    existed could never pass this check: every ledger keyword search failed
+    closed, permanently (observed hourly in dev since 2026-08-30). The fields
+    are all optional and additive, so adopting them is a bounded idempotent
+    alter. A concurrent adopter can win the race; the post-alter re-read is
+    the authority, and a collection still missing fields after the attempt
+    keeps failing closed.
+    """
+
+    collection_name = memories_collection_name()
+    collection = _typesense_client().collections[collection_name]
+    try:
+        schema = _payload_or_empty(collection.retrieve())
+    except Exception as exc:
+        raise RuntimeError("ledger keyword schema unavailable") from exc
+    missing = sorted(_LEDGER_SCHEMA_FIELDS - _schema_field_names(schema))
+    if not missing:
+        return
+    try:
+        collection.update({"fields": [dict(_LEDGER_FIELD_DEFINITIONS[name]) for name in missing]})
+    except Exception:
+        logger.warning(
+            "ledger keyword schema adoption failed for collection=%s missing=%s",
+            collection_name,
+            missing,
+        )
+    try:
+        schema = _payload_or_empty(collection.retrieve())
+    except Exception as exc:
+        raise RuntimeError("ledger keyword schema unavailable") from exc
+    missing = sorted(_LEDGER_SCHEMA_FIELDS - _schema_field_names(schema))
+    if missing:
+        raise RuntimeError(f"Typesense ledger keyword schema is missing fields: {missing}")
 
 
 def upsert_atom_keyword_doc(item: MemoryItem, *, db_client: Any = None) -> bool:
@@ -228,14 +364,18 @@ def upsert_atom_keyword_doc(item: MemoryItem, *, db_client: Any = None) -> bool:
     if not is_indexable_long_term_atom(item):
         return False
     try:
-        ensure_memories_collection()
-        doc = build_atom_keyword_document(item)
-        documents = _typesense_client().collections[memories_collection_name()].documents
-        # Remove the former bare ``memory_id`` identity and any previous
-        # user-scoped projection before writing the replacement. A cleanup
-        # failure must not acknowledge the upsert; the durable outbox retries.
-        documents.delete({"filter_by": _provider_identity_delete_filter(item.uid, item.memory_id)})
-        documents.upsert(doc)
+        client = db_client if db_client is not None else default_db_client
+        with external_write_fence(item.uid, firestore_client=client):
+            ensure_memories_collection()
+            if item.ledger_schema_version == "knowledge_ledger.v1":
+                ensure_ledger_keyword_schema()
+            doc = build_atom_keyword_document(item)
+            documents = _typesense_client().collections[memories_collection_name()].documents
+            # The fence refuses this provider write while explicit/account
+            # deletion owns the account gate; a stale rebuild cannot upsert
+            # after privacy cleanup reports success.
+            documents.delete({"filter_by": _provider_identity_delete_filter(item.uid, item.memory_id)})
+            documents.upsert(doc)
         return True
     except Exception as exc:
         logger.warning(
@@ -351,6 +491,60 @@ def keyword_search_memory_ids(
         return memory_ids
     except Exception as exc:
         logger.warning("keyword_search_memory_ids failed uid=%s, falling back to vector-only: %s", uid, exc)
+        return []
+
+
+def keyword_search_ledger_memory_ids(
+    uid: str,
+    query: str,
+    *,
+    kinds: Collection[str] = LEDGER_SEARCH_KINDS,
+    limit: int = 5,
+    db_client: Any = None,
+) -> List[str]:
+    """Search only open ledger rows through the versioned keyword projection.
+
+    Older generic atom collections may not have the ledger fields.  Returning
+    no keyword candidates in that state is intentional: an unlabelled
+    provider document must never be promoted to canonical ledger evidence.
+    """
+
+    parsed_kinds = validate_ledger_kinds(kinds)
+    if not user_allows_atom_keyword_index(uid, db_client=db_client) or not (query or "").strip():
+        return []
+    try:
+        ensure_ledger_keyword_schema()
+        filter_by = (
+            f"userId:={_typesense_filter_literal(uid)} && layer:={MemoryLayer.long_term.value} "
+            f"&& status:={MemoryItemStatus.active.value} && schema_version:=1 "
+            f"&& ledger_index_version:={LEDGER_INDEX_VERSION} "
+            "&& ledger_schema_version:=`knowledge_ledger.v1` "
+            "&& ledger_row_state:=`open` "
+            f"&& ledger_kind:=[{','.join(_typesense_filter_literal(kind) for kind in sorted(parsed_kinds))}]"
+        )
+        results = _payload_or_empty(
+            _typesense_client()
+            .collections[memories_collection_name()]
+            .documents.search(
+                {
+                    "q": query,
+                    "query_by": "content,entity_terms,predicate",
+                    "filter_by": filter_by,
+                    "sort_by": "created_at:desc",
+                    "per_page": max(1, min(limit, 60)),
+                    "page": 1,
+                }
+            )
+        )
+        memory_ids: List[str] = []
+        for hit in _payload_list(results.get("hits")):
+            doc = _payload_or_empty(hit.get("document"))
+            memory_id = doc.get("memory_id") or doc.get("id")
+            if memory_id:
+                memory_ids.append(str(memory_id))
+        return memory_ids
+    except Exception as exc:
+        logger.warning("ledger keyword search failed closed uid=%s error_type=%s", uid, type(exc).__name__)
         return []
 
 

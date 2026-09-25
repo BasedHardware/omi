@@ -133,21 +133,24 @@ New to backend development? Install [Homebrew](https://docs.brew.sh/Installation
     gcloud auth application-default login --project <project-id>
     ```
 
-    This generates credentials at `~/.config/gcloud/application_default_credentials.json`.
-  </Step>
-  <Step title="Copy Credentials to Backend" icon="copy">
-    <Tabs>
-      <Tab title="macOS/Linux">
-        ```bash
-        cp ~/.config/gcloud/application_default_credentials.json ./google-credentials.json
-        ```
-      </Tab>
-      <Tab title="Windows">
-        ```powershell
-        Copy-Item "$env:APPDATA\gcloud\application_default_credentials.json" .\google-credentials.json
-        ```
-      </Tab>
-    </Tabs>
+    This installs **Application Default Credentials** (ADC) for the Google client
+    libraries. Do **not** copy a service-account JSON key into the repo — long-lived
+    keys are the #6800 anti-pattern. Prefer plain user ADC for local work.
+
+    Impersonation is an advanced, time-limited option (ADC tokens from
+    `--impersonate-service-account` expire in about an hour). Only use it when you
+    already have an org-provisioned lower-privilege SA and hold
+    `roles/iam.serviceAccountTokenCreator` on that account — replace the
+    placeholder below with a real SA email from your team; there is no default
+    `dev-readonly@…` account in this repo:
+
+    ```bash
+    gcloud auth application-default login \
+      --impersonate-service-account=<YOUR_DEV_SA>@<project-id>.iam.gserviceaccount.com
+    ```
+
+    Firebase Admin and Firestore discover ADC automatically when
+    `SERVICE_ACCOUNT_JSON` / `GOOGLE_APPLICATION_CREDENTIALS` are unset.
   </Step>
 </Steps>
 
@@ -316,6 +319,25 @@ OAuth is required for user authentication. You need to configure both Google and
     ```
 
     Edit `.env` and fill in your API keys (see [Environment Variables](#environment-variables) below).
+
+    For a self-hosted backend used by an existing Omi mobile build, set the
+    Firebase token audience separately from your data project:
+
+    ```dotenv
+    # Stock development/community Omi mobile builds mint tokens for this project.
+    FIREBASE_AUTH_PROJECT_ID=based-hardware-dev
+
+    # Your own Google Cloud/Firebase project for Firestore and other backend data.
+    FIREBASE_PROJECT_ID=your-self-hosted-project
+    ```
+
+    Firebase ID tokens are verified with the issuer's public signing keys, so
+    `FIREBASE_AUTH_PROJECT_ID` does not require Omi service-account credentials.
+    When it is unset, Firebase Admin uses its default project selection instead;
+    set the auth project explicitly when it differs from your data-project setup,
+    or stock mobile-build tokens will be rejected.
+    Do not enable `LOCAL_DEVELOPMENT` on an internet-accessible deployment: that
+    mode intentionally bypasses authentication for local harnesses.
   </Step>
 </Steps>
 
@@ -332,7 +354,9 @@ OAuth is required for user authentication. You need to configure both Google and
     cp .env.template .env
     ```
 
-    Edit the `.env` file and set `SERVICE_ACCOUNT_JSON` to your Google credentials string.
+    Prefer ADC from `gcloud auth application-default login` (leave
+    `SERVICE_ACCOUNT_JSON` unset). Only use a scoped secret for Modal/CI
+    compatibility paths that have not yet moved to Workload Identity (#6800).
 
     Start the service:
     ```bash
@@ -470,7 +494,7 @@ Complete reference for all `.env` variables:
     | `REDIS_DB_PASSWORD` | Redis password (blank if none) |
     | `PINECONE_API_KEY` | Pinecone API key for vector database |
     | `PINECONE_INDEX_NAME` | Name of your Pinecone index |
-    | `GOOGLE_APPLICATION_CREDENTIALS` | Path to `google-credentials.json` |
+    | `GOOGLE_APPLICATION_CREDENTIALS` | Optional. Leave unset to use ADC from `gcloud auth application-default login`. Do not point this at a long-lived service-account JSON key (#6800). |
     | `ADMIN_KEY` | Temporary key for local dev (e.g., `123`) |
     | `ENCRYPTION_SECRET` | At least 32 bytes for encrypting user data |
   </Tab>
@@ -484,6 +508,12 @@ Complete reference for all `.env` variables:
     | `APPLE_KEY_ID` | Apple private key ID |
     | `APPLE_PRIVATE_KEY` | Apple .p8 file contents (with BEGIN/END lines) |
     | `BASE_API_URL` | Your backend URL (e.g., Ngrok URL) |
+  </Tab>
+  <Tab title="Firebase projects" icon="fire">
+    | Variable | Description |
+    |----------|-------------|
+    | `FIREBASE_AUTH_PROJECT_ID` | Firebase project whose ID-token audience the backend accepts; set this explicitly when it differs from the data project. |
+    | `FIREBASE_PROJECT_ID` | Google Cloud/Firebase project used for the backend's Firestore and other data services. |
   </Tab>
   <Tab title="Storage" icon="database">
     | Variable | Description |

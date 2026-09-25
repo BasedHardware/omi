@@ -31,34 +31,72 @@ final class ShellModalScrimDismissTests: XCTestCase {
 
   /// **The click that dismisses lands where nothing was painted.**
   ///
-  /// The dim is clamped to the shell's lane, so at any real window width there is a band of
-  /// undimmed desktop-backed glass on either side of it. A barrier clamped to the same lane would
-  /// leave that band inert: the modal would look modal and refuse to close when you clicked beside
-  /// it. Asserted at the far corner *and* in the middle so a barrier that shrank to the paint fails
-  /// on the first while the second still proves the harness can see a tap at all.
+  /// The paint is inset from its host; the barrier is not. A barrier that shrank to the paint would
+  /// leave the inset band inert: the modal would look modal and refuse to close when you clicked in
+  /// it. Probed in every undimmed band the surface actually has *and* in the middle, so a barrier
+  /// that shrank to the paint fails on the first while the second still proves the harness can see
+  /// a tap at all.
+  ///
+  /// Which band exists is the surface's own arithmetic, not a constant restated here: since the
+  /// shell was flushed to its glass the lane fills the window, so `.wholeShell` has no undimmed
+  /// side band left, while a `.contentArea` surface still leaves the page's top gap above the dim.
+  /// Deriving the probes from `ShellModalScrimLayout` keeps this exercising whichever bands the
+  /// product has rather than the ones it had when this was written.
   func testAClickOutsideThePaintedDimStillRunsTheDismiss() throws {
     let size = Self.hostSize
-    let laneWidth = ShellModalScrimLayout.laneWidth(for: size.width)
-    let sideBand = (size.width - laneWidth) / 2
-    XCTAssertGreaterThan(
-      sideBand, 1,
-      "precondition: the dim is clamped to the lane, so there is undimmed glass beside it")
+    var probed = 0
 
-    for (label, point) in [
-      ("beside the dim", CGPoint(x: sideBand / 2, y: size.height / 2)),
-      ("above the dim", CGPoint(x: size.width / 2, y: size.height - 2)),
-      ("on the dim", CGPoint(x: size.width / 2, y: size.height / 2)),
-    ] {
-      let dismissals = Counter()
+    for bounds in ShellModalScrimBounds.allCases {
+      for (label, point) in undimmedProbes(for: bounds, in: size) {
+        probed += 1
+        let dismissals = Counter()
+        click(
+          at: point,
+          on: ShellModalScrim(onTap: { dismissals.increment() })
+            .shellModalScrimBounds(bounds))
+
+        XCTAssertEqual(
+          dismissals.count, 1,
+          "a click \(label) of a \(bounds) dim must still dismiss the modal — modality covers the "
+            + "host, only the paint is bounded to the surface")
+      }
+
+      let onTheDim = Counter()
       click(
-        at: point,
-        on: ShellModalScrim(onTap: { dismissals.increment() }))
-
+        at: CGPoint(x: size.width / 2, y: size.height / 2),
+        on: ShellModalScrim(onTap: { onTheDim.increment() })
+          .shellModalScrimBounds(bounds))
       XCTAssertEqual(
-        dismissals.count, 1,
-        "a click \(label) must still dismiss the modal — modality covers the host, only the paint "
-          + "is bounded to the surface")
+        onTheDim.count, 1, "a click on a \(bounds) dim must dismiss the modal")
     }
+
+    XCTAssertGreaterThan(
+      probed, 0,
+      "precondition: at least one surface still insets its paint, so there is undimmed host to "
+        + "click; if this ever reaches zero the barrier's extra extent is no longer observable here")
+  }
+
+  /// Points inside `bounds`' host that the dim does **not** paint, derived from the layout itself.
+  private func undimmedProbes(
+    for bounds: ShellModalScrimBounds,
+    in size: CGSize
+  ) -> [(String, CGPoint)] {
+    let sideBand = (size.width - ShellModalScrimLayout.paintedWidth(bounds, in: size.width)) / 2
+    let topBand = ShellModalScrimLayout.topInset(bounds)
+    let bottomBand = ShellModalScrimLayout.bottomInset(bounds)
+
+    var probes: [(String, CGPoint)] = []
+    if sideBand > 1 {
+      probes.append(("beside the dim", CGPoint(x: sideBand / 2, y: size.height / 2)))
+    }
+    // AppKit's origin is bottom-left, so the paint's *top* inset is the band at the high end of y.
+    if topBand > 1 {
+      probes.append(("above the dim", CGPoint(x: size.width / 2, y: size.height - topBand / 2)))
+    }
+    if bottomBand > 1 {
+      probes.append(("below the dim", CGPoint(x: size.width / 2, y: bottomBand / 2)))
+    }
+    return probes
   }
 
   /// …and a dim that is pure decoration must not take the click at all.

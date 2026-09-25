@@ -419,7 +419,7 @@ struct TaskTestRunnerView: View {
     elapsedTime = 0
     totalContextSwitches = 0
     cancellationRequested = false
-    statusMessage = "Finding context switches..."
+    statusMessage = "Finding context switches…"
 
     Task {
       log("TaskTestRunner: Starting test task")
@@ -518,7 +518,7 @@ struct TaskTestRunnerView: View {
 
       await MainActor.run {
         totalContextSwitches = sampled.count
-        statusMessage = "Found \(sampled.count) context switches, testing all..."
+        statusMessage = "Found \(sampled.count) context switches, testing all…"
       }
 
       // Process each departing frame
@@ -526,7 +526,7 @@ struct TaskTestRunnerView: View {
         if cancellationRequested { break }
 
         await MainActor.run {
-          statusMessage = "Processing \(i + 1)/\(sampled.count)..."
+          statusMessage = "Processing \(i + 1)/\(sampled.count)…"
         }
 
         do {

@@ -67,7 +67,7 @@ Primary command palette (all verified on iOS):
 | Text entry that actually works | MCP `mcp__marionette__enter_text` with a `ValueKey` (see §6) |
 | Screenshot (last resort / human evidence) | `agent-flutter screenshot /tmp/x.png` — path **must** be under `/tmp` |
 
-Navigation facts and the current screen map live in [`SKILL.md`](./SKILL.md) — notably: chat opens from the **"Ask Omi anything…" input bar on home**, not a nav tab; back is the **in-app top-left IconButton** (`agent-flutter back` is adb/Android-only).
+Navigation facts and the current screen map live in [`SKILL.md`](./SKILL.md) — notably: chat opens from the **"Ask Omi" input bar on home**, not a nav tab; back is the **in-app top-left IconButton** (`agent-flutter back` is adb/Android-only).
 
 ## 5. Verify like an agent (no screenshots)
 

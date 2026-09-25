@@ -2,6 +2,7 @@
 
 import { Suspense } from "react";
 import { useSearchParams } from "next/navigation";
+import { grafanaBoardSrc } from "@/lib/grafana-board";
 
 // The analytics dashboard IS the Grafana "Omi TV" board, embedded full-bleed.
 // Non-kiosk so Grafana's own Edit mode (drag, resize, remove, save) works
@@ -12,18 +13,26 @@ import { useSearchParams } from "next/navigation";
 // TV mode: /dashboard?tv=0.55 scales the embed down so big-screen browsers
 // (Fire TV Silk renders very zoomed-in) fit the whole board, and switches
 // Grafana to kiosk chrome.
-const GRAFANA_URL =
-  process.env.NEXT_PUBLIC_GRAFANA_URL ?? "/grafana/d/omi-tv/omi-tv?refresh=5m";
+//
+// Platform boards: /dashboard?platform=macos|mobile opens that platform's
+// board directly instead of the All-platforms one.
+export function boardUrl(platform: string | null): string {
+  return grafanaBoardSrc(platform, false);
+}
 
 function GrafanaFrame() {
   const params = useSearchParams();
   const tvParam = params?.get("tv") ?? null;
-  const scale = tvParam ? Math.min(Math.max(parseFloat(tvParam) || 1, 0.25), 1) : 1;
-  const src = tvParam ? `${GRAFANA_URL}&kiosk` : GRAFANA_URL;
+  const kiosk = Boolean(tvParam);
+  const base = grafanaBoardSrc(params?.get("platform") ?? null, kiosk);
+  const scale = tvParam
+    ? Math.min(Math.max(parseFloat(tvParam) || 1, 0.25), 1)
+    : 1;
+  const src = base;
   const pct = `${(100 / scale).toFixed(4)}%`;
 
   return (
-    <div className="-m-4 md:-m-6 h-[calc(100vh-3.5rem)] overflow-hidden">
+    <div className="-m-4 h-[calc(100vh-3.5rem)] overflow-hidden md:-m-6">
       <iframe
         src={src}
         title="Omi analytics (Grafana)"

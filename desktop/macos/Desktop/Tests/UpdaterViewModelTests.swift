@@ -156,6 +156,71 @@ final class UpdaterViewModelTests: XCTestCase {
     XCTAssertTrue(tracker.lastCompletedWasExpectedAutomaticOffline(for: offline))
   }
 
+  private func sparkleFailure(
+    code: Int,
+    nsurlCode: Int?,
+    bundlePath: String = "/Applications/Omi.app"
+  ) -> UpdateFailureDiagnostics {
+    var userInfo: [String: Any] = [NSLocalizedDescriptionKey: "The update check failed."]
+    if let nsurlCode {
+      userInfo[NSUnderlyingErrorKey] = NSError(domain: NSURLErrorDomain, code: nsurlCode)
+    }
+    return UpdateFailureDiagnostics.classify(
+      error: NSError(domain: "SUSparkleErrorDomain", code: code, userInfo: userInfo),
+      updateChannel: "stable",
+      bundlePath: bundlePath
+    )
+  }
+
+  /// Sparkle re-delivers `didAbortWithError` for a single check. `Update Check
+  /// Completed` is protected by consuming the attempt identity, but the legacy
+  /// `Update Check Failed` event fires straight from the delegate and had no
+  /// such guard, so one failed check was counted once per callback — 3x to 47x
+  /// inflation on shipped builds, which is why it dominated macOS reliability
+  /// reporting in the 2026-08 churn cohort.
+  func testRepeatedAbortForOneCheckIsRecognizedAsADuplicate() {
+    let failure = sparkleFailure(code: 2001, nsurlCode: NSURLErrorNetworkConnectionLost)
+    let tracker = UpdateCheckAttemptTracker(makeID: { "check-duplicate-failure" })
+    _ = tracker.begin(trigger: .automatic, context: analyticsContext())
+
+    XCTAssertEqual(tracker.finishFailure(diagnostics: failure)?.result, .failed)
+    XCTAssertTrue(
+      tracker.isDuplicateOfLastTerminal(failure),
+      "the second abort for the same closed check must not be reported again")
+  }
+
+  /// The guard keys on the closed terminal, not on "no active attempt", so a
+  /// genuinely different failure and a first-ever abort are both still reported.
+  func testDistinctAndUntrackedFailuresAreStillReported() {
+    let network = sparkleFailure(code: 2001, nsurlCode: NSURLErrorTimedOut)
+    let installer = sparkleFailure(code: 4005, nsurlCode: nil)
+
+    let tracker = UpdateCheckAttemptTracker(makeID: { "check-distinct-failure" })
+    _ = tracker.begin(trigger: .automatic, context: analyticsContext())
+    XCTAssertEqual(tracker.finishFailure(diagnostics: network)?.result, .failed)
+    XCTAssertFalse(
+      tracker.isDuplicateOfLastTerminal(installer),
+      "a different failure after a closed check is a new occurrence")
+
+    let untracked = UpdateCheckAttemptTracker(makeID: { "check-never-started" })
+    XCTAssertFalse(
+      untracked.isDuplicateOfLastTerminal(network),
+      "an abort with nothing closed yet must still be reported, not swallowed")
+  }
+
+  /// The guard must never suppress a live check's first terminal.
+  func testActiveCheckIsNeverTreatedAsADuplicate() {
+    let failure = sparkleFailure(code: 3000, nsurlCode: nil)
+    let tracker = UpdateCheckAttemptTracker(makeID: { "check-active" })
+    _ = tracker.begin(trigger: .automatic, context: analyticsContext())
+    XCTAssertEqual(tracker.finishFailure(diagnostics: failure)?.result, .failed)
+
+    _ = tracker.begin(trigger: .automatic, context: analyticsContext())
+    XCTAssertFalse(
+      tracker.isDuplicateOfLastTerminal(failure),
+      "a new admitted check owns its own terminal even when the failure repeats")
+  }
+
   func testManualCheckIsUnavailableWhileBackgroundUpdateSessionIsInProgress() {
     XCTAssertFalse(
       UpdaterViewModel.allowsManualCheck(

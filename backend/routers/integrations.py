@@ -18,6 +18,7 @@ import database.users as users_db
 import database.redis_db as redis_db
 from utils.other import endpoints as auth
 from utils.log_sanitizer import sanitize
+from utils.llm.gateway_error_contract import BYOK_RATE_LIMIT_ERROR_DETAIL, is_byok_rate_limit_gateway_error
 from utils.subscription import is_trial_paywalled
 from utils.executors import run_blocking, db_executor, llm_executor
 from utils.integrations_registry import oauth_authorization_query, resolve_integration_provider
@@ -257,15 +258,21 @@ async def synthesize_connector_data(
 
     if await run_blocking(db_executor, is_trial_paywalled, uid, 'desktop'):
         raise HTTPException(status_code=402, detail='trial_expired')
-    synthesis = await run_blocking(
-        llm_executor,
-        lambda: connector_synthesis.synthesize_connector_items(
-            uid,
-            body.source,
-            body.items,
-            existing_memories=body.existing_memories,
-        ),
-    )
+    try:
+        synthesis = await run_blocking(
+            llm_executor,
+            lambda: connector_synthesis.synthesize_connector_items(
+                uid,
+                body.source,
+                body.items,
+                existing_memories=body.existing_memories,
+            ),
+        )
+    except Exception as e:
+        if not is_byok_rate_limit_gateway_error(e):
+            raise
+        logger.warning('Connector synthesis halted because the configured BYOK provider is rate limited')
+        raise HTTPException(status_code=429, detail=BYOK_RATE_LIMIT_ERROR_DETAIL) from None
     if synthesis is None:
         raise HTTPException(status_code=502, detail="connector_synthesis_failed")
     return ConnectorSynthesisResponse(
@@ -338,9 +345,17 @@ def sync_apple_health_data(data: AppleHealthSyncData, uid: str = Depends(auth.ge
 
     Unlike other integrations that use OAuth, Apple Health data is pushed from the device.
     """
-    # Build the health data structure
+    # Build the health data structure. Every category starts empty: the write below
+    # merges into the stored map, so a category the device no longer sends (a week
+    # without workouts, a revoked HealthKit category) would otherwise keep being
+    # served, stamped with a fresh last_synced.
     health_data: Dict[str, Any] = {
         'period_days': data.period_days,
+        'steps': {},
+        'sleep': {},
+        'heart_rate': {},
+        'active_energy': {},
+        'workouts': [],
     }
 
     # Steps
@@ -396,7 +411,7 @@ def sync_apple_health_data(data: AppleHealthSyncData, uid: str = Depends(auth.ge
         "status": "ok",
         "app_key": "apple_health",
         "synced_at": integration_data['last_synced'],
-        "data_types_synced": list(health_data.keys()),
+        "data_types_synced": [key for key, value in health_data.items() if value or key == 'period_days'],
     }
 
 

@@ -1,7 +1,7 @@
 'use client';
 
 import { X, FileText, Image as ImageIcon, Loader2 } from 'lucide-react';
-import Image from 'next/image';
+import Image from '@tschk/moonshine-next/image';
 import { cn } from '@/lib/utils';
 
 interface FilePreviewItem {

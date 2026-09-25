@@ -19,6 +19,10 @@ LaneId = Annotated[str, Field(pattern=r'^omi:auto:[a-z0-9][a-z0-9-]*$')]
 class Surface(str, Enum):
     OPENAI_CHAT_COMPLETIONS = 'openai.chat_completions'
     ANTHROPIC_MESSAGES = 'anthropic.messages'
+    OPENAI_EMBEDDINGS = 'openai.embeddings'
+    # OpenRouter's decision-model endpoint (POST /api/v1/systemone): typed
+    # answers with probabilities, no generated text (TypeSafe Jev, #14835).
+    OPENROUTER_SYSTEMONE = 'openrouter.systemone'
 
 
 class StructuredOutputMode(str, Enum):
@@ -145,6 +149,7 @@ class GeneratedRouteOverride(StrictBaseModel):
     feature: str = Field(min_length=1)
     primary: ProviderRef
     provider_options: dict[str, Any] = Field(default_factory=dict)
+    request_timeout_ms: int | None = Field(default=None, gt=0, le=900_000)
 
 
 class TimeoutPolicy(StrictBaseModel):

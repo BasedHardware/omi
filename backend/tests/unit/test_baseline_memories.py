@@ -148,6 +148,15 @@ class TestBaselineMemoryInjection:
         service.read.return_value = [MemoryDB.model_validate(item) for item in raw]
         return service
 
+    @pytest.fixture(autouse=True)
+    def clear_prompt_cache(self, mem_module):
+        """Keep get_prompt_data's per-uid prompt cache from leaking across cases."""
+        if hasattr(mem_module, '_prompt_data_cache'):
+            mem_module._prompt_data_cache.clear()
+        yield
+        if hasattr(mem_module, '_prompt_data_cache'):
+            mem_module._prompt_data_cache.clear()
+
     def test_baseline_memory_lands_in_first_bucket(self, mem_module):
         """get_prompt_data must route is_baseline=True memories into the baseline bucket."""
         raw = [
@@ -166,6 +175,28 @@ class TestBaselineMemoryInjection:
         assert len(generated) == 1
         assert generated[0].content == "A regular fact"
         assert len(user_made) == 0
+
+    def test_prompt_data_cache_is_invalidated_on_explicit_clear(self, mem_module):
+        """get_prompt_data must refetch after clear_prompt_data_cache(uid)."""
+        from models.memories import MemoryDB
+
+        first = [_raw_memory("Initial fact")]
+        second = [_raw_memory("Updated fact")]
+        service = MagicMock()
+        service.read.side_effect = [
+            [MemoryDB.model_validate(item) for item in first],
+            [MemoryDB.model_validate(item) for item in second],
+        ]
+        with (
+            patch.object(mem_module, "MemoryService", return_value=service),
+            patch.object(mem_module, "get_user_name", return_value="Alice"),
+        ):
+            _, _, _, generated = mem_module.get_prompt_data("user-1")
+            mem_module.clear_prompt_data_cache("user-1")
+            _, _, _, refreshed = mem_module.get_prompt_data("user-1")
+
+        assert generated[0].content == "Initial fact"
+        assert refreshed[0].content == "Updated fact"
 
     def test_manually_added_memory_lands_in_user_bucket(self, mem_module):
         """get_prompt_data must route manually_added=True memories into the user_made bucket."""

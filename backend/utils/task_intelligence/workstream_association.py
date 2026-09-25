@@ -8,6 +8,7 @@ from typing import Any, Optional, Protocol, cast
 
 import database.recurrence_inbox as recurrence_inbox_db
 import database.workstreams as workstreams_db
+from database.durable_queue import ProcessOutcome, drain_isolated
 from database.vector_db import (
     delete_workstream_association_vector,
     query_workstream_association_candidates,
@@ -349,7 +350,9 @@ def drain_recurrence_inbox_for_maintenance(
         account_generation=control.account_generation,
         firestore_client=firestore_client,
     )
-    for receipt in receipts:
+
+    def process_one(receipt: RecurrenceInboxReceipt) -> ProcessOutcome:
+        nonlocal created
         try:
             result = consume_recurrence_signal(
                 uid,
@@ -365,8 +368,9 @@ def drain_recurrence_inbox_for_maintenance(
                 firestore_client=firestore_client,
             )
             created += int(result.outcome == RecurrenceOutcomeKind.candidate_created)
+            return ProcessOutcome.ack()
         except recurrence_inbox_db.RecurrenceGenerationMismatchError:
-            continue
+            return ProcessOutcome.reject('generation mismatch', reason='generation_mismatch')
         except Exception as exc:
             retry(
                 uid,
@@ -382,6 +386,9 @@ def drain_recurrence_inbox_for_maintenance(
                 reason='other',
                 outcome='degraded',
             )
+            return ProcessOutcome.retry(type(exc).__name__, reason='retryable')
+
+    drain_isolated(receipts, process_one)
     return created
 
 

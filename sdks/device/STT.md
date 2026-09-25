@@ -28,7 +28,7 @@ PCM contract matches BLE decode: **16-bit LE mono @ 16 kHz**.
 | Go | build tag `ble` | default net | build tag `whisper` | default net |
 | Rust | feature `ble` | feature `stt-deepgram` | feature `stt-whisper` | feature `stt-parakeet` |
 | Dart | optional BLE package later | always-on | optional runner | always-on |
-| C++ | `OMI_DEVICE_BLE` | `OMI_STT_DEEPGRAM` | `OMI_STT_WHISPER` | `OMI_STT_PARAKEET` |
+| C++ | injected `BleBackend` | `OMI_STT_DEEPGRAM` | `OMI_STT_WHISPER` | `OMI_STT_PARAKEET` |
 
 ## Parakeet wire format
 

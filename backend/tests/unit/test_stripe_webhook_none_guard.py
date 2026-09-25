@@ -67,7 +67,10 @@ def test_build_subscription_catches_unknown_price_id():
     next_func = source.index('\ndef ', func_start + 1)
     func_body = source[func_start:next_func]
 
-    assert 'except ValueError:' in func_body
+    # Matches both 'except ValueError:' and 'except ValueError as e:' -- the handler
+    # now binds the exception to log it. Asserting the exact source text made this a
+    # third source-parsing test that breaks on wording rather than on behavior.
+    assert 'except ValueError' in func_body
     assert 'return None' in func_body
 
 

@@ -151,9 +151,11 @@ final class SettingsAssistantControlsTests: XCTestCase {
     XCTAssertEqual(InsightAssistantSettings.shared.extractionInterval, 600)
     XCTAssertEqual(UserDefaults.standard.double(forKey: insightIntervalDefaultsKey), 600)
 
+    // Memory's default is 1800 (30 min), not 600: 2026-08-17 measured value ranking —
+    // worst CTR of any proactive lane at half the notification volume — cut its cadence 3x.
     MemoryAssistantSettings.shared.extractionInterval = 0
-    XCTAssertEqual(MemoryAssistantSettings.shared.extractionInterval, 600)
-    XCTAssertEqual(UserDefaults.standard.double(forKey: memoryIntervalDefaultsKey), 600)
+    XCTAssertEqual(MemoryAssistantSettings.shared.extractionInterval, 1800)
+    XCTAssertEqual(UserDefaults.standard.double(forKey: memoryIntervalDefaultsKey), 1800)
 
     AssistantSettings.shared.analysisDelay = -1
     XCTAssertEqual(AssistantSettings.shared.analysisDelay, 60)

@@ -50,7 +50,7 @@ def _nonnegative_int(value: str) -> int:
     return parsed
 
 
-def process_user(uid: str, dry_run: bool, firestore_client: Any = None) -> Dict[str, Any]:
+def process_user(uid: str, dry_run: bool, *, firestore_client: Any = None) -> Dict[str, Any]:
     """Fix language for one user's conversations."""
     fixed = 0
     try:
@@ -118,7 +118,7 @@ def main() -> int:
                 if remaining <= 0:
                     break
                 page = page[:remaining]
-            futures = [executor.submit(process_user, uid, args.dry_run, firestore_client) for uid in page]
+            futures = [executor.submit(process_user, uid, args.dry_run, firestore_client=firestore_client) for uid in page]
             for future in futures:
                 result = future.result()
                 users_scanned += 1

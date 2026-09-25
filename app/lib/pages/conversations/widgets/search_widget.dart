@@ -1,18 +1,18 @@
 import 'package:omi/utils/platform/platform_manager.dart';
-import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'package:calendar_date_picker2/calendar_date_picker2.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/home_provider.dart';
+import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/pages/conversations/widgets/speaker_filter_sheet.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/debouncer.dart';
-import 'package:omi/utils/responsive/responsive_helper.dart';
+import 'package:omi/utils/analytics/product_telemetry.dart';
 import 'package:omi/widgets/calendar_date_picker_sheet.dart';
 
 class SearchWidget extends StatefulWidget {
@@ -25,9 +25,15 @@ class SearchWidget extends StatefulWidget {
 class _SearchWidgetState extends State<SearchWidget> {
   final TextEditingController searchController = TextEditingController();
   final _debouncer = Debouncer(delay: const Duration(milliseconds: 500));
-  bool showClearButton = false;
   HomeProvider? _homeProvider;
   ConversationProvider? _convoProvider;
+
+  @override
+  void initState() {
+    super.initState();
+    // Seed from the provider so a rebuilt field never hides an active query (hub audit #23).
+    searchController.text = context.read<ConversationProvider>().previousQuery;
+  }
 
   @override
   void didChangeDependencies() {
@@ -66,206 +72,124 @@ class _SearchWidgetState extends State<SearchWidget> {
     }
   }
 
-  void setShowClearButton() {
-    if (showClearButton != searchController.text.isNotEmpty) {
-      setState(() {
-        showClearButton = searchController.text.isNotEmpty;
-      });
-    }
+  ProductFailure _searchFailure(ConversationSearchResult result) {
+    final statusCode = result.statusCode;
+    if (statusCode == null) return ProductFailure.network;
+    if (statusCode >= 500) return ProductFailure.server;
+    return ProductFailure.invalidResponse;
   }
 
-  Future<void> _showDatePicker(BuildContext context, {bool hasExistingFilter = false}) async {
-    final convoProvider = Provider.of<ConversationProvider>(context, listen: false);
-    DateTime selectedDate = convoProvider.selectedDate ?? DateTime.now();
-    await showCupertinoModalPopup<void>(
-      context: context,
-      builder: (BuildContext context) {
-        return Container(
-          height: 420,
-          padding: const EdgeInsets.only(top: 6.0),
-          margin: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-          color: const Color(0xFF1F1F25),
-          child: SafeArea(
-            top: false,
-            child: Column(
-              children: [
-                // Header with Cancel and Done buttons
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF1F1F25),
-                    border: Border(bottom: BorderSide(color: Color(0xFF35343B), width: 0.5)),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      CupertinoButton(
-                        padding: EdgeInsets.zero,
-                        onPressed: () async {
-                          if (hasExistingFilter) {
-                            final provider = Provider.of<ConversationProvider>(context, listen: false);
-                            Navigator.of(context).pop();
-                            await provider.clearDateFilter();
-                            PlatformManager.instance.analytics.calendarFilterCleared();
-                          } else {
-                            Navigator.of(context).pop();
-                          }
-                        },
-                        child: Text(
-                          hasExistingFilter ? context.l10n.removeFilter : context.l10n.cancel,
-                          style: const TextStyle(color: Colors.white, fontSize: 16),
-                        ),
-                      ),
-                      const Spacer(),
-                      CupertinoButton(
-                        padding: EdgeInsets.zero,
-                        onPressed: () async {
-                          final provider = Provider.of<ConversationProvider>(context, listen: false);
-                          Navigator.of(context).pop();
-                          await provider.filterConversationsByDate(selectedDate);
-                          PlatformManager.instance.analytics.calendarFilterApplied(selectedDate);
-                        },
-                        child: Text(
-                          context.l10n.done,
-                          style: const TextStyle(color: Colors.deepPurple, fontSize: 16, fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                // Date picker
-                Expanded(
-                  child: Material(
-                    color: ResponsiveHelper.backgroundSecondary,
-                    child: CalendarDatePicker2(
-                      config: getDefaultCalendarConfig(
-                        firstDate: DateTime(2020),
-                        lastDate: DateTime.now(),
-                        currentDate: DateTime.now(),
-                      ),
-                      value: [selectedDate],
-                      onValueChanged: (dates) {
-                        if (dates.isNotEmpty) {
-                          selectedDate = dates[0];
-                        }
-                      },
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
+  bool _isCurrentSearchSurface(String value) {
+    if (!mounted || searchController.text != value) return false;
+    final route = ModalRoute.of(context);
+    if (route != null && !route.isCurrent) return false;
+    final homeProvider = _homeProvider;
+    final conversationProvider = _convoProvider;
+    if (homeProvider == null || conversationProvider == null || homeProvider.selectedIndex != 1) return false;
+    return homeProvider.showConvoSearchBar || conversationProvider.previousQuery == value;
+  }
+
+  void _onChanged(String value) {
+    var provider = Provider.of<ConversationProvider>(context, listen: false);
+    _debouncer.run(() async {
+      if (value.isEmpty) {
+        await provider.searchConversations(value);
+        return;
+      }
+
+      final attempt = ProductTelemetry.instance.start(ProductJourney.search, surface: ProductSurface.conversations);
+      final result = await provider.searchConversations(value);
+      if (!mounted || searchController.text != value) {
+        attempt.complete(ProductOutcome.superseded);
+        return;
+      }
+
+      if (!result.isSuccess) {
+        attempt.complete(ProductOutcome.failure, failure: _searchFailure(result));
+        return;
+      }
+
+      final resultCount = result.items.length;
+      if (resultCount == 0) {
+        attempt.complete(ProductOutcome.empty, resultCount: 0);
+      } else {
+        // The provider has updated the visible list. Keep the
+        // first-result signal separate from transport completion.
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (_isCurrentSearchSurface(value)) {
+            attempt.firstResult();
+            attempt.complete(ProductOutcome.success, resultCount: resultCount);
+          } else {
+            attempt.complete(ProductOutcome.superseded);
+          }
+        });
+      }
+      PlatformManager.instance.analytics.searchQueryEntered(value, resultCount);
+    });
+  }
+
+  /// The clear X empties the query and, with no other search filter left, hides the bar.
+  Future<void> _onCleared() async {
+    _debouncer.cancel();
+    final provider = Provider.of<ConversationProvider>(context, listen: false);
+    final homeProvider = Provider.of<HomeProvider>(context, listen: false);
+    await provider.searchConversations('');
+    if (!provider.hasActiveSearch) homeProvider.hideConvoSearchBar();
+    PlatformManager.instance.analytics.searchQueryCleared();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Expanded(
-            child: TextFormField(
+            child: OmiSearchField(
               controller: searchController,
               focusNode: context.read<HomeProvider>().convoSearchFieldFocusNode,
-              onTap: () {
-                PlatformManager.instance.analytics.searchBarFocused();
-              },
+              placeholder: context.l10n.searchConversations,
+              onTap: () => PlatformManager.instance.analytics.searchBarFocused(),
               onChanged: (value) {
-                var provider = Provider.of<ConversationProvider>(context, listen: false);
-                _debouncer.run(() async {
-                  await provider.searchConversations(value);
-                  if (value.isNotEmpty) {
-                    // Track search query with results count
-                    PlatformManager.instance.analytics.searchQueryEntered(value, provider.searchedConversations.length);
-                  }
-                });
-                setShowClearButton();
+                if (value.isEmpty) return; // the clear X handles an emptied field in _onCleared
+                _onChanged(value);
               },
-              decoration: InputDecoration(
-                hintText: context.l10n.searchConversations,
-                hintStyle: const TextStyle(color: Colors.white60, fontSize: 14),
-                filled: true,
-                fillColor: const Color(0xFF1F1F25),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
-                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
-                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(24), borderSide: BorderSide.none),
-                prefixIcon: const Icon(Icons.search, color: Colors.white60),
-                suffixIcon: showClearButton
-                    ? GestureDetector(
-                        onTap: () async {
-                          var provider = Provider.of<ConversationProvider>(context, listen: false);
-                          var homeProvider = Provider.of<HomeProvider>(context, listen: false);
-                          await provider.searchConversations(""); // clear
-                          searchController.clear();
-                          setShowClearButton();
-                          if (!provider.hasActiveSearch) {
-                            homeProvider.hideConvoSearchBar();
-                          }
-                          PlatformManager.instance.analytics.searchQueryCleared();
-                        },
-                        child: const Icon(Icons.close, color: Colors.white),
-                      )
-                    : null,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 12),
-              ),
-              style: const TextStyle(color: Colors.white),
+              onCleared: _onCleared,
             ),
           ),
-          const SizedBox(width: 8),
-          Consumer<ConversationProvider>(
-            builder: (context, convoProvider, _) {
-              final isActive = convoProvider.selectedSpeakerId != null;
-              return Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: isActive ? Colors.deepPurple.withValues(alpha: 0.5) : const Color(0xFF1F1F25),
-                  borderRadius: BorderRadius.circular(24),
-                ),
-                child: IconButton(
-                  key: const Key('conversation_speaker_filter'),
-                  padding: EdgeInsets.zero,
-                  tooltip: context.l10n.phoneSpeaker,
-                  icon: Icon(Icons.person_search, size: 20, color: isActive ? Colors.white : Colors.white70),
-                  onPressed: () async {
-                    HapticFeedback.mediumImpact();
-                    await showSpeakerFilterSheet(context);
-                  },
-                ),
-              );
-            },
+          const SizedBox(width: OmiSpacing.xs),
+          Selector<ConversationProvider, bool>(
+            selector: (_, p) => p.selectedSpeakerId != null,
+            builder: (context, isActive, _) => OmiIconButton.filled(
+              key: const Key('conversation_speaker_filter'),
+              diameter: kOmiMinTapTarget,
+              fillColor: isActive ? OmiColors.accent : OmiColors.surface1,
+              color: isActive ? OmiColors.onAccent : OmiColors.textSecondary,
+              label: context.l10n.filterBySpeaker,
+              icon: const Icon(Icons.person_search, size: 20),
+              onPressed: () async {
+                HapticFeedback.mediumImpact();
+                await showSpeakerFilterSheet(context);
+              },
+            ),
           ),
-          const SizedBox(width: 8),
-          // Calendar button - same height as search bar (48px)
-          Consumer<ConversationProvider>(
-            builder: (context, convoProvider, _) {
-              return Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: convoProvider.selectedDate != null
-                      ? Colors.deepPurple.withValues(alpha: 0.5)
-                      : const Color(0xFF1F1F25),
-                  borderRadius: BorderRadius.circular(24),
-                ),
-                child: IconButton(
-                  padding: EdgeInsets.zero,
-                  icon: FaIcon(
-                    convoProvider.selectedDate != null ? FontAwesomeIcons.calendarDay : FontAwesomeIcons.calendarDays,
-                    size: 18,
-                    color: convoProvider.selectedDate != null ? Colors.white : Colors.white70,
-                  ),
-                  onPressed: () async {
-                    HapticFeedback.mediumImpact();
-                    await _showDatePicker(context, hasExistingFilter: convoProvider.selectedDate != null);
-                  },
-                ),
-              );
-            },
+          const SizedBox(width: OmiSpacing.xs),
+          // One date filter for the list and the search (hub audit #23).
+          Selector<ConversationProvider, bool>(
+            selector: (_, p) => p.selectedStartDate != null,
+            builder: (context, hasActiveFilter, _) => OmiIconButton.filled(
+              key: const Key('conversation_date_filter'),
+              diameter: kOmiMinTapTarget,
+              fillColor: hasActiveFilter ? OmiColors.accent : OmiColors.surface1,
+              color: hasActiveFilter ? OmiColors.onAccent : OmiColors.textSecondary,
+              label: context.l10n.filterByDate,
+              icon: FaIcon(hasActiveFilter ? FontAwesomeIcons.calendarDay : FontAwesomeIcons.calendarDays, size: 18),
+              onPressed: () async {
+                HapticFeedback.mediumImpact();
+                await showConversationDateRangePicker(context);
+              },
+            ),
           ),
         ],
       ),

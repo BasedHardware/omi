@@ -79,7 +79,8 @@ export function canForwardRendererCaptureCommand(
   command: CaptureCommand,
   senderId: number,
   ownsListenSession: (sessionId: string, ownerId: number) => boolean,
-  mainWindowId?: number
+  mainWindowId?: number,
+  barWindowId?: number
 ): boolean {
   // Meeting capture is main-process policy. No renderer may bypass the detector
   // and consent flow by issuing these commands through the public preload API.
@@ -92,16 +93,23 @@ export function canForwardRendererCaptureCommand(
     case 'audio-start':
     case 'audio-stop':
       return ownsListenSession(command.sessionId, senderId)
-    // All remaining controls originate in the main UI. Keeping them off auxiliary
-    // renderers prevents a compromised toast/glow window from controlling capture.
-    case 'live-finalize':
-    case 'live-view':
+    // Push-to-talk UI lives in the top-edge bar, not the main window (it replaced
+    // the old acrylic overlay window — see bar/window.ts) — usePushToTalk.ts is
+    // called ONLY from bar components. The bar must be allowed to issue these, or
+    // every warm/release/start/drain/dispose/rebuild silently no-ops (a dropped
+    // console.warn, no UI error) and PTT capture never actually starts.
     case 'ptt-warm':
     case 'ptt-release':
     case 'ptt-start':
     case 'ptt-drain':
     case 'ptt-dispose':
     case 'ptt-rebuild':
+      return senderId === mainWindowId || senderId === barWindowId
+    // All remaining controls originate in the main UI only. Keeping them off
+    // auxiliary renderers prevents a compromised toast/glow/bar window from
+    // controlling capture.
+    case 'live-finalize':
+    case 'live-view':
     case 'screen-view':
     case 'assistant-speaking':
     case 'assistant-utterance':
@@ -129,11 +137,15 @@ export function emitCaptureEventFromMain(event: CaptureEvent, captureWcId: numbe
  * Wire the capture bridge. `getCaptureWc` returns the capture window's
  * webContents (or null before it exists / after teardown) — it's read live on
  * every message so a recreated capture window is picked up automatically.
+ * `getBarWc` authorizes the bar as a PTT command sender (see
+ * canForwardRendererCaptureCommand) — optional so callers/tests that don't
+ * care about PTT-from-the-bar can omit it.
  */
 export function registerCaptureBridge(
   getCaptureWc: () => WebContents | null,
   getMainWc: () => WebContents | null,
-  ownsListenSession: (sessionId: string, ownerId: number) => boolean
+  ownsListenSession: (sessionId: string, ownerId: number) => boolean,
+  getBarWc?: () => WebContents | null
 ): void {
   ipcMain.on('omi-capture:cmd', (e, cmd: CaptureCommand) => {
     const wc = getCaptureWc()
@@ -141,7 +153,17 @@ export function registerCaptureBridge(
     if (!cmd || typeof cmd !== 'object' || typeof cmd.type !== 'string') return
     const mainWc = getMainWc()
     const mainWindowId = mainWc && !mainWc.isDestroyed() ? mainWc.id : undefined
-    if (!canForwardRendererCaptureCommand(cmd, e.sender.id, ownsListenSession, mainWindowId)) {
+    const barWc = getBarWc?.()
+    const barWindowId = barWc && !barWc.isDestroyed() ? barWc.id : undefined
+    if (
+      !canForwardRendererCaptureCommand(
+        cmd,
+        e.sender.id,
+        ownsListenSession,
+        mainWindowId,
+        barWindowId
+      )
+    ) {
       console.warn('[capture] rejected unauthorized command:', cmd.type)
       return
     }

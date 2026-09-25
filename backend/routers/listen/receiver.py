@@ -8,8 +8,10 @@ import json
 import logging
 import time
 import uuid
+
+from utils.manual_speaker_assignments import acknowledged_teaching
 from collections import OrderedDict
-from typing import Any, Dict, List, Optional, cast
+from typing import Any, Dict, List, Optional, Tuple, cast
 
 lc3: Any = None
 lc3_import_error: Optional[BaseException] = None
@@ -33,26 +35,39 @@ from fastapi.websockets import WebSocketDisconnect
 
 from models.conversation_photo import ConversationPhoto
 from models.message_event import PhotoDescribedEvent, PhotoProcessingEvent
+from models.transcript_segment import SpeakerIdentityStatus
 from utils.aac import AACDecoder
 from utils.llm.openglass import describe_image
 from utils.request_validation import ImageChunkEnvelope
-from utils.speaker_assignment import update_speaker_assignment_maps
 from utils.stt.live_failure import (
+    MAX_STT_FAILOVERS,
+    PendingLiveFailover,
     flush_live_stt_buffer,
     live_stt_initialization_failure,
     live_stt_socket_is_dead,
+    live_stt_terminal_reason,
     live_stt_upstream_failure,
+    note_typed_provider_death,
     send_live_stt_audio,
     terminate_live_stt_session,
 )
+from config.stt_provider_policy import provider_for_service
+from utils.stt.live_rollout import managed_chain_enabled, window_selection_kwargs
+from utils.stt.provider_resilience import close_rejected_socket, fallback_socket_is_serving
 from utils.stt.streaming import (
     STTService,
     connect_stt_socket_with_fallback,
+    deepgram_fallback_model,
+    get_stt_service_for_language,
     make_stream_callback,
+    modulate_is_configured_fallback,
+    parakeet_is_configured_fallback,
     process_audio_dg,
     process_audio_modulate,
+    process_audio_soniox,
     process_audio_parakeet,
 )
+from utils.stt.speaker_identity import SpeakerProviderEpoch
 from utils.stt.vad_gate import GatedSTTSocket, VADStreamingGate, VAD_GATE_MODE, is_gate_enabled
 from utils.transcribe_decisions import (
     TARGET_SAMPLE_RATE,
@@ -66,6 +81,16 @@ from utils.transcribe_decisions import (
 )
 from utils.log_sanitizer import sanitize
 from utils.listen_audio import ChannelConfig, mix_n_channel_buffers, resample_pcm
+from utils.observability.fallback import record_fallback
+from utils.observability.transcription import (
+    emit_listen_vad_gate_metrics,
+    record_listen_audio_outcome,
+    record_listen_realtime_demand,
+    record_listen_unknown_channel_prefix,
+    record_listen_zero_byte_session,
+    record_live_stt_failover_accepted,
+)
+from utils.product_telemetry import emit_product_event
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +100,10 @@ STT_DEATH_POLL_INTERVAL_SECONDS = 1.0
 
 # Longest frame the Opus format can carry, in milliseconds.
 OPUS_MAX_FRAME_MS = 120
+
+# Consecutive undecodable frames that mean the session's whole stream is unusable rather
+# than one corrupt packet: 1 s of audio at the 20 ms cadence omi clients encode with.
+DECODE_FAILURE_STREAK_ALERT = 50
 
 
 def opus_decode_capacity(sample_rate: int) -> int:
@@ -107,6 +136,12 @@ class ListenReceiver:
         self.channel_configs = channel_configs
         self.channel_id_to_index = channel_id_to_index
         self.stt_socket: Any = None
+        # Providers whose socket already died this session; a failover must not
+        # reselect one, or a dead primary would be chosen again immediately.
+        self._stt_failed_providers: set[str] = set()
+        self._stt_rebuild: Optional[Tuple[Any, Any, int]] = None
+        self._stt_failover_lock = asyncio.Lock()
+        self._pending_live_failover: Optional[PendingLiveFailover] = None
         self.stt_sockets_multi: List[Any] = [None] * len(channel_configs)
         self.multi_opus_decoders: List[Any] = [None] * len(channel_configs)
         self.channel_mix_buffers: List[bytearray] = [bytearray() for _ in channel_configs]
@@ -116,6 +151,10 @@ class ListenReceiver:
         self.vad_gate: Any = None
         self.image_chunks: OrderedDict[str, Dict[str, Any]] = OrderedDict()
         self.last_image_chunk_cleanup = 0.0
+        self.decode_failure_streak = 0
+        self.decode_stream_reported = False
+        self._unknown_prefix_streak = 0
+        self.speaker_provider_epoch = SpeakerProviderEpoch()
 
     def _capture(self, method: str, *args: Any) -> None:
         """Keep optional dev capture out of the production audio failure domain."""
@@ -127,14 +166,122 @@ class ListenReceiver:
         except Exception as error:
             logger.warning('Listen parity capture failed method=%s type=%s', method, type(error).__name__)
 
-    def _serving_provider(self) -> str:
-        """Resolve the provider actually serving this session, read at use time.
+    def _record_decode_failure(
+        self, codec: str, error: BaseException, payload_len: int, channel: Optional[int] = None
+    ) -> None:
+        """Report an undecodable audio frame with enough detail to act on it.
 
-        ``_create_stt_socket`` can fall back from Parakeet to Modulate, so a
-        value snapshotted before the socket exists attributes a Modulate
-        failure to Parakeet (#11306).
+        Dropping the frame keeps the socket alive, so an undecodable stream is a fail-open
+        branch: the user records a whole session and gets no transcript, no ring buffer, and
+        no mixed audio, while the only trace is one `type=OpusError` line per frame. That name
+        cannot tell a corrupt client stream from a decoder the receiver sized wrong (#10701),
+        so carry the codec's own message and the payload size, and once the streak proves the
+        entire stream is failing, report it as the silent mic it is.
         """
+        self.decode_failure_streak += 1
+        logger.warning(
+            'Listen audio frame decode failed codec=%s channel=%s type=%s bytes=%s streak=%s detail=%s',
+            codec,
+            channel,
+            type(error).__name__,
+            payload_len,
+            self.decode_failure_streak,
+            sanitize(error)[:120],
+        )
+        if self.decode_stream_reported or self.decode_failure_streak < DECODE_FAILURE_STREAK_ALERT:
+            return
+        self.decode_stream_reported = True
+        record_fallback(
+            component='silent_mic',
+            from_mode=codec,
+            to_mode='none',
+            reason='capability_mismatch',
+            outcome='exhausted',
+        )
+
+    def _serving_provider(self) -> str:
+        """Read the actual provider after connection fallback, never the initial selection."""
         return getattr(self.host.stt_service, 'value', self.host.stt_service)
+
+    def _enqueue_stt_segments(self, segments: List[Dict[str, Any]], provider: Optional[str] = None) -> None:
+        """Persist the provider epoch before local speaker numbers enter the conversation."""
+        pending = self._pending_live_failover
+        if pending is not None:
+            pending.note_transcript(segments)
+            if pending.settled:
+                self._pending_live_failover = None
+        self._capture('capture_inbound_stt', segments)
+        self.speaker_provider_epoch.stamp(segments, provider or self._serving_provider())
+        self.host.transcripts.enqueue(segments)
+
+    def _settle_pending_live_failover_failure(self, socket: Any = None) -> None:
+        pending = self._pending_live_failover
+        if pending is None:
+            return
+        self._pending_live_failover = None
+        target = socket if socket is not None else self.stt_socket
+        typed = getattr(target, 'typed_death_reason', None) if target is not None else None
+        pending.note_failure(typed if isinstance(typed, str) else None)
+
+    def _emit_realtime_demand(self, request: Any, decoded_audio_bytes: int) -> None:
+        """Report who could have watched this session live. Telemetry only; never raises."""
+
+        try:
+            tracker = self.host.state.realtime_demand
+            seconds = tracker.totals()
+            source = getattr(request, 'source', None)
+            platform = self._telemetry_platform()
+            record_listen_realtime_demand(source=source, platform=platform, seconds=seconds)
+            sample_rate = max(1, int(getattr(request, 'sample_rate', 16000)))
+            emit_product_event(
+                uid=str(getattr(request, 'uid', '') or ''),
+                event='Listen Session Realtime Demand',
+                properties={
+                    'recording_id': getattr(self.host, 'recording_session_id', None),
+                    'conversation_id': getattr(self.host.state, 'current_conversation_id', None),
+                    'source': str(source) if source is not None else None,
+                    'client_platform': str(platform) if platform is not None else None,
+                    'conversation_role': getattr(request, 'conversation_role', None),
+                    'audio_seconds': decoded_audio_bytes / (sample_rate * 2),
+                    'client_state_reported': tracker.reported,
+                    'client_state_reports': tracker.reports,
+                    'visible_seconds': seconds['visible'],
+                    'foreground_seconds': seconds['foreground'],
+                    'background_seconds': seconds['background'],
+                    'unreported_seconds': seconds['unreported'],
+                    'live_translation': bool(getattr(self.host, 'translation_language', None)),
+                },
+            )
+        except Exception as error:
+            logger.warning('Realtime demand telemetry failed type=%s', type(error).__name__)
+
+    def _telemetry_platform(self) -> Any:
+        """Platform label for listen funnel counters; never part of the audio failure domain."""
+
+        return getattr(getattr(self.host, 'client_device_context', None), 'platform', None)
+
+    def _mark_first_audio(self, now: float) -> None:
+        """Record the funnel's first-audio transition once a frame was accepted.
+
+        Called only after a frame passed channel-prefix validation and decoding,
+        so a session of purely unknown-prefix or undecodable frames stays at zero
+        audio and can still surface as a no-audio teardown. Reads defensively:
+        funnel telemetry never belongs to the audio failure domain.
+        """
+
+        if getattr(self.host.state, 'first_audio_byte_timestamp', None) is not None:
+            return
+
+        self.host.state.first_audio_byte_timestamp = now
+        self.host.state.last_usage_record_timestamp = now
+        record_listen_audio_outcome(
+            source=getattr(self.host.request, 'source', None),
+            outcome='first_audio',
+            platform=self._telemetry_platform(),
+        )
+        start_transcription = getattr(self.host, 'start_live_transcription', None)
+        if callable(start_transcription):
+            start_transcription()
 
     def initialize_decoders(self) -> None:
         request = self.host.request
@@ -157,9 +304,16 @@ class ListenReceiver:
             self.lc3_decoder = _get_lc3().Decoder(self.host.lc3_frame_duration_us, request.sample_rate)
 
     async def _create_stt_socket(self, callback: Any, sample_rate: int, modulate_callback: Any = None) -> Any:
+        if managed_chain_enabled(self.host):
+            from utils.stt.live_session import LiveChainSession
+
+            if not hasattr(self, '_managed_live_chain'):
+                self._managed_live_chain = LiveChainSession(self)
+            return await self._managed_live_chain.connect(sample_rate)
         keywords = self.host.vocabulary[:100] if self.host.vocabulary else []
         if self.host.stt_service == STTService.parakeet:
             socket, actual_service = await connect_stt_socket_with_fallback(
+                use_config=False,
                 primary_service=STTService.parakeet,
                 connect_primary=lambda: process_audio_parakeet(
                     callback,
@@ -180,18 +334,145 @@ class ListenReceiver:
             if actual_service == STTService.modulate:
                 self.host.stt_model = 'velma-2'
             return socket
-        if self.host.stt_service == STTService.modulate:
-            return await process_audio_modulate(modulate_callback or callback, sample_rate, self.host.stt_language)
-        if self.host.stt_service == STTService.deepgram:
-            return await process_audio_dg(
-                callback,
-                self.host.stt_language,
-                sample_rate,
-                1,
-                model=self.host.stt_model,
-                keywords=keywords,
-                is_active=lambda: self.host.state.active,
+        if self.host.stt_service == STTService.soniox:
+            # Soniox identifies language itself, so no language gate on the fallbacks;
+            # they inherit the same chain a Modulate primary uses.
+            dg_fallback_model = deepgram_fallback_model(self.host.stt_language)
+
+            def connect_deepgram_from_soniox() -> Any:
+                return process_audio_dg(
+                    callback,
+                    self.host.stt_language,
+                    sample_rate,
+                    1,
+                    model=cast(str, dg_fallback_model),
+                    keywords=keywords,
+                    is_active=lambda: self.host.state.active,
+                )
+
+            socket, actual_service = await connect_stt_socket_with_fallback(
+                use_config=False,
+                primary_service=STTService.soniox,
+                connect_primary=lambda: process_audio_soniox(
+                    modulate_callback or callback,
+                    sample_rate,
+                    self.host.stt_language,
+                ),
+                connect_modulate=(
+                    (
+                        lambda: process_audio_modulate(
+                            modulate_callback or callback,
+                            sample_rate,
+                            self.host.stt_language,
+                        )
+                    )
+                    if modulate_is_configured_fallback(self.host.stt_language)
+                    else None
+                ),
+                connect_deepgram=connect_deepgram_from_soniox if dg_fallback_model else None,
             )
+            self.host.stt_service = actual_service
+            if actual_service == STTService.modulate:
+                self.host.stt_model = 'velma-2'
+            elif actual_service == STTService.deepgram:
+                self.host.stt_model = cast(str, dg_fallback_model)
+            return socket
+        if self.host.stt_service == STTService.modulate:
+            # Velma-2 accepts the upgrade and only then reports being over quota,
+            # so a Modulate primary needs the same chain its siblings use (#11752).
+            dg_fallback_model = deepgram_fallback_model(self.host.stt_language)
+
+            def connect_deepgram_fallback() -> Any:
+                return process_audio_dg(
+                    callback,
+                    self.host.stt_language,
+                    sample_rate,
+                    1,
+                    model=cast(str, dg_fallback_model),
+                    keywords=keywords,
+                    is_active=lambda: self.host.state.active,
+                )
+
+            def connect_parakeet_fallback() -> Any:
+                return process_audio_parakeet(
+                    callback,
+                    self.host.stt_language,
+                    sample_rate,
+                    1,
+                    model='parakeet',
+                    keywords=keywords,
+                    is_active=lambda: self.host.state.active,
+                )
+
+            socket, actual_service = await connect_stt_socket_with_fallback(
+                use_config=False,
+                primary_service=STTService.modulate,
+                connect_primary=lambda: process_audio_modulate(
+                    modulate_callback or callback,
+                    sample_rate,
+                    self.host.stt_language,
+                ),
+                connect_deepgram=connect_deepgram_fallback if dg_fallback_model else None,
+                connect_parakeet=(
+                    connect_parakeet_fallback if parakeet_is_configured_fallback(self.host.stt_language) else None
+                ),
+            )
+            self.host.stt_service = actual_service
+            if actual_service == STTService.deepgram:
+                self.host.stt_model = cast(str, dg_fallback_model)
+            elif actual_service == STTService.parakeet:
+                self.host.stt_model = 'parakeet'
+            return socket
+        if self.host.stt_service == STTService.deepgram:
+
+            def connect_deepgram() -> Any:
+                return process_audio_dg(
+                    callback,
+                    self.host.stt_language,
+                    sample_rate,
+                    1,
+                    model=self.host.stt_model,
+                    keywords=keywords,
+                    is_active=lambda: self.host.state.active,
+                )
+
+            if not modulate_is_configured_fallback(self.host.stt_language):
+                # No leg to walk: Deepgram's own typed connection errors
+                # surface after a single attempt instead of a three-attempt
+                # ladder, and initialize_stt's terminal path handles them
+                # exactly like the exhaustion raise it replaces.
+                return await connect_deepgram()
+
+            def connect_parakeet() -> Any:
+                return process_audio_parakeet(
+                    callback,
+                    self.host.stt_language,
+                    sample_rate,
+                    1,
+                    model='parakeet',
+                    keywords=keywords,
+                    is_active=lambda: self.host.state.active,
+                )
+
+            socket, actual_service = await connect_stt_socket_with_fallback(
+                use_config=False,
+                primary_service=STTService.deepgram,
+                connect_primary=connect_deepgram,
+                connect_modulate=lambda: process_audio_modulate(
+                    modulate_callback or callback,
+                    sample_rate,
+                    self.host.stt_language,
+                ),
+                connect_parakeet=(
+                    connect_parakeet if parakeet_is_configured_fallback(self.host.stt_language) else None
+                ),
+            )
+            self.host.stt_service = actual_service
+            if actual_service == STTService.modulate:
+                self.host.stt_model = 'velma-2'
+            elif actual_service == STTService.parakeet:
+                self.host.stt_model = 'parakeet'
+            return socket
         raise RuntimeError(f'Unsupported serving STT provider {self.host.stt_service!r}')
 
     async def _drain_stt_sockets(self) -> None:
@@ -224,11 +505,15 @@ class ListenReceiver:
                 for index, config in enumerate(self.channel_configs):
 
                     def callback(segments: List[Dict[str, Any]], channel: ChannelConfig = config) -> None:
-                        self._capture('capture_inbound_stt', segments)
                         for segment in segments:
                             segment['is_user'] = channel.is_user
+                            segment['speaker_identity_status'] = (
+                                SpeakerIdentityStatus.user.value
+                                if channel.is_user
+                                else SpeakerIdentityStatus.not_user.value
+                            )
                             segment['speaker'] = channel.speaker_label
-                        self.host.transcripts.enqueue(segments)
+                        self._enqueue_stt_segments(segments)
 
                     socket = await self._create_stt_socket(callback, TARGET_SAMPLE_RATE)
                     if socket is None:
@@ -243,7 +528,9 @@ class ListenReceiver:
                         return False
                     self.stt_sockets_multi[index] = socket
                 return True
-            if should_initialize_vad_gate(override=request.vad_gate_override, global_gate_enabled=is_gate_enabled()):
+            if not managed_chain_enabled(self.host) and should_initialize_vad_gate(
+                override=request.vad_gate_override, global_gate_enabled=is_gate_enabled()
+            ):
                 try:
                     self.vad_gate = VADStreamingGate(
                         sample_rate=request.sample_rate,
@@ -256,8 +543,7 @@ class ListenReceiver:
                     logger.exception('VAD gate initialization failed; continuing without it')
 
             def capture_and_enqueue(segments: List[Dict[str, Any]]) -> None:
-                self._capture('capture_inbound_stt', segments)
-                self.host.transcripts.enqueue(segments)
+                self._enqueue_stt_segments(segments)
 
             parakeet_callback = make_stream_callback(capture_and_enqueue, self.vad_gate, False)
             modulate_callback = make_stream_callback(capture_and_enqueue, self.vad_gate, True)
@@ -278,8 +564,13 @@ class ListenReceiver:
                 return False
             passthrough = self.host.stt_service == STTService.modulate
             self.stt_socket = (
-                GatedSTTSocket(raw, gate=self.vad_gate, passthrough_audio=passthrough) if self.vad_gate else raw
+                GatedSTTSocket(raw, gate=self.vad_gate, passthrough_audio=passthrough)
+                if self.vad_gate and not getattr(raw, 'manages_vad', False)
+                else raw
             )
+            # Retained so a mid-session failover can rebuild the socket against the
+            # next provider without re-deriving the callbacks or the gate.
+            self._stt_rebuild = (parakeet_callback, modulate_callback, request.sample_rate)
             self.host.spawn(self._monitor_stt_death(), name='stt_death_monitor')
             return True
         except Exception as error:
@@ -292,6 +583,91 @@ class ListenReceiver:
                 platform=self.host.client_device_context.platform,
             )
             return False
+
+    async def _failover_stt_socket(self) -> bool:
+        """Serialize monitor/send-path failover so only one replacement is adopted."""
+        async with self._stt_failover_lock:
+            if self.stt_socket is not None and not live_stt_socket_is_dead(self.stt_socket):
+                return True
+            return await self._rebuild_stt_socket_locked()
+
+    async def _rebuild_stt_socket_locked(self) -> bool:
+        rebuild = getattr(self, '_stt_rebuild', None)
+        if rebuild is None or self.host.is_multi_channel or self.host.use_custom_stt:
+            return False
+        if not self.host.state.active or self.host.state.stt_terminal_failure:
+            return False
+
+        # The hop we adopted last has now died without a transcript (or is
+        # about to be replaced). Settle it as a failed failover before the
+        # next provider is tried, otherwise connect-time recovered hid a
+        # 100% dead Soniox budget-exhaustion leg for 27.5h.
+        self._settle_pending_live_failover_failure()
+
+        dead_provider = provider_for_service(self.host.stt_service)
+        if dead_provider:
+            self._stt_failed_providers.add(dead_provider)
+        if len(self._stt_failed_providers) > (3 if managed_chain_enabled(self.host) else MAX_STT_FAILOVERS):
+            return False
+        # Feed account/serve deaths even when failover prevents a terminal event.
+        note_typed_provider_death(self.stt_socket, dead_provider)
+
+        service, language, model = get_stt_service_for_language(
+            self.host.language,
+            multi_lang_enabled=self.host.multi_lang_enabled,
+            exclude=frozenset(self._stt_failed_providers),
+            **window_selection_kwargs(self.host, self.host.request.uid),
+        )
+        if service is None:
+            return False
+
+        parakeet_callback, modulate_callback, sample_rate = rebuild
+        previous = self.stt_socket
+        previous_selection = (self.host.stt_service, self.host.stt_language, self.host.stt_model)
+        self.host.stt_service, self.host.stt_language, self.host.stt_model = service, language, model
+        hop = PendingLiveFailover(from_mode=dead_provider or 'unknown', to_mode=service.value)
+        try:
+            raw = await self._create_stt_socket(
+                parakeet_callback,
+                sample_rate,
+                modulate_callback=modulate_callback,
+            )
+        except Exception:
+            if managed_chain_enabled(self.host):
+                self.host.stt_service, self.host.stt_language, self.host.stt_model = previous_selection
+            logger.exception('STT failover connect raised')
+            hop.note_failure(None)
+            return False
+        if raw is None:
+            hop.note_failure(None)
+            if managed_chain_enabled(self.host):
+                self.host.stt_service, self.host.stt_language, self.host.stt_model = previous_selection
+            return False
+        hop.to_mode = self.host.stt_service.value
+        # A provider can reject shortly after upgrade; never adopt a dead leg.
+        if not await fallback_socket_is_serving(raw):
+            raw_typed = getattr(raw, 'typed_death_reason', None)
+            hop.note_failure(raw_typed if isinstance(raw_typed, str) else None)
+            close_rejected_socket(raw)
+            if managed_chain_enabled(self.host):
+                self.host.stt_service, self.host.stt_language, self.host.stt_model = previous_selection
+            return False
+
+        passthrough = self.host.stt_service == STTService.modulate
+        self.stt_socket = (
+            GatedSTTSocket(raw, gate=self.vad_gate, passthrough_audio=passthrough)
+            if self.vad_gate and not getattr(raw, 'manages_vad', False)
+            else raw
+        )
+        self._pending_live_failover = hop
+        record_live_stt_failover_accepted(provider=self.host.stt_service.value, platform=self._telemetry_platform())
+        logger.info(f'STT failover mid-session: {dead_provider} -> {self.host.stt_service.value}')
+        if previous is not None:
+            try:
+                previous.finish()
+            except Exception:
+                logger.warning('Failed to close the STT socket that died before failover')
+        return True
 
     async def _monitor_stt_death(self) -> None:
         """Terminate the client session promptly when the provider STT socket dies.
@@ -306,11 +682,13 @@ class ListenReceiver:
         while self.host.state.active and not self.host.state.stt_terminal_failure:
             socket = self.stt_socket
             if socket is not None and live_stt_socket_is_dead(socket):
+                if await self._failover_stt_socket():
+                    continue
                 await terminate_live_stt_session(
                     self.host.request.websocket,
                     self.host.state,
                     failure=live_stt_upstream_failure(self._serving_provider()),
-                    reason='connection_lost',
+                    reason=live_stt_terminal_reason(socket, 'connection_lost'),
                     platform=self.host.client_device_context.platform,
                 )
                 return
@@ -366,40 +744,67 @@ class ListenReceiver:
 
     async def _flush_stt_buffer(self, buffer: bytearray, *, force: bool = False) -> None:
         request = self.host.request
-        socket_dead = self.stt_socket is not None and live_stt_socket_is_dead(self.stt_socket)
-        decision = decide_stt_buffer_flush(
-            buffer_len=len(buffer),
-            flush_size=stt_buffer_flush_size(request.sample_rate),
-            force=force,
-            socket_dead=socket_dead,
-            socket_available=self.stt_socket is not None,
-            fair_use_dg_budget_exhausted=self.host.state.fair_use_dg_budget_exhausted,
-            fair_use_track_dg_usage=self.host.state.fair_use_track_dg_usage,
-            sample_rate=request.sample_rate,
-        )
-        if not decision.should_flush:
-            return
-        if self.host.state.fair_use_dg_budget_exhausted:
-            buffer.clear()
-            return
-        outbound_audio = bytes(buffer)
-        sent = await flush_live_stt_buffer(
-            request.websocket,
-            self.host.state,
-            stt_socket=self.stt_socket,
-            buffer=buffer,
-            provider=self._serving_provider(),
-            platform=self.host.client_device_context.platform,
-        )
-        if sent:
-            self._capture('capture_outbound_stt', outbound_audio)
-            self.host.state.dg_usage_ms_pending += decision.dg_usage_ms
+        # Bounded retry, not a single attempt: when the send path fails over to
+        # the next provider the chunk is reported unsent with the buffer intact,
+        # and it must reach the replacement socket now — the next client chunk
+        # may be a VAD-gated silence away. `_failover_stt_socket` enforces
+        # MAX_STT_FAILOVERS, so the bound here is a backstop, not the limit.
+        for _ in range(MAX_STT_FAILOVERS + 2):
+            socket_dead = self.stt_socket is not None and live_stt_socket_is_dead(self.stt_socket)
+            decision = decide_stt_buffer_flush(
+                buffer_len=len(buffer),
+                flush_size=stt_buffer_flush_size(request.sample_rate),
+                force=force,
+                socket_dead=socket_dead,
+                socket_available=self.stt_socket is not None,
+                fair_use_dg_budget_exhausted=self.host.state.fair_use_dg_budget_exhausted,
+                fair_use_track_dg_usage=self.host.state.fair_use_track_dg_usage,
+                sample_rate=request.sample_rate,
+            )
+            if not decision.should_flush:
+                return
+            if self.host.state.fair_use_dg_budget_exhausted:
+                buffer.clear()
+                return
+            outbound_audio = bytes(buffer)
+            sent = await flush_live_stt_buffer(
+                request.websocket,
+                self.host.state,
+                stt_socket=self.stt_socket,
+                buffer=buffer,
+                provider=self._serving_provider(),
+                platform=self.host.client_device_context.platform,
+                attempt_failover=self._failover_stt_socket,
+            )
+            if sent:
+                self._capture('capture_outbound_stt', outbound_audio)
+                self.host.state.dg_usage_ms_pending += decision.dg_usage_ms
+                return
+            if self.host.state.stt_terminal_failure:
+                return
 
-    async def _handle_multi_channel_audio(self, data: bytes) -> None:
+    async def _handle_multi_channel_audio(self, data: bytes, now: float | None = None) -> int:
+        if now is None:
+            now = time.time()
         request = self.host.request
         channel_index = self.channel_id_to_index.get(data[0])
         if channel_index is None:
-            return
+            # A whole call's worth of frames can land here if a client prefixes
+            # its channels differently than build_channel_config expects; that
+            # used to be indistinguishable from silence, so count and log it.
+            record_listen_unknown_channel_prefix(
+                source=getattr(request, 'source', None),
+                platform=self._telemetry_platform(),
+            )
+            self._unknown_prefix_streak += 1
+            if self._unknown_prefix_streak <= 3 or self._unknown_prefix_streak % 100 == 0:
+                logger.warning(
+                    'Listen multi-channel frame dropped unknown prefix byte=%d frames=%s',
+                    data[0],
+                    self._unknown_prefix_streak,
+                )
+            return 0
+        self._unknown_prefix_streak = 0
         audio = data[1:]
         if request.codec == 'opus' and self.multi_opus_decoders[channel_index]:
             try:
@@ -407,14 +812,14 @@ class ListenReceiver:
                     bytes(audio), opus_decode_capacity(request.sample_rate)
                 )
             except Exception as error:
-                logger.warning(
-                    'Listen audio frame decode failed codec=opus channel=%s type=%s',
-                    channel_index,
-                    type(error).__name__,
-                )
-                return
+                self._record_decode_failure('opus', error, len(audio), channel=channel_index)
+                return 0
+            self.decode_failure_streak = 0
             if not audio:
-                return
+                return 0
+        # First audio only counts once the channel prefix resolved and an opus
+        # frame decoded; rejected frames above leave the no-audio funnel intact.
+        self._mark_first_audio(now)
         pcm = resample_pcm(bytes(audio), request.sample_rate, TARGET_SAMPLE_RATE)
         self._capture('capture_client_audio', pcm)
         # Custom-STT clients own transcript production.  Their channel sockets are intentionally
@@ -457,6 +862,8 @@ class ListenReceiver:
                 for buffer in self.channel_mix_buffers:
                     del buffer[: decision.min_len]
 
+        return len(audio)
+
     async def _handle_text(self, message: str) -> None:
         try:
             loaded = json.loads(message)
@@ -479,12 +886,12 @@ class ListenReceiver:
         elif kind == 'suggested_transcript' and self.host.use_custom_stt:
             segments = payload.get('segments', [])
             provider = payload.get('stt_provider')
-            if provider:
-                for segment in segments:
-                    segment['stt_provider'] = provider
-            self.host.transcripts.enqueue(segments)
+            self._enqueue_stt_segments(segments, provider=provider or 'custom')
         elif kind == 'speaker_assigned':
             await self._handle_speaker_assigned(payload)
+        elif kind == 'client_state':
+            if not self.host.state.realtime_demand.observe(payload):
+                logger.debug('Ignored malformed or over-budget client_state')
         elif kind == 'finalization_reason':
             reason = payload.get('reason')
             if reason in {
@@ -500,29 +907,43 @@ class ListenReceiver:
 
     async def _handle_speaker_assigned(self, payload: Dict[str, Any]) -> None:
         segment_ids = payload.get('segment_ids', [])
-        speaker = self.host.speakers
-        updated = update_speaker_assignment_maps(
-            cast(int, payload.get('speaker_id')),
-            cast(str, payload.get('person_id')),
-            cast(str, payload.get('person_name')),
-            segment_ids,
-            speaker.speaker_to_person,
-            speaker.segment_assignments,
-        )
-        if not updated:
+        conversation_id = self.host.state.current_conversation_id
+        if not conversation_id or not isinstance(segment_ids, list) or not all(isinstance(s, str) for s in segment_ids):
             return
+        # REST owns the mutation. A socket payload only wakes the persisted edit;
+        # it cannot expand a selected edit into a speaker-wide inference map.
+        conversation = await self.host.transcripts.cache.get(conversation_id, force_refresh=True)
+        if not conversation:
+            return
+        receipt = conversation.get('manual_speaker_assignments') or {}
+        if not isinstance(receipt, dict):
+            receipt = {}
+        by_id = {segment.get('id'): segment for segment in conversation.get('transcript_segments') or []}
+        speakers = receipt.get('speakers') or {}
+        overrides = receipt.get('segments') or {}
+        for sid in segment_ids:
+            segment = by_id.get(sid) or {}
+            override = overrides.get(sid)
+            covering = speakers.get(str(segment.get('speaker_id')))
+            decisions = [value for value in (override, covering) if value]
+            if not decisions:
+                continue
+            decision = max(decisions, key=lambda value: value.get('generation', 0))
+            self.host.speakers.segment_assignments[sid] = 'user' if decision['is_user'] else decision['person_id']
+        self.host.state.speaker_map_dirty = True
+        person_id = payload.get('person_id')
         if (
-            payload.get('person_id')
-            and payload.get('person_id') != 'user'
+            isinstance(person_id, str)
+            and person_id
+            and person_id != 'user'
+            and acknowledged_teaching(conversation, person_id, segment_ids)
             and self.host.private_cloud_sync_enabled
             and self.host.send_speaker_sample_request
-            and self.host.state.current_conversation_id
-            and any(self.host.transcripts.current_session_segments.get(segment_id) for segment_id in segment_ids)
         ):
             self.host.spawn(
                 self.host.send_speaker_sample_request(
-                    person_id=payload['person_id'],
-                    conv_id=self.host.state.current_conversation_id,
+                    person_id=person_id,
+                    conv_id=conversation_id,
                     segment_ids=segment_ids,
                 ),
                 name='speaker_sample_request',
@@ -531,6 +952,7 @@ class ListenReceiver:
     async def receive_data(self) -> None:
         request = self.host.request
         buffer = bytearray()
+        decoded_audio_bytes = 0
         self.host.state.last_audio_received_time = time.time()
         self.host.state.last_activity_time = self.host.state.last_audio_received_time
         try:
@@ -550,13 +972,21 @@ class ListenReceiver:
                     if len(data) <= 2:
                         continue
                     now = time.time()
+                    prev_audio_received = self.host.state.last_audio_received_time
                     self.host.state.last_audio_received_time = now
-                    if self.host.state.first_audio_byte_timestamp is None:
-                        self.host.state.first_audio_byte_timestamp = now
-                        self.host.state.last_usage_record_timestamp = now
-                        self.host.start_live_transcription()
+                    # A usage flush that fired while no audio was arriving moved the billing
+                    # window start past the last byte; without a floor the next flush bills
+                    # that silent gap. This byte is a resume exactly when the window start
+                    # outran the previous audio timestamp.
+                    usage_record_ts = self.host.state.last_usage_record_timestamp
+                    if usage_record_ts is not None and prev_audio_received < usage_record_ts:
+                        self.host.state.last_audio_resume_time = now
                     if self.host.is_multi_channel:
-                        await self._handle_multi_channel_audio(data)
+                        # `_handle_multi_channel_audio` marks first audio only
+                        # after the channel prefix is known-good (and an opus
+                        # frame decoded), so unknown-prefix frames leave the
+                        # session eligible for a no_audio teardown.
+                        decoded_audio_bytes += await self._handle_multi_channel_audio(data, now)
                         continue
                     try:
                         decoded: bytes = data
@@ -571,12 +1001,13 @@ class ListenReceiver:
                         elif request.codec == 'pcm8':
                             decoded = audioop.lin2lin(audioop.bias(data, 1, -128), 1, 2)
                     except Exception as error:
-                        logger.warning(
-                            'Listen audio frame decode failed codec=%s type=%s', request.codec, type(error).__name__
-                        )
+                        self._record_decode_failure(request.codec, error, len(data))
                         continue
+                    self.decode_failure_streak = 0
                     if not decoded:
                         continue
+                    self._mark_first_audio(now)
+                    decoded_audio_bytes += len(decoded)
                     self._capture('capture_client_audio', decoded)
                     if self.host.state.audio_ring_buffer is not None:
                         self.host.state.audio_ring_buffer.write(decoded, now)
@@ -593,8 +1024,55 @@ class ListenReceiver:
             logger.error('Listen receive failure type=%s', type(error).__name__)
             self.host.state.close_code = 1011
         finally:
+            if decoded_audio_bytes:
+                self._emit_realtime_demand(request, decoded_audio_bytes)
+                sample_rate = max(1, int(getattr(request, 'sample_rate', 16000)))
+                emit_product_event(
+                    uid=str(getattr(request, 'uid', '') or ''),
+                    event='Encoded Audio Duration Measured',
+                    properties={
+                        'recording_id': getattr(self.host, 'recording_session_id', None),
+                        'conversation_id': getattr(self.host.state, 'current_conversation_id', None),
+                        'codec': request.codec,
+                        'decoded_audio_bytes': decoded_audio_bytes,
+                        'duration_seconds': decoded_audio_bytes / (sample_rate * 2),
+                    },
+                )
             if self.vad_gate is not None:
-                logger.info(json.dumps(self.vad_gate.to_json_log()))
+                vad_metrics = self.vad_gate.get_metrics()
+                vad_payload = self.vad_gate.to_json_log()
+                onboarding_session_id = getattr(self.host, 'onboarding_session_id', None)
+                if onboarding_session_id:
+                    vad_payload['onboarding_session_id'] = onboarding_session_id
+                if self.host.is_multi_channel:
+                    vad_payload['multi_channel'] = True
+                vad_log = emit_listen_vad_gate_metrics(
+                    vad_payload,
+                    source=getattr(request, 'source', None),
+                    platform=self._telemetry_platform(),
+                )
+                if (
+                    vad_metrics.get('bytes_received') == 0
+                    and vad_metrics.get('chunks_total') == 0
+                    and vad_log.get('session_duration_sec') == 0.0
+                ):
+                    record_listen_zero_byte_session(
+                        source=getattr(request, 'source', None),
+                        platform=self._telemetry_platform(),
+                    )
+                speech_ms = max(0, int(vad_metrics.get('speech_ms_total') or 0))
+                if speech_ms:
+                    emit_product_event(
+                        uid=str(getattr(request, 'uid', '') or ''),
+                        event='Speech Positive Duration Measured',
+                        properties={
+                            'recording_id': getattr(self.host, 'recording_session_id', None),
+                            'conversation_id': getattr(self.host.state, 'current_conversation_id', None),
+                            'duration_seconds': speech_ms / 1000,
+                            'measurement': 'server_vad',
+                            'vad_mode': vad_metrics.get('mode') or 'unknown',
+                        },
+                    )
             if not self.host.use_custom_stt:
                 await self._flush_stt_buffer(buffer, force=True)
             await self._drain_stt_sockets()

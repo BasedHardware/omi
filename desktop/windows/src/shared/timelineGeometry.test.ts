@@ -10,7 +10,8 @@ import {
   gapSegments,
   frameIndexAtCursor,
   shouldRecenterTimeline,
-  REWIND_BREAK_THRESHOLD_MS
+  REWIND_BREAK_THRESHOLD_MS,
+  REWIND_LINEAR_MIN_PX
 } from './timelineGeometry'
 
 const H = 3_600_000
@@ -342,5 +343,45 @@ describe('shouldRecenterTimeline', () => {
   it('re-centers once the playhead drifts just past a quarter-viewport', () => {
     expect(shouldRecenterTimeline(1000, CW, 1201)).toBe(true)
     expect(shouldRecenterTimeline(1000, CW, 799)).toBe(true)
+  })
+})
+
+// The three cases below came out of a mutation audit against the 47 tests above.
+// Each survived them, and each is something a user would see.
+describe('timeline geometry gaps found by mutation', () => {
+  const HOUR = 3_600_000
+
+  it('gives a two-second activity block a clickable width', () => {
+    // Natural width here is (2000 / 3_600_000) * 100 = 0.056px. The floor is
+    // the only reason a short burst of activity between two long idle gaps is
+    // visible on the bar at all, let alone clickable. Nothing exercised it, so
+    // dropping the floor to zero left every test green while making the piece
+    // disappear.
+    const m = buildTimelineMapping([HOUR, HOUR + 2_000], 0, 2 * HOUR, {
+      pxPerHour: 100,
+      minWidth: 0
+    })
+    const linear = m.pieces.filter((p) => p.kind === 'linear')
+    expect(linear).toHaveLength(1)
+    expect(linear[0].xEnd - linear[0].xStart).toBe(REWIND_LINEAR_MIN_PX)
+    expect(REWIND_LINEAR_MIN_PX).toBe(3)
+  })
+
+  it('takes the finest interval that still fits the tick budget', () => {
+    // The cap is `span / interval <= maxTicks - 1`, an inclusive bound, because
+    // the tick count across a span is floor(span/interval) + 1. At exactly the
+    // bound the finer interval is still allowed; one step to `<` and the axis
+    // silently jumps to the next coarser interval everywhere.
+    const ticks = axisTicks(0, 4 * 60_000, 5)
+    expect(ticks).toHaveLength(5)
+    expect(ticks[1] - ticks[0]).toBe(60_000)
+  })
+
+  it('can select the six-hour interval', () => {
+    // A twenty-hour span with a five-tick budget is the only shape that picks
+    // it: three hours gives seven ticks, twelve gives two. Nothing reached this
+    // entry, so it could be removed from the table without a test noticing.
+    const ticks = axisTicks(0, 20 * HOUR, 5)
+    expect(ticks[1] - ticks[0]).toBe(6 * HOUR)
   })
 })

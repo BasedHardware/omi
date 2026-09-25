@@ -2,6 +2,7 @@ import ast
 import base64
 import json
 import os
+import secrets
 from typing import Any, Callable, Dict, List, Optional, TypeVar, Union, cast
 from datetime import datetime, timedelta, timezone
 
@@ -29,6 +30,11 @@ r: Any = redis.Redis(
     health_check_interval=30,
 )
 
+# Longer than the 10-minute max approval TTL (contract §5) plus clock-skew
+# slack, so a jti cannot become reusable while its approval could still be
+# considered valid by a verifier with a slow clock.
+APPROVAL_JTI_CONSUME_TTL_SECONDS = 900
+
 
 T = TypeVar("T")
 
@@ -37,18 +43,76 @@ def _decode_redis_value(raw: Union[bytes, str]) -> str:
     return raw.decode('utf-8') if isinstance(raw, bytes) else raw
 
 
+_MAX_LEGACY_LITERAL_CHARS = 64 * 1024
+
+
+def _fail_open_raw_text(text: str, reason: str) -> str:
+    try:
+        from utils.observability.fallback import record_fallback
+
+        record_fallback(
+            component='redis_cache',
+            from_mode='json',
+            to_mode='raw_text',
+            reason=reason,
+            outcome='degraded',
+            log=logger,
+        )
+    except Exception:
+        logger.warning('redis cache deserialize fail-open reason=%s', reason)
+    return text
+
+
 def _deserialize_cache_value(raw: Union[bytes, str, None]) -> Any:
-    """Deserialize a Redis cache value using JSON, with legacy literal_eval fallback."""
+    """Deserialize a Redis cache value using JSON, with safe fallback for legacy Python literals."""
     if raw is None:
         return None
     text = _decode_redis_value(raw)
     try:
         return json.loads(text)
     except (TypeError, ValueError, json.JSONDecodeError):
+        if len(text) > _MAX_LEGACY_LITERAL_CHARS:
+            return _fail_open_raw_text(text, 'oversized')
         try:
-            return ast.literal_eval(text)
-        except (ValueError, SyntaxError):
-            return text
+
+            class _SafeLiteralVisitor(ast.NodeVisitor):
+                def generic_visit(self, node: ast.AST) -> Any:
+                    raise ValueError('unsupported ast node')
+
+                def visit_Expression(self, node: ast.Expression) -> Any:
+                    return self.visit(node.body)
+
+                def visit_Dict(self, node: ast.Dict) -> dict[Any, Any]:
+                    out: dict[Any, Any] = {}
+                    for key_node, value_node in zip(node.keys, node.values):
+                        if key_node is None:
+                            raise ValueError('dict unpacking is not a literal')
+                        out[self.visit(key_node)] = self.visit(value_node)
+                    return out
+
+                def visit_List(self, node: ast.List) -> list[Any]:
+                    return [self.visit(elt) for elt in node.elts]
+
+                def visit_Tuple(self, node: ast.Tuple) -> tuple[Any, ...]:
+                    return tuple(self.visit(elt) for elt in node.elts)
+
+                def visit_Set(self, node: ast.Set) -> set[Any]:
+                    return {self.visit(elt) for elt in node.elts}
+
+                def visit_Constant(self, node: ast.Constant) -> Any:
+                    return node.value
+
+                def visit_UnaryOp(self, node: ast.UnaryOp) -> Any:
+                    if type(node.op) not in (ast.UAdd, ast.USub):
+                        raise ValueError('unsupported unary op')
+                    operand = self.visit(node.operand)
+                    if type(operand) not in (int, float):
+                        raise ValueError('unsupported unary operand')
+                    return operand if type(node.op) is ast.UAdd else -operand
+
+            return _SafeLiteralVisitor().visit(ast.parse(text, mode='eval'))
+        except Exception:
+            return _fail_open_raw_text(text, 'parse_error')
 
 
 def _serialize_cache_value(value: Any) -> str:
@@ -87,9 +151,11 @@ def set_generic_cache(path: str, data: object, ttl: Optional[int] = None) -> Non
     key = base64.b64encode(f'{path}'.encode('utf-8'))
     key = key.decode('utf-8')
 
-    r.set(f'cache:{key}', json.dumps(data, default=str))
+    payload = json.dumps(data, default=str)
     if ttl:
-        r.expire(f'cache:{key}', ttl)
+        r.set(f'cache:{key}', payload, ex=ttl)
+    else:
+        r.set(f'cache:{key}', payload)
 
 
 @try_catch_decorator
@@ -214,12 +280,29 @@ def set_app_money_made_cache(app_id: str, money: Dict[str, Any]) -> None:
     r.set(f'apps:{app_id}:money', json.dumps(money, default=str), ex=60 * 10)  # 10 minutes
 
 
+# Two reviewers of the same app race on this one key: a plain GET-modify-SET lets
+# a write that lands between another writer's GET and SET vanish, silently
+# dropping that reviewer from everything the product reads. Do the read-modify-
+# write as a single atomic script instead, mirroring the rate-limit scripts
+# below. A legacy (pre-JSON) value that cjson can't parse is treated as empty
+# rather than raising, matching the fail-open behavior of the Python reader.
+_SET_APP_REVIEW_CACHE_LUA = r.register_script("""
+local raw = redis.call('GET', KEYS[1])
+local reviews = {}
+if raw then
+    local ok, decoded = pcall(cjson.decode, raw)
+    if ok and type(decoded) == 'table' then
+        reviews = decoded
+    end
+end
+reviews[ARGV[1]] = cjson.decode(ARGV[2])
+redis.call('SET', KEYS[1], cjson.encode(reviews))
+return 1
+""")
+
+
 def set_app_review_cache(app_id: str, uid: str, data: Dict[str, Any]) -> None:
-    raw = r.get(f'plugins:{app_id}:reviews')
-    loaded = _deserialize_cache_value(raw)
-    reviews: Dict[str, Any] = cast(Dict[str, Any], loaded) if isinstance(loaded, dict) else {}
-    reviews[uid] = data
-    r.set(f'plugins:{app_id}:reviews', _serialize_cache_value(reviews))
+    _SET_APP_REVIEW_CACHE_LUA(keys=[f'plugins:{app_id}:reviews'], args=[uid, _serialize_cache_value(data)])
 
 
 def get_specific_user_review(app_id: str, uid: str) -> Dict[str, Any]:
@@ -256,8 +339,8 @@ def get_user_app_subscription_customer_id(app_id: str, uid: str) -> Optional[str
     return val.decode()
 
 
-def enable_app(uid: str, app_id: str) -> None:
-    r.sadd(f'users:{uid}:enabled_plugins', app_id)
+def enable_app(uid: str, app_id: str) -> bool:
+    return bool(r.sadd(f'users:{uid}:enabled_plugins', app_id))
 
 
 def disable_app(uid: str, app_id: str) -> None:
@@ -327,14 +410,37 @@ def get_apps_installs_count(app_ids: List[str]) -> Dict[str, int]:
     return {app_id: max(0, int(count)) if count else 0 for app_id, count in zip(app_ids, counts)}
 
 
+def _cache_set_fail_open(key: str, value: Any, ttl: int) -> None:
+    """Best-effort cache write. Redis maxmemory must not 500 product requests."""
+    try:
+        r.set(key, value, ex=ttl)
+    except Exception as exc:
+        # redis-py types omit ``exceptions``; match the live maxmemory class by name.
+        if type(exc).__name__ != 'OutOfMemoryError':
+            raise
+        prefix = key.split(':', 1)[0]
+        logger.warning('redis cache write skipped capacity_full prefix=%s', prefix)
+        try:
+            from utils.observability.fallback import record_fallback
+
+            record_fallback(
+                component='other',
+                from_mode='cache_write',
+                to_mode='skip',
+                reason='capacity_full',
+                outcome='degraded',
+                log=logger,
+            )
+        except Exception:
+            pass
+
+
 def cache_user_name(uid: str, name: str, ttl: int = 60 * 60 * 24 * 7) -> None:
-    r.set(f'users:{uid}:name', name)
-    r.expire(f'users:{uid}:name', ttl)
+    _cache_set_fail_open(f'users:{uid}:name', name, ttl)
 
 
 def cache_signed_url(blob_path: str, signed_url: str, ttl: int = 60 * 60) -> None:
-    r.set(f'urls:{blob_path}', signed_url)
-    r.expire(f'urls:{blob_path}', ttl - 1)
+    r.set(f'urls:{blob_path}', signed_url, ex=ttl - 1)
 
 
 def get_cached_signed_url(blob_path: str) -> str:
@@ -342,6 +448,13 @@ def get_cached_signed_url(blob_path: str) -> str:
     if not signed_url:
         return ''
     return signed_url.decode()
+
+
+def delete_cached_signed_url(blob_path: str) -> None:
+    """Evict a cached signed URL. Callers deleting the underlying blob must call
+    this too — a delete that leaves a still-live cached signed URL handing out
+    reads of a (now 404ing, or worse, since-overwritten) object is a bug."""
+    r.delete(f'urls:{blob_path}')
 
 
 def cache_user_geolocation(uid: str, geolocation: Dict[str, Any]) -> None:
@@ -352,8 +465,14 @@ def cache_user_geolocation(uid: str, geolocation: Dict[str, Any]) -> None:
     # was finalizing. Every reader rebuilds ``Geolocation`` from this dict, whose
     # optional fields already default to ``None`` when absent.
     present_fields = {key: value for key, value in geolocation.items() if value is not None}
-    r.set(f'users:{uid}:geolocation', _serialize_cache_value(present_fields))
-    r.expire(f'users:{uid}:geolocation', 60 * 30)  # FIXME: too much?
+    # 30m: conversation/tool place tagging does not need second-level freshness;
+    # clients re-upload on significant moves and at recording start. Keeps the
+    # last-known coords available without inventing a tighter freshness policy.
+    _cache_set_fail_open(
+        f'users:{uid}:geolocation',
+        _serialize_cache_value(present_fields),
+        60 * 30,
+    )
 
 
 def get_cached_user_geolocation(uid: str) -> Optional[Dict[str, Any]]:
@@ -409,8 +528,14 @@ def remove_public_conversation(conversation_id: str) -> None:
 
 
 def set_in_progress_conversation_id(uid: str, conversation_id: str, ttl: int = 300) -> None:
-    r.set(f'users:{uid}:in_progress_memory_id', conversation_id)
-    r.expire(f'users:{uid}:in_progress_memory_id', ttl)
+    # Best-effort pointer written AFTER the authoritative Firestore create of the
+    # in-progress conversation. Every reader falls back to Firestore
+    # (retrieve_in_progress_conversation, get_in_progress_conversation) when the
+    # key is absent, so a Redis capacity failure must skip the write instead of
+    # raising: under prod maxmemory the raise crashed the listen `lifecycle`
+    # lifetime task and tore down live sessions (supervisor `crash`), and the
+    # same raise inside prepare() surfaced as the ASGI WebSocket traceback.
+    _cache_set_fail_open(f'users:{uid}:in_progress_memory_id', conversation_id, ttl)
 
 
 def remove_in_progress_conversation_id(uid: str) -> None:
@@ -426,8 +551,13 @@ def get_in_progress_conversation_id(uid: str) -> str:
 
 def set_conversation_meeting_id(conversation_id: str, meeting_id: str, ttl: int = 86400) -> None:
     """Store the meeting_id for a conversation. TTL defaults to 24 hours."""
-    r.set(f'conversation:{conversation_id}:meeting_id', meeting_id)
-    r.expire(f'conversation:{conversation_id}:meeting_id', ttl)
+    # Same best-effort contract as set_in_progress_conversation_id: the mapping
+    # is an enrichment pointer (meeting-context attribution during processing,
+    # utils/conversations/process_conversation.py), written after the durable
+    # conversation create. Its absence degrades enrichment to the calendar
+    # overlap path, so a Redis capacity failure skips the write rather than
+    # raising out of the listen session bootstrap.
+    _cache_set_fail_open(f'conversation:{conversation_id}:meeting_id', meeting_id, ttl)
 
 
 def get_conversation_meeting_id(conversation_id: str) -> Optional[str]:
@@ -464,6 +594,55 @@ def get_user_webhook_db(uid: str, wtype: str) -> str:
     return url.decode()
 
 
+FILTER_CATEGORY_CAP = 500
+FILTER_CATEGORY_TRIM_BATCH = 128
+FILTER_CATEGORIES = frozenset({'people', 'topics', 'entities', 'dates'})
+
+# allow-oom: trim must still run when the box is at maxmemory (the incident).
+_FILTER_TRIM_LUA = """#!lua flags=allow-oom
+local key = KEYS[1]
+local cap = tonumber(ARGV[1])
+local batch = tonumber(ARGV[2])
+local n = redis.call('SCARD', key)
+if n <= cap then
+  return {n, 0}
+end
+local to_remove = math.min(n - cap, batch)
+redis.call('SPOP', key, to_remove)
+return {redis.call('SCARD', key), to_remove}
+"""
+
+_FILTER_ADMIT_LUA = """
+local key = KEYS[1]
+local member = ARGV[1]
+local cap = tonumber(ARGV[2])
+if redis.call('SISMEMBER', key, member) == 1 then
+  return 0
+end
+if redis.call('SCARD', key) >= cap then
+  return 0
+end
+return redis.call('SADD', key, member)
+"""
+
+_filter_trim_script = None
+_filter_admit_script = None
+
+
+def _filter_category_scripts() -> tuple[Any, Any]:
+    global _filter_trim_script, _filter_admit_script
+    if _filter_trim_script is None or _filter_admit_script is None:
+        # Register into locals first; publish the globals only after both
+        # registrations succeed so a concurrent caller can never observe a
+        # half-initialized pair (which would raise TypeError outside the
+        # RedisError handler in add_filter_category_item).
+        trim = r.register_script(_FILTER_TRIM_LUA)
+        admit = r.register_script(_FILTER_ADMIT_LUA)
+        _filter_trim_script = trim
+        _filter_admit_script = admit
+    return _filter_trim_script, _filter_admit_script
+
+
 def get_filter_category_items(uid: str, category: str, limit: Optional[int] = None) -> List[str]:
     key = f'users:{uid}:filters:{category}'
     if limit:
@@ -479,7 +658,38 @@ def get_filter_category_items(uid: str, category: str, limit: Optional[int] = No
 
 
 def add_filter_category_item(uid: str, category: str, item: str) -> None:
-    r.sadd(f'users:{uid}:filters:{category}', item)
+    """SADD chat-search filter members with a 500-cap; SPOP-trim oversized sets.
+
+    Redis SETs have no insertion order. Trim is random, one batch per call.
+    Fail-open on Redis errors: never fall back to an uncapped SADD.
+    """
+    if category not in FILTER_CATEGORIES or not item:
+        return
+    key = f'users:{uid}:filters:{category}'
+    try:
+        trim, admit = _filter_category_scripts()
+        after, removed = trim(keys=[key], args=[FILTER_CATEGORY_CAP, FILTER_CATEGORY_TRIM_BATCH])
+        after_n = int(after)
+        removed_n = int(removed)
+        if removed_n:
+            logger.info('filter_category_trim removed=%s after=%s', removed_n, after_n)
+        if after_n < FILTER_CATEGORY_CAP:
+            admit(keys=[key], args=[item, FILTER_CATEGORY_CAP])
+    except redis.exceptions.RedisError:  # type: ignore[attr-defined]
+        try:
+            from utils.observability.fallback import record_fallback
+
+            record_fallback(
+                component='other',
+                from_mode='filter_sadd',
+                to_mode='skip',
+                reason='other',
+                outcome='degraded',
+                log=logger,
+            )
+        except Exception:
+            pass
+        return
 
 
 def save_migrated_retrieval_conversation_id(conversation_id: str) -> None:
@@ -500,6 +710,41 @@ def get_proactive_noti_sent_at(uid: str, app_id: str) -> Optional[int]:
 
 def get_proactive_noti_sent_at_ttl(uid: str, app_id: str) -> int:
     return r.ttl(f'{uid}:{app_id}:proactive_noti_sent_at')
+
+
+PROACTIVE_MESSAGE_CHANNEL = 'proactive_message:listen'
+
+
+@try_catch_decorator
+def publish_proactive_message(
+    uid: str, app_id: str, title: str, message: str, conversation_id: Optional[str] = None
+) -> None:
+    payload = {
+        'uid': uid,
+        'app_id': app_id,
+        'title': title,
+        'message': message,
+        'conversation_id': conversation_id,
+    }
+    r.publish(PROACTIVE_MESSAGE_CHANNEL, json.dumps(payload))
+
+
+_async_redis_client: Optional[Any] = None
+
+
+async def get_async_redis_client() -> Any:
+    global _async_redis_client
+    if _async_redis_client is None:
+        import redis.asyncio as _asyncio_redis
+
+        _async_redis_client = _asyncio_redis.Redis(
+            host=cast(str, _redis_host),
+            port=int(_redis_port_env) if _redis_port_env is not None else 6379,
+            username='default',
+            password=os.getenv('REDIS_DB_PASSWORD'),
+            decode_responses=True,
+        )
+    return _async_redis_client
 
 
 @try_catch_decorator
@@ -881,15 +1126,212 @@ end
 return {1, current, ttl}
 """)
 
-_RATE_LIMIT_RELEASE_LUA = r.register_script("""
+_RATE_LIMIT_RELEASE_LUA_SOURCE = """
 local key = KEYS[1]
-local current = tonumber(redis.call('GET', key) or '0')
+local current = tonumber(redis.call('GET', key) or '0') or 0
 if current <= 1 then
     redis.call('DEL', key)
     return 0
 end
-return redis.call('DECR', key)
-""")
+local remaining = tonumber(redis.call('DECR', key) or '0') or 0
+if remaining <= 0 then
+    redis.call('DEL', key)
+    return 0
+end
+return remaining
+"""
+_RATE_LIMIT_RELEASE_LUA = r.register_script(_RATE_LIMIT_RELEASE_LUA_SOURCE)
+
+# Proactive quota leases are separate from the legacy integer limiter above.
+# A pending provider call occupies a short-lived ZSET member; only a validated
+# success is finalized into the full daily window. If the process dies or a
+# request is cancelled before that point, the member expires without consuming
+# a full quota slot and is pruned atomically by the next reservation.
+PROACTIVE_QUOTA_LEASE_SECONDS = 90
+PROACTIVE_QUOTA_COMMITTED_WINDOW_SECONDS = 24 * 60 * 60
+_PROACTIVE_QUOTA_COMMITTED_PREFIX = 'committed:'
+
+_PROACTIVE_QUOTA_RESERVE_LUA_SOURCE = """
+local key = KEYS[1]
+local server_time = redis.call('TIME')
+local now_ms = tonumber(server_time[1]) * 1000 + math.floor(tonumber(server_time[2]) / 1000)
+local lease_ms = tonumber(ARGV[1])
+local window_seconds = tonumber(ARGV[2])
+local limit = tonumber(ARGV[3])
+local token = ARGV[4]
+
+redis.call('ZREMRANGEBYSCORE', key, '-inf', now_ms)
+local current = redis.call('ZCARD', key)
+local function reset_seconds()
+    local first = redis.call('ZRANGE', key, 0, 0, 'WITHSCORES')
+    if #first < 2 then
+        return 0
+    end
+    return math.max(0, math.ceil((tonumber(first[2]) - now_ms) / 1000))
+end
+
+if current >= limit then
+    return {0, current, reset_seconds(), ''}
+end
+
+redis.call('ZADD', key, now_ms + lease_ms, token)
+redis.call('EXPIRE', key, window_seconds)
+return {1, current + 1, reset_seconds(), token}
+"""
+_PROACTIVE_QUOTA_RESERVE_LUA = r.register_script(_PROACTIVE_QUOTA_RESERVE_LUA_SOURCE)
+
+_PROACTIVE_QUOTA_RENEW_LUA_SOURCE = """
+local key = KEYS[1]
+local server_time = redis.call('TIME')
+local now_ms = tonumber(server_time[1]) * 1000 + math.floor(tonumber(server_time[2]) / 1000)
+local lease_ms = tonumber(ARGV[1])
+local window_seconds = tonumber(ARGV[2])
+local token = ARGV[3]
+local committed_member = ARGV[4] .. token
+
+redis.call('ZREMRANGEBYSCORE', key, '-inf', now_ms)
+if redis.call('ZSCORE', key, committed_member) then
+    return {0, 0}
+end
+local score = redis.call('ZSCORE', key, token)
+if not score then
+    return {0, 0}
+end
+
+redis.call('ZADD', key, now_ms + lease_ms, token)
+redis.call('EXPIRE', key, window_seconds)
+local first = redis.call('ZRANGE', key, 0, 0, 'WITHSCORES')
+if #first < 2 then
+    return {1, 0}
+end
+return {1, math.max(0, math.ceil((tonumber(first[2]) - now_ms) / 1000))}
+"""
+_PROACTIVE_QUOTA_RENEW_LUA = r.register_script(_PROACTIVE_QUOTA_RENEW_LUA_SOURCE)
+
+_PROACTIVE_QUOTA_FINALIZE_LUA_SOURCE = """
+local key = KEYS[1]
+local server_time = redis.call('TIME')
+local now_ms = tonumber(server_time[1]) * 1000 + math.floor(tonumber(server_time[2]) / 1000)
+local window_ms = tonumber(ARGV[1])
+local window_seconds = tonumber(ARGV[2])
+local token = ARGV[3]
+local committed_member = ARGV[4] .. token
+
+redis.call('ZREMRANGEBYSCORE', key, '-inf', now_ms)
+local function reset_seconds()
+    local first = redis.call('ZRANGE', key, 0, 0, 'WITHSCORES')
+    if #first < 2 then
+        return 0
+    end
+    return math.max(0, math.ceil((tonumber(first[2]) - now_ms) / 1000))
+end
+
+local committed_score = redis.call('ZSCORE', key, committed_member)
+if committed_score then
+    return {1, reset_seconds()}
+end
+if not redis.call('ZSCORE', key, token) then
+    return {0, 0}
+end
+
+redis.call('ZREM', key, token)
+redis.call('ZADD', key, now_ms + window_ms, committed_member)
+redis.call('EXPIRE', key, window_seconds)
+return {1, reset_seconds()}
+"""
+_PROACTIVE_QUOTA_FINALIZE_LUA = r.register_script(_PROACTIVE_QUOTA_FINALIZE_LUA_SOURCE)
+
+_PROACTIVE_QUOTA_RELEASE_LUA_SOURCE = """
+local key = KEYS[1]
+local token = ARGV[1]
+return redis.call('ZREM', key, token)
+"""
+_PROACTIVE_QUOTA_RELEASE_LUA = r.register_script(_PROACTIVE_QUOTA_RELEASE_LUA_SOURCE)
+
+
+def _proactive_quota_key(key: str, policy: str) -> str:
+    return f'rl:proactive_lease:{policy}:{key}'
+
+
+def reserve_proactive_rate_limit(
+    key: str,
+    policy: str,
+    max_requests: int,
+    window: int,
+    *,
+    lease_seconds: int = PROACTIVE_QUOTA_LEASE_SECONDS,
+) -> tuple[bool, int, int, str | None]:
+    """Reserve a tokenized short lease for a proactive provider attempt.
+
+    The ZSET score is the member expiry in epoch milliseconds. The script
+    prunes expired pending/committed members and admits only when the active
+    plus committed count is below ``max_requests``. ``remaining`` and
+    ``reset_seconds`` are derived from that same atomic snapshot; reset is the
+    first member's expiry, so a caller can advertise when the next slot may
+    become available.
+    """
+    if max_requests <= 0 or window <= 0 or lease_seconds <= 0 or lease_seconds >= window:
+        raise ValueError('proactive quota limits and lease must be positive; lease must be below window')
+    token = secrets.token_urlsafe(24)
+    result = _PROACTIVE_QUOTA_RESERVE_LUA(
+        keys=[_proactive_quota_key(key, policy)],
+        args=[lease_seconds * 1000, window, max_requests, token],
+    )
+    allowed, current, reset_seconds, returned_token = result
+    admitted = bool(allowed)
+    token_value = _decode_redis_value(returned_token) if returned_token else None
+    return admitted, max(0, max_requests - int(current)), max(0, int(reset_seconds)), token_value
+
+
+def renew_proactive_rate_limit(
+    key: str,
+    policy: str,
+    token: str,
+    *,
+    window: int,
+    lease_seconds: int = PROACTIVE_QUOTA_LEASE_SECONDS,
+) -> tuple[bool, int]:
+    """Renew an active token lease; missing/committed tokens fail closed."""
+    if not token or window <= 0 or lease_seconds <= 0 or lease_seconds >= window:
+        return False, 0
+    result = _PROACTIVE_QUOTA_RENEW_LUA(
+        keys=[_proactive_quota_key(key, policy)],
+        args=[lease_seconds * 1000, window, token, _PROACTIVE_QUOTA_COMMITTED_PREFIX],
+    )
+    return bool(result[0]), max(0, int(result[1]))
+
+
+def finalize_proactive_rate_limit(
+    key: str,
+    policy: str,
+    token: str,
+    *,
+    window: int = PROACTIVE_QUOTA_COMMITTED_WINDOW_SECONDS,
+) -> tuple[bool, int]:
+    """Commit a successful token into the full daily window exactly once."""
+    if not token or window <= 0:
+        return False, 0
+    result = _PROACTIVE_QUOTA_FINALIZE_LUA(
+        keys=[_proactive_quota_key(key, policy)],
+        args=[
+            window * 1000,
+            window,
+            token,
+            _PROACTIVE_QUOTA_COMMITTED_PREFIX,
+        ],
+    )
+    return bool(result[0]), max(0, int(result[1]))
+
+
+def release_proactive_rate_limit(key: str, policy: str, token: str) -> bool:
+    """Release a pending token idempotently without undoing a committed success."""
+    if not token:
+        return False
+    removed = _PROACTIVE_QUOTA_RELEASE_LUA(
+        keys=[_proactive_quota_key(key, policy)],
+        args=[token],
+    )
+    return bool(removed)
 
 
 def check_rate_limit(key: str, policy: str, max_requests: int, window: int) -> tuple[bool, int, int]:
@@ -913,13 +1355,18 @@ def check_rate_limit(key: str, policy: str, max_requests: int, window: int) -> t
 
 
 def reserve_rate_limit(key: str, policy: str, max_requests: int, window: int) -> tuple[bool, int, int]:
-    """Atomically reserve one reversible slot without counting denied attempts."""
+    """Atomically reserve one reversible slot without counting denied attempts.
+
+    Returns ``(allowed, remaining, reset_seconds)``. ``reset_seconds`` is the
+    key TTL on both admit and deny so callers can advertise window reset without
+    a second Redis round-trip. Denied attempts still do not increment the counter.
+    """
     redis_key = f'rl:{policy}:{key}'
     admitted, current, ttl = _RATE_LIMIT_RESERVE_LUA(keys=[redis_key], args=[window, max_requests])
     allowed = bool(admitted)
     remaining = max(0, max_requests - current)
-    retry_after = max(0, ttl) if not allowed else 0
-    return allowed, remaining, retry_after
+    reset_seconds = max(0, int(ttl))
+    return allowed, remaining, reset_seconds
 
 
 def release_rate_limit(key: str, policy: str) -> None:
@@ -1057,6 +1504,16 @@ def set_speech_profile_duration(uid: str, duration: float) -> None:
     r.set(f'users:{uid}:speech_profile_duration', str(duration))
 
 
+@try_catch_decorator
+def get_speech_profile_duration(uid: str) -> Optional[float]:
+    """Read the cached speech profile duration in seconds (0.0 if unset; None if
+    the read itself fails, per try_catch_decorator's fail-open contract)."""
+    val = r.get(f'users:{uid}:speech_profile_duration')
+    if not val:
+        return 0.0
+    return float(val.decode() if isinstance(val, bytes) else val)
+
+
 # ******************************************************
 # ************ DAILY SUMMARY NOTIFICATIONS *************
 # ******************************************************
@@ -1127,6 +1584,80 @@ def try_acquire_daily_summary_lock(uid: str, date: str, ttl: int = 60 * 60 * 2) 
     return result is not None
 
 
+def try_acquire_daily_wear_lock(uid: str, date: str, ttl: int = 60 * 60 * 24) -> bool:
+    """At most one wear FCM per uid per UTC day. True iff this caller may send."""
+    result = r.set(f'users:{uid}:daily_wear_lock:{date}', '1', ex=ttl, nx=True)
+    return result is not None
+
+
+def release_daily_summary_lock(uid: str, date: str) -> None:
+    """Release a day lock this process took but did not spend on generation.
+
+    The 2h TTL exists to stop two workers doing the same LLM work, not to bar the day.
+    A holder that declines before the LLM call (no conversations yet, nothing transcribed)
+    has done nothing worth protecting, and keeping the key would block every later attempt
+    — including the on-demand button and the cron tick that would have caught the day once
+    it had content.
+    """
+    try:
+        r.delete(f'users:{uid}:daily_summary_lock:{date}')
+    except Exception as error:
+        logger.warning('Failed to release daily summary lock uid=%s date=%s: %s', uid, date, error)
+
+
+_NOTIFICATIONS_JOB_RUN_LOCK_KEY = 'notifications_job:run_lock'
+# Compare-and-delete: a late release from a timed-out execution must not drop a
+# newer run's lock. Same Lua shape as the rate-limit scripts above.
+_RELEASE_NOTIFICATIONS_JOB_RUN_LOCK_LUA = r.register_script("""
+if redis.call('get', KEYS[1]) == ARGV[1] then
+    return redis.call('del', KEYS[1])
+else
+    return 0
+end
+""")
+
+
+def try_acquire_notifications_job_run_lock(token: str, ttl: int = 55 * 60) -> bool:
+    """Acquire the hourly notifications-job run lock. True iff this caller owns it.
+
+    Cloud Scheduler fires hourly and the Cloud Run task timeout is 3600s, so two
+    executions can overlap. The lock lets an overlapping execution skip the
+    notification section instead of duplicating the pass.
+    """
+    result = r.set(_NOTIFICATIONS_JOB_RUN_LOCK_KEY, token, ex=ttl, nx=True)
+    return result is not None
+
+
+def release_notifications_job_run_lock(token: str) -> None:
+    """Release the run lock only if ``token`` still owns it.
+
+    The token keeps a late release from deleting a newer run's lock. Redis
+    errors are swallowed: the key expires via TTL.
+    """
+    try:
+        _RELEASE_NOTIFICATIONS_JOB_RUN_LOCK_LUA(keys=[_NOTIFICATIONS_JOB_RUN_LOCK_KEY], args=[token])
+    except Exception as error:
+        logger.warning('Failed to release notifications job run lock: %s', error)
+
+
+def try_acquire_x_sync_window_lock(date: str, window: int, ttl: int = 6 * 60 * 60 + 10 * 60) -> bool:
+    """At most one X-connector sweep per 6-hour window across job executions.
+
+    Cloud Scheduler fires every minute, so a whole sync hour of executions can
+    otherwise start overlapping full-registry sweeps. The key carries the UTC
+    date and window index (``hour // 6``); the TTL is one window plus a margin
+    so a crashed holder cannot black out the next window for long and stale
+    keys reap themselves. Fail-open on Redis errors: losing the lock degrades
+    to the previous always-run behavior instead of silently skipping syncs.
+    """
+    try:
+        result = r.set(f'notifications_job:x_sync_lock:{date}:{window}', '1', ex=ttl, nx=True)
+        return result is not None
+    except Exception as error:
+        logger.warning('notifications-job x-sync window lock unavailable, running sweep without dedupe: %s', error)
+        return True
+
+
 @try_catch_decorator
 def set_credits_invalidation_signal(uid: str, ttl: int = 120) -> None:
     """Signal active WebSocket sessions to refresh credits immediately.
@@ -1166,3 +1697,69 @@ def try_acquire_conversation_goal_lock(uid: str, conversation_id: str, ttl: int 
     """Idempotency lock: one goal extraction per conversation. Returns True if acquired."""
     result = r.set(f'users:{uid}:conv_goal_lock:{conversation_id}', '1', ex=ttl, nx=True)
     return result is not None
+
+
+def release_conversation_goal_lock(uid: str, conversation_id: str) -> None:
+    """Release a failed goal attempt so a durable first-open retry can rerun it."""
+    try:
+        r.delete(f'users:{uid}:conv_goal_lock:{conversation_id}')
+    except Exception as error:
+        logger.warning('Failed to release conversation goal lock uid=%s conv=%s: %s', uid, conversation_id, error)
+
+
+# ******************************************************
+# ************ SCREEN FRAME EGRESS (contract §5/§6) *****
+# ******************************************************
+
+
+def try_consume_screen_frame_jti(jti: str, ttl: int = APPROVAL_JTI_CONSUME_TTL_SECONDS) -> bool:
+    """Atomically consume a one-use approval jti. Returns True the first time a
+    given jti is seen, False on any replay. This is the writer's sole replay
+    defense (contract §5: "atomically consume jti (Redis SETNX with TTL)
+    before writing") — it must run before any bytes are written to GCS.
+    """
+    result = r.set(f'screen_frame:jti:{jti}', '1', ex=ttl, nx=True)
+    return result is not None
+
+
+def reserve_screen_frame_adjudication_attempt(
+    uid: str, purpose: str, attempt_id: str, fingerprint: str, ttl: int = 86400
+) -> Optional[str]:
+    """Atomically claim an (uid, purpose, attempt_id) idempotency slot.
+
+    Returns None if this is the first time this attempt has been seen (the
+    caller now owns processing it and must call
+    store_screen_frame_adjudication_response when done). Returns the
+    previously-stored fingerprint otherwise, so the caller can tell an
+    identical retry (same fingerprint — replay the stored response) from a
+    genuinely different request reusing the same attempt_id (different
+    fingerprint — 409).
+    """
+    key = f'screen_frame:adjudication:{uid}:{purpose}:{attempt_id}'
+    payload = _serialize_cache_value({'fingerprint': fingerprint, 'response': None})
+    claimed = r.set(key, payload, ex=ttl, nx=True)
+    if claimed:
+        return None
+    existing = _deserialize_cache_value(r.get(key))
+    if not isinstance(existing, dict):
+        return None
+    return existing.get('fingerprint')
+
+
+def get_screen_frame_adjudication_response(uid: str, purpose: str, attempt_id: str) -> Any:
+    """Return the stored response for a completed attempt, or None if the
+    attempt is unknown or still in flight (reserved but not yet stored)."""
+    key = f'screen_frame:adjudication:{uid}:{purpose}:{attempt_id}'
+    existing = _deserialize_cache_value(r.get(key))
+    if not isinstance(existing, dict):
+        return None
+    return existing.get('response')
+
+
+def store_screen_frame_adjudication_response(
+    uid: str, purpose: str, attempt_id: str, fingerprint: str, response: Any, ttl: int = 86400
+) -> None:
+    """Record the finished response for an attempt already reserved above."""
+    key = f'screen_frame:adjudication:{uid}:{purpose}:{attempt_id}'
+    payload = _serialize_cache_value({'fingerprint': fingerprint, 'response': response})
+    r.set(key, payload, ex=ttl)

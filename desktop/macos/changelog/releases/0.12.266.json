@@ -1,0 +1,9 @@
+{
+  "version": "0.12.266",
+  "date": "2026-09-02",
+  "changes": [
+    "Your daily summary now appears at the top of Chat — the day's headline, stats, highlights, and action items, with a one-tap follow-up question",
+    "The first app you open after setup now gets a notch card that opens Ask Omi with a question about your screen already typed",
+    "When Omi can't see your screen during a voice question, it now explains why — Screen Recording isn't granted, was granted after Omi launched and needs a reopen, or the screen just wasn't available — instead of flatly saying it couldn't verify the current screen."
+  ]
+}

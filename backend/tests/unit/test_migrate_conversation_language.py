@@ -57,6 +57,40 @@ def test_conversation_language_default_is_scoped_to_friend_source():
     assert CreateConversation(**values, source=ConversationSource.friend, language='fr').language == 'fr'
 
 
+def test_conversation_model_language_default_is_scoped_to_friend_source():
+    from models.conversation import Conversation
+    from models.structured import Structured
+
+    def conversation(source, language=None):
+        return Conversation(
+            id='conv-1',
+            created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            structured=Structured(title='t', overview='o', category='work'),
+            source=source,
+            language=language,
+        )
+
+    assert conversation(ConversationSource.omi).language is None
+    assert conversation(ConversationSource.desktop).language is None
+    assert conversation(ConversationSource.friend).language == 'en'
+    assert conversation(ConversationSource.friend_com).language == 'en'
+    assert conversation(ConversationSource.friend, '  ').language == 'en'
+    assert conversation(ConversationSource.friend, 'fr').language == 'fr'
+
+
+def test_external_integration_language_default_is_scoped_to_friend_source():
+    from models.conversation import ExternalIntegrationCreateConversation
+
+    def external(source, language=None):
+        return ExternalIntegrationCreateConversation(text='content', source=source, language=language)
+
+    assert external(ConversationSource.workflow).language is None
+    assert external(ConversationSource.external_integration).language is None
+    assert external(ConversationSource.friend).language == 'en'
+    assert external(ConversationSource.friend, '  ').language == 'en'
+    assert external(ConversationSource.friend, 'fr').language == 'fr'
+
+
 def test_worker_count_must_be_positive():
     with pytest.raises(ArgumentTypeError):
         migrate_conversation_language._positive_int('0')

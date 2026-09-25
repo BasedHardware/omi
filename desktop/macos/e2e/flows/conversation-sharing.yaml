@@ -5,6 +5,7 @@ description: Hermetic conversation share affordance probe (clipboard/native shar
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Components/ConversationShareLink.swift
   - desktop/macos/Desktop/Sources/APIClient.swift
   - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+ChatSessions.swift
   - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+ConversationModels.swift
@@ -19,7 +20,7 @@ steps:
       target: conversations
       activateApp: false
     wait:
-      state.selectedTabIndex: 1
+      state.chatFirstRoute: memories
 
   - id: S2
     name: Create hermetic capture conversation

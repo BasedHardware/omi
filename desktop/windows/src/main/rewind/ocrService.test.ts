@@ -15,7 +15,9 @@ vi.mock('../ipc/db', () => ({ unindexedRewindFrames: (n: number) => unindexedRew
 vi.mock('../ocr/helperProcess', () => ({
   helperProcess: { ocr: vi.fn(async () => ({ ok: true, fullText: 'x', lines: [] })) }
 }))
-vi.mock('./ocrPersist', () => ({ persistFrameOcr: (...args: unknown[]) => persistFrameOcr(...args) }))
+vi.mock('./ocrPersist', () => ({
+  persistFrameOcr: (...args: unknown[]) => persistFrameOcr(...args)
+}))
 vi.mock('./paths', () => ({ rewindRoot: () => boundaryState.root }))
 
 const boundaryState = vi.hoisted(() => ({
@@ -25,7 +27,12 @@ const boundaryState = vi.hoisted(() => ({
 }))
 
 import { helperProcess } from '../ocr/helperProcess'
-import { signalRewindOcrPending, __rewindOcrTestHooks } from './ocrService'
+import {
+  signalRewindOcrPending,
+  startRewindOcr,
+  stopRewindOcr,
+  __rewindOcrTestHooks
+} from './ocrService'
 
 const { backfill, setPending, getPending } = __rewindOcrTestHooks
 
@@ -84,6 +91,39 @@ describe('OCR backlog sweep — idle gate', () => {
   })
 })
 
+describe('startRewindOcr / stopRewindOcr — interval lifecycle', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    unindexedRewindFrames.mockReturnValue([])
+  })
+
+  afterEach(() => {
+    stopRewindOcr()
+    vi.useRealTimers()
+  })
+
+  it('startRewindOcr schedules a recurring backfill tick', async () => {
+    startRewindOcr()
+    await vi.advanceTimersByTimeAsync(4000)
+    expect(unindexedRewindFrames).toHaveBeenCalled()
+  })
+
+  // Regression: a tick firing on the interval after quit already tore the app
+  // down would lazily respawn the OCR helper into nothing that could kill it,
+  // orphaning it past app exit. stopRewindOcr() (called before
+  // helperProcess.dispose() in will-quit) must make that impossible by clearing
+  // the interval itself, not just relying on the helper's own dispose() guard.
+  it('stopRewindOcr clears the interval so no further tick can fire', async () => {
+    startRewindOcr()
+    stopRewindOcr()
+    unindexedRewindFrames.mockClear()
+
+    await vi.advanceTimersByTimeAsync(20000)
+
+    expect(unindexedRewindFrames).not.toHaveBeenCalled()
+  })
+})
+
 describe('Rewind OCR backfill boundary', () => {
   const tempPaths: string[] = []
 
@@ -129,7 +169,9 @@ describe('Rewind OCR backfill boundary', () => {
     await mkdir(outside)
     await writeFile(join(outside, '1.jpg'), Buffer.from('jpeg'))
     await symlink(outside, linked, process.platform === 'win32' ? 'junction' : 'dir')
-    boundaryState.frames = [{ id: 2, imagePath: join(linked, '1.jpg'), app: 'App', windowTitle: 'w' }]
+    boundaryState.frames = [
+      { id: 2, imagePath: join(linked, '1.jpg'), app: 'App', windowTitle: 'w' }
+    ]
     signalRewindOcrPending()
 
     await backfill()

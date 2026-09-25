@@ -16,6 +16,7 @@ from typing import Any, Callable, Dict, List, Optional
 import database.fair_use as fair_use_db
 import database.users as users_db
 from database.redis_db import r as redis_client
+from config.plan_catalog import FAIR_USE_PROFILE_LIMITS, UNLIMITED_TRANSCRIPTION_PLAN_TYPES
 from models.fair_use import SoftCapTrigger
 from models.users import PlanType
 from utils.subscription import has_transcription_credits, is_paid_plan
@@ -50,16 +51,26 @@ FAIR_USE_KILL_SWITCH = os.getenv('FAIR_USE_KILL_SWITCH', 'false').lower() == 'tr
 
 # Soft cap thresholds (milliseconds of real speech) — default tier (Free, Plus, and any
 # plan with a bounded monthly transcription allowance).
-FAIR_USE_DAILY_SPEECH_MS = int(os.getenv('FAIR_USE_DAILY_SPEECH_MS', '7200000'))  # 2h
-FAIR_USE_3DAY_SPEECH_MS = int(os.getenv('FAIR_USE_3DAY_SPEECH_MS', '28800000'))  # 8h
-FAIR_USE_WEEKLY_SPEECH_MS = int(os.getenv('FAIR_USE_WEEKLY_SPEECH_MS', '36000000'))  # 10h
+_METERED_FAIR_USE_DEFAULTS = FAIR_USE_PROFILE_LIMITS['metered_transcription']['speech_milliseconds']
+FAIR_USE_DAILY_SPEECH_MS = int(os.getenv('FAIR_USE_DAILY_SPEECH_MS', str(_METERED_FAIR_USE_DEFAULTS['rolling_day'])))
+FAIR_USE_3DAY_SPEECH_MS = int(
+    os.getenv('FAIR_USE_3DAY_SPEECH_MS', str(_METERED_FAIR_USE_DEFAULTS['rolling_three_days']))
+)
+FAIR_USE_WEEKLY_SPEECH_MS = int(os.getenv('FAIR_USE_WEEKLY_SPEECH_MS', str(_METERED_FAIR_USE_DEFAULTS['rolling_week'])))
 
 # Raised triggers for unlimited-transcription tiers (Unlimited/unlimited_v2, legacy Neo,
 # Operator, Architect). They pay for unlimited use, so scrutiny starts later. Kept in the
 # same burst-vs-sustained ratio as the default tier (~4x daily for 3-day, ~5x for weekly).
-FAIR_USE_DAILY_SPEECH_MS_UNLIMITED = int(os.getenv('FAIR_USE_DAILY_SPEECH_MS_UNLIMITED', '14400000'))  # 4h
-FAIR_USE_3DAY_SPEECH_MS_UNLIMITED = int(os.getenv('FAIR_USE_3DAY_SPEECH_MS_UNLIMITED', '57600000'))  # 16h
-FAIR_USE_WEEKLY_SPEECH_MS_UNLIMITED = int(os.getenv('FAIR_USE_WEEKLY_SPEECH_MS_UNLIMITED', '72000000'))  # 20h
+_UNLIMITED_FAIR_USE_DEFAULTS = FAIR_USE_PROFILE_LIMITS['unlimited_transcription']['speech_milliseconds']
+FAIR_USE_DAILY_SPEECH_MS_UNLIMITED = int(
+    os.getenv('FAIR_USE_DAILY_SPEECH_MS_UNLIMITED', str(_UNLIMITED_FAIR_USE_DEFAULTS['rolling_day']))
+)
+FAIR_USE_3DAY_SPEECH_MS_UNLIMITED = int(
+    os.getenv('FAIR_USE_3DAY_SPEECH_MS_UNLIMITED', str(_UNLIMITED_FAIR_USE_DEFAULTS['rolling_three_days']))
+)
+FAIR_USE_WEEKLY_SPEECH_MS_UNLIMITED = int(
+    os.getenv('FAIR_USE_WEEKLY_SPEECH_MS_UNLIMITED', str(_UNLIMITED_FAIR_USE_DEFAULTS['rolling_week']))
+)
 
 # Redis bucket granularity
 FAIR_USE_BUCKET_SECONDS = int(os.getenv('FAIR_USE_BUCKET_SECONDS', '60'))  # 1-min buckets
@@ -276,25 +287,24 @@ def get_rolling_backfill_speech_ms(uid: str) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-# Paid unlimited-transcription tiers get the raised fair-use triggers. Hardcoded (like
-# _platform_hidden_plans in utils.subscription) rather than derived from get_plan_limits so
-# utils.fair_use does not depend on utils.subscription.get_plan_limits at import time (that
-# import broke module-stubbing tests), and so a mis-set BASIC_TIER cap can never flip Free
-# into this set. Plus and Free carry a bounded monthly cap and stay on the default tier.
-_UNLIMITED_TRANSCRIPTION_PLANS = frozenset(
-    {PlanType.unlimited, PlanType.unlimited_v2, PlanType.operator, PlanType.architect}
-)
-
-
-def _is_unlimited_tier(plan: Optional[PlanType]) -> bool:
+# Paid unlimited-transcription tiers get the raised fair-use triggers. The membership set is
+# generated from each plan's catalog ``fair_use_profile``; it is deliberately independent of
+# subscription quota overlays so a mis-set BASIC_TIER cap can never flip Free into this set.
+def _is_unlimited_tier(plan: Optional[PlanType | str]) -> bool:
     """True for paid unlimited-transcription tiers (Unlimited/unlimited_v2, legacy Neo,
     Operator, Architect) — the plans whose monthly transcription allowance is unbounded.
     Free and Plus (bounded monthly cap) stay on the default tier. Robust to ``None`` and to
     plans passed as raw strings (PlanType is a str enum)."""
-    return plan in _UNLIMITED_TRANSCRIPTION_PLANS
+    if plan is None:
+        return False
+    try:
+        normalized_plan = PlanType(plan)
+    except (TypeError, ValueError) as error:
+        raise ValueError(f'unknown catalog plan for fair-use classification: {plan!r}') from error
+    return normalized_plan in UNLIMITED_TRANSCRIPTION_PLAN_TYPES
 
 
-def fair_use_caps_for_plan(plan: Optional[PlanType] = None) -> tuple[int, int, int]:
+def fair_use_caps_for_plan(plan: Optional[PlanType | str] = None) -> tuple[int, int, int]:
     """Return the (daily_ms, three_day_ms, weekly_ms) soft-cap triggers for a plan.
 
     Unlimited-tier plans get the raised triggers; everyone else gets the default tier.

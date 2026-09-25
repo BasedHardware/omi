@@ -180,6 +180,19 @@ def test_check_only_does_not_propose_duplicate_creation_for_nonready_index(tmp_p
     assert proposal['blocking_indexes'][0]['state'] == 'CREATING'
 
 
+def test_missing_real_multifield_index_remains_blocking_after_document_id_exception():
+    manifest = firebase_index_manifest()
+    multi_field = next(index for index in manifest['indexes'] if len(index['fields']) > 1)
+    signature = reconcile_firestore_indexes._index_signature(multi_field)
+
+    assert reconcile_firestore_indexes.expected_index_states(
+        expected={signature},
+        live_indexes=[],
+        project='dev-project',
+        database='(default)',
+    ) == {signature: 'MISSING'}
+
+
 def test_schema_proposal_input_hash_is_stable_across_generation_times(tmp_path):
     manifest = firebase_index_manifest()
     states = {signature: 'MISSING' for signature in reconcile_firestore_indexes.expected_index_signatures(manifest)}
@@ -694,3 +707,95 @@ def test_reconcile_rejects_a_manifest_that_drifted_from_the_registry(tmp_path):
 
     with pytest.raises(ValueError, match='not generated'):
         reconcile_firestore_indexes.verify_manifest_source(path)
+
+
+def _unmanaged_live_index(collection_group='ghost_collection'):
+    return {
+        'name': (f'projects/dev-project/databases/(default)/collectionGroups/{collection_group}/indexes/hand-made-id'),
+        'queryScope': 'COLLECTION',
+        'fields': [
+            {'fieldPath': 'updated_at', 'order': 'DESCENDING'},
+            {'fieldPath': '__name__', 'order': 'ASCENDING'},
+        ],
+        'state': 'READY',
+    }
+
+
+def test_check_only_reports_live_indexes_the_manifest_does_not_declare(capsys, tmp_path):
+    # Reconciliation is create-only, so an index dropped from the manifest or
+    # created by hand in the console during an incident survives with nothing
+    # pointing at it. Deleting it automatically would break a still-serving
+    # older revision, so the readiness gate reports the drift instead.
+    def runner(command, **_kwargs):
+        assert command[:5] == ['gcloud', 'firestore', 'indexes', 'composite', 'list']
+        return SimpleNamespace(returncode=0, stdout=json.dumps([*_ready_indexes(), _unmanaged_live_index()]))
+
+    reconcile_firestore_indexes.reconcile(
+        project='dev-project',
+        database='(default)',
+        manifest_path=Path(__file__).resolve().parents[3] / 'firestore.indexes.json',
+        timeout_seconds=30,
+        poll_interval_seconds=1,
+        check_only=True,
+        proposal_output=tmp_path / 'proposal.json',
+        source_commit=SOURCE_COMMIT,
+        runner=runner,
+    )
+
+    output = capsys.readouterr().out
+    assert '::warning title=Unmanaged Firestore index::' in output
+    assert 'ghost_collection' in output
+    # Drift is reported, never blocking: readiness still passed.
+    assert 'Firestore index readiness passed' in output
+    assert not (tmp_path / 'proposal.json').exists()
+
+
+def test_manifest_declared_indexes_are_never_reported_as_unmanaged(capsys):
+    def runner(command, **_kwargs):
+        return SimpleNamespace(returncode=0, stdout=json.dumps(_ready_indexes()))
+
+    reconcile_firestore_indexes.reconcile(
+        project='dev-project',
+        database='(default)',
+        manifest_path=Path(__file__).resolve().parents[3] / 'firestore.indexes.json',
+        timeout_seconds=30,
+        poll_interval_seconds=1,
+        dry_run=True,
+        runner=runner,
+    )
+
+    assert 'Unmanaged Firestore index' not in capsys.readouterr().out
+
+
+def test_implicit_terminal_document_id_alias_is_not_reported_as_unmanaged():
+    manifest_entry = {
+        'collectionGroup': 'memories',
+        'queryScope': 'COLLECTION',
+        'fields': [
+            {'fieldPath': 'uid', 'order': 'ASCENDING'},
+            {'fieldPath': 'created_at', 'order': 'DESCENDING'},
+        ],
+    }
+    expected = reconcile_firestore_indexes.expected_index_signatures({'indexes': [manifest_entry]})
+    live = reconcile_firestore_indexes.LiveIndex(
+        resource_name='projects/p/databases/(default)/collectionGroups/memories/indexes/id',
+        signature=(
+            'memories',
+            'COLLECTION',
+            (('uid', 'ASCENDING'), ('created_at', 'DESCENDING'), ('__name__', 'DESCENDING')),
+        ),
+        state='READY',
+    )
+
+    assert reconcile_firestore_indexes.unmanaged_live_indexes(expected=expected, live_indexes=[live]) == []
+
+
+def test_datastore_mode_indexes_are_not_reported_as_unmanaged_native_drift():
+    live = reconcile_firestore_indexes.LiveIndex(
+        resource_name='projects/p/databases/(default)/collectionGroups/legacy/indexes/id',
+        signature=('legacy', 'COLLECTION', (('a', 'ASCENDING'), ('b', 'ASCENDING'))),
+        state='READY',
+        api_scope='DATASTORE_MODE_API',
+    )
+
+    assert reconcile_firestore_indexes.unmanaged_live_indexes(expected=set(), live_indexes=[live]) == []

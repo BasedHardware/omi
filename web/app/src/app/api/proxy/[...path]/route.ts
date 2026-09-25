@@ -1,53 +1,60 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { moonshineJson } from '@tschk/moonshine-next/server';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.omi.me';
+
+const FORWARDED_RESPONSE_HEADERS = [
+  'X-Omi-Memory-As-Of',
+  'X-Omi-Memory-Belief-Enabled',
+  'X-Omi-Memory-Canonical-Lifecycle-Exposed',
+  'X-Omi-Memory-Default-Delete-Supported',
+  'X-Omi-Memory-Device-Scope-Supported',
+  'X-Omi-Memory-Next-Cursor',
+  'X-Omi-List-Truncated',
+];
+
+function forwardedResponseHeaders(response: Response, initial?: HeadersInit): Headers {
+  const headers = new Headers(initial);
+  for (const name of FORWARDED_RESPONSE_HEADERS) {
+    const value = response.headers.get(name);
+    if (value !== null) {
+      headers.set(name, value);
+    }
+  }
+  return headers;
+}
 
 /**
  * API Proxy to avoid CORS issues during development
  * Forwards requests from /api/proxy/* to https://api.omi.me/*
  */
-export async function GET(
-  request: NextRequest,
-  { params }: { params: Promise<{ path: string[] }> },
-) {
-  return handleRequest(request, await params);
+export async function GET(request: Request) {
+  return handleRequest(request);
 }
 
-export async function POST(
-  request: NextRequest,
-  { params }: { params: Promise<{ path: string[] }> },
-) {
-  return handleRequest(request, await params);
+export async function POST(request: Request) {
+  return handleRequest(request);
 }
 
-export async function PATCH(
-  request: NextRequest,
-  { params }: { params: Promise<{ path: string[] }> },
-) {
-  return handleRequest(request, await params);
+export async function PATCH(request: Request) {
+  return handleRequest(request);
 }
 
-export async function DELETE(
-  request: NextRequest,
-  { params }: { params: Promise<{ path: string[] }> },
-) {
-  return handleRequest(request, await params);
+export async function DELETE(request: Request) {
+  return handleRequest(request);
 }
 
-async function handleRequest(request: NextRequest, params: { path: string[] }) {
+async function handleRequest(request: Request) {
   try {
-    const path = params.path.join('/');
-    const searchParams = request.nextUrl.searchParams.toString();
+    const requestUrl = new URL(request.url);
+    const path = requestUrl.pathname.slice('/api/proxy/'.length);
+    const searchParams = requestUrl.searchParams.toString();
     const url = `${API_BASE_URL}/${path}${searchParams ? `?${searchParams}` : ''}`;
 
     // Get auth header from incoming request
     const authHeader = request.headers.get('Authorization');
 
     if (!authHeader) {
-      return NextResponse.json(
-        { error: 'Authorization header required' },
-        { status: 401 },
-      );
+      return moonshineJson({ error: 'Authorization header required' }, { status: 401 });
     }
 
     // Check if this is a multipart form data request
@@ -59,14 +66,18 @@ async function handleRequest(request: NextRequest, params: { path: string[] }) {
       Authorization: authHeader,
     };
 
-    // Forward custom headers for FCM token registration
+    // Forward custom headers for FCM token registration and create retries
     const appPlatform = request.headers.get('X-App-Platform');
     const deviceIdHash = request.headers.get('X-Device-Id-Hash');
+    const idempotencyKey = request.headers.get('Idempotency-Key');
     if (appPlatform) {
       headers['X-App-Platform'] = appPlatform;
     }
     if (deviceIdHash) {
       headers['X-Device-Id-Hash'] = deviceIdHash;
+    }
+    if (idempotencyKey) {
+      headers['Idempotency-Key'] = idempotencyKey;
     }
 
     if (!isMultipart && request.method !== 'GET') {
@@ -100,35 +111,21 @@ async function handleRequest(request: NextRequest, params: { path: string[] }) {
 
     // Handle 204 No Content responses (common for DELETE)
     if (response.status === 204) {
-      return new NextResponse(null, { status: 204 });
+      return new Response(null, { status: 204 });
     }
 
     // Get response data
     const responseContentType = response.headers.get('content-type');
 
-    // Handle streaming responses (for chat)
-    if (
-      responseContentType?.includes('text/event-stream') ||
-      responseContentType?.includes('text/plain')
-    ) {
-      const text = await response.text();
-      return new NextResponse(text, {
-        status: response.status,
-        headers: {
-          'Content-Type': responseContentType || 'text/plain',
-        },
-      });
-    }
-
     // Handle download/streaming responses (e.g., data export) — pass body through without buffering
     const contentDisposition = response.headers.get('content-disposition');
     if (contentDisposition) {
-      return new NextResponse(response.body, {
+      return new Response(response.body, {
         status: response.status,
-        headers: {
+        headers: forwardedResponseHeaders(response, {
           'Content-Type': responseContentType || 'application/octet-stream',
           'Content-Disposition': contentDisposition,
-        },
+        }),
       });
     }
 
@@ -148,22 +145,27 @@ async function handleRequest(request: NextRequest, params: { path: string[] }) {
           'public, max-age=3600, stale-while-revalidate=86400';
       }
 
-      return NextResponse.json(data, {
+      return moonshineJson(data, {
         status: response.status,
-        headers: cacheHeaders,
+        headers: forwardedResponseHeaders(response, cacheHeaders),
       });
     }
 
-    // Default: return as text
-    const data = await response.text();
-    return new NextResponse(data, {
+    // Default: stream the body through untouched. Reading it as text would
+    // decode binary payloads (e.g. /v1/static-map PNGs) as UTF-8 and corrupt them.
+    const passthroughHeaders: HeadersInit = {
+      'Content-Type': responseContentType || 'text/plain',
+    };
+    const cacheControl = response.headers.get('cache-control');
+    if (cacheControl) {
+      passthroughHeaders['Cache-Control'] = cacheControl;
+    }
+    return new Response(response.body, {
       status: response.status,
-      headers: {
-        'Content-Type': responseContentType || 'text/plain',
-      },
+      headers: forwardedResponseHeaders(response, passthroughHeaders),
     });
   } catch (error) {
     console.error('Proxy error:', error);
-    return NextResponse.json({ error: 'Proxy request failed' }, { status: 500 });
+    return moonshineJson({ error: 'Proxy request failed' }, { status: 500 });
   }
 }

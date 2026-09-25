@@ -55,7 +55,7 @@ class DevelopmentWifPilotFixture(unittest.TestCase):
         }
 
     def test_checked_in_pilot_contract_passes(self) -> None:
-        self.assertEqual(CHECKER.main(), 0)
+        self.assertEqual(CHECKER.main([]), 0)
 
     def test_bootstrap_rejects_broad_or_secret_access(self) -> None:
         source = CHECKER.read(CHECKER.BOOTSTRAP)

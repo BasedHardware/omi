@@ -3,7 +3,10 @@ import Foundation
 
 @MainActor
 enum TaskDetailSourceNavigator {
-  static func open(_ route: TaskDetailSourceRoute) {
+  static func open(
+    _ route: TaskDetailSourceRoute,
+    rewindLease: RewindEvidenceCardLease? = nil
+  ) {
     switch route {
     case .conversation(let id), .capture(let id):
       ConversationDetailAutomationState.shared.requestOpen(conversationId: id, showTranscript: false)
@@ -26,6 +29,16 @@ enum TaskDetailSourceNavigator {
         )
       }
     case .rewind:
+      NotificationCenter.default.post(name: .navigateToRewind, object: nil)
+    case .rewindFrame(let id):
+      guard let rewindLease,
+        RewindEvidenceCardResolutionPolicy.leaseIsCurrent(
+          rewindLease,
+          screenshotID: id,
+          currentOwner: RewindCaptureOwnerSnapshot.capture()
+        )
+      else { return }
+      RewindCitationFocusState.shared.request(id)
       NotificationCenter.default.post(name: .navigateToRewind, object: nil)
     case .external(let url):
       NSWorkspace.shared.open(url)

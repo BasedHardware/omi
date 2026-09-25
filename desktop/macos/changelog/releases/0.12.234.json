@@ -1,0 +1,7 @@
+{
+  "version": "0.12.234",
+  "date": "2026-08-28",
+  "changes": [
+    "Chat's execute_sql tool now renders timestamp/*At columns in your local time zone instead of unlabeled UTC"
+  ]
+}

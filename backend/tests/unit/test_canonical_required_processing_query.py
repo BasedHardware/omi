@@ -5,7 +5,10 @@ from typing import Any
 
 from models.memory_evidence import SourceState
 from models.product_memory import MemoryItem, MemoryItemStatus, MemoryLayer, ProcessingState
-from utils.memory.canonical_required_processing import list_pending_required_processing_items
+from utils.memory.canonical_required_processing import (
+    list_pending_required_processing_items,
+    run_required_memory_processing,
+)
 from utils.memory.required_promotion import (
     REQUIRED_PROCESSING_STATUS_PENDING,
     REQUIRED_PROCESSING_STATUS_REJECTED,
@@ -204,3 +207,13 @@ def test_terminal_negative_reviews_cannot_starve_later_required_processing() -> 
     assert [item.memory_id for item in pending] == ["z-eligible"]
     assert db.stream_limit == 4
     assert db.streamed_count == 1
+
+
+def test_required_processing_limit_zero_does_not_query() -> None:
+    class _Boom:
+        def collection(self, _path):
+            raise AssertionError("limit=0 must not scan required-processing items")
+
+    report = run_required_memory_processing("uid-zero", db_client=_Boom(), limit=0)
+    assert report.attempted_count == 0
+    assert report.processed_memory_ids == []

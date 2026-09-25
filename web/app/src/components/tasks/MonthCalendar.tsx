@@ -85,15 +85,11 @@ export function MonthCalendar({
   });
 
   const goToPreviousMonth = () => {
-    setCurrentMonth(
-      new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1)
-    );
+    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() - 1, 1));
   };
 
   const goToNextMonth = () => {
-    setCurrentMonth(
-      new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1)
-    );
+    setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + 1, 1));
   };
 
   const goToToday = () => {
@@ -102,16 +98,16 @@ export function MonthCalendar({
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
-    e.currentTarget.classList.add('ring-2', 'ring-purple-primary');
+    e.currentTarget.classList.add('ring-2', 'ring-white');
   };
 
   const handleDragLeave = (e: React.DragEvent) => {
-    e.currentTarget.classList.remove('ring-2', 'ring-purple-primary');
+    e.currentTarget.classList.remove('ring-2', 'ring-white');
   };
 
   const handleDrop = (e: React.DragEvent, date: Date) => {
     e.preventDefault();
-    e.currentTarget.classList.remove('ring-2', 'ring-purple-primary');
+    e.currentTarget.classList.remove('ring-2', 'ring-white');
     const taskId = e.dataTransfer.getData('taskId');
     if (taskId && onDropTask) {
       onDropTask(date, taskId);
@@ -131,7 +127,7 @@ export function MonthCalendar({
             className={cn(
               'px-2 py-1 text-xs rounded',
               'text-text-tertiary hover:text-text-secondary hover:bg-bg-quaternary',
-              'transition-colors'
+              'transition-colors',
             )}
           >
             Today
@@ -141,7 +137,7 @@ export function MonthCalendar({
             className={cn(
               'p-1 rounded',
               'text-text-tertiary hover:text-text-secondary hover:bg-bg-quaternary',
-              'transition-colors'
+              'transition-colors',
             )}
           >
             <ChevronLeft className="w-4 h-4" />
@@ -151,7 +147,7 @@ export function MonthCalendar({
             className={cn(
               'p-1 rounded',
               'text-text-tertiary hover:text-text-secondary hover:bg-bg-quaternary',
-              'transition-colors'
+              'transition-colors',
             )}
           >
             <ChevronRight className="w-4 h-4" />
@@ -176,11 +172,11 @@ export function MonthCalendar({
         {calendarDays.map((date, index) => {
           const isCurrentMonth = date.getMonth() === currentMonth.getMonth();
           const isToday = date.toDateString() === today.toDateString();
-          const isSelected =
-            selectedDate?.toDateString() === date.toDateString();
+          const isSelected = selectedDate?.toDateString() === date.toDateString();
           const taskData = taskMap.get(date.toDateString());
           const hasTasks = taskData && (taskData.pending > 0 || taskData.completed > 0);
-          const allCompleted = taskData && taskData.pending === 0 && taskData.completed > 0;
+          const allCompleted =
+            taskData && taskData.pending === 0 && taskData.completed > 0;
 
           return (
             <motion.button
@@ -198,9 +194,9 @@ export function MonthCalendar({
                 isCurrentMonth
                   ? 'text-text-secondary'
                   : 'text-text-quaternary opacity-40',
-                isToday && 'bg-purple-primary/10 text-purple-primary font-semibold',
-                isSelected && 'ring-2 ring-purple-primary',
-                !isToday && isCurrentMonth && 'hover:bg-bg-quaternary'
+                isToday && 'bg-white/10 text-white font-semibold',
+                isSelected && 'ring-2 ring-white',
+                !isToday && isCurrentMonth && 'hover:bg-bg-quaternary',
               )}
             >
               {/* Day number */}
@@ -215,7 +211,7 @@ export function MonthCalendar({
                     <span
                       className={cn(
                         'text-[9px] font-medium',
-                        isToday ? 'text-purple-primary' : 'text-purple-primary'
+                        isToday ? 'text-white' : 'text-white',
                       )}
                     >
                       {taskData.pending}

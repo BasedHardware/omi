@@ -35,6 +35,20 @@ The app runs a local HTTP control bridge (`DesktopAutomationBridge.swift`) that 
 ```
 Disable with `OMI_DISABLE_LOCAL_AUTOMATION=1` to run a dev build "clean". Running several named bundles at once? Give each its own `OMI_AUTOMATION_PORT` (default 47777).
 
+Before treating evidence as belonging to the current checkout, inspect the
+running artifact itself:
+```bash
+./scripts/omi-ctl health | python3 -c 'import json,sys; print(json.load(sys.stdin)["sourceIdentity"])'
+# {"schemaVersion": 1, "revision": "<40-char commit>", "workingTreeState": "clean"|"dirty"}
+```
+`unknown` means the bundle predates (or has malformed) generated metadata and
+must not support a source-specific verification claim. The tiered desktop
+harness compares this receipt with its checkout and fails on a stale revision
+or mismatched dirty state; it never substitutes the review checkout's SHA for
+the running bundle's identity.
+
+**Headless, with full permissions:** a fresh named bundle has no TCC grants and no agent can click the dialogs. Lease a pre-authorized pool slot instead — `./scripts/omi-e2e-pool acquire && eval "$(./scripts/omi-e2e-pool env)"` then `./run.sh --yolo --fast-only`; `./scripts/omi-e2e-pool check` fails fast on a missing grant; `release` when done. `run.sh` refuses to build a slot you do not hold. Setup and lease semantics: [`../docs/e2e-bundle-pool.md`](../docs/e2e-bundle-pool.md).
+
 ### 2a. Desktop core E2E harness (tiered)
 Primary entry for the desktop confidence ladder: `scripts/desktop-core-harness.sh` (see `e2e/CORE_E2E.md`).
 ```bash
@@ -54,6 +68,10 @@ deterministic equivalent of the Flutter app's Marionette driver). Prefer these o
 ./scripts/omi-ctl action refresh_all_data          # same as Cmd+R
 ./scripts/omi-ctl action toggle_transcription enabled=false
 ```
+Action parameters are string-valued `key=value` arguments. Quote each argument
+for your shell; the CLI JSON-encodes quotes, backslashes, Unicode, and newlines
+without changing the value (for example, `'query=Find "release notes"'`).
+
 `omi-ctl actions` returns descriptors with `category`, `surfaces`, `safety`,
 `sideEffects`, `examples`, and `preferSemantic`. Scan those fields before using
 `agent-swift`: prefer actions whose `surfaces` match the screen and whose
@@ -184,11 +202,11 @@ the read-only `defaults read` in `auth-06`.
 The HTTP fault harness (§2c) can't stall the **agent** stream — that's a node/stdio
 bridge, not HTTP. Two non-prod bridge actions freeze it so the chat stall path can be
 exercised end-to-end (CHAT-02): a slow/stalled annotation at 8s/20s (`StallDetector`),
-and ChatProvider's **180s send watchdog** which force-releases `isSending` and surfaces
+and ChatProvider's **60s send watchdog** which force-releases `isSending` and surfaces
 "Response took too long. Try again." (recoverable — the next send works).
 
 - `suspend_agent_stream` — SIGSTOP the agent process so it emits no events; `durationMs`
-  (default `190000`, just past the 180s watchdog; capped at `300000`) auto-resumes it, so
+  (default `70000`, just past the 60s watchdog; capped at `300000`) auto-resumes it, so
   a forgotten resume can never wedge the agent.
 - `resume_agent_stream` — SIGCONT immediately (early clear).
 
@@ -199,10 +217,10 @@ cd desktop/macos
 # 1. start a chat turn so a send is in flight
 ./scripts/omi-ctl action ask query="write a long detailed answer" &
 sleep 2
-# 2. freeze the agent stream past the 180s watchdog
-./scripts/omi-ctl action suspend_agent_stream durationMs=190000
-# 3. within <=180s the send watchdog fires: assert the error + that sending is released
-sleep 185
+# 2. freeze the agent stream past the 60s watchdog
+./scripts/omi-ctl action suspend_agent_stream durationMs=70000
+# 3. within <=60s the send watchdog fires: assert the error + that sending is released
+sleep 65
 ./scripts/omi-ctl action main_chat_snapshot | python3 -c 'import json,sys; d=json.load(sys.stdin)["result"]; print("error:", d.get("has_error"), d.get("error_message")); print("is_sending:", d.get("is_sending"))'
 #   expect has_error=true / "Response took too long…" and is_sending=false (recoverable)
 # 4. resume + prove recovery with a fresh turn
@@ -533,7 +551,7 @@ Reference flows in `desktop/macos/e2e/flows/*.yaml` describe the app's key user 
 | `flows/language.yaml` | Settings → Transcription language config | 5 | Language mode toggle, voice assistant languages |
 | `flows/screen-recording-permission.yaml` | Rewind permission flow | 7 | Grant Permission button, Capture status |
 | `flows/audio-recording.yaml` | Audio capture, mic source, transcription | 7 | Start/Stop Recording, BT/mic selection |
-| `flows/refer-external.yaml` | Refer a Friend | 3 | Profile → affiliate URL |
+| `flows/refer-external.yaml` | Refer a Friend | 3 | Top bar + Settings → copy unique link |
 | `flows/recording-finalization.yaml` | Recording lifecycle | 7 | Transcription storage, conversation detail |
 
 When you modify a Swift file, check if any flow's `covers:` includes it. That flow describes the user journey your change affects.

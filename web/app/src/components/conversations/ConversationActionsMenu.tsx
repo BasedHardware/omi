@@ -8,6 +8,7 @@ import { deleteConversation, reprocessConversation } from '@/lib/api';
 import type { Conversation, TranscriptSegment } from '@/types/conversation';
 import type { Person } from '@/types/user';
 import { MixpanelManager } from '@/lib/analytics/mixpanel';
+import { selectConversationSummary } from '@/lib/conversationSummarySelection';
 
 interface ConversationActionsMenuProps {
   conversation: Conversation;
@@ -43,15 +44,8 @@ function generateTranscript(segments: TranscriptSegment[], people?: Person[]): s
     .join('\n\n');
 }
 
-/**
- * Get summary content (prioritize app results, fallback to overview)
- */
 function getSummaryContent(conversation: Conversation): string {
-  const apps = conversation.apps_results;
-  if (apps && apps.length > 0 && apps[0].content?.trim()) {
-    return apps[0].content.trim();
-  }
-  return conversation.structured.overview || '';
+  return selectConversationSummary(conversation).content;
 }
 
 export function ConversationActionsMenu({
@@ -143,13 +137,13 @@ export function ConversationActionsMenu({
       <button
         onClick={() => setIsOpen(!isOpen)}
         className={cn(
-          'p-2 rounded-lg transition-colors',
-          'hover:bg-bg-tertiary text-text-secondary hover:text-text-primary',
+          'rounded-lg p-2 transition-colors',
+          'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary',
           isOpen && 'bg-bg-tertiary text-text-primary',
         )}
         aria-label="Conversation actions"
       >
-        <MoreVertical className="w-5 h-5" />
+        <MoreVertical className="h-5 w-5" />
       </button>
 
       {/* Dropdown menu */}
@@ -161,9 +155,9 @@ export function ConversationActionsMenu({
             exit={{ opacity: 0, scale: 0.95, y: -10 }}
             transition={{ duration: 0.15 }}
             className={cn(
-              'absolute right-0 top-full mt-2 z-50',
-              'min-w-[200px] py-2 rounded-xl',
-              'bg-bg-secondary border border-bg-tertiary shadow-xl',
+              'absolute right-0 top-full z-50 mt-2',
+              'min-w-[200px] rounded-xl py-2',
+              'border border-bg-tertiary bg-bg-secondary shadow-xl',
             )}
           >
             {/* Copy Transcript */}
@@ -171,15 +165,15 @@ export function ConversationActionsMenu({
               <button
                 onClick={handleCopyTranscript}
                 className={cn(
-                  'w-full flex items-center gap-3 px-4 py-2.5',
+                  'flex w-full items-center gap-3 px-4 py-2.5',
                   'text-sm text-text-secondary hover:text-text-primary',
-                  'hover:bg-bg-tertiary transition-colors',
+                  'transition-colors hover:bg-bg-tertiary',
                 )}
               >
                 {copiedItem === 'transcript' ? (
-                  <Check className="w-4 h-4 text-success" />
+                  <Check className="h-4 w-4 text-success" />
                 ) : (
-                  <Copy className="w-4 h-4" />
+                  <Copy className="h-4 w-4" />
                 )}
                 <span>{copiedItem === 'transcript' ? 'Copied!' : 'Copy Transcript'}</span>
               </button>
@@ -190,15 +184,15 @@ export function ConversationActionsMenu({
               <button
                 onClick={handleCopySummary}
                 className={cn(
-                  'w-full flex items-center gap-3 px-4 py-2.5',
+                  'flex w-full items-center gap-3 px-4 py-2.5',
                   'text-sm text-text-secondary hover:text-text-primary',
-                  'hover:bg-bg-tertiary transition-colors',
+                  'transition-colors hover:bg-bg-tertiary',
                 )}
               >
                 {copiedItem === 'summary' ? (
-                  <Check className="w-4 h-4 text-success" />
+                  <Check className="h-4 w-4 text-success" />
                 ) : (
-                  <FileText className="w-4 h-4" />
+                  <FileText className="h-4 w-4" />
                 )}
                 <span>{copiedItem === 'summary' ? 'Copied!' : 'Copy Summary'}</span>
               </button>
@@ -215,13 +209,13 @@ export function ConversationActionsMenu({
                 onClick={handleReprocess}
                 disabled={isReprocessing}
                 className={cn(
-                  'w-full flex items-center gap-3 px-4 py-2.5',
+                  'flex w-full items-center gap-3 px-4 py-2.5',
                   'text-sm text-text-secondary hover:text-text-primary',
-                  'hover:bg-bg-tertiary transition-colors',
-                  'disabled:opacity-50 disabled:cursor-not-allowed',
+                  'transition-colors hover:bg-bg-tertiary',
+                  'disabled:cursor-not-allowed disabled:opacity-50',
                 )}
               >
-                <RefreshCw className={cn('w-4 h-4', isReprocessing && 'animate-spin')} />
+                <RefreshCw className={cn('h-4 w-4', isReprocessing && 'animate-spin')} />
                 <span>
                   {isReprocessing ? 'Reprocessing...' : 'Reprocess Conversation'}
                 </span>
@@ -234,20 +228,20 @@ export function ConversationActionsMenu({
             {/* Delete */}
             {showDeleteConfirm ? (
               <div className="px-4 py-2">
-                <p className="text-sm text-text-secondary mb-2">
+                <p className="mb-2 text-sm text-text-secondary">
                   Delete this conversation?
                 </p>
                 <div className="flex gap-2">
                   <button
                     onClick={() => setShowDeleteConfirm(false)}
-                    className="flex-1 px-3 py-1.5 text-sm rounded-lg bg-bg-tertiary text-text-secondary hover:text-text-primary transition-colors"
+                    className="flex-1 rounded-lg bg-bg-tertiary px-3 py-1.5 text-sm text-text-secondary transition-colors hover:text-text-primary"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={handleDelete}
                     disabled={isDeleting}
-                    className="flex-1 px-3 py-1.5 text-sm rounded-lg bg-error/20 text-error hover:bg-error/30 transition-colors disabled:opacity-50"
+                    className="flex-1 rounded-lg bg-error/20 px-3 py-1.5 text-sm text-error transition-colors hover:bg-error/30 disabled:opacity-50"
                   >
                     {isDeleting ? 'Deleting...' : 'Delete'}
                   </button>
@@ -257,12 +251,12 @@ export function ConversationActionsMenu({
               <button
                 onClick={() => setShowDeleteConfirm(true)}
                 className={cn(
-                  'w-full flex items-center gap-3 px-4 py-2.5',
+                  'flex w-full items-center gap-3 px-4 py-2.5',
                   'text-sm text-error hover:bg-error/10',
                   'transition-colors',
                 )}
               >
-                <Trash2 className="w-4 h-4" />
+                <Trash2 className="h-4 w-4" />
                 <span>Delete Conversation</span>
               </button>
             )}

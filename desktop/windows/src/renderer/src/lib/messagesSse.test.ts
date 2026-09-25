@@ -59,6 +59,33 @@ describe('parseDoneMessage', () => {
     expect(done?.citations).toEqual([])
   })
 
+  it('decodes bounded evidence without making the final text depend on it', () => {
+    const done = parseDoneMessage(
+      `done: ${b64(
+        JSON.stringify({
+          text: 'Authoritative answer',
+          evidence: {
+            references: [
+              {
+                id: 'segment-ref',
+                kind: 'conversation_segment',
+                state: 'available',
+                conversation_id: 'conversation-1',
+                segment_id: 'segment-1'
+              },
+              { id: 'unavailable', kind: 'new_kind', state: 'new_state' }
+            ]
+          }
+        })
+      )}`
+    )
+    expect(done?.text).toBe('Authoritative answer')
+    expect(done?.evidence?.references).toHaveLength(2)
+    expect(done?.evidence?.references[0].conversationId).toBe('conversation-1')
+    expect(done?.evidence?.references[1].kind).toBe('unknown')
+    expect(done?.evidence?.references[1].state).toBe('unknown')
+  })
+
   it('returns null for a non-done line or an undecodable payload (never throws)', () => {
     expect(parseDoneMessage('data: hello')).toBeNull()
     expect(parseDoneMessage('done:')).toBeNull()

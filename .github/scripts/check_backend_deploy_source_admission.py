@@ -208,61 +208,30 @@ def validate_auto_workflow(text: str, root: Path = ROOT) -> list[str]:
             "backend deployment scope decision",
         )
         for fragment, message in (
-            (f"GH_TOKEN: ${{{{ github.token }}}}", "auto backend scope decision must use its read-only GitHub token"),
             (f"RELEASE_SHA: {AUTO_PROOF_SHA}", "auto backend scope decision must bind the triggering SHA"),
-            (
-                '"$api_base/repos/$GITHUB_REPOSITORY/git/ref/heads/main"',
-                "auto backend scope decision must resolve current main through the bounded GitHub ref API",
-            ),
-            (
-                '"$api_base/repos/$GITHUB_REPOSITORY/compare/$RELEASE_SHA...$main_sha"',
-                "auto backend scope decision must compare the immutable triggering SHA to the resolved main SHA through GitHub",
-            ),
-            (
-                'if .ref == "refs/heads/main" and .object.type == "commit"',
-                "auto backend scope decision must bind the current-main ref response identity",
-            ),
-            (
-                '.base_commit.sha == $release_sha and .head_commit.sha == $main_sha',
-                "auto backend scope decision must bind compare base and head identities",
-            ),
-            (
-                '.status == "behind"',
-                "auto backend scope decision must require GitHub's behind status for a superseded no-op",
-            ),
-            (
-                'if [[ "$comparison" == "behind" ]]; then',
-                "auto backend scope decision must only no-op after confirmed supersession",
-            ),
-            (
-                "supersession API proof was unavailable or ambiguous; preserving fail-closed source admission",
-                "auto backend scope decision must treat API or identity ambiguity as guarded admission",
-            ),
-            ("echo \"applies=true\" >> \"$GITHUB_OUTPUT\"", "auto backend scope decision must continue to guarded admission when supersession is uncertain"),
-            ("echo \"applies=false\" >> \"$GITHUB_OUTPUT\"", "auto backend scope decision must publish a no-op result"),
-            (
-                "Backend development deploy superseded no-op",
-                "auto backend scope decision must summarize superseded candidates as green no-ops",
-            ),
-            (
-                "GitHub compare confirmed triggering SHA $RELEASE_SHA is behind current main $main_sha",
-                "auto backend scope decision must name both bound SHAs in a superseded summary",
-            ),
             ("git rev-parse \"${RELEASE_SHA}^\"", "auto backend scope decision must inspect the triggering parent"),
             (
                 "git diff --name-only \"$parent_sha\" \"$RELEASE_SHA\"",
                 "auto backend scope decision must diff the triggering SHA against its parent",
             ),
+            ("echo \"applies=true\" >> \"$GITHUB_OUTPUT\"", "auto backend scope decision must publish an in-scope result"),
+            ("echo \"applies=false\" >> \"$GITHUB_OUTPUT\"", "auto backend scope decision must publish a no-op result"),
             ("Green no-op", "auto backend scope decision must summarize green no-ops"),
         ):
             require_fragment(errors, scope_decision, fragment, message)
-        fallback_summary = "supersession API proof was unavailable or ambiguous; preserving fail-closed source admission"
-        if scope_decision.count(fallback_summary) != 2:
-            errors.append("auto backend scope decision must treat API or identity ambiguity as guarded admission")
+        # Supersession must NOT be decided here. Skipping a triggering SHA for
+        # being behind main strands a backend change whenever an unrelated
+        # commit merges first: the backend commit no-ops for being behind and
+        # the newer commit no-ops because its own diff is unrelated. Admission
+        # resolves the newest proven commit instead, which subsumes
+        # supersession without that hole.
         for forbidden, message in (
-            ("git fetch --no-tags", "auto backend scope decision must not fetch local main history for supersession"),
-            ("git merge-base", "auto backend scope decision must not use local merge-base supersession proof"),
-            ("origin/main", "auto backend scope decision must not resolve local origin/main for supersession"),
+            ('"$comparison" == "behind"', "auto backend scope decision must not strand a behind triggering SHA"),
+            ("/compare/$RELEASE_SHA...$main_sha", "auto backend scope decision must not decide supersession"),
+            ("superseded no-op", "auto backend scope decision must not publish a superseded no-op"),
+            ("git fetch --no-tags", "auto backend scope decision must not fetch local main history"),
+            ("git merge-base", "auto backend scope decision must not compute local ancestry"),
+            ("origin/main", "auto backend scope decision must not resolve local origin/main"),
         ):
             if forbidden in scope_decision:
                 errors.append(message)
@@ -304,7 +273,7 @@ def validate_auto_workflow(text: str, root: Path = ROOT) -> list[str]:
         admission = require_step(
             errors,
             readiness_steps,
-            "Verify Release Eligibility proof is current main",
+            "Resolve and verify the newest proven main source",
             "automatic release-proof freshness validation",
         )
         validate_fail_closed_step(errors, admission, "automatic release-proof freshness validation")
@@ -323,49 +292,47 @@ def validate_auto_workflow(text: str, root: Path = ROOT) -> list[str]:
                 "automatic source admission must resolve current main's immutable SHA",
             ),
             (
-                "checkout_sha=\"$(git rev-parse --verify HEAD)\"",
-                "automatic source admission must resolve the current-main guard checkout SHA",
+                "actions/workflows/release-eligibility.yml/runs?event=push&branch=main&status=success",
+                "automatic source admission must resolve the newest successful main Release Eligibility proof",
+            ),
+            (
+                "curl --silent --show-error --fail",
+                "automatic source admission must refuse to deploy on an unreadable proof listing",
+            ),
+            (
+                'git merge-base --is-ancestor "$candidate_sha" "$main_sha"',
+                "automatic source admission must only admit a candidate reachable from current main",
+            ),
+            (
+                'git merge-base --is-ancestor "$RELEASE_SHA" "$admitted_sha"',
+                "automatic source admission must prove the admitted SHA is not older than its trigger",
             ),
             (
                 ".github/scripts/verify_auto_backend_release_admission.py",
                 "automatic source admission must verify proof freshness and current main identity",
             ),
-            ("--sha \"$RELEASE_SHA\"", "automatic source admission must verify the proof SHA"),
-            ("--main-sha \"$main_sha\"", "automatic source admission must verify current main"),
+            ('--sha "$admitted_sha"', "automatic source admission must verify the resolved SHA"),
+            ('--trigger-sha "$RELEASE_SHA"', "automatic source admission must verify the triggering proof SHA"),
+            ('--main-sha "$main_sha"', "automatic source admission must verify current main"),
             (
-                "--checkout-sha \"$checkout_sha\"",
-                "automatic source admission must verify the current-main guard checkout",
-            ),
-            (
-                "--run-attempt \"$RELEASE_RUN_ATTEMPT\"",
+                '--run-attempt "$RELEASE_RUN_ATTEMPT"',
                 "automatic source admission must reject proof reruns",
             ),
             (
-                "printf 'admitted_sha=%s\\n' \"$RELEASE_SHA\" >> \"$GITHUB_OUTPUT\"",
-                "automatic source admission must publish the verified SHA",
+                '--sha-is-ancestor-of-main "$sha_is_ancestor_of_main"',
+                "automatic source admission must verify merged-into-main ancestry",
+            ),
+            (
+                '--trigger-is-ancestor-of-sha "$trigger_is_ancestor_of_sha"',
+                "automatic source admission must refuse a target older than its trigger",
+            ),
+            (
+                "printf 'admitted_sha=%s\\n' \"$admitted_sha\" >> \"$GITHUB_OUTPUT\"",
+                "automatic source admission must publish the resolved SHA",
             ),
         ):
             require_fragment(errors, admission, fragment, message)
-
-        require_step(
-            errors,
-            readiness_steps,
-            "Require read-only Firestore credentials",
-            "read-only Firestore credential boundary",
-        )
-        require_step(
-            errors,
-            readiness_steps,
-            "Checkout admitted Firestore source",
-            "admitted-source checkout",
-        )
-        require_step(
-            errors,
-            readiness_steps,
-            "Google Auth for read-only Firestore inventory",
-            "read-only Firestore inventory authentication",
-        )
-        admission_index = named_step_index(readiness_steps, "Verify Release Eligibility proof is current main")
+        admission_index = named_step_index(readiness_steps, "Resolve and verify the newest proven main source")
         credential_index = named_step_index(readiness_steps, "Require read-only Firestore credentials")
         checkout_index = named_step_index(readiness_steps, "Checkout admitted Firestore source")
         auth_index = named_step_index(readiness_steps, "Google Auth for read-only Firestore inventory")

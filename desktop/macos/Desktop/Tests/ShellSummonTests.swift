@@ -1,4 +1,5 @@
 import AppKit
+import OmiTheme
 import XCTest
 
 @testable import Omi_Computer
@@ -115,6 +116,9 @@ final class ShellSummonTests: XCTestCase {
   /// …and the default really is a panel rather than the managed window it replaced. It still has to
   /// clear the floor every destination lays out to, or the shell arrives already clipping content.
   func testTheDefaultPanelIsSmallerThanAWindowButStillFitsTheDestinations() {
+    XCTAssertEqual(
+      ShellSummonPlacement.defaultSize.width, ChatComposerLayout.contentLaneMaxWidth,
+      "a summoned panel is the hugged glass, not a sheet that stretches with the display")
     XCTAssertLessThan(
       ShellSummonPlacement.defaultSize.width, 1200,
       "1200×800 was the managed-window default; a summoned panel must read smaller than that")
@@ -124,19 +128,41 @@ final class ShellSummonTests: XCTestCase {
       ShellSummonPlacement.defaultSize.height, DesktopWindowLayoutPolicy.minimumContentSize.height)
   }
 
-  /// A remembered frame is restored exactly. This is the whole payoff of per-display memory: the
-  /// second summon on a display puts the shell back where you left it, at the size you left it.
+  func testResetWindowSizeReturnsToTheActualSummonedPanelSize() {
+    XCTAssertEqual(
+      WindowSizeResetPolicy.defaultSize,
+      ShellSummonPlacement.defaultSize,
+      "reset must not revive the obsolete 1200×800 managed-window geometry")
+  }
+
+  /// A remembered frame already at the hug size is restored exactly. This is the payoff of
+  /// per-display memory: the second summon on a display puts the shell back where you left it.
   func testARememberedFrameComesBackUntouched() {
-    let placed = NSRect(x: 1700, y: 100, width: 1200, height: 820)
+    let placed = NSRect(
+      x: 1700, y: 100,
+      width: ChatComposerLayout.contentLaneMaxWidth, height: 820)
 
     let frame = ShellSummonPlacement.frame(remembered: placed, visibleFrame: studio)
 
     XCTAssertEqual(frame, placed)
   }
 
+  /// A frame remembered from the pre-hug oversized window cannot restore the invisible border,
+  /// even on a display that would have room for it.
+  func testARememberedPreHugFrameIsHuggedToTheReadableLane() {
+    let placed = NSRect(x: 1700, y: 100, width: 1_400, height: 820)
+
+    let frame = ShellSummonPlacement.frame(remembered: placed, visibleFrame: studio)
+
+    XCTAssertEqual(frame.width, ChatComposerLayout.contentLaneMaxWidth)
+    XCTAssertEqual(frame.height, 820)
+    XCTAssertEqual(frame.origin, placed.origin)
+  }
+
   /// **The display that shrank.** A frame remembered on a 2560pt display, restored after the user
   /// switched that display to a scaled mode, would put the query field past the right edge. It is
-  /// pulled back rather than discarded — the user's size is honoured as far as it fits.
+  /// pulled back rather than discarded — the user's size is honoured as far as it fits, and the
+  /// hug max still wins over a remembered width that would recreate the click border.
   func testARememberedFrameIsPulledBackInsideADisplayThatGotSmaller() {
     let placed = NSRect(x: 2400, y: 900, width: 1200, height: 820)
     let shrunk = NSRect(x: 0, y: 0, width: 1440, height: 900)
@@ -146,19 +172,22 @@ final class ShellSummonTests: XCTestCase {
     XCTAssertTrue(
       shrunk.contains(frame),
       "a restored frame outside the display is a shell whose query field cannot be reached")
-    XCTAssertEqual(frame.width, 1200, "the width still fitted; only the position had to move")
+    XCTAssertEqual(
+      frame.width, ChatComposerLayout.contentLaneMaxWidth,
+      "the remembered 1200 pt width is the invisible border; hug it even though 1440 would fit")
     XCTAssertEqual(frame.height, 820)
   }
 
   /// A frame larger than the display it is restored onto is shrunk to fit, not centred at its old
-  /// size and left hanging off two edges at once.
+  /// size and left hanging off two edges at once. Width also cannot exceed the hug max.
   func testARememberedFrameLargerThanTheDisplayIsShrunkToIt() {
     let placed = NSRect(x: 1512, y: -200, width: 2400, height: 1300)
 
     let frame = ShellSummonPlacement.frame(remembered: placed, visibleFrame: laptop)
 
     XCTAssertTrue(laptop.contains(frame))
-    XCTAssertEqual(frame.size, laptop.size)
+    XCTAssertEqual(frame.width, ChatComposerLayout.contentLaneMaxWidth)
+    XCTAssertEqual(frame.height, laptop.height)
   }
 
   /// A degenerate stored value — a zero rect from a failed decode, or a frame written while the
@@ -376,5 +405,37 @@ final class ShellSummonTests: XCTestCase {
     XCTAssertTrue(WindowEscapeKeyMonitor.shared.dispatchEscape(in: window))
 
     XCTAssertTrue(shellDismissed)
+  }
+
+  /// A fresh install could not finish onboarding: granting the microphone quit the app.
+  ///
+  /// `requestMicrophonePermission` calls `suspendForPermissionPrompt`, which orders the only
+  /// window out so macOS can present the dialog. AppKit reports that as the last window closing,
+  /// and the handler returned `!hasCompletedOnboarding` — true during onboarding — so the process
+  /// ended before the prompt could be answered and before the completion handler restored the
+  /// shell. No crash report, because nothing crashed.
+  func testPermissionPromptDoesNotEndOnboarding() {
+    XCTAssertFalse(
+      ShellSummon.shouldTerminateAfterLastWindowClosed(
+        hasCompletedOnboarding: false, isSuspendedForPermissionPrompt: true),
+      "quitting here ends onboarding at the moment the user is granting the permission it asked for")
+  }
+
+  /// The behaviour the guard must not weaken: before onboarding completes there is no menu-bar
+  /// residency to fall back on, so a window the user actually closed still means quit.
+  func testClosingTheLastOnboardingWindowStillQuits() {
+    XCTAssertTrue(
+      ShellSummon.shouldTerminateAfterLastWindowClosed(
+        hasCompletedOnboarding: false, isSuspendedForPermissionPrompt: false))
+  }
+
+  /// After onboarding the app is a menu-bar resident, so losing the last window is never a quit —
+  /// with or without a prompt in flight.
+  func testOnboardedAppSurvivesLosingItsLastWindow() {
+    for suspended in [true, false] {
+      XCTAssertFalse(
+        ShellSummon.shouldTerminateAfterLastWindowClosed(
+          hasCompletedOnboarding: true, isSuspendedForPermissionPrompt: suspended))
+    }
   }
 }

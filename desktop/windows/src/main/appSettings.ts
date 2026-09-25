@@ -99,7 +99,10 @@ export type AppSettings = {
    *  "may I send screenshots to Gemini" lever remains `screenAnalysisEnabled`. */
   memoryEnabled: boolean
   /** Track 3 (Memory): minutes between extraction attempts, Mac's
-   *  `memoryExtractionInterval` (600s = 10 min). Default 10. */
+   *  `memoryExtractionInterval` (1800s = 30 min). Default 30. Was 10; memory
+   *  extraction measured the worst value of any proactive lane (50.5% of macOS
+   *  notification volume at 0.240% CTR), so its default cadence carries a 3x
+   *  cut. An already-persisted user value is kept as-is. */
   memoryExtractionIntervalMin: number
   /** Track 3 (Memory): minimum confidence an extracted memory must clear to be
    *  kept, Mac's `memoryMinConfidence`. Default 0.7. */
@@ -202,11 +205,13 @@ function sanitizeFrequency(raw: unknown): number {
   return raw
 }
 
-// Cooldown minutes: a positive integer, else Mac's default 10. Zero/negative/
-// junk falls back rather than disabling the cooldown (which would let a
-// distracted user be re-billed for a Gemini call every few seconds).
-function sanitizeCooldownMinutes(raw: unknown): number {
-  if (typeof raw !== 'number' || !Number.isInteger(raw) || raw <= 0) return 10
+// Cooldown / extraction-interval minutes: a positive integer, else `fallback`
+// (Focus/Task default 10; Memory default 30). Zero/negative/junk falls back
+// rather than disabling the timer (which would let a distracted user be
+// re-billed for a Gemini call every few seconds). An already-persisted
+// positive integer is kept — changing `fallback` is not a migration.
+function sanitizeCooldownMinutes(raw: unknown, fallback = 10): number {
+  if (typeof raw !== 'number' || !Number.isInteger(raw) || raw <= 0) return fallback
   return Math.min(raw, 24 * 60) // a day is already absurd; cap the blast radius.
 }
 
@@ -290,8 +295,10 @@ export function sanitizeAppSettings(raw: Partial<AppSettings> | null | undefined
     notificationFrequency: sanitizeFrequency(r.notificationFrequency),
     memoryEnabled: r.memoryEnabled === true,
     // Reuses the cooldown sanitizer: same contract (positive integer minutes,
-    // default 10, capped at a day). A junk interval falls back to 10, never 0.
-    memoryExtractionIntervalMin: sanitizeCooldownMinutes(r.memoryExtractionIntervalMin),
+    // capped at a day). Default 30 (1800s) to match Mac. A junk/absent interval
+    // falls back to 30, never 0. An explicit persisted value (including the
+    // old 10-minute default a user already has on disk) is kept.
+    memoryExtractionIntervalMin: sanitizeCooldownMinutes(r.memoryExtractionIntervalMin, 30),
     memoryMinConfidence: sanitizeMinConfidence(r.memoryMinConfidence),
     memoryExcludedApps: sanitizeExcludedApps(r.memoryExcludedApps),
     // Default ON (!== false, same idiom as screenAnalysisEnabled), matching Mac's

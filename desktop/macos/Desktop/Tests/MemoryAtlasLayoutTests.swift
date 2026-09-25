@@ -937,6 +937,30 @@ final class MemoryAtlasLayoutTests: XCTestCase {
     XCTAssertLessThan(CGFloat(1), floor, "Zooming back out to the whole map is")
   }
 
+  /// Escape that clears a selection and homes the camera must not also spend
+  /// the neighbourhood layer. The original departure floor treats zoom 1 as
+  /// leaving; the overview rebind sits at or below that camera so the island
+  /// stays until the next press, while a later pinch-out can still exit.
+  func testOverviewResetDoesNotSpendTheNeighbourhoodLayer() throws {
+    let minimum = MemoryAtlasZoomPolicy.minimumZoom
+    let neighbourhood = MemoryAtlasZoomPolicy.neighborhoodZoom
+    let entered = MemoryAtlasNeighbourhoodLabels.entering(
+      center: CGPoint(x: 0.3, y: 0.6), radius: 0.05,
+      viewport: CGSize(width: 900, height: 700),
+      zoomRange: minimum...12)
+    let original = try XCTUnwrap(
+      MemoryAtlasNeighbourhoodLabels.departureZoom(
+        enteredAt: entered.zoom, neighbourhoodZoom: neighbourhood, minimumZoom: minimum))
+    XCTAssertLessThan(CGFloat(1), original, "Fixture: the original floor treats overview as leaving")
+
+    let rebound = try XCTUnwrap(
+      MemoryAtlasNeighbourhoodLabels.overviewDepartureZoom(
+        neighbourhoodZoom: neighbourhood, minimumZoom: minimum))
+    XCTAssertGreaterThanOrEqual(
+      CGFloat(1), rebound, "Homed camera after clearing a selection must not count as leaving")
+    XCTAssertGreaterThan(rebound, minimum, "A later pinch-out can still leave")
+  }
+
   /// A place entered without moving the camera has no zoom-out exit, and the
   /// map must say so rather than set one nobody can reach.
   ///

@@ -337,10 +337,20 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
 
     let result = await OnboardingMemoryLogImportService.shared.importMemoryLog(
       rawText, source: source)
-    guard case .imported(let memories, let profileSummary) = result else {
-      lastActionError =
-        "Couldn’t extract durable memories from the pasted \(source.displayName) log."
+    guard case .imported(let memories, let failed, let profileSummary) = result else {
+      if case .failure(let message, failureClass: _) =
+        ConnectorImportOperations.memoryLogOutcome(result, source: source)
+      {
+        lastActionError = message
+      }
       return
+    }
+
+    if failed > 0,
+      case .success(_, let message) =
+        ConnectorImportOperations.memoryLogOutcome(result, source: source)
+    {
+      lastActionError = message
     }
 
     let defaults = UserDefaults.standard
@@ -635,7 +645,7 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     lastActionError = nil
     ChatToolExecutor.onboardingAppState = appState
     scanState = .scanning
-    scanStatusText = "Scanning your projects and apps..."
+    scanStatusText = "Scanning your projects and apps…"
 
     // Start local/web enrichment in parallel with the file scan. Connected
     // account imports stay behind an explicit Apps/Settings action.
@@ -943,8 +953,8 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     isResearchComplete = false
     insightStatusText =
       userInitiated
-      ? "Reading the selected data sources..."
-      : "Preparing your local profile..."
+      ? "Reading the selected data sources…"
+      : "Preparing your local profile…"
     gmailInsightsFinished = false
     calendarInsightsFinished = false
     appleNotesInsightsFinished = false
@@ -1213,7 +1223,7 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     }
     guard webResearchTask == nil && !isResearchComplete else { return }
 
-    insightStatusText = "Searching the web..."
+    insightStatusText = "Searching the web…"
 
     webResearchTask = Task {
       let results = await OnboardingWebResearchService.shared.search(queries: buildWebQueries())

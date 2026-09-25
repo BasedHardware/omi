@@ -128,7 +128,14 @@ def test_conversation_list_skips_malformed_not_500():
 def test_main_list_skips_malformed_not_500():
     bad = {'id': 'a2', 'description': 'missing completed'}  # missing required 'completed' -> ValidationError
     page = [_valid('a1'), bad]
-    with patch.object(ai_mod.action_items_db, 'get_action_items', return_value=page):
+    # This module imports routers.action_items under a stub finder that replaces the
+    # whole `database`/`utils` packages, so the list-cache TTL helper would return a
+    # MagicMock. Pin it to 0 (cache disabled) — this test is about malformed-item
+    # skipping, and the cache path has its own suite in
+    # tests/unit/test_action_items_list_read_cost.py.
+    with patch.object(ai_mod.action_items_db, 'get_action_items', return_value=page), patch.object(
+        ai_mod, 'list_cache_ttl_seconds', return_value=0
+    ), patch.object(ai_mod, 'enforce_hot_client_list_ceiling', return_value=None):
         # Pass params explicitly: calling the handler directly leaves Query() defaults unresolved.
         resp = ai_mod.get_action_items(
             limit=50,

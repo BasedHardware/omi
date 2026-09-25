@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
   assembleGoalContext,
+  activeGoalCount,
+  withPrefetchedGoals,
   hasSufficientContext,
   type GoalContextFetchers,
   type GoalContextData,
@@ -56,6 +58,89 @@ describe('assembleGoalContext', () => {
       fetchers({ fetchGoals: async () => [{ title: 'X', targetValue: 10, currentValue: 2.5 }] })
     )
     expect(data.activeGoals).toEqual(['- X (2.5/10)'])
+  })
+})
+
+describe('activeGoalCount', () => {
+  // The auto-generation cap is decided on this number, taken straight off the goal
+  // list rather than from the full five-read bundle. Two derivations of "how many
+  // goals are active" would let the cap mean different things depending on which path
+  // evaluated it, so `assembleGoalContext` and the gate share this one function.
+  const goals: RawGoal[] = [
+    { title: 'Read books', targetValue: 12, currentValue: 3 }, // active
+    { title: 'Ship v1', targetValue: 1, currentValue: 1 }, // complete (>=target)
+    { title: 'Run miles', targetValue: 100, currentValue: 100 }, // complete
+    { title: 'No target', targetValue: 0, currentValue: 0 } // target 0 -> active
+  ]
+
+  it('is the same number assembleGoalContext reports', async () => {
+    const bundle = await assembleGoalContext(fetchers({ fetchGoals: async () => goals }))
+    expect(activeGoalCount(goals)).toBe(bundle.activeGoalCount)
+    expect(activeGoalCount(goals)).toBe(2)
+  })
+
+  it('counts an empty list as zero', () => {
+    expect(activeGoalCount([])).toBe(0)
+  })
+})
+
+describe('withPrefetchedGoals', () => {
+  const goals: RawGoal[] = [{ title: 'Read books', targetValue: 12, currentValue: 3 }]
+
+  it('serves goals from the prefetched list without asking for them again', async () => {
+    let goalFetches = 0
+    const wrapped = withPrefetchedGoals(
+      fetchers({
+        fetchGoals: async () => {
+          goalFetches += 1
+          return []
+        }
+      }),
+      goals
+    )
+    const data = await assembleGoalContext(wrapped)
+    expect(goalFetches).toBe(0)
+    expect(data.activeGoals).toEqual(['- Read books (3/12)'])
+  })
+
+  it('leaves the other four reads untouched', async () => {
+    const calls: string[] = []
+    const base = fetchers({
+      fetchMemories: async () => {
+        calls.push('memories')
+        return ['m']
+      },
+      fetchConversations: async () => {
+        calls.push('conversations')
+        return []
+      },
+      fetchTasks: async () => {
+        calls.push('tasks')
+        return []
+      },
+      fetchPersona: async () => {
+        calls.push('persona')
+        return null
+      }
+    })
+    await assembleGoalContext(withPrefetchedGoals(base, goals))
+    expect(calls.sort()).toEqual(['conversations', 'memories', 'persona', 'tasks'])
+  })
+
+  it('falls back to the real fetcher when nothing was prefetched', async () => {
+    let goalFetches = 0
+    const wrapped = withPrefetchedGoals(
+      fetchers({
+        fetchGoals: async () => {
+          goalFetches += 1
+          return goals
+        }
+      }),
+      undefined
+    )
+    const data = await assembleGoalContext(wrapped)
+    expect(goalFetches).toBe(1)
+    expect(data.activeGoals).toEqual(['- Read books (3/12)'])
   })
 })
 

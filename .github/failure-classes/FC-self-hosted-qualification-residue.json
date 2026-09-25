@@ -2,20 +2,17 @@
   "schema_version": 1,
   "id": "FC-self-hosted-qualification-residue",
   "violated_contract": "A trusted self-hosted qualification runner must not admit new work while exact-provenance residue from an abandoned run can retain processes, ports, containers, leases, run stages, or required disk capacity.",
-  "canonical_prevention": "Before acquiring a new qualification lease, authenticate and reclaim only repository-owned residue using exact process, process-group, container, path, bundle, and cache provenance; reject ambiguous ownership and production app identities; enforce capacity; and bound long phases with observable watchdogs.",
+  "canonical_prevention": "The dedicated qualification lane and its self-hosted runner are removed. Reintroduction is rejected by the desktop release-process guards.",
   "canonical_prevention_artifact": [
-    "desktop/macos/scripts/qualification-runner-self-clean.py",
-    "desktop/macos/tests/test_qualification_runner_self_clean.py",
-    ".github/workflows/desktop_qualify_beta.yml"
+    ".github/scripts/check-release-process-guards.py"
   ],
   "evidence_prs": [
     10759
   ],
   "scope_hints": [
-    "desktop/macos/scripts/qualification-*.py",
-    "desktop/macos/scripts/pre-tag-readiness.sh",
-    ".github/workflows/desktop_*qualif*.yml",
-    "scripts/dev-harness/dev_harness/qualification.py"
+    ".github/scripts/check-release-process-guards.py",
+    ".github/workflows/desktop_auto_release.yml"
   ],
-  "status": "open"
+  "status": "dormant",
+  "dormant_since": "2026-08-14T19:43:00Z"
 }

@@ -375,7 +375,12 @@ def test_listen_pusher_wire_contract_provider_connect_failure_is_terminal(
 def test_listen_pusher_wire_contract_provider_send_failure_is_terminal_after_pusher_connects(
     client, test_uid, monkeypatch, fake_firestore
 ):
-    """A real provider death latch stops the live route before transcript or finalization work."""
+    """A provider death with the chain exhausted stops the live route before pusher work.
+
+    The send path first offers the session a failover (#12469); this harness
+    runs a parakeet-only chain, so reselection finds nothing and the death must
+    still end the route with the bounded terminal contract.
+    """
 
     async def unexpected_finalization(_peer, _frame, _websocket):
         raise AssertionError('provider send failure must not reach pusher finalization')
@@ -387,6 +392,11 @@ def test_listen_pusher_wire_contract_provider_send_failure_is_terminal_after_pus
     pusher = ScriptedPusherPeer(unexpected_finalization).start()
     try:
         _configure_live_wire_contract(monkeypatch, pusher, parakeet.api_url)
+        # Failover reselection reads the receiver's namespace; a parakeet-only
+        # chain means the death latch has nowhere to go and stays terminal.
+        import routers.listen.receiver as listen_receiver
+
+        monkeypatch.setattr(listen_receiver, 'get_stt_service_for_language', lambda *_a, **_k: (None, None, None))
         install_fake_firestore_transactions(monkeypatch, fake_firestore)
         clear_finalization_jobs(fake_firestore, test_uid)
         seed_listen_user(test_uid, uses_custom_stt=False, single_language_mode=True)

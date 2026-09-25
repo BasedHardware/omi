@@ -6,6 +6,8 @@
 // wedge the caller.
 //
 // The renderer side lives in renderer/src/lib/aiProfileHost.ts (respondTokenPull).
+// pi-mono spawn and Rewind embeddings pull through the same channel so a throttled
+// hidden window cannot leave those paths on a stale Firebase token.
 import { ipcMain, type IpcMainEvent, type WebContents } from 'electron'
 import type { BackendSession } from './session'
 

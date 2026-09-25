@@ -321,6 +321,11 @@ struct BleDeviceDiagnostics: Hashable {
   /// Count of connect attempts that never reached didConnect. Surfaces the
   /// silent-failure path separately from established-then-dropped disconnects.
   var failToConnectCount: Int64
+  /// BLE bytes consumed by native offline writers since the app most recently
+  /// entered the background. These packets intentionally never reach Dart.
+  var nativeBackgroundBytesConsumed: Int64
+  /// BLE notification packets represented by [nativeBackgroundBytesConsumed].
+  var nativeBackgroundPacketsConsumed: Int64
 
 
   // swift-format-ignore: AlwaysUseLowerCamelCase
@@ -329,12 +334,16 @@ struct BleDeviceDiagnostics: Hashable {
     let reconnectionCount = pigeonVar_list[1] as! Int64
     let connectedAt = pigeonVar_list[2] as! Int64
     let failToConnectCount = pigeonVar_list[3] as! Int64
+    let nativeBackgroundBytesConsumed = pigeonVar_list[4] as! Int64
+    let nativeBackgroundPacketsConsumed = pigeonVar_list[5] as! Int64
 
     return BleDeviceDiagnostics(
       disconnectHistory: disconnectHistory,
       reconnectionCount: reconnectionCount,
       connectedAt: connectedAt,
-      failToConnectCount: failToConnectCount
+      failToConnectCount: failToConnectCount,
+      nativeBackgroundBytesConsumed: nativeBackgroundBytesConsumed,
+      nativeBackgroundPacketsConsumed: nativeBackgroundPacketsConsumed
     )
   }
   func toList() -> [Any?] {
@@ -343,6 +352,8 @@ struct BleDeviceDiagnostics: Hashable {
       reconnectionCount,
       connectedAt,
       failToConnectCount,
+      nativeBackgroundBytesConsumed,
+      nativeBackgroundPacketsConsumed,
     ]
   }
   static func == (lhs: BleDeviceDiagnostics, rhs: BleDeviceDiagnostics) -> Bool {

@@ -14,6 +14,9 @@ Determinism and hermeticity:
 - Counts come from `git log --first-parent` in the checkout. No network.
 - Integration changes are counted, not raw commits: one merged PR routinely
   carries a dozen `fix:` commits, so a raw-commit threshold would be noise.
+- The change under review is counted once wherever the window is measured: its
+  `--pr-body-file` declaration is added only when HEAD did not already carry it,
+  so a PR run, that PR's main push, and a local pre-push run agree on the count.
 - History-dependent checks must degrade safely. On a shallow clone, or when
   first-parent history does not reach back to the window start, this prints a
   loud SKIP and exits 0 rather than passing silently or failing spuriously.
@@ -178,6 +181,20 @@ def read_pr_body(path: Path | None) -> str:
         return ""
 
 
+def head_declarations(root: Path) -> set[str]:
+    """Classes HEAD's own message already contributed to `declaration_counts`.
+
+    `--pr-body-file` stands in for the change under review, which is why its
+    declaration is added to the window. On a main push, and on a local run over
+    a feature branch, that change is HEAD: `declaration_counts` walks from HEAD
+    and counted it already, so adding the body on top counts one integration
+    change twice. On a `pull_request` run the checkout is the merge ref, whose
+    message declares nothing, and the body stays the only evidence of the
+    pending change.
+    """
+    return declarations_in(run_git(root, "log", "--max-count=1", "--format=%B", "HEAD"))
+
+
 def evaluate(
     definitions: dict[str, dict[str, Any]],
     allowlist: dict[str, GrandfatherEntry],
@@ -240,7 +257,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
         "--pr-body-file",
         type=Path,
         default=None,
-        help="PR body under review; its declaration counts toward the window so the declaring PR fails first.",
+        help=(
+            "PR body under review; its declaration counts toward the window so the declaring PR fails first, "
+            "unless HEAD already declared it and was counted from history."
+        ),
     )
     parser.add_argument("--now", default=None, help="UTC ISO-8601 timestamp; makes the window deterministic in tests.")
     return parser.parse_args(argv)
@@ -274,7 +294,10 @@ def main(argv: list[str] | None = None) -> int:
         definitions = load_definitions(root)
         allowlist = load_allowlist(root)
         counts = declaration_counts(root, cutoff)
+        already_counted = head_declarations(root)
         for class_id in declarations_in(read_pr_body(args.pr_body_file)):
+            if class_id in already_counted:
+                continue
             counts[class_id] = counts.get(class_id, 0) + 1
     except (CheckError, ValueError) as exc:
         print(f"FAIL: failure-class guard ratchet could not run: {exc}", file=sys.stderr)

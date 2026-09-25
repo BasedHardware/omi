@@ -206,7 +206,7 @@ extension SettingsContentView {
               ForEach(0..<steps.count, id: \.self) { i in
                 Circle()
                   .fill(
-                    i <= currentIndex ? Ink.accent : Ink.hairline
+                    i <= currentIndex ? SettingsSelection.valueFill : Ink.hairline
                   )
                   .frame(width: 12, height: 12)
                   .position(
@@ -278,10 +278,9 @@ extension SettingsContentView {
             .foregroundColor(Ink.secondary)
         }
         Spacer()
-        // The value readout, in the same shape `SettingsStatusChip` settled on: the tint is the
-        // ground, the word is `Ink.primary`. Set *in* the accent over 15% of the accent it measured
-        // about 2.8:1 on this panel — the number a slider exists to report was the faintest thing on
-        // the row.
+        // The value readout: a neutral chip ground, the word in `Ink.primary`. Set *in* the accent
+        // over 15% of the accent it measured about 2.8:1 on this panel, and a blue ground spent the
+        // accent on state; see `SettingsSelection`.
         Text(currentLabel)
           .scaledFont(size: OmiType.body, weight: .semibold)
           .foregroundColor(Ink.primary)
@@ -289,7 +288,7 @@ extension SettingsContentView {
           .padding(.vertical, OmiSpacing.xxs)
           .background(
             RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
-              .fill(Ink.accent.opacity(0.16))
+              .fill(SettingsSelection.readoutFill)
           )
       }
 
@@ -311,7 +310,7 @@ extension SettingsContentView {
           ForEach(0..<stepCount, id: \.self) { i in
             Circle()
               .fill(
-                i <= currentIndex ? Ink.accent : Ink.hairline
+                i <= currentIndex ? SettingsSelection.valueFill : Ink.hairline
               )
               .frame(width: 12, height: 12)
               .position(
@@ -389,7 +388,7 @@ extension SettingsContentView {
       HStack(spacing: OmiSpacing.sm) {
         Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
           .scaledFont(size: OmiType.subheading)
-          .foregroundColor(isSelected ? Ink.accent : Ink.secondary)
+          .foregroundColor(SettingsSelection.optionMark(isSelected: isSelected))
 
         VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
           Text(label)
@@ -407,7 +406,7 @@ extension SettingsContentView {
       .padding(.horizontal, OmiSpacing.sm)
       .background(
         RoundedRectangle(cornerRadius: SettingsGlassMetrics.controlRadius, style: .continuous)
-          .fill(isSelected ? Ink.accent.opacity(0.1) : Color.clear)
+          .fill(isSelected ? SettingsSelection.optionFill(isSelected: true) : Color.clear)
       )
     }
     .buttonStyle(.plain)
@@ -770,53 +769,29 @@ extension SettingsContentView {
 
           GlassSeparator()
 
-          settingRow(
-            title: "Update Channel", subtitle: updaterViewModel.updateChannel.description,
-            settingId: "about.channel"
-          ) {
-            if AppBuild.isBetaProductionBundle {
-              // Omi Beta is permanently a beta-channel client; switching it to stable
-              // would make Sparkle replace it with the stable-identity app in place.
-              Text(UpdateChannel.beta.displayName)
+          if !AppBuild.isBetaProductionBundle {
+            settingRow(
+              title: "Omi Beta",
+              subtitle: "Install the separate Omi Beta app. It runs beside this one.",
+              settingId: "about.channel"
+            ) {
+              Button("Get Omi Beta") {
+                openURLInDefaultBrowser(AppBuild.omiBetaInstallURL)
+              }
+              .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+            }
+          } else {
+            settingRow(
+              title: "Omi Beta",
+              subtitle: "This app updates from the Beta feed and runs beside Omi.",
+              settingId: "about.channel"
+            ) {
+              Text("Installed")
                 .scaledFont(size: OmiType.body)
                 .foregroundColor(Ink.secondary)
-            } else {
-              SettingsMenuPicker(
-                selection: Binding(
-                  get: { updaterViewModel.updateChannel },
-                  set: { newChannel in
-                    // Switching beta → stable with a newer build: confirm first
-                    if updaterViewModel.updateChannel == .beta && newChannel == .stable
-                      && updaterViewModel.isDowngradeToStable
-                    {
-                      showDowngradeAlert = true
-                    } else {
-                      updaterViewModel.updateChannel = newChannel
-                    }
-                  }
-                )
-              ) {
-                ForEach(UpdateChannel.allCases, id: \.self) { channel in
-                  Text(channel.displayName).tag(channel)
-                }
-              }
             }
           }
         }
-      }
-      .alert("Switch to Stable Channel?", isPresented: $showDowngradeAlert) {
-        Button("Stay on Beta", role: .cancel) {}
-        Button("Switch to Stable") {
-          updaterViewModel.updateChannel = .stable
-          if let url = URL(string: "https://macos.omi.me") {
-            NSWorkspace.shared.open(url)
-          }
-        }
-      } message: {
-        let stableVersion = updaterViewModel.latestStableVersionString ?? "an older version"
-        Text(
-          "You're on a newer beta build (\(updaterViewModel.currentVersion)). The latest stable release is \(stableVersion).\n\nSwitching to Stable means you won't receive new updates until a stable release surpasses your current version. You can also download the stable version now."
-        )
       }
 
       settingsCard(settingId: "about.discord") {
@@ -830,7 +805,7 @@ extension SettingsContentView {
               .scaledFont(size: OmiType.subheading, weight: .medium)
               .foregroundColor(Ink.primary)
 
-            Text("Get help from the omi community and team")
+            Text("Get help from the Omi community and team")
               .scaledFont(size: OmiType.body)
               .foregroundColor(Ink.secondary)
           }
@@ -855,7 +830,7 @@ extension SettingsContentView {
               .scaledFont(size: OmiType.subheading, weight: .medium)
               .foregroundColor(Ink.primary)
 
-            Text("Help us improve omi")
+            Text("Help us improve Omi")
               .scaledFont(size: OmiType.body)
               .foregroundColor(Ink.secondary)
           }
@@ -895,7 +870,7 @@ extension SettingsContentView {
   ) -> some View {
     let card = content()
       .frame(maxWidth: .infinity, alignment: .leading)
-      .padding(OmiSpacing.lg)
+      .padding(OmiSpacing.md)
       .settingsGlassCard()
     return Group {
       if let settingId = settingId {

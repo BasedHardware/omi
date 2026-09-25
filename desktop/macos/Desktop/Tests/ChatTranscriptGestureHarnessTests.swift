@@ -130,6 +130,41 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
         + "(drifted \(worstDrift) pt of a \(harness.viewportHeight) pt viewport)")
   }
 
+  /// The jitter complaint, as a gate: while a stream is live and the reader is
+  /// following, the pinner tracks the live edge every tick, so between-flush
+  /// drift stays within one flush's own growth. At the default 14 pt chat body
+  /// the measured line height is 22.5 pt (17.5 pt glyph height + 5 pt leading),
+  /// so the bound allows one layout line while still catching the old multi-line
+  /// glide drift. The periodic
+  /// glide this replaced drifted tens of points between follows — its worst
+  /// was 48 pt here — which read as up-and-down stutter.
+  func testStreamingPinsTheViewportToTheLiveEdgeEveryTick() throws {
+    let harness = try makeHarness()
+    defer { harness.tearDown() }
+    harness.settleInitialPlacement()
+    XCTAssertTrue(harness.isAtBottom, "precondition: the transcript opens at the live edge")
+
+    var worstDrift: CGFloat = 0
+    for chunk in 0..<40 {
+      harness.appendStreamingText(" Streamed chunk \(chunk) with enough prose to grow the row. ")
+      harness.pump(0.035)
+      worstDrift = max(worstDrift, harness.maximumScrollTop - harness.scrollTop)
+    }
+
+    let defaultChatFontSize: CGFloat = 14
+    let oneLineHeight =
+      defaultChatFontSize * 1.25
+      + OmiMarkdownContent.chatLineSpacing(fontSize: defaultChatFontSize)
+    XCTAssertLessThan(
+      oneLineHeight + 1.5,
+      48,
+      "the one-line bound must still reject the measured pre-fix 48 pt multi-line glide")
+    XCTAssertLessThan(
+      worstDrift, oneLineHeight + 1.5,
+      "a streaming transcript must pin the following viewport to the live edge per tick "
+        + "(drifted \(worstDrift) pt of a \(harness.viewportHeight) pt viewport)")
+  }
+
   func testAnArrivingTurnDoesNotPullTheReaderBack() throws {
     let harness = try makeHarness()
     defer { harness.tearDown() }
@@ -156,6 +191,13 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
     harness.performUpwardGesture(events: 30, endGesture: false)
     let readerPosition = harness.scrollTop
 
+    // Keep the native live-scroll transaction open beyond the old 300 ms
+    // ownership timer. A slow SwiftUI update or a brief pause during a real
+    // trackpad gesture must not make the viewport available to send-start.
+    harness.pump(0.4)
+    XCTAssertEqual(
+      harness.scrollTop, readerPosition, accuracy: 4,
+      "an open live-scroll transaction must retain the reader's viewport")
     harness.model.isSending = true
     harness.pump(0.7)
 
@@ -190,12 +232,11 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
         + "(scrollTop=\(harness.scrollTop) of \(harness.maximumScrollTop))")
   }
 
-  /// The transcript used to cap its column at 760pt inside a 900pt panel so a
-  /// prompt rail could live in the leftover 70pt on each side. The rail is gone,
-  /// and with it the reserved gutter: rows now reach their container's edge, the
-  /// same edge the composer below them uses. Measured on the mounted transcript
-  /// because the inset was only ever visible as painted pixels — the view's own
-  /// frame was full width the whole time.
+  /// The transcript must not cap its column to reserve a gutter. The prompt
+  /// rail is an overlay on the trailing edge; rows reach the same edge the
+  /// composer below them uses. Measured on the mounted transcript because the
+  /// inset was only ever visible as painted pixels — the view's own frame was
+  /// full width the whole time.
   func testTranscriptRowsReachTheContainerEdgeWithNoReservedGutter() throws {
     let harness = try makeHarness(messageCount: 12)
     defer { harness.tearDown() }
@@ -209,6 +250,35 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
     XCTAssertGreaterThan(
       CGFloat(painted), viewportWidth - 60,
       "transcript rows stop at x=\(painted) of \(viewportWidth), so a gutter is still reserved")
+  }
+
+  /// Selection has to be in the mounted transcript, on both senders' rows.
+  /// The unit tests prove the attributed string; this proves the transcript
+  /// actually hosts the text view that owns a selection, which is the part a
+  /// wiring mistake would silently drop.
+  func testEveryMountedRowHostsSelectableText() throws {
+    let harness = try makeHarness(messageCount: 12)
+    defer { harness.tearDown() }
+    harness.settleInitialPlacement()
+
+    var leadingEdges = Set<CGFloat>()
+    var selectable = 0
+    func walk(_ view: NSView) {
+      if let text = view as? ChatProseTextView {
+        XCTAssertTrue(text.isSelectable, "a mounted row that cannot be selected is the old bug")
+        XCTAssertFalse(text.isEditable, "a transcript row is not a document")
+        leadingEdges.insert(text.convert(text.bounds, to: nil).origin.x)
+        selectable += 1
+      }
+      view.subviews.forEach(walk)
+    }
+    walk(harness.scrollView)
+
+    XCTAssertGreaterThan(selectable, 0, "the transcript mounted no selectable prose at all")
+    XCTAssertGreaterThan(
+      leadingEdges.count, 1,
+      "user and assistant rows start at different insets, so one inset means only one sender "
+        + "is selectable — which is exactly what the popover era looked like")
   }
 
   func testRepeatedFastBurstsKeepTheMountedTranscriptResponsive() throws {
@@ -320,6 +390,59 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
         + "(scrollTop=\(harness.scrollTop) of \(harness.maximumScrollTop))")
   }
 
+  /// A press inside the transcript is ordinary now that every content block is
+  /// something you can click, and the transcript re-reaches the live edge every
+  /// `ChatScrollFollowThrottle.interval` while an answer streams. Reading its
+  /// own follow-scroll as "the reader took the viewport" would abandon the
+  /// reader for the rest of the answer, so the press-promotion test in
+  /// `ChatPressPromotionPolicy` discounts movement the app just caused.
+  func testAClickWhileAnAnswerStreamsDoesNotStopTheTranscriptFollowingIt() throws {
+    let harness = try makeHarness()
+    defer { harness.tearDown() }
+    harness.settleInitialPlacement()
+    XCTAssertTrue(harness.isAtBottom, "precondition: the transcript opens at the live edge")
+
+    harness.sendLeftMouseDown()
+    var worstDrift: CGFloat = 0
+    for chunk in 0..<40 {
+      harness.appendStreamingText(" Streamed chunk \(chunk) with enough prose to grow the row. ")
+      harness.pump(0.035)
+      worstDrift = max(worstDrift, harness.maximumScrollTop - harness.scrollTop)
+    }
+    harness.sendLeftMouseUp()
+
+    XCTAssertLessThan(
+      worstDrift, 120,
+      "a click that never moved the viewport must not end follow mode "
+        + "(drifted \(worstDrift) pt of a \(harness.viewportHeight) pt viewport)")
+  }
+
+  /// A press whose release is delivered somewhere else — the "Select Text\u{2026}"
+  /// popover and context menus present in their own window — could leave the
+  /// press candidate open for the life of the scroll view, where the next
+  /// follow-scroll would promote it. The monitor now closes a press on any
+  /// release, whichever window carried it.
+  func testAPressReleasedInAnotherWindowDoesNotStrandTheTranscript() throws {
+    let harness = try makeHarness()
+    defer { harness.tearDown() }
+    harness.settleInitialPlacement()
+
+    harness.sendLeftMouseDown()
+    harness.sendLeftMouseUp(inWindowNumber: harness.windowNumber + 4_242)
+
+    var worstDrift: CGFloat = 0
+    for chunk in 0..<40 {
+      harness.appendStreamingText(" Streamed chunk \(chunk) after the popover took the release. ")
+      harness.pump(0.035)
+      worstDrift = max(worstDrift, harness.maximumScrollTop - harness.scrollTop)
+    }
+
+    XCTAssertLessThan(
+      worstDrift, 120,
+      "a release the transcript's window never saw must still close the press "
+        + "(drifted \(worstDrift) pt of a \(harness.viewportHeight) pt viewport)")
+  }
+
   /// Dragging the scrollbar genuinely moves the viewport, so it must still take
   /// ownership away from live-follow.
   func testAMouseDragThatMovesTheViewportStillTakesOwnership() throws {
@@ -378,6 +501,44 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
       "a track click that moved the viewport must keep the reader's position")
   }
 
+  /// Clicking "Load earlier messages" inserts rows above the viewport. The clip
+  /// origin stays at zero unless restored, which is the newly loaded oldest
+  /// row — the jump this test exists to forbid.
+  func testLoadingEarlierMessagesLeavesTheReaderOnTheSameRows() throws {
+    let harness = try makeHarness(messageCount: 80)
+    defer { harness.tearDown() }
+    harness.settleInitialPlacement()
+    harness.beginLiveScroll()
+    harness.scrollClipToTop()
+    XCTAssertLessThan(
+      harness.scrollTop, 80,
+      "precondition: the reader is at the top of history (scrollTop=\(harness.scrollTop) of \(harness.maximumScrollTop))"
+    )
+    harness.endLiveScroll()
+    let heightBefore = harness.documentHeight
+    let topBefore = harness.scrollTop
+
+    harness.beginLoadMore()
+    harness.prependOlderMessages(count: 40)
+    harness.finishLoadMore()
+
+    XCTAssertGreaterThan(
+      harness.documentHeight, heightBefore + 200,
+      "precondition: older rows actually grew the document")
+    let expected = ChatTranscriptPrependPreservation.restoredScrollTop(
+      previousDocumentHeight: heightBefore,
+      previousScrollTop: topBefore,
+      newDocumentHeight: harness.documentHeight
+    )
+    XCTAssertEqual(
+      harness.scrollTop, expected, accuracy: 40,
+      "loading earlier messages jumped the reader (scrollTop=\(harness.scrollTop), expected ~\(expected))"
+    )
+    XCTAssertGreaterThan(
+      harness.scrollTop, 100,
+      "restore left the reader at the newly loaded oldest rows (scrollTop=\(harness.scrollTop))")
+  }
+
   // MARK: - Harness
 
   private func makeHarness(
@@ -391,6 +552,10 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
   final class Harness {
     let model: TranscriptModel
     private let window: NSWindow
+
+    /// The transcript's own window, so a test can address a release to some
+    /// other window the way a popover or a menu does.
+    var windowNumber: Int { window.windowNumber }
     private let hostingView: NSHostingView<HarnessChatHost>
     private var pendingMessages: [ChatMessage] = []
     private(set) var scrollView: NSScrollView
@@ -406,13 +571,15 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
       messageCount: Int,
       startsLoading: Bool = false,
       pendingMessageCount: Int = 0,
-      transcriptWindowPolicy: ChatTranscriptWindow.Policy? = nil
+      transcriptWindowPolicy: ChatTranscriptWindow.Policy? = nil,
+      pinReduceMotion: Bool? = nil
     ) throws {
       model = TranscriptModel(messages: Self.makeMessages(count: messageCount))
       model.isLoadingInitial = startsLoading
       model.transcriptWindowPolicy = transcriptWindowPolicy
       self.pendingMessages = Self.makeMessages(count: pendingMessageCount)
-      hostingView = NSHostingView(rootView: HarnessChatHost(model: model))
+      hostingView = NSHostingView(
+        rootView: HarnessChatHost(model: model, pinReduceMotion: pinReduceMotion))
       hostingView.frame = NSRect(x: 0, y: 0, width: 900, height: 600)
       window = NSWindow(
         contentRect: NSRect(x: 0, y: 0, width: 900, height: 600),
@@ -472,6 +639,19 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
         let representation = clipView.bitmapImageRepForCachingDisplay(in: bounds)
       else { return nil }
       clipView.cacheDisplay(in: bounds, to: representation)
+      // `cacheDisplay` walks `draw(_:)`, which no longer sees everything: once
+      // the transcript hosts an AppKit text view its prose is drawn from a
+      // backing layer, and a bitmap taken this way shows the SwiftUI chrome
+      // without the words. Compositing the layer tree on top puts the text back
+      // in the picture, so the probe measures the row rather than half of it.
+      if let layer = clipView.layer,
+        let context = NSGraphicsContext(bitmapImageRep: representation)
+      {
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = context
+        layer.render(in: context.cgContext)
+        NSGraphicsContext.restoreGraphicsState()
+      }
       guard let image = representation.cgImage else { return nil }
 
       let width = image.width
@@ -507,7 +687,14 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
     // MARK: Gestures
 
     /// Outlives every delay in `ChatScrollLiveEdge.initialRestoreSettlingDelays`.
-    func settleInitialPlacement() { pump(1.2) }
+    func settleInitialPlacement() {
+      pump(1.2)
+      if let discovered = Self.firstScrollView(in: hostingView) { scrollView = discovered }
+    }
+
+    func scrollClipToTop() {
+      setClipTop(0)
+    }
 
     func performUpwardGesture(
       events: Int, deltaPerEvent: CGFloat = 40, pumpPerEvent: TimeInterval = 0,
@@ -602,11 +789,12 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
       pump(0.05)
     }
 
-    func sendLeftMouseUp() {
+    func sendLeftMouseUp(inWindowNumber windowNumber: Int? = nil) {
       guard
         let event = NSEvent.mouseEvent(
           with: .leftMouseUp, location: NSPoint(x: 450, y: 300), modifierFlags: [],
-          timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: window.windowNumber,
+          timestamp: ProcessInfo.processInfo.systemUptime,
+          windowNumber: windowNumber ?? window.windowNumber,
           context: nil, eventNumber: 0, clickCount: 1, pressure: 0)
       else { return }
       NSApplication.shared.sendEvent(event)
@@ -634,12 +822,21 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
       pump(0.1)
     }
 
-    // MARK: Content mutation
-
     func appendStreamingText(_ suffix: String) {
       guard !model.messages.isEmpty else { return }
       model.messages[model.messages.count - 1].text += suffix
       model.messages[model.messages.count - 1].isStreaming = true
+    }
+
+    /// An empty assistant row that is still streaming, for a test that wants
+    /// to stream an answer into a fresh row rather than onto a settled one.
+    func beginStreamingAssistantMessage() {
+      model.messages.append(
+        ChatMessage(
+          id: "assistant-streaming-\(model.messages.count)",
+          text: "",
+          sender: .ai,
+          isStreaming: true))
     }
 
     func appendAssistantMessage() {
@@ -648,6 +845,22 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
           id: "assistant-arrival-\(model.messages.count)",
           text: String(repeating: "A newly arrived answer. ", count: 8),
           sender: .ai))
+    }
+
+    func beginLoadMore() {
+      model.hasMoreMessages = true
+      model.isLoadingMoreMessages = true
+      pump(0.05)
+    }
+
+    func prependOlderMessages(count: Int) {
+      let older = Self.makeMessages(count: count, idOffset: 10_000)
+      model.messages = older + model.messages
+    }
+
+    func finishLoadMore() {
+      model.isLoadingMoreMessages = false
+      pump(0.7)
     }
 
     /// Removes the transcript from the hierarchy and puts it back, the way
@@ -707,6 +920,13 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
           wheel1: deltaY, wheel2: 0, wheel3: 0)
       else { return nil }
       cgEvent.setIntegerValueField(isContinuousField, value: 1)
+      // These events sit inside the explicit AppKit live-scroll transaction
+      // posted by the gesture helpers. Mark them as phased trackpad updates so
+      // the detector does not also arm its classic-wheel timeout fallback.
+      cgEvent.setIntegerValueField(
+        .scrollWheelEventScrollPhase,
+        value: Int64(NSEvent.Phase.changed.rawValue)
+      )
       guard let event = NSEvent(cgEvent: cgEvent) else { return nil }
       // A CGEvent-derived NSEvent carries no window, so production's
       // `event.window == scrollView.window` guard would drop it. Give it the
@@ -737,20 +957,21 @@ final class ChatTranscriptGestureHarnessTests: XCTestCase {
       return nil
     }
 
-    private static func makeMessages(count: Int) -> [ChatMessage] {
+    private static func makeMessages(count: Int, idOffset: Int = 0) -> [ChatMessage] {
       (0..<count).map { index in
-        index.isMultiple(of: 2)
+        let identity = index + idOffset
+        return identity.isMultiple(of: 2)
           ? ChatMessage(
-            id: "user-\(index)",
-            text: "Reader question number \(index) about the desktop transcript.",
-            createdAt: Date(timeIntervalSince1970: 1_700_000_000 + Double(index)),
+            id: "user-\(identity)",
+            text: "Reader question number \(identity) about the desktop transcript.",
+            createdAt: Date(timeIntervalSince1970: 1_700_000_000 + Double(identity)),
             sender: .user)
           : ChatMessage(
-            id: "assistant-\(index)",
+            id: "assistant-\(identity)",
             text: String(
-              repeating: "Assistant answer \(index) with enough prose to make the row tall. ",
+              repeating: "Assistant answer \(identity) with enough prose to make the row tall. ",
               count: 6),
-            createdAt: Date(timeIntervalSince1970: 1_700_000_000 + Double(index)),
+            createdAt: Date(timeIntervalSince1970: 1_700_000_000 + Double(identity)),
             sender: .ai)
       }
     }
@@ -765,6 +986,8 @@ final class TranscriptModel: ObservableObject {
   @Published var conversationIdentity: String = "harness-session"
   @Published var isSending: Bool = false
   @Published var isLoadingInitial: Bool = false
+  @Published var isLoadingMoreMessages: Bool = false
+  @Published var hasMoreMessages: Bool = false
   @Published var localSendToken: LocalSendToken?
   @Published var isPresented: Bool = true
   var transcriptWindowPolicy: ChatTranscriptWindow.Policy?
@@ -776,28 +999,65 @@ final class TranscriptModel: ObservableObject {
 
 struct HarnessChatHost: View {
   @ObservedObject var model: TranscriptModel
+  /// Pins the accessibility Reduce Motion environment when set. A test that
+  /// asserts on *animated* output must not inherit the host machine's
+  /// accessibility settings — a CI host with Reduce Motion on would otherwise
+  /// silently take every static branch and fail the assertion for an
+  /// environment reason the code under test never chose.
+  var pinReduceMotion: Bool? = nil
 
   var body: some View {
+    host
+      .modifier(PinnedReduceMotion(pin: pinReduceMotion))
+  }
+
+  @ViewBuilder private var host: some View {
     ZStack {
       if model.isPresented {
         ChatMessagesView(
           messages: model.messages,
           conversationIdentity: model.conversationIdentity,
           isSending: model.isSending,
-          hasMoreMessages: false,
-          isLoadingMoreMessages: false,
+          hasMoreMessages: model.hasMoreMessages,
+          isLoadingMoreMessages: model.isLoadingMoreMessages,
           isLoadingInitial: model.isLoadingInitial,
           app: nil,
           onLoadMore: {},
-          onRate: { _, _ in },
+          onRate: { _, _, _ in },
           localSendToken: model.localSendToken,
           horizontalContentPadding: 0,
+          chatFirstRichBlockContext: ChatSurfaceTestContext.make(),
           transcriptWindowPolicy: model.transcriptWindowPolicy,
           welcomeContent: { EmptyView() }
         )
       }
     }
     .frame(width: 900, height: 600)
+  }
+}
+
+/// Applies the pinned Reduce Motion value below the host, leaving the subtree
+/// exactly as the system provided it when no pin was asked for.
+struct PinnedReduceMotion: ViewModifier {
+  let pin: Bool?
+
+  func body(content: Content) -> some View {
+    if let pin {
+      content.pinnedReduceMotion(pin)
+    } else {
+      content
+    }
+  }
+}
+
+extension View {
+  /// One environment write that compiles identically on every toolchain this
+  /// package builds with: the public `\.accessibilityReduceMotion` key path is
+  /// read-only in both the Xcode 16 and macOS 26 SDKs, so the underscored
+  /// `WritableKeyPath` twin is the only setter. It targets the same environment
+  /// entry and propagates to readers of the public key path.
+  func pinnedReduceMotion(_ pin: Bool) -> some View {
+    environment(\._accessibilityReduceMotion, pin)
   }
 }
 

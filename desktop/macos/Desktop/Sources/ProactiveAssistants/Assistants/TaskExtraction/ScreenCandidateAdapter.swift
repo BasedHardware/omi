@@ -179,8 +179,6 @@ enum ScreenCandidateReconciliation {
 
 enum ScreenCaptureOutcome: String, Codable {
   case ignore
-  case createDirect = "create_direct"
-  case autoAcceptSilent = "auto_accept_silent"
   case pendingCandidate = "pending_candidate"
   case proposeEnrichment = "propose_enrichment"
   case proposeUpdate = "propose_update"
@@ -221,13 +219,16 @@ enum ScreenCapturePolicy {
     if facts.duplicateOf != nil { return .proposeEnrichment }
     if facts.refinesTask != nil { return .proposeUpdate }
     if facts.publicBroadcast && !facts.directMention { return .ignore }
-    if facts.explicitCommand { return .createDirect }
+    // I1: no outcome here may create a task. A command read off the screen is
+    // still a model's reading of pixels, and a high-confidence commitment is
+    // still an inference. Both propose, and both clear the same floor the
+    // Suggested surface applies — a proposal it would hide is not worth storing.
+    if facts.explicitCommand {
+      return meetsUserCaptureFloor(facts) ? .pendingCandidate : .ignore
+    }
     if facts.clearCommitment && facts.owner == "user" {
       guard facts.concreteDeliverable else { return .ignore }
-      if meetsUserCaptureFloor(facts) {
-        return .autoAcceptSilent
-      }
-      return .pendingCandidate
+      return meetsUserCaptureFloor(facts) ? .pendingCandidate : .ignore
     }
     if facts.directRequest && meetsUserCaptureFloor(facts) { return .pendingCandidate }
     if facts.inferredNextStep && meetsUserCaptureFloor(facts) { return .pendingCandidate }
@@ -236,13 +237,13 @@ enum ScreenCapturePolicy {
 }
 
 enum TaskCaptureModePolicy {
+  /// INVARIANT I1: no workflow mode may route a capture onto the legacy staging
+  /// path, because that path ends in automatic promotion into the user's task
+  /// list. `.off` in particular is what `/v1/candidates/control` returns when its
+  /// own read fails, so treating it as "stage and promote" turned a backend
+  /// hiccup into unrequested tasks. Captures now defer and retry instead.
   static func usesLegacyStaging(_ mode: OmiAPI.TaskWorkflowMode?) -> Bool {
-    switch mode {
-    case .off, .shadow, .write:
-      return true
-    case .read, ._unknown, nil:
-      return false
-    }
+    false
   }
 
   static func allowsLegacyPromotion(_ mode: OmiAPI.TaskWorkflowMode?) -> Bool {
@@ -312,10 +313,6 @@ extension OmiAPI.CandidateCreate: @unchecked Sendable {}
 struct ScreenCandidateDecision {
   let outcome: ScreenCaptureOutcome
   let candidate: OmiAPI.CandidateCreate?
-
-  var shouldAutoAccept: Bool {
-    outcome == .autoAcceptSilent || outcome == .createDirect
-  }
 }
 
 struct CanonicalScreenCandidateState: @unchecked Sendable {
@@ -330,8 +327,6 @@ protocol CanonicalScreenCandidateClient {
     idempotencyKey: String,
     accountGeneration: Int
   ) async throws -> CanonicalScreenCandidateState
-
-  func accept(candidateID: String, accountGeneration: Int) async throws -> CanonicalScreenCandidateState
 }
 
 struct APICanonicalScreenCandidateClient: CanonicalScreenCandidateClient {
@@ -351,18 +346,6 @@ struct APICanonicalScreenCandidateClient: CanonicalScreenCandidateClient {
       taskID: record.resultTaskId
     )
   }
-
-  func accept(candidateID: String, accountGeneration: Int) async throws -> CanonicalScreenCandidateState {
-    let receipt = try await APIClient.shared.acceptCanonicalCandidate(
-      candidateID: candidateID,
-      accountGeneration: accountGeneration
-    )
-    return CanonicalScreenCandidateState(
-      candidateID: receipt.candidateId,
-      status: receipt.status,
-      taskID: receipt.taskId
-    )
-  }
 }
 
 struct CanonicalScreenCandidateDelivery {
@@ -375,24 +358,104 @@ struct CanonicalScreenCandidateDelivery {
     accountGeneration: Int
   ) async throws -> CanonicalScreenCandidateState? {
     guard let candidate = decision.candidate else { return nil }
-    var state = try await client.create(
+    let state = try await client.create(
       candidate,
       idempotencyKey: ScreenCandidateAdapter.idempotencyKey(deviceID: deviceID, localID: localID),
       accountGeneration: accountGeneration
     )
-    if decision.shouldAutoAccept && state.status == .pending {
-      state = try await client.accept(
-        candidateID: state.candidateID,
-        accountGeneration: accountGeneration
-      )
-    }
+    // I1: delivery creates the pending Candidate and stops. Acceptance is a
+    // user gesture ("Add to Tasks"), never a step in the capture pipeline.
     return state
   }
 }
 
+/// Retry classification for canonical capture outbox delivery failures.
+///
+/// Transport failures and server-side conditions (5xx, 401 auth refresh, 409
+/// generation mismatch, 429 throttling) are transient: the same payload can
+/// succeed later, so the outbox row must stay retryable. Validation-class
+/// rejections (400/413/415/422) are deterministic — the payload itself can
+/// never succeed — so retrying them forever only wedges the queue behind
+/// permanently rejected rows.
+enum CandidateOutboxRetryPolicy {
+  /// Permanent validation rejections tolerated before a row is poisoned.
+  /// More than one attempt guards against a backend contract briefly rejecting
+  /// a valid payload mid-deploy; three failures on a deterministic 4xx is
+  /// conclusive.
+  static let maxPermanentRejections = 3
+
+  static func isPermanentRejection(statusCode: Int) -> Bool {
+    switch statusCode {
+    case 400, 413, 415, 422: return true
+    default: return false
+    }
+  }
+
+  static func isPermanentRejection(_ error: Error) -> Bool {
+    guard case APIError.httpError(let statusCode, _) = error else { return false }
+    return isPermanentRejection(statusCode: statusCode)
+  }
+
+  /// Transient failures stay retryable forever; validation-class rejections
+  /// are counted per row and the row is poisoned after a small number of
+  /// attempts so a permanently rejected capture cannot wedge the outbox drain.
+  static func handleDeliveryFailure(_ error: Error, localID: Int64) async {
+    guard isPermanentRejection(error),
+      let outcome = try? await StagedTaskStorage.shared.recordCanonicalOutboxRejection(id: localID)
+    else {
+      logError("Task: Candidate outbox delivery failed; will retry", error: error)
+      return
+    }
+    switch outcome {
+    case .willRetry(let rejections):
+      logError(
+        "Task: Candidate outbox delivery rejected by validation (attempt \(rejections)/\(maxPermanentRejections)); will retry",
+        error: error
+      )
+    case .poisoned(let rejections):
+      logError(
+        "Task: Candidate outbox delivery rejected by validation \(rejections) times; poisoned row \(localID) and stopped retrying",
+        error: error
+      )
+    }
+  }
+}
+
 enum ScreenCandidateAdapter {
+  /// The legacy capture contract may identify a staged task rather than a Rewind screenshot.
+  static let captureEvidenceVersion = "capture.v2"
+
+  static func evidenceVersion(for screenshotID: Int64?) -> String {
+    screenshotID == nil ? captureEvidenceVersion : RewindEvidenceCardPolicy.supportedVersion
+  }
+
   static func idempotencyKey(deviceID: String, localID: Int64) -> String {
     "screen:\(deviceID):\(localID)"
+  }
+
+  /// Canonical task references must be backend StableIds
+  /// (`^[A-Za-z0-9][A-Za-z0-9._:-]*$`, 1–128 chars; keep in sync with
+  /// `backend/models/task_intelligence.py`). The extraction model is asked for
+  /// a task id in `duplicate_of`/`refines_task` but sometimes echoes the
+  /// task's *title* instead. Forwarding that string as `task_id` makes
+  /// POST /v1/candidates fail Pydantic validation (HTTP 422) on every outbox
+  /// retry, forever. Treat any non-conforming reference as absent so the
+  /// capture policy decides create/complete/ignore without a bogus target.
+  static func canonicalTaskReference(_ raw: String?) -> String? {
+    guard let raw, !raw.isEmpty, raw.count <= 128 else { return nil }
+    for (index, scalar) in raw.unicodeScalars.enumerated() {
+      let isAlphanumeric =
+        (scalar >= "A" && scalar <= "Z")
+        || (scalar >= "a" && scalar <= "z")
+        || (scalar >= "0" && scalar <= "9")
+      if index == 0 {
+        guard isAlphanumeric else { return nil }
+      } else {
+        guard isAlphanumeric || scalar == "." || scalar == "_" || scalar == ":" || scalar == "-"
+        else { return nil }
+      }
+    }
+    return raw
   }
 
   static func facts(for task: ExtractedTask) -> ScreenCaptureFacts {
@@ -407,8 +470,8 @@ enum ScreenCandidateAdapter {
       publicBroadcast: task.publicBroadcast ?? false,
       directMention: task.directMention ?? false,
       alreadyDone: task.alreadyDone ?? (kind == "already_done"),
-      duplicateOf: task.duplicateOf,
-      refinesTask: task.refinesTask,
+      duplicateOf: canonicalTaskReference(task.duplicateOf),
+      refinesTask: canonicalTaskReference(task.refinesTask),
       captureConfidence: task.confidence,
       ownershipConfidence: task.ownershipConfidence ?? 0.5
     )
@@ -418,7 +481,8 @@ enum ScreenCandidateAdapter {
     task: ExtractedTask,
     dueAt: Date?,
     localEvidenceID: String,
-    deviceID: String
+    deviceID: String,
+    evidenceVersion: String = ScreenCandidateAdapter.captureEvidenceVersion
   ) -> ScreenCandidateDecision {
     let facts = facts(for: task)
     let outcome = ScreenCapturePolicy.evaluate(facts)
@@ -432,7 +496,7 @@ enum ScreenCandidateAdapter {
       id: localEvidenceID,
       kind: .local_screen,
       scope: .device_local,
-      version: "capture.v2"
+      version: evidenceVersion
     )
     let owner = OmiAPI.TaskOwner(rawValue: facts.owner) ?? .unknown
     let priority = OmiAPI.TaskPriority(rawValue: task.priority.rawValue)

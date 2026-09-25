@@ -1,0 +1,7 @@
+{
+  "version": "0.12.294",
+  "date": "2026-09-05",
+  "changes": [
+    "Omi can now use what you've been working on across your devices, so chat picks up your context instead of asking you to re-explain it. Screenshots and on-screen text never leave your Mac, and excluding an app removes what it already learned."
+  ]
+}

@@ -1,8 +1,7 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import dynamic from 'next/dynamic';
+import dynamic from '@tschk/moonshine-next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   ArrowLeft,
@@ -14,22 +13,37 @@ import {
   FileText,
   MapPin,
   Sparkles,
-  Volume2,
   ChevronDown,
   ChevronUp,
   RefreshCw,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { formatTime, formatDuration } from '@/lib/utils';
+import ReactMarkdown from 'react-markdown';
 import { TranscriptView } from './TranscriptView';
 import { AppSummaryCard } from './AppSummaryCard';
+import { ActionItemsTab, NextStepsList } from './NoteActionItems';
+import { NoteInsights } from './NoteInsights';
+import { NoteParticipants } from './NoteParticipants';
+import { NoteSections } from './NoteSections';
 import { GenerateSummaryButton } from './GenerateSummaryButton';
 import { ConversationActionsMenu } from './ConversationActionsMenu';
 import { EditableTitle } from './EditableTitle';
 import { SpeakerTagSheet } from './SpeakerTagSheet';
 import { ManagePeopleModal } from './ManagePeopleModal';
 import { AudioPlayer, AudioPlayerRef } from './AudioPlayer';
+import { ConversationScreenFrameBanner } from './ConversationScreenFrameBanner';
+import { ConversationScreenFrameCarousel } from './ConversationScreenFrameCarousel';
+import { ScreenFrameLightbox } from './ScreenFrameLightbox';
+import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { usePeople } from '@/hooks/usePeople';
+import { useScreenFrames } from '@/hooks/useScreenFrames';
+import {
+  BANNER_LIGHTBOX_INDEX,
+  buildLightboxFrames,
+  resolveIndexAfterRemoval,
+  stripFrameLightboxIndex,
+} from '@/lib/screenFrames';
 import {
   precacheConversationAudio,
   getConversationAudioUrls,
@@ -43,15 +57,21 @@ import type {
   TranscriptSegment,
   AudioFileUrlInfo,
   Geolocation,
+  NoteInsight,
   StructuredActionItem,
 } from '@/types/conversation';
+import { isFirstPartyNoteSelection, meetingTypeLabel } from '@/lib/meetingNotes';
+import {
+  selectConversationSummary,
+  type SummarySection,
+} from '@/lib/conversationSummarySelection';
 
-// Dynamic import for Leaflet map (SSR not supported)
+// Code-split the location preview out of the conversation panel bundle
 const SingleLocationMap = dynamic(() => import('@/components/ui/SingleLocationMap'), {
   ssr: false,
   loading: () => (
-    <div className="h-full bg-bg-tertiary animate-pulse flex items-center justify-center rounded-r-xl">
-      <MapPin className="w-8 h-8 text-text-quaternary" />
+    <div className="flex h-full animate-pulse items-center justify-center rounded-r-xl bg-bg-tertiary">
+      <MapPin className="h-8 w-8 text-text-quaternary" />
     </div>
   ),
 });
@@ -104,50 +124,13 @@ function calculateDuration(start: string | null, end: string | null): number {
   return Math.floor((endDate.getTime() - startDate.getTime()) / 1000);
 }
 
-/**
- * Action item component
- */
-function ActionItemRow({ item }: { item: StructuredActionItem }) {
+const OVERVIEW_MARKDOWN_CLASS =
+  'text-text-secondary leading-relaxed text-lg prose max-w-none prose-invert prose-headings:mt-4 prose-headings:mb-2 prose-headings:font-semibold prose-headings:text-text-primary prose-p:my-2 prose-ul:my-2 prose-ol:my-2 prose-li:my-1 prose-strong:text-text-primary first:prose-headings:mt-0';
+
+function OverviewMarkdown({ overview }: { overview: string }) {
   return (
-    <div
-      className={cn(
-        'flex items-start gap-3 p-4 rounded-xl',
-        'bg-bg-tertiary border border-bg-quaternary/50',
-        item.completed && 'opacity-60',
-      )}
-    >
-      <div
-        className={cn(
-          'w-5 h-5 rounded-md border-2 flex-shrink-0 mt-0.5',
-          'flex items-center justify-center',
-          item.completed ? 'bg-success border-success' : 'border-text-quaternary',
-        )}
-      >
-        {item.completed && (
-          <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-            <path
-              fillRule="evenodd"
-              d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
-              clipRule="evenodd"
-            />
-          </svg>
-        )}
-      </div>
-      <div className="flex-1">
-        <span
-          className={cn(
-            'text-text-primary',
-            item.completed && 'line-through text-text-tertiary',
-          )}
-        >
-          {item.description}
-        </span>
-        {item.due_at && (
-          <p className="text-xs text-text-quaternary mt-1">
-            Due: {new Date(item.due_at).toLocaleDateString()}
-          </p>
-        )}
-      </div>
+    <div className={OVERVIEW_MARKDOWN_CLASS}>
+      <ReactMarkdown>{overview}</ReactMarkdown>
     </div>
   );
 }
@@ -157,6 +140,9 @@ function ActionItemRow({ item }: { item: StructuredActionItem }) {
  */
 interface SummaryTabProps {
   overview: string;
+  sections?: SummarySection[] | null;
+  insights?: NoteInsight[] | null;
+  actionItems?: StructuredActionItem[];
   category?: string;
   conversationId: string;
   appResults: AppResponse[];
@@ -165,8 +151,11 @@ interface SummaryTabProps {
   geolocation?: Geolocation | null;
 }
 
-function SummaryTab({
+export function SummaryTab({
   overview,
+  sections,
+  insights,
+  actionItems,
   category,
   conversationId,
   appResults,
@@ -174,7 +163,15 @@ function SummaryTab({
   onGenerateComplete,
   geolocation,
 }: SummaryTabProps) {
-  const hasAppSummaries = appResults && appResults.length > 0;
+  const summary = selectConversationSummary({
+    structured: { overview, sections },
+    apps_results: appResults,
+  });
+  const isStructuredNote = isFirstPartyNoteSelection(summary.kind, sections);
+  const secondaryAppResults = (appResults ?? []).filter(
+    (result, index) => result.content?.trim() && index !== summary.resultIndex,
+  );
+  const hasAppSummaries = secondaryAppResults.length > 0;
   const hasLocation = geolocation && geolocation.latitude && geolocation.longitude;
 
   // State for expandable text
@@ -202,16 +199,16 @@ function SummaryTab({
       clearTimeout(timer);
       window.removeEventListener('resize', checkOverflow);
     };
-  }, [overview, hasLocation]);
+  }, [summary.content, hasLocation]);
 
   return (
     <div className="space-y-6">
       {/* Summary Section with optional Map */}
       {hasLocation ? (
-        <div className="noise-overlay rounded-xl overflow-hidden border border-white/[0.04]">
-          <div className="grid grid-cols-1 md:grid-cols-2 md:items-start min-h-[280px]">
+        <div className="noise-overlay overflow-hidden rounded-xl border border-white/[0.04]">
+          <div className="grid min-h-[280px] grid-cols-1 md:grid-cols-2 md:items-start">
             {/* Left: Overview content */}
-            <div className="p-5 pt-4 relative">
+            <div className="relative p-5 pt-4">
               <div
                 ref={textRef}
                 className={cn(
@@ -226,15 +223,20 @@ function SummaryTab({
               >
                 {category && (
                   <div className="mb-3">
-                    <span className="inline-flex px-3 py-1 rounded-full text-xs font-medium bg-purple-primary/10 text-purple-primary capitalize">
+                    <span className="inline-flex rounded-full bg-white/[0.08] px-3 py-1 text-xs font-medium capitalize text-text-primary">
                       {category}
                     </span>
                   </div>
                 )}
-                <p className="text-text-secondary leading-relaxed text-lg">{overview}</p>
+                {isStructuredNote && <NoteInsights insights={insights} />}
+                {isStructuredNote && sections ? (
+                  <NoteSections sections={sections} />
+                ) : (
+                  <OverviewMarkdown overview={summary.content} />
+                )}
                 {geolocation.address && (
                   <div className="mt-4 flex items-start gap-2 text-sm text-text-tertiary">
-                    <MapPin className="w-4 h-4 flex-shrink-0 mt-0.5" />
+                    <MapPin className="mt-0.5 h-4 w-4 flex-shrink-0" />
                     <span>{geolocation.address}</span>
                   </div>
                 )}
@@ -246,21 +248,21 @@ function SummaryTab({
                   className={cn(
                     'mt-2',
                     !isExpanded &&
-                      'absolute bottom-0 left-0 right-0 pt-12 pb-4 px-5 bg-gradient-to-t from-bg-secondary via-bg-secondary/90 to-transparent',
+                      'absolute bottom-0 left-0 right-0 bg-gradient-to-t from-bg-secondary via-bg-secondary/90 to-transparent px-5 pb-4 pt-12',
                   )}
                 >
                   <button
                     onClick={() => setIsExpanded(!isExpanded)}
-                    className="flex items-center gap-1 text-sm text-purple-primary hover:text-purple-400 transition-colors"
+                    className="flex items-center gap-1 text-sm text-text-primary transition-colors hover:text-text-secondary"
                   >
                     {isExpanded ? (
                       <>
-                        <ChevronUp className="w-4 h-4" />
+                        <ChevronUp className="h-4 w-4" />
                         <span>Show less</span>
                       </>
                     ) : (
                       <>
-                        <ChevronDown className="w-4 h-4" />
+                        <ChevronDown className="h-4 w-4" />
                         <span>Show more</span>
                       </>
                     )}
@@ -269,7 +271,7 @@ function SummaryTab({
               )}
             </div>
             {/* Right: Map */}
-            <div ref={mapRef} className="relative overflow-hidden aspect-video">
+            <div ref={mapRef} className="relative aspect-video overflow-hidden">
               <SingleLocationMap
                 latitude={geolocation.latitude}
                 longitude={geolocation.longitude}
@@ -284,21 +286,30 @@ function SummaryTab({
         <div>
           {category && (
             <div className="mb-3">
-              <span className="inline-flex px-3 py-1 rounded-full text-xs font-medium bg-purple-primary/10 text-purple-primary capitalize">
+              <span className="inline-flex rounded-full bg-white/[0.08] px-3 py-1 text-xs font-medium capitalize text-text-primary">
                 {category}
               </span>
             </div>
           )}
-          <p className="text-text-secondary leading-relaxed text-lg">{overview}</p>
+          {isStructuredNote && <NoteInsights insights={insights} />}
+          {isStructuredNote && sections ? (
+            <NoteSections sections={sections} />
+          ) : (
+            <OverviewMarkdown overview={summary.content} />
+          )}
         </div>
       )}
 
+      {isStructuredNote && actionItems && actionItems.length > 0 && (
+        <NextStepsList items={actionItems} />
+      )}
+
       {/* App Summaries Section */}
-      <div className="pt-4 border-t border-bg-tertiary">
+      <div className="border-t border-bg-tertiary pt-4">
         {/* Section Header with Generate Button */}
-        <div className="flex items-center justify-between mb-4">
+        <div className="mb-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <Sparkles className="w-4 h-4 text-purple-primary" />
+            <Sparkles className="h-4 w-4 text-text-primary" />
             <h3 className="text-sm font-medium text-text-primary">Summary Templates</h3>
           </div>
           <GenerateSummaryButton
@@ -312,7 +323,7 @@ function SummaryTab({
         {/* App Summary Cards */}
         {hasAppSummaries && (
           <div className="space-y-3">
-            {appResults.map((appResponse, index) => (
+            {secondaryAppResults.map((appResponse, index) => (
               <AppSummaryCard
                 key={`${appResponse.app_id}-${index}`}
                 appResponse={appResponse}
@@ -323,7 +334,7 @@ function SummaryTab({
 
         {/* Empty state for templates */}
         {!hasAppSummaries && (
-          <p className="text-sm text-text-tertiary mt-2">
+          <p className="mt-2 text-sm text-text-tertiary">
             No summaries yet. Click Templates above to generate one or create a custom
             template.
           </p>
@@ -334,68 +345,35 @@ function SummaryTab({
 }
 
 /**
- * Action items tab content
- */
-function ActionItemsTab({ items }: { items: StructuredActionItem[] }) {
-  const completedCount = items.filter((i) => i.completed).length;
-
-  return (
-    <div className="space-y-4">
-      {/* Progress indicator */}
-      <div className="flex items-center gap-3 p-3 rounded-lg bg-bg-tertiary/50">
-        <div className="flex-1">
-          <div className="h-2 bg-bg-quaternary rounded-full overflow-hidden">
-            <div
-              className="h-full bg-success transition-all duration-300"
-              style={{ width: `${(completedCount / items.length) * 100}%` }}
-            />
-          </div>
-        </div>
-        <span className="text-sm text-text-tertiary">
-          {completedCount}/{items.length} completed
-        </span>
-      </div>
-
-      {/* Action items list */}
-      <div className="space-y-3">
-        {items.map((item, index) => (
-          <ActionItemRow key={index} item={item} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-/**
  * Loading skeleton
  */
 function DetailSkeleton() {
   return (
-    <div className="p-6 animate-pulse">
+    <div className="animate-pulse p-6">
       {/* Header */}
-      <div className="flex items-start gap-4 mb-6">
-        <div className="w-14 h-14 rounded-2xl bg-bg-tertiary" />
+      <div className="mb-6 flex items-start gap-4">
+        <div className="h-14 w-14 rounded-2xl bg-bg-tertiary" />
         <div className="flex-1">
-          <div className="h-6 w-3/4 bg-bg-tertiary rounded mb-2" />
+          <div className="mb-2 h-6 w-3/4 rounded bg-bg-tertiary" />
           <div className="flex gap-3">
-            <div className="h-4 w-24 bg-bg-tertiary rounded" />
-            <div className="h-4 w-20 bg-bg-tertiary rounded" />
+            <div className="h-4 w-24 rounded bg-bg-tertiary" />
+            <div className="h-4 w-20 rounded bg-bg-tertiary" />
           </div>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-2 mb-6">
+      <div className="mb-6 flex gap-2">
         {[1, 2, 3].map((i) => (
-          <div key={i} className="h-10 w-24 bg-bg-tertiary rounded-lg" />
+          <div key={i} className="h-10 w-24 rounded-lg bg-bg-tertiary" />
         ))}
       </div>
 
       {/* Content */}
       <div className="space-y-3">
-        <div className="h-4 w-full bg-bg-tertiary rounded" />
-        <div className="h-4 w-5/6 bg-bg-tertiary rounded" />
-        <div className="h-4 w-4/6 bg-bg-tertiary rounded" />
+        <div className="h-4 w-full rounded bg-bg-tertiary" />
+        <div className="h-4 w-5/6 rounded bg-bg-tertiary" />
+        <div className="h-4 w-4/6 rounded bg-bg-tertiary" />
       </div>
     </div>
   );
@@ -435,8 +413,78 @@ export function ConversationDetailPanel({
     savingId: string | null;
     failed: number;
   }>({ total: 0, done: 0, savingId: null, failed: 0 });
-  const router = useRouter();
   const { people } = usePeople();
+
+  // Meeting-note screenshots: banner + carousel + lightbox state.
+  const screenFrames = useScreenFrames(conversationId);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+  const [pendingFrameDelete, setPendingFrameDelete] = useState<
+    { kind: 'frame'; frameId: string } | { kind: 'all' } | null
+  >(null);
+  const [deletingFrameId, setDeletingFrameId] = useState<string | null>(null);
+  const [deletingAllFrames, setDeletingAllFrames] = useState(false);
+
+  // The lightbox steps through the banner (if any) plus the strip, in that
+  // order, as one list — see `@/lib/screenFrames` for why the banner isn't a
+  // disjoint sequence from the strip.
+  const lightboxFrames = buildLightboxFrames(screenFrames.frameSet);
+
+  // If that combined list shrinks (a delete just landed) while the lightbox
+  // is open, clamp its index into the new bounds or close it if nothing is
+  // left. Never guess *which* frame that lands on beyond clamping — see
+  // `@/lib/screenFrames` for why banner/strip promotion stays server-owned.
+  useEffect(() => {
+    const newLength = lightboxFrames.length;
+    setLightboxIndex((current) =>
+      current === null ? null : resolveIndexAfterRemoval(current, newLength),
+    );
+  }, [lightboxFrames.length]);
+
+  const openScreenFrameLightboxForStripIndex = useCallback(
+    (stripIndex: number) => {
+      setLightboxIndex(stripFrameLightboxIndex(screenFrames.frameSet, stripIndex));
+    },
+    [screenFrames.frameSet],
+  );
+
+  const openScreenFrameLightboxForBanner = useCallback(() => {
+    setLightboxIndex(BANNER_LIGHTBOX_INDEX);
+  }, []);
+
+  const closeScreenFrameLightbox = useCallback(() => {
+    setLightboxIndex(null);
+  }, []);
+
+  const requestDeleteScreenFrame = useCallback((frameId: string) => {
+    setPendingFrameDelete({ kind: 'frame', frameId });
+  }, []);
+
+  const requestDeleteAllScreenFrames = useCallback(() => {
+    setPendingFrameDelete({ kind: 'all' });
+  }, []);
+
+  const confirmPendingFrameDelete = useCallback(async () => {
+    const pending = pendingFrameDelete;
+    if (!pending) return;
+    setPendingFrameDelete(null);
+
+    if (pending.kind === 'frame') {
+      setDeletingFrameId(pending.frameId);
+      try {
+        await screenFrames.deleteFrame(pending.frameId);
+      } finally {
+        setDeletingFrameId(null);
+      }
+    } else {
+      setDeletingAllFrames(true);
+      try {
+        await screenFrames.deleteAll();
+        setLightboxIndex(null);
+      } finally {
+        setDeletingAllFrames(false);
+      }
+    }
+  }, [pendingFrameDelete, screenFrames]);
 
   // Refs holding the *currently displayed* conversation id and object, so async
   // completions (segment saves, reprocess) can (a) build optimistic updates from
@@ -459,6 +507,10 @@ export function ConversationDetailPanel({
     setTranscriptEdited(false);
     setIsReprocessing(false);
     setReprocessFailed(false);
+    setLightboxIndex(null);
+    setPendingFrameDelete(null);
+    setDeletingFrameId(null);
+    setDeletingAllFrames(false);
   }, [conversationId]);
 
   const isSavingSegments = saveBatch.total > saveBatch.done;
@@ -736,27 +788,34 @@ export function ConversationDetailPanel({
   const actionItems = structured.action_items || [];
   const hasActionItems = actionItems.length > 0;
   const hasTranscript = transcript_segments && transcript_segments.length > 0;
-  const hasLocation = geolocation && geolocation.latitude && geolocation.longitude;
+  const summarySelection = selectConversationSummary(conversation);
+  const showNoteChrome = isFirstPartyNoteSelection(
+    summarySelection.kind,
+    structured.sections,
+  );
+  const noteMeetingLabel = showNoteChrome
+    ? meetingTypeLabel(structured.meeting_type)
+    : null;
 
   // Build tabs array based on available content
   const tabs: Tab[] = [
     {
       id: 'summary',
       label: 'Summary',
-      icon: <FileText className="w-4 h-4" />,
-      disabled: !structured.overview,
+      icon: <FileText className="h-4 w-4" />,
+      disabled: summarySelection.kind === 'empty',
     },
     {
       id: 'actions',
       label: 'Actions',
-      icon: <CheckSquare className="w-4 h-4" />,
+      icon: <CheckSquare className="h-4 w-4" />,
       count: actionItems.length,
       disabled: !hasActionItems,
     },
     {
       id: 'transcript',
       label: 'Transcript',
-      icon: <MessageSquare className="w-4 h-4" />,
+      icon: <MessageSquare className="h-4 w-4" />,
       count: transcript_segments?.length || 0,
       disabled: !hasTranscript,
     },
@@ -774,62 +833,70 @@ export function ConversationDetailPanel({
   }
 
   return (
-    <div className="h-full flex flex-col overflow-hidden relative">
+    <div className="relative flex h-full flex-col overflow-hidden">
       {/* Header */}
-      <div className="flex-shrink-0 p-4 lg:p-6 border-b border-bg-tertiary">
+      <div className="flex-shrink-0 border-b border-bg-tertiary p-4 lg:p-6">
         <div className="flex items-start gap-4">
           {/* Back button (mobile only) */}
           {onBack && (
             <button
               onClick={onBack}
-              className="lg:hidden p-2 -ml-2 rounded-lg hover:bg-bg-tertiary transition-colors"
+              className="-ml-2 rounded-lg p-2 transition-colors hover:bg-bg-tertiary lg:hidden"
               aria-label="Back to list"
             >
-              <ArrowLeft className="w-5 h-5 text-text-secondary" />
+              <ArrowLeft className="h-5 w-5 text-text-secondary" />
             </button>
           )}
 
           {/* Emoji */}
-          <div className="w-14 h-14 rounded-2xl bg-bg-tertiary flex items-center justify-center text-3xl flex-shrink-0">
+          <div className="flex h-14 w-14 flex-shrink-0 items-center justify-center rounded-2xl bg-bg-tertiary text-3xl">
             {structured.emoji || '💬'}
           </div>
 
-          <div className="flex-1 min-w-0">
+          <div className="min-w-0 flex-1">
             {/* Editable Title */}
             <EditableTitle
               conversationId={conversationId}
               title={structured.title || 'Untitled Conversation'}
               onTitleChange={handleTitleChange}
-              className="text-xl font-display font-semibold text-text-primary mb-2 line-clamp-2"
+              className="mb-2 line-clamp-2 font-display text-xl font-semibold text-text-primary"
             />
 
             {/* Meta info */}
             <div className="flex flex-wrap items-center gap-3 text-sm text-text-tertiary">
               {conversation.started_at && (
                 <div className="flex items-center gap-1.5">
-                  <Calendar className="w-4 h-4" />
+                  <Calendar className="h-4 w-4" />
                   <span>{formatDate(conversation.started_at)}</span>
                 </div>
               )}
               {conversation.started_at && (
                 <div className="flex items-center gap-1.5">
-                  <Clock className="w-4 h-4" />
+                  <Clock className="h-4 w-4" />
                   <span>{formatTime(new Date(conversation.started_at))}</span>
                 </div>
               )}
               {duration > 0 && (
                 <div className="flex items-center gap-1.5">
-                  <MessageSquare className="w-4 h-4" />
+                  <MessageSquare className="h-4 w-4" />
                   <span>{formatDuration(duration)}</span>
+                </div>
+              )}
+              {noteMeetingLabel && (
+                <div className="flex items-center gap-1.5">
+                  <span>{noteMeetingLabel}</span>
                 </div>
               )}
               {conversation.starred && (
                 <div className="flex items-center gap-1.5 text-warning">
-                  <Star className="w-4 h-4 fill-current" />
+                  <Star className="h-4 w-4 fill-current" />
                   <span>Starred</span>
                 </div>
               )}
             </div>
+            {showNoteChrome && (
+              <NoteParticipants participants={structured.participants} />
+            )}
           </div>
 
           {/* Actions Menu */}
@@ -842,20 +909,36 @@ export function ConversationDetailPanel({
         </div>
       </div>
 
+      {/* Screenshot banner — renders nothing (and this wrapper isn't mounted)
+          when there's no approved banner frame, leaving the header above as
+          the only header treatment. */}
+      {screenFrames.frameSet?.banner && (
+        <div className="flex-shrink-0 px-4 pt-4 lg:px-6 lg:pt-6">
+          <ConversationScreenFrameBanner
+            frame={screenFrames.frameSet.banner}
+            title={structured.title || 'Untitled Conversation'}
+            dateLabel={
+              conversation.started_at ? formatDate(conversation.started_at) : undefined
+            }
+            onClick={openScreenFrameLightboxForBanner}
+          />
+        </div>
+      )}
+
       {/* Tabs */}
       {enabledTabs.length > 0 && (
-        <div className="flex-shrink-0 px-4 lg:px-6 py-3 border-b border-bg-tertiary">
+        <div className="flex-shrink-0 border-b border-bg-tertiary px-4 py-3 lg:px-6">
           <div className="flex gap-1">
             {enabledTabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={cn(
-                  'flex items-center gap-2 px-3 py-2 rounded-lg',
+                  'flex items-center gap-2 rounded-lg px-3 py-2',
                   'text-sm font-medium transition-all duration-150',
                   activeTab === tab.id
-                    ? 'bg-purple-primary text-white'
-                    : 'text-text-secondary hover:text-text-primary hover:bg-bg-tertiary',
+                    ? 'bg-text-primary text-bg-primary'
+                    : 'text-text-secondary hover:bg-bg-tertiary hover:text-text-primary',
                 )}
               >
                 {tab.icon}
@@ -863,7 +946,7 @@ export function ConversationDetailPanel({
                 {tab.count !== undefined && tab.count > 0 && (
                   <span
                     className={cn(
-                      'px-1.5 py-0.5 rounded-full text-xs',
+                      'rounded-full px-1.5 py-0.5 text-xs',
                       activeTab === tab.id ? 'bg-white/20' : 'bg-bg-tertiary',
                     )}
                   >
@@ -886,16 +969,29 @@ export function ConversationDetailPanel({
             exit={{ opacity: 0, y: -10 }}
             transition={{ duration: 0.15 }}
           >
-            {activeTab === 'summary' && structured.overview && (
-              <SummaryTab
-                overview={structured.overview}
-                category={structured.category}
-                conversationId={conversationId}
-                appResults={conversation.apps_results || []}
-                suggestedAppIds={conversation.suggested_summarization_apps || []}
-                onGenerateComplete={onConversationUpdate}
-                geolocation={geolocation}
-              />
+            {activeTab === 'summary' && summarySelection.kind !== 'empty' && (
+              <>
+                <SummaryTab
+                  overview={structured.overview || ''}
+                  sections={structured.sections}
+                  insights={structured.insights}
+                  actionItems={actionItems}
+                  category={structured.category}
+                  conversationId={conversationId}
+                  appResults={conversation.apps_results || []}
+                  suggestedAppIds={conversation.suggested_summarization_apps || []}
+                  onGenerateComplete={onConversationUpdate}
+                  geolocation={geolocation}
+                />
+                <ConversationScreenFrameCarousel
+                  frames={screenFrames.frameSet?.strip ?? []}
+                  onFrameClick={openScreenFrameLightboxForStripIndex}
+                  onRequestDeleteFrame={requestDeleteScreenFrame}
+                  onRequestDeleteAll={requestDeleteAllScreenFrames}
+                  deletingFrameId={deletingFrameId}
+                  className="mt-6"
+                />
+              </>
             )}
 
             {activeTab === 'actions' && hasActionItems && (
@@ -916,17 +1012,17 @@ export function ConversationDetailPanel({
                 )}
                 {/* Loading state while fetching signed URLs */}
                 {audioAvailable && fetchedAudioFiles.length === 0 && (
-                  <div className="flex items-center gap-3 p-3 rounded-xl bg-bg-tertiary border border-bg-quaternary/50 text-text-tertiary text-sm">
-                    <div className="w-10 h-10 rounded-full flex items-center justify-center bg-purple-primary/50">
-                      <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  <div className="flex items-center gap-3 rounded-xl border border-bg-quaternary/50 bg-bg-tertiary p-3 text-sm text-text-tertiary">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-full bg-text-primary/90">
+                      <div className="h-5 w-5 animate-spin rounded-full border-2 border-white border-t-transparent" />
                     </div>
                     <span>Loading audio...</span>
                   </div>
                 )}
                 {/* Save-queue progress: edits persist one at a time (serialized) */}
                 {isSavingSegments && (
-                  <div className="flex items-center gap-3 p-3 rounded-xl bg-bg-tertiary border border-bg-quaternary/50 text-sm text-text-secondary">
-                    <div className="w-4 h-4 border-2 border-text-quaternary border-t-transparent rounded-full animate-spin flex-shrink-0" />
+                  <div className="flex items-center gap-3 rounded-xl border border-bg-quaternary/50 bg-bg-tertiary p-3 text-sm text-text-secondary">
+                    <div className="h-4 w-4 flex-shrink-0 animate-spin rounded-full border-2 border-text-quaternary border-t-transparent" />
                     <span>
                       Saving edit {Math.min(saveBatch.done + 1, saveBatch.total)} of{' '}
                       {saveBatch.total}…
@@ -935,7 +1031,7 @@ export function ConversationDetailPanel({
                 )}
                 {/* Failed-save banner (edits were reverted to their saved value) */}
                 {!isSavingSegments && saveBatch.failed > 0 && (
-                  <div className="flex items-center gap-2 p-3 rounded-xl bg-error/10 border border-error/20 text-sm text-error">
+                  <div className="flex items-center gap-2 rounded-xl border border-error/20 bg-error/10 p-3 text-sm text-error">
                     <span>
                       Couldn&apos;t save {saveBatch.failed} edit
                       {saveBatch.failed > 1 ? 's' : ''} — reverted to the saved text.
@@ -945,18 +1041,18 @@ export function ConversationDetailPanel({
                 )}
                 {/* Reprocess failed/timed out — surface it and let the user retry */}
                 {reprocessFailed && !isReprocessing && !conversation.discarded && (
-                  <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-error/10 border border-error/20">
+                  <div className="flex items-center justify-between gap-3 rounded-xl border border-error/20 bg-error/10 p-3">
                     <span className="text-sm text-error">
                       Reprocessing failed — the summary and search may be out of date.
                     </span>
                     <button
                       onClick={handleReprocessAfterEdit}
                       className={cn(
-                        'flex items-center gap-1.5 flex-shrink-0 px-3 py-1.5 rounded-lg text-sm font-medium',
-                        'bg-white text-bg-primary hover:bg-white/90 transition-colors',
+                        'flex flex-shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium',
+                        'bg-white text-bg-primary transition-colors hover:bg-white/90',
                       )}
                     >
-                      <RefreshCw className="w-3.5 h-3.5" />
+                      <RefreshCw className="h-3.5 w-3.5" />
                       <span>Retry</span>
                     </button>
                   </div>
@@ -967,9 +1063,9 @@ export function ConversationDetailPanel({
                   !isSavingSegments &&
                   saveBatch.failed === 0 &&
                   !reprocessFailed && (
-                    <div className="flex items-center justify-between gap-3 p-3 rounded-xl bg-bg-tertiary border border-bg-quaternary/50">
+                    <div className="flex items-center justify-between gap-3 rounded-xl border border-bg-quaternary/50 bg-bg-tertiary p-3">
                       <div className="flex items-center gap-2 text-sm text-text-secondary">
-                        <Sparkles className="w-4 h-4 text-text-secondary flex-shrink-0" />
+                        <Sparkles className="h-4 w-4 flex-shrink-0 text-text-secondary" />
                         <span>
                           Transcript edited. Reprocess to update the summary and search.
                         </span>
@@ -978,13 +1074,13 @@ export function ConversationDetailPanel({
                         onClick={handleReprocessAfterEdit}
                         disabled={isReprocessing}
                         className={cn(
-                          'flex items-center gap-1.5 flex-shrink-0 px-3 py-1.5 rounded-lg text-sm font-medium',
-                          'bg-white text-bg-primary hover:bg-white/90 transition-colors',
+                          'flex flex-shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium',
+                          'bg-white text-bg-primary transition-colors hover:bg-white/90',
                           'disabled:opacity-60',
                         )}
                       >
                         <RefreshCw
-                          className={cn('w-3.5 h-3.5', isReprocessing && 'animate-spin')}
+                          className={cn('h-3.5 w-3.5', isReprocessing && 'animate-spin')}
                         />
                         <span>{isReprocessing ? 'Reprocessing…' : 'Reprocess'}</span>
                       </button>
@@ -1039,6 +1135,48 @@ export function ConversationDetailPanel({
             setShowTagSheet(true);
           }
         }}
+      />
+
+      {/* Screenshot lightbox — steps through the banner (if any) plus the
+          strip as one ordered list; see `openScreenFrameLightboxForBanner`
+          / `openScreenFrameLightboxForStripIndex` above. */}
+      <ScreenFrameLightbox
+        open={lightboxIndex !== null}
+        frames={lightboxFrames}
+        index={lightboxIndex ?? 0}
+        onIndexChange={setLightboxIndex}
+        onClose={closeScreenFrameLightbox}
+        onRequestDeleteFrame={requestDeleteScreenFrame}
+        deletingFrameId={deletingFrameId}
+      />
+
+      {/* Screenshot delete confirmation — shared by the carousel's hover-X
+          and the lightbox's delete button. A modal confirm (rather than the
+          inline two-step reveal used for conversation delete in
+          ConversationActionsMenu) because the trigger is a ~24px hover
+          affordance on a 128px-wide thumbnail with no room for inline
+          "Delete this? [Cancel] [Delete]" text. */}
+      <ConfirmDialog
+        open={pendingFrameDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingFrameDelete(null);
+        }}
+        title={
+          pendingFrameDelete?.kind === 'all'
+            ? 'Delete all screenshots?'
+            : 'Delete screenshot?'
+        }
+        description={
+          pendingFrameDelete?.kind === 'all'
+            ? "This removes every screenshot from this conversation. This can't be undone."
+            : "This screenshot will be permanently removed. This can't be undone."
+        }
+        confirmLabel="Delete"
+        variant="danger"
+        onConfirm={() => {
+          void confirmPendingFrameDelete();
+        }}
+        isLoading={deletingAllFrames}
       />
     </div>
   );

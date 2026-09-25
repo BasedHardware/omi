@@ -600,6 +600,8 @@ export function canonicalAdapterEventType(event: OutboundMessageDraft): string |
       return "tool.started";
     case "tool_result_display":
       return "tool.completed";
+    case "model_used":
+      return "progress.updated";
     case "error":
       return "progress.updated";
     default:

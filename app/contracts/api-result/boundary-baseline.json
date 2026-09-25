@@ -1,0 +1,160 @@
+{
+  "rules": [
+    {
+      "id": "legacy-nullable-http",
+      "pattern": "\\bmakeApiCall\\s*\\(",
+      "paths": [
+        "app/lib/"
+      ],
+      "remedy": "Use executeApi and exhaustively handle ApiResult; see app/lib/backend/http/API_RESULTS.md. Do not turn an outage into null or an empty list.",
+      "except": [
+        "app/lib/backend/http/shared.dart"
+      ]
+    },
+    {
+      "id": "null-swallow-patterns",
+      "pattern": "\\breturn\\s+null\\b|\\?\\?\\s*(?:<[^>]+>)?\\s*\\[\\s*\\]|\\bcatch\\s*\\(",
+      "paths": [
+        "app/lib/backend/http/api/",
+        "app/lib/backend/http/api/action_items.dart",
+        "app/lib/backend/http/api/announcements.dart",
+        "app/lib/backend/http/api/apps.dart",
+        "app/lib/backend/http/api/audio.dart",
+        "app/lib/backend/http/api/conversations.dart",
+        "app/lib/backend/http/api/dev_api.dart",
+        "app/lib/backend/http/api/device.dart",
+        "app/lib/backend/http/api/folders.dart",
+        "app/lib/backend/http/api/goals.dart",
+        "app/lib/backend/http/api/imports.dart",
+        "app/lib/backend/http/api/integrations.dart",
+        "app/lib/backend/http/api/knowledge_graph_api.dart",
+        "app/lib/backend/http/api/mcp_api.dart",
+        "app/lib/backend/http/api/memories.dart",
+        "app/lib/backend/http/api/messages.dart",
+        "app/lib/backend/http/api/notifications.dart",
+        "app/lib/backend/http/api/payment.dart",
+        "app/lib/backend/http/api/payments.dart",
+        "app/lib/backend/http/api/phone_calls.dart",
+        "app/lib/backend/http/api/privacy.dart",
+        "app/lib/backend/http/api/speech_profile.dart",
+        "app/lib/backend/http/api/task_integrations.dart",
+        "app/lib/backend/http/api/tts.dart",
+        "app/lib/backend/http/api/users.dart",
+        "app/lib/backend/http/api/wrapped.dart",
+        "app/lib/backend/http/webhooks.dart",
+        "app/lib/services/account_cutover/account_cutover_control_client.dart"
+      ],
+      "remedy": "Move error classification to executeApi/decodeApiRows and handle ApiFailure explicitly; see app/lib/backend/http/API_RESULTS.md. Legacy debt may shrink, never grow."
+    }
+  ],
+  "baseline": {
+    "app/lib/services/account_cutover/account_cutover_control_client.dart": {
+      "legacy-nullable-http": 1,
+      "null-swallow-patterns": 3
+    },
+    "app/lib/backend/http/webhooks.dart": {
+      "legacy-nullable-http": 1,
+      "null-swallow-patterns": 2
+    },
+    "app/lib/backend/http/api/apps.dart": {
+      "legacy-nullable-http": 30,
+      "null-swallow-patterns": 44
+    },
+    "app/lib/backend/http/api/audio.dart": {
+      "legacy-nullable-http": 2,
+      "null-swallow-patterns": 2
+    },
+    "app/lib/backend/http/api/action_items.dart": {
+      "legacy-nullable-http": 11,
+      "null-swallow-patterns": 17
+    },
+    "app/lib/backend/http/api/imports.dart": {
+      "legacy-nullable-http": 2,
+      "null-swallow-patterns": 7
+    },
+    "app/lib/backend/http/api/phone_calls.dart": {
+      "legacy-nullable-http": 5,
+      "null-swallow-patterns": 6
+    },
+    "app/lib/backend/http/api/mcp_api.dart": {
+      "legacy-nullable-http": 3
+    },
+    "app/lib/backend/http/api/knowledge_graph_api.dart": {
+      "legacy-nullable-http": 2,
+      "null-swallow-patterns": 2
+    },
+    "app/lib/backend/http/api/announcements.dart": {
+      "legacy-nullable-http": 3
+    },
+    "app/lib/backend/http/api/payment.dart": {
+      "legacy-nullable-http": 7,
+      "null-swallow-patterns": 10
+    },
+    "app/lib/backend/http/api/task_integrations.dart": {
+      "legacy-nullable-http": 11,
+      "null-swallow-patterns": 21
+    },
+    "app/lib/backend/http/api/payments.dart": {
+      "legacy-nullable-http": 7,
+      "null-swallow-patterns": 15
+    },
+    "app/lib/backend/http/api/notifications.dart": {
+      "legacy-nullable-http": 2
+    },
+    "app/lib/backend/http/api/dev_api.dart": {
+      "legacy-nullable-http": 3
+    },
+    "app/lib/backend/http/api/device.dart": {
+      "legacy-nullable-http": 2
+    },
+    "app/lib/backend/http/api/messages.dart": {
+      "legacy-nullable-http": 4,
+      "null-swallow-patterns": 4
+    },
+    "app/lib/backend/http/api/memories.dart": {
+      "legacy-nullable-http": 11,
+      "null-swallow-patterns": 15
+    },
+    "app/lib/backend/http/api/folders.dart": {
+      "legacy-nullable-http": 7,
+      "null-swallow-patterns": 4
+    },
+    "app/lib/backend/http/api/users.dart": {
+      "legacy-nullable-http": 43,
+      "null-swallow-patterns": 49
+    },
+    "app/lib/backend/http/api/integrations.dart": {
+      "legacy-nullable-http": 5,
+      "null-swallow-patterns": 4
+    },
+    "app/lib/backend/http/api/tts.dart": {
+      "legacy-nullable-http": 1,
+      "null-swallow-patterns": 1
+    },
+    "app/lib/backend/http/api/conversations.dart": {
+      "legacy-nullable-http": 28,
+      "null-swallow-patterns": 17
+    },
+    "app/lib/backend/http/api/privacy.dart": {
+      "legacy-nullable-http": 6,
+      "null-swallow-patterns": 6
+    },
+    "app/lib/backend/http/api/goals.dart": {
+      "legacy-nullable-http": 8,
+      "null-swallow-patterns": 18
+    },
+    "app/lib/backend/http/api/wrapped.dart": {
+      "legacy-nullable-http": 2,
+      "null-swallow-patterns": 4
+    },
+    "app/lib/backend/http/api/speech_profile.dart": {
+      "legacy-nullable-http": 5,
+      "null-swallow-patterns": 7
+    }
+  },
+  "adopted": {
+    "app/lib/backend/http/action_items_api_contract.dart": [
+      "legacy-nullable-http"
+    ]
+  }
+}

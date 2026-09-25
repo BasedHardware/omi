@@ -55,11 +55,22 @@ struct OnboardingOpenerView: View {
   }
 
   private func startFromOpener(_ question: String) {
-    AnalyticsManager.shared.chatMessageSent(
-      messageLength: question.count, hasSelectedAppContext: false, source: "onboarding_opener")
     PostOnboardingPromptSuggestions.consume()
     chatProvider.dismissOnboardingOpener()
-    Task { await chatProvider.sendMainDraft(question) }
+    if DayZeroChips.isDraftPrompt(question) {
+      // Prefill and focus; the user finishes the sentence and sends it themselves.
+      MainChatNavigationRequestStore.shared.request(draft: DayZeroChips.draftText(for: question))
+      return
+    }
+    Task {
+      await chatProvider.sendMainDraft(
+        question,
+        onAcceptedWithAttemptID: { attemptID in
+          AnalyticsManager.shared.chatMessageSent(
+            messageLength: question.count, hasSelectedAppContext: false, source: "onboarding_opener",
+            attemptID: attemptID)
+        })
+    }
   }
 }
 

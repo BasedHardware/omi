@@ -359,10 +359,11 @@ package enum InkGlass {
 
 /// The broad ambient shadow under a floating panel.
 ///
-/// Not a drop shadow. The floating quality comes almost entirely from a wide, diffuse, low-opacity
-/// shadow — a tight 1 pt one reads as a sticker. It is one value for every panel size for the same
-/// reason the corner is: two floating objects on the same desktop with different shadows read as two
-/// different materials.
+/// Not a drop shadow. The floating quality comes from a soft, low-opacity lift — a 1 pt
+/// contact shadow reads as a sticker, and a 34 pt halo into a hugged window's 8 pt inset
+/// clips into a thick black band. It is one value for every panel size for the same
+/// reason the corner is: two floating objects on the same desktop with different shadows
+/// read as two different materials.
 package struct InkGlassShadow: Equatable, Sendable {
   package var radius: CGFloat
   package var opacity: Float
@@ -377,11 +378,13 @@ package struct InkGlassShadow: Equatable, Sendable {
   /// How much clear margin the panel needs *inside its window* for this shadow to render.
   ///
   /// A borderless window clips at its own bounds, so a panel drawn edge to edge has nowhere to cast
-  /// into. Callers size their window to the panel plus twice this.
-  package var padding: CGFloat { radius + abs(offsetY) + 12 }
+  /// into. Callers size their window to the panel plus twice this. Extra fudge beyond radius+offset
+  /// is what turned a lift into a clipped black band around the hugged shell.
+  package var padding: CGFloat { radius + abs(offsetY) }
 
-  /// The one shadow.
-  package static let ambient = InkGlassShadow(radius: 34, opacity: 0.24, offsetY: -10)
+  /// The one shadow. A lift, not a halo: radius 34 at 0.24 into a hugged window's 8–16 pt
+  /// inset clips into a thick black band around the glass.
+  package static let ambient = InkGlassShadow(radius: 8, opacity: 0.10, offsetY: -2)
 }
 
 // MARK: - The style
@@ -437,10 +440,16 @@ package struct InkGlassStyle: Equatable, Sendable {
 /// only ever written on the main thread, from `InkGlassView.init`.
 private final class InkGlassObserverToken: @unchecked Sendable {
   var token: (any NSObjectProtocol)?
+  /// The centre the token was registered on; a token removed from the wrong centre stays live.
+  private let center: NotificationCenter
+
+  init(center: NotificationCenter = NSWorkspace.shared.notificationCenter) {
+    self.center = center
+  }
 
   deinit {
     guard let token else { return }
-    NSWorkspace.shared.notificationCenter.removeObserver(token)
+    center.removeObserver(token)
   }
 }
 
@@ -486,6 +495,7 @@ package final class InkGlassView: NSView {
   /// ground gets thinner, not less.
   private let shadowHost = NSView()
   private let observer = InkGlassObserverToken()
+  private let transparencyObserver = InkGlassObserverToken(center: .default)
 
   // A glass surface is visible content: report its extent so transparent windows can keep
   // pass-through margins without ever passing a click through the glass itself.
@@ -552,6 +562,16 @@ package final class InkGlassView: NSView {
     ) { [weak self] _ in
       MainActor.assumeIsolated { self?.applyCurrentSettings() }
     }
+    // The user's own transparency slider, which moves the same alpha and must reach every panel that
+    // is already up — the Settings window the slider is in, and the floating ones behind it — while
+    // the thumb is still moving.
+    transparencyObserver.token = InkGlassTransparencySettings.shared.notificationCenter.addObserver(
+      forName: InkGlassTransparencySettings.didChangeNotification,
+      object: nil,
+      queue: .main
+    ) { [weak self] _ in
+      MainActor.assumeIsolated { self?.applyCurrentSettings() }
+    }
   }
 
   @available(*, unavailable)
@@ -608,7 +628,9 @@ package final class InkGlassView: NSView {
   }
 
   private func applyCurrentSettings() {
-    apply(reduceTransparency: InkReduceTransparency.isEnabled)
+    apply(
+      reduceTransparency: InkReduceTransparency.isEnabled,
+      transparency: InkGlassTransparencySettings.shared.transparency)
   }
 
   /// One point. A highlight is a *line*, not a gradient band — a band reads as a second, lighter panel
@@ -619,15 +641,20 @@ package final class InkGlassView: NSView {
   /// layout check — would have to hop an actor to read a `1`.
   nonisolated package static let sheenHeight: CGFloat = 1
 
-  /// The panel's whole appearance, from one `Bool`. The only branch in this file.
-  package func apply(reduceTransparency reduced: Bool) {
+  /// The panel's whole appearance, from one `Bool` and the user's transparency. The only branch in
+  /// this file. `transparency` defaults to the shipped scrim so a caller asserting the accessibility
+  /// contract alone reads exactly the design's ground.
+  package func apply(
+    reduceTransparency reduced: Bool,
+    transparency: CGFloat = InkGlass.defaultTransparency
+  ) {
     material.isHidden = !InkGlass.showsMaterial(reduceTransparency: reduced)
     // A specular highlight is a property of *glass*. Under Reduce Transparency this is an opaque sheet
     // and there is no glass for the light to catch, so the highlight goes with the blur — the same rule
     // the material follows, for the same reason.
     sheen.isHidden = reduced
 
-    let alpha = InkGlass.groundAlpha(reduceTransparency: reduced)
+    let alpha = InkGlass.groundAlpha(reduceTransparency: reduced, transparency: transparency)
     // Resolved inside the panel's own (pinned) appearance, not read at file scope: a dynamic `NSColor`
     // converted to a `CGColor` anywhere else freezes whichever appearance happened to be current, which
     // on a Dark machine is exactly the near-black ground this replaces.
@@ -738,22 +765,42 @@ package struct InkGlassPanelModifier: ViewModifier {
   let shadow: InkGlassShadow?
   let requestedReduceTransparency: Bool?
   @ObservedObject private var reduceTransparencyObserver: InkReduceTransparencyObserver
+  /// Observed, not read: a slider in Settings moves this while its thumb is down, and every mounted
+  /// panel has to follow it on that same frame.
+  @ObservedObject private var transparencySettings: InkGlassTransparencySettings
 
   package init(
     cornerRadius: CGFloat,
     shadow: InkGlassShadow?,
     reduceTransparency: Bool? = nil,
-    observer: InkReduceTransparencyObserver = .shared
+    observer: InkReduceTransparencyObserver = .shared,
+    transparency: InkGlassTransparencySettings = .shared
   ) {
     self.cornerRadius = cornerRadius
     self.shadow = shadow
     self.requestedReduceTransparency = reduceTransparency
     _reduceTransparencyObserver = ObservedObject(wrappedValue: observer)
+    _transparencySettings = ObservedObject(wrappedValue: transparency)
+  }
+
+  /// Whether this panel draws as an opaque sheet: the caller's override, else the system setting.
+  private var reduceTransparency: Bool {
+    requestedReduceTransparency ?? reduceTransparencyObserver.isEnabled
+  }
+
+  /// The alpha of the `Ink.surface` ground this panel paints, resolved from what it observes right
+  /// now. `body` reads this and so do the tests: the panel mounts two representables (the material
+  /// and the hit-region reporter) and neither renders offscreen, so "the glass follows the slider" is
+  /// checked on the value the panel paints rather than on a bitmap of it.
+  package var resolvedGroundAlpha: CGFloat {
+    InkGlass.groundAlpha(
+      reduceTransparency: reduceTransparency, transparency: transparencySettings.transparency)
   }
 
   @ViewBuilder
   package func body(content: Content) -> some View {
-    let reduceTransparency = requestedReduceTransparency ?? reduceTransparencyObserver.isEnabled
+    let reduceTransparency = reduceTransparency
+    let groundAlpha = resolvedGroundAlpha
     let shape = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous)
 
     // Clip the caller's returned tree before adding the glass background. This keeps content and
@@ -762,15 +809,19 @@ package struct InkGlassPanelModifier: ViewModifier {
     content
       .environment(\.colorScheme, .light)
       .clipShape(shape)
-      // Report the panel's extent as interactive content regardless of Reduce Transparency: the
-      // material may be replaced by a flat wash, but the surface still owns the pointer.
-      .background(InkGlassHitRegionReporter())
       .background {
         ZStack(alignment: .top) {
+          // Inside the glass stack, never wrapping the caller's content: an AppKit view added as a
+          // background *of the clipped content* changed how ImageRenderer rasterized the subtree and
+          // dropped the corner clip. Here it sits beside the material, which has always been a
+          // representable, and it is mounted in every mode — Reduce Transparency removes the
+          // material, not the surface, and a panel that registers nothing would let clicks fall
+          // through to the desktop.
+          InkGlassHitRegionReporter(cornerRadius: cornerRadius)
           if InkGlass.showsMaterial(reduceTransparency: reduceTransparency) {
             InkGlassBackdrop()
           }
-          Ink.surface.opacity(InkGlass.groundAlpha(reduceTransparency: reduceTransparency))
+          Ink.surface.opacity(groundAlpha)
           // Hidden under Reduce Transparency for the same reason the material is: there is no glass to
           // catch the light.
           //

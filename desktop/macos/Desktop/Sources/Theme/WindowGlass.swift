@@ -41,15 +41,10 @@ package enum WindowGlass {
     /// An ordinary titled window whose *inside* is glass (`InkGlassStyle.fullBleed`). The window frame
     /// already owns the corner and the shadow.
     case titled
-    /// A **summoned** surface: the shell. It is the only kind that is both — a titled window (⌘W and
-    /// ⌘M route from the style mask, and the transparent title bar is one of the shell's two drag
-    /// handles) whose inside is *not* one slab of glass but several panels floating with the desktop
-    /// between them.
-    ///
-    /// That combination is why it cannot reuse `.titled`. A titled window's frame *is* the panel's
-    /// edge, so AppKit's shadow is the right one. The shell's frame is a transparent rectangle
-    /// noticeably larger than anything drawn inside it, so AppKit's shadow traces empty air — the
-    /// same defect `.floating` exists to avoid, arriving by a different route.
+    /// A **summoned** surface: the shell. Transparent, with several panels floating over
+    /// the desktop. It still uses a hidden title bar so SwiftUI's scene and `⌘W` / `⌘M`
+    /// keep working; the visible top bar occupies that band (`GlassShell.titlebarClearance`
+    /// is 0) so the top resize handle sits on the glass rather than on empty air above it.
     case summoned
   }
 

@@ -42,8 +42,18 @@ runs:
     - name: Set up uv for canonical checks
       uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
       with:
+        # Exact version resolves locally; an unset version means "latest",
+        # which fetches the astral-sh/versions manifest and has hard-failed
+        # CI on that network call. Matches backend/Dockerfile UV_VERSION.
+        version: "0.11.13"
         enable-cache: true
         cache-dependency-glob: backend/openapi-requirements.txt
+
+    # The canonical manifest can select web/app/test.sh, which invokes Bun.
+    # Pin the toolchain explicitly so Release Eligibility never depends on the
+    # mutable ubuntu runner image (incident #11936).
+    - name: Set up Bun for canonical checks
+      uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
 
     - name: Run canonical deterministic CI preflight
       shell: bash

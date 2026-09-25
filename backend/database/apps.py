@@ -4,13 +4,17 @@ from typing import Any, Dict, List, Optional, cast
 from google.cloud.firestore_v1.base_query import BaseCompositeFilter, FieldFilter
 from google.cloud.firestore import ArrayUnion, ArrayRemove
 
-from ulid import ULID
 
-from models.app import UsageHistoryType
+from models.app import App, UsageHistoryType
+from .redis_db import get_generic_cache, set_generic_cache
 from ._client import db
 import logging
 
 logger = logging.getLogger(__name__)
+
+# Shared with utils.apps (list + invalidation). Keep every reader and the invalidation path on this
+# one constant: a second literal is how a cache ends up populated but never cleared.
+PUBLIC_APPROVED_APPS_CACHE_KEY = 'get_public_approved_apps_data'
 
 # BaseCompositeFilter expects Operator enum but accepts 'AND' string at runtime.
 # Typed as Any to satisfy pyright without importing StructuredQuery (which fails
@@ -69,6 +73,20 @@ def get_public_approved_apps_db() -> List[Dict[str, Any]]:
     return [_typed_doc(doc) for doc in public_apps]
 
 
+def get_public_approved_apps_cached_db() -> List[Dict[str, Any]]:
+    """The approved+public app set, read through the marketplace's shared 10-minute Redis cache.
+
+    Same key, TTL, reduction and invalidation as `utils.apps.get_approved_available_apps`, so a
+    reader here can never serve a staler view than the list the user just came from.
+    """
+    cached = get_generic_cache(PUBLIC_APPROVED_APPS_CACHE_KEY)
+    if cached:
+        return cast(List[Dict[str, Any]], cached)
+    reduced = [App.reduce_dict(app) for app in get_public_approved_apps_db()]
+    set_generic_cache(PUBLIC_APPROVED_APPS_CACHE_KEY, reduced, 60 * 10)  # 10 minutes cached
+    return reduced
+
+
 def get_popular_apps_db() -> List[Dict[str, Any]]:
     filters = [FieldFilter('approved', '==', True), FieldFilter('is_popular', '==', True)]
     popular_apps = db.collection(apps_collection).where(filter=BaseCompositeFilter(_AND_OP, filters)).stream()
@@ -107,6 +125,10 @@ def search_apps_db(
         List of app dictionaries matching the filters
     """
     filters: List[FieldFilter] = []
+    # Whether the primary read is the whole approved+public app set. That set is 3k+ documents and
+    # streaming it per request is what made `?q=` search a p50-13s / p90-30s endpoint in prod; the
+    # marketplace list path already serves the same documents from Redis, so read through it here too.
+    reads_public_set = False
 
     # 1. Apply most restrictive filter first
     if my_apps:
@@ -120,16 +142,14 @@ def search_apps_db(
         if len(enabled_app_ids) > 30:
             # Firestore 'in' limited to 30 items
             # Query public approved apps first, then add user's own apps
-            filters.append(FieldFilter('approved', '==', True))
-            filters.append(FieldFilter('private', '==', False))
+            reads_public_set = True
         else:
             # Query by specific IDs
             filters.append(FieldFilter('id', 'in', enabled_app_ids))
 
     else:
         # Default: Public approved apps
-        filters.append(FieldFilter('approved', '==', True))
-        filters.append(FieldFilter('private', '==', False))
+        reads_public_set = True
 
     # 2. Add category filter
     if category and not my_apps:  # Don't add if already filtering by my_apps
@@ -141,7 +161,15 @@ def search_apps_db(
 
     # Execute query with all filters
     apps: List[Dict[str, Any]] = []
-    if filters:
+    if reads_public_set:
+        apps = get_public_approved_apps_cached_db()
+        # category/capability were server-side filters on the Firestore read this replaces; my_apps is
+        # False on this branch, so both are unconditional here.
+        if category:
+            apps = [app for app in apps if app.get('category') == category]
+        if capability:
+            apps = [app for app in apps if capability in (app.get('capabilities') or [])]
+    elif filters:
         query = db.collection(apps_collection).where(filter=BaseCompositeFilter(_AND_OP, filters))
         apps = [_typed_doc(doc) for doc in query.stream()]
 
@@ -216,21 +244,11 @@ def delete_app_from_db(app_id: str) -> None:
 
 def update_app_visibility_in_db(app_id: str, private: bool) -> None:
     app_ref = db.collection(apps_collection).document(app_id)
-    if 'private' in app_id and not private:
-        app = _typed_doc(app_ref.get())
-        if not app:
-            # The private app document is gone (deleted, or a stale read-cache pointed the caller
-            # here). There is nothing to republish, so skip the delete-and-recreate instead of
-            # dereferencing None below (which raised TypeError -> 500).
-            return
-        app_ref.delete()
-        new_app_id = app_id.split('-private')[0] + '-' + str(ULID())
-        app['id'] = new_app_id
-        app['private'] = private
-        app_ref = db.collection(apps_collection).document(new_app_id)
-        app_ref.set(app)
-    else:
-        app_ref.update({'private': private})
+    # Update in place: re-minting the document id orphans everything keyed on the
+    # old id — reviews, api_keys, usage history, per-user installed entries, and
+    # the Redis reviews mirror — because Firestore does not cascade. The
+    # '-private' suffix staying in a now-public app's id is cosmetic.
+    app_ref.update({'private': private})
 
 
 def change_app_approval_status(app_id: str, approved: bool) -> None:
@@ -533,7 +551,13 @@ def list_api_keys_db(app_id: str) -> List[Dict[str, Any]]:
 
 
 def delete_api_key_db(app_id: str, key_id: str) -> bool:
-    """Delete an API key"""
+    """Delete an API key.
+
+    Returns False when no key was stored under [key_id], so callers can tell a
+    confirmed revocation from a delete that removed nothing.
+    """
     api_key_ref = db.collection(apps_collection).document(app_id).collection('api_keys').document(key_id)
+    if not api_key_ref.get().exists:
+        return False
     api_key_ref.delete()
     return True

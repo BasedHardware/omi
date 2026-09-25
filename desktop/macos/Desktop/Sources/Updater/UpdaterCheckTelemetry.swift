@@ -191,6 +191,31 @@ final class UpdateCheckAttemptTracker: @unchecked Sendable {
     return terminal.diagnostics?.nsurlErrorCode == diagnostics.nsurlErrorCode
   }
 
+  /// True when this abort is Sparkle re-delivering a terminal the tracker has
+  /// already closed for the same check.
+  ///
+  /// `Update Check Completed` is deduplicated by consuming the attempt identity,
+  /// but the legacy `Update Check Failed` event has no identity of its own and
+  /// fires straight from the delegate. Sparkle's driver delivers `didAbortWithError`
+  /// more than once for a single check, so one failed check is counted once per
+  /// callback: on builds 0.12.187–0.12.212 the legacy event outran the
+  /// authoritative `result = failed` terminal by 3x to 47x, which is what made
+  /// `Update Check Failed` look like the dominant macOS reliability signal in the
+  /// 2026-08 churn cohort.
+  ///
+  /// A nil `lastTerminal` means nothing has been closed yet, so an abort without
+  /// a registered attempt is still reported rather than silently dropped.
+  func isDuplicateOfLastTerminal(_ diagnostics: UpdateFailureDiagnostics) -> Bool {
+    lock.lock()
+    defer { lock.unlock() }
+
+    guard active == nil, let terminal = lastTerminal, let closed = terminal.diagnostics
+    else { return false }
+    return closed.reason == diagnostics.reason
+      && closed.domain == diagnostics.domain
+      && closed.code == diagnostics.code
+      && closed.nsurlErrorCode == diagnostics.nsurlErrorCode
+  }
 }
 
 /// Emits updater lifecycle events without modifying the shared analytics

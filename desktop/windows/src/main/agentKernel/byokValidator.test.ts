@@ -1,13 +1,12 @@
 import { describe, it, expect, vi } from 'vitest'
-import {
-  validateProviderKey,
-  validateAllByokKeys,
-  type FetchLike
-} from './byokValidator'
+import { validateProviderKey, validateAllByokKeys, type FetchLike } from './byokValidator'
 import type { ByokKeys } from '../../shared/byok'
 
 /** A FetchLike that returns a fixed status and records the calls it received. */
-function stubFetch(status: number): { fetch: FetchLike; calls: { url: string; headers: Record<string, string> }[] } {
+function stubFetch(status: number): {
+  fetch: FetchLike
+  calls: { url: string; headers: Record<string, string> }[]
+} {
   const calls: { url: string; headers: Record<string, string> }[] = []
   const fetch: FetchLike = async (url, init) => {
     calls.push({ url, headers: init.headers })
@@ -111,22 +110,29 @@ describe('validateProviderKey — classifier', () => {
 })
 
 describe('validateAllByokKeys', () => {
-  it('validates all four providers in parallel and keys the results', async () => {
-    const fullKeys: ByokKeys = { openai: 'a', anthropic: 'b', gemini: 'c', deepgram: 'd' }
+  it('validates configured providers in parallel and keys the results', async () => {
+    const fullKeys: ByokKeys = {
+      openrouter: 'or',
+      openai: 'a',
+      anthropic: 'b',
+      gemini: 'c',
+      deepgram: 'd'
+    }
     const { fetch, calls } = stubFetch(200)
     const results = await validateAllByokKeys(fullKeys, fetch)
-    expect(calls).toHaveLength(4)
+    expect(calls).toHaveLength(5)
+    expect(results.openrouter?.ok).toBe(true)
     expect(results.openai?.ok).toBe(true)
     expect(results.anthropic?.ok).toBe(true)
     expect(results.gemini?.ok).toBe(true)
     expect(results.deepgram?.ok).toBe(true)
   })
 
-  it('marks a missing provider as an empty failure (no request for it)', async () => {
+  it('does not validate a missing provider', async () => {
     const partial: ByokKeys = { openai: 'a', anthropic: 'b', gemini: 'c' }
     const fetch = vi.fn(async () => ({ status: 200 })) as unknown as FetchLike
     const results = await validateAllByokKeys(partial, fetch)
-    expect(results.deepgram).toMatchObject({ ok: false, kind: 'empty' })
+    expect(results.deepgram).toBeUndefined()
     expect(results.openai?.ok).toBe(true)
   })
 

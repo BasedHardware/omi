@@ -122,6 +122,9 @@ def test_all_valid_prices_returns_all_plans(ctx):
     plan_ids = {p["id"] for p in plans}
     assert plan_ids == {UNLIM_MONTHLY, UNLIM_ANNUAL, ARCH_MONTHLY, ARCH_ANNUAL}
     assert len(plans) == 4
+    descriptions = {p["id"]: p["description"] for p in plans}
+    assert "chat questions per month" in descriptions[UNLIM_MONTHLY]
+    assert "Power-user AI" in descriptions[ARCH_MONTHLY]
 
 
 def test_legacy_unlimited_subscriber_sees_is_active(ctx):

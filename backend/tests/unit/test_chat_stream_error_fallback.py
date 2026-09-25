@@ -69,6 +69,8 @@ def _make_client():
     notifications = _install('utils.notifications')
     notifications.send_notification = MagicMock()
     notifications.send_notification_async = AsyncMock()
+    notifications.send_client_displayed_notification = MagicMock()
+    notifications.send_client_displayed_notification_async = AsyncMock()
 
     fallback_obs = _install('utils.observability.fallback')
     fallback_obs.record_fallback = MagicMock()
@@ -103,6 +105,7 @@ def _make_client():
 
     chat_utils = harness.load_real_module('utils.chat', BACKEND_DIR / 'utils' / 'chat.py')
 
+    sys.modules.pop('utils.chat_session_target', None)
     sys.modules.pop('routers.chat', None)
     router_module = harness.load_real_module('routers.chat', BACKEND_DIR / 'routers' / 'chat.py')
 

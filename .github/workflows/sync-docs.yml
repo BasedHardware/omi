@@ -70,11 +70,24 @@ jobs:
             fi
           done
 
+      # A GITHUB_TOKEN-authored PR does not trigger pull_request workflows, so it
+      # would arrive with zero checks run. Mint the Omi Bot token first and pass
+      # it to create-pull-request so the generated diff is verified by the same
+      # lanes as any human PR.
+      - name: Generate Omi Bot token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          app-id: ${{ secrets.OMI_BOT_APP_ID }}
+          private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+
       - name: Create Pull Request
         id: create_pr
         uses: peter-evans/create-pull-request@v8
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ steps.app-token.outputs.token }}
           commit-message: "chore: sync docs to README files"
           title: "chore: sync docs to README files"
           body: |
@@ -84,17 +97,14 @@ jobs:
           committer: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
           author: github-actions[bot] <41898282+github-actions[bot]@users.noreply.github.com>
 
-      - name: Generate Omi Bot token
-        id: app-token
-        uses: actions/create-github-app-token@v3
-        with:
-          app-id: ${{ secrets.OMI_BOT_APP_ID }}
-          private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}
-
-      - name: Auto-merge PR
+      # The PR was authored with the Omi Bot app token so the generated diff is
+      # verified by the same lanes as any human PR. Enable auto-merge (no
+      # --admin) so the merge waits for those checks to pass and branch
+      # protection to be satisfied, then let it complete on its own.
+      - name: Enable auto-merge on the sync PR
         if: steps.create_pr.outputs.pull-request-operation == 'created'
         run: |
-          gh pr merge --squash --delete-branch --admin "$PR_URL"
+          gh pr merge --auto --merge --delete-branch "$PR_URL"
         env:
-          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           PR_URL: ${{ steps.create_pr.outputs.pull-request-url }}

@@ -13,6 +13,12 @@ const inputs = [
   process.env.NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID,
 ];
 
+const configuredSha = process.env.NEXT_PUBLIC_OMI_BUILD_SHA;
+const buildSha =
+  typeof configuredSha === 'string' && configuredSha.trim()
+    ? configuredSha.trim()
+    : 'unknown';
+
 export function PublicBuildCanary() {
   const [status, setStatus] = useState('pending');
 
@@ -26,6 +32,11 @@ export function PublicBuildCanary() {
   }, []);
 
   return (
-    <span aria-hidden="true" data-omi-public-build-canary={`frontend:${status}`} hidden />
+    <span
+      aria-hidden="true"
+      data-omi-public-build-canary={`frontend:${status}`}
+      data-omi-public-build-sha={buildSha}
+      hidden
+    />
   );
 }

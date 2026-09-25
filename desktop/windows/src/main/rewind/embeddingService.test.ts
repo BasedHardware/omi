@@ -385,4 +385,62 @@ describe('embedRewindQuery', () => {
     client.embedOne.mockResolvedValue(new Float32Array(8)) // wrong dimension
     expect(await embedRewindQuery('query')).toBeNull()
   })
+
+  it('retries a 401 query embed after pulling a fresh token', async () => {
+    const { setTokenRefresher } = await import('../assistants/core/session')
+    configureRewindEmbedSession(SESSION)
+    setTokenRefresher(async () => ({
+      apiBase: 'https://api.example',
+      desktopApiBase: 'https://desktop.example',
+      token: 'fresh-tok'
+    }))
+    client.embedOne
+      .mockRejectedValueOnce(new Error('embedding proxy request failed (status 401)'))
+      .mockResolvedValueOnce(new Float32Array(3072))
+    try {
+      const result = await embedRewindQuery('what did I read')
+      expect(result).toBeInstanceOf(Float32Array)
+      expect(client.embedOne).toHaveBeenCalledTimes(2)
+      expect(client.embedOne.mock.calls[1][0]).toMatchObject({ token: 'fresh-tok' })
+    } finally {
+      setTokenRefresher(null)
+    }
+  })
+
+  it('does not resurrect a signed-out session with a pull that finished late', async () => {
+    const { setTokenRefresher } = await import('../assistants/core/session')
+    configureRewindEmbedSession(SESSION)
+    let resolvePull!: (
+      v: {
+        apiBase: string
+        desktopApiBase: string
+        token: string
+      } | null
+    ) => void
+    const pullStarted = new Promise<void>((started) => {
+      setTokenRefresher(
+        () =>
+          new Promise((r) => {
+            resolvePull = r
+            started()
+          })
+      )
+    })
+    client.embedOne.mockRejectedValueOnce(new Error('embedding proxy request failed (status 401)'))
+    try {
+      const pending = embedRewindQuery('what did I read')
+      await pullStarted
+      configureRewindEmbedSession(null)
+      resolvePull({
+        apiBase: 'https://api.example',
+        desktopApiBase: 'https://desktop.example',
+        token: 'late-tok'
+      })
+      expect(await pending).toBeNull()
+      expect(rewindEmbeddingsAvailable()).toBe(false)
+    } finally {
+      resolvePull?.(null)
+      setTokenRefresher(null)
+    }
+  })
 })

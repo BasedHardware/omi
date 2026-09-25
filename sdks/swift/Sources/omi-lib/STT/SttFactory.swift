@@ -4,6 +4,8 @@ public enum OmiSttFactory {
   public static func makeStreaming(
     engine: OmiSttEngine,
     deepgramAPIKey: String? = nil,
+    deepgramModel: String = "nova",
+    deepgramLanguage: String = "en-US",
     parakeetAPIURL: String? = ProcessInfo.processInfo.environment["HOSTED_PARAKEET_API_URL"],
     sampleRate: Int = 16000,
     onTranscript: @escaping OmiTranscriptHandler
@@ -13,7 +15,13 @@ public enum OmiSttFactory {
       guard let key = deepgramAPIKey, !key.isEmpty else {
         throw NSError(domain: "omi.stt", code: 2, userInfo: [NSLocalizedDescriptionKey: "Deepgram API key required"])
       }
-      return OmiDeepgramTranscriber(apiKey: key, sampleRate: sampleRate, onTranscript: onTranscript)
+      return OmiDeepgramTranscriber(
+        apiKey: key,
+        sampleRate: sampleRate,
+        model: deepgramModel,
+        language: deepgramLanguage,
+        onTranscript: onTranscript
+      )
     case .parakeet:
       guard let url = parakeetAPIURL, !url.isEmpty else {
         throw NSError(

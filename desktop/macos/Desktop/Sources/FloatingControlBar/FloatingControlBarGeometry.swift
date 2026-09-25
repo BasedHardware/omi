@@ -93,6 +93,40 @@ enum FloatingControlBarGeometry {
   /// state transitions. Window owns which transition is active and supplies
   /// its already-adjusted target size; geometry owns whether that transition
   /// may inherit the current midpoint or must return to a canonical anchor.
+  /// A notch island hangs from the display's top edge by definition. Auto
+  /// layout can grow the panel to fit content that has not finished
+  /// collapsing (the hosting view forwards SwiftUI's min size as a window
+  /// constraint), and AppKit grows windows from their pinned bottom-left
+  /// origin — which pushes the top-anchored chrome above the screen where
+  /// nothing ever brings it back (the "island disappeared after hovering"
+  /// bug). Whenever a resize leaves the top edge somewhere other than the
+  /// screen top while the island is in its non-interactive chrome state,
+  /// the frame is re-anchored instead of trusted.
+  /// `isConversationOpen` is the chrome/content boundary: an open conversation
+  /// surface (input, response, agent chat) is user content whose frame the user
+  /// may have moved or resized — Spaces transitions and content growth on it
+  /// must never be snapped back to the screen-top chrome anchor. Only the
+  /// closed-surface island (idle pill, hover menu) is chrome this guard owns.
+  static func notchTopReanchoredFrame(
+    frame: NSRect,
+    screenFrame: NSRect,
+    isResizable: Bool,
+    isUserDragging: Bool,
+    isConversationOpen: Bool,
+    epsilon: CGFloat = 0.5
+  ) -> NSRect? {
+    guard !isResizable, !isUserDragging, !isConversationOpen else { return nil }
+    guard screenFrame.width > 0, screenFrame.height > 0 else { return nil }
+    let desiredTop = screenFrame.maxY
+    guard abs(frame.maxY - desiredTop) > epsilon else { return nil }
+    return NSRect(
+      x: screenFrame.midX - frame.width / 2,
+      y: desiredTop - frame.height,
+      width: frame.width,
+      height: frame.height
+    )
+  }
+
   static func surfaceTransitionFrame(
     currentFrame: NSRect,
     targetSize: NSSize,
@@ -290,5 +324,100 @@ enum FloatingControlBarGeometry {
       transition: .pushToTalk(expanded: expanded),
       placement: .pill(draggable: draggable, canonicalCompactFrame: compactSourceFrame)
     )
+  }
+
+  static func unionSize(_ a: NSSize, _ b: NSSize) -> NSSize {
+    NSSize(width: max(a.width, b.width), height: max(a.height, b.height))
+  }
+
+  /// A mounted notification card owns the closed surface. Every transient
+  /// island state — PTT listening, thinking, the too-short/mic-error status
+  /// banner — may only *grow* that surface, never replace it.
+  ///
+  /// The bug this exists to prevent: the card stays mounted while the user
+  /// holds the reply shortcut against it (Interject), so any resize that
+  /// substitutes the bare voice-island size crushes a 508pt card into a
+  /// ~270pt notch lobe and the copy re-wraps to three truncated words. Height
+  /// is the card's own plus `additionalHeight` — whatever the transient state
+  /// stacks alongside the card (the status banner row) — because the island's
+  /// chrome band is already counted inside the card size. `transientSize` is
+  /// the no-card surface and already carries that budget itself, so
+  /// `additionalHeight` applies only when a card is mounted.
+  static func notificationPreservingSurfaceSize(
+    transientSize: NSSize,
+    hasMountedNotification: Bool,
+    notificationSize: NSSize,
+    additionalHeight: CGFloat = 0
+  ) -> NSSize {
+    guard hasMountedNotification else { return transientSize }
+    return NSSize(
+      width: max(notificationSize.width, transientSize.width),
+      height: notificationSize.height + additionalHeight
+    )
+  }
+
+  /// Closed-conversation chrome size. A mounted notification card wins over
+  /// listening/thinking island sizes (or the union if listening is larger).
+  static func collapsedSurfaceSize(
+    hasMountedNotification: Bool,
+    isVoiceListening: Bool,
+    isThinking: Bool,
+    notificationSize: NSSize,
+    listeningSize: NSSize,
+    thinkingSize: NSSize,
+    idleSize: NSSize
+  ) -> NSSize {
+    if hasMountedNotification {
+      var size = notificationSize
+      if isVoiceListening { size = unionSize(size, listeningSize) }
+      if isThinking { size = unionSize(size, thinkingSize) }
+      return size
+    }
+    if isVoiceListening { return listeningSize }
+    if isThinking { return thinkingSize }
+    return idleSize
+  }
+
+  static func windowResizeMinimumSize(
+    showingAIConversation: Bool,
+    hasMountedNotification: Bool,
+    isVoiceListening: Bool,
+    isHovering: Bool,
+    usesNotchIsland: Bool,
+    conversationWidth: CGFloat,
+    notificationSize: NSSize,
+    listeningWidth: CGFloat,
+    hoverWidth: CGFloat,
+    idleSize: NSSize
+  ) -> NSSize {
+    if showingAIConversation {
+      return NSSize(width: conversationWidth, height: idleSize.height)
+    }
+    if hasMountedNotification {
+      var size = notificationSize
+      if isVoiceListening {
+        size = unionSize(size, NSSize(width: listeningWidth, height: notificationSize.height))
+      }
+      return size
+    }
+    if isVoiceListening && !usesNotchIsland {
+      return NSSize(width: listeningWidth, height: idleSize.height)
+    }
+    if isHovering {
+      return NSSize(width: hoverWidth, height: idleSize.height)
+    }
+    return idleSize
+  }
+
+  /// Insight teasers collapse to one line unless the pointer is over the card
+  /// or Interject PTT is holding a reply against it.
+  static func interjectInsightTeaserLineLimit(
+    kindIsInsight: Bool,
+    isHovering: Bool,
+    interjectBarHovering: Bool,
+    interjectPTTHoldActive: Bool
+  ) -> Int {
+    guard kindIsInsight else { return 3 }
+    return (isHovering || interjectBarHovering || interjectPTTHoldActive) ? 6 : 1
   }
 }

@@ -1,3 +1,4 @@
+import json
 import logging
 import threading
 import time
@@ -18,6 +19,16 @@ ENDPOINT_REALTIME = 'realtime'
 ENDPOINT_CHAT_TOOL = 'chat_tool'
 ENDPOINT_MCP_TOOL = 'mcp_tool'
 _ALL_ENDPOINTS = [ENDPOINT_REALTIME, ENDPOINT_CHAT_TOOL, ENDPOINT_MCP_TOOL]
+
+ACTION_NONE = 0
+ACTION_WARN_DAY1 = 1
+ACTION_WARN_DAY2 = 2
+ACTION_DISABLE = 3
+ACTION_REDIRECT_NOT_FOLLOWED = 4
+
+# A redirect notice repeats at most this often per app+endpoint, because the
+# delivery that produced it retries on every conversation.
+_REDIRECT_NOTICE_INTERVAL = 86400
 
 _cache_lock = threading.Lock()
 _disabled_cache: dict[str, tuple[bool, float, int]] = {}  # (value, timestamp, generation)
@@ -141,18 +152,51 @@ def _get_failure_script():
     return _record_failure_script
 
 
+def _record_redirect_not_followed(app_id: str, status_code: int, endpoint: str) -> int:
+    """Record a 3xx delivery without advancing the auto-disable clock.
+
+    We send webhooks with ``follow_redirects=False`` so a redirect cannot escape
+    the pinned destination IP, so a 3xx does mean the payload was not delivered.
+    It does not mean the developer's host is down — the host answered — and the
+    fix is a one-line URL change the developer can only make if they are told.
+    Scoring it as an outage instead auto-disabled apps whose servers were up,
+    with the reason recorded as an opaque ``HTTP 307``.
+
+    So a redirect notifies, repeatedly if it persists, and never disables. The
+    accepted cost is that an app left permanently redirecting keeps failing
+    delivery instead of being switched off; that is the developer's endpoint to
+    fix, and it is recoverable, which the auto-disable was not.
+    """
+    try:
+        notice_key = f'app_webhook_redirect_notice:{app_id}:{endpoint}'
+        health_key = f'app_webhook_health:{app_id}:{endpoint}'
+        r.hset(
+            health_key, mapping={'last_redirect_at': str(int(time.time())), 'last_redirect_status': str(status_code)}
+        )
+        r.expire(health_key, _HEALTH_TTL)
+        if not r.set(notice_key, '1', nx=True, ex=_REDIRECT_NOTICE_INTERVAL):
+            return ACTION_NONE
+        return ACTION_REDIRECT_NOT_FOLLOWED
+    except Exception as e:
+        logger.warning(f'record_app_webhook_failure redirect path redis error app_id={app_id}: {e}')
+        return ACTION_NONE
+
+
 def record_app_webhook_failure(app_id: str, status_code: int, error: str, endpoint: str = ENDPOINT_REALTIME) -> int:
     """Record a webhook failure for a marketplace app endpoint.
 
     Returns graduated response action:
-    0 = no action, 1 = day1 warn, 2 = day2 warn, 3 = auto-disable
+    0 = no action, 1 = day1 warn, 2 = day2 warn, 3 = auto-disable,
+    4 = redirect not followed (notify only, never disables)
     """
+    if 300 <= status_code < 400:
+        return _record_redirect_not_followed(app_id, status_code, endpoint)
     try:
         key = f'app_webhook_health:{app_id}:{endpoint}'
         now_ts = int(time.time())
         script = _get_failure_script()
         action = int(script(keys=[key], args=[now_ts, str(status_code), error[:200], _HEALTH_TTL]))
-        if action == 3:
+        if action == ACTION_DISABLE:
             r.setex(f'app_webhook_disabled:{app_id}', _HEALTH_TTL, '1')
             with _cache_lock:
                 _set_disabled_state(app_id, True)
@@ -216,6 +260,8 @@ def record_app_webhook_success(app_id: str, endpoint: str = ENDPOINT_REALTIME):
         now_ts = int(time.time())
         script = _get_success_script()
         script(keys=[key], args=[now_ts, _SUCCESS_DEBOUNCE, _HEALTH_TTL])
+        r.hdel(key, 'last_redirect_at', 'last_redirect_status')
+        r.delete(f'app_webhook_redirect_notice:{app_id}:{endpoint}')
     except Exception as e:
         logger.warning(f'record_app_webhook_success redis error app_id={app_id}: {e}')
 
@@ -228,6 +274,7 @@ def clear_app_webhook_health(app_id: str):
         keys_to_delete = [f'app_webhook_disabled:{app_id}']
         for ep in _ALL_ENDPOINTS:
             keys_to_delete.append(f'app_webhook_health:{app_id}:{ep}')
+            keys_to_delete.append(f'app_webhook_redirect_notice:{app_id}:{ep}')
         r.delete(*keys_to_delete)
     except Exception as e:
         logger.warning(f'clear_app_webhook_health redis error app_id={app_id}: {e}')
@@ -428,3 +475,36 @@ def record_dev_webhook_success(uid: str, wtype: object):
         r.expire(key, _HEALTH_TTL)
     except Exception as e:
         logger.warning(f'record_dev_webhook_success redis error uid={uid} type={wtype}: {e}')
+
+
+_DLQ_TTL = 7 * 86400
+_DLQ_MAX = 100
+
+
+def enqueue_dev_webhook_dlq(
+    *,
+    webhook_name: str,
+    webhook_url: str,
+    status_code: int,
+    error: str,
+    idempotency_key: Optional[str] = None,
+    uid: Optional[str] = None,
+    payload: Optional[Dict[str, Any]] = None,
+) -> None:
+    """Store a failed developer webhook for manual replay after retries are exhausted (#5488)."""
+    try:
+        key = f'dev_webhook_dlq:{uid or "unknown"}'
+        entry = {
+            'webhook_name': webhook_name,
+            'webhook_url': webhook_url[:500],
+            'status_code': status_code,
+            'error': (error or '')[:500],
+            'idempotency_key': idempotency_key,
+            'payload': payload,
+            'failed_at': datetime.now(timezone.utc).isoformat(),
+        }
+        r.lpush(key, json.dumps(entry, separators=(',', ':')))
+        r.ltrim(key, 0, _DLQ_MAX - 1)
+        r.expire(key, _DLQ_TTL)
+    except Exception as e:
+        logger.warning(f'enqueue_dev_webhook_dlq failed name={webhook_name}: {e}')

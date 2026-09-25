@@ -21,7 +21,6 @@ import type {
   CaptureCommand,
   CaptureEvent,
   ExportMemory,
-  GoogleSource,
   KnowledgeGraph,
   OnboardingGraphNode,
   OnboardingGraphEdge,
@@ -80,6 +79,7 @@ const omi: OmiBridgeApi = {
   getLocalConversation: (id: string) => ipcRenderer.invoke('db:getLocalConversation', id),
   listLocalConversations: () => ipcRenderer.invoke('db:listLocalConversations'),
   deleteLocalConversation: (id: string) => ipcRenderer.invoke('db:deleteLocalConversation', id),
+  deleteJitConversationKeyframe: (id: string) => ipcRenderer.invoke('jit:conversationDeleted', id),
   updateLocalConversationTitle: (id: string, title: string) =>
     ipcRenderer.invoke('db:updateLocalConversationTitle', id, title),
   updateLocalConversationSync: (id: string, patch: ConversationSyncPatch) =>
@@ -186,13 +186,6 @@ const omi: OmiBridgeApi = {
   kgExecuteSql: (sql) => ipcRenderer.invoke('kg:executeSql', sql),
   readStickyNotes: () => ipcRenderer.invoke('integrations:stickyNotes:read'),
   signInWithProvider: (provider: SignInProvider) => ipcRenderer.invoke('auth:signIn', provider),
-  googleConnect: () => ipcRenderer.invoke('integrations:google:connect'),
-  googleDisconnect: () => ipcRenderer.invoke('integrations:google:disconnect'),
-  googleStatus: () => ipcRenderer.invoke('integrations:google:status'),
-  googleGmailFetchNew: () => ipcRenderer.invoke('integrations:google:gmailFetchNew'),
-  googleCalendarFetchNew: () => ipcRenderer.invoke('integrations:google:calendarFetchNew'),
-  googleMarkProcessed: (source: GoogleSource, ids: string[]) =>
-    ipcRenderer.invoke('integrations:google:markProcessed', source, ids),
   // --- Gmail session connector (Option B): Omi-owned login window + own-session
   // cookie replay. connect opens the login window and resolves once signed in. ---
   gmailSessionConnect: (email?: string) =>
@@ -328,7 +321,7 @@ const omi: OmiBridgeApi = {
       notificationsEnabled: boolean
       notificationFrequency: number
     }>,
-  memoriesBulkDelete: (args: { baseURL: string; token: string; ids: string[] }) =>
+  memoriesBulkDelete: (args: { token: string; ids: string[] }) =>
     ipcRenderer.invoke('memories:bulkDelete', args),
   onMemoriesDeleteProgress: (
     cb: (p: { deleted: number; failed: number; total: number; done: boolean }) => void
@@ -345,10 +338,17 @@ const omi: OmiBridgeApi = {
     ipcRenderer.invoke('rewind:framesSampled', from, to),
   rewindDayBounds: () => ipcRenderer.invoke('rewind:dayBounds'),
   rewindFrameCount: () => ipcRenderer.invoke('rewind:frameCount'),
+  rewindFrameById: (id: number) => ipcRenderer.invoke('rewind:frameById', id),
+  rewindFocusFrame: (id: number) => ipcRenderer.invoke('rewind:focusFrame', id),
   onRewindCaptured: (cb: () => void) => {
     const listener = (): void => cb()
     ipcRenderer.on('rewind:captured', listener)
     return () => ipcRenderer.removeListener('rewind:captured', listener)
+  },
+  onRewindFocusFrame: (cb: (frameId: number) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, frameId: number): void => cb(frameId)
+    ipcRenderer.on('rewind:focus-frame', listener)
+    return () => ipcRenderer.removeListener('rewind:focus-frame', listener)
   },
   rewindSearch: (query: string) => ipcRenderer.invoke('rewind:search', query),
   // --- Track 4 (Rewind semantic search) --- Phase 2 of a search: the same results
@@ -372,6 +372,7 @@ const omi: OmiBridgeApi = {
   rewindRebuildIndex: () => ipcRenderer.invoke('rewind:rebuildIndex'),
   rewindPrimarySourceId: () => ipcRenderer.invoke('rewind:primarySourceId'),
   rewindCaptureSourceId: () => ipcRenderer.invoke('rewind:captureSourceId'),
+  rewindCaptureDiagnostics: () => ipcRenderer.invoke('rewind:captureDiagnostics'),
   rewindSaveFrame: (data: Uint8Array, sourceId: string) =>
     ipcRenderer.invoke('rewind:saveFrame', data, sourceId),
   screenReadText: () => ipcRenderer.invoke('screen:readNow'),
@@ -395,6 +396,8 @@ const omi: OmiBridgeApi = {
   chatGetEngine: () => ipcRenderer.invoke('chat:getEngine'),
   mainChatSend: (args: MainChatSendArgs) => ipcRenderer.invoke('mainChat:send', args),
   mainChatCancel: (runId: string) => ipcRenderer.invoke('mainChat:cancel', runId),
+  setJitRendererConversationKey: (key: string | null) =>
+    ipcRenderer.invoke('jit:rendererSelectionChanged', key),
   onMainChatEvent: (cb: (event: MainChatEvent) => void) => {
     const listener = (_e: Electron.IpcRendererEvent, event: MainChatEvent): void => cb(event)
     ipcRenderer.on('mainChat:event', listener)
@@ -421,7 +424,11 @@ const omi: OmiBridgeApi = {
   byokSet: (provider: ByokProvider, key: string) => ipcRenderer.invoke('byok:set', provider, key),
   byokClear: (provider: ByokProvider) => ipcRenderer.invoke('byok:clear', provider),
   byokClearAll: () => ipcRenderer.invoke('byok:clearAll'),
+  byokClearCodex: () => ipcRenderer.invoke('byok:clearCodex'),
   byokIsActive: () => ipcRenderer.invoke('byok:isActive'),
+  // Providers whose stored key matches the last successful enrollment — the
+  // validated-capability evidence (never raw keys) for quota/plan UI.
+  byokValidatedProviders: () => ipcRenderer.invoke('byok:validatedProviders'),
   // Live-validate the stored keys and reconcile backend BYOK activation. The
   // Firebase token is relayed from the renderer (its session owns it).
   byokEnroll: (token: string): Promise<ByokEnrollResult> =>
@@ -522,6 +529,16 @@ const omi: OmiBridgeApi = {
   insightHoverStart: () => ipcRenderer.send('insight:hoverStart'),
   insightHoverEnd: () => ipcRenderer.send('insight:hoverEnd'),
   insightTest: () => ipcRenderer.send('insight:test'),
+  jitFeedback: (input: {
+    eventId: string
+    lane: 'planned' | 'ambient'
+    action: 'useful' | 'false_positive' | 'snooze' | 'disable' | 'missed_or_late'
+    subjectId: string
+    triggerRevision: number | null
+    accountGeneration: number
+    snoozedUntil?: string | null
+  }) => ipcRenderer.invoke('jit:feedback', input),
+  jitFeedbackDrain: () => ipcRenderer.invoke('jit:feedbackDrain'),
   onInsightShow: (cb) => {
     const listener = (_e: Electron.IpcRendererEvent, p: InsightPayload): void => cb(p)
     ipcRenderer.on('insight:payload', listener)

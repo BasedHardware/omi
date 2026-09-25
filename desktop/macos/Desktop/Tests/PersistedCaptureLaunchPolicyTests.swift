@@ -7,7 +7,8 @@ final class PersistedCaptureLaunchPolicyTests: XCTestCase {
     XCTAssertTrue(
       PersistedCaptureLaunchPolicy.shouldStartTranscription(
         intentEnabled: true,
-        isTranscribing: false
+        isTranscribing: false,
+        micPermissionAuthorized: true
       )
     )
   }
@@ -16,13 +17,29 @@ final class PersistedCaptureLaunchPolicyTests: XCTestCase {
     XCTAssertFalse(
       PersistedCaptureLaunchPolicy.shouldStartTranscription(
         intentEnabled: false,
-        isTranscribing: false
+        isTranscribing: false,
+        micPermissionAuthorized: true
       )
     )
     XCTAssertFalse(
       PersistedCaptureLaunchPolicy.shouldStartTranscription(
         intentEnabled: true,
-        isTranscribing: true
+        isTranscribing: true,
+        micPermissionAuthorized: true
+      )
+    )
+  }
+
+  func testRestoreNeverStartsOrPromptsWithoutMicrophoneAuthorization() {
+    // The skip-mic prompt loop: intent stays on, TCC is notDetermined or denied.
+    // An automatic start here would raise the system sheet (notDetermined) on
+    // every launch/reactivation/key-load/settings-sync — or bounce a denied
+    // alert. The restore must abandon instead and wait for an explicit action.
+    XCTAssertFalse(
+      PersistedCaptureLaunchPolicy.shouldStartTranscription(
+        intentEnabled: true,
+        isTranscribing: false,
+        micPermissionAuthorized: false
       )
     )
   }

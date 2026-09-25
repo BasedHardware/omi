@@ -35,6 +35,20 @@ import { fetchChatQuota } from './billing'
 /** Longest a cold-start send may wait on the first quota sync before failing open. */
 export const COLD_START_SYNC_TIMEOUT_MS = 5_000
 
+/** Floor between two network refreshes of the same snapshot.
+ *
+ *  `sync()` is called on every floating-bar reveal (BarApp's onShow) and after every
+ *  completed chat reply (UsageLimitTriggerHost) — both driven by the primary voice
+ *  interaction, so they fire many times a minute in ordinary use. Its only guard was
+ *  an in-flight dedupe, which does nothing for calls that are merely sequential, so
+ *  N taps meant N `GET /v1/users/me/usage-quota`.
+ *
+ *  A month-to-date counter does not move meaningfully inside a minute, and the gate
+ *  already tracks sends between refreshes with `recordQuery()`'s optimistic delta, so
+ *  the verdict stays correct across the gap. A cold start (no snapshot at all) is
+ *  never throttled — that path is load-bearing for blocking an over-cap user. */
+export const MIN_SYNC_INTERVAL_MS = 60_000
+
 /** Resolve when `p` settles or the bound elapses, whichever comes first. */
 function withTimeout(p: Promise<void>, ms: number): Promise<void> {
   return new Promise<void>((resolve) => {
@@ -93,20 +107,38 @@ export function isLimitReached(quota: ChatUsageQuota | null, optimisticDelta: nu
 
 export function createChatQuotaGate(
   fetchQuota: () => Promise<ChatUsageQuota> = fetchChatQuota,
-  coldStartTimeoutMs: number = COLD_START_SYNC_TIMEOUT_MS
+  coldStartTimeoutMs: number = COLD_START_SYNC_TIMEOUT_MS,
+  minSyncIntervalMs: number = MIN_SYNC_INTERVAL_MS
 ): ChatQuotaGate {
   let quota: ChatUsageQuota | null = null
   let optimisticDelta = 0
   // Dedupe concurrent syncs (a reveal-refresh racing a cold-start send fetch).
   let inFlight: Promise<void> | null = null
+  // When the last refresh was ATTEMPTED (0 = never). Attempt, not success, so a
+  // failing backend backs off too instead of being re-probed on every reveal.
+  let lastSyncAt = 0
 
   const applyQuota = (next: ChatUsageQuota): void => {
     quota = next
     optimisticDelta = 0
+    // A snapshot handed in from elsewhere (e.g. a send response) is just as fresh as
+    // one we fetched, so it restarts the interval rather than being ignored by it.
+    lastSyncAt = Date.now()
   }
 
   const sync = (): Promise<void> => {
     if (inFlight) return inFlight
+    // One probe per interval, counted from the last ATTEMPT. The first probe of a
+    // session is never throttled (lastSyncAt is 0), so check()'s cold start still gets
+    // the fetch it needs to keep an already-over-cap user from getting a free send.
+    //
+    // Failures are throttled too, deliberately. `fetchChatQuota` goes through
+    // apiClient, which already retries 429/503 five times with capped backoff, so a
+    // rejection here means the endpoint is genuinely down — and re-probing it on every
+    // bar reveal is the same waste this floor exists to remove. The gate is fail-open
+    // on a missing snapshot by design, so the cost of waiting is bounded and known.
+    if (Date.now() - lastSyncAt < minSyncIntervalMs) return Promise.resolve()
+    lastSyncAt = Date.now()
     inFlight = fetchQuota()
       .then(applyQuota)
       .catch(() => {

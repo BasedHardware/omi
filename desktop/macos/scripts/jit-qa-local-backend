@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/../../.." && pwd)"
+
+# Keep the wrapper usable before `make setup`; once the locked backend venv is
+# present it supplies the Google/Firebase packages needed for ADC validation.
+PYTHON_BIN="${PYTHON:-$REPO_ROOT/backend/.venv/bin/python}"
+if [ ! -x "$PYTHON_BIN" ]; then
+  PYTHON_BIN="${PYTHON:-python3}"
+fi
+PYTHONPATH="$REPO_ROOT/scripts/dev-harness${PYTHONPATH:+:$PYTHONPATH}" \
+  exec "$PYTHON_BIN" "$REPO_ROOT/scripts/dev-harness/jit_qa_local_stack.py" "$@"

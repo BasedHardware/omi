@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "FC-deterministic-provider-rejection-burns-connect-retries",
+  "violated_contract": "A connect failure that is deterministic for the whole provider credential (account balance exhausted / unpaid account, e.g. an HTTP 402 on the WebSocket upgrade) must be classified as account-level evidence and leave the provider out of selection for an account-scale cooldown. A provider whose status is only visible to logging (the SDK catches the handshake failure and start() merely returns false) must not fall through the per-connect retry schedule: deterministic 402s multiplied by per-connect retries and every fallback session re-dialed the same spent key for days (2026-09-14..18: a retired managed Deepgram key still injected into prod produced ~90k ERROR lines/hour against a healthy fallback chain, burning log ingestion budget while users kept working).",
+  "canonical_prevention": "Capture the provider SDK's own ERROR stream (a logging.Handler on the vendor logger), classify an HTTP 402 into a typed account-level rejection that bypasses the connect retry loop, and record it on the provider's circuit breaker with an account cooldown (default 30m, env-tunable) that outlasts the 30s connect cooldown; gate fallback-leg candidates on their own circuit's cooldown so a condemned provider is skipped rather than re-dialed, assert it with a regression test that feeds the real SDK log text through the real chain, and remove the retired credential from the deployment manifests in the same PR.",
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/stt/streaming.py",
+    "backend/utils/stt/provider_resilience.py",
+    "backend/charts/backend-listen/prod_omi_backend_listen_values.yaml"
+  ],
+  "status": "open"
+}

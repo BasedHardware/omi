@@ -59,8 +59,10 @@ actor AgentVMService {
     log("AgentVMService: Cancelled owner-bound lifecycle work")
   }
 
-  /// Check backend for existing VM — if none exists, run the full pipeline.
-  /// Call this on every app launch for signed-in users.
+  /// Adopt an existing agent VM on signed-in launch warmup.
+  /// Never creates a VM: missing status or a status-check failure returns
+  /// without calling `provisionAgentVM` / `runPipeline`. Use `startPipeline()`
+  /// for onboarding and other explicit first-agent-use paths.
   func ensureProvisioned() {
     startOwnerBoundPipeline(checkExisting: true)
   }
@@ -98,31 +100,60 @@ actor AgentVMService {
     }
   }
 
+  enum WarmupAction: Equatable {
+    case adoptReady
+    case pollUntilReady
+    case skip
+  }
+
+  /// Launch warmup may only reconnect to an existing VM. A missing box, an
+  /// unrecognized status, or a failed status check must not create one.
+  static func warmupAction(
+    status: String?,
+    ip: String?,
+    statusCheckFailed: Bool = false
+  ) -> WarmupAction {
+    if statusCheckFailed {
+      return .skip
+    }
+    switch status {
+    case "ready":
+      return ip == nil ? .pollUntilReady : .adoptReady
+    case "provisioning", "stopped":
+      return .pollUntilReady
+    default:
+      return .skip
+    }
+  }
+
   private func ensureExistingOrProvision(ownerID: String, generation: UInt64) async {
+    let status: APIClient.AgentStatusResponse?
     do {
-      let status = try await APIClient.shared.getAgentStatus()
-      guard isCurrent(ownerID: ownerID, generation: generation) else { return }
-      if let status, status.status == "ready", let ip = status.ip {
-        await prepareReadyVM(status, ip: ip, ownerID: ownerID, generation: generation)
-        return
-      }
-      if let status, status.status == "provisioning" || status.status == "stopped" {
-        if let result = await pollUntilReady(
-          maxAttempts: 75,
-          intervalSeconds: 5,
-          ownerID: ownerID,
-          generation: generation),
-          let ip = result.ip
-        {
-          await prepareReadyVM(result, ip: ip, ownerID: ownerID, generation: generation)
-        }
-        return
-      }
+      status = try await APIClient.shared.getAgentStatus()
     } catch {
       guard isCurrent(ownerID: ownerID, generation: generation) else { return }
-      log("AgentVMService: Status check failed — \(error.localizedDescription), will provision")
+      log("AgentVMService: Status check failed — \(error.localizedDescription), not provisioning")
+      return
     }
-    await runPipeline(ownerID: ownerID, generation: generation)
+    guard isCurrent(ownerID: ownerID, generation: generation) else { return }
+
+    switch Self.warmupAction(status: status?.status, ip: status?.ip) {
+    case .adoptReady:
+      guard let status, let ip = status.ip else { return }
+      await prepareReadyVM(status, ip: ip, ownerID: ownerID, generation: generation)
+    case .pollUntilReady:
+      if let result = await pollUntilReady(
+        maxAttempts: 75,
+        intervalSeconds: 5,
+        ownerID: ownerID,
+        generation: generation),
+        let ip = result.ip
+      {
+        await prepareReadyVM(result, ip: ip, ownerID: ownerID, generation: generation)
+      }
+    case .skip:
+      log("AgentVMService: No adoptable VM on warmup — not provisioning")
+    }
   }
 
   private func runPipeline(ownerID: String, generation: UInt64) async {

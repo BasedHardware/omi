@@ -4,8 +4,8 @@ name: Repo Hygiene
 # turns a registry the repository already maintains into a reviewable diff, so
 # retirement stops depending on someone remembering to look.
 #
-# Monday 09:00 UTC, clear of the release cadence (desktop_auto_release polls
-# every 15 min; desktop_retry_beta_qualification runs twice hourly).
+# Monday 09:00 UTC, clear of the release cadence (desktop_auto_release and
+# desktop_release_doctor each run hourly).
 
 on:
   schedule:

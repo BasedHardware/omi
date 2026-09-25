@@ -2,10 +2,30 @@
 
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Sparkles, Loader2, ChevronDown, X, MessageSquare, Send, ArrowLeft, Lock, Globe, Star } from 'lucide-react';
+import {
+  Plus,
+  Sparkles,
+  Loader2,
+  ChevronDown,
+  X,
+  MessageSquare,
+  Send,
+  ArrowLeft,
+  Lock,
+  Globe,
+  Star,
+} from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import { cn } from '@/lib/utils';
-import { getApp, reprocessConversation, testConversationPrompt, createApp, enableApp, generateAppDescriptionAndEmoji, getInstalledApps } from '@/lib/api';
+import {
+  getApp,
+  reprocessConversation,
+  testConversationPrompt,
+  createApp,
+  enableApp,
+  generateAppDescriptionAndEmoji,
+  getInstalledApps,
+} from '@/lib/api';
 import { auth } from '@/lib/firebase';
 import type { App } from '@/types/apps';
 import type { Conversation, AppResponse } from '@/types/conversation';
@@ -48,7 +68,9 @@ async function generateEmojiIcon(emoji: string): Promise<File> {
   return new Promise((resolve, reject) => {
     canvas.toBlob((blob) => {
       if (blob) {
-        const file = new File([blob], `template_icon_${Date.now()}.png`, { type: 'image/png' });
+        const file = new File([blob], `template_icon_${Date.now()}.png`, {
+          type: 'image/png',
+        });
         resolve(file);
       } else {
         reject(new Error('Failed to create icon blob'));
@@ -92,7 +114,7 @@ export function GenerateSummaryButton({
   }, []);
 
   // Track which apps already have summaries (for visual indicator)
-  const existingAppIds = new Set(existingAppResults.map(r => r.app_id));
+  const existingAppIds = new Set(existingAppResults.map((r) => r.app_id));
   // Show all suggested apps (including ones with existing results) so users can re-select
   const availableAppIds = suggestedAppIds;
 
@@ -107,7 +129,7 @@ export function GenerateSummaryButton({
         const [suggestedResults, installedResponse] = await Promise.all([
           // Fetch suggested apps
           availableAppIds.length > 0
-            ? Promise.all(availableAppIds.map(id => getApp(id).catch(() => null)))
+            ? Promise.all(availableAppIds.map((id) => getApp(id).catch(() => null)))
             : Promise.resolve([]),
           // Fetch user's installed apps
           getInstalledApps().catch(() => ({ data: [] })),
@@ -119,7 +141,7 @@ export function GenerateSummaryButton({
         // Filter installed apps to only memory templates, excluding suggested ones
         const suggestedIdSet = new Set(availableAppIds);
         const memoryTemplates = installedResponse.data.filter(
-          (app) => app.capabilities?.includes('memories') && !suggestedIdSet.has(app.id)
+          (app) => app.capabilities?.includes('memories') && !suggestedIdSet.has(app.id),
         );
         setUserTemplates(memoryTemplates);
       } catch (err) {
@@ -222,7 +244,7 @@ export function GenerateSummaryButton({
       // Generate description and emoji using AI (matches mobile app behavior)
       const { description, emoji } = await generateAppDescriptionAndEmoji(
         templateName.trim(),
-        templatePrompt.trim()
+        templatePrompt.trim(),
       );
 
       // Generate icon from emoji using canvas
@@ -307,7 +329,7 @@ export function GenerateSummaryButton({
           'bg-bg-tertiary hover:bg-bg-quaternary',
           'text-text-secondary hover:text-text-primary',
           'border border-bg-quaternary/50',
-          (generating || testingPrompt) && 'opacity-50 cursor-not-allowed'
+          (generating || testingPrompt) && 'opacity-50 cursor-not-allowed',
         )}
       >
         {generating || testingPrompt ? (
@@ -318,7 +340,9 @@ export function GenerateSummaryButton({
         ) : (
           <>
             <span>Templates</span>
-            <ChevronDown className={cn('w-4 h-4 transition-transform', isOpen && 'rotate-180')} />
+            <ChevronDown
+              className={cn('w-4 h-4 transition-transform', isOpen && 'rotate-180')}
+            />
           </>
         )}
       </button>
@@ -337,9 +361,7 @@ export function GenerateSummaryButton({
               'bg-bg-secondary border border-bg-tertiary rounded-xl',
               'shadow-lg',
               // Compact size only for apps list view
-              viewMode === 'apps'
-                ? 'w-80 max-h-[400px]'
-                : 'w-96 max-h-[520px]'
+              viewMode === 'apps' ? 'w-80 max-h-[400px]' : 'w-96 max-h-[520px]',
             )}
           >
             {/* Apps View */}
@@ -374,11 +396,11 @@ export function GenerateSummaryButton({
                     className={cn(
                       'w-full flex items-center gap-3 p-3 rounded-lg',
                       'text-left transition-all duration-150',
-                      'hover:bg-bg-tertiary'
+                      'hover:bg-bg-tertiary',
                     )}
                   >
-                    <div className="w-10 h-10 rounded-lg bg-purple-primary/20 flex items-center justify-center flex-shrink-0">
-                      <Plus className="w-5 h-5 text-purple-primary" />
+                    <div className="w-10 h-10 rounded-lg bg-white/[0.14] flex items-center justify-center flex-shrink-0">
+                      <Plus className="w-5 h-5 text-text-primary" />
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium text-text-primary">
@@ -396,7 +418,7 @@ export function GenerateSummaryButton({
                     className={cn(
                       'w-full flex items-center gap-3 p-3 rounded-lg',
                       'text-left transition-all duration-150',
-                      'hover:bg-bg-tertiary'
+                      'hover:bg-bg-tertiary',
                     )}
                   >
                     <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center flex-shrink-0">
@@ -436,8 +458,8 @@ export function GenerateSummaryButton({
                           'w-full flex items-center gap-3 p-3 rounded-lg',
                           'text-left transition-all duration-150',
                           'hover:bg-bg-tertiary',
-                          generating === app.id && 'bg-purple-primary/10',
-                          generating && generating !== app.id && 'opacity-50'
+                          generating === app.id && 'bg-white/[0.08]',
+                          generating && generating !== app.id && 'opacity-50',
                         )}
                       >
                         {app.image ? (
@@ -447,8 +469,8 @@ export function GenerateSummaryButton({
                             className="w-10 h-10 rounded-lg object-cover flex-shrink-0"
                           />
                         ) : (
-                          <div className="w-10 h-10 rounded-lg bg-purple-primary/20 flex items-center justify-center flex-shrink-0">
-                            <Sparkles className="w-5 h-5 text-purple-primary" />
+                          <div className="w-10 h-10 rounded-lg bg-white/[0.14] flex items-center justify-center flex-shrink-0">
+                            <Sparkles className="w-5 h-5 text-text-primary" />
                           </div>
                         )}
                         <div className="flex-1 min-w-0">
@@ -462,9 +484,11 @@ export function GenerateSummaryButton({
                           )}
                         </div>
                         {generating === app.id ? (
-                          <Loader2 className="w-4 h-4 animate-spin text-purple-primary flex-shrink-0" />
+                          <Loader2 className="w-4 h-4 animate-spin text-text-primary flex-shrink-0" />
                         ) : existingAppIds.has(app.id) ? (
-                          <span className="text-xs text-text-quaternary flex-shrink-0">Generated</span>
+                          <span className="text-xs text-text-quaternary flex-shrink-0">
+                            Generated
+                          </span>
                         ) : null}
                       </button>
                     ))}
@@ -486,8 +510,8 @@ export function GenerateSummaryButton({
                           'w-full flex items-center gap-3 p-3 rounded-lg',
                           'text-left transition-all duration-150',
                           'hover:bg-bg-tertiary',
-                          generating === app.id && 'bg-purple-primary/10',
-                          generating && generating !== app.id && 'opacity-50'
+                          generating === app.id && 'bg-white/[0.08]',
+                          generating && generating !== app.id && 'opacity-50',
                         )}
                       >
                         {app.image ? (
@@ -497,8 +521,8 @@ export function GenerateSummaryButton({
                             className="w-10 h-10 rounded-lg object-cover flex-shrink-0"
                           />
                         ) : (
-                          <div className="w-10 h-10 rounded-lg bg-purple-primary/20 flex items-center justify-center flex-shrink-0">
-                            <Sparkles className="w-5 h-5 text-purple-primary" />
+                          <div className="w-10 h-10 rounded-lg bg-white/[0.14] flex items-center justify-center flex-shrink-0">
+                            <Sparkles className="w-5 h-5 text-text-primary" />
                           </div>
                         )}
                         <div className="flex-1 min-w-0">
@@ -512,9 +536,11 @@ export function GenerateSummaryButton({
                           )}
                         </div>
                         {generating === app.id ? (
-                          <Loader2 className="w-4 h-4 animate-spin text-purple-primary flex-shrink-0" />
+                          <Loader2 className="w-4 h-4 animate-spin text-text-primary flex-shrink-0" />
                         ) : existingAppIds.has(app.id) ? (
-                          <span className="text-xs text-text-quaternary flex-shrink-0">Generated</span>
+                          <span className="text-xs text-text-quaternary flex-shrink-0">
+                            Generated
+                          </span>
                         ) : null}
                       </button>
                     ))}
@@ -541,7 +567,9 @@ export function GenerateSummaryButton({
                   >
                     <ArrowLeft className="w-4 h-4 text-text-tertiary" />
                   </button>
-                  <span className="text-sm font-medium text-text-primary flex-1">Test Custom Prompt</span>
+                  <span className="text-sm font-medium text-text-primary flex-1">
+                    Test Custom Prompt
+                  </span>
                   <button
                     onClick={handleClose}
                     className="p-1 rounded-md hover:bg-bg-tertiary transition-colors"
@@ -569,7 +597,7 @@ export function GenerateSummaryButton({
                       'w-full p-3 rounded-lg resize-none',
                       'bg-bg-tertiary border border-bg-quaternary',
                       'text-sm text-text-primary placeholder:text-text-quaternary',
-                      'focus:outline-none focus:ring-2 focus:ring-purple-primary/50'
+                      'focus:outline-none focus:ring-2 focus:ring-white/25',
                     )}
                     onKeyDown={(e) => {
                       if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
@@ -586,8 +614,8 @@ export function GenerateSummaryButton({
                     className={cn(
                       'w-full mt-3 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg',
                       'text-sm font-medium transition-all duration-150',
-                      'bg-purple-primary hover:bg-purple-secondary text-white',
-                      'disabled:opacity-50 disabled:cursor-not-allowed'
+                      'bg-text-primary hover:bg-text-primary/90 text-bg-primary',
+                      'disabled:opacity-50 disabled:cursor-not-allowed',
                     )}
                   >
                     {testingPrompt ? (
@@ -620,7 +648,9 @@ export function GenerateSummaryButton({
                   >
                     <ArrowLeft className="w-4 h-4 text-text-tertiary" />
                   </button>
-                  <span className="text-sm font-medium text-text-primary flex-1">Result</span>
+                  <span className="text-sm font-medium text-text-primary flex-1">
+                    Result
+                  </span>
                   <button
                     onClick={handleClose}
                     className="p-1 rounded-md hover:bg-bg-tertiary transition-colors"
@@ -648,7 +678,7 @@ export function GenerateSummaryButton({
                       className={cn(
                         'flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg',
                         'text-sm font-medium transition-colors',
-                        'bg-bg-tertiary hover:bg-bg-quaternary text-text-secondary hover:text-text-primary'
+                        'bg-bg-tertiary hover:bg-bg-quaternary text-text-secondary hover:text-text-primary',
                       )}
                     >
                       Copy Result
@@ -661,7 +691,7 @@ export function GenerateSummaryButton({
                       className={cn(
                         'flex-1 flex items-center justify-center gap-2 px-4 py-2 rounded-lg',
                         'text-sm font-medium transition-colors',
-                        'bg-bg-tertiary hover:bg-bg-quaternary text-text-secondary hover:text-text-primary'
+                        'bg-bg-tertiary hover:bg-bg-quaternary text-text-secondary hover:text-text-primary',
                       )}
                     >
                       Try Another
@@ -672,7 +702,7 @@ export function GenerateSummaryButton({
                     className={cn(
                       'w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg',
                       'text-sm font-medium transition-colors',
-                      'bg-purple-primary hover:bg-purple-secondary text-white'
+                      'bg-text-primary hover:bg-text-primary/90 text-bg-primary',
                     )}
                   >
                     <Star className="w-4 h-4" />
@@ -693,7 +723,9 @@ export function GenerateSummaryButton({
                   >
                     <ArrowLeft className="w-4 h-4 text-text-tertiary" />
                   </button>
-                  <span className="text-sm font-medium text-text-primary flex-1">Create Template</span>
+                  <span className="text-sm font-medium text-text-primary flex-1">
+                    Create Template
+                  </span>
                   <button
                     onClick={handleClose}
                     className="p-1 rounded-md hover:bg-bg-tertiary transition-colors"
@@ -726,7 +758,7 @@ export function GenerateSummaryButton({
                         'w-full p-3 rounded-lg',
                         'bg-bg-tertiary border border-bg-quaternary',
                         'text-sm text-text-primary placeholder:text-text-quaternary',
-                        'focus:outline-none focus:ring-2 focus:ring-purple-primary/50'
+                        'focus:outline-none focus:ring-2 focus:ring-white/25',
                       )}
                     />
                   </div>
@@ -745,7 +777,7 @@ export function GenerateSummaryButton({
                         'w-full p-3 rounded-lg resize-none',
                         'bg-bg-tertiary border border-bg-quaternary',
                         'text-sm text-text-primary placeholder:text-text-quaternary',
-                        'focus:outline-none focus:ring-2 focus:ring-purple-primary/50'
+                        'focus:outline-none focus:ring-2 focus:ring-white/25',
                       )}
                     />
                   </div>
@@ -756,13 +788,15 @@ export function GenerateSummaryButton({
                     className={cn(
                       'w-full flex items-center gap-3 p-3 rounded-lg',
                       'text-left transition-all duration-150',
-                      'bg-bg-tertiary hover:bg-bg-quaternary'
+                      'bg-bg-tertiary hover:bg-bg-quaternary',
                     )}
                   >
-                    <div className={cn(
-                      'w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0',
-                      isPublic ? 'bg-green-500/20' : 'bg-bg-quaternary'
-                    )}>
+                    <div
+                      className={cn(
+                        'w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0',
+                        isPublic ? 'bg-green-500/20' : 'bg-bg-quaternary',
+                      )}
+                    >
                       {isPublic ? (
                         <Globe className="w-5 h-5 text-green-400" />
                       ) : (
@@ -774,7 +808,9 @@ export function GenerateSummaryButton({
                         {isPublic ? 'Public' : 'Private'}
                       </p>
                       <p className="text-xs text-text-tertiary">
-                        {isPublic ? 'Anyone can discover your template' : 'Only you can use this template'}
+                        {isPublic
+                          ? 'Anyone can discover your template'
+                          : 'Only you can use this template'}
                       </p>
                     </div>
                   </button>
@@ -782,12 +818,14 @@ export function GenerateSummaryButton({
                   {/* Create Button */}
                   <button
                     onClick={handleCreateTemplate}
-                    disabled={!templateName.trim() || !templatePrompt.trim() || creatingTemplate}
+                    disabled={
+                      !templateName.trim() || !templatePrompt.trim() || creatingTemplate
+                    }
                     className={cn(
                       'w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg',
                       'text-sm font-medium transition-all duration-150',
-                      'bg-purple-primary hover:bg-purple-secondary text-white',
-                      'disabled:opacity-50 disabled:cursor-not-allowed'
+                      'bg-text-primary hover:bg-text-primary/90 text-bg-primary',
+                      'disabled:opacity-50 disabled:cursor-not-allowed',
                     )}
                   >
                     {creatingTemplate ? (
@@ -817,7 +855,9 @@ export function GenerateSummaryButton({
                   >
                     <ArrowLeft className="w-4 h-4 text-text-tertiary" />
                   </button>
-                  <span className="text-sm font-medium text-text-primary flex-1">Save as Template</span>
+                  <span className="text-sm font-medium text-text-primary flex-1">
+                    Save as Template
+                  </span>
                   <button
                     onClick={handleClose}
                     className="p-1 rounded-md hover:bg-bg-tertiary transition-colors"
@@ -850,7 +890,7 @@ export function GenerateSummaryButton({
                         'w-full p-3 rounded-lg',
                         'bg-bg-tertiary border border-bg-quaternary',
                         'text-sm text-text-primary placeholder:text-text-quaternary',
-                        'focus:outline-none focus:ring-2 focus:ring-purple-primary/50'
+                        'focus:outline-none focus:ring-2 focus:ring-white/25',
                       )}
                     />
                   </div>
@@ -868,7 +908,7 @@ export function GenerateSummaryButton({
                         'w-full p-3 rounded-lg resize-none',
                         'bg-bg-tertiary border border-bg-quaternary',
                         'text-sm text-text-primary placeholder:text-text-quaternary',
-                        'focus:outline-none focus:ring-2 focus:ring-purple-primary/50'
+                        'focus:outline-none focus:ring-2 focus:ring-white/25',
                       )}
                     />
                   </div>
@@ -879,13 +919,15 @@ export function GenerateSummaryButton({
                     className={cn(
                       'w-full flex items-center gap-3 p-3 rounded-lg',
                       'text-left transition-all duration-150',
-                      'bg-bg-tertiary hover:bg-bg-quaternary'
+                      'bg-bg-tertiary hover:bg-bg-quaternary',
                     )}
                   >
-                    <div className={cn(
-                      'w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0',
-                      isPublic ? 'bg-green-500/20' : 'bg-bg-quaternary'
-                    )}>
+                    <div
+                      className={cn(
+                        'w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0',
+                        isPublic ? 'bg-green-500/20' : 'bg-bg-quaternary',
+                      )}
+                    >
                       {isPublic ? (
                         <Globe className="w-5 h-5 text-green-400" />
                       ) : (
@@ -897,7 +939,9 @@ export function GenerateSummaryButton({
                         {isPublic ? 'Public' : 'Private'}
                       </p>
                       <p className="text-xs text-text-tertiary">
-                        {isPublic ? 'Anyone can discover your template' : 'Only you can use this template'}
+                        {isPublic
+                          ? 'Anyone can discover your template'
+                          : 'Only you can use this template'}
                       </p>
                     </div>
                   </button>
@@ -905,12 +949,14 @@ export function GenerateSummaryButton({
                   {/* Create Button */}
                   <button
                     onClick={handleCreateTemplate}
-                    disabled={!templateName.trim() || !templatePrompt.trim() || creatingTemplate}
+                    disabled={
+                      !templateName.trim() || !templatePrompt.trim() || creatingTemplate
+                    }
                     className={cn(
                       'w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg',
                       'text-sm font-medium transition-all duration-150',
-                      'bg-purple-primary hover:bg-purple-secondary text-white',
-                      'disabled:opacity-50 disabled:cursor-not-allowed'
+                      'bg-text-primary hover:bg-text-primary/90 text-bg-primary',
+                      'disabled:opacity-50 disabled:cursor-not-allowed',
                     )}
                   >
                     {creatingTemplate ? (
