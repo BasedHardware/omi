@@ -42,4 +42,23 @@ final class RealtimeOmniGptLiveCommitTests: XCTestCase {
     XCTAssertEqual(spy.finals, [""], "the final resolves the delegate's accumulated interim STT")
     XCTAssertEqual(spy.finishCount, 1, "the turn must reach one terminal coordinator outcome")
   }
+
+  /// A drain completion followed by `session.closed` (or any repeated finalize)
+  /// must not double-finish the input turn.
+  func testFinalizeIsIdempotentPerInputTurn() {
+    let spy = SpyDelegate()
+    let service = RealtimeOmniService(
+      provider: .gptLive,
+      relayBaseURL: "https://example.invalid",
+      authHeader: "Bearer token",
+      sttOnly: true,
+      delegate: spy
+    )
+
+    service.finalizeGptLiveInputTurn()
+    service.finalizeGptLiveInputTurn()
+
+    XCTAssertEqual(spy.finals, [""], "exactly one final per input turn")
+    XCTAssertEqual(spy.finishCount, 1, "exactly one terminal outcome per input turn")
+  }
 }
