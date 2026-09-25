@@ -15,33 +15,7 @@ import sys
 import unittest
 from unittest.mock import MagicMock
 
-# Stub heavy external and database dependencies for fast, hermetic unit testing
-for mod in [
-    "google",
-    "google.cloud",
-    "google.cloud.firestore",
-    "google.cloud.firestore_v1",
-    "google.cloud.storage",
-    "firebase_admin",
-    "firebase_admin.auth",
-    "database.frame_requests",
-    "database.conversations",
-    "services.conversation_frame_evidence",
-    "utils.executors",
-    "utils.integration_telemetry",
-    "utils.jit_rollout",
-    "utils.other.endpoints",
-    "utils.retrieval.frame_request_authority",
-    "utils.retrieval.frame_request_storage",
-]:
-    sys.modules.setdefault(mod, MagicMock())
-
 BACKEND_DIR = Path(__file__).resolve().parents[2]
-if str(BACKEND_DIR) not in sys.path:
-    sys.path.insert(0, str(BACKEND_DIR))
-
-from routers.frame_requests import _sanitize_frame_request_error
-
 FRAME_REQUESTS_ROUTER_FILE = BACKEND_DIR / "routers" / "frame_requests.py"
 
 
@@ -55,18 +29,61 @@ def _get_function_source(function_name: str) -> str:
 
 
 class FrameRequestsErrorSanitizationTests(unittest.TestCase):
+    _stubbed_modules: dict = {}
+    _sanitize_fn = None
+
+    @classmethod
+    def setUpClass(cls):
+        # Stub heavy external and database dependencies inside setUpClass (not module scope)
+        stub_names = [
+            "google",
+            "google.cloud",
+            "google.cloud.firestore",
+            "google.cloud.firestore_v1",
+            "google.cloud.storage",
+            "firebase_admin",
+            "firebase_admin.auth",
+            "database.frame_requests",
+            "database.conversations",
+            "services.conversation_frame_evidence",
+            "utils.executors",
+            "utils.integration_telemetry",
+            "utils.jit_rollout",
+            "utils.other.endpoints",
+            "utils.retrieval.frame_request_authority",
+            "utils.retrieval.frame_request_storage",
+        ]
+        for mod in stub_names:
+            if mod not in sys.modules:
+                mock_mod = MagicMock()
+                cls._stubbed_modules[mod] = mock_mod
+                sys.modules[mod] = mock_mod
+
+        if str(BACKEND_DIR) not in sys.path:
+            sys.path.insert(0, str(BACKEND_DIR))
+
+        from routers.frame_requests import _sanitize_frame_request_error
+
+        cls._sanitize_fn = staticmethod(_sanitize_frame_request_error)
+
+    @classmethod
+    def tearDownClass(cls):
+        for mod in cls._stubbed_modules:
+            sys.modules.pop(mod, None)
+
     def test_sanitize_frame_request_error_behavior(self):
         fallback = "frame_request_invalid_parameters"
+        sanitize = self._sanitize_fn
 
         # 1. Clean structured error key returned as-is
         self.assertEqual(
-            _sanitize_frame_request_error(ValueError("clean_error_code"), fallback),
+            sanitize(ValueError("clean_error_code"), fallback),
             "clean_error_code",
         )
 
         # 2. Raw traceback filtered to fallback
         self.assertEqual(
-            _sanitize_frame_request_error(
+            sanitize(
                 ValueError("Traceback (most recent call last):\n  File 'x.py', line 1\nZeroDivisionError"),
                 fallback,
             ),
@@ -75,7 +92,7 @@ class FrameRequestsErrorSanitizationTests(unittest.TestCase):
 
         # 3. Firestore / google.cloud internals filtered to fallback
         self.assertEqual(
-            _sanitize_frame_request_error(
+            sanitize(
                 ValueError("google.cloud.exceptions.NotFound: 404 Document not found in Firestore"),
                 fallback,
             ),
@@ -84,19 +101,19 @@ class FrameRequestsErrorSanitizationTests(unittest.TestCase):
 
         # 4. Multiline error text filtered to fallback
         self.assertEqual(
-            _sanitize_frame_request_error(ValueError("line 1\nline 2 error details"), fallback),
+            sanitize(ValueError("line 1\nline 2 error details"), fallback),
             fallback,
         )
 
         # 5. Generic 'Error:' prefix filtered to fallback
         self.assertEqual(
-            _sanitize_frame_request_error(ValueError("Error: invalid internal token state"), fallback),
+            sanitize(ValueError("Error: invalid internal token state"), fallback),
             fallback,
         )
 
         # 6. Empty exception detail falls back
         self.assertEqual(
-            _sanitize_frame_request_error(ValueError(""), fallback),
+            sanitize(ValueError(""), fallback),
             fallback,
         )
 
@@ -138,4 +155,3 @@ class FrameRequestsErrorSanitizationTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
-
