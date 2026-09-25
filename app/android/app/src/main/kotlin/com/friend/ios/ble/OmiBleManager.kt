@@ -224,7 +224,9 @@ class OmiBleManager private constructor(private val application: Application) {
             override fun onScanResult(callbackType: Int, result: ScanResult) {
                 val device = result.device
                 val address = device.address.uppercase()
-                val name = device.name ?: ""
+                val name = result.scanRecord?.deviceName?.takeIf { it.isNotBlank() }
+                    ?: device.name?.takeIf { it.isNotBlank() }
+                    ?: ""
                 val rssi = result.rssi
                 val advServiceUuids = result.scanRecord?.serviceUuids?.map { it.uuid.toString() } ?: emptyList()
 

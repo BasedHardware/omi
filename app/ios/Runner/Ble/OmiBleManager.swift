@@ -703,6 +703,37 @@ extension OmiBleManager: CBCentralManagerDelegate {
         }
     }
 
+    /// Scan-time name. `CBPeripheral.name` is often empty until the phone has connected
+    /// once, while NotePin S puts "NotePin" only in the advertisement (#18705).
+    static func discoveredName(peripheral: CBPeripheral, advertisementData: [String: Any]) -> String {
+        let advertised = (advertisementData[CBAdvertisementDataLocalNameKey] as? String)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if let advertised, !advertised.isEmpty {
+            return advertised
+        }
+        let cached = peripheral.name?.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let cached, !cached.isEmpty {
+            return cached
+        }
+        if isNotePinAdvertisement(advertisementData) {
+            return "NotePin"
+        }
+        return ""
+    }
+
+    /// PLAUD manufacturer id 93 (0x5D) with the NotePin payload, matching macOS discovery.
+    static func isNotePinAdvertisement(_ advertisementData: [String: Any]) -> Bool {
+        guard let manufacturerData = advertisementData[CBAdvertisementDataManufacturerDataKey] as? Data,
+              manufacturerData.count >= 6
+        else {
+            return false
+        }
+        let manufacturerId = UInt16(manufacturerData[0]) | (UInt16(manufacturerData[1]) << 8)
+        guard manufacturerId == 93 else { return false }
+        return manufacturerData[2] == 0x04 && manufacturerData[3] == 0x56 && manufacturerData[4] == 0xCF
+            && manufacturerData[5] == 0x00
+    }
+
     func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String: Any], rssi RSSI: NSNumber) {
         let uuid = peripheralUuidString(peripheral)
         peripheral.delegate = self
@@ -712,7 +743,7 @@ extension OmiBleManager: CBCentralManagerDelegate {
 
         let blePeripheral = BlePeripheral(
             uuid: uuid,
-            name: peripheral.name ?? "",
+            name: Self.discoveredName(peripheral: peripheral, advertisementData: advertisementData),
             rssi: Int64(RSSI.intValue),
             serviceUuids: serviceUuids
         )
