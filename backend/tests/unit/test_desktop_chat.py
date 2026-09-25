@@ -2572,7 +2572,7 @@ def test_thinking_escalation_routes_managed_and_drops_tools():
     assert result['model'] == desktop_chat.CHAT_AGENT_AUTO_LANE_ID
     assert result['reasoning_effort'] == 'high'
     # OpenAI rejects function tools combined with a non-none effort on
-    # gpt-5.6-luna, so the escalation lane never carries client tools.
+    # gpt-x-luna, so the escalation lane never carries client tools.
     assert 'tools' not in result
     assert 'tool_choice' not in result
 

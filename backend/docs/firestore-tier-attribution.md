@@ -59,13 +59,19 @@ sum by (collection, tier) (
 
 Summing tiers recovers the existing counter's collection totals; no shadow
 counter or duplicate reads are introduced. Do **not** add RunQuery operations to
-document reads: nonempty query results are already counted. Existing limitations
-remain: document counts omit empty-query floors, query index-entry billing,
-retries and unwrapped SDKs; aggregation accounting is the existing approximation.
-This is reconcilable measurement, not an exact billing export. Reconcile the
-observed fleet to the **Cloud Firestore Read Ops** SKU under **App Engine**.
-Unscraped services and jobs are invisible even though their reads have a bounded
-label in-process. Verify scrape coverage before making a company-wide claim.
+document reads: nonempty query results are already counted on
+`omi_firestore_document_reads_total`. Empty queries, offset skips, and
+collection-id lists are `outcome="floor"` on that counter and `kind="query"` on
+`omi_firestore_billed_reads_total`. The type split against Cloud Monitoring, and
+the ≥95% coverage threshold, live in `firestore-read-attribution.md`. Do not add
+`omi_firestore_query_operations_total` or the hand-annotated family counters to
+that numerator.
+
+Index-entry reads for multi-range queries and kNN vector search are still
+outside the probe. A process that never imports `database._client` is
+uninstrumented. This is reconcilable measurement, not an exact billing export.
+Reconcile the observed fleet to the **Cloud Firestore Read Ops** SKU under
+**App Engine**. Verify scrape coverage before making a company-wide claim.
 
 ## Attribution and cost contract
 
@@ -112,5 +118,5 @@ label in-process. Verify scrape coverage before making a company-wide claim.
 Verification lives in `tests/unit/test_firestore_tier_context.py` (real FastAPI
 auth, simultaneous requests, executor copies, cold/fault paths, close and
 cancellation, 30 requests with zero additional subscription reads) and
-`tests/unit/test_firestore_document_probe.py` (all four SDK paths under multiple
+`tests/unit/test_firestore_document_probe.py` (the SDK read surface under multiple
 tiers, bounded labels, metrics failures, additive totals).

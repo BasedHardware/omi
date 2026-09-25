@@ -12,7 +12,7 @@ server verifies that token and chooses one of two fixed Omi gateway lanes:
 - signed-out or anonymous Firebase session: `omi:auto:persona-chat`
   (`gpt-5.4-nano`);
 - verified, non-anonymous Firebase session: `omi:auto:persona-chat-premium`
-  (`gpt-5.6-luna`).
+  (`gpt-x-luna`).
 
 Both lanes are resolved inside the authenticated Omi LLM gateway. A caller
 supplied model value is ignored, and a gateway failure returns an unavailable

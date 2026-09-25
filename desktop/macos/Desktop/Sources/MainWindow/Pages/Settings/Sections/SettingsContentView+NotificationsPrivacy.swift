@@ -226,7 +226,7 @@ extension SettingsContentView {
           privacyToggleRow(
             icon: "mic.fill",
             title: "Store Recordings",
-            subtitle: "Allow omi to store audio recordings of your conversations",
+            subtitle: "Allow Omi to store audio recordings of your conversations",
             isOn: $recordingPermissionEnabled
           ) { newValue in
             updateRecordingPermission(newValue)

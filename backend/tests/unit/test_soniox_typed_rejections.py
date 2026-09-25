@@ -163,9 +163,7 @@ def test_the_raw_provider_frame_stays_on_the_death_latch():
 
 
 def test_a_live_socket_reports_no_typed_reason():
-    sock = _drive_socket(
-        [{'tokens': [{'text': 'hi', 'is_final': True, 'speaker': 1, 'start_ms': 0, 'duration_ms': 100}]}]
-    )
+    sock = _drive_socket([{'tokens': [{'text': 'hi', 'is_final': True, 'speaker': 1, 'start_ms': 0, 'end_ms': 100}]}])
     assert not sock.is_connection_dead
     assert sock.typed_death_reason is None
 
