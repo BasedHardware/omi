@@ -572,6 +572,7 @@ async def _websocket_util_trigger(
                                 f"{len(private_cloud_sync_buffer)} bytes {uid}"
                             )
                         _queue_private_cloud_chunk()
+                        _reset_private_cloud_buffer()
                     current_conversation_id = new_conversation_id
                     # A conversation boundary ends the current v2 run: the
                     # next audio starts a fresh continuity window.
