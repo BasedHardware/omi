@@ -1,4 +1,5 @@
 import { readPersistedCache, writePersistedCache } from './persistentCache'
+import type { ConversationSummary } from './conversations/summaryMarkdown'
 
 export type ConversationRow = {
   id: string
@@ -8,6 +9,9 @@ export type ConversationRow = {
   emoji?: string
   subtitle: string
   preview: string
+  // Full cached summary for offline export, separate from the transcript preview.
+  // Older persisted rows and local recordings may not contain summary metadata.
+  markdownSummary?: Omit<ConversationSummary, 'title'>
   source: 'cloud' | 'local'
   // For local rows: distinguishes captured recordings from saved Omi chats so
   // the list can badge them differently. Undefined for cloud rows.
@@ -55,10 +59,7 @@ export function publishConversationsCache(rows: ConversationRow[]): void {
   // the next launch paints it instantly (see hydrateConversationsFromDisk).
   // Optimistic "pending" placeholders are transient, so they're excluded.
   // Best-effort and bounded.
-  writePersistedCache(
-    CONV_SURFACE,
-    rows.filter((r) => !r.pending).slice(0, CONV_PERSIST_CAP)
-  )
+  writePersistedCache(CONV_SURFACE, rows.filter((r) => !r.pending).slice(0, CONV_PERSIST_CAP))
   cacheSubscribers.forEach((cb) => cb(rows))
 }
 

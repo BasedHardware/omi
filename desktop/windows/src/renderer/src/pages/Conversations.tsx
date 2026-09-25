@@ -221,6 +221,11 @@ export function Conversations(): React.JSX.Element {
               summarize(c.transcript_segments).slice(0, 200) ||
               '(no transcript)',
             source: 'cloud',
+            markdownSummary: {
+              capturedAt: c.started_at ?? c.created_at,
+              overview: c.structured?.overview,
+              actionItems: c.structured?.action_items
+            },
             starred: c.starred ?? undefined,
             folderId: c.folder_id ?? null,
             sortAt: created
