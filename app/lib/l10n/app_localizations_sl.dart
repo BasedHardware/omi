@@ -9998,7 +9998,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String get transcriptionNoAudio => 'Transkripcija ne prejema zvoka';
 
   @override
-  String get tapPlusToStartRecording => 'Tapnite + za začetek snemanja';
+  String get tapPlusToStartRecording => 'Tapnite gumb za snemanje za začetek snemanja';
 
   @override
   String get chatBlockTask => 'Opravilo';
@@ -10241,7 +10241,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'Posneti pogovori se prikažejo tukaj. Za prvi posnetek tapnite + na začetnem zaslonu.';
+      'Posneti pogovori se prikažejo tukaj. Za prvi posnetek tapnite gumb za snemanje na začetnem zaslonu.';
 
   @override
   String get conversationMap => 'Zemljevid pogovorov';
@@ -10720,7 +10720,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String get deviceConnecting => 'Povezovanje…';
 
   @override
-  String get recordOptionsTip => 'Namig: pridržite gumb za snemanje, da posnamete telefonski klic.';
+  String get recordOptionsTip => 'Namig: tapnite puščico na gumbu za snemanje, da posnamete telefonski klic.';
 
   @override
   String get firmwareUpdateFailedTitle => 'Posodobitev ni uspela';
@@ -11207,6 +11207,53 @@ class AppLocalizationsSl extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Transkripcije v čakanju $count';
   }
+
+  @override
+  String get captureSourceCall => 'Klic';
+
+  @override
+  String get captureSourcePhoneMic => 'Mikrofon telefona';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Nadaljuj';
+
+  @override
+  String get finish => 'Končaj';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Obesek je ustavljen · nadaljuje, ko končate';
+
+  @override
+  String get pendantIsListeningTitle => 'Vaš obesek posluša';
+
+  @override
+  String get oneSourceAtATime => 'Omi snema samo iz enega vira hkrati.';
+
+  @override
+  String get recordWithPhoneInstead => 'Raje snemaj s telefonom';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'Obesek je ustavljen, dokler ne končate';
+
+  @override
+  String get pendantPausesDuringCall => 'Obesek je med klicem ustavljen';
+
+  @override
+  String get keepUsingPendant => 'Še naprej uporabljaj obesek';
+
+  @override
+  String get recordWith => 'Snemaj z';
+
+  @override
+  String get moreWaysToRecord => 'Več načinov snemanja';
+
+  @override
+  String get openCall => 'Odpri klic';
 
   @override
   String get captureRecoveryBanner => 'Zvuk obeska ne prihaja v aplikacijo — tapnite za popravilo';

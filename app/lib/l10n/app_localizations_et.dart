@@ -9962,7 +9962,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get transcriptionNoAudio => 'Transkriptsioon ei saa heli';
 
   @override
-  String get tapPlusToStartRecording => 'Salvestamise alustamiseks puuduta +';
+  String get tapPlusToStartRecording => 'Salvestamise alustamiseks puuduta salvestusnuppu';
 
   @override
   String get chatBlockTask => 'Ülesanne';
@@ -10205,7 +10205,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'Siin kuvatakse salvestatud vestlused. Esimese salvestamiseks puuduta avalehel +.';
+      'Siin kuvatakse salvestatud vestlused. Esimese salvestamiseks puuduta avalehel salvestusnuppu.';
 
   @override
   String get conversationMap => 'Vestluste kaart';
@@ -10683,7 +10683,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get deviceConnecting => 'Ühendamine…';
 
   @override
-  String get recordOptionsTip => 'Nõuanne: telefonikõne salvestamiseks vajuta salvestusnuppu ja hoia all.';
+  String get recordOptionsTip => 'Nõuanne: telefonikõne salvestamiseks puuduta salvestusnupul olevat noolt.';
 
   @override
   String get firmwareUpdateFailedTitle => 'Värskendamine ebaõnnestus';
@@ -11172,6 +11172,53 @@ class AppLocalizationsEt extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Ootel transkriptsioonid $count';
   }
+
+  @override
+  String get captureSourceCall => 'Kõne';
+
+  @override
+  String get captureSourcePhoneMic => 'Telefoni mikrofon';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Jätka';
+
+  @override
+  String get finish => 'Lõpeta';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Ripats peatatud · jätkab, kui lõpetad';
+
+  @override
+  String get pendantIsListeningTitle => 'Sinu ripats kuulab';
+
+  @override
+  String get oneSourceAtATime => 'Omi salvestab korraga ainult ühest allikast.';
+
+  @override
+  String get recordWithPhoneInstead => 'Salvesta hoopis telefoniga';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'Ripats on peatatud, kuni lõpetad';
+
+  @override
+  String get pendantPausesDuringCall => 'Ripats on kõne ajal peatatud';
+
+  @override
+  String get keepUsingPendant => 'Jätka ripatsiga';
+
+  @override
+  String get recordWith => 'Salvestusviis';
+
+  @override
+  String get moreWaysToRecord => 'Rohkem salvestusviise';
+
+  @override
+  String get openCall => 'Ava kõne';
 
   @override
   String get captureRecoveryBanner => 'Ripatsi heli ei jõua rakendusse — parandamiseks puudutage';

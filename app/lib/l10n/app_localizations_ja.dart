@@ -9796,7 +9796,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get transcriptionNoAudio => '文字起こしが音声を受信していません';
 
   @override
-  String get tapPlusToStartRecording => '＋をタップして録音を開始';
+  String get tapPlusToStartRecording => '録音ボタンをタップして録音を開始';
 
   @override
   String get chatBlockTask => 'タスク';
@@ -10036,7 +10036,7 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get noConversationsHeroMessage => '録音した会話はここに表示されます。ホームの + をタップして最初の会話を録音しましょう。';
+  String get noConversationsHeroMessage => '録音した会話はここに表示されます。ホームの録音ボタンをタップして最初の会話を録音しましょう。';
 
   @override
   String get conversationMap => '会話マップ';
@@ -10509,7 +10509,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get deviceConnecting => '接続中…';
 
   @override
-  String get recordOptionsTip => 'ヒント：録音ボタンを長押しすると通話を録音できます。';
+  String get recordOptionsTip => 'ヒント：録音ボタンの矢印をタップすると通話を録音できます。';
 
   @override
   String get firmwareUpdateFailedTitle => 'アップデートに失敗しました';
@@ -10990,6 +10990,53 @@ class AppLocalizationsJa extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return '文字起こし待ち $count';
   }
+
+  @override
+  String get captureSourceCall => '通話';
+
+  @override
+  String get captureSourcePhoneMic => '電話のマイク';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => '再開';
+
+  @override
+  String get finish => '終了';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'ペンダント一時停止中 · 終了すると再開します';
+
+  @override
+  String get pendantIsListeningTitle => 'ペンダントがリスニング中です';
+
+  @override
+  String get oneSourceAtATime => 'Omiは一度に1つのソースからのみ録音します。';
+
+  @override
+  String get recordWithPhoneInstead => '代わりに電話で録音';
+
+  @override
+  String get pendantPausesUntilYouFinish => '終了するまでペンダントは一時停止します';
+
+  @override
+  String get pendantPausesDuringCall => '通話中はペンダントが一時停止します';
+
+  @override
+  String get keepUsingPendant => 'ペンダントを使い続ける';
+
+  @override
+  String get recordWith => '録音方法';
+
+  @override
+  String get moreWaysToRecord => 'その他の録音方法';
+
+  @override
+  String get openCall => '通話を開く';
 
   @override
   String get captureRecoveryBanner => 'ペンダントの音声がアプリに届いていません — タップして修復';

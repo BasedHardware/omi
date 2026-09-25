@@ -18537,10 +18537,10 @@ abstract class AppLocalizations {
   /// **'Transcription not receiving audio'**
   String get transcriptionNoAudio;
 
-  /// Empty-home hint pointing at the + record button
+  /// Empty-home hint pointing at the round record button
   ///
   /// In en, this message translates to:
-  /// **'Tap + to start recording'**
+  /// **'Tap the record button to start recording'**
   String get tapPlusToStartRecording;
 
   /// Eyebrow label on a chat task card block
@@ -18810,7 +18810,7 @@ abstract class AppLocalizations {
   /// Empty state message on the Conversations tab for a new user
   ///
   /// In en, this message translates to:
-  /// **'Conversations you record show up here. Tap + on Home to record your first one.'**
+  /// **'Conversations you record show up here. Tap the record button on Home to record your first one.'**
   String get noConversationsHeroMessage;
 
   /// Title of the page (and the button label) that shows conversations on a map
@@ -19548,7 +19548,7 @@ abstract class AppLocalizations {
   /// One-time hint after the first phone-mic recording
   ///
   /// In en, this message translates to:
-  /// **'Tip: press and hold the record button to record a phone call.'**
+  /// **'Tip: tap the arrow on the record button to record a phone call.'**
   String get recordOptionsTip;
 
   /// Title of the firmware update failed state
@@ -20360,6 +20360,96 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Transcriptions pending {count}'**
   String transcriptionsPendingCount(int count);
+
+  /// Capture source label when an Omi phone call is being recorded, on the live card (e.g. 'Call · Listening · 3:10'). A noun.
+  ///
+  /// In en, this message translates to:
+  /// **'Call'**
+  String get captureSourceCall;
+
+  /// The phone's microphone as a capture source: live page title ('Listening · Phone mic') and the first row of the 'Record with' sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'Phone mic'**
+  String get captureSourcePhoneMic;
+
+  /// Live page title: recording status followed by the capture source, e.g. 'Listening · Pendant'.
+  ///
+  /// In en, this message translates to:
+  /// **'{status} · {source}'**
+  String captureStatusWithSource(String status, String source);
+
+  /// Button that resumes a paused recording.
+  ///
+  /// In en, this message translates to:
+  /// **'Resume'**
+  String get resume;
+
+  /// Button that ends the live recording and processes the conversation.
+  ///
+  /// In en, this message translates to:
+  /// **'Finish'**
+  String get finish;
+
+  /// Small note on the live card while the phone records instead of the pendant.
+  ///
+  /// In en, this message translates to:
+  /// **'Pendant paused · resumes when you finish'**
+  String get pendantPausedResumesWhenYouFinish;
+
+  /// Sheet title shown when the user taps the phone record button while the pendant is recording.
+  ///
+  /// In en, this message translates to:
+  /// **'Your pendant is listening'**
+  String get pendantIsListeningTitle;
+
+  /// Explanation line under the 'Your pendant is listening' sheet title.
+  ///
+  /// In en, this message translates to:
+  /// **'Omi records from one source at a time.'**
+  String get oneSourceAtATime;
+
+  /// Option in the 'Your pendant is listening' sheet that switches recording to the phone microphone.
+  ///
+  /// In en, this message translates to:
+  /// **'Record with phone instead'**
+  String get recordWithPhoneInstead;
+
+  /// Subtitle of the 'Record with phone instead' option.
+  ///
+  /// In en, this message translates to:
+  /// **'Pendant pauses until you finish'**
+  String get pendantPausesUntilYouFinish;
+
+  /// Subtitle of the Phone call option in the 'Your pendant is listening' sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'Pendant pauses during the call'**
+  String get pendantPausesDuringCall;
+
+  /// Button that dismisses the 'Your pendant is listening' sheet and keeps the pendant recording.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep using pendant'**
+  String get keepUsingPendant;
+
+  /// Title of the sheet listing ways to record (Phone mic, Phone call).
+  ///
+  /// In en, this message translates to:
+  /// **'Record with'**
+  String get recordWith;
+
+  /// Accessibility label of the small arrow badge on the record button that opens the 'Record with' sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'More ways to record'**
+  String get moreWaysToRecord;
+
+  /// Accessibility hint on the live card during a call; tapping opens the call screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Open call'**
+  String get openCall;
 
   /// Persistent repair banner shown when a connected pendant's audio is not reaching the app; tapping opens device repair settings
   ///

@@ -88,7 +88,7 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
               // Live capture widget — shows when device or phone mic is recording
-              const SliverToBoxAdapter(child: ConversationCaptureWidget()),
+              const SliverToBoxAdapter(child: ConversationCaptureWidget(showsCall: true)),
 
               const SliverToBoxAdapter(child: CaptureRecoveryBanner()),
 

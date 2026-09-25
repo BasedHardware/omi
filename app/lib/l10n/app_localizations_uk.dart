@@ -9987,7 +9987,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get transcriptionNoAudio => 'Транскрипція не отримує аудіо';
 
   @override
-  String get tapPlusToStartRecording => 'Натисніть +, щоб почати запис';
+  String get tapPlusToStartRecording => 'Натисніть кнопку запису, щоб почати запис';
 
   @override
   String get chatBlockTask => 'Завдання';
@@ -10229,7 +10229,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'Тут з\'являються записані розмови. Торкніться + на головній, щоб записати першу.';
+      'Тут з\'являються записані розмови. Торкніться кнопки запису на головній, щоб записати першу.';
 
   @override
   String get conversationMap => 'Мапа розмов';
@@ -10707,7 +10707,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get deviceConnecting => 'Підключення…';
 
   @override
-  String get recordOptionsTip => 'Порада: натисніть і утримуйте кнопку запису, щоб записати телефонний дзвінок.';
+  String get recordOptionsTip => 'Порада: торкніться стрілки на кнопці запису, щоб записати телефонний дзвінок.';
 
   @override
   String get firmwareUpdateFailedTitle => 'Не вдалося оновити';
@@ -11196,6 +11196,53 @@ class AppLocalizationsUk extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Транскрипцій у черзі $count';
   }
+
+  @override
+  String get captureSourceCall => 'Дзвінок';
+
+  @override
+  String get captureSourcePhoneMic => 'Мікрофон телефона';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Продовжити';
+
+  @override
+  String get finish => 'Завершити';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Кулон на паузі · продовжить після завершення';
+
+  @override
+  String get pendantIsListeningTitle => 'Ваш кулон слухає';
+
+  @override
+  String get oneSourceAtATime => 'Omi записує лише з одного джерела за раз.';
+
+  @override
+  String get recordWithPhoneInstead => 'Записати телефоном замість кулона';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'Кулон на паузі до завершення запису';
+
+  @override
+  String get pendantPausesDuringCall => 'Кулон на паузі під час дзвінка';
+
+  @override
+  String get keepUsingPendant => 'Продовжити з кулоном';
+
+  @override
+  String get recordWith => 'Записати через';
+
+  @override
+  String get moreWaysToRecord => 'Інші способи запису';
+
+  @override
+  String get openCall => 'Відкрити дзвінок';
 
   @override
   String get captureRecoveryBanner => 'Звук кулона не надходить до застосунку — натисніть, щоб виправити';

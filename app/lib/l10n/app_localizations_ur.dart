@@ -9977,7 +9977,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get transcriptionNoAudio => 'ٹرانسکرپشن آڈیو وصول نہیں کر رہی';
 
   @override
-  String get tapPlusToStartRecording => 'ریکارڈنگ شروع کرنے کے لیے + پر ٹیپ کریں';
+  String get tapPlusToStartRecording => 'ریکارڈنگ شروع کرنے کے لیے ریکارڈ بٹن پر ٹیپ کریں';
 
   @override
   String get chatBlockTask => 'کام';
@@ -10220,7 +10220,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'آپ کی ریکارڈ کی گئی گفتگوئیں یہاں دکھائی دیتی ہیں۔ پہلی ریکارڈ کرنے کے لیے ہوم پر + دبائیں۔';
+      'آپ کی ریکارڈ کی گئی گفتگوئیں یہاں دکھائی دیتی ہیں۔ پہلی ریکارڈ کرنے کے لیے ہوم پر ریکارڈ بٹن دبائیں۔';
 
   @override
   String get conversationMap => 'گفتگو کا نقشہ';
@@ -10697,7 +10697,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String get deviceConnecting => 'منسلک ہو رہا ہے…';
 
   @override
-  String get recordOptionsTip => 'مشورہ: فون کال ریکارڈ کرنے کے لیے ریکارڈ بٹن دبا کر رکھیں۔';
+  String get recordOptionsTip => 'مشورہ: فون کال ریکارڈ کرنے کے لیے ریکارڈ بٹن پر تیر کو ٹیپ کریں۔';
 
   @override
   String get firmwareUpdateFailedTitle => 'اپ ڈیٹ ناکام';
@@ -11185,6 +11185,53 @@ class AppLocalizationsUr extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'زیرِ التوا ٹرانسکرپشن $count';
   }
+
+  @override
+  String get captureSourceCall => 'کال';
+
+  @override
+  String get captureSourcePhoneMic => 'فون مائیک';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'دوبارہ شروع کریں';
+
+  @override
+  String get finish => 'ختم کریں';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'پینڈنٹ موقوف · آپ کے ختم کرنے پر دوبارہ شروع ہوگا';
+
+  @override
+  String get pendantIsListeningTitle => 'آپ کا پینڈنٹ سن رہا ہے';
+
+  @override
+  String get oneSourceAtATime => 'Omi ایک وقت میں ایک ہی ذریعے سے ریکارڈ کرتا ہے۔';
+
+  @override
+  String get recordWithPhoneInstead => 'اس کے بجائے فون سے ریکارڈ کریں';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'آپ کے ختم کرنے تک پینڈنٹ موقوف رہے گا';
+
+  @override
+  String get pendantPausesDuringCall => 'کال کے دوران پینڈنٹ موقوف رہے گا';
+
+  @override
+  String get keepUsingPendant => 'پینڈنٹ ہی استعمال کریں';
+
+  @override
+  String get recordWith => 'ریکارڈ کرنے کا ذریعہ';
+
+  @override
+  String get moreWaysToRecord => 'ریکارڈ کرنے کے مزید طریقے';
+
+  @override
+  String get openCall => 'کال کھولیں';
 
   @override
   String get captureRecoveryBanner => 'پینڈنٹ کی آواز ایپ تک نہیں پہنچ رہی — درست کرنے کے لیے ٹیپ کریں';

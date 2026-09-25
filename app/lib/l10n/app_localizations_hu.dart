@@ -10006,7 +10006,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get transcriptionNoAudio => 'Az átírás nem kap hangot';
 
   @override
-  String get tapPlusToStartRecording => 'Koppints a + jelre a felvétel indításához';
+  String get tapPlusToStartRecording => 'Koppints a felvétel gombra a felvétel indításához';
 
   @override
   String get chatBlockTask => 'Feladat';
@@ -10249,7 +10249,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'A rögzített beszélgetések itt jelennek meg. Az elsőhöz koppints a + gombra a Kezdőlapon.';
+      'A rögzített beszélgetések itt jelennek meg. Az elsőhöz koppints a felvétel gombra a Kezdőlapon.';
 
   @override
   String get conversationMap => 'Beszélgetéstérkép';
@@ -10728,7 +10728,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get deviceConnecting => 'Csatlakozás…';
 
   @override
-  String get recordOptionsTip => 'Tipp: telefonhívás rögzítéséhez tartsd lenyomva a felvétel gombot.';
+  String get recordOptionsTip => 'Tipp: telefonhívás rögzítéséhez koppints a felvétel gomb nyilára.';
 
   @override
   String get firmwareUpdateFailedTitle => 'A frissítés nem sikerült';
@@ -11218,6 +11218,53 @@ class AppLocalizationsHu extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Függő átiratok $count';
   }
+
+  @override
+  String get captureSourceCall => 'Hívás';
+
+  @override
+  String get captureSourcePhoneMic => 'Telefon mikrofonja';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Folytatás';
+
+  @override
+  String get finish => 'Befejezés';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Medál szüneteltetve · a befejezés után folytatódik';
+
+  @override
+  String get pendantIsListeningTitle => 'A medálod figyel';
+
+  @override
+  String get oneSourceAtATime => 'Az Omi egyszerre csak egy forrásból rögzít.';
+
+  @override
+  String get recordWithPhoneInstead => 'Rögzítés inkább a telefonnal';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'A medál szünetel, amíg be nem fejezed';
+
+  @override
+  String get pendantPausesDuringCall => 'A medál szünetel a hívás alatt';
+
+  @override
+  String get keepUsingPendant => 'Maradok a medálnál';
+
+  @override
+  String get recordWith => 'Rögzítés ezzel';
+
+  @override
+  String get moreWaysToRecord => 'További rögzítési módok';
+
+  @override
+  String get openCall => 'Hívás megnyitása';
 
   @override
   String get captureRecoveryBanner => 'A medál hangja nem érkezik meg az alkalmazásba — a javításhoz koppintson';

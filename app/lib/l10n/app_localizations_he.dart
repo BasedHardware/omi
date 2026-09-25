@@ -9884,7 +9884,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get transcriptionNoAudio => 'התמליל אינו מקבל שמע';
 
   @override
-  String get tapPlusToStartRecording => 'הקישו על + כדי להתחיל להקליט';
+  String get tapPlusToStartRecording => 'הקישו על כפתור ההקלטה כדי להתחיל להקליט';
 
   @override
   String get chatBlockTask => 'משימה';
@@ -10125,7 +10125,8 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get noConversationsHeroMessage => 'שיחות שתקליטו יופיעו כאן. הקישו על + במסך הבית כדי להקליט את הראשונה.';
+  String get noConversationsHeroMessage =>
+      'שיחות שתקליטו יופיעו כאן. הקישו על כפתור ההקלטה במסך הבית כדי להקליט את הראשונה.';
 
   @override
   String get conversationMap => 'מפת שיחות';
@@ -10599,7 +10600,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get deviceConnecting => 'מתחבר…';
 
   @override
-  String get recordOptionsTip => 'טיפ: לחיצה ארוכה על כפתור ההקלטה מקליטה שיחת טלפון.';
+  String get recordOptionsTip => 'טיפ: הקישו על החץ בכפתור ההקלטה כדי להקליט שיחת טלפון.';
 
   @override
   String get firmwareUpdateFailedTitle => 'העדכון נכשל';
@@ -11085,6 +11086,53 @@ class AppLocalizationsHe extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'תמלילים ממתינים $count';
   }
+
+  @override
+  String get captureSourceCall => 'שיחה';
+
+  @override
+  String get captureSourcePhoneMic => 'מיקרופון הטלפון';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'המשך';
+
+  @override
+  String get finish => 'סיום';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'התליון מושהה · ימשיך כשתסיימו';
+
+  @override
+  String get pendantIsListeningTitle => 'התליון שלכם מאזין';
+
+  @override
+  String get oneSourceAtATime => 'Omi מקליט ממקור אחד בכל פעם.';
+
+  @override
+  String get recordWithPhoneInstead => 'הקלטה בטלפון במקום';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'התליון מושהה עד שתסיימו';
+
+  @override
+  String get pendantPausesDuringCall => 'התליון מושהה במהלך השיחה';
+
+  @override
+  String get keepUsingPendant => 'המשך עם התליון';
+
+  @override
+  String get recordWith => 'הקלטה באמצעות';
+
+  @override
+  String get moreWaysToRecord => 'דרכים נוספות להקליט';
+
+  @override
+  String get openCall => 'פתיחת השיחה';
 
   @override
   String get captureRecoveryBanner => 'השמע מהתליון לא מגיע לאפליקציה — הקישו לתיקון';

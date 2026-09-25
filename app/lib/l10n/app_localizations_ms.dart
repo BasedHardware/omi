@@ -9994,7 +9994,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get transcriptionNoAudio => 'Transkripsi tidak menerima audio';
 
   @override
-  String get tapPlusToStartRecording => 'Ketik + untuk mula merakam';
+  String get tapPlusToStartRecording => 'Ketik butang rakam untuk mula merakam';
 
   @override
   String get chatBlockTask => 'Tugas';
@@ -10237,7 +10237,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'Perbualan yang anda rakam dipaparkan di sini. Ketik + di Utama untuk merakam yang pertama.';
+      'Perbualan yang anda rakam dipaparkan di sini. Ketik butang rakam di Utama untuk merakam yang pertama.';
 
   @override
   String get conversationMap => 'Peta Perbualan';
@@ -10715,7 +10715,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get deviceConnecting => 'Menyambung…';
 
   @override
-  String get recordOptionsTip => 'Petua: tekan dan tahan butang rakam untuk merakam panggilan telefon.';
+  String get recordOptionsTip => 'Petua: ketik anak panah pada butang rakam untuk merakam panggilan telefon.';
 
   @override
   String get firmwareUpdateFailedTitle => 'Kemas Kini Gagal';
@@ -11204,6 +11204,53 @@ class AppLocalizationsMs extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Transkripsi tertunggak $count';
   }
+
+  @override
+  String get captureSourceCall => 'Panggilan';
+
+  @override
+  String get captureSourcePhoneMic => 'Mikrofon telefon';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Sambung';
+
+  @override
+  String get finish => 'Selesai';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Loket dijeda · disambung apabila anda selesai';
+
+  @override
+  String get pendantIsListeningTitle => 'Loket anda sedang mendengar';
+
+  @override
+  String get oneSourceAtATime => 'Omi merakam daripada satu sumber pada satu masa.';
+
+  @override
+  String get recordWithPhoneInstead => 'Rakam dengan telefon sebaliknya';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'Loket dijeda sehingga anda selesai';
+
+  @override
+  String get pendantPausesDuringCall => 'Loket dijeda semasa panggilan';
+
+  @override
+  String get keepUsingPendant => 'Terus guna loket';
+
+  @override
+  String get recordWith => 'Rakam dengan';
+
+  @override
+  String get moreWaysToRecord => 'Lebih banyak cara merakam';
+
+  @override
+  String get openCall => 'Buka panggilan';
 
   @override
   String get captureRecoveryBanner => 'Audio loket tidak sampai ke aplikasi — ketik untuk membaiki';

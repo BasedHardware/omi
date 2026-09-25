@@ -9966,7 +9966,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get transcriptionNoAudio => 'رونویسی صدا دریافت نمی‌کند';
 
   @override
-  String get tapPlusToStartRecording => 'برای شروع ضبط روی + بزنید';
+  String get tapPlusToStartRecording => 'برای شروع ضبط روی دکمه ضبط بزنید';
 
   @override
   String get chatBlockTask => 'وظیفه';
@@ -10209,7 +10209,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'گفتگوهایی که ضبط می‌کنید اینجا نمایش داده می‌شوند. برای ضبط اولین گفتگو در خانه روی + بزنید.';
+      'گفتگوهایی که ضبط می‌کنید اینجا نمایش داده می‌شوند. برای ضبط اولین گفتگو در خانه روی دکمه ضبط بزنید.';
 
   @override
   String get conversationMap => 'نقشه گفتگوها';
@@ -10685,7 +10685,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get deviceConnecting => 'در حال اتصال…';
 
   @override
-  String get recordOptionsTip => 'نکته: برای ضبط تماس تلفنی، دکمه ضبط را لمس کرده و نگه دارید.';
+  String get recordOptionsTip => 'نکته: برای ضبط تماس تلفنی، روی فلش دکمه ضبط بزنید.';
 
   @override
   String get firmwareUpdateFailedTitle => 'به‌روزرسانی ناموفق بود';
@@ -11172,6 +11172,53 @@ class AppLocalizationsFa extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'رونویسی‌های در انتظار $count';
   }
+
+  @override
+  String get captureSourceCall => 'تماس';
+
+  @override
+  String get captureSourcePhoneMic => 'میکروفون تلفن';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'ادامه';
+
+  @override
+  String get finish => 'پایان';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'آویز متوقف است · پس از پایان ادامه می‌یابد';
+
+  @override
+  String get pendantIsListeningTitle => 'آویز شما در حال گوش دادن است';
+
+  @override
+  String get oneSourceAtATime => 'Omi هر بار فقط از یک منبع ضبط می‌کند.';
+
+  @override
+  String get recordWithPhoneInstead => 'به‌جای آن با تلفن ضبط کنید';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'آویز تا پایان کار شما متوقف می‌ماند';
+
+  @override
+  String get pendantPausesDuringCall => 'آویز در طول تماس متوقف می‌ماند';
+
+  @override
+  String get keepUsingPendant => 'ادامه با آویز';
+
+  @override
+  String get recordWith => 'ضبط با';
+
+  @override
+  String get moreWaysToRecord => 'روش‌های دیگر ضبط';
+
+  @override
+  String get openCall => 'باز کردن تماس';
 
   @override
   String get captureRecoveryBanner => 'صدای آویز به برنامه نمی‌رسد — برای تعمیر ضربه بزنید';
