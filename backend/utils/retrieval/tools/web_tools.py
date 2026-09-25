@@ -632,9 +632,7 @@ async def _fetch_page(
                 break
             except httpx.TransportError as error:
                 last_transport_error = error
-                logger.info(
-                    f"fetch transport failed via {resolved_ip} for {sanitize(url)}: {type(error).__name__}"
-                )
+                logger.info(f"fetch transport failed via {resolved_ip} for {sanitize(url)}: {type(error).__name__}")
         if outcome is None:
             assert last_transport_error is not None
             raise last_transport_error

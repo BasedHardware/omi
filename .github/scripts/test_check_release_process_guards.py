@@ -538,9 +538,7 @@ def test_mobile_dispatcher_main_dispatches_both_mobile_workflows(monkeypatch, ca
         posts.append((url, token, payload))
         return {"buildId": f"build-{len(posts)}"}
 
-    fake_subprocess = SimpleNamespace(
-        run=lambda args, **_kwargs: _FakeCompletedProcess(stdout="a" * 40 + "\n")
-    )
+    fake_subprocess = SimpleNamespace(run=lambda args, **_kwargs: _FakeCompletedProcess(stdout="a" * 40 + "\n"))
     monkeypatch.setattr(dispatcher, "_api_post", fake_api_post)
     monkeypatch.setattr(dispatcher, "subprocess", fake_subprocess)
 
@@ -568,7 +566,9 @@ def test_mobile_dispatcher_main_dispatches_both_mobile_workflows(monkeypatch, ca
         assert payload["appId"] == "app-id"
         assert payload["branch"] == "main"
         assert payload["environment"]["variables"]["OMI_RELEASE_SOURCE_SHA"] == source_sha
-    assert {payload["workflowId"]: payload["environment"]["variables"]["OMI_RELEASE_PLATFORM"] for _, _, payload in posts} == {
+    assert {
+        payload["workflowId"]: payload["environment"]["variables"]["OMI_RELEASE_PLATFORM"] for _, _, payload in posts
+    } == {
         "ios-internal-auto": "ios",
         "android-internal-auto": "android",
     }
@@ -581,7 +581,9 @@ def test_mobile_dispatcher_main_does_not_dispatch_on_dry_run(monkeypatch):
     dispatcher = _load_dispatcher_module()
     monkeypatch.setenv("CODEMAGIC_API_TOKEN", "test-token")
     posts: list[dict] = []
-    monkeypatch.setattr(dispatcher, "_api_post", lambda _url, _token, payload: posts.append(payload) or {"buildId": "b"})
+    monkeypatch.setattr(
+        dispatcher, "_api_post", lambda _url, _token, payload: posts.append(payload) or {"buildId": "b"}
+    )
     monkeypatch.setattr(
         dispatcher, "subprocess", SimpleNamespace(run=lambda args, **_kw: _FakeCompletedProcess(stdout="a" * 40 + "\n"))
     )
@@ -607,7 +609,9 @@ def test_mobile_dispatcher_main_refuses_dispatch_when_checkout_moves(monkeypatch
     dispatcher = _load_dispatcher_module()
     monkeypatch.setenv("CODEMAGIC_API_TOKEN", "test-token")
     posts: list[dict] = []
-    monkeypatch.setattr(dispatcher, "_api_post", lambda _url, _token, payload: posts.append(payload) or {"buildId": "b"})
+    monkeypatch.setattr(
+        dispatcher, "_api_post", lambda _url, _token, payload: posts.append(payload) or {"buildId": "b"}
+    )
     monkeypatch.setattr(
         dispatcher, "subprocess", SimpleNamespace(run=lambda args, **_kw: _FakeCompletedProcess(stdout="b" * 40 + "\n"))
     )

@@ -276,9 +276,7 @@ def _openai_transcript_with_tool_result(tool_name, content):
         {
             'role': 'assistant',
             'content': '',
-            'tool_calls': [
-                {'id': 'call_1', 'type': 'function', 'function': {'name': tool_name, 'arguments': '{}'}}
-            ],
+            'tool_calls': [{'id': 'call_1', 'type': 'function', 'function': {'name': tool_name, 'arguments': '{}'}}],
         },
         {'role': 'tool', 'tool_call_id': 'call_1', 'content': content},
     ]
@@ -299,9 +297,7 @@ def test_managed_perplexity_search_is_withheld_after_private_tool_output(monkeyp
 
     registry = {'perplexity_web_search_tool': _RefusingTool()}
     configurable = {
-        'agent_messages': _openai_transcript_with_tool_result(
-            'get_memories_tool', 'secret: board deck passphrase'
-        ),
+        'agent_messages': _openai_transcript_with_tool_result('get_memories_tool', 'secret: board deck passphrase'),
     }
 
     result = asyncio.run(

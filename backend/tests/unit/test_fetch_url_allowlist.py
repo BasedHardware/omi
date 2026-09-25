@@ -29,6 +29,8 @@ from utils.retrieval.tools.web_tools import (
     is_url_allowlisted,
     user_url_allowlist_block,
 )
+
+
 def _message(text: str, sender: MessageSender = MessageSender.human, id_: str = 'm1') -> Message:
     return Message(
         id=id_,
@@ -172,9 +174,7 @@ class TestUrlExtraction:
 
     def test_extract_user_turn_urls_ignores_unknown_initiating_message_id(self):
         messages = [_message('Summarize https://user.example.com/doc', id_='turn-1')]
-        assert extract_user_turn_urls(messages, initiating_message_id='missing') == [
-            'https://user.example.com/doc'
-        ]
+        assert extract_user_turn_urls(messages, initiating_message_id='missing') == ['https://user.example.com/doc']
 
     def test_extract_user_turn_urls_bounds_overflow_scan(self):
         messages = [_message(' '.join(f'https://example.com/{index}' for index in range(1000)))]
@@ -886,6 +886,7 @@ class TestEgressAddressBounds:
             ips = await _resolve_public_ips('many.example')
 
         assert ips == ['93.184.216.34', '8.8.8.8', '8.8.4.4', '1.1.1.1']
+
 
 class TestModuleStubIsolation:
     def test_prompt_cache_stub_leaves_the_real_tool_decorator_installed(self):

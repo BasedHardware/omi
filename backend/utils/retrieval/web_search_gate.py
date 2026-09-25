@@ -19,7 +19,11 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from utils.llm.private_context import anthropic_messages_carry_private_tool_output, openai_messages_carry_private_tool_output, without_tool_named
+from utils.llm.private_context import (
+    anthropic_messages_carry_private_tool_output,
+    openai_messages_carry_private_tool_output,
+    without_tool_named,
+)
 from utils.observability.fallback import record_fallback
 
 SERVER_WEB_SEARCH_NAME = "web_search"
