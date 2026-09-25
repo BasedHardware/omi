@@ -30,6 +30,7 @@
  * fixed refusal bodies, asserted equal across both routes by test.
  */
 
+import { bearerToken } from "../auth/authorization-header";
 import type { Hono } from "hono";
 
 import {
@@ -81,15 +82,6 @@ export interface TasksReadRouteDependencies {
 
 const fixedResponse = (body: string, status: number): Response =>
   new Response(body, { status, headers: JSON_HEADERS });
-
-/** Extracts a bearer token without revealing which part of the header was wrong. */
-const bearerToken = (header: string | undefined): string | null => {
-  if (typeof header !== "string") return null;
-  const prefix = "Bearer ";
-  if (!header.startsWith(prefix)) return null;
-  const token = header.slice(prefix.length);
-  return token.length > 0 ? token : null;
-};
 
 /**
  * A repeated query parameter is ambiguous, and resolving it silently is a

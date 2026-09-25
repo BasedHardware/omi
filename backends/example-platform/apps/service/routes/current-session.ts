@@ -1,3 +1,4 @@
+import { bearerToken } from "../auth/authorization-header";
 import type { Hono } from "hono";
 
 import type { CurrentSessionPort, DevTokenResolver } from "../auth/current-session";
@@ -28,12 +29,6 @@ const response = (
   status: number,
   headers: Readonly<Record<string, string>> = JSON_HEADERS,
 ): Response => new Response(body, { status, headers });
-
-const bearerToken = (header: string | undefined): string | null => {
-  if (typeof header !== "string" || !header.startsWith("Bearer ")) return null;
-  const token = header.slice("Bearer ".length);
-  return token.length > 0 ? token : null;
-};
 
 const hasQuery = (request: Request): boolean => {
   try {

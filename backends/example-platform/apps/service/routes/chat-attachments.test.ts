@@ -16,6 +16,10 @@ import {
   CHAT_SEND_RETRY_HORIZON_MS,
   MAIN_CHAT_ATTACHMENT_SCOPE,
 } from "../chat/attachment-policy";
+import {
+  CHAT_ROUTE_TEST_AT,
+  chatCreatePayload,
+} from "../../../harness/chat-route-fixtures";
 
 const inertSupervisor = (): ChatGenerationSupervisor => Object.freeze({
   onAdmitted: (): void => {},
@@ -93,21 +97,7 @@ const send = (
     authorization: `Bearer ${local.devToken}`,
     "content-type": "application/json",
   },
-  body: JSON.stringify({
-    op: "create",
-    opId: `op-${messageId}`,
-    id: messageId,
-    at: 1_786_352_400_000,
-    text: `message ${messageId}`,
-    sender: "human",
-    journalRevision: 1,
-    type: "text",
-    appId: null,
-    chatSessionId: null,
-    messageSource: "desktop_chat",
-    metadata: null,
-    attachmentIds,
-  }),
+  body: JSON.stringify(chatCreatePayload(messageId, CHAT_ROUTE_TEST_AT, { attachmentIds })),
 }));
 
 const advanceToClean = (

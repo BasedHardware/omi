@@ -10,6 +10,7 @@ import type {
   DesktopReadOutcomes,
   DesktopReadProjection,
 } from '../desktopReadClient';
+import {matchesSearchQuery} from '../searchText';
 import type {ReadsPhase} from '../app/useDesktopReads';
 import type {PostSetupHomeCue} from '../app/usePostSetupHomeCue';
 import {FocusPressable} from '../ui/Pressable';
@@ -100,26 +101,18 @@ export function DesktopHome({
 }: Props) {
   const [wide, setWide] = useState(false);
   const query = draft.trim();
-  const normalized = query.toLocaleLowerCase();
   const currents = useMemo(() => {
     return reads.filter(item => {
       if (item.kind === 'task') {
         return false;
       }
-      return (
-        normalized === '' ||
-        item.searchableText.toLocaleLowerCase().includes(normalized)
-      );
+      return matchesSearchQuery(item.searchableText, query);
     });
-  }, [normalized, reads]);
+  }, [query, reads]);
   const tasksOutcome = outcomes?.tasks ?? null;
   const visibleTasks = (
     tasksOutcome?.status === 'success' ? tasksOutcome.value.items : []
-  ).filter(
-    item =>
-      normalized === '' ||
-      item.searchableText.toLocaleLowerCase().includes(normalized),
-  );
+  ).filter(item => matchesSearchQuery(item.searchableText, query));
   // Only a successful empty read may claim emptiness. An unsettled or failed
   // read stays truthful instead of inventing "no tasks yet".
   const tasksEmptyCopy =

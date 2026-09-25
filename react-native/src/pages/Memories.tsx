@@ -15,6 +15,7 @@ import {
   type MemoryProjection,
   type ReadPageState,
 } from '../desktopReadClient';
+import {matchesSearchQuery} from '../searchText';
 import {omiBackend} from '../omiNative';
 import {FocusPressable} from '../ui/Pressable';
 import {ReadStatus} from '../ui/ReadStatus';
@@ -68,14 +69,10 @@ export function MemoriesPage({
       activeRequest.current = false;
     };
   }, [loaded, outcome]);
-  const results = useMemo(() => {
-    const normalized = query.trim().toLocaleLowerCase();
-    return normalized === ''
-      ? items
-      : items.filter(item =>
-          item.searchableText.toLocaleLowerCase().includes(normalized),
-        );
-  }, [items, query]);
+  const results = useMemo(
+    () => items.filter(item => matchesSearchQuery(item.searchableText, query)),
+    [items, query],
+  );
   const loadMore = async () => {
     if (
       omiBackend === null ||

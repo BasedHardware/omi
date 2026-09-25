@@ -14,7 +14,7 @@ import {
   type DesktopReadOutcomes,
   type DesktopReadProjection,
 } from '../desktopReadClient';
-import {omiBackend} from '../omiNative';
+import {omiBackend, type OmiBackend} from '../omiNative';
 
 export type ProjectionFilter = 'all' | DesktopReadProjection['kind'];
 export type ReadsPhase =
@@ -79,6 +79,34 @@ function mergeOutcome<T extends DomainReadOutcome<DesktopReadProjection>>(
     ? current
     : next;
 }
+
+type PagedRead = {
+  items: Array<{id: string}>;
+  page: {hasMore: boolean; nextCursor: string | null};
+};
+
+// Everything loadMoreConversations and loadMoreTasks share: the guard
+// cluster, sequence capture, cursor-expired recovery, 10k cap, id-dedupe /
+// page-advance checks, merge, extended bookkeeping, and finally fences. The
+// tasks-only accountEpoch guard rides in validateAppend.
+type LoadMoreSpec<TRead extends PagedRead> = {
+  pendingRef: {current: boolean};
+  setLoadingMore: (loading: boolean) => void;
+  setNotice: (notice: string | null) => void;
+  outcome: (
+    outcomes: DesktopReadOutcomes,
+  ) => {status: 'success'; value: TRead} | {status: 'error'; error: string};
+  load: (backend: OmiBackend, cursor?: string | null) => Promise<TRead>;
+  cursorExpired: (error: unknown) => boolean;
+  validateAppend?: (next: TRead, current: TRead) => void;
+  listTooLargeMessage: string;
+  pageDidNotAdvanceMessage: string;
+  refreshNotice: string;
+  failureNotice: string;
+  merge: (current: DesktopReadOutcomes, value: TRead) => DesktopReadOutcomes;
+  extendedRef: {current: boolean};
+  setExtended: (extended: boolean) => void;
+};
 
 export function useDesktopReads({enabled}: {enabled: boolean}) {
   const [readOutcomes, setReadOutcomes] = useState<DesktopReadOutcomes | null>(
@@ -302,164 +330,144 @@ export function useDesktopReads({enabled}: {enabled: boolean}) {
     [enabled],
   );
 
-  const loadMoreConversations = useCallback(async () => {
-    const previous = readOutcomesRef.current;
-    if (
-      !enabled ||
-      omiBackend == null ||
-      conversationPagePendingRef.current ||
-      refreshPendingRef.current ||
-      previous?.conversations.status !== 'success' ||
-      !previous.conversations.value.page.hasMore ||
-      previous.conversations.value.page.nextCursor === null
-    ) {
-      return;
-    }
-    const backend = omiBackend;
-    const cursor = previous.conversations.value.page.nextCursor;
-    const sequence = refreshSeqRef.current;
-    conversationPagePendingRef.current = true;
-    setConversationsLoadingMore(true);
-    setConversationNotice(null);
-    try {
-      let replace = false;
-      let next;
-      try {
-        next = await loadConversations(backend, cursor);
-      } catch (error) {
-        if (
-          !(error instanceof ConversationCursorExpiredError) ||
-          sequence !== refreshSeqRef.current
-        ) {
-          throw error;
-        }
-        replace = true;
-        next = await loadConversations(backend);
-      }
-      if (sequence !== refreshSeqRef.current) {
-        return;
-      }
-      const current = readOutcomesRef.current;
-      if (current === null || current.conversations.status !== 'success') {
-        return;
-      }
-      const items = replace
-        ? next.items
-        : [...current.conversations.value.items, ...next.items];
-      if (items.length > 10000) {
-        throw new Error('Conversation list is too large');
-      }
+  const loadMore = useCallback(
+    async <TRead extends PagedRead>(
+      spec: LoadMoreSpec<TRead>,
+    ): Promise<void> => {
+      const previous = readOutcomesRef.current;
+      const previousOutcome = previous === null ? null : spec.outcome(previous);
       if (
-        new Set(items.map(item => item.id)).size !== items.length ||
-        (!replace && next.page.hasMore && next.page.nextCursor === cursor)
+        !enabled ||
+        omiBackend == null ||
+        spec.pendingRef.current ||
+        refreshPendingRef.current ||
+        previousOutcome?.status !== 'success' ||
+        !previousOutcome.value.page.hasMore ||
+        previousOutcome.value.page.nextCursor === null
       ) {
-        throw new Error('Conversation page did not advance');
+        return;
       }
-      const merged = {
-        ...current,
-        conversations: {status: 'success' as const, value: {...next, items}},
-      };
-      readOutcomesRef.current = merged;
-      setReadOutcomes(merged);
-      conversationsExtendedRef.current =
-        !replace && items.length > next.items.length;
-      setConversationsExtended(conversationsExtendedRef.current);
-      if (replace) {
-        setConversationNotice(
-          'Conversations changed. The list has been refreshed.',
-        );
+      const backend = omiBackend;
+      const cursor = previousOutcome.value.page.nextCursor;
+      const sequence = refreshSeqRef.current;
+      spec.pendingRef.current = true;
+      spec.setLoadingMore(true);
+      spec.setNotice(null);
+      try {
+        let replace = false;
+        let next: TRead;
+        try {
+          next = await spec.load(backend, cursor);
+        } catch (error) {
+          if (
+            !spec.cursorExpired(error) ||
+            sequence !== refreshSeqRef.current
+          ) {
+            throw error;
+          }
+          replace = true;
+          next = await spec.load(backend);
+        }
+        if (sequence !== refreshSeqRef.current) {
+          return;
+        }
+        const current = readOutcomesRef.current;
+        if (current === null) {
+          return;
+        }
+        const currentOutcome = spec.outcome(current);
+        if (currentOutcome.status !== 'success') {
+          return;
+        }
+        if (!replace) {
+          spec.validateAppend?.(next, currentOutcome.value);
+        }
+        const items = replace
+          ? next.items
+          : [...currentOutcome.value.items, ...next.items];
+        if (items.length > 10000) {
+          throw new Error(spec.listTooLargeMessage);
+        }
+        if (
+          new Set(items.map(item => item.id)).size !== items.length ||
+          (!replace && next.page.hasMore && next.page.nextCursor === cursor)
+        ) {
+          throw new Error(spec.pageDidNotAdvanceMessage);
+        }
+        const merged = spec.merge(current, {...next, items});
+        readOutcomesRef.current = merged;
+        setReadOutcomes(merged);
+        spec.extendedRef.current = !replace && items.length > next.items.length;
+        spec.setExtended(spec.extendedRef.current);
+        if (replace) {
+          spec.setNotice(spec.refreshNotice);
+        }
+      } catch {
+        if (sequence === refreshSeqRef.current) {
+          spec.setNotice(spec.failureNotice);
+        }
+      } finally {
+        if (sequence === refreshSeqRef.current) {
+          spec.pendingRef.current = false;
+          spec.setLoadingMore(false);
+        }
       }
-    } catch {
-      if (sequence === refreshSeqRef.current) {
-        setConversationNotice(
-          'More conversations could not be loaded. Try again.',
-        );
-      }
-    } finally {
-      if (sequence === refreshSeqRef.current) {
-        conversationPagePendingRef.current = false;
-        setConversationsLoadingMore(false);
-      }
-    }
-  }, [enabled]);
+    },
+    [enabled],
+  );
 
-  const loadMoreTasks = useCallback(async () => {
-    const previous = readOutcomesRef.current;
-    if (
-      !enabled ||
-      omiBackend == null ||
-      taskPagePendingRef.current ||
-      refreshPendingRef.current ||
-      previous?.tasks.status !== 'success' ||
-      !previous.tasks.value.page.hasMore ||
-      previous.tasks.value.page.nextCursor === null
-    ) {
-      return;
-    }
-    const backend = omiBackend;
-    const cursor = previous.tasks.value.page.nextCursor;
-    const sequence = refreshSeqRef.current;
-    taskPagePendingRef.current = true;
-    setTasksLoadingMore(true);
-    setTaskNotice(null);
-    try {
-      let replace = false;
-      let next;
-      try {
-        next = await loadTasks(backend, cursor);
-      } catch (error) {
-        if (
-          !(error instanceof TaskCursorExpiredError) ||
-          sequence !== refreshSeqRef.current
-        ) {
-          throw error;
-        }
-        replace = true;
-        next = await loadTasks(backend);
-      }
-      if (sequence !== refreshSeqRef.current) {
-        return;
-      }
-      const current = readOutcomesRef.current;
-      if (current === null || current.tasks.status !== 'success') {
-        return;
-      }
-      if (!replace && next.accountEpoch !== current.tasks.value.accountEpoch)
-        throw new Error('Task account epoch changed');
-      const items = replace
-        ? next.items
-        : [...current.tasks.value.items, ...next.items];
-      if (items.length > 10000) {
-        throw new Error('Task list is too large');
-      }
-      if (
-        new Set(items.map(item => item.id)).size !== items.length ||
-        (!replace && next.page.hasMore && next.page.nextCursor === cursor)
-      ) {
-        throw new Error('Task page did not advance');
-      }
-      const merged = {
-        ...current,
-        tasks: {status: 'success' as const, value: {...next, items}},
-      };
-      readOutcomesRef.current = merged;
-      setReadOutcomes(merged);
-      tasksExtendedRef.current = !replace && items.length > next.items.length;
-      setTasksExtended(tasksExtendedRef.current);
-      if (replace) {
-        setTaskNotice('Tasks changed. The list has been refreshed.');
-      }
-    } catch {
-      if (sequence === refreshSeqRef.current) {
-        setTaskNotice('More tasks could not be loaded. Try again.');
-      }
-    } finally {
-      if (sequence === refreshSeqRef.current) {
-        taskPagePendingRef.current = false;
-        setTasksLoadingMore(false);
-      }
-    }
-  }, [enabled]);
+  const loadMoreConversations = useCallback(
+    () =>
+      loadMore({
+        pendingRef: conversationPagePendingRef,
+        setLoadingMore: setConversationsLoadingMore,
+        setNotice: setConversationNotice,
+        outcome: outcomes => outcomes.conversations,
+        load: loadConversations,
+        cursorExpired: error => error instanceof ConversationCursorExpiredError,
+        listTooLargeMessage: 'Conversation list is too large',
+        pageDidNotAdvanceMessage: 'Conversation page did not advance',
+        refreshNotice: 'Conversations changed. The list has been refreshed.',
+        failureNotice: 'More conversations could not be loaded. Try again.',
+        merge: (current, value) => ({
+          ...current,
+          conversations: {status: 'success' as const, value},
+        }),
+        extendedRef: conversationsExtendedRef,
+        setExtended: setConversationsExtended,
+      }),
+    [loadMore],
+  );
+
+  const loadMoreTasks = useCallback(
+    () =>
+      loadMore({
+        pendingRef: taskPagePendingRef,
+        setLoadingMore: setTasksLoadingMore,
+        setNotice: setTaskNotice,
+        outcome: outcomes => outcomes.tasks,
+        load: loadTasks,
+        cursorExpired: error => error instanceof TaskCursorExpiredError,
+        // Tasks carry an account epoch: an appended page from a different
+        // epoch must never merge into the visible list.
+        validateAppend: (next, current) => {
+          if (next.accountEpoch !== current.accountEpoch) {
+            throw new Error('Task account epoch changed');
+          }
+        },
+        listTooLargeMessage: 'Task list is too large',
+        pageDidNotAdvanceMessage: 'Task page did not advance',
+        refreshNotice: 'Tasks changed. The list has been refreshed.',
+        failureNotice: 'More tasks could not be loaded. Try again.',
+        merge: (current, value) => ({
+          ...current,
+          tasks: {status: 'success' as const, value},
+        }),
+        extendedRef: tasksExtendedRef,
+        setExtended: setTasksExtended,
+      }),
+    [loadMore],
+  );
 
   const refreshTasks = useCallback(async (): Promise<TaskRead | null> => {
     if (!enabled || omiBackend == null) {

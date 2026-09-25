@@ -809,20 +809,25 @@ export const registerChatMessagesRoutes = (
       && (requestedSequence === null || requestedSequence < retainedCursorSequence);
     const replayExpired = retention !== null
       && (malformedRetention || deps.nowEpochMilliseconds() >= retention.expiresAt);
+    // Every replay/stream exit funnels through the same event-sourced stream
+    // call: one initial event (a terminal or the current snapshot) whose id is
+    // also the afterEventId cursor.
+    const streamFrom = (event: ChatGenerationEvent) => streamEvents({
+      accountId: principal.uid,
+      generationId,
+      events: deps.events,
+      initial: [event],
+      afterEventId: event.id,
+      signal: context.req.raw.signal,
+      revalidate,
+      policy: normalizeChatGenerationStreamPolicy(deps.streamPolicy),
+      scheduler: deps.streamScheduler ?? realtimeChatGenerationScheduler,
+      nowEpochMilliseconds: deps.nowEpochMilliseconds,
+    });
+    const streamTerminal = () =>
+      terminal === undefined ? generationReplayExpired() : streamFrom(terminal);
     if (lastEventId !== null && (replayOlderThanRetention || replayExpired)) {
-      if (terminal === undefined) return generationReplayExpired();
-      return streamEvents({
-        accountId: principal.uid,
-        generationId,
-        events: deps.events,
-        initial: [terminal],
-        afterEventId: terminal.id,
-        signal: context.req.raw.signal,
-        revalidate,
-        policy: normalizeChatGenerationStreamPolicy(deps.streamPolicy),
-        scheduler: deps.streamScheduler ?? realtimeChatGenerationScheduler,
-        nowEpochMilliseconds: deps.nowEpochMilliseconds,
-      });
+      return streamTerminal();
     }
 
     if (lastEventId !== null) {
@@ -831,94 +836,26 @@ export const registerChatMessagesRoutes = (
       }
       const replay = deps.events.listAfter(principal.uid, generationId, lastEventId);
       if (replay === null) {
-        if (terminal === undefined) return generationReplayExpired();
-        return streamEvents({
-          accountId: principal.uid,
-          generationId,
-          events: deps.events,
-          initial: [terminal],
-          afterEventId: terminal.id,
-          signal: context.req.raw.signal,
-          revalidate,
-          policy: normalizeChatGenerationStreamPolicy(deps.streamPolicy),
-          scheduler: deps.streamScheduler ?? realtimeChatGenerationScheduler,
-          nowEpochMilliseconds: deps.nowEpochMilliseconds,
-        });
+        return streamTerminal();
       }
       if (replay.length === 0 && lifecycle.state === "terminal") {
-        if (terminal === undefined) return generationReplayExpired();
-        return streamEvents({
-          accountId: principal.uid,
-          generationId,
-          events: deps.events,
-          initial: [terminal],
-          afterEventId: terminal.id,
-          signal: context.req.raw.signal,
-          revalidate,
-          policy: normalizeChatGenerationStreamPolicy(deps.streamPolicy),
-          scheduler: deps.streamScheduler ?? realtimeChatGenerationScheduler,
-          nowEpochMilliseconds: deps.nowEpochMilliseconds,
-        });
+        return streamTerminal();
       }
       const replayTerminal = replay.findLast(isTerminal);
       if (replayTerminal !== undefined) {
-        return streamEvents({
-          accountId: principal.uid,
-          generationId,
-          events: deps.events,
-          initial: [replayTerminal],
-          afterEventId: replayTerminal.id,
-          signal: context.req.raw.signal,
-          revalidate,
-          policy: normalizeChatGenerationStreamPolicy(deps.streamPolicy),
-          scheduler: deps.streamScheduler ?? realtimeChatGenerationScheduler,
-          nowEpochMilliseconds: deps.nowEpochMilliseconds,
-        });
+        return streamFrom(replayTerminal);
       }
       const snapshot = currentSnapshot(generationId, all);
       if (snapshot === null) return generationReplayExpired();
-      return streamEvents({
-        accountId: principal.uid,
-        generationId,
-        events: deps.events,
-        initial: [snapshot],
-        afterEventId: snapshot.id,
-        signal: context.req.raw.signal,
-        revalidate,
-        policy: normalizeChatGenerationStreamPolicy(deps.streamPolicy),
-        scheduler: deps.streamScheduler ?? realtimeChatGenerationScheduler,
-        nowEpochMilliseconds: deps.nowEpochMilliseconds,
-      });
+      return streamFrom(snapshot);
     }
 
     if (terminal !== undefined) {
-      return streamEvents({
-        accountId: principal.uid,
-        generationId,
-        events: deps.events,
-        initial: [terminal],
-        afterEventId: terminal.id,
-        signal: context.req.raw.signal,
-        revalidate,
-        policy: normalizeChatGenerationStreamPolicy(deps.streamPolicy),
-        scheduler: deps.streamScheduler ?? realtimeChatGenerationScheduler,
-        nowEpochMilliseconds: deps.nowEpochMilliseconds,
-      });
+      return streamFrom(terminal);
     }
     const snapshot = currentSnapshot(generationId, all);
     if (snapshot === null) return generationReplayExpired();
-    return streamEvents({
-      accountId: principal.uid,
-      generationId,
-      events: deps.events,
-      initial: [snapshot],
-      afterEventId: snapshot.id,
-      signal: context.req.raw.signal,
-      revalidate,
-      policy: normalizeChatGenerationStreamPolicy(deps.streamPolicy),
-      scheduler: deps.streamScheduler ?? realtimeChatGenerationScheduler,
-      nowEpochMilliseconds: deps.nowEpochMilliseconds,
-    });
+    return streamFrom(snapshot);
   });
 
   app.delete(`${CHAT_GENERATIONS_PATH}/:generationId`, (context) => {

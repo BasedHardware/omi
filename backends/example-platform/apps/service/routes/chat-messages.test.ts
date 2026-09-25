@@ -28,37 +28,13 @@ import {
   createSqliteLocalServiceStores,
   SqliteChatMessagesStore,
 } from "../../../drivers/sqlite/service-stores";
+import {
+  chatCreatePayload as payload,
+  postChatMessage as post,
+} from "../../../harness/chat-route-fixtures";
 
 const ACCOUNT = "chat-account";
 const AUTHORIZATION = (token: string): HeadersInit => ({ authorization: `Bearer ${token}` });
-
-const payload = (
-  id: string,
-  at: number,
-  overrides: Readonly<Record<string, unknown>> = {},
-): Readonly<Record<string, unknown>> => Object.freeze({
-  op: "create",
-  opId: `op-${id}`,
-  id,
-  at,
-  text: `message ${id}`,
-  sender: "human",
-  journalRevision: 1,
-  type: "text",
-  appId: null,
-  chatSessionId: null,
-  messageSource: "desktop_chat",
-  metadata: null,
-  attachmentIds: [],
-  ...overrides,
-});
-
-const post = (local: ReturnType<typeof createLocalDevService>, body: unknown): Promise<Response> =>
-  Promise.resolve(local.app.request("/v1/chat-messages", {
-    method: "POST",
-    headers: { ...AUTHORIZATION(local.devToken), "content-type": "application/json" },
-    body: JSON.stringify(body),
-  }));
 
 const inertSupervisor = (): ChatGenerationSupervisor => Object.freeze({
   onAdmitted: (): void => {},

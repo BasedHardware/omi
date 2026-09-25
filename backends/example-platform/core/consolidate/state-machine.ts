@@ -166,12 +166,14 @@ const safeAdd = (left: number, right: number): number => {
   return value;
 };
 
+const ACCEPTED_FIELD_KEYS = [
+  "version", "job_id", "owner_account_id", "account_epoch", "lifecycle_state",
+  "deletion_epoch", "work_kind", "input_frontier", "input_digest",
+  "execution_contract_digest", "accepted_at_event_time", "max_attempts",
+] as const;
+
 const acceptedFields = (value: unknown): AcceptedDurableMemoryWork => {
-  const input = exactRecord(value, [
-    "version", "job_id", "owner_account_id", "account_epoch", "lifecycle_state",
-    "deletion_epoch", "work_kind", "input_frontier", "input_digest",
-    "execution_contract_digest", "accepted_at_event_time", "max_attempts",
-  ]);
+  const input = exactRecord(value, ACCEPTED_FIELD_KEYS);
   if (input["version"] !== DURABLE_MEMORY_WORK_VERSION
     || input["lifecycle_state"] !== "active" || input["deletion_epoch"] !== null
     || typeof input["work_kind"] !== "string"
@@ -194,20 +196,9 @@ const acceptedFields = (value: unknown): AcceptedDurableMemoryWork => {
 
 export const acceptedDurableMemoryWorkDigest = (input: AcceptedDurableMemoryWork): string => {
   const accepted = acceptedFields(input);
-  return createHash("sha256").update(JSON.stringify({
-    version: accepted.version,
-    job_id: accepted.job_id,
-    owner_account_id: accepted.owner_account_id,
-    account_epoch: accepted.account_epoch,
-    lifecycle_state: accepted.lifecycle_state,
-    deletion_epoch: accepted.deletion_epoch,
-    work_kind: accepted.work_kind,
-    input_frontier: accepted.input_frontier,
-    input_digest: accepted.input_digest,
-    execution_contract_digest: accepted.execution_contract_digest,
-    accepted_at_event_time: accepted.accepted_at_event_time,
-    max_attempts: accepted.max_attempts,
-  })).digest("hex");
+  return createHash("sha256").update(JSON.stringify(Object.fromEntries(
+    ACCEPTED_FIELD_KEYS.map((key) => [key, accepted[key]]),
+  ))).digest("hex");
 };
 
 const leaseFields = (value: unknown): Readonly<DurableMemoryWorkLease> => {
@@ -279,11 +270,8 @@ const JOB_KEYS = [
 
 export const parseDurableMemoryWorkJob = (value: unknown): Readonly<DurableMemoryWorkJob> => {
   const input = exactRecord(value, JOB_KEYS);
-  const accepted = acceptedFields(Object.fromEntries([
-    "version", "job_id", "owner_account_id", "account_epoch", "lifecycle_state",
-    "deletion_epoch", "work_kind", "input_frontier", "input_digest",
-    "execution_contract_digest", "accepted_at_event_time", "max_attempts",
-  ].map((key) => [key, input[key]])));
+  const accepted = acceptedFields(Object.fromEntries(
+    ACCEPTED_FIELD_KEYS.map((key) => [key, input[key]])));
   const acceptedDigest = digest(input["accepted_work_digest"]);
   if (acceptedDigest !== acceptedDurableMemoryWorkDigest(accepted)) failShape();
   if (typeof input["state"] !== "string" || !STATES.has(input["state"] as DurableMemoryWorkState)) failShape();
@@ -448,17 +436,12 @@ export const succeedDurableMemoryWork = (
   });
 };
 
-export const failDurableMemoryWork = (
-  value: DurableMemoryWorkJob,
-  suppliedLease: DurableMemoryWorkLeaseRef,
-  atEventTime: number,
+const failAttemptTail = (
+  job: Readonly<DurableMemoryWorkJob>,
+  at: number,
   errorCode: DurableMemoryWorkErrorCode,
   nextEligibleEventTime: number | null,
 ): Readonly<DurableMemoryWorkJob> => {
-  const job = parseDurableMemoryWorkJob(value);
-  const at = eventTime(atEventTime);
-  requireOwnedLease(job, suppliedLease, at);
-  if (!ERROR_CODES.has(errorCode)) throw new DurableMemoryWorkTransitionError("invalid_transition");
   if (job.attempt >= job.max_attempts) {
     if (nextEligibleEventTime !== null) throw new DurableMemoryWorkTransitionError("invalid_transition");
     return parseDurableMemoryWorkJob({
@@ -485,6 +468,20 @@ export const failDurableMemoryWork = (
   });
 };
 
+export const failDurableMemoryWork = (
+  value: DurableMemoryWorkJob,
+  suppliedLease: DurableMemoryWorkLeaseRef,
+  atEventTime: number,
+  errorCode: DurableMemoryWorkErrorCode,
+  nextEligibleEventTime: number | null,
+): Readonly<DurableMemoryWorkJob> => {
+  const job = parseDurableMemoryWorkJob(value);
+  const at = eventTime(atEventTime);
+  requireOwnedLease(job, suppliedLease, at);
+  if (!ERROR_CODES.has(errorCode)) throw new DurableMemoryWorkTransitionError("invalid_transition");
+  return failAttemptTail(job, at, errorCode, nextEligibleEventTime);
+};
+
 /**
  * A worker that vanished on its final attempt cannot present an owned fence to
  * fail the job after expiry. A repository sweeper uses this explicit transition
@@ -503,28 +500,5 @@ export const expireDurableMemoryWorkLease = (
   if (at < job.lease.expires_at_event_time) {
     throw new DurableMemoryWorkTransitionError("not_yet_eligible");
   }
-  if (job.attempt >= job.max_attempts) {
-    if (nextEligibleEventTime !== null) throw new DurableMemoryWorkTransitionError("invalid_transition");
-    return parseDurableMemoryWorkJob({
-      ...job,
-      state: "dead_letter",
-      lease: null,
-      outcome: {
-        kind: "dead_letter", error_code: "worker_lost", attempts: job.attempt,
-        failed_at_event_time: at,
-      },
-    });
-  }
-  if (nextEligibleEventTime === null) throw new DurableMemoryWorkTransitionError("invalid_transition");
-  const next = eventTime(nextEligibleEventTime);
-  if (next <= at) throw new DurableMemoryWorkTransitionError("invalid_transition");
-  return parseDurableMemoryWorkJob({
-    ...job,
-    state: "retryable_failed",
-    lease: null,
-    outcome: {
-      kind: "retryable_error", error_code: "worker_lost",
-      failed_at_event_time: at, next_eligible_event_time: next,
-    },
-  });
+  return failAttemptTail(job, at, "worker_lost", nextEligibleEventTime);
 };
