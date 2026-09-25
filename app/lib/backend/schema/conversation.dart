@@ -98,10 +98,10 @@ class CreateConversationResponse {
               json['conversation'] as Map<String, dynamic>,
             )
           : (json['memory'] != null
-                ? ServerConversation.fromJson(
-                    json['memory'] as Map<String, dynamic>,
-                  )
-                : null),
+              ? ServerConversation.fromJson(
+                  json['memory'] as Map<String, dynamic>,
+                )
+              : null),
     );
   }
 }
@@ -177,20 +177,18 @@ class ConversationPostProcessing {
 
   factory ConversationPostProcessing.fromJson(Map<String, dynamic> json) {
     return ConversationPostProcessing(
-      status:
-          ConversationPostProcessingStatus.values.asNameMap()[json['status']] ??
+      status: ConversationPostProcessingStatus.values.asNameMap()[json['status']] ??
           ConversationPostProcessingStatus.in_progress,
-      model:
-          ConversationPostProcessingModel.values.asNameMap()[json['model']] ??
+      model: ConversationPostProcessingModel.values.asNameMap()[json['model']] ??
           ConversationPostProcessingModel.fal_whisperx,
       failReason: json['fail_reason'],
     );
   }
 
   toJson() => {
-    'status': status.toString().split('.').last,
-    'model': model.toString().split('.').last,
-  };
+        'status': status.toString().split('.').last,
+        'model': model.toString().split('.').last,
+      };
 }
 
 enum ServerProcessingConversationStatus {
@@ -534,9 +532,7 @@ class ServerConversation {
 
   factory ServerConversation.fromJson(Map<String, dynamic> json) {
     final normalized = Map<String, dynamic>.from(json);
-    final structured = json['structured'] is Map<String, dynamic>
-        ? Structured.fromJson(json['structured'])
-        : null;
+    final structured = json['structured'] is Map<String, dynamic> ? Structured.fromJson(json['structured']) : null;
     if (structured != null) {
       normalized['structured'] = structured.toGenerated().toJson();
     }
@@ -544,20 +540,18 @@ class ServerConversation {
     final rawSnippets = json['match_snippets'];
     final snippets = rawSnippets is List
         ? rawSnippets
-              .whereType<Map>()
-              .map(
-                (e) => TranscriptMatchSnippet.fromJson(
-                  Map<String, dynamic>.from(e),
-                ),
-              )
-              .toList()
+            .whereType<Map>()
+            .map(
+              (e) => TranscriptMatchSnippet.fromJson(
+                Map<String, dynamic>.from(e),
+              ),
+            )
+            .toList()
         : const <TranscriptMatchSnippet>[];
     return ServerConversation.fromGenerated(
       generated,
       structured: structured,
-      geolocation: json['geolocation'] is Map<String, dynamic>
-          ? Geolocation.fromJson(json['geolocation'])
-          : null,
+      geolocation: json['geolocation'] is Map<String, dynamic> ? Geolocation.fromJson(json['geolocation']) : null,
       deleted: json['deleted'] ?? false,
       matchSnippets: snippets,
     );
@@ -577,45 +571,33 @@ class ServerConversation {
       structured: structured ?? Structured.fromGenerated(generated.structured),
       startedAt: generated.startedAt,
       finishedAt: generated.finishedAt,
-      transcriptSegments: generated.transcriptSegments
-          .map(_transcriptSegmentFromGenerated)
-          .toList(),
+      transcriptSegments: generated.transcriptSegments.map(_transcriptSegmentFromGenerated).toList(),
       appResults: generated.appsResults.map(AppResponse.fromGenerated).toList(),
       suggestedSummarizationApps: generated.suggestedSummarizationApps,
       geolocation:
-          geolocation ??
-          (generated.geolocation == null
-              ? null
-              : Geolocation.fromGenerated(generated.geolocation!)),
+          geolocation ?? (generated.geolocation == null ? null : Geolocation.fromGenerated(generated.geolocation!)),
       photos: generated.photos.map(ConversationPhoto.fromGenerated).toList(),
       audioFiles: generated.audioFiles.map(AudioFile.fromGenerated).toList(),
       conversationAudio: generated.conversationAudio == null
           ? null
           : ConversationAudioInfo.fromGenerated(generated.conversationAudio!),
       discarded: generated.discarded,
-      source: generated.source != null
-          ? ConversationSource.values.asNameMap()[generated.source]
-          : ConversationSource.omi,
+      source:
+          generated.source != null ? ConversationSource.values.asNameMap()[generated.source] : ConversationSource.omi,
       language: generated.language,
       deleted: deleted,
-      externalIntegration: generated.externalData != null
-          ? ConversationExternalData.fromJson(generated.externalData!)
-          : null,
-      calendarEvent: generated.calendarEvent == null
-          ? null
-          : CalendarEventLink.fromGenerated(generated.calendarEvent!),
+      externalIntegration:
+          generated.externalData != null ? ConversationExternalData.fromJson(generated.externalData!) : null,
+      calendarEvent: generated.calendarEvent == null ? null : CalendarEventLink.fromGenerated(generated.calendarEvent!),
       status: generated.status != null
-          ? ConversationStatus.values.asNameMap()[generated.status] ??
-                ConversationStatus.completed
+          ? ConversationStatus.values.asNameMap()[generated.status] ?? ConversationStatus.completed
           : ConversationStatus.completed,
       isLocked: generated.isLocked,
       starred: generated.starred,
       folderId: generated.folderId,
       visibility: ConversationVisibility.fromString(generated.visibility),
       matchSnippets: snippets,
-      captureGroup: generated.captureGroup == null
-          ? null
-          : CaptureGroup.fromGenerated(generated.captureGroup!),
+      captureGroup: generated.captureGroup == null ? null : CaptureGroup.fromGenerated(generated.captureGroup!),
     );
   }
 
@@ -626,12 +608,8 @@ class ServerConversation {
       'structured': structured.toJson(),
       'started_at': startedAt?.toUtc().toIso8601String(),
       'finished_at': finishedAt?.toUtc().toIso8601String(),
-      'transcript_segments': transcriptSegments
-          .map((segment) => segment.toJson())
-          .toList(),
-      'apps_results': appResults
-          .map((result) => result.toGenerated().toJson())
-          .toList(),
+      'transcript_segments': transcriptSegments.map((segment) => segment.toJson()).toList(),
+      'apps_results': appResults.map((result) => result.toGenerated().toJson()).toList(),
       'suggested_summarization_apps': suggestedSummarizationApps,
       'geolocation': geolocation?.toJson(),
       'photos': photos.map((photo) => photo.toJson()).toList(),
@@ -659,17 +637,12 @@ class ServerConversation {
       startedAt: startedAt,
       finishedAt: finishedAt,
       structured: structured.toGenerated(),
-      transcriptSegments: transcriptSegments
-          .map((segment) => segment.toGenerated())
-          .toList(),
+      transcriptSegments: transcriptSegments.map((segment) => segment.toGenerated()).toList(),
       appsResults: appResults.map((result) => result.toGenerated()).toList(),
-
       suggestedSummarizationApps: suggestedSummarizationApps,
       geolocation: geolocation?.toGenerated(),
       photos: photos.map((photo) => photo.toGenerated()).toList(),
-      audioFiles: audioFiles
-          .map((audioFile) => audioFile.toGenerated())
-          .toList(),
+      audioFiles: audioFiles.map((audioFile) => audioFile.toGenerated()).toList(),
       discarded: discarded,
       source: source?.name,
       language: language,
@@ -685,9 +658,7 @@ class ServerConversation {
   }
 
   int unassignedSegmentsLength() {
-    return transcriptSegments
-        .where((element) => (element.personId == null && !element.isUser))
-        .length;
+    return transcriptSegments.where((element) => (element.personId == null && !element.isUser)).length;
   }
 
   int speakerWithMostUnassignedSegments() {
@@ -716,8 +687,7 @@ class ServerConversation {
     if (source == ConversationSource.sdcard) return 'SD Card';
     if (discarded) return 'Discarded';
     if (structured.category.isEmpty) return 'Other';
-    return structured.category.substring(0, 1).toUpperCase() +
-        structured.category.substring(1);
+    return structured.category.substring(0, 1).toUpperCase() + structured.category.substring(1);
   }
 
   Color getTagTextColor() {
@@ -731,8 +701,7 @@ class ServerConversation {
   }
 
   VoidCallback? onTagPressed(BuildContext context) {
-    if (source == ConversationSource.screenpipe)
-      return () => launchUrl(Uri.parse('https://screenpi.pe/'));
+    if (source == ConversationSource.screenpipe) return () => launchUrl(Uri.parse('https://screenpi.pe/'));
     return null;
   }
 
@@ -760,19 +729,29 @@ class ServerConversation {
     return _getDurationInSecondsByTranscripts();
   }
 
-  /// Calculates the conversation duration in seconds based on transcript segments
+  /// Calculates the conversation duration in seconds based on transcript segments.
+  ///
+  /// Computes the speech span (lastEndTime - firstStartTime) so that speech
+  /// recorded late in an ongoing continuous audio stream is not inflated by the
+  /// stream's session start offset (#18520).
   int _getDurationInSecondsByTranscripts() {
     if (transcriptSegments.isEmpty) return 0;
 
-    // Find the last segment's end time
-    double lastEndTime = 0;
+    double firstStartTime = transcriptSegments.first.start;
+    double lastEndTime = transcriptSegments.first.end;
+
     for (var segment in transcriptSegments) {
+      if (segment.start < firstStartTime) {
+        firstStartTime = segment.start;
+      }
       if (segment.end > lastEndTime) {
         lastEndTime = segment.end;
       }
     }
 
-    return lastEndTime.toInt();
+    if (firstStartTime < 0) firstStartTime = 0;
+    final duration = lastEndTime - firstStartTime;
+    return duration > 0 ? duration.toInt() : 0;
   }
 
   /// Matches desktop's recoverable-content heuristic: one transcript segment
@@ -781,8 +760,8 @@ class ServerConversation {
 
   /// True when any transcript segment is long enough to plausibly deserve a title.
   bool get hasSubstantialTranscriptSegment => transcriptSegments.any(
-    (segment) => segment.wordCount >= substantialTranscriptMinWords,
-  );
+        (segment) => segment.wordCount >= substantialTranscriptMinWords,
+      );
 
   /// Completed processing, empty title, and a substantial transcript — a silent
   /// title-pass failure the user can recover with Reprocess. Discarded, locked,
@@ -798,8 +777,7 @@ class ServerConversation {
   bool hasAudio() => audioFiles.isNotEmpty;
 
   /// Get the primary audio file (first one)
-  AudioFile? getPrimaryAudioFile() =>
-      audioFiles.isNotEmpty ? audioFiles.first : null;
+  AudioFile? getPrimaryAudioFile() => audioFiles.isNotEmpty ? audioFiles.first : null;
 }
 
 class SyncLocalFilesResponse {
@@ -914,10 +892,7 @@ class SyncJobStatusResponse {
     this.retryAfter,
   });
 
-  bool get isTerminal =>
-      status == 'completed' ||
-      status == 'partial_failure' ||
-      status == 'failed';
+  bool get isTerminal => status == 'completed' || status == 'partial_failure' || status == 'failed';
   bool get isSuccess => status == 'completed';
   bool get isPartialFailure => status == 'partial_failure';
 
@@ -930,9 +905,7 @@ class SyncJobStatusResponse {
       processedSegments: generated.processedSegments,
       successfulSegments: generated.successfulSegments,
       failedSegments: generated.failedSegments,
-      result: generated.result == null
-          ? null
-          : SyncLocalFilesResponse.fromGenerated(generated.result!),
+      result: generated.result == null ? null : SyncLocalFilesResponse.fromGenerated(generated.result!),
       error: generated.error,
       lane: json['lane'] as String?,
       reasonCode: json['reason_code'] as String?,
@@ -950,9 +923,7 @@ class SyncJobStatusResponse {
       processedSegments: generated.processedSegments,
       successfulSegments: generated.successfulSegments,
       failedSegments: generated.failedSegments,
-      result: generated.result == null
-          ? null
-          : SyncLocalFilesResponse.fromGenerated(generated.result!),
+      result: generated.result == null ? null : SyncLocalFilesResponse.fromGenerated(generated.result!),
       error: generated.error,
     );
   }
@@ -975,9 +946,7 @@ class SyncedConversationPointer {
 
   factory SyncedConversationPointer.fromJson(Map<String, dynamic> json) {
     return SyncedConversationPointer(
-      type:
-          SyncedConversationType.values.asNameMap()[json['type']] ??
-          SyncedConversationType.newConversation,
+      type: SyncedConversationType.values.asNameMap()[json['type']] ?? SyncedConversationType.newConversation,
       index: json['index'],
       key: DateTime.parse(json['key']).toLocal(),
       conversation: ServerConversation.fromJson(json['memory']),

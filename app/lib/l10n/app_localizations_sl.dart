@@ -933,9 +933,6 @@ class AppLocalizationsSl extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'Dodaj v claude_desktop_config.json';
-
-  @override
   String get copyConfig => 'Kopiraj konfigurацију';
 
   @override
@@ -2484,13 +2481,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String get clearAllNodesAndConnections => 'Počisti vse vozlišča in povezave';
 
   @override
-  String get addToClaudeDesktopConfig => 'Dodaj v claude_desktop_config.json';
-
-  @override
   String get connectAiAssistantsToData => 'Povežite AI asistente s svojimi podatki';
-
-  @override
-  String get useYourMcpApiKey => 'Uporabite svoj MCP API ključ';
 
   @override
   String get realTimeTranscript => 'Prepis v realnem času';
@@ -9998,7 +9989,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String get transcriptionNoAudio => 'Transkripcija ne prejema zvoka';
 
   @override
-  String get tapPlusToStartRecording => 'Tapnite + za začetek snemanja';
+  String get tapPlusToStartRecording => 'Tapnite gumb za snemanje za začetek snemanja';
 
   @override
   String get chatBlockTask => 'Opravilo';
@@ -10241,7 +10232,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'Posneti pogovori se prikažejo tukaj. Za prvi posnetek tapnite + na začetnem zaslonu.';
+      'Posneti pogovori se prikažejo tukaj. Za prvi posnetek tapnite gumb za snemanje na začetnem zaslonu.';
 
   @override
   String get conversationMap => 'Zemljevid pogovorov';
@@ -10720,7 +10711,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String get deviceConnecting => 'Povezovanje…';
 
   @override
-  String get recordOptionsTip => 'Namig: pridržite gumb za snemanje, da posnamete telefonski klic.';
+  String get recordOptionsTip => 'Namig: tapnite puščico na gumbu za snemanje, da posnamete telefonski klic.';
 
   @override
   String get firmwareUpdateFailedTitle => 'Posodobitev ni uspela';
@@ -11121,4 +11112,157 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get helpAndAbout => 'Pomoč in o aplikaciji';
+
+  @override
+  String get speakerTagPromptTitle => 'Pomagajte Omiju prepoznavati glasove';
+
+  @override
+  String get speakerTagPromptSubtitle => 'Hiter pregled glasov iz zadnjih dveh dni';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'Ste to vi?';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'Je to $name?';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'Kdo je to?';
+
+  @override
+  String get speakerTagPromptThatsMe => 'To sem jaz';
+
+  @override
+  String get speakerTagPromptNotMe => 'Nisem jaz';
+
+  @override
+  String get speakerTagPromptSomeoneNew => 'Nekdo nov';
+
+  @override
+  String get speakerTagPromptDontKnow => 'Nekdo, ki ga ne poznam';
+
+  @override
+  String get speakerTagPromptNotSure => 'Nisem prepričan';
+
+  @override
+  String get speakerTagPromptPlayClip => 'Predvajaj posnetek';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current od $total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => 'Zapomni si glasove oseb, ki jih poimenuješ';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody =>
+      'Omi shrani kratek vzorec glasu, da jih naslednjič prepozna. To lahko kadar koli spremenite v Nastavitvah.';
+
+  @override
+  String get speakerTagPromptThanks => 'Hvala! Omi bo glasove prepoznaval vedno bolje.';
+
+  @override
+  String get speakerTagPromptNameHint => 'Ime osebe';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'Posnetka ni bilo mogoče predvajati';
+
+  @override
+  String get speakerTagPromptAnswerFailed => 'Shranjevanje ni uspelo. Poskusite znova.';
+
+  @override
+  String get voiceSettingsAskToTag => 'Prosi me za označevanje glasov';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle => 'Občasno vas Omi vpraša, kdo je govoril v vaših nedavnih pogovorih';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle =>
+      'Ko nekoga poimenujete, Omi shrani kratek vzorec glasu, da ga naslednjič prepozna';
+
+  @override
+  String get leaveBlank => 'Pustite prazno';
+
+  @override
+  String get mcpOAuthSetup =>
+      'Na claude.ai dodajte prirojeni konektor in prilepite URL strežnika. Če Claude zahteva napredni OAuth Client ID, uporabite spodnjo vrednost in pustite skrivnost prazno — nikoli ne uporabljajte svojega MCP API ključa kot OAuth skrivnost.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'Dodaj v ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'Na Claude Desktop → Settings → Connectors dodajte prirojeni konektor in prilepite URL strežnika. Če Claude zahteva napredni OAuth Client ID, uporabite spodnjo vrednost in pustite skrivnost prazno — nikoli ne uporabljajte svojega MCP API ključa kot OAuth skrivnost.';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Transkripcije niso na voljo, snemanje se nadaljuje v napravi in bo obdelano pozneje';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Transkripcija ni na voljo · shranjevanje v napravi';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Transkripcije v čakanju $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Transkripcije v čakanju $count';
+  }
+
+  @override
+  String get captureSourceCall => 'Klic';
+
+  @override
+  String get captureSourcePhoneMic => 'Mikrofon telefona';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Nadaljuj';
+
+  @override
+  String get finish => 'Končaj';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Obesek je ustavljen · nadaljuje, ko končate';
+
+  @override
+  String get pendantIsListeningTitle => 'Vaš obesek posluša';
+
+  @override
+  String get oneSourceAtATime => 'Omi snema samo iz enega vira hkrati.';
+
+  @override
+  String get recordWithPhoneInstead => 'Raje snemaj s telefonom';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'Obesek je ustavljen, dokler ne končate';
+
+  @override
+  String get pendantPausesDuringCall => 'Obesek je med klicem ustavljen';
+
+  @override
+  String get keepUsingPendant => 'Še naprej uporabljaj obesek';
+
+  @override
+  String get recordWith => 'Snemaj z';
+
+  @override
+  String get moreWaysToRecord => 'Več načinov snemanja';
+
+  @override
+  String get openCall => 'Odpri klic';
+
+  @override
+  String get captureRecoveryBanner => 'Zvuk obeska ne prihaja v aplikacijo — tapnite za popravilo';
 }

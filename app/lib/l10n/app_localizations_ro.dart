@@ -938,9 +938,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'Adaugă la claude_desktop_config.json';
-
-  @override
   String get copyConfig => 'Copiază configurația';
 
   @override
@@ -2488,13 +2485,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get clearAllNodesAndConnections => 'Șterge toate nodurile și conexiunile';
 
   @override
-  String get addToClaudeDesktopConfig => 'Adaugă la claude_desktop_config.json';
-
-  @override
   String get connectAiAssistantsToData => 'Conectează asistenții AI la datele tale';
-
-  @override
-  String get useYourMcpApiKey => 'Folosește cheia ta API MCP';
 
   @override
   String get realTimeTranscript => 'Transcriere în timp real';
@@ -10014,7 +10005,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get transcriptionNoAudio => 'Transcrierea nu primește audio';
 
   @override
-  String get tapPlusToStartRecording => 'Atinge + pentru a începe înregistrarea';
+  String get tapPlusToStartRecording => 'Atinge butonul de înregistrare pentru a începe înregistrarea';
 
   @override
   String get chatBlockTask => 'Sarcină';
@@ -10257,7 +10248,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'Conversațiile pe care le înregistrezi apar aici. Atinge + pe Acasă pentru a o înregistra pe prima.';
+      'Conversațiile pe care le înregistrezi apar aici. Atinge butonul de înregistrare pe Acasă pentru a o înregistra pe prima.';
 
   @override
   String get conversationMap => 'Harta conversațiilor';
@@ -10736,7 +10727,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String get deviceConnecting => 'Se conectează…';
 
   @override
-  String get recordOptionsTip => 'Sfat: ține apăsat butonul de înregistrare pentru a înregistra un apel.';
+  String get recordOptionsTip => 'Sfat: atinge săgeata de pe butonul de înregistrare pentru a înregistra un apel.';
 
   @override
   String get firmwareUpdateFailedTitle => 'Actualizarea a eșuat';
@@ -11140,4 +11131,158 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get helpAndAbout => 'Ajutor și despre';
+
+  @override
+  String get speakerTagPromptTitle => 'Ajută-l pe Omi să recunoască vocile';
+
+  @override
+  String get speakerTagPromptSubtitle => 'O verificare rapidă a vocilor din ultimele două zile';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'Tu ești acesta?';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'Este $name?';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'Cine este?';
+
+  @override
+  String get speakerTagPromptThatsMe => 'Sunt eu';
+
+  @override
+  String get speakerTagPromptNotMe => 'Nu sunt eu';
+
+  @override
+  String get speakerTagPromptSomeoneNew => 'Cineva nou';
+
+  @override
+  String get speakerTagPromptDontKnow => 'Cineva pe care nu-l cunosc';
+
+  @override
+  String get speakerTagPromptNotSure => 'Nu sunt sigur';
+
+  @override
+  String get speakerTagPromptPlayClip => 'Redă fragmentul';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current din $total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => 'Ține minte vocile persoanelor pe care le numești';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody =>
+      'Omi păstrează o scurtă mostră de voce pentru a-i recunoaște data viitoare. Poți schimba asta oricând din Setări.';
+
+  @override
+  String get speakerTagPromptThanks => 'Mulțumim! Omi va recunoaște tot mai bine vocile.';
+
+  @override
+  String get speakerTagPromptNameHint => 'Numele persoanei';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'Fragmentul nu a putut fi redat';
+
+  @override
+  String get speakerTagPromptAnswerFailed => 'Nu s-a putut salva. Încearcă din nou.';
+
+  @override
+  String get voiceSettingsAskToTag => 'Cere-mi să etichetez vocile';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle =>
+      'Din când în când, Omi te întreabă cine vorbea în conversațiile tale recente';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle =>
+      'Când numești pe cineva, Omi păstrează o scurtă mostră de voce pentru a-l recunoaște data viitoare';
+
+  @override
+  String get leaveBlank => 'Lăsați gol';
+
+  @override
+  String get mcpOAuthSetup =>
+      'Pe claude.ai, adăugați un conector personalizat și lipiți URL-ul serverului. Dacă Claude solicită un Client ID OAuth avansat, utilizați valoarea de mai jos și lăsați secretul gol — nu folosiți niciodată cheia API MCP drept secret OAuth.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'Adaugă la ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'Pe Claude Desktop → Settings → Connectors, adăugați un conector personalizat și lipiți URL-ul serverului. Dacă Claude solicită un Client ID OAuth avansat, utilizați valoarea de mai jos și lăsați secretul gol — nu folosiți niciodată cheia API MCP drept secret OAuth.';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Transcrierile nu sunt disponibile, înregistrarea continuă pe dispozitiv și va fi procesată mai târziu';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Transcriere indisponibilă · se salvează pe dispozitiv';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Transcrieri în așteptare $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Transcrieri în așteptare $count';
+  }
+
+  @override
+  String get captureSourceCall => 'Apel';
+
+  @override
+  String get captureSourcePhoneMic => 'Microfonul telefonului';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Reia';
+
+  @override
+  String get finish => 'Finalizează';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Pandantiv în pauză · se reia când termini';
+
+  @override
+  String get pendantIsListeningTitle => 'Pandantivul tău ascultă';
+
+  @override
+  String get oneSourceAtATime => 'Omi înregistrează dintr-o singură sursă odată.';
+
+  @override
+  String get recordWithPhoneInstead => 'Înregistrează cu telefonul în schimb';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'Pandantivul e în pauză până termini';
+
+  @override
+  String get pendantPausesDuringCall => 'Pandantivul e în pauză în timpul apelului';
+
+  @override
+  String get keepUsingPendant => 'Continuă cu pandantivul';
+
+  @override
+  String get recordWith => 'Înregistrează cu';
+
+  @override
+  String get moreWaysToRecord => 'Mai multe moduri de înregistrare';
+
+  @override
+  String get openCall => 'Deschide apelul';
+
+  @override
+  String get captureRecoveryBanner => 'Sunetul pandantivului nu ajunge în aplicație — atinge pentru a repara';
 }

@@ -458,11 +458,6 @@ actor ProactiveLaneClient {
     try checkQuotaCooldown(operation: operation)
     if imageData != nil {
       if await managedPixelDecision() == .planGated {
-        // S24 local-lane seam: when OMI_LOCAL_PROACTIVITY flips, route pixels to
-        // LocalInferenceRuntime. Text-only completions stay ungated here.
-        if ProcessInfo.processInfo.environment["OMI_LOCAL_PROACTIVITY"] == "1" {
-          // Local lane not shipped — still fail closed to `.planGated`.
-        }
         throw ProactiveLaneClientError.planGated
       }
     }

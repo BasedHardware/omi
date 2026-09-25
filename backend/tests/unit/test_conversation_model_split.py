@@ -389,7 +389,6 @@ class TestPhase3NarrowImports:
 class TestConversationInitSideEffects:
     """Conversation.__init__ backward-compat side effects."""
 
-
     def test_processing_conversation_id_synced_to_processing_memory_id(self):
         from models.conversation import Conversation
         from models.conversation_enums import ConversationSource

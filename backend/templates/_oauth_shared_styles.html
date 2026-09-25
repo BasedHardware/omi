@@ -285,6 +285,40 @@
     }
 
     /* ---- Permissions ---- */
+    .unverified-client {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px 12px;
+        margin: 0 0 18px;
+        padding: 10px 14px;
+        border: 1px solid var(--danger-border);
+        border-radius: var(--radius-sm);
+        background: var(--danger-bg);
+    }
+
+    .unverified-client-badge {
+        color: var(--danger);
+        font-size: 11px;
+        font-weight: 700;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+    }
+
+    .unverified-client-host-label {
+        color: var(--muted);
+        font-size: 12px;
+        font-weight: 600;
+    }
+
+    .unverified-client-host {
+        color: var(--text);
+        font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+        font-size: 13px;
+        font-weight: 600;
+        overflow-wrap: anywhere;
+    }
+
     .permissions-card {
         margin: 0 0 22px;
         border: 1px solid var(--border);

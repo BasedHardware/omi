@@ -30,7 +30,6 @@ class DeveloperModeProvider extends BaseProvider {
 
   // Experimental switches. Like every switch in Settings they apply and are saved the moment they
   // flip (chat-apps-settings #2); only the webhook URL fields wait for Save.
-  bool followUpQuestionEnabled = false;
   bool transcriptionDiagnosticEnabled = false;
   bool autoCreateSpeakersEnabled = false;
   bool vadGateEnabled = false;
@@ -142,7 +141,6 @@ class DeveloperModeProvider extends BaseProvider {
     webhookAudioBytes.text = SharedPreferencesUtil().webhookAudioBytes;
     webhookAudioBytesDelay.text = SharedPreferencesUtil().webhookAudioBytesDelay;
     webhookDaySummary.text = SharedPreferencesUtil().webhookDaySummary;
-    followUpQuestionEnabled = SharedPreferencesUtil().devModeJoanFollowUpEnabled;
     transcriptionDiagnosticEnabled = SharedPreferencesUtil().transcriptionDiagnosticEnabled;
     autoCreateSpeakersEnabled = SharedPreferencesUtil().autoCreateSpeakersEnabled;
     vadGateEnabled = SharedPreferencesUtil().vadGateEnabled;
@@ -283,12 +281,6 @@ class DeveloperModeProvider extends BaseProvider {
 
   void setIsLoading(bool value) {
     savingSettingsLoading = value;
-    notifyListeners();
-  }
-
-  void onFollowUpQuestionChanged(bool value) {
-    followUpQuestionEnabled = value;
-    SharedPreferencesUtil().devModeJoanFollowUpEnabled = value;
     notifyListeners();
   }
 

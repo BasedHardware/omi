@@ -129,17 +129,9 @@ class QuickActionsService {
   void _toggleMute(BuildContext context, {required bool mute}) {
     final captureProvider = Provider.of<CaptureProvider>(context, listen: false);
     if (mute) {
-      if (captureProvider.havingRecordingDevice) {
-        captureProvider.pauseDeviceRecording();
-      } else {
-        captureProvider.stopStreamRecording();
-      }
+      captureProvider.pauseCapture();
     } else {
-      if (captureProvider.havingRecordingDevice) {
-        captureProvider.resumeDeviceRecording();
-      } else {
-        captureProvider.streamRecording();
-      }
+      captureProvider.resumeCapture();
     }
   }
 }

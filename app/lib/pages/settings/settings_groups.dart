@@ -119,6 +119,8 @@ class _DeviceGroupPageState extends State<DeviceGroupPage> with _GroupRows {
               row(SettingsDestination.device, icon: FontAwesomeIcons.bluetooth, title: l10n.deviceSettings),
             row(SettingsDestination.offlineSync, icon: FontAwesomeIcons.solidCloud, title: l10n.offlineSync),
             row(SettingsDestination.phoneCalls, icon: FontAwesomeIcons.phone, title: l10n.phoneCalls),
+            // Most-opened Settings item: people come here to fix microphone, Bluetooth and notifications.
+            row(SettingsDestination.permissions, icon: FontAwesomeIcons.shieldHalved, title: l10n.permissions),
           ],
         ),
       ],
@@ -301,7 +303,7 @@ class _NotificationsDisplayGroupPageState extends State<NotificationsDisplayGrou
 // -----------------------------------------------------------------------------------------------
 // Privacy & Data
 
-/// Privacy & Data: data protection, memories, permissions, and exporting or importing data.
+/// Privacy & Data: data protection, memories, and exporting or importing data.
 class PrivacyDataGroupPage extends StatefulWidget {
   const PrivacyDataGroupPage({super.key});
 
@@ -321,7 +323,6 @@ class _PrivacyDataGroupPageState extends State<PrivacyDataGroupPage> with _Group
           children: [
             row(SettingsDestination.dataPrivacy, icon: FontAwesomeIcons.shield, title: l10n.dataProtection),
             row(SettingsDestination.memories, icon: FontAwesomeIcons.brain, title: l10n.memories),
-            row(SettingsDestination.permissions, icon: FontAwesomeIcons.shieldHalved, title: l10n.permissions),
             ValueListenableBuilder<bool>(
               valueListenable: DataExport.exportInProgress,
               builder: (context, exporting, _) => OmiSettingsRow(
@@ -346,7 +347,7 @@ class _PrivacyDataGroupPageState extends State<PrivacyDataGroupPage> with _Group
 // -----------------------------------------------------------------------------------------------
 // Help & About
 
-/// Help & About: feedback and the help center (where Intercom is supported), What's New, and the
+/// Help & About: the help center (where Intercom is supported), What's New, and the
 /// app version with a copy button.
 class HelpAboutGroupPage extends StatefulWidget {
   const HelpAboutGroupPage({super.key});
@@ -426,10 +427,8 @@ class _HelpAboutGroupPageState extends State<HelpAboutGroupPage> with _GroupRows
       children: [
         OmiSettingsGroup(
           children: [
-            if (PlatformService.isIntercomSupported) ...[
-              row(SettingsDestination.feedback, icon: FontAwesomeIcons.solidEnvelope, title: l10n.feedbackBug),
+            if (PlatformService.isIntercomSupported)
               row(SettingsDestination.helpCenter, icon: FontAwesomeIcons.book, title: l10n.helpCenter),
-            ],
             row(SettingsDestination.whatsNew, icon: FontAwesomeIcons.solidStar, title: l10n.whatsNew),
           ],
         ),

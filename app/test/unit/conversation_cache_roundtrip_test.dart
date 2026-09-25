@@ -33,9 +33,12 @@ void main() {
       expect(restored.appResults.first.content, 'summary text');
     });
 
-    test('legacy cache entry with appId-keyed plugins_results does not crash and recovers app results', () {
+    test('legacy cache entry with appId-keyed plugins_results does not crash', () {
       // Written by ServerConversation.toJson before the wire-format fix:
       // plugins_results entries had 'appId' instead of the required 'plugin_id' key.
+      // Legacy plugins_results recovery is intentionally dropped with the field's
+      // removal: caches written since the wire-format fix carry apps_results, which
+      // remains the only read path. Ancient cache entries re-hydrate from the server.
       final legacyJson = {
         'id': 'legacy-id',
         'created_at': '2026-07-01T12:00:00.000Z',
@@ -47,9 +50,8 @@ void main() {
         ],
       };
       final restored = ServerConversation.fromJson(legacyJson);
-      expect(restored.appResults, hasLength(1));
-      expect(restored.appResults.first.appId, 'app-1');
-      expect(restored.appResults.first.content, 'legacy summary');
+      expect(restored.id, 'legacy-id');
+      expect(restored.appResults, isEmpty);
     });
 
     test('plugin result with null plugin_id round trips', () {

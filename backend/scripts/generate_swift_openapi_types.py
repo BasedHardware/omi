@@ -47,7 +47,6 @@ TARGET_SCHEMAS = (
     'Geolocation',
     'ConversationPhoto',
     'AppResult',
-
     'AudioFile',
     'MemoryDB',
     'MemoryEditResponse',

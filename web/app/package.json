@@ -6,12 +6,12 @@
     "generate-sw": "bun scripts/generate-firebase-sw.js",
     "dev": "bun scripts/dev.ts",
     "build": "bun run generate-sw && moonshine build && bun run build:assets",
-    "build:assets": "bun x tailwindcss -i src/app/globals.css -o .moonshine/public/styles.css --minify && bun scripts/copy-moonshine-assets.ts",
+    "build:assets": "bunx tailwindcss -i src/app/globals.css -o .moonshine/public/styles.css --minify && bun scripts/copy-moonshine-assets.ts",
     "start": "bun .moonshine/server.ts",
-    "lint": "bun x oxlint src scripts moonshine.config.ts",
-    "typecheck": "bun x tsc --noEmit",
-    "test": "bun test scripts/moonshine-smoke.test.ts && bun x vitest run --config vitest.config.mts",
-    "test:watch": "bun x vitest",
+    "lint": "bunx oxlint src scripts moonshine.config.ts",
+    "typecheck": "bunx tsc --noEmit",
+    "test": "bun test scripts/moonshine-smoke.test.ts && bunx vitest run --config vitest.config.mts",
+    "test:watch": "bunx vitest",
     "check": "bun run typecheck && bun run test"
   },
   "dependencies": {
