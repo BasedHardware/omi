@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 
 import database.conversations as conversations_db
 from models.conversation import Conversation, ConversationMutationResponse
+from models.conversation_photo import ConversationPhoto
 from models.structured import Structured
 
 
@@ -71,16 +72,42 @@ class _Transaction:
         ref.update(data)
 
 
+class _PhotoRef:
+    def __init__(self):
+        self.set_calls = []
+
+    def set(self, data, **kwargs):
+        self.set_calls.append((data, kwargs))
+
+
+class _PhotoCollection:
+    def __init__(self):
+        self.refs = {}
+
+    def document(self, photo_id):
+        return self.refs.setdefault(photo_id, _PhotoRef())
+
+
+class _PhotoConversationRef(_ConversationRef):
+    def __init__(self, snapshot):
+        super().__init__(snapshot)
+        self.photos = _PhotoCollection()
+
+    def collection(self, name):
+        assert name == 'photos'
+        return self.photos
+
+
 def test_document_update_time_is_exposed_as_server_revision():
     revision = datetime(2026, 7, 9, 12, 0, tzinfo=timezone.utc)
 
-    result = conversations_db._document_data_with_revision(_Snapshot({'id': 'conversation-1'}, update_time=revision))
+    result = conversations_db.document_data_with_revision(_Snapshot({'id': 'conversation-1'}, update_time=revision))
 
     assert result == {'id': 'conversation-1', 'updated_at': revision}
 
 
 def test_protobuf_like_document_update_time_is_normalized_for_api_models():
-    result = conversations_db._document_data_with_revision(
+    result = conversations_db.document_data_with_revision(
         _Snapshot({'id': 'conversation-1'}, update_time=_TimestampLike('1783598400', '125000'))
     )
 
@@ -91,7 +118,7 @@ def test_protobuf_like_document_update_time_is_normalized_for_api_models():
 
 
 def test_protobuf_nanoseconds_use_the_official_integer_scale():
-    result = conversations_db._document_data_with_revision(
+    result = conversations_db.document_data_with_revision(
         _Snapshot({'id': 'conversation-1'}, update_time=_TimestampLike(1783598400, 125_000_000))
     )
 
@@ -99,7 +126,7 @@ def test_protobuf_nanoseconds_use_the_official_integer_scale():
 
 
 def test_user_title_override_is_the_read_projection():
-    result = conversations_db._prepare_conversation_for_read(
+    result = conversations_db.prepare_conversation_for_read(
         {
             'structured': {'title': 'Generated title', 'overview': 'Fresh summary'},
             'user_title': 'My durable title',
@@ -201,6 +228,7 @@ def test_first_processing_write_still_creates_complete_document(monkeypatch):
     assert options == {}
     assert 'updated_at' not in written
     assert written['structured']['title'] == 'Generated title'
+    assert written['has_photos'] is False
 
 
 def test_create_if_absent_never_persists_firestore_revision_metadata(monkeypatch):
@@ -220,6 +248,24 @@ def test_create_if_absent_never_persists_firestore_revision_metadata(monkeypatch
 
     assert len(ref.create_calls) == 1
     assert 'updated_at' not in ref.create_calls[0]
+    assert ref.create_calls[0]['has_photos'] is False
+
+
+def test_storing_photos_sets_authoritative_parent_marker(monkeypatch):
+    ref = _PhotoConversationRef(_Snapshot({'data_protection_level': 'standard'}))
+    client = _Firestore(ref)
+    monkeypatch.setattr(conversations_db.firestore, 'transactional', lambda function: function)
+
+    stored = conversations_db.store_conversation_photos(
+        'user-1',
+        'conversation-1',
+        [ConversationPhoto(id='photo-1', base64='encoded')],
+        firestore_client=client,
+    )
+
+    assert stored is True
+    assert ref.update_calls == [{'has_content': True, 'has_photos': True}]
+    assert ref.photos.refs['photo-1'].set_calls[0][0]['id'] == 'photo-1'
 
 
 def test_processing_transaction_reloads_user_fields_when_firestore_retries(monkeypatch):

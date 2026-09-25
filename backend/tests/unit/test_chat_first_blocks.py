@@ -55,13 +55,21 @@ def test_materialization_v1_suppresses_conversation_links_while_v2_returns_them(
                     'type': 'conversationLink',
                     'conversation_id': 'conversation-1',
                     'summary': 'Meeting notes ready',
+                    'recommended_action_items': [
+                        {'description': 'Send the deck', 'task_id': 'task-1'},
+                        {'description': 'Book the follow-up'},
+                    ],
                 }
             ],
             'created_at': '2026-08-13T00:00:00Z',
         }
     )
     response = MaterializePromptsResponse(intents=[intent])
-    monkeypatch.setattr(chat_first_router, '_materialize_prompts', lambda request, uid: response)
+    monkeypatch.setattr(
+        chat_first_router,
+        '_materialize_prompts',
+        lambda request, uid, *, exclude_block_types=None: response,
+    )
     request = MaterializePromptsRequest(
         source_surface='main_chat',
         control_generation=7,
@@ -70,6 +78,19 @@ def test_materialization_v1_suppresses_conversation_links_while_v2_returns_them(
 
     assert chat_first_router.materialize_prompts_v1(request, 'user-1').intents == []
     assert chat_first_router.materialize_prompts(request, 'user-1') == response
+
+
+def test_v1_materialization_request_still_validates_without_rejections():
+    request = MaterializePromptsRequest.model_validate(
+        {
+            'source_surface': 'main_chat',
+            'control_generation': 7,
+            'owner_fence': 'user-1',
+        }
+    )
+
+    assert request.rejections == []
+    assert request.receipts == []
 
 
 def test_chat_first_validate_admits_canonical_blocks_with_retry_stable_ids(monkeypatch):
@@ -142,7 +163,7 @@ def test_chat_first_validate_admits_only_an_active_omi_capture_link(monkeypatch)
     monkeypatch.setattr(
         chat_first_router.conversations_db,
         'get_conversation',
-        lambda uid, conversation_id: {
+        lambda uid, conversation_id, **_kwargs: {
             'id': conversation_id,
             'source': 'omi',
             'discarded': False,
@@ -164,7 +185,7 @@ def test_chat_first_validate_rejects_non_omi_or_discarded_capture_links(monkeypa
     monkeypatch.setattr(
         chat_first_router.conversations_db,
         'get_conversation',
-        lambda uid, conversation_id: {
+        lambda uid, conversation_id, **_kwargs: {
             'id': conversation_id,
             'source': 'desktop',
             'discarded': False,
@@ -185,7 +206,7 @@ def test_chat_first_validate_admits_completed_desktop_conversation_link(monkeypa
     monkeypatch.setattr(
         chat_first_router.conversations_db,
         'get_conversation',
-        lambda uid, conversation_id: {
+        lambda uid, conversation_id, **_kwargs: {
             'id': conversation_id,
             'source': 'desktop',
             'status': 'completed',
@@ -197,13 +218,27 @@ def test_chat_first_validate_admits_completed_desktop_conversation_link(monkeypa
     response = _client().post(
         '/v1/chat-first/blocks/validate',
         json=_request(
-            blocks=[{'type': 'conversationLink', 'conversation_id': 'desktop-1', 'summary': 'Meeting notes ready'}]
+            blocks=[
+                {
+                    'type': 'conversationLink',
+                    'conversation_id': 'desktop-1',
+                    'summary': 'Meeting notes ready',
+                    'recommended_action_items': [
+                        {'description': 'Send the deck', 'task_id': 'task-1'},
+                        {'description': 'Book the follow-up'},
+                    ],
+                }
+            ]
         ),
     )
 
     assert response.status_code == 200
     assert response.json()['accepted'] is True
     assert response.json()['blocks'][0]['conversation_id'] == 'desktop-1'
+    assert response.json()['blocks'][0]['recommended_action_items'] == [
+        {'description': 'Send the deck', 'task_id': 'task-1'},
+        {'description': 'Book the follow-up'},
+    ]
 
 
 def test_chat_first_validate_rejects_ambient_desktop_conversation_link(monkeypatch):
@@ -211,7 +246,7 @@ def test_chat_first_validate_rejects_ambient_desktop_conversation_link(monkeypat
     monkeypatch.setattr(
         chat_first_router.conversations_db,
         'get_conversation',
-        lambda uid, conversation_id: {
+        lambda uid, conversation_id, **_kwargs: {
             'id': conversation_id,
             'source': 'desktop',
             'status': 'completed',
@@ -286,3 +321,66 @@ def test_chat_first_validate_returns_a_typed_rejection_for_malformed_block_schem
 
     assert response.status_code == 200
     assert response.json() == {'accepted': False, 'code': 'invalid_request', 'blocks': []}
+
+
+def test_chat_first_validate_admits_the_desktop_memory_review_card(monkeypatch):
+    _enable_chat_first(monkeypatch)
+    monkeypatch.setattr(
+        chat_first_router,
+        'fetch_memory_dict',
+        lambda uid, memory_id, **kwargs: {'id': memory_id, 'content': 'private-content-not-returned'},
+    )
+
+    # The exact shape the desktop adapter emits, including the empty-string
+    # substitutions it makes when the source block carried no provenance.
+    response = _client().post(
+        '/v1/chat-first/blocks/validate',
+        json=_request(
+            blocks=[
+                {
+                    'type': 'memoryReviewCard',
+                    'summary_id': '',
+                    'date': '',
+                    'items': [
+                        {'memory_id': 'memory-1', 'content': 'Prefers async standups', 'category': 'work'},
+                        {'memory_id': 'memory-2', 'content': 'Runs on Tuesdays', 'category': ''},
+                    ],
+                }
+            ]
+        ),
+    )
+
+    assert response.status_code == 200
+    assert response.json()['accepted'] is True
+    block = response.json()['blocks'][0]
+    assert block['type'] == 'memoryReviewCard'
+    assert [item['memory_id'] for item in block['items']] == ['memory-1', 'memory-2']
+
+
+def test_chat_first_validate_rejects_a_memory_review_card_the_account_does_not_own(monkeypatch):
+    _enable_chat_first(monkeypatch)
+    monkeypatch.setattr(
+        chat_first_router,
+        'fetch_memory_dict',
+        lambda uid, memory_id, **kwargs: {'id': memory_id} if memory_id == 'memory-1' else None,
+    )
+
+    response = _client().post(
+        '/v1/chat-first/blocks/validate',
+        json=_request(
+            blocks=[
+                {
+                    'type': 'memoryReviewCard',
+                    'summary_id': 'summary-1',
+                    'date': '2026-09-02',
+                    'items': [
+                        {'memory_id': 'memory-1', 'content': 'Owned', 'category': ''},
+                        {'memory_id': 'memory-9', 'content': 'Not this account', 'category': ''},
+                    ],
+                }
+            ]
+        ),
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {'accepted': False, 'code': 'entity_unavailable', 'blocks': []}

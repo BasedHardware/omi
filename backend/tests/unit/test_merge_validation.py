@@ -79,9 +79,11 @@ def merge():
     models_pkg.__path__ = []  # type: ignore[attr-defined]
     model_submods = {
         "models.audio_file": ["AudioFile"],
+        "models.client_processing": ["PROJECTION_FAMILY_FIELDS"],
         "models.conversation": ["Conversation"],
         "models.conversation_enums": ["ConversationStatus"],
         "models.structured": ["Structured"],
+        "models.client_processing": ["PROJECTION_FAMILY_FIELDS"],
     }
     model_stubs: dict[str, ModuleType] = {}
     for _modname, _attrs in model_submods.items():
@@ -89,6 +91,7 @@ def merge():
         for _attr in _attrs:
             setattr(_mod, _attr, MagicMock())
         model_stubs[_modname] = _mod
+    model_stubs["models.client_processing"].PROJECTION_FAMILY_FIELDS = frozenset({"client_processing"})
 
     # utils.memory.* — used only by the delete/cascade path in perform_merge_async.
     memory_service_stub = ModuleType("utils.memory.memory_service")
@@ -104,6 +107,12 @@ def merge():
     canonical_activation_stub = ModuleType("utils.memory.canonical_activation")
     setattr(canonical_activation_stub, "canonical_write_enabled", MagicMock(return_value=False))
 
+    # The retraction-scope helpers decide whether a source's canonical retraction
+    # can be skipped; only the delete path in perform_merge_async calls them.
+    retraction_scope_stub = ModuleType("utils.memory.retraction_scope")
+    for _name in ["canonical_intake_is_fenced", "historical_source_conversation_ids", "retraction_can_be_skipped"]:
+        setattr(retraction_scope_stub, _name, MagicMock())
+
     fakes: dict[str, ModuleType] = {
         "database": database_pkg,
         "database._client": client_stub,
@@ -118,6 +127,7 @@ def merge():
         "utils.memory.memory_service": memory_service_stub,
         "utils.memory.memory_system": memory_system_stub,
         "utils.memory.canonical_activation": canonical_activation_stub,
+        "utils.memory.retraction_scope": retraction_scope_stub,
     }
     fakes.update(model_stubs)
 

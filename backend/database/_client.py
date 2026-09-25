@@ -14,10 +14,12 @@ from database.google_credentials import (
 )
 
 __all__ = [
+    "data_plane_db",
     "db",
     "delete_collection_recursive",
     "document_id_from_seed",
     "get_customer_firestore_client",
+    "get_data_plane_firestore_client",
     "get_firestore_client",
     "get_users_uid",
     "is_document_size_limit_error",
@@ -82,10 +84,66 @@ def _install_query_stream_retry_compat() -> None:
 
 _install_query_stream_retry_compat()
 
+
+def _install_document_read_probe() -> None:
+    """Count every Firestore read on the SDK classes, for every client in-process.
+
+    The patch is on the classes, not on one instance, so a later ``firestore.Client()``
+    or ``AsyncClient()`` in this process is covered. A process that never imports
+    this module does not install it. Same lazy-import discipline as the query retry
+    shim above: the probe wraps SDK classes that do not exist under the unit-test
+    import stubs.
+    """
+    try:
+        from database.firestore_document_probe import install_document_read_probe
+    except ImportError:
+        return
+
+    install_document_read_probe()
+
+
+_install_document_read_probe()
+
 _firestore_client = None
 _firestore_client_lock = Lock()
 _customer_firestore_client = None
 _customer_firestore_client_lock = Lock()
+
+
+def _firestore_database_id() -> str | None:
+    """Resolve the optional named database, with a hard QA-only fence.
+
+    The isolated JIT plane owns ``jit-qa`` in the development project.  A
+    named database must never be accepted as an ambient production override:
+    ordinary services retain the default database when this variable is absent,
+    while a misconfigured QA process fails before constructing a client.
+    """
+
+    database = (os.getenv("FIRESTORE_DATABASE_ID") or "").strip()
+    qa_auth_only = (os.getenv("OMI_JIT_QA_AUTH_ONLY") or "").strip().casefold() in {"1", "true", "yes", "on"}
+    if qa_auth_only:
+        if database != "jit-qa":
+            raise RuntimeError("isolated JIT QA requires FIRESTORE_DATABASE_ID=jit-qa")
+        if (
+            (os.getenv("OMI_ENV_STAGE") or "").strip().casefold() != "dev"
+            or (os.getenv("GOOGLE_CLOUD_PROJECT") or "").strip() != "based-hardware-dev"
+            or (os.getenv("OMI_FIRESTORE_DATA_PLANE_PROJECT") or "").strip() != "based-hardware-dev"
+        ):
+            raise RuntimeError("FIRESTORE_DATABASE_ID=jit-qa requires the isolated development JIT QA fence")
+        return database
+    if not database or database == "(default)":
+        return None
+    if database == "jit-qa":
+        raise RuntimeError("FIRESTORE_DATABASE_ID=jit-qa requires the isolated development JIT QA fence")
+    raise RuntimeError("FIRESTORE_DATABASE_ID is restricted to the isolated JIT QA database")
+
+
+def _client_kwargs(credentials: Any, project: str) -> dict[str, Any]:
+    """Client kwargs for a pinned project; ``None`` credentials mean the runtime identity (ADC)."""
+    if credentials is None:
+        prepare_google_credentials()
+        return {"project": project}
+    return {"credentials": credentials, "project": project}
 
 
 def _build_firestore_client() -> Any:
@@ -107,9 +165,18 @@ def _build_firestore_client() -> Any:
     customer_data = customer_data_service_account()
     if customer_data is not None:
         credentials, project_id = customer_data
-        return firestore.Client(credentials=credentials, project=project_id)
+        database = _firestore_database_id()
+        if database and project_id != "based-hardware-dev":
+            raise RuntimeError("jit-qa cannot use a mounted customer-data service account")
+        customer_kwargs: dict[str, Any] = _client_kwargs(credentials, project_id)
+        if database:
+            customer_kwargs["database"] = database
+        return firestore.Client(**customer_kwargs)
 
     prepare_google_credentials()
+    database = _firestore_database_id()
+    if database:
+        return firestore.Client(project="based-hardware-dev", database=database)
     return firestore.Client()
 
 
@@ -135,7 +202,13 @@ def _build_customer_firestore_client() -> Any:
     entitlements = customer_entitlement_service_account()
     if entitlements is not None:
         credentials, project_id = entitlements
-        return firestore.Client(credentials=credentials, project=project_id)
+        database = _firestore_database_id()
+        if database and project_id != "based-hardware-dev":
+            raise RuntimeError("jit-qa cannot use a mounted customer-entitlement service account")
+        kwargs: dict[str, Any] = _client_kwargs(credentials, project_id)
+        if database:
+            kwargs["database"] = database
+        return firestore.Client(**kwargs)
 
     return get_firestore_client()
 
@@ -148,6 +221,76 @@ def get_customer_firestore_client() -> Any:
             if _customer_firestore_client is None:
                 _customer_firestore_client = _build_customer_firestore_client()
     return _customer_firestore_client
+
+
+_data_plane_firestore_client = None
+_data_plane_firestore_client_lock = Lock()
+
+
+def _build_data_plane_firestore_client() -> Any:
+    """The customer data plane for services whose compute project differs from it.
+
+    Some deployments (desktop-backend in dev) run their compute on one GCP
+    project via bare ADC (``GOOGLE_CLOUD_PROJECT``) while the user's actual
+    Firestore data — the memory ledger, JIT proactivity state, screen-activity
+    sync — lives in a different project (see ``backend/deploy/runtime_env``'s
+    ``data_plane_project``). ``OMI_FIRESTORE_DATA_PLANE_PROJECT`` names that
+    project explicitly so ADC can be pinned to it instead of silently
+    resolving to the compute project's empty Firestore.
+
+    Compute-local state (``agentVm``, GCE) must keep using
+    ``get_firestore_client()`` directly rather than this seam.
+    """
+    if os.environ.get("FIRESTORE_EMULATOR_HOST"):
+        return get_firestore_client()
+
+    data_plane_project = os.environ.get("OMI_FIRESTORE_DATA_PLANE_PROJECT", "").strip()
+    database = _firestore_database_id()
+    if not data_plane_project:
+        service = (os.getenv("K_SERVICE") or os.getenv("APP_NAME") or "").strip().casefold()
+        if "desktop-backend" in service:
+            raise RuntimeError("OMI_FIRESTORE_DATA_PLANE_PROJECT is required on desktop-backend")
+        return get_firestore_client()
+
+    # Bare ADC pinned to another project is not enough: the dev compute
+    # service account has no data-plane Firestore IAM (writes came back 403
+    # the first time this seam served traffic). The data-plane SA is already
+    # mounted for exactly this split — SERVICE_ACCOUNT_JSON env on listen /
+    # Python / jobs, FIREBASE_AUTH_CREDENTIALS_PATH file on desktop-backend —
+    # so the seam pins those credentials, the same way entitlement reads do.
+    pinned = customer_entitlement_service_account()
+    if pinned is not None:
+        credentials, sa_project = pinned
+        if sa_project != data_plane_project:
+            # Writing user data to whatever project the mounted SA happens to
+            # serve would be silent cross-plane corruption; refuse instead.
+            raise RuntimeError(
+                "OMI_FIRESTORE_DATA_PLANE_PROJECT="
+                f"{data_plane_project} does not match the mounted service account's "
+                f"project {sa_project}"
+            )
+        if database and sa_project != "based-hardware-dev":
+            raise RuntimeError("jit-qa cannot use a mounted customer-entitlement service account")
+        kwargs: dict[str, Any] = _client_kwargs(credentials, data_plane_project)
+        if database:
+            kwargs["database"] = database
+        return firestore.Client(**kwargs)
+
+    prepare_google_credentials()
+    kwargs = {"project": data_plane_project}
+    if database:
+        kwargs["database"] = database
+    return firestore.Client(**kwargs)
+
+
+def get_data_plane_firestore_client() -> Any:
+    global _data_plane_firestore_client
+
+    if _data_plane_firestore_client is None:
+        with _data_plane_firestore_client_lock:
+            if _data_plane_firestore_client is None:
+                _data_plane_firestore_client = _build_data_plane_firestore_client()
+    return _data_plane_firestore_client
 
 
 _EXPIRED_TRANSACTION_MARKER = "transaction has expired"
@@ -199,6 +342,18 @@ class _LazyFirestoreClient:
 
 
 db = _LazyFirestoreClient()
+
+
+class _LazyDataPlaneFirestoreClient:
+    # Same lazy-proxy idiom as ``_LazyFirestoreClient`` above, deferring
+    # ``get_data_plane_firestore_client()`` until first attribute access so a
+    # module can bind this as a default parameter value at import time without
+    # forcing client construction (and its env/ADC reads) before that.
+    def __getattr__(self, name: str) -> Any:
+        return getattr(get_data_plane_firestore_client(), name)
+
+
+data_plane_db = _LazyDataPlaneFirestoreClient()
 
 
 def delete_collection_recursive(collection_ref: Any, *, client: Any, batch_size: int = 450) -> None:

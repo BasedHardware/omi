@@ -45,6 +45,13 @@ extension AppState {
       },
       onChange: { [weak self] active in
         Task { @MainActor in
+          if active, SystemCalendarMeetingContextFeature.isEnabled {
+            // Permission and calendar I/O live outside the detector/audio path. This early sync
+            // normally stores the invite before the eventual conversation finalization begins.
+            Task(priority: .utility) {
+              await SystemCalendarMeetingContextService.shared.prepareAroundNow()
+            }
+          }
           await self?.handleMeetingObservation(active: active)
           await self?.reconcileCapture()
         }
@@ -89,6 +96,15 @@ extension AppState {
       finalizationReason: transition.finalizationReason,
       allowEmptyRotation: true,
       nextConversationRole: transition.nextRole)
+    if case .busy = result {
+      // A non-edge rotation (deferred .meetingEnded, BLE finish, Rewind finish)
+      // holds the serializer. The edge stays pending — the in-flight rotation's
+      // session-creation task replays `pendingMeetingState` when it installs the
+      // new session id, so nothing is lost.
+      pendingMeetingState = active
+      meetingBoundaryInProgress = false
+      return
+    }
     let rotationSucceeded: Bool
     if case .error(let message) = result {
       rotationSucceeded = false
@@ -99,7 +115,13 @@ extension AppState {
         rotationSucceeded: false)
       meetingBoundaryInProgress = false
       pendingMeetingState = nil
-      _ = stopTranscription()
+      // A concurrent stop is the usual cause of a mid-rotation generation
+      // change; it owns the terminal event — stopping again would double-emit
+      // `Desktop Recording Stopped`. Only a still-live session gets torn down.
+      if isTranscribing {
+        captureAttempt?.noteErrorTerminal()
+        _ = stopTranscription(finalizationReason: .rotationFailed)
+      }
       return
     } else {
       rotationSucceeded = true
@@ -109,6 +131,12 @@ extension AppState {
       transition: transition,
       rotationSucceeded: rotationSucceeded)
     meetingBoundaryInProgress = false
+
+    if MeetingConversationBoundaryPolicy.shouldAnnounceNoteTaking(
+      committedRole: currentConversationRole, rotationSucceeded: rotationSucceeded)
+    {
+      MeetingNoteTakingNotice.present()
+    }
 
     if let pending = pendingMeetingState {
       pendingMeetingState = nil

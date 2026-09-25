@@ -11,6 +11,7 @@ import {
 import { byokFingerprint } from './byokFingerprint'
 
 const fullKeys: ByokKeys = {
+  openrouter: 'sk-or',
   openai: 'sk-openai',
   anthropic: 'sk-ant',
   gemini: 'gm-key',
@@ -21,6 +22,7 @@ describe('withByokHeaders', () => {
   it('attaches a header for each non-empty key (full set)', () => {
     const out = withByokHeaders({}, fullKeys)
     expect(out).toEqual({
+      'X-BYOK-OpenRouter': 'sk-or',
       'X-BYOK-OpenAI': 'sk-openai',
       'X-BYOK-Anthropic': 'sk-ant',
       'X-BYOK-Gemini': 'gm-key',
@@ -60,26 +62,24 @@ describe('withByokHeaders', () => {
 })
 
 describe('isByokActive', () => {
-  it('is true only when all four providers have a non-empty key', () => {
+  it('is true when an LLM provider has a non-empty key', () => {
     expect(isByokActive(fullKeys)).toBe(true)
   })
 
-  it('is false at 3/4', () => {
-    const partial: ByokKeys = { ...fullKeys }
-    delete partial.deepgram
-    expect(isByokActive(partial)).toBe(false)
+  it('is false with only a transcription key', () => {
+    expect(isByokActive({ deepgram: 'dg-key' })).toBe(false)
   })
 
   it('is false when a provider key is only whitespace', () => {
-    expect(isByokActive({ ...fullKeys, gemini: '   ' })).toBe(false)
+    expect(isByokActive({ gemini: '   ' })).toBe(false)
   })
 
   it('is false for an empty map', () => {
     expect(isByokActive({})).toBe(false)
   })
 
-  it('covers exactly the four canonical providers', () => {
-    expect(BYOK_PROVIDERS).toEqual(['openai', 'anthropic', 'gemini', 'deepgram'])
+  it('covers every supported provider', () => {
+    expect(BYOK_PROVIDERS).toEqual(['openrouter', 'openai', 'anthropic', 'gemini', 'deepgram'])
     expect(Object.keys(BYOK_HEADER_NAMES).sort()).toEqual([...BYOK_PROVIDERS].sort())
   })
 })
@@ -87,6 +87,7 @@ describe('isByokActive', () => {
 describe('byokEnvVars', () => {
   it('returns the complete OMI_BYOK_* set when all four keys are present', () => {
     expect(byokEnvVars(fullKeys)).toEqual({
+      OMI_BYOK_OPENROUTER: 'sk-or',
       OMI_BYOK_OPENAI: 'sk-openai',
       OMI_BYOK_ANTHROPIC: 'sk-ant',
       OMI_BYOK_GEMINI: 'gm-key',
@@ -94,14 +95,19 @@ describe('byokEnvVars', () => {
     })
   })
 
-  it('returns {} for a partial set (all-or-nothing — never a partial injection)', () => {
+  it('returns configured capabilities for a partial set', () => {
     const partial: ByokKeys = { ...fullKeys }
     delete partial.deepgram
-    expect(byokEnvVars(partial)).toEqual({})
+    expect(byokEnvVars(partial)).toEqual({
+      OMI_BYOK_OPENROUTER: 'sk-or',
+      OMI_BYOK_OPENAI: 'sk-openai',
+      OMI_BYOK_ANTHROPIC: 'sk-ant',
+      OMI_BYOK_GEMINI: 'gm-key'
+    })
   })
 
-  it('returns {} when a provider key is only whitespace', () => {
-    expect(byokEnvVars({ ...fullKeys, gemini: '   ' })).toEqual({})
+  it('omits a provider key when it is only whitespace', () => {
+    expect(byokEnvVars({ ...fullKeys, gemini: '   ' }).OMI_BYOK_GEMINI).toBeUndefined()
   })
 
   it('returns {} for an empty map', () => {
@@ -112,7 +118,7 @@ describe('byokEnvVars', () => {
     expect(byokEnvVars({ ...fullKeys, openai: '  sk-openai  ' }).OMI_BYOK_OPENAI).toBe('sk-openai')
   })
 
-  it('names cover exactly the four canonical providers', () => {
+  it('names cover every supported provider', () => {
     expect(Object.keys(BYOK_ENV_NAMES).sort()).toEqual([...BYOK_PROVIDERS].sort())
   })
 })

@@ -3,8 +3,12 @@
 // parse: each line is `data: <chunk>` (drop the prefix), `done:`/`message:` are
 // terminal/side-message base64 frames (drop them — never reply text), `think:`
 // payloads are ephemeral status events (drop them), and reply newlines are
-// encoded as the literal token __CRLF__. Pure — no imports — so it's unit
-// testable without dragging in firebase/apiClient.
+// encoded as the literal token __CRLF__. The parser remains independent of
+// firebase/apiClient; its additive evidence decoder is a shared pure contract.
+import {
+  parseChatEvidenceFromRecord,
+  type ChatEvidenceReferenceEnvelope
+} from '../../../shared/knowledgeLedger'
 export function parseMessagesSse(raw: string): string {
   const out: string[] = []
   for (const line of raw.split('\n')) {
@@ -36,6 +40,8 @@ export type DoneMessage = {
   chartData?: unknown
   /** Whether the backend asked to prompt for an NPS rating this turn. */
   askForNps: boolean
+  /** Optional bounded supporting evidence; text remains authoritative. */
+  evidence?: ChatEvidenceReferenceEnvelope
 }
 
 // base64 → UTF-8 text. atob yields a binary (latin1) string, so multibyte JSON
@@ -60,6 +66,11 @@ export function parseDoneMessage(line: string): DoneMessage | null {
     memories?: unknown
     chart_data?: unknown
     ask_for_nps?: unknown
+    evidence?: unknown
+    evidence_envelope?: unknown
+    evidence_refs?: unknown
+    evidence_references?: unknown
+    metadata?: unknown
   }
   try {
     raw = JSON.parse(decodeBase64Utf8(b64))
@@ -79,11 +90,13 @@ export function parseDoneMessage(line: string): DoneMessage | null {
         ]
       })
     : []
+  const evidence = parseChatEvidenceFromRecord(raw)
   return {
     id: typeof raw.id === 'string' ? raw.id : undefined,
     text: typeof raw.text === 'string' ? raw.text : '',
     citations,
     chartData: raw.chart_data ?? undefined,
-    askForNps: raw.ask_for_nps === true
+    askForNps: raw.ask_for_nps === true,
+    ...(evidence ? { evidence } : {})
   }
 }

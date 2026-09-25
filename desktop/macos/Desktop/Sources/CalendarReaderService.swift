@@ -222,7 +222,17 @@ enum CalendarOutcomeParser {
 actor CalendarReaderService {
   static let shared = CalendarReaderService()
 
-  /// Read calendar events using browser cookies + SAPISID auth.
+  /// Read calendar events, preferring the account's server-held Google OAuth
+  /// grant and falling back to the Chromium cookie reader.
+  ///
+  /// The grant comes first because it is strictly more available: it works with
+  /// no Chromium browser installed, with cookies this machine cannot decrypt,
+  /// and with the browser Keychain prompt declined — the three failure modes in
+  /// issue #10459 that leave the cookie reader with nothing to recover to. The
+  /// cookie path stays for accounts that have never granted OAuth, so nobody
+  /// who is working today stops working. Retiring it belongs to that issue, not
+  /// to this fix.
+  ///
   /// Tries Arc, Chrome, Brave, and Edge across all Chromium profiles.
   /// Fetches events from `daysBack` days ago to `daysForward` days from now.
   /// Browser Keychain consent is only eligible for an explicitly requested read.
@@ -234,6 +244,15 @@ actor CalendarReaderService {
   ) async throws
     -> [CalendarEvent]
   {
+    // Absent grant and failed grant read both fall through to cookies.
+    if let granted = try? await readEventsViaGrant(
+      daysBack: daysBack,
+      daysForward: daysForward,
+      maxResults: maxResults
+    ) {
+      return granted
+    }
+
     if userInitiated {
       BrowserKeychainCache.shared.beginUserInitiatedOperation()
     }
@@ -247,6 +266,29 @@ actor CalendarReaderService {
     return events.sorted { $0.startTime > $1.startTime }
   }
 
+  /// Returns nil when this account has no Google grant. Callers that can fall
+  /// back to cookies treat a thrown read the same way, so a backend blip cannot
+  /// take Calendar down for someone the cookie reader still serves.
+  func readEventsViaGrant(
+    daysBack: Int,
+    daysForward: Int,
+    maxResults: Int
+  ) async throws -> [CalendarEvent]? {
+    guard await hasGoogleGrant() else { return nil }
+    let events = try await APIClient.shared.googleCalendarGrantEvents(
+      daysBack: daysBack,
+      daysForward: daysForward,
+      maxResults: maxResults
+    )
+    return events.sorted { $0.startTime > $1.startTime }
+  }
+
+  /// A grant check must never be the reason a read fails: a backend hiccup here
+  /// reads as "no grant" and the cookie path still gets its turn.
+  func hasGoogleGrant() async -> Bool {
+    (try? await APIClient.shared.googleCalendarGrantConnected()) ?? false
+  }
+
   /// Lightweight functional probe — does the integration actually work right now?
   ///
   /// Per `docs/integrations-philosophy.md` §3/§4, "connected" must mean "verified
@@ -255,6 +297,14 @@ actor CalendarReaderService {
   /// one-time success. It runs the same real fetch path over a tiny window so a
   /// green result guarantees the whole chain (cookies → auth → API) works.
   func verifyConnection(userInitiated: Bool = false) async -> CalendarConnectionStatus {
+    // Same real-fetch standard as the cookie probe below, over the grant: a
+    // green result means the whole chain (grant → backend → Google) works.
+    if await hasGoogleGrant(),
+      (try? await APIClient.shared.googleCalendarGrantEvents(daysBack: 1, daysForward: 1, maxResults: 1)) != nil
+    {
+      return .connected(verifiedAt: Date())
+    }
+
     if userInitiated {
       BrowserKeychainCache.shared.beginUserInitiatedOperation()
     }

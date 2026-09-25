@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-sync-gated-on-consumer-trigger",
+  "violated_contract": "A durable state sync whose authority is cheap to read (a snapshot plus its receipt) must be driven by the lifecycle event of the scope that owns it — signed-in admitted startup, owner change — never only by the opportunistic consumer path that happens to need it next. Binding the sync to the consumer's trigger silently couples availability to an unrelated subsystem: the JIT trigger snapshot download only ran inside JITProactivityRuntime.admission, reached solely after a notify-worthy screen-capture context visit, so an allowlisted owner whose TCC Screen Recording grant dropped (Sparkle replaced the signed binary) held a valid authority, kept the routes it did hit green, and stayed at zero jit_trigger_snapshot_receipts forever — the client fix in #12381 shipped in Beta 12240 but could never execute. No decode error, no failing test, and the server log looks healthy because the gating read simply never happens.",
+  "canonical_prevention": "Hook the same flag → fetch → reconcile chain the consumer uses onto the owner-ready startup path: DesktopHomeSignedInStartup.runProductServicesIfAdmitted fires JITProactivityRuntime.syncTriggerSnapshot once after isProductShellAdmitted, and the .task(id: productShellAdmissionToken) restart supplies the owner-change retry. Fire-and-forget so a slow authority route never gates startup; keep the consumer's fail-closed gate (permitsNewLane) and the complete-empty-snapshot receipt contract. Behavioral coverage: a runtime test that fetches and persists a receipt with zero context visits, fail-closed tests that every non-permitting authority performs no snapshot read, and URLProtocol-level wire tests asserting the GET sequence rollout-decision → trigger-snapshot.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Sources/AccountCutover/DesktopHomeSignedInStartup.swift",
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/Core/JITProactivityRuntime.swift",
+    "desktop/macos/Desktop/Tests/JITProactivityRuntimeTests.swift",
+    "desktop/macos/Desktop/Tests/ProactiveLaneClientTests.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/**",
+    "desktop/windows/src/main/jit/**"
+  ],
+  "status": "open"
+}

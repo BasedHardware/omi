@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "FC-permissive-cors-origin-allowlist",
+  "violated_contract": "An authenticated server surface must default to denying cross-origin browser access. A wildcard (`*`) or blank/whitespace origin folded into the CORS allowlist — whether from a permissive default, a comma-split artifact, or an env value read before configuration loads — widens what any webpage may read off a Bearer-token-authenticated backend and must fail closed to an explicit empty allowlist instead.",
+  "canonical_prevention": "Build every authenticated surface's CORS policy from one default-deny helper that loads the backend environment before parsing, comma-splits with strip, rejects `*` with a hard error, and returns an explicit allowlist with `allow_credentials=False`; cover both the module-level app and factory entrypoints with tests asserting blank/unset origins yield an empty allowlist and that a wildcard anywhere in the comma list raises.",
+  "evidence_prs": [11334],
+  "scope_hints": [
+    "backend/desktop_backend.py",
+    "backend/main.py",
+    "backend/tests/unit/test_desktop_backend_cors.py"
+  ],
+  "status": "open"
+}

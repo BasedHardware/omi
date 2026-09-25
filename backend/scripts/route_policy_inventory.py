@@ -120,7 +120,6 @@ DATA_DOMAINS = {
     'metrics',
     'firmware',
     'desktop_updates',
-    'agent_vm_lifecycle',
     'unknown',
 }
 DEPRECATION_STATES = {'active', 'deprecated', 'sunset', 'removed'}

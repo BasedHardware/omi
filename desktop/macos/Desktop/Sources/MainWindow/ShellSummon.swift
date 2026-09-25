@@ -40,6 +40,7 @@
 
 import AppKit
 import Foundation
+import OmiTheme
 
 /// The geometry half, with no window and no defaults in it, so every placement decision is a claim a
 /// hermetic test can hold. Multi-display placement is the part that breaks in the field and the part
@@ -49,24 +50,26 @@ enum ShellSummonPlacement {
   /// The size a shell that has never been placed on this display arrives at.
   ///
   /// Deliberately smaller than the old managed-window default: a surface you summon over your work
-  /// should read as a panel you called up, not as an application you switched to. It stays above
-  /// `DesktopWindowLayoutPolicy.minimumContentSize`, which is the floor the destinations lay out to.
-  static let defaultSize = NSSize(width: 960, height: 700)
+  /// should read as a panel you called up, not as an application you switched to. Width is the
+  /// hugged glass (readable lane + page margins), so a 5K display still gets a panel, not a sheet.
+  /// It stays above `DesktopWindowLayoutPolicy.minimumContentSize`, which is the floor the
+  /// destinations lay out to.
+  static let defaultSize = WindowSizeResetPolicy.defaultSize
 
   /// Where the shell lands on a given display.
   ///
   /// A remembered frame wins, shrunk and nudged until it fits — a display can get smaller (resolution
   /// change, a scaled mode, a menu bar appearing) and a frame restored past the edge is a shell with
-  /// its query field off-screen. With nothing remembered it is centred, which is where a summoned
-  /// surface belongs the first time you ask for it.
+  /// its query field off-screen. Width is also clamped to the hug max so a frame remembered from the
+  /// pre-hug oversized window cannot restore the invisible border. With nothing remembered it is
+  /// centred, which is where a summoned surface belongs the first time you ask for it.
   static func frame(remembered: NSRect?, visibleFrame: NSRect, defaultSize: NSSize = defaultSize) -> NSRect {
     guard let remembered, remembered.width > 1, remembered.height > 1 else {
       return centered(defaultSize, in: visibleFrame)
     }
-    let size = NSSize(
-      width: min(remembered.width, visibleFrame.width),
-      height: min(remembered.height, visibleFrame.height))
-    return clamped(NSRect(origin: remembered.origin, size: size), into: visibleFrame)
+    return clamped(
+      NSRect(origin: remembered.origin, size: fitted(remembered.size, in: visibleFrame)),
+      into: visibleFrame)
   }
 
   /// The least of a shell a person can actually use: enough visible surface to read the panel and
@@ -108,14 +111,23 @@ enum ShellSummonPlacement {
   }
 
   static func centered(_ size: NSSize, in visibleFrame: NSRect) -> NSRect {
-    let fitted = NSSize(
-      width: min(size.width, visibleFrame.width),
-      height: min(size.height, visibleFrame.height))
+    let fittedSize = fitted(size, in: visibleFrame)
     return NSRect(
-      x: visibleFrame.midX - fitted.width / 2,
-      y: visibleFrame.midY - fitted.height / 2,
-      width: fitted.width,
-      height: fitted.height)
+      x: visibleFrame.midX - fittedSize.width / 2,
+      y: visibleFrame.midY - fittedSize.height / 2,
+      width: fittedSize.width,
+      height: fittedSize.height)
+  }
+
+  /// Points, not pixels: `visibleFrame` is already in points, and Retina scale must not change this.
+  static func fitted(
+    _ size: NSSize,
+    in visibleFrame: NSRect,
+    maxWidth: CGFloat = ChatComposerLayout.contentLaneMaxWidth
+  ) -> NSSize {
+    NSSize(
+      width: min(size.width, visibleFrame.width, maxWidth),
+      height: min(size.height, visibleFrame.height))
   }
 
   private static func clamped(_ rect: NSRect, into visibleFrame: NSRect) -> NSRect {
@@ -303,6 +315,30 @@ enum ShellSummon {
     }
     guard hasBeenShown, let window = shellWindow(), !window.isVisible else { return }
     summon()
+  }
+
+  /// Whether the shell is currently ordered out to make room for macOS permission UI.
+  ///
+  /// The window being gone is not the user closing it, and `applicationShouldTerminateAfterLastWindowClosed`
+  /// cannot tell the difference on its own.
+  static var isSuspendedForPermissionPrompt: Bool { permissionSuspendedFrame != nil }
+
+  /// Whether losing the last window should end the process.
+  ///
+  /// Pure so the decision is provable without AppKit: the delegate hook it serves runs inside a
+  /// live `NSApplication` during a system permission prompt, which no hermetic test can stand up.
+  ///
+  /// Before onboarding completes there is no menu-bar residency to fall back on, so a closed last
+  /// window really does mean "quit". A permission prompt is the one case where the window is gone
+  /// because *we* took it away — `suspendForPermissionPrompt` orders it out so macOS can present
+  /// the dialog — and quitting there kills the app at the instant the user is granting the
+  /// permission onboarding just asked for. Every one of the eight callers reaches this path.
+  nonisolated static func shouldTerminateAfterLastWindowClosed(
+    hasCompletedOnboarding: Bool,
+    isSuspendedForPermissionPrompt: Bool
+  ) -> Bool {
+    guard !isSuspendedForPermissionPrompt else { return false }
+    return !hasCompletedOnboarding
   }
 
   /// Temporarily remove the main Omi surface before handing control to macOS permission UI.

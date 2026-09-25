@@ -10,8 +10,6 @@ RUNTIME_DOCKERFILES = (
     ROOT / "backend" / "Dockerfile",
     ROOT / "backend" / "Dockerfile.desktop_backend",
     ROOT / "backend" / "pusher" / "Dockerfile",
-    ROOT / "backend" / "agent-proxy" / "Dockerfile",
-    ROOT / "backend" / "agent_vm" / "Dockerfile",
     ROOT / "backend" / "modal" / "Dockerfile",
     ROOT / "backend" / "modal" / "Dockerfile.notifications_job",
     ROOT / "backend" / "modal" / "Dockerfile.memory_maintenance_job",

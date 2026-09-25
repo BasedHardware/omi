@@ -48,7 +48,7 @@ extension SettingsContentView {
     // Preserve request order and always send the complete locally desired state.
     // If an earlier partial mutation fails, a later successful mutation must also
     // repair that field before it is allowed to clear the pending-sync journal.
-    NotificationSettingsSyncQueue.shared.enqueue(
+    NotificationSettingsSyncCoordinator.shared.enqueue(
       enabled: NotificationService.areNotificationsEnabled(),
       frequency: NotificationService.currentFrequencyLevel(),
       revision: syncRevision)
@@ -126,7 +126,7 @@ extension SettingsContentView {
         UserDefaults.standard.set(deletionOwner, forKey: .acceptedAccountDeletionOwnerId)
         await MainActor.run {
           appState.stopTranscription()
-          ProactiveAssistantsPlugin.shared.stopMonitoring()
+          ProactiveAssistantsPlugin.shared.stopMonitoring(reason: .accountDeleted)
         }
         do {
           try await AuthService.shared.signOut(acceptedAccountDeletion: true)

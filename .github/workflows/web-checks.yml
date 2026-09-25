@@ -17,6 +17,7 @@ jobs:
   changes:
     name: Detect Changes
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     outputs:
       has_admin: ${{ steps.changes.outputs.has_admin }}
       has_frontend: ${{ steps.changes.outputs.has_frontend }}
@@ -28,7 +29,11 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
+          # detect-changes diffs against the merge base, so it needs history;
+          # blob:none skips file contents, which is what made the unfiltered
+          # clone of this ~1.25GB repo take minutes.
           fetch-depth: 0
+          filter: blob:none
 
       - name: Detect changed paths
         id: changes
@@ -39,11 +44,13 @@ jobs:
     runs-on: ubuntu-latest
     needs: changes
     if: needs.changes.outputs.has_web_lint == 'true'
+    timeout-minutes: 15
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
-          fetch-depth: 0
+          # Lint/test only reads the worktree; no git history is consulted.
+          fetch-depth: 1
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
@@ -62,6 +69,10 @@ jobs:
           npm run lint
           npm run lint:format -- --check
 
+      - name: Run Frontend Tests
+        if: needs.changes.outputs.has_frontend == 'true'
+        run: bash scripts/run-web-frontend-tests.sh
+
       - name: Lint Personas
         if: needs.changes.outputs.has_personas == 'true'
         working-directory: ./web/personas-open-source
@@ -75,11 +86,13 @@ jobs:
     runs-on: ubuntu-latest
     needs: changes
     if: needs.changes.outputs.has_web_build == 'true'
+    timeout-minutes: 15
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
-          fetch-depth: 0
+          # Builds only read the worktree; no git history is consulted.
+          fetch-depth: 1
 
       - name: Setup Node.js
         uses: actions/setup-node@v7
@@ -87,13 +100,18 @@ jobs:
           node-version: '20'
           cache: 'npm'
           cache-dependency-path: |
-            web/app/package-lock.json
             web/admin/package-lock.json
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
 
       - name: Build Web App
         if: needs.changes.outputs.has_web_app == 'true'
         working-directory: ./web/app
         env:
+          NEXT_PUBLIC_API_BASE_URL: https://api.omi.me
           NEXT_PUBLIC_FIREBASE_API_KEY: dummy
           NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: dummy.firebaseapp.com
           NEXT_PUBLIC_FIREBASE_PROJECT_ID: dummy
@@ -102,8 +120,8 @@ jobs:
           NEXT_PUBLIC_FIREBASE_APP_ID: "1:123456789:web:dummy"
           NEXT_PUBLIC_FIREBASE_VAPID_KEY: dummy
         run: |
-          npm ci
-          npm run build
+          bun install --frozen-lockfile
+          bun run build
 
       - name: Build Admin Dashboard
         if: needs.changes.outputs.has_admin == 'true'

@@ -1,22 +1,45 @@
+import json
+import re
+from collections.abc import Callable, Mapping, MutableMapping, Sequence
+from datetime import datetime
 from typing import Any, Dict, List, Literal, Optional, cast
+from uuid import uuid4
 
 from langchain_core.output_parsers import PydanticOutputParser
 from pydantic import BaseModel, Field, field_validator
 
 from database import users as users_db
+from models.daily_sweep_dispatch import SweepDispatchScope
 from models.memories import Memory, MemoryCategory
-from models.memory_contracts import L1MemoryArchiveClass
+from models.memory_contracts import L1MemoryArchiveClass, MemoryExtractionError
 from models.other import Person
+from utils.llm.conversation_prompt_prefix import ConversationPromptPrefix, shared_conversation_cache_supported
 from models.transcript_segment import TranscriptSegment
 from database.users import get_user_language_preference
+from utils.conversations.owner_attribution import OwnerAttributionEvidence, may_attribute_to_owner
 from utils.prompts import extract_memories_prompt, extract_learnings_prompt, extract_memories_text_content_prompt
 from utils.llms.memory import get_prompt_memories
 from utils.llm.temporal import current_date_for_uid
 from utils.llm.usage_tracker import Features, track_usage
+from utils.observability.fallback import record_fallback
 from .clients import get_llm
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+def _scoped_claim_arguments(value: Any, *, basis: Optional[str] = None) -> Dict[str, Any]:
+    """Normalize existing proposition arguments at the LLM boundary.
+
+    The implementation lives with the working-observation extractor to keep
+    one contract for both conversation intake and daily reconciliation.  The
+    lazy import preserves the lightweight import path used by API tests that
+    stub the extractor dependencies.
+    """
+
+    from utils.llm.working_observations import normalize_scoped_claim_arguments
+
+    return normalize_scoped_claim_arguments(value, basis=basis)
 
 
 def _get_language_instruction(uid: str, language: Optional[str] = None) -> str:
@@ -81,19 +104,29 @@ class CanonicalL1MemoryCandidate(BaseModel):
     content: str
     archive_class: L1MemoryArchiveClass = L1MemoryArchiveClass.general
     evidence_quotes: List[str] = Field(default_factory=list)
+    source_refs: List[Dict[str, Any]] = Field(default_factory=list)
+    # Capture provenance is carried with the transient candidate so the
+    # canonical caller can construct MemoryEvidence from the original
+    # conversation. It must not fall back to the generic API family.
+    source_id: Optional[str] = None
+    source_type: str = "conversation"
+    source_signal: str = "transcription"
+    lineage_id: Optional[str] = None
+    independence_group: Optional[str] = None
+    attribution: Optional[
+        Literal["unknown", "assistant", "inferred", "third_party", "screen", "user_spoken", "user_written"]
+    ] = None
     speaker_label: Optional[str] = None
     speaker_scope: str = "session-local"
     about: str = ""
+    subject_scope: Optional[str] = None
+    belief_class: Optional[str] = None
+    half_life_days: Optional[float] = None
+    valid_to: Optional[datetime] = None
+    predicate: Optional[str] = None
+    arguments: Dict[str, Any] = Field(default_factory=dict)
     confidence: str = "medium"
     risk_flags: List[str] = Field(default_factory=list)
-
-
-class MemoryExtractionError(RuntimeError):
-    """A strict memory extraction failed before producing a valid batch."""
-
-    def __init__(self, extractor: str):
-        self.extractor = extractor
-        super().__init__(f"{extractor} failed before producing a valid extraction result")
 
 
 class MemoriesByTexts(BaseModel):
@@ -131,6 +164,8 @@ def extract_canonical_l1_memory_candidates(
     user_name: Optional[str] = None,
     language: Optional[str] = None,
     strict: bool = False,
+    prompt_prefix: Optional[ConversationPromptPrefix] = None,
+    rejected_memory_examples: Sequence[str] = (),
 ) -> List[CanonicalL1MemoryCandidate]:
     """Run the broad, source-aware L1 extractor without persisting archive routes.
 
@@ -148,7 +183,12 @@ def extract_canonical_l1_memory_candidates(
     person_ids = sorted({segment.person_id for segment in segments if segment.person_id})
     people_records = cast(List[Dict[str, Any]], users_db.get_people_by_ids(uid, person_ids)) if person_ids else []
     people = Person.deserialize_many_safe(people_records)
-    content = TranscriptSegment.segments_as_string(segments, user_name=user_name, people=people)
+    # Imported here rather than at module load: the renderer pulls in ``database.auth``,
+    # and ``utils.llm.memories`` must stay importable under the stubbed ``database`` package
+    # the memory-validation unit tests install.
+    from utils.conversations.transcript_for_llm import memory_transcript_from_segments
+
+    content = memory_transcript_from_segments(segments, user_name=user_name, people=people)
     if not content or not content.strip():
         return []
 
@@ -166,20 +206,60 @@ def extract_canonical_l1_memory_candidates(
         language_instruction=_get_language_instruction(uid, language),
         persist_route_outcomes=False,
         strict=strict,
+        prompt_prefix=prompt_prefix,
+        prompt_cache_enabled=shared_conversation_cache_supported(),
+        rejected_memory_examples=tuple(rejected_memory_examples),
     )
-    return [
-        CanonicalL1MemoryCandidate(
-            content=item.text,
-            archive_class=item.archive_class,
-            evidence_quotes=item.evidence_quotes,
-            speaker_label=item.speaker_label,
-            speaker_scope=item.speaker_scope,
-            about=item.about,
-            confidence=item.confidence,
-            risk_flags=item.risk_flags,
+    owner_evidence = OwnerAttributionEvidence.from_segments(segments)
+
+    def owner_spoken_for_quotes(quotes: Sequence[str]) -> bool:
+        """Confirm that every cited quote came from the uniquely known owner."""
+
+        if not quotes or not may_attribute_to_owner(owner_evidence):
+            return False
+        for raw_quote in quotes:
+            normalized_quote = re.sub(r"[\W_]+", " ", str(raw_quote or "").casefold()).strip()
+            if not normalized_quote:
+                return False
+            matched = [
+                segment
+                for segment in segments
+                if f" {normalized_quote} "
+                in " " + re.sub(r"[\W_]+", " ", str(getattr(segment, "text", "") or "").casefold()).strip() + " "
+            ]
+            if len(matched) != 1 or not may_attribute_to_owner(owner_evidence, segment=matched[0]):
+                return False
+        return True
+
+    candidates: List[CanonicalL1MemoryCandidate] = []
+    for item in items:
+        quotes = list(getattr(item, "evidence_quotes", None) or [])
+        candidates.append(
+            CanonicalL1MemoryCandidate(
+                content=item.text,
+                archive_class=item.archive_class,
+                source_refs=list(getattr(item, "source_refs", None) or []),
+                source_id=source_id,
+                source_type="conversation",
+                source_signal="transcription",
+                lineage_id=source_id,
+                independence_group=source_id,
+                attribution="user_spoken" if owner_spoken_for_quotes(quotes) else None,
+                evidence_quotes=quotes,
+                speaker_label=item.speaker_label,
+                speaker_scope=item.speaker_scope,
+                about=item.about,
+                subject_scope=item.subject_scope,
+                belief_class=item.belief_class,
+                half_life_days=item.half_life_days,
+                valid_to=item.valid_to,
+                predicate=getattr(item, "predicate", None),
+                arguments=_scoped_claim_arguments(getattr(item, "arguments", {})),
+                confidence=item.confidence,
+                risk_flags=item.risk_flags,
+            )
         )
-        for item in items
-    ]
+    return candidates
 
 
 def new_memories_extractor(
@@ -328,6 +408,7 @@ def extract_memories_from_text(
     content_date: Optional[str] = None,
     *,
     strict: bool = False,
+    llm: Optional[Any] = None,
 ) -> List[Memory]:
     """Extract memories from external integration text sources like email, posts, messages"""
     if user_name is None or memories_str is None:
@@ -341,18 +422,21 @@ def extract_memories_from_text(
     try:
         parser = PydanticOutputParser(pydantic_object=MemoriesByTexts)
         with track_usage(uid, Features.MEMORIES):
-            chain = extract_memories_text_content_prompt | get_llm('memories') | parser
-            response: MemoriesByTexts = chain.invoke(
-                {
-                    'user_name': user_name,
-                    'text_content': text,
-                    'text_source': text_source,
-                    'memories_str': memories_str,
-                    'language_instruction': language_instruction,
-                    'current_date': content_date or current_date_for_uid(uid),
-                    'format_instructions': parser.get_format_instructions(),
-                }
-            )
+            prompt_input = {
+                'user_name': user_name,
+                'text_content': text,
+                'text_source': text_source,
+                'memories_str': memories_str,
+                'language_instruction': language_instruction,
+                'current_date': content_date or current_date_for_uid(uid),
+                'format_instructions': parser.get_format_instructions(),
+            }
+            if llm is None:
+                chain = extract_memories_text_content_prompt | get_llm('memories') | parser
+                response: MemoriesByTexts = chain.invoke(prompt_input)
+            else:
+                prompt_value = extract_memories_text_content_prompt.invoke(prompt_input)
+                response = parser.invoke(llm.invoke(prompt_value))
 
         # Ensure all new memories use the new category format
         memories = response.to_memories()
@@ -363,6 +447,10 @@ def extract_memories_from_text(
         return memories
     except Exception as e:
         logger.error("Error extracting facts from %s: %s", text_source, type(e).__name__)
+        from utils.memory.promotion_flex import PromotionFlexDeferred
+
+        if isinstance(e, PromotionFlexDeferred):
+            raise
         if strict:
             raise MemoryExtractionError("external_text_memory_extractor") from e
         return []
@@ -588,3 +676,561 @@ Respond with action, supersedes (indices), merged_content (only for merge), and 
         logger.error(f'Error resolving memory conflict: {e}')
         # Default to storing the new memory if resolution fails (never lose information).
         return MemoryResolution(action='add', reasoning=f'Resolution failed: {e}')
+
+
+# ── Daily sweep summary agent ──
+#
+# One agent pass per user per completed local day: the whole day's conversation
+# SUMMARIES go in as the spine, and the model may request a bounded number of
+# raw transcript excerpts to verify specifics before finalizing.  At most two
+# provider calls; both run inside the sweep's single at-most-once invocation
+# fence, so a retry replays the staged output instead of paying again.
+
+
+class DailySweepAgentMemory(BaseModel):
+    about: str = Field(
+        default="",
+        description="Named subject: user for the account owner, otherwise the person name",
+    )
+    content: str = Field(description="One durable memory, stated as a standalone fact")
+    conversation_ids: List[str] = Field(
+        default=[], description="Ids of the conversations this memory came from (at least one)"
+    )
+    basis: str = Field(
+        default="",
+        description="The memory's evidentiary basis: 'decided' (commitment on tape), 'proposed', or 'observed'",
+    )
+    slot: str = Field(
+        default="",
+        description="Snake_case standing-attribute name when this memory updates one (the ledger supersedes the old value); empty for one-off facts",
+    )
+    duplicate_of: str = Field(
+        default="",
+        description="Ledger memory id from a prior-memory lookup hit this fact merely restates; empty when the fact is new",
+    )
+    arguments: Dict[str, Any] = Field(
+        default_factory=dict,
+        description=(
+            "Existing proposition arguments. Preserve explicit object and qualifier details. "
+            "Optional arguments.decision is proposed, accepted, or resolved; rationale is retained only "
+            "when explicitly stated. Never use arguments to create or complete a task."
+        ),
+    )
+
+    @field_validator("arguments", mode="before")
+    @classmethod
+    def normalize_arguments(cls, value: Any, info) -> Dict[str, Any]:
+        basis = None
+        # Pydantic validates fields in declaration order; basis is already
+        # available for normal model output, but tolerate direct construction
+        # where it is not yet present.
+        if info.data:
+            basis = info.data.get("basis")
+        return _scoped_claim_arguments(value, basis=basis)
+
+
+class DailySweepTranscriptRequest(BaseModel):
+    conversation_id: str = Field(description="Id of the conversation whose raw transcript to fetch")
+    reason: str = Field(default="", description="What specific detail needs verification")
+
+
+class DailySweepMemoryLookup(BaseModel):
+    query: str = Field(description="Short search query over the user's prior memory ledger")
+
+
+class DailySweepFolderAssignment(BaseModel):
+    conversation_id: str = Field(description="Id of an unfiled conversation")
+    folder_id: str = Field(description="Id of the folder it belongs in, from the provided folder list")
+
+
+class DailySweepAgentPassOutput(BaseModel):
+    memories: List[DailySweepAgentMemory] = Field(default=[])
+    transcript_requests: List[DailySweepTranscriptRequest] = Field(default=[])
+    memory_lookups: List[DailySweepMemoryLookup] = Field(default=[])
+    folder_assignments: List[DailySweepFolderAssignment] = Field(default=[])
+
+
+_DAILY_SWEEP_FOLDER_TASK = (
+    "**Folder task**: the following conversations are unfiled. For each, pick the best folder_id from the "
+    "folder list, or omit it if none fits.\nUnfiled conversations: {unfiled}\nFolders: {folders}"
+)
+
+# Phase-B input bounds. Everything phase B adds beyond the shared prefix and
+# the transcript-fetch budget is either model-controlled (draft memories,
+# request reasons, lookup queries) or ledger-controlled (lookup results), so
+# each piece is clamped here and the worst case is exported to the sweep's
+# pre-call cost ceiling via daily_sweep_phase_b_overhead_characters().
+DAILY_SWEEP_DRAFT_ROW_LIMIT = 24
+DAILY_SWEEP_DRAFT_CONTENT_CHARACTERS = 600
+DAILY_SWEEP_DRAFT_CITED_IDS = 8
+DAILY_SWEEP_REQUEST_REASON_CHARACTERS = 200
+DAILY_SWEEP_LOOKUP_QUERY_CHARACTERS = 200
+DAILY_SWEEP_LOOKUP_RESULT_ROWS = 10
+DAILY_SWEEP_LOOKUP_RESULT_CHARACTERS = 400
+
+
+def daily_sweep_phase_b_overhead_characters(
+    max_memory_lookups: int,
+    *,
+    max_candidate_rows: int = DAILY_SWEEP_DRAFT_ROW_LIMIT,
+) -> int:
+    """Worst-case characters phase B adds beyond the spine and excerpts.
+
+    ``max_candidate_rows`` is explicit so a tightly bounded qualification run
+    can price the same model path without charging for the production page.
+    Production keeps the historical default.
+    """
+
+    candidate_rows = max(0, min(DAILY_SWEEP_DRAFT_ROW_LIMIT, max_candidate_rows))
+    draft = candidate_rows * (DAILY_SWEEP_DRAFT_CONTENT_CHARACTERS + DAILY_SWEEP_DRAFT_CITED_IDS * 40)
+    reasons = candidate_rows * DAILY_SWEEP_REQUEST_REASON_CHARACTERS
+    lookups = max(0, max_memory_lookups) * (
+        DAILY_SWEEP_LOOKUP_QUERY_CHARACTERS + DAILY_SWEEP_LOOKUP_RESULT_ROWS * DAILY_SWEEP_LOOKUP_RESULT_CHARACTERS
+    )
+    return draft + reasons + lookups
+
+
+def _neutralize_fences(text: str) -> str:
+    """Keep untrusted text from closing the prompt's ``` blocks."""
+
+    return text.replace("```", "'''")
+
+
+def _ledger_lookup_memory_id(row: str) -> str:
+    """Parse the bracketed canonical id the ledger searcher prefixes onto a hit."""
+
+    text = str(row or "").lstrip()
+    if not text.startswith("["):
+        return ""
+    close = text.find("]")
+    if close <= 1:
+        return ""
+    return text[1:close].strip()
+
+
+def _normalized_duplicate_of(value: str) -> str:
+    text = str(value or "").strip()
+    if text.startswith("[") and text.endswith("]") and len(text) > 2:
+        return text[1:-1].strip()
+    return text
+
+
+def _daily_sweep_summaries_block(summary_rows: Sequence[tuple[str, str]]) -> str:
+    return "\n".join(f"[{conversation_id}] {_neutralize_fences(text)}" for conversation_id, text in summary_rows)
+
+
+_INPUT_BUDGET_TRUNCATION_MARKER = "[truncated]"
+_DISPATCH_FAILURE_REASON_RE = re.compile(r"^[a-z][a-z0-9_]{0,80}$")
+_DISPATCH_FAILURE_CAUSE_RE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]{0,80}$")
+_SUMMARY_LINE_TIME_RE = re.compile(r"^\[(?P<id>[^\]]+)\]\s+(?P<hour>\d{2}):(?P<minute>\d{2})\b")
+
+
+def _note_daily_sweep_dispatch_failure(
+    dispatch_evidence: Optional[MutableMapping[str, Any]],
+    reason: str,
+    *,
+    cause_class: Optional[str] = None,
+) -> None:
+    """Record a content-free failure token on QA dispatch evidence."""
+
+    if dispatch_evidence is None:
+        return
+    if _DISPATCH_FAILURE_REASON_RE.fullmatch(reason):
+        dispatch_evidence["failure_reason"] = reason
+    if cause_class and _DISPATCH_FAILURE_CAUSE_RE.fullmatch(cause_class):
+        dispatch_evidence["failure_cause"] = cause_class
+
+
+def _summary_line_recency_key(line: str) -> tuple[int, int, str]:
+    match = _SUMMARY_LINE_TIME_RE.match(line)
+    if match:
+        return (int(match.group("hour")), int(match.group("minute")), match.group("id"))
+    return (-1, -1, line)
+
+
+def _shrink_daily_sweep_prompt_input(prompt_input: Dict[str, Any]) -> bool:
+    """Drop oldest spine rows, then clamp remaining text, then memories_str.
+
+    Returns True when the prompt shrank. Newest rows (HH:MM in the spine line)
+    are kept first; lines without a timestamp are dropped first. memories_str
+    is the remaining variable block after the spine is gone — the parser
+    instructions plus template leave only a few kilobytes under the QA byte
+    cap, so a full profile can overflow even a one-row day.
+    """
+
+    summaries = str(prompt_input.get("summaries_block") or "")
+    lines = [line for line in summaries.split("\n") if line.strip() and line.strip() != _INPUT_BUDGET_TRUNCATION_MARKER]
+    if len(lines) > 1:
+        lines.sort(key=_summary_line_recency_key, reverse=True)
+        prompt_input["summaries_block"] = _INPUT_BUDGET_TRUNCATION_MARKER + "\n" + "\n".join(lines[:-1])
+        return True
+    if len(lines) == 1:
+        line = lines[0]
+        prefix_match = re.match(r"^\[[^\]]+\]\s*", line)
+        prefix = prefix_match.group(0) if prefix_match else ""
+        body = line[len(prefix) :]
+        if len(body) <= 64:
+            prompt_input["summaries_block"] = _INPUT_BUDGET_TRUNCATION_MARKER
+            return True
+        prompt_input["summaries_block"] = (
+            _INPUT_BUDGET_TRUNCATION_MARKER + "\n" + prefix + body[: max(1, len(body) // 2)]
+        )
+        return True
+    memories = str(prompt_input.get("memories_str") or "")
+    if memories.strip() and memories.strip() != _INPUT_BUDGET_TRUNCATION_MARKER:
+        if len(memories) <= 16:
+            prompt_input["memories_str"] = _INPUT_BUDGET_TRUNCATION_MARKER
+            return True
+        prompt_input["memories_str"] = memories[: max(1, len(memories) // 2)]
+        return True
+    return False
+
+
+def _daily_sweep_folder_task(folder_options: Sequence[tuple[str, str]], needs_folder_ids: Sequence[str]) -> str:
+    if not folder_options or not needs_folder_ids:
+        return "Folder task: none. folder_assignments must be empty."
+    folders = ", ".join(f"{folder_id} ({name})" for folder_id, name in folder_options)
+    return _DAILY_SWEEP_FOLDER_TASK.format(unfiled=", ".join(needs_folder_ids), folders=folders)
+
+
+def _daily_sweep_request_body_bytes(
+    model: Any,
+    prompt_value: Any,
+    invoke_kwargs: Mapping[str, Any],
+    *,
+    require_payload_builder: bool = False,
+) -> int:
+    """Measure the JSON body sent by the OpenAI-compatible client.
+
+    The QA gateway's input budget covers the serialized request envelope, not
+    only the rendered prompt. Keep the fallback for scripted/direct test
+    models outside the QA path; a bounded QA invocation must take the exact
+    payload path or fail closed.
+    """
+
+    prompt_text = prompt_value.to_string() if hasattr(prompt_value, "to_string") else str(prompt_value)
+    fallback = len(prompt_text.encode("utf-8"))
+    payload_builder = getattr(model, "_get_request_payload", None)
+    if not callable(payload_builder):
+        if require_payload_builder:
+            raise MemoryExtractionError("daily_sweep_summary_request_serialization")
+        return fallback
+    try:
+        payload = payload_builder(prompt_value, **dict(invoke_kwargs))
+        if not isinstance(payload, Mapping):
+            if require_payload_builder:
+                raise MemoryExtractionError("daily_sweep_summary_request_serialization")
+            return fallback
+        body = {key: value for key, value in payload.items() if key != "extra_headers"}
+        return len(json.dumps(body, separators=(",", ":"), ensure_ascii=False).encode("utf-8"))
+    except (TypeError, ValueError, OverflowError) as error:
+        if require_payload_builder:
+            raise MemoryExtractionError("daily_sweep_summary_request_serialization") from error
+        return fallback
+
+
+@SweepDispatchScope.certify_pre_dispatch
+def run_daily_sweep_summary_agent(
+    uid: str,
+    summary_rows: Sequence[tuple[str, str]],
+    transcript_lookup: Dict[str, str],
+    *,
+    folder_options: Sequence[tuple[str, str]] = (),
+    needs_folder_ids: Sequence[str] = (),
+    max_candidates: int = 8,
+    max_transcript_fetches: int = 8,
+    max_fetch_characters: int = 8_000,
+    memory_searcher: Optional[Callable[[str], Sequence[str]]] = None,
+    max_memory_lookups: int = 4,
+    cache_key: Optional[str] = None,
+    llm: Optional[Any] = None,
+    max_provider_retries: Optional[int] = None,
+    max_input_tokens: Optional[int] = None,
+    max_output_tokens: Optional[int] = None,
+    jit_run_id: Optional[str] = None,
+    jit_max_spend_micro_usd: Optional[int] = None,
+    dispatch_evidence: Optional[MutableMapping[str, Any]] = None,
+) -> DailySweepAgentPassOutput:
+    """Run the bounded two-phase daily agent; raises MemoryExtractionError on failure.
+
+    Strict by design: failures keep the source incomplete with no cursor advance.
+    Within a fenced claim, the wrapper certifies preparation failures only until
+    the first dispatch latch; later or unknown failures stay indeterminate.
+    ``memory_searcher(query) -> Sequence[str]`` is a read-only seam over the
+    user's prior memory ledger; absent or failing lookups degrade to an empty
+    result block, never to a failed day.  Both phases share one byte-identical
+    prompt prefix so phase B reuses phase A's provider prompt cache.
+    """
+
+    from utils.prompts import daily_sweep_summary_agent_prompt, daily_sweep_transcript_review_prompt
+
+    if not summary_rows:
+        return DailySweepAgentPassOutput()
+    known_ids = {conversation_id for conversation_id, _ in summary_rows}
+    user_name, memories_str = get_prompt_memories(uid)
+    parser = PydanticOutputParser(pydantic_object=DailySweepAgentPassOutput)
+    common = {
+        'user_name': user_name,
+        'current_date': current_date_for_uid(uid),
+        'memories_str': memories_str,
+        'summaries_block': _daily_sweep_summaries_block(summary_rows),
+        'folder_task': _daily_sweep_folder_task(folder_options, needs_folder_ids),
+        'max_candidates': max_candidates,
+        'format_instructions': parser.get_format_instructions(),
+    }
+
+    if dispatch_evidence is not None:
+        dispatch_evidence.clear()
+        dispatch_evidence.update(
+            {
+                'feature': 'memories',
+                'sdk_max_retries': max_provider_retries,
+                'jit_run_id': jit_run_id,
+                'requests': [],
+            }
+        )
+
+    def invoke(prompt: Any, prompt_input: Dict[str, Any]) -> DailySweepAgentPassOutput:
+        model = llm if llm is not None else get_llm('memories', cache_key=cache_key, max_retries=max_provider_retries)
+        prompt_input = dict(prompt_input)
+        prompt_value = prompt.invoke(prompt_input)
+        request_id = str(uuid4()) if dispatch_evidence is not None else None
+        invoke_kwargs: Dict[str, Any] = {}
+        if max_output_tokens is not None:
+            if isinstance(max_output_tokens, bool) or max_output_tokens <= 0:
+                raise ValueError('daily sweep output token budget is invalid')
+            invoke_kwargs['max_completion_tokens'] = max_output_tokens
+        if jit_run_id is not None:
+            if (
+                request_id is None
+                or jit_max_spend_micro_usd is None
+                or max_input_tokens is None
+                or max_output_tokens is None
+            ):
+                raise ValueError('QA JIT budget requires request, input, output, and spend bounds')
+            invoke_kwargs['extra_headers'] = {
+                'x-omi-request-id': request_id,
+                'x-omi-jit-contract-version': 'jit-cloud-qa-v1',
+                'x-omi-jit-run-id': jit_run_id,
+                'x-omi-jit-max-attempts': '1',
+                'x-omi-jit-max-output-tokens': str(max_output_tokens),
+                'x-omi-jit-max-input-tokens': str(max_input_tokens),
+                'x-omi-jit-max-spend-micro-usd': str(jit_max_spend_micro_usd),
+            }
+        input_bytes = _daily_sweep_request_body_bytes(
+            model,
+            prompt_value,
+            invoke_kwargs,
+            require_payload_builder=jit_run_id is not None,
+        )
+        truncated = False
+        if max_input_tokens is not None:
+            while input_bytes > max_input_tokens:
+                if not _shrink_daily_sweep_prompt_input(prompt_input):
+                    break
+                truncated = True
+                prompt_value = prompt.invoke(prompt_input)
+                input_bytes = _daily_sweep_request_body_bytes(
+                    model,
+                    prompt_value,
+                    invoke_kwargs,
+                    require_payload_builder=jit_run_id is not None,
+                )
+            if truncated and input_bytes <= max_input_tokens:
+                common['summaries_block'] = prompt_input.get('summaries_block', common.get('summaries_block'))
+                common['memories_str'] = prompt_input.get('memories_str', common.get('memories_str'))
+                if dispatch_evidence is not None:
+                    dispatch_evidence['truncated'] = True
+                record_fallback(
+                    component='other',
+                    from_mode='full_input',
+                    to_mode='truncated_input',
+                    reason='quota',
+                    outcome='degraded',
+                    log=logger,
+                )
+            if input_bytes > max_input_tokens:
+                _note_daily_sweep_dispatch_failure(dispatch_evidence, 'daily_sweep_summary_input_budget')
+                raise MemoryExtractionError('daily_sweep_summary_input_budget')
+        SweepDispatchScope.mark_provider_dispatch()
+        request_evidence: Dict[str, Any] | None = None
+        if dispatch_evidence is not None:
+            request_evidence = {
+                'request_id': request_id,
+                'input_bytes': input_bytes,
+                'max_input_tokens': max_input_tokens,
+                'max_output_tokens': max_output_tokens,
+                'max_spend_micro_usd': jit_max_spend_micro_usd,
+                'usage_observed': False,
+            }
+            casted_requests = dispatch_evidence.setdefault('requests', [])
+            if not isinstance(casted_requests, list):
+                raise RuntimeError('daily sweep dispatch evidence requests is malformed')
+            # Persist the request identity before the provider call. A provider
+            # failure still consumed an admitted request and must remain
+            # joinable without claiming usage or a successful result.
+            casted_requests.append(request_evidence)
+        response = model.invoke(prompt_value, **invoke_kwargs)
+        usage = getattr(response, 'usage_metadata', None)
+        if isinstance(usage, Mapping):
+            numeric = {
+                key: usage[key]
+                for key in ('input_tokens', 'output_tokens', 'total_tokens')
+                if isinstance(usage.get(key), int) and not isinstance(usage.get(key), bool) and usage[key] >= 0
+            }
+            if numeric:
+                if request_evidence is not None:
+                    request_evidence['usage_observed'] = True
+                    request_evidence['usage_tokens'] = numeric
+        # Record the durable request before parsing. A malformed structured
+        # response still consumed a gateway attempt and must remain visible to
+        # the QA consumer instead of disappearing behind parser failure.
+        parsed = parser.invoke(response)
+        return parsed
+
+    lookup_memory_ids: set[str] = set()
+
+    def lookup_results_block(lookups: Sequence[Any]) -> str:
+        sections = []
+        for lookup in lookups:
+            query = str(getattr(lookup, "query", "") or "").strip()[:DAILY_SWEEP_LOOKUP_QUERY_CHARACTERS]
+            if not query:
+                continue
+            results: List[str] = []
+            if memory_searcher is not None:
+                try:
+                    results = [str(item) for item in memory_searcher(query)]
+                except Exception:
+                    results = []
+            for item in results[:DAILY_SWEEP_LOOKUP_RESULT_ROWS]:
+                memory_id = _ledger_lookup_memory_id(item)
+                if memory_id:
+                    lookup_memory_ids.add(memory_id)
+            rendered = (
+                "\n".join(
+                    f"- {_neutralize_fences(str(item)[:DAILY_SWEEP_LOOKUP_RESULT_CHARACTERS])}"
+                    for item in results[:DAILY_SWEEP_LOOKUP_RESULT_ROWS]
+                )
+                or "- (no matches)"
+            )
+            sections.append(f"Q: {_neutralize_fences(query)}\n{rendered}")
+        return "\n\n".join(sections)
+
+    try:
+        with track_usage(uid, Features.MEMORIES):
+            first = invoke(
+                daily_sweep_summary_agent_prompt,
+                {
+                    **common,
+                    'max_transcript_fetches': max_transcript_fetches,
+                    'max_memory_lookups': max_memory_lookups,
+                },
+            )
+            requests = [
+                request
+                for request in first.transcript_requests
+                if request.conversation_id in known_ids and transcript_lookup.get(request.conversation_id)
+            ][: max(0, max_transcript_fetches)]
+            lookups = list(first.memory_lookups)[: max(0, max_memory_lookups)] if callable(memory_searcher) else []
+            if not requests and not lookups:
+                sanitized = _sanitized_daily_sweep_output(first, known_ids, max_candidates, lookup_ids=set())
+                return sanitized
+            excerpts = "\n\n".join(
+                f"[{request.conversation_id}] "
+                f"({_neutralize_fences(str(request.reason or '')[:DAILY_SWEEP_REQUEST_REASON_CHARACTERS])})\n"
+                + _neutralize_fences(
+                    (transcript_lookup.get(request.conversation_id) or "")[: max(1, max_fetch_characters)]
+                )
+                for request in requests
+            )
+            draft = "\n".join(
+                f"- {_neutralize_fences(str(memory.content or '')[:DAILY_SWEEP_DRAFT_CONTENT_CHARACTERS])} "
+                f"(from {', '.join(str(item)[:64] for item in memory.conversation_ids[:DAILY_SWEEP_DRAFT_CITED_IDS])}; "
+                f"basis={memory.basis}; arguments="
+                f"{_neutralize_fences(json.dumps(memory.arguments, sort_keys=True, default=str))[:400]})"
+                for memory in first.memories[:DAILY_SWEEP_DRAFT_ROW_LIMIT]
+            )
+            second = invoke(
+                daily_sweep_transcript_review_prompt,
+                {
+                    **common,
+                    'draft_block': draft or '(none)',
+                    'excerpts_block': excerpts or '(none requested)',
+                    'prior_memories_block': lookup_results_block(lookups) or '(none requested)',
+                },
+            )
+        merged = DailySweepAgentPassOutput(
+            memories=second.memories,
+            transcript_requests=[],
+            memory_lookups=[],
+            folder_assignments=second.folder_assignments or first.folder_assignments,
+        )
+        sanitized = _sanitized_daily_sweep_output(merged, known_ids, max_candidates, lookup_ids=lookup_memory_ids)
+        return sanitized
+    except MemoryExtractionError as error:
+        _note_daily_sweep_dispatch_failure(dispatch_evidence, error.extractor)
+        logger.error("Daily sweep summary agent failed: %s", error.extractor)
+        raise
+    except Exception as error:
+        _note_daily_sweep_dispatch_failure(
+            dispatch_evidence,
+            "daily_sweep_summary_agent",
+            cause_class=type(error).__name__,
+        )
+        logger.error("Daily sweep summary agent failed: %s", type(error).__name__)
+        raise MemoryExtractionError("daily_sweep_summary_agent") from error
+
+
+def _sanitized_daily_sweep_output(
+    output: DailySweepAgentPassOutput,
+    known_ids: set,
+    max_candidates: int,
+    *,
+    lookup_ids: Optional[set[str]] = None,
+) -> DailySweepAgentPassOutput:
+    """Drop memories without valid provenance and assignments for unknown rows.
+
+    folder_id is only checked for non-emptiness here; membership in the user's
+    real folder set is enforced downstream in daily_memory_sweep (both when the
+    page is staged and again on apply). Do not reuse this sanitizer anywhere
+    that lacks that second gate. A duplicate_of marker is kept only when it
+    cites a ledger id the model actually saw in lookup results; any other
+    non-empty marker is cleared so the candidate is processed as new.
+    """
+
+    allowed_lookup_ids = lookup_ids if lookup_ids is not None else None
+    memories = []
+    for memory in output.memories:
+        cited = [conversation_id for conversation_id in memory.conversation_ids if conversation_id in known_ids]
+        content = " ".join((memory.content or "").split())
+        if not cited or not content:
+            continue
+        duplicate_of = (memory.duplicate_of or "").strip()
+        if allowed_lookup_ids is not None and _normalized_duplicate_of(duplicate_of) not in allowed_lookup_ids:
+            duplicate_of = ""
+        basis = (memory.basis or "").strip().casefold()
+        arguments = _scoped_claim_arguments(memory.arguments, basis=basis)
+        memories.append(
+            DailySweepAgentMemory(
+                content=content,
+                conversation_ids=cited,
+                basis=memory.basis,
+                about=memory.about,
+                slot=(memory.slot or "").strip()[:64],
+                duplicate_of=duplicate_of,
+                arguments=arguments,
+            )
+        )
+        if len(memories) >= max(0, max_candidates):
+            break
+    assignments = [
+        assignment
+        for assignment in output.folder_assignments
+        if assignment.conversation_id in known_ids and assignment.folder_id.strip()
+    ]
+    return DailySweepAgentPassOutput(
+        memories=memories,
+        transcript_requests=[],
+        memory_lookups=[],
+        folder_assignments=assignments,
+    )

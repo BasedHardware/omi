@@ -15,6 +15,7 @@ import {
   minIntervalMs,
   notificationsActive,
   notifyProactive,
+  setJitLegacyAmbientGate,
   setNotificationSnooze,
   type ThrottleInput
 } from './notify'
@@ -60,6 +61,34 @@ describe('minIntervalMs (frequency table)', () => {
 })
 
 describe('NotificationThrottle.tryAllow', () => {
+  it('reserves a single local display slot and spends it only on commit', () => {
+    const t = new NotificationThrottle()
+    const slot = t.reserve(input())
+    expect('token' in slot).toBe(true)
+    expect(t.reserve(input({ assistantId: 'task', now: T0 + 1 }))).toEqual({
+      allowed: false,
+      reason: 'frequency'
+    })
+    t.cancel(slot as Extract<typeof slot, { token: string }>)
+    expect(t.tryAllow(input({ now: T0 + 1 })).allowed).toBe(true)
+  })
+
+  it('stops blocking once a reservation nobody released has expired', () => {
+    // A slot leaked by a throw between reserve and commit used to gag EVERY
+    // proactive lane for the life of the process. Reservations expire.
+    const t = new NotificationThrottle()
+    const leaked = t.reserve(input({ frequencyLevel: 5 }))
+    expect('token' in leaked).toBe(true)
+    expect(t.decide(input({ frequencyLevel: 5, now: T0 + 9 * MIN }))).toEqual({
+      allowed: false,
+      reason: 'frequency'
+    })
+    expect(t.decide(input({ frequencyLevel: 5, now: T0 + 10 * MIN }))).toEqual({ allowed: true })
+    // The stale slot is gone, not merely ignored: committing it cannot resurrect
+    // a display budget the throttle has already released.
+    expect(t.commit(leaked as Extract<typeof leaked, { token: string }>)).toBe(false)
+  })
+
   it('level 0 (Off, the default) suppresses everything proactive', () => {
     const t = new NotificationThrottle()
     expect(t.tryAllow(input({ frequencyLevel: 0 }))).toEqual({
@@ -72,6 +101,18 @@ describe('NotificationThrottle.tryAllow', () => {
     const t = new NotificationThrottle()
     for (let i = 0; i < 5; i++)
       expect(t.tryAllow(input({ frequencyLevel: 5, now: T0 + i })).allowed).toBe(true)
+  })
+
+  it('level 5 still respects one exclusive pending display slot', () => {
+    const t = new NotificationThrottle()
+    const first = t.reserve(input({ frequencyLevel: 5 }))
+    expect('token' in first).toBe(true)
+    expect(t.decide(input({ frequencyLevel: 5, now: T0 + 1 }))).toEqual({
+      allowed: false,
+      reason: 'frequency'
+    })
+    t.cancel(first as Extract<typeof first, { token: string }>)
+    expect(t.decide(input({ frequencyLevel: 5, now: T0 + 1 }))).toEqual({ allowed: true })
   })
 
   it('holds an assistant off until its interval has elapsed', () => {
@@ -155,6 +196,7 @@ describe('notifyProactive (delivery)', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     setNotificationSnooze(null)
+    setJitLegacyAmbientGate(null)
     h.getAppSettings.mockReturnValue({ notificationsEnabled: true, notificationFrequency: 5 })
     vi.spyOn(console, 'log').mockImplementation(() => {})
   })
@@ -181,6 +223,7 @@ describe('notifyProactive (delivery)', () => {
 describe('notificationsActive (would-a-toast-appear predicate)', () => {
   beforeEach(() => {
     setNotificationSnooze(null)
+    setJitLegacyAmbientGate(null)
     h.getAppSettings.mockReturnValue({ notificationsEnabled: true, notificationFrequency: 3 })
   })
 
@@ -215,5 +258,13 @@ describe('notificationsActive (would-a-toast-appear predicate)', () => {
     // only snooze/master/frequency, never the rate clocks.
     expect(notificationsActive('insight', T0)).toBe(true)
     expect(notificationsActive('insight', T0 + 1)).toBe(true)
+  })
+
+  it('stops the Insight pipeline while JIT rollout is effective, not only the toast', () => {
+    setJitLegacyAmbientGate(() => true)
+    expect(notificationsActive('insight', T0)).toBe(false)
+    expect(notificationsActive('focus', T0)).toBe(true)
+    expect(notifyProactive('insight', payload, { now: T0 })).toBe(false)
+    expect(h.deliverInsight).not.toHaveBeenCalled()
   })
 })

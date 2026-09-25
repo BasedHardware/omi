@@ -1,0 +1,10 @@
+{
+  "version": "26.6",
+  "build": "17F113",
+  "app_path": "/Applications/Xcode_26.6.app",
+  "evidence": {
+    "github_actions": "macos-26 image 20260907.0351.1: Xcode 26.6 (17F113) at /Applications/Xcode_26.6.app (default); https://github.com/actions/runner-images/blob/main/images/macos/macos-26-arm64-Readme.md",
+    "codemagic": "mac_mini_m4 image 'Xcode 26.6.x (default)': Xcode 26.6 (17F113) at /Applications/Xcode-26.6.app; https://docs.codemagic.io/specs-macos/xcode-26-6/"
+  },
+  "notes": "Single source of truth for the desktop Swift ship/CI toolchain. Consumers (desktop/macos/scripts/run-swift-ci.sh, .github/scripts/test_desktop_swift_ci_contract.py, codemagic.yaml workflows omi-desktop-swift-release and omi-desktop-swift-preview) must read this file instead of duplicating the version or build literals. Pin only versions that exist on BOTH GitHub-hosted macos-26 runners and Codemagic mac_mini_m4 images."
+}

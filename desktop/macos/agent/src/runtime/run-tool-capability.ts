@@ -78,6 +78,8 @@ export interface RunToolCapability {
   originatingUserText: string;
   precedingAssistantText: string | null;
   runMode: RunMode;
+  /** Kernel-derived adapter built-in policy; request metadata cannot widen it. */
+  builtInToolPolicy: "default" | "read_only";
   chatMode: string | null;
   profileGeneration: number;
   manifestVersion: number;
@@ -277,13 +279,15 @@ export class RunToolCapabilityBroker {
     const projectionContext = {
       executionRole: persisted.profile.executionRole,
       screenContext: persisted.screenContext,
+      jitKnowledgeToolsEnabled: persisted.jitKnowledgeToolsEnabled,
+      jitProactivity: persisted.jitProactivity,
       surfaceKind: persisted.surfaceKind,
       chatFirstUi: persisted.chatFirstUi,
       controlGeneration: persisted.chatFirstControlGeneration,
     };
     const snapshot = buildToolAvailabilitySnapshot(adapterProjection, projectionContext);
     // Realtime-voice runs invoke Swift-executed voice tools that no chat
-    // adapter advertises (ask_higher_model, point_click, …). Authorize the
+    // adapter advertises (think_deeper, point_click, …). Authorize the
     // run's surface projection alongside the adapter projection so the
     // allowlist matches the tools the surface actually offers the provider.
     const surfaceTools = REALTIME_VOICE_SURFACE_KINDS.has(persisted.surfaceKind)
@@ -314,6 +318,13 @@ export class RunToolCapabilityBroker {
       originatingUserText: persisted.originatingUserText,
       precedingAssistantText: persisted.precedingAssistantText,
       runMode: persisted.runMode,
+      // Ask-mode service turns are non-interactive system work. Derive this
+      // from persisted run/surface authority, never an external-ref prefix or
+      // caller metadata, so choosing a label cannot grant mutation tools.
+      builtInToolPolicy:
+        persisted.runMode === "ask" && persisted.surfaceKind === "service"
+          ? "read_only"
+          : "default",
       chatMode: persisted.chatMode,
       profileGeneration: persisted.profile.generation,
       manifestVersion: snapshot.manifestVersion,
@@ -395,6 +406,9 @@ export class RunToolCapabilityBroker {
     const normalized = normalizeOmiToolName(projection, input.toolName).canonicalName;
     const tool = toolManifestEntry(normalized);
     if (!tool) this.reject("tool_not_manifested", "Tool is absent from the canonical Omi manifest");
+    if (capability.builtInToolPolicy === "read_only" && tool.annotations.readOnlyHint !== true) {
+      this.reject("tool_not_allowed", "Ask-mode service runs have hard read-only tool authority");
+    }
     if (!capability.allowedToolNames.includes(tool.name)) {
       this.reject("tool_not_allowed", "Tool is unavailable for this run execution profile");
     }
@@ -713,6 +727,8 @@ export class RunToolCapabilityBroker {
     runMode: RunMode;
     chatMode: string | null;
     screenContext: boolean;
+    jitKnowledgeToolsEnabled: boolean;
+    jitProactivity: boolean;
     chatFirstUi: boolean;
     chatFirstControlGeneration: number | null;
     /** Spawn-time child tool restriction; null = no policy, [] = no tools (fail closed). */
@@ -759,7 +775,15 @@ export class RunToolCapabilityBroker {
       && !Array.isArray(admitted.capabilities)
       ? admitted.capabilities as Record<string, unknown>
       : {};
-    const chatFirstUi = admittedCapabilities.chatFirstUi === true && text(row.surface_kind) === "main_chat";
+    // The run's surface, falling back to the session's for runs admitted before
+    // it was recorded. `s.surface_kind` is where the session was first
+    // registered — for a shared shell that can be `floating_chat` while main
+    // Chat runs on it, and gating chat-first on that rejected the tool the
+    // model had just been offered.
+    const runSurfaceKind = typeof runInput.surfaceKind === "string" && runInput.surfaceKind.trim()
+      ? runInput.surfaceKind.trim()
+      : text(row.surface_kind);
+    const chatFirstUi = admittedCapabilities.chatFirstUi === true && runSurfaceKind === "main_chat";
     const controlGeneration = Number(admittedCapabilities.chatFirstControlGeneration);
     return {
       ownerId: text(row.owner_id),
@@ -768,7 +792,10 @@ export class RunToolCapabilityBroker {
       attemptStatus: text(row.authoritative_attempt_status) as AttemptStatus,
       currentAttemptId: text(latest.attempt_id),
       profile: this.profileForSession(sessionId),
-      surfaceKind: externalSurface?.authority === "swift_realtime" ? "realtime_voice" : text(row.surface_kind),
+      // Also the run's surface: Swift re-validates an authorized invocation with
+      // `surfaceKind == "main_chat"` before it will execute a chat-first tool,
+      // and selects the manifest digest from the same field.
+      surfaceKind: externalSurface?.authority === "swift_realtime" ? "realtime_voice" : runSurfaceKind,
       externalRefKind: row.external_ref_kind === null ? null : text(row.external_ref_kind),
       externalRefId: row.external_ref_id === null ? null : text(row.external_ref_id),
       originatingUserText: typeof runInput.prompt === "string" ? runInput.prompt : "",
@@ -776,6 +803,8 @@ export class RunToolCapabilityBroker {
       runMode: text(row.mode) === "act" ? "act" : "ask",
       chatMode: typeof metadata.chatMode === "string" ? metadata.chatMode : null,
       screenContext: admittedScreenContext(runInput),
+      jitKnowledgeToolsEnabled: metadata.jitKnowledgeToolsEnabled === true,
+      jitProactivity: metadata.jitBudget !== undefined,
       chatFirstUi,
       chatFirstControlGeneration: chatFirstUi && Number.isSafeInteger(controlGeneration) && controlGeneration >= 0
         ? controlGeneration

@@ -6,6 +6,8 @@ import shlex
 from dataclasses import dataclass
 
 RECONCILE_SCRIPT = 'reconcile_firestore_indexes.py'
+FIELD_EXEMPTION_SCRIPT = 'reconcile_firestore_field_exemptions.py'
+FIRESTORE_SCHEMA_SCRIPTS = frozenset({RECONCILE_SCRIPT, FIELD_EXEMPTION_SCRIPT})
 FIRESTORE_MUTATION_VERBS = frozenset({'create', 'delete', 'update'})
 
 
@@ -46,6 +48,8 @@ class ReconciliationInvocation:
 
     @property
     def mutates_schema(self) -> bool:
+        if any(token.endswith(FIELD_EXEMPTION_SCRIPT) for token in self.tokens):
+            return '--apply' in self.tokens
         return (
             '--check-only' not in self.tokens
             and '--dry-run' not in self.tokens
@@ -106,10 +110,13 @@ def reconciliation_invocations(run: str) -> tuple[ReconciliationInvocation, ...]
     invocations = [
         ReconciliationInvocation(tokens)
         for tokens in commands
-        if any(token.endswith(RECONCILE_SCRIPT) for token in tokens)
+        if any(token.endswith(tuple(FIRESTORE_SCHEMA_SCRIPTS)) for token in tokens)
     ]
     invocations.extend(
-        ReconciliationInvocation((RECONCILE_SCRIPT,)) for line in malformed_lines if RECONCILE_SCRIPT in line
+        ReconciliationInvocation((script,))
+        for line in malformed_lines
+        for script in FIRESTORE_SCHEMA_SCRIPTS
+        if script in line
     )
     return tuple(invocations)
 

@@ -30,7 +30,7 @@ struct AddMemorySheet: View {
     VStack(spacing: OmiSpacing.xl) {
       // Header with close button
       HStack {
-        Text("Add Memory")
+        Text("New Memory")
           .scaledFont(size: OmiType.heading, weight: .semibold)
           .foregroundColor(Ink.primary)
         Spacer()
@@ -64,7 +64,10 @@ struct AddMemorySheet: View {
             .padding(.horizontal, OmiSpacing.xl)
             .padding(.vertical, OmiSpacing.sm)
             .background(
-              viewModel.newMemoryText.isEmpty ? Ink.rowFillHover : Ink.surface
+              // Ink.surface is this label's own colour, so filling with it painted white on
+              // white and the button read as blank the moment the field had text. The edit
+              // sheet's identical button already fills with Ink.primary.
+              viewModel.newMemoryText.isEmpty ? Ink.rowFillHover : Ink.primary
             )
             .cornerRadius(OmiChrome.elementRadius)
             .overlay(

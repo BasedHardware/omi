@@ -99,4 +99,37 @@ final class EscapeKeyDispatchTests: XCTestCase {
     XCTAssertNil(editingNoteId)
     XCTAssertFalse(rewindHandled)
   }
+
+  @MainActor
+  func testAtlasSelectionTakesEscapeBeforeLeavingThePage() {
+    let window = NSWindow(contentRect: .zero, styleMask: [], backing: .buffered, defer: true)
+    var selected = true
+    var leftMap = false
+    let navigation = WindowEscapeKeyMonitor.shared.register(window: window, priority: .navigation) {
+      leftMap = true
+      return true
+    }
+    let content = WindowEscapeKeyMonitor.shared.register(window: window, priority: .content) {
+      switch MemoryAtlasDismissal.next(
+        isSearching: false, hasSelection: selected, hasTrail: false, isInsideNeighbourhood: false)
+      {
+      case .selection:
+        selected = false
+        return true
+      case .passThrough:
+        leftMap = true
+        return true
+      default:
+        return true
+      }
+    }
+    defer {
+      WindowEscapeKeyMonitor.shared.unregister(content)
+      WindowEscapeKeyMonitor.shared.unregister(navigation)
+    }
+
+    XCTAssertTrue(WindowEscapeKeyMonitor.shared.dispatchEscape(in: window))
+    XCTAssertFalse(selected)
+    XCTAssertFalse(leftMap)
+  }
 }

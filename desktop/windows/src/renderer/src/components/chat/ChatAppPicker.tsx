@@ -141,17 +141,28 @@ function AssistantRow(props: {
   )
 }
 
-/** Gated container: reads the pref + fetches chat apps + wires selection into the
- *  shared chat engine. Renders nothing unless the pref is ON and there is at least
- *  one chat-capable app (Mac disables its picker when `chatApps.isEmpty`). */
+/** Gate wrapper: reads the pref and renders nothing when the picker is off — WITHOUT
+ *  mounting the component that fetches chat apps.
+ *
+ *  `chatAppPickerEnabled` is optional, so the picker is off for almost everyone, and
+ *  the fetch used to run above the gate: every ask-bar focus mounts the chat panel,
+ *  so each focus cycle issued a `GET /v1/apps` for a picker that then returned null.
+ *  This is the same split (and the same reason) as HubChatHeader's. */
 export function ChatAppPicker(): React.JSX.Element | null {
   const [enabled, setEnabled] = useState(() => getPreferences().chatAppPickerEnabled === true)
   useEffect(() => onPreferencesChange((p) => setEnabled(p.chatAppPickerEnabled === true)), [])
 
+  if (!enabled) return null
+  return <ChatAppPickerGated />
+}
+
+/** Fetches chat apps + wires selection into the shared chat engine. Renders nothing
+ *  when there is no chat-capable app (Mac disables its picker when `chatApps.isEmpty`). */
+function ChatAppPickerGated(): React.JSX.Element | null {
   const { chat } = useAppState()
   const { chatApps } = useChatApps()
 
-  if (!enabled || chatApps.length === 0) return null
+  if (chatApps.length === 0) return null
 
   return (
     <div className="mb-3 flex items-center">

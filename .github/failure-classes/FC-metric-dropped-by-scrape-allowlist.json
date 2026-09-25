@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-metric-dropped-by-scrape-allowlist",
+  "violated_contract": "A metric a feature relies on for operational visibility must be named so the collector actually keeps it. The Cloud Run managed-Prometheus sidecar (backend/deploy/cloud_run_gmp_sidecar.yaml) keeps only names matching omi_.*; any other prometheus_client metric is exported on /metrics, passes every unit test, and is silently dropped at ingestion, so dashboards and alerts built on it read 'no data', which looks identical to 'nothing happened'. Observed 2026-09-23: conversation_relevance_decision_total shipped in #16587 and never reached Prometheus after the prod deploy; lazy_desktop_deferral_total and jit_first_open_total in the same module are dropped the same way.",
+  "canonical_prevention": "Name every Cloud Run application metric with the omi_ prefix, and pin each feature metric that an alert or rollout check depends on with a unit test that reads the sidecar's keep regex from the deploy YAML and asserts the metric name matches it, so a rename or a new metric outside the allowlist fails in CI instead of at ingestion.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_relevance_metric_is_scraped.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/utils/metrics.py",
+    "backend/deploy/cloud_run_gmp_sidecar.yaml"
+  ],
+  "status": "open"
+}

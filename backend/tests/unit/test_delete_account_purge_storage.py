@@ -37,7 +37,9 @@ def users_service():
         "database.conversations": AutoMockModule("database.conversations"),
         "database.memories": AutoMockModule("database.memories"),
         "database.screen_activity": AutoMockModule("database.screen_activity"),
+        "database.frame_requests": AutoMockModule("database.frame_requests"),
         "database.vector_db": AutoMockModule("database.vector_db"),
+        "database.legal_holds": AutoMockModule("database.legal_holds"),
         "database.dev_api_key": AutoMockModule("database.dev_api_key"),
         "database.mcp_api_key": AutoMockModule("database.mcp_api_key"),
         "database.mcp_oauth": AutoMockModule("database.mcp_oauth"),
@@ -47,6 +49,8 @@ def users_service():
         "utils.stripe": AutoMockModule("utils.stripe"),
         "utils.executors": AutoMockModule("utils.executors"),
         "utils.log_sanitizer": AutoMockModule("utils.log_sanitizer"),
+        "utils.observability": _pkg("utils.observability"),
+        "utils.observability.fallback": AutoMockModule("utils.observability.fallback"),
         "utils.integration_telemetry": AutoMockModule("utils.integration_telemetry"),
         "utils.other": _pkg("utils.other"),
         "utils.other.endpoints": AutoMockModule("utils.other.endpoints"),
@@ -55,6 +59,8 @@ def users_service():
         "utils.memory.canonical_memory_adapter": AutoMockModule("utils.memory.canonical_memory_adapter"),
         "utils.memory.memory_service": AutoMockModule("utils.memory.memory_service"),
         "utils.memory.memory_system": AutoMockModule("utils.memory.memory_system"),
+        "utils.retrieval": _pkg("utils.retrieval"),
+        "utils.retrieval.frame_request_storage": AutoMockModule("utils.retrieval.frame_request_storage"),
         "utils.twilio_service": AutoMockModule("utils.twilio_service"),
     }
     with stub_modules(fakes):
@@ -131,7 +137,10 @@ def test_id_enumeration_happens_before_firestore_wipe(users_service):
         users_service.background_wipe_user_data("uid1")
     finally:
         _stop(patchers)
-    assert order == ["enumerate", "enumerate", "wipe"], order
+    # Conversation IDs feed the conversation-vector, transcript-vector, and
+    # permanent-photo pixel inventories. All three snapshots must finish
+    # before the recursive Firestore wipe removes their source documents.
+    assert order == ["enumerate", "enumerate", "enumerate", "wipe"], order
 
 
 def test_pinecone_failure_does_not_block_recordings_or_firestore_wipe(users_service):

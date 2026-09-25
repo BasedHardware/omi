@@ -23,6 +23,14 @@ actor RewindDatabase {
   /// Path to the running flag file (used to detect unclean shutdown)
   private var runningFlagPath: String?
 
+  /// Whether the *previous* session ended uncleanly, latched at the first
+  /// observation in this process. `.omi_running` is created at the end of
+  /// `performInitialization()`, so the answer stops being observable once the
+  /// database opens — and any of the lazily-initializing storage actors can get
+  /// there first. That race is why `App Startup Timing` reported
+  /// `had_unclean_shutdown = true` on ~every sample.
+  private var uncleanShutdownVerdict: Bool?
+
   /// The user ID this database is configured for (nil = not yet configured → "anonymous")
   private var configuredUserId: String?
 
@@ -332,6 +340,10 @@ actor RewindDatabase {
     initializationTask = nil
     runningFlagPath = nil
     openedForUserId = nil
+    // The database identity is being torn down, so the latched verdict no longer
+    // describes anything. The next performInitialization() makes a fresh
+    // authoritative observation for whichever user it opens.
+    uncleanShutdownVerdict = nil
     initGeneration += 1
     poolEpoch += 1
     log("RewindDatabase: Closed database (generation \(initGeneration), pool epoch \(poolEpoch))")
@@ -383,9 +395,17 @@ actor RewindDatabase {
   }
 
   /// Check if the previous session ended with an unclean shutdown (crash, force quit, etc.)
+  ///
+  /// Order-independent: whoever observes first latches the verdict for the whole
+  /// process, and `performInitialization()` latches it before it writes this
+  /// session's own running flag. A later caller therefore reads the previous
+  /// session's state, not this one's.
   func hadUncleanShutdown() -> Bool {
+    if let uncleanShutdownVerdict { return uncleanShutdownVerdict }
     let flagPath = userBaseDirectory().appendingPathComponent(".omi_running").path
-    return FileManager.default.fileExists(atPath: flagPath)
+    let verdict = FileManager.default.fileExists(atPath: flagPath)
+    uncleanShutdownVerdict = verdict
+    return verdict
   }
 
   /// Initialize the database with migrations.
@@ -448,6 +468,7 @@ actor RewindDatabase {
     expectedUserId: String,
     expectedGeneration: Int
   ) async throws {
+    try Task.checkCancellation()
     guard dbQueue == nil else { return }
 
     // Resolve the directory once. `retargetEffectiveOwner` may run while
@@ -471,6 +492,13 @@ actor RewindDatabase {
     // Detect unclean shutdown: if the running flag file exists, the previous launch
     // didn't exit cleanly (crash, force quit, power loss)
     let previousCrashed = FileManager.default.fileExists(atPath: flagPath)
+    // This is the authoritative, user-scoped observation and it happens before
+    // this session's flag is written below. Latch it here so a startup-timing
+    // reader that arrives after the database opened still reports the previous
+    // session, whatever order the storage actors initialized in.
+    if uncleanShutdownVerdict == nil {
+      uncleanShutdownVerdict = previousCrashed
+    }
     if previousCrashed {
       log("RewindDatabase: Unclean shutdown detected (running flag exists)")
     }
@@ -528,6 +556,7 @@ actor RewindDatabase {
         }
 
         if isCorrupted && FileManager.default.fileExists(atPath: dbPath) {
+          try Task.checkCancellation()
           log("RewindDatabase: Database is corrupted (error: \(retryError)), attempting recovery...")
           try await handleCorruptedDatabase(at: dbPath, in: omiDir, triggerError: retryError)
           // Retry with recovered or fresh database
@@ -569,6 +598,23 @@ actor RewindDatabase {
       throw CancellationError()
     }
 
+    // Migrate BEFORE publishing the pool. `initialize()` treats
+    // `dbQueue != nil && openedForUserId == targetUser` as "already
+    // initialized", so publishing first and then throwing out of the schema
+    // ladder would latch a half-migrated schema in permanently: every later
+    // initialize() returns early and every caller is handed a pool whose
+    // tables do not match the code. Leaving both unset means the next
+    // initialize() retries the migration from the top.
+    do {
+      try migrate(
+        activeQueue,
+        ownerID: expectedUserId,
+        legacyOwnerFallback: migratedLegacyOwnerID)
+    } catch {
+      try? activeQueue.close()
+      throw error
+    }
+
     dbQueue = activeQueue
     // Bump the pool epoch on every (re)open so storage actors that cached the
     // previous pool revalidate and drop it — recovery may have replaced the
@@ -579,8 +625,6 @@ actor RewindDatabase {
     poolEpoch += 1
     openedForUserId = expectedUserId
     consecutiveQueryIOErrors = 0
-
-    try migrate(activeQueue, legacyOwnerFallback: migratedLegacyOwnerID)
 
     // After unclean shutdown, do a cheap schema sanity check (not a full DB scan).
     // PRAGMA quick_check scans the ENTIRE database regardless of the (N) argument
@@ -1145,7 +1189,13 @@ actor RewindDatabase {
 
   // MARK: - Migrations
 
-  private func migrate(_ queue: DatabasePool, legacyOwnerFallback: String? = nil) throws {
+  /// `ownerID` is passed explicitly because migration now runs *before* `openedForUserId` is
+  /// published, so the owner-scoped migrations cannot read it back off the actor.
+  private func migrate(
+    _ queue: DatabasePool,
+    ownerID: String? = nil,
+    legacyOwnerFallback: String? = nil
+  ) throws {
     var migrator = DatabaseMigrator()
 
     // Migration 1: Create screenshots table
@@ -1529,6 +1579,12 @@ actor RewindDatabase {
     migrator.registerMigration("addTranscriptionConversationRole") { db in
       try db.alter(table: "transcription_sessions") { t in
         t.add(column: "conversationRole", .text).notNull().defaults(to: "ambient")
+      }
+    }
+
+    migrator.registerMigration("addTranscriptionCaptureAttemptId") { db in
+      try db.alter(table: "transcription_sessions") { t in
+        t.add(column: "captureAttemptId", .text)
       }
     }
 
@@ -2568,7 +2624,7 @@ actor RewindDatabase {
       }
     }
 
-    let contextBucketOwnerID = openedForUserId ?? targetUserId()
+    let contextBucketOwnerID = ownerID ?? openedForUserId ?? targetUserId()
     ContextBucketSchema.registerMigration(
       on: &migrator,
       defaults: .standard,
@@ -2577,11 +2633,159 @@ actor RewindDatabase {
 
     RewindAbandonedVideoChunkQuarantine.registerMigration(on: &migrator)
 
+    // Keep new migrations after every previously registered component migration. Existing rows
+    // deliberately start pending so a dark-launched lossless sweep can recover history later.
+    migrator.registerMigration("addScreenActivitySyncState") { db in
+      try Self.installScreenActivitySyncStateSchema(db)
+    }
+
+    // Ledger fields are an additive mirror only. Legacy rows remain intact and
+    // fail closed in the prompt projection until a canonical payload refreshes
+    // their metadata.
+    migrator.registerMigration("addMemoryLedgerMetadata") { db in
+      try Self.addMemoryColumnIfMissing(db, name: "ledgerMetadataJson", type: .text)
+    }
+
+    Self.registerMemoryLedgerEvidenceMigrations(on: &migrator)
+    Self.registerFabricatedActionItemTombstoneRepair(on: &migrator)
+    JITTriggerMirrorSchema.registerMigration(on: &migrator)
+    KnowledgeLedgerMirrorStagingSchema.registerMigration(on: &migrator)
+    Self.registerClientProcessingProjectionMigration(on: &migrator)
+    Self.registerConversationSummarySectionsMigration(on: &migrator)
+    Self.registerConversationLocalSummaryMigration(on: &migrator)
+    Self.registerConversationCaptureGroupMigration(on: &migrator)
+    LocalEmbeddingStore.registerMigration(on: &migrator)
     try migrator.migrate(queue)
     try ContextBucketSchema.removeMigratedLegacyDefaults(
       afterMigrating: queue,
       defaults: .standard,
       ownerID: contextBucketOwnerID)
+  }
+
+  /// Kept as one callable migration boundary so a populated legacy table can be exercised in a
+  /// focused test without reproducing the entire historical migration ledger.
+  static func installScreenActivitySyncStateSchema(_ db: Database) throws {
+    try db.alter(table: "screenshots") { t in
+      t.add(column: "screenActivitySyncState", .integer).notNull().defaults(to: 0)
+    }
+    try db.execute(
+      sql: """
+        CREATE INDEX idx_screenshots_screen_activity_sync
+        ON screenshots(screenActivitySyncState, id)
+        WHERE screenActivitySyncState IN (0, 1)
+        """)
+  }
+
+  /// Registers the evidence columns separately so an upgrade from a populated
+  /// pre-evidence table exercises the same path as the production migrator.
+  static func registerMemoryLedgerEvidenceMigrations(on migrator: inout DatabaseMigrator) {
+    migrator.registerMigration("addMemoryLedgerEvidence") { db in
+      try Self.addMemoryColumnIfMissing(db, name: "ledgerEvidenceJson", type: .text)
+    }
+    migrator.registerMigration("addMemoryLedgerEvidenceRevision") { db in
+      try Self.addMemoryColumnIfMissing(db, name: "ledgerEvidenceRevision", type: .datetime)
+    }
+  }
+
+  /// Clear the local tombstones the Removed lane manufactured over live tasks.
+  ///
+  /// `TasksStore.fetchDeletedPage` asked the backend for retired rows with a
+  /// `deleted=true` query item that `GET /v1/action-items` never had. FastAPI
+  /// drops an unknown query item, and that handler skips soft-deleted
+  /// documents outright, so the page it answered with was the user's live
+  /// tasks — which the lane then stamped retired and synced into this table.
+  /// Every visit to Removed tombstoned another page. Completing one of those
+  /// tasks from a chat card read the tombstone back and rendered "Task is no
+  /// longer available" over a task the reader had just ticked.
+  ///
+  /// A genuine retirement always leaves a witness the fabricated ones cannot:
+  /// a local deletion records `deletedBy`, and a server-side retirement
+  /// arrives as canonical status `cancelled` or `superseded`. A row carrying
+  /// neither was retired by nothing but the stamp, so only those are cleared —
+  /// a real deletion, local or remote, is left exactly as it is.
+  /// Durable `client_processing` blob for S10. Retry serialization (S11) sends
+  /// this stored JSON; it is never regenerated from the transcript.
+  static func registerClientProcessingProjectionMigration(on migrator: inout DatabaseMigrator) {
+    migrator.registerMigration("addClientProcessingProjection") { db in
+      try Self.addTranscriptionSessionColumnIfMissing(db, name: "clientProcessingJson", type: .text)
+    }
+  }
+
+  /// Persist the structured summary sections alongside the legacy overview. Without this field,
+  /// a cache refresh silently dropped section bodies and their transcript evidence even though the
+  /// network decode had succeeded.
+  static func registerConversationSummarySectionsMigration(on migrator: inout DatabaseMigrator) {
+    migrator.registerMigration("addConversationSummarySections") { db in
+      try Self.addTranscriptionSessionColumnIfMissing(db, name: "sectionsJson", type: .text)
+    }
+  }
+
+  /// Display attribution is separate from clientProcessingJson, whose exact bytes own retries.
+  static func registerConversationLocalSummaryMigration(on migrator: inout DatabaseMigrator) {
+    migrator.registerMigration("addConversationLocalSummary") { db in
+      try Self.addTranscriptionSessionColumnIfMissing(db, name: "localSummaryJson", type: .text)
+    }
+  }
+
+  /// Cross-surface event membership, so a cached list collapses the same way before the server answers.
+  static func registerConversationCaptureGroupMigration(on migrator: inout DatabaseMigrator) {
+    migrator.registerMigration("addConversationCaptureGroup") { db in
+      try Self.addTranscriptionSessionColumnIfMissing(db, name: "captureGroupJson", type: .text)
+    }
+  }
+
+  static func addTranscriptionSessionColumnIfMissing(
+    _ db: Database,
+    name: String,
+    type: Database.ColumnType
+  ) throws {
+    guard try db.columns(in: "transcription_sessions").contains(where: { $0.name == name }) == false else {
+      return
+    }
+    try db.alter(table: "transcription_sessions") { t in
+      t.add(column: name, type)
+    }
+  }
+
+  static func registerFabricatedActionItemTombstoneRepair(on migrator: inout DatabaseMigrator) {
+    migrator.registerMigration("clearFabricatedActionItemTombstones") { db in
+      let repaired =
+        try Int.fetchOne(
+          db,
+          sql: """
+            SELECT COUNT(*) FROM action_items
+            WHERE deleted = 1
+              AND (deletedBy IS NULL OR deletedBy = '')
+              AND (taskStatus IS NULL OR taskStatus NOT IN ('cancelled', 'superseded'))
+            """) ?? 0
+      guard repaired > 0 else { return }
+      try db.execute(
+        sql: """
+          UPDATE action_items
+          SET deleted = 0
+          WHERE deleted = 1
+            AND (deletedBy IS NULL OR deletedBy = '')
+            AND (taskStatus IS NULL OR taskStatus NOT IN ('cancelled', 'superseded'))
+          """)
+      log("RewindDatabase: Cleared \(repaired) fabricated action-item tombstone(s)")
+    }
+  }
+
+  /// A dogfood or QA machine can already carry one of these columns from an earlier build of the
+  /// same branch, where the migration ran under a different identifier. A bare `ADD COLUMN` there
+  /// fails with "duplicate column name" and kills the whole ladder, so probe the table first —
+  /// the same guard `KnowledgeLedgerMirrorStagingSchema` uses.
+  static func addMemoryColumnIfMissing(
+    _ db: Database,
+    name: String,
+    type: Database.ColumnType
+  ) throws {
+    guard try db.columns(in: "memories").contains(where: { $0.name == name }) == false else {
+      return
+    }
+    try db.alter(table: "memories") { t in
+      t.add(column: name, type)
+    }
   }
 
   // MARK: - OCR Precision Reduction Migration
@@ -2778,7 +2982,7 @@ actor RewindDatabase {
         // unrelated screenshot.
         record.id = nil
         if record.imagePath == nil { record.imagePath = "" }
-        try record.insert(db)
+        _ = try record.inserted(db)
       }
 
       return screenshots.count
@@ -3132,8 +3336,13 @@ actor RewindDatabase {
     let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return "" }
 
-    // Split query into words
-    let words = trimmed.components(separatedBy: .whitespaces).filter { !$0.isEmpty }
+    // Split on anything that is not alphanumeric, not just whitespace. FTS5 gives punctuation
+    // its own meaning, so a bare `2.1.220*` built from a Cursor version title is
+    // `fts5: syntax error near "."` and fails the whole search. Callers that sanitize first
+    // (the suggestion grounding path) never saw this; the Rewind search UI passes raw titles
+    // and did. Splitting here makes the expansion safe for both rather than relying on every
+    // caller to clean up first.
+    let words = trimmed.split(whereSeparator: { !$0.isLetter && !$0.isNumber }).map(String.init)
 
     let expandedWords = words.compactMap { word -> String? in
       var parts: [String] = [word]
@@ -3165,7 +3374,13 @@ actor RewindDatabase {
       }
     }
 
-    return expandedWords.joined(separator: " ")
+    // Joined with an explicit AND, not a space. FTS5 only accepts implicit AND between bare
+    // terms: the moment one word expands into a parenthesised `(a* OR b*)` group, a
+    // space-joined query fails whole with `fts5: syntax error near "("` — so a two-word title
+    // where either word splits on camelCase or a number boundary returned nothing at all.
+    // Observed 45 times across 13 sessions, silently emptying screen-history grounding and
+    // the Rewind search UI alike. AND is what the space already meant.
+    return expandedWords.joined(separator: " AND ")
   }
 
   /// Split camelCase string into parts

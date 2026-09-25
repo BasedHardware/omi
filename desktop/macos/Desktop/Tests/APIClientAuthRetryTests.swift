@@ -525,7 +525,12 @@ import XCTest
       }
 
       XCTAssertEqual(AuthRetryURLStub.attempts, 2)
-      XCTAssertNil(UserDefaults.standard.string(forKey: .authUserId))
+      // Light invalidation intentionally preserves the owner so Claude/chat
+      // sessions can rehydrate after re-auth (#13859). The credential, not the
+      // owner identity, is what a persistent backend 401 must revoke.
+      XCTAssertEqual(UserDefaults.standard.string(forKey: .authUserId), "user-1")
+      XCTAssertNil(UserDefaults.standard.string(forKey: .authIdToken))
+      XCTAssertEqual(AuthState.shared.sessionPhase, .needsReauth)
     }
 
     func testTTSProvider429ReturnsTypedQuotaFailure() async throws {

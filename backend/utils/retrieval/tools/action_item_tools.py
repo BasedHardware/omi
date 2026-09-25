@@ -18,6 +18,7 @@ from utils.notifications import (
     sync_action_item_reminder,
 )
 from utils.conversations.render import format_local_time, resolve_display_tz
+from utils.retrieval.chat_scope import apply_chat_scope_dates, chat_scope_from_config
 import logging
 
 logger = logging.getLogger(__name__)
@@ -183,6 +184,20 @@ def get_action_items_tool(
 
         traceback.print_exc()
         return f"Error: Configuration error - {str(config_error)}"
+
+    # Hard-scope: force conversation_id and intersect creation dates with chat_scope (#4515).
+    scope = chat_scope_from_config(configurable)
+    if scope and scope.get("conversation_id"):
+        scoped_cid = str(scope["conversation_id"])
+        if conversation_id and conversation_id != scoped_cid:
+            return (
+                f"Error: Chat is scoped to conversation {scoped_cid}. "
+                "Action items outside that conversation are unavailable."
+            )
+        conversation_id = scoped_cid
+    start_date, end_date, scope_err = apply_chat_scope_dates(scope, start_date, end_date)
+    if scope_err:
+        return f"Error: {scope_err}"
 
     # Cap at 500 per call
     if limit > 500:
@@ -445,11 +460,11 @@ def create_action_item_tool(
         except ValueError as e:
             return f"Error: Invalid due_at format. Expected YYYY-MM-DDTHH:MM:SS+HH:MM in user's timezone: {due_at} - {str(e)}"
     else:
-        # Set default due date to 24 hours from now in UTC
-        now = datetime.now(datetime.now().astimezone().tzinfo)
-        default_due = now + timedelta(hours=24)
-        action_item_data['due_at'] = default_due
-        logger.info(f"📅 No due date provided, setting default to 24h from now: {default_due}")
+        # A task the user never dated has no due date. Inventing now+24h put it in
+        # neither the overdue nor the due-today bucket any reader uses, so
+        # "remind me to X" followed by "what's on my list" deterministically
+        # returned nothing. `due_at` is Optional everywhere; leave it unset.
+        logger.info("📅 No due date provided, leaving due_at unset")
 
     # Create the action item
     try:

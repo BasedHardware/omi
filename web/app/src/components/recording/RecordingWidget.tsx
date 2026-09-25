@@ -91,7 +91,7 @@ export function RecordingWidget() {
             className={cn(
               'fixed bottom-6 left-6 z-50',
               'flex flex-col',
-              isWidgetExpanded ? 'w-80' : 'w-auto'
+              isWidgetExpanded ? 'w-80' : 'w-auto',
             )}
           >
             {/* Expanded panel */}
@@ -105,7 +105,9 @@ export function RecordingWidget() {
                 >
                   {/* Header */}
                   <div className="flex items-center justify-between px-4 py-3 border-b border-bg-tertiary">
-                    <span className="text-sm font-medium text-text-primary">Live Transcript</span>
+                    <span className="text-sm font-medium text-text-primary">
+                      Live Transcript
+                    </span>
                     <button
                       onClick={() => setWidgetExpanded(false)}
                       className="p-1 rounded-lg text-text-tertiary hover:text-text-secondary hover:bg-bg-tertiary transition-colors"
@@ -143,7 +145,7 @@ export function RecordingWidget() {
                 'bg-bg-secondary border border-bg-tertiary shadow-strong',
                 isWidgetExpanded && (isRecording || isPaused || segments.length > 0)
                   ? 'rounded-b-2xl border-t-0'
-                  : 'rounded-2xl'
+                  : 'rounded-2xl',
               )}
             >
               {/* Error message */}
@@ -177,8 +179,8 @@ export function RecordingWidget() {
                     onClick={handleStartClick}
                     className={cn(
                       'flex items-center gap-3 px-4 py-2.5 rounded-xl w-full',
-                      'bg-purple-primary hover:bg-purple-secondary text-white',
-                      'transition-all'
+                      'bg-text-primary text-bg-primary hover:bg-text-primary/90',
+                      'transition-all',
                     )}
                   >
                     <Mic className="w-5 h-5" />
@@ -191,7 +193,7 @@ export function RecordingWidget() {
                     className={cn(
                       'flex items-center gap-3 px-4 py-2.5 rounded-xl w-full',
                       'bg-bg-tertiary hover:bg-bg-quaternary',
-                      'transition-all'
+                      'transition-all',
                     )}
                   >
                     {/* Recording indicator */}
@@ -202,7 +204,9 @@ export function RecordingWidget() {
                         transition={{ duration: 1, repeat: Infinity }}
                       />
                     )}
-                    {isPaused && <div className="w-2.5 h-2.5 rounded-full bg-yellow-500" />}
+                    {isPaused && (
+                      <div className="w-2.5 h-2.5 rounded-full bg-yellow-500" />
+                    )}
 
                     <span className="text-sm font-mono text-text-primary tabular-nums">
                       {formatDuration(duration)}
@@ -210,10 +214,8 @@ export function RecordingWidget() {
 
                     <ChevronUp className="w-4 h-4 text-text-tertiary ml-auto" />
                   </button>
-                ) : (
-                  // Expanded and recording - show nothing here (controls are above)
-                  null
-                )}
+                ) : // Expanded and recording - show nothing here (controls are above)
+                null}
               </div>
             </motion.div>
           </motion.div>

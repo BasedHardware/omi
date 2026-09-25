@@ -5,6 +5,7 @@ import { RevealMarkdown } from './RevealMarkdown'
 import { ChatAttachmentStrip } from './ChatAttachmentStrip'
 import { OmiThinkingSpinner } from './OmiThinkingSpinner'
 import { AgentThreadCard } from './AgentThreadCard'
+import { ChatEvidenceReferenceList } from './ChatEvidenceCard'
 import type { AgentThreadCardBlock } from '../../../../shared/types'
 
 const BUBBLE: Record<'main' | 'overlay', { user: string; assistant: string }> = {
@@ -130,6 +131,7 @@ const MessageRow = memo(function MessageRow({
   // empty placeholder) — only once there is settled text to copy.
   const streaming = isLast && sending && m.role === 'assistant'
   const canCopy = !streaming && m.content.trim().length > 0
+  const evidence = m.role === 'assistant' ? m.evidence : undefined
   const bubbleClass = `group/msg relative ${m.role === 'user' ? cls.user : cls.assistant}`
   const bubbleChildren = (
     <>
@@ -158,6 +160,14 @@ const MessageRow = memo(function MessageRow({
       <div className="flex flex-col items-end gap-1.5">
         <ChatAttachmentStrip attachments={m.attachments} compact={compact} align="end" />
         {filesOnly ? null : <div className={bubbleClass}>{bubbleChildren}</div>}
+      </div>
+    )
+  }
+  if (evidence && evidence.references.length > 0) {
+    return (
+      <div className="flex flex-col gap-1.5">
+        <div className={bubbleClass}>{bubbleChildren}</div>
+        <ChatEvidenceReferenceList envelope={evidence} compact={compact} />
       </div>
     )
   }

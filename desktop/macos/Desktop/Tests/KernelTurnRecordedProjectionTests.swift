@@ -53,6 +53,17 @@ import XCTest
     override func setUp() {
       super.setUp()
       DesktopDiagnosticsManager.shared.resetForTests()
+      // An owner transition abandoned by any earlier suite leaves the process-global
+      // revocation active, and `currentOwnerId` then returns nil for everything that
+      // follows. Name that here instead of letting it resurface as an unrelated
+      // "kernel owner surface clear failed" three suites later, then clear it so this
+      // suite still runs.
+      if RuntimeOwnerIdentity.effectiveOwnerTransitionInProgress {
+        RuntimeOwnerIdentity.resetEffectiveOwnerTransitionForTests()
+        XCTFail(
+          "An earlier suite leaked an effective-owner transition; owner resolution was "
+            + "globally revoked before this suite started. Cleared it to continue.")
+      }
     }
 
     func testJournalProjectionSignalsValueOrderingAndDuplicateDivergenceWithoutChangingTheWinner() throws {
@@ -650,7 +661,6 @@ import XCTest
         "fault-harness-owner"
       ) {
         provider.selectedAppId = "research"
-        provider.isInDefaultChat = true
         provider.kernelTurnProjection = KernelTurnProjection(
           host: provider,
           client: AgentClient.Session(harnessMode: "piMono"),
@@ -684,62 +694,6 @@ import XCTest
       XCTAssertNil(error)
       XCTAssertEqual(modelReadinessRequests, 0)
       XCTAssertEqual(clearedSurfaceIDs, [expectedChatID])
-    }
-
-    func testFaultHarnessResetClearsSelectedSessionOnlyOnce() async {
-      let provider = ChatProvider()
-      let session = ChatSession(id: "fault-selected-session")
-      var modelReadinessRequests = 0
-      var clearedSurfaceIDs: [String] = []
-      var replacementSessionRequests = 0
-      var sessionWasCleared = false
-
-      let error: String? = await RuntimeOwnerIdentity.withAutomationOwnerIfMissing(
-        "fault-harness-owner"
-      ) {
-        provider.sessions = [session]
-        provider.currentSession = session
-        provider.isInDefaultChat = false
-        provider.kernelTurnProjection = KernelTurnProjection(
-          host: provider,
-          client: AgentClient.Session(harnessMode: "piMono"),
-          ownerIDProvider: {
-            RuntimeOwnerIdentity.currentOwnerId(allowAutomationOverride: true)
-          },
-          journalListOperation: { _, surface, ownerID, afterTurnSeq, limit in
-            XCTAssertFalse(ownerID.isEmpty)
-            XCTAssertEqual(surface.externalRefId, session.id)
-            XCTAssertEqual(afterTurnSeq, 0)
-            XCTAssertEqual(limit, 1)
-            return self.journalPage(
-              conversationId: "fault-selected-session-conversation",
-              turns: [],
-              generation: 9
-            )
-          },
-          journalClearOperation: { _, surface, _, _, _ in
-            clearedSurfaceIDs.append(surface.externalRefId)
-            return 1
-          },
-          kernelReadyOperation: {
-            modelReadinessRequests += 1
-            return false
-          }
-        )
-
-        let error = await provider.performMainChatHarnessResetTransaction {
-          replacementSessionRequests += 1
-          return ChatSession(id: "fault-replacement-session")
-        }
-        sessionWasCleared = provider.currentSession == nil
-        return error
-      }
-
-      XCTAssertNil(error)
-      XCTAssertEqual(modelReadinessRequests, 0)
-      XCTAssertEqual(clearedSurfaceIDs, [session.id])
-      XCTAssertEqual(replacementSessionRequests, 1)
-      XCTAssertTrue(sessionWasCleared)
     }
 
     func testClearOwnerSurfaceStateUsesAuthoritativeJournalControlWhenModelReadinessIsUnavailable() async throws {
@@ -781,6 +735,118 @@ import XCTest
       XCTAssertEqual(clearCalls.map(\.ownerID), ["fault-harness-owner"])
       XCTAssertEqual(clearCalls.map(\.generation), [9])
       XCTAssertTrue(provider.messages.isEmpty)
+    }
+
+    /// Guards the test seam itself: the scoped helper must always hand the revocation back,
+    /// including when the body throws. A leaked revocation makes `currentOwnerId` return nil
+    /// for every suite that runs afterwards in the same binary, and the revocation lives on a
+    /// `private` singleton that no suite can reach to clear — so a leak here is unrecoverable
+    /// rather than merely noisy.
+    func testEffectiveOwnerTransitionSeamNeverLeaksTheRevocation() async {
+      struct BodyFailure: Error {}
+
+      XCTAssertFalse(RuntimeOwnerIdentity.effectiveOwnerTransitionInProgress)
+
+      await RuntimeOwnerIdentity.withEffectiveOwnerTransitionForTests {
+        XCTAssertTrue(
+          RuntimeOwnerIdentity.effectiveOwnerTransitionInProgress,
+          "the seam must actually revoke owner resolution inside the body")
+      }
+      XCTAssertFalse(
+        RuntimeOwnerIdentity.effectiveOwnerTransitionInProgress,
+        "the revocation must be released when the body returns")
+
+      do {
+        try await RuntimeOwnerIdentity.withEffectiveOwnerTransitionForTests {
+          throw BodyFailure()
+        }
+        XCTFail("expected the body's error to propagate")
+      } catch is BodyFailure {
+      } catch {
+        XCTFail("unexpected error: \(error)")
+      }
+      XCTAssertFalse(
+        RuntimeOwnerIdentity.effectiveOwnerTransitionInProgress,
+        "the revocation must be released when the body throws")
+    }
+
+    /// The revocation is a shared boolean, not a counter, so the seam restores the state it
+    /// found instead of ending unconditionally. Two cases depend on that: a nested scope
+    /// must not un-revoke while its caller is still inside, and a revocation leaked by an
+    /// earlier suite must survive — `setUp` reports that leak, and a seam that quietly
+    /// cleared it would hide the defect this seam exists to expose.
+    func testSeamRestoresTheRevocationStateItFound() async {
+      await RuntimeOwnerIdentity.withEffectiveOwnerTransitionForTests {
+        await RuntimeOwnerIdentity.withEffectiveOwnerTransitionForTests {
+          XCTAssertTrue(RuntimeOwnerIdentity.effectiveOwnerTransitionInProgress)
+        }
+        XCTAssertTrue(
+          RuntimeOwnerIdentity.effectiveOwnerTransitionInProgress,
+          "a nested scope must not release its caller's revocation")
+      }
+      XCTAssertFalse(
+        RuntimeOwnerIdentity.effectiveOwnerTransitionInProgress,
+        "the outermost scope still releases what it started")
+
+      // Simulate entering the seam with a revocation already leaked into the process.
+      await RuntimeOwnerIdentity.withEffectiveOwnerTransitionForTests {
+        await RuntimeOwnerIdentity.withEffectiveOwnerTransitionForTests {}
+        XCTAssertTrue(
+          RuntimeOwnerIdentity.effectiveOwnerTransitionInProgress,
+          "an inherited revocation must outlive an inner scope")
+      }
+      RuntimeOwnerIdentity.resetEffectiveOwnerTransitionForTests()
+      XCTAssertFalse(RuntimeOwnerIdentity.effectiveOwnerTransitionInProgress)
+    }
+
+    /// A harness reset does not run *under* a revocation — it dissolves it first.
+    ///
+    /// This is the open question #12664 raised and declined to answer. The answer is that
+    /// the premise does not hold. `withAutomationOwnerIfMissing` asks `currentOwnerId()`,
+    /// gets `nil` (the revocation working as designed), concludes an owner is missing, and
+    /// installs one through `performEffectiveOwnerTransition`. That transition's
+    /// `endAuthorizationRevocation` calls `EffectiveOwnerAuthorizationRevocation.end()`,
+    /// clearing the flag — the revocation is a plain boolean, so a legitimate transition
+    /// ends whatever is outstanding. The body therefore executes with owner resolution
+    /// restored, not revoked.
+    ///
+    /// Pinning the mechanism rather than the outcome: if the revocation ever became a
+    /// refcount, the body would run genuinely revoked and this assertion would catch that
+    /// as the behavior change it is.
+    ///
+    /// The transition only cycles the revocation when the planned owner differs from the
+    /// persisted one, so this must run against an empty, isolated defaults domain. The
+    /// standard domain is shared with every other suite process on the runner (cfprefsd
+    /// routes it past `CFFIXED_USER_HOME`), and a concurrent suite that has `auth_userId`
+    /// set there turns this into a no-op transition that leaves the revocation in place.
+    func testAnOwnerTransitionDissolvesAnOutstandingRevocation() async {
+      var observedInsideBody: Bool?
+
+      await RuntimeOwnerIdentity.withEffectiveOwnerTransitionForTests {
+        XCTAssertTrue(
+          RuntimeOwnerIdentity.effectiveOwnerTransitionInProgress,
+          "precondition: the revocation is outstanding on entry")
+
+        let suiteName = "KernelTurnRecordedProjectionTests.\(UUID().uuidString)"
+        guard let defaults = UserDefaults(suiteName: suiteName) else {
+          return XCTFail("failed to create isolated defaults")
+        }
+        defer { defaults.removePersistentDomain(forName: suiteName) }
+
+        await RuntimeOwnerIdentity.withAutomationOwnerIfMissing(
+          "revocation-dissolve-owner",
+          defaults: defaults
+        ) {
+          observedInsideBody = RuntimeOwnerIdentity.effectiveOwnerTransitionInProgress
+        }
+      }
+
+      XCTAssertEqual(
+        observedInsideBody,
+        false,
+        "an owner transition ends the outstanding revocation, so owner-scoped work inside "
+          + "it resolves an owner normally instead of running blind")
+      XCTAssertFalse(RuntimeOwnerIdentity.effectiveOwnerTransitionInProgress)
     }
 
     func testFaultHarnessResetUsesCredentialFreeControlClearOnceAndCompletesProjectionReset() async throws {
@@ -1251,11 +1317,15 @@ import XCTest
         "journalRevision": 11,
         "text": "hello",
         "sender": "human",
+        "contentBlocks": [["type": "taskCard", "id": "task-1", "taskId": "task-1"]],
         "messageSource": "desktop_chat",
       ]
       XCTAssertEqual(KernelJournalBackendSyncDriver.Request(payload: valid)?.turnId, "turn-1")
       XCTAssertEqual(KernelJournalBackendSyncDriver.Request(payload: valid)?.ownerId, "owner-1")
       XCTAssertEqual(KernelJournalBackendSyncDriver.Request(payload: valid)?.journalRevision, 11)
+      XCTAssertTrue(
+        KernelJournalBackendSyncDriver.Request(payload: valid)?.contentBlocksJSON?.contains(
+          "taskCard") == true)
 
       var invalid = valid
       invalid["clientMessageId"] = "another-id"
@@ -1271,6 +1341,10 @@ import XCTest
 
       invalid = valid
       invalid["journalRevision"] = 0
+      XCTAssertNil(KernelJournalBackendSyncDriver.Request(payload: invalid))
+
+      invalid = valid
+      invalid["contentBlocks"] = "not-an-array"
       XCTAssertNil(KernelJournalBackendSyncDriver.Request(payload: invalid))
 
     }
@@ -1345,18 +1419,8 @@ import XCTest
       XCTAssertFalse(provider.contains("APIClient.shared.saveMessage("))
       XCTAssertFalse(provider.contains("messages.append(greetingMessage)"))
       XCTAssertFalse(provider.contains("func recordCompletedTurn("))
-      XCTAssertTrue(provider.contains("remoteId: response.messageId"))
-      XCTAssertTrue(provider.contains("canonicalTurnId: response.messageId"))
-      XCTAssertTrue(provider.contains("await kernelTurnProjection.refresh(surface: surface)"))
-      let greetingStart = try XCTUnwrap(provider.range(of: "private func fetchInitialMessage("))
-      let greetingSource = provider[greetingStart.lowerBound...]
-      let admission = try XCTUnwrap(greetingSource.range(of: "guard accepted else"))
-      let preview = try XCTUnwrap(greetingSource.range(of: "sessions[index].preview = response.message"))
-      let analytics = try XCTUnwrap(greetingSource.range(of: "initialMessageGenerated("))
-      XCTAssertLessThan(admission.lowerBound, preview.lowerBound)
-      XCTAssertLessThan(preview.lowerBound, analytics.lowerBound)
-      XCTAssertEqual(provider.components(separatedBy: "APIClient.shared.getMessages(").count - 1, 2)
-      XCTAssertEqual(provider.components(separatedBy: "expectedOwnerId: ownerId").count - 1, 3)
+      XCTAssertEqual(provider.components(separatedBy: "APIClient.shared.getMessages(").count - 1, 1)
+      XCTAssertEqual(provider.components(separatedBy: "expectedOwnerId: ownerId").count - 1, 1)
       XCTAssertFalse(taskState.contains("persistMessage("))
       XCTAssertFalse(taskStorage.contains("PersistableRecord"))
       XCTAssertFalse(taskStorage.contains("func insert("))

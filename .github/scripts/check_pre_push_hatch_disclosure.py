@@ -9,9 +9,9 @@ hatch nobody can find is not a hatch.
 
 The real instance this was written for. `make setup` provisions the backend
 venv only ("It does not install app or desktop runtime environments" --
-AGENTS.md), while `.github/checks-manifest.yaml` is in ROUTING_INPUTS, so
-editing it makes pre_push_ci_prediction.py conservatively wake the Flutter
-codegen lane. A PR touching only .cursor/ and .github/ therefore hit:
+AGENTS.md), while `.github/checks-manifest.yaml` remains in ROUTING_INPUTS but
+selector-only changes no longer wake the Flutter codegen lane. A PR with an
+actual generator input therefore hit:
 
     FAIL: Flutter generated-output checks need resolved app dependencies.
           Run: cd app && flutter pub get

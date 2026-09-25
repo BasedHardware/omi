@@ -29,7 +29,11 @@ from typing import Iterable
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 REGISTRY_PATH = REPOSITORY_ROOT / "backend" / "runtime_images.json"
-IGNORED_SOURCE_DIRECTORIES = {".git", ".pytest_cache", ".venv", "__pycache__"}
+IGNORED_SOURCE_DIRECTORIES = {".git", ".pytest_cache", ".venv", ".openapi-venv", "__pycache__"}
+# First-party modules that raise at import time unless an environment variable is set.
+# An import smoke reaching one of these without the variable fails the deploy, so the
+# registry must declare a non-production placeholder in ``smoke_environment``.
+IMPORT_TIME_REQUIRED_ENVIRONMENT = {"utils.encryption": "ENCRYPTION_SECRET"}
 
 
 @dataclass(frozen=True)
@@ -206,7 +210,7 @@ def _logical_docker_lines(path: Path) -> list[str]:
     return logical_lines
 
 
-def final_stage_copy_instructions(dockerfile: Path) -> list[CopyInstruction]:
+def docker_stages(dockerfile: Path) -> list[list[str]]:
     stages: list[list[str]] = []
     current_stage: list[str] | None = None
     for line in _logical_docker_lines(dockerfile):
@@ -218,6 +222,11 @@ def final_stage_copy_instructions(dockerfile: Path) -> list[CopyInstruction]:
             current_stage.append(line)
     if not stages:
         raise ContractError(f"{_repository_relative(dockerfile)} has no Docker stage")
+    return stages
+
+
+def final_stage_copy_instructions(dockerfile: Path) -> list[CopyInstruction]:
+    stages = docker_stages(dockerfile)
 
     copies: list[CopyInstruction] = []
     for line in stages[-1]:
@@ -231,6 +240,58 @@ def final_stage_copy_instructions(dockerfile: Path) -> list[CopyInstruction]:
             raise ContractError(f"cannot parse COPY instruction in {_repository_relative(dockerfile)}: {line}")
         copies.append(CopyInstruction(sources=tuple(tokens[:-1]), destination=tokens[-1]))
     return copies
+
+
+def _copy_destination(line: str) -> str | None:
+    if not line.upper().startswith("COPY "):
+        return None
+    tokens = [token for token in shlex.split(line[5:]) if not token.startswith("--")]
+    return tokens[-1] if len(tokens) >= 2 else None
+
+
+def final_stage_layer_errors(contract: ImageContract) -> list[str]:
+    """Reject bytes hidden by later layers and installs shadowed by a late venv copy."""
+    instructions = docker_stages(contract.dockerfile)[-1]
+    errors: list[str] = []
+
+    copied_destinations: dict[str, int] = {}
+    path_venvs: dict[str, int] = {}
+    for index, line in enumerate(instructions):
+        if line.upper().startswith("COPY "):
+            destination = _copy_destination(line)
+            if destination:
+                copied_destinations[destination.rstrip("/")] = index
+            continue
+        if line.upper().startswith("ENV PATH="):
+            path_value = line.split("=", 1)[1].strip('"\'')
+            first_entry = path_value.split(":", 1)[0]
+            if first_entry.endswith("/bin"):
+                path_venvs[first_entry[: -len("/bin")].rstrip("/")] = index
+
+    for destination, copy_index in copied_destinations.items():
+        for line in instructions[copy_index + 1 :]:
+            if line.upper().startswith("RUN ") and any(
+                marker in line for marker in (f"rm -rf {destination}", f"rm -r {destination}")
+            ):
+                errors.append(
+                    f"{contract.name}: final-stage COPY to {destination!r} is removed in a later RUN layer; "
+                    "the copied bytes remain in the image manifest"
+                )
+                break
+
+    for venv, path_index in path_venvs.items():
+        copy_index = copied_destinations.get(venv)
+        if copy_index is None or copy_index <= path_index:
+            continue
+        for line in instructions[path_index + 1 : copy_index]:
+            if line.upper().startswith("RUN ") and "pip install" in line:
+                errors.append(
+                    f"{contract.name}: {venv!r} leads PATH but pip runs before that environment is copied into "
+                    "the final stage; the install is shadowed at runtime"
+                )
+                break
+
+    return errors
 
 
 def _ignore_source_directory(_: str, names: list[str]) -> set[str]:
@@ -387,9 +448,52 @@ def source_closure_errors(contract: ImageContract) -> list[str]:
     return errors
 
 
+def first_party_import_closure(contract: ImageContract, entrypoints: Iterable[str]) -> set[str]:
+    """Return the first-party modules reachable from ``entrypoints`` in the checkout."""
+    source_roots = _first_party_source_roots(contract)
+    visited: set[str] = set()
+
+    def visit(module: str) -> None:
+        if module in visited:
+            return
+        visited.add(module)
+        source = _find_module_source(source_roots, module)
+        if source is None:
+            return
+        source_path, _ = source
+        tree = ast.parse(source_path.read_text(encoding="utf-8"), filename=str(source_path))
+        for imported in _imported_modules(
+            tree, module, source_roots, current_is_package=source_path.name == "__init__.py"
+        ):
+            if _module_or_namespace_exists(source_roots, imported.split(".", 1)[0]):
+                visit(imported)
+
+    for entrypoint in entrypoints:
+        visit(entrypoint)
+    return visited
+
+
+def import_smoke_environment_errors(contracts: Iterable[ImageContract]) -> list[str]:
+    """Fail registrations whose import smoke would hit an import-time environment guard."""
+    errors: list[str] = []
+    for contract in contracts:
+        if not contract.image_import_smoke:
+            continue
+        declared = dict(contract.smoke_environment)
+        reachable = first_party_import_closure(contract, contract.smoke_entrypoints)
+        for module, variable in sorted(IMPORT_TIME_REQUIRED_ENVIRONMENT.items()):
+            if module in reachable and variable not in declared:
+                errors.append(
+                    f"{contract.name}: import smoke reaches {module!r}, which raises at import time "
+                    f"unless {variable} is set; declare a non-production {variable} in smoke_environment"
+                )
+    return errors
+
+
 def check_source_closures(contracts: Iterable[ImageContract]) -> list[str]:
     errors: list[str] = []
     for contract in contracts:
+        errors.extend(final_stage_layer_errors(contract))
         errors.extend(source_closure_errors(contract))
     return errors
 
@@ -604,6 +708,7 @@ def main() -> int:
             errors = []
             if args.command in {"check", "check-source"}:
                 errors.extend(check_source_closures(contracts))
+                errors.extend(import_smoke_environment_errors(contracts))
             if args.command in {"check", "check-workflows"}:
                 errors.extend(workflow_contract_errors(contracts))
             if errors:

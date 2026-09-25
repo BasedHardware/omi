@@ -36,6 +36,7 @@ class ImportJobResponse {
   final int? totalFiles;
   final int? processedFiles;
   final int? conversationsCreated;
+  final int? conversationsSkipped;
   final DateTime? createdAt;
   final String? error;
 
@@ -45,6 +46,7 @@ class ImportJobResponse {
     this.totalFiles,
     this.processedFiles,
     this.conversationsCreated,
+    this.conversationsSkipped,
     this.createdAt,
     this.error,
   });
@@ -60,6 +62,7 @@ class ImportJobResponse {
       totalFiles: generated.totalFiles,
       processedFiles: generated.processedFiles,
       conversationsCreated: generated.conversationsCreated,
+      conversationsSkipped: generated.conversationsSkipped,
       createdAt: generated.createdAt == null ? null : DateTime.tryParse(generated.createdAt!),
       error: generated.error,
     );
@@ -85,6 +88,7 @@ class ImportJobResponse {
       totalFiles: totalFiles,
       processedFiles: processedFiles,
       conversationsCreated: conversationsCreated,
+      conversationsSkipped: conversationsSkipped,
       createdAt: createdAt?.toUtc().toIso8601String(),
       error: error,
     );

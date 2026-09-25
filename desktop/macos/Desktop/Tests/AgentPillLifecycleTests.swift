@@ -81,7 +81,8 @@ import XCTest
     XCTAssertTrue(providerSource.contains("struct SpawnedAgentPillProjection: Equatable, Sendable"))
     XCTAssertTrue(pillSource.contains("guard !pill.status.isFinished else { return }"))
     XCTAssertTrue(viewSource.contains("private func mainConversationBackAction()"))
-    XCTAssertTrue(viewSource.contains(".help(agentPills.pills.isEmpty ? \"Close Omi Chat\" : \"Back to subagents\")"))
+    XCTAssertTrue(
+      viewSource.contains(".help(agentPills.pills.isEmpty ? \"Close Omi Chat (Esc)\" : \"Back to subagents\")"))
   }
 
   func testFloatingPillProjectionMergeRequiresCanonicalKernelIds() throws {
@@ -392,7 +393,8 @@ import XCTest
     XCTAssertTrue(source.contains("private func groupedContentBlocks(for message: ChatMessage) -> [ContentBlockGroup]"))
     XCTAssertTrue(source.contains("ToolCallsGroup(calls: calls, compact: true)"))
     XCTAssertTrue(source.contains("ThinkingBlock(text: text)"))
-    XCTAssertTrue(source.contains("OmiMarkdown(text: trimmed, sender: .ai)"))
+    XCTAssertTrue(
+      source.contains("OmiMarkdown(text: trimmed, sender: .ai, citations: message.inlineCitationReferences)"))
     XCTAssertTrue(source.contains(".environment(\\.fontScale, 0.88)"))
     XCTAssertTrue(source.contains(".frame(width: 36, height: 36)"))
     XCTAssertTrue(source.contains(".contentShape(Rectangle())"))
@@ -446,7 +448,6 @@ import XCTest
     XCTAssertFalse(lobeSource.contains("VoiceWaveformBars(isActive: true)"))
     XCTAssertFalse(lobeSource.contains("showingNotchPttHint"))
     XCTAssertTrue(source.contains("pttStatusBanner"))
-    XCTAssertTrue(source.contains("state.isVoiceListening && state.pttHintText.isEmpty"))
     XCTAssertFalse(source.contains("!state.isVoiceFollowUp && !state.showingAIConversation"))
   }
 
@@ -497,12 +498,9 @@ import XCTest
     XCTAssertTrue(source.contains("openAgentChatsFromNotchLogo()"))
   }
 
-  func testChatFirstCanRoutePrimaryFloatingTextEntryToTheMainApp() {
-    FloatingPrimaryTextInputRouting.configure(routesToMainApp: false)
-    defer { FloatingPrimaryTextInputRouting.configure(routesToMainApp: false) }
-
-    XCTAssertFalse(FloatingPrimaryTextInputRouting.shouldRouteAgentExitToMainApp(hasMainConversation: false))
-    FloatingPrimaryTextInputRouting.configure(routesToMainApp: true)
+  /// The notch never takes typed text on any shell: backing out of an agent chat with no main
+  /// conversation to show lands in the main chat, never in a composer.
+  func testAgentExitWithNothingToShowRoutesToTheMainAppOnEveryShell() {
     XCTAssertTrue(FloatingPrimaryTextInputRouting.shouldRouteAgentExitToMainApp(hasMainConversation: false))
     XCTAssertFalse(FloatingPrimaryTextInputRouting.shouldRouteAgentExitToMainApp(hasMainConversation: true))
   }
@@ -543,7 +541,10 @@ import XCTest
     XCTAssertFalse(responseSource.contains("proxy.scrollTo(\"bottom\", anchor: .bottom)"))
     XCTAssertFalse(viewSource.contains("proxy.scrollTo(\"agentBottom\", anchor: .bottom)"))
     XCTAssertTrue(scrollSource.contains("struct ChatScrollContainer<Content: View>: View"))
-    XCTAssertTrue(scrollSource.contains("UserScrollDetector {"))
+    // The detector is mounted, and mounted with the transcript's own
+    // programmatic-scroll signal — without it a follow-scroll landing under an
+    // open press reads as the reader taking the viewport.
+    XCTAssertTrue(scrollSource.contains("UserScrollDetector(programmaticScroll: programmaticScroll) {"))
     XCTAssertTrue(scrollSource.contains("onScrollSettledAtBottom"))
     XCTAssertTrue(scrollSource.contains("scheduleSettledBottomFollow"))
     XCTAssertTrue(scrollSource.contains("Self.isAtBottom(scrollView)"))
@@ -647,9 +648,11 @@ import XCTest
     XCTAssertTrue(source.contains("if state.usesNotchIsland && shouldShowNotchHoverMenu"))
     XCTAssertTrue(source.contains("rowTopOffset: 0"))
     XCTAssertTrue(source.contains("private var showingNotchWaveform: Bool"))
-    XCTAssertTrue(source.contains("private var escToClearHint: some View"))
+    // Esc closes and keeps the conversation; clearing is an explicit, labeled control.
+    XCTAssertTrue(source.contains("private var clearConversationButton: some View"))
     XCTAssertTrue(
-      source.contains("        if state.hasVisibleConversation {\n          escToClearHint\n        }"))
+      source.contains("        if state.hasVisibleConversation {\n          clearConversationButton\n        }"))
+    XCTAssertFalse(source.contains("escToClearHint"))
     XCTAssertTrue(source.contains("canClearVisibleConversation: false"))
     XCTAssertTrue(source.contains("showsHeader: false"))
     XCTAssertTrue(responseSource.contains("var showsHeader: Bool = true"))
@@ -680,7 +683,7 @@ import XCTest
     XCTAssertTrue(windowSource.contains("static let notchActiveSideWidth: CGFloat = 42"))
     XCTAssertTrue(windowSource.contains("func resizeForAgentSwitcher(visible: Bool)"))
     XCTAssertTrue(windowSource.contains("max(collapsedBarSize.width, Self.notchExpandedWidth)"))
-    XCTAssertTrue(windowSource.contains("      if state.showingAIConversation {\n        return\n      }"))
+    XCTAssertTrue(windowSource.contains("if usesNotchIsland, state.showingAIConversation {\n      return\n    }"))
   }
 
   func testSpacesTransitionPreservesUserResizedNotchChatFrame() {
@@ -845,7 +848,8 @@ import XCTest
         ownerID: "owner",
         title: "Replacement notification",
         message: "Must remain visible",
-        assistantId: "test"),
+        assistantId: "test",
+        kind: .functional),
       animated: false)
     scheduler.fire()
 
@@ -943,7 +947,9 @@ import XCTest
     // semantic animated transition.
     XCTAssertTrue(body.contains("if notchModeEnabled {"))
     XCTAssertTrue(body.contains("notchHoverMenuSurfaceSize(agentCount:"))
-    XCTAssertTrue(body.contains(": notchCollapsedSize"))
+    // The collapse lands on the composed closed surface (the single closed
+    // sizing authority), not a bare lobe size derived at the call site.
+    XCTAssertTrue(body.contains(": closedSurfaceSize(usesNotchIsland: true)"))
     XCTAssertTrue(body.contains("animated: false"))
     XCTAssertTrue(body.contains("animationDuration: Self.notchHoverMenuExpandDuration"))
     XCTAssertTrue(body.contains("animationDuration: Self.notchHoverMenuCollapseDuration"))
@@ -1060,35 +1066,6 @@ import XCTest
     XCTAssertFalse(source.contains("let initialSize = NSSize(width: expandedContentWidth, height: startHeight)"))
   }
 
-  func testTypedSendDelegatesResponseSizingToWindow() throws {
-    let viewSource = try floatingControlBarViewSource()
-    let windowSource = try floatingControlBarWindowSource()
-
-    guard let inputRange = viewSource.range(of: "private var aiInputView: some View"),
-      let inputEnd = viewSource.range(of: "private func recomputeUnifiedInputHeight")
-    else {
-      return XCTFail("Expected AI input view section")
-    }
-    let inputSource = String(viewSource[inputRange.lowerBound..<inputEnd.lowerBound])
-
-    XCTAssertTrue(inputSource.contains(".beginVisibleMainQuery(message, fromVoice: false, animated: true)"))
-    // Archiving moved with the retired typed follow-up: the window's query
-    // paths own it now; the view must not archive on its own.
-    XCTAssertTrue(windowSource.contains("state.archiveCurrentExchange(using:"))
-    XCTAssertFalse(viewSource.contains("archiveCurrentExchange"))
-    XCTAssertTrue(viewSource.contains(".beginVisibleMainQuery(message, fromVoice: false, animated: true)"))
-    XCTAssertFalse(inputSource.contains("state.showingAIResponse = true"))
-    XCTAssertFalse(viewSource.contains("state.conversationSurface == .mainResponse || state.showingAIResponse"))
-    XCTAssertTrue(
-      windowSource.contains("func beginVisibleMainQuery(_ message: String, fromVoice: Bool, animated: Bool = true)"))
-    XCTAssertTrue(windowSource.contains("state.resetMeasuredContentHeight(for: .mainResponse)"))
-    XCTAssertTrue(windowSource.contains("state.present(.mainResponse)"))
-    XCTAssertTrue(windowSource.contains("beginMainResponseHeight(animated: animated)"))
-    XCTAssertFalse(windowSource.contains("state.showingAIResponse = true"))
-    XCTAssertFalse(windowSource.contains("state.chatHistory"))
-    XCTAssertTrue(windowSource.contains("barWindow?.state.bindAnswerMessage(aiMessage)"))
-  }
-
   func testActiveSubagentChatRefreshesWhenAgentOutputChanges() throws {
     let agentSource = try agentPillSource()
     let viewSource = try floatingControlBarViewSource()
@@ -1164,10 +1141,20 @@ import XCTest
     )
     XCTAssertFalse(source.contains("viewportResizeDetector"))
     XCTAssertFalse(source.contains("handleViewportSizeChange"))
-    // omi-test-quality: source-inspection -- static contract: geometry inside
-    // the LazyVStack must not feed transcript layout values back into state;
-    // the behavioral scroll coverage lives in ChatScrollLiveEdgeTests.
-    XCTAssertFalse(source.contains(".onGeometryChange(for: "))
+    // omi-test-quality: source-inspection -- static contract: measured transcript geometry must
+    // not re-enter this view's observed state; the behavioral scroll coverage lives in
+    // ChatScrollLiveEdgeTests and the rail's in ChatPromptTimelineTests.
+    //
+    // The claim is that geometry never re-enters *this view's* state, not that the transcript
+    // never measures itself. A blanket ban on `.onGeometryChange` stood in for that while the
+    // prompt rail was deleted; the rail is back and measures rows again, but it writes into
+    // `ChatTranscriptGeometry`, which this view holds as a plain `@State` reference and therefore
+    // does not observe — only the rail overlay does. Assert the facts that actually close the
+    // layout loop rather than the mechanism that happened to be absent.
+    XCTAssertFalse(source.contains(".onGeometryChange(for: ChatTranscriptContentFrame.self)"))
+    XCTAssertTrue(source.contains("@State private var transcriptGeometry = ChatTranscriptGeometry()"))
+    XCTAssertFalse(source.contains("@StateObject private var transcriptGeometry"))
+    XCTAssertFalse(source.contains("@ObservedObject private var transcriptGeometry"))
     // omi-test-quality: source-inspection -- static contract: a local send may
     // enter follow mode, but must never clear the reader's in-flight gesture
     // latch to do it; the behavioral coverage is in
@@ -1602,9 +1589,12 @@ import XCTest
   func testPTTCollapsePreservesGlowPaddingOnLegacyDisplays() throws {
     let source = try floatingControlBarWindowSource()
 
-    // Legacy PTT collapse supplies the bare compact surface to the shared
-    // transition path, which applies the active response/agent glow exactly once.
-    XCTAssertTrue(source.contains("toSurfaceSize: expanded ? Self.voiceBarSize : Self.minBarSize"))
+    // Legacy PTT collapse now lands on the composed closed surface (card ∪
+    // banner ∪ listening island) instead of substituting the bare compact
+    // bar; the shared transition path still applies the active response/agent
+    // glow exactly once on top of whatever size lands.
+    XCTAssertTrue(source.contains("return closedSurfaceSize(usesNotchIsland: usesNotchIsland)"))
+    XCTAssertFalse(source.contains("voiceSize = expanded ? Self.voiceBarSize : Self.minBarSize"))
     XCTAssertTrue(source.contains("let windowSize = responseGlowWindowSizeForCurrentScreen(forSurfaceSize: size)"))
     XCTAssertTrue(source.contains("guard state.isVoiceResponseGlowActive || collapsedPillAgentGlowActive else"))
   }

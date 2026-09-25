@@ -8,11 +8,13 @@ Covers:
 5. Completion notification fires for shared tasks
 """
 
+import importlib.util
 import json
 import os
 import sys
 import types
 from datetime import datetime, timezone
+from pathlib import Path
 from unittest.mock import MagicMock, patch, call
 
 os.environ.setdefault(
@@ -40,6 +42,7 @@ for sub in [
     "tasks",
     "trends",
     "action_items",
+    "action_items_cache",
     "folders",
     "calendar_meetings",
     "vector_db",
@@ -56,6 +59,9 @@ for sub in [
     "notifications",
     "workstreams",
     "firestore_transaction_retry",
+    # Landing with #15099: routers/account_cutover.py imports this submodule at
+    # module scope; collection of this file fails without the stub.
+    "account_cutover",
 ]:
     mod = _stub_module(f"database.{sub}")
     setattr(database_mod, sub, mod)
@@ -66,6 +72,18 @@ sys.modules["database.firestore_transaction_retry"].FirestoreContentionExhausted
     {},
 )
 sys.modules["database.task_intelligence_control"].get_task_workflow_control = MagicMock()
+
+# The action-items router imports the list-cache seams at module scope. Keep
+# this sharing test's database package stubbed and provide inert implementations
+# for the unrelated list endpoint cache.
+action_items_cache_mod = sys.modules["database.action_items_cache"]
+action_items_cache_mod.compute_etag = MagicMock()
+action_items_cache_mod.get_action_items_list_version = MagicMock(return_value=None)
+action_items_cache_mod.if_none_match_matches = MagicMock(return_value=False)
+action_items_cache_mod.list_cache_key = MagicMock()
+action_items_cache_mod.list_cache_ttl_seconds = MagicMock(return_value=0)
+action_items_cache_mod.read_cached_list = MagicMock(return_value=None)
+action_items_cache_mod.write_cached_list = MagicMock()
 
 # Stub vector_db functions used by routers.action_items
 vector_db_mod = sys.modules["database.vector_db"]
@@ -86,6 +104,12 @@ clients_mod.llm_large = MagicMock()
 
 # Stub other utils that import heavy dependencies
 _stub_module("utils.llm.notifications")
+# routers/action_items.py imports product_metrics (#15099); its real import
+# chain reaches database.read_boundary, unresolvable under the stubbed
+# "database" package, so stub it before the router import.
+product_metrics_mod = _stub_module("utils.product_metrics")
+product_metrics_mod.record_product_event = MagicMock()
+product_metrics_mod.extract_app_build = MagicMock(return_value='unknown')
 notif_mod = _stub_module("utils.notifications")
 notif_mod.send_notification = MagicMock()
 notif_mod.send_action_item_data_message = MagicMock()
@@ -100,6 +124,7 @@ sys.modules["utils.task_sync"].auto_sync_action_item = MagicMock()
 # Stub redis_db.r so Redis helper tests can patch it
 redis_mod = sys.modules["database.redis_db"]
 redis_mod.r = MagicMock()
+redis_mod.check_rate_limit = MagicMock(return_value=(True, 0, 0))
 redis_mod.try_catch_decorator = lambda f: f
 redis_mod.TASK_SHARE_TTL = 60 * 60 * 24 * 30
 redis_mod.json = __import__("json")
@@ -121,6 +146,28 @@ utils_users_mod.get_user_display_name = MagicMock(return_value="TestUser")
 _stub_module("utils.other")
 _stub_module("utils.other.endpoints")
 sys.modules["utils.other.endpoints"].get_current_user_uid = MagicMock()
+# The action-items router wraps its list auth dependency at module level:
+#   Depends(auth.with_rate_limit(auth.get_current_user_uid, "action_items:list"))
+# so the stub has to expose it or importing the router raises AttributeError
+# during collection. Pass the dependency straight through: these tests assert
+# sharing behavior, and the real wrapper only adds a Redis rate-limit check.
+sys.modules["utils.other.endpoints"].with_rate_limit = lambda auth_dependency, policy_name: auth_dependency
+
+# The action-items router imports the list-read budget seam at module level
+# (#11831). Delegate the stubbed submodule to the real (stdlib-only) module so
+# the import binds real symbols without pulling heavy dependencies.
+list_budget_stub = _stub_module("utils.other.list_budget")
+_list_budget_path = Path(__file__).resolve().parents[2] / "utils" / "other" / "list_budget.py"
+_list_budget_spec = importlib.util.spec_from_file_location("_omi_real_list_budget", _list_budget_path)
+_list_budget_real = importlib.util.module_from_spec(_list_budget_spec)
+_list_budget_spec.loader.exec_module(_list_budget_real)
+
+
+def _list_budget_getattr(name):
+    return getattr(_list_budget_real, name)
+
+
+list_budget_stub.__getattr__ = _list_budget_getattr
 
 import database.redis_db as redis_db
 import routers.action_items as action_items_router
@@ -303,6 +350,34 @@ class TestAcceptEndpoint:
                 assert False, "Should have raised HTTPException"
             except Exception as e:
                 assert e.status_code == 503
+
+    def _accept_one(self, original):
+        request = AcceptSharedTasksRequest(token="tok1")
+        with patch("routers.action_items.redis_db") as mock_redis, patch(
+            "routers.action_items.action_items_db"
+        ) as mock_db, patch("routers.action_items.send_action_item_data_message") as reminder:
+            mock_redis.get_task_share.return_value = self._mock_share_data()
+            mock_redis.try_accept_task_share.return_value = True
+            mock_db.get_action_item.return_value = original
+            mock_db.create_action_item.return_value = "new_t1"
+            accept_shared_action_items(request, uid="uid_bob")
+        return reminder
+
+    def test_accept_schedules_reminder_for_task_with_due_date(self):
+        due = datetime(2026, 9, 20, 9, 0, tzinfo=timezone.utc)
+        reminder = self._accept_one({"id": "t1", "description": "Review PR", "due_at": due})
+
+        reminder.assert_called_once_with(
+            user_id="uid_bob",
+            action_item_id="new_t1",
+            description="Review PR",
+            due_at=due.isoformat(),
+        )
+
+    def test_accept_schedules_no_reminder_without_due_date(self):
+        reminder = self._accept_one({"id": "t1", "description": "Review PR", "due_at": None})
+
+        reminder.assert_not_called()
 
 
 class TestCompletionNotification:

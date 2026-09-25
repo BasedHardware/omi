@@ -61,7 +61,8 @@ final class FloatingOwnerProjectionTests: XCTestCase {
         title: "owner A private title",
         message: "owner A private content",
         assistantId: "insight",
-        sound: .none)
+        sound: .none,
+        kind: .insight)
     }
     await gate.waitUntilStarted()
     defaults.set("owner-b", forKey: .authUserId)
@@ -99,6 +100,7 @@ final class FloatingOwnerProjectionTests: XCTestCase {
         message: "must not mark delivered",
         assistantId: "context-director",
         sound: .none,
+        kind: .insight,
         onPresented: { presentedCount += 1 },
         onDropped: { droppedCount += 1 })
     }

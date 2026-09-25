@@ -243,7 +243,13 @@ async def test_listen_runtime_persists_and_exports_capture_exactly_once_after_cl
     assert runtime.parity_capture.enabled is True
     assert len(stt_sockets) == 1
     assert stt_sockets[0].sent == [_AUDIO]
-    assert runtime.transcripts.inbound == [{'text': _TRANSCRIPT, 'start': 0.0, 'end': 0.03}]
+    assert len(runtime.transcripts.inbound) == 1
+    inbound = runtime.transcripts.inbound[0]
+    assert inbound['text'] == _TRANSCRIPT
+    assert inbound['start'] == 0.0
+    assert inbound['end'] == 0.03
+    assert inbound['stt_provider'] == 'parakeet'
+    assert inbound['speaker_id_scope'].endswith(':0')
     assert len(persist_calls) == 1
     persist_offloads = [
         (executor, function)

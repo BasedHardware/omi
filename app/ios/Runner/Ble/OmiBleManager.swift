@@ -2,40 +2,6 @@ import CoreBluetooth
 import Flutter
 import UIKit
 
-/// Keep in sync with `app/lib/services/devices/ble_reconnect_policy.dart`.
-enum OmiBleReconnectPolicy {
-    static let timeoutBackoffMs: [Int] = [200, 2_000, 10_000, 30_000, 60_000]
-    static let backoffCapMs = 60_000
-    static let batteryMinDeltaPercent = 5
-    static let batteryMinIntervalMs: Int64 = 15 * 60 * 1_000
-    static let batteryLowThresholdPercent = 20
-
-    /// 0 = first parked connect (no delay). Later background timeout/fail
-    /// attempts walk 200ms → 2s → 10s → 30s → 60s.
-    static func reconnectDelayMs(attempt: Int, isBackground: Bool, isTimeoutOrFailToConnect: Bool) -> Int {
-        if attempt <= 0 || !isBackground || !isTimeoutOrFailToConnect {
-            return 0
-        }
-        let idx = min(max(attempt - 1, 0), timeoutBackoffMs.count - 1)
-        return min(timeoutBackoffMs[idx], backoffCapMs)
-    }
-
-    static func shouldPersistBatteryReading(
-        previousLevel: Int?,
-        lastPersistedAtMs: Int64?,
-        newLevel: Int,
-        nowMs: Int64
-    ) -> Bool {
-        guard let previousLevel, let lastPersistedAtMs else { return true }
-        let delta = abs(previousLevel - newLevel)
-        let elapsed = nowMs - lastPersistedAtMs
-        let crossedLow =
-            (newLevel < batteryLowThresholdPercent && previousLevel >= batteryLowThresholdPercent) ||
-            (newLevel >= batteryLowThresholdPercent && previousLevel < batteryLowThresholdPercent)
-        return delta >= batteryMinDeltaPercent || elapsed >= batteryMinIntervalMs || crossedLow
-    }
-}
-
 /// Native CoreBluetooth manager that handles BLE lifecycle, state restoration,
 /// reconnection, service discovery, and audio batching.
 ///
@@ -65,23 +31,18 @@ final class OmiBleManager: NSObject {
     /// Whether the user explicitly disconnected (suppress auto-reconnect).
     private var manuallyDisconnected: Set<String> = []
 
-    /// Consecutive reconnect attempts since the last audio notification.
-    private var reconnectAttempt: [String: Int] = [:]
-    /// In-flight delayed reconnects — at most one parked connect per peripheral.
-    private var pendingReconnectWork: [String: DispatchWorkItem] = [:]
-    /// Deadline + peripheral for delayed reconnects, so a CoreBluetooth wake
-    /// can fire overdue work if `asyncAfter` was lost to suspend.
-    private var pendingReconnectDeadline: [String: Date] = [:]
-    private var pendingReconnectPeripheral: [String: CBPeripheral] = [:]
+    /// Peripherals with a stale iOS bond (CB error 14). Suppresses native auto-reconnect
+    /// until Dart explicitly calls manageDevice again after the user forgets the device.
+    private var pairingLostBlocked: Set<String> = []
 
-    /// Last battery sample actually written to the plist ring, per peripheral.
-    private var lastPersistedBatteryLevel: [String: Int] = [:]
-    private var lastPersistedBatteryAtMs: [String: Int64] = [:]
-
-    /// RSSI keep-alive timer — periodic reads prevent connection supervision timeout.
+    /// RSSI timer used only while the diagnostics screen is visible.
     private var rssiTimer: Timer?
+    private var rssiTimerPeripheralUuid: String?
 
-    /// When true, RSSI reads are forwarded to Flutter for the diagnostics graph.
+    /// Peripheral whose live RSSI graph is currently subscribed by Flutter.
+    private var diagnosticsRssiPeripheralUuid: String?
+    /// Whether the diagnostics UI currently has an RSSI subscription.
+    /// The UUID above remains the authoritative per-peripheral gate.
     var isRssiStreamingEnabled = false
 
     /// Connection start time per peripheral UUID.
@@ -110,6 +71,21 @@ final class OmiBleManager: NSObject {
     /// Queued scan request if Bluetooth wasn't ready when startScan was called.
     private var pendingScan: (timeout: Int, serviceUuids: [String])?
 
+    /// Last battery point written during this process, used to avoid rewriting
+    /// the complete UserDefaults history for every notification.
+    private var lastPersistedBatteryLevel: [String: Int] = [:]
+    private var lastPersistedBatteryTimestampMs: [String: Int64] = [:]
+    /// UUIDs whose persisted battery history has already been consulted in
+    /// this process. This keeps relaunch rehydration to one read per device
+    /// without putting UserDefaults on the hot notification path.
+    private var batteryBaselineRehydrated: Set<String> = []
+
+    /// Native batch/flash-drain traffic during the current background window.
+    /// These packets do not cross Pigeon, so Dart counters cannot observe them.
+    private var nativeBackgroundBytesConsumed: [String: Int64] = [:]
+    private var nativeBackgroundPacketsConsumed: [String: Int64] = [:]
+    private var isBackgroundTelemetryWindowActive = false
+
     // MARK: - Initialization
 
     private override init() {
@@ -124,6 +100,23 @@ final class OmiBleManager: NSObject {
             ]
         )
         NSLog("[OmiBle] CBCentralManager created")
+    }
+
+    func markBackgroundTelemetryStart() {
+        guard !isBackgroundTelemetryWindowActive else { return }
+        nativeBackgroundBytesConsumed.removeAll()
+        nativeBackgroundPacketsConsumed.removeAll()
+        isBackgroundTelemetryWindowActive = true
+    }
+
+    func markBackgroundTelemetryEnd() {
+        isBackgroundTelemetryWindowActive = false
+    }
+
+    private func recordNativeBackgroundPacket(uuid: String, bytes: Int) {
+        guard isBackgroundTelemetryWindowActive else { return }
+        nativeBackgroundBytesConsumed[uuid, default: 0] += Int64(bytes)
+        nativeBackgroundPacketsConsumed[uuid, default: 0] += 1
     }
 
     func setFlutterApi(_ api: BleFlutterApi) {
@@ -171,6 +164,7 @@ final class OmiBleManager: NSObject {
 
     func connectPeripheral(uuid: String) {
         manuallyDisconnected.remove(uuid)
+        pairingLostBlocked.remove(uuid)
 
         if let peripheral = peripherals[uuid] {
             if peripheral.state == .connected {
@@ -193,8 +187,7 @@ final class OmiBleManager: NSObject {
 
     func disconnectPeripheral(uuid: String) {
         manuallyDisconnected.insert(uuid)
-        cancelPendingReconnect(uuid: uuid)
-        reconnectAttempt[uuid] = 0
+        pairingLostBlocked.remove(uuid)
         persistDisconnectEvent(uuid: uuid, reason: "manual", reasonCode: 0, isManual: true, eventType: "disconnect")
         guard let peripheral = peripherals[uuid] else { return }
         centralManager.cancelPeripheralConnection(peripheral)
@@ -203,86 +196,12 @@ final class OmiBleManager: NSObject {
     func disconnectAllPeripherals() {
         for (uuid, peripheral) in peripherals {
             manuallyDisconnected.insert(uuid)
-            cancelPendingReconnect(uuid: uuid)
-            reconnectAttempt[uuid] = 0
             centralManager.cancelPeripheralConnection(peripheral)
         }
     }
 
     func isPeripheralConnected(uuid: String) -> Bool {
         return peripherals[uuid]?.state == .connected
-    }
-
-    private func cancelPendingReconnect(uuid: String) {
-        pendingReconnectWork[uuid]?.cancel()
-        pendingReconnectWork.removeValue(forKey: uuid)
-        pendingReconnectDeadline.removeValue(forKey: uuid)
-        pendingReconnectPeripheral.removeValue(forKey: uuid)
-    }
-
-    private func isTimeoutOrFailToConnectReason(_ reason: String) -> Bool {
-        return reason == "connection_timeout" ||
-            reason == "fail_to_connect" ||
-            reason == "connection_failed_instant_passed"
-    }
-
-    /// Fire overdue delayed reconnects. CoreBluetooth wake / restore / poweredOn
-    /// and foreground entry call this because `DispatchQueue.main.asyncAfter`
-    /// does not wake a suspended process.
-    func flushDueReconnects() {
-        let now = Date()
-        let due = pendingReconnectDeadline.compactMap { uuid, deadline -> String? in
-            now >= deadline ? uuid : nil
-        }
-        for uuid in due {
-            guard let peripheral = pendingReconnectPeripheral[uuid] else {
-                cancelPendingReconnect(uuid: uuid)
-                continue
-            }
-            fireReconnect(uuid: uuid, peripheral: peripheral)
-        }
-    }
-
-    private func fireReconnect(uuid: String, peripheral: CBPeripheral) {
-        cancelPendingReconnect(uuid: uuid)
-        if manuallyDisconnected.contains(uuid) { return }
-        if peripheral.state == .connected { return }
-        centralManager.connect(peripheral, options: nil)
-    }
-
-    /// At most one parked `central.connect` per peripheral. First drop is
-    /// synchronous (iOS can suspend before `asyncAfter` fires). Later
-    /// background timeout/fail storms back off.
-    private func scheduleReconnect(peripheral: CBPeripheral, reason: String) {
-        let uuid = peripheralUuidString(peripheral)
-        if manuallyDisconnected.contains(uuid) { return }
-        if reason == "pairing_lost" { return }
-
-        cancelPendingReconnect(uuid: uuid)
-
-        let attempt = reconnectAttempt[uuid] ?? 0
-        let isBackground = UIApplication.shared.applicationState != .active
-        let delayMs = OmiBleReconnectPolicy.reconnectDelayMs(
-            attempt: attempt,
-            isBackground: isBackground,
-            isTimeoutOrFailToConnect: isTimeoutOrFailToConnectReason(reason)
-        )
-        reconnectAttempt[uuid] = attempt + 1
-
-        NSLog("[OmiBle] scheduleReconnect uuid=\(uuid) reason=\(reason) attempt=\(attempt) delayMs=\(delayMs) background=\(isBackground)")
-
-        if delayMs <= 0 {
-            fireReconnect(uuid: uuid, peripheral: peripheral)
-            return
-        }
-
-        pendingReconnectPeripheral[uuid] = peripheral
-        pendingReconnectDeadline[uuid] = Date().addingTimeInterval(Double(delayMs) / 1000.0)
-        let work = DispatchWorkItem { [weak self] in
-            self?.flushDueReconnects()
-        }
-        pendingReconnectWork[uuid] = work
-        DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(delayMs), execute: work)
     }
 
     /// Re-issue `connect()` on any previously-connected peripheral that isn't
@@ -293,7 +212,6 @@ final class OmiBleManager: NSObject {
     /// foreground — `centralManager.connect` is idempotent and pending connects
     /// cost nothing while iOS waits at the chipset level.
     func reconnectStalePeripherals() {
-        flushDueReconnects()
         guard centralManager.state == .poweredOn else { return }
         for (uuid, peripheral) in peripherals {
             guard everConnected.contains(uuid) else { continue }
@@ -377,35 +295,53 @@ final class OmiBleManager: NSObject {
         }
     }
 
-    // MARK: - RSSI diagnostics polling
+    // MARK: - RSSI Diagnostics
 
-    /// Periodic `readRSSI` is only for the diagnostics graph. It is not a
-    /// connection keep-alive — a 3s timer in the background costs radio/CPU
-    /// and does not prevent `connection_timeout`.
     func setRssiStreamingEnabled(_ enabled: Bool, uuid: String) {
         isRssiStreamingEnabled = enabled
-        if enabled, let peripheral = peripherals[uuid], peripheral.state == .connected {
-            startRssiPolling(for: peripheral)
-        } else {
-            stopRssiPolling()
+        if enabled {
+            diagnosticsRssiPeripheralUuid = uuid
+            guard let peripheral = peripherals[uuid],
+                  OmiBleEnergyPolicy.shouldPollRssi(
+                    diagnosticsEnabled: true,
+                    peripheralConnected: peripheral.state == .connected
+                  ) else {
+                stopRssiDiagnosticsPolling()
+                return
+            }
+            peripheral.readRSSI()
+            startRssiDiagnosticsPolling(for: peripheral)
+            return
+        }
+
+        if diagnosticsRssiPeripheralUuid == uuid {
+            diagnosticsRssiPeripheralUuid = nil
+            isRssiStreamingEnabled = false
+            stopRssiDiagnosticsPolling()
         }
     }
 
-    private func startRssiPolling(for peripheral: CBPeripheral) {
-        stopRssiPolling()
+    private func startRssiDiagnosticsPolling(for peripheral: CBPeripheral) {
+        stopRssiDiagnosticsPolling()
+        rssiTimerPeripheralUuid = peripheralUuidString(peripheral)
         rssiTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: true) { [weak self, weak peripheral] _ in
-            guard let peripheral = peripheral, peripheral.state == .connected else {
-                self?.stopRssiPolling()
+            guard let self, let peripheral else { return }
+            let uuid = self.peripheralUuidString(peripheral)
+            guard OmiBleEnergyPolicy.shouldPollRssi(
+                diagnosticsEnabled: self.diagnosticsRssiPeripheralUuid == uuid,
+                peripheralConnected: peripheral.state == .connected
+            ) else {
+                self.stopRssiDiagnosticsPolling()
                 return
             }
             peripheral.readRSSI()
         }
-        peripheral.readRSSI()
     }
 
-    private func stopRssiPolling() {
+    private func stopRssiDiagnosticsPolling() {
         rssiTimer?.invalidate()
         rssiTimer = nil
+        rssiTimerPeripheralUuid = nil
     }
 
     // MARK: - Private Helpers
@@ -446,11 +382,6 @@ final class OmiBleManager: NSObject {
     private static let batteryHistoryRetentionMs: Int64 = 7 * 24 * 3600 * 1000
 
     private static let batteryLevelCharUuid = CBUUID(string: "2A19")
-    private static let audioCharUuids: Set<CBUUID> = [
-        CBUUID(string: "19B10001-E8F2-537E-4F6C-D104768A1214"),
-        CBUUID(string: "01000000-1111-1111-1111-111111111111"),
-        CBUUID(string: "632DE003-604C-446B-A80F-7963E950F3FB"),
-    ]
 
     private static let diagnosticsKeyPrefix = "ble_diagnostics_disconnect_history_"
     private static let reconnectCountKeyPrefix = "ble_diagnostics_reconnect_count_"
@@ -465,7 +396,7 @@ final class OmiBleManager: NSObject {
     private static func classifyRssiTrend(samples: [(ts: Int64, rssi: Int64)], nowMs: Int64) -> String {
         let windowStart = nowMs - rssiTrendWindowMs
         let recent = samples.filter { $0.ts >= windowStart }
-        // No recent samples — diagnostics RSSI polling was off, so we can't say.
+        // No recent samples — keep-alive wasn't running, so we can't say.
         if recent.isEmpty { return "gap" }
         if recent.count < 3 { return "unknown" }
         // Compare the average of the oldest third to the newest third. A drop of
@@ -501,6 +432,9 @@ final class OmiBleManager: NSObject {
     }
 
     private static func bleReasonString(from error: Error?) -> String {
+        if OmiBlePairingPolicy.isPairingLost(error) {
+            return "pairing_lost"
+        }
         guard let cbError = error as? CBError else { return "clean_disconnect" }
         switch cbError.code {
         case .connectionTimeout: return "connection_timeout"
@@ -509,6 +443,15 @@ final class OmiBleManager: NSObject {
         case .peerRemovedPairingInformation: return "pairing_lost"
         default: return "gatt_error_\(cbError.code.rawValue)"
         }
+    }
+
+    private func markPairingLost(uuid: String) {
+        pairingLostBlocked.insert(uuid)
+        manuallyDisconnected.insert(uuid)
+    }
+
+    private func shouldAutoReconnect(uuid: String, pairingLost: Bool) -> Bool {
+        !manuallyDisconnected.contains(uuid) && !pairingLost && !pairingLostBlocked.contains(uuid)
     }
 
     /// Append a disconnect/fail event to the per-device history ring buffer.
@@ -619,7 +562,9 @@ final class OmiBleManager: NSObject {
             disconnectHistory: events,
             reconnectionCount: Int64(reconnectCount),
             connectedAt: connectedAt,
-            failToConnectCount: Int64(failToConnectCount)
+            failToConnectCount: Int64(failToConnectCount),
+            nativeBackgroundBytesConsumed: nativeBackgroundBytesConsumed[uuid] ?? 0,
+            nativeBackgroundPacketsConsumed: nativeBackgroundPacketsConsumed[uuid] ?? 0
         )
     }
 
@@ -627,19 +572,30 @@ final class OmiBleManager: NSObject {
 
     private static func batteryHistoryKey(_ uuid: String) -> String { "\(batteryHistoryKeyPrefix)\(uuid)" }
 
+    /// The in-memory throttle baseline is lost on process restart; restore it
+    /// from the newest persisted history entry before evaluating the first
+    /// notification. Without this, a relaunch can rewrite the entire history
+    /// ring even when the battery level has not meaningfully changed.
+    private func rehydrateBatteryBaselineIfNeeded(uuid: String) {
+        guard batteryBaselineRehydrated.insert(uuid).inserted else { return }
+        guard let history = UserDefaults.standard.array(forKey: OmiBleManager.batteryHistoryKey(uuid)) as? [[String: Any]],
+              let last = history.last,
+              let ts = last["ts"] as? Int64,
+              let level = last["level"] as? Int
+        else { return }
+        lastPersistedBatteryLevel[uuid] = level
+        lastPersistedBatteryTimestampMs[uuid] = ts
+    }
+
     private func persistBatteryReading(uuid: String, level: Int) {
         let now = Int64(Date().timeIntervalSince1970 * 1000)
-        guard OmiBleReconnectPolicy.shouldPersistBatteryReading(
+        rehydrateBatteryBaselineIfNeeded(uuid: uuid)
+        guard OmiBleEnergyPolicy.shouldPersistBatteryReading(
             previousLevel: lastPersistedBatteryLevel[uuid],
-            lastPersistedAtMs: lastPersistedBatteryAtMs[uuid],
-            newLevel: level,
+            previousTimestampMs: lastPersistedBatteryTimestampMs[uuid],
+            level: level,
             nowMs: now
-        ) else {
-            return
-        }
-
-        lastPersistedBatteryLevel[uuid] = level
-        lastPersistedBatteryAtMs[uuid] = now
+        ) else { return }
 
         let defaults = UserDefaults.standard
         let key = OmiBleManager.batteryHistoryKey(uuid)
@@ -655,6 +611,8 @@ final class OmiBleManager: NSObject {
         }
 
         defaults.set(history, forKey: key)
+        lastPersistedBatteryLevel[uuid] = level
+        lastPersistedBatteryTimestampMs[uuid] = now
     }
 
     func getBatteryHistory(uuid: String) -> [BleBatteryPoint] {
@@ -674,7 +632,13 @@ final class OmiBleManager: NSObject {
     // MARK: - Audio Batch Helpers
 
     private func cleanupPeripheral(_ peripheralUuid: String) {
-        stopRssiPolling()
+        if rssiTimerPeripheralUuid == peripheralUuid {
+            stopRssiDiagnosticsPolling()
+        }
+        if diagnosticsRssiPeripheralUuid == peripheralUuid {
+            diagnosticsRssiPeripheralUuid = nil
+            isRssiStreamingEnabled = false
+        }
         discoveredServices.removeValue(forKey: peripheralUuid)
 
         // Clean up pending completions
@@ -700,10 +664,6 @@ extension OmiBleManager: CBCentralManagerDelegate {
         NSLog("[OmiBle] centralManagerDidUpdateState: \(state), flutterApi=\(flutterApi != nil)")
         flutterApi?.onBluetoothStateChanged(state: state) { _ in }
 
-        if central.state == .poweredOn {
-            flushDueReconnects()
-        }
-
         // Execute queued scan if Bluetooth just became ready
         if central.state == .poweredOn, let pending = pendingScan {
             NSLog("[OmiBle] Executing queued scan (timeout=\(pending.timeout))")
@@ -712,7 +672,14 @@ extension OmiBleManager: CBCentralManagerDelegate {
     }
 
     func centralManager(_ central: CBCentralManager, willRestoreState dict: [String: Any]) {
-        flushDueReconnects()
+        // CoreBluetooth can relaunch the process directly into the background;
+        // applicationDidEnterBackground is not delivered for that lifecycle.
+        // Start the native accounting window here so restored notifications are
+        // represented in diagnostics instead of silently dropped.
+        if UIApplication.shared.applicationState != .active {
+            markBackgroundTelemetryStart()
+        }
+
         // Restore previously connected peripherals after app relaunch
         if let restoredPeripherals = dict[CBCentralManagerRestoredStatePeripheralsKey] as? [CBPeripheral] {
             var uuids: [String] = []
@@ -720,12 +687,13 @@ extension OmiBleManager: CBCentralManagerDelegate {
                 let uuid = peripheralUuidString(peripheral)
                 peripheral.delegate = self
                 peripherals[uuid] = peripheral
-                uuids.append(uuid)
-                // Restored peripherals are reconnect-eligible after a later drop.
+                // State-restored peripherals have already connected in a prior
+                // process lifetime; count a later connection as a reconnect.
                 everConnected.insert(uuid)
+                uuids.append(uuid)
 
                 // Re-establish connection if not already connected
-                if peripheral.state != .connected {
+                if peripheral.state != .connected, !pairingLostBlocked.contains(uuid) {
                     central.connect(peripheral, options: nil)
                 } else {
                     peripheral.discoverServices(nil)
@@ -764,7 +732,6 @@ extension OmiBleManager: CBCentralManagerDelegate {
         }
         everConnected.insert(uuid)
         connectionStartTimes[uuid] = Int64(Date().timeIntervalSince1970 * 1000)
-        cancelPendingReconnect(uuid: uuid)
 
         peripheral.delegate = self
         peripheral.discoverServices(nil)
@@ -773,9 +740,13 @@ extension OmiBleManager: CBCentralManagerDelegate {
     func centralManager(_ central: CBCentralManager, didFailToConnect peripheral: CBPeripheral, error: Error?) {
         let uuid = peripheralUuidString(peripheral)
         let isManual = manuallyDisconnected.contains(uuid)
-        let pairingLost = (error as? CBError)?.code == .peerRemovedPairingInformation
+        let pairingLost = OmiBlePairingPolicy.isPairingLost(error)
         NSLog("[OmiBle] didFailToConnect: \(peripheral.name ?? "<nil>"), uuid=\(uuid), error=\(error?.localizedDescription ?? "nil")")
         cleanupPeripheral(uuid)
+
+        if pairingLost {
+            markPairingLost(uuid: uuid)
+        }
 
         if !isManual {
             let reason = Self.bleReasonString(from: error)
@@ -792,24 +763,26 @@ extension OmiBleManager: CBCentralManagerDelegate {
 
         flutterApi?.onPeripheralDisconnected(peripheralUuid: uuid, error: pairingLost ? "pairing_lost" : error?.localizedDescription) { _ in }
 
-        flushDueReconnects()
-
         // Retry previously-connected peripherals — otherwise a failed connect silently
-        // drops the user. First attempt is a parked chipset-level connect; later
-        // background timeout storms back off instead of 200ms forever.
-        if !isManual, !pairingLost, everConnected.contains(uuid) {
-            let reason = Self.bleReasonString(from: error)
-            let reconnectReason = reason == "connection_timeout" ? reason : "fail_to_connect"
-            scheduleReconnect(peripheral: peripheral, reason: reconnectReason)
+        // drops the user. iOS queues this at the chipset level; it's free while waiting.
+        if !isManual, shouldAutoReconnect(uuid: uuid, pairingLost: pairingLost), everConnected.contains(uuid) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(200)) { [weak self] in
+                guard let self = self else { return }
+                self.centralManager.connect(peripheral, options: nil)
+            }
         }
     }
 
     func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
         let uuid = peripheralUuidString(peripheral)
         let isManual = manuallyDisconnected.contains(uuid)
-        let pairingLost = (error as? CBError)?.code == .peerRemovedPairingInformation
+        let pairingLost = OmiBlePairingPolicy.isPairingLost(error)
         NSLog("[OmiBle] didDisconnect: \(peripheral.name ?? "<nil>"), uuid=\(uuid), error=\(error?.localizedDescription ?? "nil")")
         cleanupPeripheral(uuid)
+
+        if pairingLost {
+            markPairingLost(uuid: uuid)
+        }
 
         // Finalize the in-progress batch recording so it's saved + ingestable right away
         // (a plain BLE disconnect never delivers another packet to trigger the gap finalize).
@@ -833,13 +806,13 @@ extension OmiBleManager: CBCentralManagerDelegate {
 
         flutterApi?.onPeripheralDisconnected(peripheralUuid: uuid, error: pairingLost ? "pairing_lost" : error?.localizedDescription) { _ in }
 
-        flushDueReconnects()
-
-        // Auto-reconnect unless manually disconnected. Prefer a synchronous
-        // parked connect — iOS can suspend before asyncAfter fires.
-        if !isManual, !pairingLost {
-            let reason = Self.bleReasonString(from: error)
-            scheduleReconnect(peripheral: peripheral, reason: reason)
+        // Auto-reconnect unless manually disconnected
+        if !isManual, shouldAutoReconnect(uuid: uuid, pairingLost: pairingLost) {
+            DispatchQueue.main.asyncAfter(deadline: .now() + .milliseconds(200)) { [weak self] in
+                guard let self = self else { return }
+                // iOS handles this at the BLE chipset level — zero CPU/radio cost while waiting
+                self.centralManager.connect(peripheral, options: nil)
+            }
         }
     }
 }
@@ -877,11 +850,11 @@ extension OmiBleManager: CBPeripheralDelegate {
             
             flutterApi?.onDeviceReady(peripheralUuid: uuid, services: bleServices) { _ in }
             LimitlessFlashDrainEngine.shared.onDeviceReady(uuid)
-            // One sample for disconnect annotation. Do not start a 3s timer
-            // here — that was a fake keep-alive and a background battery cost.
+            // Retain one connection-time sample for disconnect diagnostics, but
+            // do not keep the radio polling unless the diagnostics UI asks.
             peripheral.readRSSI()
-            if isRssiStreamingEnabled {
-                startRssiPolling(for: peripheral)
+            if diagnosticsRssiPeripheralUuid == uuid {
+                startRssiDiagnosticsPolling(for: peripheral)
             }
         }
     }
@@ -904,7 +877,7 @@ extension OmiBleManager: CBPeripheralDelegate {
         rssiHistory[uuid] = samples
 
         // Forward to Flutter only while the diagnostics screen has subscribed.
-        if isRssiStreamingEnabled {
+        if isRssiStreamingEnabled, diagnosticsRssiPeripheralUuid == uuid {
             flutterApi?.onRssiUpdate(peripheralUuid: uuid, rssi: value) { _ in }
         }
     }
@@ -936,10 +909,6 @@ extension OmiBleManager: CBPeripheralDelegate {
             persistBatteryReading(uuid: uuid, level: Int(firstByte))
         }
 
-        if OmiBleManager.audioCharUuids.contains(characteristic.uuid) {
-            reconnectAttempt[uuid] = 0
-        }
-
         // Limitless Transcribe Later: while batch mode targets this pendant's RX
         // characteristic, the flash-drain engine consumes the packet natively.
         if LimitlessFlashDrainEngine.shared.handle(
@@ -948,6 +917,7 @@ extension OmiBleManager: CBPeripheralDelegate {
             characteristicUuid: charUuid,
             value: data
         ) {
+            recordNativeBackgroundPacket(uuid: uuid, bytes: data.count)
             return
         }
 
@@ -960,6 +930,7 @@ extension OmiBleManager: CBPeripheralDelegate {
             characteristicUuid: charUuid,
             value: data
         ) {
+            recordNativeBackgroundPacket(uuid: uuid, bytes: data.count)
             return
         }
 

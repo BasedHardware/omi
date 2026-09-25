@@ -532,6 +532,43 @@ actor StagedTaskStorage {
     }
   }
 
+  enum CanonicalOutboxRejectionOutcome: Equatable {
+    case willRetry(rejections: Int)
+    case poisoned(rejections: Int)
+  }
+
+  /// Records one permanent (validation-class) delivery rejection for an outbox
+  /// row. The count is persisted in the row's metadata so it survives restarts.
+  /// Once the count reaches `limit`, the row is poisoned: marked deleted so
+  /// `getUnsyncedCanonicalOutbox` stops returning it, with a metadata marker
+  /// distinguishing this terminal state from a user delete. A permanently
+  /// rejected payload can never succeed, so retrying it forever only wedges the
+  /// outbox and burns quota on deterministic 4xx responses.
+  func recordCanonicalOutboxRejection(
+    id: Int64,
+    limit: Int = CandidateOutboxRetryPolicy.maxPermanentRejections
+  ) async throws -> CanonicalOutboxRejectionOutcome {
+    let db = try await ensureInitialized()
+    return try await db.write { database in
+      guard var record = try StagedTaskRecord.fetchOne(database, key: id) else {
+        throw ActionItemStorageError.recordNotFound
+      }
+      var metadata = record.metadata ?? [:]
+      let rejections = ((metadata["outbox_permanent_rejections"] as? Int) ?? 0) + 1
+      metadata["outbox_permanent_rejections"] = rejections
+      let poisoned = rejections >= limit
+      if poisoned {
+        metadata["outbox_poisoned"] = true
+        record.completed = true
+        record.deleted = true
+      }
+      record.setMetadata(metadata)
+      record.updatedAt = Date()
+      try record.update(database)
+      return poisoned ? .poisoned(rejections: rejections) : .willRetry(rejections: rejections)
+    }
+  }
+
   func getUnsyncedCanonicalOutbox(limit: Int? = nil) async throws -> [StagedTaskRecord] {
     let db = try await ensureInitialized()
     return try await db.read { database in

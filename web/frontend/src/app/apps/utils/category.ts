@@ -13,6 +13,8 @@ import {
   ShoppingBag,
   Globe,
   Sparkles,
+  HeartHandshake,
+  Plane,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -186,6 +188,42 @@ export const categoryMetadata: Record<string, CategoryMetadata> = {
       secondary: 'text-cyan-400',
       accent: 'bg-cyan-500/15',
       background: 'bg-cyan-500/5',
+    },
+  },
+  'communication-improvement': {
+    id: 'communication-improvement',
+    displayName: 'Communication',
+    description: 'Improve your communication skills',
+    icon: MessageSquare,
+    theme: {
+      primary: 'text-lime-500',
+      secondary: 'text-lime-400',
+      accent: 'bg-lime-500/15',
+      background: 'bg-lime-500/5',
+    },
+  },
+  'emotional-and-mental-support': {
+    id: 'emotional-and-mental-support',
+    displayName: 'Emotional Support',
+    description: 'Support for emotional and mental health',
+    icon: HeartHandshake,
+    theme: {
+      primary: 'text-red-500',
+      secondary: 'text-red-400',
+      accent: 'bg-red-500/15',
+      background: 'bg-red-500/5',
+    },
+  },
+  'travel-and-exploration': {
+    id: 'travel-and-exploration',
+    displayName: 'Travel',
+    description: 'Plan and enhance your travel experiences',
+    icon: Plane,
+    theme: {
+      primary: 'text-yellow-500',
+      secondary: 'text-yellow-400',
+      accent: 'bg-yellow-500/15',
+      background: 'bg-yellow-500/5',
     },
   },
   other: {

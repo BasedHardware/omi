@@ -8,13 +8,14 @@
 //  actually happened in, newest first.
 //
 //  **Conversations stay dominant and every extracted record stays first-class.** Memories, tasks,
-//  and screen moments
-//  render *indented under* the conversation that produced them, which is what keeps a conversation
-//  the thing your eye lands on. They are not children of a card, though: they are rows of the same
-//  spine, so filtering to one kind is a real filter over the whole stream rather than a different
-//  screen. When one kind is soloed the indent collapses and every row states its own time (see
-//  `SpineRow.isAttached` and `SpineComposer.compose`), so the spine stays a clock rather than
-//  degrading into a flat list.
+//  and screen moments render *close under* the conversation that produced them — tighter air, no
+//  timestamp of their own — which is what keeps a conversation the thing your eye lands on. They
+//  are not children of a card, though: they are rows of the same spine, and every row sits on the
+//  same leading grid, so a strip of frames starts at the same left edge whether it hangs under a
+//  conversation or stands on its own. Filtering to one kind is a real filter over the whole stream
+//  rather than a different screen. When one kind is soloed the closeness collapses and every row
+//  states its own time (see `SpineRow.isAttached` and `SpineComposer.compose`), so the spine stays
+//  a clock rather than degrading into a flat list.
 //
 //  Everything here is a pure function of its inputs, deliberately: the composition is the part with
 //  rules in it (what attaches to what, what a day header counts, where the brain map is filed), and
@@ -170,18 +171,19 @@ struct SpineConversation: Identifiable, Equatable {
   /// otherwise the start, which makes the window a point and attaches nothing by accident.
   var finishedAt: Date { conversation.finishedAt ?? startedAt }
 
-  var duration: TimeInterval { max(0, finishedAt.timeIntervalSince(startedAt)) }
+  /// How long the conversation's speech lasted — the same number the Conversations list and the
+  /// detail show (`ServerConversation.durationInSeconds`). The clock window (`finishedAt -
+  /// startedAt`) measures how long the capture socket had been open, so an 8-second dictation read
+  /// as 42m45s here while the list said 8s (FC-capture-session-window-read-as-content-duration).
+  var duration: TimeInterval { TimeInterval(conversation.durationInSeconds) }
 
-  var title: String {
-    let title = conversation.structured.title.trimmingCharacters(in: .whitespacesAndNewlines)
-    return title.isEmpty ? "Untitled conversation" : title
-  }
+  /// The same title every other surface shows, including its processing, locked and failed states.
+  var title: String { conversation.displayTitle }
 
-  /// The tile glyph. An empty emoji from the server would render as a blank circle, so the category
-  /// initial is not used as a fallback — a speech mark is, because every conversation is one.
+  /// The tile's emoji, or empty when the pipeline has produced none — the row then draws the
+  /// neutral waveform the Conversations list uses, rather than a 💬 that claims an identity.
   var emoji: String {
-    let emoji = conversation.structured.emoji.trimmingCharacters(in: .whitespacesAndNewlines)
-    return emoji.isEmpty ? "💬" : emoji
+    conversation.structured.emoji.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
   var isStarred: Bool { conversation.starred }
@@ -245,8 +247,9 @@ struct SpineRow: Identifiable, Equatable {
   let anchor: Date
   /// Never `.everything`: a row is one kind of thing.
   let kind: SpineKind
-  /// True when this row was produced by the conversation directly above it. Indented while the
-  /// whole spine is shown; flattened — and given its own timestamp — the moment one kind is soloed.
+  /// True when this row was produced by the conversation directly above it. Set close under it —
+  /// on the same leading grid as every other row — while the whole spine is shown; flattened, and
+  /// given its own timestamp, the moment one kind is soloed.
   let isAttached: Bool
   let content: Content
 
@@ -255,6 +258,18 @@ struct SpineRow: Identifiable, Equatable {
 }
 
 // MARK: - Day
+
+/// Formats `SpineDay.id` (local start-of-day) as the backend's `YYYY-MM-DD` key.
+///
+/// Must use the same calendar the day was composed in. A UTC formatter here renders the
+/// previous evening in every zone east of UTC, and every recap lookup misses.
+enum SpineDayDateKey {
+  static func string(from dayID: Date, calendar: Calendar) -> String? {
+    let parts = calendar.dateComponents([.year, .month, .day], from: dayID)
+    guard let year = parts.year, let month = parts.month, let day = parts.day else { return nil }
+    return String(format: "%04d-%02d-%02d", year, month, day)
+  }
+}
 
 /// One day of the spine, with the header that counts it.
 struct SpineDay: Identifiable, Equatable {
@@ -375,8 +390,8 @@ enum SpineComposer {
   /// Recomposing on every keystroke would make the query bar feel like the list is thinking; this
   /// way the store composes when the *data* changes and filters when the *question* does.
   ///
-  /// It also keeps the day header honest: `filter(_:kind:query:)` never touches the counts, so a
-  /// filtered spine still says how big the day really was.
+  /// It also keeps the day header honest: `filter(_:kind:query:)` recomputes the counts from the
+  /// rows it leaves on screen, so a filtered spine does not claim that hidden records are visible.
   ///
   /// - Parameters:
   ///   - conversations: the loaded page(s) of the real conversation list, any order.
@@ -502,12 +517,28 @@ enum SpineComposer {
         }
       }
 
+      // The day header describes the rows currently on screen. Carrying the composed day's totals
+      // through a query made an empty-looking kind filter still say "1 conversation · 1 memory";
+      // recompute each unit count after narrowing while keeping the timeline's row ordering intact.
+      let momentCount = rows.reduce(0) { total, row in
+        guard case .moments(_, let count) = row.content else { return total }
+        return total + count
+      }
+      let conversationCount = rows.reduce(0) { total, row in
+        guard case .conversation = row.content else { return total }
+        return total + 1
+      }
+      let taskCount = rows.reduce(0) { total, row in
+        guard case .tasks(let tasks) = row.content else { return total }
+        return total + tasks.count
+      }
+
       return SpineDay(
         id: day.id,
         title: day.title,
-        momentCount: day.momentCount,
-        conversationCount: day.conversationCount,
-        taskCount: day.taskCount,
+        momentCount: momentCount,
+        conversationCount: conversationCount,
+        taskCount: taskCount,
         rows: rows
       )
     }
@@ -603,7 +634,7 @@ enum SpineComposer {
 
     // Re-seat every attached row directly under its conversation. Sorting by anchor alone would
     // interleave them with anything that happened mid-conversation, which is the exact reading
-    // failure the indent exists to prevent.
+    // failure the attachment exists to prevent.
     rows = reseatAttachments(rows)
 
     // The brain map is filed under memories at the foot of the day, never as a destination.
@@ -738,17 +769,9 @@ enum SpineFormat {
   }
 
   /// "8m 9s", "1h 04m", "42s".
-  static func duration(_ seconds: TimeInterval) -> String {
-    let total = Int(seconds.rounded())
-    let hours = total / 3600
-    let minutes = (total % 3600) / 60
-    let secs = total % 60
-    if hours > 0 { return String(format: "%dh %02dm", hours, minutes) }
-    if minutes > 0 { return "\(minutes)m \(secs)s" }
-    return "\(secs)s"
-  }
+  static func duration(_ seconds: TimeInterval) -> String { OmiDateFormat.duration(seconds) }
 
-  static func time(_ date: Date) -> String { timeFormatter.string(from: date) }
+  static func time(_ date: Date) -> String { OmiDateFormat.time(date) }
 
   /// The longest prefix that still reads as a category rather than as the first clause of a sentence.
   /// Past this, splitting stops being a label and becomes a fold through the middle of the copy.
@@ -783,18 +806,11 @@ enum SpineFormat {
     return SpineMemoryCopy(label: label, body: body)
   }
 
-  /// "Wednesday 6 August" — and "Today" / "Yesterday" for the two days a date is the wrong answer
-  /// for, because nobody reads their own morning as a date.
+  /// "Wednesday, Sep 23" — and "Today" / "Yesterday" for the two days a date is the wrong answer
+  /// for, because nobody reads their own morning as a date. The same day header the Conversations
+  /// list uses (`OmiDateFormat.dayHeader`), in the reader's own locale.
   static func day(_ date: Date, calendar: Calendar = .current, now: Date = Date()) -> String {
-    if calendar.isDate(date, inSameDayAs: now) { return "Today" }
-    if let yesterday = calendar.date(byAdding: .day, value: -1, to: calendar.startOfDay(for: now)),
-      calendar.isDate(date, inSameDayAs: yesterday)
-    {
-      return "Yesterday"
-    }
-    let formatter =
-      calendar.isDate(date, equalTo: now, toGranularity: .year) ? dayFormatter : dayYearFormatter
-    return formatter.string(from: date)
+    OmiDateFormat.dayHeader(date, now: now, calendar: calendar)
   }
 
   /// The hour a rail label states: "6 AM", "12 PM".
@@ -813,21 +829,4 @@ enum SpineFormat {
     return formatter
   }()
 
-  private static let timeFormatter: DateFormatter = {
-    let formatter = DateFormatter()
-    formatter.dateFormat = "h:mm a"
-    return formatter
-  }()
-
-  private static let dayFormatter: DateFormatter = {
-    let formatter = DateFormatter()
-    formatter.dateFormat = "EEEE d MMMM"
-    return formatter
-  }()
-
-  private static let dayYearFormatter: DateFormatter = {
-    let formatter = DateFormatter()
-    formatter.dateFormat = "EEEE d MMMM yyyy"
-    return formatter
-  }()
 }

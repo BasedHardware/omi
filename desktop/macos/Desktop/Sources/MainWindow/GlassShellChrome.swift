@@ -6,7 +6,7 @@
 //  - `Components/GlassContentChrome.swift` owns what a **page hosted inside the panel** may draw on
 //    it: the card, the row, the chip, the field, the scroll fade. Every one of those is a wash on the
 //    ground rather than a surface of its own.
-//  - **This file owns the shell's own terms** — the clearance the hidden title bar demands — plus the
+//  - **This file owns the shell's own terms** — window-specific clearance, plus the
 //    nav pill / icon button the top bar and the sidebar are built out of. The window itself has no
 //    ground at all: `ShellWindowChrome` makes it transparent and every surface grounds itself, so what
 //    is behind a panel is the user's wallpaper. See that file.
@@ -33,24 +33,10 @@ import SwiftUI
 enum GlassShell {
   /// Vertical clearance the content keeps under a hidden title bar.
   ///
-  /// `.hiddenTitleBar` gives the window `fullSizeContentView`, which lays a real — if transparent —
-  /// title bar *over* the content view. 32 pt is the height AppKit adds to a content rect to make a
-  /// titled window's frame rect, which is exactly that band — a **measurement**, checked against
-  /// `NSWindow.frameRect(forContentRect:styleMask:)` by `ShellGlassChromeTests`, so the guard fails
-  /// rather than the layout if a future macOS changes it.
-  ///
-  /// It used to be the band the traffic lights sat in. `ShellWindowChrome` hides those, and the band
-  /// still has to stay empty for a better reason: **it is the window's drag handle.** A title bar,
-  /// even an invisible one, takes the mouse before the content under it does — so a control drawn up
-  /// there is a control that cannot be clicked, and a bar drawn up there is a window that cannot be
-  /// dragged from the one place every macOS user reaches for first.
-  ///
-  /// It is a *reserved band* and not a leading inset: the top bar centres its lane, so a leading
-  /// inset moves the whole bar off centre and still collides at the minimum window width.
-  ///
-  /// A stored constant rather than the live measurement because `NSWindow.frameRect` is main-actor
-  /// isolated and this is read while laying out — the test does the asking.
-  static let titlebarClearance: CGFloat = 32
+  /// Zero: the top bar is drawn in that band (`fullSizeContentView` + a transparent
+  /// title bar), so the window's top edge is the nav bar's top edge. Drag lives on
+  /// the visible top bar (`ShellWindowDragHandle`).
+  static let titlebarClearance: CGFloat = 0
 
   /// A pill of shell chrome: nothing at rest, a wash under the pointer, the heavier wash when
   /// selected.
@@ -73,9 +59,16 @@ enum GlassShell {
   /// active `wash` (0.06) → pressed `rowFillHover` (0.085). Reaching for the token whose *name*
   /// sounds right rather than checking its alpha is how the first version of this made a merely
   /// hovered button heavier than the current one.
-  static func iconButtonFill(isPressed: Bool, isActive: Bool, isHovering: Bool) -> Color {
+  ///
+  /// `restsFilled` is the close/dismiss variant: it sits on content rather than on the bar, so it
+  /// needs a resting `wash` to read as a control at all. Its hover steps up to `rowFillHover`, which
+  /// keeps the ladder monotonic from its own resting point.
+  static func iconButtonFill(
+    isPressed: Bool, isActive: Bool, isHovering: Bool, restsFilled: Bool = false
+  ) -> Color {
     if isPressed { return Ink.rowFillHover }
     if isActive { return Ink.wash }
+    if restsFilled { return isHovering ? Ink.rowFillHover : Ink.wash }
     return isHovering ? Ink.rowFill : .clear
   }
 
@@ -106,12 +99,16 @@ struct GlassPillBackground: View {
 }
 
 /// The shell's icon button: a circular target, no fill at rest, colour-only feedback.
+///
+/// Every icon-only control in the main window uses this style, usually through `OmiIconButton`, so
+/// they share one diameter ladder (22 / 28 / 32), one hover wash, and one press state.
 struct GlassIconButtonStyle: ButtonStyle {
   var isActive: Bool = false
   var diameter: CGFloat = 32
+  var restsFilled: Bool = false
 
   func makeBody(configuration: Configuration) -> some View {
-    Chrome(configuration: configuration, isActive: isActive, diameter: diameter)
+    Chrome(configuration: configuration, isActive: isActive, diameter: diameter, restsFilled: restsFilled)
   }
 
   /// A nested view rather than an inline body: `@State` is only tracked inside a `View`, so a hover
@@ -120,6 +117,7 @@ struct GlassIconButtonStyle: ButtonStyle {
     let configuration: Configuration
     let isActive: Bool
     let diameter: CGFloat
+    let restsFilled: Bool
     @State private var isHovering = false
 
     var body: some View {
@@ -129,7 +127,8 @@ struct GlassIconButtonStyle: ButtonStyle {
         .background(
           Circle().fill(
             GlassShell.iconButtonFill(
-              isPressed: configuration.isPressed, isActive: isActive, isHovering: isHovering))
+              isPressed: configuration.isPressed, isActive: isActive, isHovering: isHovering,
+              restsFilled: restsFilled))
         )
         .contentShape(Circle())
         .onHover { isHovering = $0 }

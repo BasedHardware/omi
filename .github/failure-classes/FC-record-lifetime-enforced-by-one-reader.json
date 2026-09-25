@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-record-lifetime-enforced-by-one-reader",
+  "violated_contract": "A stored lifetime that decides whether a record may still be put in front of the user must be evaluated by every reader that can surface it. A deadline honoured at one read path and left as prose for the rest is not a deadline: the record vanishes from the surface that asks and stays live on every surface that does not, so the expiry reads as working while the user keeps being shown the expired thing. Nothing fails -- the unchecked reader returns a well-formed, confident answer -- and the blast radius grows with the very backlog the deadline was introduced to shed, because records written before it carry no expiry field at all and are therefore permanently eligible wherever it is not derived.",
+  "canonical_prevention": "Express the deadline once, as a predicate that answers for every shape a reader actually holds -- the parsed record and the raw stored document alike -- and migrate every known reader in the same change instead of leaving the rule in a docstring for the next one to find. Pin it with a parity test asserting the shapes agree, including the derived deadline for records that predate the field, so a reader cannot silently opt out later.",
+  "canonical_prevention_artifact": [
+    "backend/database/candidates.py",
+    "backend/tests/unit/test_candidate_lifecycle.py"
+  ],
+  "evidence_prs": [11974],
+  "scope_hints": [
+    "backend/database/candidates.py",
+    "backend/routers/candidates.py",
+    "backend/utils/task_intelligence/**"
+  ],
+  "status": "open"
+}

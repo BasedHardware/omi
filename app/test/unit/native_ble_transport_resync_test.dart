@@ -60,7 +60,7 @@ void main() {
     await Future<void>.delayed(Duration.zero);
 
     expect(received, [
-      [1, 2, 3]
+      [1, 2, 3],
     ]);
   });
 
@@ -76,6 +76,17 @@ void main() {
     await Future<void>.delayed(Duration.zero);
 
     expect(states, [DeviceTransportState.disconnected, DeviceTransportState.connected]);
+  });
+
+  test('isBleAudioCharacteristicUuid covers wearable audio notify chars', () {
+    expect(isBleAudioCharacteristicUuid(audioDataStreamCharacteristicUuid), isTrue);
+    expect(isBleAudioCharacteristicUuid(friendPendantAudioCharacteristicUuid), isTrue);
+    expect(isBleAudioCharacteristicUuid(limitlessRxCharUuid), isTrue);
+    expect(isBleAudioCharacteristicUuid(beeAudioCharacteristicUuid), isTrue);
+    expect(isBleAudioCharacteristicUuid(fieldyAudioCharacteristicUuid), isTrue);
+    expect(isBleAudioCharacteristicUuid(plaudNotifyCharUuid), isTrue);
+    expect(isBleAudioCharacteristicUuid(batteryLevelCharacteristicUuid), isFalse);
+    expect(isBleAudioCharacteristicUuid(plaudWriteCharUuid), isFalse);
   });
 
   test('after reconnect, silent audio CCCD is retried once then left dead', () {

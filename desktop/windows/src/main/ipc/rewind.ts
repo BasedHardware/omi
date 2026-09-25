@@ -2,6 +2,7 @@ import { ipcMain, BrowserWindow } from 'electron'
 import {
   getPrimarySourceId,
   getRewindCaptureSourceId,
+  getRewindCaptureDiagnostics,
   isCurrentRewindCaptureSource
 } from '../rewind/sourceId'
 import {
@@ -12,8 +13,10 @@ import {
   rewindFrameCount,
   getRewindFrameOcrLines,
   searchRewindEmbeddings,
-  rewindFramesByIds
+  rewindFramesByIds,
+  getJitDatabase
 } from './db'
+import { isJitConversationKeyframePinned, type JitMirrorDb } from '../jit/jitTriggerMirror'
 import { groupFrames } from '../rewind/rewindGrouping'
 import { configureRewindEmbedSession, embedRewindQuery } from '../rewind/embeddingService'
 import { mergeRewindSearchResults, type VectorHit } from '../rewind/vectorSearchMerge'
@@ -62,7 +65,9 @@ async function vectorHits(query: string): Promise<VectorHit[]> {
 // results (type "invoice", then "receipt": invoice's vectors land last).
 let searchSeq = 0
 
-export function registerRewindHandlers(): void {
+export function registerRewindHandlers(
+  options: { focusFrame?: (frameId: number) => void } = {}
+): void {
   ipcMain.handle('rewind:frames', async (_e, from: number, to: number) =>
     listRewindFrames(from, to)
   )
@@ -74,6 +79,19 @@ export function registerRewindHandlers(): void {
   )
   ipcMain.handle('rewind:dayBounds', async () => rewindDayBounds())
   ipcMain.handle('rewind:frameCount', async () => rewindFrameCount())
+  ipcMain.handle('rewind:frameById', async (_e, id: number) => {
+    if (!Number.isInteger(id) || id < 0) return null
+    return rewindFramesByIds([id])[0] ?? null
+  })
+  ipcMain.handle('rewind:focusFrame', async (_e, id: number) => {
+    if (!Number.isInteger(id) || id < 0) return { ok: false, state: 'unavailable' as const }
+    if (rewindFramesByIds([id]).length === 0) {
+      const pinned = isJitConversationKeyframePinned(getJitDatabase() as unknown as JitMirrorDb, id)
+      return { ok: false, state: pinned ? ('pruned' as const) : ('unavailable' as const) }
+    }
+    options.focusFrame?.(id)
+    return { ok: true, state: 'available' as const }
+  })
   // Hybrid search, in TWO PHASES.
   //
   // Phase 1 (this handler, synchronous): keyword results (FTS5/BM25), returned
@@ -152,6 +170,10 @@ export function registerRewindHandlers(): void {
   // Rewind follows the foreground window across displays while retaining one
   // persistent stream. Source enumeration is cached; each lookup is cheap.
   ipcMain.handle('rewind:captureSourceId', async () => getRewindCaptureSourceId())
+  // UI-facing seam for a getSources() failure (see sourceId.ts): the Rewind tab
+  // calls this once on mount to show a real error instead of capture just
+  // never starting with only a console line.
+  ipcMain.handle('rewind:captureDiagnostics', async () => getRewindCaptureDiagnostics())
   // Receive a sampled JPEG frame from the renderer capture host and store it
   // (after foreground-window metadata + idle/lock/dup gating).
   ipcMain.handle('rewind:saveFrame', async (_e, data: Uint8Array, sourceId: string) => {

@@ -161,6 +161,7 @@ def resolve_profile(
     seeded_users: Iterable[str],
     env: Mapping[str, str] | None = None,
 ) -> DesktopLocalProfile:
+    source_env = os.environ if env is None else env
     users = tuple(sorted(set(str(item) for item in seeded_users)))
     payload = _user_payload_from_seed_manifest(cfg, user)
     email = payload.get("email", f"{user}@local.omi.invalid")
@@ -168,11 +169,11 @@ def resolve_profile(
     password = payload.get("password", f"{user}-local-password-030")
     python_api_url = cfg.backend_url
     desktop_api_url = cfg.desktop_backend_url
-    app_name = _resolve_local_app_name(env)
+    app_name = _resolve_local_app_name(source_env)
     bundle_id = _local_bundle_id(app_name)
     url_scheme = _local_url_scheme(app_name)
     storage_name = _local_storage_name(app_name)
-    env = {
+    profile_env = {
         "OMI_DESKTOP_LOCAL_PROFILE": "1",
         "OMI_HARNESS_INSTANCE": cfg.instance,
         "OMI_SKIP_AUTH_SEED": "1",
@@ -180,6 +181,10 @@ def resolve_profile(
         "OMI_SKIP_TUNNEL": "1",
         "OMI_DESKTOP_API_URL": desktop_api_url,
         "OMI_PYTHON_API_URL": python_api_url,
+        # Auth-scoped calls (desktop prompts, CSAT config, sign-in helpers) default to the
+        # production API. Without this, a local profile sends its emulator token there,
+        # gets 401, and the app treats it as a dead session.
+        "OMI_AUTH_API_URL": python_api_url,
         "OMI_LOCAL_PROFILE_STORAGE_NAME": storage_name,
         "OMI_LOCAL_AUTH_USER": user,
         "OMI_LOCAL_AUTH_EMAIL": email,
@@ -192,10 +197,10 @@ def resolve_profile(
         "FIREBASE_API_KEY": LOCAL_FIREBASE_API_KEY,
     }
     if app_name != LOCAL_APP_NAME:
-        env["OMI_APP_NAME"] = app_name
-        env["OMI_ENABLE_LOCAL_AUTOMATION"] = os.environ.get("OMI_ENABLE_LOCAL_AUTOMATION", "1")
-        if os.environ.get("OMI_AUTOMATION_PORT"):
-            env["OMI_AUTOMATION_PORT"] = os.environ["OMI_AUTOMATION_PORT"]
+        profile_env["OMI_APP_NAME"] = app_name
+        profile_env["OMI_ENABLE_LOCAL_AUTOMATION"] = source_env.get("OMI_ENABLE_LOCAL_AUTOMATION", "1")
+        if source_env.get("OMI_AUTOMATION_PORT"):
+            profile_env["OMI_AUTOMATION_PORT"] = source_env["OMI_AUTOMATION_PORT"]
     return DesktopLocalProfile(
         app_name=app_name,
         display_name=app_name if app_name != LOCAL_APP_NAME else LOCAL_DISPLAY_NAME,
@@ -223,7 +228,7 @@ def resolve_profile(
         seeded_users=users,
         state_root=str(cfg.layout.state_root),
         session_summary_path=str(cfg.layout.reports_dir / "local-emulator-memory-session-summary.json"),
-        env=env,
+        env=profile_env,
     )
 
 

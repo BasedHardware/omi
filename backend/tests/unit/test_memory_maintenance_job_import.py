@@ -64,6 +64,8 @@ anthropic.AsyncAnthropic = ForbiddenProviderClient
 langchain_openai = types.ModuleType("langchain_openai")
 langchain_openai.ChatOpenAI = ForbiddenProviderClient
 langchain_openai.OpenAIEmbeddings = ForbiddenProviderClient
+langchain_anthropic = types.ModuleType("langchain_anthropic")
+langchain_anthropic.ChatAnthropic = ForbiddenProviderClient
 tiktoken = types.ModuleType("tiktoken")
 tiktoken.encoding_for_model = lambda *_args, **_kwargs: (_ for _ in ()).throw(
     AssertionError("tokenizer must not initialize while importing the job")
@@ -71,6 +73,7 @@ tiktoken.encoding_for_model = lambda *_args, **_kwargs: (_ for _ in ()).throw(
 sys.modules.update({{
     "anthropic": anthropic,
     "langchain_openai": langchain_openai,
+    "langchain_anthropic": langchain_anthropic,
     "tiktoken": tiktoken,
 }})
 sys.path.insert(0, {str(BACKEND_DIR)!r})

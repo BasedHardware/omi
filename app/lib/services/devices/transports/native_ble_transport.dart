@@ -4,9 +4,13 @@ import 'dart:typed_data';
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
 import 'package:omi/services/devices/bluetooth_readiness.dart';
-import 'package:omi/services/capture/capture_keepalive_policy.dart';
+import 'package:omi/services/devices/models.dart';
 import 'package:omi/utils/logger.dart';
 import 'device_transport.dart';
+
+/// After reconnect, one CCCD re-subscribe is allowed if no audio bytes arrive.
+const _captureAudioLivenessWindow = Duration(seconds: 4);
+const _captureAudioSilenceResubscribeLimit = 1;
 
 /// BLE transport backed by native platform APIs via Pigeon.
 /// Uses the intent-based manageDevice/unmanageDevice API.
@@ -89,6 +93,11 @@ class NativeBleTransport extends DeviceTransport {
   Future<void> disconnect() async {
     if (_state == DeviceTransportState.disconnected && _streamControllers.isEmpty) return;
 
+    // A liveness watch pending from a prior connection must not fire into a
+    // subsequent one and force a spurious CCCD re-subscribe.
+    _audioLivenessTimer?.cancel();
+    _audioSilenceResubscribes = 0;
+
     _updateState(DeviceTransportState.disconnecting);
 
     // Unsubscribe all active streams
@@ -103,8 +112,6 @@ class NativeBleTransport extends DeviceTransport {
 
     _activeSubscriptionKeys.clear();
     _subscribedSubscriptionKeys.clear();
-    _audioLivenessTimer?.cancel();
-    _audioSilenceResubscribes = 0;
     _closeAllStreams();
     _services = [];
 
@@ -215,10 +222,10 @@ class NativeBleTransport extends DeviceTransport {
 
   @override
   Future<void> dispose() async {
+    _audioLivenessTimer?.cancel();
     BleBridge.instance.unregisterPeripheral(_peripheralUuid);
     _activeSubscriptionKeys.clear();
     _subscribedSubscriptionKeys.clear();
-    _audioLivenessTimer?.cancel();
     _closeAllStreams();
     await _connectionStateController.close();
   }
@@ -352,12 +359,12 @@ class NativeBleTransport extends DeviceTransport {
     if (_state != DeviceTransportState.connected || !_hasAudioSubscription) {
       return;
     }
-    _audioLivenessTimer = Timer(captureAudioLivenessWindow, _onAudioLivenessTimeout);
+    _audioLivenessTimer = Timer(_captureAudioLivenessWindow, _onAudioLivenessTimeout);
   }
 
   void _onAudioLivenessTimeout() {
     if (_state != DeviceTransportState.connected) return;
-    if (_audioSilenceResubscribes < captureAudioSilenceResubscribeLimit) {
+    if (_audioSilenceResubscribes < _captureAudioSilenceResubscribeLimit) {
       _audioSilenceResubscribes++;
       Logger.debug('[NativeBleTransport] no audio after reconnect, retrying CCCD subscribe once');
       for (final key in _activeSubscriptionKeys) {

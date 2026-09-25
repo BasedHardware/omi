@@ -15,14 +15,14 @@ struct ChatPrompts {
 
   /// Simplified prompt for desktop client-side chat (no tool instructions)
   /// This is what we use in ChatProvider.swift
-  /// Variables: {user_name}, {tz}, {current_datetime_str}, {memories_section}
+  /// Variables: {user_name}, {tz}, {memories_section} — live clock is per-turn, not cached here.
   static let desktopChat = """
     <assistant_role>
     You are Omi, an AI assistant & mentor for {user_name}. You are a smart friend who gives honest and concise feedback and responses to user's questions in the most personalized way possible.
     </assistant_role>
 
     <user_context>
-    Current date/time in {user_name}'s timezone ({tz}): {current_datetime_str}
+    {user_name}'s timezone is {tz}. Quote tool timestamps as printed — they already include the zone. The # Current Time block on each request is the authoritative clock.
     {memories_section}
     {goal_section}{tasks_section}{ai_profile_section}
     </user_context>
@@ -84,28 +84,28 @@ struct ChatPrompts {
     WHERE deleted = 0 AND isDismissed = 0 AND content LIKE '%keyword%'
     ORDER BY createdAt DESC
 
-    -- Daily recap (run ALL 3 for "what did I do" questions — use -1 day for yesterday, -7 day for past week):
+    -- Daily totals only (for counts/time breakdowns; use get_work_context for "what was I doing" — use -1 day for yesterday, -7 day for past week):
     -- Q1: App usage
     SELECT appName, COUNT(*) as count, ROUND(COUNT(*) * 10.0 / 60, 1) as minutes,
-    MIN(time(timestamp, 'localtime')) as first_seen, MAX(time(timestamp, 'localtime')) as last_seen
-    FROM screenshots WHERE timestamp >= datetime('now', 'start of day', '-1 day', 'localtime')
-    AND timestamp < datetime('now', 'start of day', 'localtime')
+    MIN(timestamp) AS firstSeenAt, MAX(timestamp) AS lastSeenAt
+    FROM screenshots WHERE timestamp >= datetime('now', 'localtime', 'start of day', '-1 day', 'utc')
+    AND timestamp < datetime('now', 'localtime', 'start of day', 'utc')
     AND appName IS NOT NULL AND appName != '' GROUP BY appName ORDER BY count DESC
     -- Q2: Conversations
     SELECT title, overview, emoji, startedAt, finishedAt,
     ROUND((julianday(finishedAt) - julianday(startedAt)) * 1440, 1) as duration_min
-    FROM transcription_sessions WHERE startedAt >= datetime('now', 'start of day', '-1 day', 'localtime')
-    AND startedAt < datetime('now', 'start of day', 'localtime') AND deleted = 0 AND discarded = 0
+    FROM transcription_sessions WHERE startedAt >= datetime('now', 'localtime', 'start of day', '-1 day', 'utc')
+    AND startedAt < datetime('now', 'localtime', 'start of day', 'utc') AND deleted = 0 AND discarded = 0
     ORDER BY startedAt DESC
     -- Q3: Tasks
     SELECT description, completed, priority FROM action_items
-    WHERE createdAt >= datetime('now', 'start of day', '-1 day', 'localtime')
-    AND createdAt < datetime('now', 'start of day', 'localtime') AND deleted = 0
+    WHERE createdAt >= datetime('now', 'localtime', 'start of day', '-1 day', 'utc')
+    AND createdAt < datetime('now', 'localtime', 'start of day', 'utc') AND deleted = 0
     ORDER BY createdAt DESC
 
-    -- Recent screenshots with context:
+    -- Bounded OCR preview for explicit low-level inspection only; recent-work retrieval belongs to get_work_context:
     SELECT timestamp, appName, windowTitle, substr(ocrText, 1, 200) as preview
-    FROM screenshots WHERE timestamp >= datetime('now', '-1 day', 'localtime')
+    FROM screenshots WHERE timestamp >= datetime('now', '-1 day')
     ORDER BY timestamp DESC LIMIT 20
 
     -- Active tasks:
@@ -130,12 +130,14 @@ struct ChatPrompts {
     WHERE s.deleted = 0 AND seg.text LIKE '%keyword%'
     GROUP BY s.id ORDER BY s.startedAt DESC LIMIT 10
 
-    -- Time in user's timezone: use datetime('now', 'localtime') or datetime('now', '-N hours', 'localtime')
-    -- "yesterday": datetime('now', 'start of day', '-1 day', 'localtime') to datetime('now', 'start of day', 'localtime')
+    -- Local calendar bounds as UTC instants (never compare a UTC column to datetime('now', 'localtime')):
+    -- "today" start: datetime('now', 'localtime', 'start of day', 'utc')
+    -- "yesterday": datetime('now', 'localtime', 'start of day', '-1 day', 'utc') to datetime('now', 'localtime', 'start of day', 'utc')
+    -- last 24 hours: datetime('now', '-1 day')
     -- FTS search: SELECT * FROM screenshots WHERE id IN (SELECT rowid FROM screenshots_fts WHERE screenshots_fts MATCH 'keyword')
 
     **Timezone handling:**
-    All timestamps in the database are stored in UTC. When displaying dates/times from query results to the user, convert them to {user_name}'s timezone ({tz}). When filtering by date/time in WHERE clauses, use datetime('now', 'localtime') which SQLite handles automatically.
+    All timestamps in the database are stored in UTC. Select raw timestamp and camelCase *At columns without wrapping them in time(..., 'localtime') or datetime(..., 'localtime'); execute_sql converts those result cells once to {user_name}'s timezone ({tz}) with an explicit zone label. Quote the converted tool output as-is. When filtering, compare UTC columns to UTC bounds (convert local midnight with datetime('now', 'localtime', 'start of day', 'utc')). Never compare a UTC column to datetime('now', 'localtime').
     </tools>
 
     <initiative>
@@ -151,9 +153,30 @@ struct ChatPrompts {
     - Give specific feedback/advice; never generic.
     - Always answer the question directly; no extra info, no fluff.
     - Use what you know about {user_name} to personalize your responses.
-    - Show times/dates in {user_name}'s timezone ({tz}), in a natural, friendly way.
+    - Show times/dates in {user_name}'s timezone ({tz}), including the zone, in a natural, friendly way. Quote tool timestamps as printed.
     - When searching screen history, summarize findings naturally — don't dump raw data.
     </instructions>
+
+    <closing_question>
+    End a grounded answer with exactly one follow-up question, on its own final line, after the marker \(ChatFollowUpTail.delimiter).
+
+    Format (the marker and question are the last thing you write):
+    \(ChatFollowUpTail.delimiter) <one question>
+
+    Rules for that question:
+    - Specific to what you just said or to the conversations, memories, tasks or screen activity you just read. Never generic — never "anything else?", "want more detail?", "does that help?".
+    - Answerable by you from data you can reach with a tool. Never a question only {user_name} could answer from outside Omi.
+    - Under 15 words, one sentence, ends with a question mark.
+    - For a recall answer, go one hop further into the same source: who else was there, what was decided next, when it is due, what happened after.
+
+    Write NO marker and NO question when:
+    - The turn failed, errored, timed out, or you are refusing or saying you cannot do something.
+    - You could not verify or find what was asked ("I don't remember that coming up").
+    - The question was general knowledge rather than about {user_name}.
+    - Your answer is itself a clarifying question back to {user_name}.
+
+    The marker line is stripped from the visible answer and shown as a tappable chip, so never repeat the question in the answer text itself.
+    </closing_question>
     """
 
   // MARK: - Onboarding Chat Prompt
@@ -482,6 +505,9 @@ struct ChatPrompts {
     "staged_tasks": "AI-extracted task candidates pending user review",
     "task_chat_messages": "Claude Code agent ↔ user chat history, one thread per task (action item)",
     "observations": "per-screenshot AI observations used to detect tasks and activities",
+    "context_visits":
+      "durable recent-work visits; handlesJson contains URL/file addresses and is the preferred SQL source for work aggregates",
+    "context_buckets": "durable document/page/file work destinations rolled up across visits",
     "local_kg_nodes":
       "knowledge graph nodes — entities (people, orgs, places, things, concepts) extracted from user files",
     "local_kg_edges": "knowledge graph edges — relationships between entities",
@@ -501,6 +527,19 @@ struct ChatPrompts {
         "Legacy flag for screenshots captured before battery mode switched to adaptive capture cadence",
       "deviceName": "Computer name that captured this screenshot (optional; absent when provenance is unknown)",
       "clientDeviceId": "Stable capture-device identifier used for canonical memory provenance",
+    ],
+    "context_visits": [
+      "handlesJson": "JSON array of durable URL/file handles for the visited work source",
+      "bucketID": "FK to context_buckets",
+      "startedAt": "When this work visit started",
+      "endedAt": "When this work visit ended",
+      "outcome": "active | completed | discarded",
+    ],
+    "context_buckets": [
+      "subjectKind": "Kind of durable work destination",
+      "subjectID": "Stable destination identity, commonly derived from a URL or file",
+      "lastVisitedAt": "Most recent completed visit",
+      "visitCount": "Number of visits rolled into this destination",
     ],
     "action_items": [
       "description": "The task text shown to the user",
@@ -524,14 +563,6 @@ struct ChatPrompts {
       "indentLevel": "Nesting level 0–3 for subtasks",
       "relevanceScore": "AI-scored relevance 0–100; higher = more important",
       "scoredAt": "When relevanceScore was last computed",
-      "agentStatus": "AI agent execution state: pending | processing | editing | completed | failed",
-      "agentSessionName": "tmux session name for the running agent",
-      "agentPrompt": "Prompt that was sent to the Claude agent",
-      "agentPlan": "Claude agent's response / execution plan",
-      "agentStartedAt": "When the agent started working on this task",
-      "agentCompletedAt": "When the agent finished",
-      "agentEditedFilesJson": "JSON array of file paths the agent modified",
-      "chatSessionId": "Firestore session ID for the task-scoped sidebar chat",
       "recurrenceRule": "Recurrence pattern: daily | weekdays | weekly | biweekly | monthly",
       "recurrenceParentId": "backendId of the parent recurring task template",
     ],
@@ -583,6 +614,8 @@ struct ChatPrompts {
       "category": "AI-assigned topic category",
       "actionItemsJson": "JSON array of tasks extracted by backend",
       "eventsJson": "JSON array of calendar events detected",
+      "sectionsJson": "JSON array of headed summary sections with transcript evidence ids",
+      "captureGroupJson": "JSON event membership: other devices' recordings of this same conversation",
       "geolocationJson": "Location data if available",
       "photosJson": "Referenced photo metadata",
       "appsResultsJson": "App integrations results",
@@ -727,7 +760,7 @@ struct ChatPrompts {
 
     FTS query patterns:
     -- Keyword search with JOIN:
-    SELECT s.* FROM screenshots s JOIN screenshots_fts ON screenshots_fts.rowid = s.id WHERE screenshots_fts MATCH 'keyword'
+    SELECT s.id, s.timestamp, s.appName, s.windowTitle, substr(s.ocrText, 1, 200) AS preview FROM screenshots s JOIN screenshots_fts ON screenshots_fts.rowid = s.id WHERE screenshots_fts MATCH 'keyword'
     -- BM25-ranked search (lower rank = better match):
     SELECT a.*, bm25(action_items_fts) as rank FROM action_items a JOIN action_items_fts ON action_items_fts.rowid = a.id WHERE action_items_fts MATCH 'keyword' ORDER BY rank
     -- Multi-word: 'word1 word2' (AND), 'word1 OR word2' (OR), '"exact phrase"'
@@ -754,28 +787,71 @@ struct ChatPrompts {
 /// Helper class to build prompts with template variables
 struct ChatPromptBuilder {
 
-  /// Shared formatter — `DateFormatter` is expensive to construct, and
-  /// `currentDatetimeString` is on the per-query hot path. Configured once and
-  /// only read afterwards (safe for concurrent formatting).
-  private static let datetimeFormatter: DateFormatter = {
-    let f = DateFormatter()
-    f.dateFormat = "yyyy-MM-dd HH:mm:ss"
-    f.timeZone = .current
-    return f
-  }()
-
-  /// Human-readable "now" in the user's timezone ("yyyy-MM-dd HH:mm:ss").
-  /// Single source for the {current_datetime_str} substitution and the
-  /// floating-bar live-context line, so the cached prefix and live tail can't
-  /// drift in datetime format.
-  static func currentDatetimeString(_ date: Date = Date()) -> String {
-    datetimeFormatter.string(from: date)
+  /// Human-readable "now" in the user's timezone, always including IANA zone.
+  /// Live clocks belong on the per-turn `# Current Time` prefix — not in a
+  /// cached system-prompt template.
+  static func currentDatetimeString(_ date: Date = Date(), timeZone: TimeZone = .current) -> String {
+    DesktopChatTimestampFormat.userFacing(date, timeZone: timeZone)
   }
 
   static func currentTimePrompt(for prompt: String, at date: Date = Date(), timeZone: TimeZone = .current) -> String {
     let formatter = ISO8601DateFormatter()
     formatter.timeZone = timeZone
     return "# Current Time\n\(formatter.string(from: date)) (\(timeZone.identifier))\n\n\(prompt)"
+  }
+
+  /// Shared formatter for calendar-day grounding (see `currentCalendarDay`).
+  private static let calendarDayFormatter: DateFormatter = {
+    let f = DateFormatter()
+    f.dateFormat = "yyyy-MM-dd (EEEE)"
+    f.locale = Locale(identifier: "en_US_POSIX")
+    f.timeZone = .current
+    return f
+  }()
+
+  /// Calendar-day grounding for agents that judge dates, deadlines, or recency but
+  /// not clock time: "2026-08-25 (Tuesday)".
+  ///
+  /// Date-only by contract: the string is stable within a local day, so it can ride in
+  /// a prompt without busting it per call — and it still belongs in the uncached user
+  /// turn, never in a cached system prefix. Without a year the model falls back to its
+  /// training-cutoff year and flags correctly recorded current-era dates as mistakes.
+  static func currentCalendarDay(at date: Date = Date(), timeZone: TimeZone = .current) -> String {
+    if timeZone == .current {
+      return calendarDayFormatter.string(from: date)
+    }
+    let f = DateFormatter()
+    f.dateFormat = "yyyy-MM-dd (EEEE)"
+    f.locale = Locale(identifier: "en_US_POSIX")
+    f.timeZone = timeZone
+    return f.string(from: date)
+  }
+
+  /// Shared formatter for full local datetime grounding (see `currentLocalDatetime`).
+  private static let localDatetimeFormatter: DateFormatter = {
+    let f = DateFormatter()
+    f.dateFormat = "EEEE, MMMM d, yyyy 'at' h:mm a"
+    f.locale = Locale(identifier: "en_US_POSIX")
+    f.timeZone = .current
+    return f
+  }()
+
+  /// Full local datetime with IANA timezone: "Tuesday, August 25, 2026 at 3:45 PM
+  /// (America/New_York)". For agents that also read absolute timestamps (SQL over UTC
+  /// columns, ISO strings) or discuss local times with the user. Uncached user turn
+  /// only — the live clock must never enter a cached system prefix.
+  static func currentLocalDatetime(at date: Date = Date(), timeZone: TimeZone = .current) -> String {
+    let rendered: String
+    if timeZone == .current {
+      rendered = localDatetimeFormatter.string(from: date)
+    } else {
+      let f = DateFormatter()
+      f.dateFormat = "EEEE, MMMM d, yyyy 'at' h:mm a"
+      f.locale = Locale(identifier: "en_US_POSIX")
+      f.timeZone = timeZone
+      rendered = f.string(from: date)
+    }
+    return "\(rendered) (\(timeZone.identifier))"
   }
 
   /// Build a system prompt with the given variables
@@ -792,7 +868,8 @@ struct ChatPromptBuilder {
     isoFormatter.timeZone = TimeZone.current
 
     let now = Date()
-    let datetime = currentDatetime ?? currentDatetimeString(now)
+    let resolvedTimeZone = TimeZone(identifier: timezone) ?? .current
+    let datetime = currentDatetime ?? currentDatetimeString(now, timeZone: resolvedTimeZone)
     let datetimeISO = currentDatetimeISO ?? isoFormatter.string(from: now)
     let utcFormatter = DateFormatter()
     utcFormatter.dateFormat = "yyyy-MM-dd HH:mm:ss"

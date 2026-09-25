@@ -36,6 +36,38 @@ final class AppBuildBetaIdentityTests: XCTestCase {
     XCTAssertTrue(config.allowsLocalAutomation)
   }
 
+  func testJITQARealtimeDisablePolicyRequiresExactQAIdentityAndOne() {
+    XCTAssertTrue(
+      AppBuild.shouldDisableJITQARealtime(
+        bundleIdentifier: AppBuild.jitQABundleIdentifier,
+        environment: [AppBuild.jitQADisableRealtimeEnvironmentKey: "1"]))
+  }
+
+  func testJITQARealtimeDisablePolicyIgnoresOtherIdentitiesAndValues() {
+    let enabledEnvironment = [AppBuild.jitQADisableRealtimeEnvironmentKey: "1"]
+    for bundleIdentifier in [
+      AppBuild.productionBundleIdentifier,
+      AppBuild.betaProductionBundleIdentifier,
+      AppBuild.desktopDevBundleIdentifier,
+      "com.omi.omi-feature-test",
+    ] {
+      XCTAssertFalse(
+        AppBuild.shouldDisableJITQARealtime(
+          bundleIdentifier: bundleIdentifier,
+          environment: enabledEnvironment),
+        bundleIdentifier)
+    }
+
+    XCTAssertFalse(
+      AppBuild.shouldDisableJITQARealtime(
+        bundleIdentifier: AppBuild.jitQABundleIdentifier,
+        environment: [:]))
+    XCTAssertFalse(
+      AppBuild.shouldDisableJITQARealtime(
+        bundleIdentifier: AppBuild.jitQABundleIdentifier,
+        environment: [AppBuild.jitQADisableRealtimeEnvironmentKey: "0"]))
+  }
+
   func testProductionFamilyMembership() {
     XCTAssertEqual(
       AppBuild.productionFamilyBundleIdentifiers,
@@ -55,9 +87,17 @@ final class AppBuildBetaIdentityTests: XCTestCase {
       AppBuild.mayRunLegacyStableAppCleanup(bundleIdentifier: "com.omi.omi-feature-test"))
   }
 
+  func testSparkleChannelIsIdentityBound() {
+    XCTAssertEqual(AppBuild.updateChannel(isBetaIdentity: false), "stable")
+    XCTAssertEqual(AppBuild.updateChannel(isBetaIdentity: true), "beta")
+  }
+
   func testManualDownloadURLCarriesBetaIdentity() {
     XCTAssertEqual(
       AppBuild.manualDownloadURL(channel: "beta", isBetaIdentity: true).absoluteString,
+      "https://api.omi.me/v2/desktop/download/latest?channel=beta&identity=beta")
+    XCTAssertEqual(
+      AppBuild.omiBetaInstallURL.absoluteString,
       "https://api.omi.me/v2/desktop/download/latest?channel=beta&identity=beta")
     XCTAssertEqual(
       AppBuild.manualDownloadURL(channel: "beta", isBetaIdentity: false).absoluteString,

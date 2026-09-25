@@ -8,6 +8,8 @@
 
 from unittest.mock import patch
 
+import pytest
+
 import utils.fair_use as fair_use_mod
 from models.fair_use import SoftCapTrigger
 from models.users import PlanType
@@ -60,6 +62,10 @@ class TestFairUseCapsForPlan:
         # subscription.plan may arrive as a raw string; PlanType is a str enum so membership holds.
         assert fair_use_mod._is_unlimited_tier('unlimited_v2') is True
         assert fair_use_mod._is_unlimited_tier('basic') is False
+
+    def test_unknown_plan_fails_closed_during_classification(self):
+        with pytest.raises(ValueError, match='unknown catalog plan'):
+            fair_use_mod._is_unlimited_tier('future_plan_123')
 
 
 class TestCheckSoftCapsPlanAware:

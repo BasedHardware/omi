@@ -1,16 +1,32 @@
 stackdriver:
   projectIds:
     - "based-hardware-dev"
+  # Cloud Monitoring answers descriptor lookups for this project with 503
+  # "Task is overloaded (cpu-protection)" and 10s timeouts. Give each request
+  # more room and let 503s retry instead of failing the whole scrape.
+  httpTimeout: 30s
+  maxRetries: 3
+  retryStatuses: 503
   metrics:
     prefixes:
       - 'loadbalancing.googleapis.com/https/backend_request_count'
       - 'loadbalancing.googleapis.com/https/internal/backend_latencies'
+      # firestore.googleapis.com/document/read_count: 3 series (type=LOOKUP|NOT_FOUND|QUERY),
+      # resource type firestore_instance, DELTA/INT64, single page (no pagination). Marginal
+      # cost is ~1,440 extra ListTimeSeries calls/day (~$0.43/month) against ~$728/month of
+      # Firestore read-volume waste it makes visible -- do not remove as "extra scraping cost".
+      - 'firestore.googleapis.com/document/read_count'
     # The filters to refine the metrics query by using Filter objects that Google provides.
     # Filter objects: project, group.id, resource.type, resource.labels.[KEY], metric.type, metric.labels.[KEY]
     # https://cloud.google.com/monitoring/api/v3/filters
     filters:
       - 'loadbalancing.googleapis.com/https/backend_request_count:resource.labels.backend_target_name="dev-backend-listen"'
-    interval: '1m'
+    # Query window is [now-offset-interval, now-offset]. Measured Firestore
+    # ingestion lag is ~2.4 min, so the previous 1m/1m window ([now-2m, now-1m])
+    # was always empty for firestore.googleapis.com/document/read_count and the
+    # exporter emitted no series at all despite scraping cleanly. 3m/1m covers
+    # lag between 1 and 4 minutes.
+    interval: '3m'
     offset: '1m'
     # ingestDelay: true
 
@@ -21,3 +37,12 @@ serviceAccount:
   create: true
   annotations:
     iam.gke.io/gcp-service-account: "dev-omi-prom-stackdriver-gsa@based-hardware-dev.iam.gserviceaccount.com"
+
+# Descriptor discovery, not sample collection, is what throttles here. At the 0s
+# default the exporter re-runs ListMetricDescriptors for every prefix on every
+# scrape -- ~2 calls/sec project-wide -- which is why adding the firestore prefix
+# returned no series at all: its descriptor lookup timed out every time. Metric
+# descriptors change approximately never, so an hour of caching removes the
+# throttling and the ListMetricDescriptors spend without making samples staler.
+extraArgs:
+  monitoring.descriptor-cache-ttl: 1h

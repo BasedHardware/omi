@@ -4,8 +4,9 @@
 // SHA-256 fingerprints). The desktop
 // client sends user-provided provider keys as per-request headers; the backend
 // reads them case-insensitively (`x-byok-{provider}`) but clients send the
-// canonical casing below. The backend enforces ALL-OR-NOTHING enrollment via
-// `has_all_byok_keys()` — a partial set is not a valid BYOK-active state.
+// canonical casing below. The backend fingerprints and validates each enrolled
+// provider independently — a capability-scoped subset is a valid BYOK-active
+// state as long as at least one LLM provider is configured.
 //
 // Pure, browser-safe module: no Node built-ins, no Electron, no I/O. It is
 // imported by BOTH the main process and the renderer (the axios/fetch BYOK
@@ -14,13 +15,26 @@
 // file never drags a Node built-in into the web bundle.
 
 /** A provider whose API key a user can bring themselves. */
-export type ByokProvider = 'openai' | 'anthropic' | 'gemini' | 'deepgram'
+export type ByokProvider = 'openrouter' | 'openai' | 'anthropic' | 'gemini' | 'deepgram'
 
-/** The four BYOK providers, in the backend's canonical order. */
-export const BYOK_PROVIDERS: readonly ByokProvider[] = ['openai', 'anthropic', 'gemini', 'deepgram']
+/** The BYOK providers, in the backend's canonical order. */
+export const BYOK_PROVIDERS: readonly ByokProvider[] = [
+  'openrouter',
+  'openai',
+  'anthropic',
+  'gemini',
+  'deepgram'
+]
+export const BYOK_LLM_PROVIDERS: readonly ByokProvider[] = [
+  'openrouter',
+  'openai',
+  'anthropic',
+  'gemini'
+]
 
 /** Canonical header casing clients send (backend matches case-insensitively). */
 export const BYOK_HEADER_NAMES: Record<ByokProvider, string> = {
+  openrouter: 'X-BYOK-OpenRouter',
   openai: 'X-BYOK-OpenAI',
   anthropic: 'X-BYOK-Anthropic',
   gemini: 'X-BYOK-Gemini',
@@ -35,6 +49,7 @@ export const BYOK_HEADER_NAMES: Record<ByokProvider, string> = {
  * source (`AgentRuntimeProcess.byokEnvironmentKey`).
  */
 export const BYOK_ENV_NAMES: Record<ByokProvider, string> = {
+  openrouter: 'OMI_BYOK_OPENROUTER',
   openai: 'OMI_BYOK_OPENAI',
   anthropic: 'OMI_BYOK_ANTHROPIC',
   gemini: 'OMI_BYOK_GEMINI',
@@ -59,14 +74,25 @@ export interface ByokKeyValidation {
 /** Per-provider validation results. */
 export type ByokValidationResults = Partial<Record<ByokProvider, ByokKeyValidation>>
 
+/** Provider → SHA-256 fingerprint, as accepted by the backend enrollment. */
+export type ByokEnrolledFingerprints = Partial<Record<ByokProvider, string>>
+
 /** Outcome of an enrollment attempt, returned to the renderer Settings UI. */
 export interface ByokEnrollResult {
-  /** True only when all four keys authenticated AND the backend accepted them. */
+  /** True only when at least one LLM key authenticated AND the backend accepted them. */
   active: boolean
-  /** Per-provider live-validation results (empty when the set wasn't full). */
+  /** Per-provider live-validation results for configured keys. */
   results: ByokValidationResults
   /**
-   * Set only when the keys all validated but the backend enroll call itself
+   * The fingerprint set the backend now enforces: present (possibly empty) whenever
+   * the server state is known — after a successful activate POST, or after the
+   * deactivate DELETE. Absent when the enroll POST itself failed (network/HTTP),
+   * because then the server may still hold the previous enrollment and local
+   * evidence must not be rewritten. Fingerprints only — never raw keys.
+   */
+  enrolledFingerprints?: ByokEnrolledFingerprints
+  /**
+   * Set only when the configured LLM keys validated but the backend enroll call itself
    * failed (network/HTTP) — distinct from a provider rejecting a key.
    */
   backendError?: string
@@ -92,28 +118,24 @@ export function withByokHeaders(
 }
 
 /**
- * True only when ALL four providers have a non-empty trimmed key — matches the
- * backend's all-or-nothing gate (`has_all_byok_keys()`). A partial set is not
- * BYOK-active.
+ * True when at least one LLM provider has a non-empty trimmed key.
  */
 export function isByokActive(keys: ByokKeys): boolean {
-  return BYOK_PROVIDERS.every((provider) => Boolean(keys[provider]?.trim()))
+  return BYOK_LLM_PROVIDERS.some((provider) => Boolean(keys[provider]?.trim()))
 }
 
 /**
  * The `OMI_BYOK_*` env set to inject into the pi-mono subprocess, or `{}` when
- * BYOK is not active. All-or-nothing, exactly like `withByokHeaders`'s consumer:
- * a partial set is never injected (the backend's `has_all_byok_keys()` requires
- * all four), so a 3/4 configuration falls through to Omi-managed billing rather
- * than silently sending an incomplete BYOK set. Values are trimmed to match the
- * wire value the backend fingerprints.
+ * BYOK is not active. Capability-scoped values are trimmed to match the wire
+ * value the backend fingerprints.
  */
 export function byokEnvVars(keys: ByokKeys): Record<string, string> {
   if (!isByokActive(keys)) return {}
   const out: Record<string, string> = {}
   for (const provider of BYOK_PROVIDERS) {
-    // isByokActive guarantees a non-empty trimmed value for every provider.
-    out[BYOK_ENV_NAMES[provider]] = (keys[provider] as string).trim()
+    // isByokActive guarantees at least one LLM key; each provider remains optional.
+    const value = keys[provider]?.trim()
+    if (value) out[BYOK_ENV_NAMES[provider]] = value
   }
   return out
 }

@@ -131,7 +131,15 @@
 	</dict>
 	<key>NSAppTransportSecurity</key>
 	<dict>
-		<key>NSAllowsLocalNetworking</key>
+		<!-- Dev-only plist. NSAllowsArbitraryLoads rather than NSAllowsLocalNetworking,
+		     because the latter covers only .local, unqualified hostnames and link-local
+		     addresses — never a Tailscale CGNAT address (100.64.0.0/10), which is what
+		     the local dev harness is reached on.
+
+		     These two keys must not be combined: declaring NSAllowsArbitraryLoads
+		     alongside NSAllowsLocalNetworking makes the former a documented no-op on any
+		     OS that understands the newer key, silently leaving CGNAT hosts blocked. -->
+		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
 	<key>NSBluetoothAlwaysUsageDescription</key>

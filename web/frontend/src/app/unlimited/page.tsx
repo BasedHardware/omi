@@ -1,5 +1,6 @@
 import { headers } from 'next/headers';
 import { Metadata } from 'next';
+import { getOmiPlatformDeepLink } from '@/src/lib/conversation-share-platform-link.mjs';
 
 export const metadata: Metadata = {
   title: 'Omi Unlimited | Omi',
@@ -9,6 +10,10 @@ export const metadata: Metadata = {
     title: 'Omi Unlimited | Omi',
     description: 'Unlock the full potential with Unlimited.',
     type: 'website',
+  },
+  other: {
+    'apple-itunes-app': 'app-id=6502156163',
+    'google-play-app': 'app-id=com.friend.ios',
   },
 };
 
@@ -27,7 +32,7 @@ export default async function UnlimitedPage() {
   const userAgent = (await headers()).get('user-agent') || '';
   const isMobile = isMobileDevice(userAgent);
   const appStoreLink = getAppStoreLink(userAgent);
-  const deepLink = 'omi://h.omi.me/unlimited';
+  const openInOmiHref = getOmiPlatformDeepLink(userAgent, 'unlimited');
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center bg-[#0B0F17] px-4 text-center">
@@ -39,7 +44,7 @@ export default async function UnlimitedPage() {
       {isMobile ? (
         <div className="flex flex-col gap-4">
           <a
-            href={deepLink}
+            href={openInOmiHref}
             className="rounded-xl bg-white px-8 py-4 text-lg font-semibold text-[#0B0F17] transition-all duration-300 hover:bg-gray-200"
           >
             Open in App

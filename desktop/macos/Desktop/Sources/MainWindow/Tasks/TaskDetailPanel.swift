@@ -9,11 +9,11 @@ struct TaskDetailPanel: View {
   let onDismiss: () -> Void
   let onToggle: () -> Void
   let onEdit: () -> Void
-  let onInvestigate: (() -> Void)?
   let onOpenChat: (() -> Void)?
   let onIncrementIndent: (() -> Void)?
   let onDecrementIndent: (() -> Void)?
   let onDelete: () -> Void
+  let onPriorityChange: ((String) -> Void)?
 
   @State private var isCopyingLink = false
   @State private var copyStatus: String?
@@ -27,21 +27,21 @@ struct TaskDetailPanel: View {
     onDismiss: @escaping () -> Void,
     onToggle: @escaping () -> Void,
     onEdit: @escaping () -> Void,
-    onInvestigate: (() -> Void)? = nil,
     onOpenChat: (() -> Void)? = nil,
     onIncrementIndent: (() -> Void)? = nil,
     onDecrementIndent: (() -> Void)? = nil,
-    onDelete: @escaping () -> Void
+    onDelete: @escaping () -> Void,
+    onPriorityChange: ((String) -> Void)? = nil
   ) {
     self.task = task
     self.onDismiss = onDismiss
     self.onToggle = onToggle
     self.onEdit = onEdit
-    self.onInvestigate = onInvestigate
     self.onOpenChat = onOpenChat
     self.onIncrementIndent = onIncrementIndent
     self.onDecrementIndent = onDecrementIndent
     self.onDelete = onDelete
+    self.onPriorityChange = onPriorityChange
   }
 
   var body: some View {
@@ -52,6 +52,7 @@ struct TaskDetailPanel: View {
       ScrollView {
         VStack(alignment: .leading, spacing: OmiSpacing.xl) {
           descriptionSection
+          prioritySection
           whySection
           linkedSourcesSection
           detailsSection
@@ -70,7 +71,7 @@ struct TaskDetailPanel: View {
   private var header: some View {
     HStack(spacing: OmiSpacing.sm) {
       VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-        Text("Task details")
+        Text("Task Details")
           .scaledFont(size: OmiType.subheading, weight: .semibold)
           .foregroundColor(Ink.primary)
         Text(content.status)
@@ -96,6 +97,43 @@ struct TaskDetailPanel: View {
         .frame(maxWidth: .infinity, alignment: .leading)
     }
   }
+
+  /// Priority lives here rather than on the task row: it is a rarely-changed
+  /// attribute, and the row's hover strip is reserved for per-task actions.
+  @ViewBuilder
+  private var prioritySection: some View {
+    if let onPriorityChange {
+      VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+        sectionTitle("Priority")
+        HStack(spacing: OmiSpacing.xs) {
+          ForEach(TaskDetailPanel.priorityOptions, id: \.value) { option in
+            let isSelected = task.priority?.lowercased() == option.value
+            Button {
+              guard !isSelected else { return }
+              onPriorityChange(option.value)
+            } label: {
+              Text(option.label)
+                .scaledFont(size: OmiType.caption, weight: isSelected ? .semibold : .regular)
+                .foregroundColor(isSelected ? Ink.surface : Ink.primary)
+                .padding(.horizontal, OmiSpacing.md)
+                .padding(.vertical, OmiSpacing.xs)
+                .background(
+                  Capsule().fill(isSelected ? Ink.primary : Ink.rowFillHover)
+                )
+                .contentShape(Capsule())
+            }
+            .buttonStyle(.plain)
+            .help("Set \(option.label.lowercased()) priority")
+            .accessibilityIdentifier("task-detail-priority-\(option.value)")
+          }
+        }
+      }
+    }
+  }
+
+  private static let priorityOptions: [(value: String, label: String)] = [
+    ("low", "Low"), ("medium", "Medium"), ("high", "High"),
+  ]
 
   private var whySection: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.sm) {
@@ -131,40 +169,55 @@ struct TaskDetailPanel: View {
       } else {
         VStack(spacing: OmiSpacing.xs) {
           ForEach(content.linkedSources) { source in
-            Button {
-              TaskDetailSourceNavigator.open(source.route)
-            } label: {
-              HStack(spacing: OmiSpacing.sm) {
-                Image(systemName: source.systemImage)
-                  .scaledFont(size: OmiType.body)
-                  .foregroundColor(Ink.secondary)
-                  .frame(width: 20)
-                VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
-                  Text(source.title)
-                    .scaledFont(size: OmiType.caption, weight: .medium)
-                    .foregroundColor(Ink.primary)
-                  Text(source.subtitle)
-                    .scaledFont(size: OmiType.micro)
-                    .foregroundColor(Ink.secondary)
-                    .lineLimit(1)
-                }
-                Spacer(minLength: OmiSpacing.xs)
-                Image(systemName: "arrow.up.right")
-                  .scaledFont(size: OmiType.micro, weight: .semibold)
-                  .foregroundColor(Ink.secondary)
-              }
-              .padding(OmiSpacing.sm)
-              .frame(maxWidth: .infinity, alignment: .leading)
-              .background(
-                RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous)
-                  .fill(Ink.rowFillHover)
-              )
-            }
-            .buttonStyle(.plain)
-            .accessibilityIdentifier("task-detail-source-\(source.id)")
+            linkedSourceButton(source)
           }
         }
       }
+    }
+  }
+
+  @ViewBuilder
+  private func linkedSourceButton(_ source: TaskDetailSourceLink) -> some View {
+    if case .rewindFrame(let screenshotID) = source.route {
+      RewindEvidenceCardView(
+        card: RewindEvidenceCardModel(screenshotID: screenshotID),
+        onOpen: { lease in
+          TaskDetailSourceNavigator.open(source.route, rewindLease: lease)
+        }
+      )
+      .accessibilityIdentifier("task-detail-source-\(source.id)")
+    } else {
+      Button {
+        TaskDetailSourceNavigator.open(source.route)
+      } label: {
+        HStack(spacing: OmiSpacing.sm) {
+          Image(systemName: source.systemImage)
+            .scaledFont(size: OmiType.body)
+            .foregroundColor(Ink.secondary)
+            .frame(width: 20)
+          VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
+            Text(source.title)
+              .scaledFont(size: OmiType.caption, weight: .medium)
+              .foregroundColor(Ink.primary)
+            Text(source.subtitle)
+              .scaledFont(size: OmiType.micro)
+              .foregroundColor(Ink.secondary)
+              .lineLimit(1)
+          }
+          Spacer(minLength: OmiSpacing.xs)
+          Image(systemName: "arrow.up.right")
+            .scaledFont(size: OmiType.micro, weight: .semibold)
+            .foregroundColor(Ink.secondary)
+        }
+        .padding(OmiSpacing.sm)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+          RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous)
+            .fill(Ink.rowFillHover)
+        )
+      }
+      .buttonStyle(.plain)
+      .accessibilityIdentifier("task-detail-source-\(source.id)")
     }
   }
 
@@ -191,11 +244,10 @@ struct TaskDetailPanel: View {
   @ViewBuilder
   private var contextSection: some View {
     let metadata = task.parsedMetadata ?? [:]
-    if task.contextSummary != nil || task.currentActivity != nil || task.agentPlan != nil
+    if task.contextSummary != nil || task.currentActivity != nil
       || metadata["context_summary"] as? String != nil
       || metadata["current_activity"] as? String != nil
       || metadata["reasoning"] as? String != nil
-      || metadata["agent_plan"] as? String != nil
     {
       VStack(alignment: .leading, spacing: OmiSpacing.sm) {
         sectionTitle("Context")
@@ -208,9 +260,6 @@ struct TaskDetailPanel: View {
           }
           if let reasoning = metadata["reasoning"] as? String, !reasoning.isEmpty {
             detailBlock("Reasoning", reasoning)
-          }
-          if let plan = task.agentPlan ?? metadata["agent_plan"] as? String, !plan.isEmpty {
-            detailBlock("Agent plan", String(plan.prefix(2000)))
           }
         }
       }
@@ -229,17 +278,9 @@ struct TaskDetailPanel: View {
         )
         actionButton(title: "Edit task", systemImage: "pencil", action: onEdit, identifier: "task-detail-edit")
 
-        if let onInvestigate {
-          actionButton(
-            title: "Execute with Omi",
-            systemImage: "sparkles",
-            action: onInvestigate,
-            identifier: "task-detail-execute"
-          )
-        }
         if let onOpenChat {
           actionButton(
-            title: task.workstreamId == nil ? "Work on this with Omi" : "Open thread",
+            title: task.workstreamId == nil ? "Work on This with Omi" : "Open Thread",
             systemImage: task.workstreamId == nil ? "sparkles" : "bubble.left",
             action: onOpenChat,
             identifier: "task-detail-chat"
@@ -247,7 +288,7 @@ struct TaskDetailPanel: View {
         }
         if let onDecrementIndent {
           actionButton(
-            title: "Decrease indent",
+            title: "Decrease Indent",
             systemImage: "arrow.left.to.line",
             action: onDecrementIndent,
             identifier: "task-detail-outdent"
@@ -255,26 +296,26 @@ struct TaskDetailPanel: View {
         }
         if let onIncrementIndent {
           actionButton(
-            title: "Increase indent",
+            title: "Increase Indent",
             systemImage: "arrow.right.to.line",
             action: onIncrementIndent,
             identifier: "task-detail-indent"
           )
         }
         actionButton(
-          title: isCopyingLink ? "Copying link…" : (copyStatus ?? "Copy task link"),
-          systemImage: copyStatus == nil ? "arrowshape.turn.up.right" : "checkmark",
+          title: isCopyingLink ? "Copying Link…" : (copyStatus ?? "Copy Task Link"),
+          systemImage: copyStatus == nil ? "link" : "checkmark",
           action: copyShareLink,
           identifier: "task-detail-copy-link"
         )
         .disabled(isCopyingLink)
 
         Button(role: .destructive, action: onDelete) {
-          Label("Delete task", systemImage: "trash")
+          Label("Delete Task", systemImage: "trash")
             .frame(maxWidth: .infinity, alignment: .leading)
         }
         .buttonStyle(.plain)
-        .foregroundColor(Ink.secondary)
+        .foregroundColor(Ink.errorRed)
         .padding(.vertical, OmiSpacing.xs)
         .accessibilityIdentifier("task-detail-delete")
       }

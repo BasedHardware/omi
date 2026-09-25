@@ -146,6 +146,7 @@ extension APIClient {
     dueConfidence: Double? = nil,
     provenance: [OmiAPI.EvidenceRef]? = nil,
     status: String? = nil,
+    completed: Bool? = nil,
     sortOrder: Int? = nil,
     indentLevel: Int? = nil,
     expectedOwnerId: String? = nil,
@@ -165,7 +166,7 @@ extension APIClient {
 
     let wire = OmiAPI.ActionItemCreateRequest(
       appleReminderId: nil,
-      completed: nil,
+      completed: completed,
       conversationId: nil,
       description_: description,
       dueAt: dueAt.map { formatter.string(from: $0) },

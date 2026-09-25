@@ -455,6 +455,21 @@ final class ConversationRepository {
     seed: ServerConversation,
     onCached: ((ServerConversation) -> Void)? = nil
   ) async throws -> ServerConversation {
+    try await detail(id: id, fallback: seed, onCached: onCached)
+  }
+
+  /// A detail known only by id — another device's recording of an event, which
+  /// the loaded list may not hold. Same cache-then-revalidate path, but with no
+  /// seed to fall back on a failed fetch with nothing cached throws.
+  func detail(id: String) async throws -> ServerConversation {
+    try await detail(id: id, fallback: nil, onCached: nil)
+  }
+
+  private func detail(
+    id: String,
+    fallback seed: ServerConversation?,
+    onCached: ((ServerConversation) -> Void)?
+  ) async throws -> ServerConversation {
     let session = cacheWriteScope.capture()
     if let cached = try? await local.detail(id: id) {
       try ensureCurrentSession(session)
@@ -482,6 +497,7 @@ final class ConversationRepository {
         return cached
       }
       try ensureCurrentSession(session)
+      guard let seed else { throw error }
       return seed
     }
   }
@@ -497,6 +513,19 @@ final class ConversationRepository {
     let operation = MutationOperation.title(requested: title, mutationId: UUID())
     try await mutate(id: id, operation: operation) {
       try await self.remote.updateTitle(id: id, title: title)
+    }
+  }
+
+  /// Replace a conversation in local state with a freshly-fetched server
+  /// version. Used after reprocess so the row sees the new `status` and full
+  /// `structured` payload (not just title), which matters when reprocess
+  /// transitions a `.failed` conversation back to `.completed`.
+  func replace(_ conversation: ServerConversation) {
+    let session = cacheWriteScope.capture()
+    replaceVisible(conversation)
+    emit(.server)
+    Task {
+      try? await local.store(conversation, scope: cacheWriteScope, generation: session)
     }
   }
 

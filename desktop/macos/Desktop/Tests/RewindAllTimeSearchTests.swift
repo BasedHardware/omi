@@ -79,16 +79,80 @@ final class RewindAllTimeSearchTests: XCTestCase {
     try await super.tearDown()
   }
 
+  // MARK: - One clock, one zone, for both halves of every day-bucket assertion
+
+  /// The zone every local day in this suite is expressed in.
+  ///
+  /// Pinned for the same reason `ContextBucketPromptAssemblerTests` pins it: it is never the CI
+  /// runner's zone, so a regression that goes back to bucketing in `Calendar.current` fails on a
+  /// UTC runner instead of staying green there.
+  private static let seedZoneIdentifier = "America/New_York"
+
+  /// One reading of the clock, in a zone that does not come from the machine.
+  ///
+  /// **Both halves of a day-bucket assertion must come from the same instant and the same zone.**
+  /// Seeding from one `Date()` and deriving the expectation from another lets the two straddle
+  /// local midnight; taking the zone from `Calendar.current` is the same defect in space rather
+  /// than in time, because a UTC runner and a developer at UTC-4 disagree about which local day an
+  /// evening frame belongs to. Everything below is derived from a single `Date()`, read once.
+  private struct SeedClock {
+    let calendar: Calendar
+
+    /// Local noon of the day *before* the run.
+    ///
+    /// Yesterday rather than today because `capturedDayStarts` walks back from the live `Date()`
+    /// and can never see a row seeded into the future — an anchor at today's noon is in the future
+    /// for every run before midday. Noon rather than the current time of day because a within-day
+    /// offset added to a noon anchor cannot reach either midnight.
+    let noon: Date
+
+    /// The anchor shifted back `daysAgo` local days, still at local noon.
+    func instant(daysAgo: Int) throws -> Date {
+      try XCTUnwrap(
+        calendar.date(byAdding: .day, value: -daysAgo, to: noon),
+        "the seeded day must be representable in the pinned calendar")
+    }
+
+    /// Where the local day `daysAgo` days before the anchor begins.
+    func dayStart(daysAgo: Int) throws -> Date {
+      calendar.startOfDay(for: try instant(daysAgo: daysAgo))
+    }
+
+    /// The last instant that still belongs to that local day.
+    ///
+    /// Asked of the calendar rather than computed as `start + 23:59:59`, so a 23-hour spring-forward
+    /// day does not spill the frame into the following day — which is the whole hazard this suite
+    /// exists to pin down, in its other form.
+    func dayEnd(daysAgo: Int) throws -> Date {
+      let start = try dayStart(daysAgo: daysAgo)
+      let next = try XCTUnwrap(
+        calendar.date(byAdding: .day, value: 1, to: start),
+        "the day after a seeded day must be representable in the pinned calendar")
+      return next.addingTimeInterval(-30)
+    }
+  }
+
+  private func makeSeedClock() throws -> SeedClock {
+    var calendar = Calendar(identifier: .gregorian)
+    calendar.timeZone = try XCTUnwrap(
+      TimeZone(identifier: Self.seedZoneIdentifier),
+      "the pinned seed zone must exist in the system time zone database")
+    let today = calendar.startOfDay(for: Date())
+    let yesterday = try XCTUnwrap(
+      calendar.date(byAdding: .day, value: -1, to: today),
+      "the day before the run must be representable in the pinned calendar")
+    return SeedClock(calendar: calendar, noon: yesterday.addingTimeInterval(12 * 3600))
+  }
+
   @discardableResult
   private func insert(
-    daysAgo: Int, text: String, appName: String = "AllTimeTest", embedding: Data? = nil
+    at stamp: Date, text: String, appName: String = "AllTimeTest", embedding: Data? = nil
   ) async throws -> Screenshot {
-    let stamp = try XCTUnwrap(Calendar.current.date(byAdding: .day, value: -daysAgo, to: Date()))
     let inserted = try await RewindDatabase.shared.insertScreenshot(
       Screenshot(
         timestamp: stamp,
         appName: appName,
-        videoChunkPath: "alltime/\(daysAgo).mp4",
+        videoChunkPath: "alltime/\(stamp.timeIntervalSince1970).mp4",
         frameOffset: 0,
         ocrText: text,
         isIndexed: true))
@@ -111,7 +175,9 @@ final class RewindAllTimeSearchTests: XCTestCase {
   /// only by the launch backfill, which marks itself complete — after which nothing newly captured
   /// was ever embedded, and a newest-first semantic scan looks at exactly those frames.
   func testInsertedScreenshotCarriesItsRowId() async throws {
-    let inserted = try await insert(daysAgo: 0, text: "a frame the rest of capture must be able to name")
+    let clock = try makeSeedClock()
+    let inserted = try await insert(
+      at: try clock.instant(daysAgo: 0), text: "a frame the rest of capture must be able to name")
     let id = try XCTUnwrap(inserted.id, "insertScreenshot must return the row id it just generated")
 
     let stored = try await RewindDatabase.shared.getScreenshot(id: id)
@@ -123,8 +189,9 @@ final class RewindAllTimeSearchTests: XCTestCase {
   // MARK: - Text search reaches past the day on screen
 
   func testUnclampedSearchFindsAMatchFromAnOlderDay() async throws {
-    try await insert(daysAgo: 0, text: "today the quarterly ledger reconciled")
-    try await insert(daysAgo: 23, text: "the peregrine migration notes were filed")
+    let clock = try makeSeedClock()
+    try await insert(at: try clock.instant(daysAgo: 0), text: "today the quarterly ledger reconciled")
+    try await insert(at: try clock.instant(daysAgo: 23), text: "the peregrine migration notes were filed")
 
     // What the page now asks: no date bounds at all.
     let allTime = try await RewindDatabase.shared.search(query: "peregrine", startDate: nil, endDate: nil)
@@ -132,10 +199,11 @@ final class RewindAllTimeSearchTests: XCTestCase {
     let match = try XCTUnwrap(allTime.first)
     XCTAssertTrue(match.ocrText?.contains("peregrine") == true)
 
-    // What it used to ask, and why the phrase was unfindable.
-    let calendar = Calendar.current
-    let todayStart = calendar.startOfDay(for: Date())
-    let todayEnd = try XCTUnwrap(calendar.date(byAdding: .day, value: 1, to: todayStart))
+    // What it used to ask, and why the phrase was unfindable. The bound is the seeded day in the
+    // pinned zone, so the window is the one the newer frame actually sits in on any machine.
+    let todayStart = try clock.dayStart(daysAgo: 0)
+    let todayEnd = try XCTUnwrap(
+      clock.calendar.date(byAdding: .day, value: 1, to: todayStart))
     let dayScoped = try await RewindDatabase.shared.search(
       query: "peregrine", startDate: todayStart, endDate: todayEnd)
     XCTAssertTrue(
@@ -146,10 +214,11 @@ final class RewindAllTimeSearchTests: XCTestCase {
   // MARK: - The semantic pass stays bounded once history is unlimited
 
   func testEmbeddingBatchReadsNewestFirstOverAnUnboundedRange() async throws {
+    let clock = try makeSeedClock()
     let blob = Data(repeating: 0, count: 4)
-    try await insert(daysAgo: 40, text: "oldest", embedding: blob)
-    try await insert(daysAgo: 5, text: "middle", embedding: blob)
-    try await insert(daysAgo: 0, text: "newest", embedding: blob)
+    try await insert(at: try clock.instant(daysAgo: 40), text: "oldest", embedding: blob)
+    try await insert(at: try clock.instant(daysAgo: 5), text: "middle", embedding: blob)
+    try await insert(at: try clock.instant(daysAgo: 0), text: "newest", embedding: blob)
 
     // Unbounded range, budget of one row: the caller's budget must buy the *newest* frame.
     let firstPage = try await RewindDatabase.shared.readEmbeddingBatch(
@@ -164,13 +233,13 @@ final class RewindAllTimeSearchTests: XCTestCase {
   }
 
   func testEmbeddingBatchStillHonoursAnExplicitRange() async throws {
+    let clock = try makeSeedClock()
     let blob = Data(repeating: 0, count: 4)
-    try await insert(daysAgo: 40, text: "oldest", embedding: blob)
-    try await insert(daysAgo: 0, text: "newest", embedding: blob)
+    try await insert(at: try clock.instant(daysAgo: 40), text: "oldest", embedding: blob)
+    try await insert(at: try clock.instant(daysAgo: 0), text: "newest", embedding: blob)
 
-    let calendar = Calendar.current
-    let start = try XCTUnwrap(calendar.date(byAdding: .day, value: -60, to: Date()))
-    let end = try XCTUnwrap(calendar.date(byAdding: .day, value: -30, to: Date()))
+    let start = try clock.instant(daysAgo: 60)
+    let end = try clock.instant(daysAgo: 30)
     let windowed = try await RewindDatabase.shared.readEmbeddingBatch(startDate: start, endDate: end)
 
     XCTAssertEqual(windowed.count, 1, "callers that pass a window must still get only that window")
@@ -185,24 +254,30 @@ final class RewindAllTimeSearchTests: XCTestCase {
   /// any. This drives the real seek walk against real rows: the days that hold capture come back
   /// newest-first, the days that hold nothing are absent, and no day is reported twice.
   func testCapturedDayStartsReportsEveryDayThatHoldsCaptureNewestFirst() async throws {
-    let calendar = Calendar.current
-    // Days 0, 2 and 9 back hold capture; days 1 and 3–8 hold nothing at all.
+    let clock = try makeSeedClock()
+    // Days 0, 2 and 9 back from the anchor hold capture; days 1 and 3–8 hold nothing at all.
     let offsets = [0, 2, 9]
     for offset in offsets {
-      try await insert(daysAgo: offset, text: "span \(offset)")
-      // A second frame the same day must not produce a second day.
-      let stamp = try XCTUnwrap(calendar.date(byAdding: .day, value: -offset, to: Date()))
+      // The two frames sit at the two ends of one local day *by construction*, which is the claim
+      // the assertion below rests on. They used to be a live-clock stamp and that stamp plus two
+      // minutes — same-day only if the run did not happen in the last two minutes of a day. On
+      // 2026-08-15 at 23:58 it did: each second frame landed after midnight and reported a day one
+      // newer than the one it was meant to duplicate, so three seeded days came back as five.
+      // Seeding the day's first and last instants also drives the boundary the old fixture never
+      // reached — a day is one day even when its capture touches both of its edges.
+      try await insert(
+        at: try clock.dayStart(daysAgo: offset).addingTimeInterval(30),
+        text: "span \(offset)")
       _ = try await RewindDatabase.shared.insertScreenshot(
         Screenshot(
-          timestamp: stamp.addingTimeInterval(120), appName: "AllTimeTest",
+          timestamp: try clock.dayEnd(daysAgo: offset), appName: "AllTimeTest",
           videoChunkPath: "alltime/\(offset).mp4", frameOffset: 1, isIndexed: true))
     }
 
-    let days = try await RewindDatabase.shared.capturedDayStarts()
+    // The pinned calendar, not the machine's: on a UTC runner these rows straddle two UTC days.
+    let days = try await RewindDatabase.shared.capturedDayStarts(calendar: clock.calendar)
 
-    let expected = try offsets.map {
-      calendar.startOfDay(for: try XCTUnwrap(calendar.date(byAdding: .day, value: -$0, to: Date())))
-    }
+    let expected = try offsets.map { try clock.dayStart(daysAgo: $0) }
     XCTAssertEqual(days, expected, "captured days must be exactly the days that hold rows, newest first")
     XCTAssertEqual(Set(days).count, days.count, "a day with several frames must appear once")
     XCTAssertEqual(days.last, expected.last, "the oldest captured day is what 'all time' reaches back to")
@@ -218,9 +293,10 @@ final class RewindAllTimeSearchTests: XCTestCase {
   // MARK: - The continuous timeline reaches retained history
 
   func testHistorySurveyPublishesGlobalBoundsWithoutReplacingTheVisibleWindow() async throws {
-    let newest = try await insert(daysAgo: 0, text: "newest day")
-    try await insert(daysAgo: 2, text: "middle day")
-    let oldest = try await insert(daysAgo: 9, text: "oldest day")
+    let clock = try makeSeedClock()
+    let newest = try await insert(at: try clock.instant(daysAgo: 0), text: "newest day")
+    try await insert(at: try clock.instant(daysAgo: 2), text: "middle day")
+    let oldest = try await insert(at: try clock.instant(daysAgo: 9), text: "oldest day")
 
     let viewModel = await MainActor.run { RewindViewModel() }
     await viewModel.surveyCapturedHistory(attempts: 1)
@@ -236,9 +312,10 @@ final class RewindAllTimeSearchTests: XCTestCase {
   }
 
   func testPanningReloadsOnlyTheRequestedContinuousWindow() async throws {
-    let newest = try await insert(daysAgo: 0, text: "newest day")
-    let middle = try await insert(daysAgo: 2, text: "middle day")
-    let oldest = try await insert(daysAgo: 9, text: "oldest day")
+    let clock = try makeSeedClock()
+    let newest = try await insert(at: try clock.instant(daysAgo: 0), text: "newest day")
+    let middle = try await insert(at: try clock.instant(daysAgo: 2), text: "middle day")
+    let oldest = try await insert(at: try clock.instant(daysAgo: 9), text: "oldest day")
     let viewModel = await MainActor.run { RewindViewModel() }
     await viewModel.surveyCapturedHistory(attempts: 1)
 
@@ -325,13 +402,12 @@ final class RewindAllTimeSearchTests: XCTestCase {
   }
 
   func testBoundedAllTimeSampleIncludesTheOldestAndNewestCapture() async throws {
+    let clock = try makeSeedClock()
     for offset in (0..<10).reversed() {
-      try await insert(daysAgo: offset, text: "day \(offset)")
+      try await insert(at: try clock.instant(daysAgo: offset), text: "day \(offset)")
     }
-    let calendar = Calendar.current
-    let start = calendar.startOfDay(
-      for: try XCTUnwrap(calendar.date(byAdding: .day, value: -10, to: Date())))
-    let end = try XCTUnwrap(calendar.date(byAdding: .day, value: 1, to: Date()))
+    let start = try clock.dayStart(daysAgo: 10)
+    let end = try clock.instant(daysAgo: -1)
 
     let sample = try await RewindDatabase.shared.getScreenshotsSampled(
       from: start, to: end, targetCount: 3)

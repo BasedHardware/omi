@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 import asyncio
+import hashlib
+import json
 from typing import Any
 
 from google.api_core.exceptions import AlreadyExists
+from google.cloud import firestore
 import pytest
 
-from database.llm_gateway_accounting import ATTEMPTS_COLLECTION, record_llm_gateway_attempt
+from database.llm_gateway_accounting import ATTEMPTS_COLLECTION, USER_DAYS_COLLECTION, record_llm_gateway_attempt
 from llm_gateway.gateway import accounting_sink
+from utils.llm.model_config import LUNA_MODEL
 from llm_gateway.gateway.accounting import (
     AccountingContext,
     AttemptTrace,
@@ -16,12 +20,48 @@ from llm_gateway.gateway.accounting import (
     ProviderResponseMetadata,
     ProviderUsage,
     anthropic_usage_from_response,
+    aggregate_accounting_events,
     build_accounting_event,
+    cache_requested_for_openai_request,
     cache_write_ttl_for_anthropic_request,
     image_usage,
+    jit_gateway_receipt_for_trace,
     openai_usage_from_response,
     vertex_usage_from_response,
 )
+
+
+def test_openai_cache_request_detection_matches_explicit_contract() -> None:
+    breakpoint_messages = [
+        {
+            'role': 'system',
+            'content': [
+                {
+                    'type': 'text',
+                    'text': 'static instructions',
+                    'prompt_cache_breakpoint': {'mode': 'explicit'},
+                }
+            ],
+        }
+    ]
+
+    assert cache_requested_for_openai_request(
+        {
+            'prompt_cache_key': 'omi-transcript-structure-v1',
+            'prompt_cache_options': {'mode': 'explicit', 'ttl': '30m'},
+            'messages': breakpoint_messages,
+        }
+    )
+    assert not cache_requested_for_openai_request(
+        {
+            # Include the routing key so the check reaches the breakpoint-detection
+            # branch instead of short-circuiting on the missing prompt_cache_key guard.
+            'prompt_cache_key': 'omi-transcript-structure-v1',
+            'prompt_cache_options': {'mode': 'explicit', 'ttl': '30m'},
+            'messages': [{'role': 'system', 'content': 'unique transcript'}],
+        }
+    )
+    assert cache_requested_for_openai_request({'prompt_cache_key': 'legacy-key', 'messages': []})
 
 
 def test_openai_usage_distinguishes_cache_hit_miss_and_unobserved_cache() -> None:
@@ -65,6 +105,44 @@ def test_openai_usage_distinguishes_cache_hit_miss_and_unobserved_cache() -> Non
     assert no_cache_read is not None and no_cache_read.cache_status == CacheStatus.NO_CACHE_READ_OBSERVED
 
 
+def test_openai_flex_tier_is_recorded_and_priced_at_batch_rates() -> None:
+    metadata = openai_usage_from_response(
+        {
+            'id': 'chatcmpl-flex',
+            'model': LUNA_MODEL,
+            'service_tier': 'flex',
+            'usage': {'prompt_tokens': 1_000_000, 'completion_tokens': 1_000_000},
+        }
+    )
+    trace = AttemptTrace()
+    attempt = trace.record(
+        provider='openai',
+        configured_model=LUNA_MODEL,
+        route_artifact_id='route.memory_conflict_flex.model_config.001',
+        fallback_reason=None,
+        retry_ordinal=0,
+        outcome='success',
+        error_class='none',
+        metadata=metadata,
+    )
+    context = AccountingContext.create(
+        request_id='request-flex',
+        caller='memory-maintenance-job',
+        user_uid=None,
+        feature='memory_conflict',
+        api_surface='openai.chat_completions',
+        payer='omi',
+    )
+
+    event = build_accounting_event(context, attempt)
+
+    assert event.traffic_type == 'flex'
+    # 1M input + 1M output puts this over the 272K long-context boundary:
+    # (1M * $0.20 + 1M * $0.90) halved for Flex = $0.55.
+    assert event.estimated_cost_micro_usd == 550_000
+    assert event.cost_basis == 'flex_batch_token_rates_excludes_cache_storage'
+
+
 def test_openai_usage_parses_cache_writes_and_prices_luna_write_tokens() -> None:
     usage = openai_usage_from_response(
         {
@@ -85,7 +163,7 @@ def test_openai_usage_parses_cache_writes_and_prices_luna_write_tokens() -> None
     trace = AttemptTrace()
     attempt = trace.record(
         provider='openai',
-        configured_model='gpt-5.6-luna',
+        configured_model=LUNA_MODEL,
         route_artifact_id='route.conv_action_items.model_config.001',
         fallback_reason=None,
         retry_ordinal=1,
@@ -96,8 +174,169 @@ def test_openai_usage_parses_cache_writes_and_prices_luna_write_tokens() -> None
     event = build_accounting_event(_context(), attempt)
 
     assert event.cache_write_tokens == 400_000
-    assert event.estimated_cost_micro_usd == 1_384_000
-    assert event.rate_card_id == 'openai.gpt-5.6-luna.2026-07-30'
+    # Long-context tier: 400K * $0.20 + 200K * $0.02 + 1M * $0.90
+    # + 400K * $0.25 = $1.084.
+    assert event.estimated_cost_micro_usd == 1_084_000
+    assert event.rate_card_id == f'openai.{LUNA_MODEL}.2026-09-22'
+
+
+def test_openai_receipt_normalizes_cached_and_cache_write_tokens_once() -> None:
+    """OpenAI prompt_tokens already includes both cached and write units."""
+    metadata = openai_usage_from_response(
+        {
+            'id': 'chatcmpl-jit-receipt',
+            'model': 'gpt-5.4-nano',
+            'usage': {
+                'prompt_tokens': 100,
+                'completion_tokens': 12,
+                'prompt_tokens_details': {'cached_tokens': 40, 'cache_write_tokens': 10},
+            },
+        },
+        cache_requested=True,
+    )
+
+    usage = metadata.usage
+    assert usage is not None
+    assert usage.prompt_tokens == 100
+    assert usage.cached_input_tokens == 40
+    assert usage.cache_write_tokens == 10
+    assert usage.uncached_input_tokens == 50
+
+
+def test_jit_aggregate_includes_retries_and_stops_on_unknown_cost() -> None:
+    context = AccountingContext.create(
+        request_id='request-jit-run',
+        caller='jit-proactivity',
+        user_uid='user-123',
+        feature='jit_proactivity',
+        api_surface='openai_chat_completions',
+        payer='omi',
+        jit_run_id='jit-run-opaque-1',
+        jit_contract_version='jit-cloud-qa-v1',
+    )
+    trace = AttemptTrace()
+    priced_attempt = trace.record(
+        provider='openai',
+        configured_model='gpt-5.4-nano',
+        route_artifact_id='route.jit.nano.001',
+        fallback_reason=None,
+        retry_ordinal=0,
+        outcome='success',
+        error_class='none',
+        metadata=ProviderResponseMetadata(
+            usage=ProviderUsage(prompt_tokens=100, uncached_input_tokens=80, cached_input_tokens=20, output_tokens=8)
+        ),
+    )
+    retry_without_receipt = trace.record(
+        provider='openai',
+        configured_model='gpt-5.4-nano',
+        route_artifact_id='route.jit.nano.001',
+        fallback_reason='provider_timeout',
+        retry_ordinal=1,
+        outcome='error',
+        error_class='timeout',
+    )
+
+    aggregate = aggregate_accounting_events(
+        [build_accounting_event(context, priced_attempt), build_accounting_event(context, retry_without_receipt)]
+    )
+
+    assert aggregate is not None
+    assert aggregate.attempt_count == 2
+    assert aggregate.normalized_uncached_input_tokens == 80
+    assert aggregate.cached_input_tokens == 20
+    assert aggregate.cost_status == CostStatus.INDETERMINATE
+    assert aggregate.estimated_cost_micro_usd is None
+    assert not aggregate.cost_is_known
+
+
+def test_cache_write_only_miss_reports_negative_net_cache_savings() -> None:
+    trace = AttemptTrace()
+    attempt = trace.record(
+        provider='openai',
+        configured_model=LUNA_MODEL,
+        route_artifact_id='route.test.001',
+        fallback_reason=None,
+        retry_ordinal=0,
+        outcome='success',
+        error_class='none',
+        metadata=ProviderResponseMetadata(
+            usage=ProviderUsage(
+                prompt_tokens=1_000_000,
+                cache_write_tokens=1_000_000,
+                cache_write_ttl='30m',
+            )
+        ),
+    )
+
+    event = build_accounting_event(_context(), attempt)
+
+    # 1M of write tokens is past the 272K boundary, so the long-context rates
+    # apply: a write costs $0.25/M while the ordinary input counterfactual
+    # costs $0.20/M, a $0.05/M net loss until this entry is reused.
+    assert event.estimated_cost_micro_usd == 250_000
+    assert event.estimated_cache_savings_micro_usd == -50_000
+
+
+def test_cache_write_and_read_report_net_cache_savings() -> None:
+    trace = AttemptTrace()
+    attempt = trace.record(
+        provider='openai',
+        configured_model=LUNA_MODEL,
+        route_artifact_id='route.test.001',
+        fallback_reason=None,
+        retry_ordinal=0,
+        outcome='success',
+        error_class='none',
+        metadata=ProviderResponseMetadata(
+            usage=ProviderUsage(
+                prompt_tokens=2_000_000,
+                cached_input_tokens=1_000_000,
+                uncached_input_tokens=0,
+                cache_write_tokens=1_000_000,
+                cache_write_ttl='30m',
+                output_tokens=1_000_000,
+            )
+        ),
+    )
+
+    event = build_accounting_event(_context(), attempt)
+
+    # 2M of input context is past the 272K boundary, so this prices at the
+    # long-context tier throughout. Counterfactual input bill: 2M * $0.20 =
+    # $0.40. Actual input bill is 1M * $0.02 + 1M * $0.25 = $0.27, for $0.13
+    # net savings. Output adds 1M * $0.90.
+    assert event.estimated_cost_micro_usd == 1_170_000
+    assert event.estimated_cache_savings_micro_usd == 130_000
+
+
+def test_flex_halves_complete_net_cache_savings_and_total_cost() -> None:
+    trace = AttemptTrace()
+    attempt = trace.record(
+        provider='openai',
+        configured_model=LUNA_MODEL,
+        route_artifact_id='route.test.001',
+        fallback_reason=None,
+        retry_ordinal=0,
+        outcome='success',
+        error_class='none',
+        metadata=ProviderResponseMetadata(
+            usage=ProviderUsage(
+                prompt_tokens=2_000_000,
+                cached_input_tokens=1_000_000,
+                cache_write_tokens=1_000_000,
+                cache_write_ttl='30m',
+                output_tokens=1_000_000,
+            ),
+            traffic_type='flex',
+        ),
+    )
+
+    event = build_accounting_event(_context(), attempt)
+
+    # Exactly half of the long-context figures in the test above.
+    assert event.estimated_cost_micro_usd == 585_000
+    assert event.estimated_cache_savings_micro_usd == 65_000
 
 
 def test_empty_usage_object_is_unreported_not_a_zero_cost_completion() -> None:
@@ -138,6 +377,46 @@ def test_openai_reasoning_tokens_are_an_output_subset_not_double_charged() -> No
     assert usage.output_tokens_include_reasoning is True
     assert usage.billable_output_tokens == 100
     assert usage.total_tokens == 110
+
+
+def test_jit_aggregate_and_receipt_preserve_reasoning_tokens() -> None:
+    context = AccountingContext.create(
+        request_id='request-reasoning-jit',
+        caller='jit-proactivity',
+        user_uid='user-123',
+        feature='jit_proactivity',
+        api_surface='openai_chat_completions',
+        payer='omi',
+        jit_run_id='jit-reasoning-run',
+        jit_contract_version='jit-cloud-qa-v1',
+    )
+    trace = AttemptTrace()
+    trace.record(
+        provider='openai',
+        configured_model=LUNA_MODEL,
+        route_artifact_id='route.jit.001',
+        fallback_reason=None,
+        retry_ordinal=1,
+        outcome='success',
+        error_class='none',
+        metadata=ProviderResponseMetadata(
+            usage=ProviderUsage(
+                prompt_tokens=10,
+                uncached_input_tokens=10,
+                output_tokens=100,
+                reasoning_tokens=40,
+                output_tokens_include_reasoning=True,
+            )
+        ),
+    )
+
+    receipt = jit_gateway_receipt_for_trace(context, trace)
+
+    assert receipt is not None
+    assert receipt.aggregate.output_tokens == 100
+    assert receipt.aggregate.reasoning_tokens == 40
+    assert receipt.as_dict()['aggregate']['reasoning_tokens'] == 40
+    assert receipt.as_dict()['attempts'][0]['reasoning_tokens'] == 40
 
 
 def test_vertex_and_anthropic_usage_preserve_provider_cache_fields() -> None:
@@ -315,6 +594,201 @@ def test_firestore_ledger_write_is_immutable_idempotent_and_snapshots_subscripti
     assert not record_llm_gateway_attempt(event, firestore_client=client)
     stored = client.collections[ATTEMPTS_COLLECTION]['invocation-1:1']
     assert stored['subscription_tier'] == 'pro'
+    assert stored['plan_id'] == 'architect'
+    assert stored['plan_attribution_status'] == 'complete'
+    assert stored['cost_attribution_status'] == 'missing'
+
+
+def test_firestore_ledger_marks_priced_omi_cost_complete_for_the_canonical_plan() -> None:
+    client = _FakeFirestoreClient(subscription_plan='operator')
+    event = {
+        'attempt_id': 'invocation-1:2',
+        'provider': 'openai',
+        'user_uid': 'user-123',
+        'payer': 'omi',
+        'cost_status': 'estimated',
+        'estimated_cost_micro_usd': 2500,
+    }
+
+    assert record_llm_gateway_attempt(event, firestore_client=client)
+    stored = client.collections[ATTEMPTS_COLLECTION]['invocation-1:2']
+    assert stored['plan_id'] == 'operator'
+    assert stored['cost_attribution_status'] == 'complete'
+
+
+def test_user_day_rollup_hashes_uid_and_accumulates_one_document_per_user_day() -> None:
+    client = _FakeFirestoreClient(subscription_plan='pro')
+    first = {
+        'attempt_id': 'invocation-1:1',
+        'date': '2026-09-14',
+        'provider': 'openai',
+        'user_uid': 'user-123',
+        'feature': 'desktop_chat',
+        'app_platform': 'desktop',
+        'payer': 'omi',
+        'cost_status': 'estimated',
+        'estimated_cost_micro_usd': 2500,
+    }
+    second = {
+        'attempt_id': 'invocation-1:2',
+        'date': '2026-09-14',
+        'provider': 'gemini',
+        'user_uid': 'user-123',
+        'feature': 'chat',
+        'payer': 'omi',
+        'cost_status': 'unpriced',
+    }
+
+    assert record_llm_gateway_attempt(first, firestore_client=client)
+    assert record_llm_gateway_attempt(second, firestore_client=client)
+
+    uid_hash = hashlib.sha256(b'user-123').hexdigest()[:16]
+    rollup = client.collections[USER_DAYS_COLLECTION][f'2026-09-14_{uid_hash}']
+    assert rollup['date'] == '2026-09-14'
+    assert rollup['uid_hash'] == uid_hash
+    assert rollup['attempts'] == 2
+    assert rollup['cost_micro_usd_sum'] == 2500
+    assert rollup['cost_openai'] == 2500
+    assert rollup.get('cost_gemini', 0) == 0
+    assert rollup.get('cost_other_provider', 0) == 0
+    assert rollup['attempts_unpriced'] == 1
+    assert rollup['fc_desktop'] == 2500
+    assert rollup.get('fc_chat', 0) == 0
+    # Last-seen attribution: the second attempt had no platform and no price.
+    assert rollup['app_platform'] == 'unattributed'
+    assert rollup['subscription_tier'] == 'pro'
+    assert rollup['plan_id'] == 'architect'
+    # The rollup never carries the raw Firebase uid, in values or field names.
+    assert 'user_uid' not in rollup
+    assert 'user-123' not in json.dumps(rollup)
+    assert len(client.collections[USER_DAYS_COLLECTION]) == 1
+
+
+def test_user_day_rollup_buckets_other_providers_and_separates_days_and_users() -> None:
+    client = _FakeFirestoreClient(subscription_plan='pro')
+    event = {
+        'attempt_id': 'invocation-1:1',
+        'date': '2026-09-15',
+        'provider': 'anthropic',
+        'user_uid': 'user-456',
+        'feature': 'proactive_notification',
+        'payer': 'omi',
+        'cost_status': 'estimated',
+        'estimated_cost_micro_usd': 700,
+    }
+
+    assert record_llm_gateway_attempt(event, firestore_client=client)
+
+    uid_hash = hashlib.sha256(b'user-456').hexdigest()[:16]
+    rollup = client.collections[USER_DAYS_COLLECTION][f'2026-09-15_{uid_hash}']
+    assert rollup['cost_other_provider'] == 700
+    assert rollup['cost_micro_usd_sum'] == 700
+    assert rollup['fc_proactive_notification'] == 700
+    assert 'attempts_unpriced' not in rollup
+    # A different user-day must land in its own document.
+    assert len(client.collections[USER_DAYS_COLLECTION]) == 1
+    other = dict(event, attempt_id='invocation-1:2', user_uid='user-789')
+    assert record_llm_gateway_attempt(other, firestore_client=client)
+    assert len(client.collections[USER_DAYS_COLLECTION]) == 2
+
+
+def test_user_day_rollup_does_not_double_count_duplicate_attempts() -> None:
+    client = _FakeFirestoreClient(subscription_plan='pro')
+    event = {
+        'attempt_id': 'invocation-1:1',
+        'date': '2026-09-14',
+        'provider': 'openai',
+        'user_uid': 'user-123',
+        'feature': 'chat',
+        'payer': 'omi',
+        'cost_status': 'estimated',
+        'estimated_cost_micro_usd': 100,
+    }
+
+    assert record_llm_gateway_attempt(event, firestore_client=client)
+    assert not record_llm_gateway_attempt(event, firestore_client=client)
+
+    uid_hash = hashlib.sha256(b'user-123').hexdigest()[:16]
+    rollup = client.collections[USER_DAYS_COLLECTION][f'2026-09-14_{uid_hash}']
+    assert rollup['attempts'] == 1
+    assert rollup['cost_micro_usd_sum'] == 100
+
+
+def test_user_day_rollup_failure_never_fails_the_attempt_write() -> None:
+    class _BrokenRollupClient(_FakeFirestoreClient):
+        def collection(self, name: str) -> _FakeCollection:
+            if name == USER_DAYS_COLLECTION:
+                raise RuntimeError('user-day datastore unavailable')
+            return super().collection(name)
+
+    client = _BrokenRollupClient(subscription_plan='pro')
+    event = {
+        'attempt_id': 'invocation-1:1',
+        'date': '2026-09-14',
+        'provider': 'openai',
+        'user_uid': 'user-123',
+        'feature': 'chat',
+        'payer': 'omi',
+        'cost_status': 'estimated',
+        'estimated_cost_micro_usd': 100,
+    }
+
+    assert record_llm_gateway_attempt(event, firestore_client=client)
+    assert client.collections[ATTEMPTS_COLLECTION]['invocation-1:1']['estimated_cost_micro_usd'] == 100
+
+
+def test_user_day_rollup_skips_events_without_a_date() -> None:
+    client = _FakeFirestoreClient(subscription_plan='pro')
+    event = {'attempt_id': 'invocation-1:1', 'provider': 'openai', 'user_uid': 'user-123'}
+
+    assert record_llm_gateway_attempt(event, firestore_client=client)
+    assert USER_DAYS_COLLECTION not in client.collections
+
+
+def test_user_day_rollup_survives_an_unencodable_uid() -> None:
+    client = _FakeFirestoreClient(subscription_plan='pro')
+    event = {
+        'attempt_id': 'invocation-1:1',
+        'date': '2026-09-14',
+        'provider': 'openai',
+        'user_uid': '\ud800',  # lone surrogate: sha256(uid.encode()) raises
+        'feature': 'chat',
+        'payer': 'omi',
+        'cost_status': 'estimated',
+        'estimated_cost_micro_usd': 100,
+    }
+
+    assert record_llm_gateway_attempt(event, firestore_client=client)
+    assert ATTEMPTS_COLLECTION in client.collections
+    assert USER_DAYS_COLLECTION not in client.collections
+
+
+def test_user_day_rollup_pins_every_feature_bucket_the_ledger_puller_uses() -> None:
+    client = _FakeFirestoreClient(subscription_plan='pro')
+    features = ['chat', 'persona_gen', 'translation', 'memory_embeddings', 'screen_summary', '']
+
+    for ordinal, feature in enumerate(features, start=1):
+        event = {
+            'attempt_id': f'invocation-1:{ordinal}',
+            'date': '2026-09-14',
+            'provider': 'openai',
+            'user_uid': 'user-123',
+            'feature': feature,
+            'payer': 'omi',
+            'cost_status': 'estimated',
+            'estimated_cost_micro_usd': 10,
+        }
+        assert record_llm_gateway_attempt(event, firestore_client=client)
+
+    uid_hash = hashlib.sha256(b'user-123').hexdigest()[:16]
+    rollup = client.collections[USER_DAYS_COLLECTION][f'2026-09-14_{uid_hash}']
+    assert rollup['attempts'] == 6
+    assert rollup['fc_chat'] == 20  # chat + persona_gen
+    assert rollup['fc_translation'] == 10
+    assert rollup['fc_embeddings'] == 10
+    assert rollup['fc_extraction'] == 20  # screen_summary + featureless default
+    assert 'fc_desktop' not in rollup
+    assert 'fc_proactive_notification' not in rollup
 
 
 @pytest.mark.asyncio
@@ -443,6 +917,16 @@ class _FakeDocument:
             raise AlreadyExists('attempt already exists')
         self._collection.documents[self._document_id] = dict(data)
 
+    def set(self, data: dict[str, Any], merge: bool = False) -> None:
+        current = self._collection.documents.get(self._document_id, {})
+        stored = dict(current) if merge else {}
+        for key, value in data.items():
+            if isinstance(value, firestore.Increment):
+                stored[key] = current.get(key, 0) + value.value
+            else:
+                stored[key] = value
+        self._collection.documents[self._document_id] = stored
+
     def get(self, _fields: list[str]) -> _FakeSnapshot:
         return _FakeSnapshot(self._collection.documents.get(self._document_id))
 
@@ -464,3 +948,141 @@ class _FakeFirestoreClient:
 
     def collection(self, name: str) -> _FakeCollection:
         return _FakeCollection(self.collections.setdefault(name, {}))
+
+
+def test_long_context_threshold_is_pinned_and_exclusive() -> None:
+    # The boundary is "more than 272K input tokens": exactly at 272,000 must
+    # still use the short-context rate, and 272,001 must switch to long.
+    trace = AttemptTrace()
+
+    def _priced_cost(prompt_tokens: int) -> int | None:
+        attempt = trace.record(
+            provider='openai',
+            configured_model=LUNA_MODEL,
+            route_artifact_id='route.test.001',
+            fallback_reason=None,
+            retry_ordinal=1,
+            outcome='success',
+            error_class='none',
+            metadata=ProviderResponseMetadata(
+                usage=ProviderUsage(
+                    prompt_tokens=prompt_tokens,
+                    uncached_input_tokens=prompt_tokens,
+                    output_tokens=0,
+                    output_tokens_include_reasoning=True,
+                )
+            ),
+        )
+        return build_accounting_event(_context(), attempt).estimated_cost_micro_usd
+
+    at_boundary = _priced_cost(272_000)
+    past_boundary = _priced_cost(272_001)
+
+    # 272,000 * $0.10/M short rate = $27,200 micro-USD.
+    assert at_boundary == 27_200
+    # 272,001 * $0.20/M long rate, rounded = $54,400 micro-USD (rounds from
+    # 54400.2).
+    assert past_boundary == 54_400
+
+
+def test_model_with_no_long_context_tier_ignores_token_count() -> None:
+    # gpt-5.4-nano has no long_context_* fields in cost_rate_cards.yaml, so
+    # even a huge prompt must keep pricing at its single (short) rate.
+    trace = AttemptTrace()
+    attempt = trace.record(
+        provider='openai',
+        configured_model='gpt-5.4-nano',
+        route_artifact_id='route.test.001',
+        fallback_reason=None,
+        retry_ordinal=1,
+        outcome='success',
+        error_class='none',
+        metadata=ProviderResponseMetadata(
+            usage=ProviderUsage(
+                prompt_tokens=5_000_000,
+                uncached_input_tokens=5_000_000,
+                output_tokens=0,
+                output_tokens_include_reasoning=True,
+            )
+        ),
+    )
+    event = build_accounting_event(_context(), attempt)
+
+    # 5,000,000 * $0.20/M (the only rate this card has) = $1,000,000.
+    assert event.estimated_cost_micro_usd == 1_000_000
+    assert event.rate_card_id == 'openai.gpt-5.4-nano.2026-07-17'
+
+
+def test_short_context_luna_request_uses_short_context_rates() -> None:
+    # Same shape as the long-context test above, scaled down so total input
+    # context (150K) stays under the 272K-token boundary.
+    usage = openai_usage_from_response(
+        {
+            'id': 'chatcmpl-short',
+            'usage': {
+                'prompt_tokens': 150_000,
+                'completion_tokens': 100_000,
+                'prompt_tokens_details': {'cached_tokens': 30_000, 'cache_write_tokens': 60_000},
+            },
+        },
+        cache_requested=True,
+    ).usage
+    assert usage is not None
+    assert usage.uncached_input_tokens == 60_000
+
+    trace = AttemptTrace()
+    attempt = trace.record(
+        provider='openai',
+        configured_model=LUNA_MODEL,
+        route_artifact_id='route.conv_action_items.model_config.001',
+        fallback_reason=None,
+        retry_ordinal=1,
+        outcome='success',
+        error_class='none',
+        metadata=ProviderResponseMetadata(usage=usage),
+    )
+    event = build_accounting_event(_context(), attempt)
+
+    # Short-context rates: 60K uncached @ $0.10/M + 30K cached @ $0.01/M +
+    # 100K output @ $0.60/M + 60K cache-write @ $0.125/M = $73,800 micro-USD.
+    assert event.estimated_cost_micro_usd == 73_800
+    assert event.rate_card_id == f'openai.{LUNA_MODEL}.2026-09-22'
+
+
+def _platform_attempt() -> Any:
+    trace = AttemptTrace()
+    return trace.record(
+        provider='anthropic',
+        configured_model='claude-sonnet-4-5',
+        route_artifact_id='route.chat_agent.model_config.001',
+        fallback_reason=None,
+        retry_ordinal=0,
+        outcome='success',
+        error_class='none',
+        metadata=ProviderResponseMetadata(usage=ProviderUsage(prompt_tokens=10, uncached_input_tokens=10)),
+    )
+
+
+def test_app_platform_is_recorded_on_the_accounting_event() -> None:
+    """chat_agent spend must be splittable desktop vs mobile in the ledger."""
+    context = AccountingContext.create(
+        request_id='request-platform',
+        caller='backend',
+        user_uid='user-123',
+        feature='chat_agent',
+        api_surface='openai_chat_completions',
+        payer='omi',
+        app_platform='desktop',
+    )
+
+    event = build_accounting_event(context, _platform_attempt())
+
+    assert event.app_platform == 'desktop'
+    assert event.as_dict()['app_platform'] == 'desktop'
+
+
+def test_unknown_app_platform_is_persisted_as_unattributed() -> None:
+    event = build_accounting_event(_context(), _platform_attempt())
+
+    assert event.app_platform is None
+    assert event.as_dict()['app_platform'] is None

@@ -103,6 +103,6 @@ def test_search_tool_renders_in_resolved_timezone():
     source = SOURCE.read_text(encoding="utf-8")
     func = source[source.index("def search_screen_activity_tool") :]
     assert "_resolve_display_tz(uid)" in func
-    assert "datetime.fromtimestamp(ts, tz=display_tz)" in func
+    assert "datetime.fromtimestamp(captured_at_ms / 1000, tz=display_tz)" in func
     # The naive form (no tzinfo) must be gone.
     assert "datetime.fromtimestamp(ts).strftime" not in func

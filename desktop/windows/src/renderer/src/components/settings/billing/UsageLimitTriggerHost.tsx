@@ -1,30 +1,22 @@
 import { useEffect, useRef } from 'react'
 import { useAppState } from '../../../state/appState'
-import { maybeTriggerChatQuotaPopup } from '../../../lib/usageLimit'
-import { fetchChatQuota } from '../../../lib/billing'
+import { mainChatQuotaGate } from '../../../hooks/useChat'
 
 /**
- * Raises the usage-limit popup when a chat send finishes against an exhausted
- * quota. It observes the ONE app-wide chat engine's `sending` flag (via
- * useAppState) rather than touching the chat send path itself — on the
- * busy→idle edge (a reply just completed) it probes the chat quota once. The
- * probe is cheap, silent on error, and shows the popup at most once per session
- * (guards live in lib/usageLimit). Mounted once at the app root, main window
- * only.
+ * Refreshes the main-window chat quota snapshot after an actual hosted request
+ * settles. Local automation, coding agents, pre-dispatch failures, and resets do
+ * not advance `quotaCheckSeq`, so they cannot refresh or reset the canonical
+ * pre-send gate. Mounted once at the app root, main window only.
  */
 export function UsageLimitTriggerHost(): null {
-  // TODO(#10240 stream-1 chat integration — see docs/mac-parity-audit/PARALLEL-PLAN.md
-  // §Stream 1): replace this spinner-flag inference with an explicit
-  // quota-exceeded signal from the chat engine once fix/windows-wiring-criticals'
-  // useChat changes merge.
   const { chat } = useAppState()
-  const wasSending = useRef(chat.sending)
+  const lastQuotaCheckSeq = useRef(chat.quotaCheckSeq)
 
   useEffect(() => {
-    const finishedReply = wasSending.current && !chat.sending
-    wasSending.current = chat.sending
-    if (finishedReply) void maybeTriggerChatQuotaPopup(fetchChatQuota)
-  }, [chat.sending])
+    if (lastQuotaCheckSeq.current === chat.quotaCheckSeq) return
+    lastQuotaCheckSeq.current = chat.quotaCheckSeq
+    void mainChatQuotaGate.sync()
+  }, [chat.quotaCheckSeq])
 
   return null
 }

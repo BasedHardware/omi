@@ -36,8 +36,12 @@ serviceAccount:
   create: true
   # Automatically mount a ServiceAccount's API credentials?
   automount: false
-  # Annotations to add to the service account
-  annotations: {}
+  # Annotations to add to the service account.
+  # Keyless runtime identity (Workload Identity) that replaces the nik-164
+  # SERVICE_ACCOUNT_JSON key once the key env is removed; while the key env is
+  # present the JSON still wins.
+  annotations:
+    iam.gke.io/gcp-service-account: pusher-runtime@based-hardware.iam.gserviceaccount.com
   # The name of the service account to use.
   # If not set and create is true, a name is generated using the fullname template
   name: ""
@@ -108,8 +112,15 @@ ingress:
 envFrom:
   - configMapRef:
       name: prod-omi-backend-config
+runtimeConfigMapName: prod-omi-backend-config
 
 env:
+  - name: FREE_TIER_LOCAL_PROCESSING
+    value: "false"
+  - name: FREE_TIER_EMERGENCY_STOP
+    value: "false"
+  - name: FREE_TIER_LOCAL_PROCESSING_COHORT
+    value: ""
   - name: BUCKET_SPEECH_PROFILES
     value: "profiles"
   - name: GITHUB_TOKEN
@@ -122,6 +133,15 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: OPENAI_API_KEY
+  # Read by utils/llm/managed_spend_ledger.py for direct-provider surfaces
+  # (desktop_proxy, omni_relay). Neither is mounted on the pusher today, so
+  # this is pre-positioning, not a fix for lost rows: pusher-hosted
+  # process_conversation spends through the LLM gateway, which ledgers under
+  # its own identity. Declared here so a co-host env diff cannot leave one
+  # process_conversation host silently unable to ledger if a direct surface
+  # is ever mounted (verify_pusher_cohost_env_diff.py REQUIRED_IDENTICAL_LITERALS).
+  - name: LLM_GATEWAY_ACCOUNTING_ENABLED
+    value: "true"
   - name: OMI_LLM_GATEWAY_URL
     value: "http://prod-omi-llm-gateway.prod-omi-backend.svc.cluster.local:8080"
   - name: OMI_ENV_STAGE
@@ -139,6 +159,26 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: OMI_LLM_GATEWAY_SERVICE_TOKEN
+  - name: MEMORY_ENABLED
+    value: "on"
+  - name: MEMORY_BELIEF_MODEL_ENABLED
+    value: "false"
+  - name: MEMORY_BELIEF_AUTOMATION_PAUSED
+    value: "false"
+  # Shared process_conversation rollout flags. Must match backend-listen in this
+  # environment — pusher hosts the same finalizer after 2026-08-30.
+  - name: CONVERSATION_NOTES_V2_ENABLED
+    value: "true"
+  - name: CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED
+    value: "false"
+  - name: CONVERSATION_OCR_CONTEXT_ENABLED
+    value: "false"
+  - name: MEETING_NOTES_RICH_CONTEXT_ENABLED
+    value: "false"
+  - name: MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED
+    value: "false"
+  - name: BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED
+    value: "false"
   - name: FAL_KEY
     valueFrom:
       secretKeyRef:
@@ -149,8 +189,6 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: GROQ_API_KEY
-  - name: HOSTED_SPEECH_PROFILE_API_URL
-    value: "http://vad.omi.me:80/v1/speaker-identification"
   - name: HOSTED_SPEAKER_EMBEDDING_API_URL
     value: "http://diarizer.omi.me:80"
   - name: PINECONE_API_KEY
@@ -191,6 +229,12 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: MODULATE_API_KEY
+  - name: SONIOX_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: SONIOX_API_KEY
+        optional: true
   - name: GOOGLE_MAPS_API_KEY
     valueFrom:
       secretKeyRef:
@@ -285,7 +329,7 @@ env:
   - name: STT_PRERECORDED_MODEL
     value: "parakeet,modulate-velma-2"
   - name: STT_SERVICE_MODELS
-    value: "dg-nova-3,modulate-velma-2,parakeet"
+    value: "modulate-velma-2,soniox,dg-nova-3,parakeet"
   - name: RAPID_API_KEY
     valueFrom:
       secretKeyRef:
@@ -298,12 +342,6 @@ env:
         key: OPENROUTER_API_KEY
   - name: GOOGLE_CLOUD_PROJECT
     value: "based-hardware"
-  - name: BASIC_TIER_MINUTES_LIMIT_PER_MONTH
-    value: "300"
-  - name: BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
-    value: "0"
-  - name: BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
-    value: "0"
   - name: STRIPE_UNLIMITED_MONTHLY_PRICE_ID
     value: "price_1RtJPm1F8wnoWYvwhVJ38kLb"
   - name: STRIPE_UNLIMITED_ANNUAL_PRICE_ID
@@ -323,6 +361,8 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: SERVICE_ACCOUNT_JSON
+  - name: OMI_CUSTOMER_DATA_PROJECT
+    value: "based-hardware"
   - name: METRICS_SECRET
     valueFrom:
       secretKeyRef:
@@ -397,6 +437,9 @@ autoscaling:
       selectPolicy: Max
   # targetCPUUtilizationPercentage: 60
   # targetMemoryUtilizationPercentage: 60
+  # Intentionally higher than backend-listen (22): pusher's WebSocket
+  # handling profile sustains 30 concurrent connections per pod, while
+  # backend-listen does not. Keep the two values independently tuned (#6752).
   activeConnectionsPerPod: 30
 
 podDisruptionBudget:

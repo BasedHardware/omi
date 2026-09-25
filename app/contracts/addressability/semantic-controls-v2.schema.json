@@ -1,0 +1,171 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "semantic-controls-v2.schema.json",
+  "title": "B1 bounded v2 snapshot",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "contract_version",
+    "route",
+    "auth",
+    "capture",
+    "ble",
+    "wal",
+    "wal_pending",
+    "providers",
+    "flags",
+    "flags_hydrated",
+    "readiness"
+  ],
+  "properties": {
+    "contract_version": {
+      "const": "semantic-controls/v2"
+    },
+    "route": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "auth": {
+      "enum": [
+        "unavailable",
+        "signedOut",
+        "signedIn",
+        "reauthentication",
+        "cuttingOver"
+      ]
+    },
+    "capture": {
+      "enum": [
+        "unavailable",
+        "idle",
+        "recording",
+        "stopping"
+      ]
+    },
+    "ble": {
+      "enum": [
+        "unavailable",
+        "disconnected",
+        "connecting",
+        "connected"
+      ]
+    },
+    "wal": {
+      "enum": [
+        "unavailable",
+        "ready",
+        "draining",
+        "failed"
+      ]
+    },
+    "wal_pending": {
+      "type": [
+        "integer",
+        "null"
+      ],
+      "minimum": 0,
+      "maximum": 1000
+    },
+    "providers": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "messages",
+        "conversations",
+        "memories",
+        "tasks"
+      ],
+      "properties": {
+        "messages": {
+          "enum": [
+            "unavailable",
+            "loading",
+            "ready",
+            "failed"
+          ]
+        },
+        "conversations": {
+          "enum": [
+            "unavailable",
+            "loading",
+            "ready",
+            "failed"
+          ]
+        },
+        "memories": {
+          "enum": [
+            "unavailable",
+            "loading",
+            "ready",
+            "failed"
+          ]
+        },
+        "tasks": {
+          "enum": [
+            "unavailable",
+            "loading",
+            "ready",
+            "failed"
+          ]
+        }
+      }
+    },
+    "flags": {
+      "type": "array",
+      "maxItems": 64,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "effective",
+          "override"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,47}$"
+          },
+          "effective": {
+            "type": "boolean"
+          },
+          "override": {
+            "type": [
+              "boolean",
+              "null"
+            ]
+          }
+        }
+      }
+    },
+    "flags_hydrated": {
+      "type": "boolean"
+    },
+    "readiness": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "signedIn",
+        "routed",
+        "captureIdle",
+        "appReady"
+      ],
+      "properties": {
+        "signedIn": {
+          "type": "boolean"
+        },
+        "routed": {
+          "type": "boolean"
+        },
+        "captureIdle": {
+          "type": "boolean"
+        },
+        "appReady": {
+          "type": "boolean"
+        }
+      }
+    }
+  }
+}

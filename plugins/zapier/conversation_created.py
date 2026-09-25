@@ -1,4 +1,4 @@
-from typing import List
+from typing import Any, List
 
 from fastapi import HTTPException, Request, APIRouter, Form
 from fastapi.responses import HTMLResponse
@@ -12,8 +12,13 @@ from db import (
     remove_zapier_subscribes,
 )
 from models import Conversation, ExternalIntegrationCreateConversation, EndpointResponse
-from .client import get_zapier, get_omi
-from .models import ZapierSubcribeModel, ZapierCreateConversation, ZapierActionCreateConversation
+# Fallback to direct package import when running outside parent package context (e.g. test harness)
+try:
+    from .client import get_zapier, get_omi
+    from .models import ZapierSubcribeModel, ZapierCreateConversation, ZapierActionCreateConversation
+except (ImportError, ValueError):
+    from zapier.client import get_zapier, get_omi
+    from zapier.models import ZapierSubcribeModel, ZapierCreateConversation, ZapierActionCreateConversation
 
 router = APIRouter()
 # noinspection PyRedeclaration
@@ -83,30 +88,32 @@ async def subscribe_zapier_trigger(subscriber: ZapierSubcribeModel, uid: str):
     if not uid:
         raise HTTPException(status_code=400, detail='UID is required')
 
-    if not subscriber.target_url or subscriber.target_url == "":
+    if not subscriber or not subscriber.target_url or not subscriber.target_url.strip():
         raise HTTPException(status_code=400, detail='Target url is invalid.')
-        return
+
+    target_url = subscriber.target_url.strip()
+    if not (target_url.startswith("http://") or target_url.startswith("https://")):
+        raise HTTPException(status_code=400, detail='Target url must start with http:// or https://')
 
     # Validate user status
     status = get_zapier_user_status(uid)
     if status != "enabled":
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    print({'uid': uid, 'target_url': subscriber.target_url})
-    store_zapier_subscribes(uid, subscriber.target_url)
+    store_zapier_subscribes(uid, target_url)
     return {}
 
 
 @router.delete('/zapier/trigger/subscribe', tags=['zapier'], response_model=EndpointResponse)
 async def unsubscribe_zapier_trigger(subscriber: ZapierSubcribeModel, uid: str):
     """
-    Subcribe a zapier trigger
+    Unsubcribe a zapier trigger
     """
 
     if not uid:
         raise HTTPException(status_code=400, detail='UID is required')
 
-    if not subscriber.target_url or subscriber.target_url == "":
+    if not subscriber or not subscriber.target_url or not subscriber.target_url.strip():
         raise HTTPException(status_code=400, detail='Target url is invalid.')
 
     # Validate user status
@@ -114,9 +121,86 @@ async def unsubscribe_zapier_trigger(subscriber: ZapierSubcribeModel, uid: str):
     if status != "enabled":
         raise HTTPException(status_code=401, detail="Unauthorized")
 
-    print({'uid': uid, 'target_url': subscriber.target_url})
-    remove_zapier_subscribes(uid, subscriber.target_url)
+    remove_zapier_subscribes(uid, subscriber.target_url.strip())
     return {}
+
+
+def _build_zapier_conversation_payload(conversation: Any) -> ZapierCreateConversation:
+    if conversation is None:
+        raise ValueError("Conversation cannot be None")
+
+    # Safe emoji extraction
+    emoji = "🧠"
+    structured = getattr(conversation, "structured", None)
+    if structured is not None:
+        raw_emoji = getattr(structured, "emoji", None)
+        if raw_emoji:
+            try:
+                emoji = str(raw_emoji).encode("latin1").decode("utf-8")
+            except (UnicodeEncodeError, UnicodeDecodeError, AttributeError):
+                emoji = str(raw_emoji)
+
+    # Safe title
+    title = ""
+    if structured is not None and getattr(structured, "title", None):
+        title = str(structured.title)
+    if not title:
+        title = "Omi Conversation"
+
+    # Safe category
+    category = "other"
+    if structured is not None and getattr(structured, "category", None):
+        cat = structured.category
+        category = str(getattr(cat, "value", cat))
+
+    # Safe speakers count
+    segments = getattr(conversation, "transcript_segments", None) or []
+    speakers_set = set()
+    for seg in segments:
+        if seg is None:
+            continue
+        spk = getattr(seg, "speaker", None)
+        if spk is not None:
+            speakers_set.add(spk)
+        elif isinstance(seg, dict) and "speaker" in seg:
+            speakers_set.add(seg["speaker"])
+    speakers = len(speakers_set)
+
+    # Safe duration
+    started_at = getattr(conversation, "started_at", None)
+    finished_at = getattr(conversation, "finished_at", None)
+    duration = 0
+    if started_at is not None and finished_at is not None:
+        try:
+            delta = (finished_at - started_at).total_seconds()
+            duration = max(0, int(delta))
+        except (TypeError, ValueError, AttributeError):
+            duration = 0
+
+    # Safe overview
+    overview = ""
+    if structured is not None and getattr(structured, "overview", None):
+        overview = str(structured.overview)
+
+    # Safe transcript
+    transcript = ""
+    if hasattr(conversation, "get_transcript") and callable(conversation.get_transcript):
+        try:
+            transcript = conversation.get_transcript() or ""
+        except Exception:
+            transcript = ""
+    elif hasattr(conversation, "transcript"):
+        transcript = str(getattr(conversation, "transcript", "") or "")
+
+    return ZapierCreateConversation(
+        icon={"type": "emoji", "emoji": f"{emoji}"},
+        title=title,
+        speakers=speakers,
+        category=category,
+        duration=duration,
+        overview=overview,
+        transcript=transcript,
+    )
 
 
 @router.get('/zapier/trigger/memory/sample', tags=['zapier'], response_model=List[ZapierCreateConversation])
@@ -128,7 +212,7 @@ async def get_trigger_conversation_sample(request: Request, uid: str):
     if not uid:
         raise HTTPException(status_code=400, detail='UID is required')
 
-    # Genrate sample
+    # Default sample
     sample = ZapierCreateConversation(
         icon={
             "type": "emoji",
@@ -144,30 +228,23 @@ async def get_trigger_conversation_sample(request: Request, uid: str):
 
     # Get latest from Omi
     ok = get_omi().get_latest_conversation(uid)
-    print(ok)
-    if "error" in ok:
+    if isinstance(ok, dict) and "error" in ok:
         err = ok["error"]
         print(err)
-        raise HTTPException(status_code=err["status"] if "status" in err else 500, detail='Can not create memory')
+        status_code = 500
+        if isinstance(err, dict) and "status" in err:
+            try:
+                status_code = int(err["status"])
+            except (ValueError, TypeError):
+                status_code = 500
+        raise HTTPException(status_code=status_code, detail='Can not create memory')
 
-    conversation = ok["result"]
+    conversation = ok.get("result") if isinstance(ok, dict) else None
     if conversation is not None:
         try:
-            emoji = conversation.structured.emoji.encode('latin1').decode('utf-8')
-        except UnicodeEncodeError:
-            emoji = conversation.structured.emoji
-
-        sample = ZapierCreateConversation(
-            icon={"type": "emoji", "emoji": f"{emoji}"},
-            title=f'{conversation.structured.title}',
-            speakers=len(set(map(lambda x: x.speaker, conversation.transcript_segments))),
-            category=conversation.structured.category,
-            duration=int(
-                (conversation.finished_at - conversation.started_at).total_seconds() if conversation.finished_at is not None else 0
-            ),
-            overview=conversation.structured.overview,
-            transcript=conversation.get_transcript(),
-        )
+            sample = _build_zapier_conversation_payload(conversation)
+        except Exception as e:
+            print(f"Error building sample conversation: {e}")
 
     return [sample]
 
@@ -234,47 +311,38 @@ def zapier_action_conversations(create_conversation: ZapierActionCreateConversat
     )
 
     ok = get_omi().create_conversation(conversation, uid)
-    print(ok)
-    if "error" in ok:
+    if isinstance(ok, dict) and "error" in ok:
         err = ok["error"]
         print(err)
-        raise HTTPException(status_code=err["status"] if "status" in err else 500, detail='Can not create memory')
-        return
-    result = ok["result"]
-    print(result)
+        status_code = 500
+        if isinstance(err, dict) and "status" in err:
+            try:
+                status_code = int(err["status"])
+            except (ValueError, TypeError):
+                status_code = 500
+        raise HTTPException(status_code=status_code, detail='Can not create memory')
 
     return EndpointResponse(message="Your memories are synced with Omi.")
 
 
 def create_zapier_conversation(uid: str, conversation: Conversation):
-    subscribes = get_zapier_subscribes(uid)
+    subscribes = get_zapier_subscribes(uid) or []
     for sub in subscribes:
-        target_url = sub.decode()
+        target_url = sub.decode() if isinstance(sub, bytes) else str(sub)
+        if not target_url or not target_url.strip():
+            continue
 
-        # modeling
         try:
-            emoji = conversation.structured.emoji.encode('latin1').decode('utf-8')
-        except UnicodeEncodeError:
-            emoji = conversation.structured.emoji
+            data = _build_zapier_conversation_payload(conversation)
+        except Exception as e:
+            print(f"Error modeling zapier conversation: {e}")
+            continue
 
-        data = ZapierCreateConversation(
-            icon={"type": "emoji", "emoji": f"{emoji}"},
-            title=f'{conversation.structured.title}',
-            speakers=len(set(map(lambda x: x.speaker, conversation.transcript_segments))),
-            category=conversation.structured.category,
-            duration=int(
-                (conversation.finished_at - conversation.started_at).total_seconds() if conversation.finished_at is not None else 0
-            ),
-            overview=conversation.structured.overview,
-            transcript=conversation.get_transcript(),
-        )
         ok = get_zapier().send_hook_conversation_created(target_url, data)
         # with graceful error
-        if "error" in ok:
+        if isinstance(ok, dict) and "error" in ok:
             err = ok["error"]
-            print(sub)
             print(err)
-
             continue
 
     return True

@@ -696,7 +696,7 @@ actor ActionItemStorage {
             if !newRecord.completed && !newRecord.deleted {
               visibilityChanged = true
             }
-            try newRecord.insert(database)
+            _ = try newRecord.inserted(database)
           }
         }
         try authorization.require()
@@ -1197,7 +1197,6 @@ actor ActionItemStorage {
     return count
   }
 
-  /// Hard-delete an action item by backend ID
   /// Mark a synced task deleted locally while the backend delete is still in flight.
   ///
   /// The previous shape was a local hard delete plus a fire-and-forget backend call: one
@@ -1232,6 +1231,39 @@ actor ActionItemStorage {
       logMessage: "ActionItemStorage: Tombstoned action item \(backendId) pending backend delete")
   }
 
+  /// The server acknowledged the delete: clear the pending flag but keep the tombstone.
+  ///
+  /// Hard-deleting the row here (the previous shape) threw away the only record of *who*
+  /// retired the task. The backend has no `deleted_by` field, so the row the Removed lane
+  /// re-fetches always reports `deletedBy: nil` — every user deletion came back attributed
+  /// to the AI, "Removed by me" was structurally empty, and `getRecentDeletedTasks(deletedBy:
+  /// "user")` returned nothing, so task extraction kept re-suggesting tasks the user had
+  /// explicitly removed. The retirement is already durable server-side; keeping the local
+  /// row costs one tombstone and preserves the provenance.
+  func markActionItemDeletionAcknowledged(
+    backendId: String,
+    authorization: LocalMutationAuthorization
+  ) async throws {
+    try authorization.require()
+    let db = try await ensureInitialized()
+
+    try await authorization.withCommitLease {
+      try await db.write { database in
+        try authorization.require()
+        if var record = try Self.fetchRecord(database, surfacedId: backendId) {
+          record.deleted = true
+          record.backendSynced = true
+          record.updatedAt = Date()
+          try record.update(database)
+        }
+        try authorization.require()
+      }
+    }
+
+    HomeKnowledgeCountInvalidation.post(
+      logMessage: "ActionItemStorage: Backend acknowledged deletion of \(backendId)")
+  }
+
   /// Backend IDs whose deletion the server has not yet acknowledged.
   func getPendingBackendDeletionIds() async throws -> [String] {
     let db = try await ensureInitialized()
@@ -1245,9 +1277,12 @@ actor ActionItemStorage {
     }
   }
 
+  /// Hard-delete a row. Only for rows that must leave no trace: a local-only task the
+  /// server never saw, and the undo purge before a restore re-inserts the task. A synced
+  /// deletion goes through `markActionItemDeletedPendingBackendSync` +
+  /// `markActionItemDeletionAcknowledged` instead, so its provenance survives.
   func deleteActionItemByBackendId(
     _ backendId: String,
-    deletedBy: String? = nil,
     authorization: LocalMutationAuthorization
   ) async throws {
     try authorization.require()
@@ -1637,125 +1672,6 @@ actor ActionItemStorage {
         return nil
       }
       return record.toTaskActionItem()
-    }
-  }
-
-  // MARK: - Agent Session Persistence
-
-  /// Update agent state for an action item (keyed by backendId or local_ prefix)
-  func updateAgentState(
-    taskId: String,
-    status: String?,
-    sessionName: String?,
-    prompt: String?,
-    plan: String?,
-    startedAt: Date?,
-    completedAt: Date?,
-    editedFilesJson: String?,
-    authorization: LocalMutationAuthorization
-  ) async throws {
-    try authorization.require()
-    let db = try await ensureInitialized()
-
-    try await authorization.withCommitLease {
-      try await db.write { database in
-        try authorization.require()
-        guard var rec = try Self.fetchRecord(database, surfacedId: taskId) else {
-          log("ActionItemStorage: updateAgentState - record not found for taskId \(taskId)")
-          return
-        }
-
-        rec.agentStatus = status
-        rec.agentSessionName = sessionName
-        rec.agentPrompt = prompt
-        rec.agentPlan = plan
-        rec.agentStartedAt = startedAt
-        rec.agentCompletedAt = completedAt
-        rec.agentEditedFilesJson = editedFilesJson
-        try rec.update(database)
-        try authorization.require()
-      }
-    }
-  }
-
-  /// Get action items with active (non-terminal) agent sessions for restore on startup
-  func getActiveAgentSessions() async throws -> [ActionItemRecord] {
-    let db = try await ensureInitialized()
-
-    return try await db.read { database in
-      try ActionItemRecord
-        .filter(Column("agentStatus") != nil)
-        .filter(!(["completed", "failed"].contains(Column("agentStatus"))))
-        .fetchAll(database)
-    }
-  }
-
-  /// Stamp when a background investigation last started for a task —
-  /// RecurringTaskScheduler's dedup gate. Leaves all other agent fields alone.
-  func updateAgentStartedAt(
-    taskId: String,
-    startedAt: Date,
-    authorization: LocalMutationAuthorization
-  ) async throws {
-    try authorization.require()
-    let db = try await ensureInitialized()
-
-    try await authorization.withCommitLease {
-      try await db.write { database in
-        try authorization.require()
-        guard var rec = try Self.fetchRecord(database, surfacedId: taskId) else {
-          log("ActionItemStorage: updateAgentStartedAt - record not found for taskId \(taskId)")
-          return
-        }
-
-        rec.agentStartedAt = startedAt
-        try rec.update(database)
-        try authorization.require()
-      }
-    }
-  }
-
-  /// Clear all agent fields for a task (when user stops/removes session)
-  func clearAgentState(
-    taskId: String,
-    authorization: LocalMutationAuthorization
-  ) async throws {
-    try authorization.require()
-    let db = try await ensureInitialized()
-
-    try await authorization.withCommitLease {
-      try await db.write { database in
-        try authorization.require()
-        guard var rec = try Self.fetchRecord(database, surfacedId: taskId) else { return }
-
-        rec.agentStatus = nil
-        rec.agentSessionName = nil
-        rec.agentPrompt = nil
-        rec.agentPlan = nil
-        rec.agentStartedAt = nil
-        rec.agentCompletedAt = nil
-        rec.agentEditedFilesJson = nil
-        try rec.update(database)
-        try authorization.require()
-      }
-    }
-  }
-
-  // MARK: - Recurring Tasks
-
-  /// Get incomplete recurring tasks that are due (dueAt <= now)
-  func getDueRecurringTasks() async throws -> [TaskActionItem] {
-    let db = try await ensureInitialized()
-
-    return try await db.read { database in
-      let records =
-        try ActionItemRecord
-        .filter(Column("completed") == false)
-        .filter(Column("deleted") == false)
-        .filter(Column("recurrenceRule") != nil && Column("recurrenceRule") != "")
-        .filter(Column("dueAt") != nil && Column("dueAt") <= Date())
-        .fetchAll(database)
-      return records.map { $0.toTaskActionItem() }
     }
   }
 

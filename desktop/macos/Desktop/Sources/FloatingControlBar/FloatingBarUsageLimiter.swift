@@ -35,7 +35,8 @@ final class FloatingBarUsageLimiter: ObservableObject {
 
   init() {
     hasPaidPlan =
-      UserDefaults.standard.string(forKey: .floatingBarCachedPlan).map { $0 != "basic" } ?? false
+      UserDefaults.standard.string(forKey: .floatingBarCachedPlan)
+      .map { SubscriptionPlanType(rawValue: $0).hasPaidCapability } ?? false
   }
 
   /// Fetch the user's subscription plan and usage quota from the backend.
@@ -72,7 +73,7 @@ final class FloatingBarUsageLimiter: ObservableObject {
     status: SubscriptionStatusType,
     desktopGrandfatherUntil: Int? = nil
   ) {
-    hasPaidPlan = plan != .basic && status == .active
+    hasPaidPlan = plan.hasPaidCapability && status == .active
     // A verified active subscription is authoritative over a stale
     // trial/usage flag. Neo uses the Free Desktop floor for non-premium
     // features, but it is still paid and must never remain blocked from
@@ -88,8 +89,14 @@ final class FloatingBarUsageLimiter: ObservableObject {
     // Persist only an active entitlement. Caching an inactive paid plan would
     // incorrectly restore both paid access and the larger proactive budget on
     // the next launch before the subscription refresh completes.
+    let shouldPreservePlanIdentity: Bool
+    if case .unknown = plan {
+      shouldPreservePlanIdentity = true
+    } else {
+      shouldPreservePlanIdentity = hasPaidPlan
+    }
     UserDefaults.standard.set(
-      hasPaidPlan ? plan.rawValue : SubscriptionPlanType.basic.rawValue,
+      shouldPreservePlanIdentity ? plan.rawValue : SubscriptionPlanType.basic.rawValue,
       forKey: .floatingBarCachedPlan)
     if hasPaidPlan, plan == .unlimited, let desktopGrandfatherUntil {
       UserDefaults.standard.set(
@@ -118,6 +125,12 @@ final class FloatingBarUsageLimiter: ObservableObject {
     }
     guard let quota = serverQuota else {
       // No server data yet — allow the query (server will enforce).
+      return false
+    }
+    // An overage plan bills the excess instead of refusing it: the server serves
+    // the request and `enforce_chat_quota` never raises, so blocking here would
+    // deny a send the backend would have answered.
+    if quota.isOveragePlan == true {
       return false
     }
     if quota.allowed {

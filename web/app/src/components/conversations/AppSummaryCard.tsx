@@ -13,10 +13,15 @@ import type { App } from '@/types/apps';
  * Parse markdown content into sections based on h2 headers
  * Returns an array of { title, content } objects
  */
-function parseMarkdownSections(content: string): { title: string | null; content: string }[] {
+function parseMarkdownSections(
+  content: string,
+): { title: string | null; content: string }[] {
   const lines = content.split('\n');
   const sections: { title: string | null; content: string }[] = [];
-  let currentSection: { title: string | null; content: string[] } = { title: null, content: [] };
+  let currentSection: { title: string | null; content: string[] } = {
+    title: null,
+    content: [],
+  };
 
   for (const line of lines) {
     // Check for ## headers (h2)
@@ -63,7 +68,8 @@ export function AppSummaryCard({ appResponse, className }: AppSummaryCardProps) 
   }, [appResponse.content]);
 
   // Check if content has multiple sections (h2 headers)
-  const hasMultipleSections = sections.length > 1 || (sections.length === 1 && sections[0].title);
+  const hasMultipleSections =
+    sections.length > 1 || (sections.length === 1 && sections[0].title);
 
   useEffect(() => {
     async function fetchAppInfo() {
@@ -102,7 +108,7 @@ export function AppSummaryCard({ appResponse, className }: AppSummaryCardProps) 
       className={cn(
         'noise-overlay p-4 rounded-xl',
         'bg-white/[0.02] border border-white/[0.06]',
-        className
+        className,
       )}
     >
       {/* App Header */}
@@ -120,8 +126,8 @@ export function AppSummaryCard({ appResponse, className }: AppSummaryCardProps) 
             className="w-8 h-8 rounded-lg object-cover"
           />
         ) : (
-          <div className="w-8 h-8 rounded-lg bg-purple-primary/20 flex items-center justify-center">
-            <Sparkles className="w-4 h-4 text-purple-primary" />
+          <div className="w-8 h-8 rounded-lg bg-white/[0.14] flex items-center justify-center">
+            <Sparkles className="w-4 h-4 text-text-primary" />
           </div>
         )}
         <div className="flex-1 min-w-0">
@@ -129,15 +135,15 @@ export function AppSummaryCard({ appResponse, className }: AppSummaryCardProps) 
             {loading ? (
               <span className="text-text-tertiary">Loading...</span>
             ) : isDeleted ? (
-              <span className="text-text-tertiary italic">Template no longer available</span>
+              <span className="text-text-tertiary italic">
+                Template no longer available
+              </span>
             ) : (
               app?.name || 'App Summary'
             )}
           </h4>
           {!isDeleted && app?.description && (
-            <p className="text-xs text-text-tertiary truncate">
-              {app.description}
-            </p>
+            <p className="text-xs text-text-tertiary truncate">{app.description}</p>
           )}
         </div>
       </div>
@@ -156,7 +162,7 @@ export function AppSummaryCard({ appResponse, className }: AppSummaryCardProps) 
                 </h3>
               )}
               {section.content && (
-                <div className="text-sm text-text-secondary leading-relaxed prose prose-sm prose-invert max-w-none prose-p:my-3 prose-headings:text-text-primary prose-headings:font-medium prose-h3:text-xs prose-h3:mt-4 prose-h3:mb-2 prose-ul:my-3 prose-li:my-1.5 prose-strong:text-text-primary prose-code:text-purple-primary prose-code:bg-bg-quaternary prose-code:px-1 prose-code:py-0.5 prose-code:rounded">
+                <div className="text-sm text-text-secondary leading-relaxed prose prose-sm prose-invert max-w-none prose-p:my-3 prose-headings:text-text-primary prose-headings:font-medium prose-h3:text-xs prose-h3:mt-4 prose-h3:mb-2 prose-ul:my-3 prose-li:my-1.5 prose-strong:text-text-primary prose-code:text-text-primary prose-code:bg-bg-quaternary prose-code:px-1 prose-code:py-0.5 prose-code:rounded">
                   <ReactMarkdown>{section.content}</ReactMarkdown>
                 </div>
               )}
@@ -164,7 +170,7 @@ export function AppSummaryCard({ appResponse, className }: AppSummaryCardProps) 
           ))}
         </div>
       ) : (
-        <div className="text-sm text-text-secondary leading-relaxed prose prose-sm prose-invert max-w-none prose-p:my-3 prose-headings:text-text-primary prose-headings:font-medium prose-h2:text-base prose-h2:mt-5 prose-h2:mb-3 prose-h3:text-sm prose-h3:mt-4 prose-h3:mb-2 prose-ul:my-3 prose-li:my-1.5 prose-strong:text-text-primary prose-code:text-purple-primary prose-code:bg-bg-quaternary prose-code:px-1 prose-code:py-0.5 prose-code:rounded">
+        <div className="text-sm text-text-secondary leading-relaxed prose prose-sm prose-invert max-w-none prose-p:my-3 prose-headings:text-text-primary prose-headings:font-medium prose-h2:text-base prose-h2:mt-5 prose-h2:mb-3 prose-h3:text-sm prose-h3:mt-4 prose-h3:mb-2 prose-ul:my-3 prose-li:my-1.5 prose-strong:text-text-primary prose-code:text-text-primary prose-code:bg-bg-quaternary prose-code:px-1 prose-code:py-0.5 prose-code:rounded">
           <ReactMarkdown>{appResponse.content}</ReactMarkdown>
         </div>
       )}

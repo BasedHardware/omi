@@ -24,8 +24,8 @@ from utils.other import endpoints as auth
 from utils.client_device import resolve_client_device_from_request
 from utils.llm.clients import get_llm
 from utils.task_intelligence import recommendations
+from utils.task_intelligence.chat_first_eligibility import resolve_task_intelligence_for_user
 from utils.task_intelligence.live_recommendation_judgment import LiveRecommendationJudgment
-from utils.task_intelligence.rollout import resolve_task_intelligence_for_user
 
 router = APIRouter()
 

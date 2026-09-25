@@ -189,7 +189,6 @@ SKIP_CONTENT_PREFIXES = (
     'text/html',
     'application/xml',
     'audio/',
-    'image/',
     'multipart/form-data',
 )
 
@@ -209,6 +208,8 @@ def _operation_return_type(operation: dict[str, Any]) -> str | None:
         json_content = content.get('application/json')
         if isinstance(json_content, dict):
             return schema_to_ts(json_content.get('schema', {}))
+        if any(isinstance(ct, str) and ct.startswith('image/') for ct in content):
+            return 'Blob'
         # Non-JSON success response → skip this operation
         for ct in content:
             if any(ct.startswith(p) or ct == p for p in SKIP_CONTENT_PREFIXES):
@@ -284,6 +285,7 @@ def generate_client_methods(spec: dict[str, Any]) -> str:
 
             # Parse requestBody
             body_type: str | None = None
+            multipart_body = False
             req_body = operation.get('requestBody', {})
             if isinstance(req_body, dict):
                 content = req_body.get('content', {})
@@ -291,6 +293,11 @@ def generate_client_methods(spec: dict[str, Any]) -> str:
                     json_content = content.get('application/json')
                     if isinstance(json_content, dict):
                         body_type = schema_to_ts(json_content.get('schema', {}))
+                    elif isinstance(content.get('multipart/form-data'), dict):
+                        # Callers construct the bounded multipart payload so
+                        # the generated route remains usable for file uploads.
+                        body_type = 'FormData'
+                        multipart_body = True
 
             # Build function signature
             sig_parts: list[str] = []
@@ -330,7 +337,8 @@ def generate_client_methods(spec: dict[str, Any]) -> str:
             body_lines.append(f'    method: {string_literal(http_method.upper())},')
             body_lines.append('    headers: {')
             if body_type:
-                body_lines.append("      ...(body ? { 'Content-Type': 'application/json' } : {}),")
+                if not multipart_body:
+                    body_lines.append("      ...(body ? { 'Content-Type': 'application/json' } : {}),")
             body_lines.append("      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),")
             body_lines.append('      ...init?.headers,')
             for pname, _ptype, required in header_params:
@@ -343,11 +351,17 @@ def generate_client_methods(spec: dict[str, Any]) -> str:
                     )
             body_lines.append('    },')
             if body_type:
-                body_lines.append('    body: body ? JSON.stringify(body) : undefined,')
+                (
+                    body_lines.append('    body: body,')
+                    if multipart_body
+                    else body_lines.append('    body: body ? JSON.stringify(body) : undefined,')
+                )
             body_lines.append('  });')
             body_lines.append('  if (!_res.ok) throw new OmiApiError(_res.status, _res);')
             if return_type == 'void':
                 body_lines.append('  return;')
+            elif return_type == 'Blob':
+                body_lines.append('  return await _res.blob();')
             else:
                 body_lines.append('  return _res.status === 204 ? (undefined as any) : await _res.json();')
             body_lines.append('}')

@@ -47,6 +47,11 @@ enum IntegrationConnectTelemetry {
     case apps = "apps"
     /// Conversational Second-Brain onboarding "connect what I can see" step.
     case onboarding = "onboarding"
+    /// Proactive integration nudge — the user opened an app Omi integrates with
+    /// and accepted the offer from the floating-bar card. Keeping this separate
+    /// from `apps` is the whole point of the nudge experiment: it is the only
+    /// way to tell whether the interruption converts better than the tab.
+    case nudge = "nudge"
   }
 
   /// Bounded failure classification. Closed set: the union of the
@@ -74,6 +79,7 @@ enum IntegrationConnectTelemetry {
     case permission = "permission"
     case authentication = "authentication"
     case conflict = "conflict"
+    case server = "server"
     case invalidResponse = "invalid_response"
     case resourceExhausted = "resource_exhausted"
     case unknown = "unknown"
@@ -135,7 +141,7 @@ enum IntegrationConnectTelemetry {
     case .notSignedIn, .sessionExpired, .noBrowser, .decryptFailed, .authentication:
       return true
     case .configuration, .storeNotFound, .authorizationDenied, .network, .timeout,
-      .cancelled, .noContent, .rateLimit, .permission, .conflict, .invalidResponse,
+      .cancelled, .noContent, .rateLimit, .permission, .conflict, .server, .invalidResponse,
       .resourceExhausted, .unknown:
       return false
     }

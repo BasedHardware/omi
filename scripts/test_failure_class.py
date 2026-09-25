@@ -26,7 +26,16 @@ SEED_IDS = {path.stem for path in SEED_DIRECTORY.glob("*.json")}
 # pre-commit or pre-push hook, GIT_DIR and core.hooksPath point at the real
 # checkout, so an unisolated `git init`/`git config`/`git add .` in a temp
 # directory writes to the repository under test.
-GIT_ISOLATION = ["-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false"]
+GIT_ISOLATION = [
+    "-c",
+    "core.hooksPath=/dev/null",
+    "-c",
+    "commit.gpgsign=false",
+    "-c",
+    "maintenance.auto=false",
+    "-c",
+    "gc.auto=0",
+]
 
 
 def run(command: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
@@ -236,6 +245,183 @@ class FailureClassCliTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertTrue(payload["ok"])
 
+    def write_new_definition(self, class_id: str, evidence_prs: object) -> None:
+        definition = {
+            "schema_version": 1,
+            "id": class_id,
+            "violated_contract": "Test boundaries retain their contract.",
+            "canonical_prevention": "Keep the guard at the shared boundary.",
+            "evidence_prs": evidence_prs,
+            "status": "open",
+        }
+        self.write(
+            f".github/failure-classes/{class_id}.json",
+            json.dumps(definition, indent=2) + "\n",
+        )
+
+    def test_new_definition_may_declare_empty_evidence_prs(self) -> None:
+        """A class born in this PR has no merged PR to cite.
+
+        `evidence_prs` records merged PRs, and the PR fixing a class's first instance
+        has no number until it is opened. Requiring non-empty made `Failure-Class: new`
+        unsatisfiable without inventing a number or pushing with --no-verify.
+        """
+        self.write_new_definition("FC-new-test-boundary", [])
+        self.write("src/example.txt", "new class\n")
+        self.commit("fix: register a newly observed class")
+        result = self.validate(self.body("Failure-Class: new\n"))
+        payload = self.payload(result)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(payload["ok"])
+
+    def test_empty_evidence_prs_stays_valid_once_the_class_is_merged(self) -> None:
+        """The allowance must not depend on the class being new in the range.
+
+        A rule scoped to 'added by this change' would pass in the authoring PR and then
+        fail on every run afterwards, because the merged definition is no longer new.
+        """
+        self.set_definition_field("FC-malformed-doc-read", "evidence_prs", [])
+        result = self.validate(self.body("## Summary\n"))
+        payload = self.payload(result)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(payload["ok"])
+
+    def test_evidence_prs_still_rejects_non_positive_entries(self) -> None:
+        self.set_definition_field("FC-malformed-doc-read", "evidence_prs", [0])
+        result = self.validate(self.body("## Summary\n"))
+        payload = self.payload(result)
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("invalid_evidence_prs", [item["code"] for item in payload["errors"]])
+
+    def test_pipe_separated_declaration_reports_the_declaration_not_the_registry(self) -> None:
+        """The old template read as a pipe-separated value, and the resulting error
+        pointed at the registry instead of at the malformed line."""
+        self.write_new_definition("FC-new-test-boundary", [])
+        self.write("src/example.txt", "new class\n")
+        self.commit("fix: register a newly observed class")
+        result = self.validate(self.body("Failure-Class: FC-new-test-boundary | new\n"))
+        payload = self.payload(result)
+        codes = [item["code"] for item in payload["errors"]]
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("invalid_declaration", codes)
+        self.assertNotIn("instance_fix_mutates_registry", codes)
+        declaration_error = next(item for item in payload["errors"] if item["code"] == "invalid_declaration")
+        self.assertIn("|", declaration_error["message"])
+        self.assertEqual(
+            declaration_error["accepted_forms"],
+            ["Failure-Class: FC-<lower-kebab-slug>", "Failure-Class: new", "Failure-Class: none"],
+        )
+
+    def test_prepare_narrows_candidates_to_matching_scope_hints(self) -> None:
+        """Narrowing must list exactly the classes whose hints match the
+        change. Seeded definitions keep whatever scope_hints the real
+        registry carries, so a live hint on a sibling (for example a
+        registry glob matching the definition JSON this test commits)
+        would otherwise appear as a candidate. Pin siblings to an
+        unrelated tracked glob first.
+        """
+        self.write("unrelated-tracked/keep.txt", "keep\n")
+        self.commit("chore: live hint target")
+        self.base = self.git("rev-parse", "HEAD")
+        for class_id in SEED_IDS:
+            self.set_definition_field(class_id, "scope_hints", ["unrelated-tracked/**"])
+        self.set_definition_field("FC-malformed-doc-read", "scope_hints", ["src/**"])
+        self.write("src/example.txt", "touched\n")
+        self.commit("fix(backend): protect read boundary")
+        result = self.cli(
+            "prepare", "--base", self.base, "--head", "HEAD", "--pr-body-file", str(self.body("## Summary\n"))
+        )
+        payload = self.payload(result)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([item["id"] for item in payload["advisory_candidates"]], ["FC-malformed-doc-read"])
+        self.assertEqual(payload["candidates_total"], len(SEED_IDS))
+        self.assertIn("advisory", payload["candidate_narrowing"])
+
+    def test_prepare_trailing_slash_scope_hint_matches_files_under_that_directory(self) -> None:
+        """A hint written as a directory prefix with a trailing slash is the
+        form authors actually type. fnmatch treats it as a literal, so
+        ``app/lib/pages/home/`` never matches ``app/lib/pages/home/page.dart``
+        unless prepare expands it to a directory glob.
+        """
+        self.write("unrelated-tracked/keep.txt", "keep\n")
+        self.commit("chore: live hint target")
+        self.base = self.git("rev-parse", "HEAD")
+        for class_id in SEED_IDS:
+            self.set_definition_field(class_id, "scope_hints", ["unrelated-tracked/**"])
+        self.set_definition_field("FC-malformed-doc-read", "scope_hints", ["app/lib/pages/home/"])
+        self.write("app/lib/pages/home/page.dart", "class Home {}\n")
+        self.commit("fix(app): touch home page")
+        result = self.cli(
+            "prepare", "--base", self.base, "--head", "HEAD", "--pr-body-file", str(self.body("## Summary\n"))
+        )
+        payload = self.payload(result)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual([item["id"] for item in payload["advisory_candidates"]], ["FC-malformed-doc-read"])
+
+    def test_prepare_lists_every_candidate_when_nothing_matches_scope(self) -> None:
+        """Narrowing to nothing would read as 'no class can apply' — a classification
+        this CLI does not make."""
+        self.write("unrelated-tracked/keep.txt", "keep\n")
+        self.commit("chore: live hint target")
+        self.base = self.git("rev-parse", "HEAD")
+        for class_id in SEED_IDS:
+            self.set_definition_field(class_id, "scope_hints", ["unrelated-tracked/**"])
+        self.add_fix_commit()
+        result = self.cli(
+            "prepare", "--base", self.base, "--head", "HEAD", "--pr-body-file", str(self.body("## Summary\n"))
+        )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.payload(result)["candidates_shown"], len(SEED_IDS))
+
+    def test_scope_hint_matching_zero_paths_is_error(self) -> None:
+        """A hint that matches nothing is fail-open: the class vanishes from
+        prepare's list and the author invents a new one. That must be an
+        error, not a pass.
+        """
+        self.set_definition_field("FC-malformed-doc-read", "scope_hints", ["does-not-exist/**"])
+        self.add_fix_commit()
+        result = self.cli(
+            "prepare", "--base", self.base, "--head", "HEAD", "--pr-body-file", str(self.body("## Summary\n"))
+        )
+        payload = self.payload(result)
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("scope_hint_matches_nothing", [item["code"] for item in payload["errors"]])
+        validate = self.validate(self.body("Failure-Class: FC-malformed-doc-read\n"))
+        self.assertEqual(validate.returncode, 1, validate.stdout)
+        self.assertIn("scope_hint_matches_nothing", [item["code"] for item in self.payload(validate)["errors"]])
+
+    def test_existing_dead_scope_hint_on_edited_definition_is_error(self) -> None:
+        """current-minus-previous misses this: editing a definition without
+        changing the hint string left an already-dead matcher fail-open.
+        Every current hint on a changed definition must be live.
+        """
+        self.set_definition_field("FC-malformed-doc-read", "scope_hints", ["does-not-exist/**"])
+        self.commit("chore: plant a dead hint")
+        self.base = self.git("rev-parse", "HEAD")
+        self.set_definition_field(
+            "FC-malformed-doc-read",
+            "canonical_prevention",
+            "An already-dead hint must still fail when this file is edited.",
+        )
+        self.commit("fix(ci): touch definition without changing hints")
+        result = self.validate(self.body("Failure-Class: FC-malformed-doc-read\n"))
+        payload = self.payload(result)
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("scope_hint_matches_nothing", [item["code"] for item in payload["errors"]])
+        self.assertEqual(
+            [item.get("hint") for item in payload["errors"] if item["code"] == "scope_hint_matches_nothing"],
+            ["does-not-exist/**"],
+        )
+
+    def test_prepare_all_candidates_flag_disables_narrowing(self) -> None:
+        self.set_definition_field("FC-malformed-doc-read", "scope_hints", ["src/**"])
+        self.add_fix_commit()
+        result = self.cli(
+            "prepare", "--base", self.base, "--head", "HEAD",
+            "--pr-body-file", str(self.body("## Summary\n")), "--all-candidates",
+        )
+        self.assertEqual(self.payload(result)["candidates_shown"], len(SEED_IDS))
+
     def test_new_declaration_without_added_definition_fails(self) -> None:
         self.add_fix_commit()
         result = self.validate(self.body("Failure-Class: new\n"))
@@ -302,6 +488,156 @@ class FailureClassCliTests(unittest.TestCase):
         by_id = {item["id"]: item for item in payload["classes"]}
         self.assertTrue(by_id["FC-trapping-dict-merge"]["reopen_required"])
         self.assertFalse(by_id["FC-trapping-dict-merge"]["closure_eligible"])
+
+    def write_schema_invalid_definition(self, class_id: str) -> Path:
+        """Write a definition whose schema error `validate` already detects.
+
+        A missing `status` is the unconditional case: `report` reads that field for
+        every definition and `prepare` lists it for every candidate, so neither
+        command needed an event naming this class to reach the bad data.
+        """
+        path = self.root / ".github" / "failure-classes" / f"{class_id}.json"
+        path.write_text(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "id": class_id,
+                    "violated_contract": "A contract that failed once.",
+                    "canonical_prevention": "Converge the owner.",
+                    "evidence_prs": [],
+                },
+                indent=2,
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        return path
+
+    def test_report_describes_a_schema_invalid_definition_instead_of_crashing(self) -> None:
+        self.write_schema_invalid_definition("FC-schema-invalid-example")
+
+        result = self.cli(
+            "report",
+            "--events-file",
+            str(REPORT_FIXTURE),
+            "--since",
+            "14d",
+            "--now",
+            "2026-07-16T00:00:00Z",
+        )
+
+        payload = self.payload(result)
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertFalse(payload["ok"])
+        self.assertIn("missing_definition_field", {item["code"] for item in payload["errors"]})
+        # One unreadable file must not blank the run: the valid registry is still
+        # reported, and the invalid class is described by an error, not a verdict.
+        reported = {item["id"] for item in payload["classes"]}
+        self.assertNotIn("FC-schema-invalid-example", reported)
+        self.assertIn("FC-trapping-dict-merge", reported)
+
+    def test_prepare_describes_a_schema_invalid_definition_instead_of_crashing(self) -> None:
+        self.write_schema_invalid_definition("FC-schema-invalid-example")
+
+        result = self.cli(
+            "prepare",
+            "--base",
+            self.base,
+            "--head",
+            "HEAD",
+            "--pr-body-file",
+            str(self.body("## Summary\n")),
+        )
+
+        payload = self.payload(result)
+        self.assertNotIn("Traceback", result.stderr)
+        self.assertFalse(payload["ok"])
+        self.assertIn("missing_definition_field", {item["code"] for item in payload["errors"]})
+        self.assertNotIn(
+            "FC-schema-invalid-example",
+            {item["id"] for item in payload["advisory_candidates"]},
+        )
+
+    def protocol_codes(self, base: str, head: str, body: str) -> tuple[int, list[str], list[str]]:
+        self.git("switch", "-q", "--detach", head)
+        result = self.cli(
+            "validate", "--base", base, "--head", "HEAD", "--pr-body-file", str(self.body(body))
+        )
+        payload = self.payload(result)
+        codes = [item["code"] for item in payload.get("errors", [])]
+        subjects = payload.get("validation", {}).get("commit_subjects", [])
+        return result.returncode, codes, subjects
+
+    def merge_topologies(self, base: str, head: str) -> list[tuple[str, str]]:
+        """Branch head plus both merge parent orders (--no-ff)."""
+        snapshots = [("branch-head", head)]
+        self.git("switch", "-q", "--detach", head)
+        merged = run(["git", "merge", "--no-ff", "-q", "--no-edit", base], self.root)
+        self.assertEqual(merged.returncode, 0, merged.stderr)
+        snapshots.append(("branch-first", self.git("rev-parse", "HEAD")))
+        self.git("switch", "-q", "--detach", base)
+        merged = run(["git", "merge", "--no-ff", "-q", "--no-edit", head], self.root)
+        self.assertEqual(merged.returncode, 0, merged.stderr)
+        snapshots.append(("base-first", self.git("rev-parse", "HEAD")))
+        return snapshots
+
+    def test_validate_agrees_on_branch_head_and_both_merge_parent_orders(self) -> None:
+        self.add_fix_commit()
+        head = self.git("rev-parse", "HEAD")
+        body = "Failure-Class: FC-malformed-doc-read\n"
+        answers = []
+        for label, sha in self.merge_topologies(self.base, head):
+            code, errors, subjects = self.protocol_codes(self.base, sha, body)
+            answers.append((label, code, errors, subjects))
+        reference = answers[0][1:]
+        for label, code, errors, subjects in answers:
+            self.assertEqual((code, errors, subjects), reference, label)
+        self.assertEqual(reference[0], 0)
+        self.assertEqual(reference[2], ["fix(backend): protect read boundary"])
+
+    def test_stacked_child_sees_parent_registry_only_against_main_not_parent_base(self) -> None:
+        """A child of a PR that adds a registry file must not be refused when
+        the gate diffs against the child's actual base (the parent tip). Diffing
+        against main includes the parent's new definition and raises
+        instance_fix_mutates_registry — that is the stacked-push defect."""
+        new_id = "FC-stacked-parent-registry"
+        self.write(
+            f".github/failure-classes/{new_id}.json",
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "id": new_id,
+                    "violated_contract": "parent contract",
+                    "canonical_prevention": "parent prevention",
+                    "evidence_prs": [],
+                    "status": "open",
+                },
+                indent=2,
+            )
+            + "\n",
+        )
+        self.commit("fix: add a new failure class on the parent")
+        parent = self.git("rev-parse", "HEAD")
+        self.add_fix_commit()
+        child = self.git("rev-parse", "HEAD")
+        body = "Failure-Class: FC-malformed-doc-read\n"
+
+        against_parent = [
+            self.protocol_codes(parent, sha, body) for _, sha in self.merge_topologies(parent, child)
+        ]
+        against_main = [
+            self.protocol_codes(self.base, sha, body) for _, sha in self.merge_topologies(self.base, child)
+        ]
+        parent_reference = against_parent[0]
+        main_reference = against_main[0]
+        for answer in against_parent:
+            self.assertEqual(answer, parent_reference)
+        for answer in against_main:
+            self.assertEqual(answer, main_reference)
+        self.assertEqual(parent_reference[0], 0, parent_reference)
+        self.assertNotIn("instance_fix_mutates_registry", parent_reference[1])
+        self.assertEqual(main_reference[0], 1, main_reference)
+        self.assertIn("instance_fix_mutates_registry", main_reference[1])
 
 
 if __name__ == "__main__":

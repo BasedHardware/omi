@@ -5,6 +5,7 @@ from typing import List, Optional, Tuple, Any, Dict, cast
 import database.users as users_db
 from database.auth import get_user_name
 from database.conversations import get_conversations_by_id
+from database.firestore_read_metrics import FirestoreReadSite
 from database.vector_db import query_vectors
 from models.conversation import Conversation
 from models.other import Person
@@ -57,7 +58,9 @@ def retrieve_memories_for_topics(
         for f in futures:
             f.result()
 
-    return memories_id, get_conversations_by_id(uid, list(memories_id.keys()))
+    return memories_id, get_conversations_by_id(
+        uid, list(memories_id.keys()), read_site=FirestoreReadSite.RAG_HYDRATION
+    )
 
 
 def build_conversation_context(

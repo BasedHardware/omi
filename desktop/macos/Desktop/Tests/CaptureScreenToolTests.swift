@@ -43,7 +43,7 @@ final class CaptureScreenToolTests: XCTestCase {
 
   func testScreenshotImagePreconditionDoesNotLeakArgumentsWhenSharingDisabled() {
     UserDefaults.standard.set(false, forKey: screenshotKey)
-    for toolName in ["capture_screen", "get_screenshot"] {
+    for toolName in ["capture_screen", "get_screenshot", "look_at_frame"] {
       let decision = ChatToolExecutor.physicalExecutionPrecondition(toolName: toolName)
 
       guard case .failed(let message) = decision else {
@@ -60,7 +60,7 @@ final class CaptureScreenToolTests: XCTestCase {
   /// (setting unset) must allow the tools to dispatch.
   func testScreenshotImagePreconditionAllowsByDefault() {
     UserDefaults.standard.removeObject(forKey: screenshotKey)
-    for toolName in ["capture_screen", "get_screenshot"] {
+    for toolName in ["capture_screen", "get_screenshot", "look_at_frame"] {
       XCTAssertEqual(
         ChatToolExecutor.physicalExecutionPrecondition(toolName: toolName), .satisfied,
         "\(toolName) must dispatch when Screen Sharing in Chat is on (default)")

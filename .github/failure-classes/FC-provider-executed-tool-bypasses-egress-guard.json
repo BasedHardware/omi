@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-provider-executed-tool-bypasses-egress-guard",
+  "violated_contract": "A tool the model provider executes on its own infrastructure never reaches the in-process tool executor, so every allowlist, SSRF and redirect control attached to that executor stops at the trust boundary. Whatever the request already carries can leave inside the provider-side tool's arguments, and prompt text is not a control over it. The decision to offer such a tool must therefore be made where the request is composed, from the request's own contents.",
+  "canonical_prevention": "Gate the provider-executed capability at request-composition time: refuse to offer it when the outgoing request already carries private context, classify that context from literal wire shapes rather than content heuristics, treat unknown producers as private, and record the withheld path through the shared fallback helper.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_desktop_chat.py"
+  ],
+  "evidence_prs": [
+    11414
+  ],
+  "scope_hints": [
+    "backend/routers/desktop_chat.py",
+    "backend/utils/retrieval/tools/web_tools.py"
+  ],
+  "status": "open"
+}

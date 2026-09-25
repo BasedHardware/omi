@@ -135,12 +135,34 @@ final class PendingCanonicalReceiptInvalidationDefaults: PendingCanonicalReceipt
   }
 }
 
-enum SuggestedCardAction: String, Equatable {
+enum SuggestedCardAction: String, Equatable, Hashable {
   case doNow
   case later
   case dismiss
   case saveEdit
   case cancelEdit
+
+  /// User-facing label for the Tasks-page review row.
+  var label: String {
+    switch self {
+    case .doNow: return "Accept"
+    case .later: return "Later"
+    case .dismiss: return "Reject"
+    case .saveEdit: return "Save"
+    case .cancelEdit: return "Cancel"
+    }
+  }
+
+  /// Stable accessibility suffix used as `suggested-<id>-<candidateID>`.
+  var accessibilityID: String {
+    switch self {
+    case .doNow: return "accept"
+    case .later: return "later"
+    case .dismiss: return "reject"
+    case .saveEdit: return "save"
+    case .cancelEdit: return "cancel"
+    }
+  }
 }
 
 enum SuggestedCardState: Equatable {
@@ -152,7 +174,7 @@ enum SuggestedCardState: Equatable {
 enum SuggestedActionPolicy {
   static func actions(for state: SuggestedCardState) -> [SuggestedCardAction] {
     switch state {
-    case .ready: return [.doNow, .later, .dismiss]
+    case .ready: return [.doNow, .dismiss]
     case .editing: return [.saveEdit, .cancelEdit]
     case .busy: return []
     }
@@ -244,6 +266,11 @@ final class SuggestedFeedbackOutboxDefaults: SuggestedFeedbackOutboxPersisting {
 
 @MainActor
 final class SuggestedTasksStore: ObservableObject {
+  /// One suggestion store per process. The Tasks page and the chat's suggested-task
+  /// card both accept from the same pending set, so they must not hold divergent
+  /// copies: accepting in chat has to remove the row from Tasks, and vice versa.
+  @MainActor static let shared = SuggestedTasksStore()
+
   private struct OwnerScope: Equatable {
     let suppressionOwnerID: String
     let feedbackOwnerID: String

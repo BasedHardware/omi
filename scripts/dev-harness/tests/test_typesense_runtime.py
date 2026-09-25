@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import os
+import stat
 import subprocess
 import sys
 from pathlib import Path
@@ -94,6 +96,7 @@ def test_preflight_docker_runtime_reports_dead_daemon(monkeypatch: pytest.Monkey
 def test_native_command_uses_binary_and_pinned_loopback_port(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     binary = tmp_path / "typesense-server"
     binary.write_text("#!/bin/sh\n", encoding="utf-8")
+    binary.chmod(binary.stat().st_mode | stat.S_IXUSR)
     monkeypatch.setenv("OMI_TYPESENSE_RUNTIME", "native")
     monkeypatch.setenv("OMI_TYPESENSE_SERVER_BIN", str(binary))
     cfg = _cfg(tmp_path, monkeypatch)
@@ -105,6 +108,24 @@ def test_native_command_uses_binary_and_pinned_loopback_port(monkeypatch: pytest
     assert "--api-port" in command and str(config.TYPESENSE_PORT) in command
     assert config.LOCAL_TYPESENSE_API_KEY in command
     assert "docker" not in command
+
+
+def test_native_override_non_executable_fails_before_command_startup(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    binary = tmp_path / "typesense-server"
+    binary.write_text("#!/bin/sh\n", encoding="utf-8")
+    binary.chmod(0o600)
+    if os.access(binary, os.X_OK):
+        # Windows does not model POSIX execute bits. Keep the contract portable
+        # while still proving that production consults executable access.
+        monkeypatch.setattr(cli.os, "access", lambda _path, _mode: False)
+    monkeypatch.setenv("OMI_TYPESENSE_RUNTIME", "native")
+    monkeypatch.setenv("OMI_TYPESENSE_SERVER_BIN", str(binary))
+    cfg = _cfg(tmp_path, monkeypatch)
+
+    with pytest.raises(SystemExit, match=r"OMI_TYPESENSE_SERVER_BIN.*not executable.*chmod \+x"):
+        cli._typesense_command(cfg)
 
 
 def test_native_override_missing_binary_fails_loud(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

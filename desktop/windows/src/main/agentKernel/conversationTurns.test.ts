@@ -11,6 +11,7 @@ import { SqliteAgentStore, type DatabaseFactory } from './store'
 import { resolveSurfaceSession, type SurfaceRef } from './surfaceSession'
 import {
   advanceBindingTurnDelivery,
+  conversationIdsForDeletion,
   listRecentConversationTurns,
   recordSurfaceTurn
 } from './conversationTurns'
@@ -98,6 +99,39 @@ describe('recordSurfaceTurn', () => {
     })
     expect(result.recorded).toBe(false)
     expect(result.duplicate).toBe(false)
+    store.close()
+  })
+})
+
+describe('conversationIdsForDeletion', () => {
+  it('resolves real renderer chat-session, kernel-session, and canonical keys', () => {
+    const store = newStore()
+    const resolved = resolveSurfaceSession(
+      store,
+      {
+        ownerId: 'owner',
+        surfaceRef: {
+          surfaceKind: 'main_chat',
+          externalRefKind: 'chat',
+          externalRefId: 'chat-session-42'
+        }
+      },
+      () => 1000
+    )
+
+    // The renderer deletes by the backend v2 chat-session id, which is the
+    // surface external_ref_id—not the generated kernel session/conversation id.
+    expect(conversationIdsForDeletion(store, 'owner', 'chat-session-42')).toEqual([
+      resolved.conversationId
+    ])
+    expect(conversationIdsForDeletion(store, 'owner', resolved.agentSessionId)).toEqual([
+      resolved.conversationId
+    ])
+    expect(conversationIdsForDeletion(store, 'owner', resolved.conversationId)).toEqual([
+      resolved.conversationId
+    ])
+    // A stale row from another account can never authorize cleanup for this one.
+    expect(conversationIdsForDeletion(store, 'other-owner', 'chat-session-42')).toEqual([])
     store.close()
   })
 })

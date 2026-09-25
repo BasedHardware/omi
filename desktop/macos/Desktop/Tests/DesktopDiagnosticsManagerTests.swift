@@ -564,12 +564,12 @@ import XCTest
       recorder.noteInputRoute(class: .bluetooth, source: .override)
       recorder.terminate(
         disposition: .silentRejected,
+        turnKind: .unknown,
         source: "hub",
         peak: 0,
         rms: 0,
         turnAudioSeconds: 1.2,
         voicedAudioSeconds: nil,
-        isNearZero: true,
         judgeable: true)
 
       let url = try XCTUnwrap(DesktopDiagnosticsManager.shared.writeDiagnosticsAttachment())
@@ -588,6 +588,8 @@ import XCTest
       XCTAssertEqual(snapshot["input_route_class"] as? String, "bluetooth")
       XCTAssertEqual(snapshot["input_route_source"] as? String, "override")
       XCTAssertEqual(snapshot["turn_disposition"] as? String, "silent_rejected")
+      // The funnel split key rides the same bounded snapshot.
+      XCTAssertEqual(snapshot["turn_kind"] as? String, "unknown")
       XCTAssertNotNil(snapshot["attempt_id"])
       // Privacy: no raw device identity, hardware id, or error string leaks.
       XCTAssertFalse(json.contains("engineStartFailed") || json.contains("OSStatus"))

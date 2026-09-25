@@ -10,8 +10,8 @@ Two layers guard price_id:
 
 _validate_price_id validates against is_purchasable_price_id (the active plan catalog only), NOT
 get_plan_type_from_price_id. The difference matters: get_plan_type_from_price_id also accepts
-LEGACY_PRICE_MAP prices, which exist for existing subscribers' renewals and webhook/subscription
-reconciliation. Those legacy prices must not be selectable as new checkout/upgrade targets, so the
+retained catalog prices, which exist for existing subscribers' renewals and webhook/subscription
+reconciliation. Those retained prices must not be selectable as new checkout/upgrade targets, so the
 request boundary excludes them while reconciliation still resolves them.
 
 Test isolation: routers.payment imports cleanly, so the test imports the models/handlers normally and
@@ -96,22 +96,18 @@ def test_upgrade_endpoint_rejects_non_purchasable_price_id_before_stripe():
     assert ei.value.status_code == 400
 
 
-# --- Regression: a legacy price is rejected as a new checkout/upgrade target but still resolves for
-#     reconciliation. is_purchasable_price_id (checkout boundary) excludes LEGACY_PRICE_MAP;
-#     get_plan_type_from_price_id (reconciliation) still recognizes it. ---
+# --- Regression: a retained price is rejected as a new checkout/upgrade target but still resolves
+#     for reconciliation. The checkout boundary uses effective purchase bindings while the
+#     reconciliation path uses the append-only catalog ledger. ---
 
 
-def test_legacy_price_rejected_for_checkout_but_recognized_for_reconciliation():
-    legacy_id = 'price_legacy_old'
+def test_retained_price_rejected_for_checkout_but_recognized_for_reconciliation():
+    retained_id = 'price_1TNIHd1F8wnoWYvwkIrekcQZ'
     active_id = 'price_active_new'
-    plan = 'unlimited'
-    fake_definitions = [{'monthly_price_id': active_id, 'annual_price_id': '', 'plan_type': plan}]
-    with patch.object(subscription, 'get_paid_plan_definitions', return_value=fake_definitions), patch.dict(
-        subscription.LEGACY_PRICE_MAP, {legacy_id: plan}, clear=False
-    ):
-        # reconciliation / webhook path still resolves the legacy price to its plan
-        assert subscription.get_plan_type_from_price_id(legacy_id) == plan
+    with patch.dict(os.environ, {'STRIPE_UNLIMITED_MONTHLY_PRICE_ID': active_id}, clear=False):
+        # reconciliation / webhook path still resolves the retained price to its plan
+        assert subscription.get_plan_type_from_price_id(retained_id) is subscription.PlanType.unlimited
         # but the checkout/upgrade boundary rejects it because it is not currently purchasable
-        assert subscription.is_purchasable_price_id(legacy_id) is False
+        assert subscription.is_purchasable_price_id(retained_id) is False
         # the active catalog price is still purchasable
         assert subscription.is_purchasable_price_id(active_id) is True

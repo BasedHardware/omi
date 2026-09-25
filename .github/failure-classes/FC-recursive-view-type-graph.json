@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "id": "FC-recursive-view-type-graph",
+  "violated_contract": "A SwiftUI view's body must not reach its own type again through concrete (non-erased) view types. SwiftUI resolves View._viewListCount(inputs:) statically, from types alone, without evaluating a body, so a cycle in the view-type graph recurses unbounded regardless of runtime values -- even when the branch closing the cycle never executes. The main thread writes past its stack guard page and the process dies with SIGSEGV.",
+  "canonical_prevention": "Break the cycle at its back-edge with a type-erasing wrapper (AnyView), which resolves its list count dynamically and terminates the static walk. Cover the repair with a test that mounts the view inside the container that forces a static count -- a ScrollView or LazyVStack host driven through AppKit layout -- since an unerased cycle kills the test process rather than failing an assertion.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Sources/MainWindow/Components/OmiMarkdown.swift",
+    "desktop/macos/Desktop/Tests/OmiMarkdownCitationInteractionTests.swift"
+  ],
+  "evidence_prs": [11519],
+  "scope_hints": ["desktop/macos/Desktop/Sources/**"],
+  "status": "open"
+}

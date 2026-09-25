@@ -663,13 +663,13 @@ async def get_calendar_events_tool(
                         try:
                             start_dt = datetime.fromisoformat(start['dateTime'].replace('Z', '+00:00'))
                             events_with_time.append((start_dt, event))
-                        except:
+                        except (ValueError, TypeError):
                             events_with_time.append((datetime.min.replace(tzinfo=timezone.utc), event))
                     elif 'date' in start:
                         try:
                             start_dt = datetime.fromisoformat(start['date'] + 'T00:00:00+00:00')
                             events_with_time.append((start_dt, event))
-                        except:
+                        except (ValueError, TypeError):
                             events_with_time.append((datetime.min.replace(tzinfo=timezone.utc), event))
                     else:
                         events_with_time.append((datetime.min.replace(tzinfo=timezone.utc), event))
@@ -758,7 +758,7 @@ async def get_calendar_events_tool(
                 try:
                     start_dt = datetime.fromisoformat(start['dateTime'].replace('Z', '+00:00'))
                     result += f"   Start: {_format_event_dt(start_dt, display_tz, tz_label)}\n"
-                except:
+                except (ValueError, TypeError):
                     result += f"   Start: {start.get('dateTime', 'Unknown')}\n"
             elif 'date' in start:
                 result += f"   Date: {start.get('date', 'Unknown')}\n"
@@ -769,7 +769,7 @@ async def get_calendar_events_tool(
                 try:
                     end_dt = datetime.fromisoformat(end['dateTime'].replace('Z', '+00:00'))
                     result += f"   End: {_format_event_dt(end_dt, display_tz, tz_label)}\n"
-                except:
+                except (ValueError, TypeError):
                     result += f"   End: {end.get('dateTime', 'Unknown')}\n"
             elif 'date' in end:
                 result += f"   End Date: {end.get('date', 'Unknown')}\n"
@@ -1031,7 +1031,9 @@ async def delete_calendar_event_tool(
         f"start_date: {start_date}, end_date: {end_date}, event_id: {event_id}"
     )
 
-    uid, integration, access_token, access_err = prepare_access(
+    uid, integration, access_token, access_err = await run_blocking(
+        db_executor,
+        prepare_access,
         cast(Optional[Dict[str, Any]], config),
         'google_calendar',
         'Google Calendar',
@@ -1288,7 +1290,9 @@ async def update_calendar_event_tool(
         f"add_attendees: {add_attendees}, remove_attendees: {remove_attendees}, set_attendees: {set_attendees}"
     )
 
-    uid, integration, access_token, access_err = prepare_access(
+    uid, integration, access_token, access_err = await run_blocking(
+        db_executor,
+        prepare_access,
         cast(Optional[Dict[str, Any]], config),
         'google_calendar',
         'Google Calendar',
