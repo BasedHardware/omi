@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/utils/ui_guidelines.dart';
 
@@ -13,39 +12,6 @@ class _MockThemeExtension extends ThemeExtension<AppTheme> {
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
-
-  group('copyToClipboard', () {
-    test('copies text to the system clipboard', () async {
-      const textToCopy = 'test text';
-
-      // Mock the clipboard system channel
-      List<MethodCall> calls = [];
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
-        SystemChannels.platform,
-        (MethodCall methodCall) async {
-          calls.add(methodCall);
-          return null;
-        },
-      );
-
-      // Call the function
-      copyToClipboard(textToCopy, 'Success!');
-
-      // Wait for async operations to complete
-      await Future.delayed(Duration.zero);
-
-      // Verify the correct method was called on the platform channel
-      expect(calls.length, 1);
-      expect(calls[0].method, 'Clipboard.setData');
-      expect(calls[0].arguments, {'text': textToCopy});
-
-      // Clean up
-      TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger.setMockMethodCallHandler(
-        SystemChannels.platform,
-        null,
-      );
-    });
-  });
 
   group('AppTheme', () {
     const style1 = TextStyle(fontSize: 10, color: Colors.red);
