@@ -20468,6 +20468,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Pendant audio is not reaching the app — tap to repair'**
   String get captureRecoveryBanner;
+
+  /// No description provided for @phoneRecordingBlockedByPendantBatch.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop Transcribe Later on your pendant before recording with your phone.'**
+  String get phoneRecordingBlockedByPendantBatch;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

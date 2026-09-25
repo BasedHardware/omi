@@ -3546,5 +3546,6 @@
     "recordWith": "Aufnehmen mit",
     "moreWaysToRecord": "Weitere Aufnahmeoptionen",
     "openCall": "Anruf öffnen",
-    "captureRecoveryBanner": "Der Ton des Pendants erreicht die App nicht — zum Reparieren tippen"
+    "captureRecoveryBanner": "Der Ton des Pendants erreicht die App nicht — zum Reparieren tippen",
+    "phoneRecordingBlockedByPendantBatch": "Beende Transcribe Later auf deinem Anhänger, bevor du mit dem Telefon aufnimmst."
 }

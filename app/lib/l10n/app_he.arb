@@ -11112,5 +11112,6 @@
     "recordWith": "הקלטה באמצעות",
     "moreWaysToRecord": "דרכים נוספות להקליט",
     "openCall": "פתיחת השיחה",
-    "captureRecoveryBanner": "השמע מהתליון לא מגיע לאפליקציה — הקישו לתיקון"
+    "captureRecoveryBanner": "השמע מהתליון לא מגיע לאפליקציה — הקישו לתיקון",
+    "phoneRecordingBlockedByPendantBatch": "עצרו את Transcribe Later בקולייה לפני ההקלטה בטלפון."
 }

@@ -11325,4 +11325,8 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Der Ton des Pendants erreicht die App nicht — zum Reparieren tippen';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Beende Transcribe Later auf deinem Anhänger, bevor du mit dem Telefon aufnimmst.';
 }

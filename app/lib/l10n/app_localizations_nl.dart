@@ -11268,4 +11268,8 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'De audio van de hanger komt niet aan in de app — tik om te repareren';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Stop Transcribe Later op je hanger voordat je met je telefoon opneemt.';
 }

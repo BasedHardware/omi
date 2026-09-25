@@ -11294,4 +11294,8 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Аудиото од привезокот не стигнува до апликацијата — допрете за поправка';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Запрете Transcribe Later на привезокот пред да снимате со телефонот.';
 }

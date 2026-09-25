@@ -21,7 +21,7 @@ import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/enums.dart';
 
-enum _Live { idle, idleDeviceConnected, pendant, pendantPaused, phone, phoneAfterPendant }
+enum _Live { idle, idleDeviceConnected, pendant, pendantPaused, pendantBatch, phone, phoneAfterPendant }
 
 class _Capture extends ChangeNotifier implements CaptureProvider {
   _Capture(this.live);
@@ -33,13 +33,13 @@ class _Capture extends ChangeNotifier implements CaptureProvider {
   @override
   String? get liveCaptureSource => switch (live) {
         _Live.idle || _Live.idleDeviceConnected => null,
-        _Live.pendant || _Live.pendantPaused => 'omi',
+        _Live.pendant || _Live.pendantPaused || _Live.pendantBatch => 'omi',
         _ => 'phone',
       };
   @override
   RecordingState get recordingState => switch (live) {
         _Live.idle || _Live.idleDeviceConnected => RecordingState.stop,
-        _Live.pendant => RecordingState.deviceRecord,
+        _Live.pendant || _Live.pendantBatch => RecordingState.deviceRecord,
         _Live.pendantPaused => RecordingState.pause,
         _ => RecordingState.record,
       };
@@ -57,6 +57,8 @@ class _Capture extends ChangeNotifier implements CaptureProvider {
   bool get isCallActive => false;
   @override
   bool get isPhoneMicBatchRecording => false;
+  @override
+  bool get isPendantBatchRecording => live == _Live.pendantBatch;
   @override
   DateTime? get liveCaptureStartedAt => live == _Live.idle || live == _Live.idleDeviceConnected
       ? null
@@ -242,6 +244,16 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text(en.pendantIsListeningTitle), findsNothing);
       expect(capture.phoneStarts, 0);
+    });
+
+    testWidgets('a Transcribe Later pendant rejects phone takeover with visible feedback', (tester) async {
+      final capture = _Capture(_Live.pendantBatch);
+      await pump(tester, const HomeRecordButton(), capture: capture);
+      await tester.tap(find.bySemanticsLabel(en.startRecording));
+      await tester.pump();
+      expect(find.text(en.phoneRecordingBlockedByPendantBatch), findsOneWidget);
+      expect(capture.phoneStarts, 0);
+      expect(find.text(en.recordWith), findsNothing);
     });
 
     testWidgets('during an Omi call the button never starts a recording', (tester) async {

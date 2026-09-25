@@ -11248,4 +11248,8 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'O áudio do pingente não chega à aplicação — toque para reparar';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Pare o Transcribe Later no seu pingente antes de gravar com o telefone.';
 }

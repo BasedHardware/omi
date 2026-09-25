@@ -3581,5 +3581,6 @@
     "recordWith": "Записать через",
     "moreWaysToRecord": "Другие способы записи",
     "openCall": "Открыть звонок",
-    "captureRecoveryBanner": "Звук кулона не доходит до приложения — нажмите, чтобы исправить"
+    "captureRecoveryBanner": "Звук кулона не доходит до приложения — нажмите, чтобы исправить",
+    "phoneRecordingBlockedByPendantBatch": "Остановите Transcribe Later на подвеске, прежде чем записывать с телефона."
 }

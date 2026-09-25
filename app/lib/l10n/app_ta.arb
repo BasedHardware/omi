@@ -11112,5 +11112,6 @@
     "recordWith": "பதிவுசெய்யும் முறை",
     "moreWaysToRecord": "பதிவுசெய்ய மேலும் வழிகள்",
     "openCall": "அழைப்பைத் திறக்கவும்",
-    "captureRecoveryBanner": "பென்டன்ட் ஆடியோ செயலியை அடையவில்லை — சரிசெய்ய தட்டவும்"
+    "captureRecoveryBanner": "பென்டன்ட் ஆடியோ செயலியை அடையவில்லை — சரிசெய்ய தட்டவும்",
+    "phoneRecordingBlockedByPendantBatch": "உங்கள் தொலைபேசியில் பதிவு செய்வதற்கு முன் உங்கள் பெண்டன்டில் Transcribe Later ஐ நிறுத்தவும்."
 }

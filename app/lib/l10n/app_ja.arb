@@ -3546,5 +3546,6 @@
     "recordWith": "録音方法",
     "moreWaysToRecord": "その他の録音方法",
     "openCall": "通話を開く",
-    "captureRecoveryBanner": "ペンダントの音声がアプリに届いていません — タップして修復"
+    "captureRecoveryBanner": "ペンダントの音声がアプリに届いていません — タップして修復",
+    "phoneRecordingBlockedByPendantBatch": "携帯で録音する前に、ペンダントの Transcribe Later を停止してください。"
 }

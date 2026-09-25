@@ -3546,5 +3546,6 @@
     "recordWith": "Grabar con",
     "moreWaysToRecord": "Más formas de grabar",
     "openCall": "Abrir llamada",
-    "captureRecoveryBanner": "El audio del colgante no llega a la app — toca para reparar"
+    "captureRecoveryBanner": "El audio del colgante no llega a la app — toca para reparar",
+    "phoneRecordingBlockedByPendantBatch": "Detén Transcribe Later en tu colgante antes de grabar con el teléfono."
 }

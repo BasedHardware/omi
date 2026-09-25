@@ -3546,5 +3546,6 @@
     "recordWith": "Rakam dengan",
     "moreWaysToRecord": "Lebih banyak cara merakam",
     "openCall": "Buka panggilan",
-    "captureRecoveryBanner": "Audio loket tidak sampai ke aplikasi — ketik untuk membaiki"
+    "captureRecoveryBanner": "Audio loket tidak sampai ke aplikasi — ketik untuk membaiki",
+    "phoneRecordingBlockedByPendantBatch": "Hentikan Transcribe Later pada loket anda sebelum merakam dengan telefon."
 }

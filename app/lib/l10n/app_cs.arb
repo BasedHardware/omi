@@ -3546,5 +3546,6 @@
     "recordWith": "Nahrát pomocí",
     "moreWaysToRecord": "Další způsoby nahrávání",
     "openCall": "Otevřít hovor",
-    "captureRecoveryBanner": "Zvuk přívěsku se do aplikace nedostává — opravte klepnutím"
+    "captureRecoveryBanner": "Zvuk přívěsku se do aplikace nedostává — opravte klepnutím",
+    "phoneRecordingBlockedByPendantBatch": "Před nahráváním telefonem zastavte na přívěsku režim Transcribe Later."
 }

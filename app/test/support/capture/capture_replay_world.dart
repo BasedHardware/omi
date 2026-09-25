@@ -43,6 +43,7 @@ class FakePhoneMicHostApi extends PhoneMicHostApi {
   final List<String> startStacks = [];
   bool nativeRecording = false;
   Object Function()? nextStartError;
+  Completer<void>? holdNextStart;
 
   @override
   Future<void> start(PhoneMicCaptureMode mode, int sessionId) async {
@@ -51,6 +52,9 @@ class FakePhoneMicHostApi extends PhoneMicHostApi {
     lastStartMode = mode;
     lastStartSessionId = sessionId;
     startSessionIds.add(sessionId);
+    final held = holdNextStart;
+    holdNextStart = null;
+    if (held != null) await held.future;
     nativeRecording = true;
     final error = nextStartError;
     nextStartError = null;
@@ -263,6 +267,7 @@ class CaptureReplayWorld {
 
   bool connected = true;
   bool signedIn = true;
+  bool allowMic = true;
   int processCalls = 0;
 
   /// Runs when the controller asks the server to process the in-progress conversation.
@@ -372,7 +377,7 @@ class CaptureReplayWorld {
         return null;
       },
       audioCodecLoader: (deviceId) async => BleAudioCodec.pcm16,
-      microphonePermissionRequester: () async => true,
+      microphonePermissionRequester: () async => allowMic,
       conversationLocationCapture: ConversationLocationCapture(
         isLocationServiceEnabled: () async => false,
         checkPermission: () async => LocationPermission.denied,

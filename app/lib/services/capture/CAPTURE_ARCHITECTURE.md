@@ -69,6 +69,13 @@ with no live taker is dropped rather than stranded on idle.
   `phase` so a paused session stays paused across interruptions.
 - `mutedBeforePhone` — policy a phone recording started under; restored on a
   user stop so stopping the phone never leaves the next source paused.
+- `awaitingPhoneResume` — marks a pendant suspension debt that a
+  `PhoneStopRequested(userStop, resumeSuspendedPendant: false)` deliberately
+  kept for the known next phone start/stop cycle (the speech-profile
+  temporary-stop flow). Serialized and strictly parsed; preserved across
+  unrelated settings, call, and device-identity notifications; cleared by the
+  next admitted phone start, a normal stop/finish that consumes the debt, a
+  pendant disconnect, fail-closed, or launch sanitization.
 - `lastFailure` — diagnostics for the fail-closed commit.
 
 ## Events
@@ -105,10 +112,18 @@ awaited, against `CaptureEffectPorts` — one method per primitive:
 | `setNativeWriterGate(source, admitted)` | `CaptureNativeWriterGate` interface. **Interface only**: no native per-source gate exists, so production uses `NoopCaptureNativeWriterGate` and batch handoffs stay refused rather than silently unsafe. |
 | `finalizeWal` | `_wal.getSyncs().phone.finalizeCurrentSession()`. |
 | `rollSession(identity)` | `_rollCaptureSession`. |
-| `mintRecordingId(sessionKey, source)` | `_recordingTelemetry.prepare`. |
-| `currentRecordingId()` | folds ids minted inside staged bodies back into the committed session. |
-| `readSnapshot` / `persistSnapshot` | shared-preferences snapshot store; persist is always the last step of a safe transition. |
+| `mintRecordingId(sessionKey, source)` | completes the previous telemetry id (`session_roll`) then `_recordingTelemetry.prepare`; returns the fresh id folded into the session. |
+| `checkPhonePermission()` | OS microphone permission request, run once as the first effect of any phone start; its result is handed to the start stage so the body never prompts a second time. |
+| `readSnapshot` / `persistSnapshot` | shared-preferences snapshot store; persist is the last step of a safe transition, skipped when the encoding is unchanged. |
 | `runStage(stage)` | the staged-migration seam, below. |
+
+`BleStreamStart`, `WalFinalize`, and `WalSessionRoll` are defined effects with
+dispatch arms, but **no reducer currently emits them** — pendant stream opening
+and WAL finalize/roll still happen inside staged bodies. The arms exist so the
+port contract is complete when those bodies decompose; they must not be treated
+as live paths. `NativeWriterGate` *is* emitted, into a no-op gate (see
+invariants). `currentRecordingId` was removed from the port seam: minted ids
+come only from `MintRecording`, and staged bodies no longer mint on their own.
 
 ## Staged migration seam
 
@@ -118,17 +133,58 @@ They are the legacy side-effect bodies extracted to private controller methods
 — never a queued public API (which would deadlock).
 
 Moved to pure reducer + ports: phase/ownership decisions, suspension stack,
-policy writes, socket open/close ordering, BLE stream ordering, native mic
-start/stop ordering, WAL finalize/roll, recording-id minting, snapshot
-persistence. C1 compatibility exceptions remain: `updateRecordingDevice`
-publishes its legacy synchronous device identity and retires a stale
-`CaptureSessionOwner` generation before its queued `DeviceUpdated` executes,
-so an already-awaited codec/open cannot publish an obsolete socket; `onClosed`
-marks readiness and arms the reconnect timer at callback time so a pending
-event cannot miss a virtual/OS timer deadline; `onConnected` mirrors the
-interrupted status synchronously for existing read-model consumers. None of
-these paths opens a capture source; their remaining bookkeeping belongs in
-the coordinator admission fence during the next seam extraction.
+policy writes, socket open/close ordering, BLE stream **stop** ordering,
+native mic start/stop ordering, recording-id minting, snapshot persistence.
+BLE stream *opens* and WAL finalize/roll are **not** reducer-emitted yet —
+they still run inside stage bodies (`_initiateDeviceAudioStreaming`,
+`finalizeCurrentSession`, `_rollCaptureSession`), so the "ordering" guarantee
+for them is the staged-ownership guard, not the effect list. C1 compatibility
+exceptions remain: `updateRecordingDevice` publishes only the synchronous
+display identity (`_recordingDevice`) for provider readers before its queued
+`DeviceUpdated` runs — the session-generation roll and offline bookkeeping
+stay inside the queued `UpdateRecordingDeviceStage`. Because display identity
+moves eagerly while the roll waits on the queue, a same-id disconnect/reconnect
+pair can land *inside* a held event's await: the token still reads current and
+the device id matches. `_deviceIdentityRevision` closes that window — it bumps
+synchronously on every `updateRecordingDevice` notification (and again at the
+queued identity commit) and is captured/rechecked across awaits in the pendant
+socket/BLE open paths (`_reconnectDeviceCaptureBody`,
+`_ensureDeviceSocketConnection` codec + STT resolver,
+`_transcriptionSettingsChangedBody`, `_initiateDeviceAudioStreaming` before any
+native config or BLE subscription, and the `_initiateWebsocket` →
+`_openTranscriptionSocket` → `_publishTranscriptionSocket` chain whenever the
+attempt began pendant-owned). A stale attempt stops only its own socket — never
+the installed one; `onClosed` still mutates
+three flags at callback time — `_keepAliveEpoch++` invalidates any keepalive
+reconnect attempt in flight for the now-dead socket (a tick can fire between
+the close callback and the queued `SocketClosed`, so the epoch must move
+before dispatch), `_socketCloseQueued` lets `keepAliveScheduledForTesting`
+observe a queued close without pumping the event queue (existing
+reconnect-test contract), and `_transcriptServiceReady = false` drops
+readiness immediately because the keepalive tick and reconnect gates read it
+synchronously while the dead socket object may still be non-null. Everything
+else — status reset, wedge completion, interrupted-state publish, snackbar,
+reconnect-pending mark, `_startKeepAliveServices` — runs inside
+`_socketClosedBody` under dispatch. `onConnected` is fully queued: the
+interrupted→record/deviceRecord restore and the mic restart live in
+`_socketConnectedBody`, guarded by staged live ownership. None of these paths
+opens a capture source; their remaining bookkeeping belongs in the
+coordinator admission fence during the next seam extraction.
+
+### Synchronous surfaces that remain outside the reducer
+
+| Surface | What it still does synchronously | Why it stays |
+|---|---|---|
+| Mic `onRecording`/`onStop`/`onInitializing` callbacks | Mirror native mic state into `recordingState` (admission re-checked via `_admitsCapture`). | They are native state *mirrors*, not ownership decisions; the coordinator owns start/stop ordering. |
+| `_setCaptureMuted` pause mark | Writes `RecordingState.pause` inside the `writePolicy` port, only after the durable write is confirmed unsuperseded. | Same-execution ordering is required so a superseded write never leaves a phantom pause mark. |
+| `changeAudioRecordProfile` | Reopens the transcription socket with new codec params. | Called only inside stage bodies; never emits `SocketOpen` itself. |
+| `startNewOfflineRecording` | Sets `batchCutRequested` + resets offline-session bookkeeping. | A native-writer marker preference, not an ownership change; the batch session stays owner. |
+| `dispose` | `_rollCaptureSession('disposed')`, telemetry complete, keepalive cancel, socket unsubscribe. | Dispose denies new dispatches; teardown is outside the event contract. |
+| `systemAudioRecord` keepalive lane | Read by `_shouldReconnectTranscriptionSocket`/reconnect bodies. | macOS system-audio lane shares the socket but is not coordinator-owned yet. |
+| `setBackgroundModeEnabled` | Writes native-streaming prefs directly. | Preference/config management; does not start or stop a capture owner. |
+| `recordingState` ownership reads | Reconnect gates (`_shouldReconnectTranscriptionSocket`, `_reconnectDeviceCaptureBody`) consult the legacy mirror alongside the staged phase. | Compatibility while the mirror still feeds UI; guarded by staged phase checks. |
+| `onClosed` sync flags | `_keepAliveEpoch++`, `_socketCloseQueued`, `_transcriptServiceReady = false`. | Documented above — the callback-time window a queued event cannot close. |
+| Stage-internal socket/BLE/WAL | `_initiateWebsocket`, `_initiateDeviceAudioStreaming`, `finalizeCurrentSession`, `_rollCaptureSession` run inside `RunStage` bodies behind staged-ownership guards. | The defined `BleStreamStart`/`WalFinalize`/`WalSessionRoll` effects are not emitted yet; extraction continues in a later seam. |
 
 Still staged bodies (`RunStage`) in `CaptureController._runCaptureStage`:
 device session start/stop/update, pendant suspend/resume tails, phone session
@@ -171,7 +227,27 @@ recovery, batch-mode/settings/onboarding tails.
   transition closed (physical deny + safe idle) exactly like an effect failure.
   A reducer/environment exception happens before any effect could have run,
   so it reports the error on the unchanged state instead of tearing hardware
-  down.
+  down. A state-neutral event does not write at all: the encoded target is
+  compared against the last persisted encoding (seeded from the on-disk
+  snapshot at launch, and from the sanitized state when restore resets
+  ownership) and the write is skipped when they are identical — a redundant
+  no-op write can never fail a transition closed.
+- `CheckPhonePermission` is the admission preflight for every phone start
+  (live and batch): it is always the first effect, before any teardown,
+  suspension, policy write, mint, or hardware start. A `false` result abandons
+  the transition with the committed state untouched and the outcome `false` —
+  deliberately *not* fail-closed, because nothing physical has changed. An
+  *effect* failure after the preflight follows the normal fail-closed path,
+  and a pendant already suspended for the takeover is recovered **inside the
+  same pump**: after the physical deny and safe-idle commit, the suspended
+  policy is restored (`writePolicy(wasPaused)`) and a nested
+  `DeviceStartRequested` `_run` is awaited — not queued behind events already
+  waiting. The dispatch outcome then reports the post-recovery state plus the
+  original error; if recovery itself fails, the committed state stays idle.
+  Recovery only runs for a `PhoneStartRequested` *effect* failure — a
+  superseded policy write (a newer intent already owns what comes next) and a
+  snapshot-persist failure fail closed to idle without recovering, and
+  unrelated event failures never auto-recover.
 - `failedClosed` clears `active` and the whole suspension stack (plus
   `callActive`/`micInterrupted`/`mutedBeforePhone`) so recovery events can
   start safely; only the monotonic `sessionSeq` and the known
@@ -191,7 +267,11 @@ coordinator restores **idle**.
 yields idle: ownership and suspension debt are never resurrected, no hardware
 opens during restore, and a persisted phone-pause mute cannot leak into a
 fresh launch (the launch-marker path recovers it deliberately). Only
-`sessionSeq` survives so minted keys stay unique.
+`sessionSeq` survives so minted keys stay unique. The sanitized form is
+**not** written eagerly at construction — `_lastPersistedSnapshot` seeds from
+the raw on-disk bytes, so the first transition whose target re-encodes
+differently persists it inside the serialized pump; a launch that never
+dispatches simply sanitizes again next launch.
 
 ## Invariants
 
@@ -201,7 +281,14 @@ fresh launch (the launch-marker path recovers it deliberately). Only
 - Fresh recording ids for every new source session; phone pause/resume keeps
   its recording id and its socket — a deliberate narrow exception to
   "paused source has no active transport", enforced by also stopping the
-  native mic and flushing frames so no audio crosses while paused.
+  native mic and flushing frames so no audio crosses while paused. Batch
+  pause is the wider exception: `phoneBatchLive → phoneBatchPaused` (including
+  a user pause taken while `audioInterrupted`) emits only `PolicyWrite(true)`
+  — the native `.bin` writer stays open in the same file and the muted shared
+  policy drops packets at admission, so `phoneBatchPaused → phoneBatchLive`
+  emits only `PolicyWrite(false)`; a `NativeMicStop`/`NativeMicStart` pair
+  would finalize the file and mint a new recorder session under the same
+  recording id.
 - A call during active pendant capture suspends the pendant; a call ending
   while the phone owns capture does not resume it — the phone suspension
   survives until the phone itself stops.
@@ -225,7 +312,12 @@ fresh launch (the launch-marker path recovers it deliberately). Only
   previously-paused one stays muted — unless a call still holds the channel,
   in which case no restore runs and the call-end resume applies `wasPaused`.
 - `PhoneStopRequested`/`FinishRequested` with no phone owner is a no-op: it
-  never runs a stop stage or a policy write against a pendant or a call.
+  never runs a stop stage or a policy write against a pendant or a call —
+  with one exception. An unowned stop/finish still settles an
+  `awaitingPhoneResume` phone-suspension debt held by the interim stop: a
+  normal stop or finish consumes it (the connected pendant is resumed under a
+  fresh minted id, or the debt ends when it is disconnected or the stop is
+  not a user stop), while a repeat interim stop keeps it held.
   (`FinishRequested` still runs `ProcessConversationStage` — finishing a
   pendant conversation is a processing request, not an ownership claim.)
 - `OfflineMuteToggled` routes through the phase-correct pause/resume
@@ -249,7 +341,12 @@ fresh launch (the launch-marker path recovers it deliberately). Only
   batch writer. Honest limitation: on `DeviceUpdated(null)` while a batch
   pendant records, the no-op gate cannot truly deny the native writer, so the
   deny degrades to a shared-policy `PolicyWrite(true)` (native drops packets
-  while muted) instead of claiming per-source physical denial.
+  while muted) instead of claiming per-source physical denial. The same
+  shared-policy mute is the only deny available when an Omi call suspends a
+  batch pendant — intentional privacy behavior with a real user-visible cost:
+  the pendant's Transcribe Later session keeps its file across the call, but
+  audio recorded during the call is dropped rather than captured, so the
+  batch transcript has a gap for the call's duration instead of call audio.
 - A repeated explicit `PhoneStartRequested` stops the previous phone session
   before minting a fresh recording id; only pause/resume and recovery preserve
   the existing id. Reconnection uses its own events
@@ -268,6 +365,18 @@ fresh launch (the launch-marker path recovers it deliberately). Only
   `wasPaused` intent; no device control opens BLE beneath a phone or call.
   With no owner, the old device-pause API still writes the durable mute
   policy without opening hardware.
+- Resume while idle is policy-only: `ResumeCaptureRequested`/
+  `OfflineMuteToggled` with no owner emits `PolicyWrite(false)` and nothing
+  else — no `ResumeDeviceTailStage`, no socket, no BLE open. An offline
+  unmute changes admission, never ownership.
+- A device start admitted under a muted policy is a legitimate paused
+  capture: telemetry marks it started, not `failStart`. Any other failed
+  start stage fails the transition closed rather than committing a session
+  carrying a recording id the hardware never adopted.
+- Inside the `writePolicy` port (`_setCaptureMuted`), the recording-state
+  pause mark is written only after the durable policy write returns
+  confirmed-unsuperseded; a superseded write cannot leave `recordingState`
+  claiming a pause that never landed.
 - Snapshot persist is the last I/O step of a safe transition (before publish).
 
 ## Read model
@@ -284,9 +393,15 @@ Two views over the same logical state:
 
 `CaptureReadModel` derives everything the controller getters and
 `liveCaptureDisplayState` need: `phoneOwnsCapture`, `pendantOwns`,
-`phonePaused`, `phoneBatchSession`, `pendantSuspension`,
+`phonePaused`, `phoneBatchSession`, `pendantBatchSession`, `pendantSuspension`,
 `pendantSuspendedForPhone`/`ForCall`, `pendantHoldsCapture`, `micInterrupted`,
 `callActive`, `paused`, `deviceMuted`, `liveOwnerName`, `activeRecordingId`.
+
+`pendantBatchSession` backs the public `CaptureController.isPendantBatchRecording`
+getter consumed by the home record button: because a phone takeover of a batch
+pendant is refused (invariants), the button shows
+`context.l10n.phoneRecordingBlockedByPendantBatch` via `OmiFeedback.info`
+instead of silently starting.
 
 ## Migrated entry paths
 

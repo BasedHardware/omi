@@ -11331,4 +11331,8 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Hindi nakakarating sa app ang audio ng pendant — i-tap para ayusin';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Itigil ang Transcribe Later sa iyong pendant bago mag-record gamit ang telepono.';
 }

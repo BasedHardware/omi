@@ -11236,4 +11236,8 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Riipuksen ääni ei tule perille sovellukseen — korjaa napauttamalla';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Lopeta Transcribe Later riipuksessa ennen kuin nauhoitat puhelimella.';
 }

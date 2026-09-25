@@ -11048,4 +11048,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'ペンダントの音声がアプリに届いていません — タップして修復';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch => '携帯で録音する前に、ペンダントの Transcribe Later を停止してください。';
 }

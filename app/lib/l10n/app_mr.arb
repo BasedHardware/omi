@@ -11112,5 +11112,6 @@
     "recordWith": "रेकॉर्ड करण्याची पद्धत",
     "moreWaysToRecord": "रेकॉर्ड करण्याचे आणखी मार्ग",
     "openCall": "कॉल उघडा",
-    "captureRecoveryBanner": "पेंडंटचे ऑडिओ ॲपपर्यंत पोहोचत नाही — दुरुस्त करण्यासाठी टॅप करा"
+    "captureRecoveryBanner": "पेंडंटचे ऑडिओ ॲपपर्यंत पोहोचत नाही — दुरुस्त करण्यासाठी टॅप करा",
+    "phoneRecordingBlockedByPendantBatch": "फोनने रेकॉर्ड करण्यापूर्वी तुमच्या पेंडंटवर Transcribe Later थांबवा."
 }

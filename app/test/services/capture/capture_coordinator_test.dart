@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/gen/phone_mic_pigeon.g.dart';
@@ -16,13 +17,14 @@ CaptureEnvironment environment(
   CaptureCoordinatorState state, {
   bool muted = false,
   bool batch = false,
+  bool batchSuspended = false,
   bool call = false,
 }) =>
     CaptureEnvironment(
       policyMuted: muted,
       paused: muted,
       batchModeEnabled: batch,
-      batchModeSuspendedForOnboarding: false,
+      batchModeSuspendedForOnboarding: batchSuspended,
       deviceSupportsTranscribeLater: true,
       networkConnected: true,
       signedIn: () => true,
@@ -36,8 +38,12 @@ CaptureEnvironment environment(
     );
 
 class HarnessPorts {
-  String? snapshot;
+  String? snapshot = CaptureCoordinatorState.idle().encode();
   bool muted = false;
+  bool batch = false;
+  bool batchSuspended = false;
+  bool permitPhone = true;
+  bool failNextPhoneStart = false;
   bool ble = false;
   bool devicePresent = false;
   bool mic = false;
@@ -61,6 +67,10 @@ class HarnessPorts {
   }
 
   CaptureEffectPorts get ports => CaptureEffectPorts(
+        checkPhonePermission: () async {
+          await _record('permission:check');
+          return permitPhone;
+        },
         writePolicy: (value) async {
           await _record('policy:$value');
           if (supersedeNextPolicy) {
@@ -105,7 +115,6 @@ class HarnessPorts {
         finalizeWal: () => _record('wal:finalize'),
         rollSession: (identity) => _record('wal:roll'),
         mintRecordingId: (key, source) => recordingId = '${source}_${++nextId}',
-        currentRecordingId: () => recordingId,
         readSnapshot: () => snapshot,
         persistSnapshot: (encoded) async {
           await _record('snapshot');
@@ -124,22 +133,42 @@ class HarnessPorts {
                   stage is ResumeDeviceTailStage) &&
               devicePresent) {
             ble = !muted;
-            socket = true;
+            socket = !batch;
           }
           if (stage is SuspendPendantStage) socket = false;
           if (stage is StartPhoneSessionStage) {
+            if (failNextPhoneStart) {
+              failNextPhoneStart = false;
+              recordingId = null;
+              return const CaptureStageFailure('synthetic native start failed');
+            }
             if (socket && stage.mode == CaptureTransport.live) throw StateError('two open sockets at phone handoff');
             mic = true;
             socket = stage.mode == CaptureTransport.live;
           }
-          if (stage is BatchModeStage && stage.rolledPhoneMode != null) {
-            mic = true;
-            socket = !stage.enabled;
+          if (stage is BatchModeStage) {
+            if (batch == stage.enabled) return true;
+            batch = stage.enabled;
+            if (stage.rolledPhoneMode != null) {
+              mic = false;
+              socket = false;
+              recordingId = null;
+            }
+          }
+          if (stage is OnboardingBatchStage) {
+            if (stage.suspended && batch) {
+              batch = false;
+              batchSuspended = true;
+            } else if (!stage.suspended && batchSuspended) {
+              batch = true;
+              batchSuspended = false;
+            }
           }
           if (stage is SocketClosedStage) socket = false;
           if (stage is StopPhoneLiveStage || stage is StopPhoneBatchStage) {
             mic = false;
             socket = false;
+            recordingId = null;
           }
           if (stage is StartPhoneBatchStage) mic = true;
           if (stage is PauseDeviceTailStage || stage is SuspendPendantStage || stage is StopDeviceSessionStage) {
@@ -183,7 +212,8 @@ class ScriptStep {
         25 => 'device-resume',
         26 => 'batch-phone-start',
         27 => 'offline-mute',
-        28 => 'launch',
+        28 => 'kill-and-launch',
+        29 => 'phone-stop-await-onboarding',
         _ => 'unknown-$code',
       };
 }
@@ -192,10 +222,15 @@ class SequenceModel {
   CaptureCoordinatorState state = CaptureCoordinatorState.idle();
   bool muted = false;
   bool batch = false;
+  bool batchSuspended = false;
   bool call = false;
   final seenSessions = <String>{};
 
   void step(ScriptStep step) {
+    if (step.code == 28) {
+      state = CaptureCoordinatorState.tryParse(state.encode())!.sanitizedForLaunch();
+      call = false;
+    }
     if (step.code == 6) call = true;
     if (step.code == 7) call = false;
     final event = switch (step.code) {
@@ -227,10 +262,12 @@ class SequenceModel {
       26 => const PhoneBatchStartRequested(),
       27 => const OfflineMuteToggled(),
       28 => const LaunchRecovery(markerPending: true, mutedBefore: false),
+      29 => const PhoneStopRequested(reason: 'user_stopped', userStop: true, resumeSuspendedPendant: false),
       _ => throw StateError('unknown event'),
     };
     final before = state;
-    final transition = transitionCapture(before, event, environment(before, muted: muted, batch: batch, call: call));
+    final transition = transitionCapture(
+        before, event, environment(before, muted: muted, batch: batch, batchSuspended: batchSuspended, call: call));
     final next = transition.state;
     for (final effect in transition.effects) {
       if (effect is PolicyWrite) muted = effect.muted;
@@ -242,7 +279,25 @@ class SequenceModel {
     }
     if (step.code == 16) batch = true;
     if (step.code == 17) batch = false;
-    if (next.phoneOwns && next.pendantOwns) throw StateError('two live owners');
+    if (step.code == 20 && batch) {
+      batch = false;
+      batchSuspended = true;
+    }
+    if (step.code == 21 && batchSuspended) {
+      batch = true;
+      batchSuspended = false;
+    }
+    if (next.suspended.length > 1 || next.suspended.any((entry) => entry.source != CaptureSource.pendant)) {
+      throw StateError('invalid pendant suspension stack');
+    }
+    final debt = next.pendantSuspension;
+    if (debt?.reason == SuspendReason.call && !next.callActive) throw StateError('call debt without call');
+    if (debt?.reason == SuspendReason.phone && !next.phoneOwns && !next.awaitingPhoneResume) {
+      throw StateError('phone debt without owner or onboarding return');
+    }
+    if (next.awaitingPhoneResume && (next.phoneOwns || debt?.reason != SuspendReason.phone)) {
+      throw StateError('onboarding return without phone suspension');
+    }
     if (next.phase == CapturePhase.idle && next.active != null) throw StateError('idle still owns session');
     if (next.active != null && next.active!.source != (next.phoneOwns ? CaptureSource.phone : CaptureSource.pendant)) {
       throw StateError('source/phase mismatch');
@@ -250,8 +305,7 @@ class SequenceModel {
     if (next.active != null &&
         before.active?.sessionKey != next.active!.sessionKey &&
         !seenSessions.contains(next.active!.sessionKey) &&
-        step.code != 6 &&
-        step.code != 7) {
+        before.pendantSuspension?.sessionKey != next.active!.sessionKey) {
       throw StateError('new session without minted recording id');
     }
     if (before.phoneOwns &&
@@ -280,6 +334,16 @@ class SequenceModel {
     }
     state = next;
   }
+}
+
+class FaultCoverage {
+  int snapshot = 0;
+  int socketOpen = 0;
+  int policySuperseded = 0;
+  int heldSocketError = 0;
+  int heldBleDrop = 0;
+  int kills = 0;
+  int batchToggles = 0;
 }
 
 class XorShift32 {
@@ -327,18 +391,76 @@ List<ScriptStep> shrink(List<ScriptStep> failing, String expectedFailure) {
   return result;
 }
 
-Future<String?> effectFailureFor(List<ScriptStep> steps) async {
+Future<String?> effectFailureFor(List<ScriptStep> steps, {required int seed, FaultCoverage? coverage}) async {
   final fake = HarnessPorts();
+  final faults = XorShift32(seed ^ 0x9e3779b9);
   var call = false;
   final recordingIds = <String, String>{};
   final seenRecordingIds = <String>{};
   late CaptureCoordinator coordinator;
-  coordinator = CaptureCoordinator(
-    ports: fake.ports,
-    readEnvironment: () => environment(coordinator.state, muted: fake.muted, call: call),
-  );
+  CaptureCoordinator boot() => CaptureCoordinator(
+        ports: fake.ports,
+        readEnvironment: () => environment(coordinator.state,
+            muted: fake.muted, batch: fake.batch, batchSuspended: fake.batchSuspended, call: call),
+      );
+  coordinator = boot();
+  void verify() {
+    final state = coordinator.state;
+    final active = state.active;
+    if (state.suspended.length > 1) throw StateError('multiple pendant suspensions');
+    if (state.pendantSuspension?.reason == SuspendReason.call && !state.callActive) {
+      throw StateError('call suspension without call');
+    }
+    if (state.pendantSuspension?.reason == SuspendReason.phone && !state.phoneOwns && !state.awaitingPhoneResume) {
+      throw StateError('phone suspension without taker');
+    }
+    if (active != null) {
+      final id = active.recordingId;
+      if (id == null) throw StateError('owner has no recording id');
+      final prior = recordingIds[active.sessionKey];
+      if (prior == null) {
+        if (!seenRecordingIds.add(id)) throw StateError('recording id reused across source sessions');
+        recordingIds[active.sessionKey] = id;
+      } else if (prior != id) {
+        throw StateError('recording id changed within source session');
+      }
+      if (fake.recordingId != id) throw StateError('owner and telemetry recording ids differ');
+    }
+    if (state.phase == CapturePhase.phonePaused && fake.mic) {
+      throw StateError('live phone mic open while paused');
+    }
+    if (state.phase == CapturePhase.phoneBatchPaused && (!fake.mic || !fake.muted)) {
+      throw StateError('batch phone writer must remain open but policy-muted in the same file');
+    }
+    if (state.phoneOwns && fake.ble) throw StateError('BLE open under phone owner');
+    if (state.pendantSuspension != null && fake.ble) throw StateError('BLE open while suspended');
+    if ((state.phase == CapturePhase.pendantPaused || state.phase == CapturePhase.pendantBatchPaused) && fake.ble) {
+      throw StateError('BLE open while pendant paused');
+    }
+    if (state.phase == CapturePhase.pendantLive && !fake.ble) throw StateError('live pendant has no BLE stream');
+    if ((state.phase == CapturePhase.idle || state.phase == CapturePhase.callActive) &&
+        (fake.mic || fake.ble || fake.socket)) {
+      throw StateError('physical capture open without an owner');
+    }
+    if (CaptureCoordinatorState.tryParse(fake.snapshot)?.encode() != state.encode()) {
+      throw StateError('port snapshot differs from committed state');
+    }
+  }
+
   try {
     for (final step in steps) {
+      if (step.code == 28) {
+        if (coverage != null) coverage.kills++;
+        coordinator.dispose();
+        fake.mic = false;
+        fake.ble = false;
+        fake.socket = false;
+        fake.devicePresent = false;
+        fake.recordingId = null;
+        call = false;
+        coordinator = boot();
+        if (coordinator.state.phase != CapturePhase.idle) throw StateError('launch resurrected a capture owner');
+      }
       if (step.code == 6) call = true;
       if (step.code == 7) call = false;
       final event = switch (step.code) {
@@ -354,39 +476,75 @@ Future<String?> effectFailureFor(List<ScriptStep> steps) async {
         10 => const SocketConnected(),
         11 => SocketError(StateError('injected socket error')),
         12 => const NativeMicStalled(),
+        13 => const MicInterruptionChanged(began: true),
+        14 => const MicInterruptionChanged(began: false),
         15 => const KeepAliveTick(),
+        16 => const BatchModeSetRequested(enabled: true),
+        17 => const BatchModeSetRequested(enabled: false),
+        18 => const TranscriptionSettingsChanged(),
+        19 => const RecordProfileChanged(),
+        20 => const OnboardingBatchChanged(suspended: true),
+        21 => const OnboardingBatchChanged(suspended: false),
+        22 => const AppForegrounded(),
         23 => const DeviceStopRequested(cleanDevice: true),
         24 => const DevicePauseRequested(),
         25 => const DeviceResumeRequested(),
         26 => const PhoneBatchStartRequested(),
+        27 => const OfflineMuteToggled(),
+        28 => const LaunchRecovery(markerPending: true, mutedBefore: false),
+        29 => const PhoneStopRequested(reason: 'user_stopped', userStop: true, resumeSuspendedPendant: false),
         _ => throw StateError('unknown effect event'),
       };
-      final outcome = await coordinator.dispatch(event);
-      if (outcome.failed) throw StateError('effect failed: ${outcome.error}');
-      final state = coordinator.state;
-      final active = state.active;
-      if (active != null) {
-        final id = active.recordingId;
-        if (id == null) throw StateError('owner has no recording id');
-        final prior = recordingIds[active.sessionKey];
-        if (prior == null) {
-          if (!seenRecordingIds.add(id)) throw StateError('recording id reused across source sessions');
-          recordingIds[active.sessionKey] = id;
-        } else if (prior != id) {
-          throw StateError('recording id changed within source session');
+      if (coverage != null && (step.code == 16 || step.code == 17)) coverage.batchToggles++;
+      final before = coordinator.state.encode();
+      final transition = transitionCapture(
+          coordinator.state,
+          event,
+          environment(coordinator.state,
+              muted: fake.muted, batch: fake.batch, batchSuspended: fake.batchSuspended, call: call));
+      final fault = faults.nextInt(8);
+      if (fault == 0 && transition.state.encode() != before) {
+        fake.failNextSnapshot = true;
+        if (coverage != null) coverage.snapshot++;
+      }
+      if (fault == 1 && step.code == 3 && coordinator.state.phoneOwns) {
+        fake.supersedeNextPolicy = true;
+        if (coverage != null) coverage.policySuperseded++;
+      }
+      if (fault == 2 && step.code == 5 && coordinator.state.phase == CapturePhase.phonePaused) {
+        fake.socket = false;
+        fake.failNextOpen = true;
+        if (coverage != null) coverage.socketOpen++;
+      }
+      CaptureDispatchOutcome outcome;
+      if (fault == 3 && transition.effects.isNotEmpty) {
+        final held = fake.hold = Completer<void>();
+        final first = coordinator.dispatch(event);
+        final bleDrop = faults.nextInt(2) == 0;
+        final queued = coordinator.dispatch(
+            bleDrop ? const DeviceUpdated(null) : SocketError(StateError('socket error queued behind held effect')));
+        if (coverage != null) {
+          if (bleDrop) {
+            coverage.heldBleDrop++;
+          } else {
+            coverage.heldSocketError++;
+          }
         }
+        await Future<void>.delayed(Duration.zero);
+        if (coordinator.state.encode() != before) throw StateError('published owner before held effect completed');
+        held.complete();
+        outcome = await first;
+        await queued;
+      } else {
+        outcome = await coordinator.dispatch(event);
       }
-      if (state.phase == CapturePhase.phonePaused && fake.mic) throw StateError('phone mic open while paused');
-      if (state.phoneOwns && fake.ble) throw StateError('BLE open under phone owner');
-      if (state.pendantSuspension != null && fake.ble) throw StateError('BLE open while suspended');
-      if (state.phase == CapturePhase.pendantPaused && fake.ble) throw StateError('BLE open while pendant paused');
-      if (state.phase == CapturePhase.pendantLive && !fake.ble) throw StateError('live pendant has no BLE stream');
-      if (state.phase == CapturePhase.idle && (fake.mic || fake.ble || fake.socket)) {
-        throw StateError('physical capture open without an owner');
+      if (outcome.failed && coordinator.state.phase != CapturePhase.idle) {
+        throw StateError('failed effect kept live capture');
       }
-      if (CaptureCoordinatorState.tryParse(fake.snapshot)?.encode() != state.encode()) {
-        throw StateError('port snapshot differs from committed state');
-      }
+      fake.failNextOpen = false;
+      fake.failNextSnapshot = false;
+      fake.supersedeNextPolicy = false;
+      verify();
     }
   } catch (error) {
     return error.toString();
@@ -396,14 +554,14 @@ Future<String?> effectFailureFor(List<ScriptStep> steps) async {
   return null;
 }
 
-Future<List<ScriptStep>> shrinkEffects(List<ScriptStep> failing, String failure) async {
+Future<List<ScriptStep>> shrinkEffects(List<ScriptStep> failing, String failure, int seed) async {
   var result = List<ScriptStep>.of(failing);
   var width = result.length ~/ 2;
   while (width >= 1) {
     var changed = false;
     for (var start = 0; start + width <= result.length; start++) {
       final candidate = [...result.take(start), ...result.skip(start + width)];
-      if (await effectFailureFor(candidate) == failure) {
+      if (await effectFailureFor(candidate, seed: seed) == failure) {
         result = candidate;
         changed = true;
         break;
@@ -415,19 +573,65 @@ Future<List<ScriptStep>> shrinkEffects(List<ScriptStep> failing, String failure)
 }
 
 void main() {
-  test('128 seeded effect-port sequences keep physical capture inside the owner', () async {
-    const codes = [0, 0, 1, 2, 2, 2, 3, 3, 4, 4, 5, 5, 6, 7, 8, 9, 10, 11, 12, 15, 23, 24, 25, 26];
+  test('128 seeded effect-port sequences inject held, failed and superseded effects across the event alphabet',
+      () async {
+    const codes = [
+      0,
+      0,
+      1,
+      2,
+      2,
+      2,
+      3,
+      3,
+      4,
+      4,
+      5,
+      5,
+      6,
+      7,
+      8,
+      9,
+      10,
+      11,
+      12,
+      13,
+      14,
+      15,
+      16,
+      17,
+      18,
+      19,
+      20,
+      21,
+      22,
+      23,
+      24,
+      25,
+      26,
+      27,
+      28,
+      29
+    ];
     const baseSeed = 0x5ca562;
+    final coverage = FaultCoverage();
     for (var sequence = 0; sequence < 128; sequence++) {
       final seed = baseSeed + sequence;
       final random = XorShift32(seed);
       final events = List.generate(50 + random.nextInt(70), (_) => ScriptStep(codes[random.nextInt(codes.length)]));
-      final failure = await effectFailureFor(events);
+      final failure = await effectFailureFor(events, seed: seed, coverage: coverage);
       if (failure != null) {
-        final minimized = await shrinkEffects(events, failure);
+        final minimized = await shrinkEffects(events, failure, seed);
         fail('seed=$seed sequence=$sequence error=$failure\nminimized=${minimized.join(' -> ')}');
       }
     }
+    expect(coverage.snapshot, greaterThan(0));
+    expect(coverage.socketOpen, greaterThan(0));
+    expect(coverage.policySuperseded, greaterThan(0));
+    expect(coverage.heldSocketError, greaterThan(0));
+    expect(coverage.heldBleDrop, greaterThan(0));
+    expect(coverage.kills, greaterThan(0));
+    expect(coverage.batchToggles, greaterThan(0));
   });
 
   test('2000 seeded ownership sequences (OMI_CAPTURE_SOAK_SEQUENCES overrides)', () {
@@ -446,7 +650,7 @@ void main() {
                 ? 2 + draw % 7
                 : draw < 70
                     ? 6 + draw % 11
-                    : 17 + draw % 12;
+                    : 17 + draw % 13;
         return ScriptStep(code);
       });
       final failure = failureFor(events);
@@ -505,6 +709,12 @@ void main() {
       phase: CapturePhase.phoneLive
     ),
     (name: 'phone stop resumes a pendant connected during capture', steps: [2, 0, 3], phase: CapturePhase.pendantLive),
+    (
+      name: 'speech-profile interim stop retains pendant until restarted phone finishes',
+      steps: [0, 2, 29, 2, 3],
+      phase: CapturePhase.pendantLive
+    ),
+    (name: 'pause during an OS interruption survives its end', steps: [2, 13, 4, 14], phase: CapturePhase.phonePaused),
     (name: 'deferred Omi call does not pause a live phone mic', steps: [2, 6], phase: CapturePhase.phoneLive),
     (name: 'phone interruption restores the same owner', steps: [2, 13, 14], phase: CapturePhase.phoneLive),
     (name: 'no resumed pendant after disconnect during phone handoff', steps: [0, 2, 1, 3], phase: CapturePhase.idle),
@@ -538,6 +748,129 @@ void main() {
       expect(model.state.phase, episode.phase);
     });
   }
+
+  test('a call during an interim onboarding stop cannot consume or duplicate pendant debt', () {
+    final model = SequenceModel();
+    for (final code in [2, 0, 29, 6, 3]) {
+      model.step(ScriptStep(code));
+    }
+    expect(model.state.callActive, isTrue);
+    expect(model.state.pendantOwns, isFalse);
+    expect(model.state.suspended, hasLength(1));
+    model.step(const ScriptStep(0));
+    expect(model.state.suspended, hasLength(1));
+    model.step(const ScriptStep(2));
+    expect(model.state.suspended, hasLength(1));
+  });
+
+  test('identical batch toggle leaves session, telemetry and physical mic untouched', () async {
+    final fake = HarnessPorts();
+    late CaptureCoordinator coordinator;
+    coordinator = CaptureCoordinator(
+      ports: fake.ports,
+      readEnvironment: () => environment(coordinator.state, muted: fake.muted, batch: fake.batch),
+    );
+    await coordinator.dispatch(const PhoneStartRequested());
+    await coordinator.dispatch(const BatchModeSetRequested(enabled: true));
+    final before = coordinator.state.encode();
+    final id = fake.recordingId;
+    final logLength = fake.log.length;
+    expect((await coordinator.dispatch(const BatchModeSetRequested(enabled: true))).result, isTrue);
+    expect(coordinator.state.encode(), before);
+    expect(fake.recordingId, id);
+    expect(fake.log.skip(logLength).where((entry) => entry.startsWith('stage:') || entry == 'mic:start'), isEmpty);
+    coordinator.dispose();
+  });
+
+  test('idle resume with only a connected device cannot stream without claiming ownership', () {
+    final initial = transitionCapture(
+            CaptureCoordinatorState.idle(), DeviceUpdated(pendant), environment(CaptureCoordinatorState.idle()))
+        .state;
+    expect(initial.phase, CapturePhase.idle);
+    expect(initial.connectedDevice, isNotNull);
+    final resumed = transitionCapture(initial, const ResumeCaptureRequested(), environment(initial, muted: true));
+    expect(resumed.state.phase, CapturePhase.idle);
+    expect(resumed.effects.whereType<RunStage>().where((effect) => effect.stage is ResumeDeviceTailStage), isEmpty);
+    expect(resumed.effects.whereType<BleStreamStart>(), isEmpty);
+  });
+
+  test('interrupted phone user pause emits mute and mic stop and survives interruption end', () {
+    final model = SequenceModel();
+    model.step(const ScriptStep(2));
+    model.step(const ScriptStep(13));
+    final id = model.state.active?.sessionKey;
+    final transition =
+        transitionCapture(model.state, const PauseCaptureRequested(), environment(model.state, muted: model.muted));
+    expect(transition.state.phase, CapturePhase.phonePaused);
+    expect(transition.effects.whereType<NativeMicStop>(), hasLength(1));
+    expect(transition.effects.whereType<PolicyWrite>().single.muted, isTrue);
+    model.step(const ScriptStep(4));
+    model.step(const ScriptStep(14));
+    expect(model.state.phase, CapturePhase.phonePaused);
+    expect(model.state.active?.sessionKey, id);
+  });
+
+  test('permission denial leaves the live pendant and its recording unprocessed', () async {
+    final fake = HarnessPorts();
+    late CaptureCoordinator coordinator;
+    coordinator = CaptureCoordinator(
+      ports: fake.ports,
+      readEnvironment: () => environment(coordinator.state, muted: fake.muted),
+    );
+    await coordinator.dispatch(DeviceStartRequested(device: pendant));
+    final before = coordinator.state.encode();
+    final id = fake.recordingId;
+    fake.permitPhone = false;
+    final logLength = fake.log.length;
+    final outcome = await coordinator.dispatch(const PhoneStartRequested());
+    expect(outcome.failed, isFalse);
+    expect(outcome.result, isFalse);
+    expect(coordinator.state.encode(), before);
+    expect(fake.recordingId, id);
+    expect(fake.ble, isTrue);
+    expect(fake.log.skip(logLength), isNot(contains('stage:SuspendPendantStage')));
+    coordinator.dispose();
+  });
+
+  test('native phone start failure restores a suspended pendant under a fresh recording', () async {
+    final fake = HarnessPorts();
+    late CaptureCoordinator coordinator;
+    coordinator = CaptureCoordinator(
+      ports: fake.ports,
+      readEnvironment: () => environment(coordinator.state, muted: fake.muted),
+    );
+    await coordinator.dispatch(DeviceStartRequested(device: pendant));
+    final oldId = fake.recordingId;
+    fake.failNextPhoneStart = true;
+    final result = await coordinator.dispatch(const PhoneStartRequested());
+    expect(result.failed, isTrue);
+    expect(coordinator.state.phase, CapturePhase.pendantLive);
+    expect(coordinator.state.suspended, isEmpty);
+    expect(fake.ble, isTrue);
+    expect(fake.mic, isFalse);
+    expect(coordinator.state.active?.recordingId, fake.recordingId);
+    expect(fake.recordingId, isNot(oldId));
+    coordinator.dispose();
+  });
+
+  test('a no-op keepalive never writes a snapshot or fails closed on a stale injected prefs fault', () async {
+    final fake = HarnessPorts();
+    late CaptureCoordinator coordinator;
+    coordinator = CaptureCoordinator(
+      ports: fake.ports,
+      readEnvironment: () => environment(coordinator.state, muted: fake.muted),
+    );
+    await coordinator.dispatch(const PhoneStartRequested());
+    final snapshots = fake.log.where((entry) => entry == 'snapshot').length;
+    fake.failNextSnapshot = true;
+    final result = await coordinator.dispatch(const KeepAliveTick());
+    expect(result.failed, isFalse);
+    expect(coordinator.state.phase, CapturePhase.phoneLive);
+    expect(fake.log.where((entry) => entry == 'snapshot'), hasLength(snapshots));
+    expect(fake.mic, isTrue);
+    fake.failNextSnapshot = false;
+    coordinator.dispose();
+  });
 
   test('finish processes phone conversation before opening suspended pendant', () {
     final model = SequenceModel();
@@ -676,6 +1009,194 @@ void main() {
     expect(fake.socket, isFalse);
     expect(CaptureCoordinatorState.tryParse(fake.snapshot)?.phase, CapturePhase.idle);
     coordinator.dispose();
+  });
+
+  Future<void> withReviewWorld(Future<void> Function(CaptureReplayWorld world) body) async {
+    final directory = await Directory.systemTemp.createTemp('capture_coordinator_review_');
+    final world = await CaptureReplayWorld.boot(tempDir: directory);
+    try {
+      await body(world);
+    } finally {
+      await world.dispose();
+      if (directory.existsSync()) directory.deleteSync(recursive: true);
+    }
+  }
+
+  test('real controller rejects denied phone permission before touching the pendant', () async {
+    await withReviewWorld((world) async {
+      world.deviceConnection = ScriptedDeviceConnection();
+      await world.controller.streamDeviceRecording(device: pendant);
+      await world.settle();
+      final id = world.controller.activeRecordingId;
+      final sockets = world.socketCreates;
+      world.allowMic = false;
+      await world.controller.streamRecording();
+      await world.settle();
+      expect(world.controller.liveCaptureSource, 'omi');
+      expect(world.controller.activeRecordingId, id);
+      expect(world.controller.pendantPausedForPhone, isFalse);
+      expect(world.hostApi.startCalls, 0);
+      expect(world.socketCreates, sockets);
+      expect(world.processCalls, 0);
+    });
+  });
+
+  test('native mic startup failure restores the pendant with a new recording', () async {
+    await withReviewWorld((world) async {
+      world.deviceConnection = ScriptedDeviceConnection();
+      await world.controller.streamDeviceRecording(device: pendant);
+      await world.settle();
+      final oldId = world.controller.activeRecordingId;
+      world.hostApi.nextStartError = () => StateError('injected native start failure');
+      await world.controller.streamRecording();
+      await world.settle();
+      expect(world.controller.liveCaptureSource, 'omi');
+      expect(world.controller.pendantPausedForPhone, isFalse);
+      expect(world.controller.activeRecordingId, isNot(oldId));
+      expect(world.controller.activeRecordingId, isNotNull);
+      expect(world.hostApi.nativeRecording, isFalse);
+    });
+  });
+
+  test('muted pendant connect retains a telemetry recording id across resume', () async {
+    await withReviewWorld((world) async {
+      await world.controller.pauseDeviceRecording();
+      world.deviceConnection = ScriptedDeviceConnection();
+      await world.controller.streamDeviceRecording(device: pendant);
+      await world.settle();
+      final pausedId = world.controller.activeRecordingId;
+      expect(pausedId, isNotNull);
+      expect(world.controller.liveCaptureSource, 'omi');
+      await world.controller.resumeDeviceRecording();
+      await world.settle();
+      expect(world.controller.activeRecordingId, pausedId);
+      expect(world.controller.liveCaptureSource, 'omi');
+    });
+  });
+
+  test('real mode change mints a different recording id and identical toggles do not roll', () async {
+    await withReviewWorld((world) async {
+      await world.startLiveCapture();
+      world.emitNativeState(PhoneMicCaptureState.running);
+      await world.settle();
+      final liveId = world.controller.activeRecordingId;
+      expect(liveId, isNotNull);
+      expect(await world.controller.setBatchMode(true), isTrue);
+      await world.settle();
+      final batchId = world.controller.activeRecordingId;
+      expect(batchId, isNotNull);
+      expect(batchId, isNot(liveId));
+      expect(world.hostApi.lastStartMode, PhoneMicCaptureMode.batch);
+      final startCalls = world.hostApi.startCalls;
+      expect(await world.controller.setBatchMode(true), isTrue);
+      expect(world.controller.activeRecordingId, batchId);
+      expect(world.hostApi.startCalls, startCalls);
+      expect(await world.controller.setBatchMode(false), isTrue);
+      expect(world.controller.activeRecordingId, isNot(batchId));
+    });
+  });
+
+  test('public controller getters publish owner only after a held native start completes', () async {
+    await withReviewWorld((world) async {
+      final hold = world.hostApi.holdNextStart = Completer<void>();
+      final start = world.controller.streamRecording();
+      try {
+        await pumpEventQueue();
+        expect(world.hostApi.startCalls, 1);
+        expect(world.controller.liveCaptureSource, isNull);
+        expect(world.controller.isPhoneMicPaused, isFalse);
+        expect(world.controller.isPhoneMicBatchRecording, isFalse);
+        hold.complete();
+        await start;
+        expect(world.controller.liveCaptureSource, 'phone');
+      } finally {
+        if (!hold.isCompleted) hold.complete();
+        await start;
+      }
+    });
+  });
+
+  test('real stall restart is joined by queued pause and cannot reopen the mic afterward', () async {
+    await withReviewWorld((world) async {
+      await world.startLiveCapture();
+      world.emitNativeState(PhoneMicCaptureState.running);
+      world.injectAudioFrames(1, sessionId: world.hostApi.lastStartSessionId!);
+      await world.settle();
+      final hold = world.hostApi.holdNextStart = Completer<void>();
+      final stall = world.elapse(const Duration(seconds: 4));
+      try {
+        await pumpEventQueue();
+        expect(world.hostApi.startCalls, 2);
+        final pause = world.controller.pauseCapture();
+        hold.complete();
+        await stall;
+        await pause;
+        await world.settle();
+        expect(world.controller.isPhoneMicPaused, isTrue);
+        expect(world.hostApi.nativeRecording, isFalse);
+        expect(world.hostApi.startCalls, 2);
+        await pumpEventQueue();
+        expect(world.hostApi.nativeRecording, isFalse);
+      } finally {
+        if (!hold.isCompleted) hold.complete();
+        await stall;
+      }
+    });
+  });
+
+  test('settings and reconnect under an Omi call never open a pendant socket', () async {
+    await withReviewWorld((world) async {
+      world.deviceConnection = ScriptedDeviceConnection();
+      await world.controller.streamDeviceRecording(device: pendant);
+      await world.settle();
+      world.omiCall.value = PhoneCallState.active;
+      await world.controller.pendingSourceSwitch;
+      final sockets = world.socketCreates;
+      world.controller.updateRecordingDevice(pendant);
+      await world.controller.onTranscriptionSettingsChanged();
+      world.controller.onConnected();
+      await world.controller.pendingSourceSwitch;
+      await world.settle();
+      expect(world.controller.liveCaptureSource, isNull);
+      expect(world.controller.pendantPausedForCall, isTrue);
+      expect(world.socketCreates, sockets);
+    });
+  });
+
+  test('real call mutes the Transcribe Later pendant writer and resumes its recording', () async {
+    await withReviewWorld((world) async {
+      expect(await world.controller.setBatchMode(true), isTrue);
+      world.deviceConnection = ScriptedDeviceConnection();
+      await world.controller.streamDeviceRecording(device: pendant);
+      await world.settle();
+      final id = world.controller.activeRecordingId;
+      expect(id, isNotNull);
+      expect(world.controller.isPendantBatchRecording, isTrue);
+      world.omiCall.value = PhoneCallState.active;
+      await world.controller.pendingSourceSwitch;
+      expect(world.controller.pendantPausedForCall, isTrue);
+      expect(SharedPreferencesUtil().capturePolicy.muted, isTrue);
+      world.omiCall.value = PhoneCallState.ended;
+      await world.controller.pendingSourceSwitch;
+      expect(world.controller.isPendantBatchRecording, isTrue);
+      expect(SharedPreferencesUtil().capturePolicy.muted, isFalse);
+      expect(world.controller.activeRecordingId, id);
+    });
+  });
+
+  test('real killed phone pause restores policy and never resurrects an owner', () async {
+    await withReviewWorld((world) async {
+      await world.startLiveCapture();
+      await world.controller.pauseCapture();
+      await world.settle();
+      expect(world.controller.isPhoneMicPaused, isTrue);
+      world.killProcess();
+      await world.reconstructProcess();
+      await world.controller.pendingSourceSwitch;
+      expect(world.controller.liveCaptureSource, isNull);
+      expect(world.hostApi.nativeRecording, isFalse);
+      expect(SharedPreferencesUtil().capturePolicy.muted, isFalse);
+    });
   });
 
   for (final episode in <({String name, List<int> steps})>[

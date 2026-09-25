@@ -3546,5 +3546,6 @@
     "recordWith": "Tallennustapa",
     "moreWaysToRecord": "Lisää tallennustapoja",
     "openCall": "Avaa puhelu",
-    "captureRecoveryBanner": "Riipuksen ääni ei tule perille sovellukseen — korjaa napauttamalla"
+    "captureRecoveryBanner": "Riipuksen ääni ei tule perille sovellukseen — korjaa napauttamalla",
+    "phoneRecordingBlockedByPendantBatch": "Lopeta Transcribe Later riipuksessa ennen kuin nauhoitat puhelimella."
 }

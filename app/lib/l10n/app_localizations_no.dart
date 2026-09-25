@@ -11233,4 +11233,8 @@ class AppLocalizationsNo extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Lyden fra anhenget når ikke frem til appen — trykk for å reparere';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Stopp Transcribe Later på anhenget ditt før du tar opp med telefonen.';
 }

@@ -11029,4 +11029,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => '吊坠音频未送达应用 — 轻点以修复';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch => '在用手机录音之前，请先停止吊坠上的“稍后转录”。';
 }

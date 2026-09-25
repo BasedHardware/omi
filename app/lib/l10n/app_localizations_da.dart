@@ -11219,4 +11219,8 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Lyden fra vedhænget når ikke frem til appen — tryk for at reparere';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Stop Transcribe Later på din pendant, før du optager med telefonen.';
 }

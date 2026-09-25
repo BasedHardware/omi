@@ -11268,4 +11268,8 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'ಪೆಂಡೆಂಟ್‌ನ ಆಡಿಯೊ ಆ್ಯಪ್‌ಗೆ ತಲುಪುತ್ತಿಲ್ಲ — ಸರಿಪಡಿಸಲು ಟ್ಯಾಪ್ ಮಾಡಿ';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'ನಿಮ್ಮ ಫೋನ್‌ನಿಂದ ರೆಕಾರ್ಡ್ ಮಾಡುವ ಮೊದಲು ನಿಮ್ಮ ಪೆಂಡಂಟ್‌ನಲ್ಲಿ Transcribe Later ನಿಲ್ಲಿಸಿ.';
 }

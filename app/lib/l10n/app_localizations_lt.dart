@@ -11252,4 +11252,8 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Pakabuko garsas nepasiekia programėlės — palieskite, kad ištaisytumėte';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Prieš įrašinėdami telefonu, sustabdykite „Transcribe Later“ pakabuke.';
 }

@@ -11112,5 +11112,6 @@
     "recordWith": "Снимај со",
     "moreWaysToRecord": "Повеќе начини за снимање",
     "openCall": "Отвори го повикот",
-    "captureRecoveryBanner": "Аудиото од привезокот не стигнува до апликацијата — допрете за поправка"
+    "captureRecoveryBanner": "Аудиото од привезокот не стигнува до апликацијата — допрете за поправка",
+    "phoneRecordingBlockedByPendantBatch": "Запрете Transcribe Later на привезокот пред да снимате со телефонот."
 }

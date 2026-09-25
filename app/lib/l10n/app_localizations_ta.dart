@@ -11310,4 +11310,8 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'பென்டன்ட் ஆடியோ செயலியை அடையவில்லை — சரிசெய்ய தட்டவும்';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'உங்கள் தொலைபேசியில் பதிவு செய்வதற்கு முன் உங்கள் பெண்டன்டில் Transcribe Later ஐ நிறுத்தவும்.';
 }

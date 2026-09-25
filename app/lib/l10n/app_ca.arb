@@ -3546,5 +3546,6 @@
     "recordWith": "Grava amb",
     "moreWaysToRecord": "Més maneres de gravar",
     "openCall": "Obre la trucada",
-    "captureRecoveryBanner": "L'àudio del penjoll no arriba a l'aplicació — toca'l per reparar"
+    "captureRecoveryBanner": "L'àudio del penjoll no arriba a l'aplicació — toca'l per reparar",
+    "phoneRecordingBlockedByPendantBatch": "Atura Transcribe Later al penjoll abans d'enregistrar amb el telèfon."
 }

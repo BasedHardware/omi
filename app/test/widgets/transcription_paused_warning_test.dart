@@ -42,6 +42,20 @@ class _StubPhoneCallProvider extends ChangeNotifier implements PhoneCallProvider
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+class _DeviceCardCaptureProvider extends CaptureProvider {
+  @override
+  String? get liveCaptureSource => 'omi';
+
+  @override
+  BtDevice? get recordingDevice => BtDevice(id: 'test-device', name: 'Test Omi', type: DeviceType.omi, rssi: -50);
+
+  @override
+  bool get havingRecordingDevice => true;
+
+  @override
+  bool get recordingDeviceServiceReady => true;
+}
+
 void main() {
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
@@ -184,12 +198,9 @@ void main() {
     });
 
     testWidgets('shows Listening during device recording when transcription is down', (tester) async {
-      final captureProvider = CaptureProvider();
+      final captureProvider = _DeviceCardCaptureProvider();
       addTearDown(captureProvider.dispose);
-      // Set up a fake recording device to exercise the device recording path
-      captureProvider.updateRecordingDevice(
-        BtDevice(id: 'test-device', name: 'Test Omi', type: DeviceType.omi, rssi: -50),
-      );
+      // The widget fixture supplies an owned device view; ownership transitions are tested through the controller.
       captureProvider.updateRecordingState(RecordingState.deviceRecord);
 
       await pumpCaptureWidget(tester, captureProvider);
@@ -204,11 +215,8 @@ void main() {
     });
 
     testWidgets('paused state overrides Listening during device recording', (tester) async {
-      final captureProvider = CaptureProvider();
+      final captureProvider = _DeviceCardCaptureProvider();
       addTearDown(captureProvider.dispose);
-      captureProvider.updateRecordingDevice(
-        BtDevice(id: 'test-device', name: 'Test Omi', type: DeviceType.omi, rssi: -50),
-      );
       captureProvider.updateRecordingState(RecordingState.deviceRecord);
 
       await pumpCaptureWidget(tester, captureProvider);

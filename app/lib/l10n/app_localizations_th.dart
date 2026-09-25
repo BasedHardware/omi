@@ -11169,4 +11169,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'เสียงจากจี้ไม่ถึงแอป — แตะเพื่อซ่อมแซม';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch => 'หยุด Transcribe Later บนจี้ของคุณก่อนบันทึกด้วยโทรศัพท์';
 }

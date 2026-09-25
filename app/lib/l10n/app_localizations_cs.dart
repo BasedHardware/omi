@@ -11230,4 +11230,8 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Zvuk přívěsku se do aplikace nedostává — opravte klepnutím';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Před nahráváním telefonem zastavte na přívěsku režim Transcribe Later.';
 }

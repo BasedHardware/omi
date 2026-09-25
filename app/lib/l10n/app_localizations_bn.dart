@@ -11234,4 +11234,8 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'পেন্ডেন্টের অডিও অ্যাপে পৌঁছাচ্ছে না — মেরামত করতে ট্যাপ করুন';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'ফোনে রেকর্ড করার আগে আপনার পেন্ড্যান্টে Transcribe Later বন্ধ করুন।';
 }

@@ -11228,4 +11228,8 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Âm thanh từ mặt dây chuyền không đến được ứng dụng — chạm để sửa chữa';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Dừng Transcribe Later trên mặt dây trước khi ghi âm bằng điện thoại.';
 }

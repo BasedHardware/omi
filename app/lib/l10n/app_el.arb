@@ -3546,5 +3546,6 @@
     "recordWith": "Εγγραφή με",
     "moreWaysToRecord": "Περισσότεροι τρόποι εγγραφής",
     "openCall": "Άνοιγμα κλήσης",
-    "captureRecoveryBanner": "Ο ήχος του μενταγιόν δεν φτάνει στην εφαρμογή — πατήστε για επισκευή"
+    "captureRecoveryBanner": "Ο ήχος του μενταγιόν δεν φτάνει στην εφαρμογή — πατήστε για επισκευή",
+    "phoneRecordingBlockedByPendantBatch": "Σταματήστε το Transcribe Later στο κολιέ σας πριν ηχογραφήσετε με το τηλέφωνό σας."
 }

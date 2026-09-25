@@ -11264,4 +11264,8 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'El audio del colgante no llega a la app — toca para reparar';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Detén Transcribe Later en tu colgante antes de grabar con el teléfono.';
 }

@@ -11254,4 +11254,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Звук кулона не надходить до застосунку — натисніть, щоб виправити';
+
+  @override
+  String get phoneRecordingBlockedByPendantBatch => 'Зупиніть Transcribe Later на підвісці перед записом на телефоні.';
 }
