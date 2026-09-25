@@ -5,7 +5,7 @@ Verifies that:
    TaskLinkValidationError route through _sanitize_candidate_error.
 2. The _sanitize_candidate_error helper filters raw exception details and returns clean,
    structured fallback messages to external callers.
-3. No raw detail=str(exc) or detail=str(e) leaks remain in candidates.py.
+3. No raw detail=str(exc), detail=str(e), or detail=str(error) leaks remain across candidates.py.
 4. Behavioral executions for candidate error paths return sanitized responses.
 """
 
@@ -25,11 +25,15 @@ CANDIDATES_ROUTER_FILE = BACKEND_DIR / "routers" / "candidates.py"
 
 class CandidatesErrorSanitizationTests(unittest.TestCase):
     _stubbed_modules: dict = {}
+    _modified_parent_attrs: list = []
     _sanitize_fn = None
     _router_mod = None
 
     @classmethod
     def setUpClass(cls):
+        cls._stubbed_modules = {}
+        cls._modified_parent_attrs = []
+
         class StubCandidateStoreError(Exception):
             pass
 
@@ -84,12 +88,16 @@ class CandidatesErrorSanitizationTests(unittest.TestCase):
                 cls._stubbed_modules[mod] = mock_mod
                 sys.modules[mod] = mock_mod
 
-        # Link parent/child modules
+        # Link parent/child modules cleanly with undo tracking
         for mod in stub_names:
             if "." in mod:
                 parent, child = mod.rsplit(".", 1)
                 if parent in sys.modules:
-                    setattr(sys.modules[parent], child, sys.modules[mod])
+                    parent_mod = sys.modules[parent]
+                    had_attr = hasattr(parent_mod, child)
+                    old_val = getattr(parent_mod, child, None) if had_attr else None
+                    cls._modified_parent_attrs.append((parent_mod, child, had_attr, old_val))
+                    setattr(parent_mod, child, sys.modules[mod])
 
         # Inject Pydantic models into models stubs
         sys.modules["models.action_item"].TaskCreatePayload = StubModel
@@ -136,6 +144,14 @@ class CandidatesErrorSanitizationTests(unittest.TestCase):
 
     @classmethod
     def tearDownClass(cls):
+        for parent_mod, child, had_attr, old_val in reversed(cls._modified_parent_attrs):
+            if had_attr:
+                setattr(parent_mod, child, old_val)
+            else:
+                try:
+                    delattr(parent_mod, child)
+                except AttributeError:
+                    pass
         for mod in cls._stubbed_modules:
             sys.modules.pop(mod, None)
 
@@ -164,16 +180,16 @@ class CandidatesErrorSanitizationTests(unittest.TestCase):
             fallback,
         )
 
-    def test_no_raw_str_exc_leak_in_store_error_handling(self):
+    def test_no_raw_str_exc_leak_in_candidates(self):
         target_path = CANDIDATES_ROUTER_FILE
         if not target_path.exists():
             target_path = Path(__file__).parent / "candidates.py"
         source = target_path.read_text(encoding="utf-8")
 
         self.assertIn("_sanitize_candidate_error", source)
-        store_error_def = source.split("def _raise_store_error")[1].split("def ")[0]
-        self.assertNotIn("detail=str(exc)", store_error_def)
-        self.assertNotIn("detail=str(e)", store_error_def)
+        self.assertNotIn("detail=str(exc)", source)
+        self.assertNotIn("detail=str(e)", source)
+        self.assertNotIn("detail=str(error)", source)
 
     def test_raise_store_error_sanitization(self):
         from fastapi import HTTPException
@@ -221,6 +237,22 @@ class CandidatesErrorSanitizationTests(unittest.TestCase):
                 accept_candidate(candidate_id="c-1", account_generation=1, uid="u-1")
             self.assertEqual(ctx.exception.status_code, 409)
             self.assertEqual(ctx.exception.detail, "Candidate operation could not be completed")
+
+    def test_accept_candidate_task_link_validation_error_sanitization(self):
+        from fastapi import HTTPException
+
+        router_mod = self._router_mod
+        accept_candidate = router_mod.accept_candidate
+
+        with patch.object(router_mod, "_require_candidate_write_control"), patch.object(
+            router_mod.candidate_service,
+            "accept_candidate",
+            side_effect=self._StubTaskLinkValidationError("internal resolver failed with secret state"),
+        ):
+            with self.assertRaises(HTTPException) as ctx:
+                accept_candidate(candidate_id="c-1", account_generation=1, uid="u-1")
+            self.assertEqual(ctx.exception.status_code, 409)
+            self.assertEqual(ctx.exception.detail, "Invalid candidate task link parameters")
 
 
 if __name__ == "__main__":
