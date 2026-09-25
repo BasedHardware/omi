@@ -493,7 +493,7 @@ async def _persist_collected(stack, store, monkeypatch):
 
     segments = list(stack.segments_collected)
     stack.segments_collected.clear()
-    await processor._process_v2_batches(segments, [])
+    await processor._process_v2_batches(segments, [], {})
 
 
 async def _async_noop(*args, **kwargs):

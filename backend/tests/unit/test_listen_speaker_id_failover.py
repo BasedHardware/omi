@@ -7,14 +7,23 @@ windows must still land inside the 60 s ring buffer, and the owner's later
 segments must be ``is_user=true`` in BOTH the WebSocket output to the client and
 the persisted conversation.
 
-Runs the real ListenReceiver (decode, capture clock, per-epoch translators, the
-actual ``_failover_stt_socket`` rebuild), the real TranscriptProcessor.process_loop,
+Runs the real ListenReceiver (decode, capture clock, per-epoch translators, a
+REAL active ``VADStreamingGate`` behind the real ``GatedSTTSocket`` installed by
+``initialize_stt`` itself — only the Silero inference is a deterministic fake),
+the real ``_failover_stt_socket`` rebuild, the real TranscriptProcessor.process_loop,
 the real SpeakerMatcher, and the real fenced conversation persistence - against
 an in-memory websocket double, fake provider sockets, an in-memory Firestore and
 a deterministic fake embedding model (an 8-bin spectral signature of the PCM; no
 model download). The owner and another voice are tones with distinct
 cycles-per-clip, so the fake embedding separates them exactly like cosine
 distance over real voiceprints would.
+
+The wiring assertions pin the production install: ``initialize_stt`` /
+``_rebuild_stt_socket_locked`` must wrap the provider socket in a
+``GatedSTTSocket`` carrying ``send_tracker=epoch`` — removing that argument (the
+round-2 test's socket double installed the tracker itself, so it could not catch
+this) fails ``test_initialize_stt_installs_epoch_tracked_gated_socket`` and with
+it the recognition acceptance below.
 
 Parameterized over AUDIO_TIMELINE_V2: the capture clock is internal to the
 listen socket, so recognition must survive the failover with the flag OFF
@@ -43,6 +52,7 @@ import pytest
 from fastapi.websockets import WebSocketDisconnect
 
 import routers.listen.receiver as receiver_module
+import utils.stt.vad_gate as vad_gate_module
 from database import conversations as conversations_db
 from routers.listen.contracts import ListenLimits, ListenSessionState
 from routers.listen.receiver import ListenReceiver
@@ -51,6 +61,7 @@ from routers.listen.transcripts import TranscriptProcessor
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.audio import AudioRingBuffer
 from utils.product_telemetry import set_product_telemetry_client_for_tests
+from utils.stt.socket import STTSocket
 from utils.stt.streaming import STTService
 from utils.stt.vad_gate import GatedSTTSocket
 from utils.transcribe_store import get_user_name as transcribe_get_user_name
@@ -67,12 +78,13 @@ SESSION_ID = 'rec-failover-1'
 #   60-63  owner speech   -> provider segment 1 (epoch 1, provider time 60-63)
 #   63-70  delivered silence, then the provider dies and the session fails over
 #   70-73  owner speech   -> provider segment 2 (epoch 2, provider time 0-3!)
-#   73-75.5 owner speech  -> provider segment 3 (epoch 2, provider time 3-5.5)
-#   75.5-78 delivered silence
+#   73-78  a >2 s CLIENT STALL (no audio arrives; the capture clock mints a new
+#          anchor and the ring buffer records the wall gap in its span ledger)
+#   78-80.5 owner speech  -> provider segment 3 (epoch 2, provider time 3-5.5!)
+#   80.5-83 delivered silence
 # The owner's first clip alone is below the 5 s evidence minimum, so the
 # decision can only come from post-failover audio: exactly the incident.
-PRE_STREAM_SECONDS = 70.0
-POST_STREAM_SECONDS = 8.0
+STALL_SECONDS = 5.0
 
 OWNER_FREQUENCY_HZ = 200.0  # fake-embedding bin identifying the owner's voice
 OTHER_FREQUENCY_HZ = 700.0  # a second voice would sit here; far from the owner's bin
@@ -140,6 +152,16 @@ def _fake_extract_embedding(wav_bytes: bytes, name: str):
     return vector.reshape(1, -1)
 
 
+def _fake_vad_window(window, state, context):
+    """Silero stand-in: everything is speech, so the real gate state machine
+    forwards every frame and its send-span accounting runs on real code."""
+    return 0.9, state, context
+
+
+def _fake_fresh_state():
+    return np.zeros((2, 1, 128), dtype=np.float32), np.zeros((1, 64), dtype=np.float32)
+
+
 # ---------------------------------------------------------------------------
 # Doubles for the outermost IO only.
 # ---------------------------------------------------------------------------
@@ -167,17 +189,36 @@ class FakeListenWebSocket:
         raise WebSocketDisconnect(1000)
 
 
-class FakeProviderSocket:
-    """Provider socket double; `send` accepts the capture-position seam if present."""
+class FakeProviderSocket(STTSocket):
+    """Provider socket double; the receiver's real GatedSTTSocket wraps it.
+
+    A real ``STTSocket`` subclass so the gated wrapper's death proxy sees the
+    latch flip (a plain duck-typed double makes ``isinstance`` fail and the
+    socket look alive forever).
+    """
 
     def __init__(self):
-        self.is_connection_dead = False
+        self._dead = False
         self.typed_death_reason = None
         self.sent_runs = []
+
+    @property
+    def is_connection_dead(self) -> bool:
+        return self._dead
+
+    @property
+    def death_reason(self):
+        return 'closed' if self._dead else None
+
+    def mark_dead(self) -> None:
+        self._dead = True
 
     def send(self, data, **kwargs):
         self.sent_runs.append((kwargs.get('start_sample'), len(data) // 2))
         return True
+
+    def finalize(self):
+        return None
 
     def finish(self):
         return None
@@ -190,6 +231,11 @@ def _frames_for(audio: bytes, *, seconds_per_frame=1.0):
     for offset in range(0, len(audio), piece):
         frames.append({'bytes': audio[offset : offset + piece], '_advance': (seconds_per_frame, seconds_per_frame)})
     return frames
+
+
+def _stall_frame(seconds: float):
+    """An advance-only frame: the client stalls, no audio arrives."""
+    return {'_advance': (seconds, seconds)}
 
 
 def _provider_segment(segment_id, start, end, text):
@@ -209,30 +255,44 @@ def _provider_segment(segment_id, start, end, text):
 # The hermetic session.
 # ---------------------------------------------------------------------------
 class FailoverStack:
-    def __init__(self, monkeypatch, *, v2: bool):
+    def __init__(self, monkeypatch, *, v2: bool, create_speakers: bool = False, owner_name: str = 'Alice'):
         self.clock = {'wall': T0, 'mono': 0.0}
         monkeypatch.setenv('AUDIO_TIMELINE_V2', 'true' if v2 else 'false')
         self.v2 = v2
+        self.create_speakers = create_speakers
+        self.created_people = []
+        self.sent_events = []
         # The receiver reads arrival observations through the module's time shim.
         self._real_time = receiver_module.time
         receiver_module.time = SimpleNamespace(time=lambda: self.clock['wall'], monotonic=lambda: self.clock['mono'])
-        # Both the death monitor and the explicit failover drive this rebuild.
+
+        # A real ACTIVE gate: prod VAD_GATE_MODE. The Silero inference is the
+        # deterministic fake above; the gate state machine, the wall mapper and
+        # the GatedSTTSocket accounting are the production code paths.
+        monkeypatch.setattr(receiver_module, 'VAD_GATE_MODE', 'active')
+        monkeypatch.setattr(receiver_module, 'is_gate_enabled', lambda: True)
+        monkeypatch.setattr(vad_gate_module, 'run_vad_window', _fake_vad_window)
+        monkeypatch.setattr(vad_gate_module, 'make_fresh_state', _fake_fresh_state)
+
+        # Provider connectors are faked at the seam initialize_stt actually
+        # uses; the receiver itself builds and installs the gated socket, so
+        # the test observes the real wiring instead of providing it.
         self.created_sockets = []
 
-        async def fake_create(self_receiver, callback, sample_rate, modulate_callback=None, **kwargs):
-            epoch = kwargs.get('epoch')
+        async def fake_modulate(callback, sample_rate, language, **kwargs):
             inner = FakeProviderSocket()
-            try:
-                socket = GatedSTTSocket(inner, gate=None, send_tracker=epoch)
-            except TypeError:  # merge base: no capture-position seam
-                socket = inner
-            self.created_sockets.append({'callback': callback, 'socket': socket, 'inner': inner, 'epoch': epoch})
-            return socket
+            self.created_sockets.append({'callback': callback, 'inner': inner, 'service': 'modulate'})
+            return inner
 
-        monkeypatch.setattr(ListenReceiver, '_create_stt_socket', fake_create)
-        monkeypatch.setattr(receiver_module, 'should_initialize_vad_gate', lambda **kwargs: False)
+        async def fake_soniox(callback, sample_rate, language, **kwargs):
+            inner = FakeProviderSocket()
+            self.created_sockets.append({'callback': callback, 'inner': inner, 'service': 'soniox'})
+            return inner
+
+        monkeypatch.setattr(receiver_module, 'process_audio_modulate', fake_modulate)
+        monkeypatch.setattr(receiver_module, 'process_audio_soniox', fake_soniox)
         monkeypatch.setattr(
-            receiver_module, 'get_stt_service_for_language', lambda *a, **k: (STTService.deepgram, 'en', 'nova-2')
+            receiver_module, 'get_stt_service_for_language', lambda *a, **k: (STTService.soniox, 'en', 'soniox')
         )
 
         async def serving(raw):
@@ -261,6 +321,7 @@ class FailoverStack:
         self.state.speaker_id_enabled = True
         self.state.audio_ring_buffer = AudioRingBuffer(60.0, RATE)
         self.tasks = []
+        self.owner_name = owner_name
 
         async def persistence_call(fn, *args, **kwargs):
             if fn is conversations_db.get_conversation:
@@ -283,9 +344,12 @@ class FailoverStack:
             if fn is user_db.get_user_speaker_embedding:
                 return _unit_vector(1)  # the owner's voiceprint sits in the 200 Hz bin
             if fn is transcribe_get_user_name:
-                return 'Alice'
+                return self.owner_name
             if fn is user_db.get_person_by_name:
                 return None
+            if fn is user_db.create_person:
+                self.created_people.append(args[-1] if args else kwargs)
+                return True
             raise AssertionError(f'unexpected persistence call: {fn}')
 
         def spawn(coro, *, name):
@@ -312,7 +376,7 @@ class FailoverStack:
             channels=1,
             source='desktop',
             vad_gate_override=None,
-            create_speakers=False,
+            create_speakers=create_speakers,
             speaker_auto_assign_enabled=False,
         )
         self.host = SimpleNamespace(
@@ -327,9 +391,10 @@ class FailoverStack:
             translation_language=None,
             has_speech_profile=True,
             client_device_context=SimpleNamespace(platform='desktop'),
-            stt_service=STTService.soniox,
+            stt_service=STTService.modulate,
             stt_language='en',
             stt_model='velma-2',
+            vocabulary=[],
             language='en',
             multi_lang_enabled=False,
             client_kind='test',
@@ -344,7 +409,7 @@ class FailoverStack:
             conversations=SimpleNamespace(
                 create_new_in_progress_conversation=_async_noop,
             ),
-            send_event=lambda event: None,
+            send_event=self.sent_events.append,
             emit_speaker_suggestion=lambda *args, **kwargs: None,
             complete_live_transcription=lambda: None,
         )
@@ -419,6 +484,16 @@ async def _run_failover_scenario(monkeypatch, caplog, *, v2: bool):
         assert await stack.receiver.initialize_stt()
         assert len(stack.created_sockets) == 1
 
+        # ---- The production wiring: initialize_stt itself must have installed
+        # a gated socket that tracks accepted sends on the epoch translator.
+        # (A provider connector double cannot fake this; only the receiver's
+        # own initialize_stt can.)
+        socket1 = stack.receiver.stt_socket
+        assert isinstance(socket1, GatedSTTSocket)
+        assert socket1._gate is not None and socket1._gate.mode == 'active'
+        assert socket1._send_tracker is not None, 'initialize_stt must install send_tracker=epoch'
+        assert socket1._passthrough_audio, 'the Modulate primary is passthrough'
+
         # ---- Phase 1: one minute of silence ages the ring buffer, then the
         # owner speaks once (provider time 60-63) and the provider dies.
         pre_audio = _silence(60.0) + _owner(3.0) + _silence(7.0)
@@ -431,22 +506,46 @@ async def _run_failover_scenario(monkeypatch, caplog, *, v2: bool):
         )
         await asyncio.sleep(0.3)
         assert 0 not in stack.host.speakers.speaker_to_person, 'one 3 s clip is below the 5 s evidence minimum'
-        stack.provider(0)['inner'].is_connection_dead = True
+        stack.provider(0)['inner'].mark_dead()
 
         # ---- The real failover path: a new provider epoch whose stream time
         # restarts at zero.
         assert await stack.receiver._failover_stt_socket()
         assert len(stack.created_sockets) >= 2
         failover_index = len(stack.created_sockets) - 1
-        if getattr(stack.receiver, 'capture_timeline', None) is not None:
-            assert stack.provider(failover_index)['epoch'] is not stack.provider(0)['epoch']
+        socket2 = stack.receiver.stt_socket
+        assert socket2 is not socket1 and isinstance(socket2, GatedSTTSocket)
+        assert socket2._send_tracker is not None, 'the rebuild must install send_tracker=epoch'
+        assert socket2._send_tracker is not socket1._send_tracker, 'each epoch owns its own translator'
 
         # ---- Phase 2: the owner keeps speaking; the new stream's timestamps
-        # restart at 0 exactly like the incident. (The replacement provider
-        # also opens a new diarization scope, so the owner is now a fresh,
-        # unmapped speaker - precisely the incident's "Speaker 1".)
-        post_audio = _owner(3.0) + _owner(2.5) + _silence(4.5)
-        websocket2 = await stack.run_receive(_frames_for(post_audio))
+        # restart at 0 exactly like the incident, and a >2 s client stall lands
+        # in the middle (a new capture anchor; the ring buffer's span ledger
+        # records the wall gap).
+        pre_stall = _owner(3.0)
+        post_stall = _owner(2.5)
+        post_frames = (
+            _frames_for(pre_stall)
+            + [_stall_frame(STALL_SECONDS)]
+            + _frames_for(post_stall)
+            + _frames_for(_silence(4.5))
+        )
+        websocket2 = await stack.run_receive(post_frames)
+
+        timeline = stack.receiver.capture_timeline
+        if timeline is not None:
+            assert len(timeline.anchors) == 2, 'the stall must mint exactly one new anchor'
+            # Extraction across the stall walks the span ledger: the last
+            # second of pre-stall speech followed by the first second of
+            # post-stall speech, with the 5 s wall gap skipped.
+            gap_lo = timeline.wall(int(72.0 * RATE))
+            gap_hi = timeline.wall(int(73.0 * RATE))
+            assert gap_hi - gap_lo == pytest.approx(STALL_SECONDS + 1.0, abs=0.01)
+            extracted = stack.state.audio_ring_buffer.extract(gap_lo - 1.0, gap_hi + 1.0)
+            assert (
+                extracted == pre_stall[-RATE * 4 :] + post_stall[: RATE * 2]
+            ), 'extract must return the audio on both sides of the stall, never the gap as audio'
+
         stack.provider(failover_index)['callback'](
             [
                 _provider_segment('seg-post-1', 0.0, 3.0, 'owner line right after the failover'),
@@ -533,3 +632,131 @@ async def test_owner_recognition_survives_provider_failover(monkeypatch, caplog,
     # The matcher logs are attributable by recording session.
     decisions = [record.message for record in caplog.records if 'speaker_id_decision' in record.message]
     assert decisions and all(f'session={SESSION_ID}' in line for line in decisions), decisions
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('v2', [False, True])
+async def test_initialize_stt_installs_epoch_tracked_gated_socket(monkeypatch, caplog, telemetry, v2):
+    """The production install, pinned directly.
+
+    This fails if ``send_tracker=epoch`` (or the GatedSTTSocket wrap itself)
+    is removed from ``initialize_stt`` / ``_rebuild_stt_socket_locked``: the
+    round-2 harness double installed the tracker itself, so that wiring was
+    unobserved.
+    """
+    stack = FailoverStack(monkeypatch, v2=v2)
+    try:
+        assert await stack.receiver.initialize_stt()
+        socket = stack.receiver.stt_socket
+        assert isinstance(socket, GatedSTTSocket)
+        assert socket._gate is not None and socket._gate.mode == 'active'
+        assert socket._send_tracker is not None
+
+        # A real send through the installed socket records on the epoch.
+        before = socket._send_tracker.send_map.span_count
+        pcm = _silence(0.5)
+        start_sample = stack.receiver.capture_timeline.next_sample
+        assert socket.send(pcm, wall_time=time.time(), start_sample=start_sample) is True
+        assert socket._send_tracker.send_map.span_count > before
+
+        # The rebuild path installs the same wiring on the replacement socket.
+        socket._conn.mark_dead()
+        assert await stack.receiver._failover_stt_socket()
+        rebuilt = stack.receiver.stt_socket
+        assert rebuilt is not socket and isinstance(rebuilt, GatedSTTSocket)
+        assert rebuilt._send_tracker is not None and rebuilt._send_tracker is not socket._send_tracker
+    finally:
+        stack.state.active = False
+        stack.state.shutdown_event.set()
+        for task in stack.tasks:
+            task.cancel()
+        await asyncio.gather(*stack.tasks, return_exceptions=True)
+        stack.restore()
+
+
+@pytest.mark.anyio
+async def test_introduction_recognition_runs_with_capture_windows_present(monkeypatch, caplog, telemetry):
+    """P0-1 regression: name introductions run on the merged segments even when
+    the capture clock attached windows and embeddings queue from the raws.
+
+    With the round-2 code, ``queue_from_raw`` short-circuited the whole
+    per-segment loop before ``detect_speaker_introduction``, so a flag-off
+    pendant user saying "My name is Alice" got no person, no assignment and no
+    suggestion. This drives the REAL process_loop in clock-only mode with a
+    capture window present (the exact condition that used to skip detection)
+    and requires everything origin/main's introduction path produces.
+    """
+    from models.message_event import SpeakerLabelSuggestionEvent
+
+    stack = FailoverStack(monkeypatch, v2=False, create_speakers=True, owner_name='David')
+    loop_task = asyncio.create_task(stack.processor.process_loop())
+    stack.tasks.append(loop_task)
+    try:
+        await stack.host.speakers.refresh_for_conversation(CONV)
+        assert await stack.receiver.initialize_stt()
+
+        websocket = await stack.run_receive(_frames_for(_silence(2.0) + _owner(4.0)))
+        stack.provider(0)['callback']([_provider_segment('seg-intro', 2.0, 6.0, 'My name is Alice. Nice to meet you.')])
+        # The premise itself: the raw segment reached the buffer carrying a
+        # capture window — the condition under which round 2 skipped
+        # introduction detection. (Checked before the loop's first 0.6 s
+        # drain tick, which cannot have run yet: nothing was buffered before
+        # this callback.)
+        assert any(
+            '_capture_abs_start' in segment for segment in stack.processor.segment_buffer
+        ), 'test premise failed: no capture window was attached'
+
+        def _intro_handled():
+            return 'seg-intro' in stack.host.speakers.segment_assignments
+
+        await _wait_for(_intro_handled, timeout=15.0, message='introduction to be handled', stack=stack)
+
+        # Everything origin/main's introduction handling produced:
+        assert stack.created_people and stack.created_people[0]['name'] == 'Alice'
+        suggestions = [e for e in stack.sent_events if isinstance(e, SpeakerLabelSuggestionEvent)]
+        assert suggestions and suggestions[-1].person_name == 'Alice'
+        assert stack.host.state.speaker_map_dirty
+        # The introduction marks the segment suggested, so no embedding is
+        # queued for it — origin/main behavior, unchanged by the capture clock.
+        assert stack.processor.suggested_segments == {'seg-intro'}
+        # And the delivered/persisted transcript stays legacy-shaped: the
+        # segment text survives with speaker detection applied.
+        persisted = stack.decode_segments()
+        assert any('Alice' in (segment.get('text') or '') for segment in persisted), persisted
+        _ = websocket
+    finally:
+        stack.state.active = False
+        stack.state.shutdown_event.set()
+        await asyncio.wait_for(loop_task, timeout=30)
+        for task in stack.tasks:
+            task.cancel()
+        await asyncio.gather(*stack.tasks, return_exceptions=True)
+        stack.restore()
+
+
+@pytest.mark.anyio
+@pytest.mark.parametrize('v2', [False, True])
+async def test_diarization_completed_emitted_for_both_persistence_modes(monkeypatch, telemetry, v2):
+    """P2-13 regression: the v2 batch path records Diarization Completed too."""
+    stack = FailoverStack(monkeypatch, v2=v2)
+    loop_task = asyncio.create_task(stack.processor.process_loop())
+    stack.tasks.append(loop_task)
+    try:
+        await stack.host.speakers.refresh_for_conversation(CONV)
+        assert await stack.receiver.initialize_stt()
+        await stack.run_receive(_frames_for(_silence(1.0)))
+        stack.provider(0)['callback']([_provider_segment('seg-diar-1', 0.0, 1.0, 'a line')])
+        await asyncio.sleep(1.0)
+    finally:
+        stack.state.active = False
+        stack.state.shutdown_event.set()
+        await asyncio.wait_for(loop_task, timeout=30)
+        for task in stack.tasks:
+            task.cancel()
+        await asyncio.gather(*stack.tasks, return_exceptions=True)
+        stack.restore()
+
+    events = [e for e in telemetry.events if e.get('event') == 'Diarization Completed']
+    assert events, 'Diarization Completed must be emitted from the v2 batch path as from the legacy loop'
+    assert events[-1]['properties']['conversation_id'] == CONV
+    assert events[-1]['properties']['speaker_count'] >= 1

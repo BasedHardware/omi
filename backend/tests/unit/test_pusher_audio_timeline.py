@@ -200,3 +200,45 @@ def test_ack_frame_is_stable():
     assert struct.unpack('<I', frame[:4])[0] == 202
     payload = json.loads(frame[4:])
     assert payload == {'type': 'audio_timeline_ack', 'version': AUDIO_TIMELINE_PROTOCOL}
+
+
+async def test_conflicting_replay_reaching_past_live_buffer_fails_closed(env, monkeypatch):
+    """A replay whose conflict window was already flushed must be dropped.
+
+    The first 60 s frame crosses the chunk threshold, so it is queued and the
+    live buffer resets; the replayed frame overlaps only already-flushed audio.
+    Differing bytes there cannot be byte-compared, so the flushed-run digest
+    must reject the frame instead of appending an unverified suffix.
+    """
+    from utils.metrics import OMI_AUDIO_TIMELINE_REPLAY_CONFLICTS_TOTAL
+
+    before = OMI_AUDIO_TIMELINE_REPLAY_CONFLICTS_TOTAL._value.get()
+    pcm = b'\x08\x00' * (RATE * 60)  # one 60 s run: queues a chunk, empties the live buffer
+    replay = b'\x09\x00' * (RATE * 60) + b'\x0a\x00' * (RATE // 2)  # same start, different bytes, new tail
+    ws = FakeWebSocket([_conversation('c1'), _audio(2000.0, pcm), _audio(2000.0, replay)])
+
+    await _run(ws)
+
+    assert OMI_AUDIO_TIMELINE_REPLAY_CONFLICTS_TOTAL._value.get() == before + 1
+    assert len(env) == 1, 'the conflicting suffix must not be stored'
+    assert env[0][1]['data'] == pcm
+
+
+async def test_matching_replay_reaching_past_live_buffer_continues_run(env):
+    """A flushed-range replay whose bytes match the stored digest is trusted.
+
+    Same shape as the conflict test, but the replayed prefix is byte-identical
+    to the flushed run: only the genuinely new tail is stored.
+    """
+    pcm = b'\x0b\x00' * (RATE * 60)
+    tail = b'\x0c\x00' * (RATE // 2)
+    replay = pcm + tail
+    ws = FakeWebSocket([_conversation('c1'), _audio(3000.0, pcm), _audio(3000.0, replay)])
+
+    await _run(ws)
+
+    assert len(env) == 1
+    _, chunk = env[0]
+    assert chunk['data'] == pcm + tail, 'the replayed prefix must be trimmed, not duplicated'
+    assert chunk['span']['samples'] == RATE * 60 + RATE // 2
+    assert chunk['timestamp'] == pytest.approx(3000.0)
