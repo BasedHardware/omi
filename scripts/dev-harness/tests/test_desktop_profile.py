@@ -63,3 +63,11 @@ def test_named_bundle_automation_defaults_ignore_ambient_environment(monkeypatch
 
     assert profile.env["OMI_ENABLE_LOCAL_AUTOMATION"] == "1"
     assert "OMI_AUTOMATION_PORT" not in profile.env
+
+
+def test_local_profile_keeps_auth_scoped_calls_on_the_local_backend() -> None:
+    # Unset, the app sends auth-scoped calls to the production API with an emulator
+    # token; the 401 then reads as a dead session and signs the local profile out.
+    profile = _resolve({"OMI_APP_NAME": "omi-memory"})
+    assert profile.env["OMI_AUTH_API_URL"] == profile.env["OMI_PYTHON_API_URL"]
+    assert profile.env["OMI_AUTH_API_URL"].startswith("http://127.0.0.1:")

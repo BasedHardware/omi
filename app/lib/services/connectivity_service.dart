@@ -1,6 +1,8 @@
+import 'package:omi/env/physical_qualification.dart';
 import 'dart:async';
 
 import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:omi/env/env.dart';
 import 'package:internet_connection_checker_plus/internet_connection_checker_plus.dart';
 
 class ConnectivityService {
@@ -12,16 +14,18 @@ class ConnectivityService {
   final InternetConnection _internetConnection = InternetConnection.createInstance(
     useDefaultOptions: false,
     checkInterval: const Duration(seconds: 10),
-    customCheckOptions: [
-      InternetCheckOption(uri: Uri.parse('https://one.one.one.one'), timeout: const Duration(seconds: 3)),
-      InternetCheckOption(
-        uri: Uri.parse('https://api.omi.me/v1/health'),
-        timeout: const Duration(seconds: 3),
-        responseStatusFn: (response) {
-          return response.statusCode < 500;
-        },
-      ),
-    ],
+    customCheckOptions: PhysicalQualification.enabled
+        ? [InternetCheckOption(uri: Uri.parse('${Env.apiBaseUrl}v1/health'), timeout: const Duration(seconds: 3))]
+        : [
+            InternetCheckOption(uri: Uri.parse('https://one.one.one.one'), timeout: const Duration(seconds: 3)),
+            InternetCheckOption(
+              uri: Uri.parse('https://api.omi.me/v1/health'),
+              timeout: const Duration(seconds: 3),
+              responseStatusFn: (response) {
+                return response.statusCode < 500;
+              },
+            ),
+          ],
   );
   InternetConnection get internetConnection => _internetConnection;
   final Connectivity _connectivity = Connectivity();

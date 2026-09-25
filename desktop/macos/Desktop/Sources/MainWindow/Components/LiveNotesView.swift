@@ -23,6 +23,11 @@ struct LiveNotesView: View {
   /// Focus state for manual input
   @FocusState private var isInputFocused: Bool
 
+  /// The note the delete confirmation is about. A note is deleted from storage outright (no undo),
+  /// so it asks first.
+  @State private var noteToDelete: LiveNote?
+  @State private var isConfirmingDelete = false
+
   var body: some View {
     VStack(spacing: 0) {
       // Header with AI toggle
@@ -48,6 +53,15 @@ struct LiveNotesView: View {
       guard LiveNotesEscapeHandling.shouldCancelEdit(editingNoteId: editingNoteId) else { return false }
       cancelEdit()
       return true
+    }
+    .shellConfirmation(
+      isPresented: $isConfirmingDelete,
+      title: "Delete Note?",
+      message: "This permanently deletes the note. It can't be undone.",
+      confirmTitle: "Delete"
+    ) {
+      if let noteToDelete { deleteNote(noteToDelete) }
+      noteToDelete = nil
     }
   }
 
@@ -110,7 +124,10 @@ struct LiveNotesView: View {
               onStartEdit: { startEditing(note) },
               onSaveEdit: { saveEdit(note) },
               onCancelEdit: { cancelEdit() },
-              onDelete: { deleteNote(note) }
+              onDelete: {
+                noteToDelete = note
+                isConfirmingDelete = true
+              }
             )
             .id(note.id)
           }
@@ -135,7 +152,7 @@ struct LiveNotesView: View {
       GlassSeparator()
 
       HStack(spacing: OmiSpacing.sm) {
-        TextField("Add a note...", text: $manualNoteText)
+        TextField("Add a note…", text: $manualNoteText)
           .textFieldStyle(.plain)
           .scaledFont(size: OmiType.body)
           .foregroundColor(Ink.primary)
@@ -268,33 +285,11 @@ private struct NoteRowView: View {
       if isHovering || isEditing {
         HStack(spacing: OmiSpacing.xxs) {
           if isEditing {
-            Button(action: onSaveEdit) {
-              Image(systemName: "checkmark")
-                .scaledFont(size: OmiType.caption)
-                .foregroundColor(Ink.listeningGreen)
-            }
-            .buttonStyle(.plain)
-
-            Button(action: onCancelEdit) {
-              Image(systemName: "xmark")
-                .scaledFont(size: OmiType.caption)
-                .foregroundColor(Ink.secondary)
-            }
-            .buttonStyle(.plain)
+            OmiIconButton("checkmark", help: "Save Note", size: .compact, action: onSaveEdit)
+            OmiIconButton("arrow.uturn.backward", help: "Cancel Editing", size: .compact, action: onCancelEdit)
           } else {
-            Button(action: onStartEdit) {
-              Image(systemName: "pencil")
-                .scaledFont(size: OmiType.caption)
-                .foregroundColor(Ink.secondary)
-            }
-            .buttonStyle(.plain)
-
-            Button(action: onDelete) {
-              Image(systemName: "trash")
-                .scaledFont(size: OmiType.caption)
-                .foregroundColor(Ink.errorRed)
-            }
-            .buttonStyle(.plain)
+            OmiIconButton("pencil", help: "Edit Note", size: .compact, action: onStartEdit)
+            OmiIconButton("trash", help: "Delete Note…", size: .compact, isDestructive: true, action: onDelete)
           }
         }
       }

@@ -120,6 +120,12 @@ environment_shared:
           category: rollout
         CONVERSATION_OCR_CONTEXT_ENABLED:
           category: rollout
+        MEETING_NOTES_RICH_CONTEXT_ENABLED:
+          value: 'false'
+          category: rollout
+        MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
+          value: 'false'
+          category: rollout
         BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
           category: rollout
         WAKE_WORD_ADJUDICATION_ENABLED:
@@ -251,6 +257,12 @@ environment_shared:
         CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
           category: rollout
         CONVERSATION_OCR_CONTEXT_ENABLED:
+          category: rollout
+        MEETING_NOTES_RICH_CONTEXT_ENABLED:
+          value: 'false'
+          category: rollout
+        MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
+          value: 'false'
           category: rollout
         BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
           category: rollout
@@ -392,6 +404,12 @@ environment_shared:
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
             category: rollout
           CONVERSATION_OCR_CONTEXT_ENABLED:
+            category: rollout
+          MEETING_NOTES_RICH_CONTEXT_ENABLED:
+            value: 'false'
+            category: rollout
+          MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
+            value: 'false'
             category: rollout
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             category: rollout
@@ -587,6 +605,12 @@ environment_shared:
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
             category: rollout
           CONVERSATION_OCR_CONTEXT_ENABLED:
+            category: rollout
+          MEETING_NOTES_RICH_CONTEXT_ENABLED:
+            value: 'false'
+            category: rollout
+          MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
+            value: 'false'
             category: rollout
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             category: rollout
@@ -875,9 +899,6 @@ environment_shared:
           OPENAI_API_KEY:
             secret: OPENAI_API_KEY
             version: latest
-          SERVICE_ACCOUNT_JSON:
-            secret: SERVICE_ACCOUNT_JSON
-            version: latest
           POSTHOG_PROJECT_API_KEY:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
@@ -951,9 +972,6 @@ environment_shared:
             category: memory_rollout
       frame-request-retention-job:
         secrets:
-          SERVICE_ACCOUNT_JSON:
-            secret: SERVICE_ACCOUNT_JSON
-            version: latest
           POSTHOG_PROJECT_API_KEY:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
@@ -984,9 +1002,6 @@ environment_shared:
             version: latest
           OPENAI_API_KEY:
             secret: OPENAI_API_KEY
-            version: latest
-          SERVICE_ACCOUNT_JSON:
-            secret: SERVICE_ACCOUNT_JSON
             version: latest
           POSTHOG_PROJECT_API_KEY:
             secret: POSTHOG_PROJECT_API_KEY
@@ -1026,6 +1041,9 @@ environment_shared:
             category: memory_rollout
           MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED:
             category: memory_rollout
+          MEMORY_DAILY_MEMORY_SWEEP_STAGGER_SECONDS:
+            value: '0'
+            category: memory_rollout
         forbidden_env:
         - HOSTED_PUSHER_API_URL
       knowledge-ledger-drain-job:
@@ -1035,9 +1053,6 @@ environment_shared:
         secrets:
           ENCRYPTION_SECRET:
             secret: ENCRYPTION_SECRET
-            version: latest
-          SERVICE_ACCOUNT_JSON:
-            secret: SERVICE_ACCOUNT_JSON
             version: latest
           POSTHOG_PROJECT_API_KEY:
             secret: POSTHOG_PROJECT_API_KEY
@@ -1061,9 +1076,6 @@ environment_shared:
         secrets:
           ENCRYPTION_SECRET:
             secret: ENCRYPTION_SECRET
-            version: latest
-          SERVICE_ACCOUNT_JSON:
-            secret: SERVICE_ACCOUNT_JSON
             version: latest
           POSTHOG_PROJECT_API_KEY:
             secret: POSTHOG_PROJECT_API_KEY

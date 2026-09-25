@@ -24,6 +24,7 @@ from llm_gateway.routers import dependencies, openai_compatible
 from models.structured_extraction import ActionItemsExtraction, ConversationStructureExtraction
 from utils.llm.gateway_client import _chat_structured_payload
 from utils.llm.gateway_error_contract import is_byok_rate_limit_gateway_error
+from utils.llm.model_config import LUNA_MODEL
 
 LANE_ID = 'omi:auto:chat-structured'
 
@@ -87,10 +88,10 @@ def test_chat_completions_success_uses_lane_model_and_hides_route_metadata(monke
     assert 'selected_route_artifact_id' not in body
     # The checked-in active route is in shadow rollout (percent 0), so live
     # traffic is served by the last-known-good route. The LKG primary uses the
-    # gateway-only chat_extraction policy (gpt-5.6-luna), aligned with the
+    # gateway-only chat_extraction policy (gpt-x-luna), aligned with the
     # direct product route while shadow-only.
-    assert provider.calls[0].model == 'gpt-5.6-luna'
-    assert provider.calls[0].request['model'] == 'gpt-5.6-luna'
+    assert provider.calls[0].model == LUNA_MODEL
+    assert provider.calls[0].request['model'] == LUNA_MODEL
     # Live OpenAI (gpt-5.6-luna, 2026-08): non-default temperature is rejected with
     # invalid_request_error param=temperature ("Only the default (1) value is supported").
     # Gateway strips non-default temperatures so callers cannot trip that 400.
@@ -367,7 +368,7 @@ def test_provider_rejection_preserves_exact_terminal_class_and_bounded_member(
     error = recorded[0]['error']
     assert error.failure_class == failure_class
     assert error.provider == 'openai'
-    assert error.model == 'gpt-5.6-luna'
+    assert error.model == LUNA_MODEL
     assert error.provider_rejection == provider_rejection
 
 
@@ -442,7 +443,7 @@ def test_chat_completions_persists_cache_aware_attempt_with_authenticated_attrib
                 'id': 'chatcmpl-accounted',
                 'object': 'chat.completion',
                 'created': 1,
-                'model': 'gpt-5.6-luna',
+                'model': LUNA_MODEL,
                 'choices': [{'index': 0, 'message': {'role': 'assistant', 'content': '{}'}, 'finish_reason': 'stop'}],
                 'usage': {
                     'prompt_tokens': 100,
@@ -492,7 +493,7 @@ def test_gateway_provider_body_forwards_validated_gpt56_cache_fields_unchanged()
         ],
     )
     resolved = resolve_chat_completion_route(load_gateway_config(prod_mode=True), request)
-    forwarded = provider_request_for(resolved, ProviderRef(provider='openai', model='gpt-5.6-luna'))
+    forwarded = provider_request_for(resolved, ProviderRef(provider='openai', model=LUNA_MODEL))
 
     assert forwarded['prompt_cache_key'] == 'omi-extract-actions-v1-b0'
     assert forwarded['prompt_cache_options'] == {'mode': 'explicit', 'ttl': '30m'}
@@ -990,7 +991,7 @@ async def test_streaming_midstream_provider_failure_records_error_exactly_once(m
         first_chunk=b'data: {"choices":[]}\n\n',
         stream=failing_stream(),
         provider='openai',
-        model='gpt-5.6-luna',
+        model=LUNA_MODEL,
         fallback_used=False,
         fallback_reason=None,
     )
@@ -1028,7 +1029,7 @@ async def test_streaming_consumer_abandonment_records_cancelled_exactly_once(mon
             first_chunk=b'data: {"choices":[]}\n\n',
             stream=remaining_stream(),
             provider='openai',
-            model='gpt-5.6-luna',
+            model=LUNA_MODEL,
             fallback_used=False,
             fallback_reason=None,
         ),
@@ -1175,7 +1176,7 @@ async def test_jit_stream_receipt_reframes_split_and_coalesced_sse(monkeypatch, 
         first_chunk=chunks[0],
         stream=remaining_stream(),
         provider='openai',
-        model='gpt-5.6-luna',
+        model=LUNA_MODEL,
         fallback_used=False,
         fallback_reason=None,
         reservation=object(),
@@ -1234,7 +1235,7 @@ async def test_jit_stream_settlement_failure_has_no_success_receipt(monkeypatch)
                     first_chunk=b'data: {"choices":[],"usage":{"prompt_tokens":9,"completion_tokens":2,"total_tokens":11}}\n\n',
                     stream=remaining_stream(),
                     provider='openai',
-                    model='gpt-5.6-luna',
+                    model=LUNA_MODEL,
                     fallback_used=False,
                     fallback_reason=None,
                     reservation=object(),
@@ -1296,7 +1297,7 @@ async def test_jit_stream_preserves_multiline_crlf_event_and_split_chunks(monkey
                     first_chunk=raw_chunks[0],
                     stream=remaining_stream(),
                     provider='openai',
-                    model='gpt-5.6-luna',
+                    model=LUNA_MODEL,
                     fallback_used=False,
                     fallback_reason=None,
                     reservation=object(),
@@ -1357,7 +1358,7 @@ async def test_jit_stream_preserves_crlf_and_flushes_unterminated_frame(monkeypa
                     first_chunk=raw_chunks[0],
                     stream=remaining_stream(),
                     provider='openai',
-                    model='gpt-5.6-luna',
+                    model=LUNA_MODEL,
                     fallback_used=False,
                     fallback_reason=None,
                     reservation=None,
@@ -1412,7 +1413,7 @@ async def test_jit_stream_flushes_final_unterminated_data_frame(monkeypatch):
                     first_chunk=raw,
                     stream=empty_stream(),
                     provider='openai',
-                    model='gpt-5.6-luna',
+                    model=LUNA_MODEL,
                     fallback_used=False,
                     fallback_reason=None,
                     reservation=None,
@@ -1449,7 +1450,7 @@ async def test_non_jit_stream_returns_provider_chunks_byte_for_byte():
                     first_chunk=raw_chunks[0],
                     stream=remaining_stream(),
                     provider='openai',
-                    model='gpt-5.6-luna',
+                    model=LUNA_MODEL,
                     fallback_used=False,
                     fallback_reason=None,
                 ),

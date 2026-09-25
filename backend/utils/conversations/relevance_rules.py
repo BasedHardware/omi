@@ -128,6 +128,20 @@ FUNCTION_ONLY_MAX_TOKENS = 25  # longer function-word-only runs go to the LLM
 KEEP_WORD_COUNT = 100  # above this the model is never asked; shared with the model tier
 CJK_CHARS_PER_WORD = 1.5
 
+
+def transcript_word_count(text: str) -> int:
+    """The model tier's word count (``conv_discard`` and the Jev tier share it).
+
+    CJK-dominant text counts two characters as a word; otherwise whitespace tokens.
+    """
+    if not text:
+        return 0
+    cjk_chars = sum(1 for c in text if unicodedata.east_asian_width(c) in ('W', 'F', 'H'))
+    if cjk_chars > len(text) * 0.3:
+        return cjk_chars // 2
+    return len(text.split())
+
+
 _TOKEN_RE = re.compile(r"[^\W_]+(?:'[^\W_]+)*|'(?:re|s|m|ve|ll|d)\b", re.UNICODE)
 _ELONGATED_FILLER_RE = re.compile(r'^(?:m+|h+m+|m+h+m+|u+h+|u+m+|a+h+|o+h+|e+h+|h?(?:a+h+)+a*|(?:ha)+h?|(?:he)+h?)$')
 _SENTENCE_BREAK_RE = re.compile(r'[.!?。！？…]+')
