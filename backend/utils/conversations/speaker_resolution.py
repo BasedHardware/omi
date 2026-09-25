@@ -180,7 +180,8 @@ def _embed_missing(
             first = bisect.bisect_left(midpoints, chunk_start)
             last = bisect.bisect_left(midpoints, chunk_end)
             for segment in pending[first:last]:
-                if segment.id in done:
+                segment_id = segment.id
+                if segment_id is None or segment_id in done:
                     continue
                 if time.monotonic() > deadline:
                     return embedded, 'budget'
@@ -207,8 +208,8 @@ def _embed_missing(
                         return embedded, 'diarizer_unavailable'
                     continue
                 failures = 0
-                cache[segment.id] = (_duration(segment), np.asarray(vector, dtype=np.float32).reshape(-1))
-                done.add(segment.id)
+                cache[segment_id] = (_duration(segment), np.asarray(vector, dtype=np.float32).reshape(-1))
+                done.add(segment_id)
                 embedded += 1
     return embedded, 'complete'
 
@@ -257,13 +258,10 @@ def _without_resolution(conversation: Conversation, outcome: str) -> None:
 def _apply(conversation: Conversation, speaker_ids: Mapping[str, int], identities: Mapping[int, Identity]) -> None:
     scope = f'conversation:{conversation.id}'
     for segment in conversation.transcript_segments:
-        new_id = speaker_ids.get(segment.id)
+        new_id = speaker_ids.get(segment.id) if segment.id else None
         if new_id is None:
             continue
-        segment.speaker_id = new_id
-        segment.speaker = f'SPEAKER_{new_id}'
-        segment.speaker_id_scope = scope
-        segment._speaker_id_synthesized = False
+        segment.assign_resolved_speaker(new_id, scope)
         identity = identities.get(new_id)
         if identity is not None:
             segment.is_user = identity.is_user

@@ -160,17 +160,16 @@ def resolve_conversation_speakers(
 
     # Units: a manually labeled identity is one unit (must-link); every other
     # embedded segment is its own unit.
-    unit_keys: List[Tuple[str, str]] = []
     unit_segments: List[List[Any]] = []
-    unit_identity: List[Optional[Identity]] = []
+    unit_identity: Dict[int, Identity] = {}
     index_by_key: Dict[Tuple[str, str], int] = {}
 
     def unit_for(key: Tuple[str, str], identity: Optional[Identity]) -> int:
         if key not in index_by_key:
-            index_by_key[key] = len(unit_keys)
-            unit_keys.append(key)
+            index_by_key[key] = len(unit_segments)
             unit_segments.append([])
-            unit_identity.append(identity)
+            if identity is not None:
+                unit_identity[index_by_key[key]] = identity
         return index_by_key[key]
 
     for segment in eligible:
@@ -180,41 +179,41 @@ def resolve_conversation_speakers(
         elif _seg(segment, 'id') in vectors:
             unit_segments[unit_for(('segment', _seg(segment, 'id')), None)].append(segment)
 
-    unit_vectors: List[Optional[np.ndarray]] = []
-    for members in unit_segments:
+    unit_vector: Dict[int, np.ndarray] = {}
+    for index, members in enumerate(unit_segments):
         embedded = [vectors[_seg(s, 'id')] for s in members if _seg(s, 'id') in vectors]
-        unit_vectors.append(_unit_vector(np.mean(embedded, axis=0)) if embedded else None)
+        pooled = _unit_vector(np.mean(embedded, axis=0)) if embedded else None
+        if pooled is not None:
+            unit_vector[index] = pooled
 
-    embedded_units = [i for i, v in enumerate(unit_vectors) if v is not None]
+    embedded_units = sorted(unit_vector)
     clusters: List[_Cluster] = []
     if len(embedded_units) == 1:
         clusters.append(_Cluster([embedded_units[0]]))
     elif embedded_units:
-        tree = linkage(np.vstack([unit_vectors[i] for i in embedded_units]), method='average', metric='cosine')
+        tree = linkage(np.vstack([unit_vector[i] for i in embedded_units]), method='average', metric='cosine')
         labels = fcluster(tree, t=AHC_THRESHOLD, criterion='distance')
         grouped: Dict[int, List[int]] = {}
         for unit, label in zip(embedded_units, labels):
             grouped.setdefault(int(label), []).append(unit)
         clusters.extend(_Cluster(members) for members in grouped.values())
     # A labeled identity with no embeddable audio is still its own voice.
-    clusters.extend(_Cluster([i]) for i, v in enumerate(unit_vectors) if v is None)
+    clusters.extend(_Cluster([i]) for i in range(len(unit_segments)) if i not in unit_vector)
 
     def identities_of(cluster: _Cluster) -> Set[str]:
-        return {unit_identity[i].token for i in cluster.members if unit_identity[i] is not None}
+        return {unit_identity[i].token for i in cluster.members if i in unit_identity}
 
     def talk(cluster: _Cluster) -> float:
         return sum(_duration(s) for i in cluster.members for s in unit_segments[i])
 
     def centroid(cluster: _Cluster) -> Optional[np.ndarray]:
-        weighted = [
-            unit_vectors[i] * max(talk(_Cluster([i])), 1e-3) for i in cluster.members if unit_vectors[i] is not None
-        ]
+        weighted = [unit_vector[i] * max(talk(_Cluster([i])), 1e-3) for i in cluster.members if i in unit_vector]
         return _unit_vector(np.sum(weighted, axis=0)) if weighted else None
 
     # Cannot-link: split any cluster holding two labeled identities around them.
     split: List[_Cluster] = []
     for cluster in clusters:
-        seeds = [i for i in cluster.members if unit_identity[i] is not None]
+        seeds = [i for i in cluster.members if i in unit_identity]
         if len(seeds) <= 1:
             split.append(cluster)
             continue
@@ -222,13 +221,11 @@ def resolve_conversation_speakers(
         for i in cluster.members:
             if i in parts:
                 continue
-            vector = unit_vectors[i]
-            anchored = [seed for seed in seeds if unit_vectors[seed] is not None]
-            target = (
-                min(anchored, key=lambda seed: _cosine(vector, unit_vectors[seed]))
-                if vector is not None and anchored
-                else seeds[0]
-            )
+            target = seeds[0]
+            anchored = [seed for seed in seeds if seed in unit_vector]
+            if i in unit_vector and anchored:
+                member_vector = unit_vector[i]
+                target = min((_cosine(member_vector, unit_vector[seed]), seed) for seed in anchored)[1]
             parts[target].members.append(i)
         split.extend(parts.values())
     clusters = split
@@ -238,18 +235,24 @@ def resolve_conversation_speakers(
         return not ids_a or not ids_b or ids_a == ids_b
 
     # Absorb short-clip fragments into the anchor voice they sit next to.
-    anchors = [c for c in clusters if talk(c) >= ANCHOR_SECONDS and centroid(c) is not None]
+    anchor_centroids: Dict[int, np.ndarray] = {}
+    anchors: List[_Cluster] = []
+    for cluster in clusters:
+        anchor_vector = centroid(cluster) if talk(cluster) >= ANCHOR_SECONDS else None
+        if anchor_vector is not None:
+            anchors.append(cluster)
+            anchor_centroids[id(cluster)] = anchor_vector
     if anchors:
-        anchor_centroids = {id(a): centroid(a) for a in anchors}
-        for cluster in sorted([c for c in clusters if all(c is not a for a in anchors)], key=talk):
-            vector = centroid(cluster)
-            if vector is None:
+        for cluster in sorted([c for c in clusters if id(c) not in anchor_centroids], key=talk):
+            fragment = centroid(cluster)
+            if fragment is None:
                 continue
             candidates = [a for a in anchors if compatible(a, cluster)]
             if not candidates:
                 continue
-            nearest = min(candidates, key=lambda a: _cosine(vector, anchor_centroids[id(a)]))
-            if _cosine(vector, anchor_centroids[id(nearest)]) < ABSORB_DISTANCE:
+            distance, position = min((_cosine(fragment, anchor_centroids[id(a)]), k) for k, a in enumerate(candidates))
+            nearest = candidates[position]
+            if distance < ABSORB_DISTANCE:
                 nearest.extend(cluster)
                 cluster.members = []
         clusters = [c for c in clusters if c.members]
