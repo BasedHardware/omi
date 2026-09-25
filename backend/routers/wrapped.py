@@ -73,10 +73,10 @@ def get_wrapped_status(year: int, uid: str = Depends(auth.get_current_user_uid))
     raw_error = wrapped.get('error')
     error = None
     if raw_error:
-        if any(marker in raw_error for marker in ("Traceback", "Exception", "Error:", "HTTPException", "KeyError")):
-            error = "Failed to generate Wrapped. Please try again later."
-        else:
+        if raw_error == "Failed to generate Wrapped. Please try again later.":
             error = raw_error
+        else:
+            error = "Failed to generate Wrapped. Please try again later."
 
     return WrappedStatusResponse(
         status=wrapped.get('status', WrappedStatus.NOT_GENERATED),
