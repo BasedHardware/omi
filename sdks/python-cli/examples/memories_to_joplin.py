@@ -92,6 +92,12 @@ def format_memory_for_joplin(item: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+def escape_yaml_string(val: str) -> str:
+    """Format and escape string for YAML double-quoted scalar."""
+    escaped = str(val).replace("\\", "\\\\").replace('"', '\\"')
+    return '"' + escaped + '"'
+
+
 def render_joplin_markdown(rec: Dict[str, Any], notebook: str = "Omi Memories") -> str:
     """Render a single memory record into standard Joplin Markdown note with frontmatter."""
     created_str = rec.get("created_at") or datetime.now(timezone.utc).isoformat()
@@ -101,19 +107,19 @@ def render_joplin_markdown(rec: Dict[str, Any], notebook: str = "Omi Memories") 
 
     frontmatter_lines = [
         "---",
-        f"id: \"{rec['id']}\"",
-        f"title: \"{rec['title'].replace('\"', '\\\"')}\"",
-        f"notebook: \"{notebook}\"",
-        f"category: \"{category}\"",
-        f"created: \"{created_str}\"",
-        f"updated: \"{updated_str}\"",
+        f"id: {escape_yaml_string(rec['id'])}",
+        f"title: {escape_yaml_string(rec['title'])}",
+        f"notebook: {escape_yaml_string(notebook)}",
+        f"category: {escape_yaml_string(category)}",
+        f"created: {escape_yaml_string(created_str)}",
+        f"updated: {escape_yaml_string(updated_str)}",
         "source: \"omi-wearable\"",
     ]
 
     if tags:
         frontmatter_lines.append("tags:")
         for t in tags:
-            frontmatter_lines.append(f"  - \"{t.replace('\"', '\\\"')}\"")
+            frontmatter_lines.append(f"  - {escape_yaml_string(t)}")
     else:
         frontmatter_lines.append("tags: []")
 
