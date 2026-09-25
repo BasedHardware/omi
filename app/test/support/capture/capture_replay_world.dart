@@ -1,11 +1,13 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart' show SyncLocalFilesResponse;
@@ -27,6 +29,8 @@ import 'package:omi/services/wals/sync_rate_limiter.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/services/wals/wal_interfaces.dart';
 import 'package:omi/services/wals/wal_service.dart';
+
+import 'scripted_device_connection.dart';
 
 import 'virtual_capture_time.dart';
 
@@ -246,10 +250,23 @@ class CaptureReplayWorld {
   late RecordingTransferCoordinator coordinator;
   ScriptedPureSocket? socket;
   int socketCreates = 0;
+
+  /// Every transcription socket the controller opened, in order, with the source it declared.
+  final List<({String? source, ScriptedPureSocket transport})> sockets = [];
+
+  /// The pendant's BLE link, when a scenario connects one.
+  ScriptedDeviceConnection? deviceConnection;
+
+  /// The Omi phone-call state capture observes (PhoneCallProvider.callStateListenable in the app).
+  final ValueNotifier<PhoneCallState> omiCall = ValueNotifier(PhoneCallState.idle);
   bool nextConnectFailsOnce = false;
 
   bool connected = true;
   bool signedIn = true;
+  int processCalls = 0;
+
+  /// Runs when the controller asks the server to process the in-progress conversation.
+  void Function()? onProcessInProgress;
   int tokenRefreshCalls = 0;
   final List<String> timeline = [];
 
@@ -347,6 +364,13 @@ class CaptureReplayWorld {
       now: clock.now,
       scheduling: scheduler,
       inProgressConversationLoader: () async {},
+      deviceConnectionLoader: (deviceId) async => deviceConnection,
+      omiCallState: omiCall,
+      processInProgressConversation: () async {
+        processCalls++;
+        onProcessInProgress?.call();
+        return null;
+      },
       audioCodecLoader: (deviceId) async => BleAudioCodec.pcm16,
       microphonePermissionRequester: () async => true,
       conversationLocationCapture: ConversationLocationCapture(
@@ -534,6 +558,9 @@ class _ReplayCaptureController extends CaptureController {
     super.audioCodecLoader,
     super.microphonePermissionRequester,
     super.conversationLocationCapture,
+    super.deviceConnectionLoader,
+    super.processInProgressConversation,
+    super.omiCallState,
   });
 
   @override
@@ -555,6 +582,7 @@ class _ReplayCaptureController extends CaptureController {
     }
     world.socket = transport;
     world.socketCreates++;
+    world.sockets.add((source: source, transport: transport));
     final service = TranscriptSegmentSocketService.withSocket(
       sampleRate,
       codec,

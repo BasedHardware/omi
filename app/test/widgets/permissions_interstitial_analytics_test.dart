@@ -71,7 +71,7 @@ void main() {
     provider.setLoading(true);
     provider.setLoading(false);
     await tester.pump();
-    await tester.tap(find.widgetWithText(ElevatedButton, 'Continue'));
+    await tester.tap(find.byKey(const Key('permissions_interstitial_continue')));
     await tester.idle();
     await AnalyticsManager.flushPending(force: true);
 
