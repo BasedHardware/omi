@@ -12,15 +12,6 @@ enum DashboardTaskRefreshPolicy {
   static let maxServerFetchPages = 3
 }
 
-/// Dashboard widgets, SuggestionAssistant grounding, and realtime `getTasks`
-/// stay gated on explicit acceptance. The Tasks page reads `incompleteTasks`
-/// and shows leftover extractor rows as ordinary due-date tasks.
-enum DashboardTaskLanePolicy {
-  static func admits(_ task: TaskActionItem) -> Bool {
-    !task.isPendingSuggestion
-  }
-}
-
 enum DashboardExactTaskFetchPolicy {
   static let maxConcurrentRequests = 6
 

@@ -16,6 +16,11 @@ omi_configure_homebrew_path
 # ─── Arguments ─────────────────────────────────────────────────────────
 YOLO_MODE=0
 FORCE_FULL_BUNDLE="${OMI_FORCE_FULL_BUNDLE:-0}"
+# Who asked for the full bundle. `--full` / OMI_FORCE_FULL_BUNDLE=1 is the
+# caller's habit and is refused on a reusable E2E pool slot; OMI_FORCE_REWIND_SEED
+# forces the install/seed path from inside the launcher and stays allowed.
+FULL_BUNDLE_EXPLICIT=0
+[ "$FORCE_FULL_BUNDLE" = "1" ] && FULL_BUNDLE_EXPLICIT=1
 # Reseeding replaces an existing named profile after preserving it. It must run
 # through the install/seed path; a fast executable patch intentionally skips it.
 if [ "${OMI_FORCE_REWIND_SEED:-0}" = "1" ]; then
@@ -31,6 +36,7 @@ for arg in "$@"; do
             ;;
         --full)
             FORCE_FULL_BUNDLE=1
+            FULL_BUNDLE_EXPLICIT=1
             ;;
         --fast-only)
             FAST_ONLY=1
@@ -65,14 +71,21 @@ Options (via environment variables):
   OMI_SKIP_TUNNEL=1        Skip Cloudflare tunnel (use OMI_DESKTOP_API_URL from .env directly)
   PORT=10201                Desktop backend port (default: 10201, never use 8080)
   OMI_APP_NAME="Omi Dev"   App name (default: "Omi Dev")
-  OMI_SKIP_AUTH_SEED=1     Do not copy auth/onboarding from Omi Dev into named bundles
-  OMI_SKIP_SETTINGS_SEED=1  Do not copy shortcuts/settings from Omi Dev into named bundles
+  OMI_SKIP_AUTH_SEED=1     Do not copy auth/onboarding from the auth seed source into named bundles
+  OMI_AUTH_DUMP_SOURCE="..."  Auth seed source bundle id (default: com.omi.desktop-dev, with a
+                           production com.omi.computer-macos fallback when that has no session)
+  OMI_SKIP_SETTINGS_SEED=1  Do not mirror shortcuts/settings into named bundles
+  OMI_SETTINGS_SEED_SOURCE="..."  Settings authority bundle id (default: resolve production
+                           com.omi.computer-macos when installed, else com.omi.desktop-dev;
+                           a named-but-missing domain fails closed)
   OMI_SKIP_REWIND_SEED=1    Do not copy the local Rewind history into a new named bundle
-  OMI_FORCE_REWIND_SEED=1   Replace an existing named-bundle Rewind history with a fresh Omi Dev snapshot
+  OMI_FORCE_REWIND_SEED=1   Replace an existing named-bundle Rewind history with a fresh snapshot
   OMI_DEV_EAGER_PERMISSIONS=1  Preserve eager mic/screen/file startup behavior in named bundles
   OMI_PYTHON_API_URL="..."  Python backend URL (explicit override; named bundles default to dev)
+  OMI_JIT_QA_TARGET="..."   omi-jit-qa only: local-dev-gcp, deployed-dev, or cloud-qa atomic endpoint tuple
   OMI_SIGN_IDENTITY="..."  Code signing identity (auto-detected if not set)
   OMI_FORCE_FULL_BUNDLE=1  Rebuild the complete app bundle on this launch
+                          (E2E pool slots: refused while the fast bundle is reusable — use --fast-only)
   OMI_SCAN_STALE_BUNDLES=1  Remove stale same-named app bundles under $HOME (recovery only)
   OMI_ENABLE_LOCAL_AUTOMATION=1   Force the automation bridge on (auto-on for non-prod bundles; see scripts/omi-ctl)
   OMI_DISABLE_LOCAL_AUTOMATION=1  Run a dev build "clean" with the bridge off
@@ -147,8 +160,34 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 
 # shellcheck source=fast-dev-bundle.sh
 source "$SCRIPT_DIR/scripts/fast-dev-bundle.sh"
+# shellcheck source=desktop-build-identity.sh
+source "$SCRIPT_DIR/scripts/desktop-build-identity.sh"
 # shellcheck source=local-profile-env.sh
 source "$SCRIPT_DIR/scripts/local-profile-env.sh"
+# shellcheck source=jit-qa-target.sh
+source "$SCRIPT_DIR/scripts/jit-qa-target.sh"
+
+# Reject an invalid reserved-bundle request before dev-instance creates a
+# scratch directory or the launcher acquires a build lock.
+REQUESTED_LOCAL_PROFILE=false
+[ "${OMI_DESKTOP_LOCAL_PROFILE:-0}" = "1" ] && REQUESTED_LOCAL_PROFILE=true
+omi_preflight_jit_qa_launch_request \
+    "${OMI_APP_NAME:-}" "${OMI_BUNDLE_ID:-}" "$YOLO_MODE" "$REQUESTED_LOCAL_PROFILE" || exit $?
+if [ -n "${OMI_JIT_QA_TARGET:-}" ]; then
+    omi_jit_qa_set_exact_tuple || exit $?
+fi
+
+# The backend .env is shell-sourced later and the selected app env is copied
+# into the bundle. Reject stale/mixed source tuples before dev-instance creates
+# scratch state or the launcher acquires a build lock.
+EARLY_BACKEND_DIR="$(cd "$SCRIPT_DIR/../../backend" && pwd)"
+omi_preflight_jit_qa_config_file "$EARLY_BACKEND_DIR/.env" || exit $?
+if [ -f "$SCRIPT_DIR/.env.app.dev" ]; then
+    omi_preflight_jit_qa_config_file "$SCRIPT_DIR/.env.app.dev" || exit $?
+elif [ -f "$SCRIPT_DIR/.env.app" ]; then
+    omi_preflight_jit_qa_config_file "$SCRIPT_DIR/.env.app" || exit $?
+fi
+
 # shellcheck source=python-desktop-backend-dev.sh
 source "$SCRIPT_DIR/scripts/python-desktop-backend-dev.sh"
 
@@ -173,17 +212,8 @@ substep() {
     printf "[%6.1fs]   ├─ %s\n" "$total_elapsed" "$1"
 }
 
-macos_copy_tree() {
-    local src="$1"
-    local dest="$2"
-    if [ "$(uname -s)" = "Darwin" ] && command -v ditto >/dev/null 2>&1; then
-        ditto --norsrc "$src" "$dest"
-    elif [ "$(uname -s)" = "Darwin" ]; then
-        cp -R -X "$src" "$dest"
-    else
-        cp -R "$src" "$dest"
-    fi
-}
+# shellcheck source=scripts/macos-copy-tree.sh
+source "$SCRIPT_DIR/scripts/macos-copy-tree.sh"
 
 # Per-worktree isolation: derive unique ports + bundle name so parallel worktrees don't
 # collide. Sets OMI_INSTANCE / RUST_PORT / PYTHON_PORT / AUTOMATION_PORT / OMI_APP_NAME /
@@ -206,8 +236,21 @@ trap 'omi_run_sh_release_build_lock' EXIT INT TERM
 BINARY_NAME="Omi Computer"  # Package.swift target — binary paths, pkill, CFBundleExecutable
 source "$SCRIPT_DIR/scripts/app-config.sh"
 derive_omi_app_config "${OMI_APP_NAME:-Omi Dev}" || exit 1
+# A pre-authorized E2E pool slot is machine-global and shared by every worktree;
+# building one without holding its lease clobbers another lane's app mid-test.
+# Non-pool names pass through untouched. See docs/e2e-bundle-pool.md.
+# verify passes for the holder and prints the pool slot number on stdout
+# (empty for a non-pool named bundle); the slot number drives the pool launch
+# policy below — the fail-closed guards key on it.
+if [ "$IS_NAMED_BUNDLE" = true ]; then
+    E2E_POOL_SLOT="$("$SCRIPT_DIR/scripts/omi-e2e-pool" verify "$APP_SLUG")" || exit 1
+fi
 LOCAL_PROFILE=false
 [ "${OMI_DESKTOP_LOCAL_PROFILE:-0}" = "1" ] && LOCAL_PROFILE=true
+
+# Gate-G bundle routing is a whole-tuple authority. Revalidate the fully
+# derived app identity, then reapply after .env loads below.
+omi_prepare_jit_qa_target "$APP_NAME" "$BUNDLE_ID" "$YOLO_MODE" derived "$LOCAL_PROFILE" || exit $?
 
 # A named QA bundle should exercise the shared development service unless its
 # launcher deliberately selects another profile.  Check variable *presence*,
@@ -346,31 +389,224 @@ cleanup() {
 }
 trap cleanup EXIT
 
-AUTH_DEBUG_LOG=/private/tmp/auth-debug.log
-rm -f $AUTH_DEBUG_LOG
-auth_debug() { echo "[AUTH DEBUG][$(date +%H:%M:%S)] $1" >> $AUTH_DEBUG_LOG; }
-touch $AUTH_DEBUG_LOG
+# The local self-signed identity, created without a GUI and without a password prompt.
+#
+# The documented way to make this identity is Keychain Access -> Certificate Assistant, which
+# is a wizard: unusable from CI, from an agent, and from anyone who has not read the doc. The
+# ingredients are all stock, so the wizard is not actually required -- /usr/bin/openssl is
+# LibreSSL on every Mac and supports the legacy PKCS#12 encoding Apple's importer accepts
+# (OpenSSL 3's AES/SHA256 default is rejected with "MAC verification failed").
+#
+# It lives in its own keychain rather than in login.keychain on purpose. We own that
+# keychain's password, so we can unlock it and grant codesign a partition non-interactively --
+# which is the entire point, since the login keychain is exactly what we cannot do that to.
+# The password protects a throwaway self-signed certificate and nothing else, so it is a
+# constant rather than a secret.
+OMI_LOCAL_SIGN_KEYCHAIN="$HOME/Library/Keychains/omi-local-dev-signing.keychain-db"
+OMI_LOCAL_SIGN_KEYCHAIN_PASSWORD="omi-local-dev"
+
+# Whether an identity can actually be USED here, which is not the same question as whether it
+# exists. `security find-identity` lists identities whose private key the keychain may still
+# refuse to hand over -- and refuse instantly, with no prompt, in any session that cannot draw
+# one. Probing costs one signature on a temp file and turns a failure that used to surface
+# after the whole build into a fact known before it starts.
+signing_identity_usable() {
+    local identity="$1" probe status
+    [ -n "$identity" ] || return 1
+    probe="$(mktemp "${TMPDIR:-/tmp}/omi-sign-probe.XXXXXX")" || return 1
+    cp /usr/bin/true "$probe" 2>/dev/null || { rm -f "$probe"; return 1; }
+    codesign --force --sign "$identity" "$probe" >/dev/null 2>&1
+    status=$?
+    rm -f "$probe"
+    return $status
+}
+
+# Make the keychain visible to codesign without disturbing the user's search list.
+#
+# `security list-keychains -s` REPLACES the list rather than appending, so the existing entries
+# have to be read and passed back verbatim. They come back one per line, quoted and indented,
+# and each path may contain spaces -- so they are collected into an array and re-quoted by the
+# shell. Word-splitting them instead corrupts the list, which is not a theoretical concern:
+# an earlier version of this function did exactly that and rewrote the user's login keychain
+# entry into a nested-quoted path that no longer resolved.
+add_keychain_to_search_list() {
+    local keychain="$1" line
+    local -a current=()
+    while IFS= read -r line; do
+        line="${line#"${line%%[![:space:]]*}"}"   # strip leading whitespace
+        line="${line#\"}"
+        line="${line%\"}"
+        [ -n "$line" ] || continue
+        [ "$line" = "$keychain" ] && return 0     # already present, nothing to do
+        current+=("$line")
+    done < <(security list-keychains -d user)
+    security list-keychains -d user -s "${current[@]}" "$keychain" 2>/dev/null
+}
+
+ensure_local_dev_signing_identity() {
+    if signing_identity_usable "$OMI_LOCAL_DEV_SIGN_IDENTITY"; then
+        return 0
+    fi
+    if [ -f "$OMI_LOCAL_SIGN_KEYCHAIN" ]; then
+        # Present but unusable almost always means "locked since reboot".
+        security unlock-keychain -p "$OMI_LOCAL_SIGN_KEYCHAIN_PASSWORD" "$OMI_LOCAL_SIGN_KEYCHAIN" 2>/dev/null
+        add_keychain_to_search_list "$OMI_LOCAL_SIGN_KEYCHAIN"
+        signing_identity_usable "$OMI_LOCAL_DEV_SIGN_IDENTITY" && return 0
+    fi
+
+    step "Creating local signing identity ($OMI_LOCAL_DEV_SIGN_IDENTITY)..."
+    local work
+    work="$(mktemp -d "${TMPDIR:-/tmp}/omi-local-sign.XXXXXX")" || return 1
+
+    # codeSigning EKU and CA:false are both required, or codesign declines the identity.
+    cat > "$work/openssl.cnf" <<EOF
+[req]
+distinguished_name = dn
+x509_extensions = v3
+prompt = no
+[dn]
+CN = $OMI_LOCAL_DEV_SIGN_IDENTITY
+[v3]
+basicConstraints = critical,CA:false
+keyUsage = critical,digitalSignature
+extendedKeyUsage = critical,codeSigning
+EOF
+
+    if ! /usr/bin/openssl req -x509 -newkey rsa:2048 -keyout "$work/key.pem" -out "$work/cert.pem" \
+            -days 3650 -nodes -config "$work/openssl.cnf" >/dev/null 2>&1; then
+        rm -rf "$work"; return 1
+    fi
+    if ! /usr/bin/openssl pkcs12 -export -inkey "$work/key.pem" -in "$work/cert.pem" \
+            -out "$work/identity.p12" -passout "pass:$OMI_LOCAL_SIGN_KEYCHAIN_PASSWORD" \
+            -name "$OMI_LOCAL_DEV_SIGN_IDENTITY" \
+            -certpbe PBE-SHA1-3DES -keypbe PBE-SHA1-3DES -macalg sha1 >/dev/null 2>&1; then
+        rm -rf "$work"; return 1
+    fi
+
+    if [ ! -f "$OMI_LOCAL_SIGN_KEYCHAIN" ]; then
+        security create-keychain -p "$OMI_LOCAL_SIGN_KEYCHAIN_PASSWORD" "$OMI_LOCAL_SIGN_KEYCHAIN" 2>/dev/null || { rm -rf "$work"; return 1; }
+        # No idle timeout and no lock-on-sleep: a keychain that relocks mid-build reintroduces
+        # exactly the interactive prompt this exists to avoid.
+        security set-keychain-settings "$OMI_LOCAL_SIGN_KEYCHAIN" 2>/dev/null
+    fi
+    security unlock-keychain -p "$OMI_LOCAL_SIGN_KEYCHAIN_PASSWORD" "$OMI_LOCAL_SIGN_KEYCHAIN" 2>/dev/null
+    security import "$work/identity.p12" -k "$OMI_LOCAL_SIGN_KEYCHAIN" \
+        -P "$OMI_LOCAL_SIGN_KEYCHAIN_PASSWORD" -T /usr/bin/codesign -T /usr/bin/security >/dev/null 2>&1
+    # The partition list is what lets codesign use the key with no dialog. We can set it here
+    # only because this keychain's password is ours.
+    security set-key-partition-list -S apple-tool:,apple:,codesign: -s \
+        -k "$OMI_LOCAL_SIGN_KEYCHAIN_PASSWORD" "$OMI_LOCAL_SIGN_KEYCHAIN" >/dev/null 2>&1
+    add_keychain_to_search_list "$OMI_LOCAL_SIGN_KEYCHAIN"
+    rm -rf "$work"
+
+    if signing_identity_usable "$OMI_LOCAL_DEV_SIGN_IDENTITY"; then
+        substep "Created $OMI_LOCAL_DEV_SIGN_IDENTITY (self-signed, stable, no prompt)"
+        return 0
+    fi
+    return 1
+}
+
+# Which identity this bundle was signed with last time.
+#
+# **TCC binds every grant to the code requirement at the moment it was granted**, and that
+# requirement names the signing certificate. So changing a bundle's signing identity silently
+# revokes its Microphone, Screen Recording and Files permissions -- the app then re-prompts on
+# every launch and looks broken, with nothing in its own logs to explain why.
+#
+# That is easy to do by accident: an Apple Development identity that the keychain refuses in one
+# session (see the errSecInternalComponent notes) falls back to the self-signed identity, and the
+# next build silently switches the bundle over. Remembering the last identity makes the switch
+# deliberate rather than accidental, and loud when it has to happen anyway.
+signing_identity_stamp_path() {
+    [ "$IS_NAMED_BUNDLE" = true ] || return 1
+    printf '%s/Library/Application Support/Omi Dev Bundles/%s/.signing-identity\n' "$HOME" "$BUNDLE_ID"
+}
+
+remembered_signing_identity() {
+    local stamp
+    stamp="$(signing_identity_stamp_path)" || return 1
+    [ -f "$stamp" ] || return 1
+    cat "$stamp"
+}
+
+remember_signing_identity() {
+    local stamp
+    stamp="$(signing_identity_stamp_path)" || return 0
+    mkdir -p "$(dirname "$stamp")" 2>/dev/null
+    printf '%s' "$1" > "$stamp" 2>/dev/null || true
+}
 
 resolve_signing_identity() {
     if [ -n "$SIGN_IDENTITY" ]; then
         return
     fi
-    # Prefer the development identity so local permissions remain stable.
-    SIGN_IDENTITY=$(security find-identity -v -p codesigning | grep "Apple Development" | head -1 | sed 's/.*"\(.*\)"/\1/')
-    if [ -z "$SIGN_IDENTITY" ]; then
-        SIGN_IDENTITY=$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | sed 's/.*"\(.*\)"/\1/')
-    fi
-    if [ -z "$SIGN_IDENTITY" ]; then
-        # A stable self-signed identity keeps this bundle's own TCC grants,
-        # because its designated requirement pins that certificate. Ad-hoc
-        # signing has no such requirement and silently drops Screen Recording,
-        # so prefer this over ad-hoc whenever it exists.
-        SIGN_IDENTITY=$(security find-identity -v -p codesigning | grep -F "\"$OMI_LOCAL_DEV_SIGN_IDENTITY\"" | head -1 | sed 's/.*"\(.*\)"/\1/')
-        if [ -n "$SIGN_IDENTITY" ]; then
-            substep "Using local self-signed identity: $SIGN_IDENTITY"
+    local candidate
+    # An identity this bundle already wears wins over a "better" one, because switching costs the
+    # user every permission they have granted it.
+    local remembered
+    if remembered="$(remembered_signing_identity)" && [ -n "$remembered" ]; then
+        if signing_identity_usable "$remembered"; then
+            SIGN_IDENTITY="$remembered"
+            substep "Reusing this bundle's existing identity: $SIGN_IDENTITY"
+            return
         fi
+        echo ""
+        echo "  WARNING: this bundle was last signed with \"$remembered\", which is not usable"
+        echo "           here. Signing it with anything else RESETS ITS PERMISSIONS: macOS binds"
+        echo "           Microphone, Screen Recording and Files grants to the signing certificate,"
+        echo "           so the app will prompt for all of them again on next launch."
+        echo "           The remedy is the same one printed below."
     fi
-    if [ -z "$SIGN_IDENTITY" ] && [ "${OMI_ALLOW_ADHOC_SIGN:-0}" = "1" ] && [ "$IS_NAMED_BUNDLE" = true ]; then
+
+    # Prefer a real Apple identity so local permissions stay stable AND the bundle carries a
+    # Team ID. Each candidate is probed rather than merely found: an Apple Development identity
+    # whose key the keychain will not release is worse than useless, because picking it makes
+    # the build fail an hour of work later instead of falling back now.
+    for candidate in \
+        "$(security find-identity -v -p codesigning | grep "Apple Development" | head -1 | sed 's/.*"\(.*\)"/\1/')" \
+        "$(security find-identity -v -p codesigning | grep "Developer ID Application" | head -1 | sed 's/.*"\(.*\)"/\1/')"
+    do
+        [ -n "$candidate" ] || continue
+        if signing_identity_usable "$candidate"; then
+            SIGN_IDENTITY="$candidate"
+            return
+        fi
+        # Authorization can be granted between one call and the next -- clicking "Allow" on the
+        # SecurityAgent dialog authorizes a single use, so a refusal is not necessarily a
+        # standing state. Probe once more before writing the identity off, or a dialog answered
+        # a moment too late silently costs the build its Team ID.
+        sleep 1
+        if signing_identity_usable "$candidate"; then
+            SIGN_IDENTITY="$candidate"
+            return
+        fi
+        echo ""
+        echo "  WARNING: $candidate is present but the keychain refused its key."
+        echo "           Falling back to a teamless identity, which is a DOWNGRADE:"
+        echo "           the bundle gets no Team ID, so it cannot share Keychain items or"
+        echo "           entitlements with the team-scoped builds (Omi Dev, beta, prod) and"
+        echo "           needs library validation relaxed to launch."
+        echo "           If a keychain dialog is appearing, answer it with \"Always Allow\"."
+        echo "           To stop it recurring, grant codesign a standing partition once:"
+        echo ""
+        echo "             security set-key-partition-list -S apple-tool:,apple:,codesign: -s \\"
+        echo "               -l \"$candidate\" ~/Library/Keychains/login.keychain-db"
+        echo ""
+        echo "           Or force it for this build: OMI_SIGN_IDENTITY=\"$candidate\" ./run.sh"
+        echo ""
+    done
+
+    # A stable self-signed identity keeps this bundle's own TCC grants, because its designated
+    # requirement pins that certificate. Ad-hoc signing has no such requirement and silently
+    # drops Screen Recording, so this is preferred over ad-hoc always -- and created on demand
+    # rather than waiting for someone to run a GUI wizard.
+    if [ "${OMI_SKIP_LOCAL_SIGN_IDENTITY:-0}" != "1" ] && ensure_local_dev_signing_identity; then
+        SIGN_IDENTITY="$OMI_LOCAL_DEV_SIGN_IDENTITY"
+        substep "Using local self-signed identity: $SIGN_IDENTITY"
+        return
+    fi
+
+    if [ "${OMI_ALLOW_ADHOC_SIGN:-0}" = "1" ] && [ "$IS_NAMED_BUNDLE" = true ]; then
         SIGN_IDENTITY="-"
         substep "Using ad-hoc signing for named test bundle ($BUNDLE_ID)"
     fi
@@ -428,6 +664,7 @@ local_entitlements_fallback_reason() {
 fast_bundle_fingerprint() {
     local desktop_api_fingerprint="${OMI_DESKTOP_API_URL:-}"
     local python_api_fingerprint="${OMI_PYTHON_API_URL:-}"
+    local auth_api_fingerprint="${OMI_AUTH_API_URL:-}"
     # The local-profile writer refreshes both endpoint settings plus disposable
     # Auth-emulator values inside the installed bundle on every fast patch.
     # They are launch configuration, not a packaged-input boundary.
@@ -445,6 +682,9 @@ fast_bundle_fingerprint() {
         "skip-tunnel=${OMI_SKIP_TUNNEL:-0}" \
         "desktop-api-url=$desktop_api_fingerprint" \
         "python-api-url=$python_api_fingerprint" \
+        "auth-api-url=$auth_api_fingerprint" \
+        "jit-qa-target=${OMI_JIT_QA_TARGET:-}" \
+        "env-stage=${OMI_ENV_STAGE:-}" \
         "backend-port=$BACKEND_PORT"
 }
 
@@ -465,6 +705,20 @@ reset_local_profile_keychain_state() {
         # ACL. The reset helper rejects Prod, Beta, Omi Dev, and identity mismatch.
         ./scripts/omi-local-profile-keychain-reset.sh "$BUNDLE_ID" "$APP_PATH"
     fi
+}
+
+# Pool launch policy, as a pure decision so tests/test-omi-e2e-pool.sh can
+# drive it directly. An explicitly requested full rebuild of a LEASED E2E pool
+# slot is agent habit, not necessity: it is exactly the launch that, from a
+# background shell, cannot seed auth and reads as a cold start. Refuse it when
+# the fast bundle is still reusable; allow it whenever the fingerprint path
+# already decided a full rebuild is required, when the launcher itself forced
+# full (rewind reseed: $3 = 0), and for every non-pool named bundle.
+omi_pool_refuses_explicit_full() {
+    # $1 = E2E pool slot number ("" when the named bundle is not a pool slot)
+    # $2 = underlying fast-bundle eligibility reason
+    # $3 = 1 when --full / OMI_FORCE_FULL_BUNDLE requested the rebuild
+    [ -n "$1" ] && [ "$3" = "1" ] && [ "$2" = "reusable" ]
 }
 
 fail_fast_only() {
@@ -488,6 +742,7 @@ prepare_fast_only_configuration() {
     if [ "$YOLO_MODE" = "1" ] || [ "$NAMED_BUNDLE_DEFAULT_DEV_BACKEND" = true ]; then
         apply_yolo_env
     fi
+    omi_prepare_jit_qa_target "$APP_NAME" "$BUNDLE_ID" "$YOLO_MODE" refresh "$LOCAL_PROFILE" || exit $?
 }
 
 FAST_BUNDLE_STAMP="$OMI_DEV_DIR/fast-dev-bundles/$BUNDLE_ID.stamp"
@@ -500,6 +755,54 @@ if [ "$FAST_ONLY" = "1" ]; then
         fail_fast_only "$FAST_BUNDLE_REASON"
     fi
 fi
+
+
+# Every codesign call in this file goes through here.
+#
+# When signing fails because the *keychain* refused to hand over the private key, the raw
+# message is `errSecInternalComponent` — six syllables of nothing, and the failure looks
+# identical to a corrupt bundle or a bad identity. It sent one agent down a rabbit hole that
+# ended in ad-hoc signing, which is the one fix that silently breaks Rewind capture.
+#
+# The actual cause is almost always the session, not the certificate: a process launched
+# outside the GUI login session (`launchctl managername` reports `Background` rather than
+# `Aqua` — CI, an ssh shell, an agent harness, a LaunchDaemon) has no window server, so
+# SecurityAgent cannot draw the "codesign wants to use key X" dialog. Rather than hang, the
+# Security framework fails the call immediately. The key is present, the keychain is unlocked,
+# and the caller is the right user; only the authorization is missing.
+#
+# So say that, and say the one command that fixes it for good.
+omi_codesign() {
+    local output status
+    output="$(codesign "$@" 2>&1)"
+    status=$?
+    [ -n "$output" ] && printf '%s\n' "$output"
+    if [ $status -ne 0 ] && printf '%s' "$output" | grep -qE 'errSecInternalComponent|interaction is not allowed|User interaction'; then
+        echo ""
+        echo "ERROR: the keychain refused the signing key (not a bad bundle, not a bad identity)."
+        echo ""
+        echo "  identity: $SIGN_IDENTITY"
+        echo "  session : $(launchctl managername 2>/dev/null || echo unknown)   <- must be Aqua to show a keychain prompt"
+        echo ""
+        echo "  This shell cannot display the SecurityAgent dialog that would authorize the key,"
+        echo "  so macOS fails the request instead of asking. Grant codesign a standing partition"
+        echo "  on the key once, from a terminal in the GUI session:"
+        echo ""
+        echo "    security set-key-partition-list -S apple-tool:,apple:,codesign: -s \\"
+        echo "      -l \"$SIGN_IDENTITY\" ~/Library/Keychains/login.keychain-db"
+        echo ""
+        echo "  Omit -k so it prompts for the keychain password instead of putting it in history."
+        echo "  After that this build works from any session, including this one."
+        echo ""
+        echo "  DO NOT reach for OMI_ALLOW_ADHOC_SIGN=1 here. An ad-hoc signature has no"
+        echo "  designated requirement, so the bundle loses its own Screen Recording grant and"
+        echo "  Rewind captures nothing — which reads as a broken feature, not a signing problem."
+        echo "  See desktop/macos/docs/local-code-signing.md."
+        echo ""
+        exit 1
+    fi
+    return $status
+}
 
 sign_app_bundle() {
     local bundle="$1"
@@ -546,28 +849,28 @@ sign_app_bundle() {
     if [ "$sign_nested" = true ]; then
         if [ -d "$bundle/Contents/Frameworks/Sparkle.framework" ]; then
             substep "Signing Sparkle framework"
-            codesign --force --options runtime --sign "$SIGN_IDENTITY" "$bundle/Contents/Frameworks/Sparkle.framework"
+            omi_codesign --force --options runtime --sign "$SIGN_IDENTITY" "$bundle/Contents/Frameworks/Sparkle.framework"
         fi
         if [ -d "$bundle/Contents/Frameworks/Sentry.framework" ]; then
             substep "Signing Sentry framework"
-            codesign --force --options runtime --sign "$SIGN_IDENTITY" "$bundle/Contents/Frameworks/Sentry.framework"
+            omi_codesign --force --options runtime --sign "$SIGN_IDENTITY" "$bundle/Contents/Frameworks/Sentry.framework"
         fi
         if [ -d "$bundle/Contents/Frameworks/onnxruntime.framework" ]; then
             substep "Signing onnxruntime framework"
-            codesign --force --options runtime --sign "$SIGN_IDENTITY" "$bundle/Contents/Frameworks/onnxruntime.framework"
+            omi_codesign --force --options runtime --sign "$SIGN_IDENTITY" "$bundle/Contents/Frameworks/onnxruntime.framework"
         fi
         if [ -f "$bundle/Contents/Frameworks/libsharpyuv.0.dylib" ]; then
             substep "Signing libsharpyuv"
-            codesign --force --options runtime --sign "$SIGN_IDENTITY" "$bundle/Contents/Frameworks/libsharpyuv.0.dylib"
+            omi_codesign --force --options runtime --sign "$SIGN_IDENTITY" "$bundle/Contents/Frameworks/libsharpyuv.0.dylib"
         fi
         if [ -f "$bundle/Contents/Frameworks/libwebp.7.dylib" ]; then
             substep "Signing libwebp"
-            codesign --force --options runtime --sign "$SIGN_IDENTITY" "$bundle/Contents/Frameworks/libwebp.7.dylib"
+            omi_codesign --force --options runtime --sign "$SIGN_IDENTITY" "$bundle/Contents/Frameworks/libwebp.7.dylib"
         fi
         local node_bin="$bundle/Contents/Resources/Omi Computer_Omi Computer.bundle/Contents/Resources/node"
         if [ -f "$node_bin" ]; then
             substep "Signing bundled node binary"
-            codesign --force --options runtime --entitlements Desktop/Node.entitlements --sign "$SIGN_IDENTITY" "$node_bin"
+            omi_codesign --force --options runtime --entitlements Desktop/Node.entitlements --sign "$SIGN_IDENTITY" "$node_bin"
         fi
     fi
 
@@ -601,7 +904,8 @@ sign_app_bundle() {
     fi
 
     substep "Signing app bundle"
-    codesign --force --options runtime --entitlements "$effective_entitlements" --sign "$SIGN_IDENTITY" "$bundle"
+    omi_codesign --force --options runtime --entitlements "$effective_entitlements" --sign "$SIGN_IDENTITY" "$bundle"
+    remember_signing_identity "$SIGN_IDENTITY"
 }
 
 update_app_desktop_api_url() {
@@ -667,8 +971,6 @@ rewrite_bundled_dylib_load_path() {
 }
 
 step "Killing existing instances..."
-auth_debug "BEFORE pkill: auth_isSignedIn=$(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
-auth_debug "BEFORE pkill: ALL_KEYS=$(defaults read "$BUNDLE_ID" 2>&1 | grep -E 'auth_|hasCompleted|hasLaunched|currentTier|userShow' || true)"
 # Only kill the dev app — never touch Omi Beta (production)
 pkill -f "$APP_NAME.app" 2>/dev/null || true
 # Note: don't pkill cloudflared here — other agents may have tunnels running on this machine
@@ -688,8 +990,6 @@ else
     fi
 fi
 sleep 0.5  # Let cfprefsd flush after process death
-auth_debug "AFTER pkill: auth_isSignedIn=$(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
-auth_debug "AFTER pkill: ALL_KEYS=$(defaults read "$BUNDLE_ID" 2>&1 | grep -E 'auth_|hasCompleted|hasLaunched|currentTier|userShow' || true)"
 
 # Each non-production app writes to its own bundle-and-launch log path. Never clear a
 # machine-global log here: another named QA bundle may still be running.
@@ -796,6 +1096,7 @@ fi
 if [ -f "$BACKEND_DIR/.env" ]; then
     set -a; source "$BACKEND_DIR/.env"; set +a
 fi
+omi_prepare_jit_qa_target "$APP_NAME" "$BUNDLE_ID" "$YOLO_MODE" refresh "$LOCAL_PROFILE" || exit $?
 if [ "$YOLO_MODE" = "1" ] || [ "$NAMED_BUNDLE_DEFAULT_DEV_BACKEND" = true ]; then
     apply_yolo_env
 fi
@@ -962,6 +1263,15 @@ resolve_signing_identity
 FAST_BUNDLE_FINGERPRINT="$(fast_bundle_fingerprint)"
 FAST_BUNDLE_REASON="$(omi_fast_bundle_eligibility_reason "$APP_PATH" "$FAST_BUNDLE_STAMP" "$FAST_BUNDLE_FINGERPRINT")"
 if [ "$FORCE_FULL_BUNDLE" = "1" ]; then
+    if omi_pool_refuses_explicit_full "${E2E_POOL_SLOT:-}" "$FAST_BUNDLE_REASON" "$FULL_BUNDLE_EXPLICIT"; then
+        {
+            echo "ERROR: refusing an explicit --full rebuild of leased E2E pool slot ${E2E_POOL_SLOT} ($APP_NAME)."
+            echo "  The installed bundle is fast-reusable; pool launches prefer ./run.sh --fast-only."
+            echo "  A full rebuild runs on its own whenever the fast bundle is NOT reusable"
+            echo "  (first build, changed inputs, incomplete runtime) — you never need --full for that."
+        } >&2
+        exit 2
+    fi
     FAST_BUNDLE_REASON="full_requested"
     substep "Full bundle requested (--full or OMI_FORCE_FULL_BUNDLE=1)"
 elif [ "$FAST_BUNDLE_REASON" != "reusable" ]; then
@@ -991,7 +1301,11 @@ if [ "$FAST_BUNDLE" = "1" ]; then
         substep "Refreshed local-profile bundle environment"
     else
         update_app_desktop_api_url "$APP_PATH/Contents/Resources/.env"
+        omi_write_jit_qa_bundle_env "$APP_PATH/Contents/Resources/.env" || exit $?
     fi
+
+    step "Stamping source identity..."
+    omi_stamp_desktop_build_identity "$SCRIPT_DIR" "$APP_PATH/Contents/Info.plist"
 
     step "Signing updated app with hardened runtime..."
     sign_app_bundle "$APP_PATH" false
@@ -1028,8 +1342,6 @@ fi
 
 step "Building Swift app (swift build -c debug)..."
 xcrun swift build -c debug --package-path Desktop
-
-auth_debug "AFTER swift build: auth_isSignedIn=$(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
 
 step "Creating app bundle..."
 substep "Removing prior bundle (if any)"
@@ -1094,8 +1406,7 @@ cp -f Desktop/Info.plist "$APP_BUNDLE/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleName $APP_NAME" "$APP_BUNDLE/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $APP_NAME" "$APP_BUNDLE/Contents/Info.plist"
 /usr/libexec/PlistBuddy -c "Set :CFBundleURLTypes:0:CFBundleURLSchemes:0 $URL_SCHEME" "$APP_BUNDLE/Contents/Info.plist"
-
-auth_debug "AFTER plist edits: auth_isSignedIn=$(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
+omi_stamp_desktop_build_identity "$SCRIPT_DIR" "$APP_BUNDLE/Contents/Info.plist"
 
 substep "Copying GoogleService-Info.plist"
 if [ "$LOCAL_PROFILE" = true ] && [ -f "Desktop/Sources/GoogleService-Info-Local.plist" ]; then
@@ -1204,6 +1515,7 @@ else
     echo "OMI_PYTHON_API_URL=$PYTHON_API_URL" >> "$APP_BUNDLE/Contents/Resources/.env"
 fi
 substep "Set OMI_PYTHON_API_URL=$PYTHON_API_URL"
+omi_write_jit_qa_bundle_env "$APP_BUNDLE/Contents/Resources/.env" || exit $?
 fi # end non-local .env.app merge
 
 copy_app_icon() {
@@ -1235,8 +1547,6 @@ if [ "$IS_NAMED_BUNDLE" = false ]; then
 else
     substep "Named bundle ($BUNDLE_ID) — skipping provisioning profile"
 fi
-
-auth_debug "BEFORE signing: $(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
 
 step "Preparing bundled native dependencies..."
 "$(dirname "$0")/scripts/prepare-desktop-bundle-native-deps.sh" "$APP_BUNDLE"
@@ -1293,47 +1603,80 @@ substep "Recorded reusable bundle fingerprint"
 
 reset_local_profile_keychain_state
 
-if [ "$IS_NAMED_BUNDLE" = true ] && [ "${OMI_SKIP_AUTH_SEED:-0}" != "1" ]; then
-    step "Seeding auth from Omi Dev..."
-    if AUTH_CACHE="$(mktemp "${TMPDIR:-/tmp}/omi-desktop-auth.XXXXXX")"; then
-        if ./scripts/omi-auth-dump.sh com.omi.desktop-dev "$AUTH_CACHE"; then
-            # Pass the just-installed app path so seed can resolve Team ID and
-            # clear any prior CLI-written Keychain item (apple-tool: partition).
-            # Tokens are seeded into UserDefaults; the app migrates them into
-            # Keychain on launch with the correct teamid: partition (no prompt).
-            if ./scripts/omi-auth-seed.sh "$BUNDLE_ID" "$AUTH_CACHE" "$APP_PATH"; then
-                auth_debug "AFTER auth seed: auth_isSignedIn=$(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
-            else
-                echo "Warning: could not seed auth into $BUNDLE_ID. Launching cold."
-            fi
+omi_seed_dumped_auth_session() {
+    # Pass the just-installed app path so seed can resolve Team ID and
+    # clear any prior CLI-written Keychain item (apple-tool: partition).
+    # Tokens are seeded into UserDefaults; the app migrates them into
+    # Keychain on launch with the correct teamid: partition (no prompt).
+    if ! ./scripts/omi-auth-seed.sh "$BUNDLE_ID" "$AUTH_CACHE" "$APP_PATH"; then
+        if [ -n "${E2E_POOL_SLOT:-}" ]; then
+            echo "Warning: could not seed auth into $BUNDLE_ID; keeping the existing session of E2E pool slot $E2E_POOL_SLOT."
         else
-            echo "Warning: could not seed auth from Omi Dev. Launching cold."
+            echo "Warning: could not seed auth into $BUNDLE_ID. Launching cold."
+        fi
+    fi
+}
+
+if [ "$IS_NAMED_BUNDLE" = true ] && [ "${OMI_SKIP_AUTH_SEED:-0}" != "1" ]; then
+    AUTH_SOURCE="${OMI_AUTH_DUMP_SOURCE:-com.omi.desktop-dev}"
+    step "Seeding auth from $AUTH_SOURCE..."
+    if AUTH_CACHE="$(mktemp "${TMPDIR:-/tmp}/omi-desktop-auth.XXXXXX")"; then
+        if ./scripts/omi-auth-dump.sh "$AUTH_SOURCE" "$AUTH_CACHE"; then
+            omi_seed_dumped_auth_session
+        elif [ -z "${OMI_AUTH_DUMP_SOURCE:-}" ] \
+            && ./scripts/omi-auth-dump.sh com.omi.computer-macos "$AUTH_CACHE"; then
+            # A rotted dev session used to mean a cold launch and a web OAuth
+            # dance for every new bundle. The production app holds the same
+            # account with daily-refreshed tokens; adopt it (with a notice)
+            # unless the operator pinned a source explicitly.
+            echo "Note: $AUTH_SOURCE had no usable session; seeded auth from com.omi.computer-macos instead."
+            omi_seed_dumped_auth_session
+        else
+            if [ -n "${E2E_POOL_SLOT:-}" ]; then
+                # An empty dump from a background shell means THIS session
+                # cannot read the source keychain — not that the slot has no
+                # session. Keep the slot's own persisted session; never
+                # overwrite or clear it, and never describe this as a cold
+                # launch (that wording is what sent agents at the Keychain).
+                echo "Note: cannot seed auth from $AUTH_SOURCE in this session;"
+                echo "keeping the existing session of E2E pool slot $E2E_POOL_SLOT (it persists across rebuilds)."
+                echo "Do NOT reset the slot's Keychain — a human signs in once instead (omi-e2e-pool setup)."
+            else
+                echo "Warning: could not seed auth from $AUTH_SOURCE. Launching cold."
+            fi
         fi
         rm -f "$AUTH_CACHE"
         AUTH_CACHE=""
     else
-        echo "Warning: could not create temporary auth cache. Launching cold."
-    fi
-fi
-
-if [ "$IS_NAMED_BUNDLE" = true ] && [ "${OMI_SKIP_SETTINGS_SEED:-0}" != "1" ]; then
-    step "Seeding shortcuts/settings from Omi Dev..."
-    if ./scripts/omi-settings-seed.sh "$BUNDLE_ID" com.omi.desktop-dev; then
-        auth_debug "AFTER settings seed: shortcut_askOmiEnabled=$(defaults read "$BUNDLE_ID" shortcut_askOmiEnabled 2>&1 || true)"
-        auth_debug "AFTER settings seed: devLazyPermissionsEnabled=$(defaults read "$BUNDLE_ID" devLazyPermissionsEnabled 2>&1 || true)"
-    else
-        echo "Warning: could not seed shortcuts/settings from Omi Dev. Continuing with bundle defaults."
+        if [ -n "${E2E_POOL_SLOT:-}" ]; then
+            echo "Note: could not create a temporary auth cache; keeping the existing session of E2E pool slot $E2E_POOL_SLOT."
+        else
+            echo "Warning: could not create temporary auth cache. Launching cold."
+        fi
     fi
 fi
 
 if [ "$IS_NAMED_BUNDLE" = true ] && [ "${OMI_SKIP_REWIND_SEED:-0}" != "1" ]; then
-    step "Seeding Rewind history from Omi Dev..."
+    step "Seeding Rewind history from the shared local profile..."
     if ! ./scripts/omi-rewind-seed.sh "$BUNDLE_ID"; then
         echo "Warning: could not seed Rewind history into $BUNDLE_ID. Launching with its existing local profile."
     fi
 fi
 
 fi # full bundle path
+
+# Curated preferences are launch configuration, not bundle contents. Re-sync
+# them after both full installs and executable-only fast rebuilds so a reused
+# named bundle cannot retain hotkeys/settings that diverged from the resolved
+# settings authority (production Omi when installed, else Omi Dev).
+if [ "$IS_NAMED_BUNDLE" = true ] && [ "${OMI_SKIP_SETTINGS_SEED:-0}" != "1" ]; then
+    step "Seeding shortcuts/settings from the resolved source app..."
+    if ! ./scripts/omi-settings-seed.sh "$BUNDLE_ID"; then
+        echo "ERROR: could not mirror shortcuts/settings into $BUNDLE_ID." >&2
+        echo "Set OMI_SKIP_SETTINGS_SEED=1 only when intentionally testing bundle-local settings." >&2
+        exit 1
+    fi
+fi
 
 signal_desktop_launch() {
     local signal_file="${OMI_DESKTOP_LAUNCH_SIGNAL_FILE:-}"
@@ -1400,18 +1743,30 @@ fi
 printf 'launch_mode=%s fast_reason=%s bundle_id=%s profile_root=%q\n' \
     "$LAUNCH_MODE" "$FAST_BUNDLE_REASON" "$BUNDLE_ID" "$PROFILE_ROOT"
 
-auth_debug "BEFORE launch: $(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
-
 # `open` starts the app from launchd, not this shell, so documented QA
 # overrides must be forwarded explicitly or they silently do nothing. Only the
 # direct-exec fallback below inherits this shell's environment.
 build_launch_env_args() {
     LAUNCH_ENV_ARGS=()
+    if [ -n "${OMI_JIT_QA_TARGET:-}" ]; then
+        LAUNCH_ENV_ARGS+=(
+            --env "OMI_PYTHON_API_URL=$OMI_PYTHON_API_URL"
+            --env "OMI_DESKTOP_API_URL=$OMI_DESKTOP_API_URL"
+            --env "OMI_AUTH_API_URL=$OMI_AUTH_API_URL"
+            --env "OMI_ENV_STAGE=$OMI_ENV_STAGE"
+        )
+    fi
     if [ -n "${OMI_FORCE_CANONICAL_MEMORY_ATLAS:-}" ]; then
         LAUNCH_ENV_ARGS+=(--env "OMI_FORCE_CANONICAL_MEMORY_ATLAS=$OMI_FORCE_CANONICAL_MEMORY_ATLAS")
     fi
     if [ -n "${OMI_FORCE_CONTEXT_BUCKETS:-}" ]; then
         LAUNCH_ENV_ARGS+=(--env "OMI_FORCE_CONTEXT_BUCKETS=$OMI_FORCE_CONTEXT_BUCKETS")
+    fi
+    if [ -n "${OMI_FORCE_BUCKET_CANDIDATES:-}" ]; then
+        LAUNCH_ENV_ARGS+=(--env "OMI_FORCE_BUCKET_CANDIDATES=$OMI_FORCE_BUCKET_CANDIDATES")
+    fi
+    if [ -n "${OMI_FORCE_BUCKET_WORKSTREAMS:-}" ]; then
+        LAUNCH_ENV_ARGS+=(--env "OMI_FORCE_BUCKET_WORKSTREAMS=$OMI_FORCE_BUCKET_WORKSTREAMS")
     fi
     # Forward automation token overrides when the caller already pinned them
     # (e.g. desktop-core-harness.sh). Default token discovery prefers Darwin
@@ -1424,7 +1779,7 @@ build_launch_env_args() {
     fi
 }
 
-build_launch_env_args
+build_launch_env_args || exit $?
 
 LAUNCH_TRANSPORT="open"
 if [ -n "$DESKTOP_LAUNCH_TOKEN" ]; then

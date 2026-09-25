@@ -200,4 +200,39 @@ void main() {
       expect(provider.hasDataChanged(app, app.category), isTrue);
     });
   });
+
+  group('AddAppProvider.deleteApiKey', () {
+    test('throws and skips reload when the server rejects revocation', () async {
+      var listCalls = 0;
+      final provider = AddAppProvider(
+        deleteApiKeyServerFn: (appId, keyId) async => false,
+        listApiKeysServerFn: (appId) async {
+          listCalls++;
+          return <AppApiKey>[];
+        },
+      );
+
+      await expectLater(
+        provider.deleteApiKey('app-1', 'key-1'),
+        throwsA(isA<Exception>()),
+      );
+      expect(listCalls, 0);
+    });
+
+    test('reloads API keys after a confirmed revocation', () async {
+      var listCalls = 0;
+      final provider = AddAppProvider(
+        deleteApiKeyServerFn: (appId, keyId) async => true,
+        listApiKeysServerFn: (appId) async {
+          listCalls++;
+          return <AppApiKey>[];
+        },
+      );
+
+      await provider.deleteApiKey('app-1', 'key-1');
+
+      expect(listCalls, 1);
+      expect(provider.apiKeys, isEmpty);
+    });
+  });
 }

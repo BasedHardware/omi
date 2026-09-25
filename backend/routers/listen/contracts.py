@@ -12,7 +12,9 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Optional
 
+from routers.listen.realtime_demand import RealtimeDemandTracker
 from utils.client_device import ClientDeviceContext
+from models.geolocation import Geolocation
 
 
 class CustomSttMode(str, Enum):
@@ -42,6 +44,14 @@ class ListenRequest:
     conversation_role: str = 'ambient'
     client_device_context: Optional[ClientDeviceContext] = None
     owner_persistence_blocked: asyncio.Event = field(default_factory=asyncio.Event)
+    geolocation: Optional[Geolocation] = None
+    # A re-record of an *existing* speech profile from Settings, not a claim to
+    # onboarding provenance. Distinct from onboarding_mode (which still drives
+    # the same server-pushed question flow) so this can bypass the
+    # completed-account admission gate below without weakening it for real
+    # onboarding — see runtime.py's _bootstrap. Appended last so a positional
+    # caller can't silently mis-bind an existing argument.
+    speech_profile_redo: bool = False
 
 
 @dataclass
@@ -56,6 +66,7 @@ class ListenSessionState:
     speaker_map_dirty: bool = False
     first_audio_byte_timestamp: Optional[float] = None
     live_transcription_attempt: Any = None
+    client_live_transcription_attempt: Any = None
     live_transcription_failed: bool = False
     last_usage_record_timestamp: Optional[float] = None
     words_transcribed_since_last_record: int = 0
@@ -71,11 +82,14 @@ class ListenSessionState:
     fair_use_plan: Optional[Any] = None
     dg_usage_ms_pending: int = 0
     last_audio_received_time: Optional[float] = None
+    last_audio_resume_time: Optional[float] = None
     last_activity_time: Optional[float] = None
     # Client-provided close provenance. This is set before a normal WebSocket
     # close so finalization can distinguish an internal rotation from a
     # terminal meeting end without trusting socket timing.
     finalization_reason: Optional[str] = None
+    # Who could watch this session live; see routers/listen/realtime_demand.py.
+    realtime_demand: RealtimeDemandTracker = field(default_factory=RealtimeDemandTracker)
 
 
 @dataclass(frozen=True)
@@ -91,7 +105,6 @@ class ListenLimits:
     image_chunk_cleanup_min_size: int = 5
     ring_buffer_duration: float = 60.0
     speaker_id_min_audio: float = 2.0
-    speaker_id_target_audio: float = 4.0
     credits_refresh_seconds: int = 900
     ws_receive_timeout: float = 300.0
     bg_drain_timeout: float = 30.0

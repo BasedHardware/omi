@@ -65,7 +65,7 @@ extension TasksStore {
     incompleteTasks.removeAll { $0.id == task.id }
     completedTasks.removeAll { $0.id == task.id }
     deletedTasks.removeAll { $0.id == task.id }
-    if task.deleted == true {
+    if task.isRetired {
       deletedTasks.insert(task, at: 0)
     } else if task.completed {
       completedTasks.insert(task, at: 0)

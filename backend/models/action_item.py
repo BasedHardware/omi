@@ -252,8 +252,13 @@ class ActionItemResponse(BaseModel):
 
 
 class ActionItemsResponse(BaseModel):
+    """List envelope; ``truncated`` is set only when the request's list-read
+    budget ended the aggregate scan early (#11831) — such pages may not be a
+    complete prefix, so ``has_more`` is forced true as well."""
+
     action_items: list[ActionItemResponse]
     has_more: bool = False
+    truncated: bool = False
 
 
 class ActionItemsSearchResponse(BaseModel):

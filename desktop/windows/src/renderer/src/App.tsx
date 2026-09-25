@@ -9,6 +9,7 @@ import { TitleBar } from './components/layout/TitleBar'
 import { Spinner } from './components/ui/Spinner'
 import { DbRecoveryNotice } from './components/ui/DbRecoveryNotice'
 import { DegradedModeNotice } from './components/ui/DegradedModeNotice'
+import { RewindCaptureNotice } from './components/ui/RewindCaptureNotice'
 import { ToastHost } from './components/ui/ToastHost'
 import { purgeAppMemoriesOnce } from './lib/appMemories'
 import { AppStateProvider } from './state/AppStateProvider'
@@ -70,6 +71,16 @@ function AppShellInner(): React.JSX.Element {
     window.omi?.setTitleBarSurface?.(isHome)
   }, [isHome])
 
+  // JIT evidence navigation is routed by the main process so the insight toast
+  // cannot manufacture or dereference an href in its secondary window.
+  useEffect(() => {
+    if (IS_SECONDARY_WINDOW) return
+    return window.omi.onRewindFocusFrame((frameId) => {
+      if (!Number.isInteger(frameId) || frameId < 0) return
+      navigate(`/rewind?frame_id=${encodeURIComponent(String(frameId))}`)
+    })
+  }, [navigate])
+
   // Honor the one-shot destination requested when onboarding completes. The
   // shell mounts at /home after the
   // onboarding gate redirects; we consume the pending route here and jump to it.
@@ -122,6 +133,8 @@ function AppShellInner(): React.JSX.Element {
       <DbRecoveryNotice />
       {/* Only renders during a backend 429 storm; self-clears on recovery. */}
       <DegradedModeNotice />
+      {/* Only renders when Rewind is enabled but can't get a screen source. */}
+      <RewindCaptureNotice />
       <AppChrome>
         <MainViews />
       </AppChrome>

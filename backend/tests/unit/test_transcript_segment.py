@@ -56,12 +56,14 @@ def test_merge_same_speaker_with_small_gap():
     b = _segment("world.", speaker="SPEAKER_00", start=1.1, end=2.0)
     input_concat = _concat_texts([a.text, b.text])
 
-    segments, _, removed_ids = TranscriptSegment.combine_segments([], [a, b])
+    result = TranscriptSegment.combine_segments([], [a, b])
+    segments, _, removed_ids = result
 
     assert len(segments) == 1
     assert segments[0].text == "Hello world."
     assert a.id not in removed_ids
-    assert b.id not in removed_ids
+    assert b.id in removed_ids
+    assert result.absorbed_into.get(b.id) == a.id
     assert _concat_segments(segments) == input_concat
 
 
@@ -77,9 +79,9 @@ def test_updated_segments_returned_for_existing_merge():
     assert len(updated_segments) == 1
     assert updated_segments[0].id == existing.id
     assert updated_segments[0].text == "Hello world."
-    assert removed_ids == []
+    assert removed_ids == [new.id]
     assert existing.id not in removed_ids
-    assert new.id not in removed_ids
+    assert new.id in removed_ids
     assert _concat_segments(segments) == input_concat
 
 
@@ -133,8 +135,8 @@ def test_forward_merge_drops_segment_when_only_incomplete():
     assert segments[0].text == "unfinished continues now."
     assert len(updated_segments) == 1
     assert updated_segments[0].speaker == "SPEAKER_01"
-    assert removed_ids == []
-    assert a.id not in removed_ids
+    assert removed_ids == [a.id]
+    assert a.id in removed_ids
     assert b.id not in removed_ids
     assert _concat_segments(segments) == input_concat
 
@@ -247,9 +249,8 @@ def test_backward_merge_single_lowercase_sentence_from_next_segment():
     assert segments[0].speaker == "SPEAKER_01"
     assert segments[0].text.endswith("listen.")
     assert len(updated_segments) == 1
-    assert removed_ids == []
+    assert b.id in removed_ids
     assert a.id not in removed_ids
-    assert b.id not in removed_ids
     assert _concat_segments(segments) == input_concat
 
 
@@ -263,9 +264,8 @@ def test_merge_lowercase_continuation_same_speaker():
     assert len(segments) == 1
     assert segments[0].text == "Hello world"
     assert len(updated_segments) == 1
-    assert removed_ids == []
+    assert b.id in removed_ids
     assert a.id not in removed_ids
-    assert b.id not in removed_ids
     assert _concat_segments(segments) == input_concat
 
 
@@ -293,10 +293,9 @@ def test_backward_merge_lowercase_phrase_between_same_speaker_segments():
     assert segments[0].speaker == "SPEAKER_1"
     assert "able to just, like, go to different countries" in segments[0].text
     assert len(updated_segments) == 1
-    assert removed_ids == []
+    assert b.id in removed_ids
     assert a.id not in removed_ids
-    assert b.id not in removed_ids
-    assert c.id not in removed_ids
+    assert c.id in removed_ids
     assert _concat_segments(segments) == input_concat
 
 
@@ -317,9 +316,8 @@ def test_backward_merge_lowercase_phrase_at_end_of_speaker_segment():
     assert segments[0].speaker == "SPEAKER_3"
     assert segments[0].text.endswith("pretty much")
     assert len(updated_segments) == 1
-    assert removed_ids == []
+    assert b.id in removed_ids
     assert a.id not in removed_ids
-    assert b.id not in removed_ids
     assert _concat_segments(segments) == input_concat
 
 
@@ -374,6 +372,82 @@ def test_no_merge_when_stt_provider_differs():
     assert _concat_segments(segments) == input_concat
 
 
+def test_explicit_scoped_speaker_ids_keep_padded_provider_labels_distinct():
+    deepgram = TranscriptSegment(
+        text="Deepgram speaker",
+        speaker="SPEAKER_0",
+        speaker_id=0,
+        speaker_id_scope="connection-a:0",
+        stt_provider="deepgram",
+        is_user=False,
+        start=0.0,
+        end=1.0,
+    )
+    modulate = TranscriptSegment(
+        text="Modulate speaker",
+        speaker="SPEAKER_00",
+        speaker_id=1,
+        speaker_id_scope="connection-a:1",
+        stt_provider="modulate",
+        is_user=False,
+        start=1.0,
+        end=2.0,
+    )
+
+    assert deepgram.speaker_id == 0
+    assert modulate.speaker_id == 1
+    assert deepgram.speaker_id != modulate.speaker_id
+
+
+def test_internal_speaker_identity_fields_persist_without_widening_client_schema():
+    segment = TranscriptSegment(
+        text="Owner statement",
+        speaker="SPEAKER_00",
+        speaker_id=3,
+        speaker_id_scope="connection-a:0",
+        speaker_identity_status="no_match",
+        is_user=False,
+        start=0.0,
+        end=1.0,
+    )
+
+    payload = segment.model_dump()
+    properties = TranscriptSegment.model_json_schema()['properties']
+
+    assert payload['speaker_id_scope'] == "connection-a:0"
+    assert payload['speaker_identity_status'] == "no_match"
+    assert 'speaker_id_scope' not in properties
+    assert 'speaker_identity_status' not in properties
+
+
+def test_no_merge_across_provider_epochs_when_provider_name_is_unchanged():
+    before_reconnect = TranscriptSegment(
+        text="Before reconnect",
+        speaker="SPEAKER_0",
+        speaker_id=0,
+        speaker_id_scope="connection-a:0",
+        stt_provider="deepgram",
+        is_user=False,
+        start=0.0,
+        end=1.0,
+    )
+    after_reconnect = TranscriptSegment(
+        text="after reconnect.",
+        speaker="SPEAKER_0",
+        speaker_id=1,
+        speaker_id_scope="connection-b:0",
+        stt_provider="deepgram",
+        is_user=False,
+        start=1.1,
+        end=2.0,
+    )
+
+    segments, _, _ = TranscriptSegment.combine_segments([], [before_reconnect, after_reconnect])
+
+    assert len(segments) == 2
+    assert [segment.speaker_id for segment in segments] == [0, 1]
+
+
 def test_punctuation_cleanup_normalizes_spacing():
     a = _segment("Hello , world .", speaker="SPEAKER_00", start=0.0, end=1.0)
     input_concat = _concat_texts([a.text])
@@ -399,9 +473,8 @@ def test_empty_text_segment_does_not_break_concat():
     assert len(segments) == 1
     assert segments[0].text == "Hello"
     assert len(updated_segments) == 1
-    assert removed_ids == []
+    assert b.id in removed_ids
     assert a.id not in removed_ids
-    assert b.id not in removed_ids
     assert _concat_segments(segments) == input_concat
 
 
@@ -415,9 +488,8 @@ def test_non_latin_text_merges_same_speaker():
     assert len(segments) == 1
     assert segments[0].text == "こんにちは 世界。"
     assert len(updated_segments) == 1
-    assert removed_ids == []
+    assert b.id in removed_ids
     assert a.id not in removed_ids
-    assert b.id not in removed_ids
     assert _concat_segments(segments) == input_concat
 
 
@@ -531,3 +603,58 @@ def test_segments_as_string_defaults_to_user_when_name_missing():
     rendered = TranscriptSegment.segments_as_string(segs, user_name=None)
 
     assert rendered.startswith("User: Hello.")
+
+
+def test_cross_speaker_repair_skipped_for_late_arriving_segment():
+    """A segment that starts before the current tail is not its continuation.
+
+    Late arrivals from an earlier batch are appended after a newer tail (see
+    TestCrossBatchSegmentOrdering in test_modulate_stt.py) and only sorted afterwards.
+    Repairing across that pair rewrote the tail's end to the late arrival's start,
+    producing end < start, and moved the tail speaker's words onto the other speaker.
+    """
+    existing = _segment("This is the second utterance. And I was", speaker="SPEAKER_00", start=10.0, end=12.0)
+    late_arrival = _segment("going to say something else here.", speaker="SPEAKER_01", start=2.0, end=5.0)
+
+    segments, _, removed_ids = TranscriptSegment.combine_segments([existing], [late_arrival])
+
+    assert len(segments) == 2
+    assert segments[0].text == "This is the second utterance. And I was"
+    assert segments[0].start == pytest.approx(10.0)
+    assert segments[0].end == pytest.approx(12.0)
+    assert segments[0].end >= segments[0].start
+    assert segments[1].text == "going to say something else here."
+    assert segments[1].start == pytest.approx(2.0)
+    assert removed_ids == []
+
+
+def test_cross_speaker_repair_skipped_across_long_silence():
+    """Ten minutes apart with different speakers is not one split sentence.
+
+    Without a gap bound the older segment was deleted outright and its words were
+    reattributed to the later speaker at the later timestamp.
+    """
+    existing = _segment("So the plan is", speaker="SPEAKER_00", start=0.0, end=3.0)
+    much_later = _segment("we should go with option two.", speaker="SPEAKER_01", start=600.0, end=605.0)
+
+    segments, _, removed_ids = TranscriptSegment.combine_segments([existing], [much_later])
+
+    assert len(segments) == 2
+    assert segments[0].text == "So the plan is"
+    assert segments[0].start == pytest.approx(0.0)
+    assert segments[1].text == "we should go with option two."
+    assert segments[1].start == pytest.approx(600.0)
+    assert removed_ids == []
+
+
+def test_cross_speaker_repair_still_applies_to_adjacent_segments():
+    """The guard must not disable repair for the contiguous case it exists for."""
+    existing = _segment("How are", speaker="SPEAKER_00", start=0.0, end=3.0)
+    following = _segment("you doing today?", speaker="SPEAKER_01", start=3.1, end=6.0)
+
+    segments, _, removed_ids = TranscriptSegment.combine_segments([existing], [following])
+
+    assert len(segments) == 1
+    assert segments[0].speaker == "SPEAKER_01"
+    assert segments[0].text == "How are you doing today?"
+    assert removed_ids == [existing.id]

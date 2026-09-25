@@ -9,13 +9,13 @@ import sys
 from datetime import date
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[2]
 DESKTOP_DIR = ROOT / "desktop" / "macos"
 CHANGELOG_DIR = DESKTOP_DIR / "changelog"
 UNRELEASED_DIR = CHANGELOG_DIR / "unreleased"
 RELEASES_DIR = CHANGELOG_DIR / "releases"
 LEGACY_CHANGELOG_PATH = DESKTOP_DIR / "CHANGELOG.json"
+NONE_KIND = "none"
 
 
 class ChangelogError(Exception):
@@ -50,14 +50,20 @@ def normalize_changes(raw: object, path: Path) -> list[str]:
     return normalized
 
 
+def is_none_kind_fragment(data: object) -> bool:
+    return isinstance(data, dict) and data.get("kind") == NONE_KIND
+
+
 def read_unreleased_fragment(path: Path) -> list[str]:
     data = read_json(path)
+    if is_none_kind_fragment(data):
+        return []
     if isinstance(data, dict):
         if "change" in data:
             return normalize_changes(data["change"], path)
         if "changes" in data:
             return normalize_changes(data["changes"], path)
-    raise ChangelogError(f"{path} must contain a 'change' string or 'changes' list")
+    raise ChangelogError(f"{path} must contain a 'change' string, 'changes' list, or 'kind': '{NONE_KIND}'")
 
 
 def read_release_file(path: Path) -> dict[str, object]:
@@ -120,7 +126,9 @@ def release_entries() -> list[dict[str, object]]:
                     releases.append(normalized)
                     seen_versions.add(version)
 
-    return sorted(releases, key=lambda release: (str(release["date"]), version_sort_key(str(release["version"]))), reverse=True)
+    return sorted(
+        releases, key=lambda release: (str(release["date"]), version_sort_key(str(release["version"]))), reverse=True
+    )
 
 
 def legacy_changelog() -> dict[str, object]:

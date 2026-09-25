@@ -1,9 +1,11 @@
 import 'dart:typed_data';
 
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/services/bridges/ble_bridge.dart';
+import 'package:omi/services/devices/models.dart';
 import 'package:omi/services/devices/transports/device_transport.dart';
 import 'package:omi/services/devices/transports/native_ble_transport.dart';
 
@@ -58,7 +60,7 @@ void main() {
     await Future<void>.delayed(Duration.zero);
 
     expect(received, [
-      [1, 2, 3]
+      [1, 2, 3],
     ]);
   });
 
@@ -74,5 +76,85 @@ void main() {
     await Future<void>.delayed(Duration.zero);
 
     expect(states, [DeviceTransportState.disconnected, DeviceTransportState.connected]);
+  });
+
+  test('isBleAudioCharacteristicUuid covers wearable audio notify chars', () {
+    expect(isBleAudioCharacteristicUuid(audioDataStreamCharacteristicUuid), isTrue);
+    expect(isBleAudioCharacteristicUuid(friendPendantAudioCharacteristicUuid), isTrue);
+    expect(isBleAudioCharacteristicUuid(limitlessRxCharUuid), isTrue);
+    expect(isBleAudioCharacteristicUuid(beeAudioCharacteristicUuid), isTrue);
+    expect(isBleAudioCharacteristicUuid(fieldyAudioCharacteristicUuid), isTrue);
+    expect(isBleAudioCharacteristicUuid(plaudNotifyCharUuid), isTrue);
+    expect(isBleAudioCharacteristicUuid(batteryLevelCharacteristicUuid), isFalse);
+    expect(isBleAudioCharacteristicUuid(plaudWriteCharUuid), isFalse);
+  });
+
+  test('after reconnect, silent audio CCCD is retried once then left dead', () {
+    fakeAsync((async) {
+      transport.dispose();
+      final hostApi = _FakeBleHostApi();
+      transport = NativeBleTransport(uuid, hostApi: hostApi);
+
+      const audioChar = '19b10001-e8f2-537e-4f6c-d104768a1214';
+      final audioServices = [
+        BleService(uuid: serviceUuid, characteristicUuids: [audioChar]),
+      ];
+
+      BleBridge.instance.onDeviceReady(uuid, audioServices);
+      transport.getCharacteristicStream(serviceUuid, audioChar).listen((_) {});
+      async.flushMicrotasks();
+
+      BleBridge.instance.onPeripheralDisconnected(uuid, null);
+      BleBridge.instance.onDeviceReady(uuid, audioServices);
+      async.flushMicrotasks();
+
+      final subscribesBeforeWatch = hostApi.subscribed.where((s) => s.contains(audioChar)).length;
+      expect(subscribesBeforeWatch, greaterThanOrEqualTo(1));
+
+      async.elapse(const Duration(seconds: 4));
+      async.flushMicrotasks();
+      final afterFirstSilence = hostApi.subscribed.where((s) => s.contains(audioChar)).length;
+      expect(afterFirstSilence, subscribesBeforeWatch + 1, reason: 'one CCCD resubscribe on silence');
+
+      async.elapse(const Duration(seconds: 4));
+      async.flushMicrotasks();
+      expect(
+        hostApi.subscribed.where((s) => s.contains(audioChar)).length,
+        afterFirstSilence,
+        reason: 'do not tight-loop resubscribe after the single retry',
+      );
+    });
+  });
+
+  test('Bee audio UUID silence after reconnect still schedules one CCCD retry', () {
+    fakeAsync((async) {
+      transport.dispose();
+      final hostApi = _FakeBleHostApi();
+      transport = NativeBleTransport(uuid, hostApi: hostApi);
+
+      final audioServices = [
+        BleService(uuid: beeServiceUuid, characteristicUuids: [beeAudioCharacteristicUuid]),
+      ];
+
+      BleBridge.instance.onDeviceReady(uuid, audioServices);
+      transport.getCharacteristicStream(beeServiceUuid, beeAudioCharacteristicUuid).listen((_) {});
+      async.flushMicrotasks();
+
+      BleBridge.instance.onPeripheralDisconnected(uuid, null);
+      BleBridge.instance.onDeviceReady(uuid, audioServices);
+      async.flushMicrotasks();
+
+      final subscribesBeforeWatch =
+          hostApi.subscribed.where((s) => s.toLowerCase().contains(beeAudioCharacteristicUuid.toLowerCase())).length;
+      expect(subscribesBeforeWatch, greaterThanOrEqualTo(1));
+
+      async.elapse(const Duration(seconds: 4));
+      async.flushMicrotasks();
+      expect(
+        hostApi.subscribed.where((s) => s.toLowerCase().contains(beeAudioCharacteristicUuid.toLowerCase())).length,
+        subscribesBeforeWatch + 1,
+        reason: 'Bee audio UUID must be recognized so CCCD retry arms',
+      );
+    });
   });
 }

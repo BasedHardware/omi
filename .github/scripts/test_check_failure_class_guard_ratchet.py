@@ -128,6 +128,11 @@ class GuardRatchetTests(unittest.TestCase):
             json.dumps({"schema_version": 1, "grandfathered": entries}, indent=2) + "\n", encoding="utf-8"
         )
 
+    def pr_body(self, class_id: str) -> Path:
+        path = self.root / "pr-body.md"
+        path.write_text(f"## Summary\n\nFailure-Class: {class_id}\n", encoding="utf-8")
+        return path
+
     def check(self, *extra: str) -> subprocess.CompletedProcess[str]:
         return run_checker(self.root, *extra)
 
@@ -200,8 +205,33 @@ class GuardRatchetTests(unittest.TestCase):
     def test_pr_body_declaration_counts_toward_the_window(self) -> None:
         self.define("FC-recurring-thing")
         self.declare("FC-recurring-thing", count=2)
-        body = self.root / "pr-body.md"
-        body.write_text("## Summary\n\nFailure-Class: FC-recurring-thing\n", encoding="utf-8")
+        # A `pull_request` run checks out the merge ref, whose message declares
+        # nothing: the pending change exists only in the body.
+        self.commit("Merge 1111111 into 2222222", date="2026-07-02T00:00:00Z")
+        body = self.pr_body("FC-recurring-thing")
+        result = self.check("--pr-body-file", str(body))
+        self.assertEqual(result.returncode, 1, result.stdout)
+        self.assertIn("FC-recurring-thing", result.stderr)
+
+    def test_a_landed_declaration_is_not_counted_twice_from_its_own_pr_body(self) -> None:
+        """A main push re-reads the merged PR body while HEAD already carries the
+        same declaration; counting both turns a green PR red right after merge."""
+        self.define("FC-recurring-thing")
+        self.declare("FC-recurring-thing", count=1)
+        self.commit(
+            "fix(scope): the change being pushed (#4242)\n\nFailure-Class: FC-recurring-thing\n",
+            date="2026-07-02T00:00:00Z",
+        )
+        body = self.pr_body("FC-recurring-thing")
+        result = self.check("--pr-body-file", str(body))
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+
+    def test_a_pr_body_still_counts_when_the_squash_message_omits_the_trailer(self) -> None:
+        """Subtracting HEAD must not swallow a declaration history never saw."""
+        self.define("FC-recurring-thing")
+        self.declare("FC-recurring-thing", count=2)
+        self.commit("fix(scope): declared in the body only (#4243)", date="2026-07-02T00:00:00Z")
+        body = self.pr_body("FC-recurring-thing")
         result = self.check("--pr-body-file", str(body))
         self.assertEqual(result.returncode, 1, result.stdout)
         self.assertIn("FC-recurring-thing", result.stderr)

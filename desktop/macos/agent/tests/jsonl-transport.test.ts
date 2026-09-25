@@ -5,9 +5,15 @@ import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 
 import type { OutboundMessageDraft, QueryMessage } from "../src/protocol.js";
-import { JsonlTransport, type McpServerBuilder } from "../src/runtime/jsonl-transport.js";
+import {
+  JsonlTransport,
+  type McpServerBuilder,
+  type QueryActivityLeaseScheduler,
+} from "../src/runtime/jsonl-transport.js";
 import { updateContextSource } from "../src/runtime/context-snapshot.js";
+import { stableJsonHash } from "../src/runtime/kernel-support.js";
 import { recordJournalTurn, terminalizeJournalTurn } from "../src/runtime/conversation-journal.js";
+import { readSessionExecutionProfile } from "../src/runtime/session-execution-profile.js";
 import { createKernelHarness, waitUntil } from "./kernel-fakes.js";
 
 const roots: string[] = [];
@@ -16,12 +22,16 @@ afterEach(() => {
   while (roots.length) rmSync(roots.pop()!, { recursive: true, force: true });
 });
 
-function fixture(buildMcpServers?: McpServerBuilder) {
+function fixture(
+  buildMcpServers?: McpServerBuilder,
+  scheduleQueryActivity?: QueryActivityLeaseScheduler,
+  owner = "owner",
+) {
   const root = mkdtempSync(join(tmpdir(), "omi-jsonl-"));
   roots.push(root);
   const { store, adapter, kernel } = createKernelHarness(join(root, "agent.sqlite"), "fake");
   const session = store.insertSession({
-    ownerId: "owner",
+    ownerId: owner,
     surfaceKind: "main_chat",
     externalRefKind: "chat",
     externalRefId: "default",
@@ -30,14 +40,15 @@ function fixture(buildMcpServers?: McpServerBuilder) {
     modelProfile: "pinned-model",
   });
   const sent: OutboundMessageDraft[] = [];
-  let activeOwner = "owner";
+  let activeOwner = owner;
   const transport = new JsonlTransport({
     kernel,
-    ownerId: "owner",
+    ownerId: owner,
     defaultAdapterId: "fake",
     activeOwnerId: () => activeOwner,
     send: (message) => sent.push(message),
     buildMcpServers,
+    scheduleQueryActivity,
   });
   return {
     store,
@@ -66,6 +77,43 @@ function query(sessionId: string, overrides: Partial<QueryMessage> = {}): QueryM
 }
 
 describe("JsonlTransport kernel-owned query contract", () => {
+  it("leases a quiet admitted query until its terminal result", async () => {
+    let emitActivity: (() => void) | undefined;
+    let leaseStops = 0;
+    const scheduleQueryActivity: QueryActivityLeaseScheduler = (emit) => {
+      emitActivity = emit;
+      return () => { leaseStops += 1; };
+    };
+    const { store, adapter, session, sent, transport } = fixture(undefined, scheduleQueryActivity);
+    adapter.deferResult();
+
+    const running = transport.handleQuery(query(session.sessionId, {
+      requestId: "request-quiet-round",
+    }));
+    await waitUntil(() => adapter.executed.length === 1);
+    sent.splice(0);
+
+    expect(emitActivity).toBeTypeOf("function");
+    emitActivity?.();
+    expect(sent).toContainEqual(expect.objectContaining({
+      type: "turn_activity",
+      phase: "running",
+      protocolVersion: 2,
+      requestId: "request-quiet-round",
+      clientId: "client-1",
+      sessionId: session.sessionId,
+    }));
+
+    adapter.resolveDeferred({ terminalStatus: "succeeded", text: "finished after a quiet round" });
+    await running;
+    expect(leaseStops).toBe(1);
+
+    const terminalMessageCount = sent.length;
+    emitActivity?.();
+    expect(sent).toHaveLength(terminalMessageCount);
+    store.close();
+  });
+
   it("accepts the reasoningEffort wire field and threads it into run metadata", async () => {
     const { store, session, transport } = fixture();
     await transport.handleQuery(query(session.sessionId, {
@@ -406,6 +454,41 @@ describe("JsonlTransport kernel-owned query contract", () => {
     }
   });
 
+  it("marks a terminally cancelled JIT result unknown while retaining receipt ids", async () => {
+    const { store, adapter, session, sent, transport } = fixture();
+    adapter.deferResult();
+    const running = transport.handleQuery(query(session.sessionId, {
+      requestId: "request-jit-cancelled",
+      jitBudget: {
+        contractVersion: "jit-cloud-qa-v1",
+        executionID: "execution-jit-cancelled",
+        maxProviderAttempts: 3,
+        maxOutputTokensPerAttempt: 2048,
+        maxNormalizedInputTokensPerAttempt: 32768,
+        maxEstimatedSpendMicroUSD: 50000,
+      },
+    }));
+    await waitUntil(() => adapter.executed.length === 1);
+    adapter.resolveDeferred({
+      terminalStatus: "cancelled",
+      adapterSessionId: "native-1",
+      jitCostStatus: "estimated",
+      jitEstimatedCostUsd: 0.01,
+      jitProviderAttempts: 1,
+      jitReceiptAttemptIDs: ["attempt-before-cancel"],
+    });
+    await running;
+
+    expect(sent.findLast((message) => message.type === "result")).toMatchObject({
+      terminalStatus: "cancelled",
+      jitCostStatus: "unknown",
+      jitEstimatedCostUsd: null,
+      jitProviderAttempts: 1,
+      jitReceiptAttemptIDs: ["attempt-before-cancel"],
+    });
+    store.close();
+  });
+
   it("emits one authoritative failed result when an adapter reports an error before throwing", async () => {
     const { store, adapter, session, sent, transport } = fixture();
     const conversationId = "conv-adapter-error-terminal";
@@ -532,15 +615,16 @@ describe("JsonlTransport kernel-owned query contract", () => {
     });
     store.close();
   });
-  it("requires a canonical session and uses its pinned adapter/model/cwd", async () => {
+  it("requires a canonical session and uses its pinned adapter/cwd", async () => {
     const { store, adapter, session, sent, transport } = fixture();
     await transport.handleQuery(query(session.sessionId));
 
     expect(adapter.opened).toHaveLength(1);
     expect(adapter.opened[0]).toMatchObject({
       cwd: "/tmp/pinned-workspace",
-      model: "pinned-model",
     });
+    expect(adapter.opened[0].model).toBeUndefined();
+    expect(readSessionExecutionProfile(store, session.sessionId).modelProfile).toBe("pinned-model");
     expect(adapter.opened[0].systemPrompt).toContain("desktop kernel is the authority");
     expect(sent.at(-1)).toMatchObject({
       type: "result",
@@ -925,6 +1009,233 @@ describe("JsonlTransport kernel-owned query contract", () => {
       new Set(["client-a", "client-b"]),
     );
     expect(adapter.executed).toHaveLength(2);
+    store.close();
+  });
+
+  it("relays the per-turn JIT knowledge-ledger gate into the MCP build context and run metadata", async () => {
+    let capturedContext: Record<string, unknown> | undefined;
+    const buildMcpServers: McpServerBuilder = (_mode, _cwd, _sessionKey, context) => {
+      capturedContext = context as unknown as Record<string, unknown>;
+      return [];
+    };
+    const { store, session, transport } = fixture(buildMcpServers);
+
+    await transport.handleQuery(query(session.sessionId, {
+      requestId: "jit-on",
+      jitKnowledgeToolsEnabled: true,
+      jitBudget: {
+        contractVersion: "jit-cloud-qa-v1",
+        executionID: "execution-1",
+        maxProviderAttempts: 3,
+        maxOutputTokensPerAttempt: 2048,
+        maxNormalizedInputTokensPerAttempt: 32768,
+        maxEstimatedSpendMicroUSD: 50000,
+      },
+    }));
+    expect(capturedContext?.jitKnowledgeToolsEnabled).toBe(true);
+    expect(capturedContext?.jitProactivity).toBe(true);
+    const onMetadata = JSON.parse(String(store.getRow(
+      "SELECT input_json FROM runs WHERE request_id = ?",
+      ["jit-on"],
+    ).input_json)).metadata;
+    expect(onMetadata.jitKnowledgeToolsEnabled).toBe(true);
+
+    await transport.handleQuery(query(session.sessionId, { requestId: "jit-off" }));
+    expect(capturedContext?.jitKnowledgeToolsEnabled).toBe(false);
+    const offMetadata = JSON.parse(String(store.getRow(
+      "SELECT input_json FROM runs WHERE request_id = ?",
+      ["jit-off"],
+    ).input_json)).metadata;
+    expect(offMetadata.jitKnowledgeToolsEnabled).toBeUndefined();
+    store.close();
+  });
+
+  it("pins the source projection hash to the exact admitted run snapshot", async () => {
+    const owner = "vi7SA9ckQCe4ccobWNxlbdcNdC23";
+    const { store, adapter, session, transport } = fixture(undefined, undefined, owner);
+    const projection = {
+      schema_version: "omi.jit.proactivity.source_projection.v1",
+      owner_id: "vi7SA9ckQCe4ccobWNxlbdcNdC23",
+      execution_id: "execution-projection",
+      producer_lane: "ambient" as const,
+      matched_input: {
+        evaluation_time: "2026-09-05T10:00:00-04:00",
+        timezone: "America/New_York",
+        context_id: "bucket-1",
+      },
+      legacy: { prompt: "legacy", uncached_prompt: "legacy-uncached" },
+      nano: { prompt: "nano" },
+      full: { prompt: "full" },
+    };
+    await transport.handleQuery(query(session.sessionId, {
+      requestId: "request-projection",
+      ownerId: owner,
+      prompt: "full",
+      mode: "ask",
+      jitBudget: {
+        contractVersion: "jit-cloud-qa-v1",
+        executionID: "execution-projection",
+        maxProviderAttempts: 3,
+        maxOutputTokensPerAttempt: 2048,
+        maxNormalizedInputTokensPerAttempt: 32768,
+        maxEstimatedSpendMicroUSD: 50000,
+      },
+      jitCostEvidenceProjection: projection,
+    }));
+
+    const input = JSON.parse(String(store.getRow(
+      "SELECT input_json FROM runs WHERE request_id = ?",
+      ["request-projection"],
+    ).input_json));
+    const persisted = input.jitCostEvidenceProjection;
+    expect(input.metadata.jitCostEvidenceProjection).toBeUndefined();
+    expect(adapter.executed[0]?.metadata?.jitCostEvidenceProjection).toBeUndefined();
+    const evidenceSHA256 = stableJsonHash(input.admittedContextSnapshot);
+    expect(persisted.evidence_sha256).toBe(evidenceSHA256);
+    expect(persisted.matched_input.evidence_sha256).toBe(evidenceSHA256);
+    // This fixture digest is the Python consumer's
+    // json.dumps(sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+    // SHA-256, keeping the cross-language canonicalization contract visible.
+    expect(stableJsonHash({
+      contextPlan: {},
+      ownerId: owner,
+      snapshotGeneration: 1,
+      sourceOutcomes: [],
+    })).toBe("3856f9a79ca2dd691db71a602f57b783f91b37ebc838d2250da997cb9040855d");
+    expect(persisted.execution_id).toBe("execution-projection");
+    expect(persisted.producer_lane).toBe("ambient");
+    expect(persisted.legacy.prompt).toBe("legacy");
+    expect(input.prompt).toBe(persisted.full.prompt);
+    store.close();
+  });
+
+  it("rejects malformed source projection wire values before adapter dispatch", async () => {
+    const owner = "vi7SA9ckQCe4ccobWNxlbdcNdC23";
+    const { store, adapter, session, transport } = fixture(undefined, undefined, owner);
+    const budget = {
+      contractVersion: "jit-cloud-qa-v1",
+      executionID: "execution-projection",
+      maxProviderAttempts: 3,
+      maxOutputTokensPerAttempt: 2048,
+      maxNormalizedInputTokensPerAttempt: 32768,
+      maxEstimatedSpendMicroUSD: 50000,
+    };
+    const valid = {
+      schema_version: "omi.jit.proactivity.source_projection.v1",
+      owner_id: owner,
+      execution_id: budget.executionID,
+      producer_lane: "ambient" as const,
+      matched_input: {
+        evaluation_time: "2026-09-05T10:00:00-04:00",
+        timezone: "America/New_York",
+        context_id: "bucket-1",
+      },
+      legacy: { prompt: "legacy", uncached_prompt: "legacy-uncached" },
+      nano: { prompt: "nano" },
+      full: { prompt: "run prompt" },
+    };
+    const malformed = [
+      null,
+      [],
+      { ...valid, matched_input: [] },
+      { ...valid, nano: { prompt: 42 } },
+      { ...valid, full: { prompt: "run prompt", extra: [] }, owner_id: [] },
+    ];
+    for (const [index, projection] of malformed.entries()) {
+      await expect(transport.handleQuery(query(session.sessionId, {
+        requestId: `malformed-projection-${index}`,
+        ownerId: owner,
+        mode: "ask",
+        prompt: "run prompt",
+        jitBudget: budget,
+        jitCostEvidenceProjection: projection as never,
+      }))).rejects.toThrow(/jit source projection/);
+    }
+    expect(adapter.executed).toHaveLength(0);
+    expect(store.allRows("SELECT COUNT(*) AS count FROM runs")[0].count).toBe(0);
+    store.close();
+  });
+
+  it("rejects a source projection whose owner or execution tuple drifts", async () => {
+    const owner = "vi7SA9ckQCe4ccobWNxlbdcNdC23";
+    const { store, session, transport } = fixture(undefined, undefined, owner);
+    const projection = {
+      schema_version: "omi.jit.proactivity.source_projection.v1",
+      owner_id: "wrong-owner",
+      execution_id: "different-execution",
+      producer_lane: "planned" as const,
+      matched_input: {
+        evaluation_time: "2026-09-05T10:00:00-04:00",
+        timezone: "America/New_York",
+        context_id: "bucket-1",
+      },
+      legacy: { prompt: "legacy", uncached_prompt: "legacy-uncached" },
+      nano: { prompt: "nano" },
+      full: { prompt: "run prompt" },
+    };
+    const budget = {
+      contractVersion: "jit-cloud-qa-v1",
+      executionID: "execution-projection",
+      maxProviderAttempts: 3,
+      maxOutputTokensPerAttempt: 2048,
+      maxNormalizedInputTokensPerAttempt: 32768,
+      maxEstimatedSpendMicroUSD: 50000,
+    };
+    await expect(transport.handleQuery(query(session.sessionId, {
+      ownerId: owner,
+      mode: "ask",
+      jitBudget: budget,
+      jitCostEvidenceProjection: projection,
+    }))).rejects.toThrow("jit source projection owner does not match admitted context");
+
+    await expect(transport.handleQuery(query(session.sessionId, {
+      ownerId: owner,
+      mode: "ask",
+      jitBudget: budget,
+      jitCostEvidenceProjection: {
+        ...projection,
+        owner_id: owner,
+        execution_id: "different-execution",
+      },
+    }))).rejects.toThrow("jit source projection execution does not match JIT budget");
+
+    await expect(transport.handleQuery(query(session.sessionId, {
+      ownerId: owner,
+      mode: "ask",
+      jitBudget: budget,
+      jitCostEvidenceProjection: {
+        ...projection,
+        owner_id: owner,
+        execution_id: budget.executionID,
+        matched_input: { ...projection.matched_input, context_id: "" },
+      },
+    }))).rejects.toThrow("jit source projection matched input is incomplete");
+
+    await expect(transport.handleQuery(query(session.sessionId, {
+      ownerId: owner,
+      mode: "ask",
+      prompt: "run prompt",
+      jitBudget: budget,
+      jitCostEvidenceProjection: {
+        ...projection,
+        owner_id: owner,
+        execution_id: budget.executionID,
+        full: { prompt: "different run prompt" },
+      },
+    }))).rejects.toThrow("jit source projection full prompt does not match admitted run prompt");
+
+    await expect(transport.handleQuery(query(session.sessionId, {
+      ownerId: owner,
+      mode: "ask",
+      prompt: "run prompt",
+      jitBudget: budget,
+      jitCostEvidenceProjection: {
+        ...projection,
+        owner_id: owner,
+        execution_id: budget.executionID,
+        full: { prompt: "   " },
+      },
+    }))).rejects.toThrow("jit source projection full prompt is missing");
     store.close();
   });
 });

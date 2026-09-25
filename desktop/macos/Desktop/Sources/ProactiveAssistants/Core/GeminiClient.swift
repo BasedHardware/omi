@@ -1,5 +1,11 @@
 import Foundation
 
+enum GeminiWorkloadClass: String {
+  case interactive
+  case extraction
+  case maintenance
+}
+
 // MARK: - Thinking Budget Configuration
 
 /// Controls how many tokens Gemini 2.5 spends on internal reasoning.
@@ -182,6 +188,7 @@ struct GeminiResponse: Decodable {
 /// the Gemini API key server-side. Auth uses Firebase Bearer token.
 actor GeminiClient {
   private let model: String
+  private let workload: GeminiWorkloadClass
 
   /// Backend proxy base URL resolved through the identity-bound endpoint policy.
   /// Do not read OMI_DESKTOP_API_URL directly: Beta must remain on its fixed
@@ -211,6 +218,9 @@ actor GeminiClient {
     case networkError(Error)
     case invalidResponse
     case apiError(String, retryable: Bool? = nil)
+    /// Identified basic + non-BYOK, or a typed 402 `plan_gated` from the proxy.
+    /// Non-retryable. Distinct from chat-quota 402 (`error` field).
+    case planGated
 
     /// The raw API message for internal logging (not shown to user).
     var internalMessage: String? {
@@ -236,7 +246,7 @@ actor GeminiClient {
           || lower.contains("internal error")
       case .networkError:
         return true
-      case .invalidResponse, .missingAPIKey:
+      case .invalidResponse, .missingAPIKey, .planGated:
         return false
       }
     }
@@ -252,7 +262,7 @@ actor GeminiClient {
         // A transport error after dispatch is ambiguous. Only a typed backend
         // response may authorize replay.
         return false
-      case .invalidResponse, .missingAPIKey:
+      case .invalidResponse, .missingAPIKey, .planGated:
         return false
       }
     }
@@ -271,7 +281,7 @@ actor GeminiClient {
           || lower.contains("usage limit")
           || lower.contains("quota exceeded")
           || lower.contains("http 402")
-      case .missingAPIKey:
+      case .missingAPIKey, .planGated:
         return true
       case .networkError, .invalidResponse:
         return false
@@ -288,6 +298,8 @@ actor GeminiClient {
         return "AI service returned an unexpected response. Please try again."
       case .apiError(let message, _):
         return Self.userFacingMessage(for: message)
+      case .planGated:
+        return "AI features require an active plan or BYOK keys."
       }
     }
 
@@ -347,7 +359,12 @@ actor GeminiClient {
   /// (e.g. Pro overloaded → fall back to Flash). Nil or equal-to-primary = no fallback.
   private let fallbackModel: String?
 
-  init(apiKey: String? = nil, model: String = ModelQoS.Gemini.proactive, fallbackModel: String? = nil) throws {
+  init(
+    apiKey: String? = nil,
+    model: String = ModelQoS.Gemini.proactive,
+    fallbackModel: String? = nil,
+    workload: GeminiWorkloadClass
+  ) throws {
     // BREAKING CHANGE (issue #5861): apiKey parameter is ignored.
     // All Gemini requests now route through the backend proxy which supplies
     // the key server-side. Defaults to production when OMI_DESKTOP_API_URL is absent
@@ -357,6 +374,7 @@ actor GeminiClient {
     }
     self.model = model
     self.fallbackModel = fallbackModel
+    self.workload = workload
     // Which model a proactive assistant actually runs on is a product decision with a
     // measurable click-through cost, and until now it was invisible at runtime — the model
     // appears only inside the request URL, so a tier change could not be confirmed on a
@@ -405,6 +423,10 @@ actor GeminiClient {
     let status = httpResponse.statusCode
     guard !(200..<300).contains(status) else { return nil }
 
+    if ManagedPlanGateHTTP.isPlanGated(status: status, data: data) {
+      return .planGated
+    }
+
     let body = String(data: data.prefix(512), encoding: .utf8) ?? ""
     let retryable: Bool?
     switch httpResponse.value(forHTTPHeaderField: "X-Omi-Retryable")?.lowercased() {
@@ -426,12 +448,63 @@ actor GeminiClient {
   }
 
   /// Replay only outcomes whose typed backend contract says they are safe.
+  /// Issues one proxy request on a connection pool that does not outlive it.
+  ///
+  /// `URLSession.shared` pools keep-alive connections across every request the app makes.
+  /// When the server has already closed a pooled socket, the next caller is handed that
+  /// dead socket and fails instantly with `NSURLErrorNetworkConnectionLost` (-1005); a
+  /// retry draws from the same pool and reproduces the failure, which is why three
+  /// attempts could fail identically within seconds.
+  ///
+  /// Measured on a live desktop session: 5 of 5 suggestion evaluations failed this way,
+  /// while `curl` to the same endpoint with an 800 KB body returned in ~1.9s over both
+  /// IPv4 and IPv6 — the difference being that curl dials a fresh connection each time.
+  ///
+  /// An ephemeral per-request session costs one TLS handshake per evaluation. These are
+  /// dwell-gated and capped by a daily budget, so that is a trade worth making to remove
+  /// an entire class of stale-pool failure rather than manage it.
+  static func send(_ request: URLRequest) async throws -> (Data, URLResponse) {
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.timeoutIntervalForRequest = 60
+    configuration.timeoutIntervalForResource = 300
+    let session = URLSession(configuration: configuration)
+    defer { session.finishTasksAndInvalidate() }
+    return try await session.data(for: request)
+  }
+
   static func shouldAutoRetry(_ error: Error) -> Bool {
     if let geminiError = error as? GeminiClientError {
-      return geminiError.shouldAutoRetry
+      if geminiError.shouldAutoRetry { return true }
+      if case .networkError(let underlying) = geminiError {
+        return isReplayableTransportError(underlying)
+      }
+      return false
     }
-    // Raw URLSession errors are ambiguous after dispatch and must not be replayed.
-    return false
+    return isReplayableTransportError(error)
+  }
+
+  /// Transport failures that are safe to replay for this client.
+  ///
+  /// Replaying a dispatched request is only unsafe when the request may have had an
+  /// effect. Every call this client makes is a `generateContent` inference: it reads a
+  /// prompt and an image and returns text, with no server-side state change, so a duplicate
+  /// costs one extra inference and nothing else.
+  ///
+  /// `NSURLErrorNetworkConnectionLost` (-1005) is the dominant failure here and is a stale
+  /// pooled-connection race, not a real network outage: URLSession reuses a keep-alive
+  /// socket the server has already closed, and the request dies immediately. Measured on a
+  /// live desktop session, 12 of 13 suggestion evaluations failed this way while ordinary
+  /// requests to the same host succeeded in ~0.4s — every one of them was discarded without
+  /// a second attempt.
+  static func isReplayableTransportError(_ error: Error) -> Bool {
+    let code = (error as? URLError)?.code ?? URLError.Code(rawValue: (error as NSError).code)
+    switch code {
+    case .networkConnectionLost, .timedOut, .cannotConnectToHost, .notConnectedToInternet,
+      .dnsLookupFailed, .cannotFindHost:
+      return true
+    default:
+      return false
+    }
   }
 
   /// Closed Gemini model tier for fallback telemetry (no free model ID strings).
@@ -487,7 +560,7 @@ actor GeminiClient {
           return "provider_5xx"
         }
         return "other"
-      case .invalidResponse, .missingAPIKey:
+      case .invalidResponse, .missingAPIKey, .planGated:
         return "other"
       }
     }
@@ -501,6 +574,16 @@ actor GeminiClient {
       "GeminiClient: transient error, retrying in \(delaySec)s (attempt \(attempt + 2)/3): \(error.localizedDescription)"
     )
     try await Task.sleep(nanoseconds: UInt64(delaySec) * 1_000_000_000)
+  }
+
+  /// Client UX gate. Server 402 `plan_gated` remains the invariant.
+  static func requireManagedProactivity(_ decision: SubscriptionEntitlementDecision) throws {
+    guard decision == .planGated else { return }
+    throw GeminiClientError.planGated
+  }
+
+  static func enforceManagedProactivity() async throws {
+    try requireManagedProactivity(await ManagedProactivityDecisionSource.current())
   }
 
   /// Send a request to the Gemini API with an image
@@ -518,6 +601,7 @@ actor GeminiClient {
     responseSchema: GeminiRequest.GenerationConfig.ResponseSchema,
     thinkingBudget: Int = 0
   ) async throws -> String {
+    try await Self.enforceManagedProactivity()
     let maxRetries = 2
     var lastError: Error?
 
@@ -555,10 +639,11 @@ actor GeminiClient {
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
+        urlRequest.setValue(workload.rawValue, forHTTPHeaderField: "X-Omi-Workload")
         urlRequest.timeoutInterval = 300
         urlRequest.httpBody = requestBody
 
-        let (data, urlResponse) = try await URLSession.shared.data(for: urlRequest)
+        let (data, urlResponse) = try await Self.send(urlRequest)
         try checkHTTPStatus(urlResponse, data: data)
 
         let response = try JSONDecoder().decode(GeminiResponse.self, from: data)
@@ -604,6 +689,7 @@ actor GeminiClient {
     timeout: TimeInterval = 300,
     thinkingBudget: Int = 0
   ) async throws -> String {
+    try await Self.enforceManagedProactivity()
     var lastError: Error?
 
     for attempt in 0...maxRetries {
@@ -630,10 +716,11 @@ actor GeminiClient {
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
+        urlRequest.setValue(workload.rawValue, forHTTPHeaderField: "X-Omi-Workload")
         urlRequest.timeoutInterval = timeout
         urlRequest.httpBody = try JSONEncoder().encode(request)
 
-        let (data, urlResponse) = try await URLSession.shared.data(for: urlRequest)
+        let (data, urlResponse) = try await Self.send(urlRequest)
         try checkHTTPStatus(urlResponse, data: data)
 
         let response = try JSONDecoder().decode(GeminiResponse.self, from: data)
@@ -675,6 +762,7 @@ actor GeminiClient {
     responseSchema: GeminiRequest.GenerationConfig.ResponseSchema,
     thinkingBudget: Int = 0
   ) async throws -> String {
+    try await Self.enforceManagedProactivity()
     let maxRetries = 2
     var lastError: Error?
 
@@ -702,10 +790,11 @@ actor GeminiClient {
         urlRequest.httpMethod = "POST"
         urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
         urlRequest.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
+        urlRequest.setValue(workload.rawValue, forHTTPHeaderField: "X-Omi-Workload")
         urlRequest.timeoutInterval = 300
         urlRequest.httpBody = try JSONEncoder().encode(request)
 
-        let (data, urlResponse) = try await URLSession.shared.data(for: urlRequest)
+        let (data, urlResponse) = try await Self.send(urlRequest)
         try checkHTTPStatus(urlResponse, data: data)
 
         let response = try JSONDecoder().decode(GeminiResponse.self, from: data)
@@ -965,6 +1054,7 @@ extension GeminiClient {
     forceToolCall: Bool = false,
     thinkingBudget: Int = 0
   ) async throws -> ToolChatResult {
+    try await Self.enforceManagedProactivity()
     // Try the primary model first; if it keeps failing transiently, fall back to the
     // secondary model (e.g. Pro overloaded → Flash) before giving up.
     let models: [String] = {
@@ -1007,10 +1097,11 @@ extension GeminiClient {
           urlRequest.httpMethod = "POST"
           urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
           urlRequest.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
+          urlRequest.setValue(workload.rawValue, forHTTPHeaderField: "X-Omi-Workload")
           urlRequest.timeoutInterval = 300
           urlRequest.httpBody = requestBody
 
-          let (data, urlResponse) = try await URLSession.shared.data(for: urlRequest)
+          let (data, urlResponse) = try await Self.send(urlRequest)
           try checkHTTPStatus(urlResponse, data: data)
 
           let response = try JSONDecoder().decode(GeminiToolResponse.self, from: data)

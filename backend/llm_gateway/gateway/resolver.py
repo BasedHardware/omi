@@ -13,7 +13,14 @@ from llm_gateway.gateway.errors import (
     GatewayUnsupportedModelError,
 )
 from llm_gateway.gateway.schemas import FailureClass, LaneConfig, RouteArtifact, Surface
-from llm_gateway.gateway.validator import ValidatedChatCompletionRequest, validate_chat_completion_request
+from llm_gateway.gateway.validator import (
+    ValidatedChatCompletionRequest,
+    ValidatedEmbeddingRequest,
+    ValidatedSystemOneRequest,
+    validate_chat_completion_request,
+    validate_embedding_request,
+    validate_systemone_request,
+)
 
 AUTO_LANE_PREFIX = 'omi:auto:'
 NEVER_LKG_FAILURE_CLASSES = frozenset(
@@ -36,6 +43,20 @@ class ResolvedRoute:
     active_route: RouteArtifact
     last_known_good_route: RouteArtifact
     validated_request: ValidatedChatCompletionRequest
+
+
+@dataclass(frozen=True)
+class ResolvedEmbeddingRoute:
+    lane: LaneConfig
+    route: RouteArtifact
+    validated_request: ValidatedEmbeddingRequest
+
+
+@dataclass(frozen=True)
+class ResolvedSystemOneRoute:
+    lane: LaneConfig
+    route: RouteArtifact
+    validated_request: ValidatedSystemOneRequest
 
 
 def is_auto_lane_id(model: str) -> bool:
@@ -78,6 +99,53 @@ def resolve_lane(config: GatewayConfig, model: str) -> LaneConfig:
     if lane.surface != Surface.OPENAI_CHAT_COMPLETIONS:
         raise GatewayCapabilityMismatchError(f'unsupported lane surface: {lane.surface.value}', param='model')
     return lane
+
+
+def resolve_embedding_route(
+    config: GatewayConfig,
+    request: Mapping[str, Any],
+) -> ResolvedEmbeddingRoute:
+    """Resolve an OpenAI-shaped embeddings request onto an embeddings lane."""
+    model = request.get('model')
+    if not isinstance(model, str) or not model.strip():
+        raise GatewayInvalidRequestError('model is required', param='model')
+
+    lane_id = model.strip()
+    if not is_auto_lane_id(lane_id):
+        raise GatewayUnsupportedModelError(
+            f'provider model names are not direct routes in gateway v1: {lane_id}',
+        )
+    lane = config.lanes.get(lane_id)
+    if lane is None:
+        raise GatewayModelNotFoundError(f'auto lane not found: {lane_id}')
+    if lane.surface != Surface.OPENAI_EMBEDDINGS:
+        raise GatewayCapabilityMismatchError(f'unsupported lane surface: {lane.surface.value}', param='model')
+
+    validated_request = validate_embedding_request(request, lane)
+    route = _route_by_id(config, lane.active_route, pointer_name='active_route')
+    _validate_route_matches_lane(lane, route, pointer_name='active_route')
+    return ResolvedEmbeddingRoute(lane=lane, route=route, validated_request=validated_request)
+
+
+def resolve_systemone_route(
+    config: GatewayConfig,
+    request: Mapping[str, Any],
+) -> ResolvedSystemOneRoute:
+    """Resolve a decision-model request onto its pinned systemone lane."""
+    validated_request = validate_systemone_request(request)
+    lane_id = validated_request.model
+    if not is_auto_lane_id(lane_id):
+        raise GatewayUnsupportedModelError(
+            f'provider model names are not direct routes in gateway v1: {lane_id}',
+        )
+    lane = config.lanes.get(lane_id)
+    if lane is None:
+        raise GatewayModelNotFoundError(f'auto lane not found: {lane_id}')
+    if lane.surface != Surface.OPENROUTER_SYSTEMONE:
+        raise GatewayCapabilityMismatchError(f'unsupported lane surface: {lane.surface.value}', param='model')
+    route = _route_by_id(config, lane.active_route, pointer_name='active_route')
+    _validate_route_matches_lane(lane, route, pointer_name='active_route')
+    return ResolvedSystemOneRoute(lane=lane, route=route, validated_request=validated_request)
 
 
 def select_lkg_route_for_failure(

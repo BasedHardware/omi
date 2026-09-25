@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import Any
 
 import httpx
+import json
 import pytest
 
 from config.translation import TranslationProvider, resolve_translation_profile
@@ -25,6 +26,7 @@ from utils.translation_core.providers import (
     TranslationProviderChain,
     TranslationProviderError,
 )
+from llm_gateway.gateway.vertex_wire import _json_schema_to_vertex_response_schema
 
 
 def test_config_preserves_exact_ordered_provider_policy():
@@ -46,14 +48,18 @@ def test_config_preserves_exact_ordered_provider_policy():
 def test_config_filters_unavailable_and_records_unsupported_tokens():
     resolved = resolve_translation_profile({'TRANSLATION_SERVICE_MODELS': 'unknown,nllb'})
 
-    assert resolved.providers == (TranslationProvider.google,)
+    assert resolved.providers == (TranslationProvider.nllb,)
     assert resolved.configured_providers == (TranslationProvider.nllb,)
     assert resolved.unsupported_tokens == ('unknown',)
     assert resolved.unavailable_tokens == ('nllb',)
 
 
-def test_empty_config_defaults_to_google():
-    assert resolve_translation_profile({}).providers == (TranslationProvider.google,)
+def test_empty_config_defaults_to_nllb():
+    assert resolve_translation_profile({}).providers == (TranslationProvider.nllb,)
+    assert resolve_translation_profile({'TRANSLATION_SERVICE_MODELS': ''}).providers == (TranslationProvider.nllb,)
+    assert resolve_translation_profile({'TRANSLATION_SERVICE_MODELS': 'unknown'}).providers == (
+        TranslationProvider.nllb,
+    )
 
 
 def test_filtered_configured_primary_records_recovered_fallback_after_google_succeeds():
@@ -121,7 +127,19 @@ def test_invalid_numeric_config_fails_at_the_call_boundary(name, value, message)
         resolve_translation_profile({name: value})
 
 
-def test_nllb_failure_recovers_through_google_with_shared_fallback_event():
+def test_nllb_success_never_calls_gemini():
+    nllb = FakeProvider(TranslationProvider.nllb, responses=[translations(('Hola', 'en'))])
+    google = FakeProvider(TranslationProvider.google, responses=[translations(('should not run', 'en'))])
+    service, _cache = build_service(
+        {TranslationProvider.nllb: nllb, TranslationProvider.google: google},
+        selected_profile=profile((TranslationProvider.nllb, TranslationProvider.google)),
+    )
+
+    assert service.translate_text('es', 'Hello') == ('Hola', 'en')
+    assert google.calls == []
+
+
+def test_nllb_timeout_recovers_through_google_with_shared_fallback_event():
     recorder = FallbackRecorder()
     nllb = FakeProvider(
         TranslationProvider.nllb,
@@ -207,7 +225,60 @@ def test_google_first_can_recover_through_nllb_when_configured():
     assert recorder.events[0].fields['to_mode'] == 'nllb'
 
 
-def test_invalid_primary_response_recovers_through_configured_fallback():
+def test_nllb_transport_failure_recovers_through_gemini():
+    recorder = FallbackRecorder()
+    nllb = FakeProvider(
+        TranslationProvider.nllb,
+        responses=[provider_error(TranslationProvider.nllb, 'other')],
+    )
+    google = FakeProvider(TranslationProvider.google, responses=[translations(('Hola', 'en'))])
+    service, _cache = build_service(
+        {TranslationProvider.nllb: nllb, TranslationProvider.google: google},
+        selected_profile=profile((TranslationProvider.nllb, TranslationProvider.google)),
+        recorder=recorder,
+    )
+
+    assert service.translate_text('es', 'Hello') == ('Hola', 'en')
+    assert recorder.events[0].fields['reason'] == 'other'
+    assert recorder.events[0].fields['outcome'] == 'recovered'
+
+
+def test_nllb_5xx_recovers_through_gemini():
+    recorder = FallbackRecorder()
+    nllb = FakeProvider(
+        TranslationProvider.nllb,
+        responses=[provider_error(TranslationProvider.nllb, 'provider_5xx')],
+    )
+    google = FakeProvider(TranslationProvider.google, responses=[translations(('Hola', 'en'))])
+    service, _cache = build_service(
+        {TranslationProvider.nllb: nllb, TranslationProvider.google: google},
+        selected_profile=profile((TranslationProvider.nllb, TranslationProvider.google)),
+        recorder=recorder,
+    )
+
+    assert service.translate_text('es', 'Hello') == ('Hola', 'en')
+    assert recorder.events[0].fields['reason'] == 'provider_5xx'
+
+
+def test_nllb_429_recovers_through_gemini():
+    recorder = FallbackRecorder()
+    nllb = FakeProvider(
+        TranslationProvider.nllb,
+        responses=[provider_error(TranslationProvider.nllb, 'provider_429')],
+    )
+    google = FakeProvider(TranslationProvider.google, responses=[translations(('Hola', 'en'))])
+    service, _cache = build_service(
+        {TranslationProvider.nllb: nllb, TranslationProvider.google: google},
+        selected_profile=profile((TranslationProvider.nllb, TranslationProvider.google)),
+        recorder=recorder,
+    )
+
+    assert service.translate_text('es', 'Hello') == ('Hola', 'en')
+    assert recorder.events[0].fields['reason'] == 'provider_429'
+    assert len(google.calls) == 1
+
+
+def test_invalid_primary_response_does_not_fall_through_to_gemini():
     recorder = FallbackRecorder()
     nllb = FakeProvider(TranslationProvider.nllb, responses=[[]])
     google = FakeProvider(TranslationProvider.google, responses=[translations(('Hola', 'en'))])
@@ -217,9 +288,31 @@ def test_invalid_primary_response_recovers_through_configured_fallback():
         recorder=recorder,
     )
 
-    assert service.translate_text('es', 'Hello') == ('Hola', 'en')
-    assert recorder.events[0].fields['reason'] == 'invalid_response'
-    assert recorder.events[0].fields['outcome'] == 'recovered'
+    outcomes = service.translate_outcomes('es', [('segment', 'Hello')])
+
+    assert outcomes[0].status == TranslationStatus.failed
+    assert google.calls == []
+    assert recorder.events == []
+
+
+def test_nllb_unsupported_language_does_not_fall_through_to_gemini():
+    recorder = FallbackRecorder()
+    nllb = FakeProvider(
+        TranslationProvider.nllb,
+        responses=[provider_error(TranslationProvider.nllb, 'provider_4xx')],
+    )
+    google = FakeProvider(TranslationProvider.google, responses=[translations(('Hola', 'en'))])
+    service, _cache = build_service(
+        {TranslationProvider.nllb: nllb, TranslationProvider.google: google},
+        selected_profile=profile((TranslationProvider.nllb, TranslationProvider.google)),
+        recorder=recorder,
+    )
+
+    outcomes = service.translate_outcomes('es', [('segment', 'Hello')])
+
+    assert outcomes[0].status == TranslationStatus.failed
+    assert google.calls == []
+    assert recorder.events == []
 
 
 def test_missing_primary_adapter_recovers_without_changing_config_order():
@@ -314,7 +407,7 @@ def test_nllb_adapter_validates_and_maps_response_without_network():
 
 @pytest.mark.parametrize(
     ('status_code', 'reason'),
-    [(429, 'provider_429'), (503, 'provider_5xx'), (400, 'other')],
+    [(429, 'provider_429'), (503, 'provider_5xx'), (400, 'provider_4xx')],
 )
 def test_nllb_adapter_classifies_http_failures(status_code, reason):
     client = FakeHttpClient(FakeResponse({}, status_code=status_code))
@@ -334,6 +427,41 @@ def test_nllb_adapter_rejects_malformed_payloads(body):
     provider = NllbTranslationProvider(client_factory=lambda _profile: FakeHttpClient(FakeResponse(body)))
 
     with pytest.raises(TranslationProviderError, match='response|item|fields') as raised:
+        provider.translate(['Hello'], 'es', 'en', profile((TranslationProvider.nllb,)))
+
+    assert raised.value.reason == 'invalid_response'
+
+
+def test_nllb_adapter_classifies_transport_failures_as_other():
+    class FailingClient:
+        def post(self, path: str, json: dict[str, Any]) -> FakeResponse:
+            raise httpx.ConnectError('connection refused')
+
+    provider = NllbTranslationProvider(client_factory=lambda _profile: FailingClient())
+
+    with pytest.raises(TranslationProviderError) as raised:
+        provider.translate(['Hello'], 'es', 'en', profile((TranslationProvider.nllb,)))
+
+    assert raised.value.reason == 'other'
+
+
+def test_nllb_adapter_classifies_json_decode_failures_as_invalid_response():
+    class BadJsonResponse:
+        status_code = 200
+
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> object:
+            raise ValueError('not json')
+
+    class BadJsonClient:
+        def post(self, path: str, json: dict[str, Any]) -> BadJsonResponse:
+            return BadJsonResponse()
+
+    provider = NllbTranslationProvider(client_factory=lambda _profile: BadJsonClient())
+
+    with pytest.raises(TranslationProviderError) as raised:
         provider.translate(['Hello'], 'es', 'en', profile((TranslationProvider.nllb,)))
 
     assert raised.value.reason == 'invalid_response'
@@ -411,3 +539,12 @@ def test_gemini_adapter_wraps_sdk_failures_as_typed_provider_errors():
 
     assert raised.value.provider == TranslationProvider.google
     assert raised.value.reason == 'other'
+
+
+def test_gemini_translation_batch_schema_is_inlined_for_vertex():
+    schema = GeminiTranslationBatch.model_json_schema()
+    converted = _json_schema_to_vertex_response_schema(schema)
+    dumped = json.dumps(converted)
+    assert '$ref' not in dumped
+    assert '$defs' not in dumped
+    assert converted['properties']['translations']['items']['type'] == 'object'

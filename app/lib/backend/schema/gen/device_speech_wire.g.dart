@@ -134,6 +134,26 @@ class GeneratedSpeechProfileMutationResponse {
   }
 }
 
+class GeneratedSttAvailabilityResponse {
+  final bool available;
+
+  const GeneratedSttAvailabilityResponse({
+    required this.available,
+  });
+
+  factory GeneratedSttAvailabilityResponse.fromJson(Map<String, dynamic> json) {
+    return GeneratedSttAvailabilityResponse(
+      available: _required(_readFieldValue<bool>(_readField(json, const ["available"]), "available", _readBool, requiredField: true, nullable: false), "available"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'available': available,
+    };
+  }
+}
+
 class GeneratedExpandedSpeechProfileSamplesResponse {
   final List<String> items;
 

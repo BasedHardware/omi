@@ -104,18 +104,11 @@ struct SBOnboardingView: View {
       // Navigation belongs to the onboarding card, not the window's corner. The window can be wider
       // than the card (and may be repositioned independently), so an outer overlay makes Back look
       // detached from the conversation it controls.
+      // Back on the leading edge, where every way back in the app sits; Skip Setup trailing.
       HStack {
-        Spacer(minLength: 0)
-        ViewThatFits(in: .horizontal) {
-          HStack(spacing: 8) {
-            backButton
-            if model.canSkipOnboarding { skipButton }
-          }
-          VStack(alignment: .trailing, spacing: 8) {
-            backButton
-            if model.canSkipOnboarding { skipButton }
-          }
-        }
+        backButton
+        Spacer(minLength: 8)
+        if model.canSkipOnboarding { skipButton }
       }
       .frame(minHeight: 44)
       .padding(.horizontal, 16)
@@ -132,7 +125,7 @@ struct SBOnboardingView: View {
             if model.typing {
               HStack(spacing: 10) {
                 SBLogo(size: 16, spinning: true)
-                Text("omi is typing…").inkStyle(InkType.statusLabel, color: Ink.secondary)
+                Text("Omi is typing…").inkStyle(InkType.statusLabel, color: Ink.secondary)
               }
             }
             if model.showWidget {
@@ -176,10 +169,9 @@ struct SBOnboardingView: View {
       // The band is a sibling of the scroll view, not an overlay on its content. It always claims the
       // same height, including while a step is streaming, so the current-step column never jumps when
       // one widget is replaced by the next.
-      OnboardingProgressBand(
-        total: SBOnboardingModel.Step.allCases.count,
-        current: model.step.rawValue
-      )
+      // Counts the steps this run shows, not `Step.allCases`: a granted permission is skipped, and a
+      // dot for it would make the band jump (`SBOnboardingModel.progress`).
+      OnboardingProgressBand(total: model.progress.total, current: model.progress.current)
     }
     // One shadow, and it is `InkGlassShadow.ambient` — the same broad, diffuse one every floating
     // panel in this app casts, drawn by `onboardingCard`. Not the 60 pt black drop this used to carry
@@ -209,7 +201,7 @@ struct SBOnboardingView: View {
   @ViewBuilder private var backButton: some View {
     if model.canGoBack {
       Button(action: { model.goBack() }) {
-        Text("← Back")
+        Text("‹ Back")
           .inkStyle(InkType.statusLabel, color: Ink.secondary)
           .padding(.horizontal, 14).padding(.vertical, 7)
           .glassFloatingBar(cornerRadius: Self.chipRadius)
@@ -221,7 +213,9 @@ struct SBOnboardingView: View {
 
   private var skipButton: some View {
     Button(action: { model.skip() }) {
-      Text("Skip")
+      // "Skip Setup", not "Skip": the per-step links say "Skip for now", and the two look alike while
+      // meaning very different amounts.
+      Text("Skip Setup")
         .inkStyle(InkType.statusLabel, color: Ink.secondary)
         .padding(.horizontal, 14).padding(.vertical, 7)
         .glassFloatingBar(cornerRadius: Self.chipRadius)
@@ -231,7 +225,7 @@ struct SBOnboardingView: View {
   }
 
   private func scrollDown(_ proxy: ScrollViewProxy) {
-    withAnimation(.easeOut(duration: 0.25)) { proxy.scrollTo("bottom", anchor: .bottom) }
+    OmiMotion.perform(.standard) { proxy.scrollTo("bottom", anchor: .bottom) }
   }
 
   @ViewBuilder private func messageRow(_ msg: SBOnboardingModel.Msg) -> some View {
@@ -271,21 +265,28 @@ struct SBOnboardingView: View {
     case .howHeard: howHeardWidget
     case .language: languageWidget
     case .role: roleWidget
-    case .mic: permStepWidget("microphone", "Microphone", "hears your side of conversations") { model.answerMic() }
+    case .mic:
+      permStepWidget("microphone", "Microphone", "so I can hear your side of conversations") { model.answerMic() }
     case .systemAudio:
-      permStepWidget("system_audio", "System audio", "the other side — Zoom, Meet, calls") { model.answerSystemAudio() }
+      permStepWidget("system_audio", "System Audio", "so I can hear the other side of calls — Zoom, Meet") {
+        model.answerSystemAudio()
+      }
     case .screen:
       permStepWidget("screen_recording", "Screen Recording", "so I can see what you're looking at") {
         model.answerScreen()
       }
     case .files: filesWidget
     case .accessibility:
-      permStepWidget("accessibility", "Accessibility", "catch your shortcut + click/type for you") {
+      permStepWidget("accessibility", "Accessibility", "so I can catch your shortcut and click or type for you") {
         model.answerAccessibility()
       }
     case .automation:
-      permStepWidget("automation", "Automation", "help with tasks in the apps you choose") {
+      permStepWidget("automation", "Automation", "so I can help with tasks in the apps you choose") {
         model.answerAutomation()
+      }
+    case .notifications:
+      permStepWidget("notifications", "Notifications", "so I can tell you when I notice something worth flagging") {
+        model.answerNotifications()
       }
     case .shortcutOpen: shortcutWidget(isTalk: false)
     case .shortcutTalk: shortcutWidget(isTalk: true)
@@ -293,6 +294,7 @@ struct SBOnboardingView: View {
     case .agents: agentsWidget
     case .context: contextWidget
     case .capture: captureWidget
+    case .referral: referralWidget
     }
   }
 
@@ -340,6 +342,7 @@ struct SBOnboardingView: View {
         .glassField()
         .onSubmit { model.answerName() }
       SBInkButton(title: "→", horizontalPadding: 15, verticalPadding: 9) { model.answerName() }
+        .accessibilityLabel("Continue")
     }
     .frame(maxWidth: 360, alignment: .leading)
   }
@@ -431,6 +434,7 @@ struct SBOnboardingView: View {
           .glassField()
           .onSubmit { model.answerRoleText() }
         SBInkButton(title: "→", horizontalPadding: 15, verticalPadding: 9) { model.answerRoleText() }
+          .accessibilityLabel("Continue")
       }
       .frame(maxWidth: 360)
     }
@@ -465,16 +469,9 @@ struct SBOnboardingView: View {
         }
         .buttonStyle(InkButtonStyle(kind: .primary))
         // The escape, with the consequence spelled out — never gate a step on something macOS cannot
-        // grant from a dialog. `secondary`, because on glass there is no fainter rung to hide it in,
-        // and an escape nobody can read is an escape nobody takes.
-        Button {
-          onContinue()
-        } label: {
-          Text("Later — \(name) stays off until you reopen")
-            .inkStyle(InkType.statusLabel, color: Ink.secondary)
-            .fixedSize(horizontal: false, vertical: true)
-        }
-        .buttonStyle(.plain)
+        // grant from a dialog. Same object as every other escape on this card: `skipLink`, so the way
+        // past a permission always looks the same and never outranks the way through it.
+        skipLink("Later — \(name) stays off until you reopen", action: onContinue)
       } else if action == .proceed {
         Button {
           onContinue()
@@ -502,26 +499,29 @@ struct SBOnboardingView: View {
             .frame(maxWidth: .infinity)
         }
         .buttonStyle(InkButtonStyle(kind: action == .recheck ? .secondary : .primary))
-        // The escape is a *control*, not a caption. As a bare `.plain` run of `statusLabel` this was
-        // an 11 pt grey line sitting 10 pt under a full-width filled pill — the shape of a footnote,
-        // on the one screen where the user most needs to know they are not trapped. `screenDemoWidget`
-        // already learned this ("it used to be a tiny, easily-missed text link") and shipped the
-        // secondary capsule; every skip in this flow is that same object now.
-        Button {
-          onContinue()
-        } label: {
-          Text("Skip for now").frame(maxWidth: .infinity)
-        }
-        .buttonStyle(InkButtonStyle(kind: .secondary))
+        // The escape is a **link, not a capsule**. Two full-width pills stacked read as a choice
+        // between equals, and this choice is not between equals: every permission on this card is
+        // something Omi cannot work without, and the skip is the exit, not the alternative. The
+        // capsule this replaces was itself a correction of a bare `.plain` caption that people
+        // missed — so the link keeps what that correction was actually buying: an underline and a
+        // pointing-hand cursor, so it still reads as pressable, and `skipLinkMinHeight` of target so
+        // it is still comfortably hittable. Faint but unmistakable, which is the whole ask.
+        skipLink("Skip for now", action: onContinue)
       }
     }
     .frame(maxWidth: 380, alignment: .leading)
   }
 
+  private func skipLink(_ title: String, action: @escaping () -> Void) -> some View {
+    SBSkipLink(title: title, action: action)
+  }
+
   @ViewBuilder private var filesWidget: some View {
     switch model.localFileProfileState {
     case .idle:
-      permStepWidget("full_disk_access", "Full Disk Access", "cite your files · read-only, stays on this Mac") {
+      permStepWidget(
+        "full_disk_access", "Full Disk Access", "so I can cite your files — read-only, and it stays on this Mac"
+      ) {
         model.answerFiles()
       }
     case .scanning:
@@ -729,24 +729,31 @@ struct SBOnboardingView: View {
   private var screenDemoWidget: some View {
     VStack(alignment: .leading, spacing: 12) {
       if model.screenDemoPTTReady {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
+          Text("Three doors. Three riddles. They open in your browser.")
+            .inkStyle(InkType.rowCopy, color: Ink.primary)
+            .fixedSize(horizontal: false, vertical: true)
           HStack(spacing: 5) {
-            Text("Hold").inkStyle(InkType.rowCopy, color: Ink.primary)
+            Text("Get stuck, then hold").inkStyle(InkType.rowCopy, color: Ink.primary)
             ForEach(model.voiceChordTokens, id: \.self) { tok in keycap(tok) }
-            Text("and ask me about it, out loud.").inkStyle(InkType.rowCopy, color: Ink.primary)
+            Text("and say what the page tells you.").inkStyle(InkType.rowCopy, color: Ink.primary)
           }
-          Text(
-            "Ask me what’s on your screen in \(model.selectedResponseLanguageName). I can see it, and I answer at the top of your screen."
-          )
-          .inkStyle(InkType.statusLabel, color: Ink.secondary)
-          .fixedSize(horizontal: false, vertical: true)
+          Text("I can see the page, and I answer at the top of your screen.")
+            .inkStyle(InkType.statusLabel, color: Ink.secondary)
+            .fixedSize(horizontal: false, vertical: true)
+          if model.threeDoorsOpened {
+            Button("Open the doors again") { model.openThreeDoorsPage() }
+              .buttonStyle(InkButtonStyle(kind: .secondary))
+          } else {
+            SBInkButton(title: "Open the doors", isDefaultAction: true) { model.openThreeDoorsPage() }
+          }
         }
       } else if model.screenDemoPTTUnavailable {
         VStack(alignment: .leading, spacing: 8) {
           Text("Voice setup isn't available yet. You can retry, or skip for now.")
             .inkStyle(InkType.rowCopy, color: Ink.primary)
             .fixedSize(horizontal: false, vertical: true)
-          Button("Try again") {
+          Button("Try Again") {
             model.startScreenDemo()
           }
           .buttonStyle(InkButtonStyle(kind: .secondary))
@@ -757,13 +764,13 @@ struct SBOnboardingView: View {
           Text("Preparing voice…").inkStyle(InkType.rowCopy, color: Ink.secondary)
         }
       }
-      // Continue appears once Omi has actually answered — before that, an always-
-      // tappable, clearly-visible "Skip for now" so the user is never stuck if the
-      // demo doesn't fire (it used to be a tiny, easily-missed text link).
+      // Skip for now is always offered, so the step never traps someone whose demo did not fire;
+      // Continue replaces it once Omi has answered (`SBOnboardingModel.screenDemoFooter`).
       Group {
-        if model.screenDemoDone {
+        switch model.screenDemoFooter {
+        case .continue:
           SBInkButton(title: "Continue", isDefaultAction: true) { model.answerScreenDemo() }
-        } else {
+        case .skip:
           Button {
             model.answerScreenDemo()
           } label: {
@@ -894,7 +901,7 @@ struct SBOnboardingView: View {
     case "checking": Text("checking…").inkStyle(InkType.statusLabel, color: Ink.secondary).fixedSize()
     case "unavailable": Text("not installed").inkStyle(InkType.statusLabel, color: Ink.secondary).fixedSize()
     case "error":
-      Button("Retry", action: action)
+      Button("Try Again", action: action)
         .buttonStyle(InkButtonStyle(kind: .secondary))
     default:
       // `.secondary`, and this is a hierarchy decision rather than a taste one. There are six
@@ -926,6 +933,17 @@ struct SBOnboardingView: View {
       .buttonStyle(InkButtonStyle(kind: .secondary))
     }
     .frame(maxWidth: 340, alignment: .leading)
+  }
+
+  private var referralWidget: some View {
+    VStack(alignment: .leading, spacing: 14) {
+      ReferralProgramView(showsIntroduction: false)
+
+      SBInkButton(title: "Take me to Omi", isDefaultAction: true) {
+        model.finishReferral()
+      }
+    }
+    .frame(maxWidth: 380, alignment: .leading)
   }
 }
 
@@ -995,6 +1013,70 @@ private struct ChipFlowLayout: Layout {
       sub.place(at: CGPoint(x: x, y: y), anchor: .topLeading, proposal: ProposedViewSize(size))
       x += size.width + spacing
       rowHeight = max(rowHeight, size.height)
+    }
+  }
+}
+
+/// The one way past a permission step.
+///
+/// Deliberately the quietest actionable thing on the card: `statusLabel` in `Ink.secondary` — never
+/// `Ink.tertiary`, which measures under AA on glass and is banned on first-run surfaces — underlined
+/// so it still reads as pressable rather than as a caption, and centred under the primary action so
+/// it is where the eye already is. It never becomes a capsule: a capsule beside a capsule is a fork
+/// in the road, and this is a side door.
+///
+/// A `View` rather than a `@ViewBuilder` method on `SBOnboardingView` for one reason: it owns
+/// `didPushCursor`, and that state has to be *per link*. Hung off the parent it would be one flag
+/// shared by every escape the flow draws.
+private struct SBSkipLink: View {
+  let title: String
+  let action: () -> Void
+
+  /// A hit target no smaller than this, whatever the type is set at. `statusLabel` is 12 pt, and 12 pt
+  /// of glyph is not a control — the padding is what keeps the de-emphasis a *visual* one rather than
+  /// a usability tax on the person who genuinely wants out.
+  static let skipLinkMinHeight: CGFloat = 28
+
+  /// `NSCursor` push/pop is a **stack**, so every push owes exactly one pop. SwiftUI does not deliver
+  /// `onHover(false)` to a view that leaves the hierarchy, and pressing this link is precisely that
+  /// case: `action()` advances the step and unmounts the card with the pointer still over it. Without
+  /// the flag the pointing-hand outlives the view and rides along over the next step's controls.
+  /// Same idiom, and the same reason, as `LiveTranscriptExpandTap`.
+  @State private var didPushCursor = false
+
+  private func setHovered(_ hovering: Bool) {
+    if hovering, !didPushCursor {
+      NSCursor.pointingHand.push()
+      didPushCursor = true
+    } else if !hovering, didPushCursor {
+      NSCursor.pop()
+      didPushCursor = false
+    }
+  }
+
+  var body: some View {
+    HStack {
+      Spacer(minLength: 0)
+      Button {
+        // Pop before the step swaps this card away; `onDisappear` is the belt to this braces.
+        setHovered(false)
+        action()
+      } label: {
+        Text(title)
+          .inkStyle(InkType.statusLabel, color: Ink.secondary)
+          .underline()
+          .fixedSize(horizontal: false, vertical: true)
+          .multilineTextAlignment(.center)
+          .padding(.horizontal, 12)
+          .frame(minHeight: Self.skipLinkMinHeight)
+          // The label is the hit test, and a run of 12 pt type is a thin one. Without this the
+          // padding above is decoration: SwiftUI hit-tests what `.plain` actually renders.
+          .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+      .onHover { setHovered($0) }
+      .onDisappear { setHovered(false) }
+      Spacer(minLength: 0)
     }
   }
 }

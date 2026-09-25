@@ -1,0 +1,9 @@
+{
+  "version": "0.12.192",
+  "date": "2026-08-20",
+  "changes": [
+    "Integration Suggestions is now the fifth notification type — a row beside Focus, Task, Insight, and Memory in Settings, with its own Integration chat badge",
+    "Notification chat rows no longer repeat their content twice when the message already restates the headline",
+    "Added Refer a Friend links that give eligible new Desktop users one free month of Operator"
+  ]
+}

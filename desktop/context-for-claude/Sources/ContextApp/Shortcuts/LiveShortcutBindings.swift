@@ -304,20 +304,18 @@ final class LiveShortcutBindings: ShortcutBindingProvider {
         return recorded
     }
 
-    /// The two enums are the same two actions with the same raw values, but matched by `switch`
-    /// rather than by `init(rawValue:)`: adding a third shortcut to either one should fail to
-    /// compile here, not return nil at runtime and drop a row out of Settings.
+    /// The two enums are the same action with the same raw value, but matched by `switch` rather
+    /// than by `init(rawValue:)`: adding a second shortcut to either one should fail to compile
+    /// here, not return nil at runtime and drop a row out of Settings.
     private func registryAction(_ action: ShortcutAction) -> GlobalShortcuts.Action {
         switch action {
         case .openActivity: return .openActivity
-        case .openSearch: return .openSearch
         }
     }
 
     private func settingsAction(_ action: GlobalShortcuts.Action) -> ShortcutAction {
         switch action {
         case .openActivity: return .openActivity
-        case .openSearch: return .openSearch
         }
     }
 }

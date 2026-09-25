@@ -1,16 +1,16 @@
 'use client';
 
 import { MapPin } from 'lucide-react';
-import dynamic from 'next/dynamic';
+import dynamic from '@tschk/moonshine-next/dynamic';
 import { cn } from '@/lib/utils';
 import type { LocationPin } from '@/types/recap';
 
-// Dynamically import the map component to avoid SSR issues
+// Code-split the map preview out of the recap bundle
 const LocationMap = dynamic(() => import('./LocationMap'), {
   ssr: false,
   loading: () => (
-    <div className="h-64 rounded-xl bg-bg-tertiary animate-pulse flex items-center justify-center">
-      <MapPin className="w-8 h-8 text-text-quaternary" />
+    <div className="flex h-64 animate-pulse items-center justify-center rounded-xl bg-bg-tertiary">
+      <MapPin className="h-8 w-8 text-text-quaternary" />
     </div>
   ),
 });
@@ -37,11 +37,13 @@ export function LocationsSection({
   }
 
   return (
-    <div className={cn(
-      'overflow-hidden',
-      showBorder && 'rounded-xl border border-white/[0.04]',
-      className
-    )}>
+    <div
+      className={cn(
+        'overflow-hidden',
+        showBorder && 'rounded-xl border border-white/[0.04]',
+        className,
+      )}
+    >
       <LocationMap
         locations={locations}
         height={height}

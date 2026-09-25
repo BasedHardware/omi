@@ -85,8 +85,9 @@ export const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
           const fileId = firstFile.id || '0';
           const deadline = Date.now() + 90_000;
           while (Date.now() < deadline && !cancelled) {
-            const { files, pollAfterMs } =
-              await getConversationAudioUrlsWithPoll(conversationId);
+            const { files, pollAfterMs } = await getConversationAudioUrlsWithPoll(
+              conversationId,
+            );
             if (cancelled) return;
             const info = files.find((f) => f.id === fileId) ?? files[0];
             if (info?.signed_url) {
@@ -201,12 +202,12 @@ export const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
       return (
         <div
           className={cn(
-            'flex items-center gap-3 p-3 rounded-xl bg-bg-tertiary border border-bg-quaternary/50',
-            'text-text-tertiary text-sm',
+            'flex items-center gap-3 rounded-xl border border-bg-quaternary/50 bg-bg-tertiary p-3',
+            'text-sm text-text-tertiary',
             className,
           )}
         >
-          <VolumeX className="w-5 h-5" />
+          <VolumeX className="h-5 w-5" />
           <span>{error}</span>
         </div>
       );
@@ -215,7 +216,7 @@ export const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
     return (
       <div
         className={cn(
-          'flex items-center gap-3 p-3 rounded-xl bg-bg-tertiary border border-bg-quaternary/50',
+          'flex items-center gap-3 rounded-xl border border-bg-quaternary/50 bg-bg-tertiary p-3',
           className,
         )}
       >
@@ -239,25 +240,25 @@ export const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
           onClick={handlePlayPause}
           disabled={isLoading}
           className={cn(
-            'w-10 h-10 rounded-full flex items-center justify-center',
-            'bg-purple-primary text-white',
-            'hover:bg-purple-secondary transition-colors',
-            'disabled:opacity-50 disabled:cursor-not-allowed',
+            'flex h-10 w-10 items-center justify-center rounded-full',
+            'bg-text-primary text-bg-primary',
+            'transition-colors hover:bg-text-primary/90',
+            'disabled:cursor-not-allowed disabled:opacity-50',
             'flex-shrink-0',
           )}
         >
           {isLoading ? (
-            <Loader2 className="w-5 h-5 animate-spin" />
+            <Loader2 className="h-5 w-5 animate-spin" />
           ) : isPlaying ? (
-            <Pause className="w-5 h-5" />
+            <Pause className="h-5 w-5" />
           ) : (
-            <Play className="w-5 h-5 ml-0.5" />
+            <Play className="ml-0.5 h-5 w-5" />
           )}
         </button>
 
         {/* Progress bar */}
-        <div className="flex-1 flex items-center gap-3">
-          <span className="text-xs text-text-tertiary w-10 text-right flex-shrink-0">
+        <div className="flex flex-1 items-center gap-3">
+          <span className="w-10 flex-shrink-0 text-right text-xs text-text-tertiary">
             {formatTime(currentTime)}
           </span>
 
@@ -269,18 +270,18 @@ export const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
             onChange={handleSeek}
             disabled={isLoading}
             className={cn(
-              'flex-1 h-1.5 rounded-full appearance-none cursor-pointer',
+              'h-1.5 flex-1 cursor-pointer appearance-none rounded-full',
               'bg-bg-quaternary',
               '[&::-webkit-slider-thumb]:appearance-none',
               '[&::-webkit-slider-thumb]:w-3',
               '[&::-webkit-slider-thumb]:h-3',
               '[&::-webkit-slider-thumb]:rounded-full',
-              '[&::-webkit-slider-thumb]:bg-purple-primary',
+              '[&::-webkit-slider-thumb]:bg-text-primary',
               '[&::-webkit-slider-thumb]:cursor-pointer',
               '[&::-moz-range-thumb]:w-3',
               '[&::-moz-range-thumb]:h-3',
               '[&::-moz-range-thumb]:rounded-full',
-              '[&::-moz-range-thumb]:bg-purple-primary',
+              '[&::-moz-range-thumb]:bg-text-primary',
               '[&::-moz-range-thumb]:border-0',
               '[&::-moz-range-thumb]:cursor-pointer',
               'disabled:opacity-50',
@@ -288,12 +289,14 @@ export const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
             style={{
               background:
                 duration > 0
-                  ? `linear-gradient(to right, var(--purple-primary) ${(currentTime / duration) * 100}%, var(--bg-quaternary) ${(currentTime / duration) * 100}%)`
+                  ? `linear-gradient(to right, var(--text-primary) ${
+                      (currentTime / duration) * 100
+                    }%, var(--bg-quaternary) ${(currentTime / duration) * 100}%)`
                   : undefined,
             }}
           />
 
-          <span className="text-xs text-text-tertiary w-10 flex-shrink-0">
+          <span className="w-10 flex-shrink-0 text-xs text-text-tertiary">
             {formatTime(duration)}
           </span>
         </div>
@@ -303,25 +306,25 @@ export const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
           <button
             onClick={() => setShowSpeedMenu(!showSpeedMenu)}
             className={cn(
-              'px-2 py-1 rounded-md text-xs font-medium',
+              'rounded-md px-2 py-1 text-xs font-medium',
               'bg-bg-quaternary text-text-secondary',
-              'hover:bg-bg-tertiary hover:text-text-primary transition-colors',
+              'transition-colors hover:bg-bg-tertiary hover:text-text-primary',
             )}
           >
             {playbackSpeed}x
           </button>
 
           {showSpeedMenu && (
-            <div className="absolute bottom-full right-0 mb-2 py-1 bg-bg-secondary border border-bg-tertiary rounded-lg shadow-lg z-10">
+            <div className="absolute bottom-full right-0 z-10 mb-2 rounded-lg border border-bg-tertiary bg-bg-secondary py-1 shadow-lg">
               {PLAYBACK_SPEEDS.map((speed) => (
                 <button
                   key={speed}
                   onClick={() => handleSpeedChange(speed)}
                   className={cn(
-                    'w-full px-4 py-1.5 text-xs text-left',
-                    'hover:bg-bg-tertiary transition-colors',
+                    'w-full px-4 py-1.5 text-left text-xs',
+                    'transition-colors hover:bg-bg-tertiary',
                     speed === playbackSpeed
-                      ? 'text-purple-primary font-medium'
+                      ? 'font-medium text-text-primary'
                       : 'text-text-secondary',
                   )}
                 >
@@ -336,11 +339,11 @@ export const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
         <button
           onClick={toggleMute}
           className={cn(
-            'p-2 rounded-md',
-            'text-text-secondary hover:text-text-primary transition-colors',
+            'rounded-md p-2',
+            'text-text-secondary transition-colors hover:text-text-primary',
           )}
         >
-          {isMuted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
+          {isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
         </button>
 
         {/* Download button */}
@@ -348,13 +351,13 @@ export const AudioPlayer = forwardRef<AudioPlayerRef, AudioPlayerProps>(
           onClick={handleDownload}
           disabled={!audioUrl}
           className={cn(
-            'p-2 rounded-md',
-            'text-text-secondary hover:text-text-primary transition-colors',
-            'disabled:opacity-50 disabled:cursor-not-allowed',
+            'rounded-md p-2',
+            'text-text-secondary transition-colors hover:text-text-primary',
+            'disabled:cursor-not-allowed disabled:opacity-50',
           )}
           title="Download audio"
         >
-          <Download className="w-4 h-4" />
+          <Download className="h-4 w-4" />
         </button>
       </div>
     );

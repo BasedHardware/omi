@@ -310,13 +310,18 @@ public struct OmiTranscriptSegment: Decodable, Sendable {
 public struct OmiFullConversation: Decodable, Sendable {
     public let conversation: OmiConversation
     public let segments: [OmiTranscriptSegment]
+    public let truncated: Bool
 
-    private enum Key: String, CodingKey { case transcriptSegments = "transcript_segments" }
+    private enum Key: String, CodingKey {
+        case transcriptSegments = "transcript_segments"
+        case truncated
+    }
 
     public init(from decoder: Decoder) throws {
         conversation = try OmiConversation(from: decoder)
         let container = try decoder.container(keyedBy: Key.self)
         segments = container.optionalArray(OmiTranscriptSegment.self, .transcriptSegments)
+        truncated = (try? container.decodeIfPresent(Bool.self, forKey: .truncated)) ?? false
     }
 }
 
@@ -685,8 +690,14 @@ public final class OmiBackend: @unchecked Sendable {
         // Stricter than `.urlPathAllowed`, which would let a "/" in an id walk off the endpoint.
         let unreserved = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: "-._~"))
         let escaped = trimmed.addingPercentEncoding(withAllowedCharacters: unreserved) ?? trimmed
-        // A finished conversation does not change, so hold it for the life of the process.
-        let result = get(OmiFullConversation.self, path: "v1/mcp/conversations/\(escaped)", query: [], ttl: 3600)
+        // A finished conversation does not change, so hold it for the life of the process; a
+        // truncated response is served but never stored.
+        let result = get(
+            OmiFullConversation.self,
+            path: "v1/mcp/conversations/\(escaped)",
+            query: [],
+            ttl: 3600,
+            cacheIf: { !$0.truncated })
         return map(result) { full in
             self.record([full.conversation])
             return full
@@ -739,7 +750,8 @@ public final class OmiBackend: @unchecked Sendable {
         _ type: T.Type,
         path: String,
         query: [URLQueryItem],
-        ttl: TimeInterval
+        ttl: TimeInterval,
+        cacheIf: @Sendable (T) -> Bool = { _ in true }
     ) -> OmiResult<T> {
         // Asked *before* the cache, because this read is what notices the app having rewritten the
         // key file: a rejection cached against the superseded key must never get to answer first.
@@ -794,8 +806,16 @@ public final class OmiBackend: @unchecked Sendable {
 
         switch result {
         case let .success(data):
-            cache.store(cacheKey, .success(data), ttl: ttl, generation: used.generation)
-            return decode(type, data, path: path, method: "GET")
+            let decoded = decode(type, data, path: path, method: "GET")
+            let cacheable: Bool
+            switch decoded {
+            case let .ok(value): cacheable = cacheIf(value)
+            case .unavailable: cacheable = true
+            }
+            if cacheable {
+                cache.store(cacheKey, .success(data), ttl: ttl, generation: used.generation)
+            }
+            return decoded
         case let .failure(error):
             // Terminal failures are held for the life of the credential that earned them; a
             // transient one is held only briefly, so a flaky network recovers within the session

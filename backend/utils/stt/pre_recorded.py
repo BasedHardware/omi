@@ -8,7 +8,6 @@ from math import ceil
 from threading import RLock
 from typing import Any, Dict, List, Optional, Sequence, Tuple, Union, cast
 
-import fal_client
 import httpx
 import numpy as np
 from deepgram import DeepgramClient, DeepgramClientOptions
@@ -32,9 +31,11 @@ from config.stt_provider_policy import (
 )
 from models.transcript_segment import TranscriptSegment
 from utils.byok import get_byok_key
+from utils.observability.fallback import record_fallback
 from utils.other.endpoints import timeit
 from utils.stt.outcomes import TranscriptionFailure
-from utils.stt.speaker_embedding import SPEAKER_MATCH_THRESHOLD, compare_embeddings, extract_embedding_from_bytes
+from utils.stt.speaker_clustering import select_speaker_cluster
+from utils.stt.speaker_embedding import compare_embeddings, extract_embedding_from_bytes
 
 _DG_TIMEOUT = httpx.Timeout(connect=10.0, read=120.0, write=30.0, pool=10.0)
 _MODULATE_TIMEOUT = httpx.Timeout(connect=10.0, read=300.0, write=30.0, pool=10.0)
@@ -122,18 +123,18 @@ def get_prerecorded_service(language: Optional[str] = 'en') -> Tuple[str, Option
 
 # Lazily initialized because constructing the SDK client at import makes every
 # backend consumer credential-dependent, including schema export and unit discovery.
-_deepgram_options: Optional[DeepgramClientOptions] = None
 _deepgram_client: Optional[DeepgramClient] = None
 _deepgram_client_lock = RLock()
 
 
-def _get_deepgram_options() -> DeepgramClientOptions:
-    global _deepgram_options
-    if _deepgram_options is None:
-        with _deepgram_client_lock:
-            if _deepgram_options is None:
-                _deepgram_options = DeepgramClientOptions(options={"keepalive": "true"})
-    return _deepgram_options
+def _deepgram_options() -> DeepgramClientOptions:
+    """Build fresh options per client.
+
+    DeepgramClient.__init__ calls config.set_apikey(), so a cached options
+    object shared with a BYOK client rewrites the credential the managed
+    client still holds — every later request would bill that user's key.
+    """
+    return DeepgramClientOptions(options={"keepalive": "true"})
 
 
 def _get_deepgram_client() -> DeepgramClient:
@@ -144,7 +145,7 @@ def _get_deepgram_client() -> DeepgramClient:
                 api_key = os.getenv('DEEPGRAM_API_KEY')
                 if not api_key:
                     raise PrerecordedSTTConfigurationError(PrerecordedSTTService.DEEPGRAM, 'DEEPGRAM_API_KEY')
-                _deepgram_client = DeepgramClient(api_key, _get_deepgram_options())
+                _deepgram_client = DeepgramClient(api_key, _deepgram_options())
     return _deepgram_client
 
 
@@ -152,7 +153,7 @@ def _deepgram_client_for_request() -> DeepgramClient:
     """Route to BYOK Deepgram key when set; otherwise use the process-wide client."""
     byok = get_byok_key('deepgram')
     if byok:
-        return DeepgramClient(byok, _get_deepgram_options())
+        return DeepgramClient(byok, _deepgram_options())
     return _get_deepgram_client()
 
 
@@ -281,7 +282,7 @@ def deepgram_prerecorded(
 ) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
     """
     Transcribe audio using Deepgram's pre-recorded API.
-    Returns words in same format as fal_whisperx for compatibility with existing postprocessing.
+    Returns words in same format as prerecorded for compatibility with existing postprocessing.
 
     Args:
         audio_url: URL to the audio file
@@ -346,7 +347,7 @@ def deepgram_prerecorded(
                 return [], detected_lang or 'en'
             return []
 
-        # Convert Deepgram format to fal_whisperx compatible format
+        # Convert Deepgram format to prerecorded compatible format
         # Deepgram: {word, start, end, confidence, punctuated_word, speaker (int)}
         # Expected: {timestamp: [start, end], speaker: 'SPEAKER_XX', text: 'word'}
         words: List[Dict[str, Any]] = []
@@ -521,49 +522,6 @@ def deepgram_prerecorded_from_bytes(
                 keywords,
             )
         raise RuntimeError(f'Deepgram transcription failed after {attempts + 1} attempts') from e
-
-
-@timeit
-def fal_whisperx(
-    audio_url: str,
-    speakers_count: Optional[int] = None,
-    attempts: int = 0,
-    return_language: bool = False,
-    diarize: bool = True,
-    chunk_level: str = 'word',
-) -> Union[List[Dict[str, Any]], Tuple[List[Dict[str, Any]], str]]:
-    logger.info(f'fal_whisperx {audio_url} {speakers_count} {attempts}')
-
-    try:
-        handler = fal_client.submit(
-            "fal-ai/whisper",
-            arguments={
-                "audio_url": audio_url,
-                'task': 'transcribe',
-                'diarize': diarize,
-                'chunk_level': chunk_level,
-                'version': '3',
-                'batch_size': 64,
-                'num_speakers': speakers_count,
-            },
-        )
-        result = handler.get()
-        # print(result)
-        words = result.get('chunks', [])
-        if not words:
-            raise Exception('No chunks found')
-        if return_language:
-            languages = result.get('inferred_languages', ['en'])
-            language = languages[0] if languages else 'en'
-            return words, language
-        return words
-    except Exception as e:
-        logger.error(e)
-        if attempts < 2:
-            return fal_whisperx(audio_url, speakers_count, attempts + 1, return_language)
-        if return_language:
-            return [], 'en'
-        return []
 
 
 @timeit
@@ -971,13 +929,20 @@ def _parakeet_assign_speaker_sync(
         seg_wav = _wrap_pcm_as_wav(seg_pcm, sample_rate, 1)
         emb = extract_embedding_from_bytes(seg_wav)
 
-        best_i, best_dist = -1, 1e9
-        for i, centroid in enumerate(centroids):
-            d = compare_embeddings(emb, centroid)
-            if d < best_dist:
-                best_i, best_dist = i, d
-
-        if best_i >= 0 and best_dist < SPEAKER_MATCH_THRESHOLD:
+        best_i, create_new, _, capped = select_speaker_cluster(emb, centroids, compare_embeddings)
+        if not create_new:
+            if capped:
+                # Forced by the cap: the embedding missed every centroid, so keep
+                # it out of the running mean and report the degraded merge.
+                record_fallback(
+                    component='other',
+                    from_mode='new_speaker_centroid',
+                    to_mode='nearest_centroid',
+                    reason='capacity_full',
+                    outcome='degraded',
+                    log=logger,
+                )
+                return f'SPEAKER_{best_i:02d}'
             n = counts[best_i]
             centroids[best_i] = (centroids[best_i] * n + emb) / (n + 1)
             counts[best_i] = n + 1
@@ -985,7 +950,7 @@ def _parakeet_assign_speaker_sync(
 
         centroids.append(emb)
         counts.append(1)
-        return f'SPEAKER_{len(centroids) - 1:02d}'
+        return f'SPEAKER_{best_i:02d}'
     except Exception as e:
         logger.warning(f'Parakeet batch diarization failed, defaulting to SPEAKER_00: {e}')
         return 'SPEAKER_00'
@@ -1057,6 +1022,13 @@ class ParakeetPrerecordedProvider(PrerecordedSTTProvider):
 
 def get_prerecorded_provider(language: Optional[str] = 'en') -> PrerecordedSTTProvider:
     """Construct exactly the language-aware provider selected for telemetry."""
+    # Offline harness sessions swap the provider for a deterministic stub
+    # (selection/telemetry still resolve normally above them). Imported lazily:
+    # the stub module imports this one for the provider ABC.
+    from utils.stt.prerecorded_stub import PrerecordedStubProvider, prerecorded_stub_enabled
+
+    if prerecorded_stub_enabled():
+        return PrerecordedStubProvider()
     service, _provider_language, model = get_prerecorded_service(language)
     if service == PrerecordedSTTService.MODULATE:
         return ModulatePrerecordedProvider()

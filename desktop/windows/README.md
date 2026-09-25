@@ -8,20 +8,55 @@ Omi for Windows — an Electron + React + TypeScript port of the Omi desktop app
 
 ## Run from source
 
+Requires Node 22.19+ (CI pins Node 22, matching `package.json`'s `engines.node`
+range; Node 24+ breaks the jsdom test suites — see `scripts/check-node-version.mjs`).
+With [nvm](https://github.com/nvm-sh/nvm) installed, `nvm use` in this directory
+picks up the pinned version from `.nvmrc` automatically.
+
+This directory is pnpm-managed — running `npm install` instead will corrupt
+`package.json`/`pnpm-lock.yaml`/`pnpm-workspace.yaml` (npm doesn't understand
+pnpm-workspace semantics) and leave a stray, untracked `package-lock.json`
+behind. If you see unexplained diffs in those three files with no matching
+commit, this is almost certainly why — `git restore` them and reinstall with
+pnpm.
+
+CI pins pnpm to major version **10**. If your system `pnpm --version` is a
+different major (e.g. 8 or 11+), `.npmrc`'s `node-linker=hoisted` setting can
+be silently ignored, breaking postinstall with a confusing "closure
+package(s) do not resolve on disk" error — use `npx pnpm@10 <command>`
+instead of downgrading a system-managed pnpm install.
+
 ```bash
 # 1. Install dependencies
-npm install
+nvm use   # or: nvm install (first time)
+pnpm install --frozen-lockfile
 
 # 2. Create your local env file (required — the app won't start without it)
 cp .env.example .env
 
 # 3. Start the app
-npm run dev
+pnpm run dev
 ```
 
 `.env` is gitignored. `.env.example` ships with Omi's **public** Firebase + PostHog
 config, so after `cp .env.example .env` the app runs and sign-in works with no extra
 keys to obtain.
+
+### Linux (Wayland compositors)
+
+On native Wayland compositors with limited XWayland support (e.g. niri),
+`pnpm dev` can fail to map the main window at all — the tray icon appears but
+no window does. Set `OMI_OZONE=wayland` to run under native Wayland instead
+(global shortcuts and active-window detection won't work in that mode). If
+the window still comes up blank rather than missing, also add
+`OMI_DEV_HW_GPU=1`. See [docs/multi-worktree-dev.md](docs/multi-worktree-dev.md)
+for the full dev-only environment variable reference and parallel-worktree
+port/profile isolation.
+
+`pnpm run dev` automatically unsets `ELECTRON_RUN_AS_NODE` for the spawned Electron
+app. Some shell/tooling sessions leave that variable set after using Electron as a
+Node runtime; if it leaks into app startup, Electron does not expose `electron.app`
+and the dev app crashes before opening.
 
 ## Authentication
 
@@ -30,11 +65,9 @@ keys to obtain.
   flow as the macOS app, so provider credentials stay server-side. The Firebase project
   is shared (Omi's `based-hardware`); accounts are individual. Nothing to configure —
   it works out of the box from `.env.example`.
-- **Google integration** (optional Gmail/Google connect — separate from sign-in): bring
-  your own credentials. Create an OAuth **Desktop app** client in the
-  [Google Cloud Console](https://console.cloud.google.com/apis/credentials), then in your
-  local `.env` set `MAIN_VITE_GOOGLE_CLIENT_ID`, `MAIN_VITE_GOOGLE_CLIENT_SECRET`, and
-  `VITE_ENABLE_GOOGLE_INTEGRATION=1`. Keep these in your local `.env` only — never commit them.
+- **Gmail connector** (Settings → Integrations): sign into Google once inside an
+  Omi-owned window and Omi reads recent mail through that session — no OAuth
+  client credentials to configure.
 
 ## Optional keys
 
@@ -42,8 +75,6 @@ Everything below is blank in `.env.example` and safe to leave unset:
 
 - `VITE_OMI_API_KEY` — cloud-sync recorded conversations (generate in Omi → Settings →
   Developer). Blank = recordings save locally only.
-- `MAIN_VITE_GOOGLE_CLIENT_ID` / `MAIN_VITE_GOOGLE_CLIENT_SECRET` /
-  `VITE_ENABLE_GOOGLE_INTEGRATION` — the Google integration above.
 
 ## Coding agents (Claude Code, OpenClaw, Hermes, Codex)
 
@@ -75,17 +106,25 @@ indexed folder. Adapter code lives in `src/main/codingAgent/`.
 
 ```bash
 # Windows
-npm run build:win
+pnpm run build:win
 
 # macOS
-npm run build:mac
+pnpm run build:mac
 
 # Linux
-npm run build:linux
+pnpm run build:linux
 ```
 
 Vite inlines the `.env` values at build time, so a packaged installer needs no `.env` —
 the config is compiled into the binary.
+
+## Verify your changes
+
+```bash
+pnpm typecheck   # tsc, node + web configs
+pnpm lint        # ESLint (blocking in CI; Prettier formatting is not)
+pnpm test        # vitest, ~550 tests, runs against an Electron stub
+```
 
 ## Floating bar
 

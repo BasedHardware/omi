@@ -214,3 +214,17 @@ class SegmentsDeletedEvent(MessageEvent):
         j["type"] = self.event_type
         del j["event_type"]
         return j
+
+
+class ProactiveMessageEvent(MessageEvent):
+    event_type: str = "proactive_message"
+    app_id: str
+    title: str
+    message: str
+    conversation_id: Optional[str] = None
+
+    def to_json(self):
+        j = self.model_dump(mode="json", exclude_none=True)
+        j["type"] = self.event_type
+        del j["event_type"]
+        return j

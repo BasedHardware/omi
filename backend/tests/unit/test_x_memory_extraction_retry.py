@@ -10,6 +10,7 @@ from fastapi import HTTPException
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
 
 from models.memories import Memory, MemoryCategory
+from models.memory_contracts import MemoryExtractionError
 from utils import x_connector
 
 
@@ -146,6 +147,52 @@ def test_scheduled_x_flex_deferral_remains_pending_without_acknowledgement(monke
         x_connector._extract_and_index('uid-1', [post], llm=object())
 
     assert acknowledgements == []
+
+
+def test_provider_5xx_skips_only_the_failed_chunk_and_leaves_it_pending(monkeypatch):
+    """A strict provider 5xx on one chunk cannot starve the batches behind it in the same cycle, and the failed chunk stays pending for the next sync."""
+    first_post = {'id': 'post-1', 'text': 'I prefer tea', 'created_at': '2026-07-14T00:00:00Z', 'kind': 'tweet'}
+    second_post = {'id': 'post-2', 'text': 'Second batch', 'created_at': '2026-07-14T00:00:00Z', 'kind': 'tweet'}
+
+    calls = []
+    acknowledgements = []
+    created_batches = []
+    recorded = []
+
+    def extract(*_args, **_kwargs):
+        chunk_text = _args[1]
+        calls.append(chunk_text)
+        if 'I prefer tea' in chunk_text:
+            raise MemoryExtractionError('external_text_memory_extractor')
+        return [Memory(content='Second batch memory', category=MemoryCategory.interesting)]
+
+    class RecordingMemoryService:
+        def __init__(self, **_kwargs):
+            pass
+
+        def create_external_memory_batch(self, _uid, memory_dbs, **_kwargs):
+            created_batches.append(memory_dbs)
+
+    monkeypatch.setattr(x_connector, 'MEMORY_BATCH_CHARS', 10)
+    monkeypatch.setattr(x_connector, 'extract_memories_from_text', extract)
+    monkeypatch.setattr(x_connector, 'MemoryService', RecordingMemoryService)
+    monkeypatch.setattr(x_connector, 'capture_memory_write', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        x_connector.x_posts_db,
+        'mark_memory_extraction_completed',
+        lambda _uid, post_ids: acknowledgements.append(post_ids),
+    )
+    monkeypatch.setattr(x_connector, 'record_fallback', lambda **kwargs: recorded.append(kwargs))
+
+    total = x_connector._extract_and_index('uid-1', [first_post, second_post], llm=object())
+
+    assert total == 1
+    assert len(calls) == 2, 'a 5xx chunk must not starve the batches behind it in the same cycle'
+    assert acknowledgements == [['post-2']], 'the failed chunk stays pending for the next sync'
+    assert len(created_batches) == 1 and len(created_batches[0]) == 1
+    assert recorded and recorded[0]['reason'] == 'provider_5xx'
+    assert recorded[0]['to_mode'] == 'chunk_deferred'
+    assert recorded[0]['outcome'] == 'degraded'
 
 
 async def _async_value(value):

@@ -2,8 +2,14 @@ import AppKit
 import ContextCore
 import SwiftUI
 
-/// Agents: how Claude is opened, whether Claude can reach this app at all, and which agent surfaces
-/// are genuinely on this Mac.
+/// Agents: how Claude is opened, and whether Claude can reach this app at all.
+///
+/// **A third section, "Detected on this Mac", is gone.** It surveyed the machine for Claude Code,
+/// Claude Desktop, Codex and Cursor and drew a row per surface with an Installed / Configured /
+/// Not found pill. Every row was read-only: nothing on this pane acts on the survey, and the two
+/// surfaces this app actually registers with are named by the tip above it either way — so it was
+/// a list the user could not do anything with, in the pane where the two controls that do something
+/// live. Removed on the report *"remove the detected on this mac from UI in settings"*.
 ///
 /// The reference's third row is a toggle that installs a `coast` CLI into `~/.local/bin`. We ship no
 /// CLI — `docs/rewind-and-settings.md` says outright that our equivalent is the MCP registration — so
@@ -23,12 +29,11 @@ struct SettingsAgentsPane: View {
     /// Claude Desktop's config **synchronously in `View.init`** — and SwiftUI re-inits a view body's
     /// struct freely, so two file reads rode along with every unrelated state change on this pane.
     /// It is a disk probe like the other two here, so it belongs where they are.
-    @State private var registration: (claudeCode: Bool, claudeDesktop: Bool)?
+    @State private var registration: ClaudeConnection?
     @State private var registrationMessage: String?
     /// Bumped by each attempt so the expiry below restarts rather than clearing a newer message.
     @State private var registrationMessageAttempt = 0
     @State private var isRegistering = false
-    @State private var survey: [(surface: AgentSurface, presence: AgentPresence)] = []
     /// What each Claude target would really do *on this Mac*, from `ClaudeRouter`'s own probe. Nil
     /// until it has answered, which is one frame — see `targetSubtitle` for what stands in.
     @State private var targetDetail: String?
@@ -63,9 +68,18 @@ struct SettingsAgentsPane: View {
 
             SettingsSection(
                 title: "Access",
+                // **Names all three things the switch writes.** It used to say "writes only the one
+                // entry, into Claude's own config", which was already understating it — a skill has
+                // been installed alongside the registration for some time — and the standing
+                // instruction in the user's global `CLAUDE.md` makes the omission a real one: that
+                // file is loaded into every prompt they run, so a switch that edits it has to say
+                // so where it is switched. All three are removed again on disconnect.
                 footnote: registrationMessage
-                    ?? "Registers this app's MCP server so Claude can read what was captured. "
-                    + "Writes only the one entry, into Claude's own config."
+                    ?? "Registers this app's MCP server so Claude can read what was captured, "
+                    + "installs a skill in ~/.claude/skills, and adds a block to your global "
+                    + "~/.claude/CLAUDE.md telling Claude to check this Mac's context before "
+                    + "answering. Nothing else in those files is touched, and disconnecting "
+                    + "removes all three."
             ) {
                 SettingsRow(
                     icon: "point.3.connected.trianglepath.dotted",
@@ -82,6 +96,12 @@ struct SettingsAgentsPane: View {
                             title: "Claude Connection",
                             isOn: Binding(
                                 get: {
+                                    // Registration, not reachability: the switch's job is whether
+                                    // this app has written itself into Claude's config, and a
+                                    // Claude Desktop that has not restarted yet has not undone
+                                    // that. Flipping the switch off under the user because their
+                                    // Claude is stale would offer disconnecting as the cure for
+                                    // needing a restart.
                                     registration?.claudeCode == true || registration?.claudeDesktop == true
                                 },
                                 set: { setRegistered($0) }))
@@ -108,26 +128,6 @@ struct SettingsAgentsPane: View {
                 AgentPromptMock()
             }
 
-            SettingsSection(
-                title: "Detected on this Mac",
-                footnote: survey.allSatisfy({ !$0.presence.isInstalled })
-                    ? "None of these were found. This list reads the applications and command-line "
-                        + "tools actually present, so it will fill in as you install them."
-                    : nil
-            ) {
-                SettingsRowStack(
-                    items: survey.map { AgentSurveyRow(surface: $0.surface, presence: $0.presence) }
-                ) {
-                    row in
-                    SettingsRow(
-                        icon: row.presence.isInstalled ? "checkmark.seal" : "questionmark.app.dashed",
-                        title: row.surface.title,
-                        subtitle: row.presence.detail
-                    ) {
-                        AgentPresencePill(presence: row.presence)
-                    }
-                }
-            }
         }
         .task {
             // Every probe on this pane touches the disk or LaunchServices, and none of them belongs
@@ -135,10 +135,9 @@ struct SettingsAgentsPane: View {
             // so a probe placed there is a file read per unrelated state change. Here they run once
             // per appearance instead. The registrar's two JSON parses go off the main actor as well,
             // because they are the only ones that open and decode a file.
-            survey = AgentDetector.live.survey()
             targetDetail = ClaudeRouter.targetSubtitle(surface: ClaudeHandoff.surface)
             registration = await Task.detached(priority: .userInitiated) {
-                ClaudeRegistrar.status()
+                ClaudeConnection.current()
             }.value
         }
         // The result of the last connect/disconnect, expired rather than pinned. `.task(id:)`
@@ -167,15 +166,29 @@ struct SettingsAgentsPane: View {
     }
 
     private var connectionSubtitle: String {
-        guard let registration else { return "Checking whether Claude is connected…" }
-        // Explicit `return`: the guard above makes this a multi-statement body, and a switch
-        // expression only returns implicitly when it is the single expression in the getter.
-        return switch (registration.claudeCode, registration.claudeDesktop) {
+        Self.connectionSubtitle(registration)
+    }
+
+    /// The row's subtitle, as a function of the probe's answer.
+    ///
+    /// `static` and not a computed property on the view, for the reason `ClaudeConnectorLine` is a
+    /// value: this sentence is the one place the pane makes a claim about somebody else's process,
+    /// and it shipped making a false one — `Connected to Claude Code and Claude Desktop.` over a
+    /// Claude Desktop whose server had failed to spawn at every launch for three days. A claim that
+    /// wrong has to be reachable from a test, and a `private var` on a `View` is not.
+    static func connectionSubtitle(_ connection: ClaudeConnection?) -> String {
+        guard let connection else { return "Checking whether Claude is connected…" }
+        // `desktopIsReachable`, so a registration Claude Desktop has not picked up is never
+        // reported as a working connection. The remedy is appended rather than replacing the
+        // sentence: what is connected and what is pending are both facts the user needs.
+        let connected = switch (connection.claudeCode, connection.desktopIsReachable) {
         case (true, true): "Connected to Claude Code and Claude Desktop."
         case (true, false): "Connected to Claude Code."
         case (false, true): "Connected to Claude Desktop."
         case (false, false): "Not connected. Claude cannot read anything captured here yet."
         }
+        guard let notice = connection.restartNotice else { return connected }
+        return "\(connected) \(notice)"
     }
 
     /// Connect or disconnect, off the main actor, in the same shape as the probe in `.task` above.
@@ -211,45 +224,9 @@ struct SettingsAgentsPane: View {
             // Re-read rather than trusting `result`: the registrar reports what it *did*, and the row
             // states what is *on disk*. A write that half-succeeded must show the disk's answer.
             registration = await Task.detached(priority: .userInitiated) {
-                ClaudeRegistrar.status()
+                ClaudeConnection.current()
             }.value
             isRegistering = false
-        }
-    }
-}
-
-/// `Identifiable` wrapper so the survey can go through `SettingsRowStack`.
-private struct AgentSurveyRow: Identifiable {
-    let surface: AgentSurface
-    let presence: AgentPresence
-    var id: String { surface.rawValue }
-}
-
-/// The green-dot `Installed` pill, and the two honest alternatives to it.
-struct AgentPresencePill: View {
-    let presence: AgentPresence
-
-    var body: some View {
-        HStack(spacing: 5) {
-            Circle()
-                .fill(dotColor)
-                .frame(width: 6, height: 6)
-            Text(presence.label)
-                .font(.system(size: 10, weight: .medium))
-                .foregroundStyle(presence.isInstalled ? Ink.primary : Ink.secondary)
-        }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 3)
-        .background(Capsule(style: .continuous).fill(Ink.wash))
-        .fixedSize()
-    }
-
-    private var dotColor: Color {
-        switch presence {
-        case .application, .executable: Ink.listeningGreen
-        // Configured but no binary found: real evidence, weaker than a green dot should imply.
-        case .configured: Ink.accent
-        case .absent: Ink.secondary
         }
     }
 }

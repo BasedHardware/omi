@@ -138,7 +138,12 @@ def _get_trial_metadata_fn():
         'logger': MagicMock(),
         'get_plan_display_name': lambda p: 'Free' if p == PlanType.basic else p.value.capitalize(),
         'FREE_CHAT_QUESTIONS_PER_MONTH': 30,
-        '_request_has_all_byok_keys': lambda: False,
+        # get_trial_metadata and TRIAL_FEATURES now read the catalog through
+        # _effective_chat_limit rather than the module constant. This synthetic
+        # namespace execs extracted source, so the helper must be supplied here or
+        # every extracted body raises NameError. Mirrors the stub above.
+        '_effective_chat_limit': lambda plan: 30 if plan == PlanType.basic else None,
+        '_request_has_llm_byok_key': lambda: False,
         'DESKTOP_ACCESS_TIER_FREE': 'desktop_free',
         'DESKTOP_ACCESS_TIER_FULL': 'desktop_full',
         'DESKTOP_ACCESS_TIER_ARCHITECT': 'desktop_architect',

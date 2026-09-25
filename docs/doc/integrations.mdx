@@ -243,9 +243,9 @@ Now, let's integrate your device into the Omi app's modular architecture.
 
 | Component | Location | Purpose |
 |-----------|----------|---------|
-| `DeviceConnection` | `.../device_connection.dart` | Abstract class defining the standard interface for all devices |
-| `DeviceTransport` | `.../transports/ble_transport.dart` | Low-level BLE communication handler |
-| `DeviceConnectionFactory` | `.../device_connection.dart` | Constructs the correct connection object based on DeviceType |
+| `DeviceConnection` | `.../connectors/device_connection.dart` | Abstract class defining the standard interface for all devices |
+| `DeviceTransport` | `.../transports/device_transport.dart` | Abstract transport interface (`NativeBleTransport` in `.../transports/native_ble_transport.dart` is the low-level BLE handler) |
+| `DeviceConnectionFactory` | `.../connectors/device_connection.dart` | Constructs the correct connection object based on DeviceType |
 
 ### Implementation Steps
 
@@ -267,12 +267,12 @@ Now, let's integrate your device into the Omi app's modular architecture.
     Also update `getTypeOfBluetoothDevice` function and create a helper (e.g., `isXyzDevice`) to identify your device during Bluetooth scans.
   </Step>
   <Step title="Create Your Device Connection Class" icon="code">
-    Create `app/lib/services/devices/xyz_connection.dart`:
+    Create `app/lib/services/devices/connectors/xyz_connection.dart`:
 
     ```dart
     import 'dart:async';
     import 'package:omi/backend/schema/bt_device/bt_device.dart';
-    import 'package:omi/services/devices/device_connection.dart';
+    import 'package:omi/services/devices/connectors/device_connection.dart';
     import 'package:omi/services/devices/models.dart';
 
     // Define your device's specific UUIDs
@@ -310,7 +310,7 @@ Now, let's integrate your device into the Omi app's modular architecture.
     ```
   </Step>
   <Step title="Register Your Device in the Factory" icon="gear">
-    Open `app/lib/services/devices/device_connection.dart` and add a new case:
+    Open `app/lib/services/devices/connectors/device_connection.dart` and add a new case:
 
     ```dart
     class DeviceConnectionFactory {
@@ -331,7 +331,7 @@ Now, let's integrate your device into the Omi app's modular architecture.
 </Steps>
 
 <Info>
-Refer to `app/lib/services/devices/omi_connection.dart` for a complete example of a complex device implementation.
+Refer to `app/lib/services/devices/connectors/omi_connection.dart` for a complete example of a complex device implementation.
 </Info>
 
 ---

@@ -228,9 +228,18 @@ final class DiagnosticTraceTests: XCTestCase {
             Without --info the query hides every ContextLog.info line, which is most of this file. \
             The documented command has to be the one that shows them.
             """)
+        // Derived, not spelled out again: the subsystem is now the running bundle id, so a rename
+        // of the shipping identifier must move the documented predicate with it rather than leaving
+        // a query here that matches nothing.
         XCTAssertTrue(
-            source.contains("subsystem == \"com.omi.context-for-claude\""),
-            "the documented predicate has to name the subsystem ContextLog actually registers")
+            source.contains("subsystem == \"\(ContextPaths.shippingBundleIdentifier)\""),
+            "the documented predicate has to name the subsystem an installed release registers")
+        XCTAssertTrue(
+            source.contains(ContextPaths.shippingBundleIdentifier + ".dev"),
+            """
+            A dev build logs under its own subsystem, so a doc that only shows the release's query \
+            sends a developer looking at an empty result for their own running app.
+            """)
     }
 
     // MARK: - Helpers

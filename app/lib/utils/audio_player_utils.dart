@@ -9,6 +9,7 @@ import 'package:flutter_sound/flutter_sound.dart';
 import 'package:opus_dart/opus_dart.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:omi/utils/share_sheet.dart';
 
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/app_globals.dart';
@@ -206,6 +207,8 @@ class AudioPlayerUtils extends ChangeNotifier {
       [XFile(audioFilePath)],
       text:
           'Omi Audio Recording - ${DateTime.fromMillisecondsSinceEpoch(wal.timerStart * 1000).toString().split('.')[0]}',
+      // No widget to anchor to here; the fallback is only required to be non-zero.
+      sharePositionOrigin: shareSheetOrigin(),
     );
 
     if (result.status == ShareResultStatus.success) {

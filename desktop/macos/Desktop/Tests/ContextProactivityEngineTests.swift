@@ -3,6 +3,18 @@ import XCTest
 
 @testable import Omi_Computer
 
+private actor VisitAdmissionRecorder {
+  private(set) var events: [String] = []
+
+  func record(_ event: String) {
+    events.append(event)
+  }
+
+  func snapshot() -> [String] {
+    events
+  }
+}
+
 final class ContextProactivityEngineTests: XCTestCase {
   func testDwellAdmissionTracksVisitsInsteadOfSuppressingARevisitToTheSameBucket() {
     var admission = ContextVisitDwellAdmission()
@@ -150,14 +162,61 @@ final class ContextProactivityEngineTests: XCTestCase {
     }
   }
 
-  func testNonSilenceGroundingRequiresBothValidatedEntryAndFactCitations() {
+  func testNonSilenceGroundingIsPerDecisionType() {
+    // insight/suggest/task_candidate make new claims about bucket content and
+    // keep the full anti-hallucination invariant: one entry ref AND one fact ref.
+    for decision in ["insight", "suggest", "task_candidate"] {
+      XCTAssertTrue(
+        ContextDirectorGrounding.permitsNonSilence(
+          decision: decision, entryRefs: ["entry:one"], factIDs: ["fact:one"]))
+      XCTAssertFalse(
+        ContextDirectorGrounding.permitsNonSilence(
+          decision: decision, entryRefs: ["entry:one"], factIDs: []))
+      XCTAssertFalse(
+        ContextDirectorGrounding.permitsNonSilence(
+          decision: decision, entryRefs: [], factIDs: ["fact:one"]))
+    }
+    // A resurface grounds on an open task connected to current context; its
+    // citable half is the validated fact evidencing the connection. Nine of
+    // these were vetoed in one dogfood window by the old unconditional AND.
     XCTAssertTrue(
       ContextDirectorGrounding.permitsNonSilence(
-        entryRefs: ["entry:one"], factIDs: ["fact:one"]))
+        decision: "resurface", entryRefs: [], factIDs: ["fact:one"]))
+    XCTAssertTrue(
+      ContextDirectorGrounding.permitsNonSilence(
+        decision: "resurface", entryRefs: ["entry:one"], factIDs: []))
     XCTAssertFalse(
-      ContextDirectorGrounding.permitsNonSilence(entryRefs: ["entry:one"], factIDs: []))
+      ContextDirectorGrounding.permitsNonSilence(
+        decision: "resurface", entryRefs: [], factIDs: []),
+      "a resurface with no citation of either kind stays vetoed")
+  }
+
+  func testRetrievedRefsGroundInsightAndSuggestOnly() {
+    // The answer to a question the user is writing lives in retrieved history,
+    // not in this screen's bucket — an insight/suggest citing a hop-validated
+    // retrieved ref must survive the veto even with no bucket grounding.
+    for decision in ["insight", "suggest"] {
+      XCTAssertTrue(
+        ContextDirectorGrounding.permitsNonSilence(
+          decision: decision, entryRefs: [], factIDs: [],
+          retrievedRefs: ["memory:abc"]))
+    }
+    // task_candidate keeps the strict bucket invariant regardless of retrieval.
     XCTAssertFalse(
-      ContextDirectorGrounding.permitsNonSilence(entryRefs: [], factIDs: ["fact:one"]))
+      ContextDirectorGrounding.permitsNonSilence(
+        decision: "task_candidate", entryRefs: [], factIDs: [],
+        retrievedRefs: ["memory:abc"]))
+    // No retrieved refs -> unchanged behavior for every type.
+    for decision in ["insight", "suggest", "task_candidate"] {
+      XCTAssertFalse(
+        ContextDirectorGrounding.permitsNonSilence(
+          decision: decision, entryRefs: [], factIDs: [], retrievedRefs: []))
+    }
+    // resurface keeps its bucket/fact-only rule: retrieval never grounds it.
+    XCTAssertFalse(
+      ContextDirectorGrounding.permitsNonSilence(
+        decision: "resurface", entryRefs: [], factIDs: [],
+        retrievedRefs: ["conversation:xyz"]))
   }
 
   @MainActor
@@ -212,6 +271,108 @@ final class ContextProactivityEngineTests: XCTestCase {
     XCTAssertFalse(ContextProactivityEngine.presentationSurfaceAvailable(.windowUnavailable))
     XCTAssertFalse(ContextProactivityEngine.presentationSurfaceAvailable(.rejectedOwnerChange))
     XCTAssertFalse(ContextProactivityEngine.presentationSurfaceAvailable(.presented))
+  }
+
+  func testZeroWorthinessValidatedFactsReachJITHandleAndSkipLegacyDirector() async throws {
+    let recorder = VisitAdmissionRecorder()
+    let engine = ContextProactivityEngine(
+      client: ProactiveLaneClient(authorization: { "Bearer test" }),
+      store: .shared,
+      dwellNanoseconds: 0,
+      presentationPreflight: { _ in
+        await recorder.record("director")
+        return .suppressed
+      },
+      jitHandle: { _, snapshot, _, _ in
+        await recorder.record("jit:\(snapshot.notifyWorthiness):\(snapshot.validatedFacts.count)")
+        return false
+      })
+
+    let outcome = await engine.admitJITThenLegacyDirector(
+      fence: visitFence(),
+      snapshot: bucketSnapshot(facts: ["Safari is showing github.com/BasedHardware/omi"], worthiness: 0),
+      frame: visitFrame(),
+      authorizationSnapshot: try authorizationSnapshot())
+
+    XCTAssertEqual(outcome, .skipped)
+    let events = await recorder.snapshot()
+    XCTAssertEqual(events, ["jit:0.0:1"])
+  }
+
+  func testEmptyFactsSkipJITAndLegacyDirector() async throws {
+    let recorder = VisitAdmissionRecorder()
+    let engine = ContextProactivityEngine(
+      client: ProactiveLaneClient(authorization: { "Bearer test" }),
+      store: .shared,
+      dwellNanoseconds: 0,
+      presentationPreflight: { _ in
+        await recorder.record("director")
+        return .suppressed
+      },
+      jitHandle: { _, _, _, _ in
+        await recorder.record("jit")
+        return true
+      })
+
+    let outcome = await engine.admitJITThenLegacyDirector(
+      fence: visitFence(),
+      snapshot: bucketSnapshot(facts: [], worthiness: 1),
+      frame: visitFrame(),
+      authorizationSnapshot: try authorizationSnapshot())
+
+    XCTAssertEqual(outcome, .skipped)
+    let events = await recorder.snapshot()
+    XCTAssertEqual(events, [])
+  }
+
+  func testPositiveWorthinessFallsThroughToLegacyDirectorWhenJITDeclines() async throws {
+    let recorder = VisitAdmissionRecorder()
+    let engine = ContextProactivityEngine(
+      client: ProactiveLaneClient(authorization: { "Bearer test" }),
+      store: .shared,
+      dwellNanoseconds: 0,
+      presentationPreflight: { _ in
+        await recorder.record("director")
+        return .suppressed
+      },
+      jitHandle: { _, _, _, _ in
+        await recorder.record("jit")
+        return false
+      })
+
+    let outcome = await engine.admitJITThenLegacyDirector(
+      fence: visitFence(),
+      snapshot: bucketSnapshot(facts: ["Safari is showing github.com/BasedHardware/omi"], worthiness: 0.8),
+      frame: visitFrame(),
+      authorizationSnapshot: try authorizationSnapshot())
+
+    XCTAssertEqual(outcome, .legacyDirector)
+    let events = await recorder.snapshot()
+    XCTAssertEqual(events.first, "jit")
+  }
+
+  private func visitFence() -> ContextVisitFence {
+    ContextVisitFence(
+      visitID: 1, contextGeneration: 1, poolEpoch: 1, bucketID: "safari",
+      startedAt: Date(timeIntervalSince1970: 1_725_000_000))
+  }
+
+  private func visitFrame() -> CapturedFrame {
+    CapturedFrame(
+      jpegData: Data(), appName: "Safari", windowTitle: "GitHub", frameNumber: 0,
+      captureTime: Date(timeIntervalSince1970: 1_725_000_000))
+  }
+
+  private func bucketSnapshot(facts: [String], worthiness: Double) -> ContextBucketSnapshot {
+    ContextBucketSnapshot(
+      bucketID: "safari", versionID: 1, version: 1, header: "Safari",
+      frozenRankedSegment: Data(), tail: [], validatedFacts: facts, notifyWorthiness: worthiness)
+  }
+
+  private func authorizationSnapshot() throws -> RuntimeOwnerAuthorizationSnapshot {
+    let authority = RuntimeOwnerAuthorizationAuthority()
+    authority.endTransition(ownerID: "owner")
+    return try XCTUnwrap(authority.capture(ownerID: "owner", expectedOwnerID: "owner"))
   }
 
   func testHttpLaneErrorRecordsStatusInTerminalProvenanceJSON() throws {
@@ -888,8 +1049,10 @@ final class ContextDepartureEvaluationStoreTests: XCTestCase {
             evidenceRefs: ["visit:1"],
             confidence: 1,
             notifyWorthiness: 0.6),
-          // Higher worthiness, but no identifier: needs_review, so it must not
-          // count toward the departure-evaluation admission signal.
+          // No identifier, but resolvable evidence: validates under
+          // evidence-only validity, so its 0.9 IS the admission signal. (The
+          // old identifier gate demoted this shape to needs_review and zeroed
+          // it — measured at zero discriminative value on live data.)
           BucketExtraction.Fact(
             statement: "unidentified claim",
             identifiers: [],
@@ -897,6 +1060,14 @@ final class ContextDepartureEvaluationStoreTests: XCTestCase {
             evidenceRefs: ["visit:1"],
             confidence: 1,
             notifyWorthiness: 0.9),
+          // Unresolvable evidence still demotes and must not count.
+          BucketExtraction.Fact(
+            statement: "evidence-free claim",
+            identifiers: ["handle"],
+            evidenceText: " ",
+            evidenceRefs: ["visit:1"],
+            confidence: 1,
+            notifyWorthiness: 1.0),
         ]),
       for: fence,
       appName: "Test App",
@@ -905,7 +1076,7 @@ final class ContextDepartureEvaluationStoreTests: XCTestCase {
       now: now)
 
     let writeResult = try XCTUnwrap(result)
-    XCTAssertEqual(writeResult.maximumValidatedWorthiness, 0.6, accuracy: 0.000_001)
+    XCTAssertEqual(writeResult.maximumValidatedWorthiness, 0.9, accuracy: 0.000_001)
     XCTAssertTrue(
       ContextDepartureEvaluationPolicy.triggers(
         maximumValidatedWorthiness: writeResult.maximumValidatedWorthiness, flagEnabled: true))
@@ -1096,5 +1267,39 @@ final class ContextDepartureEvaluationStoreTests: XCTestCase {
         VALUES (?, 1, ?, 'bucket', 'Test App', 'raw', 'normalized', ?, ?, ?, ?, ?, ?)
         """,
       arguments: [id, poolEpoch, "reference-\(id)", startedAt, endedAt, outcome, startedAt, startedAt])
+  }
+
+  func testClampedStripsInlineRefTokensFromVisibleText() {
+    let decision = ContextDirectorDecision(
+      decision: "insight",
+      title: "Download link [memory:abc-123]",
+      message: "The link is omi.me/desktop. [memory:3fe5b70f-f445-4580-b353-7b0d2560de3f]",
+      reasoning: "r",
+      bucketEntryRefs: ["memory:abc-123"],
+      factIDs: []
+    ).clamped()
+    XCTAssertEqual(decision.title, "Download link")
+    XCTAssertEqual(decision.message, "The link is omi.me/desktop.")
+    XCTAssertEqual(decision.bucketEntryRefs, ["memory:abc-123"], "citations stay citations")
+  }
+
+  @MainActor
+  func testDwellCaptureGuardRejectsSameAppTitleSwitch() async {
+    // Prime the tracker (buckets disabled so no store writes), then a same-app
+    // title switch must invalidate the old context for the dwell capture guard.
+    _ = await AssistantCoordinator.shared.checkContextSwitch(
+      newApp: "GuardTestApp", newWindowTitle: "Original Title", bucketsEnabled: false)
+    XCTAssertTrue(
+      AssistantCoordinator.shared.isTracking(app: "GuardTestApp", windowTitle: "Original Title"))
+    _ = await AssistantCoordinator.shared.checkContextSwitch(
+      newApp: "GuardTestApp", newWindowTitle: "Different Document", bucketsEnabled: false)
+    XCTAssertFalse(
+      AssistantCoordinator.shared.isTracking(app: "GuardTestApp", windowTitle: "Original Title"),
+      "a same-app title switch during the async capture must drop the stale frame")
+    XCTAssertFalse(
+      AssistantCoordinator.shared.isTracking(app: "OtherApp", windowTitle: "Different Document"))
+    XCTAssertTrue(
+      AssistantCoordinator.shared.isTracking(
+        app: "GuardTestApp", windowTitle: "Different Document"))
   }
 }

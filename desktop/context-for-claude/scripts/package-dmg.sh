@@ -162,6 +162,12 @@ else
     warn "no CFC_SIGN_IDENTITY set — building with the local development identity."
     warn "The result will NOT open on anyone else's Mac. See the verdict at the end."
     "$SCRIPT_DIR/build.sh" --no-install
+    # A build signed with the local development identity carries the *developer* bundle name and
+    # identifier — it must not claim the production ones, because macOS pins the signing
+    # certificate inside every TCC grant. So the bundle just built is not $APP_BUNDLE.
+    # See scripts/build-identity.sh.
+    eval "$("$SCRIPT_DIR/build-identity.sh" --kind development)"
+    APP_BUNDLE="$PKG_DIR/build/$CFC_APP_NAME.app"
 fi
 [[ -d "$APP_BUNDLE" ]] || die "no app bundle at $APP_BUNDLE"
 
@@ -184,6 +190,49 @@ fi
     || die "no Sparkle.framework in $APP_BUNDLE — that bundle cannot launch and must not be shipped. Rebuild with scripts/build.sh."
 codesign --verify --deep --strict "$APP_BUNDLE" \
     || die "the app's signature does not verify with --deep (a nested Sparkle component is unsigned or signed by somebody else). Run: codesign --verify --deep --strict --verbose=4 '$APP_BUNDLE'"
+
+# ---------------------------------------------------------------------------------------------
+# The certificate, not its name.
+#
+# Every other release gate in this pipeline tests the *name* of the signing identity — `[[ ... ==
+# *"Developer ID Application:"* ]]` here at the top, in build.sh, and in codemagic.yaml's
+# find-identity grep. A self-signed certificate can be given any name its creator likes, so all of
+# them are satisfied by a certificate Apple never issued. That matters more than it looks: macOS
+# pins the signing certificate inside every TCC permission grant, so a build signed by the wrong
+# certificate but carrying the production bundle identifier writes permission records the real
+# release can never satisfy — the switch reads ON in System Settings and the app is denied anyway,
+# with `tccutil reset` the only way out. This app shipped that state to a user for days.
+#
+# `codesign --verify` above proves the signature is *internally consistent*, not that Apple issued
+# it. Only the authority chain does that, so read it off the bundle that is about to be shipped.
+# ---------------------------------------------------------------------------------------------
+assert_release_signing_authority() {
+    local bundle="$1" authorities
+    authorities="$(codesign -dv --verbose=4 "$bundle" 2>&1 | grep '^Authority=' || true)"
+
+    local required=(
+        "Authority=Developer ID Application:"
+        "Authority=Developer ID Certification Authority"
+        "Authority=Apple Root CA"
+    )
+    local needle
+    for needle in "${required[@]}"; do
+        [[ "$authorities" == *"$needle"* ]] || die "refusing to ship $bundle: its signature does not chain to Apple.
+
+Expected an authority line containing '$needle'. The signature actually carries:
+${authorities:-  (no Authority lines at all — the bundle is ad-hoc signed or unsigned)}
+
+A certificate merely *named* 'Developer ID Application: ...' passes every other check in this
+pipeline but is not one. Shipping it under $BUNDLE_ID would write TCC permission records pinned to
+a certificate no future release can match, permanently breaking Screen Recording and Microphone for
+every user who installs it. Import the real Developer ID Application certificate and rebuild."
+    done
+}
+
+if [[ "$RELEASE_MODE" -eq 1 ]]; then
+    assert_release_signing_authority "$APP_BUNDLE"
+    log "signing authority verified: chains to Apple Root CA"
+fi
 
 # ---------------------------------------------------------------- notarize
 

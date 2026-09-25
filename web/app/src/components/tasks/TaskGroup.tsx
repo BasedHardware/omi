@@ -24,7 +24,6 @@ interface TaskGroupProps {
   onEnterSelectionMode?: (id: string) => void;
 }
 
-
 export function TaskGroup({
   title,
   icon,
@@ -56,17 +55,17 @@ export function TaskGroup({
         onClick={() => collapsible && setIsCollapsed(!isCollapsed)}
         disabled={!collapsible}
         className={cn(
-          'flex items-center gap-2 w-full',
+          'flex w-full items-center gap-2',
           'text-left',
-          collapsible && 'cursor-pointer hover:opacity-80'
+          collapsible && 'cursor-pointer hover:opacity-80',
         )}
       >
         {collapsible && (
           <span className="text-text-quaternary">
             {isCollapsed ? (
-              <ChevronRight className="w-4 h-4" />
+              <ChevronRight className="h-4 w-4" />
             ) : (
-              <ChevronDown className="w-4 h-4" />
+              <ChevronDown className="h-4 w-4" />
             )}
           </span>
         )}
@@ -99,8 +98,8 @@ export function TaskGroup({
               onClick={() => setShowAll(true)}
               className={cn(
                 'w-full py-2 text-sm text-text-tertiary',
-                'hover:text-purple-primary transition-colors',
-                'text-center'
+                'transition-colors hover:text-white',
+                'text-center',
               )}
             >
               Show {tasks.length - maxVisible} more
@@ -122,9 +121,9 @@ export function TaskGroupSkeleton({ count = 3 }: TaskGroupSkeletonProps) {
     <div className="space-y-2">
       {/* Header skeleton */}
       <div className="flex items-center gap-2">
-        <div className="w-4 h-4 bg-bg-quaternary rounded animate-pulse" />
-        <div className="h-4 w-24 bg-bg-quaternary rounded animate-pulse" />
-        <div className="h-3 w-6 bg-bg-quaternary rounded animate-pulse" />
+        <div className="h-4 w-4 animate-pulse rounded bg-bg-quaternary" />
+        <div className="h-4 w-24 animate-pulse rounded bg-bg-quaternary" />
+        <div className="h-3 w-6 animate-pulse rounded bg-bg-quaternary" />
       </div>
 
       {/* Card skeletons */}

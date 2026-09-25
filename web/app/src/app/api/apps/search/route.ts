@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { moonshineJson } from '@tschk/moonshine-next/server';
 import Fuse from 'fuse.js';
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'https://api.omi.me';
@@ -12,14 +12,12 @@ async function getAllApps() {
   const now = Date.now();
 
   // Return cached data if valid
-  if (appsCache && (now - cacheTimestamp) < CACHE_TTL) {
+  if (appsCache && now - cacheTimestamp < CACHE_TTL) {
     return appsCache;
   }
 
   // Fetch fresh data
-  const response = await fetch(`${API_BASE_URL}/v1/approved-apps`, {
-    next: { revalidate: 300 } // 5 min cache
-  });
+  const response = await fetch(`${API_BASE_URL}/v1/approved-apps`);
 
   if (!response.ok) {
     throw new Error('Failed to fetch apps');
@@ -34,13 +32,13 @@ async function getAllApps() {
   return apps;
 }
 
-export async function GET(request: NextRequest) {
+export async function GET(request: Request) {
   try {
-    const searchParams = request.nextUrl.searchParams;
+    const searchParams = new URL(request.url).searchParams;
     const query = searchParams.get('q');
 
     if (!query || query.trim().length === 0) {
-      return NextResponse.json({ results: [], count: 0, query: '' });
+      return moonshineJson({ results: [], count: 0, query: '' });
     }
 
     // Get all apps (from cache or fresh fetch)
@@ -56,16 +54,16 @@ export async function GET(request: NextRequest) {
     const searchResults = fuse.search(query.trim());
     const results = searchResults.map((result) => result.item);
 
-    return NextResponse.json({
+    return moonshineJson({
       results,
       count: results.length,
-      query: query.trim()
+      query: query.trim(),
     });
   } catch (error) {
     console.error('Search error:', error);
-    return NextResponse.json(
+    return moonshineJson(
       { error: 'Search failed', results: [], count: 0 },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

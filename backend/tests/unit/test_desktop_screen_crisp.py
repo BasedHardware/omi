@@ -1,6 +1,3 @@
-from types import SimpleNamespace
-from unittest.mock import patch
-
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
@@ -53,45 +50,5 @@ def test_screen_activity_sync_is_a_drain_that_stores_nothing():
     assert "upsert_screen_activity" not in router_source
 
 
-def test_crisp_unread_preserves_operator_text_shape(monkeypatch):
-    monkeypatch.setenv("CRISP_PLUGIN_IDENTIFIER", "identifier")
-    monkeypatch.setenv("CRISP_PLUGIN_KEY", "key")
-    monkeypatch.setenv("CRISP_WEBSITE_ID", "website")
-    desktop_screen_crisp._session_cache.clear()
-    monkeypatch.setattr(desktop_screen_crisp, "get_user", lambda uid: SimpleNamespace(email="User@Example.com"))
-    responses = iter(
-        [
-            SimpleNamespace(
-                is_success=True,
-                json=lambda: {"data": [{"session_id": "session", "meta": {"email": "user@example.com"}}]},
-            ),
-            SimpleNamespace(
-                is_success=True,
-                json=lambda: {
-                    "data": [
-                        {"from": "operator", "type": "text", "timestamp": 11, "content": "hello"},
-                        {"from": "user", "type": "text", "timestamp": 12, "content": "ignore"},
-                        {"from": "operator", "type": "file", "timestamp": 13, "content": "ignore"},
-                    ]
-                },
-            ),
-        ]
-    )
-
-    async def crisp_get(url, headers):
-        return next(responses)
-
-    monkeypatch.setattr(desktop_screen_crisp, "_crisp_get", crisp_get)
-
-    response = make_client().get("/v1/crisp/unread?since=10")
-
-    assert response.status_code == 200
-    assert response.json() == {"unread_count": 1, "messages": [{"text": "hello", "timestamp": 11, "from": "operator"}]}
-
-
-def test_crisp_unread_is_empty_when_unconfigured(monkeypatch):
-    monkeypatch.delenv("CRISP_PLUGIN_IDENTIFIER", raising=False)
-    monkeypatch.delenv("CRISP_PLUGIN_KEY", raising=False)
-    monkeypatch.delenv("CRISP_WEBSITE_ID", raising=False)
-
-    assert make_client().get("/v1/crisp/unread").json() == {"unread_count": 0, "messages": []}
+def test_crisp_unread_route_is_removed():
+    assert make_client().get("/v1/crisp/unread").status_code == 404

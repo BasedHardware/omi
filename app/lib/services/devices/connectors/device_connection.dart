@@ -156,6 +156,8 @@ class DeviceConnectionException implements Exception {
 }
 
 abstract class DeviceConnection {
+  static const Duration _findDeviceBleOperationTimeout = Duration(seconds: 5);
+
   BtDevice device;
   DeviceTransport transport;
   DateTime? _pongAt;
@@ -343,6 +345,27 @@ abstract class DeviceConnection {
       }
     }
     return BleAudioCodec.pcm8;
+  }
+
+  /// Plays a distinctive three-pulse pattern so a nearby Omi can be located.
+  ///
+  /// Haptic level 3 maps to a 500 ms vibration in the pendant firmware. The
+  /// gap leaves enough silence between writes for each pulse to be distinct.
+  Future<bool> playFindDevicePattern() async {
+    try {
+      if (!await isConnected().timeout(_findDeviceBleOperationTimeout)) return false;
+
+      for (var pulse = 0; pulse < 3; pulse++) {
+        if (!await performPlayToSpeakerHaptic(3).timeout(_findDeviceBleOperationTimeout)) return false;
+        if (pulse < 2) {
+          await Future<void>.delayed(const Duration(milliseconds: 750));
+        }
+      }
+      return true;
+    } on TimeoutException catch (e) {
+      Logger.debug('Timed out while playing find-device pattern: $e');
+      return false;
+    }
   }
 
   Future<bool> performPlayToSpeakerHaptic(int mode) async {

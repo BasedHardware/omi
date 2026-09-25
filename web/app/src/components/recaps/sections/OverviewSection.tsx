@@ -30,12 +30,14 @@ export function OverviewSection({ recap }: OverviewSectionProps) {
       {/* Stats row */}
       <div className="grid grid-cols-3 gap-3">
         {/* Conversations */}
-        <div className={cn(
-          'flex flex-col items-center justify-center p-3 rounded-xl',
-          'bg-gradient-to-b from-white/[0.03] to-white/[0.01]',
-          'border border-white/[0.04]'
-        )}>
-          <MessageSquare className="w-5 h-5 text-purple-primary mb-1" />
+        <div
+          className={cn(
+            'flex flex-col items-center justify-center rounded-xl p-3',
+            'bg-gradient-to-b from-white/[0.03] to-white/[0.01]',
+            'border border-white/[0.04]',
+          )}
+        >
+          <MessageSquare className="mb-1 h-5 w-5 text-text-primary" />
           <span className="text-lg font-semibold text-text-primary">
             {recap.stats.total_conversations}
           </span>
@@ -43,12 +45,14 @@ export function OverviewSection({ recap }: OverviewSectionProps) {
         </div>
 
         {/* Duration */}
-        <div className={cn(
-          'flex flex-col items-center justify-center p-3 rounded-xl',
-          'bg-gradient-to-b from-white/[0.03] to-white/[0.01]',
-          'border border-white/[0.04]'
-        )}>
-          <Clock className="w-5 h-5 text-blue-400 mb-1" />
+        <div
+          className={cn(
+            'flex flex-col items-center justify-center rounded-xl p-3',
+            'bg-gradient-to-b from-white/[0.03] to-white/[0.01]',
+            'border border-white/[0.04]',
+          )}
+        >
+          <Clock className="mb-1 h-5 w-5 text-blue-400" />
           <span className="text-lg font-semibold text-text-primary">
             {formatDuration(recap.stats.total_duration_minutes)}
           </span>
@@ -56,12 +60,14 @@ export function OverviewSection({ recap }: OverviewSectionProps) {
         </div>
 
         {/* Action Items */}
-        <div className={cn(
-          'flex flex-col items-center justify-center p-3 rounded-xl',
-          'bg-gradient-to-b from-white/[0.03] to-white/[0.01]',
-          'border border-white/[0.04]'
-        )}>
-          <CheckSquare className="w-5 h-5 text-success mb-1" />
+        <div
+          className={cn(
+            'flex flex-col items-center justify-center rounded-xl p-3',
+            'bg-gradient-to-b from-white/[0.03] to-white/[0.01]',
+            'border border-white/[0.04]',
+          )}
+        >
+          <CheckSquare className="mb-1 h-5 w-5 text-success" />
           <span className="text-lg font-semibold text-text-primary">
             {recap.stats.action_items_count}
           </span>
@@ -71,14 +77,14 @@ export function OverviewSection({ recap }: OverviewSectionProps) {
 
       {/* Overview text */}
       {recap.overview && (
-        <div className={cn(
-          'p-4 rounded-xl',
-          'bg-gradient-to-b from-white/[0.03] to-white/[0.01]',
-          'border border-white/[0.04]'
-        )}>
-          <p className="text-sm text-text-secondary leading-relaxed">
-            {recap.overview}
-          </p>
+        <div
+          className={cn(
+            'rounded-xl p-4',
+            'bg-gradient-to-b from-white/[0.03] to-white/[0.01]',
+            'border border-white/[0.04]',
+          )}
+        >
+          <p className="text-sm leading-relaxed text-text-secondary">{recap.overview}</p>
         </div>
       )}
     </motion.div>

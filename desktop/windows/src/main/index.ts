@@ -12,6 +12,7 @@ import { join } from 'path'
 import { appendFileSync } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { supportsMica } from './windowsVersion'
+import { defaultOzonePlatform } from './linuxCompositor'
 import { APP_BG_HEX, HOME_BG_HEX, WCO_SYMBOL_HEX } from '../shared/chrome'
 import iconPath from '../../resources/icon.png?asset'
 import { listCaptureSources } from './ipc/capture'
@@ -44,6 +45,7 @@ import {
   registerBarIpc,
   destroyBar,
   handleSummonPress,
+  summonFromTray,
   setSummonGestureAccelerator,
   setBarEnabled,
   setPeekWatchSuspended,
@@ -107,9 +109,13 @@ import { registerScreenSynthHandlers } from './ipc/screenSynth'
 import { registerAiUserProfileHandlers } from './ipc/aiUserProfile'
 import { registerTaskHandlers } from './ipc/tasks'
 import { registerBackendDegradedIpc, resetBackendDegraded } from './observability/backendDegraded'
-import { resetPendingDeletes } from './tasks/taskSyncEngine'
+import {
+  resetPendingDeletes,
+  scheduleBackgroundSync,
+  setTaskDeletionListener,
+  startTaskBackgroundSync
+} from './tasks/taskSyncEngine'
 import { onSessionReset } from './assistants/core/session'
-import { setTaskDeletionListener } from './tasks/taskSyncEngine'
 import { removeFromIndex as removeTaskFromEmbeddingIndex } from './tasks/taskEmbeddingService'
 import { createGlowWindow, registerGlowIpc, destroyGlow } from './glow/glowWindow'
 import { maybeGenerateOnStartup as maybeGenerateAiProfileOnStartup } from './assistants/aiUserProfile/service'
@@ -121,13 +127,16 @@ import { registerMemoryAssistant } from './assistants/memory/register'
 import { registerTaskAssistant, bringUpTaskEmbeddingIndex } from './assistants/tasks/register'
 import { startTaskPromotionService } from './assistants/tasks/promotionService'
 import { registerGoalGeneration } from './assistants/goals/register'
+import { registerJitAssistant } from './jit/register'
+import { registerJitFeedbackHandlers } from './jit/jitFeedbackIpc'
+import { clearRendererConversationBinding } from './jit/rendererConversationBinding'
 import { startRendererServer, rendererBaseUrl } from './rendererServer'
 import { startRewindCapture } from './rewind/captureService'
 import {
   startRewindForegroundCaptureTrigger,
   stopRewindForegroundCaptureTrigger
 } from './rewind/foregroundCaptureTrigger'
-import { startRewindOcr } from './rewind/ocrService'
+import { startRewindOcr, stopRewindOcr } from './rewind/ocrService'
 import { startRewindEmbedding } from './rewind/embeddingService'
 import { startRewindRetention } from './rewind/retentionRunner'
 import { startOrphanSweep } from './rewind/orphanSweep'
@@ -418,12 +427,13 @@ if (gotSingleInstanceLock) initCrashSentinel()
 
 // Linux: default to XWayland (x11 ozone). On a native Wayland session Electron
 // cannot register global shortcuts (push-to-talk / overlay summon) and the X11
-// active-window path is blind, so XWayland gives the fullest experience. Set
-// OMI_OZONE=wayland to run natively (accepting those limitations). Also enable
-// the PipeWire capturer (portal screen share) and PulseAudio monitor-source
-// loopback for system-audio capture when pipewire-pulse/Pulse is present.
+// active-window path is blind, so XWayland gives the fullest experience where
+// it's available. On compositors known to lack reliable XWayland support
+// (niri, sway, hyprland — see linuxCompositor.ts) XWayland can instead fail to
+// map the main window at all, so those default to native Wayland despite its
+// own limitations. Set OMI_OZONE=wayland/x11 to override either way.
 if (process.platform === 'linux') {
-  app.commandLine.appendSwitch('ozone-platform', process.env.OMI_OZONE || 'x11')
+  app.commandLine.appendSwitch('ozone-platform', process.env.OMI_OZONE || defaultOzonePlatform())
   app.commandLine.appendSwitch(
     'enable-features',
     'WebRTCPipeWireCapturer,PulseaudioLoopbackForScreenShare'
@@ -437,6 +447,7 @@ import {
   getLocalConversation,
   listLocalConversations,
   deleteLocalConversation,
+  deleteJitConversationKeyframe,
   updateLocalConversationTitle,
   updateLocalConversationSync,
   claimConversationForPosting,
@@ -789,6 +800,9 @@ app.whenReady().then(async () => {
   ipcMain.handle('db:deleteLocalConversation', async (_e, id: string) =>
     deleteLocalConversation(id)
   )
+  ipcMain.handle('jit:conversationDeleted', async (_e, id: string) =>
+    deleteJitConversationKeyframe(id)
+  )
   ipcMain.handle('db:updateLocalConversationTitle', async (_e, id: string, title: string) =>
     updateLocalConversationTitle(id, title)
   )
@@ -849,7 +863,11 @@ app.whenReady().then(async () => {
   registerCaptureBridge(
     getCaptureWc,
     () => (mainWindow && !mainWindow.isDestroyed() ? mainWindow.webContents : null),
-    isListenSessionOwnedBy
+    isListenSessionOwnedBy,
+    () => {
+      const bar = getBarWindow()
+      return bar && !bar.isDestroyed() ? bar.webContents : null
+    }
   )
   // Soak telemetry (inert unless OMI_SOAK=1): samples process metrics + listen
   // byte counters to userData/soak.jsonl for the 8h idle-soak verification.
@@ -878,10 +896,20 @@ app.whenReady().then(async () => {
   registerIntegrationsHandlers()
   registerUsageHandlers()
   registerMemoryCleanupHandlers()
-  registerRewindHandlers()
+  registerRewindHandlers({
+    focusFrame: (frameId) => {
+      withMainWindow((win) => {
+        if (win.isMinimized()) win.restore()
+        win.show()
+        win.focus()
+        win.webContents.send('rewind:focus-frame', frameId)
+      })
+    }
+  })
   registerScreenHandlers()
   registerChatPrivacyHandlers()
   registerAssistantSettingsHandlers()
+  registerJitFeedbackHandlers()
   registerBillingIpc()
   registerAppsIpc()
   // Cross-window conversations refresh: any renderer that writes a local
@@ -968,8 +996,8 @@ app.whenReady().then(async () => {
   // startup check + daily timer are wired at ready-to-show below.
   registerAiUserProfileHandlers()
   // Track 3 (task sync engine): local-first Tasks list. Cheap handler registration;
-  // the engine reads the shared backend session (relayed by the renderer) and syncs
-  // on demand when a list/reconcile channel is invoked.
+  // the engine reads the shared backend session (relayed by the renderer), reads
+  // stay SQLite-only, and freshness comes from the throttled census sync below.
   registerTaskHandlers()
   // 429-storm degraded-mode: pull channel so a window that mounts mid-storm can sync
   // the current state (the transitions themselves broadcast on `backend:degraded`).
@@ -979,12 +1007,23 @@ app.whenReady().then(async () => {
   onSessionReset(() => {
     resetPendingDeletes()
     resetBackendDegraded()
+    clearRendererConversationBinding()
   })
   // FIX (ii): keep the in-memory task-embedding index consistent — every hard-delete
   // path in the sync engine (deleteTask + the reconcile sweep) hands the storage-
   // returned ids here so their vectors are evicted. DI seam, no hard import either way.
   setTaskDeletionListener((deleted) => {
     for (const { source, id } of deleted) removeTaskFromEmbeddingIndex(source, id)
+  })
+  // The Firestore-read fix: the task engine's background reconcile (ID census, ≤1
+  // per 5 min) runs on this interval instead of on every local read, which used to
+  // full-list `GET /v1/action-items?limit=500` per Tasks/dashboard read (billing
+  // RCA 2026-08: ~61-73 RPS from omi-windows). Ticks are session-gated no-ops
+  // until the renderer relays a session. Window focus asks for a sync too — the
+  // shared 5-min throttle caps it, so focus spam can't restore the storm.
+  startTaskBackgroundSync()
+  app.on('browser-window-focus', () => {
+    void scheduleBackgroundSync()
   })
   // Track 3 (focus halo): the click-through ring the Focus assistant fires around
   // the active window (red = distracted, green = refocused). Handler registration
@@ -1034,6 +1073,13 @@ app.whenReady().then(async () => {
       surfaceMainWindow()
       withMainWindow((win) => win.webContents.send('tray:open-settings'))
     },
+    // Manual bar fallback: the bar is otherwise summon-only via the global
+    // hotkey (see bar/window.ts), which can't register on native Wayland
+    // (no XWayland grab semantics) — see AGENTS.md's Linux dev environment
+    // section. Uses summonFromTray() rather than handleSummonPress() so the
+    // click does not enter the gesture machine or emit PTT phases — a tray
+    // click has no physical key to sample.
+    openBar: () => summonFromTray(),
     // Manual update check (mirrors Settings → About and Mac's "Check for Updates").
     // checkForUpdatesNow never throws; log the outcome for a manual tester.
     checkForUpdates: () => {
@@ -1229,7 +1275,8 @@ app.whenReady().then(async () => {
         // peer — it's a time-triggered job (no screen frames). Registers the manual
         // Suggest IPC and starts the periodic scheduler; both no-op until a session is
         // relayed and the goalAutoGenerationEnabled toggle is on (default OFF).
-        { name: 'goalGeneration', run: () => registerGoalGeneration() }
+        { name: 'goalGeneration', run: () => registerGoalGeneration() },
+        { name: 'jitAssistant', run: () => registerJitAssistant() }
       ],
       undefined,
       undefined,
@@ -1513,6 +1560,10 @@ app.on('will-quit', () => {
   automationBridge.dispose()
   stopAutomationTargetTracker()
   stopRewindForegroundCaptureTrigger()
+  // Stop the Rewind OCR backfill sweep BEFORE disposing the helper below — a
+  // tick firing after dispose() would otherwise lazily respawn a fresh helper
+  // that nothing is left to kill, orphaning it past app exit.
+  stopRewindOcr()
   // Kill the long-running OCR/window-info helper subprocess. Without this it
   // outlives the app on every quit, so orphaned omi-*-ocr-helper.exe processes
   // pile up across launches (no production dispose() call site before this).

@@ -14,13 +14,27 @@ export function createWhisperTranscriber(options: {
   const batchBytes = (options.batchSeconds ?? 5) * 16000 * 2;
   let buffer = new Uint8Array(0);
   let stopped = false;
+  let queue: Promise<void> = Promise.resolve();
 
-  async function flush() {
+  function enqueue(pcm: Uint8Array) {
+    const job = async () => {
+      let text = '';
+      try {
+        text = await options.runner(pcm);
+      } catch {
+        return;
+      }
+      if (text) options.onTranscript(text);
+    };
+    queue = queue.then(job, job);
+    return queue;
+  }
+
+  function flushBuffer() {
     if (buffer.byteLength === 0) return;
     const pcm = buffer;
     buffer = new Uint8Array(0);
-    const text = await options.runner(pcm);
-    if (text && !stopped) options.onTranscript(text);
+    return enqueue(pcm);
   }
 
   return {
@@ -32,12 +46,13 @@ export function createWhisperTranscriber(options: {
       next.set(incoming, buffer.byteLength);
       buffer = next;
       if (buffer.byteLength >= batchBytes) {
-        void flush();
+        void flushBuffer();
       }
     },
     stop() {
+      if (stopped) return;
       stopped = true;
-      void flush();
+      void flushBuffer();
     },
   };
 }

@@ -111,6 +111,14 @@ let inFlightUid = ''
 // Bumped by resetAboutUserCard so an in-flight build from before the reset
 // (e.g. the previous account's) can never land in the cache afterwards.
 let generation = 0
+// When the cached card was built. The hub calls refreshAboutUserCard() on every warm,
+// and the hub deliberately re-warms for the life of the session (hubController's
+// aliveFor>60 strike reset, ~2 minutes apart against Gemini), so without a floor this
+// re-fetched the user's memories hundreds of times a day to rebuild a card that had
+// not changed. The dedupe above only covers builds that overlap in flight.
+let cachedAt = 0
+/** How long a built card is reused before a warm is allowed to rebuild it. */
+const CARD_TTL_MS = 5 * 60_000
 
 /** The cached card, or '' when nothing has been built for this user yet (in
  *  which case the caller simply omits the block — never a stale/other-user card
@@ -129,6 +137,10 @@ export function refreshAboutUserCard(): void {
   // Dedupe only against a build for the SAME account — an account switch must be
   // able to start its own build even while the previous one is still in flight.
   if (inFlight && inFlightUid === uid) return
+  // Still-fresh card for THIS account: nothing to do. Neither invalidation path can be
+  // held back by this — an account switch fails the uid check, and resetAboutUserCard
+  // nulls `cached`, which the guard requires.
+  if (cached && cached.uid === uid && Date.now() - cachedAt < CARD_TTL_MS) return
   const gen = generation
   inFlightUid = uid
   const build = buildAboutUserCard()
@@ -137,7 +149,10 @@ export function refreshAboutUserCard(): void {
       // ran against whatever token was current when they landed, so an account
       // switch mid-build would otherwise file the NEW user's name and memories
       // under the OLD uid — and serve them back if the old account returned.
-      if (gen === generation && (auth.currentUser?.uid ?? '') === uid) cached = { uid, card }
+      if (gen === generation && (auth.currentUser?.uid ?? '') === uid) {
+        cached = { uid, card }
+        cachedAt = Date.now()
+      }
     })
     .catch(() => {
       /* best-effort: keep whatever card we already had */

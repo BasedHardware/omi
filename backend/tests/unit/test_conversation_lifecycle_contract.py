@@ -110,6 +110,32 @@ def lifecycle_store(monkeypatch):
     return store
 
 
+def test_ingest_sync_conversation_records_created_versus_merged(monkeypatch):
+    recorded: list[dict[str, Any]] = []
+    monkeypatch.setattr(lifecycle_service, 'record_sync_intake_outcome', lambda **kwargs: recorded.append(kwargs))
+    monkeypatch.setattr(
+        conversations_db,
+        'assign_sync_conversation',
+        lambda *_args, **_kwargs: ({'id': 'created-row'}, True, []),
+    )
+
+    created_result = lifecycle_service.ingest_sync_conversation('uid', {'status': ConversationStatus.completed.value})
+    assert created_result == ({'id': 'created-row'}, True, [])
+    assert recorded == [{'created': True}]
+
+    recorded.clear()
+    monkeypatch.setattr(
+        conversations_db,
+        'assign_sync_conversation',
+        lambda *_args, **_kwargs: ({'id': 'merged-row'}, False, []),
+    )
+    merged_result = lifecycle_service.ingest_sync_conversation(
+        'uid', {'status': ConversationStatus.completed.value}, candidate_id='hint'
+    )
+    assert merged_result == ({'id': 'merged-row'}, False, [])
+    assert recorded == [{'created': False}]
+
+
 def test_lifecycle_service_allows_only_declared_transitions(lifecycle_store):
     lifecycle_store.put_conversation(
         'uid', 'conversation', status=ConversationStatus.in_progress.value, discarded=False
@@ -150,6 +176,14 @@ def test_generic_lifecycle_field_write_fails_closed(lifecycle_store):
     with pytest.raises(ValueError, match='lifecycle fields'):
         conversations_db.update_conversation('uid', 'conversation', {'status': ConversationStatus.in_progress.value})
     assert lifecycle_store.conversation('uid', 'conversation')['status'] == ConversationStatus.completed.value
+
+
+def test_update_conversation_reports_a_deleted_owner(lifecycle_store):
+    """Callers that keep producing work for a conversation must be able to see it is gone (#11742)."""
+    lifecycle_store.put_conversation('uid', 'conversation', status=ConversationStatus.completed.value, discarded=False)
+
+    assert conversations_db.update_conversation('uid', 'conversation', {'language': 'en'}) is True
+    assert conversations_db.update_conversation('uid', 'missing', {'language': 'en'}) is False
 
 
 def test_concurrent_finalizers_have_one_service_admission(lifecycle_store):
@@ -292,7 +326,7 @@ def test_completed_conversation_creation_is_explicit_and_idempotent(lifecycle_st
 
 
 def test_import_persists_through_the_lifecycle_owner(lifecycle_store):
-    lifecycle_service.persist_imported_conversation(
+    created = lifecycle_service.persist_imported_conversation(
         'uid',
         {
             'id': 'imported',
@@ -303,8 +337,43 @@ def test_import_persists_through_the_lifecycle_owner(lifecycle_store):
         },
     )
 
+    assert created is True
     assert list(lifecycle_store.documents) == [('users', 'uid', 'conversations', 'imported')]
-    assert lifecycle_store.conversation('uid', 'imported')['status'] == ConversationStatus.completed
+    stored = lifecycle_store.conversation('uid', 'imported')
+    assert stored['status'] == ConversationStatus.completed
+    assert stored['imported'] is True
+    assert (
+        lifecycle_service.persist_imported_conversation(
+            'uid',
+            {
+                'id': 'imported',
+                'status': ConversationStatus.completed,
+                'discarded': False,
+                'title': 'later export title',
+                'data_protection_level': 'standard',
+            },
+        )
+        is False
+    )
+    assert lifecycle_store.conversation('uid', 'imported')['title'] == 'imported title'
+    assert lifecycle_store.conversation('uid', 'imported')['imported'] is True
+
+
+def test_persist_imported_conversation_forces_imported_true(lifecycle_store):
+    created = lifecycle_service.persist_imported_conversation(
+        'uid',
+        {
+            'id': 'forced-imported',
+            'status': ConversationStatus.completed,
+            'discarded': False,
+            'imported': False,
+            'title': 'should be stamped',
+            'data_protection_level': 'standard',
+        },
+    )
+
+    assert created is True
+    assert lifecycle_store.conversation('uid', 'forced-imported')['imported'] is True
 
 
 def test_merge_rejects_processing_conversations():
@@ -360,3 +429,140 @@ def test_processing_admission_guard_stops_the_heartbeat_when_the_processor_finis
     snapshot_after_exit = len(renew_calls)
     stop_seen.wait(timeout=0.05)
     assert len(renew_calls) == snapshot_after_exit
+
+
+def test_first_completed_writes_observe_shape_once(monkeypatch, lifecycle_store):
+    observed: list[tuple[str, str | None]] = []
+    monkeypatch.setattr(
+        lifecycle_service,
+        'observe_completed_conversation_shape',
+        lambda uid, payload: observed.append((uid, payload.get('id') if isinstance(payload, dict) else None)),
+    )
+
+    created = lifecycle_service.create_completed_conversation(
+        'uid',
+        {
+            'id': 'new-conversation',
+            'status': ConversationStatus.completed,
+            'source': 'omi',
+            'data_protection_level': 'standard',
+        },
+        idempotent=True,
+    )
+    assert created is True
+    replay = lifecycle_service.create_completed_conversation(
+        'uid',
+        {
+            'id': 'new-conversation',
+            'status': ConversationStatus.completed,
+            'source': 'omi',
+            'data_protection_level': 'standard',
+        },
+        idempotent=True,
+    )
+    assert replay is False
+    assert observed == [('uid', 'new-conversation')]
+
+
+def test_persist_processed_observes_only_on_first_completion(monkeypatch, lifecycle_store):
+    observed: list[str] = []
+    monkeypatch.setattr(
+        lifecycle_service,
+        'observe_completed_conversation_shape',
+        lambda uid, payload: observed.append(payload['id']),
+    )
+    lifecycle_store.put_conversation(
+        'uid',
+        'conversation',
+        status=ConversationStatus.processing.value,
+        discarded=False,
+    )
+    payload = {
+        'id': 'conversation',
+        'status': ConversationStatus.completed,
+        'source': 'omi',
+        'data_protection_level': 'standard',
+    }
+    assert lifecycle_service.persist_processed_conversation('uid', payload) is True
+    assert observed == ['conversation']
+    assert lifecycle_service.persist_processed_conversation('uid', payload) is True
+    assert observed == ['conversation']
+
+
+def test_persist_processed_survives_shape_observer_errors(monkeypatch, lifecycle_store):
+    monkeypatch.setattr(
+        lifecycle_service,
+        'observe_completed_conversation_shape',
+        lambda uid, payload: (_ for _ in ()).throw(RuntimeError('observer failed')),
+    )
+    lifecycle_store.put_conversation(
+        'uid',
+        'conversation',
+        status=ConversationStatus.processing.value,
+        discarded=False,
+    )
+    assert (
+        lifecycle_service.persist_processed_conversation(
+            'uid',
+            {
+                'id': 'conversation',
+                'status': ConversationStatus.completed,
+                'data_protection_level': 'standard',
+            },
+        )
+        is True
+    )
+    assert lifecycle_store.conversation('uid', 'conversation')['status'] == ConversationStatus.completed
+
+
+def test_ingest_sync_observes_created_not_merged(monkeypatch):
+    observed: list[object] = []
+    monkeypatch.setattr(
+        lifecycle_service,
+        'observe_completed_conversation_shape',
+        lambda uid, payload: observed.append(payload),
+    )
+    monkeypatch.setattr(lifecycle_service, 'record_sync_intake_outcome', lambda **_kwargs: None)
+    monkeypatch.setattr(
+        conversations_db,
+        'assign_sync_conversation',
+        lambda *_args, **_kwargs: (
+            {'id': 'created-row', 'sync_content_revision': 1, 'source': 'omi'},
+            True,
+            [],
+        ),
+    )
+    lifecycle_service.ingest_sync_conversation('uid', {'status': ConversationStatus.completed.value})
+    assert len(observed) == 1
+    assert observed[0]['id'] == 'created-row'
+    assert observed[0]['sync_content_revision'] == 1
+
+    monkeypatch.setattr(
+        conversations_db,
+        'assign_sync_conversation',
+        lambda *_args, **_kwargs: ({'id': 'merged-row', 'sync_content_revision': 2}, False, []),
+    )
+    lifecycle_service.ingest_sync_conversation(
+        'uid', {'status': ConversationStatus.completed.value}, candidate_id='hint'
+    )
+    assert len(observed) == 1
+
+
+def test_import_observes_once_on_first_create(monkeypatch, lifecycle_store):
+    observed: list[str] = []
+    monkeypatch.setattr(
+        lifecycle_service,
+        'observe_completed_conversation_shape',
+        lambda uid, payload: observed.append(payload['id']),
+    )
+    payload = {
+        'id': 'imported',
+        'status': ConversationStatus.completed,
+        'discarded': False,
+        'title': 'imported title',
+        'data_protection_level': 'standard',
+    }
+    assert lifecycle_service.persist_imported_conversation('uid', payload) is True
+    assert observed == ['imported']
+    assert lifecycle_service.persist_imported_conversation('uid', payload) is False
+    assert observed == ['imported']

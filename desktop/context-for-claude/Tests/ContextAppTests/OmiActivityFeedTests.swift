@@ -1113,6 +1113,176 @@ extension OmiActivityFeedTests {
 
     /// Reads until the reader stops asking for anything, the way `ActivityStore` does: again while
     /// the answer keeps growing, and once more to find out that it has stopped.
+    // MARK: - Coming back to a settled corpus
+
+    /// **The cursor only ever moves away from the newest row, and that is the one place new rows
+    /// arrive.** Once every source is exhausted the reader answers `.settled` and makes no further
+    /// request — correct while nothing behind the cursor changes, useless the moment somebody comes
+    /// back to the panel an hour later. `refreshHead` is the reopening, and this is what it must
+    /// cost: three requests at offset zero, not a second walk of the account.
+    func testRefreshingTheHeadRereadsOffsetZeroWithoutWalkingTheAccountAgain() async {
+        let backend = PagingBackend(conversations: 5, memories: 0, tasks: 0)
+        let feed = Self.feed(over: backend)
+
+        _ = await Self.readUntilSettled(feed, limit: 2)
+        let walked = await backend.asks("conversations")
+        XCTAssertEqual(walked, [0, 2, 4, 5], "precondition: the whole account is in")
+
+        await feed.refreshHead()
+        _ = await Self.readUntilSettled(feed, limit: 2)
+
+        let reasked = await backend.asks("conversations")
+        XCTAssertEqual(
+            reasked, walked + [0], "one request at the head, and the walk is not repeated")
+    }
+
+    /// **The regression this pair of changes exists for, at the reader.** A conversation is
+    /// uploaded before the backend has titled it, so the row the account first hands over is
+    /// untitled; the title lands minutes later. A corpus whose de-duplication was
+    /// first-sighting-wins would keep the untitled copy for the life of the process, which is the
+    /// panel saying `Untitled conversation` over a conversation that has had a name for an hour.
+    func testARowTheAccountHasSinceTitledReplacesTheUntitledCopy() async {
+        let backend = RetitlingBackend()
+        let feed = OmiActivityFeed(
+            isAirgapped: { false },
+            isSignedIn: { true },
+            fetchConversations: { try await backend.conversations($0) },
+            fetchMemories: { _ in [] },
+            fetchTasks: { _ in WireActionItemPage(actionItems: []) },
+            now: { Self.placement })
+
+        let first = await feed.read(since: nil, until: nil, limit: 10)
+        XCTAssertEqual(first.conversations.map(\.title), [""], "the backend has not named it yet")
+
+        await backend.title("Design review")
+        await feed.refreshHead()
+        let second = await feed.read(since: nil, until: nil, limit: 10)
+
+        XCTAssertEqual(second.conversations.count, 1, "one conversation, not two copies of one")
+        XCTAssertEqual(second.conversations.map(\.title), ["Design review"])
+    }
+
+    /// Signing out. The reader now outlives a sign-out — it belongs to the process rather than to a
+    /// panel — so everything the previous account handed over has to go, cursors included.
+    func testForgettingDropsEveryRowAndReopensFromTheTop() async {
+        let backend = PagingBackend(conversations: 3, memories: 0, tasks: 0)
+        let feed = Self.feed(over: backend)
+
+        let settled = await Self.readUntilSettled(feed, limit: 10)
+        XCTAssertEqual(settled.conversations.count, 3, "precondition")
+
+        await feed.forget()
+        let after = await feed.read(since: nil, until: nil, limit: 10)
+
+        let asks = await backend.asks("conversations")
+        XCTAssertEqual(
+            asks.last, 0, "the next read starts at the top, as a first read does")
+        XCTAssertEqual(
+            after.conversations.count, 3,
+            "and what it holds is what this read returned, not what the last account said")
+    }
+
+    /// **The third of the sign-out races.** `read` fetches and *then* commits, so a `forget()` that
+    /// lands between the two used to have its emptied corpus repopulated by the page already on its
+    /// way back — the previous account's conversations, filed after the store had finished
+    /// forgetting them. The epoch is captured before a request leaves and quoted by every commit.
+    ///
+    /// **The two accounts return different ids on purpose.** The corpus files rows by identity and
+    /// replaces one it already holds, so a test where both reads return the same id cannot tell a
+    /// surviving row from a re-fetched one — it passes with the fence torn out, which is worth
+    /// nothing. Distinct ids make the difference a row count: one row if the sign-out was honoured,
+    /// two if the previous account's page survived it.
+    func testAPageFetchedBeforeSignOutIsNeverFiled() async {
+        let gate = ReadGate()
+        let calls = Counter()
+        let feed = OmiActivityFeed(
+            isAirgapped: { false },
+            isSignedIn: { true },
+            fetchConversations: { _ in
+                let first = await calls.next() == 0
+                // Only the first read — the one raced with the sign-out — is held.
+                if first { await gate.arriveAndWait() }
+                let id = first ? "previous-account" : "next-account"
+                return [
+                    WireConversation(
+                        id: id, createdAt: nil, startedAt: WireInstant(seconds: 1_786_000_000),
+                        finishedAt: nil,
+                        structured: WireConversation.WireStructured(
+                            title: id, overview: nil, emoji: "🎙️"))
+                ]
+            },
+            fetchMemories: { _ in [] },
+            fetchTasks: { _ in WireActionItemPage(actionItems: []) },
+            now: { Self.placement })
+
+        async let reading = feed.read(since: nil, until: nil, limit: 10)
+        await gate.waitUntilArrived()
+
+        // Sign-out, while the previous account's response is in flight.
+        await feed.forget()
+        await gate.open()
+        _ = await reading
+
+        // The read's own return value may carry what it fetched — it is a value, not state. What
+        // must not have happened is the *filing*, so the next account's read sees its own row alone.
+        let next = await feed.read(since: nil, until: nil, limit: 10)
+        XCTAssertEqual(
+            next.conversations.map(\.id), ["next-account"],
+            "the previous account's page was in flight across the sign-out and must not be held")
+    }
+
+    /// **A revalidation has to be able to delete, and until the head became authoritative it could
+    /// only add.** `reopenHead` re-reads offset zero and `absorb` replaces the ids it sees, so a
+    /// conversation deleted on the phone stayed on the spine for the life of the process. That is a
+    /// regression the process-lived store introduced: a panel rebuilt per window used to lose the
+    /// row simply by being rebuilt.
+    func testAHeadRereadDropsARowTheAccountHasStoppedListing() async {
+        let backend = MutableHeadBackend(ids: ["c2", "c1", "c0"])
+        let feed = Self.feed(overMutableHead: backend)
+
+        let first = await feed.read(since: nil, until: nil, limit: 10)
+        XCTAssertEqual(first.conversations.map(\.id), ["c2", "c1", "c0"], "precondition")
+
+        // c1 is deleted on the phone.
+        await backend.set(ids: ["c2", "c0"])
+        await feed.refreshHead()
+        let second = await feed.read(since: nil, until: nil, limit: 10)
+
+        XCTAssertEqual(
+            second.conversations.map(\.id), ["c2", "c0"],
+            "a row absent from a re-read of the head, within the head's own range, has gone")
+    }
+
+    /// **And it may only delete within the range the head page actually covers.** A head page
+    /// returned the newest `limit` rows and is evidence about nothing older; treating its absence as
+    /// a deletion would empty the account behind it on every revalidation.
+    func testAHeadRereadNeverDeletesRowsOlderThanItsOwnPage() async {
+        let backend = MutableHeadBackend(ids: ["c4", "c3", "c2", "c1", "c0"])
+        let feed = Self.feed(overMutableHead: backend)
+
+        // Page the whole account in two at a time.
+        let all = await Self.readUntilSettled(feed, limit: 2)
+        XCTAssertEqual(all.conversations.count, 5, "precondition")
+
+        // The head is re-read at a page size of two, so it can only speak for c4 and c3.
+        await feed.refreshHead()
+        let after = await Self.readUntilSettled(feed, limit: 2)
+
+        XCTAssertEqual(
+            Set(after.conversations.map(\.id)), ["c0", "c1", "c2", "c3", "c4"],
+            "everything behind the head page is untouched by a re-read of it")
+    }
+
+    private static func feed(overMutableHead backend: MutableHeadBackend) -> OmiActivityFeed {
+        OmiActivityFeed(
+            isAirgapped: { false },
+            isSignedIn: { true },
+            fetchConversations: { try await backend.conversations($0) },
+            fetchMemories: { _ in [] },
+            fetchTasks: { _ in WireActionItemPage(actionItems: []) },
+            now: { placement })
+    }
+
     private static func readUntilSettled(
         _ feed: OmiActivityFeed, limit: Int, reads: Int = 40
     ) async -> ActivityAccountFeed {
@@ -1204,5 +1374,85 @@ private actor PagingBackend {
         let total = counts[source] ?? 0
         guard offset < total else { return offset..<offset }
         return offset..<min(offset + limit, total)
+    }
+}
+
+/// One conversation whose title the backend fills in later — the ordinary lifecycle of an uploaded
+/// transcript, and the reason a corpus has to be able to replace a row it already holds.
+private actor RetitlingBackend {
+    private var currentTitle = ""
+
+    func title(_ title: String) { currentTitle = title }
+
+    func conversations(_ query: [String: String]) -> [WireConversation] {
+        guard (Int(query["offset"] ?? "0") ?? 0) == 0 else { return [] }
+        return [
+            WireConversation(
+                id: "c0", createdAt: nil, startedAt: WireInstant(seconds: 1_786_000_000),
+                finishedAt: nil,
+                structured: WireConversation.WireStructured(
+                    title: currentTitle, overview: nil, emoji: "🎙️"))
+        ]
+    }
+}
+
+/// A latch that also reports when the request reached it, so a test can drive a sign-out into the
+/// window between a fetch leaving and its response being filed.
+private actor ReadGate {
+    private var arrived = false
+    private var isOpen = false
+    private var waiters: [CheckedContinuation<Void, Never>] = []
+
+    func arriveAndWait() async {
+        arrived = true
+        guard !isOpen else { return }
+        await withCheckedContinuation { waiters.append($0) }
+    }
+
+    func waitUntilArrived() async {
+        while !arrived { await Task.yield() }
+    }
+
+    func open() {
+        isOpen = true
+        for waiter in waiters { waiter.resume() }
+        waiters = []
+    }
+}
+
+/// A call counter, so a fetcher can answer differently for the read before a sign-out and the read
+/// after it.
+private actor Counter {
+    private var count = 0
+    func next() -> Int {
+        defer { count += 1 }
+        return count
+    }
+}
+
+/// A conversations endpoint whose row set the test can change between reads, newest id first.
+///
+/// Instants descend with position so a page's "oldest row" is well defined — which is what bounds
+/// what a head re-read is allowed to delete.
+private actor MutableHeadBackend {
+    private var ids: [String]
+
+    init(ids: [String]) { self.ids = ids }
+
+    func set(ids: [String]) { self.ids = ids }
+
+    func conversations(_ query: [String: String]) -> [WireConversation] {
+        let offset = Int(query["offset"] ?? "0") ?? 0
+        let limit = Int(query["limit"] ?? "1") ?? 1
+        guard offset < ids.count else { return [] }
+        let page = ids[offset..<min(offset + limit, ids.count)]
+        return page.enumerated().map { position, id in
+            WireConversation(
+                id: id, createdAt: nil,
+                startedAt: WireInstant(seconds: 1_786_000_000 - Double(offset + position)),
+                finishedAt: nil,
+                structured: WireConversation.WireStructured(
+                    title: id, overview: nil, emoji: "🎙️"))
+        }
     }
 }

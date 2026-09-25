@@ -51,7 +51,7 @@ export function UpcomingTasksCard({
 }: UpcomingTasksCardProps) {
   // Get upcoming tasks (non-completed, sorted by due date)
   const upcomingTasks = tasks
-    .filter(t => !t.completed)
+    .filter((t) => !t.completed)
     .sort((a, b) => {
       // Tasks with due dates come first
       if (!a.due_at && !b.due_at) return 0;
@@ -66,13 +66,13 @@ export function UpcomingTasksCard({
   }
 
   return (
-    <div className="bg-bg-secondary rounded-xl p-4 border border-bg-tertiary overflow-hidden">
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-medium text-text-primary flex items-center gap-2">
-          <ArrowRight className="w-4 h-4 text-purple-primary flex-shrink-0" />
+    <div className="overflow-hidden rounded-xl border border-bg-tertiary bg-bg-secondary p-4">
+      <div className="mb-3 flex items-center justify-between">
+        <h3 className="flex items-center gap-2 text-sm font-medium text-text-primary">
+          <ArrowRight className="h-4 w-4 flex-shrink-0 text-white" />
           Coming Up
         </h3>
-        <span className="text-xs text-text-quaternary flex-shrink-0">
+        <span className="flex-shrink-0 text-xs text-text-quaternary">
           Next {upcomingTasks.length}
         </span>
       </div>
@@ -85,28 +85,28 @@ export function UpcomingTasksCard({
             animate={{ opacity: 1, x: 0 }}
             transition={{ delay: index * 0.05 }}
             className={cn(
-              'group flex items-center gap-2 p-2 -mx-2 rounded-lg',
-              'hover:bg-white/[0.03] transition-colors',
-              'min-w-0'
+              'group -mx-2 flex items-center gap-2 rounded-lg p-2',
+              'transition-colors hover:bg-white/[0.03]',
+              'min-w-0',
             )}
           >
             {/* Quick complete checkbox */}
             <button
               onClick={() => onToggleComplete(task.id, true)}
               className={cn(
-                'flex-shrink-0 w-4 h-4 rounded-full border',
+                'h-4 w-4 flex-shrink-0 rounded-full border',
                 'flex items-center justify-center',
                 'transition-all duration-150',
                 isOverdue(task.due_at)
                   ? 'border-error hover:bg-error/20'
-                  : 'border-text-quaternary/50 hover:border-success hover:bg-success/20'
+                  : 'border-text-quaternary/50 hover:border-success hover:bg-success/20',
               )}
             >
-              <Check className="w-2.5 h-2.5 text-transparent group-hover:text-success" />
+              <Check className="h-2.5 w-2.5 text-transparent group-hover:text-success" />
             </button>
 
             {/* Task description */}
-            <span className="flex-1 min-w-0 text-sm text-text-secondary">
+            <span className="min-w-0 flex-1 text-sm text-text-secondary">
               {task.description}
             </span>
 
@@ -114,11 +114,11 @@ export function UpcomingTasksCard({
             {task.due_at && (
               <span
                 className={cn(
-                  'flex-shrink-0 text-xs flex items-center gap-1 whitespace-nowrap',
-                  isOverdue(task.due_at) ? 'text-error' : 'text-text-quaternary'
+                  'flex flex-shrink-0 items-center gap-1 whitespace-nowrap text-xs',
+                  isOverdue(task.due_at) ? 'text-error' : 'text-text-quaternary',
                 )}
               >
-                <Clock className="w-3 h-3" />
+                <Clock className="h-3 w-3" />
                 {formatDueText(task.due_at)}
               </span>
             )}

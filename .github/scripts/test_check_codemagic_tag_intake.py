@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Behavioral tests for bounded native Codemagic intake and one fallback fence."""
+"""Behavioral tests for exact-tag Codemagic intake and its one-build fence."""
 
 from __future__ import annotations
 
@@ -305,26 +305,27 @@ class CodemagicTagIntakeTests(unittest.TestCase):
         self.assertEqual(page_request.method, "GET")
         self.assertEqual(urllib.parse.urlparse(page_request.full_url).path, "/builds")
         self.assertEqual(post_request.method, "POST")
-        self.assertEqual(json.loads(post_request.data.decode()), {"appId": APP_ID, "workflowId": WORKFLOW_ID, "tag": TAG})
+        self.assertEqual(
+            json.loads(post_request.data.decode()), {"appId": APP_ID, "workflowId": WORKFLOW_ID, "tag": TAG}
+        )
 
-    def test_checked_in_workflow_keeps_native_wait_then_enables_only_fenced_fallback(self) -> None:
+    def test_checked_in_workflow_api_dispatches_immediately_without_native_trigger_race(self) -> None:
         workflow = (ROOT / ".github/workflows/desktop_auto_release.yml").read_text(encoding="utf-8")
         codemagic = (ROOT / "codemagic.yaml").read_text(encoding="utf-8")
 
         for fragment in (
-            "Verify native Codemagic tag intake or dispatch fenced fallback",
+            "Dispatch or reuse the exact-tag Codemagic build",
             "CODEMAGIC_API_TOKEN: ${{ secrets.CODEMAGIC_API_TOKEN }}",
             "check-codemagic-tag-intake.py",
             '--workflow-id "omi-desktop-swift-release"',
-            "--timeout-seconds 600",
+            "--timeout-seconds 0",
+            "--poll-seconds 5",
             "--dispatch-fallback-on-absence",
             "Retain native Codemagic tag intake evidence",
         ):
             self.assertIn(fragment, workflow)
-        self.assertIn(
-            '        - pattern: "v*-macos"\n          include: true',
-            codemagic.split("  omi-desktop-swift-release:", 1)[1],
-        )
+        release_header = codemagic.split("  omi-desktop-swift-release:", 1)[1].split("    scripts:", 1)[0]
+        self.assertNotIn("triggering:", release_header)
         self.assertNotIn(intake.BUILDS_API, workflow)
 
 

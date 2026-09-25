@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import importlib.util
+import json
+import re
+import shutil
+import subprocess
 import sys
 import unittest
 from pathlib import Path
@@ -101,12 +105,36 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
                     )
                     self.assertTrue(any(required in error for error in errors), errors)
 
-    def test_requires_production_agent_vm_artifacts(self) -> None:
-        errors = POLICY.validate_deploy_workflow(
-            self.prod.replace("      - name: Build and publish Agent VM image", "      - name: Omitted agent VM", 1),
-            production=True,
-        )
-        self.assertTrue(any("Build and publish Agent VM image" in error for error in errors), errors)
+
+
+    def test_rejects_sidecar_attach_without_rendered_expected_env_state(self) -> None:
+        """#12098 made --expected-env-state required and updated only the backend caller.
+
+        Every other fragment this policy required was still present, so both
+        desktop deploy paths passed the check and then died at the attach step
+        with an argparse usage error. Bind the requirement to the step.
+        """
+        for workflow, production in ((self.dev, False), (self.prod, True)):
+            with self.subTest(production=production, mutation="drop --expected-env-state"):
+                errors = POLICY.validate_deploy_workflow(
+                    workflow.replace('            --expected-env-state=', '            --unused-arg=', 1),
+                    production=production,
+                )
+                self.assertTrue(any("--expected-env-state" in error for error in errors), errors)
+
+            with self.subTest(production=production, mutation="drop the render step"):
+                errors = POLICY.validate_deploy_workflow(
+                    workflow.replace("Render desktop backend expected env state", "Render something else"),
+                    production=production,
+                )
+                self.assertTrue(any("Render desktop backend expected env state" in e for e in errors), errors)
+
+            with self.subTest(production=production, mutation="render without --desktop-state-output"):
+                errors = POLICY.validate_deploy_workflow(
+                    workflow.replace('--desktop-state-output', '--state-output', 1),
+                    production=production,
+                )
+                self.assertTrue(any("--desktop-state-output" in error for error in errors), errors)
 
     def test_rejects_traffic_before_candidate_proof(self) -> None:
         mutated = self.dev.replace(
@@ -126,7 +154,17 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
 
     def test_rejects_missing_or_bypassed_development_probe_signer(self) -> None:
         missing_signer = self.dev.replace(
-            '--signer-credentials-file="$DESKTOP_BACKEND_PROBE_SIGNER_FILE" \\\n',
+            '--signer-service-account "$FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT" \\\n',
+            "",
+            1,
+        )
+        missing_mapping = self.dev.replace(
+            "          FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT: ${{ vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT }}\n",
+            "",
+            1,
+        )
+        missing_empty_check = self.dev.replace(
+            '          if [[ -z "${FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT:-}" ]]; then\n',
             "",
             1,
         )
@@ -135,15 +173,59 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
         )
 
         signer_errors = POLICY.validate_deploy_workflow(missing_signer, production=False)
+        mapping_errors = POLICY.validate_deploy_workflow(missing_mapping, production=False)
+        empty_check_errors = POLICY.validate_deploy_workflow(missing_empty_check, production=False)
         gate_errors = POLICY.validate_deploy_workflow(missing_gate, production=False)
 
-        self.assertTrue(any("DESKTOP_BACKEND_PROBE_SIGNER_FILE" in error for error in signer_errors), signer_errors)
+        self.assertTrue(
+            any(
+                '--signer-service-account "$FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT"' in error
+                for error in signer_errors
+            ),
+            signer_errors,
+        )
+        self.assertTrue(
+            any("FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT" in error for error in mapping_errors), mapping_errors
+        )
+        self.assertTrue(
+            any(
+                'if [[ -z "${FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT:-}" ]]; then' in error
+                for error in empty_check_errors
+            ),
+            empty_check_errors,
+        )
         self.assertTrue(any("Mint candidate probe identity" in error for error in gate_errors), gate_errors)
+
+    def test_development_probe_signer_is_json_free(self) -> None:
+        """Phase C credential rotation: no service-account key reaches the runner.
+
+        Mirrors the minter guard test
+        (backend/tests/unit/test_firebase_release_probe_token.py), which accepts
+        only vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT as the
+        --signer-service-account source: pin the dev desktop workflow to that
+        shape and re-reject the retired key-staging path.
+        """
+        self.assertNotIn("secrets.GCP_SERVICE_ACCOUNT", self.dev)
+        self.assertNotIn("FIREBASE_PROBE_SIGNER_B64", self.dev)
+        self.assertNotIn("DESKTOP_BACKEND_PROBE_SIGNER_FILE", self.dev)
+        self.assertIn("FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT: ${{ vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT }}", self.dev)
+        self.assertIn('--signer-service-account "$FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT"', self.dev)
+
+        restaged_key = self.dev.replace(
+            "      - name: Mint candidate probe identity\n",
+            "      - name: Mint candidate probe identity\n"
+            "        env:\n"
+            "          FIREBASE_PROBE_SIGNER_B64: ${{ secrets.GCP_SERVICE_ACCOUNT }}\n",
+            1,
+        )
+        errors = POLICY.validate_deploy_workflow(restaged_key, production=False)
+        self.assertTrue(any("GCP_SERVICE_ACCOUNT key secret" in error for error in errors), errors)
 
     def test_rejects_missing_or_conflicting_development_firestore_credentials(self) -> None:
         missing_mount = self.dev.replace(
-            "            /secrets/firebase/service-account.json=SERVICE_ACCOUNT_JSON:latest\n",
-            "",
+            "            GEMINI_API_KEY=GEMINI_API_KEY:latest\n",
+            "            /secrets/firebase/service-account.json=SERVICE_ACCOUNT_JSON:latest\n"
+            "            GEMINI_API_KEY=GEMINI_API_KEY:latest\n",
             1,
         )
         without_google_adc_reset = self.dev.replace(
@@ -165,11 +247,12 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
         for credential_env in ("GOOGLE_APPLICATION_CREDENTIALS", "SERVICE_ACCOUNT_JSON"):
             with self.subTest(credential_env=credential_env):
                 readded_credential = self.dev.replace(
-                    "            FIREBASE_AUTH_CREDENTIALS_PATH=/secrets/firebase/service-account.json\n",
-                    "            FIREBASE_AUTH_CREDENTIALS_PATH=/secrets/firebase/service-account.json\n"
+                    "            FIREBASE_AUTH_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}\n",
+                    "            FIREBASE_AUTH_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}\n"
                     f"            {credential_env}=/secrets/firebase/service-account.json\n",
                     1,
                 )
+                self.assertNotEqual(readded_credential, self.dev)
                 errors = POLICY.validate_deploy_workflow(readded_credential, production=False)
                 self.assertTrue(any("must not set" in error and credential_env in error for error in errors), errors)
 
@@ -232,10 +315,11 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
                 self.assertTrue(any(f"{pinecone_key}=" in error for error in errors), errors)
 
         missing_removal = self.prod.replace(
-            "            --remove-secrets=PINECONE_API_KEY,PINECONE_HOST\n",
+            "            --remove-secrets=PINECONE_API_KEY,PINECONE_HOST,/secrets/firebase/service-account.json\n",
             "",
             1,
         )
+        self.assertNotEqual(missing_removal, self.prod)
         errors = POLICY.validate_deploy_workflow(missing_removal, production=True)
         self.assertTrue(any("--remove-secrets=PINECONE_API_KEY,PINECONE_HOST" in error for error in errors), errors)
 
@@ -244,19 +328,11 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
         errors = POLICY.validate_desktop_release_gates(mutated)
         self.assertTrue(any("desktop_promote_prod.yml" in error for error in errors), errors)
 
-    def test_rejects_an_agent_vm_job_argument_that_deploy_cloudrun_would_split(self) -> None:
-        mutated = self.dev.replace("'--args=-m,jobs.agent_vm_reconciler'", "--args=-m,jobs.agent_vm_reconciler", 1)
-
-        errors = POLICY.validate_deploy_workflow(mutated, production=False)
-
-        self.assertTrue(any("action-parser-safe" in error for error in errors), errors)
-
-    def test_requires_private_agent_vm_readiness_on_each_request_service(self) -> None:
+    def test_requires_private_network_egress_on_each_request_service(self) -> None:
         contracts = (
-            "--network=default",
-            "--subnet=default",
+            "--network=${{ vars.CLOUD_RUN_VPC_NETWORK }}",
+            "--subnet=${{ vars.CLOUD_RUN_VPC_SUBNET }}",
             "--vpc-egress=private-ranges-only",
-            "AGENT_VM_TRUSTED_HEALTH_CHANNEL=private-vpc",
         )
         for workflow, production, step in (
             (self.dev, False, "Deploy desktop-backend to Cloud Run"),
@@ -273,6 +349,41 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
                         errors = POLICY.validate_deploy_workflow(mutated, production=production)
                         self.assertTrue(any(contract in error and "request service" in error for error in errors), errors)
 
+
+    def test_requires_llm_gateway_wiring_on_each_request_service(self) -> None:
+        """An unset feature mode silently routes managed desktop chat to Anthropic."""
+        contracts = (
+            "OMI_LLM_GATEWAY_URL=${{ steps.gateway-serving.outputs.gateway_url }}",
+            "OMI_LLM_GATEWAY_FEATURE_MODE=gateway",
+            "OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE=true",
+            "OMI_LLM_CHAT_AGENT_ROUTE=gateway",
+            "OMI_LLM_GATEWAY_SERVICE_TOKEN=OMI_LLM_GATEWAY_SERVICE_TOKEN:latest",
+        )
+        for workflow, production, step in (
+            (self.dev, False, "Deploy desktop-backend to Cloud Run"),
+            (self.prod, True, "Deploy production candidate at zero traffic"),
+        ):
+            with self.subTest(production=production):
+                start = workflow.index(f"      - name: {step}\n")
+                end = workflow.find("\n      - ", start + 1)
+                block = workflow[start:] if end < 0 else workflow[start:end]
+                for contract in contracts:
+                    with self.subTest(contract=contract):
+                        mutated_block = block.replace(contract, "", 1)
+                        mutated = workflow[:start] + mutated_block + workflow[start + len(block) :]
+                        errors = POLICY.validate_deploy_workflow(mutated, production=production)
+                        self.assertTrue(
+                            any(contract in error and "LLM gateway binding" in error for error in errors), errors
+                        )
+
+    def test_requires_the_gateway_serving_gate(self) -> None:
+        for workflow, production in ((self.dev, False), (self.prod, True)):
+            with self.subTest(production=production):
+                mutated = workflow.replace("verify-llm-gateway-serving.py", "gateway-gate-omitted.py")
+                errors = POLICY.validate_deploy_workflow(mutated, production=production)
+                self.assertTrue(any("LLM gateway serving gate" in error for error in errors), errors)
+
+
     def test_rejects_development_serving_with_a_development_firebase_project(self) -> None:
         mutated = self.dev.replace(
             "FIREBASE_AUTH_PROJECT_ID: based-hardware",
@@ -287,7 +398,7 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
         self.assertTrue(any("production Firebase project" in error for error in errors), errors)
 
     def test_requires_isolated_runtime_env_for_each_development_deployment(self) -> None:
-        for step in ("Deploy desktop-backend to Cloud Run", "Deploy Agent VM reconciler Cloud Run Job"):
+        for step in ("Deploy desktop-backend to Cloud Run",):
             with self.subTest(step=step):
                 start = self.dev.index(f"      - name: {step}\n")
                 end = self.dev.find("\n      - name: ", start + 1)
@@ -301,16 +412,10 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
                 errors = POLICY.validate_deploy_workflow(mutated, production=False)
                 self.assertTrue(any(step in error and "GOOGLE_CLOUD_PROJECT" in error for error in errors), errors)
 
-                mutated_block = block.replace("GCE_PROJECT_ID=${{ vars.GCP_PROJECT_ID }}", "", 1)
-                mutated = self.dev[:start] + mutated_block + self.dev[start + len(block):]
-                errors = POLICY.validate_deploy_workflow(mutated, production=False)
-                self.assertTrue(any(step in error and "GCE_PROJECT_ID" in error for error in errors), errors)
-
                 for env_var in (
                     "FIREBASE_AUTH_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}",
                     "FIREBASE_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}",
                     "GOOGLE_CLOUD_PROJECT=${{ vars.GCP_PROJECT_ID }}",
-                    "GCE_PROJECT_ID=${{ vars.GCP_PROJECT_ID }}",
                 ):
                     with self.subTest(step=step, env_var=env_var):
                         commented_block = block.replace(env_var, f"# {env_var}", 1)
@@ -327,14 +432,42 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
                         errors = POLICY.validate_deploy_workflow(mutated, production=False)
                         self.assertTrue(any(step in error and env_var in error for error in errors), errors)
 
-    def test_requires_dev_adc_and_an_explicit_firebase_auth_credential_path(self) -> None:
-        without_auth_path = self.dev.replace(
-            "FIREBASE_AUTH_CREDENTIALS_PATH=/secrets/firebase/service-account.json\n",
+    def test_production_runs_keyless_and_rejects_a_remounted_key(self) -> None:
+        self.assertEqual(POLICY.validate_deploy_workflow(self.prod, production=True), [])
+        without_identity = self.prod.replace(
+            "            --service-account=desktop-backend-runtime@based-hardware.iam.gserviceaccount.com\n", "", 1
+        )
+        self.assertNotEqual(without_identity, self.prod)
+        errors = POLICY.validate_deploy_workflow(without_identity, production=True)
+        self.assertTrue(any("desktop-backend-runtime" in error for error in errors), errors)
+        remounted = self.prod.replace(
+            "            GEMINI_API_KEY=DESKTOP_GEMINI_API_KEY:latest\n",
+            "            /secrets/firebase/service-account.json=SERVICE_ACCOUNT_JSON:latest\n"
+            "            GEMINI_API_KEY=DESKTOP_GEMINI_API_KEY:latest\n",
+            1,
+        )
+        self.assertNotEqual(remounted, self.prod)
+        errors = POLICY.validate_deploy_workflow(remounted, production=True)
+        self.assertTrue(any("SERVICE_ACCOUNT_JSON:latest" in error for error in errors), errors)
+
+    def test_requires_the_keyless_dev_runtime_identity(self) -> None:
+        self.assertEqual(POLICY.validate_deploy_workflow(self.dev, production=False), [])
+        without_identity = self.dev.replace(
+            "            --service-account=dev-backend-runtime@based-hardware-dev.iam.gserviceaccount.com\n",
             "",
             1,
         )
-        errors = POLICY.validate_deploy_workflow(without_auth_path, production=False)
-        self.assertTrue(any("Firebase auth credentials" in error for error in errors), errors)
+        self.assertNotEqual(without_identity, self.dev)
+        errors = POLICY.validate_deploy_workflow(without_identity, production=False)
+        self.assertTrue(any("keyless dev-backend-runtime" in error for error in errors), errors)
+        restaged_path = self.dev.replace(
+            "            FIREBASE_AUTH_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}\n",
+            "            FIREBASE_AUTH_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}\n"
+            "            FIREBASE_AUTH_CREDENTIALS_PATH=/secrets/firebase/service-account.json\n",
+            1,
+        )
+        errors = POLICY.validate_deploy_workflow(restaged_path, production=False)
+        self.assertTrue(any("must not mount" in error for error in errors), errors)
 
     def test_rejects_baked_credentials_or_python_contract_version_drift(self) -> None:
         errors = POLICY.validate_contract_sources(
@@ -452,6 +585,173 @@ class DesktopBackendReleasePolicyTests(unittest.TestCase):
         )
         errors = POLICY.validate_deploy_workflow(mutated, production=False)
         self.assertTrue(any("verify-image-lineage.outputs.runtime_digest" in error for error in errors), errors)
+
+    # RevisionStatus in the Cloud Run v1 API has no per-container digest map: its
+    # legacy image-digest field is a single-container scalar that is empty on any
+    # multi-container revision. The Managed Prometheus sidecar (#11998) made every
+    # desktop-backend candidate two-container, so both workflows switched to
+    # extracting the runtime image from the named "desktop-backend-1" container in
+    # `gcloud run revisions describe --format=json` instead. Regression-guard both
+    # properties: the legacy field must not come back, and the extraction filter
+    # actually resolves the right image out of a realistic two-container revision.
+
+    def test_neither_deploy_workflow_reads_the_legacy_single_container_digest_field(self) -> None:
+        legacy_field = "status" + "." + "imageDigest"
+        for name, text in (("dev", self.dev), ("prod", self.prod)):
+            with self.subTest(workflow=name):
+                self.assertNotIn(legacy_field, text)
+                self.assertIn('select(.name == "desktop-backend-1")', text)
+                self.assertIn("--format=json", text)
+
+    def _extract_runtime_image_jq_filter(self, text: str) -> str:
+        match = re.search(r"jq -er '(.*?)'\)\"", text, re.DOTALL)
+        assert match, "expected an inline jq filter selecting the desktop-backend-1 image"
+        return match.group(1)
+
+    def _run_runtime_image_filter(self, jq_filter: str, revision: dict[str, object]) -> subprocess.CompletedProcess:
+        assert shutil.which("jq"), "jq must be installed to exercise the workflow's extraction filter"
+        return subprocess.run(
+            ["jq", "-er", jq_filter],
+            input=json.dumps(revision),
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+
+    def test_runtime_image_filter_selects_desktop_backend_container_on_two_container_revision(self) -> None:
+        expected_image = (
+            "gcr.io/based-hardware-dev/desktop-backend@sha256:"
+            "b6c51555ebd7274728ccb79e0f2957fd1f6761d469aa51d5eb999d2debc6b706"
+        )
+        # A realistic post-#11998 candidate revision: two containers, and the legacy
+        # status.imageDigest scalar left absent, exactly as Cloud Run returns it.
+        revision = {
+            "spec": {
+                "containers": [
+                    {
+                        "name": "collector",
+                        "image": "gcr.io/based-hardware-dev/collector@sha256:" + "a" * 64,
+                    },
+                    {
+                        "name": "desktop-backend-1",
+                        "image": expected_image,
+                    },
+                ]
+            },
+            "status": {},
+        }
+        for name, text in (("dev", self.dev), ("prod", self.prod)):
+            with self.subTest(workflow=name):
+                jq_filter = self._extract_runtime_image_jq_filter(text)
+                result = self._run_runtime_image_filter(jq_filter, revision)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout.strip(), expected_image)
+
+    def test_runtime_image_filter_rejects_missing_or_duplicated_desktop_backend_container(self) -> None:
+        image = "gcr.io/based-hardware-dev/desktop-backend@sha256:" + "b" * 64
+        cases = {
+            "no desktop-backend-1 container": {
+                "spec": {
+                    "containers": [
+                        {"name": "collector", "image": "gcr.io/based-hardware-dev/collector@sha256:" + "a" * 64}
+                    ]
+                },
+                "status": {},
+            },
+            "duplicated desktop-backend-1 container": {
+                "spec": {
+                    "containers": [
+                        {"name": "desktop-backend-1", "image": image},
+                        {"name": "desktop-backend-1", "image": image},
+                    ]
+                },
+                "status": {},
+            },
+            "empty image string": {
+                "spec": {"containers": [{"name": "desktop-backend-1", "image": ""}]},
+                "status": {},
+            },
+        }
+        for name, text in (("dev", self.dev), ("prod", self.prod)):
+            jq_filter = self._extract_runtime_image_jq_filter(text)
+            for case_name, revision in cases.items():
+                with self.subTest(workflow=name, case=case_name):
+                    result = self._run_runtime_image_filter(jq_filter, revision)
+                    self.assertNotEqual(result.returncode, 0)
+                    self.assertIn("expected exactly one desktop-backend-1 container image", result.stderr)
+
+    def test_agent_vm_sha_reuse_guard_rejects_python_repr_boolean(self) -> None:
+        broken = (
+            "      - name: Resolve Agent VM SHA release\n"
+            "        run: |\n"
+            "          python backend/scripts/resolve_agent_vm_sha_release.py\n"
+            '          reuse="$(python3 -c \'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["reuse"])\' '
+            '"$RUNNER_TEMP/agent-vm-sha-release.json")"\n'
+            '          if [[ "$reuse" == "true" ]]; then\n'
+        )
+        errors = POLICY.validate_deploy_workflow(broken, production=False)
+        self.assertTrue(any("Python repr" in error for error in errors))
+
+    def test_agent_vm_sha_reuse_guard_catches_dollar_brace_reuse_compare(self) -> None:
+        broken = (
+            "      - name: Resolve Agent VM SHA release\n"
+            "        run: |\n"
+            "          python backend/scripts/resolve_agent_vm_sha_release.py\n"
+            '          reuse="$(python3 -c \'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["reuse"])\' '
+            '"$RUNNER_TEMP/agent-vm-sha-release.json")"\n'
+            '          if [[ "${reuse}" == "true" ]]; then\n'
+        )
+        errors = POLICY.validate_deploy_workflow(broken, production=False)
+        self.assertTrue(any("Python repr" in error for error in errors))
+
+    def test_agent_vm_sha_reuse_guard_rejects_unrelated_helper_mention(self) -> None:
+        broken = (
+            "      - name: Other step\n"
+            "        run: python .github/scripts/workflow_json_field_for_shell.py\n"
+            "      - name: Resolve Agent VM SHA release\n"
+            "        run: |\n"
+            "          python backend/scripts/resolve_agent_vm_sha_release.py\n"
+            '          reuse="$(python3 -c \'import json,sys; print(json.load(open(sys.argv[1], encoding="utf-8"))["reuse"])\' '
+            '"$RUNNER_TEMP/agent-vm-sha-release.json")"\n'
+            '          if [[ "$reuse" == "true" ]]; then\n'
+        )
+        errors = POLICY.validate_deploy_workflow(broken, production=False)
+        self.assertTrue(any("Python repr" in error for error in errors))
+        self.assertTrue(any("shell-safe reuse extraction" in error for error in errors))
+
+    def _agent_vm_resolver_step(self, *, reuse_extract: str, reuse_compare: str = 'if [[ "$reuse" == "true" ]]; then') -> str:
+        return (
+            "      - name: Resolve Agent VM SHA release\n"
+            "        run: |\n"
+            "          python backend/scripts/resolve_agent_vm_sha_release.py\n"
+            f"          {reuse_extract}\n"
+            f"          {reuse_compare}\n"
+        )
+
+    def test_agent_vm_sha_reuse_guard_accepts_json_dumps_extract(self) -> None:
+        snippet = (
+            'reuse="$(python3 -c \'import json,sys; print(json.dumps(json.load(open(sys.argv[1], encoding="utf-8"))["reuse"]))\' '
+            '"$RUNNER_TEMP/agent-vm-sha-release.json")"'
+        )
+        text = self._agent_vm_resolver_step(reuse_extract=snippet)
+        errors = POLICY.validate_deploy_workflow(text, production=False)
+        reuse_errors = [error for error in errors if "reuse" in error.lower() or "Python repr" in error]
+        self.assertEqual(reuse_errors, [])
+
+    def test_agent_vm_sha_reuse_guard_accepts_workflow_json_field_helper(self) -> None:
+        snippet = (
+            'reuse="$(python3 .github/scripts/workflow_json_field_for_shell.py '
+            '"$RUNNER_TEMP/agent-vm-sha-release.json" reuse)"'
+        )
+        text = self._agent_vm_resolver_step(reuse_extract=snippet)
+        errors = POLICY.validate_deploy_workflow(text, production=False)
+        reuse_errors = [error for error in errors if "reuse" in error.lower() or "Python repr" in error]
+        self.assertEqual(reuse_errors, [])
+
+    def test_live_desktop_backend_workflows_do_not_use_python_repr_reuse_extract(self) -> None:
+        broken = 'print(json.load(open(sys.argv[1], encoding="utf-8"))["reuse"])'
+        self.assertNotIn(broken, self.dev)
+        self.assertNotIn(broken, self.prod)
 
 
 if __name__ == "__main__":

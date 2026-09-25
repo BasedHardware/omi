@@ -164,9 +164,9 @@ final class StoreTests: XCTestCase {
         // migration re-runs on every launch and fails on the second one.
         XCTAssertEqual(
             applied,
-            ["v1", "v10-ax-node-last-seen", "v3-segment-confidence", "v4-segment-speaker",
-             "v5-cloud-segment-identity", "v6-accessibility-tree", "v7-frame-bundle-id",
-             "v8-frame-showable-index", "v9-frame-bundle-by-app-index"])
+            ["v1", "v10-ax-node-last-seen", "v11-account-cache", "v3-segment-confidence",
+             "v4-segment-speaker", "v5-cloud-segment-identity", "v6-accessibility-tree",
+             "v7-frame-bundle-id", "v8-frame-showable-index", "v9-frame-bundle-by-app-index"])
 
         // The ledger is shared with `UploadQueue`, which registers `v2-uploads` outside this
         // migrator and skips itself when its identifier is already recorded. Proving the two live
@@ -179,7 +179,7 @@ final class StoreTests: XCTestCase {
             coexisting,
             ["v1", "v3-segment-confidence", "v4-segment-speaker", "v5-cloud-segment-identity",
              "v6-accessibility-tree", "v7-frame-bundle-id", "v8-frame-showable-index",
-             "v9-frame-bundle-by-app-index", "v10-ax-node-last-seen",
+             "v9-frame-bundle-by-app-index", "v10-ax-node-last-seen", "v11-account-cache",
              UploadQueue.migrationIdentifier])
         XCTAssertTrue(try tableExists("uploads", in: upgraded), "the uploads migration was skipped")
 
@@ -270,9 +270,9 @@ final class StoreTests: XCTestCase {
         // never appear.
         XCTAssertEqual(
             applied,
-            ["v1", "v10-ax-node-last-seen", "v3-segment-confidence", "v4-segment-speaker",
-             "v5-cloud-segment-identity", "v6-accessibility-tree", "v7-frame-bundle-id",
-             "v8-frame-showable-index", "v9-frame-bundle-by-app-index"])
+            ["v1", "v10-ax-node-last-seen", "v11-account-cache", "v3-segment-confidence",
+             "v4-segment-speaker", "v5-cloud-segment-identity", "v6-accessibility-tree",
+             "v7-frame-bundle-id", "v8-frame-showable-index", "v9-frame-bundle-by-app-index"])
 
         // The ledger is shared with `UploadQueue`, which registers `v2-uploads` outside this
         // migrator. Proving they still coexist is the only way to know `v4-` did not claim a slot
@@ -285,7 +285,7 @@ final class StoreTests: XCTestCase {
             coexisting,
             ["v1", "v3-segment-confidence", "v4-segment-speaker", "v5-cloud-segment-identity",
              "v6-accessibility-tree", "v7-frame-bundle-id", "v8-frame-showable-index",
-             "v9-frame-bundle-by-app-index", "v10-ax-node-last-seen",
+             "v9-frame-bundle-by-app-index", "v10-ax-node-last-seen", "v11-account-cache",
              UploadQueue.migrationIdentifier])
         XCTAssertTrue(try tableExists("uploads", in: upgraded), "the uploads migration was skipped")
 

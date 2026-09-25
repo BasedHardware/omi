@@ -18,10 +18,7 @@ const priorityColors = {
 
 const INITIAL_SHOW_COUNT = 5;
 
-export function TasksSection({
-  tasks,
-  onConversationClick,
-}: TasksSectionProps) {
+export function TasksSection({ tasks, onConversationClick }: TasksSectionProps) {
   const [isExpanded, setIsExpanded] = useState(false);
 
   if (!tasks || tasks.length === 0) {
@@ -29,8 +26,8 @@ export function TasksSection({
   }
 
   // Group by completion status
-  const pendingTasks = tasks.filter(t => !t.completed);
-  const completedTasks = tasks.filter(t => t.completed);
+  const pendingTasks = tasks.filter((t) => !t.completed);
+  const completedTasks = tasks.filter((t) => t.completed);
 
   // Combine all tasks with pending first
   const allTasks = [...pendingTasks, ...completedTasks];
@@ -39,45 +36,48 @@ export function TasksSection({
   const showExpandButton = allTasks.length > INITIAL_SHOW_COUNT;
 
   return (
-    <div className={cn(
-      'noise-overlay rounded-xl p-4',
-      'bg-gradient-to-b from-white/[0.03] to-white/[0.01]',
-      'border border-white/[0.04]'
-    )}>
+    <div
+      className={cn(
+        'noise-overlay rounded-xl p-4',
+        'bg-gradient-to-b from-white/[0.03] to-white/[0.01]',
+        'border border-white/[0.04]',
+      )}
+    >
       <div className="space-y-2">
         {visibleTasks.map((task, idx) => (
           <div
             key={idx}
             className={cn(
               'flex items-start gap-2.5',
-              idx !== visibleTasks.length - 1 && 'pb-2 border-b border-white/[0.04]',
-              task.completed && 'opacity-50'
+              idx !== visibleTasks.length - 1 && 'border-b border-white/[0.04] pb-2',
+              task.completed && 'opacity-50',
             )}
           >
             {/* Checkbox icon */}
-            <div className="flex-shrink-0 mt-0.5">
+            <div className="mt-0.5 flex-shrink-0">
               {task.completed ? (
-                <CheckCircle className="w-4 h-4 text-success" />
+                <CheckCircle className="h-4 w-4 text-success" />
               ) : (
-                <Circle className="w-4 h-4 text-text-quaternary" />
+                <Circle className="h-4 w-4 text-text-quaternary" />
               )}
             </div>
 
             {/* Content */}
-            <div className="flex-1 min-w-0 flex items-start justify-between gap-2">
-              <p className={cn(
-                'text-sm text-text-secondary leading-relaxed flex-1',
-                task.completed && 'line-through text-text-tertiary'
-              )}>
+            <div className="flex min-w-0 flex-1 items-start justify-between gap-2">
+              <p
+                className={cn(
+                  'flex-1 text-sm leading-relaxed text-text-secondary',
+                  task.completed && 'text-text-tertiary line-through',
+                )}
+              >
                 {task.description}
               </p>
 
               {/* Priority + conversation link */}
-              <div className="flex items-center gap-1.5 flex-shrink-0">
-                <span className={cn(
-                  'text-[10px] font-medium',
-                  priorityColors[task.priority]
-                )}>
+              <div className="flex flex-shrink-0 items-center gap-1.5">
+                <span
+                  className={cn('text-[10px] font-medium', priorityColors[task.priority])}
+                >
                   {task.priority.charAt(0).toUpperCase()}
                 </span>
 
@@ -85,13 +85,13 @@ export function TasksSection({
                   <button
                     onClick={() => onConversationClick?.(task.source_conversation_id)}
                     className={cn(
-                      'p-0.5 rounded',
-                      'text-text-tertiary hover:text-purple-primary',
-                      'hover:bg-purple-primary/10 transition-colors'
+                      'rounded p-0.5',
+                      'text-text-tertiary hover:text-text-primary',
+                      'transition-colors hover:bg-white/[0.14]',
                     )}
                     title="View source conversation"
                   >
-                    <MessageSquare className="w-3 h-3" />
+                    <MessageSquare className="h-3 w-3" />
                   </button>
                 )}
               </div>
@@ -105,19 +105,19 @@ export function TasksSection({
         <button
           onClick={() => setIsExpanded(!isExpanded)}
           className={cn(
-            'w-full flex items-center justify-center gap-1.5 pt-3 mt-2',
+            'mt-2 flex w-full items-center justify-center gap-1.5 pt-3',
             'text-xs text-text-tertiary hover:text-text-secondary',
-            'border-t border-white/[0.04] transition-colors'
+            'border-t border-white/[0.04] transition-colors',
           )}
         >
           {isExpanded ? (
             <>
-              <ChevronUp className="w-3.5 h-3.5" />
+              <ChevronUp className="h-3.5 w-3.5" />
               Show less
             </>
           ) : (
             <>
-              <ChevronDown className="w-3.5 h-3.5" />
+              <ChevronDown className="h-3.5 w-3.5" />
               Show {hiddenCount} more
             </>
           )}

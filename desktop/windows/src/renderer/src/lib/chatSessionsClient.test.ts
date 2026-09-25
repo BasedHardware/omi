@@ -218,6 +218,37 @@ describe('getMessages / deleteMessages', () => {
     ])
   })
 
+  it('maps bounded evidence from serialized metadata while preserving message text', async () => {
+    api.get.mockResolvedValue({
+      data: [
+        {
+          id: 'm4',
+          text: 'Authoritative answer',
+          created_at: '2026-07-14T12:15:00Z',
+          sender: 'ai',
+          metadata: JSON.stringify({
+            evidence_refs: [
+              {
+                id: 'frame-ref',
+                kind: 'keyframe',
+                state: 'available',
+                frame_id: 'frame-1'
+              },
+              { id: 'missing-ref', kind: 'future_kind', state: 'future_state' }
+            ]
+          })
+        }
+      ]
+    })
+
+    const msgs = await getMessages()
+
+    expect(msgs[0].text).toBe('Authoritative answer')
+    expect(msgs[0].evidence?.references[0].frameId).toBe('frame-1')
+    expect(msgs[0].evidence?.references[1].kind).toBe('unknown')
+    expect(msgs[0].evidence?.references[1].state).toBe('unknown')
+  })
+
   it('omits attachments entirely when the wire message has no files', async () => {
     api.get.mockResolvedValue({
       data: [{ id: 'm4', text: 'plain', created_at: '2026-07-14T12:11:00Z', sender: 'human' }]

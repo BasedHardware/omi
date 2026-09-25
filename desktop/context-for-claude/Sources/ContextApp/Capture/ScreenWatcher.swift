@@ -463,17 +463,12 @@ final class ScreenWatcher {
 
         let pid = frontApp.processIdentifier
         let captured = CapturedImage(image: image)
-        // Read here rather than inside the pipeline: `ScreenPipeline` is file-private and runs off
-        // the main actor, and `SettingsStore` is main-actor state. Carrying the selection in is what
-        // makes the four Capture Quality tiles a setting rather than a picture of one.
-        let quality = SettingsStore.shared.captureQuality
         let processed = await Task.detached(priority: .utility) {
             ScreenPipeline.process(
                 captured,
                 repeatsLastStoredWindow: repeatsLastStoredWindow,
                 pid: pid,
-                window: capturedWindow,
-                quality: quality
+                window: capturedWindow
             )
         }.value
 
@@ -1271,8 +1266,7 @@ private enum ScreenPipeline {
         _ captured: CapturedImage,
         repeatsLastStoredWindow: Bool,
         pid: pid_t,
-        window: CapturedWindow,
-        quality: CaptureQuality
+        window: CapturedWindow
     ) -> ProcessedFrame? {
         // Detached tasks run on the cooperative pool, which does not drain autorelease pools; the
         // CoreGraphics and Vision temporaries below would otherwise accumulate for the app's life.
@@ -1309,7 +1303,7 @@ private enum ScreenPipeline {
                 axNodes = AccessibilityTree.records(of: tree)
             }
 
-            let imageData = FrameImage.encoded(captured.image, quality: quality)
+            let imageData = FrameImage.encoded(captured.image)
             if imageData == nil { ContextLog.error("Failed to encode frame image", "screen") }
 
             return ProcessedFrame(
@@ -1406,12 +1400,12 @@ private enum ScreenPipeline {
     /// the last irreversible step of a tick and belongs after the last judgement, with nothing
     /// suspended in between. See ``ScreenWatcher/emit(_:ticket:axNodes:imageData:)``.
     ///
-    /// The size and fidelity the user asked for were applied by ``FrameImage/encoded(_:quality:)``.
-    /// That selection governs **storage only** — it must never decide what Vision sees, which is why
-    /// the downscale happens after OCR, from an image captured at ``ocrMaxPixelSize``.
+    /// The stored size and fidelity were applied by ``FrameImage/encoded(_:)``. They govern
+    /// **storage only** — they must never decide what Vision sees, which is why the downscale
+    /// happens after OCR, from an image captured at ``ocrMaxPixelSize``.
     ///
-    /// `CaptureQuality.standard` (1600 px) is the tile the retention measurement was taken at, and
-    /// the reason the default is where it is: capture burns ~200 MB a day, `defaultRetentionDays` is
+    /// ``FrameImage/Quality`` (1600 px) is what the retention measurement was taken at, and the
+    /// reason the bounds are where they are: capture burns ~200 MB a day, `defaultRetentionDays` is
     /// 30, and `defaultFrameBytesCap` is 4 GB. As JPEG that is ~6 GB for the window the policy
     /// promises, so the byte cap bit around three weeks in and silently deleted the rest — the user
     /// lost history the settings told them they had. At the default tile the same 30 days is ~2.2
@@ -1456,14 +1450,33 @@ private enum ScreenPipeline {
 /// down — the tiles quoted four pixel sizes for a pipeline that hard-coded one.
 enum FrameImage {
 
-    /// The bytes to write for `image` at `quality`: downscaled, then encoded.
+    /// **How large and how compressed a stored screenshot is — one answer, for everybody.**
+    ///
+    /// This was four answers behind a Capture Quality tile row (2400/1600/1280/1024 px at HEIC
+    /// q0.40/0.20/0.15/0.10). The tiles are gone on the report *"don't give capture quality
+    /// option"*, and these two numbers are what **Default** always was: the setting every install
+    /// shipped on, the one `ScreenWatcher`'s measured storage table was taken at, and the one
+    /// `docs/ocr-quality.md` and the Storage pane's retention figures are written against.
+    ///
+    /// Deleting the choice is not the same as deleting the knob — the pipeline still downscales and
+    /// still encodes, and `CapturePacingTests` still asserts that it does, because a pipeline that
+    /// quietly stopped resizing would look identical from the outside until the disk filled.
+    enum Quality {
+        /// Longest side of the stored picture, in pixels. OCR reads a separate, larger image
+        /// (``ScreenPipeline/ocrMaxPixelSize``) before this one is written, so the text of a user's
+        /// history does not depend on this number.
+        static let longestSide = 1600
+        /// HEIC lossy-compression quality. HEIC's scale is not JPEG's — see ``data(from:)``.
+        static let compression = 0.20
+    }
+
+    /// The bytes to write for `image`: downscaled, then encoded.
     ///
     /// Downscale first. Encoding the full-size capture and shrinking afterwards would spend the
-    /// compression budget on pixels that are about to be thrown away, and would make the tile's
-    /// stated resolution a description of nothing.
-    static func encoded(_ image: CGImage, quality: CaptureQuality) -> Data? {
-        let sized = downscaled(image, longestSide: quality.longestSide) ?? image
-        return data(from: sized, quality: quality)
+    /// compression budget on pixels that are about to be thrown away.
+    static func encoded(_ image: CGImage) -> Data? {
+        let sized = downscaled(image, longestSide: Quality.longestSide) ?? image
+        return data(from: sized)
     }
 
     /// Brings the stored frame image down to the selected tile's longest side.
@@ -1498,7 +1511,7 @@ enum FrameImage {
 
     /// Encodes the stored frame as HEIC at the selected fidelity.
     ///
-    /// The scale `CaptureQuality` moves along was picked by measurement, not taste. Encoding 60 real
+    /// ``FrameImage/Quality/compression`` was picked by measurement, not taste. Encoding 60 real
     /// frames from this machine through this exact path — same downscale, same `CGImageDestination`
     /// call — gave, per frame:
     ///
@@ -1507,19 +1520,19 @@ enum FrameImage {
     ///     heic q0.40   110.2 KB     heic q0.20    68.4 KB  (-63%)
     ///
     /// Note HEIC's quality scale is not JPEG's: 0.5 buys only 28%, and matching a "low" preset from
-    /// `sips` takes roughly 0.15 — which is why the tiles land at 0.40/0.20/0.15/0.10 rather than at
-    /// the round JPEG-shaped numbers a reader would expect. Anyone re-tuning them must re-measure.
+    /// `sips` takes roughly 0.15 — which is why the stored quality is 0.20 rather than one of the
+    /// round JPEG-shaped numbers a reader would expect. Anyone re-tuning it must re-measure.
     ///
     /// **Fidelity used to be the cheap side of this trade and no longer is.** The note here once
     /// read "nothing decodes these files: no MCP tool returns pixels and the uploader sends only
     /// text" — true when it was written, and false since the `look` tool started handing these
-    /// frames to Claude as images. The tile is now also the ceiling on what a model can read off a
-    /// screenshot, and small UI text is the first thing to go, so re-tuning these numbers downward
-    /// is a legibility decision as much as a storage one.
+    /// frames to Claude as images. This number is now also the ceiling on what a model can read off
+    /// a screenshot, and small UI text is the first thing to go, so re-tuning it downward is a
+    /// legibility decision as much as a storage one.
     ///
     /// OCR reads a separate, larger image (``ocrMaxPixelSize``) before this one is written and is
-    /// untouched by the selection.
-    static func data(from image: CGImage, quality: CaptureQuality) -> Data? {
+    /// untouched by it.
+    static func data(from image: CGImage) -> Data? {
         let data = NSMutableData()
         guard
             let destination = CGImageDestinationCreateWithData(
@@ -1533,7 +1546,7 @@ enum FrameImage {
         CGImageDestinationAddImage(
             destination,
             image,
-            [kCGImageDestinationLossyCompressionQuality: quality.compressionQuality] as CFDictionary
+            [kCGImageDestinationLossyCompressionQuality: Quality.compression] as CFDictionary
         )
         guard CGImageDestinationFinalize(destination) else { return nil }
         return data as Data

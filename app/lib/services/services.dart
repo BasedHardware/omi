@@ -84,7 +84,7 @@ class ServiceManager {
     if (!identical(_phoneMic, _mic)) {
       _phoneMic.stop();
     }
-    _device.stop();
+    await _device.stop();
   }
 }
 

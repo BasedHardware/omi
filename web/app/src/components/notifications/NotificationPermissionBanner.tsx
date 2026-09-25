@@ -21,35 +21,35 @@ export function NotificationPermissionBanner() {
   // Permission not yet requested
   if (permission === 'default') {
     return (
-      <div className="px-4 py-3 bg-purple-primary/10 border-b border-purple-primary/20">
+      <div className="border-b border-white/25 bg-white/[0.08] px-4 py-3">
         <div className="flex items-start gap-3">
-          <div className="w-8 h-8 rounded-full bg-purple-primary/20 flex items-center justify-center flex-shrink-0">
-            <Bell className="w-4 h-4 text-purple-primary" />
+          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-white/[0.14]">
+            <Bell className="h-4 w-4 text-text-primary" />
           </div>
-          <div className="flex-1 min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="text-sm font-medium text-text-primary">
               Enable push notifications
             </p>
-            <p className="text-xs text-text-tertiary mt-0.5">
-              Get notified about tasks, daily summaries, and more even when
-              you&apos;re not using Omi
+            <p className="mt-0.5 text-xs text-text-tertiary">
+              Get notified about tasks, daily summaries, and more even when you&apos;re
+              not using Omi
             </p>
-            <div className="flex items-center gap-2 mt-2">
+            <div className="mt-2 flex items-center gap-2">
               <button
                 onClick={handleRequestPermission}
                 disabled={isLoading || isRequesting}
                 className={cn(
-                  'px-3 py-1.5 rounded-lg text-sm font-medium',
-                  'bg-purple-primary text-white',
-                  'hover:bg-purple-secondary transition-colors',
-                  'disabled:opacity-50 disabled:cursor-not-allowed'
+                  'rounded-lg px-3 py-1.5 text-sm font-medium',
+                  'bg-text-primary text-bg-primary',
+                  'transition-colors hover:bg-text-primary/90',
+                  'disabled:cursor-not-allowed disabled:opacity-50',
                 )}
               >
                 {isRequesting ? 'Enabling...' : 'Enable notifications'}
               </button>
               <button
                 onClick={() => setIsDismissed(true)}
-                className="px-3 py-1.5 rounded-lg text-sm text-text-tertiary hover:text-text-secondary transition-colors"
+                className="rounded-lg px-3 py-1.5 text-sm text-text-tertiary transition-colors hover:text-text-secondary"
               >
                 Not now
               </button>
@@ -57,10 +57,10 @@ export function NotificationPermissionBanner() {
           </div>
           <button
             onClick={() => setIsDismissed(true)}
-            className="p-1 rounded-md hover:bg-bg-tertiary transition-colors"
+            className="rounded-md p-1 transition-colors hover:bg-bg-tertiary"
             aria-label="Dismiss"
           >
-            <X className="w-4 h-4 text-text-quaternary" />
+            <X className="h-4 w-4 text-text-quaternary" />
           </button>
         </div>
       </div>
@@ -70,20 +70,19 @@ export function NotificationPermissionBanner() {
   // Permission denied - show instructions
   if (permission === 'denied') {
     return (
-      <div className="px-4 py-3 bg-warning/10 border-b border-warning/20">
+      <div className="border-b border-warning/20 bg-warning/10 px-4 py-3">
         <div className="flex items-start gap-3">
-          <div className="w-8 h-8 rounded-full bg-warning/20 flex items-center justify-center flex-shrink-0">
-            <AlertTriangle className="w-4 h-4 text-warning" />
+          <div className="flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full bg-warning/20">
+            <AlertTriangle className="h-4 w-4 text-warning" />
           </div>
-          <div className="flex-1 min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="text-sm font-medium text-text-primary">
               Notifications are blocked
             </p>
-            <p className="text-xs text-text-tertiary mt-0.5">
-              To enable notifications, you&apos;ll need to update your browser
-              settings:
+            <p className="mt-0.5 text-xs text-text-tertiary">
+              To enable notifications, you&apos;ll need to update your browser settings:
             </p>
-            <ol className="text-xs text-text-tertiary mt-2 space-y-1 list-decimal list-inside">
+            <ol className="mt-2 list-inside list-decimal space-y-1 text-xs text-text-tertiary">
               <li>Click the lock icon in your browser address bar</li>
               <li>Find &quot;Notifications&quot; and set to &quot;Allow&quot;</li>
               <li>Refresh this page</li>
@@ -93,21 +92,21 @@ export function NotificationPermissionBanner() {
               target="_blank"
               rel="noopener noreferrer"
               className={cn(
-                'inline-flex items-center gap-1 mt-2',
-                'text-xs text-purple-primary hover:text-purple-secondary',
-                'transition-colors'
+                'mt-2 inline-flex items-center gap-1',
+                'text-xs text-text-primary hover:text-text-secondary',
+                'transition-colors',
               )}
             >
               Learn more
-              <ExternalLink className="w-3 h-3" />
+              <ExternalLink className="h-3 w-3" />
             </a>
           </div>
           <button
             onClick={() => setIsDismissed(true)}
-            className="p-1 rounded-md hover:bg-bg-tertiary transition-colors"
+            className="rounded-md p-1 transition-colors hover:bg-bg-tertiary"
             aria-label="Dismiss"
           >
-            <X className="w-4 h-4 text-text-quaternary" />
+            <X className="h-4 w-4 text-text-quaternary" />
           </button>
         </div>
       </div>

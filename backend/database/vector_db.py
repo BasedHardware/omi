@@ -6,15 +6,19 @@ import os
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, Callable, Dict, List, Optional, TypedDict, cast
+from functools import wraps
+from typing import Any, Callable, Dict, List, Optional, TypedDict, TypeVar, cast
 
 from pinecone import Pinecone
 
 from database import projection_repair
+from database._client import data_plane_db as default_db_client
+from database.legal_holds import external_write_fence
 from database.memory_vector_metadata import (
     build_archive_memory_vector_filter,
     build_canonical_memory_vector_delete_filter,
     build_default_memory_vector_filter,
+    build_ledger_memory_vector_filter,
     build_memory_vector_metadata,
     canonical_memory_provider_id,
     parse_memory_search_vector_hit,
@@ -24,8 +28,30 @@ from models.conversation_metadata import ConversationMetadataKeys, metadata_list
 from models.product_memory import MemoryItem
 from models.memory_search_gateway import SearchMode, SearchVectorHit
 from utils.llm.clients import embeddings
+from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
+
+R = TypeVar("R")
+
+
+def _account_external_data_write(func: Callable[..., R]) -> Callable[..., R]:
+    """Linearize provider mutations against explicit/account deletion."""
+
+    @wraps(func)
+    def wrapped(account: Any, *args: Any, **kwargs: Any) -> R:
+        # With no provider configured there is no external mutation to fence.
+        # Let the function's established fail-open return contract run without
+        # touching Firestore (important for offline/local deployments).
+        if index is None:
+            return func(account, *args, **kwargs)
+        uid = account.uid if isinstance(account, MemoryItem) else account
+        if not isinstance(uid, str) or not uid:
+            raise ValueError("provider mutation requires an account identity")
+        with external_write_fence(uid, firestore_client=default_db_client):
+            return func(account, *args, **kwargs)
+
+    return wrapped
 
 
 # ---------------------------------------------------------------------------
@@ -115,11 +141,7 @@ def _get_data(uid: str, conversation_id: str, vector: List[float]) -> VectorReco
     }
 
 
-def upsert_vector(uid: str, conversation_id: str, vector: List[float]) -> None:
-    res = index.upsert(vectors=[_get_data(uid, conversation_id, vector)], namespace="ns1")
-    logger.info(f'upsert_vector {res}')
-
-
+@_account_external_data_write
 def upsert_vector2(uid: str, conversation_id: str, vector: List[float], metadata: Dict[str, Any]) -> None:
     if index is None:
         return
@@ -130,6 +152,7 @@ def upsert_vector2(uid: str, conversation_id: str, vector: List[float], metadata
     logger.info(f'upsert_vector {res}')
 
 
+@_account_external_data_write
 def update_vector_metadata(uid: str, conversation_id: str, metadata: Dict[str, Any]) -> Dict[str, Any]:
     if index is None:
         return {}
@@ -137,12 +160,6 @@ def update_vector_metadata(uid: str, conversation_id: str, metadata: Dict[str, A
     metadata['memory_id'] = conversation_id
     result: Dict[str, Any] = index.update(f'{uid}-{conversation_id}', set_metadata=metadata, namespace="ns1")
     return result
-
-
-def upsert_vectors(uid: str, vectors: List[List[float]], conversation_ids: List[str]) -> None:
-    data: List[VectorRecordDoc] = [_get_data(uid, cid, vector) for cid, vector in zip(conversation_ids, vectors)]
-    res = index.upsert(vectors=data, namespace="ns1")
-    logger.info(f'upsert_vectors {res}')
 
 
 def _created_at_filter(starts_at: Optional[int] = None, ends_at: Optional[int] = None) -> Optional[Dict[str, int]]:
@@ -282,6 +299,7 @@ WORKSTREAM_ASSOCIATION_NAMESPACE = "workstream-association-v1"
 WORKSTREAM_ASSOCIATION_SCHEMA_VERSION = 1
 
 
+@_account_external_data_write
 def upsert_workstream_association_vector(
     uid: str,
     workstream_id: str,
@@ -389,6 +407,7 @@ class VectorCandidateQueryResult:
     rejected_count: int = 0
 
 
+@_account_external_data_write
 def upsert_memory_vector(
     uid: str,
     memory_id: str,
@@ -414,7 +433,7 @@ def upsert_memory_vector(
     metadata.update(
         strip_null_metadata_values(
             projection_metadata
-            or memory_projection_metadata(
+            or projection_repair.projection_metadata_for_fact(
                 {'id': memory_id, 'category': category, 'subject_entity_id': subject_entity_id, 'status': 'accepted'}
             )
         )
@@ -431,6 +450,7 @@ def upsert_memory_vector(
     return vector
 
 
+@_account_external_data_write
 def upsert_memory_vectors_batch(uid: str, items: List[Dict[str, Any]]) -> int:
     """
     Upsert many memory embeddings to Pinecone in a single request.
@@ -462,7 +482,7 @@ def upsert_memory_vectors_batch(uid: str, items: List[Dict[str, Any]]) -> int:
         metadata.update(
             strip_null_metadata_values(
                 item.get('projection_metadata')
-                or memory_projection_metadata(
+                or projection_repair.projection_metadata_for_fact(
                     {
                         'id': item['memory_id'],
                         'category': item['category'],
@@ -521,38 +541,7 @@ def find_similar_memories(
     return results
 
 
-def check_memory_duplicate(uid: str, content: str, threshold: float = 0.85) -> Optional[Dict[str, Any]]:
-    """
-    Check if a similar memory already exists.
-    Returns the duplicate info if found, None otherwise.
-    """
-    similar = find_similar_memories(uid, content, threshold=threshold, limit=1)
-    if similar:
-        logger.warning(f'Found duplicate memory: {similar[0]}')
-        return similar[0]
-    return None
-
-
-def search_memories_by_vector(uid: str, query: str, limit: int = 10) -> List[str]:
-    """
-    Semantic search for memories.
-    Returns list of memory_ids ordered by relevance.
-    """
-    if index is None:
-        logger.warning('Pinecone index not initialized, skipping memory search')
-        return []
-
-    vector = embeddings.embed_query(query)
-    filter_data = build_legacy_memory_vector_filter(uid)
-
-    xc = index.query(
-        vector=vector, top_k=limit, include_metadata=True, filter=filter_data, namespace=MEMORIES_NAMESPACE
-    )
-
-    matches: List[Any] = xc.get('matches', [])
-    return [match['metadata'].get('memory_id') for match in matches]
-
-
+@_account_external_data_write
 def upsert_canonical_memory_vector(
     item: MemoryItem,
     *,
@@ -602,8 +591,13 @@ def upsert_canonical_memory_vector(
 def delete_canonical_memory_vectors(uid: str, memory_id: str | None = None) -> bool:
     """Delete canonical vectors by authoritative UID metadata, including legacy bare-ID rows."""
     if index is None:
-        logger.warning('Pinecone index not initialized, skipping canonical memory vector filter delete')
-        return False
+        # No vector store is configured, so no vector copy can exist: the desired
+        # absence is trivially confirmed. Privacy deletion must not fail closed
+        # on a projection the deployment never writes (#10446 regression class —
+        # without this, every explicit memory delete 503s on Pinecone-less
+        # deployments). A configured index that raises still fails closed below.
+        logger.warning('Pinecone index not initialized, nothing to purge for canonical memory vector delete')
+        return True
     delete_filter = build_canonical_memory_vector_delete_filter(uid, memory_id)
     index.delete(filter=delete_filter, namespace=MEMORIES_NAMESPACE)
     logger.info(
@@ -615,22 +609,31 @@ def delete_canonical_memory_vectors(uid: str, memory_id: str | None = None) -> b
 
 
 def query_memory_vector_candidates(
-    uid: str, query: str, *, mode: SearchMode = SearchMode.default, limit: int = 10
+    uid: str,
+    query: str,
+    *,
+    mode: SearchMode = SearchMode.default,
+    limit: int = 10,
+    ledger_kinds: Optional[List[str]] = None,
 ) -> VectorCandidateQueryResult:
     """Query ns2 for canonical neutral-metadata memory vector candidates."""
     if index is None:
         logger.warning('Pinecone index not initialized, skipping canonical memory vector candidate search')
         return VectorCandidateQueryResult()
 
+    bounded_limit = max(1, min(int(limit or 10), 60))
     vector = embeddings.embed_query(query)
-    filter_data = (
-        build_archive_memory_vector_filter(uid)
-        if mode == SearchMode.archive_explicit
-        else build_default_memory_vector_filter(uid)
-    )
+    if ledger_kinds is not None and mode == SearchMode.default:
+        filter_data = build_ledger_memory_vector_filter(uid, ledger_kinds)
+    else:
+        filter_data = (
+            build_archive_memory_vector_filter(uid)
+            if mode == SearchMode.archive_explicit
+            else build_default_memory_vector_filter(uid)
+        )
     response = index.query(
         vector=vector,
-        top_k=limit,
+        top_k=bounded_limit,
         include_metadata=True,
         include_values=False,
         filter=filter_data,
@@ -662,55 +665,6 @@ def delete_memory_vector(uid: str, memory_id: str) -> None:
     logger.info(f'delete_memory_vector {vector_id} {result}')
 
 
-def enqueue_projection_repair(uid: str, fact_id: str, reason: str, source_commit_id: str | None = None) -> List[str]:
-    return projection_repair.enqueue_projection_repairs(
-        uid,
-        {
-            'commit_id': source_commit_id or 'manual',
-            'mutations': [{'type': reason, 'fact_id': fact_id}],
-        },
-    )
-
-
-def memory_projection_metadata(memory: Dict[str, Any], source_commit_id: str | None = None) -> Dict[str, Any]:
-    return projection_repair.projection_metadata_for_fact(memory, source_commit_id=source_commit_id)
-
-
-def repair_memory_projection(uid: str, memory: Dict[str, Any] | None) -> str:
-    if not memory or projection_repair.projection_action_for_fact(memory) == 'delete':
-        memory_id = (memory or {}).get('id')
-        if memory_id:
-            delete_memory_vector(uid, memory_id)
-        return 'delete'
-
-    upsert_memory_vector(
-        uid,
-        memory['id'],
-        memory.get('content', ''),
-        memory.get('category', 'system'),
-        subject_entity_id=memory.get('subject_entity_id'),
-        projection_metadata=memory_projection_metadata(memory),
-    )
-    return projection_repair.projection_action_for_fact(memory)
-
-
-def reconcile_projections(uid: str, facts: List[Dict[str, Any]], vector_fact_ids: List[str]) -> Dict[str, Any]:
-    return projection_repair.reconcile_memory_projection(uid, facts, vector_fact_ids)
-
-
-def process_projection_repair_queue(
-    uid: str,
-    fact_loader: Callable[[str], Optional[Dict[str, Any]]],
-    limit: int = 100,
-) -> Dict[str, Any]:
-    return projection_repair.process_projection_repairs(
-        uid,
-        fact_loader=fact_loader,
-        repair_func=repair_memory_projection,
-        limit=limit,
-    )
-
-
 # ==========================================
 # X (Twitter) Post Vector Functions
 # Semantic search over the user's raw imported tweets/bookmarks.
@@ -719,6 +673,7 @@ def process_projection_repair_queue(
 X_POSTS_NAMESPACE = "ns_x"
 
 
+@_account_external_data_write
 def upsert_x_post_vectors_batch(uid: str, items: List[Dict[str, Any]]) -> int:
     """Upsert X post embeddings in one request. Each item: {'post_id', 'content', 'kind'}.
     Returns the number of vectors written (0 if Pinecone is not configured)."""
@@ -777,6 +732,7 @@ def find_similar_x_posts(uid: str, content: str, limit: int = 10) -> List[Dict[s
 SCREEN_ACTIVITY_NAMESPACE = "ns3"
 
 
+@_account_external_data_write
 def upsert_screen_activity_vectors(uid: str, rows: List[Dict[str, Any]]) -> int:
     """Batch upsert screenshot embeddings to Pinecone ns3."""
     if index is None:
@@ -789,11 +745,13 @@ def upsert_screen_activity_vectors(uid: str, rows: List[Dict[str, Any]]) -> int:
         if not embedding:
             continue
         ts_value: Any = row['timestamp']
-        timestamp = (
-            int(datetime.fromisoformat(ts_value.replace('Z', '+00:00')).timestamp())
-            if isinstance(ts_value, str)
-            else int(ts_value)
-        )
+        if isinstance(ts_value, str):
+            parsed_timestamp = datetime.fromisoformat(ts_value.replace('Z', '+00:00'))
+            if parsed_timestamp.tzinfo is None:
+                parsed_timestamp = parsed_timestamp.replace(tzinfo=timezone.utc)
+            timestamp = int(parsed_timestamp.timestamp())
+        else:
+            timestamp = int(ts_value)
         metadata = {
             "uid": uid,
             "screenshot_id": str(row.get("storageId") or row['id']),
@@ -870,6 +828,7 @@ def delete_screen_activity_vectors(uid: str, ids: List[str]) -> None:
     if index is None:
         return
     vector_ids = [f'{uid}-sa-{sid}' for sid in ids]
+    # Chunk to stay within Pinecone's per-delete id limit (1,000).
     for i in range(0, len(vector_ids), 1000):
         index.delete(ids=vector_ids[i : i + 1000], namespace=SCREEN_ACTIVITY_NAMESPACE)
 
@@ -881,6 +840,7 @@ def delete_screen_activity_vectors(uid: str, ids: List[str]) -> None:
 ACTION_ITEMS_NAMESPACE = "ns4"
 
 
+@_account_external_data_write
 def upsert_action_item_vector(uid: str, action_item_id: str, description: str) -> List[float] | None:
     """Index one action item for semantic search.
 
@@ -916,6 +876,7 @@ def upsert_action_item_vector(uid: str, action_item_id: str, description: str) -
         return None
 
 
+@_account_external_data_write
 def upsert_action_item_vectors_batch(uid: str, items: List[Dict[str, Any]]) -> int:
     """Index a batch of action items. Best-effort, for the same reason as
     ``upsert_action_item_vector``: returns 0 instead of raising into a caller
@@ -955,26 +916,55 @@ def upsert_action_item_vectors_batch(uid: str, items: List[Dict[str, Any]]) -> i
         return 0
 
 
+# Embedding input for action-item similarity is scraped/untrusted text. The
+# embeddings gateway rejects empty or oversized input with a 400, so validate
+# and clip before spending the call; callers degrade to "no candidates".
+_ACTION_ITEM_QUERY_MAX_CHARS = 8000
+
+
+def _prepare_action_item_query(query: str) -> Optional[str]:
+    """Strip, reject empty, and clip untrusted action-item query text."""
+    prepared = (query or "").strip()
+    if not prepared:
+        return None
+    return prepared[:_ACTION_ITEM_QUERY_MAX_CHARS]
+
+
 def search_action_items_by_vector(uid: str, query: str, limit: int = 10, min_score: float = 0.3) -> List[str]:
-    if index is None:
-        logger.warning('Pinecone index not initialized, skipping action item search')
+    prepared_query = _prepare_action_item_query(query)
+    if index is None or prepared_query is None:
+        logger.warning('Pinecone index not initialized or empty query, skipping action item search')
         return []
 
-    vector = embeddings.embed_query(query)
-    filter_data: Dict[str, Any] = {'uid': uid}
+    try:
+        vector = embeddings.embed_query(prepared_query)
+        filter_data: Dict[str, Any] = {'uid': uid}
 
-    xc = index.query(
-        vector=vector, top_k=limit, include_metadata=True, filter=filter_data, namespace=ACTION_ITEMS_NAMESPACE
-    )
+        xc = index.query(
+            vector=vector, top_k=limit, include_metadata=True, filter=filter_data, namespace=ACTION_ITEMS_NAMESPACE
+        )
 
-    matches: List[Any] = xc.get('matches', [])
-    top_score = matches[0]['score'] if matches else None
-    kept = [m for m in matches if m.get('score', 0.0) >= min_score]
-    logger.info(
-        f'search_action_items_by_vector uid={uid} matches={len(matches)} kept={len(kept)} '
-        f'top_score={top_score} min_score={min_score}'
-    )
-    return [m['metadata'].get('action_item_id') for m in kept]
+        matches: List[Any] = xc.get('matches', [])
+        top_score = matches[0]['score'] if matches else None
+        kept = [m for m in matches if m.get('score', 0.0) >= min_score]
+        logger.info(
+            f'search_action_items_by_vector uid={uid} matches={len(matches)} kept={len(kept)} '
+            f'top_score={top_score} min_score={min_score}'
+        )
+        return [m['metadata'].get('action_item_id') for m in kept]
+    except Exception as e:
+        logger.exception(f'search_action_items_by_vector failed uid={uid}: {e}')
+        # Degrade telemetry: without this, a provider outage is indistinguishable
+        # from a genuine no-match search in the empty-list result.
+        record_fallback(
+            component='other',
+            from_mode='action_item_vector_search',
+            to_mode='no_candidates',
+            reason='other',
+            outcome='degraded',
+            log=logger,
+        )
+        return []
 
 
 def find_similar_action_items(uid: str, query: str, threshold: float = 0.6, limit: int = 10) -> List[Dict[str, Any]]:
@@ -989,11 +979,12 @@ def find_similar_action_items(uid: str, query: str, threshold: float = 0.6, limi
     caller treats "no candidates" as "user has nothing relevant," which is
     the same behavior as a brand-new user.
     """
-    if index is None:
+    prepared_query = _prepare_action_item_query(query)
+    if index is None or prepared_query is None:
         return []
 
     try:
-        vector = embeddings.embed_query(query)
+        vector = embeddings.embed_query(prepared_query)
         xc = index.query(
             vector=vector,
             top_k=limit,
@@ -1124,6 +1115,7 @@ def delete_memory_vectors_batch(uid: str, memory_ids: List[str]) -> int:
 TRANSCRIPT_CHUNKS_NAMESPACE = "ns_tchunks"
 
 
+@_account_external_data_write
 def upsert_transcript_chunk_vectors(uid: str, conversation_id: str, chunks: List[Dict[str, Any]]) -> int:
     """chunks: [{'text': str, 'created_at': int unix ts, 'chunk_index': int}]"""
     if index is None:
@@ -1175,7 +1167,6 @@ def search_transcript_chunks(
     # Same one-sided / invalid-range rules as summary vector search (_created_at_filter).
     created_at = _created_at_filter(starts_at, ends_at)
     if (starts_at is not None or ends_at is not None) and created_at is None:
-        logger.warning('Skipping transcript chunk search with invalid date filter')
         return []
     if created_at is not None:
         filter_data['created_at'] = created_at

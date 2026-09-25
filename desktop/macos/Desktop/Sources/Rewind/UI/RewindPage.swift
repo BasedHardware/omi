@@ -7,6 +7,10 @@ import SwiftUI
 /// The timeline is the primary interface, with search results highlighted inline
 struct RewindPage: View {
   var appState: AppState? = nil
+  var brainDestination: MemoryHubDestination? = nil
+  var onSelectBrainDestination: ((MemoryHubDestination) -> Void)? = nil
+  /// Set when Rewind was opened in place of another page (task evidence, a citation).
+  @Environment(\.drillInBack) private var drillInBack
 
   @StateObject private var viewModel = RewindViewModel()
 
@@ -20,6 +24,7 @@ struct RewindPage: View {
 
   @State private var searchViewMode: SearchViewMode? = nil
   @State private var selectedGroupIndex: Int = 0
+  @State private var unavailableCitationScreenshotID: Int64?
   @FocusState private var isSearchFocused: Bool
   @FocusState private var isPageFocused: Bool
 
@@ -59,7 +64,7 @@ struct RewindPage: View {
   }
 
   private var finishButtonText: String {
-    if isFinishing { return "Saving..." }
+    if isFinishing { return "Saving…" }
     if showSavedSuccess { return "Saved!" }
     if showDiscarded { return "Too Short" }
     if showError { return "Failed" }
@@ -111,22 +116,27 @@ struct RewindPage: View {
           VStack(spacing: 0) {
             if isTranscriptExpanded {
               // Expanded transcript + notes view replaces timeline
-              expandedTranscriptView.rewindPlayerPanel(width: player)
+              rewindContentPanel(expandedTranscriptView, width: player)
             } else {
               // Recovery banner (if database was recovered from corruption)
               if viewModel.showRecoveryBanner {
                 recoveryBanner.rewindHeaderPanel(width: header)
               }
 
-              // Unified top bar - search field is always here
-              unifiedTopBar.rewindHeaderPanel(width: header)
+              // Brain uses the same standalone search panel as every primary page. Standalone
+              // Rewind keeps its historical compact header panel.
+              if brainDestination != nil {
+                unifiedTopBar.frame(width: header)
+              } else {
+                unifiedTopBar.rewindHeaderPanel(width: header)
+              }
 
               // Content area changes based on mode
               if isInSearchMode {
                 if viewModel.screenshots.isEmpty {
-                  noSearchResultsView.rewindPlayerPanel(width: player)
+                  rewindContentPanel(noSearchResultsView, width: player)
                 } else if searchViewMode == .timeline {
-                  timelineWithSearch.rewindPlayerPanel(width: player)
+                  rewindContentPanel(timelineWithSearch, width: player)
                 } else {
                   // Already two panels of its own, with its own gap under the bar.
                   fullScreenResultsView(width: header)
@@ -135,10 +145,10 @@ struct RewindPage: View {
                 screenshotCount: viewModel.screenshots.count,
                 historyRange: viewModel.historyRange
               ) {
-                emptyState.rewindPlayerPanel(width: player)
+                rewindContentPanel(emptyState, width: player)
               } else {
                 // Normal timeline view (without top bar, since we have unified one)
-                timelineContentBody.rewindPlayerPanel(width: player)
+                rewindContentPanel(timelineContentBody, width: player)
               }
             }
           }
@@ -146,6 +156,16 @@ struct RewindPage: View {
         }
         .padding(.top, RewindSurfaceLayout.topGap)
         .padding(.bottom, RewindSurfaceLayout.bottomGap)
+      }
+
+      if let screenshotID = unavailableCitationScreenshotID {
+        VStack {
+          citationUnavailableBanner(for: screenshotID)
+          Spacer()
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .padding(.top, RewindSurfaceLayout.topGap)
+        .padding(.horizontal, OmiSpacing.lg)
       }
     }
   }
@@ -199,10 +219,14 @@ struct RewindPage: View {
         currentImage = nil
         currentIndex = 0
         selectedGroupIndex = 0
+        unavailableCitationScreenshotID = nil
         searchViewMode = nil
         selectedSpeakerSegment = nil
         isTranscriptExpanded = false
         LiveTranscriptMonitor.shared.clearSaved()
+        // Cancel the model's in-flight citation admission immediately. The model also carries the
+        // exact owner lease, so a suspended database read cannot insert an old-owner row later.
+        viewModel.invalidateCitationFocus()
       }
       .onReceive(NotificationCenter.default.publisher(for: .expandRewindTranscript)) { _ in
         OmiMotion.withGated(.easeInOut(duration: 0.2)) {
@@ -224,9 +248,9 @@ struct RewindPage: View {
           let currentId = oldScreenshots[currentIndex].id,
           let newIndex = newScreenshots.firstIndex(where: { $0.id == currentId })
         {
-          // Same screenshot found in new array - adjust index
-          currentIndex = newIndex
-          // No need to reload frame - it's the same screenshot
+          currentIndex = RewindTimelineNavigation.sameFrameIndex(
+            old: oldScreenshots.count, new: newScreenshots.count, current: currentIndex, found: newIndex)
+          if currentIndex != newIndex { scheduleLoadCurrentFrame() }
         } else if !newScreenshots.isEmpty {
           // A viewport query may replace every sampled row. Stay near the same visible moment instead
           // of snapping to the newest capture in all of history.
@@ -338,22 +362,85 @@ struct RewindPage: View {
     // notification can arrive while the destination is still mounting; consuming then would lose
     // the citation before Rewind can resolve it.
     guard viewModel.isReadyForCitationFocus,
-      let id = RewindCitationFocusState.shared.consume(),
-      let screenshot = try? await RewindDatabase.shared.getScreenshot(id: id)
+      let request = RewindCitationFocusState.shared.consumeRequest()
     else { return }
 
-    // A citation jump owns the frame transition. Cancel the previous decode and clear its image so
-    // an old day's picture cannot remain visible while the exact target day is being sampled.
-    invalidatePendingFrameLoad()
-    currentImage = nil
-    currentIndex = 0
-    guard await viewModel.focusCitationScreenshot(screenshot),
-      let targetIndex = viewModel.screenshots.firstIndex(where: { $0.id == id })
-    else { return }
+    switch await viewModel.resolveCitationRequest(request) {
+    case .staleOwner:
+      return
+    case .unavailable:
+      guard RewindCitationFocusState.isCurrent(owner: request.owner) else { return }
+      unavailableCitationScreenshotID = request.screenshotID
+      return
+    case .found(let screenshot):
+      guard RewindCitationFocusState.isCurrent(owner: request.owner) else { return }
 
-    currentIndex = targetIndex
-    trackWindow.reveal(screenshot.timestamp.timeIntervalSince1970)
-    scheduleLoadCurrentFrame()
+      // A citation jump owns the frame transition. Cancel the previous decode and clear its image
+      // so an old day's picture cannot remain visible while the exact target day is sampled.
+      invalidatePendingFrameLoad()
+      currentImage = nil
+      currentIndex = 0
+
+      switch await viewModel.focusCitationScreenshotResult(
+        screenshot,
+        ownerLease: request.owner
+      ) {
+      case .staleOwner:
+        return
+      case .unavailable:
+        guard RewindCitationFocusState.isCurrent(owner: request.owner) else { return }
+        unavailableCitationScreenshotID = request.screenshotID
+        return
+      case .focused:
+        guard let targetIndex = viewModel.screenshots.firstIndex(where: { $0.id == request.screenshotID })
+        else {
+          guard RewindCitationFocusState.isCurrent(owner: request.owner) else { return }
+          unavailableCitationScreenshotID = request.screenshotID
+          return
+        }
+
+        guard RewindCitationFocusState.isCurrent(owner: request.owner) else { return }
+        unavailableCitationScreenshotID = nil
+        currentIndex = targetIndex
+        trackWindow.reveal(screenshot.timestamp.timeIntervalSince1970)
+        scheduleLoadCurrentFrame()
+      }
+    }
+  }
+
+  private func citationUnavailableBanner(for screenshotID: Int64) -> some View {
+    HStack(spacing: OmiSpacing.sm) {
+      Image(systemName: "exclamationmark.triangle.fill")
+        .foregroundColor(PageGlass.warning)
+        .scaledFont(size: OmiType.body)
+
+      VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
+        Text(RewindCitationUnavailablePresentationPolicy.title)
+          .scaledFont(size: OmiType.caption, weight: .semibold)
+          .foregroundColor(Ink.primary)
+        Text(RewindCitationUnavailablePresentationPolicy.message(for: screenshotID))
+          .scaledFont(size: OmiType.micro)
+          .foregroundColor(Ink.secondary)
+      }
+
+      Spacer(minLength: OmiSpacing.xs)
+
+      Button("Dismiss") {
+        unavailableCitationScreenshotID = nil
+      }
+      .buttonStyle(.plain)
+      .scaledFont(size: OmiType.micro, weight: .medium)
+      .foregroundColor(PageGlass.primaryActionLabel)
+      .accessibilityIdentifier("rewind-citation-unavailable-dismiss")
+    }
+    .padding(.horizontal, OmiSpacing.md)
+    .padding(.vertical, OmiSpacing.sm)
+    .glassCard(cornerRadius: PageGlass.chipRadius, emphasized: false)
+    .accessibilityIdentifier("rewind-citation-unavailable")
+    .accessibilityElement(children: .combine)
+    .accessibilityLabel(RewindCitationUnavailablePresentationPolicy.title)
+    .accessibilityValue(RewindCitationUnavailablePresentationPolicy.message(for: screenshotID))
+    .accessibilityHint(RewindCitationUnavailablePresentationPolicy.hint)
   }
 
   /// The AppKit track owns wheel/swipe input and forwards only gestures that begin on the timeline.
@@ -373,7 +460,7 @@ struct RewindPage: View {
         .foregroundColor(Ink.secondary)
 
       if viewModel.isSearching {
-        Text("Searching...")
+        Text("Searching…")
           .scaledFont(size: OmiType.subheading, weight: .medium)
           .foregroundColor(Ink.secondary)
       } else {
@@ -393,21 +480,156 @@ struct RewindPage: View {
   // MARK: - Unified Top Bar (persistent search field)
 
   private var unifiedTopBar: some View {
+    Group {
+      if brainDestination != nil {
+        QuerySearchBar(
+          text: $viewModel.searchQuery,
+          accessibilityID: "rewind-search-field",
+          placeholder: "Search Rewind",
+          focus: $isSearchFocused, searchSurface: .rewind
+        )
+        .onChange(of: viewModel.searchQuery) { _, query in
+          if query.isEmpty { searchViewMode = nil }
+        }
+      } else {
+        unifiedTopBarControls
+          .padding(.horizontal, OmiSpacing.xxl)
+          .padding(.vertical, OmiSpacing.md)
+      }
+    }
+  }
+
+  @ViewBuilder
+  private func rewindContentPanel<Content: View>(_ content: Content, width: CGFloat) -> some View {
+    if brainDestination != nil {
+      VStack(alignment: .leading, spacing: 0) {
+        brainNavigationRow
+        content.frame(maxWidth: .infinity, maxHeight: .infinity)
+      }
+      .rewindPlayerPanel(width: width)
+    } else {
+      content.rewindPlayerPanel(width: width)
+    }
+  }
+
+  @ViewBuilder
+  private var brainNavigationRow: some View {
+    if let brainDestination, let onSelectBrainDestination {
+      HStack(spacing: OmiSpacing.md) {
+        if let drillInBack {
+          BackChip(drillInBack.title, accessibilityIdentifier: "rewind-drill-in-back", action: drillInBack.action)
+        }
+        BrainSectionNavigation(
+          selected: brainDestination,
+          onSelect: onSelectBrainDestination
+        )
+        Spacer(minLength: OmiSpacing.sm)
+        rewindBrainActions
+      }
+      .padding(.horizontal, QueryShellLayout.panelPaddingHorizontal)
+      .padding(.top, BrainSectionPageMetrics.navigationTopPadding)
+      .padding(.bottom, BrainSectionPageMetrics.navigationBottomPadding)
+    }
+  }
+
+  private var rewindBrainActions: some View {
+    HStack(spacing: OmiSpacing.sm) {
+      if isInSearchMode {
+        searchViewModeButton(
+          title: "Results", icon: "list.bullet", mode: .results)
+        searchViewModeButton(
+          title: "Timeline", icon: "timeline.selection", mode: .timeline)
+      }
+
+      if isInSearchMode {
+        Rectangle()
+          .fill(Ink.separator)
+          .frame(width: 1, height: 18)
+          .accessibilityHidden(true)
+      }
+
+      rewindMoreMenu
+
+      captureStateControl
+    }
+  }
+
+  private func searchViewModeButton(title: String, icon: String, mode: SearchViewMode) -> some View {
+    let isActive = searchViewMode == mode
+    return Button {
+      if mode == .timeline {
+        if searchViewMode != .timeline && !viewModel.screenshots.isEmpty { currentIndex = 0 }
+        searchViewMode = .timeline
+        scheduleLoadCurrentFrame()
+      } else {
+        searchViewMode = .results
+      }
+    } label: {
+      PageQueryActionLabel(icon: icon, title: title, isPrimary: isActive)
+    }
+    .buttonStyle(.plain)
+    .help("Show search \(title.lowercased())")
+    .accessibilityLabel("Search \(title.lowercased())")
+    .accessibilityAddTraits(isActive ? .isSelected : [])
+  }
+
+  private var rewindMoreMenu: some View {
+    PageMoreMenu(help: "More Rewind actions", accessibilityIdentifier: "rewind-more-actions") {
+      Button {
+        NotificationCenter.default.post(name: .navigateToRewindSettings, object: nil)
+      } label: {
+        Label("Rewind settings…", systemImage: "gearshape")
+      }
+    }
+  }
+
+  /// The switch still owns the capture action, but the surrounding control names its state so it
+  /// cannot be mistaken for an unlabeled status light. The health-specific help preserves the
+  /// reason when capture is paused or recovering.
+  private var captureStateControl: some View {
+    HStack(spacing: OmiSpacing.xs) {
+      Text(captureStateLabel)
+        .scaledFont(size: OmiType.caption, weight: .semibold)
+        .foregroundStyle(Ink.primary)
+        .lineLimit(1)
+        .accessibilityHidden(true)
+      rewindToggle
+    }
+    .padding(.horizontal, OmiSpacing.sm)
+    .frame(height: QueryShellLayout.chipHeight)
+    .background {
+      Capsule(style: .continuous)
+        .fill(Ink.rowFill)
+        .overlay { Capsule(style: .continuous).stroke(Ink.separator, lineWidth: 1) }
+    }
+    .contentShape(Capsule(style: .continuous))
+    .help(captureStateHelp)
+  }
+
+  /// The knob shows the setting (right = capture enabled); the label shows reality.
+  /// "Off" therefore only ever appears next to a left knob — when capture is enabled
+  /// but health reports it not flowing, the label names the failure instead, or the
+  /// control reads as contradicting itself (red pill, knob right, "Capture Off").
+  private var captureStateLabel: String {
+    switch screenCaptureHealth {
+    case .active: return "Capture On"
+    case .temporarilyUnavailable: return "Capture Paused"
+    case .recovering: return "Capture Recovering"
+    case .stopped: return isMonitoring ? "Capture Stopped" : "Capture Off"
+    }
+  }
+
+  private var captureStateHelp: String {
+    "\(screenCaptureHealth.statusText). Click to turn screen capture \(isMonitoring ? "off" : "on")."
+  }
+
+  private var unifiedTopBarControls: some View {
     HStack(spacing: OmiSpacing.md) {
       // Left side: Back button (search timeline mode) or Rewind logo (other modes)
       if isInSearchMode && searchViewMode == .timeline {
-        Button {
+        BackChip("Results") {
           searchViewMode = .results
-        } label: {
-          Image(systemName: "chevron.left")
-            .scaledFont(size: OmiType.caption, weight: .semibold)
-            .foregroundColor(Ink.secondary)
-            .frame(width: 28, height: 28)
-            .background(Ink.rowFill)
-            .clipShape(Circle())
         }
-        .buttonStyle(.plain)
-        .help("Back to results")
       } else {
         // Rewind title
         HStack(spacing: OmiSpacing.sm) {
@@ -480,35 +702,10 @@ struct RewindPage: View {
 
       Spacer()
 
-      // Settings
-      Button {
-        NotificationCenter.default.post(
-          name: .navigateToRewindSettings,
-          object: nil
-        )
-      } label: {
-        Image(systemName: "gearshape")
-          .scaledFont(size: OmiType.caption)
-          .foregroundColor(Ink.secondary)
-      }
-      .buttonStyle(.plain)
-      .help("Rewind Settings")
+      rewindMoreMenu
 
-      // Rewind on/off toggle (screen capture only)
-      if let badgeText = screenCaptureHealth.rewindBadgeText {
-        Text(badgeText)
-          .scaledFont(size: OmiType.micro, weight: .medium)
-          .foregroundColor(PageGlass.warning)
-          .padding(.horizontal, OmiSpacing.xs)
-          .padding(.vertical, OmiSpacing.hairline)
-          .background(PageGlass.warning.opacity(0.15))
-          .cornerRadius(OmiChrome.stripRadius)
-          .help(screenCaptureHealth.statusText)
-      }
-      rewindToggle
+      captureStateControl
     }
-    .padding(.horizontal, OmiSpacing.xxl)
-    .padding(.vertical, OmiSpacing.md)
   }
 
   // MARK: - Timeline Content Body (without top bar)
@@ -520,7 +717,8 @@ struct RewindPage: View {
       frameDisplay
         .frame(maxHeight: .infinity)
 
-      // Timeline and controls at bottom
+      // The picture's own controls, then the track
+      stageControls
       bottomControls
     }
   }
@@ -532,35 +730,74 @@ struct RewindPage: View {
   /// The panel owns its own grid, filter block, height clamp and scrolling
   /// (`RewindSearchResultsPanel`); the page keeps only what is genuinely the page's — which group is
   /// selected, and what opening one does.
+  @ViewBuilder
   private func fullScreenResultsView(width: CGFloat) -> some View {
-    RewindSearchResultsSurface(
+    if brainDestination != nil {
+      GeometryReader { proxy in
+        VStack(alignment: .leading, spacing: 0) {
+          brainNavigationRow
+          rewindSearchResultsPanel(
+            width: width,
+            availableBodyHeight: max(
+              0,
+              proxy.size.height - BrainSectionPageMetrics.navigationHeight
+                - RewindSearchLayout.panelHeaderHeight - RewindSearchLayout.panelGap
+                - RewindSearchLayout.shadowMargin
+            )
+          )
+        }
+        .frame(width: width, alignment: .top)
+        .inkGlassPanel(cornerRadius: RewindSearchLayout.panelCornerRadius, shadow: .ambient)
+        .padding(.top, RewindSearchLayout.panelGap)
+        .frame(maxWidth: .infinity, alignment: .top)
+      }
+    } else {
+      RewindSearchResultsSurface(
+        groups: viewModel.groupedSearchResults,
+        query: viewModel.activeSearchQuery ?? "",
+        totalScreenshots: viewModel.totalScreenshotCount,
+        selectedIndex: $selectedGroupIndex,
+        panelWidth: width,
+        onOpen: openSearchResult
+      )
+      .onChange(of: selectedGroupIndex) { _, _ in
+        invalidatePendingFrameLoad()
+      }
+    }
+  }
+
+  private func rewindSearchResultsPanel(
+    width: CGFloat,
+    availableBodyHeight: CGFloat
+  ) -> some View {
+    RewindSearchResultsPanel(
       groups: viewModel.groupedSearchResults,
       query: viewModel.activeSearchQuery ?? "",
       totalScreenshots: viewModel.totalScreenshotCount,
       selectedIndex: $selectedGroupIndex,
-      panelWidth: width
-    ) { groupIndex in
-      // Set the screenshots to this group's screenshots for timeline navigation
-      selectedGroupIndex = groupIndex
-      currentIndex = 0
-      searchViewMode = .timeline
-      // Search now spans the whole history, so the opened group is frequently not from the day the
-      // page was showing. Move the day control onto it rather than leaving it asserting "today"
-      // over a frame from weeks ago — and so that clearing the search lands on that day.
-      let groups = viewModel.groupedSearchResults
-      if groups.indices.contains(groupIndex) {
-        viewModel.alignSelectedDay(to: groups[groupIndex].startTime)
-        trackWindow.center(on: groups[groupIndex].startTime.timeIntervalSince1970)
-        viewModel.rememberTimelineWindow(
-          from: trackWindow.start,
-          to: trackWindow.start + trackWindow.span
-        )
-      }
-      scheduleLoadCurrentFrame()
-    }
+      panelWidth: width,
+      availableBodyHeight: availableBodyHeight,
+      onOpen: openSearchResult
+    )
     .onChange(of: selectedGroupIndex) { _, _ in
       invalidatePendingFrameLoad()
     }
+  }
+
+  private func openSearchResult(_ groupIndex: Int) {
+    selectedGroupIndex = groupIndex
+    currentIndex = 0
+    searchViewMode = .timeline
+    let groups = viewModel.groupedSearchResults
+    if groups.indices.contains(groupIndex) {
+      viewModel.alignSelectedDay(to: groups[groupIndex].startTime)
+      trackWindow.center(on: groups[groupIndex].startTime.timeIntervalSince1970)
+      viewModel.rememberTimelineWindow(
+        from: trackWindow.start,
+        to: trackWindow.start + trackWindow.span
+      )
+    }
+    scheduleLoadCurrentFrame()
   }
 
   /// Screenshots for the currently selected group (used in timeline view)
@@ -606,7 +843,8 @@ struct RewindPage: View {
       frameDisplay
         .frame(maxHeight: .infinity)
 
-      // Timeline and controls
+      // The picture's own controls, then the track
+      stageControls
       bottomControls
     }
   }
@@ -618,6 +856,7 @@ struct RewindPage: View {
   private func searchField(showResultsCount: Bool = false) -> some View {
     RewindSearchBar(
       query: $viewModel.searchQuery,
+      placeholder: "Search Rewind",
       isSearching: viewModel.isSearching,
       countLabel: showResultsCount && viewModel.activeSearchQuery != nil
         ? RewindSearchResultsPanel.countLabel(
@@ -630,6 +869,7 @@ struct RewindPage: View {
         searchViewMode = nil
       }
     )
+    .focusesOnFind($isSearchFocused)
     .frame(maxWidth: RewindSearchLayout.panelWidth * 0.6)
   }
 
@@ -741,8 +981,7 @@ struct RewindPage: View {
     GeometryReader { geometry in
       if isLoadingFrame && currentImage == nil {
         ProgressView()
-          .progressViewStyle(.circular)
-          .scaleEffect(1.2)
+          .controlSize(.regular)
           .tint(Ink.surface)
           .frame(width: geometry.size.width, height: geometry.size.height)
       } else if let image = currentImage, image.size.height > 0, image.size.width > 0, geometry.size.height > 0,
@@ -769,10 +1008,21 @@ struct RewindPage: View {
               }
             }
             .clipShape(frameShape)
-            // A border keyed to the app the frame belongs to, so the picture and its segment on the
-            // track are visibly the same stretch of the day.
-            .overlay(frameShape.strokeBorder(frameBorderColor, lineWidth: 2))
+            // A neutral hairline, never the app's palette colour: the track segment already says which
+            // app this is, and a coloured ring around a photograph of a screen reads as a selection
+            // state rather than as a frame. The hairline only keeps a white capture from dissolving
+            // into the light glass under it.
+            .overlay(frameShape.strokeBorder(Ink.hairline, lineWidth: 1))
             .shadow(color: .black.opacity(0.08), radius: 8)
+            // **The stage is a preview, not the frame.** It is fit to whatever the pane happens to
+            // be, which on a half-width window is a fraction of a 5120pt capture — enough to
+            // recognise the moment and not enough to read a line of it, which is the whole reason
+            // someone scrubbed to it. Clicking opens the real thing in Quick Look, at full
+            // resolution, with the rest of the day's frames behind the arrow keys.
+            .contentShape(frameShape)
+            .onTapGesture { openCurrentFrameFullSize() }
+            .help("Open this frame in Quick Look")
+            .contextMenu { Button("Quick Look", action: openCurrentFrameFullSize) }
         }
         .frame(width: geometry.size.width, height: geometry.size.height)
       } else {
@@ -797,29 +1047,35 @@ struct RewindPage: View {
     }
     .padding(.horizontal, RewindStageFit.horizontalInset)
     .padding(.vertical, RewindStageFit.verticalInset)
-    .overlay {
-      RewindStageChrome(
-        screenshots: activeScreenshots,
-        currentIndex: currentIndex,
-        // The overlay lands on the *padded* stage, so the chrome re-derives the picture's rect in
-        // that space. It needs the frame's shape to do it.
-        imageSize: currentImage?.size,
-        window: trackWindow,
-        onSelect: { seekToIndex($0) },
-        showsDatePicker: $showDatePicker,
-        datePicker: AnyView(dayPicker))
-    }
+  }
+
+  /// Every control the picture owns — the date pill, the previous/next app circles and the zoom
+  /// cluster — on the glass directly under it. Nothing is overlaid on the picture itself.
+  private var stageControls: some View {
+    RewindStageControlBar(
+      screenshots: activeScreenshots,
+      currentIndex: currentIndex,
+      window: trackWindow,
+      showsDatePicker: $showDatePicker,
+      datePicker: AnyView(dayPicker),
+      onSelect: { seekToIndex($0) })
   }
 
   private var frameShape: RoundedRectangle {
     RoundedRectangle(cornerRadius: 10, style: .continuous)
   }
 
-  /// Nil is an honest outcome: with no frame resolved the border is a neutral hairline rather than an
-  /// invented colour.
-  private var frameBorderColor: Color {
-    guard activeScreenshots.indices.contains(currentIndex) else { return Ink.hairline }
-    return RewindPalette.color(forApp: activeScreenshots[currentIndex].appName)
+  /// Hand the whole visible run to Quick Look, positioned on the frame that is on the stage.
+  ///
+  /// The run and not the single frame, because Quick Look steps left and right through whatever it
+  /// is given — so this makes the arrow keys walk the same sequence the track does, which is the
+  /// behaviour someone who opened a frame from a timeline already expects.
+  private func openCurrentFrameFullSize() {
+    let screenshots = activeScreenshots
+    guard screenshots.indices.contains(currentIndex) else { return }
+    let frames = screenshots.map { QuickLookFrame(screenshot: $0) }
+    ScreenFrameQuickLook.shared.present(
+      frames, startingAt: frames[currentIndex].id)
   }
 
   // MARK: - Bottom Controls
@@ -1147,16 +1403,9 @@ struct RewindPage: View {
         .disabled(viewModel.isRebuilding)
       }
 
-      Button {
-        OmiMotion.withGated(.easeOut(duration: 0.2)) {
-          viewModel.dismissRecoveryBanner()
-        }
-      } label: {
-        Image(systemName: "xmark")
-          .scaledFont(size: OmiType.caption, weight: .medium)
-          .foregroundColor(Ink.secondary)
-      }
-      .buttonStyle(.plain)
+      DismissButton(
+        action: { viewModel.dismissRecoveryBanner() }, showBackground: false, accessibilityLabel: "Dismiss",
+        size: .compact)
     }
     .padding(.horizontal, OmiSpacing.lg)
     .padding(.vertical, OmiSpacing.sm)
@@ -1190,53 +1439,19 @@ struct RewindPage: View {
   }
 
   private var loadingView: some View {
-    VStack(spacing: OmiSpacing.md) {
-      ProgressView()
-        .progressViewStyle(.circular)
-        .scaleEffect(1.2)
-        .tint(Ink.surface)
-
-      Text("Loading screenshots...")
-        .scaledFont(size: OmiType.body)
-        .foregroundColor(Ink.secondary)
+    TransparentWindowStatusPanel {
+      GlassLoadingState(label: "Loading screenshots…", placement: .panel)
     }
   }
 
   private func errorView(_: String) -> some View {
-    VStack(spacing: OmiSpacing.lg) {
-      ZStack {
-        Circle()
-          .fill(Ink.errorRed.opacity(0.1))
-          .frame(width: 80, height: 80)
-
-        Image(systemName: "exclamationmark.triangle")
-          .scaledFont(size: 36)
-          .foregroundColor(Ink.errorRed)
-      }
-
-      Text("Failed to Load Screenshots")
-        .scaledFont(size: OmiType.heading, weight: .semibold)
-        .foregroundColor(Ink.primary)
-
-      Text("Try again. If this continues, restart Omi.")
-        .scaledFont(size: OmiType.body)
-        .foregroundColor(Ink.secondary)
-
-      Button {
-        Task { await viewModel.loadInitialData() }
-      } label: {
-        HStack(spacing: OmiSpacing.xs) {
-          Image(systemName: "arrow.clockwise")
-          Text("Retry")
-        }
-        .scaledFont(size: OmiType.body, weight: .medium)
-        .foregroundColor(PageGlass.primaryActionLabel)
-        .padding(.horizontal, OmiSpacing.xl)
-        .padding(.vertical, OmiSpacing.sm)
-        .background(Ink.primary)
-        .cornerRadius(OmiChrome.elementRadius)
-      }
-      .buttonStyle(.plain)
+    TransparentWindowStatusPanel {
+      GlassErrorState(
+        title: "Couldn't Load Screenshots",
+        message: "Try again. If this continues, restart Omi.",
+        placement: .panel,
+        retry: { Task { await viewModel.loadInitialData() } }
+      )
     }
   }
 
@@ -1247,35 +1462,20 @@ struct RewindPage: View {
 
   private var expandedTranscriptView: some View {
     VStack(spacing: 0) {
-      // Show a back bar only when the recording bar is not visible
-      if appState?.isTranscribing != true && appState?.isSavingConversation != true {
-        HStack(spacing: OmiSpacing.sm) {
-          Button {
-            OmiMotion.withGated(.easeInOut(duration: 0.2)) {
-              isTranscriptExpanded = false
-              LiveTranscriptMonitor.shared.clearSaved()
-            }
-          } label: {
-            HStack(spacing: OmiSpacing.xxs) {
-              Image(systemName: "chevron.up")
-                .scaledFont(size: OmiType.caption, weight: .semibold)
-              Text("Back to Rewind")
-                .scaledFont(size: OmiType.body, weight: .medium)
-            }
-            .foregroundColor(Ink.secondary)
-            .padding(.horizontal, OmiSpacing.sm)
-            .padding(.vertical, OmiSpacing.xs)
-            .background(Ink.rowFill)
-            .cornerRadius(OmiChrome.badgeRadius)
+      // The expanded transcript replaced the timeline, so it leaves the way every drill-in does —
+      // and the way out stays visible while recording too, instead of hiding behind the bar.
+      HStack(spacing: OmiSpacing.sm) {
+        BackChip("Rewind") {
+          OmiMotion.withGated(.easeInOut(duration: 0.2)) {
+            isTranscriptExpanded = false
+            LiveTranscriptMonitor.shared.clearSaved()
           }
-          .buttonStyle(.plain)
-
-          Spacer()
         }
-        .padding(.horizontal, OmiSpacing.lg)
-        .padding(.vertical, OmiSpacing.sm)
-        .background(Ink.rowFillHover.opacity(0.8))
+
+        Spacer()
       }
+      .padding(.horizontal, OmiSpacing.lg)
+      .padding(.vertical, OmiSpacing.sm)
 
       // Split panel: transcript (left) + notes (right)
       GeometryReader { geometry in
@@ -1390,12 +1590,12 @@ struct RewindPage: View {
         .onAppear { isSavingPulsing = true }
         .onDisappear { isSavingPulsing = false }
 
-        Text("Saving conversation...")
+        Text("Saving conversation…")
           .scaledFont(size: OmiType.body, weight: .medium)
           .foregroundColor(Ink.primary)
 
         ProgressView()
-          .scaleEffect(0.7)
+          .controlSize(.small)
       }
 
       Spacer()
@@ -1408,8 +1608,7 @@ struct RewindPage: View {
           HStack(spacing: OmiSpacing.xs) {
             if isFinishing {
               ProgressView()
-                .scaleEffect(0.5)
-                .frame(width: 12, height: 12)
+                .controlSize(.small)
             } else if showSavedSuccess {
               Image(systemName: "checkmark")
                 .scaledFont(size: OmiType.caption, weight: .bold)
@@ -1470,7 +1669,7 @@ struct RewindPage: View {
       let result = await appState.finishConversation()
       isFinishing = false
       switch result {
-      case .saved:
+      case .saved, .busy:  // .busy: an in-flight rotation already owns the finish
         OmiMotion.withGated(.easeInOut(duration: 0.3)) {
           showSavedSuccess = true
         }

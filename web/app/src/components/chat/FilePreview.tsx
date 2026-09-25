@@ -1,7 +1,7 @@
 'use client';
 
 import { X, FileText, Image as ImageIcon, Loader2 } from 'lucide-react';
-import Image from 'next/image';
+import Image from '@tschk/moonshine-next/image';
 import { cn } from '@/lib/utils';
 
 interface FilePreviewItem {
@@ -25,14 +25,14 @@ export function FilePreview({ files, onRemove, disabled }: FilePreviewProps) {
   if (files.length === 0) return null;
 
   return (
-    <div className="flex gap-2 px-4 py-3 overflow-x-auto">
+    <div className="flex gap-2 overflow-x-auto px-4 py-3">
       {files.map((item, index) => (
         <div
           key={index}
           className={cn(
-            'relative flex-shrink-0 w-16 h-16 rounded-lg overflow-hidden',
-            'bg-bg-tertiary border border-bg-quaternary',
-            'group'
+            'relative h-16 w-16 flex-shrink-0 overflow-hidden rounded-lg',
+            'border border-bg-quaternary bg-bg-tertiary',
+            'group',
           )}
         >
           {/* Preview content */}
@@ -44,9 +44,9 @@ export function FilePreview({ files, onRemove, disabled }: FilePreviewProps) {
               className="object-cover"
             />
           ) : (
-            <div className="w-full h-full flex flex-col items-center justify-center p-1">
-              <FileText className="w-6 h-6 text-text-tertiary mb-1" />
-              <span className="text-[10px] text-text-quaternary truncate max-w-full px-1">
+            <div className="flex h-full w-full flex-col items-center justify-center p-1">
+              <FileText className="mb-1 h-6 w-6 text-text-tertiary" />
+              <span className="max-w-full truncate px-1 text-[10px] text-text-quaternary">
                 {item.file.name.split('.').pop()?.toUpperCase()}
               </span>
             </div>
@@ -54,8 +54,8 @@ export function FilePreview({ files, onRemove, disabled }: FilePreviewProps) {
 
           {/* Upload loading overlay */}
           {item.uploading && (
-            <div className="absolute inset-0 bg-black/50 flex items-center justify-center">
-              <Loader2 className="w-5 h-5 text-white animate-spin" />
+            <div className="absolute inset-0 flex items-center justify-center bg-black/50">
+              <Loader2 className="h-5 w-5 animate-spin text-white" />
             </div>
           )}
 
@@ -64,21 +64,21 @@ export function FilePreview({ files, onRemove, disabled }: FilePreviewProps) {
             <button
               onClick={() => onRemove(index)}
               className={cn(
-                'absolute -top-1 -right-1 w-5 h-5 rounded-full',
-                'bg-bg-primary border border-bg-tertiary',
+                'absolute -right-1 -top-1 h-5 w-5 rounded-full',
+                'border border-bg-tertiary bg-bg-primary',
                 'flex items-center justify-center',
-                'opacity-0 group-hover:opacity-100 transition-opacity',
-                'hover:bg-error hover:border-error hover:text-white'
+                'opacity-0 transition-opacity group-hover:opacity-100',
+                'hover:border-error hover:bg-error hover:text-white',
               )}
             >
-              <X className="w-3 h-3" />
+              <X className="h-3 w-3" />
             </button>
           )}
 
           {/* Uploaded indicator */}
           {item.uploadedId && !item.uploading && (
             <div className="absolute bottom-0 left-0 right-0 bg-green-500/80 py-0.5">
-              <span className="text-[8px] text-white text-center block">Ready</span>
+              <span className="block text-center text-[8px] text-white">Ready</span>
             </div>
           )}
         </div>
@@ -103,6 +103,7 @@ export const ALLOWED_FILE_TYPES = {
   ],
 };
 
-export const ALLOWED_EXTENSIONS = '.jpg,.jpeg,.png,.gif,.webp,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md';
+export const ALLOWED_EXTENSIONS =
+  '.jpg,.jpeg,.png,.gif,.webp,.pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.md';
 
 export const MAX_FILES = 4;

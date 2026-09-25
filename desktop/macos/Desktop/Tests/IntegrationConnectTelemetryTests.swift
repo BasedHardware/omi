@@ -164,10 +164,14 @@ final class IntegrationConnectTelemetryTests: XCTestCase {
     XCTAssertEqual(IntegrationConnectTelemetry.ErrorClass(CalendarFailureClass.network), .network)
   }
 
+  /// `nudge` joined the set when proactive integration nudges shipped: a
+  /// nudge-sourced connect must be separable from an Apps-tab connect, or the
+  /// nudge's conversion cannot be measured against the tab it competes with.
+  /// The guard is unchanged in kind — the set is still closed and exact.
   func testSurfaceEnumIsClosedSet() {
     XCTAssertEqual(
       Set(IntegrationConnectTelemetry.Surface.allCases.map(\.rawValue)),
-      ["apps", "onboarding"])
+      ["apps", "onboarding", "nudge"])
   }
 
   func testNoContentFailureClassIsNotReconnectRequired() {

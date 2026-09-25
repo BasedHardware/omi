@@ -76,22 +76,8 @@ struct SettingsPage: View {
     ScrollViewReader { proxy in
       ScrollView {
         VStack(spacing: 0) {
-          // The pane's own heading. Open Runde at display size — the one run on this surface above
-          // `Font.inkDisplayThreshold`, which is what decides the face; everything below it stays SF
-          // Pro, because that is what a native macOS app sets a settings pane in.
-          HStack {
-            Text(selectedSection.displayTitle)
-              .inkStyle(.stepHeadline, color: Ink.primary)
-              .id(selectedSection)
-              .transition(.opacity)
-              .omiAnimation(.easeInOut(duration: 0.15), value: selectedSection)
-
-            Spacer()
-          }
-          .padding(.horizontal, SettingsGlassMetrics.paneHorizontalPadding)
-          .padding(.top, SettingsGlassMetrics.paneTopPadding)
-          .padding(.bottom, SettingsGlassMetrics.sectionSpacing)
-
+          // The selected sidebar row already names the destination. Repeating
+          // it as a large page title consumed a row without adding context.
           SettingsContentView(
             appState: appState,
             selectedSection: $selectedSection,
@@ -100,6 +86,7 @@ struct SettingsPage: View {
             showResetOnboardingConfirm: $showResetOnboardingConfirm
           )
           .padding(.horizontal, SettingsGlassMetrics.paneHorizontalPadding)
+          .padding(.top, SettingsGlassMetrics.paneTopPadding)
           .padding(.bottom, SettingsGlassMetrics.paneBottomPadding)
 
           Spacer()
@@ -197,6 +184,19 @@ struct SettingsContentView: View {
   @AppStorage(DefaultsKey.chatScreenshotSharingEnabled.rawValue)
   var chatScreenshotSharingEnabled: Bool = true
 
+  // Offline cache of the server's `meeting_note_screenshots_enabled` account setting; read
+  // synchronously by MeetingNoteScreenshotsFeature.isEnabled so the feature gate never blocks on
+  // the network. The account setting itself (GET/PATCH `v1/screen-frame-egress/settings`) is
+  // authoritative — see `loadMeetingNoteScreenshotsSetting()` /
+  // `updateMeetingNoteScreenshotsSetting(enabled:)` in SettingsContentView+Rewind.swift. Default on.
+  @AppStorage(DefaultsKey.meetingNoteScreenshotsEnabled.rawValue)
+  var meetingNoteScreenshotsEnabled: Bool = true
+
+  // Guards against the read-on-appear (`loadMeetingNoteScreenshotsSetting`) reconciling
+  // `meetingNoteScreenshotsEnabled` with the server's value from also being mistaken for a user
+  // edit and PATCHed straight back — see the toggle's `onChange` in SettingsContentView+Rewind.swift.
+  @State var isSyncingMeetingNoteScreenshotsFromServer = false
+
   // The sole ambient-audio preference. Runtime activity remains on AppState.
   @AppStorage(AssistantSettings.audioRecordingModeDefaultsKey) var audioRecordingModeRaw =
     AssistantSettings.AudioRecordingMode.onlyMeetings.rawValue
@@ -225,6 +225,9 @@ struct SettingsContentView: View {
   @State var insightMinConfidence: Double
   @State var insightNotificationsEnabled: Bool
   @State var insightExcludedApps: Set<String>
+
+  // Meeting summary share notification
+  @State var meetingSummaryNotificationsEnabled: Bool
 
   // Memory Assistant states
   @State var memoryEnabled: Bool
@@ -260,6 +263,8 @@ struct SettingsContentView: View {
   @State var aiProfileDataSourcesUsed: Int = 0
   @State var isGeneratingAIProfile = false
   @State var isEditingAIProfile = false
+  @State var isConfirmingAIProfileDelete = false
+  @State var isConfirmingNudgeReset = false
   @State var aiProfileEditText: String = ""
 
   // Selected section (passed in from parent)
@@ -355,11 +360,9 @@ struct SettingsContentView: View {
   @State var transcriptionLanguage: String = "en"
   @State var vadGateEnabled: Bool = false
 
-  // Multi-chat mode setting
-  @AppStorage("multiChatEnabled") var multiChatEnabled = false
   @AppStorage("conversationsCompactView") var conversationsCompactView = true
-  @AppStorage("useLegacyHomeDesign") var useLegacyHomeDesign = false
   @AppStorage("speakNotificationsAloud") var speakNotificationsAloud = false
+  @AppStorage(DefaultsKey.integrationNudgesEnabled.rawValue) var integrationNudgesEnabled = true
 
   // AI Chat settings
   @AppStorage("chatBridgeMode") var chatBridgeMode: String = "piMono"
@@ -382,6 +385,7 @@ struct SettingsContentView: View {
   // Dev Mode setting
   @AppStorage("devModeEnabled") var devModeEnabled = false
   @AppStorage(BetaEnhancedDiagnosticsConfiguration.defaultsKey) var betaEnhancedDiagnosticsEnabled = true
+  @State var advancedDetailsExpanded = false
 
   // Browser Extension settings
   @AppStorage("playwrightUseExtension") var playwrightUseExtension = true
@@ -403,6 +407,7 @@ struct SettingsContentView: View {
     case floatingBar = "Floating Bar"
     case shortcuts = "Shortcuts"
     case advanced = "Advanced"
+    case referral = "Refer a Friend"
     case about = "About"
     /// The established page that had no door. It was only ever written by the sidebar the glass
     /// shell stopped rendering, so `PermissionsPage` kept working with nothing on screen that
@@ -434,7 +439,8 @@ struct SettingsContentView: View {
     var displayTitle: String {
       switch self {
       case .account, .planUsage: return "Account & Plan"
-      case .notifications, .privacy: return "Notifications & Privacy"
+      case .notifications, .privacy: return "Alerts & Privacy"
+      case .advanced: return "AI & Automation"
       default: return rawValue
       }
     }
@@ -545,7 +551,9 @@ struct SettingsContentView: View {
   @AppStorage("dev_gemini_api_key") var devGeminiKey: String = ""
   @AppStorage("dev_anthropic_api_key") var devAnthropicKey: String = ""
   @AppStorage("dev_openai_api_key") var devOpenAIKey: String = ""
+  @AppStorage("dev_openrouter_api_key") var devOpenRouterKey: String = ""
   @AppStorage("dev_deepgram_api_key") var devDeepgramKey: String = ""
+  @AppStorage(DefaultsKey.byokLLMProvider.rawValue) var devBYOKLLMProvider: String = ""
   @State var byokKeyStatuses: [BYOKProvider: BYOKValidator.Status] = [:]
   @State var byokActivationError: String?
 
@@ -589,6 +597,8 @@ struct SettingsContentView: View {
     _memoryMinConfidence = State(initialValue: MemoryAssistantSettings.shared.minConfidence)
     _memoryNotificationsEnabled = State(
       initialValue: MemoryAssistantSettings.shared.notificationsEnabled)
+    _meetingSummaryNotificationsEnabled = State(
+      initialValue: MeetingSummaryNotificationSettings.isEnabled)
     _memoryExcludedApps = State(initialValue: MemoryAssistantSettings.shared.excludedApps)
     _vadGateEnabled = State(initialValue: settings.vadGateEnabled)
     _transcriptionLanguage = State(initialValue: settings.transcriptionLanguage)
@@ -644,6 +654,8 @@ struct SettingsContentView: View {
           shortcutsSection
         case .advanced:
           advancedSection
+        case .referral:
+          referralSection
         case .about:
           aboutSection
         case .permissions:
@@ -672,6 +684,11 @@ struct SettingsContentView: View {
       appState.checkNotificationPermission()
       screenCaptureHealth = ProactiveAssistantsPlugin.shared.screenCaptureHealth
     }
+    .onReceive(NotificationCenter.default.publisher(for: .floatingBarEnabledDidChange)) { _ in
+      // The notch's Hide control, the bar's own hide path, and a Push-to-Talk reveal all move
+      // this preference without going through the switch; keep the switch honest.
+      showAskOmiBar = FloatingControlBarManager.shared.isEnabled
+    }
     .onReceive(NotificationCenter.default.publisher(for: .assistantMonitoringStateDidChange)) {
       notification in
       if let userInfo = notification.userInfo, let state = userInfo["isMonitoring"] as? Bool {
@@ -697,9 +714,17 @@ struct SettingsContentView: View {
       }
     }
     .onReceive(NotificationCenter.default.publisher(for: .navigateToTaskSettings)) { _ in
+      // The whole transition is data from SettingsDeepLinkTransition, so the test
+      // that pins it drives this exact production value. While the Task Assistant
+      // pane is hidden the highlight is nil — a highlight that targets a card that
+      // does not render scrolls to nothing, which is how the pane got "fixed back"
+      // once before.
+      let transition = SettingsDeepLinkTransition.taskSettings()
       selectedSection = .advanced
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-        highlightedSettingId = "advanced.taskassistant"
+      if let target = transition.highlight {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+          highlightedSettingId = target
+        }
       }
     }
     .onReceive(NotificationCenter.default.publisher(for: .navigateToFloatingBarSettings)) { _ in
@@ -734,6 +759,8 @@ struct SettingsContentView: View {
   }
 
   @ObservedObject var fontScaleSettings = FontScaleSettings.shared
+  @ObservedObject var glassTransparencySettings = InkGlassTransparencySettings.shared
+  @ObservedObject var reduceTransparencyObserver = InkReduceTransparencyObserver.shared
   @ObservedObject var rewindSettings = RewindSettings.shared
   @State var rewindStats: (total: Int, indexed: Int, storageSize: Int64)? = nil
 }

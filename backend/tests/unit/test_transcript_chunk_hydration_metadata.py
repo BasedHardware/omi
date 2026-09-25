@@ -30,7 +30,7 @@ def conversations_by_id(monkeypatch):
     monkeypatch.setattr(
         transcript_chunks.conversations_db,
         'get_conversations_by_id',
-        lambda _uid, _ids: holder['conversations'],
+        lambda _uid, _ids, **_kwargs: holder['conversations'],
     )
     return holder
 

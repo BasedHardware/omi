@@ -1,3 +1,4 @@
+import ContextCore
 import XCTest
 
 @testable import ContextApp
@@ -247,12 +248,17 @@ final class ScreenStaleGrantTests: XCTestCase {
         let reason = Permissions.ScreenBlock.recordUnusable.reason
 
         XCTAssertTrue(
-            reason.contains("tccutil reset ScreenCapture com.omi.context-for-claude"),
+            reason.contains(Permissions.screenRecordResetCommand),
             """
             Deleting the record is the only remedy — System Settings updates the row's allowed flag \
             without rewriting the stored code requirement — so the sentence has to name the exact \
             command rather than gesture at it.
             """)
+        // Not a second literal: the command names whichever bundle is *running*, and a sentence
+        // pinned to the shipping id would tell a dev build's user to reset the installed app's
+        // grant instead of their own. The rule itself is proved in `BuildIdentityTests`.
+        XCTAssertTrue(
+            reason.contains("tccutil reset ScreenCapture \(ContextPaths.bundleIdentifier)"), reason)
         XCTAssertFalse(
             reason.lowercased().contains("reopen me"),
             "reopening is the advice this state exists to stop repeating")

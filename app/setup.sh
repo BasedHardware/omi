@@ -48,6 +48,7 @@ echo "- bash setup.sh ios"
 echo "- bash setup.sh android"
 echo "- bash setup.sh ios beta   # explicit production-data dogfood build"
 echo "- bash setup.sh android beta   # explicit production-data dogfood build"
+echo "- OMI_MOBILE_BUILD_MODE=profile bash setup.sh ios   # AOT build that opens from the Home Screen without flutter run"
 echo ""
 
 LOCAL_DEV_HOST="${OMI_DEV_HOST:-127.0.0.1}"
@@ -56,10 +57,46 @@ ANDROID_DEV_HOST="${OMI_ANDROID_DEV_HOST:-${OMI_DEV_HOST:-10.0.2.2}}"
 ANDROID_LOCAL_API_BASE_URL="${OMI_LOCAL_API_BASE_URL:-http://${ANDROID_DEV_HOST}:8000/}"
 BETA_API_BASE_URL="${OMI_BETA_API_BASE_URL:-https://api.omiapi.com/}"
 
+# Maps OMI_MOBILE_BUILD_MODE (debug|profile|release, default debug) to the
+# `flutter run` flag. Debug builds are JIT, and iOS 14+ only lets Flutter
+# tooling start a JIT Dart VM on a physical device: FlutterEngine init returns
+# nil, the storyboard FlutterViewController has no engine, and the first Swift
+# plugin crashes on a nil registrar the moment the app is opened from the Home
+# Screen with `flutter run` gone. profile/release builds are AOT and open on
+# their own, at the cost of hot reload.
+function mobile_build_mode_flag() {
+  local mode="${OMI_MOBILE_BUILD_MODE:-debug}"
+  case "$mode" in
+    debug) ;;
+    profile) echo "--profile" ;;
+    release) echo "--release" ;;
+    *)
+      echo "ERROR: OMI_MOBILE_BUILD_MODE must be debug, profile, or release (got '${mode}')." >&2
+      return 1
+      ;;
+  esac
+}
+
+# Printed when a dev debug build is about to land on a physical iPhone, so the
+# "works under flutter run, dead from the Home Screen" symptom is explained
+# before the developer walks away from the Mac with it.
+function warn_ios_debug_build_untethered() {
+  echo "⚠️  Installing a DEBUG build on a physical iPhone. iOS only lets Flutter tooling" >&2
+  echo "   start a debug (JIT) Dart VM, so this build runs while flutter run is attached;" >&2
+  echo "   opened from the Home Screen without it, it shows an engine-unavailable notice" >&2
+  echo "   instead of running. For a build that opens on its own (no hot reload):" >&2
+  echo "     OMI_MOBILE_BUILD_MODE=profile bash setup.sh ios" >&2
+}
+
 ######################################
 # Generate device suffix from hostname
-######################################
 function generate_device_suffix() {
+  # Use hostname or a hash of it as suffix; a session harness (or two
+  # checkouts on one host) can inject a unique per-session suffix instead.
+  if [[ -n "${OMI_DEVICE_SUFFIX:-}" ]]; then
+    echo "${OMI_DEVICE_SUFFIX}"
+    return
+  fi
   # Use hostname or a hash of it as suffix
   HOSTNAME=$(hostname -s | tr '[:upper:]' '[:lower:]' | tr -cd '[:alnum:]')
   echo "${HOSTNAME}"
@@ -202,6 +239,63 @@ function setup_app_env() {
   fi
 }
 
+function validate_flutter_profile_arg() {
+  local expected_profile="$1"
+  shift
+  local arg requested_profile profile_arg_count=0
+  for arg in "$@"; do
+    if [[ "$arg" == --dart-define=OMI_APP_PROFILE=* ]]; then
+      profile_arg_count=$((profile_arg_count + 1))
+      requested_profile="${arg#--dart-define=OMI_APP_PROFILE=}"
+      if [[ "$requested_profile" != "$expected_profile" ]]; then
+        echo "ERROR: this flavor requires OMI_APP_PROFILE=$expected_profile, got '$requested_profile'." >&2
+        return 1
+      fi
+    fi
+  done
+  if [[ "$profile_arg_count" -gt 1 ]]; then
+    echo "ERROR: pass OMI_APP_PROFILE only once; the wrapper supplies the required value." >&2
+    return 1
+  fi
+}
+
+function prepare_mobile_build_env() {
+  local flavor="$1"
+  local configured_api_base_url="${2:-}"
+  local profile api_base_url
+  case "$flavor" in
+    dev)
+      profile='local_dev'
+      api_base_url="$LOCAL_API_BASE_URL"
+      ;;
+    prod)
+      profile='mobile_beta'
+      api_base_url="$BETA_API_BASE_URL"
+      ;;
+    *)
+      echo "ERROR: unsupported mobile flavor '$flavor' (expected dev or prod)." >&2
+      return 1
+      ;;
+  esac
+  if [[ "$flavor" == 'dev' && -n "$configured_api_base_url" ]]; then
+    api_base_url="$configured_api_base_url"
+  fi
+  setup_app_env "$profile" "$api_base_url" || return 1
+  scripts/validate_mobile_build_config.sh --flavor "$flavor" --profile "$profile" || return 1
+}
+
+# Bake git SHA + build number into the binary. Missing dart-defines become
+# 'unknown' in Dart; local dirty trees get OMI_GIT_DIRTY=true.
+# Prints one --dart-define per line. Bash 3.2 (macOS /bin/bash) has no namerefs.
+function build_provenance_define_lines() {
+  local script_dir script
+  script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+  script="$script_dir/scripts/build_provenance_dart_defines.sh"
+  if [[ -x "$script" ]]; then
+    "$script"
+  fi
+}
+
 # #######################
 # Set up Android Keystore
 # #######################
@@ -217,11 +311,21 @@ function run_build_android() {
   local profile='local_dev'
   local api_base_url="$ANDROID_LOCAL_API_BASE_URL"
   local emulator_host="$ANDROID_DEV_HOST"
-  if [[ "$flavor" == "prod" ]]; then
-    profile='mobile_beta'
-    api_base_url="$BETA_API_BASE_URL"
-    emulator_host=''
-  fi
+  case "$flavor" in
+    dev) ;;
+    prod)
+      profile='mobile_beta'
+      api_base_url="$BETA_API_BASE_URL"
+      emulator_host=''
+      ;;
+    *)
+      echo "ERROR: unsupported mobile flavor '$flavor' (expected dev or prod)." >&2
+      return 1
+      ;;
+  esac
+  prepare_mobile_build_env "$flavor" "$api_base_url"
+  local mode_flag
+  mode_flag=$(mobile_build_mode_flag) || return 1
   local flutter_args=(
     --flavor "$flavor"
     "--dart-define=OMI_APP_PROFILE=$profile"
@@ -230,9 +334,162 @@ function run_build_android() {
   if [[ -n "$emulator_host" ]]; then
     flutter_args+=("--dart-define=OMI_FIREBASE_AUTH_EMULATOR_HOST=$emulator_host")
   fi
+  if [[ -n "$mode_flag" ]]; then
+    flutter_args+=("$mode_flag")
+  fi
+  local provenance_def
+  while IFS= read -r provenance_def; do
+    [[ -n "$provenance_def" ]] && flutter_args+=("$provenance_def")
+  done < <(build_provenance_define_lines)
   flutter pub get \
     && dart run build_runner build \
     && flutter run "${flutter_args[@]}"
+}
+
+# #####################################
+# iOS prerequisite and device selection
+# #####################################
+
+# True if $1 (a dotted version, e.g. "16.4") is >= $2. Relies on `sort -V`,
+# which Apple's /usr/bin/sort on macOS supports (verified; this is iOS-only
+# tooling, so a non-macOS sort is not a concern).
+function _version_at_least() {
+  local have="$1" want="$2"
+  [ "$(printf '%s\n%s\n' "$want" "$have" | sort -V | head -n1)" = "$want" ]
+}
+
+# Named checks with remedies, matching the harness's own pattern
+# (scripts/dev-harness's `Cannot start; missing prerequisites:` block) instead
+# of letting a missing/outdated tool surface as a confusing downstream failure
+# several minutes into a build.
+function check_ios_prerequisites() {
+  local missing=()
+
+  local flutter_version
+  flutter_version=$(flutter --version 2>/dev/null | grep -oE '^Flutter [0-9]+\.[0-9]+\.[0-9]+' | awk '{print $2}')
+  if [[ -z "$flutter_version" ]]; then
+    missing+=("Flutter SDK (v3.44.5 or later) — install from https://docs.flutter.dev/get-started/install")
+  elif ! _version_at_least "$flutter_version" "3.44.5"; then
+    missing+=("Flutter ${flutter_version} found, but v3.44.5 or later is required — run: flutter upgrade")
+  fi
+
+  if ! command -v xcodebuild &>/dev/null; then
+    missing+=("Xcode (v16.4 or later) — install from the App Store, then run: sudo xcode-select --switch /Applications/Xcode.app")
+  else
+    local xcode_version
+    xcode_version=$(xcodebuild -version 2>/dev/null | awk '/^Xcode/ {print $2; exit}')
+    if [[ -z "$xcode_version" ]]; then
+      # xcodebuild is on PATH but produced no version line — an unaccepted
+      # license or missing components, not a real "Xcode is fine" signal.
+      # Left unchecked, this passes the gate silently and surfaces as a
+      # confusing failure deep into the build, exactly what this check exists
+      # to prevent.
+      missing+=("xcodebuild is on PATH but not usable (license not accepted or components missing) — run: sudo xcodebuild -license accept && sudo xcodebuild -runFirstLaunch")
+    elif ! _version_at_least "$xcode_version" "16.4"; then
+      missing+=("Xcode ${xcode_version} found, but v16.4 or later is required — update via the App Store")
+    fi
+  fi
+
+  if ! command -v pod &>/dev/null; then
+    missing+=("CocoaPods (v1.16.2 or later) — install with: sudo gem install cocoapods")
+  else
+    local pod_version
+    pod_version=$(pod --version 2>/dev/null)
+    if [[ -n "$pod_version" ]] && ! _version_at_least "$pod_version" "1.16.2"; then
+      missing+=("CocoaPods ${pod_version} found, but v1.16.2 or later is required — update with: brew upgrade cocoapods (Homebrew) or sudo gem install cocoapods (gem)")
+    fi
+  fi
+
+  if ! command -v jq &>/dev/null; then
+    missing+=("jq (used to select an iOS build destination) — install with: brew install jq")
+  fi
+
+  if [[ "${#missing[@]}" -gt 0 ]]; then
+    echo "❌ Cannot build for iOS; missing prerequisites:" >&2
+    local item
+    for item in "${missing[@]}"; do
+      echo "   - ${item}" >&2
+    done
+    return 1
+  fi
+}
+
+# Picks the iOS destination `flutter run -d` should target, instead of leaving
+# Flutter to fall back to whatever else it finds (macOS desktop, on a machine
+# with no simulator runtime and only a wirelessly-paired phone visible) and
+# reporting an error about a platform the developer never asked for.
+function select_ios_device() {
+  local devices_json
+  devices_json=$(flutter devices --machine 2>/dev/null) || {
+    echo "❌ Could not query connected devices (flutter devices --machine failed)." >&2
+    return 1
+  }
+
+  local ios_devices
+  ios_devices=$(echo "$devices_json" | jq -c '[.[] | select(.targetPlatform == "ios")]')
+  local count
+  count=$(echo "$ios_devices" | jq 'length')
+
+  # Explicit non-interactive selection (mobile-session harnesses, CI, nested
+  # agents): pin the exact device id instead of enumerating and prompting.
+  # Fails precisely when the pinned device is absent rather than falling back
+  # to another destination.
+  local pinned="${OMI_IOS_DEVICE_ID:-}"
+  if [[ -n "$pinned" ]]; then
+    if echo "$ios_devices" | jq -e --arg id "$pinned" 'any(.[]; .id == $id)' >/dev/null; then
+      echo "$pinned"
+      return 0
+    fi
+    echo "❌ OMI_IOS_DEVICE_ID='$pinned' matches no connected iOS device or simulator." >&2
+    echo "   Available: $(echo "$ios_devices" | jq -r 'map("\(.id) \(.name)") | join(", ")')" >&2
+    return 1
+  fi
+
+  if [[ "$count" -eq 0 ]]; then
+    echo "❌ No iOS device or simulator found." >&2
+    echo "   Boot a simulator (open -a Simulator) or connect a physical device, then retry." >&2
+    return 1
+  fi
+
+  if [[ "$count" -eq 1 ]]; then
+    echo "$ios_devices" | jq -r '.[0].id'
+    return 0
+  fi
+
+  echo "⚠️  Multiple iOS destinations found. Choose one:" >&2
+  local i=0 line
+  while IFS= read -r line; do
+    i=$((i + 1))
+    echo "   $i) $line" >&2
+  done < <(echo "$ios_devices" | jq -r '.[] | "\(.name) (\(.id))"')
+
+  # Never block on read without a TTY, or a non-interactive run (CI, nested
+  # automation) hangs indefinitely instead of failing with a usable message.
+  if [[ ! -t 0 ]]; then
+    echo "   ❌ No terminal available to choose a device." >&2
+    echo "      Disconnect the extras, or boot only the simulator you want, and re-run." >&2
+    return 1
+  fi
+
+  local choice
+  read -rp "   Enter number [1-${count}]: " choice
+  if [[ "$choice" =~ ^[0-9]+$ ]] && [ "$choice" -ge 1 ] && [ "$choice" -le "$count" ]; then
+    echo "$ios_devices" | jq -r ".[$((choice - 1))].id"
+    return 0
+  fi
+  echo "❌ Invalid selection." >&2
+  return 1
+}
+
+# True if $1 is the id of a physical iOS device rather than a simulator, per
+# `flutter devices --machine`'s own "emulator" field.
+function _ios_device_is_physical() {
+  local device_id="$1"
+  local devices_json
+  devices_json=$(flutter devices --machine 2>/dev/null) || return 1
+  local emulator
+  emulator=$(echo "$devices_json" | jq -r --arg id "$device_id" '.[] | select(.id == $id) | .emulator')
+  [[ "$emulator" == "false" ]]
 }
 
 # #########
@@ -241,10 +498,60 @@ function run_build_android() {
 function run_build_ios() {
   local flavor="${1:-dev}"
   shift || true
+  local profile='local_dev'
+  local api_base_url="$LOCAL_API_BASE_URL"
+  case "$flavor" in
+    dev) ;;
+    prod)
+      profile='mobile_beta'
+      api_base_url="$BETA_API_BASE_URL"
+      ;;
+    *)
+      echo "ERROR: unsupported mobile flavor '$flavor' (expected dev or prod)." >&2
+      return 1
+      ;;
+  esac
+  validate_flutter_profile_arg "$profile" "$@" || return 1
+  prepare_mobile_build_env "$flavor" "$api_base_url" || return 1
+  local flutter_args=("--dart-define=OMI_APP_PROFILE=$profile")
+  local arg
+  for arg in "$@"; do
+    # The wrapper owns this invariant and injects exactly one profile define.
+    if [[ "$arg" == --dart-define=OMI_APP_PROFILE=* ]]; then
+      continue
+    fi
+    flutter_args+=("$arg")
+  done
+  check_ios_prerequisites || return 1
+  local mode_flag
+  mode_flag=$(mobile_build_mode_flag) || return 1
+  if [[ -n "$mode_flag" ]]; then
+    flutter_args+=("$mode_flag")
+  fi
+  local provenance_def
+  while IFS= read -r provenance_def; do
+    [[ -n "$provenance_def" ]] && flutter_args+=("$provenance_def")
+  done < <(build_provenance_define_lines)
+  local device_id
+  device_id=$(select_ios_device) || return 1
+  local physical_device=0
+  if _ios_device_is_physical "$device_id"; then
+    physical_device=1
+  fi
+  if [[ "$flavor" == "dev" && -z "${OMI_DEV_HOST:-}" && "$physical_device" == 1 ]]; then
+    echo "⚠️  Building for a physical device with OMI_DEV_HOST unset — the dev backend" >&2
+    echo "   will default to 127.0.0.1, which on the device is itself, not this Mac." >&2
+    echo "   Set OMI_DEV_HOST to this Mac's LAN or Tailscale address before running" >&2
+    echo "   both setup.sh and make dev-up, or the app will hang waiting for the" >&2
+    echo "   backend. See the physical-device tip in docs/doc/developer/AppSetup.mdx." >&2
+  fi
+  if [[ "$flavor" == "dev" && -z "$mode_flag" && "$physical_device" == 1 ]]; then
+    warn_ios_debug_build_untethered
+  fi
   flutter pub get \
     && pushd ios && pod install --repo-update && popd \
     && dart run build_runner build \
-    && flutter run --flavor "$flavor" "$@"
+    && flutter run --flavor "$flavor" -d "$device_id" "${flutter_args[@]}"
 }
 
 
@@ -256,18 +563,17 @@ case "${1}" in
         echo "ios beta requires FIREBASE_SERVICE_ACCOUNT_KEY so the production Firebase app config can be generated." >&2
         exit 1
       fi
-      setup_firebase \
+      prepare_mobile_build_env prod \
+        && setup_firebase \
         && setup_firebase_with_service_account_ios \
         && generate_ios_custom_config Prod omi-beta \
-        && setup_app_env mobile_beta \
         && run_build_ios prod --dart-define=OMI_APP_PROFILE=mobile_beta
     else
-      setup_firebase \
+      prepare_mobile_build_env dev \
+        && setup_firebase \
         && bash scripts/generate_ios_dev_info_plist.sh \
         && generate_ios_custom_config Dev omi-dev \
-        && setup_app_env local_dev \
         && run_build_ios dev \
-          --dart-define=OMI_APP_PROFILE=local_dev \
           --dart-define=OMI_API_BASE_URL="$LOCAL_API_BASE_URL" \
           --dart-define=OMI_FIREBASE_AUTH_EMULATOR_HOST="$LOCAL_DEV_HOST"
     fi
@@ -278,15 +584,15 @@ case "${1}" in
         echo "android beta requires FIREBASE_SERVICE_ACCOUNT_KEY so the production Firebase app config can be generated." >&2
         exit 1
       fi
-      setup_keystore_android \
+      prepare_mobile_build_env prod \
+        && setup_keystore_android \
         && setup_firebase \
         && setup_firebase_with_service_account_android \
-        && setup_app_env mobile_beta "$BETA_API_BASE_URL" \
         && run_build_android prod
     else
-      setup_keystore_android \
+      prepare_mobile_build_env dev \
+        && setup_keystore_android \
         && setup_firebase \
-        && setup_app_env local_dev "$ANDROID_LOCAL_API_BASE_URL" \
         && run_build_android dev
     fi
     ;;

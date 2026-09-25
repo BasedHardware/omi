@@ -1,0 +1,5 @@
+{
+  "changes": [
+    "Signing in with a different account now resets the onboarding wizard so the new user sees the full setup flow instead of being dropped straight to the home screen."
+  ]
+}

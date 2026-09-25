@@ -11,6 +11,7 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawn } from 'child_process'
+import { app } from 'electron'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   PiMonoAdapter,
@@ -58,6 +59,7 @@ function newFakeProc(): FakeProc {
 // and inspect internal state without `any` (lint forbids explicit any).
 interface PiInternals {
   sendCommand: (cmd: Record<string, unknown>) => void
+  handleEvent: (line: string) => void
   handleTurnEnd: (event: Record<string, unknown>) => void
   handleToolStart: (event: Record<string, unknown>) => void
   handleToolEnd: (event: Record<string, unknown>) => void
@@ -248,14 +250,16 @@ describe('PiMonoAdapter prompt correlation', () => {
     })
     seedSessions(adapter, 'session-1')
     const runtime = new PiMonoRuntimeAdapter(adapter)
+    const sinkEvents: AdapterStreamEvent[] = []
 
     await expect(
       runtime.executeAttempt(
         makeAttemptContext({ attemptId: 'att_error' }),
-        () => {},
+        (event) => sinkEvents.push(event),
         new AbortController().signal
       )
     ).rejects.toThrow('adapter send failed')
+    expect(sinkEvents).toEqual([])
     expect(existsSync(internals(adapter).contextFilePath)).toBe(false)
   })
 
@@ -401,6 +405,29 @@ describe('PiMonoAdapter prompt correlation', () => {
       cacheWriteTokens: 2
     })
     expect(events.some((event) => event.type === 'result')).toBe(false)
+  })
+
+  it('treats agent_settled as advisory and waits for the authoritative turn_end', async () => {
+    const { adapter } = createAdapter()
+    seedSessions(adapter, 'session-1')
+
+    const prompt = adapter.sendPrompt(
+      'session-1',
+      [{ type: 'text', text: 'wait for the child' }],
+      [],
+      'act',
+      () => {},
+      async () => ''
+    )
+
+    internals(adapter).handleEvent(JSON.stringify({ type: 'agent_settled' }))
+
+    expect(internals(adapter).activePromptGeneration).toBe(1)
+    expect(internals(adapter).pendingRequests.size).toBe(1)
+
+    internals(adapter).handleTurnEnd(makeTurnEndEvent('authoritative terminal result'))
+
+    await expect(prompt).resolves.toMatchObject({ text: 'authoritative terminal result' })
   })
 
   it('rejects turn_end errors instead of resolving success', async () => {
@@ -623,6 +650,162 @@ describe('PiMonoAdapter restart lifecycle', () => {
     expect(spawn).toHaveBeenCalledTimes(2)
     await adapter.stop()
   })
+
+  it('prefers resolveSpawnCredentials over the construction-time snapshot', async () => {
+    const adapter = new PiMonoAdapter(
+      {
+        authToken: 'stale-token',
+        byokEnv: { OMI_BYOK_OPENAI: 'old' },
+        resolveSpawnCredentials: async () => ({
+          authToken: 'fresh-token',
+          omiApiBaseUrl: 'https://api.example/v2',
+          byokEnv: {
+            OMI_BYOK_OPENAI: 'sk-openai',
+            OMI_BYOK_ANTHROPIC: 'sk-ant',
+            OMI_BYOK_GEMINI: 'gm-key',
+            OMI_BYOK_DEEPGRAM: 'dg-key'
+          }
+        })
+      },
+      { piPath: '/fake/pi.js', extensionPath: '/fake/ext.ts', nodeBin: '/fake/node' }
+    )
+    await adapter.start()
+
+    const [, , options] = vi.mocked(spawn).mock.calls[0] as [
+      string,
+      string[],
+      { env: Record<string, string> }
+    ]
+    expect(options.env.OMI_API_KEY).toBe('fresh-token')
+    expect(options.env.OMI_BYOK_ANTHROPIC).toBe('sk-ant')
+
+    await adapter.stop()
+  })
+
+  it('keeps the snapshot when resolveSpawnCredentials fails', async () => {
+    const adapter = new PiMonoAdapter(
+      {
+        authToken: 'snapshot-token',
+        resolveSpawnCredentials: async () => {
+          throw new Error('renderer hung')
+        }
+      },
+      { piPath: '/fake/pi.js', extensionPath: '/fake/ext.ts', nodeBin: '/fake/node' }
+    )
+    await adapter.start()
+
+    const [, , options] = vi.mocked(spawn).mock.calls[0] as [
+      string,
+      string[],
+      { env: Record<string, string> }
+    ]
+    expect(options.env.OMI_API_KEY).toBe('snapshot-token')
+
+    await adapter.stop()
+  })
+
+  it('fails closed when resolveSpawnCredentials returns null (signed out)', async () => {
+    const adapter = new PiMonoAdapter(
+      {
+        authToken: 'departed-user-token',
+        byokEnv: { OMI_BYOK_ANTHROPIC: 'sk-ant' },
+        resolveSpawnCredentials: async () => null
+      },
+      { piPath: '/fake/pi.js', extensionPath: '/fake/ext.ts', nodeBin: '/fake/node' }
+    )
+
+    await expect(adapter.start()).rejects.toThrow(/requires config\.authToken/)
+    expect(spawn).not.toHaveBeenCalled()
+
+    await adapter.stop()
+  })
+
+  it('revokeAndStop clears baked credentials so a later start cannot reuse them', async () => {
+    const adapter = new PiMonoAdapter(
+      { authToken: 'departed-user-token' },
+      { piPath: '/fake/pi.js', extensionPath: '/fake/ext.ts', nodeBin: '/fake/node' }
+    )
+    await adapter.start()
+    vi.mocked(spawn).mockClear()
+
+    await adapter.revokeAndStop()
+    await expect(adapter.start()).rejects.toThrow(/requires config\.authToken/)
+    expect(spawn).not.toHaveBeenCalled()
+  })
+
+  it('updateByokEnv fails closed instead of respawning the departed user token', async () => {
+    let signedOut = false
+    const adapter = new PiMonoAdapter(
+      {
+        authToken: 'live-token',
+        resolveSpawnCredentials: async () =>
+          signedOut
+            ? null
+            : { authToken: 'live-token', omiApiBaseUrl: 'https://api.example/v2', byokEnv: {} }
+      },
+      { piPath: '/fake/pi.js', extensionPath: '/fake/ext.ts', nodeBin: '/fake/node' }
+    )
+    await adapter.start()
+    vi.mocked(spawn).mockClear()
+
+    signedOut = true
+    await expect(
+      adapter.updateByokEnv({
+        OMI_BYOK_OPENAI: 'sk-openai',
+        OMI_BYOK_ANTHROPIC: 'sk-ant',
+        OMI_BYOK_GEMINI: 'gm-key',
+        OMI_BYOK_DEEPGRAM: 'dg-key'
+      })
+    ).rejects.toThrow(/requires config\.authToken/)
+    expect(spawn).not.toHaveBeenCalled()
+  })
+
+  it('updateByokEnv restarts an idle subprocess with the new env', async () => {
+    const adapter = new PiMonoAdapter(
+      { authToken: 'firebase-id-token-xyz' },
+      { piPath: '/fake/pi.js', extensionPath: '/fake/ext.ts', nodeBin: '/fake/node' }
+    )
+    await adapter.start()
+    vi.mocked(spawn).mockClear()
+
+    await adapter.updateByokEnv({
+      OMI_BYOK_OPENAI: 'sk-openai',
+      OMI_BYOK_ANTHROPIC: 'sk-ant',
+      OMI_BYOK_GEMINI: 'gm-key',
+      OMI_BYOK_DEEPGRAM: 'dg-key'
+    })
+
+    expect(spawn).toHaveBeenCalledTimes(1)
+    const [, , options] = vi.mocked(spawn).mock.calls[0] as [
+      string,
+      string[],
+      { env: Record<string, string> }
+    ]
+    expect(options.env.OMI_BYOK_ANTHROPIC).toBe('sk-ant')
+
+    await adapter.stop()
+  })
+
+  it('updateByokEnv is a no-op when the env is unchanged', async () => {
+    const byokEnv = {
+      OMI_BYOK_OPENAI: 'sk-openai',
+      OMI_BYOK_ANTHROPIC: 'sk-ant',
+      OMI_BYOK_GEMINI: 'gm-key',
+      OMI_BYOK_DEEPGRAM: 'dg-key'
+    }
+    const adapter = new PiMonoAdapter(
+      { authToken: 'firebase-id-token-xyz', byokEnv },
+      { piPath: '/fake/pi.js', extensionPath: '/fake/ext.ts', nodeBin: '/fake/node' }
+    )
+    await adapter.start()
+    vi.mocked(spawn).mockClear()
+
+    const restarted = await adapter.updateByokEnv({ ...byokEnv })
+    expect(restarted).toBe(true)
+    expect(spawn).not.toHaveBeenCalled()
+
+    await adapter.stop()
+  })
 })
 
 describe('PiMonoAdapter spawn shape (behavioral, Windows)', () => {
@@ -752,6 +935,47 @@ describe('PiMonoAdapter spawn shape (behavioral, Windows)', () => {
       delete process.env.OMI_BYOK_OPENAI
     }
   })
+
+  it('gates OMI_YOLO_MODE reinjection on unpackaged builds only', async () => {
+    const stubApp = app as { isPackaged: boolean }
+    const wasPackaged = stubApp.isPackaged
+    const prevYolo = process.env.OMI_YOLO_MODE
+    process.env.OMI_YOLO_MODE = '1'
+    try {
+      stubApp.isPackaged = true
+      const packaged = new PiMonoAdapter(
+        { authToken: 'firebase-id-token-xyz' },
+        { piPath: '/fake/pi.js', extensionPath: '/fake/ext.ts', nodeBin: '/fake/node' }
+      )
+      await packaged.start()
+      let [, , options] = vi.mocked(spawn).mock.calls[0] as [
+        string,
+        string[],
+        { env: Record<string, string> }
+      ]
+      expect(options.env.OMI_YOLO_MODE).toBeUndefined()
+      await packaged.stop()
+
+      stubApp.isPackaged = false
+      vi.mocked(spawn).mockClear()
+      const unpackaged = new PiMonoAdapter(
+        { authToken: 'firebase-id-token-xyz' },
+        { piPath: '/fake/pi.js', extensionPath: '/fake/ext.ts', nodeBin: '/fake/node' }
+      )
+      await unpackaged.start()
+      ;[, , options] = vi.mocked(spawn).mock.calls[0] as [
+        string,
+        string[],
+        { env: Record<string, string> }
+      ]
+      expect(options.env.OMI_YOLO_MODE).toBe('1')
+      await unpackaged.stop()
+    } finally {
+      stubApp.isPackaged = wasPackaged
+      if (prevYolo === undefined) delete process.env.OMI_YOLO_MODE
+      else process.env.OMI_YOLO_MODE = prevYolo
+    }
+  })
 })
 
 describe('PiMonoAdapter image channel (no bytes leak into text)', () => {
@@ -865,6 +1089,7 @@ describe('PiMonoRuntimeAdapter sink event forwarding', () => {
     await expect(execution).resolves.toMatchObject({ terminalStatus: 'succeeded' })
 
     const types = sinkEvents.map((e) => e.type)
+    expect(types[0]).toBe('hosted_request_started')
     expect(types).toContain('tool_activity')
     expect(types).toContain('text_delta')
     expect(types).not.toContain('tool_use')

@@ -30,13 +30,14 @@ export PATH="/bin:/usr/bin:/usr/sbin:/sbin:/opt/homebrew/bin:$PATH"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PKG_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
-APP_NAME="Context for Claude"
-BUNDLE_ID="com.omi.context-for-claude"
 SIGN_IDENTITY="${CONTEXT_SIGN_IDENTITY:-Omi Local Dev Signing}"
 
+# APP_NAME, BUNDLE_ID and the install path are derived from the signing identity below: a build
+# that is not signed for release must not answer to the production identifiers. The template
+# Info.plist is the release source of truth, so it is asserted against this value.
+PRODUCTION_BUNDLE_ID="com.omi.context-for-claude"
+
 BUILD_DIR="$PKG_DIR/build"
-APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
-INSTALL_PATH="/Applications/$APP_NAME.app"
 INFO_PLIST_TEMPLATE="$PKG_DIR/Resources/Info.plist"
 ENTITLEMENTS_RELEASE="$PKG_DIR/Resources/ContextForClaude.entitlements"
 ENTITLEMENTS_DEV="$PKG_DIR/Resources/ContextForClaudeDev.entitlements"
@@ -55,6 +56,24 @@ SPARKLE_PUBLIC_KEY="${CONTEXT_SPARKLE_PUBLIC_KEY:-}"
 log()  { printf '\033[1m[context]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[context]\033[0m %s\n' "$*" >&2; }
 die()  { printf '\033[1;31m[context]\033[0m %s\n' "$*" >&2; exit 1; }
+
+# ---------------------------------------------------------------------------------------------
+# Platform identity.
+#
+# Which identifiers this build claims follows from which certificate signs it. build-identity.sh
+# owns that mapping and documents why a developer build must not share the production bundle id:
+# macOS pins the signing certificate inside every TCC grant, so two differently-signed builds with
+# one identifier write records neither can satisfy. It is a separate file so that
+# scripts/test-build-identity.sh can drive the rule without a keychain or codesign.
+# ---------------------------------------------------------------------------------------------
+IDENTITY_ASSIGNMENTS="$("$SCRIPT_DIR/build-identity.sh" "$SIGN_IDENTITY")" \
+    || die "refusing to build: no platform identity for signing identity '$SIGN_IDENTITY'"
+eval "$IDENTITY_ASSIGNMENTS"
+
+APP_NAME="$CFC_APP_NAME"
+BUNDLE_ID="$CFC_BUNDLE_ID"
+APP_BUNDLE="$BUILD_DIR/$APP_NAME.app"
+INSTALL_PATH="/Applications/$APP_NAME.app"
 
 # ---------------------------------------------------------------------------------------------
 # Production-app guard.
@@ -129,10 +148,11 @@ if [[ "$DO_RELEASE" -eq 1 ]]; then
         || die "CONTEXT_SPARKLE_PUBLIC_KEY is invalid; refusing to ship the placeholder Sparkle key"
 fi
 
-if [[ "$DO_RELEASE" -eq 1 ]] || [[ "$SIGN_IDENTITY" == *"Developer ID"* ]]; then
+if [[ "$CFC_IS_DEVELOPMENT" -eq 0 ]]; then
     ENTITLEMENTS="$ENTITLEMENTS_RELEASE"
     log "using release entitlements: $ENTITLEMENTS"
 else
+    log "building as $BUNDLE_ID ($APP_NAME) — a developer identity, separate from any installed release"
     log "using development entitlements: $ENTITLEMENTS"
 fi
 
@@ -141,11 +161,13 @@ fi
 [[ -f "$INFO_PLIST_TEMPLATE" ]] || die "missing Info.plist template at $INFO_PLIST_TEMPLATE"
 [[ -f "$ENTITLEMENTS" ]] || die "missing entitlements at $ENTITLEMENTS"
 
-# The template is the source of truth for the identifier; make sure it agrees with the guard.
+# The template is the source of truth for the *release* identifier. A developer build gets its own
+# identifier written into the built copy further down, never into the template — a template that
+# already said `.dev` would ship a developer identity in a release.
 TEMPLATE_ID="$(/usr/libexec/PlistBuddy -c 'Print :CFBundleIdentifier' "$INFO_PLIST_TEMPLATE" 2>/dev/null || true)"
 assert_not_production "Info.plist CFBundleIdentifier" "$TEMPLATE_ID"
-[[ "$TEMPLATE_ID" == "$BUNDLE_ID" ]] \
-    || die "Info.plist CFBundleIdentifier is '$TEMPLATE_ID', expected '$BUNDLE_ID'"
+[[ "$TEMPLATE_ID" == "$PRODUCTION_BUNDLE_ID" ]] \
+    || die "Info.plist CFBundleIdentifier is '$TEMPLATE_ID', expected '$PRODUCTION_BUNDLE_ID'"
 
 if ! security find-identity -v -p codesigning 2>/dev/null | grep -q "$SIGN_IDENTITY"; then
   # Any self-signed codesigning certificate works. What must not happen is ad-hoc signing: the
@@ -209,8 +231,9 @@ log "assembling $APP_BUNDLE"
 rm -rf "$APP_BUNDLE"
 mkdir -p "$APP_BUNDLE/Contents/MacOS" "$APP_BUNDLE/Contents/Resources"
 
-# CFBundleExecutable is "Context for Claude", so the app binary is installed under that name; context-for-claude-mcp
-# rides along in the same directory because Claude launches it by absolute path.
+# The app binary is installed under $APP_NAME, and CFBundleExecutable is set to match when a
+# developer build renames it; context-for-claude-mcp rides along in the same directory because
+# Claude launches it by absolute path.
 cp -f "$BIN_DIR/ContextApp" "$APP_BUNDLE/Contents/MacOS/$APP_NAME"
 cp -f "$BIN_DIR/context-for-claude-mcp" "$APP_BUNDLE/Contents/MacOS/context-for-claude-mcp"
 chmod +x "$APP_BUNDLE/Contents/MacOS/$APP_NAME" "$APP_BUNDLE/Contents/MacOS/context-for-claude-mcp"
@@ -261,6 +284,18 @@ if ! otool -l "$APP_BUNDLE/Contents/MacOS/$APP_NAME" | grep -q "@executable_path
 fi
 
 cp -f "$INFO_PLIST_TEMPLATE" "$APP_BUNDLE/Contents/Info.plist"
+
+# A developer build claims its own identity. All four keys move together by necessity: the binary
+# was copied to Contents/MacOS/$APP_NAME above, so CFBundleExecutable has to follow it or macOS
+# cannot launch the bundle at all, and CFBundleName is the name macOS shows in the Screen Recording
+# and Microphone prompts — leaving it as the release name would put two indistinguishable
+# "Context for Claude" rows in System Settings for two different identifiers.
+if [[ "$CFC_IS_DEVELOPMENT" -eq 1 ]]; then
+    /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $BUNDLE_ID" "$APP_BUNDLE/Contents/Info.plist"
+    /usr/libexec/PlistBuddy -c "Set :CFBundleExecutable $APP_NAME" "$APP_BUNDLE/Contents/Info.plist"
+    /usr/libexec/PlistBuddy -c "Set :CFBundleName $APP_NAME" "$APP_BUNDLE/Contents/Info.plist"
+    /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $APP_NAME" "$APP_BUNDLE/Contents/Info.plist"
+fi
 
 # Release metadata belongs to the immutable built bundle, not the source template. This lets a tag
 # select the version in CI without making a release worker edit Info.plist in the shared checkout.

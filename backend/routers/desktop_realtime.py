@@ -8,11 +8,12 @@ from typing import Any
 import httpx
 from fastapi import APIRouter, Depends, Response
 from fastapi.responses import JSONResponse
-from google.cloud import firestore
 from pydantic import BaseModel, StrictInt, StrictStr
 
 from database._client import get_customer_firestore_client
+from database import llm_usage as llm_usage_db
 from utils.executors import db_executor, run_blocking
+from utils.llm.realtime_usage import client_reported_cost_usd, client_reported_turn
 from utils.other.endpoints import get_current_user_uid
 from utils.subscription import enforce_desktop_chat_quota
 
@@ -20,6 +21,8 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 _OPENAI_CLIENT_SECRETS_URL = "https://api.openai.com/v1/realtime/client_secrets"
+# Leftover AI Studio Live token mint. Vertex Live is not wired here; this is
+# not the $1k/day Flash text bill. See backend/docs/vertex-pt-flash.md.
 _GEMINI_AUTH_TOKENS_URL = "https://generativelanguage.googleapis.com/v1alpha/auth_tokens"
 _OPENAI_REALTIME_MODEL = "gpt-realtime-2"
 _GEMINI_LIVE_MODEL = "models/gemini-3.1-flash-live-preview"
@@ -34,6 +37,10 @@ class MintRequest(BaseModel):
 class UsageReport(BaseModel):
     provider: StrictStr
     model: StrictStr = ""
+    # A stable client turn id makes the quota question idempotent (a retried
+    # report counts once). Absent on older clients, whose reports keep the
+    # historical non-idempotent increment.
+    turn_id: StrictStr = ""
     input_text_tokens: StrictInt = 0
     input_audio_tokens: StrictInt = 0
     input_cached_tokens: StrictInt = 0
@@ -139,7 +146,9 @@ async def _persist_session(uid: str, token: str, provider: str, model: str, expi
 
 @router.post("/v2/realtime/session")
 async def mint_session(request: MintRequest, uid: str = Depends(get_current_user_uid)) -> JSONResponse:
-    await run_blocking(db_executor, enforce_desktop_chat_quota, uid, "desktop")
+    # The hub only ever mints Omi's own provider token, so a user's BYOK key
+    # (Anthropic, for desktop chat) must not exempt them from the cap here.
+    await run_blocking(db_executor, enforce_desktop_chat_quota, uid, "desktop", byok_exempt=False)
     if request.provider == "openai":
         key = os.getenv("OPENAI_API_KEY", "").strip()
         if not key:
@@ -188,6 +197,9 @@ async def mint_session(request: MintRequest, uid: str = Depends(get_current_user
     return _error(400, "bad_provider", 'provider must be "openai" or "gemini"')
 
 
+REALTIME_HUB_TURN_QUOTA_SOURCE = 'desktop_realtime_turn'
+
+
 def _record_usage(
     uid: str,
     report: UsageReport,
@@ -197,51 +209,74 @@ def _record_usage(
     total_tokens: int,
     cost: float,
 ) -> None:
-    date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    account = "desktop_chat_realtime"
-    updates: dict[str, Any] = {"date": date, "last_updated": datetime.now(timezone.utc)}
-    for prefix in ("desktop_chat", account):
-        updates.update(
-            {
-                f"{prefix}.input_tokens": firestore.Increment(input_tokens),
-                f"{prefix}.output_tokens": firestore.Increment(output_tokens),
-                f"{prefix}.cache_read_tokens": firestore.Increment(cached_tokens),
-                f"{prefix}.cache_write_tokens": firestore.Increment(0),
-                f"{prefix}.total_tokens": firestore.Increment(total_tokens),
-                f"{prefix}.cost_usd": firestore.Increment(cost),
-                f"{prefix}.call_count": firestore.Increment(1),
-            }
+    client = get_customer_firestore_client()
+    if report.turn_id:
+        # One question per client turn, exactly once: the same idempotent
+        # writer text chat uses, keyed on the client's turn id, with the token
+        # cost in the SAME transaction. A retried report finds the event and
+        # records nothing; a failed write records nothing of either.
+        def telemetry(plan_key: str, day: str) -> dict[str, Any]:
+            return llm_usage_db.usage_bucket_update(
+                uid,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                cache_read_tokens=cached_tokens,
+                cache_write_tokens=0,
+                total_tokens=total_tokens,
+                cost_usd=cost,
+                bucket='desktop_chat',
+                account='desktop_chat_realtime',
+                cost_status='complete',
+                quota_questions=0,
+                plan_key=plan_key,
+                today=day,
+            )
+
+        llm_usage_db.record_chat_quota_question(
+            uid,
+            f'realtime_hub:{report.turn_id}',
+            REALTIME_HUB_TURN_QUOTA_SOURCE,
+            platform='desktop',
+            firestore_client=client,
+            usage_update_for=telemetry,
         )
-    updates["desktop_chat.quota_questions"] = firestore.Increment(1)
-    updates[f"{account}.quota_questions"] = firestore.Increment(1)
-    get_customer_firestore_client().collection("users").document(uid).collection("llm_usage").document(date).set(
-        updates, merge=True
+        return
+    llm_usage_db.record_llm_usage_bucket(
+        uid,
+        input_tokens=input_tokens,
+        output_tokens=output_tokens,
+        cache_read_tokens=cached_tokens,
+        cache_write_tokens=0,
+        total_tokens=total_tokens,
+        cost_usd=cost,
+        bucket='desktop_chat',
+        account='desktop_chat_realtime',
+        cost_status='complete',
+        quota_questions=1,
+        firestore_client=client,
     )
 
 
 def _usage_cost(report: UsageReport) -> float:
-    rates = (4.0, 32.0, 0.4, 24.0, 64.0) if report.provider == "openai" else (0.75, 3.0, 0.075, 4.5, 12.0)
-    return (
-        sum(
-            value * rate
-            for value, rate in zip(
-                (
-                    max(report.input_text_tokens, 0),
-                    max(report.input_audio_tokens, 0),
-                    max(report.input_cached_tokens, 0),
-                    max(report.output_text_tokens, 0),
-                    max(report.output_audio_tokens, 0),
-                ),
-                rates,
-            )
-        )
-        / 1_000_000
+    # One rate table for every realtime route: the relay prices the turns it
+    # observes on the wire with the same module (utils/llm/realtime_usage.py).
+    # The client cannot choose the rate card: mint_session issued one fixed
+    # model per provider and only that server-selected model is authoritative.
+    turn = client_reported_turn(
+        report.provider,
+        input_text_tokens=report.input_text_tokens,
+        input_audio_tokens=report.input_audio_tokens,
+        input_cached_tokens=report.input_cached_tokens,
+        output_text_tokens=report.output_text_tokens,
+        output_audio_tokens=report.output_audio_tokens,
     )
+    issued_model = _OPENAI_REALTIME_MODEL if report.provider == 'openai' else _GEMINI_LIVE_MODEL
+    return client_reported_cost_usd(report.provider, issued_model, turn)
 
 
 @router.post("/v2/realtime/usage", status_code=204)
 async def report_usage(report: UsageReport, uid: str = Depends(get_current_user_uid)) -> Response:
-    await run_blocking(db_executor, enforce_desktop_chat_quota, uid, "desktop")
+    await run_blocking(db_executor, enforce_desktop_chat_quota, uid, "desktop", byok_exempt=False)
     input_tokens = max(report.input_text_tokens, 0) + max(report.input_audio_tokens, 0)
     output_tokens = max(report.output_text_tokens, 0) + max(report.output_audio_tokens, 0)
     cached_tokens = max(report.input_cached_tokens, 0)

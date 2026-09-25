@@ -4,28 +4,30 @@ import SwiftUI
 /// The constant floating top bar.
 ///
 /// **It carries the destinations flat, and nothing opens.** On the left, one pill per destination:
-/// `Home`, `Library`, `Tasks`, `Rewind`, `Apps`. On the right, three wordless controls:
-/// microphone, screen capture, settings.
+/// `Chat`, `Brain`, `Tasks`, `Apps`. On the right, operational status and Settings
+/// stay persistent; referral remains available from Settings without competing
+/// with the product's primary destinations.
 ///
 /// The bar used to spell out `Home · Memory · Tasks · Apps` beside `Listening` and `Capture`, and both
 /// halves were wrong once Home became a search surface. A **`Memory` destination sitting next to a
 /// field that already returns memories is a contradiction** — the user reads it as two different
-/// memories — so the destinations that search absorbs are reached through `Library`, which is where
+/// memories — so the destinations that search absorbs are reached through `Activity`, which is where
 /// the whole corpus lives when you want to browse it rather than ask for it. The right-hand pills,
 /// meanwhile, were two labels permanently occupying the corner of a window whose point is the field in
 /// the middle of it; `ShellStatusIcons` carries the same state in a dot and the same sentence in a
 /// tooltip, at a third of the width.
 ///
-/// `Library` then briefly opened a **hover menu** of seven destinations, and that was the worse
-/// mistake: a control that opens because the pointer crossed it and closes because the pointer left on
-/// the way to the row you wanted. It is gone. Three of its seven entries were the Memory hub's own
-/// views and now live on the hub's page (`MemoryHubSwitcher`); the rest are the flat pills above. See
+/// That pill — then labelled `Library` — briefly opened a **hover menu** of seven destinations, and
+/// that was the worse mistake: a control that opens because the pointer crossed it and closes because
+/// the pointer left on the way to the row you wanted. It is gone. Three of its seven entries were the
+/// Memory hub's own views and now live as chips on the page this pill opens
+/// (`ActivityDestinationChip`); the rest are the flat pills above. See
 /// `TopNavigationDestinations.swift` for the full argument and `ShellDestination` for the
 /// reachability contract that keeps it honest.
 ///
 /// **Nothing became unreachable.** INV-NAV-1 is about the destination a shell routes to, not about how
 /// many pills the bar has: every established destination — Home, Conversations, Memories, Brain Map,
-/// Tasks, Rewind — still lands on its own feature-complete page. `Insights` is not in that list
+/// Tasks — still lands on its own feature-complete page. `Insights` is not in that list
 /// because its page was deleted rather than rehoused: the invariant forbids *stranding* a destination
 /// behind a reduced copy, not retiring one. What the assistant produces still arrives, as memories and
 /// notifications, and Home's knows-list still reads its history (`InsightStorage`).
@@ -46,7 +48,7 @@ struct DesktopTopBar: View {
   /// Items created after this instant count as "new" — updated whenever Omi
   /// last resigned front (see DesktopHomeView).
   let sinceDate: Date
-  let onRewind: () -> Void
+  @State private var showingReferral = false
 
   private var newConversations: Int {
     appState.conversations.filter { $0.createdAt > sinceDate && $0.deleted != true }.count
@@ -55,7 +57,7 @@ struct DesktopTopBar: View {
     memoriesViewModel.memories.filter { $0.createdAt > sinceDate }.count
   }
   private var newTasks: Int {
-    tasksStore.tasks.filter { $0.createdAt > sinceDate && $0.deleted != true }.count
+    tasksStore.tasks.filter { $0.createdAt > sinceDate && !$0.isRetired }.count
   }
 
   private var badges: TopNavigationDestinationBadges {
@@ -75,10 +77,10 @@ struct DesktopTopBar: View {
           },
           compactNavigation: { compactNavigationMenu },
           persistentControls: {
-            HStack(spacing: OmiSpacing.sm) {
-              DesktopUpdateStatusChip()
-              ShellStatusIcons(appState: appState)
-            }
+            TopNavigationTrailingControlsLayout(
+              updateStatus: { DesktopUpdateStatusChip() },
+              statusControls: { ShellStatusIcons(appState: appState) }
+            )
           },
           settings: { settingsButton }
         )
@@ -97,12 +99,20 @@ struct DesktopTopBar: View {
       .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
     .frame(height: TopNavigationLayoutMetrics.barHeight)
-    // Gap below the bar only: padding above it would put the top resize handle on empty air.
-    .padding(.bottom, OmiSpacing.sm)
+    // The destination owns the single 8 pt gap below navigation. Keeping that
+    // ownership there prevents the bar and the page from silently doubling it.
     // The compact fallback's menu is the one surface here that draws outside the bar. Elevation
     // belongs to the shared top-bar component so every shell and exported preview paints it above the
     // destination sibling rather than relying on each call site to remember (INV-NAV-1).
     .zIndex(1)
+    .sheet(isPresented: $showingReferral) {
+      ReferralSheetView()
+    }
+    .onReceive(NotificationCenter.default.publisher(for: .openReferralSheet)) { _ in
+      // The rating prompt's refer-a-friend proposal opens the same sheet as
+      // the top bar's own Refer control.
+      showingReferral = true
+    }
   }
 
   /// The complete primary navigation remains available when the full row of pills will not fit beside
@@ -152,14 +162,39 @@ struct DesktopTopBar: View {
   /// Every nav press on this bar: the brand, the pills and the settings gear. Keeping the transition
   /// in one place prevents those entry points from drifting apart.
   ///
-  /// `Rewind` is the one destination the shell does not reach by index — each shell hands the bar its
-  /// own way in (an overlay here, a `More` route in chat-first), so the pill calls that.
   private func navigate(to index: Int) {
-    guard index != SidebarNavItem.rewind.rawValue else {
-      onRewind()
-      return
+    OmiMotion.withGated(.easeOut(duration: 0.08)) {
+      // The pill says `Activity`, so it opens Activity rather than whichever hub page was persisted
+      // last. `memoryDestinationRawValue` was declared here and never written — which is why this
+      // shell used to land on Memories with no chip row and no switcher: a dead end reachable from
+      // a cold launch, since the stored default is `.memories`.
+      if index == SidebarNavItem.conversations.rawValue {
+        memoryDestinationRawValue = MemoryHubDestination.activity.rawValue
+      }
+      selectedIndex = index
     }
-    OmiMotion.withGated(.easeOut(duration: 0.08)) { selectedIndex = index }
+  }
+}
+
+/// The right-side controls in their visual order. These are persistent because
+/// they report live app state; promotional actions live in Settings instead.
+struct TopNavigationTrailingControlsLayout<UpdateStatus: View, StatusControls: View>: View {
+  let updateStatus: UpdateStatus
+  let statusControls: StatusControls
+
+  init(
+    @ViewBuilder updateStatus: () -> UpdateStatus,
+    @ViewBuilder statusControls: () -> StatusControls
+  ) {
+    self.updateStatus = updateStatus()
+    self.statusControls = statusControls()
+  }
+
+  var body: some View {
+    HStack(spacing: OmiSpacing.sm) {
+      updateStatus
+      statusControls
+    }
   }
 }
 
@@ -171,9 +206,9 @@ enum TopNavigationLayoutMetrics {
   /// `PageGlassLaneLayout.laneWidth` both delegate here, so the bar and whatever is under it cannot
   /// drift apart.
   ///
-  /// The lane fills the window. The 900 pt readable cap is a window-max
-  /// (`DesktopWindowLayoutPolicy.maximumContentWidth`), not an internal inset: capping here
-  /// inside a larger window is what drew the invisible click border around the glass.
+  /// The lane fills the window. The 900 pt readable cap belongs to content inside the lane, not to
+  /// the window itself: capping here inside a larger window is what drew the invisible click border
+  /// around the glass.
   static func contentLaneWidth(for availableWidth: CGFloat) -> CGFloat {
     max(0, availableWidth - (DesktopWindowLayoutPolicy.windowInset * 2))
   }
@@ -201,11 +236,11 @@ enum TopNavigationLayoutMetrics {
   /// three objects on the lane are lit by the same light.
   static var barShadow: InkGlassShadow { .ambient }
 
-  /// What the trailing cluster costs the row: the two capture icons, the gap, and the gear.
+  /// What the trailing cluster costs the row: the two capture icons.
   ///
   /// Stated here so the layout test can ask "does the flat row of destinations fit beside the controls
   /// at the narrowest window" without hosting the capture stack and its permissions.
-  static let persistentControlsWidth: CGFloat = 32 * 2 + 2
+  static let persistentControlsWidth: CGFloat = 32 * 2 + OmiSpacing.sm
   static let settingsControlWidth: CGFloat = 32
 }
 

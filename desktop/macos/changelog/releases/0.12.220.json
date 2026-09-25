@@ -1,0 +1,7 @@
+{
+  "version": "0.12.220",
+  "date": "2026-08-26",
+  "changes": [
+    "Fixed the Screen Recording permission dialog reappearing even though permission was already granted."
+  ]
+}

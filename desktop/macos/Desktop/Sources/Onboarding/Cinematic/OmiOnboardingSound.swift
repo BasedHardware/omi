@@ -1,5 +1,6 @@
 import AVFoundation
 import Foundation
+import ObjCExceptionCatcher
 
 //  Playback for the four sounds `scripts/make-onboarding-sounds.py` generates into
 //  `Sources/Resources/Sounds`.
@@ -90,6 +91,15 @@ struct OmiSoundAssetLocator: Sendable {
   func url(for asset: OmiSoundAsset) -> URL? {
     for root in roots {
       let candidate = root.appendingPathComponent(asset.fileName)
+      if FileManager.default.isReadableFile(atPath: candidate.path) { return candidate }
+    }
+    return nil
+  }
+
+  /// Any flat bundled resource (not only sounds), searched on the same roots.
+  func url(forFileName fileName: String) -> URL? {
+    for root in roots {
+      let candidate = root.appendingPathComponent(fileName)
       if FileManager.default.isReadableFile(atPath: candidate.path) { return candidate }
     }
     return nil
@@ -191,6 +201,16 @@ protocol OmiSoundOutput: AnyObject, Sendable {
   func playOneShot(_ asset: OmiSoundAsset)
 }
 
+/// Whether `AVAudioPlayerNode.play()` may be called.
+///
+/// `play()` raises `NSException` ("player did not see an IO cycle") when the engine
+/// is not running or has not completed an IO cycle. A silenced output never plays.
+enum OmiAVSoundPlayback {
+  static func mayPlay(engineIsRunning: Bool, isSilenced: Bool) -> Bool {
+    engineIsRunning && !isSilenced
+  }
+}
+
 /// Hands one decoded buffer to `AVAudioConverter` exactly once, then reports end of stream.
 ///
 /// A box rather than two captured locals because the converter's input block is `@Sendable` and an
@@ -258,6 +278,7 @@ final class OmiAVSoundOutput: OmiSoundOutput, @unchecked Sendable {
   /// remains retryable after the output device or audio configuration changes.
   private var isSilenced = false
   private var didLogEngineStartFailure = false
+  private var didLogPlaybackException = false
   private var loopingAsset: OmiSoundAsset?
   private var fadeTimer: DispatchSourceTimer?
   private var configurationObserver: NSObjectProtocol?
@@ -332,12 +353,15 @@ final class OmiAVSoundOutput: OmiSoundOutput, @unchecked Sendable {
       // The callback carries the voice's *index*, never the node: the completion block is
       // `@Sendable` and an `AVAudioPlayerNode` is not, so the node is looked back up on the queue
       // that owns it. A rebuild that has emptied `voices` in the meantime finds nothing and stops.
-      voice.scheduleBuffer(buffer, at: nil, options: [], completionCallbackType: .dataPlayedBack) {
-        [weak self] _ in
+      self.scheduleAndPlayOnQueue(
+        voice,
+        buffer: buffer,
+        options: [],
+        completionCallbackType: .dataPlayedBack
+      ) { [weak self] _ in
         guard let self else { return }
         self.queue.async { self.stopVoiceOnQueue(at: index) }
       }
-      voice.play()
     }
   }
 
@@ -387,9 +411,54 @@ final class OmiAVSoundOutput: OmiSoundOutput, @unchecked Sendable {
     // `.loops` on the buffer, not a container restart: the asset's tail is crossfaded into its
     // head, so looping the decoded PCM is sample-exact, while re-opening the file reintroduces the
     // seam the crossfade was generated to remove.
-    musicNode.scheduleBuffer(buffer, at: nil, options: [.loops], completionHandler: nil)
-    musicNode.play()
+    guard scheduleAndPlayOnQueue(musicNode, buffer: buffer, options: [.loops]) else { return }
     ramp(to: 1, over: fadeIn, then: nil)
+  }
+
+  /// Schedule `buffer` and call `play()` only if the engine is running, catching the
+  /// ObjC `NSException` `AVAudioPlayerNode` raises when it has not seen an IO cycle.
+  /// Returns `false` when playback was skipped or silenced; never throws into Swift.
+  @discardableResult
+  private func scheduleAndPlayOnQueue(
+    _ node: AVAudioPlayerNode,
+    buffer: AVAudioPCMBuffer,
+    options: AVAudioPlayerNodeBufferOptions,
+    completionCallbackType: AVAudioPlayerNodeCompletionCallbackType? = nil,
+    completionHandler: (@Sendable (AVAudioPlayerNodeCompletionCallbackType) -> Void)? = nil
+  ) -> Bool {
+    guard OmiAVSoundPlayback.mayPlay(engineIsRunning: engine.isRunning, isSilenced: isSilenced) else {
+      return false
+    }
+
+    let exception = ObjCExceptionCatcher.catching {
+      if let completionCallbackType {
+        node.scheduleBuffer(
+          buffer,
+          at: nil,
+          options: options,
+          completionCallbackType: completionCallbackType,
+          completionHandler: completionHandler)
+      } else {
+        node.scheduleBuffer(buffer, at: nil, options: options, completionHandler: nil)
+      }
+      node.play()
+    }
+    if exception != nil {
+      silenceAfterPlaybackExceptionOnQueue()
+      return false
+    }
+    return true
+  }
+
+  private func silenceAfterPlaybackExceptionOnQueue() {
+    isSilenced = true
+    loopingAsset = nil
+    fadeTimer?.cancel()
+    fadeTimer = nil
+    if !didLogPlaybackException {
+      didLogPlaybackException = true
+      logError("onboarding sound: audio player could not start; onboarding runs silent")
+    }
   }
 
   /// Wires the graph on first use and starts the engine, restarting it if `stopEngineIfIdleOnQueue`
@@ -523,6 +592,10 @@ final class OmiAVSoundOutput: OmiSoundOutput, @unchecked Sendable {
 
     log("onboarding sound: audio device changed; rebuilding the graph")
     guard let resume else { return }
+    // Do not schedule or play until the rebuilt engine is actually running.
+    // `startLoopOnQueue` re-checks this, but a configuration-change rebuild is
+    // the path that previously called `play()` against a graph with no IO cycle.
+    guard prepareEngineOnQueue(), engine.isRunning else { return }
     startLoopOnQueue(resume, fadeIn: Self.recoveryFadeIn)
   }
 }
@@ -556,19 +629,36 @@ final class OmiSoundController {
   private let systemUISoundsEnabled: () -> Bool
   private let defaults: UserDefaults
 
+  /// How long the bed is allowed to play before it fades itself out.
+  ///
+  /// The bed loops from one decoded buffer with `.loops`, so without a cap it plays
+  /// for as long as the process lives — nothing in the cinematic stops it if the
+  /// user leaves onboarding open, and that is what is heard as intro music that
+  /// never ends. Ten seconds is enough to read as the app arriving.
+  static let maxMusicDuration: TimeInterval = 10
+
   private var available: Set<OmiSoundAsset> = []
   private var didPrepare = false
+  /// Bumped whenever the bed starts or stops, so a cap scheduled for an older run
+  /// recognises itself as stale instead of cutting a bed someone started since.
+  private var musicGeneration = 0
+  private let scheduleCap: (TimeInterval, @escaping @Sendable () -> Void) -> Void
 
   init(
     output: OmiSoundOutput,
     locator: OmiSoundAssetLocator,
     systemUISoundsEnabled: @escaping () -> Bool,
-    defaults: UserDefaults = .standard
+    defaults: UserDefaults = .standard,
+    // Injectable so the cap is testable without a wall-clock wait.
+    scheduleCap: @escaping (TimeInterval, @escaping @Sendable () -> Void) -> Void = { delay, body in
+      DispatchQueue.main.asyncAfter(deadline: .now() + delay, execute: body)
+    }
   ) {
     self.output = output
     self.locator = locator
     self.systemUISoundsEnabled = systemUISoundsEnabled
     self.defaults = defaults
+    self.scheduleCap = scheduleCap
     // Absent means on: an install that has never seen the control still gets the bed.
     self.isMusicEnabled = defaults.object(forKey: Self.musicEnabledDefaultsKey) as? Bool ?? true
     self.areEffectsEnabled = defaults.object(forKey: Self.effectsEnabledDefaultsKey) as? Bool ?? true
@@ -634,12 +724,30 @@ final class OmiSoundController {
     guard isMusicEnabled, available.contains(.pad), !isMusicPlaying else { return }
     isMusicPlaying = true
     output.startLoop(.pad, fadeIn: max(0, fadeIn))
+    scheduleMusicCap()
   }
 
   func stopMusic(fadeOut: TimeInterval) {
+    musicGeneration &+= 1
     guard isMusicPlaying else { return }
     isMusicPlaying = false
     output.stopLoop(fadeOut: max(0, fadeOut))
+  }
+
+  /// Fades the bed out once its allowance is spent, so a loop that nothing else
+  /// stops cannot keep playing for the life of the process.
+  private func scheduleMusicCap() {
+    musicGeneration &+= 1
+    let generation = musicGeneration
+    scheduleCap(Self.maxMusicDuration) { [weak self] in
+      MainActor.assumeIsolated {
+        guard let self, self.musicGeneration == generation, self.isMusicPlaying else { return }
+        // Logged because the cap is otherwise only audible: without this line the
+        // only way to tell a build has it is to sit and listen to onboarding.
+        log("onboarding sound: bed reached its \(Int(Self.maxMusicDuration))s cap; fading out")
+        self.stopMusic(fadeOut: OmiOnboardingMusic.defaultFadeOut)
+      }
+    }
   }
 }
 

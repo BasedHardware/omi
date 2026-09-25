@@ -200,6 +200,7 @@ final class AuthorizedToolExecutionTests: XCTestCase {
     let binding = ExternalSurfaceRunBinding(
       ownerID: "owner-1",
       sessionID: "session-1",
+      surfaceKind: "floating_chat",
       turnID: turnID.rawValue.uuidString.lowercased(),
       runID: "run-1",
       attemptID: "attempt-1",
@@ -308,6 +309,18 @@ final class AuthorizedToolExecutionTests: XCTestCase {
     XCTAssertEqual(
       try AuthorizedToolExecution.inputHash(for: input),
       "sha256:6f6a5fc2f37f5512e07808cd81aafc5b868c5573cff37ac67205713dd079f870"
+    )
+  }
+
+  func testCanonicalInputHashMatchesKernelWhenTextContainsForwardSlashes() throws {
+    let input: [String: Any] = [
+      "context": "Use memories/conversations from https://omi.me",
+      "query": "Think carefully",
+    ]
+
+    XCTAssertEqual(
+      try AuthorizedToolExecution.inputHash(for: input),
+      "sha256:8a78b524b6be791ca7d4bad17e2e9ab8f902cabefdf8294c2e99b0409ab71749"
     )
   }
 

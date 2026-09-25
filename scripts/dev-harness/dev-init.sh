@@ -39,4 +39,5 @@ bash scripts/install-git-hooks.sh
 
 echo ""
 echo "Next: add your four API keys to backend/.env.local-dev, then run:"
-echo "  make dev-desktop"
+echo "  make dev-up        # start the harness for mobile/iOS testing"
+echo "  make dev-desktop   # start the harness and the desktop app"

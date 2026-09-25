@@ -62,9 +62,27 @@ Omi desktop app, so a port means a real copy, not a dependency.
 ## Part 2 — Settings
 
 A standard macOS settings window: left sidebar with rounded selection, header reading "Settings" with
-the current pane name beneath it. Six panes, each with an SF Symbol: **General** (gear), **Agents**
-(terminal prompt), **Appearance** (contrast circle), **Capture** (record circle), **Storage** (drive),
-**Exclusions** (eye with slash).
+the current pane name beneath it. Five panes, each with an SF Symbol: **General** (gear), **Agents**
+(terminal prompt), **Capture** (record circle), **Storage** (drive), **Exclusions** (eye with slash).
+
+The window opens at the **timeline's own rectangle** (`RewindWindow.defaultSize`, 1180 × 760, minimum
+820 × 560) rather than at a size of its own. The two windows already shared their chrome, ground and
+corner radius; a different size was the one thing left making them read as different objects.
+
+### Controls this app deliberately does not offer
+
+**Seven rows are gone**, listed below. Each was removed on a report, and none was narrowed — a
+control the user cannot find is still a control that fires.
+
+| Removed | Where it went, and why |
+|---|---|
+| **The whole Appearance pane** | Theme tiles overrode the machine's own Appearance setting inside one app; the timeline-control toggles were four ways to make the timeline worse (they are now always drawn). **Show Dock Icon** moved to General — it was never an appearance choice. |
+| Open Search Shortcut | A second chord (`⌘⌘⇧`) onto the *same* window `⌘ + ⌘` opens: `ContextApp.shortcutFired` answered both with one `window.press()`. Removed from the shortcut layer too, not just the pane. |
+| The standalone Accessibility row | It appeared under the recorders when the grant was missing and offered a pane this app was not listed in. Replaced by `GlobalShortcuts.askForAccessibility()`, which raises the real system alert — that is also what puts the app in the list. The recorder's own subtitle still says when a chord cannot fire. |
+| Airgap Mode toggle | The switch, not the promise: `ExclusionEngine` still carries the flag and `NetworkEgress` still enforces it for anyone whose `exclusions.json` has it set. |
+| Sound toggle | The cinematic carries its own mute button, which is the surface where music is actually playing. |
+| Capture Quality tiles | Three of the four tiles bought disk back by making the user's own screenshots harder to read — and, since `look` hands frames to Claude as images, harder for a model to read too. What every install shipped on is now what every install gets (`FrameImage.Quality`). |
+| Agents ▸ "Detected on this Mac" | A read-only survey of Claude/Codex/Cursor that nothing acted on, in the pane where the two controls that do something live. |
 
 Every row follows one pattern: a rounded icon tile on the left, a title, a smaller grey subtitle, and
 a control on the right (toggle, dropdown, button, shortcut recorder, or radio).
@@ -72,22 +90,33 @@ a control on the right (toggle, dropdown, button, shortcut recorder, or radio).
 ### General
 | Row | Subtitle | Control |
 |---|---|---|
-| Open Timeline Shortcut | Record a keyboard shortcut. Clear it to use ⌘⌘. | shortcut recorder, showing `⌘⌘` |
-| Open Search Shortcut | Record a keyboard shortcut. Clear it to use ⌘⌘⇧. | shortcut recorder, showing `⌘⌘⇧` |
-| Codex also uses ⌘⌘ | Coast and Codex both use ⌘⌘. | accent button: `Switch Codex to ⌥⌥` |
+| Open Activity Shortcut | Record a keyboard shortcut. Clear it to use ⌘ + ⌘. | shortcut recorder, showing `⌘ + ⌘` |
+| Codex also uses ⌘ + ⌘ | Context for Claude and Codex both use ⌘ + ⌘. | accent button: `Switch Codex to ⌥⌥` |
 | Launch on Login | Whether the app automatically starts when you sign in to your computer. | toggle, on |
-| Airgap Mode | *(Coast's own copy: "Suppresses telemetry, update checks, and remote favicon requests. Takes effect after relaunch.")* | toggle, off |
-| Run setup again | Starts the first-run experience over: the opening sequence, the setup cards, then the walkthrough. Nothing is deleted. | button: `Run setup again`, then a confirmation |
+| Show Dock Icon | Keeps the app's icon visible in the Dock during normal use. | toggle, on |
+| Run onboarding again | Starts the first-run experience over: the opening sequence, the onboarding cards, then the walkthrough. Nothing is deleted. | button: `Run onboarding again`, then a confirmation |
 | Updates | Version 1.0 (131000) | button: `Update Now` |
 | Automatic Updates | Check for new versions automatically. | toggle, on |
 
-**"Run setup again" is a walkthrough, not an uninstall.** It clears exactly three defaults —
+**"Run onboarding again" is a walkthrough, not an uninstall.** (It was "Run setup again"; the
+rename is the accurate word as well as the requested one — nothing is set up, a first-run experience
+is replayed.) It clears exactly three defaults —
 `context.onboarded`, `context.onboarding.step`, `context.tutorial.step` — in one owner
 (`Sources/ContextApp/Onboarding/OnboardingReset.swift`), then re-enters the launch path
 (`ContextAppDelegate.surfaceSomethingForTheUser`) so the eight-second cinematic really does play
 again. It never signs out, never touches a TCC grant or the capture database, and never clears a
 `context.settings.*` key; the Settings window closes on the way, which the confirmation says first.
 Guard tests: `Tests/ContextAppTests/OnboardingResetTests.swift`.
+
+### Airgap Mode: the switch is gone, the enforcement is not
+
+Everything from here to the end of this section is about a **row that no longer exists in
+Settings** (see the table above). It is kept because the *enforcement* is unchanged and still has to
+be right: `ExclusionEngine` carries `airgapMode`, `NetworkEgress` refuses every client while it is
+set, and installs whose `exclusions.json` already says so keep exactly the behaviour they chose.
+What went is the toggle and its subtitle; `SettingsTests.testAirgapEnforcementSurvivesTheRemovalOfItsSwitch`
+replaced the copy assertion with one on the engine. Read the paragraphs below as the specification of
+what the flag does, not as a description of a row on screen.
 
 **Do not ship Coast's Airgap copy.** It was transcribed from their screenshot and describes *their*
 app; taken as our requirement it produced a switch that suppressed favicon requests and nothing else

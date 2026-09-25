@@ -1,0 +1,7 @@
+{
+  "version": "0.12.244",
+  "date": "2026-08-30",
+  "changes": [
+    "Stopped proactive chat rows from repeating the category (Focus, Insight, Memory) above the same word in the body"
+  ]
+}

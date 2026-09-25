@@ -578,73 +578,10 @@ enum AgentQueryTerminalStatus: Equatable, Sendable {
 /// Lightweight client handle for the shared Node.js agent runtime.
 actor AgentBridge {
 
-  struct QueryResult {
-    let text: String
-    let costUsd: Double
-    let omiSessionId: String
-    let runId: String
-    let attemptId: String
-    let adapterSessionId: String?
-    let terminalStatus: AgentQueryTerminalStatus
-    let failure: AgentRuntimeFailure?
-    let inputTokens: Int
-    let outputTokens: Int
-    let cacheReadTokens: Int
-    let cacheWriteTokens: Int
-    let artifacts: [AgentArtifactProjection]
-    let completionDeltaArtifacts: [AgentArtifactProjection]
-
-    init(
-      text: String,
-      costUsd: Double,
-      omiSessionId: String,
-      runId: String,
-      attemptId: String,
-      adapterSessionId: String?,
-      terminalStatus: String?,
-      failure: AgentRuntimeFailure? = nil,
-      inputTokens: Int,
-      outputTokens: Int,
-      cacheReadTokens: Int,
-      cacheWriteTokens: Int,
-      artifacts: [AgentArtifactProjection] = [],
-      completionDeltaArtifacts: [AgentArtifactProjection] = []
-    ) {
-      self.text = text
-      self.costUsd = costUsd
-      self.omiSessionId = omiSessionId
-      self.runId = runId
-      self.attemptId = attemptId
-      self.adapterSessionId = adapterSessionId
-      self.terminalStatus = AgentQueryTerminalStatus(wireValue: terminalStatus)
-      self.failure = failure
-      self.inputTokens = inputTokens
-      self.outputTokens = outputTokens
-      self.cacheReadTokens = cacheReadTokens
-      self.cacheWriteTokens = cacheWriteTokens
-      self.artifacts = artifacts
-      self.completionDeltaArtifacts = completionDeltaArtifacts
-    }
-
-    @discardableResult
-    func requireSucceeded() throws -> QueryResult {
-      switch terminalStatus {
-      case .succeeded:
-        return self
-      case .cancelled:
-        throw BridgeError.stopped
-      case .failed, .timedOut, .orphaned:
-        let raw = failure?.displayMessage ?? (text.isEmpty ? "Agent failed" : text)
-        throw failure.map(BridgeError.agentRuntimeFailure) ?? BridgeError.agentError(raw)
-      case .invalid:
-        throw BridgeError.agentError("Agent returned an invalid terminal status")
-      }
-    }
-  }
-
   typealias TextDeltaHandler = @Sendable (String) -> Void
   typealias ToolCallHandler = @Sendable (String, String, [String: Any]) async -> String
   typealias ToolActivityHandler = @Sendable (String, String, String?, [String: Any]?) -> Void
+  typealias TurnActivityHandler = @Sendable () -> Void
   typealias ThinkingDeltaHandler = @Sendable (String) -> Void
   typealias ToolResultDisplayHandler = @Sendable (String, String, String) -> Void
   typealias AuthRequiredHandler = @Sendable ([[String: Any]], String?) -> Void
@@ -694,10 +631,8 @@ actor AgentBridge {
   private var synchronizedRuntimeAuthorityEpoch: UInt64?
   private var synchronizedRuntimeAuthorityOwnerID: String?
   private var activeRequestId: String?
+  private var realtimeChatLaneInterrupt = RealtimeChatLaneInterruptBinding()
   private var lastKnownQuota: OwnerBoundQuota?
-  private var tokenRefreshTask: Task<Void, Never>?
-  private var tokenRefreshTaskID: UUID?
-  private var tokenRefreshAuthorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
   private var stopTask: Task<Void, Never>?
   private var lifecycleGeneration: UInt64 = 0
   private var lifecycleFlight: LifecycleFlight?
@@ -1115,10 +1050,6 @@ actor AgentBridge {
   /// can spawn a fresh Node bridge (the process is already gone).
   func prepareForCrashRecovery() {
     lifecycleGeneration &+= 1
-    tokenRefreshTask?.cancel()
-    tokenRefreshTask = nil
-    tokenRefreshTaskID = nil
-    tokenRefreshAuthorizationSnapshot = nil
     registered = false
     synchronizedRuntimeAuthorityEpoch = nil
     synchronizedRuntimeAuthorityOwnerID = nil
@@ -1135,10 +1066,6 @@ actor AgentBridge {
       await stopTask.value
       return
     }
-    tokenRefreshTask?.cancel()
-    tokenRefreshTask = nil
-    tokenRefreshTaskID = nil
-    tokenRefreshAuthorizationSnapshot = nil
     lifecycleGeneration &+= 1
     let flightID = lifecycleFlight?.id
     registered = false
@@ -1174,7 +1101,6 @@ actor AgentBridge {
   ) async throws -> AgentDefaultExecutionProfile {
     let authorization = try captureAuthorization()
     try await start(authorizationSnapshot: authorization)
-    ensureTokenRefreshTask(authorizationSnapshot: authorization)
     _ = try? await refreshAuthToken(authorizationSnapshot: authorization)
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else {
       throw BridgeError.authMissing
@@ -1582,9 +1508,12 @@ actor AgentBridge {
     producingTurnId: String? = nil,
     expectedContext: AgentContextFreshness? = nil,
     reasoningEffort: String? = nil,
+    jitBudget: JITProactivityAgentBudget? = nil,
+    jitCostEvidenceProjection: RuntimeJSONPayloadBox? = nil,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
     onTextDelta: @escaping TextDeltaHandler,
     onToolActivity: @escaping ToolActivityHandler,
+    onTurnActivity: @escaping TurnActivityHandler = {},
     onThinkingDelta: @escaping ThinkingDeltaHandler = { _ in },
     onToolResultDisplay: @escaping ToolResultDisplayHandler = { _, _, _ in },
     onAuthRequired: @escaping AuthRequiredHandler = { _, _ in },
@@ -1614,9 +1543,12 @@ actor AgentBridge {
       producingTurnId: producingTurnId,
       expectedContext: expectedContext,
       reasoningEffort: reasoningEffort,
+      jitBudget: jitBudget,
+      jitCostEvidenceProjection: jitCostEvidenceProjection,
       authorizationSnapshot: authorization,
       onTextDelta: onTextDelta,
       onToolActivity: onToolActivity,
+      onTurnActivity: onTurnActivity,
       onThinkingDelta: onThinkingDelta,
       onToolResultDisplay: onToolResultDisplay,
       onAuthRequired: onAuthRequired,
@@ -1634,9 +1566,12 @@ actor AgentBridge {
     producingTurnId: String? = nil,
     expectedContext: AgentContextFreshness? = nil,
     reasoningEffort: String? = nil,
+    jitBudget: JITProactivityAgentBudget? = nil,
+    jitCostEvidenceProjection: RuntimeJSONPayloadBox? = nil,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
     onTextDelta: @escaping TextDeltaHandler,
     onToolActivity: @escaping ToolActivityHandler,
+    onTurnActivity: @escaping TurnActivityHandler = {},
     onThinkingDelta: @escaping ThinkingDeltaHandler = { _ in },
     onToolResultDisplay: @escaping ToolResultDisplayHandler = { _, _, _ in },
     onAuthRequired: @escaping AuthRequiredHandler = { _, _ in },
@@ -1671,7 +1606,19 @@ actor AgentBridge {
 
     let usesManagedCloud = session.profile.credentialScope == .managedCloud
     if usesManagedCloud {
-      if let cached = currentQuota(for: authorization), !cached.allowed {
+      // Refresh before the cached verdict is applied, not after it: a blocking
+      // snapshot must never be the reason it is itself never re-fetched. When
+      // the throw came first, upgrading an exhausted plan left this cache
+      // denying every send with no path back.
+      Task { [weak self, authorization] in
+        if let quota = await APIClient.shared.fetchChatUsageQuota(
+          authorizationSnapshot: authorization)
+        {
+          guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return }
+          await self?.cacheQuota(quota, authorizationSnapshot: authorization)
+        }
+      }
+      if let cached = currentQuota(for: authorization), !cached.allowed, cached.isOveragePlan != true {
         QueryTracerContext.current?.mark("quota_check", metadata: ["result": "exceeded_cached"])
         throw BridgeError.quotaExceeded(
           plan: cached.plan,
@@ -1682,19 +1629,20 @@ actor AgentBridge {
         )
       }
       QueryTracerContext.current?.mark("quota_check", metadata: ["mode": "optimistic"])
-      Task { [weak self, authorization] in
-        if let quota = await APIClient.shared.fetchChatUsageQuota(
-          authorizationSnapshot: authorization)
-        {
-          guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return }
-          await self?.cacheQuota(quota, authorizationSnapshot: authorization)
-        }
-      }
     }
 
     let requestId = UUID().uuidString
     activeRequestId = requestId
-    defer { activeRequestId = nil }
+    defer {
+      realtimeChatLaneInterrupt.finishRequest(requestId)
+      if let current = activeRequestId {
+        realtimeChatLaneInterrupt.finishRequest(current)
+        activeRequestId = nil
+      }
+    }
+    guard realtimeChatLaneInterrupt.beginRequest(requestId) else {
+      throw BridgeError.stopped
+    }
 
     let bridgeOutputTracker = BridgeOutputTracker()
     let trackedTextDelta: TextDeltaHandler = { delta in
@@ -1706,6 +1654,10 @@ actor AgentBridge {
       guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return }
       bridgeOutputTracker.markOutput()
       onToolActivity(name, status, toolUseId, input)
+    }
+    let trackedTurnActivity: TurnActivityHandler = {
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return }
+      onTurnActivity()
     }
     let trackedThinkingDelta: ThinkingDeltaHandler = { delta in
       guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else { return }
@@ -1734,9 +1686,12 @@ actor AgentBridge {
         producingTurnId: producingTurnId,
         expectedContext: expectedContext,
         reasoningEffort: reasoningEffort,
+        jitBudget: jitBudget,
+        jitCostEvidenceProjection: jitCostEvidenceProjection,
         authorizationSnapshot: authorization,
         onTextDelta: trackedTextDelta,
         onToolActivity: trackedToolActivity,
+        onTurnActivity: trackedTurnActivity,
         onThinkingDelta: trackedThinkingDelta,
         onToolResultDisplay: trackedToolResultDisplay,
         onAuthRequired: guardedAuthRequired,
@@ -1761,7 +1716,11 @@ actor AgentBridge {
         throw BridgeError.authMissing
       }
       let retryRequestId = UUID().uuidString
+      realtimeChatLaneInterrupt.finishRequest(requestId)
       activeRequestId = retryRequestId
+      guard realtimeChatLaneInterrupt.beginRequest(retryRequestId) else {
+        throw BridgeError.stopped
+      }
       return try await runtime.query(
         clientId: clientId,
         requestId: retryRequestId,
@@ -1774,9 +1733,12 @@ actor AgentBridge {
         producingTurnId: producingTurnId,
         expectedContext: expectedContext,
         reasoningEffort: reasoningEffort,
+        jitBudget: jitBudget,
+        jitCostEvidenceProjection: jitCostEvidenceProjection,
         authorizationSnapshot: authorization,
         onTextDelta: trackedTextDelta,
         onToolActivity: trackedToolActivity,
+        onTurnActivity: trackedTurnActivity,
         onThinkingDelta: trackedThinkingDelta,
         onToolResultDisplay: trackedToolResultDisplay,
         onAuthRequired: guardedAuthRequired,
@@ -1785,10 +1747,38 @@ actor AgentBridge {
     }
   }
 
+  func bindRealtimeChatLaneInterrupt(_ identity: String) {
+    realtimeChatLaneInterrupt.bind(identity)
+  }
+
+  func unbindRealtimeChatLaneInterrupt(_ identity: String) {
+    realtimeChatLaneInterrupt.unbind(identity)
+  }
+
   func interrupt(
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async {
     guard let requestId = activeRequestId else { return }
+    await interrupt(
+      requestId: requestId,
+      authorizationSnapshot: authorizationSnapshot)
+  }
+
+  func interruptRealtimeChatLane(
+    identity: String,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async {
+    guard let requestId = realtimeChatLaneInterrupt.requestInterrupt(identity) else { return }
+    await interrupt(
+      requestId: requestId,
+      authorizationSnapshot: authorizationSnapshot)
+  }
+
+  private func interrupt(
+    requestId: String,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
+  ) async {
+    guard activeRequestId == requestId else { return }
     guard let authorization = try? resolveAuthorization(authorizationSnapshot) else { return }
     await runtime.interrupt(
       clientId: clientId,
@@ -1818,15 +1808,14 @@ actor AgentBridge {
             expectedUserId: expectedOwnerId
           )
         },
-        sendToken: { token, expectedOwnerId, snapshot in
-          await runtime.refreshAuthToken(
-            token,
+        sendToken: { _, expectedOwnerId, snapshot in
+          await runtime.confirmModelCredentials(
             expectedOwnerId: expectedOwnerId,
             authorizationSnapshot: snapshot)
         }
       )
       if !refreshed {
-        log("AgentBridge: refreshAuthToken owner changed or token was unavailable; skipping push")
+        log("AgentBridge: refreshAuthToken owner changed or token was unavailable; skipping authority update")
       }
       return refreshed
     } catch {
@@ -1835,9 +1824,9 @@ actor AgentBridge {
     }
   }
 
-  /// Fetches and sends one token under a single immutable owner identity.
+  /// Validates a credential under one immutable owner identity before confirming readiness.
   /// The second owner read closes the suspension window around the credential
-  /// fetch; the runtime performs the same comparison again at the send boundary.
+  /// fetch; readiness IPC performs the same comparison and carries no token.
   nonisolated static func refreshOwnerBoundToken<Authorization: Sendable>(
     captureAuthorization: @escaping @Sendable () async -> Authorization?,
     authorizationOwnerId: @escaping @Sendable (_ authorization: Authorization) -> String,
@@ -1876,47 +1865,10 @@ actor AgentBridge {
     return token.isEmpty ? nil : token
   }
 
-  private func ensureTokenRefreshTask(
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
-  ) {
-    guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
-    if tokenRefreshTask != nil,
-      tokenRefreshAuthorizationSnapshot == authorizationSnapshot
-    {
-      return
-    }
-    tokenRefreshTask?.cancel()
-    let taskID = UUID()
-    tokenRefreshTaskID = taskID
-    tokenRefreshAuthorizationSnapshot = authorizationSnapshot
-    tokenRefreshTask = Task { [weak self] in
-      defer {
-        Task { [weak self] in
-          await self?.finishTokenRefreshTask(id: taskID)
-        }
-      }
-      while !Task.isCancelled {
-        try? await Task.sleep(nanoseconds: 45 * 60 * 1_000_000_000)
-        guard !Task.isCancelled else { break }
-        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { break }
-        let refreshed = try? await self?.refreshAuthToken(
-          authorizationSnapshot: authorizationSnapshot)
-        guard refreshed == true else { break }
-      }
-    }
-  }
-
-  private func finishTokenRefreshTask(id: UUID) {
-    guard tokenRefreshTaskID == id else { return }
-    tokenRefreshTask = nil
-    tokenRefreshTaskID = nil
-    tokenRefreshAuthorizationSnapshot = nil
-  }
-
   /// Node starts with a non-authoritative local placeholder owner. Every
   /// harness must replace it before the first owner-scoped RPC. When a managed
-  /// token is available it is pushed even for ACP/Hermes/OpenClaw so a pinned
-  /// pi-mono session can still register; missing token only fails a pi-mono start.
+  /// credential check succeeds, only readiness is recorded; credentials are
+  /// obtained again on demand for each pi-mono provider request.
   nonisolated static func synchronizeAuthorityForStart(
     requiresCredentials: Bool,
     refreshCredentials: () async throws -> Bool,
@@ -1940,9 +1892,6 @@ actor AgentBridge {
     requiresCredentials: Bool
   ) async {
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
-    if requiresCredentials {
-      ensureTokenRefreshTask(authorizationSnapshot: authorizationSnapshot)
-    }
     await Self.synchronizeAuthorityForStart(
       requiresCredentials: requiresCredentials,
       refreshCredentials: { [weak self] in
@@ -2109,8 +2058,9 @@ enum BridgeError: LocalizedError {
     case .agentError(let message):
       return Self.isSessionAuthenticationFailureMessage(message)
     case .agentRuntimeFailure(let failure):
-      if failure.failureCode == .authentication {
-        return true
+      guard failure.provider == "omi" else { return false }
+      if failure.failureCode != .unknown {
+        return failure.failureCode == .authentication
       }
       return Self.isSessionAuthenticationFailureMessage(failure.displayMessage)
         || (failure.technicalMessage.map(Self.isSessionAuthenticationFailureMessage) ?? false)

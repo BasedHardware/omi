@@ -11,8 +11,10 @@ import 'package:omi/pages/conversations/widgets/create_folder_sheet.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/folder_provider.dart';
 import 'package:omi/utils/folders/folder_icon_mapper.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/responsive/responsive_helper.dart';
+import 'package:omi/widgets/header_circle_button.dart';
 
 class FolderTabs extends StatefulWidget {
   final List<Folder> folders;
@@ -20,9 +22,6 @@ class FolderTabs extends StatefulWidget {
   final Function(String?) onFolderSelected;
   final bool showStarredOnly;
   final VoidCallback onStarredToggle;
-  final bool showDailySummaries;
-  final VoidCallback onDailySummariesToggle;
-  final bool hasDailySummaries;
 
   const FolderTabs({
     super.key,
@@ -31,9 +30,6 @@ class FolderTabs extends StatefulWidget {
     required this.onFolderSelected,
     required this.showStarredOnly,
     required this.onStarredToggle,
-    required this.showDailySummaries,
-    required this.onDailySummariesToggle,
-    required this.hasDailySummaries,
   });
 
   @override
@@ -44,26 +40,21 @@ class _FolderTabsState extends State<FolderTabs> {
   final ScrollController _scrollController = ScrollController();
   String? _previousSelectedFolderId;
   bool _previousShowStarredOnly = false;
-  bool _previousShowDailySummaries = false;
 
   @override
   void initState() {
     super.initState();
     _previousSelectedFolderId = widget.selectedFolderId;
     _previousShowStarredOnly = widget.showStarredOnly;
-    _previousShowDailySummaries = widget.showDailySummaries;
   }
 
   @override
   void didUpdateWidget(FolderTabs oldWidget) {
     super.didUpdateWidget(oldWidget);
     // Auto-scroll to top when selection changes
-    if (widget.selectedFolderId != _previousSelectedFolderId ||
-        widget.showStarredOnly != _previousShowStarredOnly ||
-        widget.showDailySummaries != _previousShowDailySummaries) {
+    if (widget.selectedFolderId != _previousSelectedFolderId || widget.showStarredOnly != _previousShowStarredOnly) {
       _previousSelectedFolderId = widget.selectedFolderId;
       _previousShowStarredOnly = widget.showStarredOnly;
-      _previousShowDailySummaries = widget.showDailySummaries;
       _scrollToStart();
     }
   }
@@ -120,24 +111,20 @@ class _FolderTabsState extends State<FolderTabs> {
 
   @override
   Widget build(BuildContext context) {
-    // Build ordered list of tabs: All, Recap (if available), Starred, folders
+    // Build ordered list of tabs: All, Starred, folders
     final List<Widget> tabs = [];
 
     // "All" tab always first - clears all filters when clicked
     tabs.add(
       _FolderTab(
         label: context.l10n.all,
-        isSelected: widget.selectedFolderId == null && !widget.showStarredOnly && !widget.showDailySummaries,
+        isSelected: widget.selectedFolderId == null && !widget.showStarredOnly,
         onTap: () {
           // Clear folder filter
           widget.onFolderSelected(null);
           // Clear starred filter if active
           if (widget.showStarredOnly) {
             widget.onStarredToggle();
-          }
-          // Clear daily summaries filter if active
-          if (widget.showDailySummaries) {
-            widget.onDailySummariesToggle();
           }
         },
       ),
@@ -165,9 +152,12 @@ class _FolderTabsState extends State<FolderTabs> {
     // Extra padding at the end for scroll
     tabs.add(const SizedBox(width: 8));
 
+    // The strip is one touch target tall. Chips still paint at 36pt: each one
+    // pads itself by the difference, and the strip's margin gives the same 8pt
+    // back, so the row occupies the 52pt it always did.
     return Container(
-      height: 36,
-      margin: const EdgeInsets.symmetric(vertical: 8),
+      height: kMinTapTarget,
+      margin: const EdgeInsets.symmetric(vertical: 4),
       child: Row(
         children: [
           // Scrollable folder tabs
@@ -217,12 +207,7 @@ class _FolderTab extends StatelessWidget {
     // Track context menu opened
     PlatformManager.instance.analytics.folderContextMenuOpened(folderId: folder!.id, folderName: folder!.name);
 
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF1F1F25),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => _FolderContextMenu(folder: folder!),
-    );
+    showOmiSheet<void>(context: context, builder: (ctx) => _FolderContextMenu(folder: folder!));
   }
 
   @override
@@ -239,32 +224,39 @@ class _FolderTab extends StatelessWidget {
         onTap();
       },
       onLongPress: folder != null ? () => _showContextMenu(context) : null,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: isSelected ? effectiveColor.withValues(alpha: 0.15) : Colors.grey.withValues(alpha: 0.12),
-          borderRadius: BorderRadius.circular(20),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (icon != null) ...[
-              Padding(
-                padding: const EdgeInsets.only(bottom: 2),
-                child: FaIcon(folderIconToFa(icon), size: 12, color: isSelected ? effectiveColor : Colors.grey[400]),
+      // Opaque so the transparent band above and below the painted chip is
+      // part of the target.
+      behavior: HitTestBehavior.opaque,
+      child: Semantics(
+        button: true,
+        selected: isSelected,
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 200),
+          margin: const EdgeInsets.symmetric(vertical: (kMinTapTarget - 36) / 2),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+          decoration: BoxDecoration(
+            color: isSelected ? effectiveColor.withValues(alpha: 0.15) : Colors.grey.withValues(alpha: 0.12),
+            borderRadius: OmiRadius.pillAll,
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (icon != null) ...[
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 2),
+                  child: FaIcon(folderIconToFa(icon), size: 12, color: isSelected ? effectiveColor : Colors.grey[400]),
+                ),
+                const SizedBox(width: 5),
+              ],
+              Text(
+                label,
+                style: OmiType.footnote.copyWith(
+                  color: isSelected ? effectiveColor : Colors.grey[400],
+                  fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
+                ),
               ),
-              const SizedBox(width: 5),
             ],
-            Text(
-              label,
-              style: TextStyle(
-                color: isSelected ? effectiveColor : Colors.grey[400],
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w500,
-                fontSize: 13,
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
@@ -275,20 +267,20 @@ class _FolderTab extends StatelessWidget {
 class _AddFolderButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
+    // 32pt circle in a 44pt target; the margins shrink by the 6pt overhang so
+    // the circle stays 8pt from the chips and 16pt from the screen edge.
     return Container(
-      margin: const EdgeInsets.only(left: 8, right: 16),
-      child: GestureDetector(
+      margin: const EdgeInsets.only(left: 2, right: 10),
+      child: HeaderCircleButton(
+        semanticLabel: context.l10n.newFolder,
+        diameter: 32,
+        color: Colors.grey.withValues(alpha: 0.12),
+        icon: Icon(Icons.add, size: 18, color: Colors.grey[400]),
         onTap: () async {
           HapticFeedback.mediumImpact();
           PlatformManager.instance.analytics.createFolderButtonClicked();
           await showCreateFolderBottomSheet(context);
         },
-        child: Container(
-          width: 32,
-          height: 32,
-          decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.12), shape: BoxShape.circle),
-          child: Icon(Icons.add, size: 18, color: Colors.grey[400]),
-        ),
       ),
     );
   }
@@ -301,24 +293,25 @@ class _FolderContextMenu extends StatelessWidget {
   const _FolderContextMenu({required this.folder});
 
   Future<void> _handleEdit(BuildContext context) async {
+    // The menu's own context dies with it; open the editor from the navigator's.
+    final navigatorContext = Navigator.of(context).context;
     Navigator.pop(context);
-    await showCreateFolderBottomSheet(context, folderToEdit: folder);
+    await showCreateFolderBottomSheet(navigatorContext, folderToEdit: folder);
   }
 
   Future<void> _handleDelete(BuildContext context) async {
     // Capture references before context becomes invalid
     final folderProvider = Provider.of<FolderProvider>(context, listen: false);
     final conversationProvider = Provider.of<ConversationProvider>(context, listen: false);
-    final scaffoldMessenger = ScaffoldMessenger.of(context);
+    final navigatorContext = Navigator.of(context).context;
     final l10n = context.l10n;
 
     Navigator.pop(context);
 
     // Show delete folder sheet with move options
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
+    showOmiSheet<void>(
+      context: navigatorContext,
+      title: l10n.deleteQuoted(folder.name),
       builder: (ctx) => _DeleteFolderSheet(
         folder: folder,
         onDelete: (String? moveToFolderId) {
@@ -338,7 +331,7 @@ class _FolderContextMenu extends StatelessWidget {
               // Refresh conversations to show updated folder contents
               conversationProvider.filterByFolder(moveToFolderId);
             } else {
-              scaffoldMessenger.showSnackBar(SnackBar(content: Text(l10n.failedToDeleteFolder)));
+              if (navigatorContext.mounted) OmiFeedback.error(navigatorContext, l10n.failedToDeleteFolder);
             }
           });
         },
@@ -348,69 +341,46 @@ class _FolderContextMenu extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Handle bar
-            Container(
-              width: 40,
-              height: 4,
-              decoration: BoxDecoration(color: Colors.grey[600], borderRadius: BorderRadius.circular(2)),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: OmiSpacing.md),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          // Folder preview
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            decoration: BoxDecoration(color: folder.colorValue.withValues(alpha: 0.2), borderRadius: OmiRadius.lgAll),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                FaIcon(folderIconToFa(folder.icon), size: 18, color: folder.colorValue),
+                const SizedBox(width: 8),
+                Text(folder.name,
+                    style: OmiType.callout.copyWith(color: folder.colorValue, fontWeight: FontWeight.w600)),
+              ],
             ),
-            const SizedBox(height: 16),
-
-            // Folder preview
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              decoration: BoxDecoration(
-                color: folder.colorValue.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(16),
+          ),
+          const SizedBox(height: OmiSpacing.lg),
+          OmiSettingsGroup(
+            children: [
+              OmiSettingsRow(
+                leading: const Icon(Icons.edit_outlined),
+                title: context.l10n.editFolder,
+                showChevron: false,
+                onTap: () => _handleEdit(context),
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  FaIcon(folderIconToFa(folder.icon), size: 18, color: folder.colorValue),
-                  const SizedBox(width: 8),
-                  Text(
-                    folder.name,
-                    style: TextStyle(color: folder.colorValue, fontWeight: FontWeight.w600, fontSize: 16),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 20),
-
-            // Edit option
-            ListTile(
-              leading: const Icon(Icons.edit_outlined, color: Colors.white),
-              title: Text(context.l10n.editFolder, style: const TextStyle(color: Colors.white)),
-              onTap: () => _handleEdit(context),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            ),
-
-            // Delete option (only for non-system folders)
-            if (!folder.isSystem)
-              ListTile(
-                leading: const Icon(Icons.delete_outline, color: Colors.red),
-                title: Text(context.l10n.deleteFolder, style: const TextStyle(color: Colors.red)),
-                onTap: () => _handleDelete(context),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              ),
-
-            // Cancel
-            const SizedBox(height: 8),
-            SizedBox(
-              width: double.infinity,
-              child: TextButton(
-                onPressed: () => Navigator.pop(context),
-                child: Text(context.l10n.cancel, style: const TextStyle(color: Colors.grey, fontSize: 16)),
-              ),
-            ),
-          ],
-        ),
+              // Delete option (only for non-system folders)
+              if (!folder.isSystem)
+                OmiSettingsRow(
+                  leading: const Icon(Icons.delete_outline),
+                  title: context.l10n.deleteFolder,
+                  isDestructive: true,
+                  showChevron: false,
+                  onTap: () => _handleDelete(context),
+                ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -425,100 +395,51 @@ class _DeleteFolderSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: ResponsiveHelper.backgroundSecondary,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      child: Consumer<FolderProvider>(
-        builder: (context, provider, _) {
-          final otherFolders = provider.folders.where((f) => f.id != folder.id).toList();
+    return Consumer<FolderProvider>(
+      builder: (context, provider, _) {
+        final otherFolders = provider.folders.where((f) => f.id != folder.id).toList();
 
-          return Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: Colors.red.withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Center(
-                        child: FaIcon(folderIconToFa(folder.icon), size: 20, color: Colors.red.withValues(alpha: 0.8)),
-                      ),
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              context.l10n.moveConversationsTo(folder.conversationCount),
+              style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
+            ),
+            const SizedBox(height: OmiSpacing.xs),
+            // Folder options
+            ConstrainedBox(
+              constraints: BoxConstraints(maxHeight: MediaQuery.sizeOf(context).height * 0.4),
+              child: ListView(
+                shrinkWrap: true,
+                padding: const EdgeInsets.only(bottom: OmiSpacing.md),
+                children: [
+                  // No folder option
+                  _MoveOption(
+                    icon: '🚫',
+                    name: context.l10n.noFolder,
+                    description: context.l10n.removeFromAllFolders,
+                    color: Colors.grey,
+                    onTap: () => onDelete(null),
+                  ),
+
+                  // Other folders
+                  ...otherFolders.map(
+                    (f) => _MoveOption(
+                      icon: f.icon,
+                      name: f.name,
+                      description: f.description,
+                      color: f.colorValue,
+                      onTap: () => onDelete(f.id),
                     ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            context.l10n.deleteQuoted(folder.name),
-                            style: const TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w600,
-                              color: ResponsiveHelper.textPrimary,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            context.l10n.moveConversationsTo(folder.conversationCount),
-                            style: const TextStyle(fontSize: 13, color: ResponsiveHelper.textTertiary),
-                          ),
-                        ],
-                      ),
-                    ),
-                    GestureDetector(
-                      onTap: () => Navigator.pop(context),
-                      child: const Icon(Icons.close, color: ResponsiveHelper.textTertiary, size: 24),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
-
-              // Folder options
-              ConstrainedBox(
-                constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.4),
-                child: ListView(
-                  shrinkWrap: true,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  children: [
-                    // No folder option
-                    _MoveOption(
-                      icon: '🚫',
-                      name: context.l10n.noFolder,
-                      description: context.l10n.removeFromAllFolders,
-                      color: Colors.grey,
-                      onTap: () => onDelete(null),
-                    ),
-
-                    // Other folders
-                    ...otherFolders.map(
-                      (f) => _MoveOption(
-                        icon: f.icon,
-                        name: f.name,
-                        description: f.description,
-                        color: f.colorValue,
-                        onTap: () => onDelete(f.id),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // Bottom padding
-              const SizedBox(height: 16),
-            ],
-          );
-        },
-      ),
+            ),
+          ],
+        );
+      },
     );
   }
 }

@@ -16,7 +16,7 @@ import Foundation
 /// turn the airgap guard itself into the disclosure it exists to prevent — and it would fire on
 /// exactly the machines whose users asked for silence. Anything added here must consult
 /// `NetworkEgress.isSuppressed` before sending, and must not report its own suppression.
-enum ContextFallbackArea: String, Sendable {
+enum ContextFallbackArea: String, Sendable, CaseIterable {
     case capture
     case upload
     case mcp
@@ -26,7 +26,7 @@ enum ContextFallbackArea: String, Sendable {
     case rewind
 }
 
-enum ContextFallbackOutcome: String, Sendable {
+enum ContextFallbackOutcome: String, Sendable, CaseIterable {
     case degraded
     case dropped
     case retried
@@ -50,6 +50,20 @@ enum ContextTelemetry {
         outcome: ContextFallbackOutcome
     ) {
         ContextLog.info("[fallback] area=\(area.rawValue) from=\(from) to=\(to) reason=\(reason) outcome=\(outcome.rawValue)", "telemetry")
+
+        // The remote half. Only reasons that map to a known slug are forwarded — `reason` is a
+        // convention-enforced string here, and the analytics vocabulary is closed, so an unmapped
+        // slug is dropped rather than smuggled through as free text.
+        //
+        // **`airgap-mode` is excluded, and that exclusion is load-bearing twice over.** It is the
+        // invariant this type was written with: `NetworkEgress` reports every Airgap Mode
+        // suppression through here, so forwarding one would phone home on exactly the machines whose
+        // users asked for silence. It is *also* the cycle breaker — `ContextAnalytics.record`
+        // reports its own airgap refusal through `NetworkEgress.recordSuppression`, which calls
+        // this function, which would call `record` again. See `ContextAnalytics.recordFallback`.
+        if let mapped = AnalyticsEvent.FallbackReason(slug: reason), mapped != .airgapMode {
+            ContextAnalytics.recordFallback(area: area, outcome: outcome, reason: mapped)
+        }
         // Remote telemetry (PostHog/Sentry) requires project-specific credentials and SDKs that
         // are not yet dependencies of this package. The structured log above is the contract; a
         // future provider can read it or be called here without changing callers — but only behind

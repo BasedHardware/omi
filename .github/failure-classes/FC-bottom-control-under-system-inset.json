@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-bottom-control-under-system-inset",
+  "violated_contract": "A control anchored to the bottom of an edge-to-edge window must reserve the window's bottom view padding so its hit-test bounds stay inside the region the user can actually reach. Painting to the physical screen edge is fine; placing the control's tap targets there is not, because the system navigation bar owns that band and consumes the taps.",
+  "canonical_prevention": "Bottom-anchored chrome reserves MediaQuery.viewPaddingOf(context).bottom — through SafeArea, or by adding the inset to its own height and bottom padding when it must keep painting to the screen edge — and any sibling positioned against it carries the same inset so the pair stays in step. viewPadding rather than padding: the home Scaffold sets resizeToAvoidBottomInset: false, and padding.bottom collapses to zero while a keyboard is open, which would drop the control back under the system bar.",
+  "canonical_prevention_artifact": [
+    "app/test/widgets/bottom_nav_bar_test.dart"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "app/lib/widgets/bottom_nav_bar.dart",
+    "app/lib/pages/home/**"
+  ],
+  "status": "open"
+}

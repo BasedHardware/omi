@@ -1,7 +1,7 @@
 'use client';
 
-import Link from 'next/link';
-import Image from 'next/image';
+import Link from '@tschk/moonshine-next/link';
+import Image from '@tschk/moonshine-next/image';
 import { useAuth } from '@/components/auth/AuthProvider';
 import { cn } from '@/lib/utils';
 
@@ -9,7 +9,7 @@ export function MarketplaceHeader() {
   const { user, loading, openLoginPanel } = useAuth();
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 h-12 bg-[#0B0F17] border-b border-white/5">
+    <header className="fixed left-0 right-0 top-0 z-50 h-12 border-b border-white/5 bg-[#0B0F17]">
       <div className="container mx-auto h-full px-3 sm:px-6 md:px-8">
         <div className="flex h-full items-center justify-between">
           {/* Logo - links to main apps page */}
@@ -32,9 +32,9 @@ export function MarketplaceHeader() {
                 <Link
                   href="/conversations"
                   className={cn(
-                    'px-4 py-1.5 rounded-full text-sm font-medium',
-                    'bg-purple-primary text-white',
-                    'hover:bg-purple-secondary transition-colors'
+                    'rounded-full px-4 py-1.5 text-sm font-medium',
+                    'bg-text-primary text-bg-primary',
+                    'transition-colors hover:bg-text-primary/90',
                   )}
                 >
                   Dashboard
@@ -44,9 +44,9 @@ export function MarketplaceHeader() {
               <button
                 onClick={openLoginPanel}
                 className={cn(
-                  'px-4 py-1.5 rounded-full text-sm font-medium',
+                  'rounded-full px-4 py-1.5 text-sm font-medium',
                   'bg-white text-gray-900',
-                  'hover:bg-gray-100 transition-colors'
+                  'transition-colors hover:bg-gray-100',
                 )}
               >
                 Sign In

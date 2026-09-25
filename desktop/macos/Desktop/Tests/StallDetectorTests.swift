@@ -70,6 +70,32 @@ final class StallDetectorTests: XCTestCase {
     XCTAssertEqual(state, .running)
   }
 
+  func testRuntimeActivityLeaseKeepsAQuietTurnBelowTheBridgeWatchdog() async {
+    let detector = StallDetector(thresholds: thresholds, startedAtMs: 0)
+
+    _ = await detector.step(kind: .other, atMs: 15_000)
+    _ = await detector.step(kind: .other, atMs: 30_000)
+    _ = await detector.step(kind: .other, atMs: 45_000)
+    _ = await detector.step(kind: .other, atMs: 60_000)
+
+    let beforeLeaseExpiry = await detector.isSilentWithoutActiveTools(
+      durationMs: 60_000,
+      atMs: 119_999
+    )
+    let atLeaseExpiry = await detector.isSilentWithoutActiveTools(
+      durationMs: 60_000,
+      atMs: 120_000
+    )
+    XCTAssertFalse(
+      beforeLeaseExpiry,
+      "a responsive runtime may legitimately wait on a quiet provider round"
+    )
+    XCTAssertTrue(
+      atLeaseExpiry,
+      "once the runtime lease stops, the existing bridge watchdog must still recover the turn"
+    )
+  }
+
   func testStepAlsoEvaluatesElapsedTime() async {
     let detector = StallDetector(thresholds: thresholds, startedAtMs: 0)
     // No prior event observed; step at slowGapMs both records the

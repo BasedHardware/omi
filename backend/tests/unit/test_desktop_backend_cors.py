@@ -94,12 +94,19 @@ def test_desktop_backend_cors_middleware_enforces_allowlist(monkeypatch):
                 'Access-Control-Request-Method': 'GET',
             },
         )
+        exposed = client.get('/', headers={'Origin': 'https://app.example'})
         without_origin = client.get('/')
 
     assert allowed.status_code == 200
     assert allowed.headers['access-control-allow-origin'] == 'https://app.example'
     assert denied.status_code == 400
     assert 'access-control-allow-origin' not in denied.headers
+    exposed_headers = {name.strip().lower() for name in exposed.headers['access-control-expose-headers'].split(',')}
+    assert {
+        'x-omi-memory-belief-enabled',
+        'x-omi-memory-next-cursor',
+        'x-omi-list-truncated',
+    } <= exposed_headers
     assert 'access-control-allow-origin' not in without_origin.headers
 
 
@@ -146,3 +153,37 @@ def test_module_level_app_loads_environment_before_building_cors(monkeypatch):
 
     assert response.status_code == 200
     assert response.headers['access-control-allow-origin'] == 'https://app.example'
+
+
+def test_desktop_backend_metrics_route_is_fail_closed(monkeypatch):
+    monkeypatch.delenv('CORS_ALLOWED_ORIGINS', raising=False)
+    monkeypatch.delenv('PROMETHEUS_SIDECAR_PORT', raising=False)
+    monkeypatch.setenv('METRICS_SECRET', 'test-metrics-token')
+    client = _test_client(monkeypatch, desktop_backend._build_app())
+
+    with client:
+        missing = client.get('/metrics')
+        invalid = client.get('/metrics', headers={'Authorization': 'Bearer wrong'})
+        valid = client.get('/metrics', headers={'Authorization': 'Bearer test-metrics-token'})
+
+    assert missing.status_code == 401
+    assert invalid.status_code == 401
+    assert valid.status_code == 200
+    assert 'omi_journey_accepted_total' in valid.text
+
+
+def test_desktop_backend_mounts_authenticated_metrics(monkeypatch):
+    monkeypatch.setenv('METRICS_SECRET', 'test-metrics-secret')
+    client = _test_client(monkeypatch, desktop_backend._build_app())
+
+    with client:
+        unauthorized = client.get('/metrics')
+        response = client.get(
+            '/metrics',
+            headers={'Authorization': 'Bearer test-metrics-secret'},
+        )
+
+    assert unauthorized.status_code == 401
+    assert response.status_code == 200
+    assert response.headers['content-type'].startswith('text/plain')
+    assert 'omi_client_journey_accepted_total' in response.text

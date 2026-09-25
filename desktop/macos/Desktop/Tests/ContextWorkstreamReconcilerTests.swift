@@ -350,6 +350,36 @@ final class ContextWorkstreamReconcilerTests: XCTestCase {
       "two different instruction blocks under one key would only evict each other")
   }
 
+  /// Arming selects for a discrete transition, not a standing condition. The
+  /// durability test is actionability at delivery, not mere truth; the
+  /// minute-volatile-count guard stays beside it.
+  func testCandidateInstructionsRequireADiscreteTransitionAndStayActionable() {
+    let instructions = ContextWorkstreamReconciler.candidateInstructions
+    // Clause assertions run against a whitespace-flattened copy: these sentences
+    // wrap across source lines, and rewrapping one must not silently pass or
+    // fail an assertion about whether the clause is still there.
+    let flattened = instructions.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+    XCTAssertTrue(
+      instructions.hasPrefix(ScreenDerivedContent.untrustedPreamble),
+      "the safety preamble must stay above every quoted statement")
+    XCTAssertTrue(
+      flattened.contains("discrete transition"),
+      "arming must require a discrete transition, not a standing commitment or blocker")
+    XCTAssertTrue(
+      flattened.contains("merely persists is not enough"),
+      "a condition that merely persists must be an explicit omit")
+    XCTAssertTrue(
+      flattened.contains("still be actionable"),
+      "the delivery-time test is actionability, not whether the statement stays true")
+    XCTAssertFalse(
+      flattened.contains("still be true and useful"),
+      "the old truth-durability line selected for standing state")
+    XCTAssertTrue(
+      flattened.contains(
+        "Do not build the message around counts or figures that change minute to minute."),
+      "the minute-volatile-count staleness guard is load-bearing")
+  }
+
   func testInsertsSkipAGarbageCollectedBucketWithoutAbortingTheRestOfTheBatch() throws {
     let queue = try migratedQueue()
     try queue.write { db in

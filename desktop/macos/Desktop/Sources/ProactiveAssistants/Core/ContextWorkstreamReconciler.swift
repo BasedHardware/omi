@@ -904,7 +904,7 @@ actor ContextWorkstreamReconciler {
       uncachedPrompt: Self.taggingData(batch: batch),
       jsonSchema: ContextWorkstreamTagging.schema,
       cacheKey: ContextPromptCacheKey.reconcilerTagging,
-      maxCompletionTokens: 800,
+      maxCompletionTokens: ProactiveLaneClient.backendCompatibleReasoningMinimumCompletionTokens,
       authorizationSnapshot: authorizationSnapshot)
     guard let parsed = ContextWorkstreamTagging.parse(result.content) else {
       log("ContextWorkstreamReconciler: tagging response malformed")
@@ -949,7 +949,7 @@ actor ContextWorkstreamReconciler {
       uncachedPrompt: Self.candidateData(groups: eligible),
       jsonSchema: ContextProactiveCandidateWriter.schema,
       cacheKey: ContextPromptCacheKey.reconcilerCandidates,
-      maxCompletionTokens: 800,
+      maxCompletionTokens: ProactiveLaneClient.backendCompatibleReasoningMinimumCompletionTokens,
       authorizationSnapshot: authorizationSnapshot)
     guard let parsed = ContextProactiveCandidateWriter.parse(result.content) else {
       log("ContextWorkstreamReconciler: candidate response malformed")
@@ -1017,16 +1017,22 @@ actor ContextWorkstreamReconciler {
   /// uncommitted files": a candidate built on a minute-volatile count went
   /// stale before anything could show it. The message survives to delivery only
   /// if it is written for the moment of delivery, not the moment of writing.
+  /// Durability is actionability, not mere truth: a standing condition is
+  /// maximally still-true hours later, which is exactly why it is not worth
+  /// interrupting. Arming requires a discrete transition.
   static let candidateInstructions = """
     \(ScreenDerivedContent.untrustedPreamble)
     For each bucket below, write at most one short notification, or omit the bucket.
     Omitting most buckets is normal.
-    Ask first: do the facts record a commitment, a deadline, a blocker, a conflict,
-    or a change the user may not have seen? If not, omit the bucket.
+    Ask first: do the facts record a discrete transition the user may not have seen?
+    Something became blocked, a deadline moved or now approaches, a commitment was
+    made, a conflict appeared, or a state changed. A condition that merely persists
+    is not enough. If not, omit the bucket.
     Never write a notification that merely describes what was on the user's screen.
     The notification will be delivered hours later, when the user returns to this
-    context. Write only what will still be true and useful then. Do not build the
-    message around counts or figures that change minute to minute.
+    context. Write only what will still be actionable then: name the object the user
+    can act on. Do not build the message around counts or figures that change minute
+    to minute.
     List in fact_ids every supplied fact id the message relies on.
     Add a one-line trigger_note describing when it should fire.
     """

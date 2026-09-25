@@ -6,11 +6,12 @@
 //  wallpaper. That is the whole point — panels sit *on* the desktop rather than on a full-bleed slab
 //  of glass the window painted for them.
 //
-//  Home and Rewind were already built that way: each is a set of glass objects with real air between
-//  them (`QueryShellHome`, `RewindSearchLayout`). **Every other destination was drawn assuming the
-//  window's ground was underneath it**, so without one they render type and controls straight onto the
-//  wallpaper. This file is where they get a surface, and it is one surface for all of them: a page that
-//  invents its own panel is the drift `InkGlass` exists to stop.
+//  Search-first pages and Rewind are built that way: each is a set of glass objects with real air
+//  between them. The older single-surface pages are the exception:
+//  `DashboardPage` is laned when it mounts either one, so without this file they render straight onto
+//  the wallpaper. **Every other destination was drawn assuming the window's ground was underneath it**,
+//  so this file is where they get a surface, and it is one surface for all of them: a page that invents
+//  its own panel is the drift `InkGlass` exists to stop.
 //
 //  ## One tall panel, not a header plus a body
 //
@@ -39,8 +40,8 @@ import SwiftUI
 
 /// Which destinations already carry their own glass, and therefore must not be wrapped in more.
 ///
-/// A pure function of the route rather than a condition inside the router, so "Home and Rewind own
-/// their panels and everything else is given one" is a claim a hermetic test can hold. Nesting a
+/// A pure function of the route rather than a condition inside the router, so panel ownership is a
+/// claim a hermetic test can hold. Nesting a
 /// second `.behindWindow` surface inside a panel does not stack two materials, it takes a second copy
 /// of the desktop and doubles the scrim — see `InkGlassBackdrop` — so a page wrapped twice reads
 /// visibly muddier than the pages around it.
@@ -50,10 +51,20 @@ enum PageGlassLanePolicy {
   ///
   /// It takes the raw index rather than a `SidebarNavItem` because the router's `switch` sends every
   /// unrecognised index to Home through its `default:` branch. Resolving an unknown index to anything
-  /// else here would wrap Home in a second panel on exactly the routes nobody tests.
-  static func ownsItsPanels(selectedIndex: Int) -> Bool {
+  /// else here would wrap Home in a second panel on exactly the routes nobody tests. The router passes
+  /// the already-resolved Home surface decision instead of making this lane read a settings key.
+  static func ownsItsPanels(
+    selectedIndex: Int,
+    homeOwnsItsPanels: Bool
+  ) -> Bool {
     switch SidebarNavItem(rawValue: selectedIndex) ?? .dashboard {
-    case .dashboard, .rewind:
+    case .dashboard:
+      return homeOwnsItsPanels
+    case .conversations, .memories, .rewind:
+      // These legacy indices are compatibility aliases for MemoryHubPage.
+      // The hub's children own their search and content panels.
+      return true
+    case .tasks, .apps:
       return true
     default:
       return false
@@ -93,29 +104,46 @@ enum PageGlassLaneLayout {
 ///
 /// It wraps the router's whole page switch rather than each page in turn, so there is exactly one
 /// place that decides what a destination's surface is. A page inside it paints no background of its
-/// own (`glassContent()`); the panel is the ground.
+/// own (`glassContent()`); the panel is the ground. Home and Rewind are handed their own-glass answer
+/// by the router, while the older `DashboardPage` surfaces are handed `false` and use this panel.
 struct PageGlassLane<Content: View>: View {
   /// The route being rendered, used only to ask `PageGlassLanePolicy` whether it already has glass.
   let selectedIndex: Int
+  /// Whether the Home surface selected by the router owns its own glass.
+  let homeOwnsItsPanels: Bool
   @ViewBuilder var content: () -> Content
 
   var body: some View {
-    if PageGlassLanePolicy.ownsItsPanels(selectedIndex: selectedIndex) {
+    if PageGlassLanePolicy.ownsItsPanels(
+      selectedIndex: selectedIndex,
+      homeOwnsItsPanels: homeOwnsItsPanels)
+    {
       // Handed the whole content area, so a modal dim mounted inside it has to take the lane rather
       // than the surface it was given — see `ShellModalScrim`. Published here rather than chosen at
       // each modal, because this is the one place that knows which of the two shapes it just built.
       content()
         .shellModalScrimBounds(.contentArea)
     } else {
-      panel
+      PageGlassLanePanel(content: content)
     }
   }
+}
+
+/// The unconditional shared page panel.
+///
+/// Route policies belong to their router. The legacy shell uses `PageGlassLane` above to resolve its
+/// overloaded sidebar indices; routers with their own route model use this panel directly after making
+/// their own ownership decision. Passing a modern route through the legacy policy is how a persisted
+/// Memory-hub destination cancelled Chat-first's decision to wrap Conversations and left the whole
+/// page on the transparent window.
+struct PageGlassLanePanel<Content: View>: View {
+  @ViewBuilder var content: () -> Content
 
   private var shape: RoundedRectangle {
     RoundedRectangle(cornerRadius: PageGlassLaneLayout.cornerRadius, style: .continuous)
   }
 
-  private var panel: some View {
+  var body: some View {
     GeometryReader { proxy in
       content()
         // The page *is* the panel, so its modals fill it edge to edge and stop at its corner.
@@ -131,5 +159,28 @@ struct PageGlassLane<Content: View>: View {
     }
     .padding(.top, PageGlassLaneLayout.topGap)
     .padding(.bottom, PageGlassLaneLayout.bottomGap)
+  }
+}
+
+/// A compact ground for transient states mounted directly on the transparent main window.
+///
+/// Apps and Rewind normally own their full page surfaces, so the shell correctly passes them through
+/// without a shared lane. Their loading and error branches still need a surface of their own: bare
+/// status text on this window is text painted straight on the wallpaper. Keeping that rule here
+/// prevents each asynchronous branch from rebuilding the material, scrim, corner, and placement.
+struct TransparentWindowStatusPanel<Content: View>: View {
+  var reduceTransparency: Bool? = nil
+  @ViewBuilder var content: () -> Content
+
+  var body: some View {
+    content()
+      .padding(OmiSpacing.xxl)
+      .frame(minWidth: 260, minHeight: 140)
+      .inkGlassPanel(
+        cornerRadius: QueryShellLayout.panelCornerRadius,
+        shadow: .ambient,
+        reduceTransparency: reduceTransparency
+      )
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
   }
 }

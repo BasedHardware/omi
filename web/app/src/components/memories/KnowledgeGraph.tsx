@@ -1,11 +1,25 @@
 'use client';
 
 import { useRef, useCallback, useEffect, useState } from 'react';
-import dynamic from 'next/dynamic';
+import dynamic from '@tschk/moonshine-next/dynamic';
 import { motion, AnimatePresence } from 'framer-motion';
-import { RefreshCw, Loader2, Network, X, ExternalLink, RotateCcw, Tag, ZoomIn, ZoomOut, Search } from 'lucide-react';
+import {
+  Loader2,
+  Network,
+  X,
+  ExternalLink,
+  RotateCcw,
+  Tag,
+  ZoomIn,
+  ZoomOut,
+  Search,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { useKnowledgeGraph, NODE_COLORS, type GraphNode } from '@/hooks/useKnowledgeGraph';
+import {
+  useKnowledgeGraph,
+  NODE_COLORS,
+  type GraphNode,
+} from '@/hooks/useKnowledgeGraph';
 import type { KnowledgeGraphNodeType } from '@/types/conversation';
 import SpriteText from 'three-spritetext';
 
@@ -15,8 +29,8 @@ import SpriteText from 'three-spritetext';
 const ForceGraph3D = dynamic(() => import('react-force-graph-3d'), {
   ssr: false,
   loading: () => (
-    <div className="flex items-center justify-center h-full">
-      <Loader2 className="w-8 h-8 text-purple-primary animate-spin" />
+    <div className="flex h-full items-center justify-center">
+      <Loader2 className="h-8 w-8 animate-spin text-white" />
     </div>
   ),
 });
@@ -37,16 +51,8 @@ export function KnowledgeGraph({ onNodeSelect }: KnowledgeGraphProps) {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<Set<string>>(new Set());
 
-  const {
-    graphData,
-    loading,
-    error,
-    rebuilding,
-    selectedNode,
-    rebuild,
-    selectNode,
-    getConnectedNodes,
-  } = useKnowledgeGraph();
+  const { graphData, loading, error, selectedNode, selectNode, getConnectedNodes } =
+    useKnowledgeGraph();
 
   // Update dimensions on resize
   useEffect(() => {
@@ -75,7 +81,9 @@ export function KnowledgeGraph({ onNodeSelect }: KnowledgeGraphProps) {
         if (!graphRef.current) return;
         const nodes = graphRef.current.graphData()?.nodes || [];
         nodes.forEach((node: any) => {
-          const dist = Math.sqrt((node.x || 0) ** 2 + (node.y || 0) ** 2 + (node.z || 0) ** 2);
+          const dist = Math.sqrt(
+            (node.x || 0) ** 2 + (node.y || 0) ** 2 + (node.z || 0) ** 2,
+          );
           if (dist > SPHERE_RADIUS) {
             const scale = SPHERE_RADIUS / dist;
             node.x = (node.x || 0) * scale;
@@ -99,7 +107,7 @@ export function KnowledgeGraph({ onNodeSelect }: KnowledgeGraphProps) {
       graphRef.current.cameraPosition(
         { x: 0, y: 0, z: INITIAL_CAMERA_DISTANCE },
         { x: 0, y: 0, z: 0 },
-        1000
+        1000,
       );
       selectNode(null);
       setSearchQuery('');
@@ -115,7 +123,7 @@ export function KnowledgeGraph({ onNodeSelect }: KnowledgeGraphProps) {
       graphRef.current.cameraPosition(
         { x: currentPos.x * 0.7, y: currentPos.y * 0.7, z: newZ },
         { x: 0, y: 0, z: 0 },
-        500
+        500,
       );
     }
   }, []);
@@ -128,185 +136,194 @@ export function KnowledgeGraph({ onNodeSelect }: KnowledgeGraphProps) {
       graphRef.current.cameraPosition(
         { x: currentPos.x * 1.4, y: currentPos.y * 1.4, z: newZ },
         { x: 0, y: 0, z: 0 },
-        500
+        500,
       );
     }
   }, []);
 
   // Search for nodes
-  const handleSearch = useCallback((query: string) => {
-    setSearchQuery(query);
+  const handleSearch = useCallback(
+    (query: string) => {
+      setSearchQuery(query);
 
-    if (!query.trim() || !graphData) {
-      setSearchResults(new Set());
-      return;
-    }
-
-    const lowerQuery = query.toLowerCase();
-    const matchingNodeIds = new Set<string>();
-
-    // Find nodes that match the search query
-    graphData.nodes.forEach((node) => {
-      if (
-        node.label.toLowerCase().includes(lowerQuery) ||
-        node.aliases.some((alias) => alias.toLowerCase().includes(lowerQuery))
-      ) {
-        matchingNodeIds.add(node.id);
-        // Also add connected nodes
-        const connected = getConnectedNodes(node.id);
-        connected.forEach((n) => matchingNodeIds.add(n.id));
+      if (!query.trim() || !graphData) {
+        setSearchResults(new Set());
+        return;
       }
-    });
 
-    setSearchResults(matchingNodeIds);
+      const lowerQuery = query.toLowerCase();
+      const matchingNodeIds = new Set<string>();
 
-    // If there's exactly one matching node (not counting connections), focus on it
-    const directMatches = graphData.nodes.filter(
-      (node) =>
-        node.label.toLowerCase().includes(lowerQuery) ||
-        node.aliases.some((alias) => alias.toLowerCase().includes(lowerQuery))
-    );
+      // Find nodes that match the search query
+      graphData.nodes.forEach((node) => {
+        if (
+          node.label.toLowerCase().includes(lowerQuery) ||
+          node.aliases.some((alias) => alias.toLowerCase().includes(lowerQuery))
+        ) {
+          matchingNodeIds.add(node.id);
+          // Also add connected nodes
+          const connected = getConnectedNodes(node.id);
+          connected.forEach((n) => matchingNodeIds.add(n.id));
+        }
+      });
 
-    if (directMatches.length === 1 && graphRef.current) {
-      const node = directMatches[0];
-      const nodePos = { x: node.x || 0, y: node.y || 0, z: node.z || 0 };
-      const distance = 100;
-      const distFromOrigin = Math.hypot(nodePos.x, nodePos.y, nodePos.z) || 1;
-      const distRatio = 1 + distance / distFromOrigin;
-      graphRef.current.cameraPosition(
-        {
-          x: nodePos.x * distRatio,
-          y: nodePos.y * distRatio,
-          z: nodePos.z * distRatio,
-        },
-        nodePos,
-        1000
+      setSearchResults(matchingNodeIds);
+
+      // If there's exactly one matching node (not counting connections), focus on it
+      const directMatches = graphData.nodes.filter(
+        (node) =>
+          node.label.toLowerCase().includes(lowerQuery) ||
+          node.aliases.some((alias) => alias.toLowerCase().includes(lowerQuery)),
       );
-    }
-  }, [graphData, getConnectedNodes]);
+
+      if (directMatches.length === 1 && graphRef.current) {
+        const node = directMatches[0];
+        const nodePos = { x: node.x || 0, y: node.y || 0, z: node.z || 0 };
+        const distance = 100;
+        const distFromOrigin = Math.hypot(nodePos.x, nodePos.y, nodePos.z) || 1;
+        const distRatio = 1 + distance / distFromOrigin;
+        graphRef.current.cameraPosition(
+          {
+            x: nodePos.x * distRatio,
+            y: nodePos.y * distRatio,
+            z: nodePos.z * distRatio,
+          },
+          nodePos,
+          1000,
+        );
+      }
+    },
+    [graphData, getConnectedNodes],
+  );
 
   // Handle node click
-  const handleNodeClick = useCallback((node: GraphNode) => {
-    selectNode(node);
-    onNodeSelect?.(node.id, node.memoryIds);
+  const handleNodeClick = useCallback(
+    (node: GraphNode) => {
+      selectNode(node);
+      onNodeSelect?.(node.id, node.memoryIds);
 
-    // Focus on node with animation - zoom in closer
-    if (graphRef.current) {
-      const distance = 80;
-      const nodePos = { x: node.x || 0, y: node.y || 0, z: node.z || 0 };
-      const distFromOrigin = Math.hypot(nodePos.x, nodePos.y, nodePos.z) || 1;
-      const distRatio = 1 + distance / distFromOrigin;
-      graphRef.current.cameraPosition(
-        {
-          x: nodePos.x * distRatio,
-          y: nodePos.y * distRatio,
-          z: nodePos.z * distRatio,
-        },
-        nodePos,
-        1000
-      );
-    }
-  }, [selectNode, onNodeSelect]);
+      // Focus on node with animation - zoom in closer
+      if (graphRef.current) {
+        const distance = 80;
+        const nodePos = { x: node.x || 0, y: node.y || 0, z: node.z || 0 };
+        const distFromOrigin = Math.hypot(nodePos.x, nodePos.y, nodePos.z) || 1;
+        const distRatio = 1 + distance / distFromOrigin;
+        graphRef.current.cameraPosition(
+          {
+            x: nodePos.x * distRatio,
+            y: nodePos.y * distRatio,
+            z: nodePos.z * distRatio,
+          },
+          nodePos,
+          1000,
+        );
+      }
+    },
+    [selectNode, onNodeSelect],
+  );
 
   // Get connected node IDs for highlighting
-  const connectedNodeIds = useCallback((nodeId: string): Set<string> => {
-    const connected = getConnectedNodes(nodeId);
-    return new Set([nodeId, ...connected.map(n => n.id)]);
-  }, [getConnectedNodes]);
+  const connectedNodeIds = useCallback(
+    (nodeId: string): Set<string> => {
+      const connected = getConnectedNodes(nodeId);
+      return new Set([nodeId, ...connected.map((n) => n.id)]);
+    },
+    [getConnectedNodes],
+  );
 
   // Check if a node should show its label
-  const shouldShowLabel = useCallback((node: GraphNode): boolean => {
-    if (showAllLabels) return true;
-    // Show labels for search results
-    if (searchResults.size > 0 && searchResults.has(node.id)) return true;
-    if (!selectedNode) return false;
-    // Show label for selected node and its direct connections
-    const connected = connectedNodeIds(selectedNode.id);
-    return connected.has(node.id);
-  }, [showAllLabels, selectedNode, connectedNodeIds, searchResults]);
+  const shouldShowLabel = useCallback(
+    (node: GraphNode): boolean => {
+      if (showAllLabels) return true;
+      // Show labels for search results
+      if (searchResults.size > 0 && searchResults.has(node.id)) return true;
+      if (!selectedNode) return false;
+      // Show label for selected node and its direct connections
+      const connected = connectedNodeIds(selectedNode.id);
+      return connected.has(node.id);
+    },
+    [showAllLabels, selectedNode, connectedNodeIds, searchResults],
+  );
 
   // Custom node rendering with labels
-  const nodeThreeObject = useCallback((node: GraphNode) => {
-    if (!shouldShowLabel(node)) return undefined;
+  const nodeThreeObject = useCallback(
+    (node: GraphNode) => {
+      if (!shouldShowLabel(node)) return undefined;
 
-    const sprite = new SpriteText(node.label);
-    sprite.color = '#ffffff';
-    sprite.textHeight = 4;
-    sprite.backgroundColor = 'rgba(0, 0, 0, 0.6)';
-    sprite.padding = 1.5;
-    sprite.borderRadius = 2;
-    return sprite;
-  }, [shouldShowLabel]);
+      const sprite = new SpriteText(node.label);
+      sprite.color = '#ffffff';
+      sprite.textHeight = 4;
+      sprite.backgroundColor = 'rgba(0, 0, 0, 0.6)';
+      sprite.padding = 1.5;
+      sprite.borderRadius = 2;
+      return sprite;
+    },
+    [shouldShowLabel],
+  );
 
   // Get node color with highlight effect
-  const getNodeColor = useCallback((node: GraphNode) => {
-    // If searching, highlight search results
-    if (searchResults.size > 0) {
-      if (searchResults.has(node.id)) {
-        return node.color; // Full color for search matches
+  const getNodeColor = useCallback(
+    (node: GraphNode) => {
+      // If searching, highlight search results
+      if (searchResults.size > 0) {
+        if (searchResults.has(node.id)) {
+          return node.color; // Full color for search matches
+        }
+        return `${node.color}10`; // Very dim for non-matches
       }
-      return `${node.color}10`; // Very dim for non-matches
-    }
 
-    // If a node is selected, highlight it and connections
-    if (selectedNode) {
-      const connected = connectedNodeIds(selectedNode.id);
-      if (connected.has(node.id)) {
-        return node.color; // Full color for selected and connected
+      // If a node is selected, highlight it and connections
+      if (selectedNode) {
+        const connected = connectedNodeIds(selectedNode.id);
+        if (connected.has(node.id)) {
+          return node.color; // Full color for selected and connected
+        }
+        // Dim non-connected nodes significantly
+        return `${node.color}15`; // ~8% opacity - very dim
       }
-      // Dim non-connected nodes significantly
-      return `${node.color}15`; // ~8% opacity - very dim
-    }
-    return node.color;
-  }, [selectedNode, connectedNodeIds, searchResults]);
+      return node.color;
+    },
+    [selectedNode, connectedNodeIds, searchResults],
+  );
 
   // Get link opacity
-  const getLinkOpacity = useCallback((link: any) => {
-    if (!selectedNode) return 0.3;
+  const getLinkOpacity = useCallback(
+    (link: any) => {
+      if (!selectedNode) return 0.3;
 
-    const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
-    const targetId = typeof link.target === 'object' ? link.target.id : link.target;
+      const sourceId = typeof link.source === 'object' ? link.source.id : link.source;
+      const targetId = typeof link.target === 'object' ? link.target.id : link.target;
 
-    if (sourceId === selectedNode.id || targetId === selectedNode.id) {
-      return 0.8;
-    }
-    return 0.1;
-  }, [selectedNode]);
+      if (sourceId === selectedNode.id || targetId === selectedNode.id) {
+        return 0.8;
+      }
+      return 0.1;
+    },
+    [selectedNode],
+  );
 
   // Empty state
   if (!loading && (!graphData || graphData.nodes.length <= 1)) {
     return (
-      <div className="flex flex-col items-center justify-center h-full text-center p-8">
-        <div className="w-20 h-20 rounded-full bg-bg-tertiary flex items-center justify-center mb-4">
-          <Network className="w-10 h-10 text-text-quaternary" />
+      <div className="flex h-full flex-col items-center justify-center p-8 text-center">
+        <div className="mb-4 flex h-20 w-20 items-center justify-center rounded-full bg-bg-tertiary">
+          <Network className="h-10 w-10 text-text-quaternary" />
         </div>
-        <h3 className="text-lg font-medium text-text-primary mb-2">Knowledge graph is empty</h3>
-        <p className="text-sm text-text-tertiary max-w-sm mb-4">
+        <h3 className="mb-2 text-lg font-medium text-text-primary">
+          Knowledge graph is empty
+        </h3>
+        <p className="mb-4 max-w-sm text-sm text-text-tertiary">
           Add more memories to build your personal knowledge network.
         </p>
-        <button
-          onClick={rebuild}
-          disabled={rebuilding}
-          className={cn(
-            'flex items-center gap-2 px-4 py-2 rounded-lg',
-            'bg-purple-primary text-white text-sm font-medium',
-            'hover:bg-purple-secondary transition-colors',
-            'disabled:opacity-50 disabled:cursor-not-allowed'
-          )}
-        >
-          {rebuilding ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <RefreshCw className="w-4 h-4" />
-          )}
-          {rebuilding ? 'Rebuilding...' : 'Rebuild Graph'}
-        </button>
       </div>
     );
   }
 
   return (
-    <div ref={containerRef} className="relative w-full h-full bg-bg-primary overflow-hidden">
+    <div
+      ref={containerRef}
+      className="relative h-full w-full overflow-hidden bg-bg-primary"
+    >
       {/* Graph */}
       {graphData && (
         <ForceGraph3D
@@ -336,28 +353,28 @@ export function KnowledgeGraph({ onNodeSelect }: KnowledgeGraphProps) {
       )}
 
       {/* Search bar - top left */}
-      <div className="absolute top-4 left-4 w-64">
+      <div className="absolute left-4 top-4 w-64">
         <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-quaternary" />
+          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-quaternary" />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => handleSearch(e.target.value)}
             placeholder="Search nodes..."
             className={cn(
-              'w-full pl-9 pr-8 py-2 rounded-lg',
-              'bg-bg-tertiary/80 backdrop-blur-sm border border-bg-quaternary',
+              'w-full rounded-lg py-2 pl-9 pr-8',
+              'border border-bg-quaternary bg-bg-tertiary/80 backdrop-blur-sm',
               'text-sm text-text-primary',
-              'focus:outline-none focus:ring-2 focus:ring-purple-primary/50',
-              'placeholder:text-text-quaternary'
+              'focus:outline-none focus:ring-2 focus:ring-white/50',
+              'placeholder:text-text-quaternary',
             )}
           />
           {searchQuery && (
             <button
               onClick={() => handleSearch('')}
-              className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded text-text-quaternary hover:text-text-primary"
+              className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-text-quaternary hover:text-text-primary"
             >
-              <X className="w-3 h-3" />
+              <X className="h-3 w-3" />
             </button>
           )}
         </div>
@@ -369,20 +386,20 @@ export function KnowledgeGraph({ onNodeSelect }: KnowledgeGraphProps) {
       </div>
 
       {/* Controls - top right */}
-      <div className="absolute top-4 right-4 flex items-center gap-2">
+      <div className="absolute right-4 top-4 flex items-center gap-2">
         {/* Labels toggle */}
         <button
           onClick={() => setShowAllLabels(!showAllLabels)}
           className={cn(
-            'flex items-center gap-2 px-3 py-2 rounded-lg',
-            'backdrop-blur-sm border transition-colors',
+            'flex items-center gap-2 rounded-lg px-3 py-2',
+            'border backdrop-blur-sm transition-colors',
             showAllLabels
-              ? 'bg-purple-primary/20 border-purple-primary/50 text-purple-primary'
-              : 'bg-bg-tertiary/80 border-bg-quaternary text-text-secondary hover:text-text-primary'
+              ? 'border-white/50 bg-white/20 text-white'
+              : 'border-bg-quaternary bg-bg-tertiary/80 text-text-secondary hover:text-text-primary',
           )}
           title={showAllLabels ? 'Hide labels' : 'Show all labels'}
         >
-          <Tag className="w-4 h-4" />
+          <Tag className="h-4 w-4" />
           <span className="text-sm">Labels</span>
         </button>
 
@@ -390,78 +407,59 @@ export function KnowledgeGraph({ onNodeSelect }: KnowledgeGraphProps) {
         <button
           onClick={resetView}
           className={cn(
-            'flex items-center gap-2 px-3 py-2 rounded-lg',
-            'bg-bg-tertiary/80 backdrop-blur-sm border border-bg-quaternary',
+            'flex items-center gap-2 rounded-lg px-3 py-2',
+            'border border-bg-quaternary bg-bg-tertiary/80 backdrop-blur-sm',
             'text-text-secondary hover:text-text-primary',
-            'transition-colors'
+            'transition-colors',
           )}
           title="Reset view"
         >
-          <RotateCcw className="w-4 h-4" />
+          <RotateCcw className="h-4 w-4" />
           <span className="text-sm">Reset</span>
-        </button>
-
-        {/* Rebuild */}
-        <button
-          onClick={rebuild}
-          disabled={rebuilding}
-          className={cn(
-            'flex items-center gap-2 px-3 py-2 rounded-lg',
-            'bg-bg-tertiary/80 backdrop-blur-sm border border-bg-quaternary',
-            'text-text-secondary hover:text-text-primary',
-            'transition-colors',
-            'disabled:opacity-50 disabled:cursor-not-allowed'
-          )}
-          title="Rebuild knowledge graph"
-        >
-          {rebuilding ? (
-            <Loader2 className="w-4 h-4 animate-spin" />
-          ) : (
-            <RefreshCw className="w-4 h-4" />
-          )}
-          <span className="text-sm">Rebuild</span>
         </button>
       </div>
 
       {/* Zoom controls - right side */}
-      <div className="absolute right-4 top-1/2 -translate-y-1/2 flex flex-col gap-2">
+      <div className="absolute right-4 top-1/2 flex -translate-y-1/2 flex-col gap-2">
         <button
           onClick={zoomIn}
           className={cn(
-            'p-2 rounded-lg',
-            'bg-bg-tertiary/80 backdrop-blur-sm border border-bg-quaternary',
+            'rounded-lg p-2',
+            'border border-bg-quaternary bg-bg-tertiary/80 backdrop-blur-sm',
             'text-text-secondary hover:text-text-primary',
-            'transition-colors'
+            'transition-colors',
           )}
           title="Zoom in"
         >
-          <ZoomIn className="w-5 h-5" />
+          <ZoomIn className="h-5 w-5" />
         </button>
         <button
           onClick={zoomOut}
           className={cn(
-            'p-2 rounded-lg',
-            'bg-bg-tertiary/80 backdrop-blur-sm border border-bg-quaternary',
+            'rounded-lg p-2',
+            'border border-bg-quaternary bg-bg-tertiary/80 backdrop-blur-sm',
             'text-text-secondary hover:text-text-primary',
-            'transition-colors'
+            'transition-colors',
           )}
           title="Zoom out"
         >
-          <ZoomOut className="w-5 h-5" />
+          <ZoomOut className="h-5 w-5" />
         </button>
       </div>
 
       {/* Legend */}
-      <div className="absolute bottom-4 left-4 p-3 rounded-lg bg-bg-tertiary/80 backdrop-blur-sm border border-bg-quaternary">
-        <p className="text-xs text-text-quaternary mb-2">Node Types</p>
+      <div className="absolute bottom-4 left-4 rounded-lg border border-bg-quaternary bg-bg-tertiary/80 p-3 backdrop-blur-sm">
+        <p className="mb-2 text-xs text-text-quaternary">Node Types</p>
         <div className="grid grid-cols-2 gap-x-4 gap-y-1">
-          {(Object.entries(NODE_COLORS) as [KnowledgeGraphNodeType | 'user', string][]).map(([type, color]) => (
+          {(
+            Object.entries(NODE_COLORS) as [KnowledgeGraphNodeType | 'user', string][]
+          ).map(([type, color]) => (
             <div key={type} className="flex items-center gap-2">
               <div
-                className="w-2.5 h-2.5 rounded-full"
+                className="h-2.5 w-2.5 rounded-full"
                 style={{ backgroundColor: color }}
               />
-              <span className="text-xs text-text-tertiary capitalize">
+              <span className="text-xs capitalize text-text-tertiary">
                 {type === 'user' ? 'You' : type}
               </span>
             </div>
@@ -483,38 +481,40 @@ export function KnowledgeGraph({ onNodeSelect }: KnowledgeGraphProps) {
             exit={{ opacity: 0, y: 20 }}
             className={cn(
               'absolute bottom-20 left-4 right-4 max-w-md',
-              'p-4 rounded-xl',
-              'bg-bg-tertiary/90 backdrop-blur-md border border-bg-quaternary',
-              'shadow-strong'
+              'rounded-xl p-4',
+              'border border-bg-quaternary bg-bg-tertiary/90 backdrop-blur-md',
+              'shadow-strong',
             )}
           >
             <div className="flex items-start justify-between gap-3">
               <div className="flex items-center gap-3">
                 <div
-                  className="w-4 h-4 rounded-full flex-shrink-0"
+                  className="h-4 w-4 flex-shrink-0 rounded-full"
                   style={{ backgroundColor: selectedNode.color }}
                 />
                 <div>
                   <h4 className="font-medium text-text-primary">{selectedNode.label}</h4>
-                  <p className="text-xs text-text-quaternary capitalize">{selectedNode.nodeType}</p>
+                  <p className="text-xs capitalize text-text-quaternary">
+                    {selectedNode.nodeType}
+                  </p>
                 </div>
               </div>
               <button
                 onClick={() => selectNode(null)}
-                className="p-1 rounded-md text-text-tertiary hover:text-text-primary hover:bg-bg-quaternary transition-colors"
+                className="rounded-md p-1 text-text-tertiary transition-colors hover:bg-bg-quaternary hover:text-text-primary"
               >
-                <X className="w-4 h-4" />
+                <X className="h-4 w-4" />
               </button>
             </div>
 
             {selectedNode.aliases.length > 0 && (
               <div className="mt-2">
-                <p className="text-xs text-text-quaternary mb-1">Also known as:</p>
+                <p className="mb-1 text-xs text-text-quaternary">Also known as:</p>
                 <div className="flex flex-wrap gap-1">
                   {selectedNode.aliases.map((alias, i) => (
                     <span
                       key={i}
-                      className="px-2 py-0.5 rounded text-xs bg-bg-quaternary text-text-tertiary"
+                      className="rounded bg-bg-quaternary px-2 py-0.5 text-xs text-text-tertiary"
                     >
                       {alias}
                     </span>
@@ -523,7 +523,7 @@ export function KnowledgeGraph({ onNodeSelect }: KnowledgeGraphProps) {
               </div>
             )}
 
-            <div className="flex items-center justify-between mt-3 pt-3 border-t border-bg-quaternary">
+            <div className="mt-3 flex items-center justify-between border-t border-bg-quaternary pt-3">
               <span className="text-sm text-text-tertiary">
                 {selectedNode.memoryIds.length} related memories
               </span>
@@ -531,13 +531,13 @@ export function KnowledgeGraph({ onNodeSelect }: KnowledgeGraphProps) {
                 <button
                   onClick={() => onNodeSelect(selectedNode.id, selectedNode.memoryIds)}
                   className={cn(
-                    'flex items-center gap-1 px-2 py-1 rounded-md text-xs',
-                    'text-purple-primary hover:bg-purple-primary/10',
-                    'transition-colors'
+                    'flex items-center gap-1 rounded-md px-2 py-1 text-xs',
+                    'text-white hover:bg-white/10',
+                    'transition-colors',
                   )}
                 >
                   View Memories
-                  <ExternalLink className="w-3 h-3" />
+                  <ExternalLink className="h-3 w-3" />
                 </button>
               )}
             </div>
@@ -548,13 +548,13 @@ export function KnowledgeGraph({ onNodeSelect }: KnowledgeGraphProps) {
       {/* Loading overlay */}
       {loading && (
         <div className="absolute inset-0 flex items-center justify-center bg-bg-primary/80">
-          <Loader2 className="w-8 h-8 text-purple-primary animate-spin" />
+          <Loader2 className="h-8 w-8 animate-spin text-white" />
         </div>
       )}
 
       {/* Error state */}
       {error && (
-        <div className="absolute top-4 left-4 right-4 p-3 rounded-lg bg-error/10 border border-error/30 text-error text-sm">
+        <div className="absolute left-4 right-4 top-4 rounded-lg border border-error/30 bg-error/10 p-3 text-sm text-error">
           {error}
         </div>
       )}

@@ -1741,51 +1741,37 @@ final class TutorialTests: XCTestCase {
 
     // MARK: - The chord, being typed
 
-    /// **A double tap is drawn as one key struck twice, and the drawing is checked against the
-    /// detector rather than against an opinion.**
+    /// **The chord this app actually teaches is not a double tap, and the card must not draw one.**
     ///
-    /// This replaces `testARepeatedTapIsDrawnAsTwoSeparatePresses`, which asserted the same timing
-    /// over *two* caps. The timing was never the defect; the cap count was. A Mac has two Command
-    /// keys, so two ⌘ caps lighting in turn is a good drawing of "press the left one, then the right
-    /// one" — and it was read that way and reported: *"expressing both the command keys one by one.
-    /// It's supposed to be both the command keys together."*
+    /// This replaces `testTheDemonstratedTapIsOneCapAndIsTheGestureTheDetectorFires`, which replayed
+    /// the `⌘⌘` cycle through `ModifierDoubleTap` — the production detector — and asserted that it
+    /// fired. Both the detector and the double-tap shortcut are gone: `openActivity`'s default is
+    /// `.bothCommandKeys`, and `openSearch`, the only action that was ever a double tap, was a
+    /// second chord onto the same window. So the claim worth pinning moved. It is no longer "the
+    /// drawing fires the detector" but "the drawing is the *other* shape entirely": `⌘ + ⌘` routes
+    /// to `TutorialCommandPair`, which draws two caps pressed at once, and never to the repeated-tap
+    /// cycle, which draws one cap struck twice. Those two pictures teach different gestures and only
+    /// one of them opens the window.
     ///
-    /// The expected value is not taken from that report and is not taken from the new code either.
-    /// It is taken from `ModifierDoubleTap`, the production detector `GlobalShortcuts` runs on real
-    /// `flagsChanged` events, which is the only thing on this machine that decides what the gesture
-    /// *is*. The demonstration's beats are replayed through it and it has to fire — and the reading
-    /// the report asked for is replayed through it too, and must not.
-    func testTheDemonstratedTapIsOneCapAndIsTheGestureTheDetectorFires() {
-        let cycle = TutorialChordCycle(chord: "⌘⌘")
-        XCTAssertEqual(cycle.keys, ["⌘"], "two caps put a second Command key in the picture")
-        XCTAssertEqual(cycle.taps, 2)
-        XCTAssertTrue(cycle.isRepeatedTap)
-        XCTAssertEqual(cycle.spoken, "Tap ⌘ twice", "the label a screen reader gets says the gesture")
+    /// The expected value is taken from production — `GlobalShortcuts.Action.openActivity`'s own
+    /// default chord — rather than from a literal here, so a chord that moves without this moving
+    /// fails rather than passes.
+    func testTheChordTheCardTeachesIsTheBothCommandGestureAndNotADoubleTap() {
+        let chord = GlobalShortcuts.Action.openActivity.defaultChord.display
 
-        // A hand's tempo, not the demonstration's. `TutorialChordCycle.beat` is deliberately slower
-        // than a real double tap — the loop is being read rather than performed — so what is under
-        // test is the *shape* the beats describe, played at a speed a person would use.
-        let tempo: TimeInterval = 0.10
-        var detector = ModifierDoubleTap(tapped: .command)
-        var fired = false
-        for beat in 0..<cycle.beats {
-            let snapshot = ModifierDoubleTap.Snapshot(
-                modifiers: cycle.isDown(0, at: beat) ? [.command] : [],
-                at: Double(beat) * tempo)
-            if detector.flagsChanged(snapshot) != nil { fired = true }
-        }
-        XCTAssertTrue(fired, "the card draws a gesture that does not fire the shortcut it is teaching")
+        XCTAssertTrue(
+            TutorialCommandPair.matches(chord),
+            "the card would fall through to the repeated-tap drawing for \(chord)")
+        XCTAssertEqual(TutorialCommandPair.spoken, "Press both Command keys together")
 
-        // And the literal reading of the report — both Command keys held down together — cannot fire
-        // it at any tempo, because the two keys share one modifier mask: holding both is one press.
-        // This is why "show them pressed at the same time" is not the fix.
-        var together = ModifierDoubleTap(tapped: .command)
-        XCTAssertNil(together.flagsChanged(.init(modifiers: [.command], at: 0)))
-        XCTAssertNil(together.flagsChanged(.init(modifiers: [.command], at: tempo)))
-        XCTAssertNil(
-            together.flagsChanged(.init(modifiers: [], at: tempo * 2)),
-            "two Command keys held together fired the shortcut, so the picture could have shown that")
+        // …and the reading the report rejected — one key struck twice — is a different string and a
+        // different drawing. `⌘⌘` is what a double tap prints, and it must not reach the pair.
+        XCTAssertFalse(
+            TutorialCommandPair.matches("⌘⌘"),
+            "⌘⌘ is the double tap; drawing it as two keys at once is the reported defect in reverse")
+        XCTAssertTrue(TutorialChordCycle(chord: "⌘⌘").isRepeatedTap)
     }
+
 
     /// The other double tap this app ships: `⌘⌘⇧`, a repeated ⌘ with Shift **held across both
     /// halves**. Collapsing the duplicate must not collapse the modifier with it, and the held cap

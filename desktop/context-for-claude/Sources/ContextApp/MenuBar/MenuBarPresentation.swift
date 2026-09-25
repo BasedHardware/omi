@@ -201,16 +201,28 @@ struct ClaudeConnectorLine: Equatable {
     /// rather than a second control, which is what stops a second press starting a second write.
     var action: String?
 
-    init(claudeCode: Bool, claudeDesktop: Bool, note: String?, isConnecting: Bool) {
-        switch (claudeCode, claudeDesktop) {
+    init(connection: ClaudeConnection, note: String?, isConnecting: Bool) {
+        // **`desktopIsReachable`, not `claudeDesktop`.** The line reports what Claude can do, and a
+        // Claude Desktop that has not read the registration yet cannot do anything — saying
+        // "Connected to Claude Desktop" over a connector that fails to answer is the exact claim
+        // `ClaudeConnection` exists to stop this surface making.
+        switch (connection.claudeCode, connection.desktopIsReachable) {
         case (true, true): summary = "Connected to Claude Code and Claude Desktop"
         case (true, false): summary = "Connected to Claude Code"
         case (false, true): summary = "Connected to Claude Desktop"
         case (false, false): summary = "Not connected to Claude"
         }
-        isConnected = claudeCode || claudeDesktop
-        self.note = note
-        action = isConnected ? nil : (isConnecting ? "Connecting…" : "Connect")
+        isConnected = connection.claudeCode || connection.desktopIsReachable
+        // The remedy takes the note slot only when there is no fresher one: a sentence describing
+        // the write the user just asked for is about the press they just made, and outranks a
+        // standing condition they can act on whenever they like.
+        self.note = note ?? connection.restartNotice
+        // **Offered only when nothing is registered at all.** `Connect` writes the config files, so
+        // in the needs-restart state it would rewrite two files that are already correct and change
+        // nothing the user can see — a control that answers a real complaint with a no-op is worse
+        // than no control. The sentence in `note` names what actually works.
+        let hasNothingRegistered = !connection.claudeCode && !connection.claudeDesktop
+        action = hasNothingRegistered ? (isConnecting ? "Connecting…" : "Connect") : nil
     }
 }
 

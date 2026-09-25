@@ -59,19 +59,14 @@ public struct QueryStamp: Codable, Sendable, Equatable {
     /// is a third process. Two properties matter, and both are handled here rather than left to the
     /// caller:
     ///
-    /// 1. **A reader never sees a partial file.** The payload is written to a uniquely named temp
-    ///    file in the same directory and then `rename(2)`d onto the destination. POSIX rename is
-    ///    atomic within a filesystem: a reader opening the path gets either the whole previous file
-    ///    or the whole new one, never a mixture and never a zero-length truncation. Readers
-    ///    therefore take no lock at all and can never block a server.
-    ///    The temp name carries the pid *and* a UUID: a shared temp name would let two servers
-    ///    interleave their bytes into one temp file and then rename the wreckage into place.
+    /// 1. **A reader never sees a partial file.** `ContextFileLock.replace` writes to a uniquely
+    ///    named temp file and `rename(2)`s it onto the destination, so a reader opening the path gets
+    ///    either the whole previous file or the whole new one. Readers therefore take no lock at all
+    ///    and can never block a server.
     /// 2. **The newest call wins.** Renames alone are last-writer-wins by wall-clock arrival, so a
     ///    server that was slightly slow could bury a newer stamp under its older one. The
-    ///    read-compare-rename is therefore done under an exclusive `flock` on a *separate* lock
-    ///    file. It has to be separate: locking the destination would lock an inode that the next
-    ///    rename unlinks, after which two writers hold exclusive locks on two different inodes and
-    ///    the lock means nothing. `flock` is released by the kernel when the process dies, so a
+    ///    read-compare-rename is therefore done under an exclusive `flock` on a *separate* lock file
+    ///    — `ContextFileLock`, which documents why separate is the only workable choice and why a
     ///    crashed MCP server cannot wedge the file.
     public func record(to url: URL = ContextPaths.queryStampURL) throws {
         let directory = url.deletingLastPathComponent()
@@ -79,7 +74,7 @@ public struct QueryStamp: Codable, Sendable, Equatable {
         // yet. Recording the very first call still has to work.
         _ = try ContextPaths.ensureSupportDirectory(at: directory)
 
-        let lock = try QueryStampLock(at: ContextPaths.queryStampLockURL(for: url))
+        let lock = try ContextFileLock(at: ContextPaths.queryStampLockURL(for: url))
         defer { lock.release() }
         try lock.acquire()
 
@@ -93,15 +88,7 @@ public struct QueryStamp: Codable, Sendable, Equatable {
             return
         }
 
-        let temp = directory.appendingPathComponent(
-            ".\(url.lastPathComponent).\(ProcessInfo.processInfo.processIdentifier).\(UUID().uuidString).tmp")
-        try JSONEncoder().encode(self).write(to: temp)
-        ContextPaths.setPermissions(temp, mode: 0o600)
-        guard rename(temp.path, url.path) == 0 else {
-            let reason = String(cString: strerror(errno))
-            try? FileManager.default.removeItem(at: temp)
-            throw QueryStampError.couldNotReplaceStamp(path: url.path, reason: reason)
-        }
+        try ContextFileLock.replace(url, with: JSONEncoder().encode(self))
     }
 
     /// Convenience for the one call site that matters: the MCP server's tool dispatch.
@@ -166,51 +153,7 @@ public struct QueryStamp: Codable, Sendable, Equatable {
     }
 }
 
-// MARK: - Errors
-
-public enum QueryStampError: Error, LocalizedError, Equatable {
-    case couldNotLock(path: String, reason: String)
-    case couldNotReplaceStamp(path: String, reason: String)
-
-    public var errorDescription: String? {
-        switch self {
-        case let .couldNotLock(path, reason):
-            return "Could not lock \(path) to record the query stamp: \(reason)"
-        case let .couldNotReplaceStamp(path, reason):
-            return "Could not replace \(path) with the new query stamp: \(reason)"
-        }
-    }
-}
-
-// MARK: - Lock
-
-/// An exclusive `flock` over the compare-and-replace, held for microseconds.
-///
-/// A dedicated file that is only ever locked and never renamed or replaced, so every writer locks
-/// the same inode for the lifetime of the install.
-private struct QueryStampLock {
-    private let descriptor: Int32
-
-    init(at url: URL) throws {
-        descriptor = open(url.path, O_CREAT | O_RDWR | O_CLOEXEC, 0o600)
-        guard descriptor >= 0 else {
-            throw QueryStampError.couldNotLock(path: url.path, reason: String(cString: strerror(errno)))
-        }
-    }
-
-    func acquire() throws {
-        while flock(descriptor, LOCK_EX) != 0 {
-            // A signal interrupting the wait is not a failure to lock.
-            guard errno == EINTR else {
-                throw QueryStampError.couldNotLock(path: "fd \(descriptor)",
-                                                   reason: String(cString: strerror(errno)))
-            }
-        }
-    }
-
-    /// Closing the descriptor releases the lock; unlocking first keeps that explicit.
-    func release() {
-        flock(descriptor, LOCK_UN)
-        close(descriptor)
-    }
-}
+// The lock and the atomic replace live in `ContextFileLock`, shared with `ToolCallLedger`. Both files
+// are written by concurrent `context-for-claude-mcp` processes and read by the app, so they need the
+// identical discipline; two hand-written flock dances in one package is one more than can be kept
+// correct.

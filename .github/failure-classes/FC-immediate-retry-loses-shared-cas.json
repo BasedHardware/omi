@@ -1,0 +1,17 @@
+{
+ "schema_version": 1,
+ "id": "FC-immediate-retry-loses-shared-cas",
+ "violated_contract": "A conflict loop over a shared compare-and-swap must space its rounds. Retrying immediately re-reads the state the winning peer just advanced, so concurrent writers keep losing in lockstep and a bounded budget of immediate attempts is spent on ordinary contention rather than on a real failure — the caller fails closed even though every attempt was retryable.",
+ "canonical_prevention": "Give the loop a bounded backoff schedule and derive its attempt count from that schedule, so 'how many rounds' and 'how far apart' cannot drift apart. A caller that already owns an outer converging loop passes an explicit immediate schedule rather than the inner loop silently having none.",
+ "evidence_prs": [
+  11731
+ ],
+ "scope_hints": [
+  "backend/utils/memory/**",
+  "backend/database/memory_apply_store.py"
+ ],
+ "canonical_prevention_artifact": [
+  "backend/utils/memory/canonical_memory_adapter.py"
+ ],
+ "status": "open"
+}

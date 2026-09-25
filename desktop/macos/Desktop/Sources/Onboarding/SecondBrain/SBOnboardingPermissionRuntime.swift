@@ -79,7 +79,7 @@ enum SBAutomationConsent {
   static func requestSystemEventsConsent() -> Outcome {
     // Already answered? Asking again is what makes a spent prompt feel dead:
     // macOS will not re-show it, so the click would do nothing visible.
-    let known = determinePermission(askUserIfNeeded: false)
+    let known = currentSystemEventsPermission()
     if known == noErr || known == -1743 { return Outcome(status: known) }
 
     launchSystemEventsIfNeeded()
@@ -101,6 +101,39 @@ enum SBAutomationConsent {
     return Outcome(status: determinePermission(askUserIfNeeded: false), usedAppleEventFallback: true)
   }
 
+  /// **Blocking.** Report the current Automation status for System Events
+  /// without ever raising a prompt. This is the read every passive status probe
+  /// wants — the Permissions page, onboarding re-checks, the chat permission
+  /// tool.
+  ///
+  /// `AEDeterminePermissionToAutomateTarget` answers `-600` (procNotFound)
+  /// whenever the target is not running, and System Events is a background-only
+  /// app that exits as soon as it goes idle. So on any Mac that is not
+  /// currently being scripted — which is the normal state — a bare probe cannot
+  /// tell a real grant from no grant at all, and the caller is left projecting
+  /// `-600` onto whatever it happened to believe before. From a cold launch
+  /// that belief is the `false` default, so a permission the user granted
+  /// months ago reads "Not Granted" for the whole session, on every refresh.
+  ///
+  /// Starting the target is what makes the question answerable. LaunchServices
+  /// sends no Apple Event, and `askUserIfNeeded: false` cannot raise a dialog,
+  /// so this stays silent: it is still a status read, not a request.
+  ///
+  /// `determine` and `launch` are injection seams for tests; production passes
+  /// neither and gets the real Apple Event and LaunchServices calls.
+  static func currentSystemEventsPermission(
+    determine: ((Bool) -> OSStatus)? = nil,
+    launch: (() -> Void)? = nil
+  ) -> OSStatus {
+    let read = determine ?? { determinePermission(askUserIfNeeded: $0) }
+    let start = launch ?? { launchSystemEventsIfNeeded() }
+
+    let status = read(false)
+    guard status == -600 else { return status }
+    start()
+    return read(false)
+  }
+
   private static func sendProbeAppleEvent() {
     var error: NSDictionary?
     NSAppleScript(
@@ -109,8 +142,9 @@ enum SBAutomationConsent {
   }
 
   /// System Events is a background-only app; launching it with LaunchServices
-  /// sends no Apple Event, so it cannot itself trip the prompt we are about to
-  /// raise deliberately.
+  /// sends no Apple Event, so it cannot itself trip a TCC prompt — neither the
+  /// one the request path raises deliberately, nor any at all on the silent
+  /// status read.
   private static func launchSystemEventsIfNeeded() {
     guard
       NSRunningApplication.runningApplications(withBundleIdentifier: systemEventsBundleID).isEmpty,

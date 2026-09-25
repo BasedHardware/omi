@@ -2,11 +2,19 @@ import AppKit
 import ContextCore
 import SwiftUI
 
-/// The six panes, in sidebar order.
+/// The five panes, in sidebar order.
+///
+/// **There was a sixth, Appearance, and it is gone rather than emptied.** It held a light/dark/system
+/// tile row, a Dock-icon switch and four toggles hiding controls on the timeline. Reported as *"remove
+/// appearance options altogether … in fact remove appearance section from settings altogether"*, and
+/// the three parts came apart cleanly: the theme tiles were an override of a system setting the app
+/// has no business restating (it follows the machine, which is what `System` always meant), the
+/// timeline control toggles were four ways to make the timeline worse, and the Dock icon was never an
+/// appearance choice at all — it moved to General, beside Launch on Login, which is the question it
+/// actually answers.
 enum SettingsPane: String, CaseIterable, Identifiable, Sendable {
     case general
     case agents
-    case appearance
     case capture
     case storage
     case exclusions
@@ -17,7 +25,6 @@ enum SettingsPane: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .general: "General"
         case .agents: "Agents"
-        case .appearance: "Appearance"
         case .capture: "Capture"
         case .storage: "Storage"
         case .exclusions: "Exclusions"
@@ -29,7 +36,6 @@ enum SettingsPane: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .general: "gearshape"
         case .agents: "terminal"
-        case .appearance: "circle.lefthalf.filled"
         case .capture: "record.circle"
         case .storage: "internaldrive"
         case .exclusions: "eye.slash"
@@ -128,11 +134,9 @@ struct SettingsView: View {
     private var paneContent: some View {
         switch pane {
         case .general:
-            SettingsGeneralPane(store: store, shortcuts: shortcuts, exclusions: exclusions)
+            SettingsGeneralPane(store: store, shortcuts: shortcuts)
         case .agents:
             SettingsAgentsPane(store: store)
-        case .appearance:
-            SettingsAppearancePane(store: store)
         case .capture:
             SettingsCapturePane(store: store)
         case .storage:

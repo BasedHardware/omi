@@ -24,7 +24,7 @@ Before getting started, make sure your device is connected and unlocked. If you'
    Java runtime and `firebase-tools`/`npx`; `make dev-up` names what's missing.
 
    `make dev-status` shows what came up; `make dev-down` stops it. Ports, seeded
-   users, and troubleshooting: [`docs/runbooks/local-emulator-manual-qa.md`](../docs/runbooks/local-emulator-manual-qa.md).
+   users, and troubleshooting: [`backend/docs/runbooks/local-emulator-manual-qa.md`](../backend/docs/runbooks/local-emulator-manual-qa.md).
 
 2. Navigate to the app directory:
    ```bash
@@ -47,8 +47,9 @@ Before getting started, make sure your device is connected and unlocked. If you'
 
    `bash setup.sh ios` is the safe local-development path: it uses the local
    API/emulator harness and the `demo-omi-local` Firebase project. For a real
-   iPhone, set `OMI_DEV_HOST` to the Mac's LAN address when the local harness is
-   reachable from the device.
+   iPhone, set `OMI_DEV_HOST` to the Mac's LAN or Tailscale address before
+   running both `setup.sh ios` and `make dev-up` (export it so both commands
+   see it) — the harness now binds there too, not just the app build.
 
    iOS setup requires macOS/Xcode, so Windows developers should use the Android setup path.
 
@@ -86,13 +87,49 @@ build.
    ```
 
 
+### Verifying changes
+
+The fast path for app changes is the unified verify entrypoint (no device, no
+credentials — loopback fixtures and synthetic data only):
+
+```bash
+make mobile-verify ARGS="doctor"                              # lane readiness + remedy
+make mobile-verify ARGS="fast --paths app/lib/pages/chat/page.dart"  # focused journeys
+make mobile-verify ARGS="fast --all"                          # full hermetic suite
+```
+
+Selection is mechanical: journeys are discovered from
+`integration_test/journeys/`, changed paths map to the behaviors they can
+break, unknown `app/lib` changes fall back to the full suite, and an empty
+selection fails instead of passing. CI runs the same command in the
+`journeys-hermetic` lane when app/journey inputs change. Receipts, selection
+rules, simulator smoke, and the separate physical-device path:
+[`scripts/dev-harness/MOBILE_VERIFY.md`](../scripts/dev-harness/MOBILE_VERIFY.md).
+
 ### Building and Deploying to iPhone
 
 To build and deploy the app to an iPhone so it can run independently from your laptop:
 
+The quick path is the setup wrapper with an AOT build mode:
+```bash
+OMI_MOBILE_BUILD_MODE=profile bash setup.sh ios   # or release
+```
+A plain `bash setup.sh ios` installs a debug (JIT) build, which iOS only lets run
+while `flutter run` is attached; opened from the Home Screen it shows a notice
+explaining that instead of starting.
+
+Manual equivalent:
+
 1. Build the iOS app with release mode and specific flavor:
    ```bash
-   flutter build ios --flavor dev --release
+   # After the normal setup has seeded the iOS/Firebase files:
+   source setup.sh
+   setup_app_env local_dev "$LOCAL_API_BASE_URL"
+   scripts/validate_mobile_build_config.sh --flavor dev --profile local_dev
+   flutter build ios --flavor dev --release \
+     --dart-define=OMI_APP_PROFILE=local_dev \
+     --dart-define=OMI_API_BASE_URL="$LOCAL_API_BASE_URL" \
+     --dart-define=OMI_FIREBASE_AUTH_EMULATOR_HOST="$LOCAL_DEV_HOST"
    ```
    This produces an .app bundle at:
    ```

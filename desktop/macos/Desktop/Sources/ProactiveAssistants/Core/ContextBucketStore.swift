@@ -646,6 +646,27 @@ actor ContextBucketStore {
       }) ?? []
   }
 
+  /// Candidate-sourced deliveries that actually reached the user in the last
+  /// 24-hour window, for the candidate show ceiling. Fails closed to the
+  /// ceiling (treats an unreadable database as "ceiling reached") so a storage
+  /// error can never turn into extra interruptions.
+  func candidateDeliveriesInWindow(now: Date = Date()) async -> Int {
+    let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool else { return Int.max }
+    let windowStart = ContextDeliveryBudget.dailyWindowStart(now: now)
+    return
+      (try? await pool.read { db in
+        try Int.fetchOne(
+          db,
+          sql: """
+            SELECT COUNT(*) FROM proactive_deliveries
+            WHERE deliveredAt >= ? AND lifecycleState = 'delivered'
+              AND provenanceJson LIKE '%"source":"candidate"%'
+            """,
+          arguments: [windowStart]) ?? 0
+      }) ?? Int.max
+  }
+
   func recentContextPool(
     excludingBucketID: String, now: Date = Date()
   ) async -> [ContextWorkstreamPoolItem] {
@@ -828,6 +849,11 @@ actor ContextBucketStore {
         """,
       arguments: [bucketID]
     ).reversed()
+    // `identifiersJson` is deliberately absent, and adding it would be a no-op:
+    // `BucketFactValidator.acceptedIdentifiers` only stores an identifier that the
+    // row's own (already truncated) `evidenceText` contains, and `evidenceText` is
+    // emitted verbatim right here. See the `Ceiling` note on
+    // `ContextBucketRollup.directorStablePrompt`.
     let facts = try String.fetchAll(
       db,
       sql: """
@@ -930,6 +956,19 @@ actor ContextBucketStore {
       arguments: arguments)
     let allowed = Set(rows)
     return citedSnapshotIDs.filter { allowed.contains($0) }.map { "fact:\($0)" }
+  }
+
+  /// Consumes a fact after its delivery: a delivered forced-question answer
+  /// expires the question fact so it stops re-forcing retrieval, and the
+  /// expiry-aware duplicate check lets a re-typed question re-validate.
+  func expireFact(id: String, now: Date = Date()) async throws {
+    let (pool, _) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+    guard let pool else { throw ContextBucketStoreError.staleFence }
+    try await pool.write { db in
+      try db.execute(
+        sql: "UPDATE bucket_facts SET expiresAt = ?, updatedAt = ? WHERE id = ?",
+        arguments: [now, now, id])
+    }
   }
 
   private static func snapshotFactID(_ fact: String) -> String? {

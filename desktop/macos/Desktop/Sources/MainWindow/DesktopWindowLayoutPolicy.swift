@@ -13,11 +13,11 @@ enum DesktopWindowLayoutPolicy {
   /// gutter. Chat's own `pageMargin` is interior layout and is not this inset.
   static let windowInset: CGFloat = 0
 
-  /// Readable lane plus `windowInset` on each side.
-  ///
-  /// Extra width beyond this is empty wallpaper that still belongs to the window
-  /// until AppKit clamps the frame. Height stays display-limited: a taller panel
-  /// is still hugged glass, not a gutter.
-  static let maximumContentWidth =
-    ChatComposerLayout.contentLaneMaxWidth + windowInset * 2
+  @MainActor
+  static func maximumContentSize(for window: NSWindow) -> NSSize {
+    guard let visibleFrame = (window.screen ?? NSScreen.main)?.visibleFrame else {
+      return NSSize(width: 10_000, height: 10_000)
+    }
+    return window.contentRect(forFrameRect: visibleFrame).size
+  }
 }

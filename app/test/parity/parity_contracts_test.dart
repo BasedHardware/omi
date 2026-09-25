@@ -3,20 +3,62 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:omi/backend/schema/capture_group.dart';
+import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/gen/action_items_folders_wire.g.dart';
+import 'package:omi/backend/schema/memory.dart';
+import 'package:omi/backend/schema/structured.dart';
+import 'package:omi/backend/schema/transcript_segment.dart';
+import 'package:omi/models/chat_evidence_reference.dart';
 import 'package:omi/pages/action_items/task_categorization.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/utils/conversations/capture_groups.dart';
 
 /// Flutter conformance suite for the shared cross-platform parity contracts
 /// (contracts/parity/README.md). Runs the repo-root fixture vectors through the
 /// REAL production rules: task bucketing (categorizeTasks, this platform's
 /// separate_overdue model), local-day conversation keys
-/// (conversationLocalDayKey, the #10198 contract), and action item wire decode
-/// (GeneratedActionItemResponse.fromJson). Day-key cases execute only when the
+/// (conversationLocalDayKey, the #10198 contract), action item wire decode
+/// (GeneratedActionItemResponse.fromJson), and conversation duration
+/// (ServerConversation.getDurationInSeconds, the #4056 contract). Day-key cases execute only when the
 /// fixture covers the runner's zone offset at that instant; offset 0 is always
 /// present so UTC CI runs every case.
 void main() {
   final root = _repoRoot();
+
+  group('additive JIT mixed-version runtime contract', () {
+    final fixture = _fixture(root, 'jit_runtime_contract_matrix.json');
+    final expected = fixture['expected'] as Map<String, dynamic>;
+
+    test('mobile keeps mixed memory text readable and grants only v1 ledger authority', () {
+      final memories = (fixture['memory_rows'] as List<dynamic>)
+          .map((row) => Memory.fromJson(Map<String, dynamic>.from(row as Map)))
+          .toList(growable: false);
+
+      expect(memories.map((memory) => memory.id), expected['memory_ids']);
+      expect({for (final memory in memories) memory.id: memory.content}, expected['readable_text_by_id']);
+      expect(
+        memories.where((memory) => memory.isKnowledgeLedger).map((memory) => memory.id),
+        expected['authoritative_ledger_ids'],
+      );
+    });
+
+    test('mobile leaves legacy evidence optional and makes future evidence inert', () {
+      final records = fixture['chat_records'] as Map<String, dynamic>;
+      expect(
+        ChatEvidenceReferenceEnvelope.tryFromJson((records['legacy'] as Map<String, dynamic>)['evidence']),
+        isNull,
+      );
+
+      final current = ChatEvidenceReferenceEnvelope.tryFromJson((records['v1'] as Map<String, dynamic>)['evidence']);
+      final future = ChatEvidenceReferenceEnvelope.tryFromJson((records['future'] as Map<String, dynamic>)['evidence']);
+
+      expect(current?.references.single.kind.wireValue, expected['v1_evidence_kind']);
+      expect(future?.references.single.kind.wireValue, expected['future_evidence_kind']);
+      expect(future?.references.single.state.wireValue, expected['future_evidence_state']);
+      expect((records['future'] as Map<String, dynamic>)['text'], isNotEmpty);
+    });
+  });
 
   group('task due buckets (separate_overdue model)', () {
     final fixture = _fixture(root, 'task_due_buckets.json');
@@ -55,6 +97,32 @@ void main() {
         final key = conversationLocalDayKey(instant);
         expect('${key.year}-${_pad(key.month)}-${_pad(key.day)}', expected);
       }, skip: expected == null ? 'fixture does not cover this zone offset' : false);
+    }
+  });
+
+  group('conversation duration (parity contract)', () {
+    final fixture = _fixture(root, 'conversation_duration.json');
+    for (final raw in fixture['cases'] as List<dynamic>) {
+      final c = raw as Map<String, dynamic>;
+      test(c['name'] as String, () {
+        final conversation = _durationConversation(c);
+        expect(conversation.getDurationInSeconds(), c['expected_seconds']);
+      });
+    }
+  });
+
+  group('capture group collapse (parity contract)', () {
+    final fixture = _fixture(root, 'capture_group_collapse.json');
+    final groups = fixture['groups'] as Map<String, dynamic>;
+    for (final raw in fixture['cases'] as List<dynamic>) {
+      final c = raw as Map<String, dynamic>;
+      test(c['name'] as String, () {
+        final rows = [
+          for (final row in (c['rows'] as List<dynamic>).cast<Map<String, dynamic>>())
+            _captureRow(row['id'] as String, row['group'] as String?, groups),
+        ];
+        expect(CaptureGroupPresentation.collapse(rows).map((row) => row.id).toList(), c['expected_ids']);
+      });
     }
   });
 
@@ -131,3 +199,46 @@ GeneratedActionItemResponse _wireItem({DateTime? due, DateTime? created}) => Gen
       if (created != null) 'created_at': created.toUtc().toIso8601String(),
       if (due != null) 'due_at': due.toUtc().toIso8601String(),
     });
+
+/// Build the conversation through the production model so duration cases
+/// exercise the same getter the conversation list and detail header read.
+ServerConversation _durationConversation(Map<String, dynamic> c) {
+  final segments = (c['segments'] as List<dynamic>).asMap().entries.map((entry) {
+    final segment = entry.value as Map<String, dynamic>;
+    return TranscriptSegment(
+      id: 'seg-${entry.key}',
+      text: segment['text'] as String,
+      speaker: 'SPEAKER_00',
+      isUser: true,
+      personId: null,
+      start: (segment['start'] as num).toDouble(),
+      end: (segment['end'] as num).toDouble(),
+      translations: [],
+    );
+  }).toList();
+
+  return ServerConversation(
+    id: c['name'] as String,
+    createdAt: DateTime.utc(2026, 1, 1),
+    structured: Structured('Parity', 'Parity'),
+    transcriptSegments: segments,
+    startedAt: c['started_at'] == null ? null : DateTime.parse(c['started_at'] as String),
+    finishedAt: c['finished_at'] == null ? null : DateTime.parse(c['finished_at'] as String),
+  );
+}
+
+ServerConversation _captureRow(String id, String? groupName, Map<String, dynamic> groups) {
+  final spec = groupName == null ? null : groups[groupName] as Map<String, dynamic>;
+  return ServerConversation(
+    id: id,
+    createdAt: DateTime.utc(2026, 9, 23, 12),
+    structured: Structured(id, ''),
+    captureGroup: spec == null
+        ? null
+        : CaptureGroup(
+            id: groupName!,
+            primaryId: spec['primary_id'] as String,
+            members: [for (final member in spec['members'] as List<dynamic>) CaptureGroupMember(id: member as String)],
+          ),
+  );
+}

@@ -115,19 +115,28 @@ distrust.
 | H14 | Track zoom distinct from frame-image zoom | DONE |
 | H15 | Beautiful | SUBJECTIVE — verify by screenshot |
 
-## I. Settings — six panes
+## I. Settings — five panes
 
-Sidebar: General, Agents, Appearance, Capture, Storage, Exclusions. Every row is an icon tile, a
-title, a grey subtitle, and a right-hand control.
+Sidebar: General, Agents, Capture, Storage, Exclusions. Every row is an icon tile, a title, a grey
+subtitle, and a right-hand control.
+
+**Seven settings rows are deliberately not shipped**, each removed on a report on 2026-08-16, and
+they account for **twelve** requirement IDs marked DROPPED below: the Appearance pane entire (I14 and
+I17–I22 — one pane, seven IDs), the second shortcut recorder (I2), Airgap Mode's switch (I5), the
+agent survey (I13) and Capture Quality with its footnote (I25, I26).
+`docs/rewind-and-settings.md` § Part 2 carries the same list as one table. The pattern in all of them
+is the same and is worth stating once: a control that only makes the product worse, or that
+duplicates another control, is removed rather than narrowed or hidden — a setting nobody can find
+still fires.
 
 ### I-General
 | # | Requirement | Status |
 |---|---|---|
 | I1 | Open Timeline Shortcut — recorder, default double-Command, "Clear it to use ⌘⌘" | PARTIAL — recorder, copy, cleared-state and rejection are real, but bound to `SettingsShortcutChord`, a stub. `GlobalShortcuts` now exists and must be adapted onto `ShortcutBindingProvider` |
-| I2 | Open Search Shortcut — recorder, default ⌘⌘⇧ | PARTIAL — same stub binding as I1 |
+| I2 | Open Search Shortcut — recorder, default ⌘⌘⇧ | DROPPED (2026-08-16 report) — it bound a second chord onto the *same* window I1's opens. `ContextApp.shortcutFired` answered `.openActivity` and `.openSearch` with one `window.press()`, because the Spotlight panel became the Activity window; so the pane drew two recorders, two defaults and two conflict rows for one behaviour, and a user who rebound one could not tell which had won. Removed from `GlobalShortcuts.Action` as well as from the pane — hiding the row would have left the chord firing — and `ModifierDoubleTap` went with it |
 | I3 | Conflict row, shown ONLY on a real conflict, with a one-click switch | PARTIAL — UI live-queries and never persists; the real `ShortcutConflicts` scanner exists but the pane still reads the stub |
 | I4 | Launch on Login toggle | MISSING (LoginItem exists) |
-| I5 | Airgap Mode toggle — suppresses telemetry, update checks, remote favicon requests; takes effect after relaunch | MISSING (engine flag exists) |
+| I5 | Airgap Mode toggle — suppresses telemetry, update checks, remote favicon requests; takes effect after relaunch | DROPPED (2026-08-16 report) — the switch, not the promise. `ExclusionEngine` still carries the flag, `NetworkEgress` still refuses every client while it is set, and anyone whose `exclusions.json` already says `airgapMode` keeps exactly the behaviour they chose. Ripping out the enforcement instead would silently start uploading for those users. Guard: `SettingsTests.testAirgapEnforcementSurvivesTheRemovalOfItsSwitch` |
 | I6 | Updates row showing the real version | DONE — `UpdatesSettingsRow` reads the bundle version through `ContextUpdater`. |
 | I7 | Automatic Updates toggle | DECIDED — Sparkle now ships (`Sources/ContextApp/Update/`, the shared micro-app feed, `docs/releasing.md`). The Updates row has a real `Check Now`; checks and verified downloads run automatically, while installation always asks before relaunch. A toggle is intentionally omitted because the shipping policy is fixed and locally signed copies are refused by `UpdatePolicy`. |
 
@@ -139,28 +148,35 @@ title, a grey subtitle, and a right-hand control.
 | I10 | Tip line about mentioning the app inside Claude Code/Codex/Cursor | DONE, narrowed — it now names **Claude Code and Claude Desktop only**. `ClaudeRegistrar` writes those two configs (`~/.claude.json`, `claude_desktop_config.json`) and nothing in this package writes a Codex or Cursor MCP entry, nor do we ship a CLI (I12), so naming them made two thirds of the sentence work the user would have had to do by hand without being told. Codex and Cursor remain in the I13 survey, which reports what is *installed* and claims nothing about integration |
 | I11 | An illustrative mock of an agent prompt box | MISSING |
 | I12 | CLI toggle installing a command to `~/.local/bin` | MISSING — decide whether we ship a CLI at all; our equivalent is the MCP registration |
-| I13 | Detected agent list (Claude, Codex, Cursor) with a green "Installed" pill | MISSING — detection must be real, with a not-installed state |
+| I13 | Detected agent list (Claude, Codex, Cursor) with a green "Installed" pill | DROPPED (2026-08-16 report) — it was built, with real detection and a real not-installed state, and it was read-only: nothing on the pane or anywhere else acted on the survey, and the two surfaces this app registers with are named by I10's tip line either way. A list the user cannot do anything with, in the pane where the two controls that do something live. `AgentSurface`/`AgentPresence` and the probe are gone; `AgentPaths` keeps the `~`-abbreviation the Storage pane needs |
 
 ### I-Appearance
+
+**The pane does not exist.** Reported as *"remove appearance options altogether … in fact remove
+appearance section from settings altogether"*, and the three things on it came apart cleanly: the
+theme tiles let a user disagree with their own machine's Appearance setting inside one app, the four
+timeline toggles were four ways to make the timeline worse, and the Dock row was never an appearance
+choice. Guard: `SettingsTests.testThereIsNoAppearancePane`.
+
 | # | Requirement | Status |
 |---|---|---|
-| I14 | Appearance: System / Light / Dark preview tiles, selected one ringed | MISSING |
+| I14 | Appearance: System / Light / Dark preview tiles, selected one ringed | DROPPED (2026-08-16 report) — `System` (the default, and what every install was on) installed no appearance at all, so the control existed only to pin this app against the machine around it. Phase 0 of `docs/first-run-experience.md` had already deleted a forced `NSApp.appearance = .aqua` for rendering a light popover inside a dark system menu; the tiles were that defect with a switch on it |
 | I15 | Accent Colour dropdown with a colour dot | DROPPED (J7, INV-UI-1) — **the requirement itself was wrong**, and it took shipping it to see why. Its only consumer was `.tint(store.accentColor)` on the Settings window, so picking a colour recoloured that window's switches and nothing else: every structural accent in the app reads `Ink.accent`, a fixed `systemBlue` chosen precisely so no machine can make it purple. And the requirement's own instruction — "default must mean `controlAccentColor`" — is the violation: on a Mac whose system accent is Purple, the *default* value of a control nobody touched painted the Settings window purple, which is exactly what `Ink.accent` refuses to do. A control that cannot do what it says and can only break the brand rule is deleted, not narrowed. `AccentChoice`, `Key.accent`, the published property and `accentColor` are gone; `Ink.accent` is the one accent, guarded by `InkAccentTests` over `BrandColourGuard` |
-| I16 | Show Dock Icon toggle | MISSING |
-| I17 | Timeline section with a LIVE preview reflecting the toggles below it | MISSING |
-| I18 | Open externally toggle + `↵` hint | MISSING |
-| I19 | Live Text toggle | MISSING |
-| I20 | Zoom controls toggle + `⌘⇧+/−` hint | MISSING |
-| I21 | Segment navigation toggle + `⌥←/→` hint | MISSING |
-| I22 | Hidden controls keep their keyboard shortcuts working | MISSING |
+| I16 | Show Dock Icon toggle | DONE, **moved to General** — it decides whether the app has a second home besides the menu bar, which is the same question Launch on Login answers. `DockPresence` still owns the key, the default and the mapping |
+| I17 | Timeline section with a LIVE preview reflecting the toggles below it | DROPPED (2026-08-16 report) with I18–I22 |
+| I18 | Open externally toggle + `↵` hint | DROPPED (2026-08-16 report) — the timeline draws it always |
+| I19 | Live Text toggle | DROPPED (2026-08-16 report) — the timeline draws it always |
+| I20 | Zoom controls toggle + `⌘⇧+/−` hint | DROPPED (2026-08-16 report) — the timeline draws them always |
+| I21 | Segment navigation toggle + `⌥←/→` hint | DROPPED (2026-08-16 report) — the timeline draws them always |
+| I22 | Hidden controls keep their keyboard shortcuts working | DROPPED (2026-08-16 report) — vacuous once no control can be hidden. `RewindTests.TimelineControlVisibilityWiringTests` now checks the opposite direction: that no preference gate grows back over a control |
 
 ### I-Capture
 | # | Requirement | Status |
 |---|---|---|
 | I23 | Screen Capture toggle | MISSING |
 | I24 | Pause on Inactivity toggle | MISSING |
-| I25 | Capture Quality: four tiles (Best / Default / Compact / Smallest), subtitle describes the selection | MISSING |
-| I26 | Footnote about quality vs disk space | MISSING |
+| I25 | Capture Quality: four tiles (Best / Default / Compact / Smallest), subtitle describes the selection | DROPPED (2026-08-16 report) — it was built and it genuinely worked (`FrameImage` resized and re-encoded to the selected tile), and the choice it offered was between one good answer and three worse ones: three of the four bought disk back by making the user's own screenshots harder to read, and — since `look` began handing frames to Claude as images — harder for a model to read too. The shipped Default is now the only answer, in `FrameImage.Quality`. `FrameLoader.maxPixelSize` stays at 2400 because frames written on Best Quality are still on disk |
+| I26 | Footnote about quality vs disk space | DROPPED (2026-08-16 report) with I25 — there is no selection left to footnote |
 
 ### I-Storage
 | # | Requirement | Status |

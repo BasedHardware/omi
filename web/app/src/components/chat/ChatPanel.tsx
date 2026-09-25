@@ -4,7 +4,6 @@ import { useRef, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Send, Sparkles, Trash2, Brain, Paperclip, ArrowLeft } from 'lucide-react';
 import { useChat as useChatContext } from './ChatContext';
-import { useChat } from '@/hooks/useChat';
 import { ConfirmDialog } from '@/components/ui/ConfirmDialog';
 import { FilePreview, ALLOWED_EXTENSIONS, MAX_FILES } from './FilePreview';
 import { InlineVoiceRecorder } from './VoiceRecorder';
@@ -12,6 +11,11 @@ import { uploadChatFiles, getChatApps } from '@/lib/api';
 import type { App } from '@/lib/api';
 import { cn } from '@/lib/utils';
 import { MixpanelManager } from '@/lib/analytics/mixpanel';
+import { shouldSubmitComposerKey } from '@/lib/chatComposerKey';
+import { parseChatEvidenceFromRecord } from '@/lib/chatEvidence';
+import { ChatMarkdown } from './ChatMarkdown';
+import { ChatEvidenceCard } from './ChatEvidenceCard';
+import { PanelReveal } from '@/components/ui/PanelReveal';
 
 interface FilePreviewItem {
   file: File;
@@ -36,11 +40,7 @@ function getQuickPrompts(contextType: string | undefined): string[] {
         'Set a reminder for this',
       ];
     case 'memory':
-      return [
-        'Tell me more about this',
-        'When did I mention this?',
-        'Related memories',
-      ];
+      return ['Tell me more about this', 'When did I mention this?', 'Related memories'];
     default:
       return [
         'What did I talk about today?',
@@ -51,7 +51,8 @@ function getQuickPrompts(contextType: string | undefined): string[] {
 }
 
 export function ChatPanel() {
-  const { isOpen, closeChat, currentContext, selectedAppId, clearAppContext } = useChatContext();
+  const { isOpen, closeChat, currentContext, selectedAppId, chat, clearAppContext } =
+    useChatContext();
   const {
     messages,
     isLoading,
@@ -62,7 +63,7 @@ export function ChatPanel() {
     sendMessage,
     clearHistory,
     loadHistory,
-  } = useChat({ appId: selectedAppId || undefined });
+  } = chat;
 
   const [input, setInput] = useState('');
   const [showClearDialog, setShowClearDialog] = useState(false);
@@ -77,10 +78,12 @@ export function ChatPanel() {
   // Fetch app info when selectedAppId changes
   useEffect(() => {
     if (selectedAppId) {
-      getChatApps().then((apps) => {
-        const app = apps.find((a) => a.id === selectedAppId);
-        setSelectedApp(app || null);
-      }).catch(() => setSelectedApp(null));
+      getChatApps()
+        .then((apps) => {
+          const app = apps.find((a) => a.id === selectedAppId);
+          setSelectedApp(app || null);
+        })
+        .catch(() => setSelectedApp(null));
     } else {
       setSelectedApp(null);
     }
@@ -124,7 +127,7 @@ export function ChatPanel() {
           preview = URL.createObjectURL(file);
         }
         return { file, preview, uploading: true };
-      })
+      }),
     );
 
     setSelectedFiles((prev) => [...prev, ...newItems]);
@@ -137,21 +140,18 @@ export function ChatPanel() {
       // Update items with uploaded IDs
       setSelectedFiles((prev) =>
         prev.map((item) => {
-          const uploadedFile = uploadedFiles.find(
-            (f) => f.name === item.file.name
-          );
+          const fileIndex = filesToAdd.indexOf(item.file);
+          const uploadedFile = fileIndex >= 0 ? uploadedFiles[fileIndex] : undefined;
           if (uploadedFile) {
             return { ...item, uploading: false, uploadedId: uploadedFile.id };
           }
           return item;
-        })
+        }),
       );
     } catch (err) {
       console.error('Failed to upload files:', err);
       // Remove failed uploads
-      setSelectedFiles((prev) =>
-        prev.filter((item) => !filesToAdd.includes(item.file))
-      );
+      setSelectedFiles((prev) => prev.filter((item) => !filesToAdd.includes(item.file)));
     } finally {
       setIsUploading(false);
     }
@@ -181,7 +181,12 @@ export function ChatPanel() {
   };
 
   const handleSend = async (text: string = input) => {
-    if (!text.trim() || isStreaming) return;
+    if (
+      (!text.trim() && !selectedFiles.some((item) => item.uploadedId)) ||
+      isLoading ||
+      isStreaming
+    )
+      return;
 
     // Get file IDs from uploaded files
     const fileIds = selectedFiles
@@ -200,7 +205,7 @@ export function ChatPanel() {
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (shouldSubmitComposerKey(e)) {
       e.preventDefault();
       handleSend();
     }
@@ -216,7 +221,11 @@ export function ChatPanel() {
     }
   };
 
-  const canSend = (input.trim() || selectedFiles.some((f) => f.uploadedId)) && !isStreaming && !isUploading;
+  const canSend =
+    (input.trim() || selectedFiles.some((f) => f.uploadedId)) &&
+    !isLoading &&
+    !isStreaming &&
+    !isUploading;
 
   return (
     <AnimatePresence>
@@ -228,7 +237,7 @@ export function ChatPanel() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 bg-black/30 z-40 sm:hidden"
+            className="fixed inset-0 z-40 bg-black/30 sm:hidden"
             onClick={closeChat}
           />
 
@@ -240,266 +249,292 @@ export function ChatPanel() {
             transition={{ type: 'spring', damping: 30, stiffness: 300 }}
             className={cn(
               'h-full flex-shrink-0 overflow-hidden',
-              'bg-bg-secondary border-l border-bg-tertiary',
-              'max-sm:fixed max-sm:inset-0 max-sm:z-50 max-sm:w-full'
+              'border-l border-bg-tertiary bg-bg-secondary',
+              'max-sm:fixed max-sm:inset-0 max-sm:z-50 max-sm:w-full',
             )}
           >
-            <div className={cn(
-              'w-[400px] h-full flex flex-col',
-              'max-sm:w-full'
-            )}>
-            {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b border-bg-tertiary">
-              <div className="flex items-center gap-3">
-                {/* Back button when in app-specific chat */}
-                {selectedAppId && (
-                  <button
-                    onClick={clearAppContext}
-                    className="p-1.5 -ml-1 rounded-lg hover:bg-bg-tertiary transition-colors"
-                    aria-label="Back to Omi chat"
-                    title="Back to Omi"
-                  >
-                    <ArrowLeft className="w-4 h-4 text-text-tertiary" />
-                  </button>
-                )}
-                <div className="w-8 h-8 rounded-full bg-purple-primary/20 flex items-center justify-center">
-                  <Sparkles className="w-4 h-4 text-purple-primary" />
-                </div>
-                <div>
-                  <h2 className="font-semibold text-text-primary">
-                    {selectedApp ? `Chat with ${selectedApp.name}` : 'Chat with Omi'}
-                  </h2>
-                  {currentContext?.title && !selectedAppId && (
-                    <p className="text-xs text-text-tertiary truncate max-w-[250px]">
-                      Context: {currentContext.title}
-                    </p>
-                  )}
-                </div>
-              </div>
-              <div className="flex items-center gap-1">
-                {messages.length > 0 && (
-                  <button
-                    onClick={() => setShowClearDialog(true)}
-                    className="p-2 rounded-lg hover:bg-bg-tertiary transition-colors"
-                    aria-label="Clear chat"
-                    title="Clear chat history"
-                  >
-                    <Trash2 className="w-4 h-4 text-text-quaternary hover:text-text-secondary" />
-                  </button>
-                )}
-                <button
-                  onClick={closeChat}
-                  className="p-2 rounded-lg hover:bg-bg-tertiary transition-colors"
-                  aria-label="Close chat"
-                >
-                  <X className="w-5 h-5 text-text-secondary" />
-                </button>
-              </div>
-            </div>
-
-            {/* Error banner */}
-            {error && (
-              <div className="px-4 py-2 bg-error/10 border-b border-error/20">
-                <p className="text-sm text-error">{error}</p>
-              </div>
-            )}
-
-            {/* Quick prompts (shown when no messages) */}
-            {messages.length === 0 && !isLoading && (
-              <div className="p-4 border-b border-bg-tertiary">
-                <p className="text-xs text-text-quaternary mb-2">Quick prompts:</p>
-                <div className="flex flex-wrap gap-2">
-                  {quickPrompts.map((prompt, i) => (
+            <PanelReveal
+              className={cn('flex h-full w-[400px] flex-col', 'max-sm:w-full')}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between border-b border-bg-tertiary p-4">
+                <div className="flex items-center gap-3">
+                  {/* Back button when in app-specific chat */}
+                  {selectedAppId && (
                     <button
-                      key={i}
-                      onClick={() => handleSend(prompt)}
-                      disabled={isStreaming}
-                      className={cn(
-                        'px-3 py-1.5 rounded-full text-sm',
-                        'bg-bg-tertiary hover:bg-bg-quaternary',
-                        'text-text-secondary hover:text-text-primary',
-                        'transition-colors',
-                        'disabled:opacity-50 disabled:cursor-not-allowed'
-                      )}
+                      onClick={clearAppContext}
+                      className="-ml-1 rounded-lg p-1.5 transition-colors hover:bg-bg-tertiary"
+                      aria-label="Back to Omi chat"
+                      title="Back to Omi"
                     >
-                      {prompt}
+                      <ArrowLeft className="h-4 w-4 text-text-tertiary" />
                     </button>
-                  ))}
+                  )}
+                  <div className="flex h-8 w-8 items-center justify-center rounded-full bg-white/[0.14]">
+                    <Sparkles className="h-4 w-4 text-text-primary" />
+                  </div>
+                  <div>
+                    <h2 className="font-semibold text-text-primary">
+                      {selectedApp ? `Chat with ${selectedApp.name}` : 'Chat with Omi'}
+                    </h2>
+                    {currentContext?.title && !selectedAppId && (
+                      <p className="max-w-[250px] truncate text-xs text-text-tertiary">
+                        Context: {currentContext.title}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <div className="flex items-center gap-1">
+                  {messages.length > 0 && (
+                    <button
+                      onClick={() => setShowClearDialog(true)}
+                      className="rounded-lg p-2 transition-colors hover:bg-bg-tertiary"
+                      aria-label="Clear chat"
+                      title="Clear chat history"
+                    >
+                      <Trash2 className="h-4 w-4 text-text-quaternary hover:text-text-secondary" />
+                    </button>
+                  )}
+                  <button
+                    onClick={closeChat}
+                    className="rounded-lg p-2 transition-colors hover:bg-bg-tertiary"
+                    aria-label="Close chat"
+                  >
+                    <X className="h-5 w-5 text-text-secondary" />
+                  </button>
                 </div>
               </div>
-            )}
 
-            {/* Messages */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {messages.length === 0 && !isLoading ? (
-                <div className="flex flex-col items-center justify-center h-full text-center">
-                  <div className="w-16 h-16 rounded-full bg-purple-primary/10 flex items-center justify-center mb-4">
-                    <Sparkles className="w-8 h-8 text-purple-primary" />
-                  </div>
-                  <h3 className="text-lg font-medium text-text-primary mb-2">
-                    Hi! I&apos;m Omi
-                  </h3>
-                  <p className="text-text-tertiary max-w-[280px]">
-                    Ask me anything about your conversations, tasks, or memories.
-                  </p>
+              {/* Error banner */}
+              {error && (
+                <div className="border-b border-error/20 bg-error/10 px-4 py-2">
+                  <p className="text-sm text-error">{error}</p>
                 </div>
-              ) : (
-                <>
-                  {/* Rendered messages */}
-                  {messages.map((message) => (
-                    <div
-                      key={message.id}
-                      className={cn(
-                        'flex',
-                        message.sender === 'human' ? 'justify-end' : 'justify-start'
-                      )}
-                    >
-                      <div
+              )}
+
+              {/* Quick prompts (shown when no messages) */}
+              {messages.length === 0 && !isLoading && (
+                <div className="border-b border-bg-tertiary p-4">
+                  <p className="mb-2 text-xs text-text-quaternary">Quick prompts:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {quickPrompts.map((prompt, i) => (
+                      <button
+                        key={i}
+                        onClick={() => handleSend(prompt)}
+                        disabled={isLoading || isStreaming}
                         className={cn(
-                          'max-w-[80%] rounded-2xl px-4 py-2.5',
-                          message.sender === 'human'
-                            ? 'bg-purple-primary text-white'
-                            : 'bg-bg-tertiary text-text-primary'
+                          'rounded-full px-3 py-1.5 text-sm',
+                          'bg-bg-tertiary hover:bg-bg-quaternary',
+                          'text-text-secondary hover:text-text-primary',
+                          'transition-colors',
+                          'disabled:cursor-not-allowed disabled:opacity-50',
                         )}
                       >
-                        <p className="text-sm whitespace-pre-wrap">{message.text}</p>
-                      </div>
-                    </div>
-                  ))}
-
-                  {/* Thinking indicator */}
-                  {currentThinking && (
-                    <div className="flex justify-start">
-                      <div className="max-w-[80%] rounded-2xl px-4 py-2.5 bg-bg-tertiary/50 border border-purple-primary/20">
-                        <div className="flex items-center gap-2 text-purple-primary mb-1">
-                          <Brain className="w-3 h-3" />
-                          <span className="text-xs font-medium">Thinking...</span>
-                        </div>
-                        <p className="text-xs text-text-quaternary whitespace-pre-wrap line-clamp-3">
-                          {currentThinking}
-                        </p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Streaming text (AI response in progress) */}
-                  {streamingText && (
-                    <div className="flex justify-start">
-                      <div className="max-w-[80%] rounded-2xl px-4 py-2.5 bg-bg-tertiary text-text-primary">
-                        <p className="text-sm whitespace-pre-wrap">{streamingText}</p>
-                        <span className="inline-block w-2 h-4 bg-purple-primary/50 animate-pulse ml-0.5" />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Loading indicator (before streaming starts) */}
-                  {isStreaming && !streamingText && !currentThinking && (
-                    <div className="flex justify-start">
-                      <div className="bg-bg-tertiary rounded-2xl px-4 py-3">
-                        <div className="flex gap-1">
-                          <div className="w-2 h-2 bg-text-quaternary rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                          <div className="w-2 h-2 bg-text-quaternary rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                          <div className="w-2 h-2 bg-text-quaternary rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-
-              {/* Loading state when fetching history */}
-              {isLoading && messages.length === 0 && (
-                <div className="flex justify-center py-8">
-                  <div className="flex gap-1">
-                    <div className="w-2 h-2 bg-text-quaternary rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                    <div className="w-2 h-2 bg-text-quaternary rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                    <div className="w-2 h-2 bg-text-quaternary rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                        {prompt}
+                      </button>
+                    ))}
                   </div>
                 </div>
               )}
 
-              <div ref={messagesEndRef} />
-            </div>
+              {/* Messages */}
+              <div className="flex-1 space-y-4 overflow-y-auto p-4">
+                {messages.length === 0 && !isLoading ? (
+                  <div className="flex h-full flex-col items-center justify-center text-center">
+                    <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-white/[0.08]">
+                      <Sparkles className="h-8 w-8 text-text-primary" />
+                    </div>
+                    <h3 className="mb-2 text-lg font-medium text-text-primary">
+                      Hi! I&apos;m Omi
+                    </h3>
+                    <p className="max-w-[280px] text-text-tertiary">
+                      Ask me anything about your conversations, tasks, or memories.
+                    </p>
+                  </div>
+                ) : (
+                  <>
+                    {/* Rendered messages */}
+                    {messages.map((message) => (
+                      <div
+                        key={message.id}
+                        className={cn(
+                          'flex',
+                          message.sender === 'human' ? 'justify-end' : 'justify-start',
+                        )}
+                      >
+                        {message.sender === 'human' ? (
+                          <div className="max-w-[80%] rounded-2xl bg-text-primary px-4 py-2.5 text-bg-primary">
+                            <p className="whitespace-pre-wrap text-sm">{message.text}</p>
+                          </div>
+                        ) : (
+                          <div className="min-w-0 max-w-[80%]">
+                            <div className="rounded-2xl bg-bg-tertiary px-4 py-2.5 text-text-primary">
+                              <ChatMarkdown>{message.text}</ChatMarkdown>
+                            </div>
+                            <ChatEvidenceCard
+                              envelope={parseChatEvidenceFromRecord(message)}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    ))}
 
-            {/* Input area */}
-            <div className="border-t border-bg-tertiary">
-              {/* File preview bar */}
-              {selectedFiles.length > 0 && (
-                <FilePreview
-                  files={selectedFiles}
-                  onRemove={handleRemoveFile}
-                  disabled={isStreaming}
-                />
-              )}
-
-              <div className="p-4">
-                <div className="flex items-center gap-2">
-                  {/* File attach button */}
-                  <button
-                    onClick={() => fileInputRef.current?.click()}
-                    disabled={isStreaming || selectedFiles.length >= MAX_FILES}
-                    className={cn(
-                      'p-2 rounded-lg flex-shrink-0',
-                      'text-text-tertiary hover:text-purple-primary hover:bg-bg-tertiary',
-                      'disabled:opacity-50 disabled:cursor-not-allowed',
-                      'transition-colors'
+                    {/* Thinking indicator */}
+                    {currentThinking && (
+                      <div className="flex justify-start">
+                        <div className="max-w-[80%] rounded-2xl border border-white/20 bg-bg-tertiary/50 px-4 py-2.5">
+                          <div className="mb-1 flex items-center gap-2 text-text-primary">
+                            <Brain className="h-3 w-3" />
+                            <span className="text-xs font-medium">Thinking...</span>
+                          </div>
+                          <p className="line-clamp-3 whitespace-pre-wrap text-xs text-text-quaternary">
+                            {currentThinking}
+                          </p>
+                        </div>
+                      </div>
                     )}
-                    title={selectedFiles.length >= MAX_FILES ? `Max ${MAX_FILES} files` : 'Attach file'}
-                  >
-                    <Paperclip className="w-5 h-5" />
-                  </button>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    multiple
-                    accept={ALLOWED_EXTENSIONS}
-                    onChange={handleFileSelect}
-                    className="hidden"
-                  />
 
-                  {/* Text input */}
-                  <input
-                    ref={inputRef}
-                    type="text"
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder="Ask anything..."
-                    disabled={isStreaming}
-                    className={cn(
-                      'flex-1 px-4 py-3 rounded-xl',
-                      'bg-bg-tertiary border border-bg-quaternary',
-                      'text-text-primary placeholder:text-text-quaternary',
-                      'focus:outline-none focus:ring-2 focus:ring-purple-primary/50',
-                      'transition-shadow',
-                      'disabled:opacity-50 disabled:cursor-not-allowed'
+                    {/* Streaming text (AI response in progress) */}
+                    {streamingText && (
+                      <div className="flex justify-start">
+                        <div className="max-w-[80%] rounded-2xl bg-bg-tertiary px-4 py-2.5 text-text-primary">
+                          <ChatMarkdown isStreaming>{streamingText}</ChatMarkdown>
+                        </div>
+                      </div>
                     )}
-                  />
 
-                  {/* Inline voice recorder */}
-                  <InlineVoiceRecorder
-                    onTranscript={handleVoiceTranscript}
-                    disabled={isStreaming}
-                  />
-
-                  {/* Send button */}
-                  <button
-                    onClick={() => handleSend()}
-                    disabled={!canSend}
-                    className={cn(
-                      'p-3 rounded-xl flex-shrink-0',
-                      'bg-purple-primary hover:bg-purple-secondary',
-                      'disabled:opacity-50 disabled:cursor-not-allowed',
-                      'transition-colors'
+                    {/* Loading indicator (before streaming starts) */}
+                    {isStreaming && !streamingText && !currentThinking && (
+                      <div className="flex justify-start">
+                        <div className="rounded-2xl bg-bg-tertiary px-4 py-3">
+                          <div className="flex gap-1">
+                            <div
+                              className="h-2 w-2 animate-bounce rounded-full bg-text-quaternary"
+                              style={{ animationDelay: '0ms' }}
+                            />
+                            <div
+                              className="h-2 w-2 animate-bounce rounded-full bg-text-quaternary"
+                              style={{ animationDelay: '150ms' }}
+                            />
+                            <div
+                              className="h-2 w-2 animate-bounce rounded-full bg-text-quaternary"
+                              style={{ animationDelay: '300ms' }}
+                            />
+                          </div>
+                        </div>
+                      </div>
                     )}
-                    aria-label="Send message"
-                  >
-                    <Send className="w-5 h-5 text-white" />
-                  </button>
+                  </>
+                )}
+
+                {/* Loading state when fetching history */}
+                {isLoading && messages.length === 0 && (
+                  <div className="flex justify-center py-8">
+                    <div className="flex gap-1">
+                      <div
+                        className="h-2 w-2 animate-bounce rounded-full bg-text-quaternary"
+                        style={{ animationDelay: '0ms' }}
+                      />
+                      <div
+                        className="h-2 w-2 animate-bounce rounded-full bg-text-quaternary"
+                        style={{ animationDelay: '150ms' }}
+                      />
+                      <div
+                        className="h-2 w-2 animate-bounce rounded-full bg-text-quaternary"
+                        style={{ animationDelay: '300ms' }}
+                      />
+                    </div>
+                  </div>
+                )}
+
+                <div ref={messagesEndRef} />
+              </div>
+
+              {/* Input area */}
+              <div className="border-t border-bg-tertiary">
+                {/* File preview bar */}
+                {selectedFiles.length > 0 && (
+                  <FilePreview
+                    files={selectedFiles}
+                    onRemove={handleRemoveFile}
+                    disabled={isLoading || isStreaming}
+                  />
+                )}
+
+                <div className="p-4">
+                  <div className="flex items-center gap-2">
+                    {/* File attach button */}
+                    <button
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={
+                        isLoading || isStreaming || selectedFiles.length >= MAX_FILES
+                      }
+                      className={cn(
+                        'flex-shrink-0 rounded-lg p-2',
+                        'text-text-tertiary hover:bg-bg-tertiary hover:text-text-primary',
+                        'disabled:cursor-not-allowed disabled:opacity-50',
+                        'transition-colors',
+                      )}
+                      title={
+                        selectedFiles.length >= MAX_FILES
+                          ? `Max ${MAX_FILES} files`
+                          : 'Attach file'
+                      }
+                    >
+                      <Paperclip className="h-5 w-5" />
+                    </button>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      multiple
+                      accept={ALLOWED_EXTENSIONS}
+                      onChange={handleFileSelect}
+                      className="hidden"
+                    />
+
+                    {/* Text input */}
+                    <input
+                      ref={inputRef}
+                      type="text"
+                      value={input}
+                      onChange={(e) => setInput(e.target.value)}
+                      onKeyDown={handleKeyDown}
+                      placeholder="Ask anything..."
+                      disabled={isLoading || isStreaming}
+                      className={cn(
+                        'flex-1 rounded-xl px-4 py-3',
+                        'border border-bg-quaternary bg-bg-tertiary',
+                        'text-text-primary placeholder:text-text-quaternary',
+                        'focus:outline-none focus:ring-2 focus:ring-white/25',
+                        'transition-shadow',
+                        'disabled:cursor-not-allowed disabled:opacity-50',
+                      )}
+                    />
+
+                    {/* Inline voice recorder */}
+                    <InlineVoiceRecorder
+                      onTranscript={handleVoiceTranscript}
+                      disabled={isLoading || isStreaming}
+                    />
+
+                    {/* Send button */}
+                    <button
+                      onClick={() => handleSend()}
+                      disabled={!canSend}
+                      className={cn(
+                        'flex-shrink-0 rounded-xl p-3',
+                        'bg-text-primary text-bg-primary hover:bg-text-primary/90',
+                        'disabled:cursor-not-allowed disabled:opacity-50',
+                        'transition-colors',
+                      )}
+                      aria-label="Send message"
+                    >
+                      <Send className="h-5 w-5 text-white" />
+                    </button>
+                  </div>
                 </div>
               </div>
-            </div>
-            </div>
+            </PanelReveal>
           </motion.div>
 
           {/* Clear chat confirmation dialog */}

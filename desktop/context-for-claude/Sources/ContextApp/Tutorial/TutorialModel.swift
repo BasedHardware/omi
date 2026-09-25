@@ -994,6 +994,43 @@ final class TutorialModel: ObservableObject {
 
     // MARK: - Transitions
 
+    /// **The tutorial funnel**, as an ordinal and an outcome.
+    ///
+    /// Onboarding hands off to the walkthrough and the walkthrough is where the product is actually
+    /// taught — including the one beat gated on Claude genuinely calling a tool — so the measured
+    /// funnel used to stop exactly where the interesting drop-off starts.
+    ///
+    /// Ordinal only, never the beat's name: the names are product copy, and a funnel keyed on copy
+    /// resets every release. `flow` is the order, and `flow.count` the denominator, so a beat added
+    /// or cut moves both together.
+    ///
+    /// The index is read off `flow` rather than off `plan`: this run's plan may have dropped
+    /// `screenAccess` for a Mac that already had the grant, and an index that shifted with it would
+    /// make two installs' step 4 mean different beats.
+    ///
+    /// **`abandon()` reports nothing, and that is the sharpest rule here.** It reaches `.skipped` by
+    /// the same transition `skip()` does, and it is *not* a person leaving: it is this process being
+    /// torn down under a live run — which `screenAccess` causes on purpose, by asking macOS for a
+    /// grant whose dialog offers "Quit & Reopen". Counting it would put a cliff at the one beat
+    /// nearly every install passes through, and the run it belongs to resumes in the next process.
+    /// `runWasConcluded` is already the app's word for "somebody ended this", so it is the word here.
+    private func recordBeat(entering next: TutorialStep, leaving previous: TutorialStep) {
+        let total = TutorialStep.flow.count
+        let outcome: AnalyticsEvent.TutorialOutcome
+        let beat: TutorialStep
+        switch next {
+        case .finished:
+            (outcome, beat) = (.finished, previous)
+        case .skipped:
+            guard runWasConcluded else { return }
+            (outcome, beat) = (.skipped, previous)
+        default:
+            (outcome, beat) = (.entered, next)
+        }
+        guard let index = TutorialStep.flow.firstIndex(of: beat) else { return }
+        ContextAnalytics.record(.tutorialStep(index: index, of: total, outcome: outcome))
+    }
+
     /// The next step in *this run's* plan, so a step dropped at `begin()` is never walked into.
     private func nextStep() -> TutorialStep {
         guard let index = plan.firstIndex(of: step) else { return step.next ?? .finished }
@@ -1002,6 +1039,10 @@ final class TutorialModel: ObservableObject {
     }
 
     private func enter(_ next: TutorialStep) {
+        // Before the assignment, because a terminal transition is reported against the beat it is
+        // *leaving* — "they got to the chord and stopped" is the whole of what a drop-off says, and
+        // `.finished`/`.skipped` are not on `flow` and have no ordinal of their own.
+        recordBeat(entering: next, leaving: step)
         step = next
         stepEnteredAt = environment.now()
         // Written before the beat does anything, and on the transition rather than on arrival: the

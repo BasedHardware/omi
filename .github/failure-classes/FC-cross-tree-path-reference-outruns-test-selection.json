@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-cross-tree-path-reference-outruns-test-selection",
+  "violated_contract": "A config or manifest that names source paths in another tree must be kept resolvable by the change that moves those paths. Path-based test selection decides which checks a diff runs from the diff's own paths, so a validator that resolves cross-tree references is never selected for the very change that invalidates them.",
+  "canonical_prevention": "Either select the validating test from the referenced paths as well as from the config's own path, or make the reference resistant to relocation (glob, symbol lookup, or a generated index) rather than a literal path. Both directions must be guarded: the refactor that relocates a referenced file has to fail fast, not hand a red default branch to the next unrelated contributor whose diff happens to trigger the full suite.",
+  "canonical_prevention_artifact": [
+    "backend/tests/unit/test_task_intelligence_contract_freeze.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/config/task_intelligence_sources_v1.json",
+    "backend/utils/task_intelligence/contracts.py"
+  ],
+  "status": "open"
+}

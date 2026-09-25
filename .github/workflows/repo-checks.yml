@@ -37,21 +37,8 @@ jobs:
         with:
           python-version-file: backend/.python-version
 
-      # The preflight can select uv-backed checks (e.g. backend-route-policy-baseline
-      # runs the OpenAPI runner) whenever a PR touches backend routes, so this job
-      # needs uv just like the sibling Hygiene job.
-      - name: Set up uv
-        uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
-        with:
-          enable-cache: true
-          cache-dependency-glob: backend/openapi-requirements.txt
-
-      - name: Set up Java for manifest-selected Firestore checks
-        uses: actions/setup-java@v5
-        with:
-          distribution: temurin
-          java-version: '21'
-
+      # Metadata edits reuse the source verdict from Hygiene. These manifest
+      # checks consume only Python stdlib + Git; do not install code-test tools.
       - name: Run current PR metadata preflight
         env:
           GITHUB_TOKEN: ${{ github.token }}
@@ -61,7 +48,7 @@ jobs:
           # days later can carry a value main has long since moved past. actions/checkout
           # already fetched origin/${{ github.base_ref }} live (fetch-depth: 0
           # above), so diff against that instead of the stale payload field.
-          scripts/pr-preflight \
+          scripts/pr-preflight --metadata-only \
             --base "origin/${{ github.base_ref }}" \
             --repository "${{ github.repository }}" \
             --pr-number "${{ github.event.pull_request.number }}"
@@ -107,14 +94,25 @@ jobs:
       - name: Set up uv
         uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
         with:
+          # See the metadata-preflight job: an exact version keeps the action from
+          # fetching the astral-sh/versions manifest to resolve "latest".
+          version: "0.11.13"
           enable-cache: true
           cache-dependency-glob: backend/openapi-requirements.txt
+
+      - name: Install runtime environment validator dependency
+        run: uv pip install --system pyyaml==6.0.1
 
       - name: Set up Java for manifest-selected Firestore checks
         uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '21'
+
+      - name: Set up Bun for manifest-selected web/app checks
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
 
       - name: Save changed files
         run: |
@@ -134,7 +132,26 @@ jobs:
 
       - name: Run deterministic check manifest on main pushes
         if: github.event_name != 'pull_request'
-        run: python3 .github/scripts/run_checks.py --lane ci --base "${{ needs.changes.outputs.diff_base }}" --skip-pr-body-checks
+        env:
+          PR_BODY_FILE: /tmp/main-push-commit-body.txt
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          # On main pushes there is no PR event payload. #10965 / #9744 pass
+          # the merge-commit body through --pr-body-file so product-invariants
+          # and failure-class-protocol still run. That is necessary but not
+          # sufficient here: this repo squashes with the commit list, not the
+          # PR description, so INV-* citations that already made PR Hygiene
+          # green disappear on the main push (see #11835). Recover the live
+          # (#NNNN) PR body and append it. Fail-closed is preserved: a direct
+          # push with no PR number still uses only the commit message.
+          git log -1 --format=%B HEAD > /tmp/main-push-commit-message.txt
+          python3 .github/scripts/pr_metadata.py \
+            --repository "${{ github.repository }}" \
+            --from-commit-body-file /tmp/main-push-commit-message.txt \
+            --output "$PR_BODY_FILE"
+          python3 .github/scripts/run_checks.py --lane ci \
+            --base "${{ needs.changes.outputs.diff_base }}" \
+            --pr-body-file "$PR_BODY_FILE"
 
       - name: Check typed error flow-control ratchet
         run: python3 .github/scripts/check_isinstance_return_ratchet.py
@@ -176,6 +193,13 @@ jobs:
           scripts/changed-files "${{ needs.changes.outputs.diff_base }}"...HEAD > /tmp/changed-files.txt
           cat /tmp/changed-files.txt
 
+      - name: Set up uv for Python formatting
+        if: needs.changes.outputs.has_python == 'true'
+        uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
+        with:
+          version: "0.11.13"
+          enable-cache: true
+
       - name: Setup Flutter
         if: needs.changes.outputs.has_dart == 'true'
         uses: subosito/flutter-action@v2
@@ -201,12 +225,9 @@ jobs:
       - name: Check Python formatting
         if: needs.changes.outputs.has_python == 'true'
         run: |
-          # Pinned: an unpinned black drifts from local/pre-commit formatting on
-          # every black release, making this check fail on untouched files.
-          pip install -q black==26.5.1
           FILES=$(grep 'backend/.*\.py$' /tmp/changed-files.txt | while IFS= read -r f; do [ -f "$f" ] && echo "$f"; done || true)
           if [ -n "$FILES" ]; then
-            echo "$FILES" | xargs black --check --line-length 120 --skip-string-normalization
+            echo "$FILES" | xargs scripts/backend-python-format --check
           fi
 
       - name: Check ARB formatting

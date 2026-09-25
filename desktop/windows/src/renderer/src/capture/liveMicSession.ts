@@ -277,7 +277,7 @@ export function startLiveMicSession(): LiveMicController {
             /* ignore */
           }
           handle = null
-          if (!isRetryableDropError((e as Error).message)) {
+          if (!isRetryableDropError((e as Error).message, (e as Error).name)) {
             // Quota/entitlement/sign-in error — reconnecting can't help. Surface it
             // now (no rescue: a quota-blocked account can't create conversations).
             // On a quota exhaustion this mirrored 'error' status drives the main

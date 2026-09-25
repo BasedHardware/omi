@@ -186,8 +186,6 @@ class _TestEnvFields implements EnvFields {
   String? get googleClientSecret => null;
 
   @override
-  String? get googleMapsApiKey => null;
-
   @override
   String? get intercomAppId => null;
 

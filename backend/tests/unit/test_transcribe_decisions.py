@@ -149,7 +149,6 @@ def test_speech_profile_and_speaker_id_gates():
     assert should_load_speech_profile(use_custom_stt=False, is_multi_channel=False, include_speech_profile=True) is True
     assert should_load_speech_profile(use_custom_stt=True, is_multi_channel=False, include_speech_profile=True) is False
     assert should_load_speech_profile(use_custom_stt=False, is_multi_channel=True, include_speech_profile=True) is False
-
     assert (
         should_enable_speaker_identification(
             use_custom_stt=False,
@@ -603,6 +602,17 @@ def test_speaker_detection_gates():
         )
         is False
     )
+    assert (
+        should_queue_speaker_embedding(
+            speaker_id=1,
+            person_id='',
+            is_user=False,
+            speaker_id_enabled=True,
+            has_person_embeddings=False,
+            speaker_already_mapped=False,
+        )
+        is False
+    )
     assert should_spawn_speaker_match(speaker_already_mapped=False, duration=2.0, min_audio_seconds=2.0) is True
     assert should_spawn_speaker_match(speaker_already_mapped=False, duration=1.99, min_audio_seconds=2.0) is False
     assert should_spawn_speaker_match(speaker_already_mapped=True, duration=4.0, min_audio_seconds=2.0) is False
@@ -641,3 +651,13 @@ def test_text_speaker_assignment_create_speakers_compatibility():
     assert no_create.should_create_person is False
     assert no_create.event_person_id == ''
     assert no_create.update_maps is False
+
+
+def test_default_boundary_agrees_with_capture_coverage():
+    from utils.conversation_continuity import DEFAULT_GAP_SECONDS, intervals_connect
+
+    for gap in (0, 119.99, 120, 120.01):
+        action = decide_existing_conversation_action(
+            seconds_since_last_segment=gap, conversation_creation_timeout=DEFAULT_GAP_SECONDS
+        )
+        assert intervals_connect(0, 70, 70 + gap, 140 + gap) == (action == ConversationLifecycleAction.continue_current)

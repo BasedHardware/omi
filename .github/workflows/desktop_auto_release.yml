@@ -2,10 +2,8 @@ name: Build Desktop Release Candidate
 
 on:
   # The hourly release train: at most one candidate per hour, coalescing every
-  # merge since the last tag. The planner's --min-tag-interval-seconds throttle
-  # applies only to schedule runs; workflow_dispatch stays immediate for
-  # deliberate/emergency cuts. (The old per-merge push trigger cut a candidate
-  # on nearly every desktop-affecting merge; the train replaces it.)
+  # merge since the last tag. Schedule and manual dispatch use the same
+  # throttle; a retry must never create a second candidate inside the hour.
   schedule:
     - cron: "7 * * * *"
   workflow_dispatch:
@@ -41,7 +39,8 @@ jobs:
         run: |
           python3 .github/scripts/plan-desktop-release.py \
             --repository "${{ github.repository }}" \
-            --min-tag-interval-seconds "${{ github.event_name == 'schedule' && '3300' || '0' }}"
+            --min-tag-interval-seconds 3600 \
+            --codemagic-source-gate
 
       - name: Show release plan
         run: echo "${{ steps.plan.outputs.reason }}"
@@ -155,13 +154,16 @@ jobs:
           RESOLVE_MERGED_MAIN="$(grep '^merged_main_sha=' "$RESOLVE_OUT" | tail -1 | cut -d= -f2-)"
           RESOLVE_ON_MAIN="$(grep '^already_on_main=' "$RESOLVE_OUT" | tail -1 | cut -d= -f2-)"
 
+          if [ "$RESOLVE_MODE" = "stale-orphan" ]; then
+            # A manually squash-merged or otherwise orphaned sync branch must
+            # not poison every retry (incident #11936). Keep the stale ref for
+            # audit and publish a run-qualified recovery branch instead.
+            BRANCH="${BRANCH}-recovery-${GITHUB_RUN_ID}"
+          fi
+
           if [ -n "$RESOLVE_COMMIT" ]; then
-            # already-on-main recovery after tip-bumps: consolidate^1 is the
-            # original planned source, not the current tip. Only enforce the
-            # parent identity when reusing a not-yet-merged branch tip.
-            if [ "$RESOLVE_ON_MAIN" != "true" ]; then
-              test "$(git rev-parse "${RESOLVE_COMMIT}^1")" = "$PLANNED_SOURCE_SHA"
-            fi
+            # Reuse only the exact-parent consolidate selected by the resolver.
+            test "$(git rev-parse "${RESOLVE_COMMIT}^1")" = "$PLANNED_SOURCE_SHA"
             git checkout -B "$BRANCH" "$RESOLVE_COMMIT"
             {
               echo "changed=true"
@@ -171,6 +173,7 @@ jobs:
               echo "pr_url=$RESOLVE_PR_URL"
               echo "merged_main_sha=$RESOLVE_MERGED_MAIN"
               echo "resolve_mode=$RESOLVE_MODE"
+              echo "branch=$BRANCH"
             } >> "$GITHUB_OUTPUT"
             exit 0
           fi
@@ -187,6 +190,7 @@ jobs:
             # Nothing to PR. Direct tag path admits later non-desktop main commits.
             echo "changed=false" >> "$GITHUB_OUTPUT"
             echo "already_on_main=false" >> "$GITHUB_OUTPUT"
+            echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -202,6 +206,7 @@ jobs:
             echo "pr_url="
             echo "merged_main_sha="
             echo "resolve_mode=created"
+            echo "branch=$BRANCH"
           } >> "$GITHUB_OUTPUT"
 
       - name: Create and regular-merge PR to sync changelog back to main
@@ -217,8 +222,7 @@ jobs:
           fi
 
           VERSION="${{ steps.version.outputs.version }}"
-          PLANNED_SOURCE_SHA="${{ steps.plan.outputs.source_sha }}"
-          BRANCH="changelog/v${VERSION}-${PLANNED_SOURCE_SHA:0:12}"
+          BRANCH="${{ steps.changelog.outputs.branch }}"
           CHANGELOG_COMMIT="${{ steps.changelog.outputs.commit }}"
 
           # Changelog already on main from a partial prior candidate tag: do not
@@ -296,57 +300,13 @@ jobs:
             echo "merged_main_sha=$MERGED_MAIN_SHA"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Replan release source after changelog sync
-        # A newer releasable desktop change may merge while the changelog branch
-        # is being prepared. The regular changelog merge must remain intact, but
-        # its original planner source is then intentionally stale. Replan from
-        # fresh main before binding evidence so this run either tags the newly
-        # ready source or defers cleanly (exit 0; the next hourly tick tags,
-        # and changelog reuse makes it idempotent).
-        if: steps.plan.outputs.should_release == 'true' && steps.changelog.outputs.changed == 'true'
-        id: replan
-        env:
-          GH_TOKEN: ${{ steps.app-token.outputs.token }}
-        run: |
-          set -euo pipefail
-          if [ -z "${GH_TOKEN:-}" ]; then
-            echo "Omi Bot token not available; cannot replan after changelog sync."
-            exit 1
-          fi
-
-          git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
-          git checkout --detach origin/main
-          test "$(git rev-parse HEAD)" = "$(git rev-parse origin/main)"
-
-          python3 .github/scripts/plan-desktop-release.py \
-            --repository "${{ github.repository }}"
-
-      - name: Select final release plan
+      - name: Bind immutable planner evidence to merged release source
         if: steps.plan.outputs.should_release == 'true'
-        id: final-plan
-        run: |
-          set -euo pipefail
-          if [ "${{ steps.changelog.outputs.changed }}" = "true" ]; then
-            # The merge above can advance main. Always use the post-merge plan,
-            # even when it defers, so a stale initial plan cannot reach tagging.
-            SHOULD_RELEASE="${{ steps.replan.outputs.should_release }}"
-            SOURCE_SHA="${{ steps.replan.outputs.source_sha }}"
-          else
-            SHOULD_RELEASE="${{ steps.plan.outputs.should_release }}"
-            SOURCE_SHA="${{ steps.plan.outputs.source_sha }}"
-          fi
-          {
-            echo "should_release=$SHOULD_RELEASE"
-            echo "source_sha=$SOURCE_SHA"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Bind immutable planner evidence to fresh main
-        if: steps.final-plan.outputs.should_release == 'true'
         id: identity
         run: |
           set -euo pipefail
           RELEASE_TAG="${{ steps.version.outputs.release_tag }}"
-          PLANNED_SOURCE_SHA="${{ steps.final-plan.outputs.source_sha }}"
+          PLANNED_SOURCE_SHA="${{ steps.plan.outputs.source_sha }}"
           CHANGELOG_CHANGED="${{ steps.changelog.outputs.changed }}"
           git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
           MAIN_SHA="$(git rev-parse 'origin/main^{commit}')"
@@ -355,7 +315,7 @@ jobs:
             CHANGELOG_COMMIT="${{ steps.changelog.outputs.commit }}"
             CHANGELOG_PR="${{ steps.changelog-pr.outputs.url }}"
             CHANGELOG_PARENT_SHA="$(git rev-parse "${CHANGELOG_COMMIT}^1")"
-            CANDIDATE_SHA="$MAIN_SHA"
+            CANDIDATE_SHA="$CHANGELOG_COMMIT"
             python3 .github/scripts/desktop-release-source-identity.py \
               --release-tag "$RELEASE_TAG" \
               --planned-source-sha "$PLANNED_SOURCE_SHA" \
@@ -366,7 +326,7 @@ jobs:
               --changelog-pr "$CHANGELOG_PR" \
               --output "$RUNNER_TEMP/desktop-release-source-identity.json"
           else
-            CANDIDATE_SHA="$MAIN_SHA"
+            CANDIDATE_SHA="$PLANNED_SOURCE_SHA"
             python3 .github/scripts/desktop-release-source-identity.py \
               --release-tag "$RELEASE_TAG" \
               --planned-source-sha "$PLANNED_SOURCE_SHA" \
@@ -381,7 +341,7 @@ jobs:
           } >> "$GITHUB_OUTPUT"
 
       - name: Retain immutable planner source evidence
-        if: steps.final-plan.outputs.should_release == 'true'
+        if: steps.plan.outputs.should_release == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: desktop-release-planner-source-identity-${{ steps.version.outputs.release_tag }}-${{ github.run_id }}-${{ github.run_attempt }}
@@ -389,8 +349,8 @@ jobs:
           if-no-files-found: error
           overwrite: false
 
-      - name: Publish immutable tag from exact live main source
-        if: steps.final-plan.outputs.should_release == 'true'
+      - name: Publish immutable tag from merged release source
+        if: steps.plan.outputs.should_release == 'true'
         env:
           GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
@@ -403,9 +363,9 @@ jobs:
             echo "Omi Bot token not available; cannot publish a candidate tag." >&2
             exit 1
           fi
-          # The publisher refetches GitHub's authoritative main immediately
-          # before the native lightweight-tag push. A moved main or an existing
-          # tag fails without creating or rewriting a candidate ref.
+          # The publisher verifies the exact candidate is still reachable
+          # from authoritative GitHub main. Later merges belong to the next
+          # train; an unmerged candidate or existing tag still fails closed.
           python3 .github/scripts/publish-desktop-candidate-tag.py \
             --repository "${{ github.repository }}" \
             --release-tag "$RELEASE_TAG" \
@@ -415,26 +375,26 @@ jobs:
           git fetch --no-tags origin "+refs/tags/$RELEASE_TAG:refs/tags/$RELEASE_TAG"
           test "$(git rev-parse "$RELEASE_TAG^{commit}")" = "$CANDIDATE_SHA"
 
-      - name: Verify native Codemagic tag intake or dispatch fenced fallback
-        if: steps.final-plan.outputs.should_release == 'true'
+      - name: Dispatch or reuse the exact-tag Codemagic build
+        if: steps.plan.outputs.should_release == 'true'
         env:
           CODEMAGIC_API_TOKEN: ${{ secrets.CODEMAGIC_API_TOKEN }}
         run: |
-          # The helper waits the complete native-intake budget first. It posts at
-          # most one tag-bound fallback only after a final all-state same-tag
-          # absence fence; any existing same-tag build remains canonical.
+          # Codemagic's automatic tag trigger is disabled for this workflow.
+          # One all-state exact-tag query fences retries, then the helper posts
+          # at most one API build and verifies its immutable source identity.
           python3 .github/scripts/check-codemagic-tag-intake.py \
             --app-id "66c95e6ec76853c447b8bcbb" \
             --workflow-id "omi-desktop-swift-release" \
             --release-tag "${{ steps.version.outputs.release_tag }}" \
             --source-sha "${{ steps.identity.outputs.candidate_sha }}" \
-            --timeout-seconds 600 \
-            --poll-seconds 15 \
+            --timeout-seconds 0 \
+            --poll-seconds 5 \
             --dispatch-fallback-on-absence \
             --evidence "$RUNNER_TEMP/codemagic-native-tag-intake.json"
 
       - name: Retain native Codemagic tag intake evidence
-        if: always() && steps.final-plan.outputs.should_release == 'true'
+        if: always() && steps.plan.outputs.should_release == 'true'
         uses: actions/upload-artifact@v7
         with:
           name: codemagic-native-tag-intake-${{ steps.version.outputs.release_tag }}-${{ github.run_id }}-${{ github.run_attempt }}

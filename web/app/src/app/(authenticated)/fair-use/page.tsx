@@ -3,6 +3,7 @@
 import { useEffect } from 'react';
 import { FairUseStatus } from '@/components/fair-use/FairUseStatus';
 import { MixpanelManager } from '@/lib/analytics/mixpanel';
+import { registerMoonshineRoute } from '@/moonshine/register-client-route';
 
 export default function FairUsePage() {
   useEffect(() => {
@@ -15,3 +16,5 @@ export default function FairUsePage() {
     </div>
   );
 }
+
+registerMoonshineRoute('/fair-use', FairUsePage, 'authenticated');

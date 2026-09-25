@@ -1,0 +1,14 @@
+{
+  "_doc": "Dated registry of one-off GCP charges that must never enter a per-user run rate. Each rule is injected as the FIRST branch of the component CASE by pull_gcp.py, so a matching row lands in its own `one_time_*` component, is reported as method='one_time', and is excluded from every allocation pool. Add a rule only with a dated reason and an owner; never widen a rule to a whole SKU without a date bound.",
+  "events": [
+    {
+      "component": "one_time_storage_lifecycle",
+      "reason": "Coldline@30d lifecycle transition of the audio bucket, shipped in PR #12631. 345M Class A operations, one sweep, ~$14.7k total; stopped by 2026-09-08 10:00Z. Run-rate storage fell $116 -> $85/day as a result. Matches both the prod bucket omi-private-cloud-sync and the dev bucket omi-dev-private-cloud-sync ($103.86 on 2026-09-05, $822 on 2026-09-08).",
+      "recorded_by": "run-2026-09-09-overnight-margins / finops-infra",
+      "date_from": "2026-09-04",
+      "date_to": "2026-09-09",
+      "sku_like": "%Coldline Class A Operations%",
+      "resource_like": "%private-cloud-sync%"
+    }
+  ]
+}

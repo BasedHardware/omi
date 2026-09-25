@@ -79,18 +79,20 @@ export function TaskProgressCard({
     <div
       className={cn(
         'noise-overlay rounded-xl',
-        'bg-white/[0.02] border border-white/[0.06]',
-        compact ? 'flex flex-col' : 'grid grid-cols-2 gap-0'
+        'border border-white/[0.06] bg-white/[0.02]',
+        compact ? 'flex flex-col' : 'grid grid-cols-2 gap-0',
       )}
     >
       {/* Left side - Progress Ring & Main Stats */}
-      <div className={cn(
-        "flex items-center gap-4 p-4",
-        !compact && "border-r border-bg-tertiary"
-      )}>
+      <div
+        className={cn(
+          'flex items-center gap-4 p-4',
+          !compact && 'border-r border-bg-tertiary',
+        )}
+      >
         {/* Progress Ring */}
         <div className="relative flex-shrink-0">
-          <svg width={size} height={size} className="transform -rotate-90">
+          <svg width={size} height={size} className="-rotate-90 transform">
             {/* Background circle */}
             <circle
               cx={size / 2}
@@ -138,14 +140,14 @@ export function TaskProgressCard({
         </div>
 
         {/* Stats */}
-        <div className="flex-1 min-w-0">
+        <div className="min-w-0 flex-1">
           {/* Overdue badge */}
           {overdueCount > 0 && (
             <div className="mb-1.5">
               <span
                 className={cn(
-                  'px-2 py-0.5 rounded-md text-xs font-medium',
-                  'bg-error/10 text-error'
+                  'rounded-md px-2 py-0.5 text-xs font-medium',
+                  'bg-error/10 text-error',
                 )}
               >
                 {overdueCount} overdue
@@ -153,7 +155,7 @@ export function TaskProgressCard({
             </div>
           )}
 
-          <p className="text-sm text-text-secondary mb-1">{message}</p>
+          <p className="mb-1 text-sm text-text-secondary">{message}</p>
 
           {/* Counts */}
           <div className="flex items-center gap-3 text-xs text-text-quaternary">
@@ -164,22 +166,26 @@ export function TaskProgressCard({
       </div>
 
       {/* Right side - Weekly Stats & Streak */}
-      <div className={cn(
-        "flex flex-col justify-center p-4 gap-3",
-        compact && "border-t border-bg-tertiary"
-      )}>
+      <div
+        className={cn(
+          'flex flex-col justify-center gap-3 p-4',
+          compact && 'border-t border-bg-tertiary',
+        )}
+      >
         {/* This Week Progress */}
         <div>
-          <div className="flex items-center justify-between mb-1.5">
+          <div className="mb-1.5 flex items-center justify-between">
             <div className="flex items-center gap-1.5">
-              <TrendingUp className="w-3.5 h-3.5 text-purple-primary" />
+              <TrendingUp className="h-3.5 w-3.5 text-white" />
               <span className="text-xs font-medium text-text-secondary">This Week</span>
             </div>
-            <span className="text-xs text-text-quaternary">{weekCompleted}/{weekTotal}</span>
+            <span className="text-xs text-text-quaternary">
+              {weekCompleted}/{weekTotal}
+            </span>
           </div>
-          <div className="h-2 bg-bg-quaternary rounded-full overflow-hidden">
+          <div className="h-2 overflow-hidden rounded-full bg-bg-quaternary">
             <motion.div
-              className="h-full bg-gradient-to-r from-purple-primary to-purple-secondary rounded-full"
+              className="h-full rounded-full bg-gradient-to-r from-white/60 to-white/30"
               initial={{ width: 0 }}
               animate={{ width: `${weekPercent}%` }}
               transition={{ duration: 0.6, delay: 0.2, ease: 'easeOut' }}
@@ -191,20 +197,20 @@ export function TaskProgressCard({
         <div className="flex items-center gap-2">
           <div
             className={cn(
-              'flex items-center gap-1.5 px-2.5 py-1 rounded-lg',
-              streak > 0 ? 'bg-orange-500/10' : 'bg-bg-quaternary'
+              'flex items-center gap-1.5 rounded-lg px-2.5 py-1',
+              streak > 0 ? 'bg-orange-500/10' : 'bg-bg-quaternary',
             )}
           >
             <Flame
               className={cn(
-                'w-4 h-4',
-                streak > 0 ? 'text-orange-500' : 'text-text-quaternary'
+                'h-4 w-4',
+                streak > 0 ? 'text-orange-500' : 'text-text-quaternary',
               )}
             />
             <span
               className={cn(
                 'text-sm font-medium',
-                streak > 0 ? 'text-orange-500' : 'text-text-quaternary'
+                streak > 0 ? 'text-orange-500' : 'text-text-quaternary',
               )}
             >
               {streak}

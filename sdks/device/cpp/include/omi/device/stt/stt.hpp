@@ -30,7 +30,8 @@ inline std::string DeepgramWsUrl(int sample_rate = 16000) {
 //  - define OMI_STT_DEEPGRAM and link a WS stack to enable Deepgram
 //  - define OMI_STT_PARAKEET similarly
 //  - define OMI_STT_WHISPER and inject a local runner for Whisper
-// BLE stacks similarly gate with OMI_DEVICE_BLE (CoreBluetooth/WinRT/Android JNI).
+// BLE is injected rather than gated: implement omi::device::BleBackend against
+// CoreBluetooth/WinRT/BlueZ and install it with SetBleBackend(). See README.md.
 
 }  // namespace stt
 }  // namespace device

@@ -14,7 +14,6 @@ export interface HarnessConfig {
   /** Omi API base URL for pi-mono provider */
   omiApiBaseUrl?: string;
   /** Firebase auth token for Omi API authentication */
-  authToken?: string;
 }
 
 /**
@@ -46,6 +45,12 @@ export interface PromptResult {
   outputTokens?: number;
   cacheReadTokens?: number;
   cacheWriteTokens?: number;
+  /** Gateway receipt status for the qualification-only JIT lane. */
+  jitCostStatus?: "estimated" | "unknown";
+  /** Trusted gateway estimate in USD; null means attribution is unknown. */
+  jitEstimatedCostUsd?: number | null;
+  jitProviderAttempts?: number;
+  jitReceiptAttemptIDs?: string[];
 }
 
 /**
@@ -363,6 +368,8 @@ export interface AdapterAttemptContext {
   attemptId: string;
   /** Opaque, attempt-bounded authority for Omi/Swift-backed tools. */
   toolCapabilityRef: string;
+  /** Kernel-derived policy for adapter-native tools; request metadata cannot widen it. */
+  builtInToolPolicy: "default" | "read_only";
   binding: AdapterBindingHandle;
   prompt: PromptBlock[];
   mode: RunMode;
@@ -391,6 +398,16 @@ export interface AdapterAttemptResult {
   outputTokens?: number;
   cacheReadTokens?: number;
   cacheWriteTokens?: number;
+  jitCostStatus?: "estimated" | "unknown";
+  /** Trusted gateway estimate in USD; null means attribution is unknown. */
+  jitEstimatedCostUsd?: number | null;
+  jitProviderAttempts?: number;
+  jitReceiptAttemptIDs?: string[];
+  /** Provider identities observed on completion events (for example
+   *  `openai-codex`). These are response facts, never requested aliases. */
+  providerTargets?: string[];
+  /** Served model identities observed on completion events. */
+  modelsUsed?: string[];
   /** Adapter-owned native session id for request-scoped tool relays. */
   adapterSessionId: string;
   terminalStatus: "succeeded" | "failed" | "cancelled";

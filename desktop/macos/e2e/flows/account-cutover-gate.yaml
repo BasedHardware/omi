@@ -8,6 +8,9 @@ covers:
   - desktop/macos/Desktop/Sources/AccountCutover/AccountCutoverBlockingOverlay.swift
   - desktop/macos/Desktop/Sources/AccountCutover/AccountCutoverControl.swift
   - desktop/macos/Desktop/Sources/AccountCutover/DesktopHomeSignedInStartup.swift
+  # Daily usage starts with admitted product services and POSTs via this client.
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Services/DesktopUsageDailyReporter.swift
+  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+DesktopUsage.swift
   - desktop/macos/Desktop/Sources/MainWindow/Tasks/SuggestedTasksStore.swift
   - desktop/macos/Desktop/Sources/Stores/TasksStore.swift
   - desktop/macos/Desktop/Sources/Chat/KernelJournalBackendSyncDriver.swift

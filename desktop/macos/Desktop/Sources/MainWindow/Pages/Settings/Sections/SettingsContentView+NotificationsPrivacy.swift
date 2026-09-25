@@ -34,14 +34,35 @@ extension SettingsContentView {
 
             GlassSeparator()
 
-            // Every notification below is produced by a frame-driven assistant, so while
-            // screen frames are not distributed none of them can ever fire. Hidden rather
-            // than shown as dead switches; the persisted values are untouched.
+            // Every notification row produced by a frame-driven assistant is gated on
+            // `assistantFrameProcessingEnabled`: while screen frames are not distributed
+            // those assistants can never fire, so their toggles are hidden rather than
+            // shown as dead switches; the persisted values are untouched.
             //
-            // The Task Notifications row is deliberately OUTSIDE this gate: contextual
-            // task interruptions also fire from non-frame events (meeting-state changes,
-            // resurfacing), and their only delivery gate is the toggle below — hiding it
-            // would leave interruptions users cannot turn off.
+            // Task, Meeting Summary, and Integration Notifications stay deliberately
+            // OUTSIDE the gate: contextual task interruptions also fire from non-frame
+            // events (meeting-state changes, resurfacing), and the meeting-summary and
+            // integration rows are not frame-driven at all.
+            if ProactiveCapturePolicy.assistantFrameProcessingEnabled {
+              // Sits under the master toggle and the frequency slider because both gate it:
+              // frequency caps how often any proactive card is delivered, and this decides
+              // whether focus nudges are generated at all.
+              settingRow(
+                title: "Focus Notifications",
+                subtitle: "Nudges in the notch to keep you on track, using what Omi already knows",
+                settingId: "notifications.livesuggestions"
+              ) {
+                Toggle("", isOn: $liveSuggestionsEnabled)
+                  .toggleStyle(OmiToggleStyle())
+                  .labelsHidden()
+                  .onChange(of: liveSuggestionsEnabled) { _, newValue in
+                    SuggestionAssistantSettings.shared.applyUserEnabledChange(newValue)
+                  }
+              }
+
+              GlassSeparator()
+            }
+
             settingRow(
               title: "Task Notifications",
               subtitle: "Allow interruptions when a task needs attention",
@@ -61,24 +82,6 @@ extension SettingsContentView {
             GlassSeparator()
 
             if ProactiveCapturePolicy.assistantFrameProcessingEnabled {
-              // Sits under the master toggle and the frequency slider because both gate it:
-              // frequency caps how often any proactive card is delivered, and this decides
-              // whether live suggestions are generated at all.
-              settingRow(
-                title: "Live Suggestions",
-                subtitle: "Suggest things in the notch, using what Omi already knows",
-                settingId: "notifications.livesuggestions"
-              ) {
-                Toggle("", isOn: $liveSuggestionsEnabled)
-                  .toggleStyle(OmiToggleStyle())
-                  .labelsHidden()
-                  .onChange(of: liveSuggestionsEnabled) { _, newValue in
-                    SuggestionAssistantSettings.shared.applyUserEnabledChange(newValue)
-                  }
-              }
-
-              GlassSeparator()
-
               settingRow(
                 title: "Insight Notifications",
                 subtitle: "Show notification when an insight is generated",
@@ -96,7 +99,24 @@ extension SettingsContentView {
               }
 
               GlassSeparator()
+            }
 
+            settingRow(
+              title: "Meeting Summary Notifications",
+              subtitle: "After a call, offer to copy the share link or email the summary to participants",
+              settingId: "notifications.meetingsummary"
+            ) {
+              Toggle("", isOn: $meetingSummaryNotificationsEnabled)
+                .toggleStyle(OmiToggleStyle())
+                .labelsHidden()
+                .onChange(of: meetingSummaryNotificationsEnabled) { _, newValue in
+                  MeetingSummaryNotificationSettings.isEnabled = newValue
+                }
+            }
+
+            GlassSeparator()
+
+            if ProactiveCapturePolicy.assistantFrameProcessingEnabled {
               settingRow(
                 title: "Memory Notifications",
                 subtitle: "Show notification when a memory is extracted",
@@ -112,6 +132,24 @@ extension SettingsContentView {
                         memory: MemorySettingsResponse(notificationsEnabled: newValue)))
                   }
               }
+            }
+
+            GlassSeparator()
+
+            // The fifth notification type. It lives inside the master gate for the
+            // same reason as the other four: `IntegrationNudgeCoordinator.isEnabledNow`
+            // requires notifications to be on, so showing this switched ON beside a
+            // disabled master toggle would promise a feature that cannot run.
+            // `@AppStorage` already persists to the key the coordinator reads;
+            // a second writer on one key only invites drift.
+            settingRow(
+              title: "Integration Notifications",
+              subtitle: "Occasionally offer to connect an app Omi can use — Gmail, Notion, ChatGPT",
+              settingId: "notifications.integrationsuggestions"
+            ) {
+              Toggle("", isOn: $integrationNudgesEnabled)
+                .toggleStyle(OmiToggleStyle())
+                .labelsHidden()
             }
           }
         }
@@ -203,7 +241,7 @@ extension SettingsContentView {
           privacyToggleRow(
             icon: "mic.fill",
             title: "Store Recordings",
-            subtitle: "Allow omi to store audio recordings of your conversations",
+            subtitle: "Allow Omi to store audio recordings of your conversations",
             isOn: $recordingPermissionEnabled
           ) { newValue in
             updateRecordingPermission(newValue)

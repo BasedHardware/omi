@@ -19,7 +19,15 @@ import Foundation
 /// per-device frame extraction, silence-gap finalize and wall-clock rotation.
 final class OmiBatchAudioWriter: BaseBatchAudioWriter {
     static let shared = OmiBatchAudioWriter()
-    private init() {
+    private let defaults: UserDefaults
+    private let decodeJSON: (Data) throws -> Any
+
+    init(
+        defaults: UserDefaults = .standard,
+        decodeJSON: @escaping (Data) throws -> Any = { try JSONSerialization.jsonObject(with: $0) }
+    ) {
+        self.defaults = defaults
+        self.decodeJSON = decodeJSON
         super.init(tag: "BatchWriter", queueLabel: "com.omi.batchAudioWriter", recoveryPrefix: "audio_omibatch_")
     }
 
@@ -28,6 +36,11 @@ final class OmiBatchAudioWriter: BaseBatchAudioWriter {
     private var lastFrameMs: Int64 = 0
     private var wasEnabled = false
     private var diagLoggedMatch = false
+    // BLE callback-thread confined, like wasEnabled. Read preferences each time
+    // so setting changes apply immediately; decode only when their values change.
+    private var cachedRawConfig: String?
+    private var cachedDirectory: String?
+    private var cachedConfig: Config?
 
     private let maxFileBytes: Int64 = 32 * 1024 * 1024 // ~32 MB per file
     private let maxFileSeconds: Int64 = 900 // 15 min per file
@@ -58,7 +71,7 @@ final class OmiBatchAudioWriter: BaseBatchAudioWriter {
         }
         wasEnabled = true
         guard config.deviceType != "limitless" else { return false } // LimitlessFlashDrainEngine owns that device
-        guard config.deviceId.lowercased() == peripheralUuid.lowercased() else { return false }
+        guard config.deviceId == peripheralUuid.lowercased() else { return false }
         guard config.serviceUuid == serviceUuid.lowercased(),
             config.characteristicUuid == characteristicUuid.lowercased() else { return false }
 
@@ -67,13 +80,15 @@ final class OmiBatchAudioWriter: BaseBatchAudioWriter {
             NSLog("[BatchWriter] matched audio characteristic — batch capture active (device=\(peripheralUuid), dir=\(config.dir))")
         }
 
-        let d = UserDefaults.standard
+        let admission = CaptureAdmissionPolicy.load(from: defaults)
         // Muted: drop the packet but keep the open file's gap timer alive so unmute
-        // resumes the same recording instead of starting a new one.
-        if d.bool(forKey: "flutter.batchMuted") {
+        // resumes the same recording instead of starting a new one. This check is
+        // deliberately native so it still applies when Dart is suspended.
+        if admission.muted {
             queue.async { self.touchKeepAlive() }
             return true
         }
+        let d = defaults
         // Manual "New recording": finalize the current file now; this packet opens a fresh one.
         if d.bool(forKey: "flutter.batchCutRequested") {
             d.set(false, forKey: "flutter.batchCutRequested")
@@ -82,7 +97,8 @@ final class OmiBatchAudioWriter: BaseBatchAudioWriter {
 
         let frames = transformFrames(deviceType: config.deviceType, value: value)
         if !frames.isEmpty {
-            queue.async { self.writeFrames(frames, config: config) }
+            let admittedRevision = admission.revision
+            queue.async { self.writeFrames(frames, config: config, admittedRevision: admittedRevision) }
         }
         // Audio packet on the configured characteristic: consume it (do not forward
         // to Dart) even if it carried no payload, to keep the engine idle.
@@ -98,7 +114,14 @@ final class OmiBatchAudioWriter: BaseBatchAudioWriter {
         }
     }
 
-    private func writeFrames(_ frames: [Data], config: Config) {
+    private func writeFrames(_ frames: [Data], config: Config, admittedRevision: Int64) {
+        // The callback may have queued work before a mute, unmute, or mode
+        // transition. Retire that work before it can rotate/open a file.
+        let admission = CaptureAdmissionPolicy.load(from: defaults)
+        guard admission.permits(admittedRevision: admittedRevision) else {
+            if admission.muted { touchKeepAlive() }
+            return
+        }
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
 
         // Gap finalize: a pause longer than gapMs starts a new file (so the
@@ -124,6 +147,13 @@ final class OmiBatchAudioWriter: BaseBatchAudioWriter {
             }
         }
 
+        // Re-read at the actual write boundary. A policy revision change while
+        // the queue was opening/rotating a file retires the queued packet too.
+        let writeAdmission = CaptureAdmissionPolicy.load(from: defaults)
+        guard writeAdmission.permits(admittedRevision: admittedRevision) else {
+            if writeAdmission.muted { touchKeepAlive() }
+            return
+        }
         guard writeFramesLocked(frames) else { return }
 
         lastFrameMs = nowMs
@@ -132,6 +162,14 @@ final class OmiBatchAudioWriter: BaseBatchAudioWriter {
 
     override func onClosedLocked() {
         lastFrameMs = 0
+    }
+
+    override func onOpenedLocked(_ partURL: URL) {
+        guard let geolocationJSON = recordingGeolocationJSON(fromDefaultsKey: "flutter.nativeBleStreamConfig") else { return }
+        persistRecordingGeolocationSidecar(
+            rawGeolocation: geolocationJSON,
+            audioURL: partURL.deletingPathExtension()
+        )
     }
 
     // MARK: - Frame extraction (mirrors Android transformFrames)
@@ -158,17 +196,21 @@ final class OmiBatchAudioWriter: BaseBatchAudioWriter {
     // MARK: - Config
 
     private func loadConfig() -> Config? {
-        let d = UserDefaults.standard
+        let d = defaults
         guard d.bool(forKey: "flutter.batchModeEnabled") else { return nil }
         guard let dir = d.string(forKey: "flutter.batchAudioDir"), !dir.isEmpty else { return nil }
-        guard let raw = d.string(forKey: "flutter.nativeBleStreamConfig"),
-            let data = raw.data(using: .utf8),
-            let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        guard let raw = d.string(forKey: "flutter.nativeBleStreamConfig") else { return nil }
+        if raw == cachedRawConfig, dir == cachedDirectory { return cachedConfig }
+        cachedRawConfig = raw
+        cachedDirectory = dir
+        cachedConfig = nil // Invalid replacements must never reuse a previous route.
+        guard let data = raw.data(using: .utf8),
+            let json = try? decodeJSON(data) as? [String: Any] else { return nil }
         guard let deviceId = json["deviceId"] as? String, !deviceId.isEmpty,
             let serviceUuid = json["serviceUuid"] as? String, !serviceUuid.isEmpty,
             let charUuid = json["characteristicUuid"] as? String, !charUuid.isEmpty else { return nil }
-        return Config(
-            deviceId: deviceId,
+        let config = Config(
+            deviceId: deviceId.lowercased(),
             codec: (json["codec"] as? String) ?? "opus",
             sampleRate: (json["sampleRate"] as? Int) ?? 16000,
             serviceUuid: serviceUuid.lowercased(),
@@ -176,5 +218,7 @@ final class OmiBatchAudioWriter: BaseBatchAudioWriter {
             deviceType: (json["deviceType"] as? String) ?? "omi",
             dir: dir
         )
+        cachedConfig = config
+        return config
     }
 }

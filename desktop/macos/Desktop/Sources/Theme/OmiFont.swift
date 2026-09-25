@@ -184,11 +184,18 @@ extension View {
 
 // MARK: - Window Size Reset
 
+package enum WindowSizeResetPolicy {
+  /// Reset means the same compact shell users get on first summon. Keeping a
+  /// second, legacy managed-window size here made the recovery action enlarge
+  /// the product it was supposed to normalize.
+  package static let defaultSize = NSSize(width: 900, height: 700)
+}
+
 @MainActor package func resetWindowToDefaultSize() {
   guard
     let window = NSApp.keyWindow ?? NSApp.windows.first(where: { $0.title.contains("omi") || $0.title.contains("Omi") })
   else { return }
-  let defaultSize = NSSize(width: 1200, height: 800)
+  let defaultSize = WindowSizeResetPolicy.defaultSize
   let frame = window.frame
   let newOrigin = NSPoint(
     x: frame.midX - defaultSize.width / 2,

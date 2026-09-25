@@ -1223,6 +1223,35 @@ public final class ContextStore: @unchecked Sendable {
             }
         }
 
+        // The last answer the user's Omi account gave, so a cold launch paints it before the
+        // network has said anything. See `AccountCacheQueries` for what the table is and is not.
+        //
+        // `WITHOUT ROWID` because every access is by the primary key and the payload is small: the
+        // rows *are* the index, which halves the file this adds and removes a lookup from the one
+        // query that matters. `(source, id)` in that order so the per-source reads and the
+        // per-source trim are both prefix scans of the same key.
+        //
+        // No foreign key to anything. These rows describe the account, not this Mac — a cached
+        // conversation routinely has no local session behind it, because the phone recorded it —
+        // and a reference to `sessions` would delete exactly the rows a laptop that has captured
+        // nothing needs most.
+        migrator.registerMigration("v11-account-cache") { db in
+            try db.create(table: "account_rows", options: [.ifNotExists, .withoutRowID]) { t in
+                t.column("source", .text).notNull()
+                t.column("id", .text).notNull()
+                t.column("at", .double).notNull()
+                t.column("payload", .text).notNull()
+                t.primaryKey(["source", "id"])
+            }
+            // The trim and the read are the same question — "the newest N of one source" — and
+            // both are this index.
+            try db.create(
+                index: "idx_account_rows_recent",
+                on: "account_rows",
+                columns: ["source", "at"],
+                options: .ifNotExists)
+        }
+
         return migrator
     }
 

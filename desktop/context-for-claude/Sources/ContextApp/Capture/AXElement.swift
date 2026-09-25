@@ -108,8 +108,28 @@ struct AXElement: AXElementSource {
     ///
     /// Never prompts. Accessibility is not a permission that can be requested from code the way the
     /// microphone can — the system offers no dialog that grants it — so asking is a separate,
-    /// deliberate act and this stays a pure question.
+    /// deliberate act and this stays a pure question. `requestTrust()` below is that act.
     static var isTrusted: Bool { AXIsProcessTrusted() }
+
+    /// The same question, asked out loud.
+    ///
+    /// **This is not a grant dialog and the distinction matters.** No API grants Accessibility;
+    /// the switch is flipped by hand in Privacy & Security. What `kAXTrustedCheckOptionPrompt`
+    /// buys is the two things opening the pane cannot: macOS shows the standard "would like to
+    /// control this computer" alert with a button that leads straight there, and — the part that
+    /// actually unblocks people — it **registers this app in that list**. An app that has never
+    /// asked is not listed at all, so a user sent to the pane finds no row to switch on and has to
+    /// know about the `+` button and go hunting for the bundle. That is the state
+    /// `⌘ + ⌘` shipped in: a gesture that cannot fire, pointing at a pane that cannot fix it.
+    ///
+    /// - Returns: whether trust is held *now*. The dialog is asynchronous and the user has to leave
+    ///   for System Settings, so this is almost always `false` on the call that raises it; the real
+    ///   answer arrives on the next `refresh()`, which app activation already triggers.
+    @discardableResult
+    static func requestTrust() -> Bool {
+        let key = kAXTrustedCheckOptionPrompt.takeUnretainedValue()
+        return AXIsProcessTrustedWithOptions([key: true] as CFDictionary)
+    }
 
     var axRole: String? { string(kAXRoleAttribute) }
     var axSubrole: String? { string(kAXSubroleAttribute) }

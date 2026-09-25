@@ -31,12 +31,36 @@ struct MemoryHubPage: View {
   @ObservedObject var memoriesViewModel: MemoriesViewModel
   @ObservedObject private var conversationDetailState = ConversationDetailAutomationState.shared
   @Binding var destinationRawValue: Int
+  @State private var brainMapSearchText = ""
+  /// The hub page a conversation was opened from, so the detail's Back returns there ("‹ Activity",
+  /// "‹ Memories") instead of always landing on the Conversations list.
+  @State private var conversationOrigin: MemoryHubDestination?
   /// How this shell applies a hub selection. The modern shell only has to write the persisted
   /// destination; the chat-first shell also moves its own typed route, so it passes its own.
   var onSelectDestination: ((MemoryHubDestination) -> Void)? = nil
-  /// Rewind lives on the shell rail, not in this hub, so the Activity spine's way into it has to be
-  /// supplied by the host that owns the rail index. Hosts without one leave the card inert.
-  var onOpenRewind: (() -> Void)? = nil
+  /// How the host opens one exact conversation.
+  ///
+  /// The chat-first shell supplies its typed deep link (`navigation.open(conversation:)`), which
+  /// carries the record to the Conversations host. Hosts without one fall back to the automation
+  /// singleton below — correct for the modern shell, where this page mounts `ConversationsPageHost`
+  /// itself and that host is guaranteed to be the one that consumes the request.
+  var onOpenConversationRecord: ((ServerConversation) -> Void)? = nil
+  /// Optional exact record supplied by a Chat-first Activity deep-link. It is
+  /// passed to the same hub-owned ConversationsPageHost used by the
+  /// Conversations destination, so Activity does not open a second detail
+  /// presentation on the dedicated Chat-first route.
+  var initialConversation: ServerConversation? = nil
+  /// Optional timestamp carried by a conversation deep link. The hub remains
+  /// the sole presentation owner; this only seeds the transcript/playback
+  /// focus inside its canonical Conversations destination.
+  var initialCaptureMomentTimestamp: TimeInterval? = nil
+  var onCaptureFocusResolved: ((Bool) -> Void)? = nil
+  /// Canonical detail capabilities supplied by the owning shell. Activity and
+  /// the Conversations destination forward the same callbacks so opening the
+  /// same record never changes which actions are available.
+  var onDiscussInChat: ((ServerConversation) -> Void)? = nil
+  var onOpenLinkedTask: ((String) -> Void)? = nil
+  var onConversationSelectionChanged: ((ServerConversation?) -> Void)? = nil
 
   private var destination: MemoryHubDestination {
     MemoryHubDestination(rawValue: destinationRawValue) ?? .memories
@@ -52,20 +76,16 @@ struct MemoryHubPage: View {
     )
   }
 
-  /// The hub wears its own switcher. It used to live in the top bar's `Library` hover menu, which
-  /// made the window's chrome responsible for one page's three views — and made Brain Map reachable
-  /// only by hovering. A page's tabs belong to the page (INV-NAV-1: same destinations, same owner).
+  /// Brain is a stable parent with one persistent peer-navigation row. Switching sections never
+  /// becomes a drill-in, so Conversations, Memories, Rewind, and Brain Map do not replace the row
+  /// with a back button.
   var body: some View {
-    VStack(spacing: 0) {
-      MemoryHubSwitcher(selection: destination, onSelect: select)
-        .padding(.top, 22)
-        .padding(.horizontal, 28)
-        .padding(.bottom, 4)
-      hubContent
-    }
+    hubContent
   }
 
   private func select(_ next: MemoryHubDestination) {
+    // A deliberate section change starts a fresh trail.
+    conversationOrigin = nil
     OmiMotion.withGated(.easeOut(duration: InkMotion.checkbox)) {
       if let onSelectDestination {
         onSelectDestination(next)
@@ -82,31 +102,105 @@ struct MemoryHubPage: View {
       ActivityHubTab(
         appState: appState,
         memoriesViewModel: memoriesViewModel,
-        onOpenConversation: { id in
-          ConversationDetailAutomationState.shared.requestOpen(
-            conversationId: id, showTranscript: false)
-          select(.conversations)
+        onOpenConversation: { conversation in
+          // Clicking a conversation in Activity used to write its id into the automation singleton
+          // and then call `select(.conversations)` — a plain destination change, which is the one
+          // primitive defined to *discard* an unconsumed deep link (`selectPrimary` nils
+          // `pendingConversation`). The id was dropped a frame after it was written and the user
+          // landed on the conversation list. When the host owns a typed deep link, use it.
+          if let onOpenConversationRecord {
+            onOpenConversationRecord(conversation)
+          } else {
+            ConversationDetailAutomationState.shared.requestOpen(
+              conversationId: conversation.id, showTranscript: false)
+            select(.conversations)
+          }
+          conversationOrigin = .activity
+        },
+        onOpenMemory: { memory in
+          // Same gate the Brain Map's citations use: leave Activity only once the memory is really
+          // open, so an unresolvable memory does not strand the user on an empty detail panel.
+          Task {
+            await MemoryAtlasCitationOpen.open(
+              id: memory.id, in: memoriesViewModel, leave: { select(.memories) })
+          }
         },
         onOpenBrainMap: { select(.brainMap) },
-        onOpenRewind: { onOpenRewind?() }
+        onOpenRewind: { select(.rewind) },
+        selectedDestination: destination,
+        onSelectDestination: select
       )
       .frame(maxWidth: .infinity, maxHeight: .infinity)
     case .memories:
-      adaptiveContent(
-        MemoriesPage(viewModel: viewModelContainer.memoriesViewModel),
-        conversationID: viewModelContainer.memoriesViewModel.linkedConversation?.id
+      MemoriesPage(
+        viewModel: viewModelContainer.memoriesViewModel,
+        brainDestination: destination,
+        onSelectBrainDestination: select,
+        onOpenConversation: openConversation
       )
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
     case .conversations:
-      ConversationsPageHost(appState: appState)
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+      ConversationsPageHost(
+        appState: appState,
+        brainDestination: destination,
+        onSelectBrainDestination: select,
+        detailOrigin: conversationOrigin,
+        initialConversation: initialConversation,
+        initialCaptureMomentTimestamp: initialCaptureMomentTimestamp,
+        onCaptureFocusResolved: onCaptureFocusResolved,
+        onDiscussInChat: onDiscussInChat,
+        onOpenLinkedTask: onOpenLinkedTask,
+        onSelectionChanged: onConversationSelectionChanged
+      )
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+    case .rewind:
+      RewindPage(
+        appState: appState,
+        brainDestination: destination,
+        onSelectBrainDestination: select
+      )
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
     case .brainMap:
-      brainMapDestination
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        // The lifecycle capability is established by the first authoritative
-        // memory response. Without this, opening straight into a persisted
-        // Brain Map destination would resolve the compatibility graph before
-        // the server capability was known purely because Memories was never visited.
-        .task { await memoriesViewModel.loadMemoriesIfNeeded() }
+      BrainSectionPageLayout(
+        selected: destination,
+        onSelect: select,
+        search: {
+          QuerySearchBar(
+            text: $brainMapSearchText,
+            accessibilityID: "brain-map-search-field",
+            placeholder: "Search Brain Map",
+            searchSurface: .brainMap
+          )
+        },
+        content: { brainMapDestination }
+      )
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+      // The lifecycle capability is established by the first authoritative
+      // memory response. Without this, opening straight into a persisted
+      // Brain Map destination would resolve the compatibility graph before
+      // the server capability was known purely because Memories was never visited.
+      .task { await memoriesViewModel.loadMemoriesIfNeeded() }
+    }
+  }
+
+  private func openConversation(_ conversationID: String) {
+    guard !conversationID.isEmpty else { return }
+    if let onOpenConversationRecord {
+      Task { @MainActor in
+        guard let conversation = try? await APIClient.shared.getConversation(id: conversationID) else {
+          OmiToastCenter.shared.confirm("Couldn't open the source conversation")
+          return
+        }
+        onOpenConversationRecord(conversation)
+        conversationOrigin = .memories
+      }
+    } else {
+      ConversationDetailAutomationState.shared.requestOpen(
+        conversationId: conversationID,
+        showTranscript: false
+      )
+      select(.conversations)
+      conversationOrigin = .memories
     }
   }
 
@@ -121,11 +215,14 @@ struct MemoryHubPage: View {
       CanonicalBrainMapDestination(
         graphViewModel: viewModelContainer.memoryGraphViewModel,
         memoriesViewModel: memoriesViewModel,
+        searchText: $brainMapSearchText,
         onLeave: { destinationRawValue = MemoryHubDestination.memories.rawValue }
       )
-      .equatable()
     case .legacyBrainMap:
-      MemoryGraphPage(viewModel: viewModelContainer.memoryGraphViewModel)
+      MemoryGraphPage(
+        viewModel: viewModelContainer.memoryGraphViewModel,
+        searchText: brainMapSearchText
+      )
     case .undetermined:
       // Neither surface may mount before the server capability is known. The compatibility graph
       // in particular latches the shared view model's in-flight guard and runs
@@ -147,14 +244,11 @@ struct MemoryHubPage: View {
   /// and open actions use the current model at invocation time, while the map
   /// itself observes `MemoryGraphViewModel` for the only state that changes its
   /// projection.
-  private struct CanonicalBrainMapDestination: View, Equatable {
+  private struct CanonicalBrainMapDestination: View {
     let graphViewModel: MemoryGraphViewModel
     let memoriesViewModel: MemoriesViewModel
+    @Binding var searchText: String
     let onLeave: () -> Void
-
-    nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
-      lhs.graphViewModel === rhs.graphViewModel && lhs.memoriesViewModel === rhs.memoriesViewModel
-    }
 
     var body: some View {
       CanonicalMemoryAtlasTabView(
@@ -168,6 +262,8 @@ struct MemoryHubPage: View {
               id: memoryID, in: memoriesViewModel, leave: onLeave)
           }
         },
+        searchText: $searchText,
+        showsSearchField: false,
         onLeave: onLeave
       )
     }

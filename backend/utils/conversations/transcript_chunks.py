@@ -10,6 +10,7 @@ from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 import database.conversations as conversations_db
+from database.firestore_read_metrics import FirestoreReadSite
 
 # ~8 segments per chunk with 2-segment overlap keeps chunks small enough to embed
 # precisely while not splitting answers across a hard boundary.
@@ -85,7 +86,9 @@ def hydrate_chunk_texts(uid: str, rows: List[Dict[str, Any]]) -> List[Dict[str, 
     conv_ids = list({r['conversation_id'] for r in rows if r.get('conversation_id')})
     if not conv_ids:
         return []
-    conversations = conversations_db.get_conversations_by_id(uid, conv_ids)
+    conversations = conversations_db.get_conversations_by_id(
+        uid, conv_ids, read_site=FirestoreReadSite.TRANSCRIPT_CHUNK_HYDRATION
+    )
     chunks_by_conv: Dict[str, Dict[int, str]] = {}
     meta_by_conv: Dict[str, Dict[str, Any]] = {}
     for c in conversations:
