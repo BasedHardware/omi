@@ -1,27 +1,25 @@
 import 'package:flutter/material.dart';
 
-/// Smallest comfortable touch target: Apple's HIG asks for 44x44pt, Material
-/// for 48dp. Header controls use the smaller of the two so a row of them still
-/// fits a phone-width app bar.
-const double kMinTapTarget = 44;
+import 'package:omi/ui/components/omi_icon_button.dart';
+import 'package:omi/ui/omi_tokens.dart';
 
-/// Diameter of the circle a [HeaderCircleButton] paints.
-const double kHeaderCircleDiameter = 36;
+/// Smallest comfortable touch target. Same value as [kOmiMinTapTarget]; kept for existing callers.
+const double kMinTapTarget = kOmiMinTapTarget;
 
-/// A small circular header control whose touch target is larger than the
-/// circle it paints.
+/// Diameter of the circle a [HeaderCircleButton] paints. Same value as [kOmiIconCircleDiameter].
+const double kHeaderCircleDiameter = kOmiIconCircleDiameter;
+
+/// A small circular header control whose touch target is larger than the circle it paints.
 ///
-/// The home header's buttons are 36pt circles, and they used to be 36pt touch
-/// targets too, 8pt apart. This keeps the 36pt visual and centers it in a
-/// [kMinTapTarget] square that owns the taps, so neighbouring buttons laid out
-/// edge to edge keep the same 8pt visual gap with no dead strip between them.
+/// This is now a thin wrapper over [OmiIconButton.filled], which new code should use directly:
+/// the same 36pt circle centred in a 44pt target, plus a tooltip on long-press.
 class HeaderCircleButton extends StatelessWidget {
   const HeaderCircleButton({
     super.key,
     required this.icon,
     required this.onTap,
     required this.semanticLabel,
-    this.color = const Color(0xFF1F1F25),
+    this.color = OmiColors.surface1,
     this.diameter = kHeaderCircleDiameter,
   });
 
@@ -35,26 +33,12 @@ class HeaderCircleButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Semantics(
-      button: true,
+    return OmiIconButton.filled(
+      icon: icon,
       label: semanticLabel,
-      child: InkResponse(
-        onTap: onTap,
-        radius: kMinTapTarget / 2,
-        child: SizedBox(
-          width: kMinTapTarget,
-          height: kMinTapTarget,
-          child: Center(
-            child: Container(
-              width: diameter,
-              height: diameter,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(color: color, shape: BoxShape.circle),
-              child: icon,
-            ),
-          ),
-        ),
-      ),
+      onPressed: onTap,
+      fillColor: color,
+      diameter: diameter,
     );
   }
 }

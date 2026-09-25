@@ -7,6 +7,7 @@ import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/models/audio_route.dart';
 import 'package:omi/providers/phone_call_provider.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/pages/phone_calls/call_duration_format.dart';
 
@@ -48,9 +49,9 @@ class _ActiveCallPageState extends State<ActiveCallPage> {
 
   void _showDtmfDialpad(BuildContext context, PhoneCallProvider provider) {
     PlatformManager.instance.analytics.phoneCallDialpadOpened();
-    showModalBottomSheet(
+    showOmiSheet<void>(
       context: context,
-      backgroundColor: Colors.transparent,
+      showCloseButton: false,
       builder: (_) => _DtmfDialpadSheet(
         onDigitPressed: (digit) {
           PlatformManager.instance.analytics.phoneCallDialpadDigitPressed(digit);
@@ -63,15 +64,15 @@ class _ActiveCallPageState extends State<ActiveCallPage> {
   void _showAudioRoutePicker(BuildContext context, PhoneCallProvider provider) async {
     await provider.loadAudioRoutes();
     if (!context.mounted) return;
-    showModalBottomSheet(
+    showOmiSheet<void>(
       context: context,
-      backgroundColor: Colors.transparent,
-      builder: (_) => _AudioRouteSheet(
+      title: context.l10n.audioOutput,
+      builder: (sheetContext) => _AudioRouteSheet(
         routes: provider.availableRoutes,
         selectedRoute: provider.selectedRoute,
         onRouteSelected: (route) {
           provider.selectAudioRoute(route);
-          Navigator.of(context).pop();
+          Navigator.of(sheetContext).pop();
         },
       ),
     );
@@ -86,32 +87,24 @@ class _ActiveCallPageState extends State<ActiveCallPage> {
             provider.callState == PhoneCallState.ringing;
 
         return Scaffold(
-          backgroundColor: Colors.black,
+          // A pushed page: the leading back control minimizes the call by stepping back one page,
+          // exactly like system back and the iOS edge swipe (the call keeps running and the call
+          // banner returns here). Hidden once the call is over, when the page closes itself.
+          appBar: AppBar(
+            automaticallyImplyLeading: false,
+            leading: isCallInProgress
+                ? OmiBackButton(
+                    onPressed: () {
+                      PlatformManager.instance.analytics.track('Phone Call Minimized');
+                      Navigator.of(context).maybePop();
+                    },
+                  )
+                : null,
+          ),
           body: SafeArea(
+            top: false,
             child: Column(
               children: [
-                // Top bar with minimize button — always visible so user can return to app
-                Padding(
-                  padding: const EdgeInsets.only(left: 8, right: 8, top: 4),
-                  child: Row(
-                    children: [
-                      if (isCallInProgress)
-                        IconButton(
-                          onPressed: () {
-                            PlatformManager.instance.analytics.track('Phone Call Minimized');
-                            Navigator.of(context).popUntil((route) => route.isFirst);
-                          },
-                          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 22),
-                          padding: const EdgeInsets.all(12),
-                          constraints: const BoxConstraints(),
-                        )
-                      else
-                        const SizedBox(width: 46),
-                      const Spacer(),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 8),
                 _CallInfoHeader(
                   contactName: provider.contactName,
                   phoneNumber: provider.remoteNumber ?? '',
@@ -139,7 +132,7 @@ class _ActiveCallPageState extends State<ActiveCallPage> {
                   onKeypad: () => _showDtmfDialpad(context, provider),
                   onAudioRoute: () => _showAudioRoutePicker(context, provider),
                 ),
-                const SizedBox(height: 32),
+                const SizedBox(height: OmiSpacing.xxl),
               ],
             ),
           ),
@@ -184,28 +177,32 @@ class _CallInfoHeader extends StatelessWidget {
   Widget build(BuildContext context) {
     return Column(
       children: [
-        CircleAvatar(
-          radius: 40,
-          backgroundColor: Colors.grey[800],
-          child: Text(
-            contactName != null && contactName!.isNotEmpty ? contactName![0].toUpperCase() : '#',
-            style: const TextStyle(fontSize: 32, color: Colors.white),
+        ExcludeSemantics(
+          child: CircleAvatar(
+            radius: 40,
+            backgroundColor: OmiColors.surface3,
+            child: Text(
+              contactName != null && contactName!.isNotEmpty ? contactName![0].toUpperCase() : '#',
+              style: OmiType.title1.copyWith(fontWeight: FontWeight.w400),
+            ),
           ),
         ),
-        const SizedBox(height: 16),
-        Text(
-          contactName ?? phoneNumber,
-          style: const TextStyle(fontSize: 24, fontWeight: FontWeight.w500, color: Colors.white),
-        ),
+        const SizedBox(height: OmiSpacing.md),
+        Text(contactName ?? phoneNumber, style: OmiType.title2.copyWith(fontWeight: FontWeight.w500)),
         if (contactName != null)
           Padding(
-            padding: const EdgeInsets.only(top: 4),
-            child: Text(phoneNumber, style: TextStyle(fontSize: 14, color: Colors.grey[400])),
+            padding: const EdgeInsets.only(top: OmiSpacing.xxs),
+            child: Text(phoneNumber, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
           ),
-        const SizedBox(height: 8),
-        Text(
-          _stateLabel(context),
-          style: TextStyle(fontSize: 16, color: state == PhoneCallState.failed ? Colors.red[300] : Colors.grey[400]),
+        const SizedBox(height: OmiSpacing.xs),
+        Semantics(
+          liveRegion: state != PhoneCallState.active,
+          child: Text(
+            _stateLabel(context),
+            style: OmiType.callout.copyWith(
+              color: state == PhoneCallState.failed ? OmiColors.danger : OmiColors.textSecondary,
+            ),
+          ),
         ),
       ],
     );
@@ -230,13 +227,16 @@ class _LiveTranscriptView extends StatelessWidget {
             child: Text(
               context.l10n.transcriptionNoAudio,
               textAlign: TextAlign.center,
-              style: TextStyle(color: Colors.orange[300], fontSize: 14),
+              style: OmiType.subhead.copyWith(color: OmiColors.warning),
             ),
           ),
         );
       }
       return Center(
-        child: Text(context.l10n.transcriptPlaceholder, style: TextStyle(color: Colors.grey[600], fontSize: 14)),
+        child: Text(
+          context.l10n.transcriptPlaceholder,
+          style: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
+        ),
       );
     }
 
@@ -287,32 +287,31 @@ class _TranscriptBubble extends StatelessWidget {
                 padding: const EdgeInsets.only(bottom: 4),
                 child: Text(
                   speakerLabel,
-                  style: TextStyle(fontSize: 12, color: Colors.grey[500], fontWeight: FontWeight.w500),
+                  style: OmiType.caption.copyWith(color: OmiColors.textTertiary, fontWeight: FontWeight.w500),
                 ),
               ),
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
-                  color: isUser ? const Color(0xFF2A2A30) : Colors.grey[850],
+                  color: isUser ? OmiColors.surface2 : OmiColors.surface1,
                   borderRadius: BorderRadius.only(
-                    topLeft: const Radius.circular(16),
-                    topRight: const Radius.circular(16),
-                    bottomLeft: isUser ? const Radius.circular(16) : const Radius.circular(4),
-                    bottomRight: isUser ? const Radius.circular(4) : const Radius.circular(16),
+                    topLeft: const Radius.circular(OmiRadius.lg),
+                    topRight: const Radius.circular(OmiRadius.lg),
+                    bottomLeft: Radius.circular(isUser ? OmiRadius.lg : OmiSpacing.xxs),
+                    bottomRight: Radius.circular(isUser ? OmiSpacing.xxs : OmiRadius.lg),
                   ),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(text, style: const TextStyle(fontSize: 15, color: Colors.white, height: 1.4)),
+                    Text(text, style: OmiType.subhead.copyWith(height: 1.4)),
                     if (translations.isNotEmpty) ...[
                       const SizedBox(height: 6),
                       ...translations.map(
                         (t) => Text(
                           t.text,
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.white.withValues(alpha: 0.7),
+                          style: OmiType.subhead.copyWith(
+                            color: OmiColors.textSecondary,
                             fontStyle: FontStyle.italic,
                             height: 1.3,
                           ),
@@ -368,31 +367,39 @@ class _CallControls extends StatelessWidget {
           ),
           _ControlButton(icon: Icons.dialpad, label: context.l10n.phoneKeypad, onTap: isActive ? onKeypad : null),
           _EndCallButton(onTap: state != PhoneCallState.ended ? onEndCall : null),
-          GestureDetector(
-            onTap: isActive ? onSpeakerToggle : null,
-            onLongPress: isActive ? onAudioRoute : null,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 56,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: isSpeakerOn ? Colors.white : Colors.grey[800],
+          Semantics(
+            button: true,
+            toggled: isSpeakerOn,
+            enabled: isActive,
+            onLongPressHint: onAudioRoute != null ? context.l10n.audioOutput : null,
+            child: GestureDetector(
+              onTap: isActive ? onSpeakerToggle : null,
+              onLongPress: isActive ? onAudioRoute : null,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 56,
+                    height: 56,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: isSpeakerOn ? OmiColors.accent : OmiColors.surface2,
+                    ),
+                    child: Icon(
+                      isSpeakerOn ? Icons.volume_up : Icons.volume_down,
+                      color: isSpeakerOn
+                          ? OmiColors.onAccent
+                          : (isActive ? OmiColors.textPrimary : OmiColors.textDisabled),
+                      size: 28,
+                    ),
                   ),
-                  child: Icon(
-                    isSpeakerOn ? Icons.volume_up : Icons.volume_down,
-                    color: isSpeakerOn ? Colors.black : (isActive ? Colors.white : Colors.grey[600]),
-                    size: 28,
+                  const SizedBox(height: OmiSpacing.xs),
+                  Text(
+                    context.l10n.phoneSpeaker,
+                    style: OmiType.caption.copyWith(color: isActive ? OmiColors.textPrimary : OmiColors.textDisabled),
                   ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  context.l10n.phoneSpeaker,
-                  style: TextStyle(fontSize: 12, color: isActive ? Colors.white : Colors.grey[600]),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ],
@@ -411,24 +418,33 @@ class _ControlButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 56,
-            height: 56,
-            decoration: BoxDecoration(shape: BoxShape.circle, color: isActive ? Colors.white : Colors.grey[800]),
-            child: Icon(
-              icon,
-              color: isActive ? Colors.black : (onTap != null ? Colors.white : Colors.grey[600]),
-              size: 28,
+    final enabled = onTap != null;
+    return Semantics(
+      button: true,
+      enabled: enabled,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 56,
+              height: 56,
+              decoration:
+                  BoxDecoration(shape: BoxShape.circle, color: isActive ? OmiColors.accent : OmiColors.surface2),
+              child: Icon(
+                icon,
+                color: isActive ? OmiColors.onAccent : (enabled ? OmiColors.textPrimary : OmiColors.textDisabled),
+                size: 28,
+              ),
             ),
-          ),
-          const SizedBox(height: 8),
-          Text(label, style: TextStyle(fontSize: 12, color: onTap != null ? Colors.white : Colors.grey[600])),
-        ],
+            const SizedBox(height: OmiSpacing.xs),
+            Text(
+              label,
+              style: OmiType.caption.copyWith(color: enabled ? OmiColors.textPrimary : OmiColors.textDisabled),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -441,23 +457,29 @@ class _EndCallButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            width: 64,
-            height: 64,
-            decoration: BoxDecoration(shape: BoxShape.circle, color: onTap != null ? Colors.red : Colors.grey[800]),
-            child: Icon(Icons.call_end, color: onTap != null ? Colors.white : Colors.grey[600], size: 32),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            context.l10n.phoneEndCall,
-            style: TextStyle(fontSize: 12, color: onTap != null ? Colors.white : Colors.grey[600]),
-          ),
-        ],
+    final enabled = onTap != null;
+    // Red is state (hang up), not decoration.
+    return Semantics(
+      button: true,
+      enabled: enabled,
+      child: GestureDetector(
+        onTap: onTap,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 64,
+              height: 64,
+              decoration: BoxDecoration(shape: BoxShape.circle, color: enabled ? OmiColors.danger : OmiColors.surface2),
+              child: Icon(Icons.call_end, color: enabled ? OmiColors.textPrimary : OmiColors.textDisabled, size: 32),
+            ),
+            const SizedBox(height: OmiSpacing.xs),
+            Text(
+              context.l10n.phoneEndCall,
+              style: OmiType.caption.copyWith(color: enabled ? OmiColors.textPrimary : OmiColors.textDisabled),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -490,28 +512,22 @@ class _DtmfDialpadSheetState extends State<_DtmfDialpadSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFF1C1C1E),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      padding: const EdgeInsets.only(top: 12, bottom: 32),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: OmiSpacing.md),
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 36,
-            height: 4,
-            decoration: BoxDecoration(color: Colors.grey[700], borderRadius: BorderRadius.circular(2)),
+          Semantics(
+            liveRegion: true,
+            child: Text(
+              _digits.isEmpty ? ' ' : _digits,
+              textAlign: TextAlign.center,
+              style: OmiType.title1.copyWith(fontWeight: FontWeight.w300, letterSpacing: 2),
+            ),
           ),
-          const SizedBox(height: 16),
-          Text(
-            _digits.isEmpty ? ' ' : _digits,
-            style: const TextStyle(fontSize: 28, fontWeight: FontWeight.w300, color: Colors.white, letterSpacing: 2),
-          ),
-          const SizedBox(height: 16),
+          const SizedBox(height: OmiSpacing.md),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 32),
+            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: List.generate(_keys.length, (row) {
@@ -537,11 +553,8 @@ class _DtmfDialpadSheetState extends State<_DtmfDialpadSheet> {
               }),
             ),
           ),
-          const SizedBox(height: 16),
-          GestureDetector(
-            onTap: () => Navigator.of(context).pop(),
-            child: Text(context.l10n.phoneHideKeypad, style: TextStyle(fontSize: 16, color: Colors.grey[400])),
-          ),
+          const SizedBox(height: OmiSpacing.md),
+          OmiButton.tertiary(label: context.l10n.phoneHideKeypad, onPressed: () => Navigator.of(context).pop()),
         ],
       ),
     );
@@ -557,36 +570,37 @@ class _DtmfKey extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(36),
-      splashColor: Colors.white.withValues(alpha: 0.08),
-      highlightColor: Colors.white.withValues(alpha: 0.05),
-      child: Container(
-        width: 72,
-        height: 72,
-        decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF2A2A30)),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              digit,
-              style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w300, color: Colors.white),
-            ),
-            if (subtext.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 1),
-                child: Text(
-                  subtext,
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.grey[600],
-                    letterSpacing: 1.5,
+    return Semantics(
+      button: true,
+      label: digit,
+      excludeSemantics: true,
+      child: InkWell(
+        onTap: onTap,
+        customBorder: const CircleBorder(),
+        splashColor: OmiColors.textPrimary.withValues(alpha: 0.08),
+        highlightColor: OmiColors.textPrimary.withValues(alpha: 0.05),
+        child: Container(
+          width: 72,
+          height: 72,
+          decoration: const BoxDecoration(shape: BoxShape.circle, color: OmiColors.surface2),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(digit, style: OmiType.title1.copyWith(fontWeight: FontWeight.w300)),
+              if (subtext.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 1),
+                  child: Text(
+                    subtext,
+                    style: OmiType.caption.copyWith(
+                      fontWeight: FontWeight.w500,
+                      color: OmiColors.textTertiary,
+                      letterSpacing: 1.5,
+                    ),
                   ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -609,19 +623,19 @@ class _TranscriptionStatusIndicator extends StatelessWidget {
 
     switch (status) {
       case TranscriptionStatus.connecting:
-        dotColor = Colors.yellow;
+        dotColor = OmiColors.warning;
         label = context.l10n.transcriptionConnecting;
         break;
       case TranscriptionStatus.reconnecting:
-        dotColor = Colors.orange;
+        dotColor = OmiColors.warning;
         label = context.l10n.transcriptionReconnecting;
         break;
       case TranscriptionStatus.failed:
-        dotColor = Colors.red;
+        dotColor = OmiColors.danger;
         label = context.l10n.transcriptionUnavailable;
         break;
       case TranscriptionStatus.noAudio:
-        dotColor = Colors.orange;
+        dotColor = OmiColors.warning;
         label = context.l10n.transcriptionNoAudio;
         break;
       default:
@@ -629,7 +643,7 @@ class _TranscriptionStatusIndicator extends StatelessWidget {
     }
 
     return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.only(bottom: OmiSpacing.xs),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
@@ -639,7 +653,10 @@ class _TranscriptionStatusIndicator extends StatelessWidget {
             decoration: BoxDecoration(shape: BoxShape.circle, color: dotColor),
           ),
           const SizedBox(width: 6),
-          Text(label, style: TextStyle(fontSize: 12, color: Colors.grey[500])),
+          Semantics(
+            liveRegion: true,
+            child: Text(label, style: OmiType.caption.copyWith(color: OmiColors.textTertiary)),
+          ),
         ],
       ),
     );
@@ -674,35 +691,23 @@ class _AudioRouteSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFF1C1C1E),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      padding: const EdgeInsets.only(top: 12, bottom: 32),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
+    return Padding(
+      padding: const EdgeInsets.only(top: OmiSpacing.xs, bottom: OmiSpacing.md),
+      child: OmiSettingsGroup(
         children: [
-          Container(
-            width: 36,
-            height: 4,
-            decoration: BoxDecoration(color: Colors.grey[700], borderRadius: BorderRadius.circular(2)),
-          ),
-          const SizedBox(height: 16),
-          Text(
-            context.l10n.audioOutput,
-            style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white),
-          ),
-          const SizedBox(height: 12),
-          ...routes.map((route) {
-            bool isSelected = selectedRoute?.id == route.id;
-            return ListTile(
-              leading: Icon(_iconForType(route.type), color: isSelected ? Colors.blue : Colors.white, size: 24),
-              title: Text(route.name, style: TextStyle(color: isSelected ? Colors.blue : Colors.white, fontSize: 16)),
-              trailing: isSelected ? const Icon(Icons.check, color: Colors.blue, size: 20) : null,
-              onTap: () => onRouteSelected(route),
-            );
-          }),
+          for (final route in routes)
+            Semantics(
+              selected: selectedRoute?.id == route.id,
+              child: OmiSettingsRow(
+                leading: Icon(_iconForType(route.type)),
+                title: route.name,
+                trailing: selectedRoute?.id == route.id
+                    ? const Icon(Icons.check, color: OmiColors.textPrimary, size: 20)
+                    : null,
+                showChevron: false,
+                onTap: () => onRouteSelected(route),
+              ),
+            ),
         ],
       ),
     );

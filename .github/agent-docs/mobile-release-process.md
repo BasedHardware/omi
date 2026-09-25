@@ -44,6 +44,40 @@ platform-matched distribution evidence. Upload/build completion alone is not a
 distribution receipt. The current destination policy remains TestFlight
 internal for iOS and Play internal with alpha promotion for Android.
 
+## Release notes
+
+User-facing mobile PRs author one JSON fragment per change under
+`app/changelog/unreleased/` (`{"change": "..."}`; `{"kind": "none"}` for
+internal-only edits). The `check-mobile-changelog.py` gate enforces this on the
+PR diff and, identically, on the post-merge push where no PR metadata exists.
+Authoring rules live in `app/changelog/README.md`.
+
+Fragments are aggregated at release time, not continuously:
+`python3 .github/scripts/mobile-changelog.py collect --version X.Y.Z` validates
+every unreleased fragment, writes `app/changelog/releases/<version>.json`, and
+removes the consumed fragments. Collecting the same marketing version again
+appends new lines after the ones already collected; nothing rewrites or
+compresses the authored text in the durable release file.
+
+Store submission text is derived on demand with
+`store-notes --version X.Y.Z --store ios|android` (or the `store_notes()`
+function, used by `app/scripts/mobile_store_promote.py`). iOS gets
+newline-separated bullets capped at 4000 characters; Android gets a
+`; `-joined plain-text summary capped at 500 characters. Fitting the budget
+only drops or truncates the derived text — the release file is never touched.
+A release collected from only `none` fragments yields exactly
+"Bug fixes and improvements".
+
+Public promotion stays a manual operator action: the `mobile-store-promote`
+Codemagic lane runs only on an explicit trigger, requires
+`CONFIRM=submit-for-review`, selects an already-uploaded build, and attaches
+the derived notes as the store "What's New" text. Deriving notes never submits
+anything; a missing or invalid release file fails the promotion closed.
+
+Rollback: revert the `codemagic.yaml` workflow addition to retire the lane, and
+delete `app/changelog/releases/<version>.json` to drop a collected release.
+Neither affects builds already uploaded to a store.
+
 ## Operator prerequisites
 
 - GitHub branch protection must require the intended release-eligibility and

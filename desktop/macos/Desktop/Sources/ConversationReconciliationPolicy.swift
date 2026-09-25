@@ -207,7 +207,8 @@ enum ConversationReconciliationPolicy {
       folderId: mutation.hasFolderIdMutation ? mutation.folderId : serverConversation.folderId,
       inputDeviceName: serverConversation.inputDeviceName,
       deferred: serverConversation.deferred,
-      localSummary: serverConversation.localSummary
+      localSummary: serverConversation.localSummary,
+      captureGroup: serverConversation.captureGroup
     )
   }
 

@@ -12,6 +12,7 @@ import google.auth.credentials  # noqa: F401
 from models.calendar_context import CalendarMeetingContext, MeetingParticipant
 from models.structured import ActionItem, Structured
 from testing.import_isolation import stub_modules
+from utils.llm.model_config import LUNA_MODEL
 
 
 @pytest.fixture(scope='module', autouse=True)
@@ -380,6 +381,20 @@ def test_note_source_refs_are_empty_without_transcript_headers(monkeypatch):
     assert result.action_items[0].source_segment_ids == []
 
 
+def test_source_segment_refs_drop_non_string_ids():
+    """Malformed non-string ids never become valid evidence references."""
+    from utils.llm.meeting_notes_validation import validate_structured_source_segment_ids
+
+    structured = SimpleNamespace(
+        sections=[SimpleNamespace(source_segment_ids=['s1', 7])],
+        action_items=[SimpleNamespace(source_segment_ids=['s1', 7])],
+    )
+    result = validate_structured_source_segment_ids(structured, ['s1', 7])
+
+    assert result.sections[0].source_segment_ids == ['s1']
+    assert result.action_items[0].source_segment_ids == ['s1']
+
+
 def test_telegram_screen_identity_prefix_uses_real_name_not_speaker_placeholder():
     from utils.conversations.meeting_context import context_from_screen_activity
     from utils.llm.conversation_prompt_prefix import build_conversation_prompt_prefix
@@ -425,9 +440,9 @@ def test_shared_cache_requires_notes_and_memory_to_use_the_same_model(monkeypatc
         routes = load_gateway_config(prod_mode=True).route_artifacts
         notes = routes['route.conv_structure.model_config.001']
         memory = routes['route.memory_l1.model_config.001']
-        assert notes.primary.model == memory.primary.model == 'gpt-5.6-luna'
+        assert notes.primary.model == memory.primary.model == LUNA_MODEL
         assert notes.provider_options['reasoning_effort'] == 'low'
-        assert memory.primary.model == 'gpt-5.6-luna'
+        assert memory.primary.model == LUNA_MODEL
         assert conversation_prompt_prefix.shared_conversation_cache_supported() is True
     else:
         assert get_model_config('conv_structure') == get_model_config('memory_l1')

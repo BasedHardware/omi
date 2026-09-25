@@ -7,15 +7,20 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
+import 'package:omi/pages/conversations/widgets/capture_recovery_banner.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/pages/conversations/widgets/today_tasks_widget.dart';
+import 'package:omi/pages/conversations/daily_recaps_page.dart';
+import 'package:omi/pages/conversations/widgets/daily_summaries_list.dart';
 import 'package:omi/pages/home/widgets/daily_summary_card.dart';
 import 'package:omi/pages/memories/widgets/memory_graph_page.dart';
 import 'package:omi/pages/settings/daily_summary_detail_page.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/home_provider.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/ui_guidelines.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
 import 'package:omi/widgets/bottom_nav_bar.dart';
@@ -76,14 +81,16 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
             HapticFeedback.mediumImpact();
             await Future.wait([convoProvider.getInitialConversations(), _loadSummaries()]);
           },
-          color: Colors.black,
-          backgroundColor: Colors.white,
+          color: OmiColors.onAccent,
+          backgroundColor: OmiColors.accent,
           child: CustomScrollView(
             controller: _scrollController,
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
               // Live capture widget — shows when device or phone mic is recording
-              const SliverToBoxAdapter(child: ConversationCaptureWidget()),
+              const SliverToBoxAdapter(child: ConversationCaptureWidget(showsCall: true)),
+
+              const SliverToBoxAdapter(child: CaptureRecoveryBanner()),
 
               // Today section — TodayTasksWidget has its own header
               const SliverToBoxAdapter(child: TodayTasksWidget()),
@@ -94,10 +101,7 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
                   child: _buildSectionHeader(
                     context,
                     context.l10n.dailyRecaps,
-                    onViewAll: () {
-                      if (!convoProvider.showDailySummaries) convoProvider.toggleDailySummaries();
-                      context.read<HomeProvider>().setIndex(1);
-                    },
+                    onViewAll: () => routeToPage(context, const DailyRecapsPage()),
                   ),
                 ),
                 SliverToBoxAdapter(child: _buildDailyRecapsPreview(context)),
@@ -114,13 +118,7 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
                   child: _buildSectionHeader(
                     context,
                     context.l10n.conversations,
-                    onViewAll: () {
-                      // Reset the daily-summaries flag so the conversations tab
-                      // actually shows conversations (it persists from Daily
-                      // Recaps' View All otherwise).
-                      if (convoProvider.showDailySummaries) convoProvider.toggleDailySummaries();
-                      context.read<HomeProvider>().setIndex(1);
-                    },
+                    onViewAll: () => context.read<HomeProvider>().setIndex(1),
                   ),
                 ),
                 HomeConversationsPreview(conversationProvider: convoProvider),
@@ -130,10 +128,7 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
                   child: _buildSectionHeader(
                     context,
                     context.l10n.mindMap,
-                    onViewAll: () => Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => const MemoryGraphPage(trackOpenEvent: false)),
-                    ),
+                    onViewAll: () => routeToPage(context, const MemoryGraphPage(trackOpenEvent: false)),
                     buttonLabel: context.l10n.expand,
                   ),
                 ),
@@ -159,7 +154,7 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
                     child: Center(
                       child: Text(
                         context.l10n.tapPlusToStartRecording,
-                        style: const TextStyle(color: Color(0xFF8E8E93), fontSize: 15),
+                        style: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
                       ),
                     ),
                   ),
@@ -181,27 +176,17 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          GestureDetector(
-            onTap: onViewAll,
-            child: Text(
-              title,
-              style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
+          Flexible(
+            child: GestureDetector(
+              onTap: onViewAll,
+              child: Semantics(header: true, child: Text(title, style: OmiType.headline)),
             ),
           ),
           if (onViewAll != null)
-            GestureDetector(
-              onTap: onViewAll,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: Colors.grey.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                child: Text(
-                  buttonLabel ?? context.l10n.viewAll,
-                  style: TextStyle(color: Colors.grey[400], fontSize: 12, fontWeight: FontWeight.w500),
-                ),
-              ),
+            OmiButton.secondary(
+              label: buttonLabel ?? context.l10n.viewAll,
+              size: OmiButtonSize.compact,
+              onPressed: onViewAll,
             ),
         ],
       ),
@@ -226,9 +211,9 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
                 highlightColor: AppStyles.backgroundTertiary,
                 child: Container(
                   width: DailySummaryCard.width,
-                  decoration: BoxDecoration(
+                  decoration: const BoxDecoration(
                     color: AppStyles.backgroundSecondary,
-                    borderRadius: BorderRadius.circular(20),
+                    borderRadius: BorderRadius.all(Radius.circular(DailySummaryCard.radius)),
                   ),
                 ),
               ),
@@ -257,18 +242,13 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
   Widget _buildSummaryCard(BuildContext context, DailySummary summary) {
     return DailySummaryCard(
       summary: summary,
-      dateLabel: _formatDate(context, summary.date),
+      dateLabel: recapDateLabel(context, summary.date),
       onTap: () async {
         PlatformManager.instance.analytics.dailySummaryDetailViewed(summaryId: summary.id, date: summary.date);
         // Detail page pops with ``{deleted: true, summaryId}`` when the user
         // deletes from there — drop the card so the home recap row doesn't
         // linger until the next pull-to-refresh.
-        final result = await Navigator.push<dynamic>(
-          context,
-          MaterialPageRoute(
-            builder: (context) => DailySummaryDetailPage(summaryId: summary.id, summary: summary),
-          ),
-        );
+        final result = await routeToPage(context, DailySummaryDetailPage(summaryId: summary.id, summary: summary));
         if (!mounted) return;
         if (result is Map && result['deleted'] == true) {
           final deletedId = result['summaryId'] as String?;
@@ -280,35 +260,15 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
     );
   }
 
-  String _formatDate(BuildContext context, String dateStr) {
-    final parts = dateStr.split('-');
-    if (parts.length != 3) return dateStr;
-    final year = int.tryParse(parts[0]) ?? 2024;
-    final month = int.tryParse(parts[1]) ?? 1;
-    final day = int.tryParse(parts[2]) ?? 1;
-    final date = DateTime(year, month, day);
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final yesterday = today.subtract(const Duration(days: 1));
-    if (date == today) return context.l10n.today;
-    if (date == yesterday) return context.l10n.yesterday;
-    const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return '${weekdays[date.weekday - 1]}, ${months[month - 1]} $day';
-  }
-
   Widget _buildMindMapPreview(BuildContext context) {
     return GestureDetector(
       behavior: HitTestBehavior.opaque,
-      onTap: () => Navigator.push(
-        context,
-        MaterialPageRoute(builder: (context) => const MemoryGraphPage(trackOpenEvent: false)),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+      onTap: () => routeToPage(context, const MemoryGraphPage(trackOpenEvent: false)),
+      child: const Padding(
+        padding: EdgeInsets.fromLTRB(16, 12, 16, 0),
         child: ClipRRect(
-          borderRadius: BorderRadius.circular(24),
-          child: const SizedBox(
+          borderRadius: OmiRadius.xlAll,
+          child: SizedBox(
             height: 180,
             child: IgnorePointer(
               child: MemoryGraphPage(
@@ -351,10 +311,8 @@ class HomeConversationsPreview extends StatelessWidget {
                   highlightColor: AppStyles.backgroundTertiary,
                   child: Container(
                     height: 80,
-                    decoration: BoxDecoration(
-                      color: AppStyles.backgroundSecondary,
-                      borderRadius: BorderRadius.circular(24),
-                    ),
+                    decoration:
+                        const BoxDecoration(color: AppStyles.backgroundSecondary, borderRadius: OmiRadius.xlAll),
                   ),
                 ),
               ),
@@ -385,6 +343,7 @@ class HomeConversationsPreview extends StatelessWidget {
           conversation: conversation,
           date: date,
           conversationIdx: index,
+          allowSelection: false,
         );
       }),
     );
