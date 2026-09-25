@@ -56,6 +56,10 @@ struct SpeakerSegment: Identifiable {
 enum FinishConversationResult {
   case saved
   case discarded
+  /// Another rotation already holds `conversationRotationInFlight`; this caller's
+  /// finalize intent is covered by the in-flight rotation, so the result is not
+  /// an error and must not tear down the session.
+  case busy
   case error(String)
 }
 
@@ -313,6 +317,7 @@ class AppState: ObservableObject {
       } else {
         preferredMicrophoneReconnectMonitor.stop()
       }
+      publishMeetingCaptureActivity()
     }
   }
   /// A terminal live-STT failure reported by `/v4/listen`. Audio capture can
@@ -486,6 +491,12 @@ class AppState: ObservableObject {
     get { servicesCoordinator.meetingDetector }
     set { servicesCoordinator.meetingDetector = newValue }
   }
+  /// Mutes the ambient mic contribution while a dictation app holds the microphone. Lives for
+  /// one transcription session, alongside `meetingDetector`.
+  var dictationMicSuppressionMonitor: DictationMicSuppressionMonitor? {
+    get { servicesCoordinator.dictationMicSuppressionMonitor }
+    set { servicesCoordinator.dictationMicSuppressionMonitor = newValue }
+  }
   var captureGateInFlight = false
   var captureReconcilePending = false
   var pendingCoreAudioCaptureRecoveryReason: String?
@@ -495,10 +506,35 @@ class AppState: ObservableObject {
   /// transcription session. This lives above `AudioCaptureService` because each
   /// rebuild creates a fresh service (and therefore a fresh service-local watchdog).
   var silentMicRecoveryAttempts = 0
-  var currentConversationRole: MeetingConversationBoundaryPolicy.Role = .ambient
+  var currentConversationRole: MeetingConversationBoundaryPolicy.Role = .ambient {
+    didSet { publishMeetingCaptureActivity() }
+  }
+  /// A relaunch mid-meeting splits the call into two conversations; the updater defers on this.
+  func publishMeetingCaptureActivity() {
+    UpdateInstallActivity.setMeetingCaptureActive(isLiveCapturing && currentConversationRole == .meeting)
+  }
   var meetingDetectorMode: AssistantSettings.AudioRecordingMode?
   var meetingBoundaryInProgress = false
   var pendingMeetingState: Bool?
+  /// True while `finishConversation` is rotating the logical conversation.
+  /// Serializes ALL rotation callers — `handleMeetingObservation`'s boundary
+  /// flag only covers detector edges; the deferred `.meetingEnded` finalizer,
+  /// the BLE double-tap, and the Rewind "finish" action each bump
+  /// `recordingGeneration`, and two overlapping rotations abort one another into
+  /// `handleMeetingObservation`'s error path, which used to hard-stop the whole
+  /// session (SCA-526).
+  var conversationRotationInFlight = false
+  /// Deferred preferred-mic reapply requested while the capture gate was
+  /// mid-flight; consumed by the `reconcileCapture` tail.
+  var pendingPreferredMicReapplyDeviceID: AudioDeviceID?
+  var pendingPreferredMicReapplyDeviceName: String?
+  /// Last in-place preferred-mic swap, for the reapply cooldown.
+  var lastPreferredMicSwapAt: Date?
+  /// Last `freemium_threshold_reached` admission stop. The 60s trial-metadata
+  /// refresh must not clear a paywall flag an admission event just set — a
+  /// disagreement between the two backend verdicts would otherwise loop
+  /// capture stop/re-arm on every refresh tick (SCA-526).
+  var lastPaywallAdmissionStopAt: Date?
 
   /// The input device a silent-mic fallback healed onto, held for the rest of the session.
   ///
@@ -509,7 +545,9 @@ class AppState: ObservableObject {
   /// user gets an alert, then it starts over.
   var silentMicHealedDeviceID: AudioDeviceID?
   var meetingEndFinalizationInProgress = false
-  @Published var isAwaitingMeeting = false
+  @Published var isAwaitingMeeting = false {
+    didSet { publishMeetingCaptureActivity() }
+  }
 
   /// Audio is actually reaching STT — not merely that a transcription session is armed.
   ///
@@ -573,6 +611,10 @@ class AppState: ObservableObject {
   }
 
   var currentSessionId: Int64?
+  /// Privacy-bounded state of the armed ambient-capture attempt in flight
+  /// (`CaptureAttemptOutcomeState`). Non-nil exactly between arming in
+  /// `startTranscription` and terminalization in `clearTranscriptionState`.
+  var captureAttempt: CaptureAttemptOutcomeState?
   /// Serializes segment persistence so a local duplicate replacement cannot race
   /// the original mic segment's upsert in SQLite.
   var transcriptPersistenceTail: Task<Void, Never>?
@@ -841,10 +883,10 @@ class AppState: ObservableObject {
           let sessionId = self.currentSessionId
           self.stopAudioCapture()
           if let sessionId {
-            try? await TranscriptionStorage.shared.finishSession(id: sessionId, reason: .userStop)
+            try? await TranscriptionStorage.shared.finishSession(id: sessionId, reason: .appTerminated)
           }
           self.clearTranscriptionState(
-            finalizationReason: .userStop,
+            finalizationReason: .appTerminated,
             runFinalizer: false,
             allowCloudForceProcess: false,
             finishSession: false
@@ -868,10 +910,10 @@ class AppState: ObservableObject {
           let sessionId = self.currentSessionId
           self.stopAudioCapture()
           if let sessionId {
-            try? await TranscriptionStorage.shared.finishSession(id: sessionId, reason: .userStop)
+            try? await TranscriptionStorage.shared.finishSession(id: sessionId, reason: .systemSleep)
           }
           self.clearTranscriptionState(
-            finalizationReason: .userStop,
+            finalizationReason: .systemSleep,
             runFinalizer: false,
             allowCloudForceProcess: false,
             finishSession: false
@@ -952,7 +994,7 @@ class AppState: ObservableObject {
         guard let self else { return }
         switch AssistantSettings.shared.audioRecordingMode {
         case .off:
-          self.stopTranscription()
+          self.stopTranscription(finalizationReason: .recordingDisabled)
         case .always, .onlyMeetings:
           if self.isTranscribing {
             await self.reconcileCapture()

@@ -7,7 +7,9 @@ import 'package:flutter/material.dart';
 import 'package:awesome_notifications/awesome_notifications.dart';
 
 import 'package:omi/app_globals.dart';
-import 'package:omi/pages/home/page.dart';
+import 'package:omi/pages/home/home_navigation.dart';
+import 'package:omi/services/capture/capture_wedge_monitor.dart';
+import 'package:omi/utils/analytics/product_telemetry.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -47,7 +49,7 @@ class NotificationUtil {
       SendPort? sendPort = IsolateNameServer.lookupPortByName('notification_action_port');
 
       if (sendPort != null) {
-        print('Redirecting the execution to main isolate process in listening...');
+        print('Redirecting the execution to main isolate process in listening…');
         dynamic serializedData = receivedAction.toMap();
         sendPort.send(serializedData);
       }
@@ -55,16 +57,28 @@ class NotificationUtil {
   }
 
   static Future<void> onActionReceivedMethodImpl(ReceivedAction receivedAction) async {
-    if (receivedAction.payload == null || receivedAction.payload!.isEmpty) {
+    final payload = receivedAction.payload;
+    if (payload == null || payload.isEmpty) {
       return;
     }
-    await _handleAppLinkOrDeepLink(receivedAction.payload!);
+    await handleFcmDataTap(payload);
   }
 
   /// Public entry for FCM background/terminated notification taps (#5126).
-  static void handleNavigateTo(String route) {
-    // Fire-and-forget: waits for navigator readiness before pushing (terminated cold start).
-    unawaited(_handleAppLinkOrDeepLink({'navigate_to': route}));
+  static Future<bool> handleNavigateTo(String route, {RecordReference? objectId}) async {
+    final attempt = ProductTelemetry.instance.start(
+      ProductJourney.notificationOpen,
+      surface: ProductSurface.notification,
+      objectId: objectId,
+    );
+    // Wait for navigator readiness so callers can distinguish an accepted
+    // destination from a tap that was dropped during cold start.
+    final destinationReady = await _handleAppLinkOrDeepLink({'navigate_to': route});
+    attempt.complete(
+      destinationReady ? ProductOutcome.success : ProductOutcome.failure,
+      failure: destinationReady ? ProductFailure.none : ProductFailure.timeout,
+    );
+    return destinationReady;
   }
 
   /// Extract a chat/conversation deep-link from an FCM data map.
@@ -75,6 +89,30 @@ class NotificationUtil {
       return navigateTo;
     }
     return null;
+  }
+
+  static const String captureRecoveryPushType = 'capture_recovery';
+  static const String captureRecoveryRepairAction = 'repair_device';
+  static const String captureRecoveryRoute = '/settings/device';
+
+  static String? routeFromFcmData(Map<String, dynamic> data) {
+    final pushType = data['push_type'];
+    if (pushType is String && pushType.isNotEmpty) {
+      if (pushType == captureRecoveryPushType && data['action'] == captureRecoveryRepairAction) {
+        return captureRecoveryRoute;
+      }
+      return null;
+    }
+    return navigateToFromFcmData(data);
+  }
+
+  static Future<bool> handleFcmDataTap(Map<String, dynamic> data, {RecordReference? objectId}) async {
+    final route = routeFromFcmData(data);
+    if (route == null) return false;
+    if (data['push_type'] == captureRecoveryPushType) {
+      CaptureWedgeMonitor.instance.onRecoveryActioned(surface: 'push');
+    }
+    return handleNavigateTo(route, objectId: objectId);
   }
 
   /// Poll until [read] returns non-null, or [timeout] elapses.
@@ -100,24 +138,25 @@ class NotificationUtil {
     return null;
   }
 
-  static Future<void> _handleAppLinkOrDeepLink(Map<String, dynamic> payload) async {
+  static Future<bool> _handleAppLinkOrDeepLink(Map<String, dynamic> payload) async {
     WidgetsFlutterBinding.ensureInitialized();
 
     final navigateTo = payload['navigate_to'];
     if (navigateTo is! String || navigateTo.isEmpty) {
       Logger.debug('Navigate To is null');
-      return;
+      return false;
     }
 
     final navigator = await waitUntilNonNull(() => globalNavigatorKey.currentState);
     if (navigator == null) {
       Logger.debug('Navigator unavailable; dropping navigate_to=$navigateTo');
-      return;
+      return false;
     }
 
-    navigator.pushReplacement(
-      MaterialPageRoute(builder: (context) => HomePageWrapper(navigateToRoute: navigateTo)),
-    );
+    // Open the destination inside the Home already on screen (pop to it, then push the page) —
+    // never a second Home over whatever was showing (nav #3). No Home within the wait (signed
+    // out, still onboarding) drops the link rather than skipping those screens.
+    return HomeNavigation.openRoute(navigateTo, navigator: navigator);
   }
 
   static Future<void> triggerFallNotification() async {

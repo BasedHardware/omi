@@ -1,39 +1,40 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/schema.dart';
+import 'package:omi/pages/action_items/widgets/action_item_form_sheet.dart';
+import 'package:omi/pages/action_items/widgets/task_row_parts.dart';
 import 'package:omi/providers/action_items_provider.dart';
 import 'package:omi/providers/home_provider.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 /// Widget showing top 3 today's tasks with "Show all ->" button
-class TodayTasksWidget extends StatelessWidget {
+class TodayTasksWidget extends StatefulWidget {
   const TodayTasksWidget({super.key});
+
+  @override
+  State<TodayTasksWidget> createState() => _TodayTasksWidgetState();
+}
+
+class _TodayTasksWidgetState extends State<TodayTasksWidget> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      unawaited(context.read<ActionItemsProvider>().ensureHomeTodayTasksLoaded());
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
     return Consumer<ActionItemsProvider>(
       builder: (context, provider, child) {
-        // Get today's tasks - same logic as action_items_page.dart
-        final now = DateTime.now();
-        final startOfTomorrow = DateTime(now.year, now.month, now.day + 1);
-        // Filter out old tasks (older than 7 days) - same as tasks page
-        final sevenDaysAgo = now.subtract(const Duration(days: 7));
-
-        // Get incomplete tasks due today (including recent overdue) - matches tasks page logic
-        final todayTasks = provider.actionItems.where((item) {
-          if (item.completed) return false;
-          if (item.dueAt == null) return false;
-          // Skip very old overdue tasks (older than 7 days)
-          if (item.dueAt!.isBefore(sevenDaysAgo)) return false;
-          // Same as tasks page: dueDate.isBefore(startOfTomorrow)
-          return item.dueAt!.isBefore(startOfTomorrow);
-        }).toList();
-
-        // Take top 3
-        final displayTasks = todayTasks.take(3).toList();
+        final displayTasks = provider.todayPreviewTasks();
 
         // Hide if no today tasks
         if (displayTasks.isEmpty) {
@@ -46,58 +47,36 @@ class TodayTasksWidget extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header with "Today" and "Show All" button
+              // Header with "Today" and "View All"
               Padding(
-                padding: const EdgeInsets.only(top: 8, bottom: 8, right: 8),
+                padding: const EdgeInsets.only(top: 4, right: 8),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      context.l10n.today,
-                      style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-                    ),
-                    GestureDetector(
-                      onTap: () {
-                        HapticFeedback.lightImpact();
+                    Semantics(header: true, child: Text(context.l10n.today, style: OmiType.title3)),
+                    OmiButton.tertiary(
+                      label: context.l10n.viewAll,
+                      size: OmiButtonSize.compact,
+                      onPressed: () {
+                        OmiHaptics.selection();
                         // Navigate to Tasks tab (index 2). Index 1 is Conversations.
                         context.read<HomeProvider>().setIndex(2);
                       },
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: Colors.grey.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                        child: Text(
-                          context.l10n.viewAll,
-                          style: TextStyle(color: Colors.grey[400], fontSize: 12, fontWeight: FontWeight.w500),
-                        ),
-                      ),
                     ),
                   ],
                 ),
               ),
-              // Tasks list
-              if (displayTasks.isEmpty)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  child: Text(
-                    context.l10n.noTasksForToday,
-                    style: TextStyle(color: Colors.white.withValues(alpha: 0.4), fontSize: 14),
-                  ),
-                )
-              else
-                Transform.translate(
-                  offset: const Offset(-8, 0),
-                  child: Container(
-                    margin: const EdgeInsets.only(top: 12),
-                    decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(24)),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                    child: Column(
-                      children: displayTasks.map((task) => _TaskItem(task: task, provider: provider)).toList(),
-                    ),
+              Transform.translate(
+                offset: const Offset(-8, 0),
+                child: Container(
+                  margin: const EdgeInsets.only(top: 8),
+                  decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.xlAll),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  child: Column(
+                    children: displayTasks.map((task) => _TaskItem(task: task, provider: provider)).toList(),
                   ),
                 ),
+              ),
             ],
           ),
         );
@@ -114,41 +93,43 @@ class _TaskItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 10),
+    // Same row behaviour as the Tasks page: the mark completes instantly, the row opens the task.
+    return InkWell(
+      borderRadius: OmiRadius.mdAll,
+      onTap: () => showActionItemFormSheet(context, actionItem: task),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          // Checkbox
-          GestureDetector(
-            onTap: () async {
-              HapticFeedback.lightImpact();
-              await provider.updateActionItemState(task, !task.completed);
-            },
-            child: Container(
-              width: 22,
-              height: 22,
-              margin: const EdgeInsets.only(top: 2, right: 12),
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(color: task.completed ? Colors.amber : Colors.grey.shade600, width: 2),
-                color: task.completed ? Colors.amber : Colors.transparent,
+          Semantics(
+            button: true,
+            checked: task.completed,
+            label: task.completed ? context.l10n.markIncomplete : context.l10n.markComplete,
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: () async {
+                OmiHaptics.light();
+                await provider.updateActionItemState(task, !task.completed);
+              },
+              child: SizedBox(
+                width: kOmiMinTapTarget,
+                height: kOmiMinTapTarget,
+                child: Center(child: TaskCompletionMark(completed: task.completed)),
               ),
-              child: task.completed ? const Icon(Icons.check, size: 14, color: Colors.black) : null,
             ),
           ),
-          // Task text
           Expanded(
-            child: Text(
-              task.description,
-              style: TextStyle(
-                color: task.completed ? Colors.grey.shade600 : Colors.white,
-                fontSize: 15,
-                decoration: task.completed ? TextDecoration.lineThrough : null,
-                height: 1.4,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              child: Text(
+                task.description,
+                style: OmiType.subhead.copyWith(
+                  color: task.completed ? OmiColors.textTertiary : OmiColors.textPrimary,
+                  decoration: task.completed ? TextDecoration.lineThrough : null,
+                  height: 1.4,
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
             ),
           ),
         ],

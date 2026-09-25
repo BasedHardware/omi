@@ -129,31 +129,86 @@ if [ -n "$STAGED_WEB_FILES" ]; then
     else
       LOCAL_VERSION=""
     fi
-    RESOLVED_VERSION=$(git show :"$dir/package-lock.json" 2>/dev/null | python3 -c "import json,sys; d=json.load(sys.stdin); print((d.get('packages',{}).get('node_modules/prettier') or {}).get('version',''))" 2>/dev/null)
+
+    # npm-lock remains the established source of truth for npm-managed web
+    # trees. Bun's lockfile is JSON with trailing commas, so read its package
+    # tuple directly instead of parsing it as strict JSON. In both cases the
+    # resolved lock entry, rather than the installed binary alone, pins the
+    # formatter that may rewrite staged files.
+    LOCK_KIND=""
+    if git show :"$dir/package-lock.json" >/dev/null 2>&1; then
+      LOCK_KIND="package-lock.json"
+    elif git show :"$dir/bun.lock" >/dev/null 2>&1; then
+      LOCK_KIND="bun.lock"
+    fi
+    bun_lock_version() {
+      package="$1"
+      lock_path="$2"
+      if git show :"$lock_path" >/dev/null 2>&1; then
+        git show :"$lock_path" | python3 -c '
+import re, sys
+package = sys.argv[1]
+matches = re.findall(
+    rf"(?m)^\s*{re.escape(chr(34) + package + chr(34))}\s*:\s*\[\s*{re.escape(chr(34) + package + chr(64))}([^\"@]+)",
+    sys.stdin.read(),
+)
+if len(matches) == 1:
+    print(matches[0])
+elif len(matches) > 1:
+    raise SystemExit(2)
+' "$package" 2>/dev/null
+      elif [ -f "$lock_path" ]; then
+        python3 -c '
+import re, sys
+package = sys.argv[1]
+matches = re.findall(
+    rf"(?m)^\s*{re.escape(chr(34) + package + chr(34))}\s*:\s*\[\s*{re.escape(chr(34) + package + chr(64))}([^\"@]+)",
+    sys.stdin.read(),
+)
+if len(matches) == 1:
+    print(matches[0])
+elif len(matches) > 1:
+    raise SystemExit(2)
+' "$package" < "$lock_path" 2>/dev/null
+      fi
+    }
+    if [ "$LOCK_KIND" = "package-lock.json" ]; then
+      RESOLVED_VERSION=$(git show :"$dir/package-lock.json" 2>/dev/null | python3 -c "import json,sys; d=json.load(sys.stdin); print((d.get('packages',{}).get('node_modules/prettier') or {}).get('version',''))" 2>/dev/null)
+    elif [ "$LOCK_KIND" = "bun.lock" ]; then
+      RESOLVED_VERSION=$(bun_lock_version "prettier" "$dir/bun.lock")
+    else
+      RESOLVED_VERSION=""
+    fi
     if [ -n "$RESOLVED_VERSION" ]; then
       if [ -z "$LOCAL_VERSION" ] || [ "$LOCAL_VERSION" != "$RESOLVED_VERSION" ]; then
-        echo "Prettier toolchain mismatch in $dir: package-lock resolves $RESOLVED_VERSION, found ${LOCAL_VERSION:-no $dir/node_modules/.bin/prettier}." >&2
+        echo "Prettier toolchain mismatch in $dir: $LOCK_KIND resolves $RESOLVED_VERSION, found ${LOCAL_VERSION:-no $dir/node_modules/.bin/prettier}." >&2
         echo "A floating prettier reformats files into a shape CI rejects, so formatting is refused." >&2
-        echo "Run 'npm ci' in $dir, or set OMI_SKIP_WEB_FORMAT=1 to commit unformatted." >&2
+        echo "Install from the pinned $LOCK_KIND in $dir, or set OMI_SKIP_WEB_FORMAT=1 to commit unformatted." >&2
         exit 1
       fi
     else
       echo "Prettier lockfile pin missing or unresolvable in $dir: refusing to format $dir." >&2
-      echo "A missing, empty, or unparseable package-lock.json lets a floating prettier reformat files into a shape CI rejects." >&2
-      echo "Run 'npm ci' in $dir, or set OMI_SKIP_WEB_FORMAT=1 to commit unformatted." >&2
+      echo "A missing, empty, or unparseable package-lock.json or bun.lock lets a floating prettier reformat files into a shape CI rejects." >&2
+      echo "Install from the pinned lockfile in $dir, or set OMI_SKIP_WEB_FORMAT=1 to commit unformatted." >&2
       exit 1
     fi
     for plugin in prettier-plugin-tailwindcss; do
-      PLUGIN_RESOLVED=$(git show :"$dir/package-lock.json" 2>/dev/null | python3 -c "import json,sys; d=json.load(sys.stdin); print((d.get('packages',{}).get('node_modules/' + sys.argv[1]) or {}).get('version',''))" "$plugin" 2>/dev/null)
+      if [ "$LOCK_KIND" = "package-lock.json" ]; then
+        PLUGIN_RESOLVED=$(git show :"$dir/package-lock.json" 2>/dev/null | python3 -c "import json,sys; d=json.load(sys.stdin); print((d.get('packages',{}).get('node_modules/' + sys.argv[1]) or {}).get('version',''))" "$plugin" 2>/dev/null)
+      elif [ "$LOCK_KIND" = "bun.lock" ]; then
+        PLUGIN_RESOLVED=$(bun_lock_version "$plugin" "$dir/bun.lock")
+      else
+        PLUGIN_RESOLVED=""
+      fi
       PLUGIN_DECLARED=$(git show :"$dir/package.json" 2>/dev/null | sed -n "s/.*\"$plugin\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" | head -1)
       if [ -z "$PLUGIN_DECLARED" ]; then
         PLUGIN_DECLARED=$(sed -n "s/.*\"$plugin\"[[:space:]]*:[[:space:]]*\"\([^\"]*\)\".*/\1/p" "$dir/package.json" 2>/dev/null | head -1)
       fi
       if [ -z "$PLUGIN_RESOLVED" ]; then
         if [ -n "$PLUGIN_DECLARED" ]; then
-          echo "Prettier plugin toolchain unresolved in $dir: package.json declares $plugin $PLUGIN_DECLARED, package-lock.json has no entry for it." >&2
+          echo "Prettier plugin toolchain unresolved in $dir: package.json declares $plugin $PLUGIN_DECLARED, $LOCK_KIND has no entry for it." >&2
           echo "Prettier auto-loads any installed plugin, so a stale or missing one reformats files into a shape CI rejects; formatting is refused." >&2
-          echo "Run 'npm ci' in $dir, or set OMI_SKIP_WEB_FORMAT=1 to commit unformatted." >&2
+          echo "Install from the pinned lockfile in $dir, or set OMI_SKIP_WEB_FORMAT=1 to commit unformatted." >&2
           exit 1
         fi
         continue
@@ -165,9 +220,9 @@ if [ -n "$STAGED_WEB_FILES" ]; then
         PLUGIN_LOCAL=""
       fi
       if [ -z "$PLUGIN_LOCAL" ] || [ "$PLUGIN_LOCAL" != "$PLUGIN_RESOLVED" ]; then
-        echo "Prettier plugin toolchain mismatch in $dir: package-lock resolves $plugin $PLUGIN_RESOLVED, found ${PLUGIN_LOCAL:-no $dir/node_modules/$plugin}." >&2
+        echo "Prettier plugin toolchain mismatch in $dir: $LOCK_KIND resolves $plugin $PLUGIN_RESOLVED, found ${PLUGIN_LOCAL:-no $dir/node_modules/$plugin}." >&2
         echo "A missing or stale plugin reformats files into a shape CI rejects, so formatting is refused." >&2
-        echo "Run 'npm ci' in $dir, or set OMI_SKIP_WEB_FORMAT=1 to commit unformatted." >&2
+        echo "Install from the pinned lockfile in $dir, or set OMI_SKIP_WEB_FORMAT=1 to commit unformatted." >&2
         exit 1
       fi
     done

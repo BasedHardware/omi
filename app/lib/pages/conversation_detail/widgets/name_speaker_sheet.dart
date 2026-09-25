@@ -8,16 +8,48 @@ import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/settings/people.dart';
+import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/providers/people_provider.dart';
 import 'package:omi/widgets/person_chip.dart';
+import 'package:omi/ui/ui.dart';
+
+/// Opens the sheet that names the speaker of [segmentId] (a person, a new person, or "You"),
+/// titled with the conversation's dense speaker number.
+Future<void> showNameSpeakerSheet(
+  BuildContext context, {
+  required int speakerId,
+  required String segmentId,
+  required List<TranscriptSegment> segments,
+  required Future<bool> Function(
+          int speakerId, String personId, String personName, List<String> segmentIds, bool applyToSpeaker)
+      onSpeakerAssigned,
+  SpeakerLabelSuggestionEvent? suggestion,
+  bool defaultApplyToSpeaker = false,
+}) {
+  return showOmiSheet<void>(
+    context: context,
+    title: context.l10n.tagSpeaker(TranscriptSegment.getDisplaySpeakerId(speakerId, segments)),
+    builder: (_) => NameSpeakerBottomSheet(
+      speakerId: speakerId,
+      segmentId: segmentId,
+      segments: segments,
+      suggestion: suggestion,
+      defaultApplyToSpeaker: defaultApplyToSpeaker,
+      onSpeakerAssigned: onSpeakerAssigned,
+    ),
+  );
+}
 
 class NameSpeakerBottomSheet extends StatefulWidget {
   final int speakerId;
   final String segmentId;
-  final Function(int speakerId, String personId, String personName, List<String> segmentIds) onSpeakerAssigned;
+  final Future<bool> Function(
+          int speakerId, String personId, String personName, List<String> segmentIds, bool applyToSpeaker)
+      onSpeakerAssigned;
   final List<TranscriptSegment> segments;
   final SpeakerLabelSuggestionEvent? suggestion;
+  final bool defaultApplyToSpeaker;
 
   const NameSpeakerBottomSheet({
     super.key,
@@ -26,6 +58,7 @@ class NameSpeakerBottomSheet extends StatefulWidget {
     required this.onSpeakerAssigned,
     required this.segments,
     this.suggestion,
+    this.defaultApplyToSpeaker = false,
   });
 
   @override
@@ -38,8 +71,10 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
   String selectedPersonName = '';
   List<String> _selectedSegmentIds = [];
   bool _isSegmentsExpanded = false;
+  bool _applyToSpeaker = false;
   bool allowSave = false;
   bool loading = false;
+  bool _saveFailed = false;
   String? speakerTextSample;
   bool _isCreatingNewPerson = false;
   String? _duplicateNameError;
@@ -78,8 +113,15 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
   @override
   void initState() {
     super.initState();
-    _selectedSegmentIds.add(widget.segmentId);
+    _applyToSpeaker = widget.defaultApplyToSpeaker;
+    final sameSpeaker = widget.segments.where((s) => s.speakerId == widget.speakerId);
+    _selectedSegmentIds = _applyToSpeaker ? sameSpeaker.map((s) => s.id).toList() : [widget.segmentId];
+    if (!_selectedSegmentIds.contains(widget.segmentId)) {
+      _selectedSegmentIds.add(widget.segmentId);
+    }
+    _isSegmentsExpanded = _applyToSpeaker && sameSpeaker.any((s) => s.id != widget.segmentId);
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
       final peopleProvider = context.read<PeopleProvider>();
       final people = peopleProvider.people;
       final userName = SharedPreferencesUtil().givenName;
@@ -98,6 +140,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
           _controller.text = suggestion.personName;
           setAllowSave(true);
         });
+        return;
       }
 
       // Predict selected person
@@ -149,38 +192,37 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
     final people = peopleProvider.people;
     final userName = SharedPreferencesUtil().givenName;
 
-    return Padding(
-      padding: MediaQuery.of(context).viewInsets,
-      child: SingleChildScrollView(
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              loading
-                  ? const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 40),
-                      child: Center(child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation(Colors.white))),
-                    )
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildHeader(),
-                        const SizedBox(height: 16),
-                        if (_isCreatingNewPerson)
-                          _buildNewPersonInput(people, userName)
-                        else
-                          _buildPersonSelector(people, userName),
-                        const SizedBox(height: 16),
-                        _buildUntaggedSegments(),
-                        const SizedBox(height: 8),
-                        _buildSaveButton(),
-                        const SizedBox(height: 28),
-                      ],
-                    ),
-            ],
-          ),
+    return SingleChildScrollView(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: OmiSpacing.xs),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            loading
+                ? const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 40),
+                    child: Center(child: OmiSpinner()),
+                  )
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildHeader(),
+                      const SizedBox(height: 16),
+                      if (_isCreatingNewPerson)
+                        _buildNewPersonInput(people, userName)
+                      else
+                        _buildPersonSelector(people, userName),
+                      const SizedBox(height: 16),
+                      _buildUntaggedSegments(),
+                      const SizedBox(height: 8),
+                      if (_saveFailed)
+                        Text(context.l10n.somethingWentWrong, style: const TextStyle(color: Colors.white70)),
+                      _buildSaveButton(),
+                      const SizedBox(height: OmiSpacing.md),
+                    ],
+                  ),
+          ],
         ),
       ),
     );
@@ -188,27 +230,13 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
 
   Widget _buildHeader() {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Expanded(
-              child: Text(
-                context.l10n.tagSpeaker(TranscriptSegment.getDisplaySpeakerId(widget.speakerId, widget.segments)),
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-            ),
-            IconButton(
-              icon: const Icon(Icons.close, color: Colors.grey),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-          ],
-        ),
         if (speakerTextSample != null && speakerTextSample!.isNotEmpty) ...[
           const SizedBox(height: 8),
           Text(
             speakerTextSample!,
-            style: TextStyle(color: Colors.grey.shade400, fontStyle: FontStyle.italic),
+            style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, fontStyle: FontStyle.italic),
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
           ),
@@ -251,7 +279,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
             filled: true,
             contentPadding: const EdgeInsets.symmetric(horizontal: 16),
             fillColor: Colors.grey[900],
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide.none),
+            border: const OutlineInputBorder(borderRadius: OmiRadius.smAll, borderSide: BorderSide.none),
             hintStyle: const TextStyle(color: Colors.grey),
             errorText: _duplicateNameError,
           ),
@@ -338,34 +366,32 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
   }
 
   Widget _buildUntaggedSegments() {
-    final untaggedSegments = widget.segments
-        .where((s) => s.speakerId == widget.speakerId && s.personId == null && !s.isUser && s.id != widget.segmentId)
-        .toList();
+    final untaggedSegments =
+        widget.segments.where((s) => s.speakerId == widget.speakerId && s.id != widget.segmentId).toList();
     final selectedUntaggedSegmentsCount = untaggedSegments.where((s) => _selectedSegmentIds.contains(s.id)).length;
 
     return Column(
       children: [
         CheckboxListTile(
           title: Text(
-            _isSegmentsExpanded
+            _isSegmentsExpanded && untaggedSegments.isNotEmpty
                 ? context.l10n.tagOtherSegmentsFromSpeaker(selectedUntaggedSegmentsCount, untaggedSegments.length)
-                : context.l10n.tagOtherSegments,
-            style: TextStyle(fontSize: 14, color: untaggedSegments.isNotEmpty ? Colors.white : Colors.grey),
+                : context.l10n.tagSpeakerIncludingLaterSpeech,
+            style: OmiType.footnote,
           ),
-          value: _isSegmentsExpanded,
-          onChanged: untaggedSegments.isNotEmpty
-              ? (value) {
-                  setState(() {
-                    _isSegmentsExpanded = value ?? false;
-                    if (_isSegmentsExpanded) {
-                      _selectedSegmentIds = {..._selectedSegmentIds, ...untaggedSegments.map((s) => s.id)}.toList();
-                    } else {
-                      final untaggedIds = untaggedSegments.map((s) => s.id).toSet();
-                      _selectedSegmentIds.removeWhere((id) => untaggedIds.contains(id));
-                    }
-                  });
-                }
-              : null,
+          value: _applyToSpeaker,
+          onChanged: (value) {
+            setState(() {
+              _applyToSpeaker = value ?? false;
+              _isSegmentsExpanded = _applyToSpeaker && untaggedSegments.isNotEmpty;
+              if (_applyToSpeaker) {
+                _selectedSegmentIds = {..._selectedSegmentIds, ...untaggedSegments.map((s) => s.id)}.toList();
+              } else {
+                final untaggedIds = untaggedSegments.map((s) => s.id).toSet();
+                _selectedSegmentIds.removeWhere((id) => untaggedIds.contains(id));
+              }
+            });
+          },
           controlAffinity: ListTileControlAffinity.leading,
           dense: true,
           activeColor: Theme.of(context).colorScheme.secondary,
@@ -373,17 +399,16 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
           contentPadding: EdgeInsets.zero,
           secondary: InkWell(
             onTap: () {
-              Navigator.of(context).push(MaterialPageRoute(builder: (context) => const UserPeoplePage()));
+              routeToPage(context, const UserPeoplePage());
             },
             child: Padding(
               padding: const EdgeInsets.only(right: 8.0),
               child: Text(
                 context.l10n.managePeople,
-                style: const TextStyle(
-                  color: Colors.white70,
-                  fontSize: 14,
+                style: OmiType.footnote.copyWith(
+                  color: OmiColors.textSecondary,
                   decoration: TextDecoration.underline,
-                  decorationColor: Colors.white70,
+                  decorationColor: OmiColors.textSecondary,
                 ),
               ),
             ),
@@ -405,10 +430,11 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
                         segment.text,
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
-                        style: const TextStyle(fontSize: 12, color: Colors.white),
+                        style: OmiType.caption,
                       ),
                       const SizedBox(height: 4),
-                      Text(segment.getTimestampString(), style: TextStyle(fontSize: 10, color: Colors.grey.shade400)),
+                      Text(OmiDuration.offset(segment.start),
+                          style: OmiType.caption.copyWith(color: OmiColors.textTertiary)),
                     ],
                   ),
                   value: _selectedSegmentIds.contains(segment.id),
@@ -418,6 +444,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
                         _selectedSegmentIds.add(segment.id);
                       } else {
                         _selectedSegmentIds.remove(segment.id);
+                        _applyToSpeaker = false;
                       }
                     });
                   },
@@ -434,41 +461,45 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
   }
 
   Widget _buildSaveButton() {
-    return SizedBox(
-      width: double.infinity,
-      child: ElevatedButton(
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.white,
-          foregroundColor: Colors.black,
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-        ),
-        onPressed: !allowSave || loading
-            ? null
-            : () async {
-                setLoading(true);
-                String personIdToAssign = selectedPerson;
-                String personNameToAssign = selectedPersonName;
+    return OmiButton(
+      label: context.l10n.save,
+      expand: true,
+      isLoading: loading,
+      onPressed: !allowSave || loading
+          ? null
+          : () async {
+              setLoading(true);
+              String personIdToAssign = selectedPerson;
+              String personNameToAssign = selectedPersonName;
 
-                if (_controller.text.isNotEmpty && selectedPerson.isEmpty) {
-                  personNameToAssign =
-                      _controller.text.toString()[0].toUpperCase() + _controller.text.toString().substring(1);
-                  personIdToAssign = ''; // Indicates a new person
-                }
+              if (_controller.text.isNotEmpty && selectedPerson.isEmpty) {
+                personNameToAssign =
+                    _controller.text.toString()[0].toUpperCase() + _controller.text.toString().substring(1);
+                personIdToAssign = ''; // Indicates a new person
+              }
 
-                await widget.onSpeakerAssigned(
+              bool saved = false;
+              try {
+                saved = await widget.onSpeakerAssigned(
                   widget.speakerId,
                   personIdToAssign,
                   personNameToAssign,
-                  _selectedSegmentIds,
+                  List<String>.of(_selectedSegmentIds),
+                  _applyToSpeaker,
                 );
+              } catch (_) {
+                saved = false;
+              }
 
-                setLoading(false);
-                if (mounted) {
+              setLoading(false);
+              if (mounted) {
+                if (saved) {
                   Navigator.pop(context);
+                } else {
+                  setState(() => _saveFailed = true);
                 }
-              },
-        child: Center(child: Text(context.l10n.save)),
-      ),
+              }
+            },
     );
   }
 }

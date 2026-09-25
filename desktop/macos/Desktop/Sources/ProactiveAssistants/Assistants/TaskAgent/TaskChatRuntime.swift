@@ -364,10 +364,12 @@ enum TaskChatRuntime {
     guard let adapterId = AgentRuntimeProcess.adapterId(forHarnessMode: harness) else {
       throw BridgeError.agentError("Unknown AI runtime mode: \(harness)")
     }
-    let usesNativeModelChoice = harness == "hermes" || harness == "openclaw"
     return QueryRouting(
       adapterId: adapterId,
-      modelProfile: usesNativeModelChoice ? nil : ModelQoS.Claude.chat,
+      modelProfile: AgentRuntimeRouting.defaultModelProfile(
+        harnessMode: harness,
+        chatBridgeMode: preference.rawValue
+      ),
       workingDirectory: workspacePath.isEmpty
         ? AgentRuntimeProcess.defaultArtifactsDirectory()
         : workspacePath,

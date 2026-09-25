@@ -32,7 +32,7 @@ extension ChatProvider {
 
   func automationChatSnapshot(limit: Int) -> [String: String] {
     let boundedLimit = max(1, limit)
-    let runtimeChatId = mainChatRuntimeChatId(sessionId: currentSessionId)
+    let runtimeChatId = mainChatRuntimeChatId()
     let rows: [[String: String]] = messages.suffix(boundedLimit).map { message in
       [
         "id": message.id,
@@ -44,6 +44,7 @@ extension ChatProvider {
         "resources_json": ChatResource.encodeResourcesForPersistence(message.displayResources) ?? "[]",
         "has_metadata": message.metadata != nil ? "true" : "false",
         "models_used": message.metadata?.modelsUsed.joined(separator: ",") ?? "",
+        "provider_targets": message.metadata?.providerTargets.joined(separator: ",") ?? "",
       ]
     }
     let messagesJSON: String
@@ -55,7 +56,6 @@ extension ChatProvider {
       messagesJSON = "[]"
     }
     var detail: [String: String] = [
-      "chat_session_id": currentSessionId ?? "",
       "runtime_chat_id": runtimeChatId,
       "is_sending": isSending ? "true" : "false",
       "is_streaming": messages.contains(where: { $0.isStreaming }) ? "true" : "false",

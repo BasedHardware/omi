@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import 'package:omi/pages/memories/widgets/memory_graph_page.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 class OnboardingKnowledgeGraphStep extends StatelessWidget {
@@ -11,42 +12,34 @@ class OnboardingKnowledgeGraphStep extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      color: Colors.black,
+      color: OmiColors.surface0,
       width: double.infinity,
       height: double.infinity,
       child: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+          // Clear of the progress dots and back button drawn over the top of every step.
+          padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, 60, OmiSpacing.xl, OmiSpacing.xl),
           child: Column(
             children: [
-              const SizedBox(height: 12),
-              Text(
-                context.l10n.onboardingWhatIKnowAboutYouTitle,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 30,
-                  fontWeight: FontWeight.bold,
-                  height: 1.2,
-                  fontFamily: 'Manrope',
+              Semantics(
+                header: true,
+                child: Text(
+                  context.l10n.onboardingWhatIKnowAboutYouTitle,
+                  textAlign: TextAlign.center,
+                  style: OmiType.title1.copyWith(height: 1.2),
                 ),
               ),
               const SizedBox(height: 10),
               Text(
                 context.l10n.onboardingWhatIKnowAboutYouDescription,
                 textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.white.withValues(alpha: 0.65),
-                  fontSize: 16,
-                  height: 1.4,
-                  fontFamily: 'Manrope',
-                ),
+                style: OmiType.callout.copyWith(color: OmiColors.textSecondary, height: 1.4),
               ),
-              const SizedBox(height: 20),
-              Expanded(
+              const SizedBox(height: OmiSpacing.lg),
+              const Expanded(
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(24),
-                  child: const MemoryGraphPage(
+                  borderRadius: OmiRadius.xlAll,
+                  child: MemoryGraphPage(
                     embedded: true,
                     trackOpenEvent: false,
                     showAppBar: false,
@@ -55,23 +48,15 @@ class OnboardingKnowledgeGraphStep extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(height: 20),
-              SizedBox(
-                width: double.infinity,
-                height: 56,
-                child: ElevatedButton(
-                  onPressed: onContinue,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: Colors.black,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
-                    elevation: 0,
-                  ),
-                  child: Text(
-                    context.l10n.continueAction,
-                    style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, fontFamily: 'Manrope'),
-                  ),
-                ),
+              const SizedBox(height: OmiSpacing.lg),
+              OmiButton(
+                key: const Key('onboarding_knowledge_graph_continue'),
+                label: context.l10n.continueButton,
+                expand: true,
+                onPressed: () {
+                  OmiHaptics.selection();
+                  onContinue();
+                },
               ),
             ],
           ),

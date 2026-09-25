@@ -345,9 +345,17 @@ def sync_apple_health_data(data: AppleHealthSyncData, uid: str = Depends(auth.ge
 
     Unlike other integrations that use OAuth, Apple Health data is pushed from the device.
     """
-    # Build the health data structure
+    # Build the health data structure. Every category starts empty: the write below
+    # merges into the stored map, so a category the device no longer sends (a week
+    # without workouts, a revoked HealthKit category) would otherwise keep being
+    # served, stamped with a fresh last_synced.
     health_data: Dict[str, Any] = {
         'period_days': data.period_days,
+        'steps': {},
+        'sleep': {},
+        'heart_rate': {},
+        'active_energy': {},
+        'workouts': [],
     }
 
     # Steps
@@ -403,7 +411,7 @@ def sync_apple_health_data(data: AppleHealthSyncData, uid: str = Depends(auth.ge
         "status": "ok",
         "app_key": "apple_health",
         "synced_at": integration_data['last_synced'],
-        "data_types_synced": list(health_data.keys()),
+        "data_types_synced": [key for key, value in health_data.items() if value or key == 'period_days'],
     }
 
 

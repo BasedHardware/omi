@@ -112,6 +112,9 @@ user-facing controls; expected labels must never contain user content.
     state.chatFirstRoute: goals
 ```
 
+Do not wait on `state.selectedTabIndex`. The chat-first snapshot always reports
+that field as nil, so the wait never becomes true.
+
 Use `wait:` after bridge steps when a state or trace must settle before the next
 step. Keep automated checks to facts the harness can measure directly: state,
 traces, logs, timing, and AX text. The harness does not score screenshot quality;

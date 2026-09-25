@@ -2,25 +2,45 @@ import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
+import 'package:omi/widgets/speaker_label.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message_event.dart';
+import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversation_detail/widgets/name_speaker_sheet.dart';
+import 'package:omi/pages/conversations/widgets/capture_recovery_banner.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
+import 'package:omi/providers/home_provider.dart';
+import 'package:omi/providers/people_provider.dart';
+import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/services/wals/wal.dart';
-import 'package:omi/widgets/confirmation_dialog.dart';
 import 'package:omi/widgets/conversation_photo_image.dart';
 import 'package:omi/widgets/media_viewer_page.dart';
 import 'package:omi/widgets/transcript.dart';
+import 'package:omi/services/sockets/listen_client_state.dart';
+import 'package:omi/ui/ui.dart';
+import 'package:omi/pages/conversations/widgets/live_capture_card.dart';
+import 'package:omi/widgets/capture_sources.dart';
+import 'package:omi/widgets/photos_grid.dart';
+
+import 'package:omi/pages/conversations/capture_state_labels.dart';
+
+import 'capture_state_header.dart';
+
+/// Switch the home IndexedStack to Conversations *before* popping the capturing
+/// route so the user lands on that tab with no flash of the previous page.
+void switchHomeToConversationsTab(BuildContext context) {
+  context.read<HomeProvider>().setIndex(1);
+}
 
 class ConversationCapturingPage extends StatefulWidget {
   final String? topConversationId;
@@ -31,23 +51,16 @@ class ConversationCapturingPage extends StatefulWidget {
   State<ConversationCapturingPage> createState() => _ConversationCapturingPageState();
 }
 
-class _ConversationCapturingPageState extends State<ConversationCapturingPage> with TickerProviderStateMixin {
+class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
   final TranscriptScrollStateStore _transcriptScrollStateStore = TranscriptScrollStateStore();
 
   final scaffoldKey = GlobalKey<ScaffoldState>();
-  TabController? _controller;
-  late bool showSummarizeConfirmation;
-  late AnimationController _animationController;
-  bool _isMuted = false;
+  bool _mutePending = false;
 
   @override
   void initState() {
-    _controller = TabController(length: 2, vsync: this, initialIndex: 0);
-    _controller!.addListener(() => setState(() {}));
-    showSummarizeConfirmation = SharedPreferencesUtil().showSummarizeConfirmation;
-    _animationController = AnimationController(vsync: this, duration: const Duration(milliseconds: 1000))
-      ..repeat(reverse: true);
     super.initState();
+    ListenClientState.instance.capturePageOpened();
   }
 
   TranscriptScrollState _scrollStateFor(String sessionId) {
@@ -55,345 +68,151 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
   }
 
   Future<void> _toggleMute(CaptureProvider provider) async {
-    if (_isMuted) {
-      // Unmute - resume recording
+    if (_mutePending) return;
+    setState(() => _mutePending = true);
+    try {
       HapticFeedback.mediumImpact();
-      setState(() {
-        _isMuted = false;
-      });
-
-      if (provider.havingRecordingDevice) {
-        // Device recording (Omi device)
-        await provider.resumeDeviceRecording();
+      final phone = provider.liveCaptureSource == 'phone';
+      if (provider.isPaused) {
+        await provider.resumeCapture();
+        if (phone) PlatformManager.instance.analytics.phoneMicRecordingStarted();
       } else {
-        // Phone mic
-        await provider.streamRecording();
-        PlatformManager.instance.analytics.phoneMicRecordingStarted();
+        await provider.pauseCapture();
+        if (phone) PlatformManager.instance.analytics.phoneMicRecordingStopped();
       }
-    } else {
-      // Mute - pause recording with interesting haptic
-      HapticFeedback.heavyImpact();
-      await Future.delayed(const Duration(milliseconds: 80));
-      HapticFeedback.lightImpact();
-      setState(() {
-        _isMuted = true;
-      });
-
-      if (provider.havingRecordingDevice) {
-        // Device recording (Omi device)
-        await provider.pauseDeviceRecording();
-      } else {
-        // Phone mic
-        await provider.stopStreamRecording();
-        PlatformManager.instance.analytics.phoneMicRecordingStopped();
-      }
+    } catch (_) {
+      if (mounted) OmiFeedback.error(context, context.l10n.somethingWentWrong);
+    } finally {
+      if (mounted) setState(() => _mutePending = false);
     }
   }
 
   @override
   void dispose() {
-    _controller?.dispose();
-    _animationController.dispose();
+    ListenClientState.instance.capturePageClosed();
     super.dispose();
   }
 
-  int convertDateTimeToSeconds(DateTime dateTime) {
-    DateTime now = DateTime.now();
-    Duration difference = now.difference(dateTime);
+  @visibleForTesting
+  Future<void> debugStopConversation(CaptureProvider provider) => _stopConversation(provider);
 
-    return difference.inSeconds;
-  }
-
-  String convertToHHMMSS(int seconds) {
-    int hours = seconds ~/ 3600;
-    int minutes = (seconds % 3600) ~/ 60;
-    int remainingSeconds = seconds % 60;
-
-    String twoDigits(int n) => n.toString().padLeft(2, '0');
-
-    return '${twoDigits(hours)}:${twoDigits(minutes)}:${twoDigits(remainingSeconds)}';
-  }
-
+  /// Finish: the one stop. No confirmation: Finish is explicit, and it processes the conversation
+  /// (a phone recording stops first; a pendant it paused resumes afterwards).
   Future<void> _stopConversation(CaptureProvider provider) async {
-    if (provider.segments.isNotEmpty || provider.photos.isNotEmpty) {
-      // Helper function to stop recording and process conversation
-      Future<void> stopRecordingAndProcess() async {
-        // Stop any active recording (phone mic)
-        if (provider.recordingState == RecordingState.record) {
-          await provider.stopStreamRecording();
-        }
-        // Then process the conversation
-        provider.forceProcessingCurrentConversation();
-      }
+    await provider.finishCapture();
+    if (!mounted) return;
+    switchHomeToConversationsTab(context);
+    Navigator.of(context).pop();
+  }
 
-      if (!showSummarizeConfirmation) {
-        await stopRecordingAndProcess();
-        if (mounted) {
-          Navigator.of(context).pop();
-        }
-        return;
-      }
-      showDialog(
-        context: context,
-        builder: (context) {
-          return StatefulBuilder(
-            builder: (context, setState) {
-              final timeoutDuration = SharedPreferencesUtil().conversationSilenceDuration;
-              String timeoutText;
-              if (timeoutDuration == -1) {
-                timeoutText = context.l10n.conversationEndsManually;
-              } else {
-                final minutes = timeoutDuration ~/ 60;
-                timeoutText = context.l10n.conversationSummarizedAfterMinutes(minutes, minutes == 1 ? '' : 's');
-              }
-
-              return ConfirmationDialog(
-                title: context.l10n.finishedConversation,
-                description: "${context.l10n.stopRecordingConfirmation}\n\n${context.l10n.hints(timeoutText)}",
-                checkboxValue: !showSummarizeConfirmation,
-                checkboxText: context.l10n.dontAskAgain,
-                onCheckboxChanged: (value) {
-                  setState(() {
-                    showSummarizeConfirmation = !value;
-                  });
-                },
-                onCancel: () {
-                  Navigator.of(context).pop();
-                },
-                onConfirm: () async {
-                  SharedPreferencesUtil().showSummarizeConfirmation = showSummarizeConfirmation;
-                  await stopRecordingAndProcess();
-                  if (context.mounted) {
-                    Navigator.of(context).pop();
-                    Navigator.of(context).pop();
-                  }
-                },
-              );
-            },
-          );
-        },
-      );
-    }
+  /// The live page's state, resolved exactly as the conversation list's capture card resolves it
+  /// (`liveCaptureDisplayState`): an audio interruption, a mute or a call is Paused, a terminal
+  /// transcription failure or offline buffering is named as such, otherwise Listening.
+  CaptureDisplayState _displayState(CaptureProvider provider, {required bool capturingPhotos}) {
+    return liveCaptureDisplayState(
+      audioInterrupted: provider.recordingState == RecordingState.interrupted,
+      paused: provider.isPaused || provider.isCallActive,
+      transcriptionUnavailable: provider.terminalTranscriptionFailure != null,
+      bufferingFor: provider.customSttBufferingDuration,
+      capturingPhotos: capturingPhotos,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Consumer2<CaptureProvider, DeviceProvider>(
       builder: (context, provider, deviceProvider, child) {
-        final effectivelyMuted = _isMuted || provider.isCallActive;
+        final effectivelyMuted = provider.isPaused || provider.isCallActive;
+        final connectivity = context.watch<ConnectivityProvider>();
+        final usage = context.watch<UsageProvider>();
+        final photoChannelActive = _photoChannelActive(deviceProvider.connectedDevice);
+        final transcriptionInterrupted = provider.recordingState == RecordingState.interrupted;
         final transcriptSessionId =
             provider.activeCaptureSessionId ?? widget.topConversationId ?? 'pending-live-capture';
         final transcriptScrollState = _scrollStateFor(transcriptSessionId);
-        return PopScope(
-          canPop: true,
-          child: Scaffold(
-            key: scaffoldKey,
-            backgroundColor: Theme.of(context).colorScheme.primary,
-            appBar: AppBar(
-              automaticallyImplyLeading: false,
-              backgroundColor: Theme.of(context).colorScheme.primary,
-              title: Row(
-                mainAxisSize: MainAxisSize.max,
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  IconButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      return;
-                    },
-                    icon: const Icon(Icons.arrow_back_rounded, size: 24.0),
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    provider.photos.isNotEmpty
-                        ? "📸"
-                        : effectivelyMuted
-                            ? "🔇"
-                            : "🎙️",
-                  ),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: Text(
-                      provider.photos.isNotEmpty
-                          ? 'Capturing'
-                          : (effectivelyMuted ? context.l10n.muted : context.l10n.listening),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            body: Column(
-              children: [
-                Expanded(
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 0),
-                    child: TabBarView(
-                      controller: _controller,
-                      physics: const NeverScrollableScrollPhysics(),
-                      children: [
-                        // Transcripts, photos + inline WAL safety indicator
-                        Column(
-                          children: [
-                            _buildUnsyncedWalIndicator(provider.unsyncedSessionWals, provider.inFlightAudioSeconds),
-                            Expanded(
-                              child: provider.segments.isEmpty && provider.photos.isEmpty
-                                  ? Center(
-                                      child: Padding(
-                                        padding: const EdgeInsets.only(top: 50.0),
-                                        child: Text(context.l10n.waitingForTranscriptOrPhotos),
-                                      ),
-                                    )
-                                  : provider.photos.isNotEmpty
-                                      ? _buildChronologicalTimeline(provider, transcriptSessionId,
-                                          transcriptScrollState, widget.topConversationId ?? provider.topConversationId)
-                                      : getTranscriptWidget(
-                                          false,
-                                          provider.segments,
-                                          provider.photos,
-                                          deviceProvider.connectedDevice,
-                                          bottomMargin: 0,
-                                          suggestions: provider.suggestionsBySegmentId,
-                                          taggingSegmentIds: provider.taggingSegmentIds,
-                                          transcriptKey: ValueKey('live-transcript-$transcriptSessionId'),
-                                          followLatest: true,
-                                          scrollState: transcriptScrollState,
-                                          jumpToLatestButtonBottom: MediaQuery.paddingOf(context).bottom + 84,
-                                          contentVersion: provider.segmentsPhotosVersion,
-                                          onAcceptSuggestion: (suggestion) {
-                                            provider.assignSpeakerToConversation(
-                                              suggestion.speakerId,
-                                              suggestion.personId,
-                                              suggestion.personName,
-                                              [suggestion.segmentId],
-                                            );
-                                          },
-                                          editSegment: (segmentId, speakerId) {
-                                            final connectivityProvider = Provider.of<ConnectivityProvider>(
-                                              context,
-                                              listen: false,
-                                            );
-                                            if (!connectivityProvider.isConnected) {
-                                              ConnectivityProvider.showNoInternetDialog(context);
-                                              return;
-                                            }
-                                            showModalBottomSheet(
-                                              context: context,
-                                              isScrollControlled: true,
-                                              backgroundColor: Colors.black,
-                                              shape: const RoundedRectangleBorder(
-                                                borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                                              ),
-                                              builder: (context) {
-                                                final suggestion = provider.suggestionsBySegmentId.values.firstWhere(
-                                                  (s) => s.speakerId == speakerId,
-                                                  orElse: () => SpeakerLabelSuggestionEvent.empty(),
-                                                );
-                                                return NameSpeakerBottomSheet(
-                                                  speakerId: speakerId,
-                                                  segmentId: segmentId,
-                                                  segments: provider.segments,
-                                                  suggestion: suggestion,
-                                                  onSpeakerAssigned:
-                                                      (speakerId, personId, personName, segmentIds) async {
-                                                    await provider.assignSpeakerToConversation(
-                                                      speakerId,
-                                                      personId,
-                                                      personName,
-                                                      segmentIds,
-                                                    );
-                                                  },
-                                                );
-                                              },
-                                            );
-                                          },
-                                        ),
-                            ),
-                          ],
-                        ),
-                        // Summary Tab
-                        Center(
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 32.0,
-                            ).copyWith(bottom: 50.0), // Adjust padding
-                            child: Text(
-                              provider.segments.isEmpty && provider.photos.isEmpty
-                                  ? context.l10n.noSummaryYet
-                                  : _getTimeoutDisplayText(context),
-                              textAlign: TextAlign.center,
-                              style: TextStyle(fontSize: provider.segments.isEmpty ? 16 : 22),
+        return Scaffold(
+          key: scaffoldKey,
+          backgroundColor: OmiColors.surface0,
+          appBar: ConversationStateAppBar(
+            state: _displayState(provider, capturingPhotos: provider.photos.isNotEmpty),
+            bufferingFor: provider.customSttBufferingDuration,
+            sourceLabel: switch (provider.liveCaptureSource) {
+              null => null,
+              'phone' => context.l10n.captureSourcePhoneMic,
+              final source => CaptureSources.label(context, source),
+            },
+          ),
+          body: Column(
+            children: [
+              const CaptureRecoveryBanner(),
+              _buildUnsyncedWalIndicator(provider),
+              Expanded(
+                child: provider.segments.isEmpty && provider.photos.isEmpty
+                    ? Center(
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(OmiSpacing.xxl, 50, OmiSpacing.xxl, 0),
+                          child: Text(
+                            textAlign: TextAlign.center,
+                            style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+                            _liveCaptureEmptyStateText(
+                              provider,
+                              connectivity: connectivity,
+                              usage: usage,
+                              photoChannelActive: photoChannelActive,
+                              transcriptionInterrupted: transcriptionInterrupted,
                             ),
                           ),
+                        ),
+                      )
+                    : provider.photos.isNotEmpty
+                        ? _buildChronologicalTimeline(provider, transcriptSessionId, transcriptScrollState,
+                            widget.topConversationId ?? provider.topConversationId)
+                        : getTranscriptWidget(
+                            false,
+                            provider.segments,
+                            provider.photos,
+                            deviceProvider.connectedDevice,
+                            bottomMargin: 0,
+                            taggingSegmentIds: provider.taggingSegmentIds,
+                            transcriptKey: ValueKey('live-transcript-$transcriptSessionId'),
+                            followLatest: true,
+                            scrollState: transcriptScrollState,
+                            jumpToLatestButtonBottom: MediaQuery.paddingOf(context).bottom + 84,
+                            contentVersion: provider.segmentsPhotosVersion,
+                            editSegment: (segmentId, speakerId) => _nameSpeaker(segmentId, speakerId, provider),
+                          ),
+              ),
+            ],
+          ),
+          floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
+          // Pause/Resume (a pause glyph: mics belong to Ask Omi) and Finish, the one stop.
+          floatingActionButton:
+              (provider.liveCaptureSource != null || provider.segments.isNotEmpty || provider.photos.isNotEmpty)
+                  ? Row(
+                      mainAxisSize: MainAxisSize.min,
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        if (provider.liveCaptureSource != null &&
+                            LiveCaptureCard.canPause(provider.recordingDevice, source: provider.liveCaptureSource)) ...[
+                          OmiIconButton.filled(
+                            key: const Key('capture_pause_button'),
+                            icon: Icon(effectivelyMuted ? Icons.play_arrow_rounded : Icons.pause_rounded, size: 26),
+                            label: effectivelyMuted ? context.l10n.resume : context.l10n.pause,
+                            diameter: 52,
+                            fillColor: OmiColors.surface3,
+                            onPressed: _mutePending || provider.isCallActive ? null : () => _toggleMute(provider),
+                          ),
+                          const SizedBox(width: OmiSpacing.sm),
+                        ],
+                        OmiButton(
+                          key: const Key('process_now_button'),
+                          label: context.l10n.finish,
+                          leading: const Icon(Icons.check_rounded),
+                          onPressed: () => _stopConversation(provider),
                         ),
                       ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            floatingActionButtonLocation: FloatingActionButtonLocation.centerFloat,
-            floatingActionButton: (provider.segments.isNotEmpty || provider.photos.isNotEmpty)
-                ? Row(
-                    mainAxisSize: MainAxisSize.min,
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      // Process Now button
-                      GestureDetector(
-                        onTap: () => _stopConversation(provider),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFFB800),
-                            borderRadius: BorderRadius.circular(28),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.25),
-                                spreadRadius: 2,
-                                blurRadius: 8,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const FaIcon(FontAwesomeIcons.stop, color: Colors.black, size: 16.0),
-                              const SizedBox(width: 10),
-                              Text(
-                                context.l10n.processNow,
-                                style: const TextStyle(color: Colors.black, fontSize: 16, fontWeight: FontWeight.w600),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      // Mute button
-                      GestureDetector(
-                        onTap: () => _toggleMute(provider),
-                        child: Container(
-                          width: 52,
-                          height: 52,
-                          decoration: BoxDecoration(
-                            color: effectivelyMuted ? Colors.red : const Color(0xFF35343B),
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.25),
-                                spreadRadius: 2,
-                                blurRadius: 8,
-                                offset: const Offset(0, 4),
-                              ),
-                            ],
-                          ),
-                          child: const Icon(Icons.mic_off, color: Colors.white, size: 24),
-                        ),
-                      ),
-                    ],
-                  )
-                : null,
-          ),
+                    )
+                  : null,
         );
       },
     );
@@ -408,6 +227,8 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
   ) {
     final photos = List<ConversationPhoto>.from(provider.photos)..sort((a, b) => a.createdAt.compareTo(b.createdAt));
     final segments = provider.segments;
+    final people = context.watch<PeopleProvider?>()?.people ?? SharedPreferencesUtil().cachedPeople;
+    final names = SpeakerNames.forSegments(segments, people: people, l10n: context.l10n);
 
     // Group consecutive photos taken within 30 seconds of each other
     final List<List<ConversationPhoto>> photoGroups = [];
@@ -447,7 +268,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
       layoutIdentity: 'photo-timeline',
       leadingItems: leadingItems,
       leadingItemIds: photoGroups.map((group) => group.first.id).toList(),
-      segmentBuilder: (context, segment, index) => _buildTranscriptTimelineItem(segment, provider),
+      segmentBuilder: (context, segment, index) => _buildTranscriptTimelineItem(segment, provider, people, names),
     );
   }
 
@@ -456,9 +277,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
     List<ConversationPhoto> allPhotos,
     String? conversationId,
   ) {
-    final firstPhoto = group.first;
-    final timeStr =
-        '${firstPhoto.createdAt.hour.toString().padLeft(2, '0')}:${firstPhoto.createdAt.minute.toString().padLeft(2, '0')}';
+    final timeStr = OmiDateFormat.of(context).time(group.first.createdAt);
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: Row(
@@ -469,8 +288,8 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
             children: [
               CircleAvatar(
                 radius: 16,
-                backgroundColor: Color(0xFF2A5D3E),
-                child: Icon(Icons.camera_alt, size: 16, color: Colors.white70),
+                backgroundColor: OmiColors.surface2,
+                child: Icon(Icons.camera_alt, size: 16, color: OmiColors.textSecondary),
               ),
               SizedBox(height: 2),
             ],
@@ -481,8 +300,8 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
             child: Container(
               constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.7),
               decoration: BoxDecoration(
-                color: const Color(0xFF1A3D2E),
-                borderRadius: BorderRadius.circular(18),
+                color: OmiColors.surface1,
+                borderRadius: const BorderRadius.all(Radius.circular(18)),
                 boxShadow: [
                   BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 4, offset: const Offset(0, 1)),
                 ],
@@ -512,11 +331,13 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.camera_alt, size: 12, color: Colors.grey.shade500),
+                        const Icon(Icons.camera_alt, size: 12, color: OmiColors.textTertiary),
                         const SizedBox(width: 4),
                         Text(
-                          group.length > 1 ? '$timeStr · ${group.length} photos' : timeStr,
-                          style: TextStyle(color: Colors.grey.shade500, fontSize: 11),
+                          group.length > 1
+                              ? '$timeStr · ${context.l10n.conversationPhotosCount(group.length)}'
+                              : timeStr,
+                          style: OmiType.caption.copyWith(color: OmiColors.textTertiary),
                         ),
                       ],
                     ),
@@ -591,58 +412,63 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
   }
 
   void _openPhotoViewer(List<ConversationPhoto> allPhotos, int index, String? conversationId) {
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (context) => MediaViewerPage(
-          items: allPhotos.map((photo) {
-            final hasInlineBytes = photo.base64.isNotEmpty;
-            return MediaViewerItem(
-              base64: hasInlineBytes ? photo.base64 : null,
-              bytesLoader: hasInlineBytes ? null : () => loadConversationPhotoBytes(photo, conversationId),
-              mimeType: photo.contentType,
-              heroTag: photo.id,
-              showCaptionStrip: true,
-              caption: photo.description,
-              discarded: photo.discarded,
-            );
-          }).toList(),
-          initialIndex: index >= 0 ? index : 0,
-        ),
-      ),
+    MediaViewerPage.open(
+      context,
+      items: mediaItemsForPhotos(allPhotos, conversationId),
+      initialIndex: index >= 0 ? index : 0,
     );
   }
 
-  void _editSegmentSpeaker(TranscriptSegment segment, CaptureProvider provider) {
+  void _nameSpeaker(String segmentId, int speakerId, CaptureProvider provider) {
     final connectivityProvider = Provider.of<ConnectivityProvider>(context, listen: false);
     if (!connectivityProvider.isConnected) {
       ConnectivityProvider.showNoInternetDialog(context);
       return;
     }
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.black,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (context) {
-        final suggestion = provider.suggestionsBySegmentId.values.firstWhere(
-          (s) => s.speakerId == segment.speakerId,
-          orElse: () => SpeakerLabelSuggestionEvent.empty(),
-        );
-        return NameSpeakerBottomSheet(
-          speakerId: segment.speakerId,
-          segmentId: segment.id,
-          segments: provider.segments,
-          suggestion: suggestion,
-          onSpeakerAssigned: (speakerId, personId, personName, segmentIds) async {
-            await provider.assignSpeakerToConversation(speakerId, personId, personName, segmentIds);
-          },
-        );
+    final suggestion = provider.suggestionsBySegmentId.values.firstWhere(
+      (s) => s.speakerId == speakerId,
+      orElse: () => SpeakerLabelSuggestionEvent.empty(),
+    );
+    showNameSpeakerSheet(
+      context,
+      speakerId: speakerId,
+      segmentId: segmentId,
+      segments: provider.segments,
+      suggestion: suggestion,
+      defaultApplyToSpeaker: true,
+      onSpeakerAssigned: (speakerId, personId, personName, segmentIds, applyToSpeaker) async {
+        return provider.assignSpeakerToConversation(speakerId, personId, personName, segmentIds,
+            applyToSpeaker: applyToSpeaker);
       },
     );
   }
 
-  Widget _buildTranscriptTimelineItem(TranscriptSegment segment, CaptureProvider provider) {
+  void _editSegmentSpeaker(TranscriptSegment segment, CaptureProvider provider) =>
+      _nameSpeaker(segment.id, segment.speakerId, provider);
+
+  Widget _buildTranscriptTimelineItem(
+      TranscriptSegment segment, CaptureProvider provider, List<Person> people, SpeakerNames names) {
     final bool isUser = segment.isUser;
+    final name = names.forSegment(segment, person: personById(people, segment.personId));
+    Widget avatar() => Semantics(
+          button: true,
+          label: context.l10n.identifySpeaker,
+          excludeSemantics: true,
+          onTap: () => _editSegmentSpeaker(segment, provider),
+          child: GestureDetector(
+            onTap: () => _editSegmentSpeaker(segment, provider),
+            child: const Column(
+              children: [
+                CircleAvatar(
+                  radius: 16,
+                  backgroundColor: OmiColors.surface2,
+                  child: Icon(Icons.person, size: 16, color: OmiColors.textSecondary),
+                ),
+                SizedBox(height: 2),
+              ],
+            ),
+          ),
+        );
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: Row(
@@ -650,19 +476,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
         mainAxisAlignment: isUser ? MainAxisAlignment.end : MainAxisAlignment.start,
         children: [
           if (!isUser) ...[
-            GestureDetector(
-              onTap: () => _editSegmentSpeaker(segment, provider),
-              child: Column(
-                children: [
-                  CircleAvatar(
-                    radius: 16,
-                    backgroundColor: Colors.blueGrey.withValues(alpha: 0.3),
-                    child: const Icon(Icons.person, size: 16, color: Colors.white70),
-                  ),
-                  const SizedBox(height: 2),
-                ],
-              ),
-            ),
+            avatar(),
             const SizedBox(width: 8),
           ],
           Flexible(
@@ -672,98 +486,168 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> w
                 constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.75),
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
                 decoration: BoxDecoration(
-                  color: isUser ? const Color(0xFF8B5CF6).withValues(alpha: 0.8) : const Color(0xFF2A2A32),
-                  borderRadius: BorderRadius.circular(18),
+                  color: isUser ? OmiColors.surface3 : OmiColors.surface2,
+                  borderRadius: const BorderRadius.all(Radius.circular(18)),
                   boxShadow: [
                     BoxShadow(color: Colors.black.withValues(alpha: 0.15), blurRadius: 4, offset: const Offset(0, 1)),
                   ],
                 ),
-                child: Text(
-                  segment.text,
-                  style: TextStyle(color: isUser ? Colors.white : Colors.grey.shade100, fontSize: 15, height: 1.4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(name, style: OmiType.caption.copyWith(color: OmiColors.textSecondary)),
+                    const SizedBox(height: 4),
+                    Text(segment.text, style: OmiType.subhead.copyWith(height: 1.4)),
+                  ],
                 ),
               ),
             ),
           ),
           if (isUser) ...[
             const SizedBox(width: 8),
-            GestureDetector(
-              onTap: () => _editSegmentSpeaker(segment, provider),
-              child: Column(
-                children: [
-                  CircleAvatar(
-                    radius: 16,
-                    backgroundColor: const Color(0xFF8B5CF6).withValues(alpha: 0.3),
-                    child: const Icon(Icons.person, size: 16, color: Colors.white70),
-                  ),
-                  const SizedBox(height: 2),
-                ],
-              ),
-            ),
+            avatar(),
           ],
         ],
       ),
     );
   }
 
-  Widget _buildUnsyncedWalIndicator(List<Wal> unsyncedWals, int inFlightSeconds) {
+  /// Photos reach a live conversation only through camera-capable wearables
+  /// (Ray-Ban Meta, OpenGlass). A phone-mic session has no photo channel, so
+  /// its empty state must not promise one (#14473).
+  bool _photoChannelActive(BtDevice? connectedDevice) {
+    final type = connectedDevice?.type;
+    return type == DeviceType.raybanMeta || type == DeviceType.openglass;
+  }
+
+  /// The live-capture empty state names only what this session can actually
+  /// produce, and swaps in a truthful state line when the transcript pipeline
+  /// is degraded instead of promising "waiting" forever (#14473): an
+  /// out-of-credits plan can never produce a transcript while waiting, a
+  /// terminal STT failure means the audio is only being saved (the shared
+  /// outage sentence — the app bar names the same moment the same way), an
+  /// offline device is waiting on the network, and `interrupted` means the
+  /// transcription socket dropped and is reconnecting.
+  String _liveCaptureEmptyStateText(
+    CaptureProvider provider, {
+    required ConnectivityProvider connectivity,
+    required UsageProvider usage,
+    required bool photoChannelActive,
+    required bool transcriptionInterrupted,
+  }) {
+    if (usage.isOutOfCredits) return context.l10n.transcriptionUnavailableRecordingSaved;
+    if (provider.terminalTranscriptionFailure != null) {
+      return context.l10n.transcriptionUnavailableRecordingContinues;
+    }
+    if (!connectivity.isConnected) return context.l10n.recordingOfflineTranscriptWillCatchUp;
+    if (transcriptionInterrupted) return context.l10n.transcriptionPausedReconnecting;
+    if (!photoChannelActive) return context.l10n.listeningTranscriptWillAppear;
+    return context.l10n.waitingForTranscriptOrPhotos;
+  }
+
+  Widget _buildUnsyncedWalIndicator(CaptureProvider provider) {
+    final unsyncedWals = provider.unsyncedSessionWals;
+    final inFlightSeconds = provider.inFlightAudioSeconds;
     final totalSeconds = unsyncedWals.fold<int>(0, (sum, w) => sum + w.seconds) + inFlightSeconds;
     if (totalSeconds <= 5) return const SizedBox.shrink();
     final minutes = totalSeconds ~/ 60;
     final seconds = totalSeconds % 60;
     final label = minutes > 0 ? '${minutes}m ${seconds}s' : '${seconds}s';
-    return SafeArea(
-      top: false,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1A1A24),
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: const Color(0xFF2E2E3E), width: 0.5),
-          ),
-          child: Row(
+
+    // Queued-recordings count ("pending X/Y"): only meaningful once there is a
+    // queue — a single unsynced recording is already named by the duration line.
+    final backlog = provider.sessionTranscriptionBacklogCounts;
+    final showBacklogCount = backlog.total >= 2 && backlog.pending >= 1;
+
+    // The indicator names the worst outcome across the session's WALs so it
+    // can say what happens next, instead of always claiming a healthy local
+    // save next to a spinner that never resolves (#14473).
+    final worst = worstSessionSyncState(unsyncedWals);
+    final bool uploading =
+        inFlightSeconds > 0 || unsyncedWals.any((w) => w.syncDisplayState == WalSyncDisplayState.syncing);
+    final bool retrying = worst == WalSyncDisplayState.retrying;
+    final bool failed = worst != null && _isTerminalWalState(worst);
+    final bool retryable = worst != null && isRetryableSyncState(worst);
+
+    final Color dotColor;
+    final String text;
+    if (failed) {
+      dotColor = OmiColors.danger;
+      text = retryable ? context.l10n.audioUploadFailedTapRetry(label) : context.l10n.audioUploadFailedKeptLocal(label);
+    } else if (retrying) {
+      dotColor = OmiColors.warning;
+      text = context.l10n.audioUploadRetrying(label);
+    } else if (uploading) {
+      dotColor = OmiColors.success;
+      text = context.l10n.uploadingAudioForTranscription(label);
+    } else {
+      dotColor = OmiColors.success;
+      text = context.l10n.audioSavedLocally(label);
+    }
+
+    final indicator = Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      decoration: BoxDecoration(
+        color: OmiColors.surface1,
+        borderRadius: OmiRadius.mdAll,
+        border: Border.all(color: OmiColors.border, width: 0.5),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
             mainAxisAlignment: MainAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
                 width: 7,
                 height: 7,
-                decoration: const BoxDecoration(color: Color(0xFF4CAF50), shape: BoxShape.circle),
+                decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
               ),
               const SizedBox(width: 8),
               Text(
-                context.l10n.audioSavedLocally(label),
-                style: const TextStyle(color: Color(0xFFE0E0E8), fontSize: 12.5, fontWeight: FontWeight.w500),
+                text,
+                style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
               ),
-              if (inFlightSeconds > 0) ...[
+              if (!failed && !retrying && uploading) ...[
                 const SizedBox(width: 8),
-                const SizedBox(
-                  width: 12,
-                  height: 12,
-                  child: CircularProgressIndicator(strokeWidth: 1.5, color: Color(0xFF6C6C80)),
-                ),
+                const OmiSpinner(size: OmiSpinnerSize.small, color: OmiColors.textTertiary),
               ],
             ],
           ),
+          // How many queued recordings are still waiting for transcription out
+          // of the session's total, so a drain after an outage reads as progress.
+          if (showBacklogCount) ...[
+            const SizedBox(height: 4),
+            Text(
+              context.l10n.transcriptionsPendingFraction(backlog.pending, backlog.total),
+              style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
+            ),
+          ],
+        ],
+      ),
+    );
+
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
+        child: Semantics(
+          liveRegion: true,
+          button: retryable,
+          child: retryable
+              ? GestureDetector(onTap: () => provider.retryFailedSessionWalUploads(), child: indicator)
+              : indicator,
         ),
       ),
     );
   }
 
-  String _getTimeoutDisplayText(BuildContext context) {
-    final timeoutDuration = SharedPreferencesUtil().conversationSilenceDuration;
-    if (timeoutDuration == -1) {
-      return "${context.l10n.conversationEndsManually} 🤫";
-    } else {
-      final minutes = timeoutDuration ~/ 60;
-      return "${context.l10n.conversationSummarizedAfterMinutes(minutes, minutes == 1 ? '' : 's')} 🤫";
-    }
-  }
-}
-
-String transcriptElapsedTime(String timepstamp) {
-  timepstamp = timepstamp.split(' - ')[1];
-  return timepstamp;
+  /// Terminal for automatic uploads: failed (retry budget spent, but a
+  /// deliberate retry can still work), corrupted, or past the recovery window.
+  bool _isTerminalWalState(WalSyncDisplayState state) =>
+      state == WalSyncDisplayState.failed ||
+      state == WalSyncDisplayState.corrupted ||
+      state == WalSyncDisplayState.outsideRecoveryWindow ||
+      state == WalSyncDisplayState.unsupportedAudio;
 }

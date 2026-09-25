@@ -135,11 +135,16 @@ PROVIDER_SERVING_SURFACES: Final[Mapping[str, frozenset[STTServingSurface]]] = {
 # hard stream gate (see parakeet/admission.py), so every listener converges on
 # one cap per serving pod instead of listener-local counters.
 DEFAULT_MODELS_BY_SURFACE: Final[Mapping[STTServingSurface, tuple[str, ...]]] = {
-    # Velma-2 leads on cost. Soniox is streaming-capable but not a default hop:
-    # prod's SONIOX_API_KEY is empty, so listing it consumed a mental next slot
-    # while accepted=0. Deepgram is the overflow; Parakeet stays last (bounded
-    # GPU, English-only streaming) and is honorable when a client asks by name.
-    STTServingSurface.STREAMING: ('modulate-velma-2', 'dg-nova-3', 'parakeet'),
+    # Velma-2 leads on cost, and its failures are recoverable: a mid-session
+    # error frame hands the stream to Soniox rather than ending it (#12459), which
+    # is what the second slot is for. Soniox only ever serves as that failover
+    # hop, so judge it by the failover metrics, not by session-start acceptance
+    # (#13662). Deepgram stays listed so a BYOK user still resolves a `dg-*`
+    # model; it is not the intended overflow for Velma failures. Parakeet stays
+    # last rather than being dropped: a client can ask for it by name
+    # (`?stt_service=parakeet`), and that preference is only honorable while
+    # the model is listed here.
+    STTServingSurface.STREAMING: ('modulate-velma-2', 'soniox', 'dg-nova-3', 'parakeet'),
     # Batch work is queued, so Parakeet's bounded GPU means waiting rather than the
     # user-visible failure it causes on the streaming surface. Prefer the self-hosted
     # provider here and keep Velma as the overflow.
@@ -308,7 +313,7 @@ def provider_for_model_token(model: str) -> str | None:
     hosted identity; use ``deepgram_provider_for_runtime`` where it matters.
     """
     normalized = model.strip().lower()
-    if normalized == 'parakeet':
+    if normalized in ('parakeet', 'parakeet-window'):
         return PARAKEET_PROVIDER
     if normalized == 'modulate-velma-2':
         return MODULATE_PROVIDER
@@ -335,6 +340,8 @@ def model_is_enabled(model: str, surface: STTServingSurface) -> bool:
     A Deepgram token is admissible when either deployment is allowed. Selection
     re-checks the runtime's own provider, so this cannot reach a withheld one.
     """
+    if model.strip().lower() == 'parakeet-window' and surface != STTServingSurface.STREAMING:
+        return False
     provider = provider_for_model_token(model)
     if provider is None:
         return False

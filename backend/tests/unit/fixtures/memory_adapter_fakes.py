@@ -25,9 +25,10 @@ def freeze_default_vector_eligibility_clock(monkeypatch, *, now: datetime = MEMO
 
 
 class Snapshot:
-    def __init__(self, data=None, *, exists=True):
+    def __init__(self, data=None, *, exists=True, document_id=None):
         self._data = data
         self.exists = exists
+        self.id = document_id
 
     def to_dict(self):
         if self._data is None:
@@ -51,13 +52,52 @@ class CollectionRef:
     def __init__(self, db_client, path):
         self._db_client = db_client
         self.path = path
+        self._orders = []
+        self._limit = None
+        self._start_after = None
+
+    def order_by(self, field, direction=None):
+        self._orders.append((field, direction))
+        return self
+
+    def limit(self, value):
+        self._limit = value
+        return self
+
+    def start_after(self, values):
+        self._start_after = values
+        return self
+
+    def document(self, document_id):
+        return DocumentRef(self._db_client, f"{self.path}/{document_id}")
+
+    @staticmethod
+    def _timestamp(value):
+        return datetime.fromisoformat(value) if isinstance(value, str) else value
 
     def stream(self):
         prefix = f"{self.path}/"
-        snapshots = []
+        rows = []
         for path, data in sorted(self._db_client.docs.items()):
             if path.startswith(prefix) and "/" not in path[len(prefix) :]:
-                snapshots.append(Snapshot(data))
+                rows.append((path[len(prefix) :], dict(data)))
+        for field, direction in reversed(self._orders):
+            rows.sort(
+                key=lambda row: row[0] if field == '__name__' else self._timestamp(row[1][field]),
+                reverse=direction == 'DESCENDING',
+            )
+        if self._start_after is not None:
+            cursor = self._start_after
+            cursor_key = (-self._timestamp(cursor['updated_at']).timestamp(), cursor['__name__'].path.rsplit('/', 1)[1])
+            rows = [row for row in rows if (-self._timestamp(row[1]['updated_at']).timestamp(), row[0]) > cursor_key]
+        if self._limit is not None:
+            rows = rows[: self._limit]
+        snapshots = []
+        for document_id, data in rows:
+            if self._orders and 'updated_at' in data:
+                # Firestore timestamps are native datetimes, unlike the JSON fixture seed.
+                data['updated_at'] = self._timestamp(data['updated_at'])
+            snapshots.append(Snapshot(data, document_id=document_id))
         return snapshots
 
 

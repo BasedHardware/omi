@@ -882,6 +882,24 @@ STALE_IN_PROGRESS_CONVERSATIONS_QUERY = FirestoreQuerySpec(
     ),
 )
 
+# Duplicate-capture detection (#3244): the other capture clients' conversations
+# whose activity clock runs past this recording's start. Shares the composite
+# above with the stale sweep; the range and order both sit on `finished_at`.
+CONVERSATIONS_BY_STATUS_FINISHED_AFTER_QUERY = FirestoreQuerySpec(
+    identifier='conversations_by_status_finished_after',
+    collection_group='conversations',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('status', '==', 'status'),
+        FirestoreQueryFilter('finished_at', '>=', 'finished_after'),
+    ),
+    index_fields=(
+        _asc('status'),
+        _asc('finished_at'),
+        _asc('__name__'),
+    ),
+)
+
 CONVERSATIONS_ACTIVE_ORDERED_QUERY = FirestoreQuerySpec(
     identifier='conversations_discarded_created',
     collection_group='conversations',
@@ -959,6 +977,20 @@ ENTITY_TIMELINE_SCREEN_ACTIVITY_QUERY = FirestoreQuerySpec(
     collection_group='screen_activity',
     query_scope='COLLECTION',
     filters=(),
+    index_fields=(
+        _desc('timestamp'),
+        _desc('__name__'),
+    ),
+)
+
+SCREEN_ACTIVITY_KEYWORD_RANGE_QUERY = FirestoreQuerySpec(
+    identifier='screen_activity_keyword_timestamp_range',
+    collection_group='screen_activity',
+    query_scope='COLLECTION',
+    filters=(
+        FirestoreQueryFilter('timestamp', '>=', 'start'),
+        FirestoreQueryFilter('timestamp', '<=', 'end'),
+    ),
     index_fields=(
         _desc('timestamp'),
         _desc('__name__'),
@@ -1261,15 +1293,21 @@ MESSAGES_BY_SESSION_ORDERED_QUERY = FirestoreQuerySpec(
 # range on a different field is a compound serving query, so automatic
 # single-field indexes do not cover it however the directions line up.
 DAY3_REENGAGEMENT_SIGNUP_COHORT_QUERY = FirestoreQuerySpec(
-    identifier='users_signup_platform_signup_at_range',
+    identifier='users_signup_platform_signup_os_signup_at_range',
     collection_group='users',
     query_scope='COLLECTION',
     filters=(
         FirestoreQueryFilter('signup_platform', '==', 'signup_platform'),
+        FirestoreQueryFilter('signup_os', 'in', 'signup_os_values'),
         FirestoreQueryFilter('signup_platform_at', '>=', 'start'),
         FirestoreQueryFilter('signup_platform_at', '<', 'end'),
     ),
-    index_fields=(_asc('signup_platform'), _asc('signup_platform_at'), _asc('__name__')),
+    index_fields=(
+        _asc('signup_platform'),
+        _asc('signup_os'),
+        _asc('signup_platform_at'),
+        _asc('__name__'),
+    ),
 )
 
 # EXP-001's day-0 output count: real conversations created inside the 24h after
@@ -1386,9 +1424,11 @@ QUERY_SPECS = (
     ACTIVE_ATTENTION_OVERRIDE_QUERY,
     LEGACY_CONVERSATION_RECOVERY_QUERY,
     STALE_IN_PROGRESS_CONVERSATIONS_QUERY,
+    CONVERSATIONS_BY_STATUS_FINISHED_AFTER_QUERY,
     ENTITY_TIMELINE_CONVERSATIONS_QUERY,
     ENTITY_TIMELINE_MEETINGS_QUERY,
     ENTITY_TIMELINE_SCREEN_ACTIVITY_QUERY,
+    SCREEN_ACTIVITY_KEYWORD_RANGE_QUERY,
     CHAT_FIRST_DEFERRALS_DUE_QUERY,
     CHAT_FIRST_DEFERRALS_SUBJECT_QUERY,
     CHAT_FIRST_TRANSIENT_DEAD_LETTER_REPAIR_QUERY,

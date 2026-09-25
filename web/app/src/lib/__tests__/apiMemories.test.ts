@@ -6,7 +6,7 @@ const { getWebDeviceIdHash } = vi.hoisted(() => ({ getWebDeviceIdHash: vi.fn() }
 vi.mock('@/lib/firebase', () => ({ getIdToken }));
 vi.mock('@/lib/clientDevice', () => ({ getWebDeviceIdHash }));
 
-import { createMemory, getMemories } from '@/lib/api';
+import { createMemory, getMemories, getMemoriesPage, setMemoryUse } from '@/lib/api';
 
 describe('getMemories ledger boundary', () => {
   beforeEach(() => {
@@ -16,8 +16,10 @@ describe('getMemories ledger boundary', () => {
   });
 
   it('normalizes malformed/future rows at the used API consumer without dropping text rows', async () => {
-    const fetchMock = vi.fn(
-      async () =>
+    const fetchMock = vi.fn<
+      (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+    >(
+      async (_input?: RequestInfo | URL, _init?: RequestInit) =>
         new Response(
           JSON.stringify([
             {
@@ -85,6 +87,102 @@ describe('getMemories ledger boundary', () => {
     ]) {
       expect(memories[1]).not.toHaveProperty(field);
     }
+  });
+
+  it('retains the server belief capability and pagination receipts', async () => {
+    const fetchMock = vi.fn<
+      (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
+    >(
+      async () =>
+        new Response(
+          JSON.stringify([
+            {
+              id: 'current',
+              uid: 'web-user-1',
+              content: 'Current text',
+              created_at: '2026-08-23T00:00:00Z',
+              updated_at: '2026-08-23T00:00:00Z',
+              belief_class: 'preference',
+              currency_band: 'current',
+              currency: 0.9,
+              as_of: '2026-08-22T00:00:00Z',
+              belief_computed_at: '2026-08-23T01:00:00Z',
+            },
+          ]),
+          {
+            headers: {
+              'content-type': 'application/json',
+              'X-Omi-Memory-Belief-Enabled': 'true',
+              'X-Omi-Memory-Next-Cursor': 'next-page',
+            },
+          },
+        ),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    const page = await getMemoriesPage({
+      limit: 25,
+      view: 'useful_now',
+    });
+
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain(
+      '/v3/memories?limit=25&offset=0&view=useful_now',
+    );
+    expect(page).toMatchObject({
+      beliefEnabled: true,
+      nextCursor: 'next-page',
+      truncated: false,
+    });
+    expect(page.memories[0]).toMatchObject({
+      belief_class: 'preference',
+      currency_band: 'current',
+      currency: 0.9,
+      as_of: '2026-08-22T00:00:00Z',
+      belief_computed_at: '2026-08-23T01:00:00Z',
+    });
+  });
+
+  it('does not invent beta capability when the server sends no header', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify([
+              {
+                id: 'legacy',
+                uid: 'web-user-1',
+                content: 'Legacy text',
+                created_at: '2026-08-23T00:00:00Z',
+                updated_at: '2026-08-23T00:00:00Z',
+              },
+            ]),
+          ),
+      ),
+    );
+
+    const page = await getMemoriesPage();
+
+    expect(page.beliefEnabled).toBeNull();
+    expect(page.memories[0]).not.toHaveProperty('currency_band');
+  });
+
+  it('posts use feedback with the caller-owned idempotency id', async () => {
+    const fetchMock = vi.fn(
+      async (_input?: RequestInfo | URL, _init?: RequestInit) =>
+        new Response(JSON.stringify({ status: 'accepted' })),
+    );
+    vi.stubGlobal('fetch', fetchMock);
+
+    await setMemoryUse('memory-1', 'suppress', '00000000-0000-4000-8000-000000000001');
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    const [, request] = fetchMock.mock.calls[0] as [RequestInfo | URL, RequestInit];
+    expect(String(fetchMock.mock.calls[0]?.[0])).toContain('/v3/memories/memory-1/use');
+    expect(JSON.parse(String(request.body))).toEqual({
+      action: 'suppress',
+      feedback_id: '00000000-0000-4000-8000-000000000001',
+    });
   });
 
   it('normalizes the actual createMemory response before returning it', async () => {

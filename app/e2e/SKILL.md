@@ -8,6 +8,16 @@ allowed-tools: Bash, Read, Glob, Grep
 
 This skill teaches you the Omi Flutter mobile app's navigation structure, screen architecture, and widget patterns. Use it when developing features (to understand how the app works), fixing bugs (to navigate to the affected screen), or verifying changes (to confirm your code works in the live app).
 
+> **Verifying changes (agents and contributors):** this skill drives a *live*
+> app on an emulator/device and assumes a manually-authenticated session
+> against a real or local backend — it is an exploration and physical-device
+> tool. The canonical fast verification path is the seeded local lane with
+> synthetic auth: `make mobile-verify ARGS="fast --paths <changed-file>"` —
+> no device, no OAuth, loopback fixtures. See
+> [`scripts/dev-harness/MOBILE_VERIFY.md`](../../scripts/dev-harness/MOBILE_VERIFY.md)
+> and [`MOBILE_SESSIONS.md`](../../scripts/dev-harness/MOBILE_SESSIONS.md).
+> Physical-device evidence remains a separately reported lane (SCA-491).
+
 ## How to Explore the App
 
 You can interact with the running app via `agent-flutter` — a CLI that taps widgets, reads the widget tree, and captures screenshots through Flutter's Marionette debug protocol.
@@ -159,52 +169,42 @@ Home (home/page.dart) — main app after auth, 4-slot bottom nav
     │   └── Reviews, capabilities, install/enable, Chat button → Chat
     └── Top-bar "+" on this slot → Add App / Add MCP Server
 
-Settings sheet (settings_drawer.dart) — rows in order
-├── Profile (profile.dart)
-│   ├── Name → Change name dialog
-│   ├── Email (read-only)
-│   ├── Language → Language Settings (language_settings_page.dart)
-│   ├── Custom Vocabulary (custom_vocabulary_page.dart)
-│   ├── Speech Profile (speech_profile/page.dart)
-│   ├── Identifying Others (people.dart)
-│   ├── Payment Methods (payments/payments_page.dart)
-│   ├── Conversation Display (conversation_display_settings.dart)
-│   ├── Data Privacy (data_privacy_page.dart)
-│   └── Delete Account (delete_account.dart)
-├── Notifications (notifications_settings_page.dart)
-│   ├── Frequency slider (0-5)
-│   ├── Daily Summary toggle + time picker
-│   └── Daily Reflection toggle
-├── Plan & Usage (usage_page.dart) (only in some subscription states)
-├── Offline Sync (sync_page.dart)
-│   ├── Local storage, recordings list
-│   ├── Fast transfer settings
-│   └── Private cloud sync
-├── Device Settings (device_settings.dart) (only when a device is connected)
-│   ├── Device info (name, ID, firmware, SD card)
-│   ├── LED brightness slider, mic gain slider
-│   └── Double tap action picker
-├── Integrations (integrations_page.dart) — BETA; also opens from conversation detail
-│   └── Google Calendar, Gmail, Apple Health
-├── Permissions (permissions_page.dart) — Microphone, Bluetooth, Location, Background Activity
-├── Memories (memories/page.dart) — not a bottom-nav tab; reached here or via /memories, /facts deep links
-│   ├── Search bar, "This device" filter chip
-│   ├── FAB (bottom-right) → New Memory sheet (memory_dialog.dart) — the "Create new memory" text row
-│   │   is NOT tappable, only the FAB is; field/button ValueKeys `memory_content_field` / `memory_save_button` (PR #9484)
-│   ├── Memory item → Quick edit sheet (memory_edit_sheet.dart)
-│   ├── Graph → Memory Graph (memory_graph_page.dart)
-│   └── Management → Category management sheet
-├── Feedback/Bug → feedback.omi.me (Intercom platforms only)
-├── Help Center → help.omi.me (Intercom platforms only)
-├── Developer Settings (developer.dart)
-│   ├── Custom STT provider config
-│   ├── API key management
-│   └── MCP API keys
-├── What's New → Changelog sheet
-├── Get Omi for Mac → App Store link
-├── Referral Program (referral_page.dart) — NEW
-└── Sign Out → Confirmation dialog
-(Settings search reaches a few extra destinations not in the visible list, e.g. Background Mode on Android.)
+Settings sheet (settings_drawer.dart) — search + close header, then five visual groups: Account ·
+Plan & Usage, Referral Program · Device … Data & Privacy · Help & About, Feedback · Developer Settings.
+Every top-level row has a ValueKey (`settings_account`, `settings_group_<group>`, or
+`settings_row_<SettingsDestination>` for the direct rows Plan, Referral and Feedback); each page has a
+Scaffold key (`settings_page_<page>`); rows on group/Account pages are `settings_row_<SettingsDestination>`
+(plus `settings_row_voiceResponseMode`, `settings_row_transcribeLater`, `settings_row_backgroundMode`,
+`settings_row_name`, `settings_row_email`, `settings_row_userId`, `settings_row_version`).
+├── Account [settings_account] — shows the name, email as subtitle → Account page (profile.dart, ProfilePage)
+│   ├── Name → Change name dialog; Email (read-only)
+│   ├── User ID (tap copies)
+│   └── Sign Out → Confirmation dialog; Delete Account (delete_account.dart)
+├── Plan & Usage [settings_row_planAndUsage] (usage_page.dart) — "Pro" value when paid
+├── Referral Program [settings_row_referral] (referral_page.dart) — NEW tag
+├── Device [settings_group_device] → settings_groups.dart
+│   ├── Device Settings (device_settings.dart) (only when a device is connected)
+│   ├── Offline Sync (sync_page.dart / auto_sync_page.dart)
+│   ├── Phone Calls (phone_call_settings_page.dart)
+│   └── Permissions (permissions_page.dart) — microphone, Bluetooth, notifications
+├── Recording & Transcription [settings_group_recording] → settings_groups.dart
+│   ├── Transcription (transcription_settings_page.dart) — provider value; Language; Custom Vocabulary
+│   ├── Voice Profile → guided introduction (onboarding/speech_profile_widget.dart); Identifying Others (people.dart)
+│   ├── Voice Response (picker sheet); Conversation Timeout (picker)
+│   └── Recording (BETA): Transcribe Later switch; Background Mode switch (Android only)
+├── Notifications & Display [settings_group_notifications] → settings_groups.dart
+│   └── Notifications (notifications_settings_page.dart); Home Screen; Conversation Display
+├── Integrations [settings_group_integrations] (integrations_page.dart) — BETA; also opens from conversation detail
+├── Data & Privacy [settings_group_privacy] → settings_groups.dart
+│   ├── Data Protection (data_privacy_page.dart); Memories (memories/page.dart)
+│   └── Export All Data (spinner while running); Import Data (import_history_page.dart)
+├── Help & About [settings_group_help] → settings_groups.dart
+│   ├── Help Center → help.omi.me (Intercom platforms only)
+│   ├── What's New → Changelog sheet
+│   └── Version + copy button (iOS/Android)
+├── Feedback / Report a bug [settings_row_feedback] → feedback.omi.me (Intercom platforms only)
+└── Developer Settings [settings_group_developer] (developer.dart)
+(Settings search finds every row above and opens the page that holds it.)
 
 Transcription Settings (transcription_settings_page.dart) — not in settings drawer; reached from
 Plan & Usage, Developer Settings, or the Plans sheet
@@ -231,11 +231,9 @@ Connected Device (home/device.dart) — requires BLE
 ├── Actions: Firmware Update, SD Card Sync, Disconnect, Unpair
 └── Device info: Product, Model, Manufacturer, Firmware, ID, Serial
 
-Speech Profile (speech_profile/page.dart)
-├── Device animation, intro text
-├── Get Started / Do It Again button
-├── Question flow: text, progress bar, skip
-└── Listen to Speech Profile (if samples exist)
+Voice Profile — guided introduction (onboarding/speech_profile_widget.dart, #14514)
+├── Four sentence starters, phone mic, Next / Skip per prompt
+└── Review: edit or uncheck answers, then Save and finish (voice, memories, goal)
 ```
 
 ### Widget Patterns
@@ -254,12 +252,13 @@ Speech Profile (speech_profile/page.dart)
 
 **Settings gear:**
 - Android: rightmost `button` widget in the top bar; detect by sorting buttons by `bounds.x` descending, take first
-- iOS (verified 2026-07-11): single top-right icon on home at ~x=362, y=58 → Settings sheet (Profile,
-  Notifications, Offline Sync, Permissions, Memories, Developer Settings, …, Sign Out)
+- iOS (verified 2026-07-11): single top-right icon on home at ~x=362, y=58 → Settings sheet (Account,
+  Plan & Usage, Referral Program, Device, Recording & Transcription, Notifications & Display,
+  Integrations, Data & Privacy, Help & About, Feedback, Developer Settings)
 
 **Settings rows:**
 - `gesture` widgets with `bounds.width > 300`
-- Position-based: Profile is y=150-200, Developer Settings is y=400-520 after scrolling
+- Prefer the ValueKeys above (`settings_account`, `settings_group_*`, `settings_row_*`) over positions
 
 **Switch toggles:**
 - Type `switch` in snapshots
@@ -470,6 +469,68 @@ After making changes, verify them in the live app:
 3. Test interactions (press buttons, fill fields, scroll)
 4. Capture evidence: `agent-flutter screenshot /tmp/evidence.png`
 5. Generate video: `ffmpeg -framerate 1 -pattern_type glob -i '/tmp/e2e-*.png' -vf "scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:-1:-1" -c:v libx264 -pix_fmt yuv420p /tmp/report.mp4`
+
+## Visual audit (before/after screenshots without a device)
+
+`app/scripts/visual_audit.sh` screenshots registered screen states at two revisions and pairs them
+in one gallery. It pumps **production widgets** in `flutter-tester` with synthetic local state: the
+app's own fonts (FontManifest plus Roboto from the pinned SDK), `buildOmiTheme()`, 390×844 logical
+px at 2×, and a loopback-only network guard over the hermetic fixture backend. No login, simulator,
+signing, customer data or external API.
+
+**Use it** for layout, copy, grouping and visual-regression review of a UI change, and for the
+before/after images a UI PR description needs. **Use agent-flutter / flow-walker (above) instead**
+for anything a headless capture cannot show: native keyboard, status bar and safe areas, system
+permission dialogs, BLE, audio, real network timing, screen readers, or a claim about the installed
+app. The captures are evidence of a widget rendering, not of device behavior.
+
+```bash
+app/scripts/visual_audit.sh --list                                  # scenario ids, per suite
+app/scripts/visual_audit.sh --base origin/main --head HEAD          # every scenario, both sides
+app/scripts/visual_audit.sh --base <sha> --head <sha> --only settings-sheet,settings-device
+app/scripts/visual_audit.sh --head WORKTREE --only settings-help    # this checkout, uncommitted, one side
+```
+
+Each revision is checked out in a temporary detached worktree under `$OMI_WORKTREES` (default: the
+system temp dir), prepared like CI (generated env files, `pub get`, `build_runner`) and removed on
+exit. The harness and scenarios always come from the checkout you run the command in, copied over
+both sides. The current suite (`registry.dart`) compiles against current main; a revision from
+before a large UI change is captured with a compat suite (`compat/<name>/`, chosen by its `UNTIL`
+commit; see `compat/README.md`) that pumps the equivalent old page under the same id, so the old
+Profile page pairs with Account. A page only one side has is shown as "did not exist" there. The
+output directory (`--out`,
+default a new temp dir; it must be empty and outside the repository) holds `before/` and `after/`
+PNGs named `<id>.png` or `<id>-<step>.png`, per-side `capture.log`, `INDEX.md` with both SHAs and
+capture times, and a static `gallery.html`. A scenario that throws on one side is reported as failed
+there and the rest still capture. **Never commit screenshots.**
+
+**Add a scenario** in `app/integration_test/visual_audit/scenarios/<area>.dart` (new areas are
+spread into `registry.dart`). Put `id` first; it is lowercase-hyphenated, starts with the area, and
+names the PNGs:
+
+```dart
+AuditScenario(
+  id: 'settings-device',
+  title: 'Device group, device connected',
+  page: 'lib/pages/settings/settings_groups.dart (DeviceGroupPage)',
+  state: 'Signed-in fixture account; a device connected',
+  run: (a) async {
+    await a.pump(const DeviceGroupPage(), providers: [
+      ChangeNotifierProvider<DeviceProvider>.value(value: AuditDeviceProvider(connected: true)),
+    ]);
+    await a.scrollSeries('Open Device from the Settings sheet');
+  },
+),
+```
+
+`AuditRun` (`a`) gives `pump` (the production theme and a broad inert provider roster from
+`fakes.dart`; your `providers` win), `pumpHost` (opens a sheet or dialog from a neutral host),
+`tap`/`longPress`/`enterText` (each settles), `shot(action, step:)`, `scrollSeries(action)` (top,
+every 700 px, exact bottom) and `server` (the running fixture backend: seed conversations, set
+`assistantReplyText`, `failNext`). Seed state through providers and the fixture backend, find
+widgets by stable `Key`s, and keep `expect(...)` checks that prove the intended state rendered.
+`app/test/visual_audit/visual_audit_smoke_test.dart` renders every registered scenario in the
+ordinary `app/test.sh` suite without writing images, so a scenario that breaks fails CI.
 
 ## Decision Tree
 

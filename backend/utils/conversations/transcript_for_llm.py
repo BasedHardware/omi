@@ -18,6 +18,8 @@ from typing import Any, List, Optional, Protocol
 
 from database.auth import get_user_name
 from models.other import Person
+from models.transcript_segment import TranscriptSegment
+from utils.conversations.owner_attribution import OwnerAttributionEvidence, may_attribute_to_owner
 from utils.conversations.wake_word import WAKE_WORD_MARKER, escape_spoken_wake_word_marker, find_wake_word_segment_ids
 
 
@@ -73,6 +75,37 @@ def conversation_action_item_speaker_labels(
             }
         )
     return labels
+
+
+def memory_transcript_from_segments(
+    segments: List[TranscriptSegment],
+    *,
+    user_name: Optional[str] = None,
+    people: Optional[List[Person]] = None,
+) -> str:
+    """Render memory evidence without turning ambiguous diarization into identity.
+
+    Copies are local to this render; summaries and action items retain their
+    existing presentation and the original transcript segments are untouched.
+    """
+    evidence = OwnerAttributionEvidence.from_segments(segments)
+    rendered_segments = [
+        (
+            segment.model_copy(update={"is_user": False, "person_id": None})
+            if segment.is_user and not may_attribute_to_owner(evidence, segment=segment)
+            else segment
+        )
+        for segment in segments
+    ]
+    transcript = TranscriptSegment.segments_as_string(rendered_segments, user_name=user_name, people=people)
+    if transcript and not may_attribute_to_owner(evidence):
+        header = (
+            f"[Diarization marked {evidence.owner_speaker_ids} of {evidence.distinct_speaker_ids} speaker clusters "
+            "as the account owner; owner identity is UNTRUSTED in this transcript — "
+            "treat first-person statements as unattributed]"
+        )
+        return f"{header}\n{transcript}"
+    return transcript
 
 
 def conversation_transcript_for_llm(
@@ -159,6 +192,7 @@ def conversation_transcripts_for_llm(
 
 
 __all__ = [
+    'memory_transcript_from_segments',
     'conversation_action_item_speaker_labels',
     'conversation_transcript_and_speaker_map',
     'conversation_transcript_for_action_items',

@@ -16,7 +16,7 @@ from utils.byok import (
     validate_byok_websocket_keys,
 )
 from utils.async_tasks import drain_tasks
-from utils.executors import critical_executor, db_executor, run_blocking
+from utils.executors import db_executor, run_blocking
 from utils.llm.gateway_client import raise_if_gateway_feature_mode_blocks_direct_model_surface
 from utils.llm.managed_spend_ledger import (
     DESKTOP_REALTIME_FEATURE,
@@ -33,9 +33,10 @@ from utils.llm.realtime_usage import (
     realtime_turn_metadata,
 )
 from utils.observability.fallback import record_fallback
-from utils.other.endpoints import (  # type: ignore[reportPrivateUsage]  # shared WS auth helpers, intentionally reused cross-module
-    _verify_ws_auth,
+from utils.other.endpoints import (  # shared WS auth helpers, intentionally reused cross-module
+    _verify_ws_auth,  # type: ignore[reportPrivateUsage]
     get_current_user_uid_from_ws_message,
+    run_critical_ws,
 )
 import database.llm_usage as llm_usage_db
 import database.user_usage as user_usage_db
@@ -269,12 +270,11 @@ async def omni_relay(websocket: WebSocket):
         f"omni relay connect: auth_header={bool(authz)} byok={byok_present} "
         f"provider={websocket.query_params.get('provider')}"
     )
-
     accepted = False
     uid: str
     if authz:
         try:
-            uid = await run_blocking(critical_executor, _verify_ws_auth, authz)
+            uid = await run_critical_ws(_verify_ws_auth, cast(str, authz))
         except WebSocketException as e:
             logger.warning(f"omni relay auth rejected: code={e.code} reason={e.reason}")
             await websocket.close(code=e.code, reason=e.reason or "unauthorized")
@@ -313,7 +313,7 @@ async def omni_relay(websocket: WebSocket):
 
     # BYOK: validate forwarded keys (same as /v4/listen). Keys then resolve via get_byok_key.
     byok = extract_byok_from_websocket(websocket)
-    validated_byok, byok_err = await run_blocking(critical_executor, validate_byok_websocket_keys, uid, byok)
+    validated_byok, byok_err = await run_critical_ws(validate_byok_websocket_keys, uid, byok)
     if byok_err:
         logger.warning(f"omni relay BYOK invalid uid={uid}: {byok_err}")
         await websocket.close(code=4003, reason=byok_err)

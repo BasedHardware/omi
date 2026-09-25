@@ -4,6 +4,7 @@ tier: 1
 description: Cursor-free smoke flow for the Omi desktop experience harness.
 app: non-prod
 covers:
+  - desktop/macos/Desktop/Sources/Automation/DesktopBuildIdentity.swift
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge+Notifications.swift
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge+RealtimeHub.swift
@@ -60,7 +61,7 @@ steps:
       target: dashboard
       activateApp: false
     wait:
-      state.selectedTabIndex: 0
+      state.chatFirstRoute: chat
 
   - id: S2
     name: Capture Dashboard Visual
@@ -70,7 +71,7 @@ steps:
   - id: S3
     name: Assert Dashboard State
     state.expect:
-      state.selectedTabIndex: 0
+      state.chatFirstRoute: chat
 
   - id: S4
     name: Navigate to Memories
@@ -78,7 +79,7 @@ steps:
       target: memories
       activateApp: false
     wait:
-      state.selectedTabIndex: 3
+      state.chatFirstRoute: memories
 
   - id: S5
     name: Refresh Data

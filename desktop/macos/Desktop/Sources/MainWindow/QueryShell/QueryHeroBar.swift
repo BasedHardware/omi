@@ -241,7 +241,7 @@ struct QueryHeroBar: View {
           .keyboardShortcut(.return, modifiers: .command)
           .accessibilityIdentifier("query-shell-ask-hint")
           .accessibilityLabel("Send")
-          .help("Send — ⏎")
+          .help("Send (⏎)")
       }
     }
   }
@@ -298,7 +298,7 @@ struct QueryHeroBar: View {
           .accessibilityLabel("Send")
           // **The key hint is help text, not paint.** `⏎ Send` written across the control was the
           // widest thing in the row and the reason it needed a pill to sit in at all.
-          .help("Send — ⏎")
+          .help("Send (⏎)")
       }
     }
   }
@@ -387,6 +387,10 @@ struct QueryHeroBar: View {
       focusOnAppear: false,
       onMarkedTextChange: { hasMarkedText = $0 },
       focusRequest: caretClaim,
+      // Without these the NSTextView swallows the drag before the SwiftUI `.onDrop` below ever sees
+      // it, so only the padding around the field — never the field itself — could stage a file.
+      onFileDrop: { url in onAttachmentsAdded([url]) },
+      onFileDragTargeted: { isDropTargeted = $0 },
       onPasteAttachments: onPasteAttachments,
       minHeight: minEditorHeight,
       maxHeight: maxEditorHeight

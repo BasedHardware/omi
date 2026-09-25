@@ -1,25 +1,21 @@
-import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
+
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/providers/capture_provider.dart';
-import 'package:omi/pages/memories/page.dart';
-import 'package:provider/provider.dart';
 import 'package:omi/pages/settings/change_name_widget.dart';
-import 'package:omi/pages/settings/language_settings_page.dart';
-import 'package:omi/pages/settings/custom_vocabulary_page.dart';
-import 'package:omi/pages/settings/people.dart';
-import 'package:omi/pages/settings/widgets/profile_settings_tile.dart';
-import 'package:omi/pages/speech_profile/page.dart';
-
-import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/pages/settings/settings_destinations.dart';
+import 'package:omi/pages/settings/settings_groups.dart';
+import 'package:omi/pages/settings/settings_search_index.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/utils/other/temp.dart';
-import 'package:omi/utils/platform/platform_service.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
 
-import 'delete_account.dart';
-
+/// Account: who you are (name, email), your plan and referrals, your user id, and at the bottom
+/// Sign Out and Delete Account. The Settings sheet's first row opens it.
+///
+/// The recording, voice and memory rows that used to live here are on the Settings group pages
+/// (settings_groups.dart).
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
 
@@ -28,517 +24,78 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
-  @override
-  void initState() {
-    super.initState();
+  final _prefs = SharedPreferencesUtil();
+
+  Future<void> _open(SettingsDestination destination) async {
+    await openSettingsDestination(context, destination);
+    if (mounted) setState(() {});
   }
 
-  Widget _buildSectionContainer({required List<Widget> children}) {
-    return Container(
-      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
-      child: Column(children: children),
-    );
-  }
-
-  Widget _buildProfileItem({
-    required String title,
-    String? subtitle,
-    String? chipValue,
-    required Widget icon,
-    required VoidCallback onTap,
-    bool showSubtitle = true,
-    bool showBetaTag = false,
-    bool showChevron = true,
-  }) {
-    return ProfileSettingsTile(
-      title: title,
-      subtitle: subtitle,
-      chipValue: chipValue,
-      icon: icon,
-      onTap: onTap,
-      showSubtitle: showSubtitle,
-      showBetaTag: showBetaTag,
-      showChevron: showChevron,
-    );
-  }
-
-  String _voiceResponseModeLabel(int mode) {
-    switch (mode) {
-      case 0:
-        return context.l10n.voiceResponseOff;
-      case 2:
-        return context.l10n.voiceResponseAlways;
-      case 1:
-      default:
-        return context.l10n.voiceResponseHeadphonesOnly;
-    }
-  }
-
-  void _showVoiceResponseModeSheet() {
-    int current = SharedPreferencesUtil().voiceResponseMode;
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF1C1C1E),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (sheetContext) {
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
-            void pick(int value) {
-              setState(() => SharedPreferencesUtil().voiceResponseMode = value);
-              PlatformManager.instance.analytics.voiceResponseModeChanged(value);
-              Navigator.pop(sheetContext);
-            }
-
-            return SafeArea(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    margin: const EdgeInsets.only(top: 12, bottom: 16),
-                    width: 36,
-                    height: 4,
-                    decoration: BoxDecoration(color: const Color(0xFF3C3C43), borderRadius: BorderRadius.circular(2)),
-                  ),
-                  Text(
-                    context.l10n.voiceResponseModeTitle,
-                    style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 16),
-                  ListTile(
-                    title: Text(
-                      context.l10n.voiceResponseOff,
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w400),
-                    ),
-                    trailing: current == 0 ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
-                    onTap: () => pick(0),
-                  ),
-                  ListTile(
-                    title: Text(
-                      context.l10n.voiceResponseHeadphonesOnly,
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w400),
-                    ),
-                    trailing: current == 1 ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
-                    onTap: () => pick(1),
-                  ),
-                  ListTile(
-                    title: Text(
-                      context.l10n.voiceResponseAlways,
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w400),
-                    ),
-                    trailing: current == 2 ? const Icon(Icons.check, color: Colors.white, size: 20) : null,
-                    onTap: () => pick(2),
-                  ),
-                  const SizedBox(height: 16),
-                ],
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  Widget _buildProfileStyleItem({
-    required FaIconData icon,
-    required String title,
-    String? chipValue,
-    VoidCallback? onTap,
-  }) {
-    return ProfileSettingsTile(
-      title: title,
-      chipValue: chipValue,
-      icon: FaIcon(icon, color: const Color(0xFF8E8E93), size: 20),
-      onTap: onTap,
-      useInkWell: true,
-    );
-  }
-
-  void _showBackgroundModeSheet() {
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF1C1C1E),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (sheetContext) {
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
-            final captureProvider = context.read<CaptureProvider>();
-            final enabled = SharedPreferencesUtil().backgroundModeEnabled;
-            final canEnable = captureProvider.hasNativeBackgroundStreamRoute;
-            void setEnabled(bool value) async {
-              if (value && !canEnable) return;
-              final accepted = await captureProvider.setBackgroundModeEnabled(value);
-              if (accepted) {
-                setSheetState(() {});
-                setState(() {});
-              }
-            }
-
-            return SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Center(
-                      child: Container(
-                        margin: const EdgeInsets.only(bottom: 16),
-                        width: 36,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF3C3C43),
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
-                    ),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            context.l10n.backgroundModeTitle,
-                            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-                          ),
-                        ),
-                        Switch(
-                          value: enabled,
-                          activeThumbColor: Colors.white,
-                          activeTrackColor: const Color(0xFF8B5CF6),
-                          onChanged: (enabled || canEnable) ? (v) => setEnabled(v) : null,
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      context.l10n.backgroundModeDescription,
-                      style: TextStyle(color: Colors.grey.shade400, fontSize: 14, height: 1.4),
-                    ),
-                    const SizedBox(height: 16),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF2A2A2E),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Icon(Icons.info_outline, color: Colors.grey.shade400, size: 18),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              context.l10n.backgroundModeNote,
-                              style: TextStyle(color: Colors.grey.shade400, fontSize: 13, height: 1.4),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (!canEnable) ...[
-                      const SizedBox(height: 12),
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF3A2A2A),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Icon(Icons.warning_amber_rounded, color: Color(0xFFE0A030), size: 18),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Text(
-                                context.l10n.backgroundModeUnavailable,
-                                style: TextStyle(color: Colors.orange.shade200, fontSize: 13, height: 1.4),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
-  }
-
-  void _showOfflineModeSheet() {
-    final captureProvider = context.read<CaptureProvider>();
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: const Color(0xFF1C1C1E),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(16))),
-      builder: (sheetContext) {
-        return StatefulBuilder(
-          builder: (context, setSheetState) {
-            final enabled = SharedPreferencesUtil().batchModeEnabled;
-            Future<void> setEnabled(bool value) async {
-              final accepted = await captureProvider.setBatchMode(value);
-              if (!accepted && context.mounted) {
-                AppSnackbar.showSnackbarError(context.l10n.transcribeLaterNote);
-              }
-              if (sheetContext.mounted) {
-                setSheetState(() {});
-              }
-              if (mounted) {
-                setState(() {});
-              }
-            }
-
-            return SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Center(
-                      child: Container(
-                        margin: const EdgeInsets.only(bottom: 16),
-                        width: 36,
-                        height: 4,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF3C3C43),
-                          borderRadius: BorderRadius.circular(2),
-                        ),
-                      ),
-                    ),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            context.l10n.transcribeLaterTitle,
-                            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-                          ),
-                        ),
-                        Switch(
-                          value: enabled,
-                          activeThumbColor: Colors.white,
-                          activeTrackColor: const Color(0xFF8B5CF6),
-                          onChanged: (v) => setEnabled(v),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      context.l10n.transcribeLaterDescription,
-                      style: TextStyle(color: Colors.grey.shade400, fontSize: 14, height: 1.4),
-                    ),
-                    const SizedBox(height: 16),
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF2A2A2E),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Icon(Icons.info_outline, color: Colors.grey.shade400, size: 18),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              context.l10n.transcribeLaterNote,
-                              style: TextStyle(color: Colors.grey.shade400, fontSize: 13, height: 1.4),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (SharedPreferencesUtil().getBool('batchStorageFull')) ...[
-                      const SizedBox(height: 12),
-                      Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF3A2A2A),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Icon(Icons.warning_amber_rounded, color: Color(0xFFE0A030), size: 18),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Text(
-                                context.l10n.transcribeLaterStorageFull,
-                                style: TextStyle(color: Colors.orange.shade200, fontSize: 13, height: 1.4),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-              ),
-            );
-          },
-        );
-      },
-    );
+  Future<void> _editName() async {
+    PlatformManager.instance.analytics.pageOpened('Profile Change Name');
+    await showDialog(context: context, builder: (_) => const ChangeNameWidget());
+    if (mounted) setState(() {});
   }
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final uid = _prefs.uid;
+    final truncatedUid = uid.length > 6 ? '${uid.substring(0, 3)}•••••${uid.substring(uid.length - 3)}' : uid;
+
     return Scaffold(
-      backgroundColor: const Color(0xFF000000),
-      appBar: AppBar(
-        title: Text(
-          context.l10n.profile,
-          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-        ),
-        centerTitle: true,
-        backgroundColor: const Color(0xFF000000),
-        elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.white),
-      ),
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 20),
-        child: Column(
-          children: <Widget>[
-            const SizedBox(height: 20),
-
-            // YOUR INFORMATION SECTION
-            _buildSectionContainer(
-              children: [
-                _buildProfileItem(
-                  title: context.l10n.name,
-                  chipValue: SharedPreferencesUtil().givenName.isEmpty
-                      ? context.l10n.notSet
-                      : SharedPreferencesUtil().givenName,
-                  icon: const FaIcon(FontAwesomeIcons.solidUser, color: Color(0xFF8E8E93), size: 20),
-                  onTap: () async {
-                    PlatformManager.instance.analytics.pageOpened('Profile Change Name');
-                    await showDialog(
-                      context: context,
-                      builder: (BuildContext context) {
-                        return const ChangeNameWidget();
-                      },
-                    ).whenComplete(() => setState(() {}));
-                  },
-                ),
-                const Divider(height: 1, color: Color(0xFF3C3C43)),
-                _buildProfileItem(
-                  title: context.l10n.email,
-                  chipValue:
-                      SharedPreferencesUtil().email.isEmpty ? context.l10n.notSet : SharedPreferencesUtil().email,
-                  icon: const FaIcon(FontAwesomeIcons.solidEnvelope, color: Color(0xFF8E8E93), size: 20),
-                  onTap: () {},
-                  showChevron: false,
-                ),
-                const Divider(height: 1, color: Color(0xFF3C3C43)),
-                _buildProfileItem(
-                  title: context.l10n.language,
-                  icon: const FaIcon(FontAwesomeIcons.globe, color: Color(0xFF8E8E93), size: 20),
-                  onTap: () {
-                    routeToPage(context, const LanguageSettingsPage());
-                  },
-                ),
-                const Divider(height: 1, color: Color(0xFF3C3C43)),
-                _buildProfileItem(
-                  title: context.l10n.customVocabulary,
-                  icon: const FaIcon(FontAwesomeIcons.book, color: Color(0xFF8E8E93), size: 20),
-                  onTap: () {
-                    routeToPage(context, const CustomVocabularyPage());
-                  },
-                ),
-                const Divider(height: 1, color: Color(0xFF3C3C43)),
-                _buildProfileItem(
-                  title: context.l10n.memories,
-                  icon: const FaIcon(FontAwesomeIcons.brain, color: Color(0xFF8E8E93), size: 20),
-                  onTap: () {
-                    routeToPage(context, const MemoriesPage());
-                  },
-                ),
-              ],
-            ),
-            const SizedBox(height: 32),
-
-            // VOICE & PEOPLE SECTION
-            _buildSectionContainer(
-              children: [
-                _buildProfileItem(
-                  title: context.l10n.speechProfile,
-                  icon: const FaIcon(FontAwesomeIcons.microphone, color: Color(0xFF8E8E93), size: 20),
-                  onTap: () {
-                    routeToPage(context, const SpeechProfilePage());
-                    PlatformManager.instance.analytics.pageOpened('Profile Speech Profile');
-                  },
-                ),
-                const Divider(height: 1, color: Color(0xFF3C3C43)),
-                _buildProfileItem(
-                  title: context.l10n.identifyingOthers,
-                  icon: const FaIcon(FontAwesomeIcons.users, color: Color(0xFF8E8E93), size: 20),
-                  onTap: () {
-                    routeToPage(context, const UserPeoplePage());
-                  },
-                ),
-                const Divider(height: 1, color: Color(0xFF3C3C43)),
-                _buildProfileStyleItem(
-                  icon: FontAwesomeIcons.volumeHigh,
-                  title: context.l10n.voiceResponseMode,
-                  chipValue: _voiceResponseModeLabel(SharedPreferencesUtil().voiceResponseMode),
-                  onTap: _showVoiceResponseModeSheet,
-                ),
-                if (PlatformService.isAndroid) ...[
-                  const Divider(height: 1, color: Color(0xFF3C3C43)),
-                  _buildProfileItem(
-                    title: context.l10n.backgroundModeTitle,
-                    icon: const FaIcon(FontAwesomeIcons.towerBroadcast, color: Color(0xFF8E8E93), size: 20),
-                    showBetaTag: true,
-                    chipValue: SharedPreferencesUtil().backgroundModeEnabled ? context.l10n.on : context.l10n.off,
-                    onTap: _showBackgroundModeSheet,
-                  ),
-                ],
-                const Divider(height: 1, color: Color(0xFF3C3C43)),
-                _buildProfileItem(
-                  title: context.l10n.transcribeLaterTitle,
-                  icon: const FaIcon(FontAwesomeIcons.floppyDisk, color: Color(0xFF8E8E93), size: 20),
-                  showBetaTag: true,
-                  chipValue: SharedPreferencesUtil().batchModeEnabled ? context.l10n.on : context.l10n.off,
-                  onTap: _showOfflineModeSheet,
-                ),
-              ],
-            ),
-            const SizedBox(height: 32),
-
-            // ACCOUNT SECTION
-            _buildSectionContainer(
-              children: [
-                Builder(
-                  builder: (context) {
-                    final uid = SharedPreferencesUtil().uid;
-                    final truncatedUid =
-                        uid.length > 6 ? '${uid.substring(0, 3)}•••••${uid.substring(uid.length - 3)}' : uid;
-                    return _buildProfileItem(
-                      title: context.l10n.userId,
-                      chipValue: truncatedUid,
-                      icon: const FaIcon(FontAwesomeIcons.solidClipboard, color: Color(0xFF8E8E93), size: 20),
-                      onTap: () {
-                        Clipboard.setData(ClipboardData(text: uid));
-                        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.userIdCopied)));
-                      },
-                    );
-                  },
-                ),
-                const Divider(height: 1, color: Color(0xFF3C3C43)),
-                _buildProfileItem(
-                  title: context.l10n.deleteAccountTitle,
-                  icon: const FaIcon(FontAwesomeIcons.exclamationTriangle, color: Colors.red, size: 20),
-                  onTap: () {
-                    PlatformManager.instance.analytics.pageOpened('Profile Delete Account Dialog');
-                    Navigator.push(context, MaterialPageRoute(builder: (context) => const DeleteAccount()));
-                  },
-                ),
-              ],
-            ),
-            const SizedBox(height: 32),
-          ],
-        ),
+      key: const ValueKey('settings_page_account'),
+      appBar: AppBar(leading: const OmiBackButton(), title: Text(l10n.account)),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(OmiSpacing.lg, OmiSpacing.lg, OmiSpacing.lg, OmiSpacing.xxl),
+        children: [
+          OmiSettingsGroup(
+            children: [
+              OmiSettingsRow(
+                key: const ValueKey('settings_row_name'),
+                leading: const FaIcon(FontAwesomeIcons.solidUser),
+                title: l10n.name,
+                value: _prefs.givenName.isEmpty ? l10n.notSet : _prefs.givenName,
+                onTap: _editName,
+              ),
+              OmiSettingsRow(
+                key: const ValueKey('settings_row_email'),
+                leading: const FaIcon(FontAwesomeIcons.solidEnvelope),
+                title: l10n.email,
+                value: _prefs.email.isEmpty ? l10n.notSet : _prefs.email,
+              ),
+              OmiSettingsRow(
+                key: const ValueKey('settings_row_userId'),
+                leading: const FaIcon(FontAwesomeIcons.solidClipboard),
+                title: l10n.userId,
+                value: truncatedUid,
+                showChevron: false,
+                onTap: () => OmiClipboard.copy(context, uid, what: l10n.userId),
+              ),
+            ],
+          ),
+          const SizedBox(height: OmiSpacing.xl),
+          OmiSettingsGroup(
+            children: [
+              OmiSettingsRow(
+                key: settingsRowKey(SettingsDestination.signOut),
+                leading: const FaIcon(FontAwesomeIcons.rightFromBracket),
+                title: l10n.signOut,
+                isDestructive: true,
+                showChevron: false,
+                onTap: () => _open(SettingsDestination.signOut),
+              ),
+              OmiSettingsRow(
+                key: settingsRowKey(SettingsDestination.deleteAccount),
+                leading: const FaIcon(FontAwesomeIcons.triangleExclamation),
+                title: l10n.deleteAccountTitle,
+                isDestructive: true,
+                showChevron: true,
+                onTap: () => _open(SettingsDestination.deleteAccount),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }

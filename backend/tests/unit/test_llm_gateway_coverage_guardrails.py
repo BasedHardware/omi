@@ -13,7 +13,7 @@ import pytest
 
 from llm_gateway.gateway.config_loader import feature_lane_id, load_gateway_config, load_generated_route_overrides
 from llm_gateway.gateway.schemas import Surface
-from utils.llm.model_config import get_all_configured_features, get_route_options, get_model, get_provider
+from utils.llm.model_config import LUNA_MODEL, get_all_configured_features, get_route_options, get_model, get_provider
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 INVENTORY_PATH = BACKEND_DIR / 'docs' / 'llm' / 'model_endpoint_inventory.yaml'
@@ -57,6 +57,7 @@ DIRECT_PROVIDER_ALLOWLIST = {
     DirectUse('llm_gateway/routers/health.py', 'ANTHROPIC_API_KEY'),
     DirectUse('llm_gateway/routers/health.py', 'OPENAI_API_KEY'),
     DirectUse('llm_gateway/routers/health.py', 'PERPLEXITY_API_KEY'),
+    DirectUse('llm_gateway/routers/health.py', 'OPENROUTER_API_KEY'),
     DirectUse('routers/desktop_proxy.py', 'GEMINI_API_KEY'),
     DirectUse('routers/desktop_realtime.py', 'GEMINI_API_KEY'),
     DirectUse('routers/desktop_realtime.py', 'OPENAI_API_KEY'),
@@ -245,7 +246,7 @@ def test_persona_auth_tiers_resolve_to_fixed_gateway_models():
     overrides = load_generated_route_overrides()
 
     assert overrides['persona_chat'].primary.model == 'gpt-5-nano'
-    assert overrides['persona_chat_premium'].primary.model == 'gpt-5.6-luna'
+    assert overrides['persona_chat_premium'].primary.model == LUNA_MODEL
 
 
 def test_every_gpt5_generated_lane_pins_an_explicit_reasoning_effort():
@@ -254,7 +255,7 @@ def test_every_gpt5_generated_lane_pins_an_explicit_reasoning_effort():
     File chat ran unpinned with a 2048-token output cap, and the provider
     default can spend a capped completion budget on hidden reasoning before
     any answer text — the truncation failure desktop proactivity hit on its
-    direct path. Every OpenAI GPT-5 lane must name its effort explicitly.
+    direct path.     Every OpenAI GPT-5 lane, and gpt-x-luna, must name its effort explicitly.
     """
     overrides = load_generated_route_overrides()
 
@@ -262,7 +263,7 @@ def test_every_gpt5_generated_lane_pins_an_explicit_reasoning_effort():
         override = overrides.get(feature)
         model = override.primary.model if override is not None else get_model(feature)
         provider = override.primary.provider if override is not None else get_provider(feature)
-        if provider != 'openai' or not model.startswith('gpt-5'):
+        if provider != 'openai' or not (model.startswith('gpt-5') or model == LUNA_MODEL):
             continue
         options = get_route_options(feature, model, provider)
         if override is not None:

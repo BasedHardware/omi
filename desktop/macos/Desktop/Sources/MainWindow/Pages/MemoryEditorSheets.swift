@@ -30,7 +30,7 @@ struct AddMemorySheet: View {
     VStack(spacing: OmiSpacing.xl) {
       // Header with close button
       HStack {
-        Text("Add Memory")
+        Text("New Memory")
           .scaledFont(size: OmiType.heading, weight: .semibold)
           .foregroundColor(Ink.primary)
         Spacer()

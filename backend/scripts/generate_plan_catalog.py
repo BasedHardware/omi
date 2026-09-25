@@ -705,7 +705,11 @@ def scan_embedded_stripe_ids(catalog: Mapping[str, Any]) -> list[str]:
         )
         for file_name in sorted(file_names):
             path = Path(directory) / file_name
-            if not _is_scannable_source(path):
+            # Directory prune above skips ignored *trees*. An ignored file in a
+            # tracked directory (``local.json`` next to production sources) is
+            # still walked, and must not fail the contract the way a sibling
+            # worktree did (#12476).
+            if path.resolve() in ignored or not _is_scannable_source(path):
                 continue
             try:
                 text = path.read_text(encoding='utf-8')
