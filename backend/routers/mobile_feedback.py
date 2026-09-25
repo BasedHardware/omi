@@ -78,11 +78,6 @@ def submit_mobile_feedback(
     before the write. The idempotency key is scoped to the authenticated UID,
     so a retry is safe while a reused key with a different payload is rejected.
     """
-    if not payload.feedback_id or len(payload.feedback_id.strip()) == 0:
-        raise HTTPException(status_code=422, detail='feedback_id cannot be empty')
-    if not payload.target_id or len(payload.target_id.strip()) == 0:
-        raise HTTPException(status_code=422, detail='target_id cannot be empty')
-
     related_conversation_id: str | None = None
     resolved_target_kind = FeedbackTargetKind.conversation
     provenance: dict[str, Any] = {}

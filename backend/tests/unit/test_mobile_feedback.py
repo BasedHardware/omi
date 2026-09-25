@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import pytest
+from fastapi import HTTPException
+from pydantic import ValidationError
 
-from tests.unit.fixtures.generic_firestore_fake import FakeFirestore
-from models.feedback import FeedbackSurface, FeedbackTargetKind, MobileFeedbackKind, MobileFeedbackRequest
 from database import feedback as feedback_db
+from models.feedback import FeedbackSurface, FeedbackTargetKind, MobileFeedbackKind, MobileFeedbackRequest
 from routers import mobile_feedback
+from tests.unit.fixtures.generic_firestore_fake import FakeFirestore
 
 
 def test_mobile_feedback_request_rejects_cross_surface_reason():
@@ -27,6 +29,24 @@ def test_mobile_feedback_request_rejects_summary_recording_target_kind():
             target_kind='recording',
             target_id='conversation-1',
             value=1,
+        )
+
+
+def test_mobile_feedback_model_rejects_blank_identifiers():
+    with pytest.raises(ValidationError):
+        MobileFeedbackRequest(
+            feedback_id='   ',
+            kind=MobileFeedbackKind.summary_helpfulness,
+            target_id='conversation-1',
+            value=-1,
+        )
+
+    with pytest.raises(ValidationError):
+        MobileFeedbackRequest(
+            feedback_id='f-blank-target',
+            kind=MobileFeedbackKind.summary_helpfulness,
+            target_id='   ',
+            value=-1,
         )
 
 
@@ -239,3 +259,192 @@ def test_recording_quality_explicit_recording_target_does_not_fallback_to_conver
     with pytest.raises(Exception) as error:
         mobile_feedback.submit_mobile_feedback(payload, None, None, None, 'uid-1')
     assert getattr(error.value, 'status_code', None) == 404
+
+
+def test_mobile_feedback_conversations_db_exception_returns_503(monkeypatch):
+    payload = MobileFeedbackRequest(
+        feedback_id='client-f-503-conv',
+        kind=MobileFeedbackKind.summary_helpfulness,
+        target_id='conversation-1',
+        value=1,
+    )
+
+    def failing_get_conversation(uid, cid):
+        raise RuntimeError('Firestore connection reset: details leaking test')
+
+    monkeypatch.setattr(mobile_feedback.conversations_db, 'get_conversation', failing_get_conversation)
+
+    with pytest.raises(HTTPException) as exc_info:
+        mobile_feedback.submit_mobile_feedback(payload, None, None, None, 'uid-1')
+
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.detail == 'Conversation service temporarily unavailable'
+    assert 'Firestore' not in exc_info.value.detail
+
+
+def test_mobile_feedback_recording_sessions_db_exception_returns_503(monkeypatch):
+    payload = MobileFeedbackRequest(
+        feedback_id='client-f-503-rec',
+        kind=MobileFeedbackKind.recording_quality,
+        target_kind='recording',
+        target_id='recording-1',
+        value=-1,
+    )
+
+    def failing_get_recording_session(uid, sid):
+        raise RuntimeError('Firestore socket timeout')
+
+    monkeypatch.setattr(mobile_feedback.recording_sessions_db, 'get_recording_session', failing_get_recording_session)
+
+    with pytest.raises(HTTPException) as exc_info:
+        mobile_feedback.submit_mobile_feedback(payload, None, None, None, 'uid-1')
+
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.detail == 'Recording ownership is temporarily unavailable'
+    assert 'socket timeout' not in exc_info.value.detail
+
+
+def test_mobile_feedback_related_conversation_lookup_failure_degrades_gracefully(monkeypatch):
+    payload = MobileFeedbackRequest(
+        feedback_id='client-f-provenance-degraded',
+        kind=MobileFeedbackKind.recording_quality,
+        target_kind='recording',
+        target_id='recording-1',
+        value=1,
+    )
+    monkeypatch.setattr(
+        mobile_feedback.recording_sessions_db,
+        'get_recording_session',
+        lambda uid, sid: {'conversation_id': 'conversation-1'},
+    )
+
+    def failing_get_conversation(uid, cid):
+        raise RuntimeError('Transient failure fetching related conversation')
+
+    monkeypatch.setattr(mobile_feedback.conversations_db, 'get_conversation', failing_get_conversation)
+
+    recorded = {}
+    monkeypatch.setattr(
+        mobile_feedback.feedback_db,
+        'record_feedback_event_idempotent',
+        lambda *args, **kwargs: recorded.update(args=args, kwargs=kwargs) or ('event-provenance-1', True),
+    )
+    monkeypatch.setattr(mobile_feedback, '_safe_emit_product_event', lambda **kwargs: None)
+
+    receipt = mobile_feedback.submit_mobile_feedback(payload, None, None, None, 'uid-1')
+    assert receipt.persisted is True
+    assert receipt.created is True
+    assert recorded['kwargs']['related_conversation_id'] == 'conversation-1'
+    assert recorded['kwargs']['backend_release'] is None
+
+
+def test_mobile_feedback_fallback_conversation_lookup_exception_returns_503(monkeypatch):
+    payload = MobileFeedbackRequest(
+        feedback_id='client-f-fallback-conv-fail',
+        kind=MobileFeedbackKind.recording_quality,
+        target_id='conversation-1',
+        value=1,
+    )
+    monkeypatch.setattr(mobile_feedback.recording_sessions_db, 'get_recording_session', lambda uid, sid: None)
+
+    def failing_get_conversation(uid, cid):
+        raise RuntimeError('DB internal error in fallback')
+
+    monkeypatch.setattr(mobile_feedback.conversations_db, 'get_conversation', failing_get_conversation)
+
+    with pytest.raises(HTTPException) as exc_info:
+        mobile_feedback.submit_mobile_feedback(payload, None, None, None, 'uid-1')
+
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.detail == 'Conversation service temporarily unavailable'
+    assert 'DB internal error' not in exc_info.value.detail
+
+
+def test_mobile_feedback_persistence_error_returns_503(monkeypatch):
+    payload = MobileFeedbackRequest(
+        feedback_id='client-f-persistence-error',
+        kind=MobileFeedbackKind.summary_helpfulness,
+        target_id='conversation-1',
+        value=-1,
+    )
+    monkeypatch.setattr(mobile_feedback.conversations_db, 'get_conversation', lambda uid, cid: {'id': cid})
+
+    def failing_record(*args, **kwargs):
+        raise feedback_db.FeedbackPersistenceError('Durable write timed out')
+
+    monkeypatch.setattr(mobile_feedback.feedback_db, 'record_feedback_event_idempotent', failing_record)
+
+    with pytest.raises(HTTPException) as exc_info:
+        mobile_feedback.submit_mobile_feedback(payload, None, None, None, 'uid-1')
+
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.detail == 'Feedback could not be durably stored; retry safely'
+    assert 'Durable write timed out' not in exc_info.value.detail
+
+
+def test_mobile_feedback_unexpected_persistence_error_returns_503(monkeypatch):
+    payload = MobileFeedbackRequest(
+        feedback_id='client-f-unexpected-persistence-error',
+        kind=MobileFeedbackKind.summary_helpfulness,
+        target_id='conversation-1',
+        value=-1,
+    )
+    monkeypatch.setattr(mobile_feedback.conversations_db, 'get_conversation', lambda uid, cid: {'id': cid})
+
+    def failing_record(*args, **kwargs):
+        raise RuntimeError('Raw unexpected database failure internal leak')
+
+    monkeypatch.setattr(mobile_feedback.feedback_db, 'record_feedback_event_idempotent', failing_record)
+
+    with pytest.raises(HTTPException) as exc_info:
+        mobile_feedback.submit_mobile_feedback(payload, None, None, None, 'uid-1')
+
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.detail == 'Feedback could not be durably stored; retry safely'
+    assert 'Raw unexpected' not in exc_info.value.detail
+
+
+def test_mobile_feedback_idempotency_conflict_returns_409(monkeypatch):
+    payload = MobileFeedbackRequest(
+        feedback_id='client-f-idempotency-conflict',
+        kind=MobileFeedbackKind.summary_helpfulness,
+        target_id='conversation-1',
+        value=1,
+    )
+    monkeypatch.setattr(mobile_feedback.conversations_db, 'get_conversation', lambda uid, cid: {'id': cid})
+
+    def conflict_record(*args, **kwargs):
+        raise feedback_db.FeedbackIdempotencyConflict('idempotency key clash')
+
+    monkeypatch.setattr(mobile_feedback.feedback_db, 'record_feedback_event_idempotent', conflict_record)
+
+    with pytest.raises(HTTPException) as exc_info:
+        mobile_feedback.submit_mobile_feedback(payload, None, None, None, 'uid-1')
+
+    assert exc_info.value.status_code == 409
+    assert exc_info.value.detail == 'feedback_id was already used for a different event'
+
+
+def test_mobile_feedback_telemetry_failure_does_not_fail_request(monkeypatch):
+    payload = MobileFeedbackRequest(
+        feedback_id='client-f-telemetry-fail',
+        kind=MobileFeedbackKind.summary_helpfulness,
+        target_id='conversation-1',
+        value=1,
+    )
+    monkeypatch.setattr(mobile_feedback.conversations_db, 'get_conversation', lambda uid, cid: {'id': cid})
+    monkeypatch.setattr(
+        mobile_feedback.feedback_db,
+        'record_feedback_event_idempotent',
+        lambda *args, **kwargs: ('event-telemetry-1', True),
+    )
+
+    def failing_telemetry(**kwargs):
+        raise RuntimeError('Telemetry service connection refused')
+
+    monkeypatch.setattr(mobile_feedback, 'emit_product_event', failing_telemetry)
+
+    receipt = mobile_feedback.submit_mobile_feedback(payload, None, None, None, 'uid-1')
+    assert receipt.persisted is True
+    assert receipt.created is True
+    assert receipt.event_id == 'event-telemetry-1'
