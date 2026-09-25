@@ -377,6 +377,10 @@ rate-limit responses still retry; read retries are unchanged.
 
 `omi action-item update ID --clear-due-at` removes a due date on servers supporting explicit null PATCH fields (backend fix #13029). It cannot be combined with `--due-at`. Omitting both leaves the date unchanged.
 
+## Preserve ambiguous sql table output
+
+`omi --json local sql` keeps ambiguous or truncated display tables under `text` rather than silently dropping cells. Structured Desktop responses pass through unchanged; the text display is not a lossless SQL wire format.
+
 ## Datetime options
 Conversation and action-item datetime options accept ISO timestamps with `Z`
 (UTC), numeric offsets, and optional fractional seconds, for example
