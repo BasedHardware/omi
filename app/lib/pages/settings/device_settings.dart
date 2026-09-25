@@ -416,6 +416,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   Widget _customizationGroup(BtDevice? device, DeviceProvider provider) {
     final l10n = context.l10n;
     final isOmi = device?.type == DeviceType.omi;
+    final supportsFind = isOmi && !FirmwareUpdateBuildPolicy.current.isOpenGlassDevice(device);
     final singleTapRow = OmiSettingsRow(
       key: const Key('single_tap_setting'),
       leading: const FaIcon(FontAwesomeIcons.handPointer),
