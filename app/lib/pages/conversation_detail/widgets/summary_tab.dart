@@ -577,7 +577,11 @@ class _SummaryFeedbackPromptState extends State<SummaryFeedbackPrompt> {
             Expanded(
               child: Text(
                 context.l10n.wasThisHelpful,
-                style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 14, // omi-ux-allow: font-size-literal -- pre-existing label style; no 14pt OmiType token
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ),
             IconButton(

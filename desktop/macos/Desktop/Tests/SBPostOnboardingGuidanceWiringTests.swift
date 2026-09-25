@@ -158,13 +158,13 @@ final class SBPostOnboardingGuidanceWiringTests: XCTestCase {
     appState?.hasCompletedOnboarding = false
     defer {
       appState?.hasCompletedOnboarding = previousCompletion
-      UserDefaults.standard.removeObject(forKey: "sbOnboardingResumeStepSchema")
+      UserDefaults.standard.removeObject(forKey: SBOnboardingModel.resumeStepSchemaKey)
     }
 
     UserDefaults.standard.set(
       SBOnboardingModel.Step.notifications.rawValue, forKey: SBOnboardingModel.resumeStepKey)
     UserDefaults.standard.set(
-      SBOnboardingModel.resumeStepSchemaVersion, forKey: "sbOnboardingResumeStepSchema")
+      SBOnboardingModel.resumeStepSchemaVersion, forKey: SBOnboardingModel.resumeStepSchemaKey)
     model.begin()
     XCTAssertEqual(model.step, .notifications, "a persisted resume step must be honored")
 
