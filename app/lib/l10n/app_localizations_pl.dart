@@ -2492,12 +2492,6 @@ class AppLocalizationsPl extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Szczegółowe komunikaty diagnostyczne';
 
   @override
-  String get autoCreateSpeakers => 'Automatycznie twórz mówców';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Automatycznie twórz po wykryciu nazwy';
-
-  @override
   String get followUpQuestions => 'Pytania uzupełniające';
 
   @override

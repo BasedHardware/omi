@@ -2500,12 +2500,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Mesaje de diagnostic detaliate';
 
   @override
-  String get autoCreateSpeakers => 'Creați automat vorbitori';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Creare automată când se detectează un nume';
-
-  @override
   String get followUpQuestions => 'Întrebări de urmărire';
 
   @override

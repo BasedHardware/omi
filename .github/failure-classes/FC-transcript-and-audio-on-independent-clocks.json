@@ -14,8 +14,7 @@
     "backend/routers/listen/speakers.py",
     "backend/utils/listen_pusher_session.py",
     "backend/routers/pusher.py",
-    "backend/utils/audio.py",
-    "backend/utils/audio_timeline.py"
+    "backend/utils/audio.py"
   ],
   "status": "open"
 }

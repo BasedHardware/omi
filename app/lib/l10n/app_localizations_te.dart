@@ -2504,12 +2504,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String get detailedDiagnosticMessages => 'వివరణాత్మక నిర్ధారణ సందేశాలు';
 
   @override
-  String get autoCreateSpeakers => 'స్పీకర్‌లను స్వయంచాలకంగా సృష్టించండి';
-
-  @override
-  String get autoCreateWhenNameDetected => 'పేరు కనుగొనబడినప్పుడు స్వయంచాలకంగా సృష్టించండి';
-
-  @override
   String get followUpQuestions => 'అనుసరణ ప్రశ్నలు';
 
   @override

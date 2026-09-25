@@ -2495,12 +2495,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Подробные диагностические сообщения';
 
   @override
-  String get autoCreateSpeakers => 'Автосоздание спикеров';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Автоматически создавать при обнаружении имени';
-
-  @override
   String get followUpQuestions => 'Дополнительные вопросы';
 
   @override

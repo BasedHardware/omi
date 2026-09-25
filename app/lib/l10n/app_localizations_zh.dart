@@ -2443,12 +2443,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get detailedDiagnosticMessages => '详细诊断消息';
 
   @override
-  String get autoCreateSpeakers => '自动创建说话者';
-
-  @override
-  String get autoCreateWhenNameDetected => '检测到名称时自动创建';
-
-  @override
   String get followUpQuestions => '后续问题';
 
   @override

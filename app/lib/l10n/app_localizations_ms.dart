@@ -2497,12 +2497,6 @@ class AppLocalizationsMs extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Mesej diagnostik terperinci';
 
   @override
-  String get autoCreateSpeakers => 'Cipta Penceramah Secara Automatik';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Cipta automatik apabila nama dikesan';
-
-  @override
   String get followUpQuestions => 'Soalan Susulan';
 
   @override

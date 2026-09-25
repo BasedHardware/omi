@@ -2486,12 +2486,6 @@ class AppLocalizationsNo extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Detaljerte diagnostiske meldinger';
 
   @override
-  String get autoCreateSpeakers => 'Opprett talere automatisk';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Opprett automatisk når navn oppdages';
-
-  @override
   String get followUpQuestions => 'Oppfølgingsspørsmål';
 
   @override

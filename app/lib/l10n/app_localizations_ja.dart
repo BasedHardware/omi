@@ -2448,12 +2448,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get detailedDiagnosticMessages => '詳細な診断メッセージ';
 
   @override
-  String get autoCreateSpeakers => '話者を自動作成';
-
-  @override
-  String get autoCreateWhenNameDetected => '名前が検出されたら自動作成';
-
-  @override
   String get followUpQuestions => 'フォローアップの質問';
 
   @override

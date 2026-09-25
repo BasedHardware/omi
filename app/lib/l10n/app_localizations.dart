@@ -4824,18 +4824,6 @@ abstract class AppLocalizations {
   /// Experimental feature name
   ///
   /// In en, this message translates to:
-  /// **'Auto-create Speakers'**
-  String get autoCreateSpeakers;
-
-  /// Description for auto-create speakers
-  ///
-  /// In en, this message translates to:
-  /// **'Auto-create when name detected'**
-  String get autoCreateWhenNameDetected;
-
-  /// Experimental feature name
-  ///
-  /// In en, this message translates to:
   /// **'Follow-up Questions'**
   String get followUpQuestions;
 
