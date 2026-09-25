@@ -11,6 +11,7 @@ from utils.apps import (
     get_available_app_by_id,
 )
 import database.notifications as notification_db
+from utils.integration_telemetry import emit_posthog_event
 from models.other import FcmTokenResponse, SaveFcmTokenRequest, SyncUserTimeZoneRequest
 from models.integrations import IntegrationNotificationResponse
 from utils.notifications import (
@@ -48,6 +49,15 @@ def save_token(
     token_data['device_key'] = device_key
 
     notification_db.save_token(uid, token_data)
+    # Analytics-only lifecycle signal (Firestore stays the eligibility source of
+    # truth): a recent `registered` event is how churn/re-engagement analysis
+    # knows a uid had a deliverable push token as of a date. Low cardinality —
+    # at most one per app launch / token refresh, vs per-request session events.
+    emit_posthog_event(
+        uid,
+        'Push Token Status',
+        {'status': 'registered', 'platform': platform.lower() if platform else None},
+    )
     return FcmTokenResponse(status='Ok')
 
 
