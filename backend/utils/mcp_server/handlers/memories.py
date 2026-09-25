@@ -417,9 +417,10 @@ def create_memories(
 ) -> Dict[str, Any]:
     """Create 1..25 memories in one call with per-item results.
 
-    Every submitted item — including duplicates and items that later fail —
-    is charged once against the ``memories:create`` bucket, so a batch of 25
-    cannot bypass the singular write limit. The write bucket is charged
+    Every VALID item — including duplicates and items that later fail to
+    store — is charged once against the ``memories:create`` bucket, so a
+    batch of 25 cannot bypass the singular write limit; malformed items are
+    rejected before their charge. The write bucket is charged
     inside this handler (the tool spec carries no transport-level
     ``rate_bucket``), preserving the fail-closed 429/503 limiter errors as
     per-item failures rather than aborting the whole batch. Within-batch
@@ -441,12 +442,6 @@ def create_memories(
     results: List[Dict[str, Any]] = []
     first_created_id_by_key: Dict[Any, str] = {}
     for index, item in enumerate(raw_items):
-        try:
-            _charge_memories_create(uid, auth_context)
-        except HTTPException as exc:
-            results.append({"index": index, "status": "error", "error": _batch_item_error(exc)})
-            continue
-
         if not isinstance(item, dict):
             results.append(
                 {
@@ -468,6 +463,12 @@ def create_memories(
                     },
                 }
             )
+            continue
+
+        try:
+            _charge_memories_create(uid, auth_context)
+        except HTTPException as exc:
+            results.append({"index": index, "status": "error", "error": _batch_item_error(exc)})
             continue
 
         dedupe_key = (content, item.get("category") if isinstance(item.get("category"), str) else None)

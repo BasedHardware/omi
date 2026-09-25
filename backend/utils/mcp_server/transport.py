@@ -50,6 +50,7 @@ from utils.mcp_server.versions import (
     MCP_METHOD_HEADER,
     MCP_NAME_HEADER,
     MCP_PROTOCOL_VERSION_HEADER,
+    META_CLIENT_CAPABILITIES,
     PROTOCOL_VERSION_2026,
     SERVER_INFO,
     SUPPORTED_PROTOCOL_VERSIONS,
@@ -57,6 +58,7 @@ from utils.mcp_server.versions import (
     TOOLS_LIST_TTL_MS,
     JsonRpcProtocolError,
     client_info_name,
+    declared_client_capabilities,
     declared_protocol_version,
     is_batch_era_version,
     is_supported_version,
@@ -591,7 +593,15 @@ def prepare_messages(
     if any(not isinstance(message, dict) for message in body):
         return None, create_mcp_error(None, -32600, "Invalid Request: every batch element must be a JSON-RPC object.")
 
-    declared = {version for message in body if (version := declared_protocol_version(message))}
+    declared = set()
+    for message in body:
+        version = declared_protocol_version(message)
+        if version:
+            declared.add(version)
+        if message.get("method") == "initialize":
+            params = message.get("params")
+            requested = params.get("protocolVersion") if isinstance(params, dict) else None
+            declared.add(negotiate_protocol_version(requested))
     if header_version:
         declared.add(header_version)
     if len(declared) > 1:
@@ -676,6 +686,27 @@ def header_violation_error(
     return None
 
 
+def _client_capabilities_error(message: Dict[str, Any], header_version: Optional[str]) -> Optional[Dict[str, Any]]:
+    """2026-07-28 requires every request to carry ``clientCapabilities`` ``_meta``.
+
+    Both official SDKs (``mcp`` Python 2.0.0, ``@modelcontextprotocol/client``
+    2.0.0) stamp it on every modern call, so a 2026-declared message without a
+    capabilities OBJECT is a malformed request: ``-32602`` on HTTP 400.
+    Older revisions and undeclared messages are untouched.
+    """
+    declared = declared_protocol_version(message) or header_version
+    if declared != PROTOCOL_VERSION_2026:
+        return None
+    if isinstance(declared_client_capabilities(message), dict):
+        return None
+    return create_mcp_error(
+        message.get("id"),
+        -32602,
+        f"Invalid params: _meta['{META_CLIENT_CAPABILITIES}'] must be an object "
+        f"for protocol version {PROTOCOL_VERSION_2026}.",
+    )
+
+
 def _request_client_name(messages: List[Any], user_agent: Optional[str]) -> str:
     for message in messages:
         if isinstance(message, dict):
@@ -686,11 +717,22 @@ def _request_client_name(messages: List[Any], user_agent: Optional[str]) -> str:
 
 
 def _request_protocol_version(messages: List[Any], header_version: Optional[str]) -> str:
+    """Analytics-facing version for the whole POST.
+
+    An explicit ``_meta`` declaration wins. When no message declares one but
+    the POST carries an ``initialize``, the version the server actually
+    negotiated for it — not a disagreeing header — is what the client observes.
+    """
     for message in messages:
         if isinstance(message, dict):
             version = declared_protocol_version(message)
             if version:
                 return version
+    for message in messages:
+        if isinstance(message, dict) and message.get("method") == "initialize":
+            params = message.get("params")
+            requested = params.get("protocolVersion") if isinstance(params, dict) else None
+            return negotiate_protocol_version(requested)
     return header_version or DEFAULT_PROTOCOL_VERSION
 
 
@@ -747,7 +789,7 @@ async def handle_post_request(
     message_count = 0
     tool_name: Optional[str] = None
     try:
-        auth_context = await run_blocking(db_executor, authenticate_mcp_request, authorization)
+        auth_context = await run_blocking(db_executor, authenticate_mcp_request, authorization, request)
         if not auth_context:
             raise invalid_mcp_auth_exception(path_kind=path_kind)
         uid = auth_context.uid
@@ -803,6 +845,12 @@ async def handle_post_request(
             return JSONResponse(content=error_response)
         messages = cast(List[Dict[str, Any]], messages)
 
+        for message in messages:
+            capabilities_error = _client_capabilities_error(message, header_version)
+            if capabilities_error is not None:
+                http_status = 400
+                return JSONResponse(status_code=400, content=capabilities_error)
+
         all_notifications = all(message.get("id") is None for message in messages)
 
         # Admission-level rate limiting: one mcp:sse charge per JSON-RPC message,
@@ -810,12 +858,15 @@ async def handle_post_request(
         for _ in messages:
             await run_blocking(critical_executor, check_rate_limit_inline, uid, "mcp:sse")
 
+        tool_calls = [message for message in messages if message.get("method") == "tools/call"]
+        tool_name = None
+        if len(tool_calls) == 1:
+            params = tool_calls[0].get("params")
+            name = params.get("name") if isinstance(params, dict) else None
+            tool_name = name if isinstance(name, str) and name else None
+
         responses: List[Dict[str, Any]] = []
         for message in messages:
-            if tool_name is None and message.get("method") == "tools/call":
-                params = message.get("params")
-                name = params.get("name") if isinstance(params, dict) else None
-                tool_name = name if isinstance(name, str) else None
             response = await dispatch_message(auth_context, message, request_context)
             if response:
                 responses.append(response)
@@ -828,7 +879,7 @@ async def handle_post_request(
         accept = request.headers.get("accept") or ""
         if "text/event-stream" in accept:
             return _sse_response(responses)
-        return JSONResponse(content=responses[0] if len(responses) == 1 else responses)
+        return JSONResponse(content=responses if is_batch else responses[0])
     except HTTPException as exc:
         http_status = exc.status_code
         raise
@@ -871,14 +922,18 @@ def no_stream_get_response() -> Response:
     return Response(status_code=405, headers={"Allow": "POST, HEAD, DELETE"})
 
 
-def handle_head(authorization: Optional[str], path_kind: str = "canonical") -> Response:
-    if not authenticate_mcp_request(authorization):
+def handle_head(
+    authorization: Optional[str], path_kind: str = "canonical", request: Optional[Request] = None
+) -> Response:
+    if not authenticate_mcp_request(authorization, request):
         raise invalid_mcp_auth_exception(path_kind=path_kind)
     return Response(status_code=200)
 
 
-def handle_delete(authorization: Optional[str], path_kind: str = "canonical") -> Response:
-    auth_context = authenticate_mcp_request(authorization)
+def handle_delete(
+    authorization: Optional[str], path_kind: str = "canonical", request: Optional[Request] = None
+) -> Response:
+    auth_context = authenticate_mcp_request(authorization, request)
     if not auth_context:
         raise invalid_mcp_auth_exception("Invalid or missing API key", path_kind=path_kind)
 

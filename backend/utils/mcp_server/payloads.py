@@ -6,13 +6,20 @@ the transport itself.
 """
 
 import json
+from datetime import datetime
 from typing import Any, Dict
 
 from utils.mcp_server.versions import JSONRPC_VERSION, META_SERVER_INFO, PROTOCOL_VERSION_2026, SERVER_INFO
 
 
+def _json_default(value: Any) -> Any:
+    if isinstance(value, datetime):
+        return value.isoformat()
+    return str(value)
+
+
 def json_safe(value: Any) -> Any:
-    return json.loads(json.dumps(value, default=str))
+    return json.loads(json.dumps(value, default=_json_default))
 
 
 def compact_json(value: Any) -> str:

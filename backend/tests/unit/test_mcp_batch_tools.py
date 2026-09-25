@@ -300,7 +300,9 @@ class TestCreateMemories:
         assert [r["status"] for r in result["results"]] == ["created", "error", "created"]
         assert result["results"][1]["error"]["code"] == "rate_limited"
 
-    def test_invalid_item_is_per_item_error_but_still_charged(self):
+    def test_invalid_item_is_per_item_error_and_not_charged(self):
+        """Malformed items are rejected before their charge; only valid items
+        consume write quota."""
         patches, _service = _memory_stubs()
         with patches[0], patches[1], patches[2], patches[3], patches[4] as limiter, patches[5]:
             result = sse.execute_tool(
@@ -308,6 +310,39 @@ class TestCreateMemories:
             )
         assert [r["status"] for r in result["results"]] == ["created", "error"]
         assert result["results"][1]["error"]["code"] == "invalid_arguments"
+        assert limiter.call_count == 1
+
+    def test_non_object_item_is_per_item_error_and_not_charged(self):
+        patches, _service = _memory_stubs()
+        with patches[0], patches[1], patches[2], patches[3], patches[4] as limiter, patches[5]:
+            result = sse.execute_tool(
+                UID, "create_memories", {"items": [{"content": "ok"}, "not-an-object"]}, _memory_ctx()
+            )
+        assert [r["status"] for r in result["results"]] == ["created", "error"]
+        assert result["results"][1]["error"]["code"] == "invalid_arguments"
+        assert limiter.call_count == 1
+
+    def test_duplicate_is_charged_like_a_write(self):
+        """A within-batch duplicate still consumes write quota even though it
+        never reaches the store."""
+        patches, _service = _memory_stubs()
+        with patches[0], patches[1], patches[2], patches[3], patches[4] as limiter, patches[5]:
+            result = sse.execute_tool(
+                UID, "create_memories", {"items": [{"content": "same"}, {"content": "same"}]}, _memory_ctx()
+            )
+        assert [r["status"] for r in result["results"]] == ["created", "duplicate"]
+        assert limiter.call_count == 2
+
+    def test_store_failure_is_charged_like_a_write(self):
+        def _fail(uid, memory_db, **kw):
+            raise HTTPException(status_code=500, detail="boom")
+
+        patches, _service = _memory_stubs(create_side_effect=_fail)
+        with patches[0], patches[1], patches[2], patches[3], patches[4] as limiter, patches[5]:
+            result = sse.execute_tool(
+                UID, "create_memories", {"items": [{"content": "a"}, {"content": "b"}]}, _memory_ctx()
+            )
+        assert [r["status"] for r in result["results"]] == ["error", "error"]
         assert limiter.call_count == 2
 
     @pytest.mark.parametrize("items", [[], [{"content": "x"}] * 26, "not-a-list"])
@@ -425,6 +460,17 @@ class TestScreenActivityGrouping:
         with pytest.raises(ToolExecutionError) as exc:
             sse.execute_tool(UID, "get_screen_activity", {"group_by": "minute"})
         assert exc.value.code == -32602
+
+    def test_summary_with_group_by_rejected_before_db(self):
+        with (
+            patch.object(other_handler.screen_activity_db, "get_screen_activity_page") as page_fn,
+            patch.object(other_handler.screen_activity_db, "get_screen_activity_summary") as summary_fn,
+        ):
+            with pytest.raises(ToolExecutionError) as exc:
+                sse.execute_tool(UID, "get_screen_activity", {"summary": True, "group_by": "app"})
+        assert exc.value.code == -32602
+        page_fn.assert_not_called()
+        summary_fn.assert_not_called()
 
     def test_legacy_summary_path_preserved_and_cursor_rejected(self):
         summary = {"apps": {}, "total_screenshots": 3, "coverage": {}}

@@ -85,6 +85,19 @@ def declared_protocol_version(message: Dict[str, Any]) -> Optional[str]:
     return None
 
 
+def declared_client_capabilities(message: Dict[str, Any]) -> Any:
+    """The ``_meta`` clientCapabilities value a stateless message carries, if any."""
+    params = message.get("params")
+    if isinstance(params, dict):
+        meta = params.get("_meta")
+        if isinstance(meta, dict) and META_CLIENT_CAPABILITIES in meta:
+            return meta[META_CLIENT_CAPABILITIES]
+    meta = message.get("_meta")
+    if isinstance(meta, dict):
+        return meta.get(META_CLIENT_CAPABILITIES)
+    return None
+
+
 def client_info_name(message: Dict[str, Any]) -> Optional[str]:
     """Best-effort client identity for analytics, from ``clientInfo`` or ``_meta``."""
     params = message.get("params")

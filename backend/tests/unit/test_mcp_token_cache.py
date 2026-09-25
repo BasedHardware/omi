@@ -607,7 +607,10 @@ def test_cimd_grant_document_id_is_sanitized_but_preregistered_id_unchanged(_fak
     prereg_grant = mcp_oauth.create_or_update_grant(
         "grant-user", "omi-chatgpt-prod", mcp_oauth.MCP_RESOURCE_URL, ["memories.read"]
     )
-    assert prereg_grant["id"] == f"grant-user:omi-chatgpt-prod:{mcp_oauth.hash_secret(mcp_oauth.MCP_RESOURCE_URL)[:16]}"
+    assert (
+        prereg_grant["id"]
+        == f"grant-user:omi-chatgpt-prod:{mcp_oauth.hash_secret(mcp_oauth.MCP_LEGACY_RESOURCE_URL)[:16]}"
+    )
 
 
 # --- Outage semantics --------------------------------------------------------

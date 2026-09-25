@@ -1100,3 +1100,159 @@ def test_refresh_rotation_with_omitted_resource_keeps_stored_audience():
     rotated = mcp_oauth.rotate_refresh_token(token_pair['refresh_token'], 'omi-chatgpt-prod', None)
     auth_context = mcp_oauth.validate_access_token(rotated['access_token'], mcp_oauth.MCP_RESOURCE_URL)
     assert auth_context['uid'] == 'user-omit-refresh'
+
+
+def _seed_grant_doc(uid, client_id, resource, grant_id, *, revoked=False, scopes=None, days_ago=0):
+    """Write a bare grant doc the way a historical migration left it."""
+    now = mcp_oauth._now() - timedelta(days=days_ago)
+    mcp_oauth.db.collection('mcp_oauth_grants').document(grant_id).set(
+        {
+            'id': grant_id,
+            'uid': uid,
+            'client_id': client_id,
+            'resource': resource,
+            'scopes': scopes or ['memories.read'],
+            'created_at': now,
+            'updated_at': now,
+            'last_used_at': now,
+            'revoked_at': now if revoked else None,
+            'status': 'revoked' if revoked else 'active',
+        }
+    )
+    return grant_id
+
+
+def test_grant_document_id_hashes_legacy_resource_form():
+    """Canonical and legacy resources produce the pre-existing legacy grant
+    id; a different host stays a different grant."""
+    uid = 'user-id-seed'
+    expected = f"{uid}:omi-chatgpt-prod:{mcp_oauth.hash_secret(mcp_oauth.MCP_LEGACY_RESOURCE_URL)[:16]}"
+    assert mcp_oauth._grant_document_id(uid, 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL) == expected
+    assert mcp_oauth._grant_document_id(uid, 'omi-chatgpt-prod', mcp_oauth.MCP_LEGACY_RESOURCE_URL) == expected
+    assert mcp_oauth._grant_document_id(uid, 'omi-chatgpt-prod', 'https://other.example/v1/mcp') != expected
+
+
+def test_legacy_then_canonical_consent_converges_on_one_grant():
+    """Real consent against the legacy path then the canonical path produces
+    one grant; revoking it kills the token families both consents issued."""
+    scopes = ['memories.read']
+    redirect = 'https://chatgpt.com/connector_platform_oauth_redirect'
+    legacy_grant, _ = mcp_oauth.create_grant_and_authorization_code_if_allowed(
+        'user-dual',
+        'omi-chatgpt-prod',
+        redirect,
+        mcp_oauth.MCP_LEGACY_RESOURCE_URL,
+        scopes,
+        mcp_oauth.pkce_s256('a' * 64),
+    )
+    canonical_grant, _ = mcp_oauth.create_grant_and_authorization_code_if_allowed(
+        'user-dual',
+        'omi-chatgpt-prod',
+        redirect,
+        mcp_oauth.MCP_RESOURCE_URL,
+        scopes,
+        mcp_oauth.pkce_s256('b' * 64),
+    )
+    assert canonical_grant['id'] == legacy_grant['id']
+    assert [grant['id'] for grant in mcp_oauth.list_user_grants('user-dual')] == [legacy_grant['id']]
+
+    legacy_tokens = mcp_oauth.issue_token_pair(legacy_grant, scopes=scopes)
+    canonical_tokens = mcp_oauth.issue_token_pair(canonical_grant, scopes=scopes)
+    assert mcp_oauth.revoke_user_grant('user-dual', canonical_grant['id']) is True
+    for tokens in (legacy_tokens, canonical_tokens):
+        assert mcp_oauth.validate_access_token(tokens['access_token'], mcp_oauth.MCP_RESOURCE_URL) is None
+        assert (
+            mcp_oauth.rotate_refresh_token(tokens['refresh_token'], 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL)
+            is None
+        )
+
+
+def test_historical_parallel_grant_is_deduped_and_revoked_together():
+    """A pre-fork parallel doc (hashed directly on the canonical resource)
+    stays live behind the deduped listing, and revoking the visible grant
+    revokes its token family too."""
+    uid = 'user-fork'
+    client_id = 'omi-chatgpt-prod'
+    scopes = ['memories.read']
+    fork_id = _seed_grant_doc(
+        uid,
+        client_id,
+        mcp_oauth.MCP_RESOURCE_URL,
+        f"{uid}:{client_id}:{mcp_oauth.hash_secret(mcp_oauth.MCP_RESOURCE_URL)[:16]}",
+        days_ago=30,
+    )
+    live = mcp_oauth.create_or_update_grant(uid, client_id, mcp_oauth.MCP_LEGACY_RESOURCE_URL, scopes)
+    assert live['id'] != fork_id
+
+    fork_doc = mcp_oauth.db.collection('mcp_oauth_grants').document(fork_id).get().to_dict()
+    fork_tokens = mcp_oauth.issue_token_pair(fork_doc, scopes=scopes)
+    live_tokens = mcp_oauth.issue_token_pair(live, scopes=scopes)
+
+    listed = mcp_oauth.list_user_grants(uid)
+    assert [grant['id'] for grant in listed] == [live['id']]
+
+    assert mcp_oauth.revoke_user_grant(uid, live['id']) is True
+    fork_after = mcp_oauth.db.collection('mcp_oauth_grants').document(fork_id).get().to_dict()
+    assert fork_after['status'] == 'revoked'
+    assert mcp_oauth.validate_access_token(live_tokens['access_token'], mcp_oauth.MCP_RESOURCE_URL) is None
+    assert mcp_oauth.validate_access_token(fork_tokens['access_token'], mcp_oauth.MCP_RESOURCE_URL) is None
+    assert mcp_oauth.rotate_refresh_token(fork_tokens['refresh_token'], client_id, mcp_oauth.MCP_RESOURCE_URL) is None
+    assert mcp_oauth.rotate_refresh_token(live_tokens['refresh_token'], client_id, mcp_oauth.MCP_RESOURCE_URL) is None
+
+
+def test_deduped_listing_prefers_active_over_revoked_parallel():
+    uid = 'user-pref'
+    client_id = 'omi-chatgpt-prod'
+    fork_id = _seed_grant_doc(
+        uid,
+        client_id,
+        mcp_oauth.MCP_RESOURCE_URL,
+        f"{uid}:{client_id}:{mcp_oauth.hash_secret(mcp_oauth.MCP_RESOURCE_URL)[:16]}",
+        revoked=True,
+    )
+    active = mcp_oauth.create_or_update_grant(uid, client_id, mcp_oauth.MCP_LEGACY_RESOURCE_URL, ['memories.read'])
+    mcp_oauth.db.collection('mcp_oauth_grants').document(fork_id).set(
+        {'updated_at': mcp_oauth._now() + timedelta(days=1)}, merge=True
+    )
+    listed = mcp_oauth.list_user_grants(uid)
+    assert [grant['id'] for grant in listed] == [active['id']]
+
+
+def test_deduped_listing_resorts_after_active_replaces_revoked():
+    """An older active grant replacing a revoked equivalent at the top must
+    not leave the visible rows out of recency order."""
+    uid = 'user-order'
+    client_id = 'omi-chatgpt-prod'
+    fork_id = _seed_grant_doc(
+        uid,
+        client_id,
+        mcp_oauth.MCP_RESOURCE_URL,
+        f"{uid}:{client_id}:{mcp_oauth.hash_secret(mcp_oauth.MCP_RESOURCE_URL)[:16]}",
+        revoked=True,
+    )
+    active = mcp_oauth.create_or_update_grant(uid, client_id, mcp_oauth.MCP_LEGACY_RESOURCE_URL, ['memories.read'])
+    between = mcp_oauth.create_or_update_grant(uid, 'omi-mcp-public', mcp_oauth.MCP_RESOURCE_URL, ['memories.read'])
+    now = mcp_oauth._now()
+    mcp_oauth.db.collection('mcp_oauth_grants').document(fork_id).set(
+        {'updated_at': now + timedelta(days=3)}, merge=True
+    )
+    mcp_oauth.db.collection('mcp_oauth_grants').document(active['id']).set({'updated_at': now}, merge=True)
+    mcp_oauth.db.collection('mcp_oauth_grants').document(between['id']).set(
+        {'updated_at': now + timedelta(days=1)}, merge=True
+    )
+    listed = mcp_oauth.list_user_grants(uid)
+    assert [grant['id'] for grant in listed] == [between['id'], active['id']]
+
+
+def test_revoke_user_grant_leaves_other_clients_and_hosts_untouched():
+    uid = 'user-iso'
+    scopes = ['memories.read']
+    target = mcp_oauth.create_or_update_grant(uid, 'omi-chatgpt-prod', mcp_oauth.MCP_RESOURCE_URL, scopes)
+    other_client = mcp_oauth.create_or_update_grant(uid, 'omi-mcp-public', mcp_oauth.MCP_RESOURCE_URL, scopes)
+    other_host = mcp_oauth.create_or_update_grant(uid, 'omi-chatgpt-prod', 'https://other.example/v1/mcp', scopes)
+
+    assert mcp_oauth.revoke_user_grant(uid, target['id']) is True
+
+    survivors = {grant['id']: grant for grant in mcp_oauth.list_user_grants(uid)}
+    assert survivors[other_client['id']]['status'] == 'active'
+    assert survivors[other_host['id']]['status'] == 'active'

@@ -8,6 +8,7 @@ capture path, and the HTTP 400 contract for header-caused protocol errors.
 
 import json
 import math
+from datetime import datetime, timedelta, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -20,7 +21,11 @@ import utils.mcp_server.transport as mcp_transport
 from routers import mcp_sse
 from utils.mcp_scopes import MCP_FULL_ACCESS_SCOPES
 from utils.mcp_server.auth import MCPAuthContext
-from utils.mcp_server.versions import META_PROTOCOL_VERSION, SUPPORTED_PROTOCOL_VERSIONS
+from utils.mcp_server.versions import (
+    META_PROTOCOL_VERSION,
+    NEGOTIATED_FALLBACK_VERSION,
+    SUPPORTED_PROTOCOL_VERSIONS,
+)
 
 ALL_SCOPES = list(MCP_FULL_ACCESS_SCOPES)
 
@@ -71,6 +76,10 @@ def authed():
 
 def _post(client, path, body, **headers):
     return client.post(path, json=body, headers={"Authorization": "Bearer tok", **headers})
+
+
+def _tool_call(name, arguments=None, msg_id=7):
+    return _msg("tools/call", msg_id=msg_id, params={"name": name, "arguments": arguments or {}})
 
 
 class TestHeaderErrorStatusCodes:
@@ -369,6 +378,14 @@ class TestToolCallUserSampling:
         assert math.isfinite(rate)
 
 
+@pytest.fixture(autouse=True)
+def _reset_mcp_active_local_seen():
+    """The process-local uid/day cache survives across tests in one process."""
+    mcp_analytics._mcp_active_seen_reset()
+    yield
+    mcp_analytics._mcp_active_seen_reset()
+
+
 class TestMcpActiveMarker:
     """``MCP Active`` fires at most once per uid per UTC day behind a Redis
     ``SET NX EX`` marker, and fails open when Redis is down."""
@@ -436,6 +453,105 @@ class TestMcpActiveMarker:
         mcp_analytics.schedule_mcp_active(uid="mcp-anonymous", **self._properties())
         mcp_analytics.schedule_mcp_active(uid=None, **self._properties())
         submit.assert_not_called()
+
+
+class TestMcpActiveLocalCache:
+    """The bounded process-local uid/day cache short-circuits the Redis NX
+    claim at scheduling time and inside the worker; Redis stays authority."""
+
+    def _properties(self):
+        return dict(client_name="claude_ai", transport="oauth", protocol_version="2025-03-26", first_tool=None)
+
+    def _redis(self, monkeypatch, set_return=True):
+        redis = MagicMock()
+        redis.r.set.return_value = set_return
+        monkeypatch.setattr(mcp_analytics, "redis_db", redis)
+        monkeypatch.setattr(mcp_analytics, "emit_mcp_posthog_event", MagicMock())
+        return redis
+
+    def test_repeated_uid_one_redis_set_and_one_schedule(self, monkeypatch):
+        redis = self._redis(monkeypatch)
+        submit = MagicMock(side_effect=lambda executor, fn, **kwargs: fn(**kwargs))
+        monkeypatch.setattr(mcp_analytics, "submit_with_context", submit)
+        for _ in range(3):
+            mcp_analytics.schedule_mcp_active(uid="u1", **self._properties())
+        assert submit.call_count == 1
+        assert redis.r.set.call_count == 1
+        mcp_analytics.emit_mcp_active(uid="u1", **self._properties())
+        assert redis.r.set.call_count == 1
+
+    def test_nx_miss_is_cached_and_skips_future_claims(self, monkeypatch):
+        redis = self._redis(monkeypatch, set_return=None)
+        emit = MagicMock()
+        monkeypatch.setattr(mcp_analytics, "emit_mcp_posthog_event", emit)
+        for _ in range(3):
+            mcp_analytics.emit_mcp_active(uid="u1", **self._properties())
+        assert redis.r.set.call_count == 1
+        emit.assert_not_called()
+
+    def test_redis_error_is_not_cached_and_retries(self, monkeypatch):
+        redis = self._redis(monkeypatch)
+        redis.r.set.side_effect = ConnectionError("redis down")
+        emit = MagicMock()
+        monkeypatch.setattr(mcp_analytics, "emit_mcp_posthog_event", emit)
+        for _ in range(2):
+            mcp_analytics.emit_mcp_active(uid="u1", **self._properties())
+        assert redis.r.set.call_count == 2
+        emit.assert_not_called()
+        redis.r.set.side_effect = None
+        redis.r.set.return_value = True
+        mcp_analytics.emit_mcp_active(uid="u1", **self._properties())
+        emit.assert_called_once()
+
+    def test_utc_day_rollover_resets_cache(self, monkeypatch):
+        redis = self._redis(monkeypatch)
+        current = {"day": "20260728"}
+        monkeypatch.setattr(mcp_analytics, "_utc_day", lambda now=None: current["day"])
+        mcp_analytics.emit_mcp_active(uid="u1", **self._properties())
+        mcp_analytics.emit_mcp_active(uid="u1", **self._properties())
+        assert redis.r.set.call_count == 1
+        current["day"] = "20260729"
+        mcp_analytics.emit_mcp_active(uid="u1", **self._properties())
+        assert redis.r.set.call_count == 2
+        assert redis.r.set.call_args.args[0].endswith(":20260729:u1")
+
+    def test_fifo_cap_evicts_oldest_entries(self, monkeypatch):
+        redis = self._redis(monkeypatch)
+        monkeypatch.setattr(mcp_analytics, "MCP_ACTIVE_LOCAL_SEEN_MAX", 2)
+        for uid in ("u1", "u2", "u3"):
+            mcp_analytics.emit_mcp_active(uid=uid, **self._properties())
+        assert redis.r.set.call_count == 3
+        mcp_analytics.emit_mcp_active(uid="u2", **self._properties())
+        mcp_analytics.emit_mcp_active(uid="u3", **self._properties())
+        assert redis.r.set.call_count == 3
+        mcp_analytics.emit_mcp_active(uid="u1", **self._properties())
+        assert redis.r.set.call_count == 4
+
+    def test_rollover_mid_claim_marks_the_claimed_day(self, monkeypatch):
+        """The worker captures its day once: if the UTC day rolls over while
+        the Redis SET is awaited, the local mark lands on the claimed day, so
+        the next day still performs its own claim."""
+        instant = {"now": datetime(2026, 7, 28, 23, 59, 59, tzinfo=timezone.utc)}
+
+        class _FrozenDateTime:
+            @classmethod
+            def now(cls, tz=None):
+                return instant["now"]
+
+        monkeypatch.setattr(mcp_analytics, "datetime", _FrozenDateTime)
+        redis = self._redis(monkeypatch)
+
+        def _set_then_roll(*args, **kwargs):
+            instant["now"] = instant["now"] + timedelta(days=1)
+            return True
+
+        redis.r.set.side_effect = _set_then_roll
+        mcp_analytics.emit_mcp_active(uid="u1", **self._properties())
+        assert redis.r.set.call_args.args[0].endswith(":20260728:u1")
+        assert mcp_analytics._mcp_active_seen_day == "20260728"
+        mcp_analytics.emit_mcp_active(uid="u1", **self._properties())
+        assert redis.r.set.call_count == 2
+        assert redis.r.set.call_args.args[0].endswith(":20260729:u1")
 
 
 class TestPostHogKeyScoping:
@@ -513,3 +629,93 @@ class TestPostHogKeyScoping:
         provider._timeout_seconds = 1
         # Only the events key is present: no decision client may be built.
         assert provider._build_client() is None
+
+
+class TestInitializeNegotiatedAnalytics:
+    """With no header/_meta declaration, the analytics version follows the
+    negotiated initialize result; request log and MCP Active stay in lockstep."""
+
+    def test_initialize_requested_version_drives_analytics(self, client, authed):
+        response = _post(client, "/v1/mcp", _msg("initialize", params={"protocolVersion": "2025-11-25"}))
+        assert response.status_code == 200
+        assert response.json()["result"]["protocolVersion"] == "2025-11-25"
+        assert authed.request_log.call_args.kwargs["protocol_version"] == "2025-11-25"
+        assert authed.active_event.call_args.kwargs["protocol_version"] == "2025-11-25"
+
+    def test_unsupported_initialize_logs_negotiated_fallback(self, client, authed):
+        _post(client, "/v1/mcp", _msg("initialize", params={"protocolVersion": "1999-01-01"}))
+        assert authed.request_log.call_args.kwargs["protocol_version"] == NEGOTIATED_FALLBACK_VERSION
+        assert authed.active_event.call_args.kwargs["protocol_version"] == NEGOTIATED_FALLBACK_VERSION
+
+    def test_legacy_batch_initialize_logs_its_version(self, client, authed):
+        _post(
+            client,
+            "/v1/mcp",
+            [_msg("initialize", 1, params={"protocolVersion": "2025-03-26"}), _msg("ping", 2)],
+        )
+        assert authed.request_log.call_args.kwargs["protocol_version"] == "2025-03-26"
+        assert authed.active_event.call_args.kwargs["protocol_version"] == "2025-03-26"
+
+    def test_initialize_negotiated_result_beats_disagreeing_header(self, client, authed):
+        response = _post(
+            client,
+            "/v1/mcp",
+            _msg("initialize", params={"protocolVersion": "2025-11-25"}),
+            **{"mcp-protocol-version": "2024-11-05"},
+        )
+        assert response.status_code == 200
+        assert response.json()["result"]["protocolVersion"] == "2025-11-25"
+        assert authed.request_log.call_args.kwargs["protocol_version"] == "2025-11-25"
+
+    def test_explicit_meta_beats_initialize_request(self, client, authed):
+        message = _msg(
+            "initialize",
+            params={
+                "protocolVersion": "2025-03-26",
+                "_meta": {META_PROTOCOL_VERSION: "2025-11-25"},
+            },
+        )
+        _post(client, "/v1/mcp", message)
+        assert authed.request_log.call_args.kwargs["protocol_version"] == "2025-11-25"
+
+
+class TestRequestToolDimension:
+    """``mcp_request.tool`` is populated only when the POST carries exactly one
+    ``tools/call`` message; any other count would misattribute it."""
+
+    def test_mixed_tool_batch_logs_unknown(self, client, authed):
+        with patch.object(mcp_transport, "execute_tool", return_value={}):
+            response = _post(
+                client,
+                "/v1/mcp",
+                [_tool_call("get_memories", msg_id=1), _tool_call("get_people", msg_id=2)],
+                **{"mcp-protocol-version": "2025-03-26"},
+            )
+        assert response.status_code == 200
+        assert authed.request_log.call_args.kwargs["tool_name"] is None
+
+    def test_single_tool_name_preserved(self, client, authed):
+        with patch.object(mcp_transport, "execute_tool", return_value={}):
+            _post(client, "/v1/mcp", _tool_call("get_people"))
+        assert authed.request_log.call_args.kwargs["tool_name"] == "get_people"
+
+    def test_tool_plus_ping_keeps_tool_name(self, client, authed):
+        with patch.object(mcp_transport, "execute_tool", return_value={}):
+            _post(
+                client,
+                "/v1/mcp",
+                [_tool_call("get_people", msg_id=1), _msg("ping", 2)],
+                **{"mcp-protocol-version": "2025-03-26"},
+            )
+        assert authed.request_log.call_args.kwargs["tool_name"] == "get_people"
+
+    def test_same_tool_called_twice_logs_unknown(self, client, authed):
+        with patch.object(mcp_transport, "execute_tool", return_value={}):
+            response = _post(
+                client,
+                "/v1/mcp",
+                [_tool_call("get_people", msg_id=1), _tool_call("get_people", msg_id=2)],
+                **{"mcp-protocol-version": "2025-03-26"},
+            )
+        assert response.status_code == 200
+        assert authed.request_log.call_args.kwargs["tool_name"] is None

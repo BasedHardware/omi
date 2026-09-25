@@ -134,7 +134,7 @@ denials log a WARNING carrying only the grant's safe observability reason.
 
 The REST `/v1/mcp/*` incremental-sync contract — `X-Next-Cursor` pagination,
 the `updated_since` feed on action-items, the explicit
-`incremental_sync_unavailable` 503 gates on conversations/memories (with
-rollout prerequisites), and deletion/tombstone semantics — is documented in
-[`mcp-rest-sync.md`](./mcp-rest-sync.md). The gates are deferred follow-ups,
-not implemented behavior.
+`incremental_sync_unsupported` 400 gates on conversations/memories, and
+deletion/tombstone semantics — is documented in
+[`mcp-rest-sync.md`](./mcp-rest-sync.md). Incremental sync stays permanently
+unsupported on those surfaces until first-class revisions exist.

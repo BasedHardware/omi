@@ -21,6 +21,8 @@ import logging
 import math
 import os
 import sys
+import threading
+from collections import OrderedDict
 from datetime import datetime, timezone
 from typing import Any, List, Mapping, Optional
 
@@ -49,6 +51,47 @@ MCP_TOOL_CALL_USER_SAMPLE_SALT = "omi:mcp-tool-call:user-sample:v1:"
 # with a 48-hour TTL so exact-day boundaries never emit twice.
 MCP_ACTIVE_REDIS_PREFIX = "mcp:active"
 MCP_ACTIVE_TTL_SECONDS = 172800
+
+MCP_ACTIVE_LOCAL_SEEN_MAX = 100_000
+_mcp_active_seen_uids: "OrderedDict[str, None]" = OrderedDict()
+_mcp_active_seen_day: Optional[str] = None
+_mcp_active_seen_lock = threading.Lock()
+
+
+def _utc_day(now: Optional[datetime] = None) -> str:
+    return (now or datetime.now(timezone.utc)).strftime("%Y%m%d")
+
+
+def _mcp_active_seen_reset_day(now: Optional[datetime] = None) -> str:
+    """Return the current UTC day, clearing the local cache on rollover."""
+    global _mcp_active_seen_day
+    day = _utc_day(now)
+    if _mcp_active_seen_day != day:
+        _mcp_active_seen_uids.clear()
+        _mcp_active_seen_day = day
+    return day
+
+
+def _mcp_active_locally_seen(uid: str, *, now: Optional[datetime] = None) -> bool:
+    with _mcp_active_seen_lock:
+        _mcp_active_seen_reset_day(now)
+        return uid in _mcp_active_seen_uids
+
+
+def _mcp_active_mark_local(uid: str, *, now: Optional[datetime] = None) -> None:
+    with _mcp_active_seen_lock:
+        _mcp_active_seen_reset_day(now)
+        _mcp_active_seen_uids[uid] = None
+        while len(_mcp_active_seen_uids) > MCP_ACTIVE_LOCAL_SEEN_MAX:
+            _mcp_active_seen_uids.popitem(last=False)
+
+
+def _mcp_active_seen_reset() -> None:
+    global _mcp_active_seen_day
+    with _mcp_active_seen_lock:
+        _mcp_active_seen_uids.clear()
+        _mcp_active_seen_day = None
+
 
 _CHATGPT_CLIENT_IDS = frozenset(
     client_id
@@ -335,6 +378,8 @@ def schedule_mcp_active(
     """Queue the once-per-uid-per-day ``MCP Active`` marker without delaying the response."""
     if not uid or uid == MCP_ANONYMOUS_DISTINCT_ID:
         return
+    if _mcp_active_locally_seen(uid):
+        return
     try:
         submit_with_context(
             postprocess_executor,
@@ -349,18 +394,19 @@ def schedule_mcp_active(
         logger.warning("mcp active analytics scheduling failed error=%s", type(exc).__name__)
 
 
-def _claim_daily_active_marker(uid: str, *, now: Optional[datetime] = None) -> bool:
+def _claim_daily_active_marker(uid: str, *, now: Optional[datetime] = None) -> Optional[bool]:
     """Redis ``SET NX EX`` dedupe: True only for the first claim of the UTC day.
 
-    Fail-open: a Redis error skips the marker event but never blocks or fails
-    the request it rode in on.
+    Returns ``None`` when Redis errored, so callers skip local caching and
+    keep retrying. Fail-open: a Redis error skips the marker event but never
+    blocks or fails the request it rode in on.
     """
-    day = (now or datetime.now(timezone.utc)).strftime("%Y%m%d")
+    day = _utc_day(now)
     try:
         claimed = redis_db.r.set(f"{MCP_ACTIVE_REDIS_PREFIX}:{day}:{uid}", "1", nx=True, ex=MCP_ACTIVE_TTL_SECONDS)
     except Exception as exc:  # noqa: BLE001 - dedupe failures skip the event
         logger.warning("mcp active marker dedupe failed error=%s", type(exc).__name__)
-        return False
+        return None
     return bool(claimed)
 
 
@@ -373,7 +419,14 @@ def emit_mcp_active(
     first_tool: Any = None,
 ) -> None:
     """Emit the daily active marker; the NX claim caps it at one per uid per UTC day."""
-    if not _claim_daily_active_marker(uid):
+    now = datetime.now(timezone.utc)
+    if _mcp_active_locally_seen(uid, now=now):
+        return
+    claimed = _claim_daily_active_marker(uid, now=now)
+    if claimed is None:
+        return
+    _mcp_active_mark_local(uid, now=now)
+    if not claimed:
         return
     properties = {
         "client_name": client_name if client_name in _MCP_CLIENT_NAMES else "unknown",

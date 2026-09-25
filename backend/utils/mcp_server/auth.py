@@ -5,7 +5,7 @@ import os
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-from fastapi import HTTPException
+from fastapi import HTTPException, Request
 from google.api_core import exceptions as google_api_exceptions
 
 import database.mcp_api_key as mcp_api_key_db
@@ -48,13 +48,22 @@ class MCPAuthContext:
     memory_context: Optional[ProductAuthorizationContext] = None
 
 
-def _enforce_mcp_cutover_access(uid: str) -> None:
+def _enforce_mcp_cutover_access(uid: str, request: Optional[Request] = None) -> None:
     """Fence MCP product principals when cutover enforcement is enabled.
 
-    MCP auth helpers are Request-free; evaluate as a mutating product path so
-    positive-generation and migrating/new rules apply fail-closed.
+    HTTP callers pass the live Request so generation rules see the real
+    method/path/headers; Request-free callers evaluate as a mutating product
+    path so positive-generation and migrating/new rules apply fail-closed.
     """
     if not cutover_enforcement_enabled():
+        return
+    if request is not None:
+        enforce_account_cutover_http_access(
+            uid,
+            method=request.method,
+            path=request.url.path,
+            headers=request.headers,
+        )
         return
     enforce_account_cutover_http_access(
         uid,
@@ -95,7 +104,9 @@ def authenticate_api_key_auth_context(authorization: Optional[str]) -> Optional[
     return _mcp_memory_context_from_auth_data(user_data)
 
 
-def authenticate_mcp_request(authorization: Optional[str]) -> Optional[MCPAuthContext]:
+def authenticate_mcp_request(
+    authorization: Optional[str], request: Optional[Request] = None
+) -> Optional[MCPAuthContext]:
     """Validate Authorization and return an MCP auth context.
 
     Raises 503 (never 401) when the token store itself is unreachable: a client
@@ -110,7 +121,7 @@ def authenticate_mcp_request(authorization: Optional[str]) -> Optional[MCPAuthCo
         token = authorization[7:]
 
     try:
-        return _authenticate_mcp_token(token)
+        return _authenticate_mcp_token(token, request)
     except google_api_exceptions.GoogleAPIError as exc:
         logger.warning("MCP auth lookup failed against the token store: %s", exc)
         raise mcp_auth_store_unavailable_exception() from exc
@@ -128,7 +139,7 @@ def mcp_auth_store_unavailable_exception() -> HTTPException:
     )
 
 
-def _authenticate_mcp_token(token: str) -> Optional[MCPAuthContext]:
+def _authenticate_mcp_token(token: str, request: Optional[Request] = None) -> Optional[MCPAuthContext]:
     if token.startswith("omi_mcp_"):
         auth_result = mcp_api_key_db.get_api_key_auth_result(token)
         record_api_key_repairs(key_kind="mcp", operation="auth", repairs=auth_result.repairs, log=logger)
@@ -136,7 +147,7 @@ def _authenticate_mcp_token(token: str) -> Optional[MCPAuthContext]:
         if not user_data or not user_data.get("user_id"):
             return None
         enforce_account_deletion_http_access(user_data["user_id"])
-        _enforce_mcp_cutover_access(user_data["user_id"])
+        _enforce_mcp_cutover_access(user_data["user_id"], request)
         return MCPAuthContext(
             uid=user_data["user_id"],
             auth_type="legacy_mcp_key",
@@ -150,7 +161,7 @@ def _authenticate_mcp_token(token: str) -> Optional[MCPAuthContext]:
     if not oauth_context:
         return None
     enforce_account_deletion_http_access(oauth_context["uid"])
-    _enforce_mcp_cutover_access(oauth_context["uid"])
+    _enforce_mcp_cutover_access(oauth_context["uid"], request)
     return MCPAuthContext(
         uid=oauth_context["uid"],
         auth_type="oauth",

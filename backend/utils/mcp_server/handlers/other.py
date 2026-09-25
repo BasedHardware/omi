@@ -295,6 +295,8 @@ def screen_activity_core(
     validate/parse their own inputs (dates arrive as datetimes; REST always
     passes ``group_by="none"``).
     """
+    if summary and group_by != "none":
+        raise ToolExecutionError("summary=true cannot be combined with group_by other than 'none'.", code=-32602)
     if summary and group_by == "none":
         # The legacy aggregate path is unchanged: one bounded scan with
         # explicit coverage, no cursor (a cursor here could never resume).

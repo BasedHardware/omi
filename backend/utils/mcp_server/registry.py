@@ -56,6 +56,25 @@ def _object_schema(required: List[str], **properties: Any) -> Dict[str, Any]:
 
 _ARRAY_OF_OBJECTS = {"type": "array", "items": {"type": "object"}}
 
+_DATETIME_OR_NULL = {"type": ["string", "null"], "format": "date-time"}
+
+_CONVERSATION_TIMESTAMPS: Dict[str, Any] = {
+    "created_at": _DATETIME_OR_NULL,
+    "started_at": _DATETIME_OR_NULL,
+    "finished_at": _DATETIME_OR_NULL,
+}
+
+_ACTION_ITEM_TIMESTAMPS: Dict[str, Any] = {
+    "created_at": _DATETIME_OR_NULL,
+    "due_at": _DATETIME_OR_NULL,
+    "completed_at": _DATETIME_OR_NULL,
+    "updated_at": _DATETIME_OR_NULL,
+}
+
+
+def _object_array_with(**properties: Any) -> Dict[str, Any]:
+    return {"type": "array", "items": {"type": "object", "properties": properties}}
+
 
 def _read_annotations(title: str) -> Dict[str, Any]:
     return {
@@ -192,8 +211,14 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
                     _object_schema(
                         ["profile_text"],
                         profile_text={"type": "string"},
-                        generated_at={},
-                        data_sources_used={},
+                        generated_at=_DATETIME_OR_NULL,
+                        data_sources_used={
+                            "anyOf": [
+                                {"type": "integer", "minimum": 0},
+                                {"type": "array", "items": {"type": "string"}},
+                                {"type": "null"},
+                            ]
+                        },
                     ),
                     _object_schema(
                         ["profile", "message"],
@@ -446,7 +471,7 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
         output_schema=_output_schema(
             _object_schema(
                 ["conversations"],
-                conversations=_ARRAY_OF_OBJECTS,
+                conversations=_object_array_with(**_CONVERSATION_TIMESTAMPS),
                 next_cursor=_NEXT_CURSOR_OUTPUT,
             )
         ),
@@ -488,7 +513,7 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
         output_schema=_output_schema(
             _object_schema(
                 ["conversation"],
-                conversation={"type": "object"},
+                conversation={"type": "object", "properties": dict(_CONVERSATION_TIMESTAMPS)},
                 truncated={"type": "boolean"},
             )
         ),
@@ -539,7 +564,15 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
         output_schema=_output_schema(
             _object_schema(
                 ["conversations", "not_found", "truncated"],
-                conversations=_ARRAY_OF_OBJECTS,
+                conversations={
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "conversation": {"type": "object", "properties": dict(_CONVERSATION_TIMESTAMPS)},
+                        },
+                    },
+                },
                 not_found={"type": "array", "items": {"type": "string"}},
                 truncated={"type": "boolean"},
             )
@@ -604,7 +637,9 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
             },
             "required": ["query"],
         },
-        output_schema=_output_schema(_object_schema(["conversations"], conversations=_ARRAY_OF_OBJECTS)),
+        output_schema=_output_schema(
+            _object_schema(["conversations"], conversations=_object_array_with(**_CONVERSATION_TIMESTAMPS))
+        ),
         scope="conversations.read",
         operation="conversation_search",
         write_operation=_READ,
@@ -633,7 +668,7 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
             },
             "required": ["query"],
         },
-        output_schema=_output_schema(_object_schema(["posts"], posts=_ARRAY_OF_OBJECTS)),
+        output_schema=_output_schema(_object_schema(["posts"], posts=_object_array_with(created_at=_DATETIME_OR_NULL))),
         scope="memories.read",
         operation="x_post_search",
         write_operation=_READ,
@@ -665,7 +700,7 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
                 },
             },
         },
-        output_schema=_output_schema(_object_schema(["posts"], posts=_ARRAY_OF_OBJECTS)),
+        output_schema=_output_schema(_object_schema(["posts"], posts=_object_array_with(created_at=_DATETIME_OR_NULL))),
         scope="memories.read",
         operation="x_post_list",
         write_operation=_READ,
@@ -715,7 +750,7 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
         output_schema=_output_schema(
             _object_schema(
                 ["action_items"],
-                action_items=_ARRAY_OF_OBJECTS,
+                action_items=_object_array_with(**_ACTION_ITEM_TIMESTAMPS),
                 next_cursor=_NEXT_CURSOR_OUTPUT,
             )
         ),
@@ -747,7 +782,9 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
             },
             "required": ["query"],
         },
-        output_schema=_output_schema(_object_schema(["action_items"], action_items=_ARRAY_OF_OBJECTS)),
+        output_schema=_output_schema(
+            _object_schema(["action_items"], action_items=_object_array_with(**_ACTION_ITEM_TIMESTAMPS))
+        ),
         scope="action_items.read",
         operation="action_item_search",
         write_operation=_READ,
@@ -779,7 +816,11 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
             "required": ["description"],
         },
         output_schema=_output_schema(
-            _object_schema(["action_item"], success={"type": "boolean"}, action_item={"type": "object"})
+            _object_schema(
+                ["action_item"],
+                success={"type": "boolean"},
+                action_item={"type": "object", "properties": dict(_ACTION_ITEM_TIMESTAMPS)},
+            )
         ),
         scope="action_items.write",
         operation="other",
@@ -805,7 +846,11 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
             "required": ["action_item_id"],
         },
         output_schema=_output_schema(
-            _object_schema(["action_item"], success={"type": "boolean"}, action_item={"type": "object"})
+            _object_schema(
+                ["action_item"],
+                success={"type": "boolean"},
+                action_item={"type": "object", "properties": dict(_ACTION_ITEM_TIMESTAMPS)},
+            )
         ),
         scope="action_items.write",
         operation="other",
@@ -834,7 +879,11 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
             "required": ["action_item_id"],
         },
         output_schema=_output_schema(
-            _object_schema(["action_item"], success={"type": "boolean"}, action_item={"type": "object"})
+            _object_schema(
+                ["action_item"],
+                success={"type": "boolean"},
+                action_item={"type": "object", "properties": dict(_ACTION_ITEM_TIMESTAMPS)},
+            )
         ),
         scope="action_items.write",
         operation="other",
@@ -917,7 +966,7 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
         output_schema=_output_schema(
             _object_schema(
                 ["messages"],
-                messages=_ARRAY_OF_OBJECTS,
+                messages=_object_array_with(created_at=_DATETIME_OR_NULL),
                 next_cursor=_NEXT_CURSOR_OUTPUT,
             )
         ),
@@ -937,7 +986,9 @@ TOOL_SPECS: Tuple[ToolSpec, ...] = (
         ),
         annotations=_read_annotations("Get people"),
         input_schema={"type": "object", "properties": {}},
-        output_schema=_output_schema(_object_schema(["people"], people=_ARRAY_OF_OBJECTS)),
+        output_schema=_output_schema(
+            _object_schema(["people"], people=_object_array_with(created_at=_DATETIME_OR_NULL))
+        ),
         scope="people.read",
         operation="people_list",
         write_operation=_READ,

@@ -10,6 +10,8 @@ import importlib
 import json
 import logging
 import sys
+from contextlib import contextmanager
+from datetime import datetime, timezone
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -34,6 +36,7 @@ from utils.mcp_server.registry import MCP_TOOLS, TOOL_SPECS
 from utils.mcp_server.versions import (
     DEFAULT_PROTOCOL_VERSION,
     HANDSHAKE_PROTOCOL_VERSIONS,
+    META_CLIENT_CAPABILITIES,
     META_PROTOCOL_VERSION,
     META_SERVER_INFO,
     NEGOTIATED_FALLBACK_VERSION,
@@ -75,7 +78,11 @@ EXPECTED_TOOL_ORDER = [
 
 # Representative handler results exercising every success output schema.
 FAKE_SUCCESS = {
-    "get_user_profile": {"profile_text": "p", "generated_at": "t", "data_sources_used": []},
+    "get_user_profile": {
+        "profile_text": "p",
+        "generated_at": "2026-06-11T10:30:00+00:00",
+        "data_sources_used": [],
+    },
     "get_memories": {"memories": [{"id": "m1"}], "filters": {}},
     "create_memory": {"success": True, "memory": {"id": "m1", "content": "c"}},
     "create_memories": {"results": [{"index": 0, "status": "created", "memory_id": "m1"}]},
@@ -403,6 +410,82 @@ class TestBatchAdmission:
         assert response.status_code == 200
         payload = response.json()
         assert [item["id"] for item in payload] == [1, 2]
+
+    def test_legacy_initialize_batch_accepted_when_others_undeclared(self):
+        messages, error = mcp_transport.prepare_messages(
+            [_msg("initialize", 1, params={"protocolVersion": "2025-03-26"}), _msg("ping", 2)],
+            header_version=None,
+            mcp_method=None,
+            mcp_name=None,
+        )
+        assert error is None
+        assert [message["id"] for message in messages] == [1, 2]
+
+    def test_modern_initialize_in_batch_rejected(self):
+        """An initialize's requested revision is a declaration for the whole
+        batch: 2025-11-25 is handshake-era, not batch-era, so the array fails."""
+        _, error = mcp_transport.prepare_messages(
+            [_msg("initialize", 1, params={"protocolVersion": "2025-11-25"}), _msg("ping", 2)],
+            header_version=None,
+            mcp_method=None,
+            mcp_name=None,
+        )
+        assert error["error"]["code"] == -32600
+
+    def test_initialize_version_conflicting_with_header_rejected(self):
+        _, error = mcp_transport.prepare_messages(
+            [_msg("initialize", 1, params={"protocolVersion": "2025-03-26"}), _msg("ping", 2)],
+            header_version="2025-11-25",
+            mcp_method=None,
+            mcp_name=None,
+        )
+        assert error["error"]["code"] == -32020
+
+    def test_unsupported_initialize_version_rejects_batch(self):
+        """An unrecognizable requested revision negotiates to the 2025-11-25
+        fallback, which is not batch-era, so the array is rejected."""
+        _, error = mcp_transport.prepare_messages(
+            [_msg("initialize", 1, params={"protocolVersion": "1999-01-01"}), _msg("ping", 2)],
+            header_version=None,
+            mcp_method=None,
+            mcp_name=None,
+        )
+        assert error["error"]["code"] == -32600
+
+    def test_initialize_2026_request_rejects_batch(self):
+        """Requesting the stateless revision negotiates the non-batch-era
+        fallback, so the array is rejected."""
+        _, error = mcp_transport.prepare_messages(
+            [_msg("initialize", 1, params={"protocolVersion": "2026-07-28"}), _msg("ping", 2)],
+            header_version=None,
+            mcp_method=None,
+            mcp_name=None,
+        )
+        assert error["error"]["code"] == -32600
+
+    def test_initialize_without_version_rejects_batch(self):
+        """An initialize with no requested revision still negotiates the
+        non-batch-era fallback."""
+        _, error = mcp_transport.prepare_messages(
+            [_msg("initialize", 1, params={}), _msg("ping", 2)],
+            header_version=None,
+            mcp_method=None,
+            mcp_name=None,
+        )
+        assert error["error"]["code"] == -32600
+
+    def test_batch_response_stays_array_after_notification_trimmed(self, client, authed):
+        response = _post(
+            client,
+            "/v1/mcp",
+            [_msg("ping", 1), {"jsonrpc": "2.0", "method": "notifications/initialized"}],
+            **{"mcp-protocol-version": "2025-03-26"},
+        )
+        assert response.status_code == 200
+        payload = response.json()
+        assert isinstance(payload, list)
+        assert len(payload) == 1
+        assert payload[0] == {"jsonrpc": "2.0", "id": 1, "result": {}}
 
 
 class TestRateLimitCharging:
@@ -1133,10 +1216,18 @@ class TestProfileAndScreenOutputVariants:
     def test_profile_success_variants_validate(self):
         spec = next(s for s in TOOL_SPECS if s.name == "get_user_profile")
         validator = Draft202012Validator(spec.output_schema)
-        validator.validate({"profile_text": "p", "generated_at": "t", "data_sources_used": ["x"]})
+        validator.validate(
+            {"profile_text": "p", "generated_at": "2026-06-11T10:30:00+00:00", "data_sources_used": ["x"]}
+        )
+        validator.validate({"profile_text": "p", "generated_at": None, "data_sources_used": 3})
+        validator.validate({"profile_text": "p", "data_sources_used": None})
         validator.validate({"profile": None, "message": "No profile has been generated for this user yet."})
         with pytest.raises(Exception):
             validator.validate({"arbitrary": "object"})
+        with pytest.raises(Exception):
+            validator.validate({"profile_text": "p", "data_sources_used": "not-a-union-member"})
+        with pytest.raises(Exception):
+            validator.validate({"profile_text": "p", "data_sources_used": -1})
 
     def test_screen_activity_variants_validate(self):
         spec = next(s for s in TOOL_SPECS if s.name == "get_screen_activity")
@@ -1145,3 +1236,256 @@ class TestProfileAndScreenOutputVariants:
         validator.validate({"apps": {"Cursor": {"count": 2}}, "total_screenshots": 2, "coverage": {}})
         with pytest.raises(Exception):
             validator.validate({"arbitrary": "object"})
+
+    def test_screen_activity_summary_with_group_by_is_invalid_arguments(self, client, authed):
+        """summary=true cannot combine with a grouped projection — a
+        model-visible invalid_arguments error, answered before any DB read."""
+        from utils.mcp_server.handlers import other as other_handlers
+
+        with (
+            patch.object(other_handlers.screen_activity_db, "get_screen_activity_page") as page_fn,
+            patch.object(other_handlers.screen_activity_db, "get_screen_activity_summary") as summary_fn,
+        ):
+            response = _post(client, "/v1/mcp", _tool_call("get_screen_activity", {"summary": True, "group_by": "app"}))
+        result = response.json()["result"]
+        assert result["isError"] is True
+        assert result["structuredContent"]["error"]["code"] == "invalid_arguments"
+        page_fn.assert_not_called()
+        summary_fn.assert_not_called()
+
+
+def _iter_schema_properties(node):
+    """Yield ``(name, property_schema)`` pairs from anywhere in a schema tree."""
+    if isinstance(node, dict):
+        for key, value in node.items():
+            if key == "properties" and isinstance(value, dict):
+                yield from value.items()
+                for sub in value.values():
+                    yield from _iter_schema_properties(sub)
+            else:
+                yield from _iter_schema_properties(value)
+    elif isinstance(node, list):
+        for item in node:
+            yield from _iter_schema_properties(item)
+
+
+class TestOutputSchemaTimestampFormats:
+    _TIMESTAMP_FIELDS = {
+        "created_at",
+        "started_at",
+        "finished_at",
+        "due_at",
+        "completed_at",
+        "updated_at",
+        "generated_at",
+    }
+
+    @pytest.mark.parametrize("spec", TOOL_SPECS, ids=lambda spec: spec.name)
+    def test_timestamp_properties_advertise_datetime(self, spec):
+        found = [name for name, prop in _iter_schema_properties(spec.output_schema) if name in self._TIMESTAMP_FIELDS]
+        for name, prop in _iter_schema_properties(spec.output_schema):
+            if name in self._TIMESTAMP_FIELDS:
+                assert prop.get("format") == "date-time", f"{spec.name}.{name} missing date-time format"
+                assert prop.get("type") in (["string", "null"], "string"), f"{spec.name}.{name}"
+        if spec.name in {
+            "get_user_profile",
+            "get_conversations",
+            "get_conversation_by_id",
+            "get_conversations_by_ids",
+            "search_conversations",
+            "get_action_items",
+            "search_action_items",
+            "create_action_item",
+            "complete_action_item",
+            "update_action_item",
+            "get_chat_messages",
+            "get_x_posts",
+            "search_x_posts",
+            "get_people",
+        }:
+            assert found, f"{spec.name} should advertise timestamp properties"
+
+    def test_datetime_results_serialize_iso8601_on_json_and_sse(self, client, authed):
+        moment = datetime(2026, 6, 11, 10, 30, 0, tzinfo=timezone.utc)
+        fake = {"conversations": [{"id": "c1", "meta": {"created_at": moment}}]}
+        with patch.object(mcp_transport, "execute_tool", return_value=fake):
+            json_response = _post(client, "/v1/mcp", _tool_call("get_conversations"))
+        result = json_response.json()["result"]
+        assert result["structuredContent"]["conversations"][0]["meta"]["created_at"] == "2026-06-11T10:30:00+00:00"
+        assert result["content"][0]["text"] == json.dumps(
+            result["structuredContent"], ensure_ascii=False, separators=(",", ":")
+        )
+
+        with patch.object(mcp_transport, "execute_tool", return_value=fake):
+            sse_response = _post(client, "/v1/mcp", _tool_call("get_conversations"), accept="text/event-stream")
+        frame = next(line for line in sse_response.text.splitlines() if line.startswith("data: "))
+        sse_result = json.loads(frame[len("data: ") :])["result"]
+        assert sse_result["structuredContent"] == result["structuredContent"]
+        assert sse_result["content"][0]["text"] == result["content"][0]["text"]
+
+
+class TestClientCapabilities2026:
+    """Explicit 2026-07-28 declarations must carry the clientCapabilities
+    ``_meta`` object — both official SDKs stamp it on every modern call."""
+
+    @pytest.mark.parametrize("path", ["/v1/mcp", "/v1/mcp/sse"])
+    def test_2026_header_without_capabilities_rejected(self, client, authed, path):
+        response = _post(client, path, _msg("tools/list"), **{"mcp-protocol-version": PROTOCOL_VERSION_2026})
+        assert response.status_code == 400
+        error = response.json()["error"]
+        assert error["code"] == -32602
+        assert META_CLIENT_CAPABILITIES in error["message"]
+
+    @pytest.mark.parametrize("path", ["/v1/mcp", "/v1/mcp/sse"])
+    def test_2026_meta_without_capabilities_rejected(self, client, authed, path):
+        message = _msg("tools/list")
+        message["params"] = {"_meta": {META_PROTOCOL_VERSION: PROTOCOL_VERSION_2026}}
+        response = _post(client, path, message)
+        assert response.status_code == 400
+        assert response.json()["error"]["code"] == -32602
+
+    @pytest.mark.parametrize("caps", ["read-only", ["tools"], 7])
+    def test_2026_non_object_capabilities_rejected(self, client, authed, caps):
+        message = _msg("tools/list")
+        message["params"] = {"_meta": {META_PROTOCOL_VERSION: PROTOCOL_VERSION_2026, META_CLIENT_CAPABILITIES: caps}}
+        response = _post(client, "/v1/mcp", message)
+        assert response.status_code == 400
+        assert response.json()["error"]["code"] == -32602
+
+    @pytest.mark.parametrize("meta_location", ["params", "message"])
+    def test_2026_empty_capabilities_accepted(self, client, authed, meta_location):
+        message = _msg("tools/list")
+        meta = {META_PROTOCOL_VERSION: PROTOCOL_VERSION_2026, META_CLIENT_CAPABILITIES: {}}
+        if meta_location == "params":
+            message["params"] = {"_meta": meta}
+        else:
+            message["_meta"] = meta
+        response = _post(client, "/v1/mcp", message)
+        assert response.status_code == 200
+        assert response.json()["result"]["resultType"] == "complete"
+
+    def test_2026_header_accepts_capabilities_in_meta(self, client, authed):
+        message = _msg("tools/list")
+        message["params"] = {"_meta": {META_CLIENT_CAPABILITIES: {}}}
+        response = _post(client, "/v1/mcp", message, **{"mcp-protocol-version": PROTOCOL_VERSION_2026})
+        assert response.status_code == 200
+        assert response.json()["result"]["resultType"] == "complete"
+
+    @pytest.mark.parametrize("version", ["2025-11-25", "2025-03-26"])
+    def test_handshake_requests_need_no_capabilities(self, client, authed, version):
+        response = _post(client, "/v1/mcp", _msg("tools/list"), **{"mcp-protocol-version": version})
+        assert response.status_code == 200
+        assert "tools" in response.json()["result"]
+
+    def test_undeclared_request_needs_no_capabilities(self, client, authed):
+        response = _post(client, "/v1/mcp", _msg("tools/list"))
+        assert response.status_code == 200
+        assert "tools" in response.json()["result"]
+
+
+class TestCutoverRequestEnforcement:
+    """With cutover enforcement on, POST/HEAD/DELETE hand the real Request to
+    ``enforce_account_cutover_http_access``; Request-free callers keep the
+    mutating-path default, and enforcement-off changes nothing."""
+
+    def _oauth_ctx(self):
+        return {
+            "uid": "u1",
+            "scopes": ALL_SCOPES,
+            "client_id": "c",
+            "resource": mcp_oauth_db.MCP_RESOURCE_URL,
+            "grant_id": "g",
+        }
+
+    @contextmanager
+    def _seams(self, enforce_on=True):
+        with (
+            patch.object(mcp_oauth_db, "validate_access_token", return_value=self._oauth_ctx()),
+            patch("utils.mcp_server.auth.enforce_account_deletion_http_access"),
+            patch("utils.mcp_server.auth.cutover_enforcement_enabled", return_value=enforce_on),
+            patch("utils.mcp_server.auth._mcp_memory_context_from_auth_data", return_value=None),
+            patch.object(mcp_transport, "check_rate_limit_inline"),
+            patch.object(mcp_transport, "log_mcp_request"),
+            patch.object(mcp_transport, "schedule_mcp_active"),
+            patch.object(mcp_transport, "schedule_mcp_tool_call"),
+        ):
+            yield
+
+    def test_post_passes_real_request_to_cutover_hook(self, client):
+        with (
+            self._seams(),
+            patch("utils.mcp_server.auth.enforce_account_cutover_http_access") as enforce,
+        ):
+            response = _post(client, "/v1/mcp", _msg("ping"), **{"x-account-generation": "4"})
+        assert response.status_code == 200
+        enforce.assert_called_once()
+        assert enforce.call_args.kwargs["method"] == "POST"
+        assert enforce.call_args.kwargs["path"] == "/v1/mcp"
+        assert enforce.call_args.kwargs["headers"]["authorization"] == "Bearer tok"
+        assert enforce.call_args.kwargs["headers"]["x-account-generation"] == "4"
+
+    def test_head_passes_real_request_to_cutover_hook(self, client):
+        with (
+            self._seams(),
+            patch("utils.mcp_server.auth.enforce_account_cutover_http_access") as enforce,
+        ):
+            response = client.head("/v1/mcp/sse", headers={"Authorization": "Bearer tok", "X-Account-Generation": "4"})
+        assert response.status_code == 200
+        enforce.assert_called_once()
+        assert enforce.call_args.kwargs["method"] == "HEAD"
+        assert enforce.call_args.kwargs["path"] == "/v1/mcp/sse"
+        assert enforce.call_args.kwargs["headers"]["authorization"] == "Bearer tok"
+        assert enforce.call_args.kwargs["headers"]["x-account-generation"] == "4"
+
+    def test_delete_passes_real_request_to_cutover_hook(self, client):
+        with (
+            self._seams(),
+            patch("utils.mcp_server.auth.enforce_account_cutover_http_access") as enforce,
+        ):
+            response = client.delete("/v1/mcp", headers={"Authorization": "Bearer tok", "X-Account-Generation": "4"})
+        assert response.status_code == 204
+        enforce.assert_called_once()
+        assert enforce.call_args.kwargs["method"] == "DELETE"
+        assert enforce.call_args.kwargs["path"] == "/v1/mcp"
+        assert enforce.call_args.kwargs["headers"]["x-account-generation"] == "4"
+
+    def test_generation_header_reaches_the_real_evaluator(self, client, monkeypatch):
+        """The forwarded header feeds real evaluation: a positive-generation
+        account permits a matching X-Account-Generation and 403s a mismatch."""
+        from database import account_cutover as account_cutover_db
+        from models.account_cutover import AccountCutoverRecord, AccountCutoverState
+
+        monkeypatch.setenv("ACCOUNT_CUTOVER_ENFORCEMENT", "on")
+        record = AccountCutoverRecord(uid="u1", state=AccountCutoverState.legacy, account_generation=4)
+        with (
+            self._seams(),
+            patch.object(account_cutover_db, "get_account_cutover_record", return_value=record),
+        ):
+            permitted = _post(client, "/v1/mcp", _msg("ping"), **{"x-account-generation": "4"})
+            mismatched = _post(client, "/v1/mcp", _msg("ping"), **{"x-account-generation": "3"})
+            missing = _post(client, "/v1/mcp", _msg("ping"))
+        assert permitted.status_code == 200
+        assert mismatched.status_code == 403
+        assert mismatched.json()["detail"]["code"] == "account_generation_mismatch"
+        assert missing.status_code == 403
+
+    def test_no_enforcement_when_disabled(self, client):
+        with (
+            self._seams(enforce_on=False),
+            patch("utils.mcp_server.auth.enforce_account_cutover_http_access") as enforce,
+        ):
+            response = _post(client, "/v1/mcp", _msg("ping"))
+        assert response.status_code == 200
+        enforce.assert_not_called()
+
+    def test_request_free_caller_keeps_mutating_default(self):
+        """Direct (Request-free) callers keep the documented POST /v1/mcp/sse
+        default so migrating/new rules still apply fail-closed."""
+        with (
+            patch("utils.mcp_server.auth.cutover_enforcement_enabled", return_value=True),
+            patch("utils.mcp_server.auth.enforce_account_cutover_http_access") as enforce,
+        ):
+            from utils.mcp_server import auth as mcp_auth
+
+            mcp_auth._enforce_mcp_cutover_access("u1")
+        enforce.assert_called_once_with("u1", method="POST", path="/v1/mcp/sse", headers={})

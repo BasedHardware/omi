@@ -600,7 +600,15 @@ def _grant_document_id(uid: str, client_id: str, resource: str) -> str:
     # ids, so only that component is hashed; preregistered client grant ids are
     # byte-for-byte unchanged.
     client_component = hash_secret(client_id) if is_url_form_client_id(client_id) else client_id
-    return f"{uid}:{client_component}:{hash_secret(resource)[:16]}"
+    return f"{uid}:{client_component}:{hash_secret(legacy_mcp_resource_url(resource))[:16]}"
+
+
+def _grant_is_revoked(grant: Dict[str, Any]) -> bool:
+    return bool(grant.get("revoked_at") or grant.get("status") == "revoked")
+
+
+def _grant_recency_key(grant: Dict[str, Any]) -> Any:
+    return grant.get("updated_at") or grant.get("created_at") or datetime.min.replace(tzinfo=timezone.utc)
 
 
 def create_or_update_grant(uid: str, client_id: str, resource: str, scopes: List[str]) -> Dict[str, Any]:
@@ -1132,13 +1140,24 @@ def list_user_grants(uid: str) -> List[Dict[str, Any]]:
         data: Dict[str, Any] = _typed_doc(doc)
         data.setdefault("id", doc.id)
         grants.append(data)
-    grants.sort(
-        key=lambda grant: grant.get("updated_at")
-        or grant.get("created_at")
-        or datetime.min.replace(tzinfo=timezone.utc),
-        reverse=True,
-    )
-    return grants
+    grants.sort(key=_grant_recency_key, reverse=True)
+    deduped: List[Dict[str, Any]] = []
+    seen_indexes: Dict[Tuple[str, str], int] = {}
+    for grant in grants:
+        key = (
+            str(grant.get("client_id") or ""),
+            legacy_mcp_resource_url(str(grant.get("resource") or "")),
+        )
+        existing_index = seen_indexes.get(key)
+        if existing_index is None:
+            seen_indexes[key] = len(deduped)
+            deduped.append(grant)
+            continue
+        current = deduped[existing_index]
+        if _grant_is_revoked(current) and not _grant_is_revoked(grant):
+            deduped[existing_index] = grant
+    deduped.sort(key=_grant_recency_key, reverse=True)
+    return deduped
 
 
 def revoke_user_grant(uid: str, grant_id: str) -> bool:
@@ -1148,7 +1167,17 @@ def revoke_user_grant(uid: str, grant_id: str) -> bool:
     data: Dict[str, Any] = _typed_doc(doc)
     if data.get("uid") != uid:
         return False
-    revoke_grant(grant_id)
+    equivalents = []
+    for candidate in db.collection("mcp_oauth_grants").where("uid", "==", uid).stream():
+        candidate_data: Dict[str, Any] = _typed_doc(candidate)
+        if (
+            candidate_data.get("client_id") == data.get("client_id")
+            and mcp_resource_urls_match(candidate_data.get("resource"), data.get("resource"))
+            and not _grant_is_revoked(candidate_data)
+        ):
+            equivalents.append(candidate.id)
+    for equivalent_id in equivalents:
+        revoke_grant(equivalent_id)
     return True
 
 
