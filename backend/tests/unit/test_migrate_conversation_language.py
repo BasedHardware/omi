@@ -65,6 +65,8 @@ def test_conversation_model_language_default_is_scoped_to_friend_source():
         return Conversation(
             id='conv-1',
             created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            started_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+            finished_at=datetime(2026, 1, 1, 0, 0, 1, tzinfo=timezone.utc),
             structured=Structured(title='t', overview='o', category='work'),
             source=source,
             language=language,

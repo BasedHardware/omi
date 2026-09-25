@@ -738,7 +738,9 @@ class TestProcessSegmentPreferences:
     @patch('utils.sync.pipeline.prerecorded')
     @patch('utils.sync.pipeline.delete_syncing_temporal_file')
     @patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='http://example.com/audio.wav')
-    def test_detected_language_is_persisted_on_new_conversation(self, mock_url, mock_delete, mock_dg, mock_ts, mock_closest):
+    def test_detected_language_is_persisted_on_new_conversation(
+        self, mock_url, mock_delete, mock_dg, mock_ts, mock_closest
+    ):
         """Detected language must be handed to the intake so the Friend 'en' default cannot replace it."""
         from models.conversation_enums import ConversationSource
         from utils.sync.pipeline import process_segment
