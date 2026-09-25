@@ -85,6 +85,7 @@ def _build_fakes() -> dict[str, ModuleType | None]:
     put(client_mod, 'db', MagicMock(name='db'))
     put(client_mod, 'get_firestore_client', lambda: getattr(client_mod, 'db'))
     put(client_mod, 'document_id_from_seed', lambda seed: 'seed-id')
+    put(client_mod, 'run_transactional', MagicMock(name='run_transactional'))
     add('database._client', client_mod)
 
     vector_db = add('database.vector_db', AutoMockModule('database.vector_db'))
@@ -682,7 +683,7 @@ def _spy_managed_effects(monkeypatch: Any, pc: Any) -> dict[str, Any]:
     monkeypatch.setattr(pc, '_extract_memories', spies['extract_memories_inner'])
     monkeypatch.setattr(pc, 'trigger_conversation_apps', spies['trigger_apps'])
     monkeypatch.setattr(pc, 'assign_conversation_to_folder', spies['assign_folder'])
-    monkeypatch.setattr(pc.conversations_db, 'initialize_first_open_work', spies['init_first_open'])
+    monkeypatch.setattr(pc.first_open_obligations_db, 'initialize_first_open_work', spies['init_first_open'])
     monkeypatch.setattr(pc, 'should_defer_desktop_processing', spies['should_defer'])
     monkeypatch.setattr(pc, '_enrich_meeting_context', lambda *args, **kwargs: None)
     monkeypatch.setattr(pc, 'is_trial_paywalled', lambda *args, **kwargs: False)

@@ -23,6 +23,7 @@ from utils.conversations.transcript_for_llm import (
 )
 from utils.conversations.wake_word import has_structural_wake_word_marker
 import database.conversations as conversations_db
+import database.first_open_obligations as first_open_obligations_db
 import database.notifications as notification_db
 import database.users as users_db
 import database.tasks as tasks_db
@@ -2934,7 +2935,7 @@ def process_conversation(
         first_open_plan = resolve_authorized_first_open_plan(uid=uid, source=str(source_value))
         if first_open_plan.defer_derived_work:
             try:
-                jit_defer_expensive = conversations_db.initialize_first_open_work(uid, conversation.id)
+                jit_defer_expensive = first_open_obligations_db.initialize_first_open_work(uid, conversation.id)
                 if jit_defer_expensive:
                     record_jit_first_open(event='claim', effect='obligation')
             except Exception as error:
