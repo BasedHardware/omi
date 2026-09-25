@@ -9998,7 +9998,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get transcriptionNoAudio => 'Транскрыпцыя не атрымлівае аўдыё';
 
   @override
-  String get tapPlusToStartRecording => 'Націсніце +, каб пачаць запіс';
+  String get tapPlusToStartRecording => 'Націсніце кнопку запісу, каб пачаць запіс';
 
   @override
   String get chatBlockTask => 'Задача';
@@ -10240,7 +10240,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'Тут з\'яўляюцца размовы, якія вы запісваеце. Націсніце + на галоўнай, каб запісаць першую.';
+      'Тут з\'яўляюцца размовы, якія вы запісваеце. Націсніце кнопку запісу на галоўнай, каб запісаць першую.';
 
   @override
   String get conversationMap => 'Карта размоў';
@@ -10717,7 +10717,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get deviceConnecting => 'Падключэнне…';
 
   @override
-  String get recordOptionsTip => 'Парада: націсніце і ўтрымлівайце кнопку запісу, каб запісаць тэлефонны званок.';
+  String get recordOptionsTip => 'Парада: націсніце стрэлку на кнопцы запісу, каб запісаць тэлефонны званок.';
 
   @override
   String get firmwareUpdateFailedTitle => 'Абнаўленне не ўдалося';
@@ -11205,4 +11205,51 @@ class AppLocalizationsBe extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Транскрыпцый у чаканні $count';
   }
+
+  @override
+  String get captureSourceCall => 'Званок';
+
+  @override
+  String get captureSourcePhoneMic => 'Мікрафон тэлефона';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Працягнуць';
+
+  @override
+  String get finish => 'Завяршыць';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Кулон на паўзе · працягне пасля завяршэння';
+
+  @override
+  String get pendantIsListeningTitle => 'Ваш кулон слухае';
+
+  @override
+  String get oneSourceAtATime => 'Omi запісвае толькі з адной крыніцы за раз.';
+
+  @override
+  String get recordWithPhoneInstead => 'Запісаць тэлефонам замест кулона';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'Кулон на паўзе да завяршэння запісу';
+
+  @override
+  String get pendantPausesDuringCall => 'Кулон на паўзе падчас званка';
+
+  @override
+  String get keepUsingPendant => 'Працягнуць з кулонам';
+
+  @override
+  String get recordWith => 'Запісаць праз';
+
+  @override
+  String get moreWaysToRecord => 'Іншыя спосабы запісу';
+
+  @override
+  String get openCall => 'Адкрыць званок';
 }

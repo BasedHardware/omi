@@ -10799,7 +10799,7 @@
     "@memoryHistory": {
         "description": "Filter option for retained memory history"
     },
-    "tapPlusToStartRecording": "রেকর্ডিং শুরু করতে + চাপুন",
+    "tapPlusToStartRecording": "রেকর্ডিং শুরু করতে রেকর্ড বোতাম চাপুন",
     "processingTakingLonger": "এখনও কাজ চলছে — এটি স্বাভাবিকের চেয়ে বেশি সময় নিচ্ছে।",
     "speechProfileEnrollmentPrompt": "Omi যেন আপনার কণ্ঠ চিনতে পারে — যেকোনো বিষয়ে প্রায় ৫ সেকেন্ড কথা বলুন।",
     "home": "হোম",
@@ -10842,7 +10842,7 @@
     "conversationsMovedCount": "{count, plural, =1{১টি কথোপকথন সরানো হয়েছে} other{{count}টি কথোপকথন সরানো হয়েছে}}",
     "failedToMoveConversations": "কথোপকথনগুলো সরানো যায়নি",
     "discardedConversationTitle": "বাতিল · {duration}",
-    "noConversationsHeroMessage": "আপনার রেকর্ড করা কথোপকথন এখানে দেখা যাবে। প্রথমটি রেকর্ড করতে হোমে + চাপুন।",
+    "noConversationsHeroMessage": "আপনার রেকর্ড করা কথোপকথন এখানে দেখা যাবে। প্রথমটি রেকর্ড করতে হোমে রেকর্ড বোতাম চাপুন।",
     "conversationMap": "কথোপকথনের মানচিত্র",
     "conversationCount": "{count, plural, =1{১টি কথোপকথন} other{{count}টি কথোপকথন}}",
     "taskCount": "{count, plural, =1{১টি কাজ} other{{count}টি কাজ}}",
@@ -10965,7 +10965,7 @@
     "batteryLevelSemantics": "ব্যাটারি {level}%",
     "updateOmiGlassFirmware": "OmiGlass ফার্মওয়্যার আপডেট করুন",
     "deviceConnecting": "সংযোগ হচ্ছে…",
-    "recordOptionsTip": "টিপ: ফোন কল রেকর্ড করতে রেকর্ড বোতাম চেপে ধরে রাখুন।",
+    "recordOptionsTip": "টিপ: ফোন কল রেকর্ড করতে রেকর্ড বোতামের তীর চিহ্নে চাপুন।",
     "firmwareUpdateFailedTitle": "আপডেট ব্যর্থ হয়েছে",
     "firmwareUpdateFailedMessage": "আপডেট শেষ হয়নি। আপনার ডিভাইস এখনও বর্তমান ফার্মওয়্যারে আছে এবং ব্যবহার নিরাপদ। চার্জ দিয়ে ফোনের কাছে রাখুন, তারপর আবার চেষ্টা করুন।",
     "firmwareDownloadFailedMessage": "আপডেট ডাউনলোড করা যায়নি, আপনার ডিভাইসে কোনো পরিবর্তন হয়নি। ইন্টারনেট সংযোগ দেখে আবার চেষ্টা করুন।",
@@ -11100,5 +11100,20 @@
     "transcriptionUnavailableRecordingContinues": "ট্রান্সক্রিপশন অনুপলব্ধ, ডিভাইসে রেকর্ডিং চলছে এবং পরে প্রসেস করা হবে",
     "transcriptionUnavailableSavingOnDevice": "ট্রান্সক্রিপশন অনুপলব্ধ · ডিভাইসে সংরক্ষণ হচ্ছে",
     "transcriptionsPendingFraction": "অপেক্ষমাণ ট্রান্সক্রিপশন {pending}/{total}",
-    "transcriptionsPendingCount": "অপেক্ষমাণ ট্রান্সক্রিপশন {count}"
+    "transcriptionsPendingCount": "অপেক্ষমাণ ট্রান্সক্রিপশন {count}",
+    "captureSourceCall": "কল",
+    "captureSourcePhoneMic": "ফোনের মাইক",
+    "captureStatusWithSource": "{status} · {source}",
+    "resume": "আবার শুরু করুন",
+    "finish": "শেষ করুন",
+    "pendantPausedResumesWhenYouFinish": "পেন্ডেন্ট বিরতিতে · আপনি শেষ করলে আবার চালু হবে",
+    "pendantIsListeningTitle": "আপনার পেন্ডেন্ট শুনছে",
+    "oneSourceAtATime": "Omi একবারে একটি উৎস থেকেই রেকর্ড করে।",
+    "recordWithPhoneInstead": "বরং ফোন দিয়ে রেকর্ড করুন",
+    "pendantPausesUntilYouFinish": "আপনি শেষ না করা পর্যন্ত পেন্ডেন্ট বিরতিতে থাকবে",
+    "pendantPausesDuringCall": "কলের সময় পেন্ডেন্ট বিরতিতে থাকবে",
+    "keepUsingPendant": "পেন্ডেন্ট ব্যবহার চালিয়ে যান",
+    "recordWith": "রেকর্ডের মাধ্যম",
+    "moreWaysToRecord": "রেকর্ড করার আরও উপায়",
+    "openCall": "কল খুলুন"
 }

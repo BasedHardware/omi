@@ -9991,7 +9991,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get transcriptionNoAudio => 'Transkripcija nesaņem audio';
 
   @override
-  String get tapPlusToStartRecording => 'Pieskarieties +, lai sāktu ierakstīšanu';
+  String get tapPlusToStartRecording => 'Pieskarieties ieraksta pogai, lai sāktu ierakstīšanu';
 
   @override
   String get chatBlockTask => 'Uzdevums';
@@ -10234,7 +10234,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'Šeit parādās jūsu ierakstītās sarunas. Lai ierakstītu pirmo, sākumlapā pieskarieties +.';
+      'Šeit parādās jūsu ierakstītās sarunas. Lai ierakstītu pirmo, sākumlapā pieskarieties ieraksta pogai.';
 
   @override
   String get conversationMap => 'Sarunu karte';
@@ -10713,7 +10713,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String get deviceConnecting => 'Savienojas…';
 
   @override
-  String get recordOptionsTip => 'Padoms: lai ierakstītu tālruņa zvanu, nospiediet un turiet ieraksta pogu.';
+  String get recordOptionsTip => 'Padoms: lai ierakstītu tālruņa zvanu, pieskarieties bultiņai uz ieraksta pogas.';
 
   @override
   String get firmwareUpdateFailedTitle => 'Atjaunināšana neizdevās';
@@ -11202,4 +11202,51 @@ class AppLocalizationsLv extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Gaidošas transkripcijas $count';
   }
+
+  @override
+  String get captureSourceCall => 'Zvans';
+
+  @override
+  String get captureSourcePhoneMic => 'Tālruņa mikrofons';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Atsākt';
+
+  @override
+  String get finish => 'Pabeigt';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Kulons apturēts · atsāksies, kad pabeigsiet';
+
+  @override
+  String get pendantIsListeningTitle => 'Jūsu kulons klausās';
+
+  @override
+  String get oneSourceAtATime => 'Omi vienlaikus ieraksta tikai no viena avota.';
+
+  @override
+  String get recordWithPhoneInstead => 'Tā vietā ierakstīt ar tālruni';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'Kulons ir apturēts, līdz pabeigsiet';
+
+  @override
+  String get pendantPausesDuringCall => 'Kulons ir apturēts zvana laikā';
+
+  @override
+  String get keepUsingPendant => 'Turpināt ar kulonu';
+
+  @override
+  String get recordWith => 'Ierakstīt ar';
+
+  @override
+  String get moreWaysToRecord => 'Citi ierakstīšanas veidi';
+
+  @override
+  String get openCall => 'Atvērt zvanu';
 }

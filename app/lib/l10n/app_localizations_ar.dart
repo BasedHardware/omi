@@ -9904,7 +9904,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get transcriptionNoAudio => 'النسخ لا يستلم الصوت';
 
   @override
-  String get tapPlusToStartRecording => 'اضغط على + لبدء التسجيل';
+  String get tapPlusToStartRecording => 'اضغط على زر التسجيل لبدء التسجيل';
 
   @override
   String get chatBlockTask => 'مهمة';
@@ -10146,7 +10146,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'تظهر هنا المحادثات التي تسجّلها. اضغط + في الصفحة الرئيسية لتسجيل أول محادثة.';
+      'تظهر هنا المحادثات التي تسجّلها. اضغط على زر التسجيل في الصفحة الرئيسية لتسجيل أول محادثة.';
 
   @override
   String get conversationMap => 'خريطة المحادثات';
@@ -10621,7 +10621,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get deviceConnecting => 'جارٍ الاتصال…';
 
   @override
-  String get recordOptionsTip => 'نصيحة: اضغط مع الاستمرار على زر التسجيل لتسجيل مكالمة هاتفية.';
+  String get recordOptionsTip => 'نصيحة: اضغط على السهم في زر التسجيل لتسجيل مكالمة هاتفية.';
 
   @override
   String get firmwareUpdateFailedTitle => 'فشل التحديث';
@@ -11107,4 +11107,51 @@ class AppLocalizationsAr extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'نسخ معلّق $count';
   }
+
+  @override
+  String get captureSourceCall => 'مكالمة';
+
+  @override
+  String get captureSourcePhoneMic => 'ميكروفون الهاتف';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'استئناف';
+
+  @override
+  String get finish => 'إنهاء';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'القلادة متوقفة مؤقتاً · تُستأنف عند الانتهاء';
+
+  @override
+  String get pendantIsListeningTitle => 'قلادتك تستمع';
+
+  @override
+  String get oneSourceAtATime => 'يسجّل Omi من مصدر واحد فقط في كل مرة.';
+
+  @override
+  String get recordWithPhoneInstead => 'التسجيل بالهاتف بدلاً من ذلك';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'تتوقف القلادة مؤقتاً حتى تنتهي';
+
+  @override
+  String get pendantPausesDuringCall => 'تتوقف القلادة مؤقتاً أثناء المكالمة';
+
+  @override
+  String get keepUsingPendant => 'متابعة استخدام القلادة';
+
+  @override
+  String get recordWith => 'التسجيل باستخدام';
+
+  @override
+  String get moreWaysToRecord => 'طرق أخرى للتسجيل';
+
+  @override
+  String get openCall => 'فتح المكالمة';
 }

@@ -10799,7 +10799,7 @@
     "@memoryHistory": {
         "description": "Filter option for retained memory history"
     },
-    "tapPlusToStartRecording": "Tapnite + za začetek snemanja",
+    "tapPlusToStartRecording": "Tapnite gumb za snemanje za začetek snemanja",
     "processingTakingLonger": "Še poteka — traja dlje kot običajno.",
     "speechProfileEnrollmentPrompt": "Da bo Omi vedel, kateri glas je vaš — govorite o čemer koli približno 5 sekund.",
     "home": "Domov",
@@ -10842,7 +10842,7 @@
     "conversationsMovedCount": "{count, plural, =1{1 pogovor premaknjen} other{Premaknjeni pogovori: {count}}}",
     "failedToMoveConversations": "Pogovorov ni bilo mogoče premakniti",
     "discardedConversationTitle": "Zavrženo · {duration}",
-    "noConversationsHeroMessage": "Posneti pogovori se prikažejo tukaj. Za prvi posnetek tapnite + na začetnem zaslonu.",
+    "noConversationsHeroMessage": "Posneti pogovori se prikažejo tukaj. Za prvi posnetek tapnite gumb za snemanje na začetnem zaslonu.",
     "conversationMap": "Zemljevid pogovorov",
     "conversationCount": "{count, plural, =1{1 pogovor} other{Pogovori: {count}}}",
     "taskCount": "{count, plural, =1{1 naloga} other{Naloge: {count}}}",
@@ -10965,7 +10965,7 @@
     "batteryLevelSemantics": "Baterija {level} %",
     "updateOmiGlassFirmware": "Posodobi strojno programsko opremo OmiGlass",
     "deviceConnecting": "Povezovanje…",
-    "recordOptionsTip": "Namig: pridržite gumb za snemanje, da posnamete telefonski klic.",
+    "recordOptionsTip": "Namig: tapnite puščico na gumbu za snemanje, da posnamete telefonski klic.",
     "firmwareUpdateFailedTitle": "Posodobitev ni uspela",
     "firmwareUpdateFailedMessage": "Posodobitev se ni dokončala. Naprava ima še vedno trenutno strojno programsko opremo in je varna za uporabo. Imejte jo napolnjeno in blizu telefona ter poskusite znova.",
     "firmwareDownloadFailedMessage": "Posodobitve ni bilo mogoče prenesti in naprava ni bila spremenjena. Preverite internetno povezavo in poskusite znova.",
@@ -11100,5 +11100,20 @@
     "transcriptionUnavailableRecordingContinues": "Transkripcije niso na voljo, snemanje se nadaljuje v napravi in bo obdelano pozneje",
     "transcriptionUnavailableSavingOnDevice": "Transkripcija ni na voljo · shranjevanje v napravi",
     "transcriptionsPendingFraction": "Transkripcije v čakanju {pending}/{total}",
-    "transcriptionsPendingCount": "Transkripcije v čakanju {count}"
+    "transcriptionsPendingCount": "Transkripcije v čakanju {count}",
+    "captureSourceCall": "Klic",
+    "captureSourcePhoneMic": "Mikrofon telefona",
+    "captureStatusWithSource": "{status} · {source}",
+    "resume": "Nadaljuj",
+    "finish": "Končaj",
+    "pendantPausedResumesWhenYouFinish": "Obesek je ustavljen · nadaljuje, ko končate",
+    "pendantIsListeningTitle": "Vaš obesek posluša",
+    "oneSourceAtATime": "Omi snema samo iz enega vira hkrati.",
+    "recordWithPhoneInstead": "Raje snemaj s telefonom",
+    "pendantPausesUntilYouFinish": "Obesek je ustavljen, dokler ne končate",
+    "pendantPausesDuringCall": "Obesek je med klicem ustavljen",
+    "keepUsingPendant": "Še naprej uporabljaj obesek",
+    "recordWith": "Snemaj z",
+    "moreWaysToRecord": "Več načinov snemanja",
+    "openCall": "Odpri klic"
 }

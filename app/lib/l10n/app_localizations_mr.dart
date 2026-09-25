@@ -9975,7 +9975,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get transcriptionNoAudio => 'ट्रान्सक्रिप्शन ऑडिओ घेत नाही';
 
   @override
-  String get tapPlusToStartRecording => 'रेकॉर्डिंग सुरू करण्यासाठी + टॅप करा';
+  String get tapPlusToStartRecording => 'रेकॉर्डिंग सुरू करण्यासाठी रेकॉर्ड बटण टॅप करा';
 
   @override
   String get chatBlockTask => 'कार्य';
@@ -10218,7 +10218,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'तुम्ही रेकॉर्ड केलेली संभाषणे येथे दिसतात. पहिले रेकॉर्ड करण्यासाठी होमवर + टॅप करा.';
+      'तुम्ही रेकॉर्ड केलेली संभाषणे येथे दिसतात. पहिले रेकॉर्ड करण्यासाठी होमवर रेकॉर्ड बटण टॅप करा.';
 
   @override
   String get conversationMap => 'संभाषण नकाशा';
@@ -10695,7 +10695,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get deviceConnecting => 'कनेक्ट होत आहे…';
 
   @override
-  String get recordOptionsTip => 'टीप: फोन कॉल रेकॉर्ड करण्यासाठी रेकॉर्ड बटण दाबून धरा.';
+  String get recordOptionsTip => 'टीप: फोन कॉल रेकॉर्ड करण्यासाठी रेकॉर्ड बटणावरील बाण टॅप करा.';
 
   @override
   String get firmwareUpdateFailedTitle => 'अपडेट अयशस्वी';
@@ -11184,4 +11184,51 @@ class AppLocalizationsMr extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'प्रलंबित ट्रान्सक्रिप्शन $count';
   }
+
+  @override
+  String get captureSourceCall => 'कॉल';
+
+  @override
+  String get captureSourcePhoneMic => 'फोन माइक';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'पुन्हा सुरू करा';
+
+  @override
+  String get finish => 'पूर्ण करा';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'पेंडंट थांबवले आहे · तुम्ही पूर्ण केल्यावर पुन्हा सुरू होईल';
+
+  @override
+  String get pendantIsListeningTitle => 'तुमचे पेंडंट ऐकत आहे';
+
+  @override
+  String get oneSourceAtATime => 'Omi एका वेळी एकाच स्रोतातून रेकॉर्ड करते.';
+
+  @override
+  String get recordWithPhoneInstead => 'त्याऐवजी फोनने रेकॉर्ड करा';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'तुम्ही पूर्ण करेपर्यंत पेंडंट थांबलेले राहील';
+
+  @override
+  String get pendantPausesDuringCall => 'कॉलदरम्यान पेंडंट थांबलेले राहील';
+
+  @override
+  String get keepUsingPendant => 'पेंडंटच वापरत राहा';
+
+  @override
+  String get recordWith => 'रेकॉर्ड करण्याची पद्धत';
+
+  @override
+  String get moreWaysToRecord => 'रेकॉर्ड करण्याचे आणखी मार्ग';
+
+  @override
+  String get openCall => 'कॉल उघडा';
 }

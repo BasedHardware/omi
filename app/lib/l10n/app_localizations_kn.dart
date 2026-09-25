@@ -9999,7 +9999,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get transcriptionNoAudio => 'ಲಿಪ್ಯಂತರಣ ಆಡಿಯೊ ಸ್ವೀಕರಿಸುತ್ತಿಲ್ಲ';
 
   @override
-  String get tapPlusToStartRecording => 'ರೆಕಾರ್ಡಿಂಗ್ ಪ್ರಾರಂಭಿಸಲು + ಟ್ಯಾಪ್ ಮಾಡಿ';
+  String get tapPlusToStartRecording => 'ರೆಕಾರ್ಡಿಂಗ್ ಪ್ರಾರಂಭಿಸಲು ರೆಕಾರ್ಡ್ ಬಟನ್ ಟ್ಯಾಪ್ ಮಾಡಿ';
 
   @override
   String get chatBlockTask => 'ಕಾರ್ಯ';
@@ -10242,7 +10242,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'ನೀವು ರೆಕಾರ್ಡ್ ಮಾಡಿದ ಸಂಭಾಷಣೆಗಳು ಇಲ್ಲಿ ಕಾಣಿಸುತ್ತವೆ. ಮೊದಲನೆಯದನ್ನು ರೆಕಾರ್ಡ್ ಮಾಡಲು ಮುಖಪುಟದಲ್ಲಿ + ಟ್ಯಾಪ್ ಮಾಡಿ.';
+      'ನೀವು ರೆಕಾರ್ಡ್ ಮಾಡಿದ ಸಂಭಾಷಣೆಗಳು ಇಲ್ಲಿ ಕಾಣಿಸುತ್ತವೆ. ಮೊದಲನೆಯದನ್ನು ರೆಕಾರ್ಡ್ ಮಾಡಲು ಮುಖಪುಟದಲ್ಲಿ ರೆಕಾರ್ಡ್ ಬಟನ್ ಟ್ಯಾಪ್ ಮಾಡಿ.';
 
   @override
   String get conversationMap => 'ಸಂಭಾಷಣೆ ನಕ್ಷೆ';
@@ -10720,7 +10720,7 @@ class AppLocalizationsKn extends AppLocalizations {
   String get deviceConnecting => 'ಸಂಪರ್ಕಿಸಲಾಗುತ್ತಿದೆ…';
 
   @override
-  String get recordOptionsTip => 'ಸಲಹೆ: ಫೋನ್ ಕರೆ ರೆಕಾರ್ಡ್ ಮಾಡಲು ರೆಕಾರ್ಡ್ ಬಟನ್ ಒತ್ತಿ ಹಿಡಿಯಿರಿ.';
+  String get recordOptionsTip => 'ಸಲಹೆ: ಫೋನ್ ಕರೆ ರೆಕಾರ್ಡ್ ಮಾಡಲು ರೆಕಾರ್ಡ್ ಬಟನ್‌ನಲ್ಲಿರುವ ಬಾಣದ ಗುರುತನ್ನು ಟ್ಯಾಪ್ ಮಾಡಿ.';
 
   @override
   String get firmwareUpdateFailedTitle => 'ಅಪ್‌ಡೇಟ್ ವಿಫಲವಾಗಿದೆ';
@@ -11210,4 +11210,51 @@ class AppLocalizationsKn extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'ಬಾಕಿ ಇರುವ ಲಿಪ್ಯಂತರಗಳು $count';
   }
+
+  @override
+  String get captureSourceCall => 'ಕರೆ';
+
+  @override
+  String get captureSourcePhoneMic => 'ಫೋನ್ ಮೈಕ್';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'ಮುಂದುವರಿಸಿ';
+
+  @override
+  String get finish => 'ಮುಗಿಸಿ';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'ಪೆಂಡೆಂಟ್ ವಿರಾಮದಲ್ಲಿದೆ · ನೀವು ಮುಗಿಸಿದಾಗ ಮುಂದುವರಿಯುತ್ತದೆ';
+
+  @override
+  String get pendantIsListeningTitle => 'ನಿಮ್ಮ ಪೆಂಡೆಂಟ್ ಕೇಳುತ್ತಿದೆ';
+
+  @override
+  String get oneSourceAtATime => 'Omi ಒಂದು ಬಾರಿಗೆ ಒಂದೇ ಮೂಲದಿಂದ ರೆಕಾರ್ಡ್ ಮಾಡುತ್ತದೆ.';
+
+  @override
+  String get recordWithPhoneInstead => 'ಬದಲಿಗೆ ಫೋನ್‌ನಿಂದ ರೆಕಾರ್ಡ್ ಮಾಡಿ';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'ನೀವು ಮುಗಿಸುವವರೆಗೆ ಪೆಂಡೆಂಟ್ ವಿರಾಮದಲ್ಲಿರುತ್ತದೆ';
+
+  @override
+  String get pendantPausesDuringCall => 'ಕರೆಯ ಸಮಯದಲ್ಲಿ ಪೆಂಡೆಂಟ್ ವಿರಾಮದಲ್ಲಿರುತ್ತದೆ';
+
+  @override
+  String get keepUsingPendant => 'ಪೆಂಡೆಂಟ್ ಬಳಸುವುದನ್ನು ಮುಂದುವರಿಸಿ';
+
+  @override
+  String get recordWith => 'ರೆಕಾರ್ಡ್ ಮಾಡುವ ವಿಧಾನ';
+
+  @override
+  String get moreWaysToRecord => 'ರೆಕಾರ್ಡ್ ಮಾಡಲು ಇನ್ನಷ್ಟು ಮಾರ್ಗಗಳು';
+
+  @override
+  String get openCall => 'ಕರೆ ತೆರೆಯಿರಿ';
 }

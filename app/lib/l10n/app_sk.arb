@@ -3227,7 +3227,7 @@
     "@memoryHistory": {
         "description": "Filter option for retained memory history"
     },
-    "tapPlusToStartRecording": "Ťuknutím na + spustíte nahrávanie",
+    "tapPlusToStartRecording": "Ťuknutím na tlačidlo nahrávania spustíte nahrávanie",
     "processingTakingLonger": "Stále prebieha — trvá to dlhšie ako zvyčajne.",
     "speechProfileEnrollmentPrompt": "Aby Omi vedel, ktorý hlas je váš — hovorte asi 5 sekúnd o čomkoľvek.",
     "home": "Domov",
@@ -3270,7 +3270,7 @@
     "conversationsMovedCount": "{count, plural, =1{1 konverzácia presunutá} other{Presunuté konverzácie: {count}}}",
     "failedToMoveConversations": "Konverzácie sa nepodarilo presunúť",
     "discardedConversationTitle": "Zahodené · {duration}",
-    "noConversationsHeroMessage": "Nahraté konverzácie sa zobrazia tu. Prvú nahráte klepnutím na + na domovskej obrazovke.",
+    "noConversationsHeroMessage": "Nahraté konverzácie sa zobrazia tu. Prvú nahráte klepnutím na tlačidlo nahrávania na domovskej obrazovke.",
     "conversationMap": "Mapa konverzácií",
     "conversationCount": "{count, plural, =1{1 konverzácia} other{Konverzácie: {count}}}",
     "taskCount": "{count, plural, =1{1 úloha} other{Úlohy: {count}}}",
@@ -3393,7 +3393,7 @@
     "batteryLevelSemantics": "Batéria {level} %",
     "updateOmiGlassFirmware": "Aktualizovať firmvér OmiGlass",
     "deviceConnecting": "Pripája sa…",
-    "recordOptionsTip": "Tip: podržaním tlačidla nahrávania nahráte telefonický hovor.",
+    "recordOptionsTip": "Tip: klepnutím na šípku na tlačidle nahrávania nahráte telefonický hovor.",
     "firmwareUpdateFailedTitle": "Aktualizácia zlyhala",
     "firmwareUpdateFailedMessage": "Aktualizácia sa nedokončila. Zariadenie má stále súčasný firmvér a je bezpečné ho používať. Nabite ho, majte ho pri telefóne a skúste to znova.",
     "firmwareDownloadFailedMessage": "Aktualizáciu sa nepodarilo stiahnuť a zariadenie sa nezmenilo. Skontrolujte pripojenie na internet a skúste to znova.",
@@ -3528,5 +3528,20 @@
     "transcriptionUnavailableRecordingContinues": "Transkripcie sú nedostupné, nahrávanie pokračuje v zariadení a neskôr sa spracuje",
     "transcriptionUnavailableSavingOnDevice": "Transkripcia nedostupná · ukladá sa v zariadení",
     "transcriptionsPendingFraction": "Čakajúce transkripcie {pending}/{total}",
-    "transcriptionsPendingCount": "Čakajúce transkripcie {count}"
+    "transcriptionsPendingCount": "Čakajúce transkripcie {count}",
+    "captureSourceCall": "Hovor",
+    "captureSourcePhoneMic": "Mikrofón telefónu",
+    "captureStatusWithSource": "{status} · {source}",
+    "resume": "Pokračovať",
+    "finish": "Dokončiť",
+    "pendantPausedResumesWhenYouFinish": "Prívesok pozastavený · po dokončení pokračuje",
+    "pendantIsListeningTitle": "Váš prívesok počúva",
+    "oneSourceAtATime": "Omi nahráva vždy len z jedného zdroja.",
+    "recordWithPhoneInstead": "Nahrávať radšej telefónom",
+    "pendantPausesUntilYouFinish": "Prívesok sa pozastaví, kým neskončíte",
+    "pendantPausesDuringCall": "Prívesok sa počas hovoru pozastaví",
+    "keepUsingPendant": "Ďalej používať prívesok",
+    "recordWith": "Nahrať pomocou",
+    "moreWaysToRecord": "Ďalšie spôsoby nahrávania",
+    "openCall": "Otvoriť hovor"
 }

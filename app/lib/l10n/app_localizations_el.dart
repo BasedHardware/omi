@@ -10038,7 +10038,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get transcriptionNoAudio => 'Η μεταγραφή δεν λαμβάνει ήχο';
 
   @override
-  String get tapPlusToStartRecording => 'Πατήστε + για να ξεκινήσετε την εγγραφή';
+  String get tapPlusToStartRecording => 'Πατήστε το κουμπί εγγραφής για να ξεκινήσετε την εγγραφή';
 
   @override
   String get chatBlockTask => 'Εργασία';
@@ -10281,7 +10281,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'Οι συνομιλίες που ηχογραφείτε εμφανίζονται εδώ. Πατήστε + στην Αρχική για να ηχογραφήσετε την πρώτη.';
+      'Οι συνομιλίες που ηχογραφείτε εμφανίζονται εδώ. Πατήστε το κουμπί εγγραφής στην Αρχική για να ηχογραφήσετε την πρώτη.';
 
   @override
   String get conversationMap => 'Χάρτης συνομιλιών';
@@ -10760,7 +10760,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get deviceConnecting => 'Σύνδεση…';
 
   @override
-  String get recordOptionsTip => 'Συμβουλή: πατήστε παρατεταμένα το κουμπί εγγραφής για να καταγράψετε μια κλήση.';
+  String get recordOptionsTip => 'Συμβουλή: πατήστε το βέλος στο κουμπί εγγραφής για να καταγράψετε μια κλήση.';
 
   @override
   String get firmwareUpdateFailedTitle => 'Η ενημέρωση απέτυχε';
@@ -11252,4 +11252,51 @@ class AppLocalizationsEl extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Αναμενόμενες απομαγνητοφωνήσεις $count';
   }
+
+  @override
+  String get captureSourceCall => 'Κλήση';
+
+  @override
+  String get captureSourcePhoneMic => 'Μικρόφωνο τηλεφώνου';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Συνέχεια';
+
+  @override
+  String get finish => 'Ολοκλήρωση';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Μενταγιόν σε παύση · συνεχίζει όταν τελειώσετε';
+
+  @override
+  String get pendantIsListeningTitle => 'Το μενταγιόν σας ακούει';
+
+  @override
+  String get oneSourceAtATime => 'Το Omi ηχογραφεί από μία μόνο πηγή κάθε φορά.';
+
+  @override
+  String get recordWithPhoneInstead => 'Εγγραφή με το τηλέφωνο αντ\' αυτού';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'Το μενταγιόν σε παύση μέχρι να τελειώσετε';
+
+  @override
+  String get pendantPausesDuringCall => 'Το μενταγιόν σε παύση κατά την κλήση';
+
+  @override
+  String get keepUsingPendant => 'Συνέχεια με το μενταγιόν';
+
+  @override
+  String get recordWith => 'Εγγραφή με';
+
+  @override
+  String get moreWaysToRecord => 'Περισσότεροι τρόποι εγγραφής';
+
+  @override
+  String get openCall => 'Άνοιγμα κλήσης';
 }

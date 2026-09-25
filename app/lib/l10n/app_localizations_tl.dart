@@ -10058,7 +10058,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get transcriptionNoAudio => 'Hindi tumatanggap ng audio ang transkripsyon';
 
   @override
-  String get tapPlusToStartRecording => 'I-tap ang + para magsimulang mag-record';
+  String get tapPlusToStartRecording => 'I-tap ang record button para magsimulang mag-record';
 
   @override
   String get chatBlockTask => 'Gawain';
@@ -10301,7 +10301,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'Lalabas dito ang mga usapang nire-record mo. I-tap ang + sa Home para i-record ang una.';
+      'Lalabas dito ang mga usapang nire-record mo. I-tap ang record button sa Home para i-record ang una.';
 
   @override
   String get conversationMap => 'Mapa ng mga Usapan';
@@ -10779,7 +10779,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get deviceConnecting => 'Kumokonekta…';
 
   @override
-  String get recordOptionsTip => 'Tip: pindutin nang matagal ang record button para mag-record ng tawag.';
+  String get recordOptionsTip => 'Tip: i-tap ang arrow sa record button para mag-record ng tawag.';
 
   @override
   String get firmwareUpdateFailedTitle => 'Nabigo ang Update';
@@ -11273,4 +11273,51 @@ class AppLocalizationsTl extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Mga transcript na naghihintay $count';
   }
+
+  @override
+  String get captureSourceCall => 'Tawag';
+
+  @override
+  String get captureSourcePhoneMic => 'Mic ng telepono';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Ituloy';
+
+  @override
+  String get finish => 'Tapusin';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Naka-pause ang pendant · magpapatuloy pagkatapos mo';
+
+  @override
+  String get pendantIsListeningTitle => 'Nakikinig ang iyong pendant';
+
+  @override
+  String get oneSourceAtATime => 'Isang source lang ang nire-record ng Omi sa bawat pagkakataon.';
+
+  @override
+  String get recordWithPhoneInstead => 'Sa telepono na lang mag-record';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'Naka-pause ang pendant hanggang matapos ka';
+
+  @override
+  String get pendantPausesDuringCall => 'Naka-pause ang pendant habang may tawag';
+
+  @override
+  String get keepUsingPendant => 'Ituloy ang paggamit ng pendant';
+
+  @override
+  String get recordWith => 'Mag-record gamit ang';
+
+  @override
+  String get moreWaysToRecord => 'Iba pang paraan ng pag-record';
+
+  @override
+  String get openCall => 'Buksan ang tawag';
 }

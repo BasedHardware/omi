@@ -3227,7 +3227,7 @@
     "@memoryHistory": {
         "description": "Filter option for retained memory history"
     },
-    "tapPlusToStartRecording": "Nhấn + để bắt đầu ghi âm",
+    "tapPlusToStartRecording": "Nhấn nút ghi âm để bắt đầu ghi âm",
     "processingTakingLonger": "Vẫn đang xử lý — mất nhiều thời gian hơn bình thường.",
     "speechProfileEnrollmentPrompt": "Để Omi biết đâu là giọng của bạn — hãy nói về bất cứ điều gì trong khoảng 5 giây.",
     "home": "Trang chủ",
@@ -3270,7 +3270,7 @@
     "conversationsMovedCount": "{count, plural, =1{Đã chuyển 1 cuộc trò chuyện} other{Đã chuyển {count} cuộc trò chuyện}}",
     "failedToMoveConversations": "Không thể chuyển các cuộc trò chuyện",
     "discardedConversationTitle": "Đã loại bỏ · {duration}",
-    "noConversationsHeroMessage": "Các cuộc trò chuyện bạn ghi âm sẽ hiển thị ở đây. Nhấn + trên Trang chủ để ghi cuộc đầu tiên.",
+    "noConversationsHeroMessage": "Các cuộc trò chuyện bạn ghi âm sẽ hiển thị ở đây. Nhấn nút ghi âm trên Trang chủ để ghi cuộc đầu tiên.",
     "conversationMap": "Bản đồ cuộc trò chuyện",
     "conversationCount": "{count, plural, =1{1 cuộc trò chuyện} other{{count} cuộc trò chuyện}}",
     "taskCount": "{count, plural, =1{1 nhiệm vụ} other{{count} nhiệm vụ}}",
@@ -3393,7 +3393,7 @@
     "batteryLevelSemantics": "Pin {level}%",
     "updateOmiGlassFirmware": "Cập nhật firmware OmiGlass",
     "deviceConnecting": "Đang kết nối…",
-    "recordOptionsTip": "Mẹo: nhấn giữ nút ghi âm để ghi âm cuộc gọi điện thoại.",
+    "recordOptionsTip": "Mẹo: nhấn vào mũi tên trên nút ghi âm để ghi âm cuộc gọi điện thoại.",
     "firmwareUpdateFailedTitle": "Cập nhật thất bại",
     "firmwareUpdateFailedMessage": "Bản cập nhật chưa hoàn tất. Thiết bị vẫn dùng firmware hiện tại và an toàn để sử dụng. Hãy sạc và để gần điện thoại, rồi thử lại.",
     "firmwareDownloadFailedMessage": "Không tải được bản cập nhật và thiết bị không bị thay đổi. Hãy kiểm tra kết nối internet rồi thử lại.",
@@ -3528,5 +3528,20 @@
     "transcriptionUnavailableRecordingContinues": "Bản chép âm không khả dụng, quá trình ghi âm tiếp tục trên thiết bị và sẽ được xử lý sau",
     "transcriptionUnavailableSavingOnDevice": "Bản chép âm không khả dụng · đang lưu trên thiết bị",
     "transcriptionsPendingFraction": "Bản chép âm đang chờ {pending}/{total}",
-    "transcriptionsPendingCount": "Bản chép âm đang chờ {count}"
+    "transcriptionsPendingCount": "Bản chép âm đang chờ {count}",
+    "captureSourceCall": "Cuộc gọi",
+    "captureSourcePhoneMic": "Micro điện thoại",
+    "captureStatusWithSource": "{status} · {source}",
+    "resume": "Tiếp tục",
+    "finish": "Kết thúc",
+    "pendantPausedResumesWhenYouFinish": "Mặt dây chuyền tạm dừng · tiếp tục khi bạn xong",
+    "pendantIsListeningTitle": "Mặt dây chuyền của bạn đang lắng nghe",
+    "oneSourceAtATime": "Omi chỉ ghi âm từ một nguồn mỗi lúc.",
+    "recordWithPhoneInstead": "Chuyển sang ghi âm bằng điện thoại",
+    "pendantPausesUntilYouFinish": "Mặt dây chuyền tạm dừng đến khi bạn xong",
+    "pendantPausesDuringCall": "Mặt dây chuyền tạm dừng trong cuộc gọi",
+    "keepUsingPendant": "Tiếp tục dùng mặt dây chuyền",
+    "recordWith": "Ghi âm bằng",
+    "moreWaysToRecord": "Thêm cách ghi âm",
+    "openCall": "Mở cuộc gọi"
 }

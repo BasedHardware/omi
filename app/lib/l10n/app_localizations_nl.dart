@@ -9995,7 +9995,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get transcriptionNoAudio => 'Transcriptie ontvangt geen audio';
 
   @override
-  String get tapPlusToStartRecording => 'Tik op + om de opname te starten';
+  String get tapPlusToStartRecording => 'Tik op de opnameknop om de opname te starten';
 
   @override
   String get chatBlockTask => 'Taak';
@@ -10238,7 +10238,7 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'Gesprekken die je opneemt verschijnen hier. Tik op + op Home om je eerste op te nemen.';
+      'Gesprekken die je opneemt verschijnen hier. Tik op Home op de opnameknop om je eerste op te nemen.';
 
   @override
   String get conversationMap => 'Gesprekskaart';
@@ -10718,7 +10718,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String get deviceConnecting => 'Verbinden…';
 
   @override
-  String get recordOptionsTip => 'Tip: houd de opnameknop ingedrukt om een telefoongesprek op te nemen.';
+  String get recordOptionsTip => 'Tip: tik op de pijl op de opnameknop om een telefoongesprek op te nemen.';
 
   @override
   String get firmwareUpdateFailedTitle => 'Update mislukt';
@@ -11210,4 +11210,51 @@ class AppLocalizationsNl extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Transcripties in behandeling $count';
   }
+
+  @override
+  String get captureSourceCall => 'Gesprek';
+
+  @override
+  String get captureSourcePhoneMic => 'Telefoonmicrofoon';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Hervatten';
+
+  @override
+  String get finish => 'Afronden';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Hanger gepauzeerd · gaat verder als je klaar bent';
+
+  @override
+  String get pendantIsListeningTitle => 'Je hanger luistert';
+
+  @override
+  String get oneSourceAtATime => 'Omi neemt steeds van één bron tegelijk op.';
+
+  @override
+  String get recordWithPhoneInstead => 'In plaats daarvan met telefoon opnemen';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'Hanger pauzeert tot je klaar bent';
+
+  @override
+  String get pendantPausesDuringCall => 'Hanger pauzeert tijdens het gesprek';
+
+  @override
+  String get keepUsingPendant => 'Hanger blijven gebruiken';
+
+  @override
+  String get recordWith => 'Opnemen met';
+
+  @override
+  String get moreWaysToRecord => 'Meer manieren om op te nemen';
+
+  @override
+  String get openCall => 'Gesprek openen';
 }

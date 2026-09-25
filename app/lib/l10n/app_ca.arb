@@ -3227,7 +3227,7 @@
     "@memoryHistory": {
         "description": "Filter option for retained memory history"
     },
-    "tapPlusToStartRecording": "Toca + per començar a gravar",
+    "tapPlusToStartRecording": "Toca el botó de gravació per començar a gravar",
     "processingTakingLonger": "Encara en curs: això està trigant més del normal.",
     "speechProfileEnrollmentPrompt": "Perquè Omi sàpiga quina veu és la teva — parla de qualsevol cosa durant uns 5 segons.",
     "home": "Inici",
@@ -3270,7 +3270,7 @@
     "conversationsMovedCount": "{count, plural, =1{S'ha mogut 1 conversa} other{S'han mogut {count} converses}}",
     "failedToMoveConversations": "No s'han pogut moure les converses",
     "discardedConversationTitle": "Descartada · {duration}",
-    "noConversationsHeroMessage": "Les converses que graves apareixen aquí. Toca + a l'Inici per gravar la primera.",
+    "noConversationsHeroMessage": "Les converses que graves apareixen aquí. Toca el botó de gravació a l'Inici per gravar la primera.",
     "conversationMap": "Mapa de converses",
     "conversationCount": "{count, plural, =1{1 conversa} other{{count} converses}}",
     "taskCount": "{count, plural, =1{1 tasca} other{{count} tasques}}",
@@ -3393,7 +3393,7 @@
     "batteryLevelSemantics": "Bateria {level}%",
     "updateOmiGlassFirmware": "Actualitza el firmware de l'OmiGlass",
     "deviceConnecting": "S'està connectant…",
-    "recordOptionsTip": "Consell: mantén premut el botó de gravació per gravar una trucada.",
+    "recordOptionsTip": "Consell: toca la fletxa del botó de gravació per gravar una trucada.",
     "firmwareUpdateFailedTitle": "L'actualització ha fallat",
     "firmwareUpdateFailedMessage": "L'actualització no ha acabat. El dispositiu continua amb el firmware actual i es pot fer servir amb seguretat. Mantén-lo carregat i a prop del telèfon i torna-ho a provar.",
     "firmwareDownloadFailedMessage": "No s'ha pogut baixar l'actualització i el dispositiu no ha canviat. Comprova la connexió a internet i torna-ho a provar.",
@@ -3528,5 +3528,20 @@
     "transcriptionUnavailableRecordingContinues": "Les transcripcions no estan disponibles, l'enregistrament continua al dispositiu i es processarà més tard",
     "transcriptionUnavailableSavingOnDevice": "Transcripció no disponible · s'està desant al dispositiu",
     "transcriptionsPendingFraction": "Transcripcions pendents {pending}/{total}",
-    "transcriptionsPendingCount": "Transcripcions pendents {count}"
+    "transcriptionsPendingCount": "Transcripcions pendents {count}",
+    "captureSourceCall": "Trucada",
+    "captureSourcePhoneMic": "Micròfon del telèfon",
+    "captureStatusWithSource": "{status} · {source}",
+    "resume": "Reprèn",
+    "finish": "Finalitza",
+    "pendantPausedResumesWhenYouFinish": "Penjoll en pausa · es reprèn quan acabis",
+    "pendantIsListeningTitle": "El teu penjoll està escoltant",
+    "oneSourceAtATime": "Omi grava des d'una sola font alhora.",
+    "recordWithPhoneInstead": "Grava amb el telèfon en lloc seu",
+    "pendantPausesUntilYouFinish": "El penjoll es posa en pausa fins que acabis",
+    "pendantPausesDuringCall": "El penjoll es posa en pausa durant la trucada",
+    "keepUsingPendant": "Continua amb el penjoll",
+    "recordWith": "Grava amb",
+    "moreWaysToRecord": "Més maneres de gravar",
+    "openCall": "Obre la trucada"
 }

@@ -10055,7 +10055,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get transcriptionNoAudio => 'La transcription ne reçoit pas d\'audio';
 
   @override
-  String get tapPlusToStartRecording => 'Appuyez sur + pour commencer l’enregistrement';
+  String get tapPlusToStartRecording => 'Appuyez sur le bouton d\'enregistrement pour lancer l\'enregistrement';
 
   @override
   String get chatBlockTask => 'Tâche';
@@ -10298,7 +10298,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'Les conversations que vous enregistrez apparaissent ici. Touchez + sur l\'Accueil pour enregistrer la première.';
+      'Les conversations que vous enregistrez apparaissent ici. Touchez le bouton d\'enregistrement sur l\'Accueil pour enregistrer la première.';
 
   @override
   String get conversationMap => 'Carte des conversations';
@@ -10778,7 +10778,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String get deviceConnecting => 'Connexion…';
 
   @override
-  String get recordOptionsTip => 'Astuce : maintenez le bouton d\'enregistrement appuyé pour enregistrer un appel.';
+  String get recordOptionsTip => 'Astuce : touchez la flèche du bouton d\'enregistrement pour enregistrer un appel.';
 
   @override
   String get firmwareUpdateFailedTitle => 'Échec de la mise à jour';
@@ -11271,4 +11271,51 @@ class AppLocalizationsFr extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Transcriptions en attente $count';
   }
+
+  @override
+  String get captureSourceCall => 'Appel';
+
+  @override
+  String get captureSourcePhoneMic => 'Micro du téléphone';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Reprendre';
+
+  @override
+  String get finish => 'Terminer';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Pendentif en pause · reprend quand vous terminez';
+
+  @override
+  String get pendantIsListeningTitle => 'Votre pendentif écoute';
+
+  @override
+  String get oneSourceAtATime => 'Omi enregistre une seule source à la fois.';
+
+  @override
+  String get recordWithPhoneInstead => 'Enregistrer plutôt avec le téléphone';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'Pendentif en pause jusqu\'à ce que vous terminiez';
+
+  @override
+  String get pendantPausesDuringCall => 'Pendentif en pause pendant l\'appel';
+
+  @override
+  String get keepUsingPendant => 'Continuer avec le pendentif';
+
+  @override
+  String get recordWith => 'Enregistrer avec';
+
+  @override
+  String get moreWaysToRecord => 'Autres façons d\'enregistrer';
+
+  @override
+  String get openCall => 'Ouvrir l\'appel';
 }

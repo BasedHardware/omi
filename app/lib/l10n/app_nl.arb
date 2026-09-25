@@ -3227,7 +3227,7 @@
     "@memoryHistory": {
         "description": "Filter option for retained memory history"
     },
-    "tapPlusToStartRecording": "Tik op + om de opname te starten",
+    "tapPlusToStartRecording": "Tik op de opnameknop om de opname te starten",
     "processingTakingLonger": "Nog bezig — dit duurt langer dan normaal.",
     "speechProfileEnrollmentPrompt": "Zodat Omi weet welke stem van jou is — praat ongeveer 5 seconden over wat je maar wilt.",
     "home": "Home",
@@ -3270,7 +3270,7 @@
     "conversationsMovedCount": "{count, plural, =1{1 gesprek verplaatst} other{{count} gesprekken verplaatst}}",
     "failedToMoveConversations": "Kan de gesprekken niet verplaatsen",
     "discardedConversationTitle": "Verworpen · {duration}",
-    "noConversationsHeroMessage": "Gesprekken die je opneemt verschijnen hier. Tik op + op Home om je eerste op te nemen.",
+    "noConversationsHeroMessage": "Gesprekken die je opneemt verschijnen hier. Tik op Home op de opnameknop om je eerste op te nemen.",
     "conversationMap": "Gesprekskaart",
     "conversationCount": "{count, plural, =1{1 gesprek} other{{count} gesprekken}}",
     "taskCount": "{count, plural, =1{1 taak} other{{count} taken}}",
@@ -3393,7 +3393,7 @@
     "batteryLevelSemantics": "Batterij {level}%",
     "updateOmiGlassFirmware": "OmiGlass-firmware bijwerken",
     "deviceConnecting": "Verbinden…",
-    "recordOptionsTip": "Tip: houd de opnameknop ingedrukt om een telefoongesprek op te nemen.",
+    "recordOptionsTip": "Tip: tik op de pijl op de opnameknop om een telefoongesprek op te nemen.",
     "firmwareUpdateFailedTitle": "Update mislukt",
     "firmwareUpdateFailedMessage": "De update is niet voltooid. Je apparaat draait nog op de huidige firmware en is veilig te gebruiken. Houd het opgeladen en dicht bij je telefoon en probeer het opnieuw.",
     "firmwareDownloadFailedMessage": "De update kon niet worden gedownload en je apparaat is niet gewijzigd. Controleer je internetverbinding en probeer het opnieuw.",
@@ -3528,5 +3528,20 @@
     "transcriptionUnavailableRecordingContinues": "Transcripties zijn niet beschikbaar, de opname gaat door op het apparaat en wordt later verwerkt",
     "transcriptionUnavailableSavingOnDevice": "Transcriptie niet beschikbaar · wordt op het apparaat opgeslagen",
     "transcriptionsPendingFraction": "Transcripties in behandeling {pending}/{total}",
-    "transcriptionsPendingCount": "Transcripties in behandeling {count}"
+    "transcriptionsPendingCount": "Transcripties in behandeling {count}",
+    "captureSourceCall": "Gesprek",
+    "captureSourcePhoneMic": "Telefoonmicrofoon",
+    "captureStatusWithSource": "{status} · {source}",
+    "resume": "Hervatten",
+    "finish": "Afronden",
+    "pendantPausedResumesWhenYouFinish": "Hanger gepauzeerd · gaat verder als je klaar bent",
+    "pendantIsListeningTitle": "Je hanger luistert",
+    "oneSourceAtATime": "Omi neemt steeds van één bron tegelijk op.",
+    "recordWithPhoneInstead": "In plaats daarvan met telefoon opnemen",
+    "pendantPausesUntilYouFinish": "Hanger pauzeert tot je klaar bent",
+    "pendantPausesDuringCall": "Hanger pauzeert tijdens het gesprek",
+    "keepUsingPendant": "Hanger blijven gebruiken",
+    "recordWith": "Opnemen met",
+    "moreWaysToRecord": "Meer manieren om op te nemen",
+    "openCall": "Gesprek openen"
 }

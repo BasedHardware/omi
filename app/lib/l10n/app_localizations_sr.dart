@@ -9981,7 +9981,7 @@ class AppLocalizationsSr extends AppLocalizations {
   String get transcriptionNoAudio => 'Транскрипција не прима аудио';
 
   @override
-  String get tapPlusToStartRecording => 'Додирните + да започнете снимање';
+  String get tapPlusToStartRecording => 'Додирните дугме за снимање да започнете снимање';
 
   @override
   String get chatBlockTask => 'Задатак';
@@ -10223,7 +10223,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'Разговори које снимите појављују се овде. Додирните + на почетној да снимите први.';
+      'Разговори које снимите појављују се овде. Додирните дугме за снимање на почетној да снимите први.';
 
   @override
   String get conversationMap => 'Мапа разговора';
@@ -10701,7 +10701,7 @@ class AppLocalizationsSr extends AppLocalizations {
   String get deviceConnecting => 'Повезивање…';
 
   @override
-  String get recordOptionsTip => 'Савет: притисните и задржите дугме за снимање да бисте снимили телефонски позив.';
+  String get recordOptionsTip => 'Савет: додирните стрелицу на дугмету за снимање да бисте снимили телефонски позив.';
 
   @override
   String get firmwareUpdateFailedTitle => 'Ажурирање није успело';
@@ -11190,4 +11190,51 @@ class AppLocalizationsSr extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Транскрипције на чекању $count';
   }
+
+  @override
+  String get captureSourceCall => 'Позив';
+
+  @override
+  String get captureSourcePhoneMic => 'Микрофон телефона';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Настави';
+
+  @override
+  String get finish => 'Заврши';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Привезак паузиран · наставља када завршите';
+
+  @override
+  String get pendantIsListeningTitle => 'Ваш привезак слуша';
+
+  @override
+  String get oneSourceAtATime => 'Omi снима само из једног извора истовремено.';
+
+  @override
+  String get recordWithPhoneInstead => 'Уместо тога снимај телефоном';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'Привезак је паузиран док не завршите';
+
+  @override
+  String get pendantPausesDuringCall => 'Привезак је паузиран током позива';
+
+  @override
+  String get keepUsingPendant => 'Настави са привеском';
+
+  @override
+  String get recordWith => 'Снимај помоћу';
+
+  @override
+  String get moreWaysToRecord => 'Више начина снимања';
+
+  @override
+  String get openCall => 'Отвори позив';
 }

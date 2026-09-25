@@ -10799,7 +10799,7 @@
     "@memoryHistory": {
         "description": "Filter option for retained memory history"
     },
-    "tapPlusToStartRecording": "הקישו על + כדי להתחיל להקליט",
+    "tapPlusToStartRecording": "הקישו על כפתור ההקלטה כדי להתחיל להקליט",
     "processingTakingLonger": "עדיין בעבודה — זה לוקח יותר זמן מהרגיל.",
     "speechProfileEnrollmentPrompt": "כדי ש-Omi יידע איזה קול הוא שלך — יש לדבר על כל נושא במשך כ-5 שניות.",
     "home": "בית",
@@ -10842,7 +10842,7 @@
     "conversationsMovedCount": "{count, plural, =1{שיחה אחת הועברה} other{{count} שיחות הועברו}}",
     "failedToMoveConversations": "לא ניתן היה להעביר את השיחות",
     "discardedConversationTitle": "נמחקה מהרשימה · {duration}",
-    "noConversationsHeroMessage": "שיחות שתקליטו יופיעו כאן. הקישו על + במסך הבית כדי להקליט את הראשונה.",
+    "noConversationsHeroMessage": "שיחות שתקליטו יופיעו כאן. הקישו על כפתור ההקלטה במסך הבית כדי להקליט את הראשונה.",
     "conversationMap": "מפת שיחות",
     "conversationCount": "{count, plural, =1{שיחה אחת} other{{count} שיחות}}",
     "taskCount": "{count, plural, =1{משימה אחת} other{{count} משימות}}",
@@ -10965,7 +10965,7 @@
     "batteryLevelSemantics": "סוללה {level}%",
     "updateOmiGlassFirmware": "עדכון קושחת OmiGlass",
     "deviceConnecting": "מתחבר…",
-    "recordOptionsTip": "טיפ: לחיצה ארוכה על כפתור ההקלטה מקליטה שיחת טלפון.",
+    "recordOptionsTip": "טיפ: הקישו על החץ בכפתור ההקלטה כדי להקליט שיחת טלפון.",
     "firmwareUpdateFailedTitle": "העדכון נכשל",
     "firmwareUpdateFailedMessage": "העדכון לא הסתיים. המכשיר עדיין עם הקושחה הנוכחית ובטוח לשימוש. השאירו אותו טעון וקרוב לטלפון ונסו שוב.",
     "firmwareDownloadFailedMessage": "לא ניתן היה להוריד את העדכון והמכשיר לא השתנה. בדקו את החיבור לאינטרנט ונסו שוב.",
@@ -11100,5 +11100,20 @@
     "transcriptionUnavailableRecordingContinues": "התמלילים אינם זמינים, ההקלטה ממשיכה במכשיר ותעובד מאוחר יותר",
     "transcriptionUnavailableSavingOnDevice": "תמליל לא זמין · נשמר במכשיר",
     "transcriptionsPendingFraction": "תמלילים ממתינים {pending}/{total}",
-    "transcriptionsPendingCount": "תמלילים ממתינים {count}"
+    "transcriptionsPendingCount": "תמלילים ממתינים {count}",
+    "captureSourceCall": "שיחה",
+    "captureSourcePhoneMic": "מיקרופון הטלפון",
+    "captureStatusWithSource": "{status} · {source}",
+    "resume": "המשך",
+    "finish": "סיום",
+    "pendantPausedResumesWhenYouFinish": "התליון מושהה · ימשיך כשתסיימו",
+    "pendantIsListeningTitle": "התליון שלכם מאזין",
+    "oneSourceAtATime": "Omi מקליט ממקור אחד בכל פעם.",
+    "recordWithPhoneInstead": "הקלטה בטלפון במקום",
+    "pendantPausesUntilYouFinish": "התליון מושהה עד שתסיימו",
+    "pendantPausesDuringCall": "התליון מושהה במהלך השיחה",
+    "keepUsingPendant": "המשך עם התליון",
+    "recordWith": "הקלטה באמצעות",
+    "moreWaysToRecord": "דרכים נוספות להקליט",
+    "openCall": "פתיחת השיחה"
 }

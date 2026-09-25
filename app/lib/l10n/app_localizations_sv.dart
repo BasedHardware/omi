@@ -9972,7 +9972,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get transcriptionNoAudio => 'Transkrieringen tar inte emot ljud';
 
   @override
-  String get tapPlusToStartRecording => 'Tryck på + för att börja spela in';
+  String get tapPlusToStartRecording => 'Tryck på inspelningsknappen för att börja spela in';
 
   @override
   String get chatBlockTask => 'Uppgift';
@@ -10215,7 +10215,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'Konversationer du spelar in visas här. Tryck på + på Hem för att spela in den första.';
+      'Konversationer du spelar in visas här. Tryck på inspelningsknappen på Hem för att spela in den första.';
 
   @override
   String get conversationMap => 'Konversationskarta';
@@ -10694,7 +10694,7 @@ class AppLocalizationsSv extends AppLocalizations {
   String get deviceConnecting => 'Ansluter…';
 
   @override
-  String get recordOptionsTip => 'Tips: tryck och håll inne inspelningsknappen för att spela in ett telefonsamtal.';
+  String get recordOptionsTip => 'Tips: tryck på pilen på inspelningsknappen för att spela in ett telefonsamtal.';
 
   @override
   String get firmwareUpdateFailedTitle => 'Uppdateringen misslyckades';
@@ -11184,4 +11184,51 @@ class AppLocalizationsSv extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Transkriptioner i kö $count';
   }
+
+  @override
+  String get captureSourceCall => 'Samtal';
+
+  @override
+  String get captureSourcePhoneMic => 'Telefonmikrofon';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Återuppta';
+
+  @override
+  String get finish => 'Avsluta';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Hänge pausat · fortsätter när du är klar';
+
+  @override
+  String get pendantIsListeningTitle => 'Ditt hänge lyssnar';
+
+  @override
+  String get oneSourceAtATime => 'Omi spelar in från en källa i taget.';
+
+  @override
+  String get recordWithPhoneInstead => 'Spela in med telefonen i stället';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'Hänget pausas tills du är klar';
+
+  @override
+  String get pendantPausesDuringCall => 'Hänget pausas under samtalet';
+
+  @override
+  String get keepUsingPendant => 'Fortsätt med hänget';
+
+  @override
+  String get recordWith => 'Spela in med';
+
+  @override
+  String get moreWaysToRecord => 'Fler sätt att spela in';
+
+  @override
+  String get openCall => 'Öppna samtal';
 }
