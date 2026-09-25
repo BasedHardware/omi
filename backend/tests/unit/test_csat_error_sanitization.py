@@ -16,14 +16,19 @@ import sys
 import unittest
 from unittest.mock import MagicMock, patch
 
+_candidates = [
+    Path(__file__).resolve().parents[2] / "routers" / "csat.py",
+    Path(__file__).resolve().parent / "csat.py",
+    Path("routers/csat.py").resolve(),
+    Path("backend/routers/csat.py").resolve(),
+    Path("csat.py").resolve(),
+]
+CSAT_ROUTER_FILE = next((p for p in _candidates if p.exists()), None)
 BACKEND_DIR = (
     Path(__file__).resolve().parents[2]
-    if "backend" in str(Path(__file__).resolve())
+    if len(Path(__file__).resolve().parents) >= 3
     else Path(__file__).resolve().parent
 )
-CSAT_ROUTER_FILE = BACKEND_DIR / "backend" / "routers" / "csat.py"
-if not CSAT_ROUTER_FILE.exists():
-    CSAT_ROUTER_FILE = BACKEND_DIR / "csat.py"
 
 
 class CsatErrorSanitizationTests(unittest.TestCase):
@@ -100,6 +105,7 @@ class CsatErrorSanitizationTests(unittest.TestCase):
         self.client = TestClient(self.app)
 
     def test_static_zero_raw_exception_reflection(self):
+        self.assertIsNotNone(CSAT_ROUTER_FILE, "csat.py router file must be resolved")
         source = CSAT_ROUTER_FILE.read_text(encoding="utf-8")
         self.assertNotIn("detail=str(e)", source)
         self.assertNotIn("detail=str(exc)", source)
