@@ -410,23 +410,6 @@ class TestConversationInitSideEffects:
         assert conv.plugins_results[0].plugin_id == "app1"
         assert conv.plugins_results[0].content == "result1"
 
-    def test_processing_conversation_id_synced_to_processing_memory_id(self):
-        from models.conversation import Conversation
-        from models.conversation_enums import ConversationSource
-        from models.structured import Structured
-
-        now = datetime.now(timezone.utc)
-        conv = Conversation(
-            id="side-effect-2",
-            created_at=now,
-            started_at=now,
-            finished_at=now,
-            source=ConversationSource.omi,
-            structured=Structured(title="Test"),
-            processing_conversation_id="proc-123",
-        )
-        assert conv.processing_memory_id == "proc-123"
-
 
 class TestGetPersonIds:
     """get_person_ids with duplicates and None values."""

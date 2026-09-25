@@ -7490,17 +7490,6 @@
             ],
             "title": "Processing Conversation Id"
           },
-          "processing_memory_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Processing Memory Id"
-          },
           "processing_state": {
             "anyOf": [
               {
@@ -8628,17 +8617,6 @@
               }
             ],
             "title": "Processing Conversation Id"
-          },
-          "processing_memory_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Processing Memory Id"
           },
           "processing_state": {
             "anyOf": [

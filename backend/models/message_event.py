@@ -42,7 +42,6 @@ class ConversationEvent(MessageEvent):
 
 
 class NewConversationCreated(MessageEvent):
-    processing_memory_id: Optional[str] = None
     memory_id: Optional[str] = None
     message_ids: Optional[List[str]] = []
     memory: Conversation
@@ -56,7 +55,6 @@ class NewConversationCreated(MessageEvent):
 
 
 class NewProcessingConversationCreated(MessageEvent):
-    processing_memory_id: Optional[str] = None
     memory_id: Optional[str] = None
 
     def to_json(self):
@@ -67,7 +65,6 @@ class NewProcessingConversationCreated(MessageEvent):
 
 
 class ProcessingConversationStatusChanged(MessageEvent):
-    processing_memory_id: Optional[str] = None
     processing_memory_status: Optional[str] = None
     memory_id: Optional[str] = None
 
