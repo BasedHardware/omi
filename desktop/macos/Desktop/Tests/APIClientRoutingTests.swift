@@ -462,7 +462,14 @@ final class APIClientRoutingTests: XCTestCase {
         bundleIdentifier: AppBuild.betaProductionBundleIdentifier,
         environmentValue: DesktopBackendEnvironment.productionPythonAPIURL
       ),
-      "https://api.omiapi.com/v1/mcp/sse"
+      "https://api.omiapi.com/v1/mcp"
+    )
+    XCTAssertEqual(
+      MemoryExportDestination.mcpServerURL(
+        bundleIdentifier: AppBuild.productionBundleIdentifier,
+        environmentValue: DesktopBackendEnvironment.productionPythonAPIURL
+      ),
+      "https://api.omi.me/v1/mcp"
     )
     XCTAssertEqual(
       MemoryExportDestination.mcpAuthorizeURL(

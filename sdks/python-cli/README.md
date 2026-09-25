@@ -300,6 +300,9 @@ Both transcript JSON and `local call --args-json` require finite numbers:
 range are rejected before opening an API client. In `--json` mode, these input
 errors are reported as JSON on stderr.
 
+Goal numeric options and progress values must also be finite. NaN, infinities,
+and overflowing exponents are rejected before an API request.
+
 `action-item get` searches successive API pages until it finds the ID or
 reaches the end of the results. It can retrieve items beyond the first 1,000;
 looking up an older or missing item may require several API requests.
@@ -373,6 +376,10 @@ rate-limit responses still retry; read retries are unchanged.
 ## Allow clearing an action item due date
 
 `omi action-item update ID --clear-due-at` removes a due date on servers supporting explicit null PATCH fields (backend fix #13029). It cannot be combined with `--due-at`. Omitting both leaves the date unchanged.
+
+## Preserve ambiguous sql table output
+
+`omi --json local sql` keeps ambiguous or truncated display tables under `text` rather than silently dropping cells. Structured Desktop responses pass through unchanged; the text display is not a lossless SQL wire format.
 
 ## Datetime options
 Conversation and action-item datetime options accept ISO timestamps with `Z`

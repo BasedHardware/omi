@@ -935,9 +935,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'Lisa claude_desktop_config.json-i';
-
-  @override
   String get copyConfig => 'Kopeeri konfiguratsioon';
 
   @override
@@ -2477,13 +2474,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get clearAllNodesAndConnections => 'Kustuta kõik sõlmed ja ühendused';
 
   @override
-  String get addToClaudeDesktopConfig => 'Lisa faili claude_desktop_config.json';
-
-  @override
   String get connectAiAssistantsToData => 'Ühenda AI-assistendid oma andmetega';
-
-  @override
-  String get useYourMcpApiKey => 'Kasuta oma MCP API võtit';
 
   @override
   String get realTimeTranscript => 'Reaalajas transkriptsioon';
@@ -9962,7 +9953,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get transcriptionNoAudio => 'Transkriptsioon ei saa heli';
 
   @override
-  String get tapPlusToStartRecording => 'Salvestamise alustamiseks puuduta +';
+  String get tapPlusToStartRecording => 'Salvestamise alustamiseks puuduta salvestusnuppu';
 
   @override
   String get chatBlockTask => 'Ülesanne';
@@ -10205,7 +10196,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'Siin kuvatakse salvestatud vestlused. Esimese salvestamiseks puuduta avalehel +.';
+      'Siin kuvatakse salvestatud vestlused. Esimese salvestamiseks puuduta avalehel salvestusnuppu.';
 
   @override
   String get conversationMap => 'Vestluste kaart';
@@ -10683,7 +10674,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String get deviceConnecting => 'Ühendamine…';
 
   @override
-  String get recordOptionsTip => 'Nõuanne: telefonikõne salvestamiseks vajuta salvestusnuppu ja hoia all.';
+  String get recordOptionsTip => 'Nõuanne: telefonikõne salvestamiseks puuduta salvestusnupul olevat noolt.';
 
   @override
   String get firmwareUpdateFailedTitle => 'Värskendamine ebaõnnestus';
@@ -11077,4 +11068,166 @@ class AppLocalizationsEt extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get recordingAndTranscription => 'Salvestamine ja transkriptsioon';
+
+  @override
+  String get notificationsAndDisplay => 'Teavitused ja kuva';
+
+  @override
+  String get helpAndAbout => 'Abi ja teave';
+
+  @override
+  String get speakerTagPromptTitle => 'Aita Omil hääli ära tunda';
+
+  @override
+  String get speakerTagPromptSubtitle => 'Kiire ülevaade viimase kahe päeva häältest';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'Kas see oled sina?';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'Kas see on $name?';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'Kes see on?';
+
+  @override
+  String get speakerTagPromptThatsMe => 'See olen mina';
+
+  @override
+  String get speakerTagPromptNotMe => 'Pole mina';
+
+  @override
+  String get speakerTagPromptSomeoneNew => 'Keegi uus';
+
+  @override
+  String get speakerTagPromptDontKnow => 'Keegi, keda ma ei tunne';
+
+  @override
+  String get speakerTagPromptNotSure => 'Pole kindel';
+
+  @override
+  String get speakerTagPromptPlayClip => 'Esita klipp';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current/$total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => 'Jäta meelde nende inimeste hääled, kellele nime annad';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody =>
+      'Omi hoiab alles lühikese häälenäidise, et neid järgmine kord ära tunda. Saad seda igal ajal seadetes muuta.';
+
+  @override
+  String get speakerTagPromptThanks => 'Aitäh! Omi tunneb hääli nüüd paremini ära.';
+
+  @override
+  String get speakerTagPromptNameHint => 'Nimi';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'Seda klippi ei õnnestunud esitada';
+
+  @override
+  String get speakerTagPromptAnswerFailed => 'Salvestamine ebaõnnestus. Proovi uuesti.';
+
+  @override
+  String get voiceSettingsAskToTag => 'Palu mul hääli märgistada';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle => 'Aeg-ajalt küsib Omi, kes sinu hiljutistes vestlustes rääkis';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle =>
+      'Kui annad kellelegi nime, hoiab Omi alles lühikese häälenäidise, et teda järgmine kord ära tunda';
+
+  @override
+  String get leaveBlank => 'Jäta tühjaks';
+
+  @override
+  String get mcpOAuthSetup =>
+      'Lehel claude.ai lisa kohandatud konnektor ja kleebi serveri URL. Kui Claude küsib täiustatud OAuth Client ID-d, kasuta allolevat väärtust ja jäta saladus tühjaks — ära kunagi kasuta oma MCP API võtit OAuth saladusena.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'Lisa faili ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'Lehel Claude Desktop → Settings → Connectors lisa kohandatud konnektor ja kleebi serveri URL. Kui Claude küsib täiustatud OAuth Client ID-d, kasuta allolevat väärtust ja jäta saladus tühjaks — ära kunagi kasuta oma MCP API võtit OAuth saladusena.';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Transkriptsioonid pole saadaval, salvestamine jätkub seadmel ja töödeldakse hiljem';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Transkriptsioon pole saadaval · salvestatakse seadmesse';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Ootel transkriptsioonid $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Ootel transkriptsioonid $count';
+  }
+
+  @override
+  String get captureSourceCall => 'Kõne';
+
+  @override
+  String get captureSourcePhoneMic => 'Telefoni mikrofon';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Jätka';
+
+  @override
+  String get finish => 'Lõpeta';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Ripats peatatud · jätkab, kui lõpetad';
+
+  @override
+  String get pendantIsListeningTitle => 'Sinu ripats kuulab';
+
+  @override
+  String get oneSourceAtATime => 'Omi salvestab korraga ainult ühest allikast.';
+
+  @override
+  String get recordWithPhoneInstead => 'Salvesta hoopis telefoniga';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'Ripats on peatatud, kuni lõpetad';
+
+  @override
+  String get pendantPausesDuringCall => 'Ripats on kõne ajal peatatud';
+
+  @override
+  String get keepUsingPendant => 'Jätka ripatsiga';
+
+  @override
+  String get recordWith => 'Salvestusviis';
+
+  @override
+  String get moreWaysToRecord => 'Rohkem salvestusviise';
+
+  @override
+  String get openCall => 'Ava kõne';
+
+  @override
+  String get captureRecoveryBanner => 'Ripatsi heli ei jõua rakendusse — parandamiseks puudutage';
 }
