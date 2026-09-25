@@ -16,7 +16,7 @@ import argparse
 import json
 import re
 import sys
-from datetime import datetime, timezone
+from datetime import datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Sequence
 
@@ -85,6 +85,8 @@ def render_kanban(items: List[Dict[str, Any]], title: str = "Omi Action Items Bo
 
         desc = str(item.get("description") or item.get("title") or "Untitled task").strip()
         desc = re.sub(r"\r\n|\r|\n", " ", desc)
+        # Strip existing @YYYY-MM-DD date tag from description text to prevent duplicate due dates
+        desc = re.sub(r"\s*@\d{4}-\d{2}-\d{2}\b", "", desc).strip()
 
         completed = parse_boolean(item.get("completed"))
         due = format_due_date(item.get("due_at"))

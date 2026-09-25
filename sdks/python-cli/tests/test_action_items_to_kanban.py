@@ -62,6 +62,14 @@ class TestActionItemsToKanban(unittest.TestCase):
             content = out.read_text(encoding="utf-8")
             self.assertIn("- [ ] Single task", content)
 
+    def test_strip_duplicate_due_tag_from_description(self):
+        items = [
+            {"id": "act-dup", "description": "Fix API endpoint @2026-01-02", "completed": False, "due_at": "2026-01-02T10:00:00Z"}
+        ]
+        board = a2k.render_kanban(items)
+        self.assertIn("- [ ] Fix API endpoint @2026-01-02 #act-dup", board)
+        self.assertNotIn("@2026-01-02 @2026-01-02", board)
+
 
 if __name__ == "__main__":
     unittest.main()
