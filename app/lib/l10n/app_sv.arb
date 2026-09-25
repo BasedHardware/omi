@@ -3556,5 +3556,17 @@
     "capturePhoneStorageFull": "Telefonens lagring är full",
     "captureStorageAlmostFull": "Lagringen är nästan full",
     "capturePendantDisconnectedDetail": "Hängsmycket tappade anslutningen till den här telefonen. Omi ansluter igen av sig själv när hängsmycket är på och i närheten. Allt som spelats in innan är säkert.",
-    "participantsSummaryUncounted": "{name} och andra"
+    "participantsSummaryUncounted": "{name} och andra",
+    "transcriptionUnavailableSavingOnDevice": "Transkription inte tillgänglig · sparas på enheten",
+    "addToClaudeConfig": "Lägg till i claude_desktop_config.json",
+    "addToClaudeDesktopConfig": "Lägg till i claude_desktop_config.json",
+    "useYourMcpApiKey": "Använd din MCP API-nyckel",
+    "singlePress": "Enkeltryck",
+    "triplePress": "Trippeltryck",
+    "longPress": "Långt tryck",
+    "turnOnOff": "Slå på/av",
+    "singlePressAction": "Enkeltrycksåtgärd",
+    "triplePressAction": "Trippeltrycksåtgärd",
+    "askQuestion": "Ställ en fråga",
+    "longPressFixedNotice": "Långt tryck slår på/av enheten och kan inte anpassas."
 }

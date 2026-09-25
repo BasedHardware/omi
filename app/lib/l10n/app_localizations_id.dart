@@ -11278,4 +11278,40 @@ class AppLocalizationsId extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name dan lainnya';
   }
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Transkripsi tidak tersedia · disimpan di perangkat';
+
+  @override
+  String get addToClaudeConfig => 'Tambahkan ke claude_desktop_config.json';
+
+  @override
+  String get addToClaudeDesktopConfig => 'Tambahkan ke claude_desktop_config.json';
+
+  @override
+  String get useYourMcpApiKey => 'Gunakan kunci API MCP Anda';
+
+  @override
+  String get singlePress => 'Tekan Sekali';
+
+  @override
+  String get triplePress => 'Tekan Tiga Kali';
+
+  @override
+  String get longPress => 'Tekan Lama';
+
+  @override
+  String get turnOnOff => 'Nyalakan/Matikan';
+
+  @override
+  String get singlePressAction => 'Aksi Tekan Sekali';
+
+  @override
+  String get triplePressAction => 'Aksi Tekan Tiga Kali';
+
+  @override
+  String get askQuestion => 'Ajukan Pertanyaan';
+
+  @override
+  String get longPressFixedNotice => 'Tekan lama untuk menyalakan/mematikan perangkat dan tidak dapat disesuaikan.';
 }

@@ -20528,6 +20528,78 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{name} + others'**
   String participantsSummaryUncounted(String name);
+
+  /// Compact transcription-outage status for the in-progress capture card.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcription unavailable · saving on device'**
+  String get transcriptionUnavailableSavingOnDevice;
+
+  /// No description provided for @addToClaudeConfig.
+  ///
+  /// In en, this message translates to:
+  /// **'Add to claude_desktop_config.json'**
+  String get addToClaudeConfig;
+
+  /// Description for Claude Desktop config
+  ///
+  /// In en, this message translates to:
+  /// **'Add to claude_desktop_config.json'**
+  String get addToClaudeDesktopConfig;
+
+  /// Hint for client secret value
+  ///
+  /// In en, this message translates to:
+  /// **'Use your MCP API key'**
+  String get useYourMcpApiKey;
+
+  /// Label for the single press button gesture row in device settings
+  ///
+  /// In en, this message translates to:
+  /// **'Single Press'**
+  String get singlePress;
+
+  /// Label for the triple press button gesture row in device settings
+  ///
+  /// In en, this message translates to:
+  /// **'Triple Press'**
+  String get triplePress;
+
+  /// Label for the long press button gesture row in device settings
+  ///
+  /// In en, this message translates to:
+  /// **'Long Press'**
+  String get longPress;
+
+  /// Action value for long press indicating device power on and off
+  ///
+  /// In en, this message translates to:
+  /// **'Turn On/Off'**
+  String get turnOnOff;
+
+  /// Title of the bottom sheet to configure single press button action
+  ///
+  /// In en, this message translates to:
+  /// **'Single Press Action'**
+  String get singlePressAction;
+
+  /// Title of the bottom sheet to configure triple press button action
+  ///
+  /// In en, this message translates to:
+  /// **'Triple Press Action'**
+  String get triplePressAction;
+
+  /// Option in button action picker to ask Omi a voice question
+  ///
+  /// In en, this message translates to:
+  /// **'Ask Question'**
+  String get askQuestion;
+
+  /// Snackbar notice explaining that long press is reserved for power control
+  ///
+  /// In en, this message translates to:
+  /// **'Long press powers the device on/off and cannot be customized.'**
+  String get longPressFixedNotice;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

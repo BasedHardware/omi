@@ -3556,5 +3556,17 @@
     "capturePhoneStorageFull": "Tālruņa krātuve ir pilna",
     "captureStorageAlmostFull": "Krātuve gandrīz pilna",
     "capturePendantDisconnectedDetail": "Kulons zaudēja savienojumu ar šo tālruni. Omi pats atjaunos savienojumu, kad kulons būs ieslēgts un tuvumā. Viss, kas ierakstīts līdz šim, ir drošībā.",
-    "participantsSummaryUncounted": "{name} un citi"
+    "participantsSummaryUncounted": "{name} un citi",
+    "transcriptionUnavailableSavingOnDevice": "Transkripcija nav pieejama · tiek saglabāta ierīcē",
+    "addToClaudeConfig": "Pievienot claude_desktop_config.json",
+    "addToClaudeDesktopConfig": "Pievienot claude_desktop_config.json",
+    "useYourMcpApiKey": "Izmantojiet savu MCP API atslēgu",
+    "singlePress": "Viens spiediens",
+    "triplePress": "Trīskāršs spiediens",
+    "longPress": "Ilgs spiediens",
+    "turnOnOff": "Ieslēgt/Izslēgt",
+    "singlePressAction": "Viena spiediena darbība",
+    "triplePressAction": "Trīskārša spiediena darbība",
+    "askQuestion": "Uzdot jautājumu",
+    "longPressFixedNotice": "Ilgs spiediens ieslēdz/izslēdz ierīci un to nevar pielāgot."
 }

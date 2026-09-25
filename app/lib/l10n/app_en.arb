@@ -13392,5 +13392,50 @@
                 "type": "String"
             }
         }
+    },
+    "transcriptionUnavailableSavingOnDevice": "Transcription unavailable · saving on device",
+    "@transcriptionUnavailableSavingOnDevice": {
+        "description": "Compact transcription-outage status for the in-progress capture card."
+    },
+    "addToClaudeConfig": "Add to claude_desktop_config.json",
+    "addToClaudeDesktopConfig": "Add to claude_desktop_config.json",
+    "@addToClaudeDesktopConfig": {
+        "description": "Description for Claude Desktop config"
+    },
+    "useYourMcpApiKey": "Use your MCP API key",
+    "@useYourMcpApiKey": {
+        "description": "Hint for client secret value"
+    },
+    "singlePress": "Single Press",
+    "@singlePress": {
+        "description": "Label for the single press button gesture row in device settings"
+    },
+    "triplePress": "Triple Press",
+    "@triplePress": {
+        "description": "Label for the triple press button gesture row in device settings"
+    },
+    "longPress": "Long Press",
+    "@longPress": {
+        "description": "Label for the long press button gesture row in device settings"
+    },
+    "turnOnOff": "Turn On/Off",
+    "@turnOnOff": {
+        "description": "Action value for long press indicating device power on and off"
+    },
+    "singlePressAction": "Single Press Action",
+    "@singlePressAction": {
+        "description": "Title of the bottom sheet to configure single press button action"
+    },
+    "triplePressAction": "Triple Press Action",
+    "@triplePressAction": {
+        "description": "Title of the bottom sheet to configure triple press button action"
+    },
+    "askQuestion": "Ask Question",
+    "@askQuestion": {
+        "description": "Option in button action picker to ask Omi a voice question"
+    },
+    "longPressFixedNotice": "Long press powers the device on/off and cannot be customized.",
+    "@longPressFixedNotice": {
+        "description": "Snackbar notice explaining that long press is reserved for power control"
     }
 }

@@ -11345,4 +11345,40 @@ class AppLocalizationsTa extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name மற்றும் மற்றவர்கள்';
   }
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'நகலெடுப்பு இல்லை · சாதனத்தில் சேமிக்கப்படுகிறது';
+
+  @override
+  String get addToClaudeConfig => 'claude_desktop_config.json க்கு சேர்க்கவும்';
+
+  @override
+  String get addToClaudeDesktopConfig => 'claude_desktop_config.json இல் சேர்க்கவும்';
+
+  @override
+  String get useYourMcpApiKey => 'உங்கள் MCP API விசையைப் பயன்படுத்தவும்';
+
+  @override
+  String get singlePress => 'ஒற்றை அழுத்தம்';
+
+  @override
+  String get triplePress => 'மூன்று அழுத்தம்';
+
+  @override
+  String get longPress => 'நீண்ட அழுத்தம்';
+
+  @override
+  String get turnOnOff => 'இயக்கு/நிறுத்து';
+
+  @override
+  String get singlePressAction => 'ஒற்றை அழுத்த நடவடிக்கை';
+
+  @override
+  String get triplePressAction => 'மூன்று அழுத்த நடவடிக்கை';
+
+  @override
+  String get askQuestion => 'கேள்வி கேளுங்கள்';
+
+  @override
+  String get longPressFixedNotice => 'நீண்ட அழுத்தம் சாதனத்தை இயக்குகிறது/நிறுத்துகிறது மற்றும் தனிப்பயனாக்க முடியாது.';
 }

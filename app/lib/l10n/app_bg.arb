@@ -3556,5 +3556,17 @@
     "capturePhoneStorageFull": "Паметта на телефона е пълна",
     "captureStorageAlmostFull": "Паметта е почти пълна",
     "capturePendantDisconnectedDetail": "Висулката загуби връзка с този телефон. Omi ще се свърже отново сам, когато висулката е включена и наблизо. Всичко записано дотук е запазено.",
-    "participantsSummaryUncounted": "{name} и други"
+    "participantsSummaryUncounted": "{name} и други",
+    "transcriptionUnavailableSavingOnDevice": "Транскрипцията е недостъпна · записва се на устройството",
+    "addToClaudeConfig": "Добавете към claude_desktop_config.json",
+    "addToClaudeDesktopConfig": "Добавяне към claude_desktop_config.json",
+    "useYourMcpApiKey": "Използвайте вашия MCP API ключ",
+    "singlePress": "Единично натискане",
+    "triplePress": "Тройно натискане",
+    "longPress": "Дълго натискане",
+    "turnOnOff": "Включване/Изключване",
+    "singlePressAction": "Действие при единично натискане",
+    "triplePressAction": "Действие при тройно натискане",
+    "askQuestion": "Задаване на въпрос",
+    "longPressFixedNotice": "Дългото натискане включва/изключва устройството и не може да се персонализира."
 }

@@ -11295,4 +11295,40 @@ class AppLocalizationsLv extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name un citi';
   }
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Transkripcija nav pieejama · tiek saglabāta ierīcē';
+
+  @override
+  String get addToClaudeConfig => 'Pievienot claude_desktop_config.json';
+
+  @override
+  String get addToClaudeDesktopConfig => 'Pievienot claude_desktop_config.json';
+
+  @override
+  String get useYourMcpApiKey => 'Izmantojiet savu MCP API atslēgu';
+
+  @override
+  String get singlePress => 'Viens spiediens';
+
+  @override
+  String get triplePress => 'Trīskāršs spiediens';
+
+  @override
+  String get longPress => 'Ilgs spiediens';
+
+  @override
+  String get turnOnOff => 'Ieslēgt/Izslēgt';
+
+  @override
+  String get singlePressAction => 'Viena spiediena darbība';
+
+  @override
+  String get triplePressAction => 'Trīskārša spiediena darbība';
+
+  @override
+  String get askQuestion => 'Uzdot jautājumu';
+
+  @override
+  String get longPressFixedNotice => 'Ilgs spiediens ieslēdz/izslēdz ierīci un to nevar pielāgot.';
 }

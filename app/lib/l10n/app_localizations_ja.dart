@@ -11083,4 +11083,40 @@ class AppLocalizationsJa extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$nameほか';
   }
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => '文字起こし不可 · 端末に保存中';
+
+  @override
+  String get addToClaudeConfig => 'claude_desktop_config.jsonに追加';
+
+  @override
+  String get addToClaudeDesktopConfig => 'claude_desktop_config.jsonに追加';
+
+  @override
+  String get useYourMcpApiKey => 'MCP APIキーを使用';
+
+  @override
+  String get singlePress => 'シングルプレス';
+
+  @override
+  String get triplePress => 'トリプルプレス';
+
+  @override
+  String get longPress => '長押し';
+
+  @override
+  String get turnOnOff => '電源オン/オフ';
+
+  @override
+  String get singlePressAction => 'シングルプレスアクション';
+
+  @override
+  String get triplePressAction => 'トリプルプレスアクション';
+
+  @override
+  String get askQuestion => '質問する';
+
+  @override
+  String get longPressFixedNotice => '長押しは電源のオン/オフ用であり、カスタマイズできません。';
 }

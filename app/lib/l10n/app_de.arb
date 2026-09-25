@@ -3556,5 +3556,17 @@
     "capturePhoneStorageFull": "Telefonspeicher voll",
     "captureStorageAlmostFull": "Speicher fast voll",
     "capturePendantDisconnectedDetail": "Dein Anhänger hat die Verbindung zu diesem Telefon verloren. Omi verbindet sich von selbst neu, sobald der Anhänger eingeschaltet und in der Nähe ist. Alles bisher Aufgenommene ist sicher.",
-    "participantsSummaryUncounted": "{name} und weitere"
+    "participantsSummaryUncounted": "{name} und weitere",
+    "transcriptionUnavailableSavingOnDevice": "Transkription nicht verfügbar · wird auf dem Gerät gespeichert",
+    "addToClaudeConfig": "Zu claude_desktop_config.json hinzufügen",
+    "addToClaudeDesktopConfig": "Zu claude_desktop_config.json hinzufügen",
+    "useYourMcpApiKey": "Verwenden Sie Ihren MCP-API-Schlüssel",
+    "singlePress": "Einmaliges Drücken",
+    "triplePress": "Dreimaliges Drücken",
+    "longPress": "Langes Drücken",
+    "turnOnOff": "Ein-/Ausschalten",
+    "singlePressAction": "Aktion für einmaliges Drücken",
+    "triplePressAction": "Aktion für dreimaliges Drücken",
+    "askQuestion": "Frage stellen",
+    "longPressFixedNotice": "Langes Drücken schaltet das Gerät ein/aus und kann nicht angepasst werden."
 }

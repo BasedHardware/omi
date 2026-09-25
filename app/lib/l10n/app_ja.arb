@@ -3556,5 +3556,17 @@
     "capturePhoneStorageFull": "端末の空き容量なし",
     "captureStorageAlmostFull": "空き容量わずか",
     "capturePendantDisconnectedDetail": "ペンダントとこのスマートフォンの接続が切れました。ペンダントの電源が入っていて近くにあれば、Omiは自動で再接続します。それまでに録音した内容は保存されています。",
-    "participantsSummaryUncounted": "{name}ほか"
+    "participantsSummaryUncounted": "{name}ほか",
+    "transcriptionUnavailableSavingOnDevice": "文字起こし不可 · 端末に保存中",
+    "addToClaudeConfig": "claude_desktop_config.jsonに追加",
+    "addToClaudeDesktopConfig": "claude_desktop_config.jsonに追加",
+    "useYourMcpApiKey": "MCP APIキーを使用",
+    "singlePress": "シングルプレス",
+    "triplePress": "トリプルプレス",
+    "longPress": "長押し",
+    "turnOnOff": "電源オン/オフ",
+    "singlePressAction": "シングルプレスアクション",
+    "triplePressAction": "トリプルプレスアクション",
+    "askQuestion": "質問する",
+    "longPressFixedNotice": "長押しは電源のオン/オフ用であり、カスタマイズできません。"
 }

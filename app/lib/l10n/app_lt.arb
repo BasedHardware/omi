@@ -3556,5 +3556,17 @@
     "capturePhoneStorageFull": "Telefono atmintis pilna",
     "captureStorageAlmostFull": "Atmintis beveik pilna",
     "capturePendantDisconnectedDetail": "Pakabukas prarado ryšį su šiuo telefonu. Omi pats vėl prisijungs, kai pakabukas bus įjungtas ir netoliese. Viskas, kas įrašyta iki šiol, išsaugota.",
-    "participantsSummaryUncounted": "{name} ir kiti"
+    "participantsSummaryUncounted": "{name} ir kiti",
+    "transcriptionUnavailableSavingOnDevice": "Transkripcija neprieinama · saugoma įrenginyje",
+    "addToClaudeConfig": "Pridėti į claude_desktop_config.json",
+    "addToClaudeDesktopConfig": "Pridėti prie claude_desktop_config.json",
+    "useYourMcpApiKey": "Naudokite savo MCP API raktą",
+    "singlePress": "Vienas paspaudimas",
+    "triplePress": "Trigubas paspaudimas",
+    "longPress": "Ilgas paspaudimas",
+    "turnOnOff": "Įjungti / išjungti",
+    "singlePressAction": "Vieno paspaudimo veiksmas",
+    "triplePressAction": "Trigubo paspaudimo veiksmas",
+    "askQuestion": "Užduoti klausimą",
+    "longPressFixedNotice": "Ilgas paspaudimas įjungia / išjungia įrenginį ir jo negalima tinkinti."
 }

@@ -11269,4 +11269,40 @@ class AppLocalizationsBn extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name ও অন্যরা';
   }
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'ট্রান্সক্রিপশন অনুপলব্ধ · ডিভাইসে সংরক্ষণ হচ্ছে';
+
+  @override
+  String get addToClaudeConfig => 'claude_desktop_config.json এ যোগ করুন';
+
+  @override
+  String get addToClaudeDesktopConfig => 'claude_desktop_config.json এ যোগ করুন';
+
+  @override
+  String get useYourMcpApiKey => 'আপনার MCP API চাবি ব্যবহার করুন';
+
+  @override
+  String get singlePress => 'একবার চাপুন';
+
+  @override
+  String get triplePress => 'তিনবার চাপুন';
+
+  @override
+  String get longPress => 'দীর্ঘক্ষণ চাপুন';
+
+  @override
+  String get turnOnOff => 'চালু/বন্ধ করুন';
+
+  @override
+  String get singlePressAction => 'একবার চাপার ক্রিয়া';
+
+  @override
+  String get triplePressAction => 'তিনবার চাপার ক্রিয়া';
+
+  @override
+  String get askQuestion => 'প্রশ্ন জিজ্ঞাসা করুন';
+
+  @override
+  String get longPressFixedNotice => 'দীর্ঘক্ষণ চাপলে ডিভাইসটি চালু/বন্ধ হয় এবং কাস্টমাইজ করা যায় না।';
 }

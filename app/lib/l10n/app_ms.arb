@@ -3556,5 +3556,17 @@
     "capturePhoneStorageFull": "Storan telefon penuh",
     "captureStorageAlmostFull": "Storan hampir penuh",
     "capturePendantDisconnectedDetail": "Loket anda terputus sambungan dengan telefon ini. Omi akan bersambung semula sendiri apabila loket dihidupkan dan berdekatan. Semua yang dirakam sebelum ini selamat.",
-    "participantsSummaryUncounted": "{name} dan lain-lain"
+    "participantsSummaryUncounted": "{name} dan lain-lain",
+    "transcriptionUnavailableSavingOnDevice": "Transkripsi tidak tersedia · disimpan pada peranti",
+    "addToClaudeConfig": "Tambah ke claude_desktop_config.json",
+    "addToClaudeDesktopConfig": "Tambah ke claude_desktop_config.json",
+    "useYourMcpApiKey": "Gunakan kunci API MCP anda",
+    "singlePress": "Tekan Sekali",
+    "triplePress": "Tekan Tiga Kali",
+    "longPress": "Tekan Lama",
+    "turnOnOff": "Hidupkan/Matikan",
+    "singlePressAction": "Tindakan Tekan Sekali",
+    "triplePressAction": "Tindakan Tekan Tiga Kali",
+    "askQuestion": "Tanya Soalan",
+    "longPressFixedNotice": "Tekan lama menghidupkan/mematikan peranti dan tidak boleh disesuaikan."
 }

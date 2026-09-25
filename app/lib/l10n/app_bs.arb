@@ -11122,5 +11122,23 @@
     "capturePhoneStorageFull": "Memorija telefona je puna",
     "captureStorageAlmostFull": "Memorija je skoro puna",
     "capturePendantDisconnectedDetail": "Privjesak je izgubio vezu s ovim telefonom. Omi će se sam ponovo povezati kad je privjesak uključen i u blizini. Sve snimljeno do sada je sačuvano.",
-    "participantsSummaryUncounted": "{name} i drugi"
+    "participantsSummaryUncounted": "{name} i drugi",
+    "transcriptionUnavailableSavingOnDevice": "Transkripcija nedostupna · čuva se na uređaju",
+    "addToClaudeConfig": "Dodaj u claude_desktop_config.json",
+    "addToClaudeDesktopConfig": "Dodaj u claude_desktop_config.json",
+    "@addToClaudeDesktopConfig": {
+        "description": "Description for Claude Desktop config"
+    },
+    "useYourMcpApiKey": "Koristi svoj MCP API ključ",
+    "@useYourMcpApiKey": {
+        "description": "Hint for client secret value"
+    },
+    "singlePress": "Jedan pritisak",
+    "triplePress": "Trostruki pritisak",
+    "longPress": "Dugi pritisak",
+    "turnOnOff": "Uključi/Isključi",
+    "singlePressAction": "Akcija jednog pritiska",
+    "triplePressAction": "Akcija trostrukog pritiska",
+    "askQuestion": "Postavi pitanje",
+    "longPressFixedNotice": "Dugi pritisak uključuje/isključuje uređaj i ne može se prilagoditi."
 }

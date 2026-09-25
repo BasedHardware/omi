@@ -3556,5 +3556,17 @@
     "capturePhoneStorageFull": "Spațiul telefonului e plin",
     "captureStorageAlmostFull": "Spațiul e aproape plin",
     "capturePendantDisconnectedDetail": "Pandantivul a pierdut conexiunea cu acest telefon. Omi se va reconecta singur când pandantivul este pornit și în apropiere. Tot ce s-a înregistrat înainte este în siguranță.",
-    "participantsSummaryUncounted": "{name} și alții"
+    "participantsSummaryUncounted": "{name} și alții",
+    "transcriptionUnavailableSavingOnDevice": "Transcriere indisponibilă · se salvează pe dispozitiv",
+    "addToClaudeConfig": "Adaugă la claude_desktop_config.json",
+    "addToClaudeDesktopConfig": "Adaugă la claude_desktop_config.json",
+    "useYourMcpApiKey": "Folosește cheia ta API MCP",
+    "singlePress": "O singură apăsare",
+    "triplePress": "Apăsare triplă",
+    "longPress": "Apăsare lungă",
+    "turnOnOff": "Pornire/Oprire",
+    "singlePressAction": "Acțiune la o singură apăsare",
+    "triplePressAction": "Acțiune la apăsare triplă",
+    "askQuestion": "Pune o întrebare",
+    "longPressFixedNotice": "Apăsarea lungă pornește/oprește dispozitivul și nu poate fi personalizată."
 }

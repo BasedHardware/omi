@@ -3556,5 +3556,17 @@
     "capturePhoneStorageFull": "مساحة الهاتف ممتلئة",
     "captureStorageAlmostFull": "المساحة ممتلئة تقريبًا",
     "capturePendantDisconnectedDetail": "فقد القلادة اتصالها بهذا الهاتف. سيعيد Omi الاتصال تلقائيًا عندما تكون القلادة قيد التشغيل وقريبة. كل ما سُجّل قبل ذلك محفوظ.",
-    "participantsSummaryUncounted": "{name} وآخرون"
+    "participantsSummaryUncounted": "{name} وآخرون",
+    "transcriptionUnavailableSavingOnDevice": "النسخ غير متوفر · يتم الحفظ على الجهاز",
+    "addToClaudeConfig": "أضف إلى claude_desktop_config.json",
+    "addToClaudeDesktopConfig": "أضف إلى claude_desktop_config.json",
+    "useYourMcpApiKey": "استخدم مفتاح MCP API الخاص بك",
+    "singlePress": "نقرة واحدة",
+    "triplePress": "ثلاث نقرات",
+    "longPress": "ضغط مطول",
+    "turnOnOff": "تشغيل/إيقاف",
+    "singlePressAction": "إجراء النقر المفرد",
+    "triplePressAction": "إجراء النقر الثلاثي",
+    "askQuestion": "طرح سؤال",
+    "longPressFixedNotice": "الضغط المطول يقوم بتشغيل/إيقاف تشغيل الجهاز ولا يمكن تخصيصه."
 }

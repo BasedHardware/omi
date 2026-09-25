@@ -3556,5 +3556,17 @@
     "capturePhoneStorageFull": "Telefoni mälu on täis",
     "captureStorageAlmostFull": "Mälu on peaaegu täis",
     "capturePendantDisconnectedDetail": "Ripats kaotas ühenduse selle telefoniga. Omi loob ühenduse ise uuesti, kui ripats on sisse lülitatud ja lähedal. Kõik varem salvestatu on alles.",
-    "participantsSummaryUncounted": "{name} ja teised"
+    "participantsSummaryUncounted": "{name} ja teised",
+    "transcriptionUnavailableSavingOnDevice": "Transkriptsioon pole saadaval · salvestatakse seadmesse",
+    "addToClaudeConfig": "Lisa claude_desktop_config.json-i",
+    "addToClaudeDesktopConfig": "Lisa faili claude_desktop_config.json",
+    "useYourMcpApiKey": "Kasuta oma MCP API võtit",
+    "singlePress": "Ühekordne vajutus",
+    "triplePress": "Kolmekordne vajutus",
+    "longPress": "Pikk vajutus",
+    "turnOnOff": "Sisse/välja lülitamine",
+    "singlePressAction": "Ühekordse vajutuse tegevus",
+    "triplePressAction": "Kolmekordse vajutuse tegevus",
+    "askQuestion": "Küsimuse esitamine",
+    "longPressFixedNotice": "Pikk vajutus lülitab seadme sisse/välja ja seda ei saa kohandada."
 }

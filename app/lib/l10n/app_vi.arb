@@ -3556,5 +3556,17 @@
     "capturePhoneStorageFull": "Bộ nhớ điện thoại đầy",
     "captureStorageAlmostFull": "Bộ nhớ gần đầy",
     "capturePendantDisconnectedDetail": "Mặt dây chuyền đã mất kết nối với điện thoại này. Omi sẽ tự kết nối lại khi mặt dây chuyền bật và ở gần. Mọi thứ đã ghi trước đó vẫn an toàn.",
-    "participantsSummaryUncounted": "{name} và những người khác"
+    "participantsSummaryUncounted": "{name} và những người khác",
+    "transcriptionUnavailableSavingOnDevice": "Bản chép âm không khả dụng · đang lưu trên thiết bị",
+    "addToClaudeConfig": "Thêm vào claude_desktop_config.json",
+    "addToClaudeDesktopConfig": "Thêm vào claude_desktop_config.json",
+    "useYourMcpApiKey": "Sử dụng khóa API MCP của bạn",
+    "singlePress": "Nhấn một lần",
+    "triplePress": "Nhấn ba lần",
+    "longPress": "Nhấn giữ",
+    "turnOnOff": "Bật/Tắt",
+    "singlePressAction": "Hành động nhấn một lần",
+    "triplePressAction": "Hành động nhấn ba lần",
+    "askQuestion": "Đặt câu hỏi",
+    "longPressFixedNotice": "Nhấn giữ để bật/tắt thiết bị và không thể tùy chỉnh."
 }

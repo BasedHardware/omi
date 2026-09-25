@@ -11087,4 +11087,40 @@ class AppLocalizationsKo extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name 외 여러 명';
   }
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => '전사 불가 · 기기에 저장 중';
+
+  @override
+  String get addToClaudeConfig => 'claude_desktop_config.json에 추가';
+
+  @override
+  String get addToClaudeDesktopConfig => 'claude_desktop_config.json에 추가';
+
+  @override
+  String get useYourMcpApiKey => 'MCP API 키 사용';
+
+  @override
+  String get singlePress => '한 번 누르기';
+
+  @override
+  String get triplePress => '세 번 누르기';
+
+  @override
+  String get longPress => '길게 누르기';
+
+  @override
+  String get turnOnOff => '켜기/끄기';
+
+  @override
+  String get singlePressAction => '한 번 누르기 동작';
+
+  @override
+  String get triplePressAction => '세 번 누르기 동작';
+
+  @override
+  String get askQuestion => '질문하기';
+
+  @override
+  String get longPressFixedNotice => '길게 누르면 장치가 켜지거나 꺼지며 사용자 지정할 수 없습니다.';
 }

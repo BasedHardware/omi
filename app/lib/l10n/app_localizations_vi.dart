@@ -11263,4 +11263,40 @@ class AppLocalizationsVi extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name và những người khác';
   }
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Bản chép âm không khả dụng · đang lưu trên thiết bị';
+
+  @override
+  String get addToClaudeConfig => 'Thêm vào claude_desktop_config.json';
+
+  @override
+  String get addToClaudeDesktopConfig => 'Thêm vào claude_desktop_config.json';
+
+  @override
+  String get useYourMcpApiKey => 'Sử dụng khóa API MCP của bạn';
+
+  @override
+  String get singlePress => 'Nhấn một lần';
+
+  @override
+  String get triplePress => 'Nhấn ba lần';
+
+  @override
+  String get longPress => 'Nhấn giữ';
+
+  @override
+  String get turnOnOff => 'Bật/Tắt';
+
+  @override
+  String get singlePressAction => 'Hành động nhấn một lần';
+
+  @override
+  String get triplePressAction => 'Hành động nhấn ba lần';
+
+  @override
+  String get askQuestion => 'Đặt câu hỏi';
+
+  @override
+  String get longPressFixedNotice => 'Nhấn giữ để bật/tắt thiết bị và không thể tùy chỉnh.';
 }

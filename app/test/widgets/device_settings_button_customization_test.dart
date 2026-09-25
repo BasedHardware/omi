@@ -1,5 +1,3 @@
-import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -13,11 +11,9 @@ import 'package:omi/pages/settings/device_settings.dart';
 import 'package:omi/providers/device_provider.dart';
 
 class _StubDeviceProvider extends ChangeNotifier implements DeviceProvider {
-  _StubDeviceProvider({this.device, this.findResult = true, this.findCompleter});
+  _StubDeviceProvider({this.device});
 
   final BtDevice? device;
-  final bool findResult;
-  final Completer<bool>? findCompleter;
   int findCalls = 0;
 
   @override
@@ -30,12 +26,24 @@ class _StubDeviceProvider extends ChangeNotifier implements DeviceProvider {
   BtDevice? get pairedDevice => null;
 
   @override
+  int get batteryLevel => 0;
+
+  @override
+  bool get isCharging => false;
+
+  @override
+  bool get havingNewFirmware => false;
+
+  @override
+  String get latestStableFirmwareVersion => '';
+
+  @override
   Future<void> getDeviceInfo() async {}
 
   @override
   Future<bool> findDevice() {
     findCalls++;
-    return findCompleter?.future ?? Future.value(findResult);
+    return Future.value(true);
   }
 
   @override
@@ -51,6 +59,10 @@ Widget _app(DeviceProvider provider) {
       GlobalCupertinoLocalizations.delegate,
     ],
     supportedLocales: AppLocalizations.supportedLocales,
+    builder: (context, child) => MediaQuery(
+      data: MediaQuery.of(context).copyWith(disableAnimations: true),
+      child: child!,
+    ),
     home: ChangeNotifierProvider<DeviceProvider>.value(value: provider, child: const DeviceSettings()),
   );
 }
@@ -67,6 +79,11 @@ void main() {
   });
 
   testWidgets('renders all customizable button options with defaults', (tester) async {
+    tester.view.physicalSize = const Size(1200, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     final provider = _StubDeviceProvider(
       device: BtDevice(id: 'omi-test-1', name: 'Omi', type: DeviceType.omi, rssi: -40),
     );
@@ -88,7 +105,7 @@ void main() {
     // Verify Triple Press row
     expect(find.byKey(const Key('triple_tap_setting')), findsOneWidget);
     expect(find.text('Triple Press'), findsOneWidget);
-    expect(find.text('End and Process'), findsOneWidget);
+    expect(find.text('End & Process Conversation'), findsOneWidget);
 
     // Verify Long Press fixed row
     expect(find.byKey(const Key('long_press_setting')), findsOneWidget);
@@ -97,6 +114,11 @@ void main() {
   });
 
   testWidgets('single press sheet updates preference when option selected', (tester) async {
+    tester.view.physicalSize = const Size(1200, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     final provider = _StubDeviceProvider(
       device: BtDevice(id: 'omi-test-1', name: 'Omi', type: DeviceType.omi, rssi: -40),
     );
@@ -119,6 +141,11 @@ void main() {
   });
 
   testWidgets('triple press sheet updates preference when option selected', (tester) async {
+    tester.view.physicalSize = const Size(1200, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     final provider = _StubDeviceProvider(
       device: BtDevice(id: 'omi-test-1', name: 'Omi', type: DeviceType.omi, rssi: -40),
     );
@@ -141,6 +168,11 @@ void main() {
   });
 
   testWidgets('long press displays fixed warning snackbar', (tester) async {
+    tester.view.physicalSize = const Size(1200, 2400);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
     final provider = _StubDeviceProvider(
       device: BtDevice(id: 'omi-test-1', name: 'Omi', type: DeviceType.omi, rssi: -40),
     );

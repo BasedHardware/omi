@@ -38,7 +38,7 @@ Future<int?> showButtonActionSheet(
     (0, l10n.endAndProcess),
     (1, l10n.deviceOnboardingMuteUnmute),
     (2, l10n.starOngoing),
-    (3, 'Ask Question'),
+    (3, l10n.askQuestion),
   ];
   return showOmiSheet<int>(
     context: context,

@@ -11280,4 +11280,40 @@ class AppLocalizationsTr extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name ve diğerleri';
   }
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Transkript kullanılamıyor · cihaza kaydediliyor';
+
+  @override
+  String get addToClaudeConfig => 'claude_desktop_config.json\'a ekle';
+
+  @override
+  String get addToClaudeDesktopConfig => 'claude_desktop_config.json dosyasına ekle';
+
+  @override
+  String get useYourMcpApiKey => 'MCP API anahtarınızı kullanın';
+
+  @override
+  String get singlePress => 'Tek Basış';
+
+  @override
+  String get triplePress => 'Üç Basış';
+
+  @override
+  String get longPress => 'Uzun Basış';
+
+  @override
+  String get turnOnOff => 'Aç/Kapat';
+
+  @override
+  String get singlePressAction => 'Tek Basış İşlemi';
+
+  @override
+  String get triplePressAction => 'Üç Basış İşlemi';
+
+  @override
+  String get askQuestion => 'Soru Sor';
+
+  @override
+  String get longPressFixedNotice => 'Uzun basış cihazı açar/kapatır ve özelleştirilemez.';
 }

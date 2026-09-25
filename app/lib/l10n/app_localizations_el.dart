@@ -11344,4 +11344,42 @@ class AppLocalizationsEl extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name και άλλοι';
   }
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice =>
+      'Η απομαγνητοφώνηση δεν είναι διαθέσιμη · αποθήκευση στη συσκευή';
+
+  @override
+  String get addToClaudeConfig => 'Προσθήκη στο claude_desktop_config.json';
+
+  @override
+  String get addToClaudeDesktopConfig => 'Προσθήκη στο claude_desktop_config.json';
+
+  @override
+  String get useYourMcpApiKey => 'Χρησιμοποιήστε το κλειδί MCP API σας';
+
+  @override
+  String get singlePress => 'Μονό πάτημα';
+
+  @override
+  String get triplePress => 'Τριπλό πάτημα';
+
+  @override
+  String get longPress => 'Παρατεταμένο πάτημα';
+
+  @override
+  String get turnOnOff => 'Ενεργοποίηση/Απενεργοποίηση';
+
+  @override
+  String get singlePressAction => 'Ενέργεια μονού πατήματος';
+
+  @override
+  String get triplePressAction => 'Ενέργεια τριπλού πατήματος';
+
+  @override
+  String get askQuestion => 'Κάντε μια ερώτηση';
+
+  @override
+  String get longPressFixedNotice =>
+      'Το παρατεταμένο πάτημα ενεργοποιεί/απενεργοποιεί τη συσκευή και δεν προσαρμόζεται.';
 }

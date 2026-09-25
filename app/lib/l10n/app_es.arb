@@ -3556,5 +3556,17 @@
     "capturePhoneStorageFull": "Almacenamiento del teléfono lleno",
     "captureStorageAlmostFull": "Almacenamiento casi lleno",
     "capturePendantDisconnectedDetail": "Tu colgante perdió la conexión con este teléfono. Omi se volverá a conectar solo cuando el colgante esté encendido y cerca. Todo lo grabado antes está a salvo.",
-    "participantsSummaryUncounted": "{name} y otros"
+    "participantsSummaryUncounted": "{name} y otros",
+    "transcriptionUnavailableSavingOnDevice": "Transcripción no disponible · se guarda en el dispositivo",
+    "addToClaudeConfig": "Añadir a claude_desktop_config.json",
+    "addToClaudeDesktopConfig": "Agregar a claude_desktop_config.json",
+    "useYourMcpApiKey": "Usa tu clave API de MCP",
+    "singlePress": "Pulsación simple",
+    "triplePress": "Pulsación triple",
+    "longPress": "Pulsación larga",
+    "turnOnOff": "Encender/Apagar",
+    "singlePressAction": "Acción de pulsación simple",
+    "triplePressAction": "Acción de pulsación triple",
+    "askQuestion": "Hacer una pregunta",
+    "longPressFixedNotice": "La pulsación larga enciende/apaga el dispositivo y no se puede personalizar."
 }

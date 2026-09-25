@@ -11302,4 +11302,41 @@ class AppLocalizationsNl extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name en anderen';
   }
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice =>
+      'Transcriptie niet beschikbaar · wordt op het apparaat opgeslagen';
+
+  @override
+  String get addToClaudeConfig => 'Toevoegen aan claude_desktop_config.json';
+
+  @override
+  String get addToClaudeDesktopConfig => 'Toevoegen aan claude_desktop_config.json';
+
+  @override
+  String get useYourMcpApiKey => 'Gebruik je MCP API-sleutel';
+
+  @override
+  String get singlePress => 'Enkele druk';
+
+  @override
+  String get triplePress => 'Drievoudige druk';
+
+  @override
+  String get longPress => 'Lang indrukken';
+
+  @override
+  String get turnOnOff => 'In-/uitschakelen';
+
+  @override
+  String get singlePressAction => 'Enkele druk actie';
+
+  @override
+  String get triplePressAction => 'Drievoudige druk actie';
+
+  @override
+  String get askQuestion => 'Vraag stellen';
+
+  @override
+  String get longPressFixedNotice => 'Lang indrukken schakelt het apparaat in/uit en kan niet worden aangepast.';
 }

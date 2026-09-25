@@ -190,7 +190,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
       case 2:
         return context.l10n.starOngoing;
       case 3:
-        return 'Ask Question';
+        return context.l10n.askQuestion;
       default:
         return context.l10n.endAndProcess;
     }
@@ -199,7 +199,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   Future<void> _pickSingleTapAction() async {
     final action = await showButtonActionSheet(
       context,
-      title: 'Single Press Action',
+      title: context.l10n.singlePressAction,
       current: SharedPreferencesUtil().singleTapAction,
     );
     if (action == null || !mounted) return;
@@ -219,7 +219,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   Future<void> _pickTripleTapAction() async {
     final action = await showButtonActionSheet(
       context,
-      title: 'Triple Press Action',
+      title: context.l10n.triplePressAction,
       current: SharedPreferencesUtil().tripleTapAction,
     );
     if (action == null || !mounted) return;
@@ -416,10 +416,11 @@ class _DeviceSettingsState extends State<DeviceSettings> {
   Widget _customizationGroup(BtDevice? device, DeviceProvider provider) {
     final l10n = context.l10n;
     final isOmi = device?.type == DeviceType.omi;
+    final supportsFind = isOmi && !FirmwareUpdateBuildPolicy.current.isOpenGlassDevice(device);
     final singleTapRow = OmiSettingsRow(
       key: const Key('single_tap_setting'),
       leading: const FaIcon(FontAwesomeIcons.handPointer),
-      title: 'Single Press',
+      title: l10n.singlePress,
       value: _buttonActionLabel(SharedPreferencesUtil().singleTapAction),
       onTap: _pickSingleTapAction,
       showChevron: true,
@@ -435,7 +436,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     final tripleTapRow = OmiSettingsRow(
       key: const Key('triple_tap_setting'),
       leading: const FaIcon(FontAwesomeIcons.handPointer),
-      title: 'Triple Press',
+      title: l10n.triplePress,
       value: _buttonActionLabel(SharedPreferencesUtil().tripleTapAction),
       onTap: _pickTripleTapAction,
       showChevron: true,
@@ -443,14 +444,14 @@ class _DeviceSettingsState extends State<DeviceSettings> {
     final longPressRow = OmiSettingsRow(
       key: const Key('long_press_setting'),
       leading: const FaIcon(FontAwesomeIcons.powerOff),
-      title: 'Long Press',
-      value: 'Turn On/Off',
+      title: l10n.longPress,
+      value: l10n.turnOnOff,
       showChevron: false,
       onTap: () {
         ScaffoldMessenger.of(context)
           ..hideCurrentSnackBar()
-          ..showSnackBar(const SnackBar(
-            content: Text('Long press powers the device on/off and cannot be customized.'),
+          ..showSnackBar(SnackBar(
+            content: Text(l10n.longPressFixedNotice),
           ));
       },
     );
@@ -488,12 +489,8 @@ class _DeviceSettingsState extends State<DeviceSettings> {
             tripleTapRow,
             longPressRow,
           ],
-        ] else ...[
-          singleTapRow,
+        ] else
           doubleTapRow,
-          tripleTapRow,
-          longPressRow,
-        ],
         if (_isDimRatioLoaded && _hasDimmingFeature == true)
           OmiSettingsRow(
             leading: const FaIcon(FontAwesomeIcons.lightbulb),

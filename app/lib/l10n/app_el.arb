@@ -3556,5 +3556,17 @@
     "capturePhoneStorageFull": "Ο χώρος του τηλεφώνου γέμισε",
     "captureStorageAlmostFull": "Ο χώρος σχεδόν γέμισε",
     "capturePendantDisconnectedDetail": "Το μενταγιόν έχασε τη σύνδεση με αυτό το τηλέφωνο. Το Omi θα επανασυνδεθεί μόνο του όταν το μενταγιόν είναι αναμμένο και κοντά. Ό,τι ηχογραφήθηκε πριν είναι ασφαλές.",
-    "participantsSummaryUncounted": "{name} και άλλοι"
+    "participantsSummaryUncounted": "{name} και άλλοι",
+    "transcriptionUnavailableSavingOnDevice": "Η απομαγνητοφώνηση δεν είναι διαθέσιμη · αποθήκευση στη συσκευή",
+    "addToClaudeConfig": "Προσθήκη στο claude_desktop_config.json",
+    "addToClaudeDesktopConfig": "Προσθήκη στο claude_desktop_config.json",
+    "useYourMcpApiKey": "Χρησιμοποιήστε το κλειδί MCP API σας",
+    "singlePress": "Μονό πάτημα",
+    "triplePress": "Τριπλό πάτημα",
+    "longPress": "Παρατεταμένο πάτημα",
+    "turnOnOff": "Ενεργοποίηση/Απενεργοποίηση",
+    "singlePressAction": "Ενέργεια μονού πατήματος",
+    "triplePressAction": "Ενέργεια τριπλού πατήματος",
+    "askQuestion": "Κάντε μια ερώτηση",
+    "longPressFixedNotice": "Το παρατεταμένο πάτημα ενεργοποιεί/απενεργοποιεί τη συσκευή και δεν προσαρμόζεται."
 }

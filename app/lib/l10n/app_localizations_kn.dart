@@ -11303,4 +11303,40 @@ class AppLocalizationsKn extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name ಮತ್ತು ಇತರರು';
   }
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'ಲಿಪ್ಯಂತರ ಲಭ್ಯವಿಲ್ಲ · ಸಾಧನದಲ್ಲಿ ಉಳಿಸಲಾಗುತ್ತಿದೆ';
+
+  @override
+  String get addToClaudeConfig => 'claude_desktop_config.json ಗೆ ಸೇರಿಸಿ';
+
+  @override
+  String get addToClaudeDesktopConfig => 'claude_desktop_config.json ಗೆ ಸೇರಿಸಿ';
+
+  @override
+  String get useYourMcpApiKey => 'ನಿಮ್ಮ MCP API ಕೀ ಬಳಸಿ';
+
+  @override
+  String get singlePress => 'ಒಂದೇ ಒತ್ತು';
+
+  @override
+  String get triplePress => 'ಮೂರು ಬಾರಿ ಒತ್ತು';
+
+  @override
+  String get longPress => 'ದೀರ್ಘ ಒತ್ತು';
+
+  @override
+  String get turnOnOff => 'ಆನ್/ಆಫ್ ಮಾಡಿ';
+
+  @override
+  String get singlePressAction => 'ಒಂದೇ ಒತ್ತುವ ಕ್ರಿಯೆ';
+
+  @override
+  String get triplePressAction => 'ಮೂರು ಬಾರಿ ಒತ್ತುವ ಕ್ರಿಯೆ';
+
+  @override
+  String get askQuestion => 'ಪ್ರಶ್ನೆ ಕೇಳಿ';
+
+  @override
+  String get longPressFixedNotice => 'ದೀರ್ಘವಾಗಿ ಒತ್ತುವುದು ಸಾಧನವನ್ನು ಆನ್/ಆಫ್ ಮಾಡುತ್ತದೆ ಮತ್ತು ಕಸ್ಟಮೈಸ್ ಮಾಡಲು ಸಾಧ್ಯವಿಲ್ಲ.';
 }

@@ -11311,4 +11311,40 @@ class AppLocalizationsHu extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name és mások';
   }
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Átirat nem érhető el · mentés az eszközön';
+
+  @override
+  String get addToClaudeConfig => 'Hozzáadás claude_desktop_config.json-hoz';
+
+  @override
+  String get addToClaudeDesktopConfig => 'Hozzáadás a claude_desktop_config.json fájlhoz';
+
+  @override
+  String get useYourMcpApiKey => 'Használja MCP API kulcsát';
+
+  @override
+  String get singlePress => 'Egyszeri megnyomás';
+
+  @override
+  String get triplePress => 'Háromszori megnyomás';
+
+  @override
+  String get longPress => 'Hosszú megnyomás';
+
+  @override
+  String get turnOnOff => 'Be-/kikapcsolás';
+
+  @override
+  String get singlePressAction => 'Egyszeri megnyomás művelet';
+
+  @override
+  String get triplePressAction => 'Háromszori megnyomás művelet';
+
+  @override
+  String get askQuestion => 'Kérdés feltevése';
+
+  @override
+  String get longPressFixedNotice => 'A hosszú megnyomás be-/kikapcsolja az eszközt, és nem szabható testre.';
 }

@@ -11268,4 +11268,40 @@ class AppLocalizationsNo extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name og andre';
   }
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Transkripsjon utilgjengelig · lagres på enheten';
+
+  @override
+  String get addToClaudeConfig => 'Legg til i claude_desktop_config.json';
+
+  @override
+  String get addToClaudeDesktopConfig => 'Legg til i claude_desktop_config.json';
+
+  @override
+  String get useYourMcpApiKey => 'Bruk din MCP API-nøkkel';
+
+  @override
+  String get singlePress => 'Enkelt trykk';
+
+  @override
+  String get triplePress => 'Tredobbelt trykk';
+
+  @override
+  String get longPress => 'Langt trykk';
+
+  @override
+  String get turnOnOff => 'Slå på/av';
+
+  @override
+  String get singlePressAction => 'Enkelt trykk-handling';
+
+  @override
+  String get triplePressAction => 'Tredobbelt trykk-handling';
+
+  @override
+  String get askQuestion => 'Still et spørsmål';
+
+  @override
+  String get longPressFixedNotice => 'Langt trykk slår enheten på/av og kan ikke tilpasses.';
 }

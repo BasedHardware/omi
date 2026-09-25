@@ -3591,5 +3591,17 @@
     "capturePhoneStorageFull": "Память телефона заполнена",
     "captureStorageAlmostFull": "Память почти заполнена",
     "capturePendantDisconnectedDetail": "Кулон потерял связь с этим телефоном. Omi переподключится сам, когда кулон будет включён и рядом. Всё, что записано до этого, сохранено.",
-    "participantsSummaryUncounted": "{name} и другие"
+    "participantsSummaryUncounted": "{name} и другие",
+    "transcriptionUnavailableSavingOnDevice": "Транскрипция недоступна · сохраняется на устройстве",
+    "addToClaudeConfig": "Добавить в claude_desktop_config.json",
+    "addToClaudeDesktopConfig": "Добавить в claude_desktop_config.json",
+    "useYourMcpApiKey": "Используйте свой MCP API-ключ",
+    "singlePress": "Одинарное нажатие",
+    "triplePress": "Тройное нажатие",
+    "longPress": "Долгое нажатие",
+    "turnOnOff": "Включение/выключение",
+    "singlePressAction": "Действие при одинарном нажатии",
+    "triplePressAction": "Действие при тройном нажатии",
+    "askQuestion": "Задать вопрос",
+    "longPressFixedNotice": "Долгое нажатие включает/выключает устройство и не настраивается."
 }

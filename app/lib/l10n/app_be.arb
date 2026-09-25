@@ -11122,5 +11122,23 @@
     "capturePhoneStorageFull": "Памяць тэлефона запоўнена",
     "captureStorageAlmostFull": "Памяць амаль запоўнена",
     "capturePendantDisconnectedDetail": "Кулон страціў сувязь з гэтым тэлефонам. Omi перападключыцца сам, калі кулон уключаны і побач. Усё, што запісана да гэтага, захавана.",
-    "participantsSummaryUncounted": "{name} і іншыя"
+    "participantsSummaryUncounted": "{name} і іншыя",
+    "transcriptionUnavailableSavingOnDevice": "Транскрыпцыя недаступная · захоўваецца на прыладзе",
+    "addToClaudeConfig": "Дадаць у claude_desktop_config.json",
+    "addToClaudeDesktopConfig": "Дадайце да claude_desktop_config.json",
+    "@addToClaudeDesktopConfig": {
+        "description": "Description for Claude Desktop config"
+    },
+    "useYourMcpApiKey": "Выкарыстоўвайце ваш MCP ключ API",
+    "@useYourMcpApiKey": {
+        "description": "Hint for client secret value"
+    },
+    "singlePress": "Адзіночны націск",
+    "triplePress": "Трайны націск",
+    "longPress": "Доўгі націск",
+    "turnOnOff": "Уключыць/Выключыць",
+    "singlePressAction": "Дзеянне адзіночнага націску",
+    "triplePressAction": "Дзеянне трайнога націску",
+    "askQuestion": "Задаць пытанне",
+    "longPressFixedNotice": "Доўгі націск уключае/выключае прыладу і не наладжваецца."
 }

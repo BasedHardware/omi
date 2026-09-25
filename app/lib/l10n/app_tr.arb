@@ -3591,5 +3591,17 @@
     "capturePhoneStorageFull": "Telefon depolama alanı dolu",
     "captureStorageAlmostFull": "Depolama neredeyse dolu",
     "capturePendantDisconnectedDetail": "Kolyenin bu telefonla bağlantısı kesildi. Kolye açık ve yakındayken Omi kendiliğinden yeniden bağlanır. Bundan önce kaydedilen her şey güvende.",
-    "participantsSummaryUncounted": "{name} ve diğerleri"
+    "participantsSummaryUncounted": "{name} ve diğerleri",
+    "transcriptionUnavailableSavingOnDevice": "Transkript kullanılamıyor · cihaza kaydediliyor",
+    "addToClaudeConfig": "claude_desktop_config.json'a ekle",
+    "addToClaudeDesktopConfig": "claude_desktop_config.json dosyasına ekle",
+    "useYourMcpApiKey": "MCP API anahtarınızı kullanın",
+    "singlePress": "Tek Basış",
+    "triplePress": "Üç Basış",
+    "longPress": "Uzun Basış",
+    "turnOnOff": "Aç/Kapat",
+    "singlePressAction": "Tek Basış İşlemi",
+    "triplePressAction": "Üç Basış İşlemi",
+    "askQuestion": "Soru Sor",
+    "longPressFixedNotice": "Uzun basış cihazı açar/kapatır ve özelleştirilemez."
 }

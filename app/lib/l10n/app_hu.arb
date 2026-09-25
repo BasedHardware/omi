@@ -3652,5 +3652,17 @@
     "capturePhoneStorageFull": "A telefon tárhelye megtelt",
     "captureStorageAlmostFull": "A tárhely majdnem megtelt",
     "capturePendantDisconnectedDetail": "A medál elvesztette a kapcsolatot ezzel a telefonnal. Az Omi magától újracsatlakozik, amikor a medál be van kapcsolva és a közelben van. Minden, amit eddig rögzített, biztonságban van.",
-    "participantsSummaryUncounted": "{name} és mások"
+    "participantsSummaryUncounted": "{name} és mások",
+    "transcriptionUnavailableSavingOnDevice": "Átirat nem érhető el · mentés az eszközön",
+    "addToClaudeConfig": "Hozzáadás claude_desktop_config.json-hoz",
+    "addToClaudeDesktopConfig": "Hozzáadás a claude_desktop_config.json fájlhoz",
+    "useYourMcpApiKey": "Használja MCP API kulcsát",
+    "singlePress": "Egyszeri megnyomás",
+    "triplePress": "Háromszori megnyomás",
+    "longPress": "Hosszú megnyomás",
+    "turnOnOff": "Be-/kikapcsolás",
+    "singlePressAction": "Egyszeri megnyomás művelet",
+    "triplePressAction": "Háromszori megnyomás művelet",
+    "askQuestion": "Kérdés feltevése",
+    "longPressFixedNotice": "A hosszú megnyomás be-/kikapcsolja az eszközt, és nem szabható testre."
 }

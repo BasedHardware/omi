@@ -11265,4 +11265,40 @@ class AppLocalizationsEt extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name ja teised';
   }
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Transkriptsioon pole saadaval · salvestatakse seadmesse';
+
+  @override
+  String get addToClaudeConfig => 'Lisa claude_desktop_config.json-i';
+
+  @override
+  String get addToClaudeDesktopConfig => 'Lisa faili claude_desktop_config.json';
+
+  @override
+  String get useYourMcpApiKey => 'Kasuta oma MCP API võtit';
+
+  @override
+  String get singlePress => 'Ühekordne vajutus';
+
+  @override
+  String get triplePress => 'Kolmekordne vajutus';
+
+  @override
+  String get longPress => 'Pikk vajutus';
+
+  @override
+  String get turnOnOff => 'Sisse/välja lülitamine';
+
+  @override
+  String get singlePressAction => 'Ühekordse vajutuse tegevus';
+
+  @override
+  String get triplePressAction => 'Kolmekordse vajutuse tegevus';
+
+  @override
+  String get askQuestion => 'Küsimuse esitamine';
+
+  @override
+  String get longPressFixedNotice => 'Pikk vajutus lülitab seadme sisse/välja ja seda ei saa kohandada.';
 }

@@ -3556,5 +3556,17 @@
     "capturePhoneStorageFull": "Telefoonopslag vol",
     "captureStorageAlmostFull": "Opslag bijna vol",
     "capturePendantDisconnectedDetail": "Je hanger heeft de verbinding met deze telefoon verloren. Omi maakt vanzelf opnieuw verbinding zodra de hanger aan staat en in de buurt is. Alles wat eerder is opgenomen, is veilig.",
-    "participantsSummaryUncounted": "{name} en anderen"
+    "participantsSummaryUncounted": "{name} en anderen",
+    "transcriptionUnavailableSavingOnDevice": "Transcriptie niet beschikbaar · wordt op het apparaat opgeslagen",
+    "addToClaudeConfig": "Toevoegen aan claude_desktop_config.json",
+    "addToClaudeDesktopConfig": "Toevoegen aan claude_desktop_config.json",
+    "useYourMcpApiKey": "Gebruik je MCP API-sleutel",
+    "singlePress": "Enkele druk",
+    "triplePress": "Drievoudige druk",
+    "longPress": "Lang indrukken",
+    "turnOnOff": "In-/uitschakelen",
+    "singlePressAction": "Enkele druk actie",
+    "triplePressAction": "Drievoudige druk actie",
+    "askQuestion": "Vraag stellen",
+    "longPressFixedNotice": "Lang indrukken schakelt het apparaat in/uit en kan niet worden aangepast."
 }

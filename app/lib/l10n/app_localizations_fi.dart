@@ -11271,4 +11271,40 @@ class AppLocalizationsFi extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name ja muut';
   }
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Transkriptio ei käytettävissä · tallennetaan laitteelle';
+
+  @override
+  String get addToClaudeConfig => 'Lisää claude_desktop_config.json-tiedostoon';
+
+  @override
+  String get addToClaudeDesktopConfig => 'Lisää claude_desktop_config.json-tiedostoon';
+
+  @override
+  String get useYourMcpApiKey => 'Käytä MCP API -avaintasi';
+
+  @override
+  String get singlePress => 'Kertapainallus';
+
+  @override
+  String get triplePress => 'Kolmoispainallus';
+
+  @override
+  String get longPress => 'Pitkä painallus';
+
+  @override
+  String get turnOnOff => 'Kytke päälle/pois';
+
+  @override
+  String get singlePressAction => 'Kertapainalluksen toiminto';
+
+  @override
+  String get triplePressAction => 'Kolmoispainalluksen toiminto';
+
+  @override
+  String get askQuestion => 'Esitä kysymys';
+
+  @override
+  String get longPressFixedNotice => 'Pitkä painallus käynnistää/sammuttaa laitteen, eikä sitä voi mukauttaa.';
 }

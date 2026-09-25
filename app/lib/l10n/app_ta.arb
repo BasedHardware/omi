@@ -11122,5 +11122,23 @@
     "capturePhoneStorageFull": "ஃபோன் சேமிப்பகம் நிரம்பியது",
     "captureStorageAlmostFull": "சேமிப்பகம் கிட்டத்தட்ட நிரம்பியது",
     "capturePendantDisconnectedDetail": "உங்கள் பதக்கம் இந்த ஃபோனுடனான இணைப்பை இழந்தது. பதக்கம் இயக்கத்தில் இருந்து அருகில் இருக்கும்போது Omi தானாகவே மீண்டும் இணையும். இதற்கு முன் பதிவானவை அனைத்தும் பாதுகாப்பாக உள்ளன.",
-    "participantsSummaryUncounted": "{name} மற்றும் மற்றவர்கள்"
+    "participantsSummaryUncounted": "{name} மற்றும் மற்றவர்கள்",
+    "transcriptionUnavailableSavingOnDevice": "நகலெடுப்பு இல்லை · சாதனத்தில் சேமிக்கப்படுகிறது",
+    "addToClaudeConfig": "claude_desktop_config.json க்கு சேர்க்கவும்",
+    "addToClaudeDesktopConfig": "claude_desktop_config.json இல் சேர்க்கவும்",
+    "@addToClaudeDesktopConfig": {
+        "description": "Description for Claude Desktop config"
+    },
+    "useYourMcpApiKey": "உங்கள் MCP API விசையைப் பயன்படுத்தவும்",
+    "@useYourMcpApiKey": {
+        "description": "Hint for client secret value"
+    },
+    "singlePress": "ஒற்றை அழுத்தம்",
+    "triplePress": "மூன்று அழுத்தம்",
+    "longPress": "நீண்ட அழுத்தம்",
+    "turnOnOff": "இயக்கு/நிறுத்து",
+    "singlePressAction": "ஒற்றை அழுத்த நடவடிக்கை",
+    "triplePressAction": "மூன்று அழுத்த நடவடிக்கை",
+    "askQuestion": "கேள்வி கேளுங்கள்",
+    "longPressFixedNotice": "நீண்ட அழுத்தம் சாதனத்தை இயக்குகிறது/நிறுத்துகிறது மற்றும் தனிப்பயனாக்க முடியாது."
 }

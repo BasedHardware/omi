@@ -11122,5 +11122,23 @@
     "capturePhoneStorageFull": "فون اسٹوریج بھر گئی",
     "captureStorageAlmostFull": "اسٹوریج تقریباً بھر گئی",
     "capturePendantDisconnectedDetail": "آپ کے پینڈنٹ کا اس فون سے رابطہ ٹوٹ گیا۔ پینڈنٹ آن اور قریب ہونے پر Omi خود دوبارہ جڑ جائے گا۔ اس سے پہلے ریکارڈ ہونے والی ہر چیز محفوظ ہے۔",
-    "participantsSummaryUncounted": "{name} اور دیگر"
+    "participantsSummaryUncounted": "{name} اور دیگر",
+    "transcriptionUnavailableSavingOnDevice": "ٹرانسکرپشن دستیاب نہیں · ڈیوائس پر محفوظ ہو رہی ہے",
+    "addToClaudeConfig": "claude_desktop_config.json میں شامل کریں",
+    "addToClaudeDesktopConfig": "claude_desktop_config.json میں شامل کریں",
+    "@addToClaudeDesktopConfig": {
+        "description": "Description for Claude Desktop config"
+    },
+    "useYourMcpApiKey": "اپنی MCP API کلید استعمال کریں",
+    "@useYourMcpApiKey": {
+        "description": "Hint for client secret value"
+    },
+    "singlePress": "ایک بار دبائیں",
+    "triplePress": "تین بار دبائیں",
+    "longPress": "دیر تک دبائیں",
+    "turnOnOff": "آن/آف کریں",
+    "singlePressAction": "ایک بار دبانے کا عمل",
+    "triplePressAction": "تین بار دبانے کا عمل",
+    "askQuestion": "سوال پوچھیں",
+    "longPressFixedNotice": "دیر تک دبانے سے آلہ آن/آف ہوتا ہے اور اسے اپنی مرضی کے مطابق نہیں بنایا جا سکتا۔"
 }

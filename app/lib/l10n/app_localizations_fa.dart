@@ -11265,4 +11265,40 @@ class AppLocalizationsFa extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name و دیگران';
   }
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'رونویسی در دسترس نیست · در حال ذخیره روی دستگاه';
+
+  @override
+  String get addToClaudeConfig => 'افزودن به claude_desktop_config.json';
+
+  @override
+  String get addToClaudeDesktopConfig => 'افزودن به claude_desktop_config.json';
+
+  @override
+  String get useYourMcpApiKey => 'از کلید MCP API خود استفاده کنید';
+
+  @override
+  String get singlePress => 'یک بار فشار دادن';
+
+  @override
+  String get triplePress => 'سه بار فشار دادن';
+
+  @override
+  String get longPress => 'فشار طولانی';
+
+  @override
+  String get turnOnOff => 'روشن/خاموش کردن';
+
+  @override
+  String get singlePressAction => 'عمل یک بار فشار دادن';
+
+  @override
+  String get triplePressAction => 'عمل سه بار فشار دادن';
+
+  @override
+  String get askQuestion => 'پرسیدن سوال';
+
+  @override
+  String get longPressFixedNotice => 'فشار طولانی دستگاه را روشن/خاموش می‌کند و قابل شخصی‌سازی نیست.';
 }
