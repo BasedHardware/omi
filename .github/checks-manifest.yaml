@@ -1520,6 +1520,11 @@ checks:
     triggers: ["plugins/omi-openfoodfacts-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Open Food Facts app must guard _safe_int, sanitize barcodes (4-18 digits, URL extraction), handle 404s gracefully, and test hermetically"
+  - id: notification-settings-tools-sanitization-tests
+    command: ["python3", "backend/tests/unit/test_notification_settings_tools_sanitization.py"]
+    triggers: ["backend/utils/retrieval/tools/notification_settings_tools.py", "backend/tests/unit/test_notification_settings_tools_sanitization.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Prevent unhandled database exceptions from escaping in notification settings tools"
 exempt:
   - path: ".github/scripts/check-desktop-beta-freshness.py"
     reason: "hourly doctor job hits the public beta appcast; behavioral coverage is desktop-beta-freshness-tests"
