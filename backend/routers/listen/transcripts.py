@@ -22,6 +22,7 @@ from models.message_event import (
     TranslationEvent,
 )
 from models.transcript_segment import SpeakerIdentityStatus, TranscriptSegment, Translation
+from routers.listen.contracts import persisted_started_seconds
 from utils.app_integrations import trigger_realtime_integrations
 from utils.conversations.factory import deserialize_conversation
 from utils.metrics import OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL
@@ -339,6 +340,40 @@ class TranscriptProcessor:
             logger.warning('Listen segment delivery after close type=%s', type(error).__name__)
         return False
 
+    async def _deliver_live_updates(
+        self,
+        conversation: Conversation,
+        updated: List[TranscriptSegment],
+        removed: List[str],
+        new_segments: List[TranscriptSegment],
+        conversation_id: str,
+    ) -> None:
+        """Deliver one batch's live updates: client WS, pusher/realtime, onboarding, translation.
+
+        Shared by the legacy loop and the v2 batch path so the two persistence
+        modes never drift in what a delivered segment triggers downstream.
+        """
+        client_segments = [segment.model_dump() for segment in updated]
+        delivered = await self._deliver_segments(client_segments)
+        if delivered and client_segments:
+            self.host.complete_live_transcription()
+        if self.host.transcript_send is not None and self.host.user_has_credits:
+            self.host.transcript_send([segment.model_dump() for segment in new_segments])
+        elif not self.host.pusher_enabled and self.host.user_has_credits:
+            try:
+                await trigger_realtime_integrations(
+                    self.host.request.uid,
+                    [segment.model_dump() for segment in new_segments],
+                    conversation_id,
+                    source=self.host.request.source,
+                    client_kind=self.host.client_kind,
+                )
+            except Exception as error:
+                logger.error('Realtime integration trigger failed type=%s', type(error).__name__)
+        if self.host.onboarding_handler and not self.host.onboarding_handler.completed:
+            self.host.onboarding_handler.on_segments_received([segment.model_dump() for segment in new_segments])
+        await self._translate(updated, conversation.id, removed)
+
     async def process_loop(self) -> None:
         diarized_speaker_ids_by_conversation: Dict[str, set[int]] = {}
         while self.host.state.active or self.segment_buffer or self.photo_buffer:
@@ -360,7 +395,7 @@ class TranscriptProcessor:
                 # absolute projected wall times and their owning conversation
                 # from the capture span; offsets are computed against the
                 # pinned origin below.
-                await self._process_v2_batches(raw_segments, photos)
+                await self._process_v2_batches(raw_segments, photos, diarized_speaker_ids_by_conversation)
                 continue
             # Legacy persistence (flag off, resumed rows, custom/multi channel).
             # Segments may still carry a capture-clock window attached by the
@@ -437,28 +472,7 @@ class TranscriptProcessor:
                 self.host.send_event(SegmentsDeletedEvent(segment_ids=removed))
             if not transcript_segments:
                 continue
-            client_segments = [segment.model_dump() for segment in updated]
-            delivered = await self._deliver_segments(client_segments)
-            if delivered and client_segments:
-                self.host.complete_live_transcription()
-            if self.host.transcript_send is not None and self.host.user_has_credits:
-                self.host.transcript_send([segment.model_dump() for segment in transcript_segments])
-            elif not self.host.pusher_enabled and self.host.user_has_credits:
-                try:
-                    await trigger_realtime_integrations(
-                        self.host.request.uid,
-                        [segment.model_dump() for segment in transcript_segments],
-                        self.host.state.current_conversation_id,
-                        source=self.host.request.source,
-                        client_kind=self.host.client_kind,
-                    )
-                except Exception as error:
-                    logger.error('Realtime integration trigger failed type=%s', type(error).__name__)
-            if self.host.onboarding_handler and not self.host.onboarding_handler.completed:
-                self.host.onboarding_handler.on_segments_received(
-                    [segment.model_dump() for segment in transcript_segments]
-                )
-            await self._translate(updated, conversation.id, removed)
+            await self._deliver_live_updates(conversation, updated, removed, transcript_segments, conversation.id)
             await self._speaker_detection(
                 updated,
                 self.host.state.first_audio_byte_timestamp - offset,
@@ -486,7 +500,12 @@ class TranscriptProcessor:
                 },
             )
 
-    async def _process_v2_batches(self, raw_segments: List[Dict[str, Any]], photos: List[ConversationPhoto]) -> None:
+    async def _process_v2_batches(
+        self,
+        raw_segments: List[Dict[str, Any]],
+        photos: List[ConversationPhoto],
+        diarized_by_conversation: Dict[str, set[int]],
+    ) -> None:
         """Audio-timeline v2 persistence for one drain of the segment buffer.
 
         Epoch-translated segments carry absolute projected wall start/end plus
@@ -496,6 +515,18 @@ class TranscriptProcessor:
         pinned first-audio origin; a late batch whose owner is still open is
         written to that owner, while a terminal owner is fenced out and
         counted instead of being replayed into a newer conversation.
+
+        Late-but-open owners are **persist-only**: their segments are written
+        and speaker-detected on the row that owns them, but WebSocket
+        delivery, realtime integrations, onboarding and translation run for
+        the session's current conversation only — a client watching this
+        socket is watching the current conversation, and the late row's own
+        finalization owns its post-processing.
+
+        Only a conversation admitted as v2 from its first audio (a pinnable
+        origin, or an already-pinned marker) may carry the v2 marker. A
+        resumed row adopts its persisted ``started_at`` as the projection
+        base and stays legacy for its lifetime — no marker, no origin move.
         """
         state = self.host.state
         groups: Dict[str, List[Dict[str, Any]]] = {}
@@ -509,6 +540,12 @@ class TranscriptProcessor:
                 groups[owner] = []
                 order.append(owner)
             groups[owner].append(raw)
+        if photos and state.current_conversation_id and state.current_conversation_id not in groups:
+            # Photo-only drain, or a batch of late segments for a previous
+            # owner: the current conversation's photos must still be written,
+            # so run its write with an empty segment list.
+            groups[state.current_conversation_id] = []
+            order.append(state.current_conversation_id)
 
         for owner in order:
             segments = groups[owner]
@@ -525,28 +562,43 @@ class TranscriptProcessor:
                 continue
             marker = data.get('audio_timeline')
             pinned = isinstance(marker, dict) and marker.get('version') == 2
-            origin_wall = state.conversation_capture_origins.get(owner)
+            origin = state.conversation_capture_origins.get(owner)
+            origin_wall = origin.wall if origin is not None else None
             if pinned:
-                doc_started = data.get('started_at')
-                if doc_started is None:
+                started_ts = persisted_started_seconds(data.get('started_at'))
+                if started_ts is None:
                     OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode='v2', outcome='late_owner_dropped').inc()
                     continue
-                started_ts = doc_started.timestamp() if hasattr(doc_started, 'timestamp') else float(doc_started)
                 pin_started_at: Optional[datetime] = None
                 pin_marker: Optional[Dict[str, Any]] = None
             elif origin_wall is not None:
-                # Fresh v2 generation: pin the marker and the first-audio
-                # origin atomically with this batch's write.
                 started_ts = origin_wall
-                pin_started_at = datetime.fromtimestamp(origin_wall, tz=timezone.utc)
-                pin_marker = {'version': 2}
+                if origin.pinnable:
+                    # Fresh v2 generation: pin the marker and the first-audio
+                    # origin atomically with this batch's write.
+                    pin_started_at = datetime.fromtimestamp(origin_wall, tz=timezone.utc)
+                    pin_marker = {'version': 2}
+                else:
+                    # Adopted (resumed) row: project against its own persisted
+                    # started_at; never pin the marker or move the origin.
+                    pin_started_at = None
+                    pin_marker = None
             elif not segments:
                 # Photo-only drain before any audio: photos keep ordinary wall
                 # lifecycle times and pin nothing.
-                doc_started = data.get('started_at')
-                if doc_started is None:
+                started_ts = persisted_started_seconds(data.get('started_at'))
+                if started_ts is None:
                     continue
-                started_ts = doc_started.timestamp() if hasattr(doc_started, 'timestamp') else float(doc_started)
+                pin_started_at = None
+                pin_marker = None
+            elif owner in state.conversations_legacy_locked:
+                # Resumed with an unparseable started_at: keep the transcript
+                # on the legacy projection base; never pin v2. The row's own
+                # started_at stays as-is — the shadow datetime below only
+                # makes the in-memory row model parseable, and no write in
+                # this path touches started_at.
+                started_ts = float(state.first_audio_byte_timestamp or 0.0)
+                data['started_at'] = datetime.fromtimestamp(started_ts, tz=timezone.utc)
                 pin_started_at = None
                 pin_marker = None
             else:
@@ -585,6 +637,9 @@ class TranscriptProcessor:
                 state.words_transcribed_since_last_record += len(
                     ' '.join(segment.text for segment in new_segments).split()
                 )
+                diarized_by_conversation.setdefault(owner, set()).update(
+                    segment.speaker_id for segment in new_segments if isinstance(segment.speaker_id, int)
+                )
             current = deserialize_conversation(data)
             result = await self._update_live_conversation(
                 current,
@@ -618,28 +673,7 @@ class TranscriptProcessor:
             if not new_segments:
                 continue
             if is_current:
-                client_segments = [segment.model_dump() for segment in updated]
-                delivered = await self._deliver_segments(client_segments)
-                if delivered and client_segments:
-                    self.host.complete_live_transcription()
-                if self.host.transcript_send is not None and self.host.user_has_credits:
-                    self.host.transcript_send([segment.model_dump() for segment in new_segments])
-                elif not self.host.pusher_enabled and self.host.user_has_credits:
-                    try:
-                        await trigger_realtime_integrations(
-                            self.host.request.uid,
-                            [segment.model_dump() for segment in new_segments],
-                            owner,
-                            source=self.host.request.source,
-                            client_kind=self.host.client_kind,
-                        )
-                    except Exception as error:
-                        logger.error('Realtime integration trigger failed type=%s', type(error).__name__)
-                if self.host.onboarding_handler and not self.host.onboarding_handler.completed:
-                    self.host.onboarding_handler.on_segments_received(
-                        [segment.model_dump() for segment in new_segments]
-                    )
-                await self._translate(updated, conversation.id, removed)
+                await self._deliver_live_updates(conversation, updated, removed, new_segments, owner)
             await self._speaker_detection(updated, started_ts)
 
     async def _write_fresh(
@@ -705,9 +739,11 @@ class TranscriptProcessor:
                     self.host.emit_speaker_suggestion(segment.speaker_id, person_id, person_name, segment_id)
                 self.suggested_segments.add(segment_id)
                 continue
-            if queue_from_raw is not None:
-                continue
-            if should_queue_speaker_embedding(
+            # queue_from_raw only re-homes the *embedding* work (the raw
+            # segments keep their own capture windows through the live merge);
+            # introduction detection must run on these merged segments exactly
+            # as it does without capture windows.
+            if queue_from_raw is None and should_queue_speaker_embedding(
                 speaker_id=segment.speaker_id,
                 person_id=segment.person_id,
                 is_user=segment.is_user,
