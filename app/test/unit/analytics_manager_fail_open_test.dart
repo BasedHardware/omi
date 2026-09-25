@@ -240,10 +240,14 @@ void main() {
     attempt.complete(ProductOutcome.success);
     telemetry.value(ProductValue.feedbackHelpful);
     await AnalyticsManager.flushPending(force: true);
-    expect(adapter.events.singleWhere((event) => event.eventName == 'Product Journey Outcome').properties,
-        containsPair(r'$feature/test-ui', 'compact'));
-    expect(adapter.events.singleWhere((event) => event.eventName == 'Product Value').properties,
-        isNot(contains(r'$feature/test-ui')));
+    expect(
+      adapter.events.singleWhere((event) => event.eventName == 'Product Journey Outcome').properties,
+      containsPair(r'$feature/test-ui', 'compact'),
+    );
+    expect(
+      adapter.events.singleWhere((event) => event.eventName == 'Product Value').properties,
+      isNot(contains(r'$feature/test-ui')),
+    );
   });
 
   test('attempt started without consent never emits after consent is restored', () async {
