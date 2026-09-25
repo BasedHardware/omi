@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, Header, HTTPException
@@ -19,6 +20,8 @@ from models.feedback import (
 from utils.other import endpoints as auth
 from utils.product_metrics import sanitize_app_build
 from utils.product_telemetry import emit_product_event
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=['mobile-feedback'])
 
@@ -46,8 +49,18 @@ def _provenance_from_conversation(conversation: Optional[dict[str, Any]]) -> dic
 
 
 def _header_or_payload(header: str | None, payload: str | None, *, max_length: int) -> str | None:
-    value = (payload or header or '').strip()
+    header_val = header if isinstance(header, str) else None
+    payload_val = payload if isinstance(payload, str) else None
+    value = (payload_val or header_val or '').strip()
     return value[:max_length] if value else None
+
+
+def _safe_emit_product_event(uid: str, event: str, properties: dict[str, Any]) -> None:
+    """Dispatches product telemetry safely without interrupting primary HTTP response flows."""
+    try:
+        emit_product_event(uid=uid, event=event, properties=properties)
+    except Exception as exc:
+        logger.warning('mobile_feedback: telemetry dispatch failed for %s (%s): %s', uid, event, exc)
 
 
 @router.post('/v1/mobile/feedback', response_model=MobileFeedbackReceipt, status_code=201)
@@ -65,11 +78,22 @@ def submit_mobile_feedback(
     before the write. The idempotency key is scoped to the authenticated UID,
     so a retry is safe while a reused key with a different payload is rejected.
     """
+    if not payload.feedback_id or len(payload.feedback_id.strip()) == 0:
+        raise HTTPException(status_code=422, detail='feedback_id cannot be empty')
+    if not payload.target_id or len(payload.target_id.strip()) == 0:
+        raise HTTPException(status_code=422, detail='target_id cannot be empty')
+
     related_conversation_id: str | None = None
     resolved_target_kind = FeedbackTargetKind.conversation
     provenance: dict[str, Any] = {}
     if payload.kind is MobileFeedbackKind.summary_helpfulness or payload.target_kind == 'conversation':
-        conversation = conversations_db.get_conversation(uid, payload.target_id)
+        try:
+            conversation = conversations_db.get_conversation(uid, payload.target_id)
+        except HTTPException:
+            raise
+        except Exception as exc:
+            logger.warning('mobile_feedback: conversation lookup failed for %s (%s): %s', uid, payload.target_id, exc)
+            raise HTTPException(status_code=503, detail='Conversation service temporarily unavailable') from exc
         if not conversation:
             raise HTTPException(status_code=404, detail='Conversation not found')
         related_conversation_id = payload.target_id
@@ -82,7 +106,16 @@ def submit_mobile_feedback(
             raise HTTPException(status_code=503, detail='Recording ownership is temporarily unavailable') from exc
         if binding:
             related_conversation_id = binding['conversation_id']
-            conversation = conversations_db.get_conversation(uid, related_conversation_id)
+            try:
+                conversation = conversations_db.get_conversation(uid, related_conversation_id)
+            except Exception as exc:
+                logger.warning(
+                    'mobile_feedback: related conversation lookup failed for %s (%s): %s',
+                    uid,
+                    related_conversation_id,
+                    exc,
+                )
+                conversation = None
             if conversation:
                 provenance = _provenance_from_conversation(conversation)
             resolved_target_kind = FeedbackTargetKind.recording
@@ -91,7 +124,18 @@ def submit_mobile_feedback(
             # the detail page. Preserve their authenticated ownership path
             # while new callers can make this coordinate explicit with
             # target_kind=conversation.
-            conversation = conversations_db.get_conversation(uid, payload.target_id)
+            try:
+                conversation = conversations_db.get_conversation(uid, payload.target_id)
+            except HTTPException:
+                raise
+            except Exception as exc:
+                logger.warning(
+                    'mobile_feedback: fallback conversation lookup failed for %s (%s): %s',
+                    uid,
+                    payload.target_id,
+                    exc,
+                )
+                raise HTTPException(status_code=503, detail='Conversation service temporarily unavailable') from exc
             if not conversation:
                 raise HTTPException(status_code=404, detail='Recording not found')
             related_conversation_id = payload.target_id
@@ -101,7 +145,9 @@ def submit_mobile_feedback(
             raise HTTPException(status_code=404, detail='Recording not found')
 
     app_version = _header_or_payload(x_app_version, payload.app_version, max_length=64)
-    app_build = sanitize_app_build(payload.app_build, x_app_build, payload.app_version, x_app_version)
+    raw_header_build = x_app_build if isinstance(x_app_build, str) else None
+    raw_header_version = x_app_version if isinstance(x_app_version, str) else None
+    app_build = sanitize_app_build(payload.app_build, raw_header_build, payload.app_version, raw_header_version)
     platform = _header_or_payload(x_app_platform, payload.platform, max_length=32)
     if platform:
         platform = platform.lower()
@@ -141,9 +187,14 @@ def submit_mobile_feedback(
         raise HTTPException(status_code=409, detail='feedback_id was already used for a different event') from exc
     except feedback_db.FeedbackPersistenceError as exc:
         raise HTTPException(status_code=503, detail='Feedback could not be durably stored; retry safely') from exc
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.warning('mobile_feedback: durable write failed for %s: %s', uid, exc)
+        raise HTTPException(status_code=503, detail='Feedback could not be durably stored; retry safely') from exc
 
     if created:
-        emit_product_event(
+        _safe_emit_product_event(
             uid=uid,
             event='Product Feedback Submitted',
             properties={
