@@ -456,6 +456,34 @@ def test_poll_terminal_backfill_with_confirmed_ledger_serves_status(monkeypatch)
     assert _client_terminal_policy(resp['status'], is_terminal=True) == 'retry'
 
 
+def test_poll_stale_self_healed_backfill_releases_inflight_slot(monkeypatch):
+    stale_job = _backfill_job(status='processing', updated_at=time.time() - 700, created_at=time.time() - 800)
+    fake_redis, _, _ = _hook_harness(monkeypatch, stale_job)
+    released = []
+    monkeypatch.setattr(sync_router, 'get_sync_job', sync_jobs.get_sync_job)
+    monkeypatch.setattr(sync_router, 'get_sync_ledger_fence_mode', lambda: sync_router.SyncLedgerFenceMode.LEGACY)
+    monkeypatch.setattr(sync_router.sync_dead_letters, 'get_dead_letter', MagicMock(return_value=_ledger_doc()))
+    monkeypatch.setattr(sync_router, 'release_backfill_slot', lambda uid, jid: released.append((uid, jid)))
+
+    resp = sync_router.get_sync_job_status('job-1', uid='u1')
+
+    assert resp['status'] == 'failed'
+    assert json.loads(fake_redis.raw)['status'] == 'failed'
+    assert released == [('u1', 'job-1')]
+
+
+def test_poll_failed_backfill_without_ledger_does_not_release_slot(monkeypatch):
+    job = _backfill_job(status='failed', reason_code='sync_decode_failed')
+    released = []
+    monkeypatch.setattr(sync_router, 'release_backfill_slot', lambda uid, jid: released.append((uid, jid)))
+
+    with pytest.raises(HTTPException) as excinfo:
+        _poll(job, None, monkeypatch)
+
+    assert excinfo.value.status_code == 503
+    assert released == []
+
+
 @pytest.mark.parametrize(
     'doc',
     [
