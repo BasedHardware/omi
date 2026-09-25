@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from fastapi.testclient import TestClient
 
-from llm_gateway.gateway.config_loader import ConfigValidationError
-from llm_gateway.gateway.schemas import LaneConfig
+from llm_gateway.gateway.config_loader import ConfigValidationError, load_gateway_config
+from llm_gateway.gateway.schemas import LaneConfig, RolloutStage
 from llm_gateway.main import app
 from llm_gateway.routers import health
 from utils.llm.model_config import get_all_configured_features
@@ -69,6 +69,60 @@ def test_managed_web_search_tracks_the_active_web_search_lane():
 
     assert health._managed_perplexity_chat_enabled(config) is True
     assert config.route_artifacts[config.lanes['omi:auto:web-search'].active_route].primary.provider == 'perplexity'
+
+
+def test_ready_fails_closed_when_the_managed_systemone_key_is_missing(monkeypatch):
+    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
+    monkeypatch.delenv('OPENROUTER_API_KEY', raising=False)
+
+    response = TestClient(app).get('/ready', headers=auth_headers())
+
+    assert response.status_code == 503
+    assert response.json()['detail'] == 'llm gateway managed systemone provider is not configured'
+
+
+def test_ready_passes_with_a_synthetic_systemone_key(monkeypatch):
+    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
+    monkeypatch.setenv('OPENROUTER_API_KEY', 'test-openrouter-key')
+
+    response = TestClient(app).get('/ready', headers=auth_headers())
+
+    assert response.status_code == 200
+    assert response.json()['status'] == 'ready'
+
+
+def test_managed_systemone_tracks_the_active_decision_lane():
+    config = health.get_gateway_config()
+
+    assert health._managed_systemone_provider_enabled(config) is True
+    route = config.route_artifacts[config.lanes['omi:auto:jev-decisions'].active_route]
+    assert route.primary.provider == 'openrouter'
+
+
+def test_managed_systemone_ignores_disabled_absent_or_non_openrouter_lanes():
+    config = load_gateway_config()
+    route = config.route_artifacts[config.lanes['omi:auto:jev-decisions'].active_route]
+    route.rollout.stage = RolloutStage.DISABLED
+    assert health._managed_systemone_provider_enabled(config) is False
+
+    route.rollout.stage = RolloutStage.ACTIVE
+    route.primary.provider = 'not-openrouter'
+    assert health._managed_systemone_provider_enabled(config) is False
+
+    del config.lanes['omi:auto:jev-decisions']
+    assert health._managed_systemone_provider_enabled(config) is False
+
+
+def test_ready_does_not_demand_the_systemone_key_when_its_route_is_disabled(monkeypatch):
+    monkeypatch.setenv('LLM_GATEWAY_SERVICE_TOKEN', 'shared-secret')
+    monkeypatch.delenv('OPENROUTER_API_KEY', raising=False)
+    config = load_gateway_config()
+    config.route_artifacts[config.lanes['omi:auto:jev-decisions'].active_route].rollout.stage = RolloutStage.DISABLED
+    monkeypatch.setattr(health, 'get_gateway_config', lambda: config)
+
+    response = TestClient(app).get('/ready', headers=auth_headers())
+
+    assert response.status_code == 200
 
 
 def test_ready_fails_closed_when_an_explicit_anthropic_lane_is_present(monkeypatch):

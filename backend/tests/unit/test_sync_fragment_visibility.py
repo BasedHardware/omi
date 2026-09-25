@@ -7,12 +7,38 @@ from before it did.
 
 from __future__ import annotations
 
+from copy import deepcopy
 from datetime import datetime, timezone
 from unittest.mock import MagicMock
 
 import pytest
 from tests.unit.test_sync_donor_tombstone_visibility import _install_listing
-from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore, StrictFirestoreTransaction
+
+
+class _MergeCapableTransaction(StrictFirestoreTransaction):
+    """Adds the ``set(..., merge=True)`` branch the strict fixture omits."""
+
+    def __init__(self, database, *, allow_reads_after_writes=False):
+        super().__init__(database, allow_reads_after_writes=allow_reads_after_writes)
+        self.merges = []
+
+    def set(self, ref, data, merge=False):
+        if not merge:
+            return super().set(ref, data)
+        self._assert_reference_belongs(ref)
+        self.has_written = True
+        self.merges.append((ref.path, merge))
+        payload = deepcopy(data)
+        self.sets.append((ref.path, payload))
+        self._database.rows.setdefault(ref.path, {}).update(payload)
+
+
+class _MergeFirestore(StrictFirestore):
+    def transaction(self):
+        transaction = _MergeCapableTransaction(self, allow_reads_after_writes=self._allow_reads_after_writes)
+        self.transactions.append(transaction)
+        return transaction
 
 
 def _review(**overrides):
@@ -253,3 +279,112 @@ def test_restore_of_any_row_persists_the_user_choice(monkeypatch):
             {'discarded': False, 'sync_relevance_user_kept': True},
         )
     ]
+
+
+def test_restore_of_jev_discard_stamps_the_marker(monkeypatch):
+    """A restored Jev discard records ``jev_discard_restored`` in the same transaction."""
+    from database import conversations
+
+    row = _review(
+        id='restored',
+        sync_relevance='keep',
+        discarded=True,
+        relevance_decision={
+            'verdict': 'discard',
+            'decided_by': 'jev',
+            'reason': 'jev_discard',
+            'trigger': 'sync_update',
+            'rules_version': 3,
+            'jev': {'p_discard': 0.97, 'threshold': 0.95, 'model': 'typesafe/jev-1.13'},
+        },
+    )
+    db = StrictFirestore({('users', 'u', 'conversations', 'restored'): row})
+    monkeypatch.setattr(conversations, 'db', db)
+    monkeypatch.setattr(conversations, '_sync_conversation_search_index', MagicMock())
+
+    assert conversations.restore_conversation_from_discarded('u', 'restored') is True
+    assert db.transactions[0].updates == [
+        (
+            ('users', 'u', 'conversations', 'restored'),
+            {
+                'discarded': False,
+                'sync_relevance_user_kept': True,
+                'jev_discard_restored': True,
+            },
+        )
+    ]
+    assert db.rows[('users', 'u', 'conversations', 'restored')]['jev_discard_restored'] is True
+
+
+@pytest.mark.parametrize(
+    'relevance_decision',
+    [
+        pytest.param({'verdict': 'discard', 'decided_by': 'model', 'reason': 'model_discard'}, id='model-decision'),
+        pytest.param({'verdict': 'discard', 'decided_by': 'rule', 'reason': 'too_short'}, id='rule-decision'),
+        pytest.param({'verdict': 'keep', 'decided_by': 'jev', 'reason': 'jev_keep'}, id='jev-keep'),
+        pytest.param('stale-non-mapping', id='non-mapping-decision'),
+        pytest.param(None, id='legacy-row'),
+    ],
+)
+def test_restore_of_non_jev_discard_writes_no_marker(monkeypatch, relevance_decision):
+    """Only a currently discarded row carrying a Jev discard decision gets the marker."""
+    from database import conversations
+
+    row = _review(id='restored', sync_relevance='keep', discarded=True)
+    if relevance_decision is not None:
+        row['relevance_decision'] = relevance_decision
+    db = StrictFirestore({('users', 'u', 'conversations', 'restored'): row})
+    monkeypatch.setattr(conversations, 'db', db)
+    monkeypatch.setattr(conversations, '_sync_conversation_search_index', MagicMock())
+
+    assert conversations.restore_conversation_from_discarded('u', 'restored') is True
+    (update,) = db.transactions[0].updates
+    assert 'jev_discard_restored' not in update[1]
+    assert 'jev_discard_restored' not in db.rows[('users', 'u', 'conversations', 'restored')]
+
+
+def test_restored_jev_discard_survives_reassessment_persist(monkeypatch):
+    """Restore stamps the marker; reassessment rewrites the decision, not the marker."""
+    from types import SimpleNamespace
+
+    from database import conversations
+    from utils.conversations.processing_trigger import ProcessingTrigger
+    from utils.conversations.relevance import decide_relevance
+    from utils.conversations.relevance_io import apply_relevance
+
+    row = _review(
+        id='restored',
+        sync_relevance='keep',
+        discarded=True,
+        relevance_decision={'verdict': 'discard', 'decided_by': 'jev', 'reason': 'jev_discard'},
+    )
+    db = _MergeFirestore({('users', 'u', 'conversations', 'restored'): row})
+    monkeypatch.setattr(conversations, 'db', db)
+    monkeypatch.setattr(conversations, '_sync_conversation_search_index', MagicMock())
+
+    assert conversations.restore_conversation_from_discarded('u', 'restored') is True
+
+    decision = decide_relevance(
+        trigger=ProcessingTrigger.SYNC_UPDATE,
+        texts=['a real conversation'],
+        speech_seconds=60.0,
+        has_photos=False,
+        user_kept=True,
+        exempt=False,
+        trusted_wake_word=False,
+        model_discards=None,
+        calendar_retains=lambda: False,
+    )
+    conversation = SimpleNamespace(discarded=True)
+    payload = {'id': 'restored', 'status': 'completed', 'data_protection_level': 'standard'}
+    apply_relevance(conversation, payload, decision)
+    assert 'jev_discard_restored' not in payload
+
+    assert conversations.persist_processing_result_with_lifecycle('u', payload) is True
+
+    assert db.transactions[-1].merges == [(('users', 'u', 'conversations', 'restored'), True)]
+    stored = db.rows[('users', 'u', 'conversations', 'restored')]
+    assert stored['relevance_decision']['decided_by'] == 'user'
+    assert stored['relevance_decision']['verdict'] == 'keep'
+    assert stored['discarded'] is False
+    assert stored['jev_discard_restored'] is True
