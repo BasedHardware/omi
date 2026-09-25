@@ -146,14 +146,21 @@ class LiveChainSession:
                 if generation != self.generation:
                     return
                 if epoch is not None:
-                    # Audio-timeline v2: the epoch translator maps provider
+                    # Audio-timeline epochs: the translator maps provider
                     # times through its accepted send spans onto the capture
                     # timeline's wall axis. It replaces this leg's own
                     # offset/last_end clock, so no generation offset is added.
-                    translated = epoch.translate(segments)
-                    if translated:
-                        leg.note_selection_transcript(translated)
-                        self.receiver._enqueue_translated_segments(translated, provider=service.value)
+                    # The translate itself reads unsynchronized timeline state,
+                    # so it runs on the listen loop (Deepgram calls this from
+                    # its SDK thread); the enqueue then follows the receiver's
+                    # pinned persistence mode (v2 owner fencing vs clock-only).
+                    def translate_on_loop(seg_list: list[dict[str, Any]]) -> None:
+                        translated = epoch.translate(seg_list)
+                        if translated:
+                            leg.note_selection_transcript(translated)
+                            self.receiver._enqueue_epoch_segments(translated, provider=service.value)
+
+                    self.receiver._run_on_listen_loop(translate_on_loop, segments)
                     return
                 if gate is not None and not passthrough:
                     gate.remap_segments(segments)

@@ -12,6 +12,7 @@ from models.conversation import Conversation
 from models.conversation_enums import ConversationSource, ConversationStatus
 from models.message_event import ConversationEvent, ConversationSessionEvent, LastConversationEvent
 from models.structured import Structured  # type: ignore[reportAttributeAccessIssue]
+from routers.listen.contracts import ConversationCaptureOrigin, persisted_started_seconds
 from utils.byok import get_byok_keys
 from utils.cloud_tasks import is_listen_finalization_dispatch_enabled
 from utils.observability.transcription import record_listen_audio_outcome
@@ -196,9 +197,13 @@ class LiveConversationController:
         """Track the audio-timeline v2 origin for a conversation this session owns.
 
         A resumed conversation reuses its persisted ``started_at`` as the
-        projection origin (a resumed v1 row is never marked v2); a conversation
-        created fresh by this v2 session waits for its first accepted audio
-        frame, which the receiver pins as the origin.
+        projection origin; that row is never admitted as v2 — the adopted
+        origin carries ``pinnable=False`` so no later batch pins the v2 marker
+        or rewrites ``started_at`` on it. A conversation created fresh by this
+        session waits for its first accepted audio frame, which the receiver
+        pins as the (pinnable) origin. A ``started_at`` that cannot be parsed
+        (datetime, number, or ISO string) locks the row to legacy projection:
+        it never falls through to a fresh pin.
         """
         state = getattr(self.host, 'state', None)
         if state is None or getattr(state, 'capture_timeline', None) is None:
@@ -206,11 +211,11 @@ class LiveConversationController:
         if started_at is None:
             state.conversations_awaiting_capture_origin.add(conversation_id)
             return
-        timestamp = started_at.timestamp() if hasattr(started_at, 'timestamp') else None
+        timestamp = persisted_started_seconds(started_at)
         if timestamp is None:
-            state.conversations_awaiting_capture_origin.add(conversation_id)
+            state.conversations_legacy_locked.add(conversation_id)
             return
-        state.conversation_capture_origins[conversation_id] = timestamp
+        state.conversation_capture_origins[conversation_id] = ConversationCaptureOrigin(timestamp, pinnable=False)
 
     def on_conversation_processing_started(self, conversation_id: str) -> None:
         self.host.spawn(

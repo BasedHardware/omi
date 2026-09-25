@@ -14,7 +14,8 @@ from collections import OrderedDict, deque
 from typing import Any, Deque, Dict, List, Optional, Tuple, cast
 
 from config.audio_timeline import audio_timeline_v2_enabled
-from utils.audio_timeline import ProviderEpochTranslator
+from routers.listen.contracts import ConversationCaptureOrigin
+from utils.audio_timeline import CaptureTimeline, ProviderEpochTranslator
 
 lc3: Any = None
 lc3_import_error: Optional[BaseException] = None
@@ -113,6 +114,11 @@ DECODE_FAILURE_STREAK_ALERT = 50
 # callbacks; older mapped segments fail closed as late_owner_dropped.
 CAPTURE_RANGE_RETENTION_SECONDS = 120.0
 
+# Hard cap on retained ownership *runs*. Runs are contiguous same-conversation
+# ranges (one per conversation switch inside the retention window), so this is
+# a pathological-case bound, not the working retention limit.
+CAPTURE_RANGE_MAX_RUNS = 512
+
 
 def opus_decode_capacity(sample_rate: int) -> int:
     """Samples to hand `Decoder.decode` as its output-buffer size.
@@ -179,18 +185,25 @@ class ListenReceiver:
             and not host.use_custom_stt
             and int(getattr(host.request, 'sample_rate', 0) or 0) > 0
         ):
-            from utils.audio_timeline import CaptureTimeline
-
             self.capture_timeline = CaptureTimeline(sample_rate=int(host.request.sample_rate))
             # Pin the persistence mode for the recording's life; the flag is
             # never re-read per message or per callback.
             self.capture_timeline_v2 = audio_timeline_v2_enabled()
             host.state.capture_timeline = self.capture_timeline
             host.state.capture_timeline_v2 = self.capture_timeline_v2
-            # Conversation ownership of recent capture ranges, bounded by
-            # capture time (provider callbacks can trail their audio by tens
-            # of seconds) with a hard entry cap.
-            host.state.conversation_sample_ranges = deque(maxlen=512)
+            # Conversation ownership of recent capture ranges. Entries are
+            # *runs* (contiguous samples under one conversation), coalesced by
+            # `_note_accepted_frame`, so retention is time-based (120 s) and a
+            # hard entry cap counts conversation switches, not frames.
+            host.state.conversation_sample_ranges = deque(maxlen=CAPTURE_RANGE_MAX_RUNS)
+        # The loop this receiver serves. Deepgram's SDK delivers transcripts on
+        # its own thread; those callbacks hop back onto this loop (see
+        # `_run_on_listen_loop`) so timeline/send-map state is only ever
+        # mutated from one thread.
+        try:
+            self._listen_loop: Optional[asyncio.AbstractEventLoop] = asyncio.get_running_loop()
+        except RuntimeError:
+            self._listen_loop = None
         # Capture start sample of the STT buffer's first byte; the buffer is
         # one contiguous run of accepted decoded audio.
         self._stt_buffer_start_sample: Optional[int] = None
@@ -203,6 +216,19 @@ class ListenReceiver:
         for start, end, conversation_id in reversed(ranges):
             if start <= sample < end:
                 return conversation_id
+        # Outside every retained run. A sample below the oldest retained run
+        # whose retained history shows a single conversation fails open to that
+        # conversation (no recorded boundary contradicts it); anything else —
+        # boundaries in the retained window, or a sample past the newest run —
+        # is genuinely ambiguous and fails closed.
+        oldest_start = ranges[0][0]
+        newest_end = ranges[-1][1]
+        if sample < oldest_start:
+            owners = {conversation_id for _, _, conversation_id in ranges}
+            if len(owners) == 1:
+                return next(iter(owners))
+        elif sample >= newest_end:
+            return self.host.state.current_conversation_id
         return None
 
     def _note_accepted_frame(self, start_sample: int, end_sample: int) -> None:
@@ -210,14 +236,25 @@ class ListenReceiver:
         state = self.host.state
         conversation_id = state.current_conversation_id
         if state.conversation_sample_ranges is not None:
-            state.conversation_sample_ranges.append((start_sample, end_sample, conversation_id))
-            retention_samples = CAPTURE_RANGE_RETENTION_SECONDS * self.capture_timeline.sample_rate
             ranges = state.conversation_sample_ranges
+            # Coalesce into the previous run while the audio is contiguous and
+            # the owner unchanged, so the deque counts runs (conversation
+            # switches), never per-frame entries a maxlen would evict after
+            # ~10 s of 20 ms frames.
+            if ranges and ranges[-1][2] == conversation_id and ranges[-1][1] == start_sample:
+                ranges[-1] = (ranges[-1][0], end_sample, conversation_id)
+            else:
+                ranges.append((start_sample, end_sample, conversation_id))
+            retention_samples = CAPTURE_RANGE_RETENTION_SECONDS * self.capture_timeline.sample_rate
             while len(ranges) > 1 and end_sample - ranges[0][1] > retention_samples:
                 ranges.popleft()
         if conversation_id and conversation_id in state.conversations_awaiting_capture_origin:
             state.conversations_awaiting_capture_origin.discard(conversation_id)
-            state.conversation_capture_origins[conversation_id] = self.capture_timeline.wall(start_sample)
+            # Fresh conversation created by this session: the origin is pinned
+            # from its first accepted audio and may carry the v2 marker.
+            state.conversation_capture_origins[conversation_id] = ConversationCaptureOrigin(
+                self.capture_timeline.wall(start_sample), pinnable=True
+            )
 
     def _enqueue_translated_segments(self, segments: List[Dict[str, Any]], provider: Optional[str] = None) -> None:
         """Owner-resolve epoch-translated segments before they enter the buffer.
@@ -263,9 +300,50 @@ class ListenReceiver:
             start_sample = segment.pop('_capture_start_sample', None)
             end_sample = segment.pop('_capture_end_sample', None)
             if start_sample is not None and end_sample is not None and end_sample >= start_sample:
-                segment['_capture_abs_start'] = self.capture_timeline.wall(start_sample)
-                segment['_capture_abs_end'] = self.capture_timeline.wall(end_sample)
+                abs_start = self.capture_timeline.wall_strict(start_sample)
+                abs_end = self.capture_timeline.wall_strict(end_sample)
+                if abs_start is not None and abs_end is not None:
+                    segment['_capture_abs_start'] = abs_start
+                    segment['_capture_abs_end'] = abs_end
         self._enqueue_stt_segments(segments)
+
+    def _run_on_listen_loop(self, action, segments: List[Dict[str, Any]]) -> None:
+        """Run a provider callback on the listen event loop.
+
+        Deepgram's SDK invokes its message handlers on its own thread; every
+        other provider's receive loop is an asyncio task on this loop. Timeline
+        and send-map state is unsynchronized, so an off-loop caller defers
+        here instead of mutating it concurrently; ``call_soon_threadsafe``
+        preserves cross-thread FIFO order.
+        """
+        loop = self._listen_loop
+        if loop is None:
+            action(segments)
+            return
+        try:
+            current = asyncio.get_running_loop()
+        except RuntimeError:
+            current = None
+        if current is loop:
+            action(segments)
+            return
+        try:
+            loop.call_soon_threadsafe(action, segments)
+        except RuntimeError:
+            logger.warning('Listen STT callback arrived after loop shutdown; dropped %d segments', len(segments))
+
+    def _enqueue_epoch_segments(self, segments: List[Dict[str, Any]], provider: Optional[str] = None) -> None:
+        """Owner-resolve epoch-translated segments by the pinned persistence mode.
+
+        The managed live chain routes its callbacks through here so it uses
+        the same enqueue the receiver's own callbacks chose: v2 owner-fencing
+        when admitted, clock-only (legacy pipeline, capture window attached)
+        when not.
+        """
+        if self.capture_timeline_v2:
+            self._enqueue_translated_segments(segments, provider=provider)
+        else:
+            self._enqueue_clock_positioned_segments(segments)
 
     def _build_stt_callbacks(self) -> Tuple[Any, Any, Optional[ProviderEpochTranslator]]:
         """Fresh legacy callbacks bound to one provider epoch's translator.
@@ -275,6 +353,15 @@ class ListenReceiver:
         callback from an obsolete epoch can never be mapped through a later
         epoch's accepted send spans. Without a capture timeline the callbacks
         keep today's gate-remapping behavior exactly.
+
+        With the clock on and v2 persistence off (flag-off prod), the
+        non-passthrough callback keeps today's ``make_stream_callback``
+        semantics: the active gate's ``remap_segments`` runs on provider
+        timestamps before anything is persisted or emitted, and the epoch
+        translation only *attaches* the capture window (it never rewrites
+        ``start``/``end``), so stored and WebSocket times are byte-identical
+        to the flag-off baseline. With v2 on, the send-map translation
+        replaces the gate mapper — both must never apply.
         """
         timeline = self.capture_timeline
         if timeline is None:
@@ -302,16 +389,47 @@ class ListenReceiver:
         )
 
         if self.capture_timeline_v2:
-            enqueue = self._enqueue_translated_segments
-        else:
-            enqueue = self._enqueue_clock_positioned_segments
+            # v2: the translation projects start/end onto the capture wall
+            # axis; the gate's provider-time mapper must not also apply.
+            def translate_and_enqueue(segments: List[Dict[str, Any]]) -> None:
+                translated = epoch.translate(segments)
+                if translated:
+                    self._enqueue_translated_segments(translated)
 
-        def translate_and_enqueue(segments: List[Dict[str, Any]]) -> None:
-            translated = epoch.translate(segments)
-            if translated:
-                enqueue(translated)
+            return (
+                self._loop_hop(translate_and_enqueue),
+                self._loop_hop(translate_and_enqueue),
+                epoch,
+            )
 
-        return (translate_and_enqueue, translate_and_enqueue, epoch)
+        def clock_only(passthrough: bool):
+            def translate_remap_enqueue(segments: List[Dict[str, Any]]) -> None:
+                # Attach the capture window from the *provider* timestamps
+                # (they index the accepted send spans); start/end are not
+                # rewritten, so the gate remap below sees exactly the values
+                # origin/main's make_stream_callback saw.
+                translated = epoch.translate(segments)
+                if not translated:
+                    return
+                if self.vad_gate is not None and not passthrough:
+                    self.vad_gate.remap_segments(translated)
+                self._enqueue_clock_positioned_segments(translated)
+
+            return translate_remap_enqueue
+
+        return (
+            self._loop_hop(clock_only(False)),
+            self._loop_hop(clock_only(True)),
+            epoch,
+        )
+
+    def _loop_hop(self, callback):
+        """Bind a provider callback to the listen loop (see `_run_on_listen_loop`)."""
+
+        def hopped(segments: List[Dict[str, Any]]) -> None:
+            self._run_on_listen_loop(callback, segments)
+
+        return hopped
 
     def _capture(self, method: str, *args: Any) -> None:
         """Keep optional dev capture out of the production audio failure domain."""
