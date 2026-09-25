@@ -1,249 +1,107 @@
-import 'dart:ui';
-
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:gradient_borders/box_borders/gradient_box_border.dart';
 import 'package:provider/provider.dart';
 
-import 'package:omi/backend/http/api/conversations.dart';
-import 'package:omi/backend/http/webhooks.dart';
-import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/app.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/geolocation.dart';
+import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
 import 'package:omi/pages/conversation_detail/conversation_summary_selection.dart';
-import 'package:omi/pages/conversation_detail/test_prompts.dart';
 import 'package:omi/pages/conversation_detail/widgets/conversation_markdown_widget.dart';
 import 'package:omi/pages/conversation_detail/widgets/summarized_apps_sheet.dart';
-import 'package:omi/pages/settings/developer.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/other/temp.dart';
-import 'package:omi/widgets/dialog.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'package:omi/widgets/omi_map_preview.dart';
-import 'package:url_launcher/url_launcher.dart';
 import 'maps_util.dart';
 
-// Highlight search matches with current result highlighting
-List<TextSpan> highlightSearchMatches(String text, String searchQuery, {int currentResultIndex = -1}) {
-  if (searchQuery.isEmpty) {
-    return [TextSpan(text: text)];
-  }
-
-  final List<TextSpan> spans = [];
-  final String lowerText = text.toLowerCase();
-  final String lowerQuery = searchQuery.toLowerCase();
-
-  int start = 0;
-  int index = lowerText.indexOf(lowerQuery, start);
-  int matchCount = 0;
-
-  while (index != -1) {
-    if (index > start) {
-      spans.add(TextSpan(text: text.substring(start, index)));
-    }
-
-    bool isCurrentResult = currentResultIndex >= 0 && matchCount == currentResultIndex;
-
-    spans.add(
-      TextSpan(
-        text: text.substring(index, index + searchQuery.length),
-        style: TextStyle(
-          backgroundColor:
-              isCurrentResult ? Colors.orange.withValues(alpha: 0.9) : Colors.deepPurple.withValues(alpha: 0.6),
-          color: Colors.white,
-          fontWeight: FontWeight.bold,
-        ),
-      ),
-    );
-
-    matchCount++;
-    start = index + searchQuery.length;
-    index = lowerText.indexOf(lowerQuery, start);
-  }
-
-  // Add remaining text
-  if (start < text.length) {
-    spans.add(TextSpan(text: text.substring(start)));
-  }
-
-  return spans;
+/// The detail page's length label: the same rule and format as the conversation list row
+/// ([ServerConversation.getDurationInSeconds], [OmiDuration.compact]), so both always agree.
+/// Empty when there is no measurable length.
+String conversationDurationLabel(ServerConversation conversation, [AppLocalizations? l10n]) {
+  final seconds = conversation.getDurationInSeconds();
+  if (seconds <= 0) return '';
+  return OmiDuration.compact(seconds, l10n);
 }
 
-class ActionItemsListWidget extends StatelessWidget {
-  const ActionItemsListWidget({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Consumer<ConversationDetailProvider>(
-      builder: (context, provider, child) {
-        return Column(
-          children: [
-            provider.conversation.structured.actionItems.isNotEmpty
-                ? Row(
-                    crossAxisAlignment: CrossAxisAlignment.center,
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        context.l10n.actionItems,
-                        style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 26),
-                      ),
-                      IconButton(
-                        onPressed: () {
-                          Clipboard.setData(
-                            ClipboardData(
-                              text:
-                                  '- ${provider.conversation.structured.actionItems.map((e) => e.description.decodeString).join('\n- ')}',
-                            ),
-                          );
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(context.l10n.actionItemsCopiedToClipboard),
-                              duration: const Duration(seconds: 2),
-                            ),
-                          );
-                          PlatformManager.instance.analytics.copiedConversationDetails(
-                            provider.conversation,
-                            source: 'Action Items',
-                          );
-                        },
-                        icon: const Icon(Icons.copy_rounded, color: Colors.white, size: 20),
-                      ),
-                    ],
-                  )
-                : const SizedBox.shrink(),
-            ListView.builder(
-              itemCount: provider.conversation.structured.actionItems.where((e) => !e.deleted).length,
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemBuilder: (context, idx) {
-                var item = provider.conversation.structured.actionItems.where((e) => !e.deleted).toList()[idx];
-                return Dismissible(
-                  key: Key(item.description),
-                  direction: DismissDirection.endToStart,
-                  background: Container(
-                    alignment: Alignment.centerRight,
-                    padding: const EdgeInsets.only(right: 20.0),
-                    color: Colors.red,
-                    child: const Icon(Icons.delete, color: Colors.white),
-                  ),
-                  onDismissed: (direction) {
-                    var tempItem = provider.conversation.structured.actionItems[idx];
-                    var tempIdx = idx;
-                    provider.deleteActionItem(idx);
-                    provider.deleteActionItemPermanently(tempItem, tempIdx);
-                    PlatformManager.instance.analytics.deletedActionItem(provider.conversation);
-                    // ScaffoldMessenger.of(context)
-                    //     .showSnackBar(
-                    //       SnackBar(
-                    //         content: const Text('Action Item deleted successfully 🗑️'),
-                    //         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                    //         action: SnackBarAction(
-                    //           label: 'Undo',
-                    //           textColor: Colors.white,
-                    //           onPressed: () {
-                    //             provider.undoDeleteActionItem(idx);
-                    //           },
-                    //         ),
-                    //       ),
-                    //     )
-                    //     .closed
-                    //     .then((reason) {
-                    //   if (reason != SnackBarClosedReason.action) {
-                    //     provider.deleteActionItemPermanently(tempItem, tempIdx);
-                    //     PlatformManager.instance.analytics.deletedActionItem(provider.conversation);
-                    //   }
-                    // });
-                  },
-                  child: Padding(
-                    padding: const EdgeInsets.only(top: 10, bottom: 2),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Padding(
-                          padding: const EdgeInsets.only(top: 6.0),
-                          child: SizedBox(
-                            height: 22.0,
-                            width: 22.0,
-                            child: Checkbox(
-                              shape: const CircleBorder(),
-                              value: item.completed,
-                              onChanged: (value) {
-                                if (value != null) {
-                                  context.read<ConversationDetailProvider>().updateActionItemState(value, idx);
-                                  setConversationActionItemState(provider.conversation.id, [idx], [value]);
-                                  if (value) {
-                                    PlatformManager.instance.analytics.checkedActionItem(provider.conversation, idx);
-                                  } else {
-                                    PlatformManager.instance.analytics.uncheckedActionItem(provider.conversation, idx);
-                                  }
-                                }
-                              },
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: SelectionArea(
-                            child: Text(
-                              item.description.decodeString,
-                              style: TextStyle(color: Colors.grey.shade300, fontSize: 16, height: 1.3),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                );
-              },
-            ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class GetEditTextField extends StatefulWidget {
-  final String conversationId;
-  final String content;
+/// The conversation title, edited in place.
+///
+/// One line with a Done key; an empty title shows the "Untitled Conversation" placeholder. The
+/// edit is saved when editing ends — Done, or tapping away — and the outcome is announced
+/// ("Saved" / an error that restores the old title). Blank or unchanged text is not saved.
+class ConversationTitleField extends StatefulWidget {
   final TextStyle style;
   final TextEditingController? controller;
   final FocusNode? focusNode;
 
-  const GetEditTextField({
-    super.key,
-    required this.content,
-    required this.style,
-    required this.conversationId,
-    required this.controller,
-    required this.focusNode,
-  });
+  const ConversationTitleField({super.key, required this.style, required this.controller, required this.focusNode});
 
   @override
-  State<GetEditTextField> createState() => _GetEditTextFieldState();
+  State<ConversationTitleField> createState() => _ConversationTitleFieldState();
 }
 
-class _GetEditTextFieldState extends State<GetEditTextField> {
+class _ConversationTitleFieldState extends State<ConversationTitleField> {
+  @override
+  void initState() {
+    super.initState();
+    widget.focusNode?.addListener(_onFocusChanged);
+  }
+
+  @override
+  void didUpdateWidget(ConversationTitleField oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.focusNode != widget.focusNode) {
+      oldWidget.focusNode?.removeListener(_onFocusChanged);
+      widget.focusNode?.addListener(_onFocusChanged);
+    }
+  }
+
+  @override
+  void dispose() {
+    widget.focusNode?.removeListener(_onFocusChanged);
+    super.dispose();
+  }
+
+  void _onFocusChanged() {
+    if (widget.focusNode?.hasFocus ?? true) return;
+    _save();
+  }
+
+  Future<void> _save() async {
+    final controller = widget.controller;
+    if (controller == null) return;
+    final l10n = context.l10n;
+    final saved = await context.read<ConversationDetailProvider>().saveTitle(controller.text);
+    if (!mounted || saved == null) return;
+    if (saved) {
+      OmiFeedback.confirm(context, l10n.saved);
+    } else {
+      OmiFeedback.error(context, l10n.failedToUpdateConversationTitle);
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return TextField(
-      keyboardType: TextInputType.multiline,
-      minLines: 1,
-      maxLines: 3,
+      keyboardType: TextInputType.text,
+      textInputAction: TextInputAction.done,
+      maxLines: 1,
       focusNode: widget.focusNode,
-      decoration: const InputDecoration(
-        border: OutlineInputBorder(borderSide: BorderSide.none),
-        contentPadding: EdgeInsets.all(0),
-      ),
       controller: widget.controller,
-      enabled: true,
+      onSubmitted: (_) => widget.focusNode?.unfocus(),
+      decoration: InputDecoration(
+        border: const OutlineInputBorder(borderSide: BorderSide.none),
+        contentPadding: EdgeInsets.zero,
+        isDense: true,
+        hintText: context.l10n.untitledConversation,
+        hintStyle: widget.style.copyWith(color: OmiColors.textTertiary),
+      ),
       style: widget.style,
     );
   }
@@ -257,71 +115,44 @@ class ReprocessDiscardedWidget extends StatelessWidget {
     return Consumer<ConversationDetailProvider>(
       builder: (context, provider, child) {
         if (provider.loadingReprocessConversation && provider.reprocessConversationId == provider.conversation.id) {
-          return Center(
-            child: Padding(
-              padding: const EdgeInsets.only(top: 18.0),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  const CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
-                  const SizedBox(width: 16),
-                  Text(
-                    provider.conversation.discarded
-                        ? context.l10n.summarizingConversation
-                        : context.l10n.resummarizingConversation,
-                    style: const TextStyle(color: Colors.white, fontSize: 16),
-                  ),
-                ],
-              ),
+          return Padding(
+            padding: const EdgeInsets.only(top: 18.0),
+            child: OmiLoadingState(
+              label: provider.conversation.discarded
+                  ? context.l10n.summarizingConversation
+                  : context.l10n.resummarizingConversation,
             ),
           );
         }
-        return ListView(
-          shrinkWrap: true,
-          children: [
-            const SizedBox(height: 32),
-            Text(
-              context.l10n.nothingInterestingRetry,
-              style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 20),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 24),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Container(
-                  decoration: BoxDecoration(
-                    border: const GradientBoxBorder(
-                      gradient: LinearGradient(
-                        colors: [
-                          Color.fromARGB(127, 208, 208, 208),
-                          Color.fromARGB(127, 188, 99, 121),
-                          Color.fromARGB(127, 86, 101, 182),
-                          Color.fromARGB(127, 126, 190, 236),
-                        ],
-                      ),
-                      width: 2,
-                    ),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: MaterialButton(
-                    onPressed: () async {
-                      await provider.reprocessConversation();
-                    },
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-                      child: Text(context.l10n.summarize, style: const TextStyle(color: Colors.white, fontSize: 16)),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 32),
-          ],
+        return _SummaryCallToAction(
+          message: context.l10n.nothingInterestingRetry,
+          actionLabel: context.l10n.summarize,
+          onPressed: () => provider.reprocessConversation(),
         );
       },
+    );
+  }
+}
+
+/// A centred sentence with one secondary button under it ("Summarize", "Generate Summary").
+class _SummaryCallToAction extends StatelessWidget {
+  const _SummaryCallToAction({required this.message, required this.actionLabel, required this.onPressed});
+
+  final String message;
+  final String actionLabel;
+  final Future<void> Function() onPressed;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: OmiSpacing.xxl),
+      child: Column(
+        children: [
+          Text(message, style: OmiType.title3, textAlign: TextAlign.center),
+          const SizedBox(height: OmiSpacing.xl),
+          OmiButton.secondary(label: actionLabel, onPressed: onPressed),
+        ],
+      ),
     );
   }
 }
@@ -374,7 +205,7 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
     final selection = widget.summarySelection;
     if (!selection.canEdit(widget.conversation)) return;
     if (widget.canStartEditing != null && !widget.canStartEditing!()) return;
-    HapticFeedback.mediumImpact();
+    OmiHaptics.medium();
     final controller = TextEditingController(text: currentContent);
     final focusNode = FocusNode();
     setState(() {
@@ -425,6 +256,16 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
     return selection.isApp ? context.l10n.unknownApp : context.l10n.summary;
   }
 
+  Widget _buildNoSummaryForApp(BuildContext context) {
+    return Semantics(
+      button: true,
+      child: GestureDetector(
+        onTap: () => showSummarizedAppsSheet(context),
+        child: Text(context.l10n.noSummaryForApp, style: OmiType.subhead.copyWith(color: OmiColors.textTertiary)),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final selection = widget.summarySelection;
@@ -435,37 +276,15 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
     }
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 20),
+      margin: const EdgeInsets.only(bottom: OmiSpacing.lg),
       child: Column(
         mainAxisAlignment: MainAxisAlignment.start,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
+            padding: const EdgeInsets.symmetric(vertical: OmiSpacing.xs),
             child: content.isEmpty
-                ? Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Expanded(
-                        child: GestureDetector(
-                          onTap: () {
-                            showModalBottomSheet(
-                              context: context,
-                              isScrollControlled: true,
-                              backgroundColor: Colors.transparent,
-                              builder: (context) => const SummarizedAppsBottomSheet(),
-                            );
-                          },
-                          child: RichText(
-                            text: TextSpan(
-                              style: const TextStyle(color: Colors.grey),
-                              text: context.l10n.noSummaryForApp,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  )
+                ? _buildNoSummaryForApp(context)
                 : _isEditing
                     ? _buildEditor(context)
                     : GestureDetector(
@@ -479,104 +298,7 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
                         ),
                       ),
           ),
-
-          // App info in a more subtle format below the content - only show if content is not empty
-          if (content.isNotEmpty && !_isEditing)
-            GestureDetector(
-              onTap: () async {
-                if (widget.app != null) {
-                  PlatformManager.instance.analytics.pageOpened('App Detail');
-                  await routeToPage(context, AppDetailPage(app: widget.app!));
-                }
-              },
-              child: Padding(
-                padding: const EdgeInsets.only(top: 12, left: 4),
-                child: Row(
-                  children: [
-                    // App icon
-                    widget.app != null
-                        ? CachedNetworkImage(
-                            imageUrl: widget.app!.getImageUrl(),
-                            imageBuilder: (context, imageProvider) {
-                              return CircleAvatar(
-                                backgroundColor: Colors.white,
-                                radius: 12,
-                                backgroundImage: imageProvider,
-                              );
-                            },
-                            errorWidget: (context, url, error) {
-                              return const CircleAvatar(
-                                backgroundColor: Colors.white,
-                                radius: 12,
-                                child: Icon(Icons.error_outline_rounded, size: 12),
-                              );
-                            },
-                            progressIndicatorBuilder: (context, url, progress) => CircleAvatar(
-                              backgroundColor: Colors.white,
-                              radius: 12,
-                              child: CircularProgressIndicator(
-                                value: progress.progress,
-                                valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
-                                strokeWidth: 2,
-                              ),
-                            ),
-                          )
-                        : Container(
-                            decoration: BoxDecoration(
-                              image: DecorationImage(
-                                image: AssetImage(Assets.images.background.path),
-                                fit: BoxFit.cover,
-                              ),
-                              borderRadius: const BorderRadius.all(Radius.circular(12.0)),
-                            ),
-                            height: 24,
-                            width: 24,
-                            child: Stack(
-                              alignment: Alignment.center,
-                              children: [Image.asset(Assets.images.herologo.path, height: 16, width: 16)],
-                            ),
-                          ),
-
-                    const SizedBox(width: 8),
-
-                    // App name and description with arrow
-                    Expanded(
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  _summarySourceLabel(context, selection),
-                                  maxLines: 1,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w500,
-                                    color: Colors.white,
-                                    fontSize: 14,
-                                  ),
-                                ),
-                                if (widget.app != null)
-                                  Text(
-                                    widget.app!.description.decodeString,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(color: Colors.grey, fontSize: 12),
-                                  ),
-                              ],
-                            ),
-                          ),
-                          const SizedBox(
-                            width: 42,
-                            child: Icon(Icons.arrow_forward_ios, color: Colors.white, size: 20),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
+          if (content.isNotEmpty && !_isEditing) _buildAppAttribution(context, selection),
         ],
       ),
     );
@@ -592,37 +314,26 @@ class _AppResultDetailWidgetState extends State<AppResultDetailWidget> {
           minLines: 6,
           maxLines: 12,
           maxLength: 10000,
-          style: const TextStyle(color: Colors.white, fontSize: 16, height: 1.5),
+          style: OmiType.callout.copyWith(height: 1.5),
           decoration: InputDecoration(
             filled: true,
-            fillColor: Colors.grey.shade900,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+            fillColor: OmiColors.surface1,
+            border: const OutlineInputBorder(borderRadius: OmiRadius.mdAll, borderSide: BorderSide.none),
             contentPadding: const EdgeInsets.all(14),
-            counterStyle: TextStyle(color: Colors.grey.shade500),
+            counterStyle: OmiType.caption.copyWith(color: OmiColors.textTertiary),
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: OmiSpacing.sm),
         Row(
           mainAxisAlignment: MainAxisAlignment.end,
           children: [
-            TextButton(
+            OmiButton.tertiary(
+              label: context.l10n.cancel,
+              size: OmiButtonSize.compact,
               onPressed: () => _exitEditing(cancelled: true),
-              child: Text(
-                context.l10n.cancel,
-                style: TextStyle(color: Colors.grey.shade300, fontWeight: FontWeight.w500),
-              ),
             ),
-            const SizedBox(width: 8),
-            ElevatedButton(
-              onPressed: _save,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.white,
-                foregroundColor: Colors.black,
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-              ),
-              child: Text(context.l10n.save, style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600)),
-            ),
+            const SizedBox(width: OmiSpacing.xs),
+            OmiButton(label: context.l10n.save, size: OmiButtonSize.compact, onPressed: _save),
           ],
         ),
       ],
@@ -671,62 +382,14 @@ class GetAppsWidgets extends StatelessWidget {
                 onSaveSummarySelection: onSaveSummarySelection,
                 asSliver: true,
               ),
-            const SliverToBoxAdapter(child: SizedBox(height: 8)),
+            const SliverToBoxAdapter(child: SizedBox(height: OmiSpacing.xs)),
           ],
         );
       },
-      child: ListView(
-        shrinkWrap: true,
-        physics: const NeverScrollableScrollPhysics(),
-        children: [
-          const SizedBox(height: 32),
-          Text(
-            context.l10n.noSummaryForConversation,
-            style: Theme.of(context).textTheme.titleLarge!.copyWith(fontSize: 20),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 24),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                decoration: BoxDecoration(
-                  border: const GradientBoxBorder(
-                    gradient: LinearGradient(
-                      colors: [
-                        Color.fromARGB(127, 208, 208, 208),
-                        Color.fromARGB(127, 188, 99, 121),
-                        Color.fromARGB(127, 86, 101, 182),
-                        Color.fromARGB(127, 126, 190, 236),
-                      ],
-                    ),
-                    width: 2,
-                  ),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: MaterialButton(
-                  onPressed: () {
-                    showModalBottomSheet(
-                      context: context,
-                      isScrollControlled: true,
-                      backgroundColor: Colors.transparent,
-                      builder: (context) => const SummarizedAppsBottomSheet(),
-                    );
-                  },
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 0),
-                    child: Text(
-                      context.l10n.generateSummary,
-                      style: const TextStyle(color: Colors.white, fontSize: 16),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 32),
-        ],
+      child: _SummaryCallToAction(
+        message: context.l10n.noSummaryForConversation,
+        actionLabel: context.l10n.generateSummary,
+        onPressed: () => showSummarizedAppsSheet(context),
       ),
     );
   }
@@ -774,7 +437,7 @@ class GetGeolocationWidgets extends StatelessWidget {
                       MapsUtil.launchMap(geolocation.latitude!, geolocation.longitude!);
                     },
                     child: ClipRRect(
-                      borderRadius: BorderRadius.circular(16),
+                      borderRadius: OmiRadius.lgAll,
                       child: SizedBox(
                         height: 200,
                         child: Stack(
@@ -785,7 +448,7 @@ class GetGeolocationWidgets extends StatelessWidget {
                             OmiMapPreview(
                               key: const ValueKey('conversation_location_map'),
                               pins: [OmiMapPin(latitude: geolocation.latitude!, longitude: geolocation.longitude!)],
-                              backgroundColor: const Color(0xFF2A2A2A),
+                              backgroundColor: OmiColors.surface2,
                             ),
                             // Gradient blur overlay from bottom
                             Positioned(
@@ -810,11 +473,9 @@ class GetGeolocationWidgets extends StatelessWidget {
                               right: 16,
                               child: Text(
                                 _getShortAddress(context, geolocation.address?.decodeString),
-                                style: const TextStyle(
-                                  color: Colors.white,
-                                  fontSize: 15,
+                                style: OmiType.subhead.copyWith(
                                   fontWeight: FontWeight.w500,
-                                  shadows: [Shadow(offset: Offset(0, 1), blurRadius: 2, color: Colors.black)],
+                                  shadows: const [Shadow(offset: Offset(0, 1), blurRadius: 2, color: Colors.black)],
                                 ),
                                 maxLines: 1,
                                 overflow: TextOverflow.ellipsis,
@@ -840,423 +501,106 @@ extension _AppResultDetailWidgetSliver on _AppResultDetailWidgetState {
         slivers: [
           SliverToBoxAdapter(
             child: Padding(
-              padding: const EdgeInsets.symmetric(vertical: 8),
-              child: content.isEmpty
-                  ? Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () {
-                              showModalBottomSheet(
-                                context: context,
-                                isScrollControlled: true,
-                                backgroundColor: Colors.transparent,
-                                builder: (context) => const SummarizedAppsBottomSheet(),
-                              );
-                            },
-                            child: RichText(
-                              text: TextSpan(
-                                style: const TextStyle(color: Colors.grey),
-                                text: context.l10n.noSummaryForApp,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    )
-                  : _buildEditor(context),
+              padding: const EdgeInsets.symmetric(vertical: OmiSpacing.xs),
+              child: content.isEmpty ? _buildNoSummaryForApp(context) : _buildEditor(context),
             ),
           ),
-          const SliverToBoxAdapter(child: SizedBox(height: 20)),
+          const SliverToBoxAdapter(child: SizedBox(height: OmiSpacing.lg)),
         ],
       );
     }
 
     return SliverMainAxisGroup(
       slivers: [
-        if (content.isNotEmpty)
-          SliverPadding(
-            padding: const EdgeInsets.only(bottom: 20),
-            sliver: ConversationMarkdownSliver(
-              content: content,
-              searchQuery: widget.searchQuery,
-              currentResultIndex: widget.currentResultIndex,
-              onDoubleTap: widget.onSaveSummarySelection == null || !selection.canEdit(widget.conversation)
-                  ? null
-                  : () => _startEditing(content),
-            ),
+        SliverPadding(
+          padding: const EdgeInsets.only(bottom: OmiSpacing.lg),
+          sliver: ConversationMarkdownSliver(
+            content: content,
+            searchQuery: widget.searchQuery,
+            currentResultIndex: widget.currentResultIndex,
+            onDoubleTap: widget.onSaveSummarySelection == null || !selection.canEdit(widget.conversation)
+                ? null
+                : () => _startEditing(content),
           ),
+        ),
         SliverToBoxAdapter(child: _buildAppAttribution(context, selection)),
       ],
     );
   }
 
   Widget _buildAppAttribution(BuildContext context, ConversationSummarySelection selection) {
-    return GestureDetector(
-      onTap: () async {
-        if (widget.app != null) {
-          PlatformManager.instance.analytics.pageOpened('App Detail');
-          await routeToPage(context, AppDetailPage(app: widget.app!));
-        }
-      },
-      child: Padding(
-        padding: const EdgeInsets.only(top: 12, left: 4),
-        child: Row(
-          children: [
-            widget.app != null
-                ? CachedNetworkImage(
-                    imageUrl: widget.app!.getImageUrl(),
-                    imageBuilder: (context, imageProvider) {
-                      return CircleAvatar(backgroundColor: Colors.white, radius: 12, backgroundImage: imageProvider);
-                    },
-                    errorWidget: (context, url, error) {
-                      return const CircleAvatar(
-                        backgroundColor: Colors.white,
-                        radius: 12,
-                        child: Icon(Icons.error_outline_rounded, size: 12),
-                      );
-                    },
-                    progressIndicatorBuilder: (context, url, progress) => CircleAvatar(
-                      backgroundColor: Colors.white,
-                      radius: 12,
-                      child: CircularProgressIndicator(
-                        value: progress.progress,
-                        valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
-                        strokeWidth: 2,
-                      ),
-                    ),
-                  )
-                : Container(
-                    decoration: BoxDecoration(
-                      image: DecorationImage(image: AssetImage(Assets.images.background.path), fit: BoxFit.cover),
-                      borderRadius: const BorderRadius.all(Radius.circular(12.0)),
-                    ),
-                    height: 24,
-                    width: 24,
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [Image.asset(Assets.images.herologo.path, height: 16, width: 16)],
-                    ),
-                  ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          _summarySourceLabel(context, selection),
-                          maxLines: 1,
-                          style: const TextStyle(fontWeight: FontWeight.w500, color: Colors.white, fontSize: 14),
-                        ),
-                        if (widget.app != null)
-                          Text(
-                            widget.app!.description.decodeString,
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(color: Colors.grey, fontSize: 12),
-                          ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 42, child: Icon(Icons.arrow_forward_ios, color: Colors.white, size: 20)),
-                ],
-              ),
-            ),
-          ],
+    const avatarRadius = 12.0;
+    final app = widget.app;
+    final Widget avatar;
+    if (app != null) {
+      avatar = CachedNetworkImage(
+        imageUrl: app.getImageUrl(),
+        imageBuilder: (context, imageProvider) =>
+            CircleAvatar(backgroundColor: OmiColors.textPrimary, radius: avatarRadius, backgroundImage: imageProvider),
+        errorWidget: (context, url, error) => const CircleAvatar(
+          backgroundColor: OmiColors.textPrimary,
+          radius: avatarRadius,
+          child: Icon(Icons.error_outline_rounded, size: 12),
         ),
-      ),
-    );
-  }
-}
-
-///************************************************
-///************ SETTINGS BOTTOM SHEET *************
-///************************************************
-
-///************************************************
-
-class GetSheetTitle extends StatelessWidget {
-  const GetSheetTitle({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return Consumer<ConversationDetailProvider>(
-      builder: (context, provider, child) {
-        return Column(
-          children: [
-            ListTile(
-              title: Text(
-                provider.conversation.discarded
-                    ? context.l10n.discardedConversation
-                    : provider.conversation.structured.title,
-                style: Theme.of(context).textTheme.labelLarge,
-              ),
-              leading: const Icon(Icons.description),
-              trailing: IconButton(
-                icon: const Icon(Icons.cancel_outlined),
-                onPressed: () {
-                  Navigator.of(context).pop(true);
-                },
-              ),
-            ),
-            const SizedBox(height: 8),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class GetDevToolsOptions extends StatefulWidget {
-  final ServerConversation conversation;
-
-  const GetDevToolsOptions({super.key, required this.conversation});
-
-  @override
-  State<GetDevToolsOptions> createState() => _GetDevToolsOptionsState();
-}
-
-class _GetDevToolsOptionsState extends State<GetDevToolsOptions> {
-  bool loadingAppIntegrationTest = false;
-
-  void changeLoadingAppIntegrationTest(bool value) {
-    setState(() {
-      loadingAppIntegrationTest = value;
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        Card(
-          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
-          child: ListTile(
-            title: Text(context.l10n.triggerConversationIntegration),
-            leading: loadingAppIntegrationTest
-                ? const SizedBox(
-                    height: 24,
-                    width: 24,
-                    child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
-                  )
-                : const Icon(Icons.send_to_mobile_outlined),
-            onTap: () {
-              changeLoadingAppIntegrationTest(true);
-              if (SharedPreferencesUtil().webhookOnConversationCreated.isEmpty) {
-                showDialog(
-                  context: context,
-                  builder: (c) => getDialog(
-                    context,
-                    () {
-                      Navigator.pop(context);
-                    },
-                    () {
-                      Navigator.pop(context);
-                      routeToPage(context, const DeveloperSettingsPage());
-                    },
-                    context.l10n.webhookUrlNotSet,
-                    context.l10n.setWebhookUrlInSettings,
-                    okButtonText: context.l10n.settings,
-                  ),
-                );
-                changeLoadingAppIntegrationTest(false);
-                return;
-              } else {
-                webhookOnConversationCreatedCall(widget.conversation, returnRawBody: true).then((response) {
-                  if (context.mounted) {
-                    showDialog(
-                      context: context,
-                      builder: (c) => getDialog(
-                        context,
-                        () => Navigator.pop(context),
-                        () => Navigator.pop(context),
-                        context.l10n.result,
-                        response,
-                        okButtonText: context.l10n.ok,
-                        singleButton: true,
-                      ),
-                    );
-                  }
-                  changeLoadingAppIntegrationTest(false);
-                });
-              }
-            },
-          ),
+        progressIndicatorBuilder: (context, url, progress) => const CircleAvatar(
+          backgroundColor: OmiColors.surface2,
+          radius: avatarRadius,
+          child: OmiSpinner(size: OmiSpinnerSize.small),
         ),
-        Card(
-          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.all(Radius.circular(8))),
-          child: ListTile(
-            title: Text(context.l10n.testConversationPrompt),
-            leading: const Icon(Icons.chat),
-            trailing: const Icon(Icons.arrow_forward_ios, size: 20),
-            onTap: () {
-              routeToPage(context, TestPromptsPage(conversation: widget.conversation));
-            },
-          ),
+      );
+    } else {
+      avatar = Container(
+        decoration: BoxDecoration(
+          image: DecorationImage(image: AssetImage(Assets.images.background.path), fit: BoxFit.cover),
+          borderRadius: OmiRadius.mdAll,
         ),
-      ],
-    );
-  }
-}
+        height: 24,
+        width: 24,
+        alignment: Alignment.center,
+        child: Image.asset(Assets.images.herologo.path, height: 16, width: 16),
+      );
+    }
 
-class CalendarEventDetailsSheet extends StatefulWidget {
-  final CalendarEventLink calendarEvent;
-  final Future<void> Function()? onUnlink;
-
-  const CalendarEventDetailsSheet({super.key, required this.calendarEvent, this.onUnlink});
-
-  @override
-  State<CalendarEventDetailsSheet> createState() => _CalendarEventDetailsSheetState();
-}
-
-class _CalendarEventDetailsSheetState extends State<CalendarEventDetailsSheet> {
-  bool _unlinking = false;
-
-  String _fmt(DateTime dt) {
-    final h = dt.hour % 12 == 0 ? 12 : dt.hour % 12;
-    final m = dt.minute.toString().padLeft(2, '0');
-    final period = dt.hour < 12 ? 'AM' : 'PM';
-    return '$h:$m $period';
-  }
-
-  Future<void> _shareWithAttendees() async {
-    final emails = widget.calendarEvent.attendeeEmails;
-    if (emails.isEmpty) return;
-    final subject = Uri.encodeComponent('Notes: ${widget.calendarEvent.title}');
-    final uri = Uri.parse('mailto:${emails.join(',')}?subject=$subject');
-    await launchUrl(uri);
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final start = widget.calendarEvent.startTime;
-    final end = widget.calendarEvent.endTime;
-    final timeStr = '${_fmt(start)} – ${_fmt(end)}';
-
-    return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xFF1A1A1A),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
-      padding: EdgeInsets.fromLTRB(20, 16, 20, MediaQuery.of(context).padding.bottom + 24),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(
-            child: Container(
-              width: 36,
-              height: 4,
-              decoration: BoxDecoration(color: Colors.grey[700], borderRadius: BorderRadius.circular(2)),
-            ),
-          ),
-          const SizedBox(height: 20),
-          Row(
+    return Semantics(
+      button: app != null,
+      child: GestureDetector(
+        onTap: () async {
+          if (app != null) {
+            PlatformManager.instance.analytics.pageOpened('App Detail');
+            await routeToPage(context, AppDetailPage(app: app));
+          }
+        },
+        child: Padding(
+          padding: const EdgeInsets.only(top: OmiSpacing.sm, left: OmiSpacing.xxs),
+          child: Row(
             children: [
-              const Icon(Icons.calendar_today, size: 18, color: Colors.white70),
-              const SizedBox(width: 10),
+              avatar,
+              const SizedBox(width: OmiSpacing.xs),
               Expanded(
-                child: Text(
-                  widget.calendarEvent.title,
-                  style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _summarySourceLabel(context, selection),
+                      maxLines: 1,
+                      style: OmiType.footnote.copyWith(fontWeight: FontWeight.w500),
+                    ),
+                    if (app != null)
+                      Text(
+                        app.description.decodeString,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: OmiType.caption.copyWith(color: OmiColors.textTertiary),
+                      ),
+                  ],
                 ),
+              ),
+              const SizedBox(
+                width: 42,
+                child: Icon(Icons.arrow_forward_ios, color: OmiColors.textPrimary, size: 20),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              const Icon(Icons.access_time, size: 16, color: Colors.white54),
-              const SizedBox(width: 8),
-              Text(timeStr, style: const TextStyle(color: Colors.white70, fontSize: 14)),
-            ],
-          ),
-          if (widget.calendarEvent.attendees.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(Icons.people_outline, size: 16, color: Colors.white54),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    widget.calendarEvent.attendees.join(', '),
-                    style: const TextStyle(color: Colors.white70, fontSize: 14),
-                  ),
-                ),
-              ],
-            ),
-          ],
-          if (widget.calendarEvent.htmlLink != null) ...[
-            const SizedBox(height: 16),
-            GestureDetector(
-              onTap: () => launchUrl(Uri.parse(widget.calendarEvent.htmlLink!), mode: LaunchMode.externalApplication),
-              child: const Text(
-                'Open in Google Calendar',
-                style: TextStyle(color: Color(0xFF4285F4), fontSize: 14, decoration: TextDecoration.underline),
-              ),
-            ),
-          ],
-          const SizedBox(height: 24),
-          const Divider(color: Color(0xFF2C2C2E)),
-          const SizedBox(height: 8),
-          // Share with attendees button
-          if (widget.calendarEvent.attendeeEmails.isNotEmpty)
-            _ActionRow(icon: Icons.share_outlined, label: 'Share with attendees', onTap: _shareWithAttendees),
-          // Unlink button
-          if (widget.onUnlink != null)
-            _ActionRow(
-              icon: Icons.link_off,
-              label: 'Unlink calendar event',
-              color: Colors.redAccent,
-              loading: _unlinking,
-              onTap: () async {
-                setState(() => _unlinking = true);
-                await widget.onUnlink!();
-                if (!context.mounted) return;
-                Navigator.pop(context);
-              },
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ActionRow extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final VoidCallback? onTap;
-  final Color color;
-  final bool loading;
-
-  const _ActionRow({
-    required this.icon,
-    required this.label,
-    this.onTap,
-    this.color = Colors.white,
-    this.loading = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return InkWell(
-      onTap: loading ? null : onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
-        child: Row(
-          children: [
-            loading
-                ? SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: color))
-                : Icon(icon, size: 20, color: color),
-            const SizedBox(width: 12),
-            Text(label, style: TextStyle(color: color, fontSize: 15)),
-          ],
         ),
       ),
     );
