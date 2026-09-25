@@ -323,6 +323,13 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
       .where((w) => w.status == WalStatus.miss && (w.storage == WalStorage.sdcard || w.storage == WalStorage.flashPage))
       .toList();
 
+  /// Phone-local recordings still waiting to be uploaded for transcription —
+  /// the backlog a transcription outage or offline capture leaves behind.
+  /// Uploads that already reached the server (`uploaded`, processing there)
+  /// count too: their transcripts are still pending. Device-side files are
+  /// [missingWalsOnDevice], a different drain.
+  List<Wal> get pendingLocalTranscriptionWals => pendingWals.where((w) => w.storage == WalStorage.disk).toList();
+
   // Backward compatibility getters
   bool get isSyncing => _syncState.isSyncing;
   bool get syncCompleted => _syncState.isCompleted;

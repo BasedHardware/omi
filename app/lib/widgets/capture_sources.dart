@@ -21,6 +21,9 @@ abstract final class CaptureSources {
         return Icons.phone_iphone;
       case 'apple_watch':
         return Icons.watch_outlined;
+      case 'openglass':
+      case 'rayban_meta':
+        return Icons.camera_alt_outlined;
       default:
         return Icons.mic_none;
     }

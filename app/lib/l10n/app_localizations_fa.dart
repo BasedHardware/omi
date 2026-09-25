@@ -935,9 +935,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'افزودن به claude_desktop_config.json';
-
-  @override
   String get copyConfig => 'کپی پیکربندی';
 
   @override
@@ -2481,13 +2478,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get clearAllNodesAndConnections => 'پاک کردن تمام گره‌ها و اتصالات';
 
   @override
-  String get addToClaudeDesktopConfig => 'افزودن به claude_desktop_config.json';
-
-  @override
   String get connectAiAssistantsToData => 'دستیارهای هوش مصنوعی را به داده‌های خود متصل کنید';
-
-  @override
-  String get useYourMcpApiKey => 'از کلید MCP API خود استفاده کنید';
 
   @override
   String get realTimeTranscript => 'رونوشت بلادرنگ';
@@ -9966,7 +9957,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get transcriptionNoAudio => 'رونویسی صدا دریافت نمی‌کند';
 
   @override
-  String get tapPlusToStartRecording => 'برای شروع ضبط روی + بزنید';
+  String get tapPlusToStartRecording => 'برای شروع ضبط روی دکمه ضبط بزنید';
 
   @override
   String get chatBlockTask => 'وظیفه';
@@ -10209,7 +10200,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'گفتگوهایی که ضبط می‌کنید اینجا نمایش داده می‌شوند. برای ضبط اولین گفتگو در خانه روی + بزنید.';
+      'گفتگوهایی که ضبط می‌کنید اینجا نمایش داده می‌شوند. برای ضبط اولین گفتگو در خانه روی دکمه ضبط بزنید.';
 
   @override
   String get conversationMap => 'نقشه گفتگوها';
@@ -10685,7 +10676,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get deviceConnecting => 'در حال اتصال…';
 
   @override
-  String get recordOptionsTip => 'نکته: برای ضبط تماس تلفنی، دکمه ضبط را لمس کرده و نگه دارید.';
+  String get recordOptionsTip => 'نکته: برای ضبط تماس تلفنی، روی فلش دکمه ضبط بزنید.';
 
   @override
   String get firmwareUpdateFailedTitle => 'به‌روزرسانی ناموفق بود';
@@ -11086,4 +11077,157 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get helpAndAbout => 'راهنما و درباره';
+
+  @override
+  String get speakerTagPromptTitle => 'به Omi در شناختن صداها کمک کنید';
+
+  @override
+  String get speakerTagPromptSubtitle => 'بررسی سریع صداهای دو روز گذشته';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'این شما هستید؟';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'این $name است؟';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'این کیست؟';
+
+  @override
+  String get speakerTagPromptThatsMe => 'این من هستم';
+
+  @override
+  String get speakerTagPromptNotMe => 'من نیستم';
+
+  @override
+  String get speakerTagPromptSomeoneNew => 'فردی جدید';
+
+  @override
+  String get speakerTagPromptDontKnow => 'کسی که نمی‌شناسم';
+
+  @override
+  String get speakerTagPromptNotSure => 'مطمئن نیستم';
+
+  @override
+  String get speakerTagPromptPlayClip => 'پخش کلیپ';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current از $total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => 'صدای افرادی را که نام می‌برید به خاطر بسپار';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody =>
+      'Omi یک نمونه کوتاه از صدا نگه می‌دارد تا دفعه بعد آن‌ها را بشناسد. هر زمان می‌توانید این را در تنظیمات تغییر دهید.';
+
+  @override
+  String get speakerTagPromptThanks => 'ممنون! Omi در شناختن صداها بهتر خواهد شد.';
+
+  @override
+  String get speakerTagPromptNameHint => 'نام او';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'پخش این کلیپ ممکن نشد';
+
+  @override
+  String get speakerTagPromptAnswerFailed => 'ذخیره نشد. لطفاً دوباره تلاش کنید.';
+
+  @override
+  String get voiceSettingsAskToTag => 'از من بخواه صداها را برچسب بزنم';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle => 'گاهی Omi می‌پرسد چه کسی در گفتگوهای اخیر شما صحبت می‌کرد';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle =>
+      'وقتی کسی را نام‌گذاری می‌کنید، Omi یک نمونه کوتاه از صدا نگه می‌دارد تا دفعه بعد او را بشناسد';
+
+  @override
+  String get leaveBlank => 'خالی بگذارید';
+
+  @override
+  String get mcpOAuthSetup =>
+      'در claude.ai یک کانکتور سفارشی اضافه کنید و URL سرور را جای‌گذاری کنید. اگر Claude یک Client ID پیشرفته OAuth خواست، از مقدار زیر استفاده کنید و secret را خالی بگذارید — هرگز کلید MCP API خود را به‌عنوان secret OAuth استفاده نکنید.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'افزودن به ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'در Claude Desktop → Settings → Connectors یک کانکتور سفارشی اضافه کنید و URL سرور را جای‌گذاری کنید. اگر Claude یک Client ID پیشرفته OAuth خواست، از مقدار زیر استفاده کنید و secret را خالی بگذارید — هرگز کلید MCP API خود را به‌عنوان secret OAuth استفاده نکنید.';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'رونویسی‌ها در دسترس نیستند، ضبط در دستگاه ادامه دارد و بعداً پردازش می‌شود';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'رونویسی در دسترس نیست · در حال ذخیره روی دستگاه';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'رونویسی‌های در انتظار $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'رونویسی‌های در انتظار $count';
+  }
+
+  @override
+  String get captureSourceCall => 'تماس';
+
+  @override
+  String get captureSourcePhoneMic => 'میکروفون تلفن';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'ادامه';
+
+  @override
+  String get finish => 'پایان';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'آویز متوقف است · پس از پایان ادامه می‌یابد';
+
+  @override
+  String get pendantIsListeningTitle => 'آویز شما در حال گوش دادن است';
+
+  @override
+  String get oneSourceAtATime => 'Omi هر بار فقط از یک منبع ضبط می‌کند.';
+
+  @override
+  String get recordWithPhoneInstead => 'به‌جای آن با تلفن ضبط کنید';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'آویز تا پایان کار شما متوقف می‌ماند';
+
+  @override
+  String get pendantPausesDuringCall => 'آویز در طول تماس متوقف می‌ماند';
+
+  @override
+  String get keepUsingPendant => 'ادامه با آویز';
+
+  @override
+  String get recordWith => 'ضبط با';
+
+  @override
+  String get moreWaysToRecord => 'روش‌های دیگر ضبط';
+
+  @override
+  String get openCall => 'باز کردن تماس';
+
+  @override
+  String get captureRecoveryBanner => 'صدای آویز به برنامه نمی‌رسد — برای تعمیر ضربه بزنید';
 }
