@@ -11266,4 +11266,9 @@ class AppLocalizationsSv extends AppLocalizations {
   @override
   String get capturePendantDisconnectedDetail =>
       'Hängsmycket tappade anslutningen till den här telefonen. Omi ansluter igen av sig själv när hängsmycket är på och i närheten. Allt som spelats in innan är säkert.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name och andra';
+  }
 }

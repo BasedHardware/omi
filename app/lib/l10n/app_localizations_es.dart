@@ -11288,4 +11288,9 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get capturePendantDisconnectedDetail =>
       'Tu colgante perdió la conexión con este teléfono. Omi se volverá a conectar solo cuando el colgante esté encendido y cerca. Todo lo grabado antes está a salvo.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name y otros';
+  }
 }

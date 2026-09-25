@@ -11334,4 +11334,9 @@ class AppLocalizationsTa extends AppLocalizations {
   @override
   String get capturePendantDisconnectedDetail =>
       'உங்கள் பதக்கம் இந்த ஃபோனுடனான இணைப்பை இழந்தது. பதக்கம் இயக்கத்தில் இருந்து அருகில் இருக்கும்போது Omi தானாகவே மீண்டும் இணையும். இதற்கு முன் பதிவானவை அனைத்தும் பாதுகாப்பாக உள்ளன.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name மற்றும் மற்றவர்கள்';
+  }
 }

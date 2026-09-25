@@ -11289,4 +11289,9 @@ class AppLocalizationsSl extends AppLocalizations {
   @override
   String get capturePendantDisconnectedDetail =>
       'Obesek je izgubil povezavo s tem telefonom. Omi se bo sam znova povezal, ko bo obesek vklopljen in v bližini. Vse, kar je bilo posneto prej, je varno.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name in drugi';
+  }
 }

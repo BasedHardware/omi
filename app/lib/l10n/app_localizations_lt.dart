@@ -11276,4 +11276,9 @@ class AppLocalizationsLt extends AppLocalizations {
   @override
   String get capturePendantDisconnectedDetail =>
       'Pakabukas prarado ryšį su šiuo telefonu. Omi pats vėl prisijungs, kai pakabukas bus įjungtas ir netoliese. Viskas, kas įrašyta iki šiol, išsaugota.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name ir kiti';
+  }
 }

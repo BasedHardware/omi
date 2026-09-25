@@ -11252,4 +11252,9 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get capturePendantDisconnectedDetail =>
       'Mặt dây chuyền đã mất kết nối với điện thoại này. Omi sẽ tự kết nối lại khi mặt dây chuyền bật và ở gần. Mọi thứ đã ghi trước đó vẫn an toàn.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name và những người khác';
+  }
 }

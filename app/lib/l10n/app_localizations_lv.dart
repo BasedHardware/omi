@@ -11284,4 +11284,9 @@ class AppLocalizationsLv extends AppLocalizations {
   @override
   String get capturePendantDisconnectedDetail =>
       'Kulons zaudēja savienojumu ar šo tālruni. Omi pats atjaunos savienojumu, kad kulons būs ieslēgts un tuvumā. Viss, kas ierakstīts līdz šim, ir drošībā.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name un citi';
+  }
 }

@@ -11291,4 +11291,9 @@ class AppLocalizationsNl extends AppLocalizations {
   @override
   String get capturePendantDisconnectedDetail =>
       'Je hanger heeft de verbinding met deze telefoon verloren. Omi maakt vanzelf opnieuw verbinding zodra de hanger aan staat en in de buurt is. Alles wat eerder is opgenomen, is veilig.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name en anderen';
+  }
 }

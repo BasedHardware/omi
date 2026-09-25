@@ -11246,4 +11246,9 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get capturePendantDisconnectedDetail =>
       'Your pendant lost its connection to this phone. Omi reconnects on its own when the pendant is on and nearby. Everything recorded before this is safe.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name + others';
+  }
 }

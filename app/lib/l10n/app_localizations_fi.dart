@@ -11260,4 +11260,9 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String get capturePendantDisconnectedDetail =>
       'Riipus menetti yhteyden tähän puhelimeen. Omi yhdistää itsestään uudelleen, kun riipus on päällä ja lähellä. Kaikki tätä ennen tallennettu on tallessa.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name ja muut';
+  }
 }

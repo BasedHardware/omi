@@ -11320,4 +11320,9 @@ class AppLocalizationsIt extends AppLocalizations {
   @override
   String get capturePendantDisconnectedDetail =>
       'Il ciondolo ha perso la connessione con questo telefono. Omi si riconnetterà da solo quando il ciondolo sarà acceso e vicino. Tutto ciò che è stato registrato prima è al sicuro.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name e altri';
+  }
 }

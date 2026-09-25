@@ -11266,4 +11266,9 @@ class AppLocalizationsMr extends AppLocalizations {
   @override
   String get capturePendantDisconnectedDetail =>
       'तुमच्या पेंडंटचा या फोनशी संपर्क तुटला. पेंडंट चालू आणि जवळ असल्यावर Omi आपोआप पुन्हा कनेक्ट होईल. याआधी रेकॉर्ड झालेले सर्व सुरक्षित आहे.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name आणि इतर';
+  }
 }

@@ -11272,4 +11272,9 @@ class AppLocalizationsSr extends AppLocalizations {
   @override
   String get capturePendantDisconnectedDetail =>
       'Привезак је изгубио везу са овим телефоном. Omi ће се сам поново повезати кад је привезак укључен и у близини. Све снимљено до сада је безбедно.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name и други';
+  }
 }
