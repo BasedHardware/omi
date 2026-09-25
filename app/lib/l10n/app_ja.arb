@@ -3553,5 +3553,6 @@
     "deviceNameTooLong": "名前が長すぎます（最大{maxBytes}文字。絵文字や日本語などは複数文字分としてカウントされます）",
     "deviceNameInvalidCharacters": "名前にサポートされていない文字が含まれています",
     "deviceRenameFailed": "Omiに名前を保存できませんでした。接続されていることを確認して、もう一度お試しください。",
-    "deviceRenamed": "デバイス名を{name}に変更しました"
+    "deviceRenamed": "デバイス名を{name}に変更しました",
+    "captureRecoveryBanner": "ペンダントの音声がアプリに届いていません — タップして修復"
 }

@@ -11119,5 +11119,6 @@
     "deviceNameTooLong": "Masyadong mahaba ang pangalan (hanggang {maxBytes} character; mas malaki ang bilang ng emoji at accent)",
     "deviceNameInvalidCharacters": "May hindi sinusuportahang character ang pangalan",
     "deviceRenameFailed": "Hindi ma-save ang pangalan sa iyong Omi. Tiyaking nakakonekta ito at subukang muli.",
-    "deviceRenamed": "Pinalitan ang pangalan ng device sa {name}"
+    "deviceRenamed": "Pinalitan ang pangalan ng device sa {name}",
+    "captureRecoveryBanner": "Hindi nakakarating sa app ang audio ng pendant — i-tap para ayusin"
 }

@@ -3553,5 +3553,6 @@
     "deviceNameTooLong": "Nimi on liian pitkä (enintään {maxBytes} merkkiä; emojit ja ääkköset vievät enemmän)",
     "deviceNameInvalidCharacters": "Nimi sisältää merkkejä, joita ei tueta",
     "deviceRenameFailed": "Nimeä ei voitu tallentaa Omiin. Tarkista, että se on yhdistetty, ja yritä uudelleen.",
-    "deviceRenamed": "Laite nimettiin uudelleen: {name}"
+    "deviceRenamed": "Laite nimettiin uudelleen: {name}",
+    "captureRecoveryBanner": "Riipuksen ääni ei tule perille sovellukseen — korjaa napauttamalla"
 }

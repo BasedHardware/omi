@@ -3553,5 +3553,6 @@
     "deviceNameTooLong": "Nimi on liiga pikk (kuni {maxBytes} märki; emojid ja täpitähed loevad rohkem)",
     "deviceNameInvalidCharacters": "Nimi sisaldab toetamata märke",
     "deviceRenameFailed": "Nime ei õnnestunud Omi seadmesse salvestada. Kontrolli, et see on ühendatud, ja proovi uuesti.",
-    "deviceRenamed": "Seade nimetati ümber: {name}"
+    "deviceRenamed": "Seade nimetati ümber: {name}",
+    "captureRecoveryBanner": "Ripatsi heli ei jõua rakendusse — parandamiseks puudutage"
 }

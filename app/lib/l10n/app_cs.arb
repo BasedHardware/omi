@@ -3553,5 +3553,6 @@
     "deviceNameTooLong": "Název je příliš dlouhý (max. {maxBytes} znaků; emoji a diakritika se počítají víc)",
     "deviceNameInvalidCharacters": "Název obsahuje nepodporované znaky",
     "deviceRenameFailed": "Název se nepodařilo uložit do Omi. Zkontrolujte, že je připojeno, a zkuste to znovu.",
-    "deviceRenamed": "Zařízení přejmenováno na {name}"
+    "deviceRenamed": "Zařízení přejmenováno na {name}",
+    "captureRecoveryBanner": "Zvuk přívěsku se do aplikace nedostává — opravte klepnutím"
 }

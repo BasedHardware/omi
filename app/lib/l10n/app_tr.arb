@@ -3588,5 +3588,6 @@
     "deviceNameTooLong": "Ad çok uzun (en fazla {maxBytes} karakter; emoji ve aksanlı harfler daha fazla sayılır)",
     "deviceNameInvalidCharacters": "Ad desteklenmeyen karakterler içeriyor",
     "deviceRenameFailed": "Ad Omi'nize kaydedilemedi. Bağlı olduğunu kontrol edip yeniden deneyin.",
-    "deviceRenamed": "Cihaz adı {name} olarak değiştirildi"
+    "deviceRenamed": "Cihaz adı {name} olarak değiştirildi",
+    "captureRecoveryBanner": "Kolye sesi uygulamaya ulaşmıyor — onarmak için dokunun"
 }

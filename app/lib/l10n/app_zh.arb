@@ -3553,5 +3553,6 @@
     "deviceNameTooLong": "名称过长（最多 {maxBytes} 个字符；表情符号和汉字按多个字符计算）",
     "deviceNameInvalidCharacters": "名称包含不支持的字符",
     "deviceRenameFailed": "无法将名称保存到 Omi。请确认设备已连接，然后重试。",
-    "deviceRenamed": "设备已重命名为 {name}"
+    "deviceRenamed": "设备已重命名为 {name}",
+    "captureRecoveryBanner": "吊坠音频未送达应用 — 轻点以修复"
 }

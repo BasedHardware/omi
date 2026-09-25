@@ -11119,5 +11119,6 @@
     "deviceNameTooLong": "Ime je predolgo (do {maxBytes} znakov; emojiji in šumniki štejejo več)",
     "deviceNameInvalidCharacters": "Ime vsebuje nepodprte znake",
     "deviceRenameFailed": "Imena ni bilo mogoče shraniti v Omi. Preverite, ali je povezan, in poskusite znova.",
-    "deviceRenamed": "Naprava je preimenovana v {name}"
+    "deviceRenamed": "Naprava je preimenovana v {name}",
+    "captureRecoveryBanner": "Zvuk obeska ne prihaja v aplikacijo — tapnite za popravilo"
 }

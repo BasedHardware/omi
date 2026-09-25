@@ -3588,5 +3588,6 @@
     "deviceNameTooLong": "Nama terlalu panjang (maksimal {maxBytes} karakter; emoji dan aksen dihitung lebih)",
     "deviceNameInvalidCharacters": "Nama mengandung karakter yang tidak didukung",
     "deviceRenameFailed": "Nama tidak dapat disimpan ke Omi Anda. Pastikan perangkat terhubung, lalu coba lagi.",
-    "deviceRenamed": "Nama perangkat diubah menjadi {name}"
+    "deviceRenamed": "Nama perangkat diubah menjadi {name}",
+    "captureRecoveryBanner": "Audio pendant tidak sampai ke aplikasi — ketuk untuk memperbaiki"
 }

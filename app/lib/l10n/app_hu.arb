@@ -3649,5 +3649,6 @@
     "deviceNameTooLong": "A név túl hosszú (legfeljebb {maxBytes} karakter; az emodzsik és ékezetek többet számítanak)",
     "deviceNameInvalidCharacters": "A név nem támogatott karaktereket tartalmaz",
     "deviceRenameFailed": "A nevet nem sikerült elmenteni az Omira. Ellenőrizd, hogy csatlakoztatva van, majd próbáld újra.",
-    "deviceRenamed": "Az eszköz új neve: {name}"
+    "deviceRenamed": "Az eszköz új neve: {name}",
+    "captureRecoveryBanner": "A medál hangja nem érkezik meg az alkalmazásba — a javításhoz koppintson"
 }

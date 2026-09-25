@@ -11119,5 +11119,6 @@
     "deviceNameTooLong": "Име је предугачко (до {maxBytes} знакова; емоџији и dijakritički znakovi se računaju više)",
     "deviceNameInvalidCharacters": "Име садржи неподржане знакове",
     "deviceRenameFailed": "Име није могло да се сачува на Omi. Проверите да ли је повезан и покушајте поново.",
-    "deviceRenamed": "Уређај је преименован у {name}"
+    "deviceRenamed": "Уређај је преименован у {name}",
+    "captureRecoveryBanner": "Звук привеска не стиже до апликације — додирните за поправку"
 }

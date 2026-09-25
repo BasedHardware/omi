@@ -449,6 +449,52 @@ def test_get_memories_created_desc_scan_is_capped_for_hosted_mcp():
     assert service.read.call_count == 2
 
 
+def test_get_memories_locked_null_content_does_not_crash():
+    service = MagicMock()
+    service.read.return_value = [
+        SimpleNamespace(
+            model_dump=lambda mode: {
+                'id': 'm1',
+                'content': None,
+                'is_locked': True,
+            }
+        )
+    ]
+    with (
+        patch.object(
+            sse_memories, 'authorize_memory_external_default_memory_read', return_value=_allowed_empty_result()
+        ),
+        patch.object(sse_memories, 'MemoryService', return_value=service),
+    ):
+        result = sse.execute_tool(UID, 'get_memories', {}, auth_context=_sse_auth_context())
+
+    assert len(result['memories']) == 1
+    assert result['memories'][0]['id'] == 'm1'
+    assert result['memories'][0]['content'] == ''
+
+
+def test_rest_get_memories_locked_null_content_does_not_crash():
+    service = MagicMock()
+    service.read.return_value = [
+        SimpleNamespace(
+            model_dump=lambda mode: {
+                'id': 'm1',
+                'content': None,
+                'is_locked': True,
+            }
+        )
+    ]
+    with (
+        patch.object(rest, 'authorize_memory_external_default_memory_read', return_value=_allowed_empty_result()),
+        patch.object(sse_memories, 'MemoryService', return_value=service),
+    ):
+        result = rest.get_memories(response=SimpleNamespace(headers={}), auth_context=SimpleNamespace(uid=UID))
+
+    assert len(result) == 1
+    assert result[0]['id'] == 'm1'
+    assert result[0]['content'] == ''
+
+
 def _fat_conversation():
     return {
         'id': 'conv-1',

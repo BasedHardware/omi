@@ -11119,5 +11119,6 @@
     "deviceNameTooLong": "نام خیلی طولانی است (حداکثر {maxBytes} نویسه؛ ایموجی و اعراب بیشتر حساب می‌شوند)",
     "deviceNameInvalidCharacters": "نام شامل نویسه‌های پشتیبانی‌نشده است",
     "deviceRenameFailed": "ذخیره نام روی Omi ممکن نشد. مطمئن شوید متصل است و دوباره تلاش کنید.",
-    "deviceRenamed": "نام دستگاه به {name} تغییر یافت"
+    "deviceRenamed": "نام دستگاه به {name} تغییر یافت",
+    "captureRecoveryBanner": "صدای آویز به برنامه نمی‌رسد — برای تعمیر ضربه بزنید"
 }

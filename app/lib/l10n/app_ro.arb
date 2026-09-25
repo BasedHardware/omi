@@ -3553,5 +3553,6 @@
     "deviceNameTooLong": "Numele este prea lung (până la {maxBytes} caractere; emoji-urile și diacriticele contează mai mult)",
     "deviceNameInvalidCharacters": "Numele conține caractere neacceptate",
     "deviceRenameFailed": "Numele nu a putut fi salvat pe Omi. Verifică dacă este conectat și încearcă din nou.",
-    "deviceRenamed": "Dispozitivul a fost redenumit în {name}"
+    "deviceRenamed": "Dispozitivul a fost redenumit în {name}",
+    "captureRecoveryBanner": "Sunetul pandantivului nu ajunge în aplicație — atinge pentru a repara"
 }

@@ -3553,5 +3553,6 @@
     "deviceNameTooLong": "Naam is te lang (maximaal {maxBytes} tekens; emoji en accenten tellen extra)",
     "deviceNameInvalidCharacters": "De naam bevat niet-ondersteunde tekens",
     "deviceRenameFailed": "De naam kon niet op je Omi worden opgeslagen. Controleer of hij verbonden is en probeer het opnieuw.",
-    "deviceRenamed": "Apparaat hernoemd naar {name}"
+    "deviceRenamed": "Apparaat hernoemd naar {name}",
+    "captureRecoveryBanner": "De audio van de hanger komt niet aan in de app — tik om te repareren"
 }

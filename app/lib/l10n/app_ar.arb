@@ -3553,5 +3553,6 @@
     "deviceNameTooLong": "الاسم طويل جدًا (حتى {maxBytes} حرفًا؛ الرموز التعبيرية وعلامات التشكيل تُحسب أكثر)",
     "deviceNameInvalidCharacters": "يحتوي الاسم على أحرف غير مدعومة",
     "deviceRenameFailed": "تعذّر حفظ الاسم على جهاز Omi. تأكد من أنه متصل وحاول مرة أخرى.",
-    "deviceRenamed": "تمت إعادة تسمية الجهاز إلى {name}"
+    "deviceRenamed": "تمت إعادة تسمية الجهاز إلى {name}",
+    "captureRecoveryBanner": "صوت القلادة لا يصل إلى التطبيق — انقر للإصلاح"
 }

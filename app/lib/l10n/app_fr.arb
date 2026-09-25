@@ -3588,5 +3588,6 @@
     "deviceNameTooLong": "Le nom est trop long (jusqu'à {maxBytes} caractères ; les emojis et accents comptent davantage)",
     "deviceNameInvalidCharacters": "Le nom contient des caractères non pris en charge",
     "deviceRenameFailed": "Impossible d'enregistrer le nom sur votre Omi. Vérifiez qu'il est connecté et réessayez.",
-    "deviceRenamed": "Appareil renommé en {name}"
+    "deviceRenamed": "Appareil renommé en {name}",
+    "captureRecoveryBanner": "Le son du pendentif n'arrive pas à l'application — touchez pour réparer"
 }

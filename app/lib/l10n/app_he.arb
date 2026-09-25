@@ -11119,5 +11119,6 @@
     "deviceNameTooLong": "השם ארוך מדי (עד {maxBytes} תווים; אמוג'י וניקוד נספרים יותר)",
     "deviceNameInvalidCharacters": "השם מכיל תווים שאינם נתמכים",
     "deviceRenameFailed": "לא ניתן היה לשמור את השם על ה-Omi. ודאו שהוא מחובר ונסו שוב.",
-    "deviceRenamed": "שם המכשיר שונה ל-{name}"
+    "deviceRenamed": "שם המכשיר שונה ל-{name}",
+    "captureRecoveryBanner": "השמע מהתליון לא מגיע לאפליקציה — הקישו לתיקון"
 }

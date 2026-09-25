@@ -3553,5 +3553,6 @@
     "deviceNameTooLong": "Nama terlalu panjang (maksimum {maxBytes} aksara; emoji dan aksen dikira lebih)",
     "deviceNameInvalidCharacters": "Nama mengandungi aksara yang tidak disokong",
     "deviceRenameFailed": "Nama tidak dapat disimpan ke Omi anda. Pastikan ia disambungkan dan cuba lagi.",
-    "deviceRenamed": "Peranti dinamakan semula kepada {name}"
+    "deviceRenamed": "Peranti dinamakan semula kepada {name}",
+    "captureRecoveryBanner": "Audio loket tidak sampai ke aplikasi — ketik untuk membaiki"
 }

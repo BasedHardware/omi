@@ -3553,5 +3553,6 @@
     "deviceNameTooLong": "Tên quá dài (tối đa {maxBytes} ký tự; emoji và chữ có dấu được tính nhiều hơn)",
     "deviceNameInvalidCharacters": "Tên chứa ký tự không được hỗ trợ",
     "deviceRenameFailed": "Không thể lưu tên vào Omi. Hãy kiểm tra thiết bị đã kết nối rồi thử lại.",
-    "deviceRenamed": "Đã đổi tên thiết bị thành {name}"
+    "deviceRenamed": "Đã đổi tên thiết bị thành {name}",
+    "captureRecoveryBanner": "Âm thanh từ mặt dây chuyền không đến được ứng dụng — chạm để sửa chữa"
 }

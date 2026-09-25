@@ -3553,5 +3553,6 @@
     "deviceNameTooLong": "Pavadinimas per ilgas (iki {maxBytes} simbolių; jaustukai ir diakritiniai ženklai užima daugiau)",
     "deviceNameInvalidCharacters": "Pavadinime yra nepalaikomų simbolių",
     "deviceRenameFailed": "Nepavyko išsaugoti pavadinimo Omi įrenginyje. Patikrinkite, ar jis prijungtas, ir bandykite dar kartą.",
-    "deviceRenamed": "Įrenginys pervadintas į {name}"
+    "deviceRenamed": "Įrenginys pervadintas į {name}",
+    "captureRecoveryBanner": "Pakabuko garsas nepasiekia programėlės — palieskite, kad ištaisytumėte"
 }

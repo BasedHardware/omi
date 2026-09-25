@@ -70,7 +70,7 @@ def _parse_value(raw: str) -> Any:
     value = raw.strip()
     if not value:
         return ""
-    if value.startswith(("[", '"')) or value in {"true", "false", "null"}:
+    if value.startswith(("[", "{", '"')) or value in {"true", "false", "null"}:
         return json.loads(value)
     return value
 
@@ -91,6 +91,12 @@ def _parse_yaml_subset(path: Path) -> dict[str, list[dict[str, Any]]]:
             continue
         if section is None:
             raise ValueError(f"{path}:{lineno}: entry appears before a section")
+        if stripped.startswith("- {"):
+            current = json.loads(stripped[2:])
+            if not isinstance(current, dict):
+                raise ValueError(f"{path}:{lineno}: expected an object")
+            sections[section].append(current)
+            continue
         if stripped.startswith("- "):
             current = {}
             sections[section].append(current)

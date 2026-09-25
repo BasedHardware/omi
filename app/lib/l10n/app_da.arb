@@ -3595,5 +3595,6 @@
     "deviceNameTooLong": "Navnet er for langt (op til {maxBytes} tegn; emoji og accenter tæller ekstra)",
     "deviceNameInvalidCharacters": "Navnet indeholder tegn, der ikke understøttes",
     "deviceRenameFailed": "Navnet kunne ikke gemmes på din Omi. Tjek, at den er forbundet, og prøv igen.",
-    "deviceRenamed": "Enheden er omdøbt til {name}"
+    "deviceRenamed": "Enheden er omdøbt til {name}",
+    "captureRecoveryBanner": "Lyden fra vedhænget når ikke frem til appen — tryk for at reparere"
 }

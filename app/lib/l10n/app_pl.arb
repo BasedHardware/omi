@@ -3588,5 +3588,6 @@
     "deviceNameTooLong": "Nazwa jest za długa (maks. {maxBytes} znaków; emoji i znaki diakrytyczne liczą się więcej)",
     "deviceNameInvalidCharacters": "Nazwa zawiera nieobsługiwane znaki",
     "deviceRenameFailed": "Nie udało się zapisać nazwy w Omi. Sprawdź, czy jest połączone, i spróbuj ponownie.",
-    "deviceRenamed": "Zmieniono nazwę urządzenia na {name}"
+    "deviceRenamed": "Zmieniono nazwę urządzenia na {name}",
+    "captureRecoveryBanner": "Dźwięk z zawieszki nie dociera do aplikacji — dotknij, aby naprawić"
 }

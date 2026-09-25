@@ -3588,5 +3588,6 @@
     "deviceNameTooLong": "O nome é muito longo (até {maxBytes} caracteres; emojis e acentos contam mais)",
     "deviceNameInvalidCharacters": "O nome contém caracteres não suportados",
     "deviceRenameFailed": "Não foi possível guardar o nome no seu Omi. Verifique se está ligado e tente novamente.",
-    "deviceRenamed": "Dispositivo renomeado para {name}"
+    "deviceRenamed": "Dispositivo renomeado para {name}",
+    "captureRecoveryBanner": "O áudio do pingente não chega à aplicação — toque para reparar"
 }

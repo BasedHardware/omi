@@ -3553,5 +3553,6 @@
     "deviceNameTooLong": "Name ist zu lang (bis zu {maxBytes} Zeichen; Emojis und Akzente zählen mehr)",
     "deviceNameInvalidCharacters": "Der Name enthält nicht unterstützte Zeichen",
     "deviceRenameFailed": "Der Name konnte nicht auf deinem Omi gespeichert werden. Prüfe, ob es verbunden ist, und versuche es erneut.",
-    "deviceRenamed": "Gerät umbenannt in {name}"
+    "deviceRenamed": "Gerät umbenannt in {name}",
+    "captureRecoveryBanner": "Der Ton des Pendants erreicht die App nicht — zum Reparieren tippen"
 }

@@ -3553,5 +3553,6 @@
     "deviceNameTooLong": "Nosaukums ir pārāk garš (līdz {maxBytes} rakstzīmēm; emocijzīmes un diakritiskās zīmes aizņem vairāk)",
     "deviceNameInvalidCharacters": "Nosaukumā ir neatbalstītas rakstzīmes",
     "deviceRenameFailed": "Nosaukumu neizdevās saglabāt Omi ierīcē. Pārbaudiet, vai tā ir pievienota, un mēģiniet vēlreiz.",
-    "deviceRenamed": "Ierīce pārdēvēta uz {name}"
+    "deviceRenamed": "Ierīce pārdēvēta uz {name}",
+    "captureRecoveryBanner": "Kulona audio nesasniedz lietotni — pieskarieties, lai salabotu"
 }

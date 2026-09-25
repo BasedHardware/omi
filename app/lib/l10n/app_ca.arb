@@ -3553,5 +3553,6 @@
     "deviceNameTooLong": "El nom és massa llarg (fins a {maxBytes} caràcters; els emojis i els accents compten més)",
     "deviceNameInvalidCharacters": "El nom conté caràcters no compatibles",
     "deviceRenameFailed": "No s'ha pogut desar el nom a l'Omi. Comprova que estigui connectat i torna-ho a provar.",
-    "deviceRenamed": "Dispositiu reanomenat a {name}"
+    "deviceRenamed": "Dispositiu reanomenat a {name}",
+    "captureRecoveryBanner": "L'àudio del penjoll no arriba a l'aplicació — toca'l per reparar"
 }
