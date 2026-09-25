@@ -80,3 +80,4 @@ export const PostHog = {
     dispatch((client) => client.setPersonProperties({ [key]: value }));
   },
 };
+
