@@ -865,6 +865,13 @@ extension APIClient {
     return response.conversation
   }
 
+  /// Separates a conversation from its cross-surface capture group. Sticky: the
+  /// server never regroups it with the members it left.
+  func separateConversationFromCaptureGroup(id: String) async throws {
+    struct SeparateResponse: Decodable { let status: String }
+    let _: SeparateResponse = try await post("v1/conversations/\(id)/capture-group/separate")
+  }
+
   /// Sets the visibility of a conversation for sharing
   /// - Parameters:
   ///   - id: The conversation ID

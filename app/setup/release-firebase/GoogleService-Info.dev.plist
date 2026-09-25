@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CLIENT_ID</key>
+	<string>1031333818730-dusn243nct6i5rgfpfkj5mchuj1qnmde.apps.googleusercontent.com</string>
+	<key>REVERSED_CLIENT_ID</key>
+	<string>com.googleusercontent.apps.1031333818730-dusn243nct6i5rgfpfkj5mchuj1qnmde</string>
+	<key>ANDROID_CLIENT_ID</key>
+	<string>1031333818730-1cgqp3jc5p8n2rk467pl4t56qc4lnnbr.apps.googleusercontent.com</string>
+	<key>API_KEY</key>
+	<string>AIzaSyBK-G7KmEoC72mR10gmQyb2NFBbZyDvcqM</string>
+	<key>GCM_SENDER_ID</key>
+	<string>1031333818730</string>
+	<key>PLIST_VERSION</key>
+	<string>1</string>
+	<key>BUNDLE_ID</key>
+	<string>com.friend-app-with-wearable.ios12.development</string>
+	<key>PROJECT_ID</key>
+	<string>based-hardware-dev</string>
+	<key>STORAGE_BUCKET</key>
+	<string>based-hardware-dev.firebasestorage.app</string>
+	<key>IS_ADS_ENABLED</key>
+	<false></false>
+	<key>IS_ANALYTICS_ENABLED</key>
+	<false></false>
+	<key>IS_APPINVITE_ENABLED</key>
+	<true></true>
+	<key>IS_GCM_ENABLED</key>
+	<true></true>
+	<key>IS_SIGNIN_ENABLED</key>
+	<true></true>
+	<key>GOOGLE_APP_ID</key>
+	<string>1:1031333818730:ios:3bea63d8e4f41dbfafb513</string>
+</dict>
+</plist>

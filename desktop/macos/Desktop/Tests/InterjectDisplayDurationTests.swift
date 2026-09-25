@@ -3,7 +3,7 @@ import XCTest
 @testable import Omi_Computer
 
 final class InterjectDisplayDurationTests: XCTestCase {
-  func testFlagOffIsExactlyTheLegacySixSecondPath() {
+  func testFlagOffIsTheInformationalCardTime() {
     XCTAssertEqual(
       InterjectDisplayDuration.timeout(
         title: "A long title with many words in it",
@@ -11,9 +11,9 @@ final class InterjectDisplayDurationTests: XCTestCase {
         kind: .task,
         enabled: false
       ),
-      6
+      OmiFeedbackTiming.informational
     )
-    XCTAssertEqual(InterjectDisplayDuration.legacyTimeout, 6)
+    XCTAssertEqual(InterjectDisplayDuration.flagOffTimeout, 8)
   }
 
   func testWordCountSplitsOnWhitespace() {

@@ -710,7 +710,7 @@ def test_live_fixture_evaluation_fails_closed_on_adjudicator_error_log():
 def test_live_discard_evaluation_asserts_only_that_marked_commands_are_kept():
     calls: list[dict[str, object]] = []
 
-    def fake_discard(transcript, photos, duration_seconds, *, trusted_wake_word_markers=False):
+    def fake_discard(transcript, photos, duration_seconds, *, trusted_wake_word_markers=False, **_kwargs: object):
         calls.append(
             {
                 'transcript': transcript,

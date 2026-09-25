@@ -148,7 +148,7 @@ def screenshot(
     written = _write_screenshot_result(result, output)
     raw_metadata = result.get("metadata") if isinstance(result, Mapping) else None
     metadata: Mapping[str, Any] = raw_metadata if isinstance(raw_metadata, Mapping) else {}
-    ctx.renderer.success(f"Wrote screenshot to [bold]{written}[/bold].")
+    ctx.renderer.success(f"Wrote screenshot to [bold]{escape(str(written))}[/bold].")
     ctx.renderer.emit(
         {
             "path": str(written),
@@ -196,7 +196,7 @@ def complete_task(
     task_id: str = typer.Argument(..., help="Task backend ID."),
 ) -> None:
     ctx = _ctx(typer_ctx)
-    _emit_tool(ctx, "complete_task", {"task_id": task_id}, success=f"Completed task [bold]{task_id}[/bold].")
+    _emit_tool(ctx, "complete_task", {"task_id": task_id}, success=f"Completed task [bold]{escape(task_id)}[/bold].")
 
 
 @task_app.command("delete", help="Delete a task permanently.")
@@ -208,7 +208,7 @@ def delete_task(
     ctx = _ctx(typer_ctx)
     if not confirm:
         typer.confirm(f"Delete task {task_id}?", abort=True)
-    _emit_tool(ctx, "delete_task", {"task_id": task_id}, success=f"Deleted task [bold]{task_id}[/bold].")
+    _emit_tool(ctx, "delete_task", {"task_id": task_id}, success=f"Deleted task [bold]{escape(task_id)}[/bold].")
 
 
 def _emit_tool(
@@ -300,10 +300,13 @@ def _normalize_sql_result(result: Any) -> Any:
 
     if result == "No results":
         return {"rows": [], "columns": [], "row_count": 0}
+    # Column labels can start with status prefixes too. Prefer a complete,
+    # validated table; use the status interpretation only for non-table text.
+    fallback: dict[str, Any] = {"text": result}
     if result.startswith("Error:") or result.startswith("SQL Error:"):
-        return {"error": result}
-    if result.startswith("OK:"):
-        return {"ok": True, "message": result}
+        fallback = {"error": result}
+    elif result.startswith("OK:"):
+        fallback = {"ok": True, "message": result}
 
     # Find first non-empty line (header) and last non-empty line (footer)
     header_idx = None
@@ -319,17 +322,17 @@ def _normalize_sql_result(result: Any) -> Any:
             break
 
     if header_idx is None or footer_idx is None or header_idx >= footer_idx:
-        return {"text": result}
+        return fallback
 
     footer = lines[footer_idx].strip()
     row_count_match = re.match(r"^(\d+) row\(s\)$", footer)
     if not row_count_match:
-        return {"text": result}
+        return fallback
 
     header = lines[header_idx].strip()
     sep_idx = header_idx + 1
     if sep_idx >= footer_idx or not set(lines[sep_idx].strip()) <= {"-", " "}:
-        return {"text": result}
+        return fallback
 
     expected_count = int(row_count_match.group(1))
 
@@ -340,18 +343,24 @@ def _normalize_sql_result(result: Any) -> Any:
         data_lines.pop()
 
     if len(data_lines) != expected_count:
-        return {"text": result}
+        return fallback
 
     # Verify no embedded empty continuation lines inside data_lines
     if any(not line.strip() for line in data_lines):
-        return {"text": result}
+        return fallback
 
     columns = [part.strip() for part in header.split("|")] if "|" in header else [header.strip()]
+    # Ambiguous tables must not be silently reshaped: duplicate column names
+    # would collapse rows keyed by column, so treat the text as non-table.
+    if len(set(columns)) != len(columns):
+        return fallback
     rows = []
     for line in data_lines:
+        if line.startswith("Result truncated after "):
+            return fallback
         values = [part.strip() for part in line.split("|")] if "|" in line else [line.strip()]
         if len(values) != len(columns):
-            return {"text": result}
+            return fallback
         rows.append({column: values[index] for index, column in enumerate(columns)})
 
     return {
