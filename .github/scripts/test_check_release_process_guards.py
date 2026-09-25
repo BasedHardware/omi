@@ -6,7 +6,9 @@ import json
 import os
 import shutil
 import subprocess
+import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import yaml
@@ -498,6 +500,130 @@ def test_mobile_codemagic_dispatcher_guard_rejects_missing_workflow_target(tmp_p
     errors = GUARDS.check_mobile_codemagic_release_triggers()
 
     assert errors == ["mobile internal build dispatcher script must declare both Codemagic mobile workflows"], errors
+
+
+def _load_dispatcher_module():
+    """Import the real dispatcher module so its dispatch behavior can be exercised."""
+    script = REPO_ROOT / ".github/scripts/dispatch_mobile_internal_builds.py"
+    spec = importlib.util.spec_from_file_location("dispatch_mobile_internal_builds_behavior", script)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    sys.path.insert(0, str(script.parent))  # the dispatcher imports its sibling mobile_distribution module
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.path.pop(0)
+    return module
+
+
+class _FakeCompletedProcess:
+    def __init__(self, stdout: str = "", returncode: int = 0) -> None:
+        self.stdout = stdout
+        self.returncode = returncode
+
+
+def test_mobile_dispatcher_main_dispatches_both_mobile_workflows(monkeypatch, capsys):
+    """The dispatcher's real `main()` must start one Codemagic build per mobile workflow.
+
+    Presence-of-identifier checks (in the workflow YAML or the script source) stay green
+    when the dispatch loop is removed, so the guarantee is proven here by running `main()`
+    against a mocked transport seam and asserting the actual POST payloads.
+    """
+    dispatcher = _load_dispatcher_module()
+    monkeypatch.setenv("CODEMAGIC_API_TOKEN", "test-token")
+
+    posts: list[tuple[str, str, dict]] = []
+
+    def fake_api_post(url: str, token: str, payload: dict) -> dict:
+        posts.append((url, token, payload))
+        return {"buildId": f"build-{len(posts)}"}
+
+    fake_subprocess = SimpleNamespace(
+        run=lambda args, **_kwargs: _FakeCompletedProcess(stdout="a" * 40 + "\n")
+    )
+    monkeypatch.setattr(dispatcher, "_api_post", fake_api_post)
+    monkeypatch.setattr(dispatcher, "subprocess", fake_subprocess)
+
+    source_sha = "a" * 40
+    exit_code = dispatcher.main(
+        [
+            "--event",
+            "workflow_dispatch",
+            "--branch",
+            "main",
+            "--source-sha",
+            source_sha,
+            "--app-id",
+            "app-id",
+        ]
+    )
+
+    assert exit_code == 0
+    assert [(url, payload["workflowId"]) for url, _token, payload in posts] == [
+        ("https://api.codemagic.io/builds", "ios-internal-auto"),
+        ("https://api.codemagic.io/builds", "android-internal-auto"),
+    ], posts
+    for _url, token, payload in posts:
+        assert token == "test-token"
+        assert payload["appId"] == "app-id"
+        assert payload["branch"] == "main"
+        assert payload["environment"]["variables"]["OMI_RELEASE_SOURCE_SHA"] == source_sha
+    assert {payload["workflowId"]: payload["environment"]["variables"]["OMI_RELEASE_PLATFORM"] for _, _, payload in posts} == {
+        "ios-internal-auto": "ios",
+        "android-internal-auto": "android",
+    }
+    summary = capsys.readouterr().out
+    assert "dispatched workflow=ios-internal-auto" in summary
+    assert "dispatched workflow=android-internal-auto" in summary
+
+
+def test_mobile_dispatcher_main_does_not_dispatch_on_dry_run(monkeypatch):
+    dispatcher = _load_dispatcher_module()
+    monkeypatch.setenv("CODEMAGIC_API_TOKEN", "test-token")
+    posts: list[dict] = []
+    monkeypatch.setattr(dispatcher, "_api_post", lambda _url, _token, payload: posts.append(payload) or {"buildId": "b"})
+    monkeypatch.setattr(
+        dispatcher, "subprocess", SimpleNamespace(run=lambda args, **_kw: _FakeCompletedProcess(stdout="a" * 40 + "\n"))
+    )
+
+    exit_code = dispatcher.main(
+        [
+            "--event",
+            "workflow_dispatch",
+            "--source-sha",
+            "a" * 40,
+            "--app-id",
+            "app-id",
+            "--dry-run",
+        ]
+    )
+
+    assert exit_code == 0
+    assert posts == []
+
+
+def test_mobile_dispatcher_main_refuses_dispatch_when_checkout_moves(monkeypatch):
+    """The source pin must fail closed when HEAD no longer matches the evaluated commit."""
+    dispatcher = _load_dispatcher_module()
+    monkeypatch.setenv("CODEMAGIC_API_TOKEN", "test-token")
+    posts: list[dict] = []
+    monkeypatch.setattr(dispatcher, "_api_post", lambda _url, _token, payload: posts.append(payload) or {"buildId": "b"})
+    monkeypatch.setattr(
+        dispatcher, "subprocess", SimpleNamespace(run=lambda args, **_kw: _FakeCompletedProcess(stdout="b" * 40 + "\n"))
+    )
+
+    with pytest.raises(dispatcher.DispatchError, match="does not match the checked-out commit"):
+        dispatcher.main(
+            [
+                "--event",
+                "workflow_dispatch",
+                "--source-sha",
+                "a" * 40,
+                "--app-id",
+                "app-id",
+            ]
+        )
+    assert posts == []
 
 
 @pytest.mark.parametrize(

@@ -1,10 +1,12 @@
 """Tests for fetch_url_tool per-turn URL allowlist (prompt scoping + runtime enforcement)."""
 
 import socket
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from unittest.mock import AsyncMock, patch
 from urllib.parse import urlparse
 
+import httpx
 import pytest
 from langchain_core.runnables import RunnableConfig
 
@@ -12,11 +14,14 @@ from models.chat import Message, MessageSender, MessageType
 from utils.retrieval.agentic import (
     AGENT_SAFETY_INSTRUCTIONS,
     _inject_user_url_allowlist,
+    agent_config_context,
 )
 from utils.retrieval.tools.web_tools import (
+    URL_ALREADY_FETCHED_MESSAGE,
     URL_NOT_ALLOWLISTED_MESSAGE,
+    _canonical_user_url,
     _is_disallowed_ip,
-    _resolve_public_ip,
+    _resolve_public_ips,
     extract_urls_from_text,
     extract_user_turn_urls,
     fetch_url_tool,
@@ -24,16 +29,26 @@ from utils.retrieval.tools.web_tools import (
     is_url_allowlisted,
     user_url_allowlist_block,
 )
-
-
-def _message(text: str, sender: MessageSender = MessageSender.human) -> Message:
+def _message(text: str, sender: MessageSender = MessageSender.human, id_: str = 'm1') -> Message:
     return Message(
-        id='m1',
+        id=id_,
         text=text,
         created_at=datetime.now(timezone.utc),
         sender=sender,
         type=MessageType.text,
     )
+
+
+@contextmanager
+def _turn_configurable(configurable):
+    """Mirror production: agentic.py stores the turn's original configurable dict in
+    agent_config_context, because LangChain shallow-copies `configurable` per tool
+    invocation and per-call state written to the copy would not survive."""
+    token = agent_config_context.set({'configurable': configurable})
+    try:
+        yield
+    finally:
+        agent_config_context.reset(token)
 
 
 class TestUrlExtraction:
@@ -99,6 +114,67 @@ class TestUrlExtraction:
     def test_extracted_terminal_url_punctuation_matches_literal_allowlist(self):
         url = extract_user_turn_urls([_message('Fetch <https://example.com/releases/v1.0.>')])[0]
         assert is_url_allowlisted(url, [url])
+
+    def test_extract_user_turn_urls_strips_single_emphasis_delimiters(self):
+        messages = [_message('Fetch *https://example.com/article* and _https://example.com/docs_')]
+        assert extract_user_turn_urls(messages) == ['https://example.com/article', 'https://example.com/docs']
+
+    def test_single_emphasis_is_not_read_off_double_emphasis(self):
+        """`**url**` must strip both stars, not leave one behind as single emphasis."""
+        messages = [_message('Fetch **https://example.com/article**')]
+        assert extract_user_turn_urls(messages) == ['https://example.com/article']
+
+    def test_prose_url_allowlists_both_stripped_and_literal_spellings(self):
+        """Sentence punctuation and URL punctuation are indistinguishable from text alone,
+        so an ambiguous prose URL contributes both the stripped primary and the literal
+        spelling the user typed."""
+        messages = [_message('Read https://example.com/releases/v1.0.')]
+        assert extract_user_turn_urls(messages, include_literal_variants=True) == [
+            'https://example.com/releases/v1.0',
+            'https://example.com/releases/v1.0.',
+        ]
+        assert extract_user_turn_urls(messages) == ['https://example.com/releases/v1.0']
+
+    def test_literal_variants_do_not_expand_the_url_budget(self):
+        """max_urls bounds distinct user URLs; variants ride along without admitting an
+        extra primary, and URLs past the budget contribute no spelling at all."""
+        text = ' '.join(f'https://example.com/{index}.' for index in range(6))
+        urls = extract_urls_from_text(
+            text, preserve_terminal_punctuation=True, include_literal_variants=True, max_urls=5
+        )
+        assert urls == [f'https://example.com/{index}{suffix}' for index in range(5) for suffix in ('', '.')]
+        assert all('https://example.com/5' not in url for url in urls)
+
+    def test_query_delimiter_is_part_of_the_allowlist_identity(self):
+        """`/path` and `/path?` are different request targets, so an allowlist entry for
+        one must not unlock the other after the page is listed."""
+        bare = _canonical_user_url('https://example.com/path', strip_trailing_punctuation=False)
+        delimited = _canonical_user_url('https://example.com/path?', strip_trailing_punctuation=False)
+        assert bare is not None and delimited is not None
+        assert bare != delimited
+        assert bare[-1] == '' and delimited[-1] == '?'
+        assert not is_url_allowlisted('https://example.com/path', ['https://example.com/path?'])
+        assert not is_url_allowlisted('https://example.com/path?', ['https://example.com/path'])
+        assert is_url_allowlisted('https://example.com/path?', ['https://example.com/path?'])
+
+    def test_extract_user_turn_urls_honors_initiating_message_id(self):
+        """With overlapping sends in a shared history, the message that initiated this
+        request is the authoritative turn, not the newest human message."""
+        messages = [
+            _message('Summarize https://initiating.example.com/doc', id_='turn-1'),
+            _message('Also read https://newer.example.com/page', id_='turn-2'),
+        ]
+        assert extract_user_turn_urls(messages, initiating_message_id='turn-1') == [
+            'https://initiating.example.com/doc'
+        ]
+        # Without an id (single-send history), the latest user turn still wins.
+        assert extract_user_turn_urls(messages) == ['https://newer.example.com/page']
+
+    def test_extract_user_turn_urls_ignores_unknown_initiating_message_id(self):
+        messages = [_message('Summarize https://user.example.com/doc', id_='turn-1')]
+        assert extract_user_turn_urls(messages, initiating_message_id='missing') == [
+            'https://user.example.com/doc'
+        ]
 
     def test_extract_user_turn_urls_bounds_overflow_scan(self):
         messages = [_message(' '.join(f'https://example.com/{index}' for index in range(1000)))]
@@ -227,6 +303,99 @@ class TestRuntimeEnforcement:
         assert mock_fetch.await_args.args[0] == allowed
 
     @pytest.mark.asyncio
+    async def test_each_allowlisted_url_fetches_once_per_turn(self):
+        """A repeat request to an unchanged destination is observable by that server, so
+        the second fetch of the same canonical URL must be refused within the turn."""
+        allowed = 'https://example.com/page'
+        configurable = {'user_provided_urls': [allowed]}
+        config = RunnableConfig(configurable=configurable)
+        body = (200, 'text/html', '<html><body><p>Hello</p></body></html>')
+
+        with (
+            _turn_configurable(configurable),
+            patch(
+                'utils.retrieval.tools.web_tools._fetch_page',
+                new_callable=AsyncMock,
+                return_value=body,
+            ) as mock_fetch,
+        ):
+            first = await fetch_url_tool.ainvoke({'url': allowed}, config=config)
+            second = await fetch_url_tool.ainvoke({'url': allowed}, config=config)
+
+        assert 'Hello' in first
+        assert second == URL_ALREADY_FETCHED_MESSAGE
+        assert mock_fetch.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_consumption_is_per_allowlisted_spelling(self):
+        """An ambiguous prose URL allowlists both spellings, and each spelling — a
+        distinct request target — may be fetched once; repeats of either are refused."""
+        literal = 'https://example.com/releases/v1.0.'
+        stripped = 'https://example.com/releases/v1.0'
+        # The real extraction allowlists both spellings for an ambiguous prose URL.
+        configurable = {'user_provided_urls': [stripped, literal]}
+        config = RunnableConfig(configurable=configurable)
+
+        with (
+            _turn_configurable(configurable),
+            patch(
+                'utils.retrieval.tools.web_tools._fetch_page',
+                new_callable=AsyncMock,
+                return_value=(200, 'text/html', '<html><body><p>Hello</p></body></html>'),
+            ) as mock_fetch,
+        ):
+            first = await fetch_url_tool.ainvoke({'url': literal}, config=config)
+            second = await fetch_url_tool.ainvoke({'url': stripped}, config=config)
+            repeat = await fetch_url_tool.ainvoke({'url': literal}, config=config)
+
+        assert 'Hello' in first and 'Hello' in second
+        assert repeat == URL_ALREADY_FETCHED_MESSAGE
+        assert mock_fetch.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_a_different_url_still_fetches_after_consumption(self):
+        first_url = 'https://example.com/one'
+        second_url = 'https://example.com/two'
+        configurable = {'user_provided_urls': [first_url, second_url]}
+        config = RunnableConfig(configurable=configurable)
+        body = (200, 'text/html', '<html><body><p>Hello</p></body></html>')
+
+        with (
+            _turn_configurable(configurable),
+            patch(
+                'utils.retrieval.tools.web_tools._fetch_page',
+                new_callable=AsyncMock,
+                return_value=body,
+            ) as mock_fetch,
+        ):
+            await fetch_url_tool.ainvoke({'url': first_url}, config=config)
+            other = await fetch_url_tool.ainvoke({'url': second_url}, config=config)
+
+        assert 'Hello' in other
+        assert mock_fetch.await_count == 2
+
+    @pytest.mark.asyncio
+    async def test_failed_fetch_still_consumes_the_url(self):
+        """A failed attempt still hit the network once, so it counts as this turn's fetch."""
+        allowed = 'https://example.com/page'
+        configurable = {'user_provided_urls': [allowed]}
+        config = RunnableConfig(configurable=configurable)
+
+        with (
+            _turn_configurable(configurable),
+            patch(
+                'utils.retrieval.tools.web_tools._fetch_page',
+                new_callable=AsyncMock,
+                side_effect=httpx.ConnectError('unreachable'),
+            ),
+        ):
+            first = await fetch_url_tool.ainvoke({'url': allowed}, config=config)
+            second = await fetch_url_tool.ainvoke({'url': allowed}, config=config)
+
+        assert 'Failed to fetch' in first
+        assert second == URL_ALREADY_FETCHED_MESSAGE
+
+    @pytest.mark.asyncio
     async def test_outbound_url_lowercases_only_the_scheme(self):
         allowed = 'HTTPS://example.com/Path?A=B#Frag'
         config = RunnableConfig(configurable={'user_provided_urls': [allowed]})
@@ -326,9 +495,9 @@ class TestRuntimeEnforcement:
         with (
             patch('utils.retrieval.tools.web_tools.get_web_fetch_client', return_value=client),
             patch(
-                'utils.retrieval.tools.web_tools._resolve_public_ip',
+                'utils.retrieval.tools.web_tools._resolve_public_ips',
                 new_callable=AsyncMock,
-                return_value='93.184.216.34',
+                return_value=['93.184.216.34'],
             ),
         ):
             result = await fetch_url_tool.ainvoke({'url': allowed}, config=config)
@@ -374,9 +543,9 @@ class TestRuntimeEnforcement:
         with (
             patch('utils.retrieval.tools.web_tools.get_web_fetch_client', return_value=client),
             patch(
-                'utils.retrieval.tools.web_tools._resolve_public_ip',
+                'utils.retrieval.tools.web_tools._resolve_public_ips',
                 new_callable=AsyncMock,
-                return_value='93.184.216.34',
+                return_value=['93.184.216.34'],
             ),
         ):
             result = await fetch_url_tool.ainvoke({'url': start}, config=config)
@@ -455,7 +624,7 @@ class TestEgressAddressBounds:
     @pytest.mark.parametrize('address', NON_GLOBAL_DESTINATIONS)
     async def test_hostname_resolving_to_non_global_address_is_not_public(self, address):
         with patch.object(socket, 'getaddrinfo', _fake_getaddrinfo(address)):
-            assert await _resolve_public_ip('reserved.example') is None
+            assert await _resolve_public_ips('reserved.example') == []
 
     @pytest.mark.asyncio
     @pytest.mark.parametrize('address', ['0.0.0.0', '198.18.0.1', '224.0.0.1', '255.255.255.255', '::', 'ff02::1'])
@@ -618,6 +787,105 @@ class TestEgressAddressBounds:
         assert client.last_kwargs['extensions']['sni_hostname'] == 'trusted.example'
         assert 'Hello' in result
 
+    @pytest.mark.asyncio
+    async def test_fetch_falls_through_to_the_next_resolved_address(self):
+        """A resolver may front an unreachable record (commonly a dead AAAA ahead of a
+        working A); the fetch must try every safe address before failing the hop."""
+        url = 'https://dualstack.example/article'
+        config = RunnableConfig(configurable={'user_provided_urls': [url]})
+
+        class _FakeResponse:
+            def __init__(self):
+                self.status_code = 200
+                self.headers = {'content-type': 'text/html'}
+                self._body = b'<p>Second try</p>'
+
+            async def aiter_bytes(self, chunk_size=8192):
+                yield self._body
+
+            async def __aenter__(self):
+                return self
+
+            async def __aexit__(self, *args):
+                return False
+
+        class _FirstAddressUnreachableClient:
+            def __init__(self):
+                self.urls = []
+
+            def stream(self, method, pinned_url, **kwargs):
+                self.urls.append(pinned_url)
+                if '2606:4700:dead::1' in pinned_url:
+                    raise httpx.ConnectError('dead AAAA record')
+                return _FakeResponse()
+
+        client = _FirstAddressUnreachableClient()
+
+        def _resolver(host, port, *args, **kwargs):
+            return [
+                (socket.AF_INET6, socket.SOCK_STREAM, socket.IPPROTO_TCP, '', ('2606:4700:dead::1', 0, 0, 0)),
+                (socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, '', ('93.184.216.34', 0)),
+            ]
+
+        with (
+            patch('utils.retrieval.tools.web_tools.get_web_fetch_client', return_value=client),
+            patch.object(socket, 'getaddrinfo', _resolver),
+        ):
+            result = await fetch_url_tool.ainvoke({'url': url}, config=config)
+
+        assert 'Second try' in result
+        assert client.urls == ['https://[2606:4700:dead::1]/article', 'https://93.184.216.34/article']
+
+    @pytest.mark.asyncio
+    async def test_fetch_raises_the_last_error_when_every_address_fails(self):
+        url = 'https://dualstack.example/article'
+        config = RunnableConfig(configurable={'user_provided_urls': [url]})
+
+        class _AlwaysUnreachableClient:
+            def __init__(self):
+                self.urls = []
+
+            def stream(self, method, pinned_url, **kwargs):
+                self.urls.append(pinned_url)
+                raise httpx.ConnectError(f'unreachable via {pinned_url}')
+
+        client = _AlwaysUnreachableClient()
+
+        def _resolver(host, port, *args, **kwargs):
+            return [
+                (socket.AF_INET6, socket.SOCK_STREAM, socket.IPPROTO_TCP, '', ('2606:4700:dead::1', 0, 0, 0)),
+                (socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, '', ('93.184.216.34', 0)),
+            ]
+
+        with (
+            patch('utils.retrieval.tools.web_tools.get_web_fetch_client', return_value=client),
+            patch.object(socket, 'getaddrinfo', _resolver),
+        ):
+            result = await fetch_url_tool.ainvoke({'url': url}, config=config)
+
+        assert len(client.urls) == 2
+        assert 'Failed to fetch' in result
+
+    @pytest.mark.asyncio
+    async def test_resolver_keeps_only_bounded_deduped_public_records(self):
+        """Duplicated, private, and excess records collapse to a bounded ordered list."""
+        records = [
+            (socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, '', ('93.184.216.34', 0)),
+            (socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, '', ('93.184.216.34', 0)),  # duplicate
+            (socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, '', ('10.0.0.1', 0)),  # private
+            (socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, '', ('8.8.8.8', 0)),
+            (socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, '', ('8.8.4.4', 0)),
+            (socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, '', ('1.1.1.1', 0)),
+            (socket.AF_INET, socket.SOCK_STREAM, socket.IPPROTO_TCP, '', ('9.9.9.9', 0)),  # past the bound
+        ]
+
+        def _resolver(host, port, *args, **kwargs):
+            return records
+
+        with patch.object(socket, 'getaddrinfo', _resolver):
+            ips = await _resolve_public_ips('many.example')
+
+        assert ips == ['93.184.216.34', '8.8.8.8', '8.8.4.4', '1.1.1.1']
 
 class TestModuleStubIsolation:
     def test_prompt_cache_stub_leaves_the_real_tool_decorator_installed(self):

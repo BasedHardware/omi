@@ -19,15 +19,24 @@ from __future__ import annotations
 
 from collections.abc import Mapping
 
-from utils.llm.private_context import anthropic_messages_carry_private_tool_output, without_tool_named
+from utils.llm.private_context import anthropic_messages_carry_private_tool_output, openai_messages_carry_private_tool_output, without_tool_named
 from utils.observability.fallback import record_fallback
 
 SERVER_WEB_SEARCH_NAME = "web_search"
+MANAGED_WEB_SEARCH_TOOL_NAME = "perplexity_web_search_tool"
 WEB_SEARCH_TOOL = {
     "type": "web_search_20260209",
     "name": SERVER_WEB_SEARCH_NAME,
     "max_uses": 5,
 }
+
+# Managed searches leave through an in-process tool, so unlike the Anthropic
+# server tool they can be gated at execution time instead of by editing the
+# request's tool offer.
+MANAGED_WEB_SEARCH_WITHHELD_MESSAGE = (
+    "Error: web search is unavailable for this turn because private tool output is already in "
+    "the conversation. Answer from the conversation, already-fetched pages, and your own knowledge."
+)
 
 # Only product-doc lookups stay public-safe. Every other core tool reads user
 # data, echoes the user's input back, or can surface user data in an error
@@ -59,3 +68,32 @@ def request_tools_after_private_taint(
         )
     request_tools = without_tool_named(schemas, SERVER_WEB_SEARCH_NAME) if withheld else schemas
     return request_tools, withheld
+
+
+def managed_web_search_withheld(tool_name: str, configurable: object) -> bool:
+    """Whether a managed (Perplexity) web-search execution must be refused this turn.
+
+    The managed tool leaves through ``_execute_tool``, so it can be checked at
+    call time against the live OpenAI-shaped transcript (``agent_messages`` in
+    ``configurable``). Once any private tool output is in the transcript, an
+    injected instruction could otherwise place that data in the outbound query —
+    the same exfiltration path the prompt-only rule guards against. The refusal
+    latches for the rest of the turn: the withheld-error tool result is itself a
+    tool message, so the taint condition can never clear again this turn.
+    """
+    if tool_name != MANAGED_WEB_SEARCH_TOOL_NAME or not isinstance(configurable, dict):
+        return False
+    if configurable.get("managed_web_search_withheld"):
+        return True
+    messages = configurable.get("agent_messages")
+    if openai_messages_carry_private_tool_output(messages, public_safe_tools=PUBLIC_SAFE_AGENT_TOOLS):
+        configurable["managed_web_search_withheld"] = True
+        record_fallback(
+            component="other",
+            from_mode="managed_web_search",
+            to_mode="model_knowledge",
+            reason="private_tool_output_in_context",
+            outcome="degraded",
+        )
+        return True
+    return False

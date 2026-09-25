@@ -69,6 +69,7 @@ from utils.retrieval.tool_result_boundaries import preserve_chat_memory_tool_res
 from utils.retrieval.tools.web_tools import (
     MAX_USER_PROVIDED_URLS,
     extract_user_turn_urls,
+    user_message_index_by_id,
     user_url_allowlist_block,
 )
 from utils.retrieval.chat_scope import build_chat_scope
@@ -81,7 +82,12 @@ from utils.retrieval.safety import (
     should_retry_provider_error,
     INPUT_TOO_LONG_MESSAGE,
 )
-from utils.retrieval.web_search_gate import WEB_SEARCH_TOOL, request_tools_after_private_taint
+from utils.retrieval.web_search_gate import (
+    MANAGED_WEB_SEARCH_WITHHELD_MESSAGE,
+    WEB_SEARCH_TOOL,
+    managed_web_search_withheld,
+    request_tools_after_private_taint,
+)
 from utils.observability.fallback import record_fallback
 from utils.llm.byok_errors import handle_llm_error_async
 from utils.llm.clients import anthropic_client, ANTHROPIC_AGENT_MODEL, get_llm, num_tokens_from_string
@@ -661,6 +667,11 @@ def _finish_memory_retrieval(attempt: ClientJourneyAttempt, result: str) -> None
 @_traceable(name="chat.tool_execution", run_type="tool")
 async def _execute_tool(tool_name: str, tool_input: dict, registry: dict, configurable: dict) -> str:
     """Execute a LangChain tool by name, injecting RunnableConfig."""
+    # Managed web search is the one outbound-egress tool that is not URL-allowlisted;
+    # once private tool output is in the transcript its query must not leave the box.
+    if managed_web_search_withheld(tool_name, configurable):
+        logger.info('Managed web search withheld: private tool output in context')
+        return MANAGED_WEB_SEARCH_WITHHELD_MESSAGE
     tool_obj = registry[tool_name]
     config = RunnableConfig(configurable=configurable)
     client_kind = configurable.get('client_kind')
@@ -763,32 +774,46 @@ def _inject_current_datetime(anthropic_messages: list, datetime_block: str) -> l
     return _prepend_block_to_latest_user_turn(anthropic_messages, datetime_block)
 
 
-def _inject_user_url_allowlist(anthropic_messages: list, urls: List[str], *, overflow: bool = False) -> list:
-    """Attach the per-turn allowlist of user-typed URLs to the latest user turn.
+def _inject_user_url_allowlist(
+    anthropic_messages: list, urls: List[str], *, overflow: bool = False, target_index: Optional[int] = None
+) -> list:
+    """Attach the per-turn allowlist of user-typed URLs to the initiating user turn.
 
     The allowlist varies every request, so like the datetime block it is kept out of the
     cache_control system prefix. When the user typed no URL nothing is injected at all, and
-    the static system rule then forbids fetch_url_tool for the turn.
+    the static system rule then forbids fetch_url_tool for the turn. *target_index* binds the
+    block to the message that initiated this request even when a concurrently reloaded shared
+    history contains a newer human message from an overlapping send.
     """
-    return _prepend_block_to_latest_user_turn(anthropic_messages, user_url_allowlist_block(urls, overflow=overflow))
+    return _prepend_block_to_latest_user_turn(
+        anthropic_messages, user_url_allowlist_block(urls, overflow=overflow), index=target_index
+    )
 
 
-def _prepend_block_to_latest_user_turn(anthropic_messages: list, block: str) -> list:
-    """Prepend a per-turn text block to the most recent user message."""
+def _prepend_block_to_latest_user_turn(anthropic_messages: list, block: str, *, index: Optional[int] = None) -> list:
+    """Prepend a per-turn text block to a user message (latest, or *index* when given)."""
     if not block:
         return anthropic_messages
-    for msg in reversed(anthropic_messages):
-        if msg["role"] != "user":
-            continue
-        content = msg.get("content")
-        if isinstance(content, str):
-            msg["content"] = f"{block}\n\n{content}"
-        elif isinstance(content, list):
-            msg["content"] = [{"type": "text", "text": block}, *content]
-        else:
-            break  # unexpected content shape — fall back to a separate user message
+    target = None
+    if index is not None and 0 <= index < len(anthropic_messages):
+        candidate = anthropic_messages[index]
+        target = candidate if isinstance(candidate, dict) and candidate.get('role') == 'user' else None
+    if target is None:
+        for msg in reversed(anthropic_messages):
+            if msg["role"] != "user":
+                continue
+            target = msg
+            break
+    if target is None:
+        anthropic_messages.append({"role": "user", "content": block})
         return anthropic_messages
-    anthropic_messages.append({"role": "user", "content": block})
+    content = target.get("content")
+    if isinstance(content, str):
+        target["content"] = f"{block}\n\n{content}"
+    elif isinstance(content, list):
+        target["content"] = [{"type": "text", "text": block}, *content]
+    else:
+        anthropic_messages.append({"role": "user", "content": block})  # unexpected content shape
     return anthropic_messages
 
 
@@ -1407,6 +1432,7 @@ async def execute_agentic_chat_stream(
     current_datetime_block: Optional[str] = None,
     tz: Optional[str] = None,
     setup_deadline_at: Optional[float] = None,
+    initiating_message_id: Optional[str] = None,
 ) -> AsyncGenerator[str, None]:
     """Execute an agentic chat interaction with streaming.
 
@@ -1564,9 +1590,21 @@ IMPORTANT: Always call a matching integration tool when relevant. Never tell the
     tool_registry[perplexity_web_search_tool.name] = perplexity_web_search_tool
     tool_schemas = [*tool_schemas, _langchain_tool_to_openai(perplexity_web_search_tool)]
 
-    all_user_urls = extract_user_turn_urls(messages, max_urls=MAX_USER_PROVIDED_URLS + 1)
+    # The initiating message is the authoritative current turn: overlapping sends for one
+    # chat session both reload the shared history, so the latest human message in `messages`
+    # is not necessarily the message that started this request.
+    initiating_message_index = user_message_index_by_id(messages, initiating_message_id)
+    all_user_urls = extract_user_turn_urls(
+        messages, max_urls=MAX_USER_PROVIDED_URLS + 1, initiating_message_id=initiating_message_id
+    )
     url_allowlist_overflow = len(all_user_urls) > MAX_USER_PROVIDED_URLS
-    user_provided_urls = [] if url_allowlist_overflow else all_user_urls
+    user_provided_urls = (
+        []
+        if url_allowlist_overflow
+        else extract_user_turn_urls(
+            messages, include_literal_variants=True, initiating_message_id=initiating_message_id
+        )
+    )
 
     # Build the provider-neutral role/content message shape. The current datetime is injected
     # into the user turn (not the system prompt) so the direct Anthropic cache prefix stays stable.
@@ -1574,7 +1612,7 @@ IMPORTANT: Always call a matching integration tool when relevant. Never tell the
     # Scope the fetch_url_tool mandate to URLs the user typed in this turn. Anything else the
     # model sees this turn is retrieved data, which must not be able to direct an outbound fetch.
     anthropic_messages = _inject_user_url_allowlist(
-        anthropic_messages, user_provided_urls, overflow=url_allowlist_overflow
+        anthropic_messages, user_provided_urls, overflow=url_allowlist_overflow, target_index=initiating_message_index
     )
     anthropic_messages = _inject_current_datetime(
         anthropic_messages, current_datetime_block or get_current_datetime_block(uid, tz=tz, location=city)
@@ -1605,6 +1643,9 @@ IMPORTANT: Always call a matching integration tool when relevant. Never tell the
         "tools": core_tools + app_tools,
         "user_provided_urls": user_provided_urls,
         "chat_scope": chat_scope,
+        # The live transcript the runner appends tool calls/results to. The managed
+        # web-search gate reads it at tool-execution time to detect private output.
+        "agent_messages": anthropic_messages,
     }
 
     # Store config in context variable for tools that use agent_config_context

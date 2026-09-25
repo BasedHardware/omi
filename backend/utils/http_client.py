@@ -89,6 +89,32 @@ def assert_public_http_url(url: str) -> str:
     return first_safe_ip
 
 
+def _idna_ascii_hostname(hostname: str) -> str:
+    """Return the DNS hostname as its ASCII A-label form for Host/SNI use.
+
+    ``urlparse`` keeps Unicode IDN spellings untouched, but HTTP header values
+    and the TLS SNI extension are ASCII on the wire (HTTPX 0.28 encodes header
+    values as ASCII and would raise ``UnicodeEncodeError`` otherwise).
+    """
+    if hostname.isascii():
+        return hostname
+    try:
+        return hostname.encode("idna").decode("ascii")
+    except UnicodeError:
+        # Not representable as an A-label; leave as-is so the transport fails
+        # with its own bounded error instead of a silent wrong-host request.
+        return hostname
+
+
+def _host_header_value(hostname: str, port: int | None, scheme: str) -> str:
+    """Host header authority: original hostname, bracketed IPv6, non-default port."""
+    host = _idna_ascii_hostname(hostname)
+    if ":" in host:
+        host = f"[{host}]"
+    default_port = 443 if scheme == "https" else 80
+    return host if port in (None, default_port) else f"{host}:{port}"
+
+
 def pin_to_resolved_ip(url: str, resolved_ip: str) -> tuple[str, dict]:
     """Rewrite `url` to connect directly to `resolved_ip` instead of trusting
     a second DNS lookup at connect time. Returns (pinned_url, extra) where
@@ -97,14 +123,21 @@ def pin_to_resolved_ip(url: str, resolved_ip: str) -> tuple[str, dict]:
     used for virtual-host routing and certificate verification — the
     connection targets the pinned IP, but looks and authenticates exactly
     like a normal request to the original hostname.
+
+    The `Host` value preserves the original authority's non-default port and
+    IPv6 bracketing, and the SNI name is the IDNA ASCII form of the original
+    hostname. Keep `sni_hostname` a `str`: httpcore passes it straight through
+    as ``server_hostname``, which the ssl layer requires to be text.
     """
     parsed = urlparse(url)
     hostname = parsed.hostname
-    netloc = f'[{resolved_ip}]' if ':' in resolved_ip else resolved_ip
+    netloc = f"[{resolved_ip}]" if ":" in resolved_ip else resolved_ip
     if parsed.port:
-        netloc += f':{parsed.port}'
+        netloc += f":{parsed.port}"
     pinned_url = parsed._replace(netloc=netloc).geturl()
-    extra = {'headers': {'Host': hostname}, 'extensions': {'sni_hostname': hostname}}
+    host_value = _host_header_value(hostname, parsed.port, parsed.scheme) if hostname else hostname
+    sni_hostname = _idna_ascii_hostname(hostname) if hostname else hostname
+    extra = {"headers": {"Host": host_value}, "extensions": {"sni_hostname": sni_hostname}}
     return pinned_url, extra
 
 
@@ -510,12 +543,20 @@ def get_web_fetch_client() -> httpx.AsyncClient:
 
     Isolated from the webhook pool so slow/stalled external pages don't
     compete with partner webhook delivery slots.
+
+    Keep-alive is disabled (`max_keepalive_connections=0`): these requests pin
+    the connection to a resolved IP while presenting the original hostname's
+    Host/SNI, and a pooled connection is keyed only by that pinned origin —
+    not by the original hostname. Reusing such a connection for a second
+    hostname that happens to resolve to the same IP would skip that hostname's
+    own certificate check and SNI routing, so every fetch opens a fresh
+    connection. Fetch volume is low; a TLS handshake per request is fine.
     """
     return _get_client(
         'web_fetch',
         lambda: httpx.AsyncClient(
             timeout=httpx.Timeout(15.0, connect=5.0),
-            limits=httpx.Limits(max_connections=16, max_keepalive_connections=4),
+            limits=httpx.Limits(max_connections=16, max_keepalive_connections=0),
         ),
     )
 

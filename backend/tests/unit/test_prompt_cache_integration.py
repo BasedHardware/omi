@@ -39,6 +39,13 @@ BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 
 
 _STUBBED_MODULE_NAMES: set[str] = set()
+# name -> the stub ModuleType this file installed, so a re-entry after the module
+# teardown restore can put the exact same stub back.
+_INSTALLED_STUBS: dict[str, types.ModuleType] = {}
+# name -> what sys.modules held before this file's stub replaced it (None = absent).
+# The module teardown fixture restores these, so the stub graph never outlives this
+# file's tests in a shared pytest process (threads: order-dependent pollution).
+_STUB_ORIGINALS: dict[str, types.ModuleType | None] = {}
 
 # Real modules this file stubs that are safe and cheap to actually import (pure
 # Python / lazy client construction, no database or network access at import
@@ -100,13 +107,53 @@ def _stub_module(name: str) -> types.ModuleType:
                 importlib.import_module(name)
             except Exception:
                 pass
-        stub = types.ModuleType(name)
         existing = sys.modules.get(name)
+        stub = types.ModuleType(name)
         if existing is not None:
             stub.__dict__.update(existing.__dict__)
+        # Record the pre-stub sys.modules state exactly once: the module teardown
+        # fixture (`_restore_stubbed_modules`) puts it back once this file's
+        # tests finish, so the stub graph never outlives this file in a shared
+        # pytest process.
+        _STUB_ORIGINALS.setdefault(name, existing)
         sys.modules[name] = stub
+        _INSTALLED_STUBS[name] = stub
         _STUBBED_MODULE_NAMES.add(name)
-    return sys.modules[name]
+        return stub
+    stub = _INSTALLED_STUBS[name]
+    if sys.modules.get(name) is not stub:
+        # Normally unreachable under pytest (all _stub_module calls happen at
+        # this file's import time, before the teardown fixture runs), but kept
+        # as a guard: if anything re-invokes this file's stub setup after the
+        # teardown restored the real module, reinstall the recorded stub instead
+        # of letting callers below mutate the real module in place.
+        sys.modules[name] = stub
+    return stub
+
+
+def _restore_stubbed_modules_now() -> None:
+    """Put back every sys.modules entry this file stubbed (see `_restore_stubbed_modules`)."""
+    from tests.unit.memory_import_isolation import restore_sys_modules
+
+    restore_sys_modules(_STUB_ORIGINALS)
+
+
+@pytest.fixture(autouse=True, scope="module")
+def _restore_stubbed_modules():
+    """Restore sys.modules entries this file stubbed once its tests finish.
+
+    The stubs above are installed at module import (collection) time. Without
+    this teardown they persist for the rest of the pytest process: later test
+    files that lazily import e.g. `database.auth` silently bind this stub
+    graph, and the divergence between files that imported the real modules at
+    their own collection time and files that lazily import them at test time
+    shows up as order-dependent failures (e.g. this file before
+    test_agent_tools_isolation.py). Restoring the recorded originals keeps the
+    stubbing scoped to this file, mirroring the monkeypatch/restore pattern in
+    tests/unit/memory_import_isolation.py.
+    """
+    yield
+    _restore_stubbed_modules_now()
 
 
 # --- database stubs ---
@@ -1491,3 +1538,39 @@ def _find_first_diff(a: str, b: str) -> str:
     if len(a) != len(b):
         return f"strings differ in length: {len(a)} vs {len(b)}"
     return "no difference found"
+
+
+def test_module_teardown_removes_the_stub_graph():
+    """The module teardown (`_restore_stubbed_modules`) must put back every sys.modules
+    entry this file stubbed, so tests that dynamically import production modules
+    afterwards — later files in a shared pytest process — receive the real modules,
+    not the incomplete stubs installed at collection time.
+
+    Must stay the last test in this file: it performs the teardown restore directly,
+    and the stub graph is what every earlier test in this file runs against.
+
+    https://github.com/BasedHardware/omi/pull/11015 review thread 3747824073.
+    """
+    import importlib
+
+    installed = _INSTALLED_STUBS["langchain_core.tools"]
+    assert sys.modules.get("langchain_core.tools") is installed
+
+    _restore_stubbed_modules_now()
+
+    original = _STUB_ORIGINALS["langchain_core.tools"]
+    if original is None:
+        # The stub created the entry; the teardown removes it so the next import
+        # loads the real package instead of recycling the stub.
+        assert "langchain_core.tools" not in sys.modules
+    else:
+        assert sys.modules["langchain_core.tools"] is original
+
+    tools = importlib.import_module("langchain_core.tools")
+
+    @tools.tool
+    def _probe(value: str) -> str:
+        """Probe."""
+        return value
+
+    assert hasattr(_probe, "ainvoke")

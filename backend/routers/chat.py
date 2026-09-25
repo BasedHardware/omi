@@ -692,6 +692,7 @@ def send_message(
                 platform=x_app_platform,
                 client_kind=mobile_journey_attempt.client_kind,
                 client_tz=chat_tz,
+                initiating_message_id=message.id,
             ):
                 if chunk:
                     if chunk.startswith('error: '):
