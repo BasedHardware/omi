@@ -388,7 +388,7 @@ def _require_uid(request: Request, *, query_uid: str | None = None, body_uid: st
 
 
 @app.get("/", response_class=HTMLResponse)
-# TODO(security): setup URL uid must be signed by Omi backend (product)
+# TODO(security): setup URL uid must be signed by Omi backend (product) — tracked in #13463
 async def home(uid: str = Query(None)):
     """Home page - shows connection status and settings."""
     if not uid:
@@ -431,7 +431,7 @@ async def check_setup(uid: str = Query(...)):
 
 
 @app.get("/auth/dropbox")
-# TODO(security): OAuth start uid from unsigned query — product must sign setup identity
+# TODO(security): OAuth start uid from unsigned query — product must sign setup identity (tracked in #13463)
 async def auth_dropbox(uid: str = Query(...)):
     """Start Dropbox OAuth flow.
 

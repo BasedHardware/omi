@@ -70,6 +70,18 @@ def make_module(name, **attrs):
     return mod
 
 
+# main.py imports omi_plugin_sdk.auth. The package __init__ pulls
+# pydantic-dependent models, but auth.py itself is stdlib-only, so load the
+# real auth module from disk: hermetic runs exercise the real HMAC scheme.
+_sdk_auth_spec = importlib.util.spec_from_file_location(
+    "omi_plugin_sdk.auth",
+    Path(__file__).resolve().parent.parent / "omi-plugin-sdk" / "src" / "omi_plugin_sdk" / "auth.py",
+)
+_sdk_auth = importlib.util.module_from_spec(_sdk_auth_spec)
+_sdk_auth_spec.loader.exec_module(_sdk_auth)
+_omi_plugin_sdk = types.ModuleType("omi_plugin_sdk")
+_omi_plugin_sdk.auth = _sdk_auth
+
 stubs = {
     "requests": make_module(
         "requests",
@@ -105,6 +117,8 @@ stubs = {
         RedirectResponse=DummyResponse,
         JSONResponse=DummyResponse,
     ),
+    "omi_plugin_sdk": _omi_plugin_sdk,
+    "omi_plugin_sdk.auth": _sdk_auth,
     "db": make_module(
         "db",
         store_dropbox_tokens=Mock(),
@@ -114,6 +128,8 @@ stubs = {
         store_oauth_state=Mock(),
         get_oauth_state=Mock(),
         delete_oauth_state=Mock(),
+        store_oauth_state_by_token=Mock(),
+        pop_oauth_uid_for_state=Mock(return_value=None),
         get_user_settings=Mock(),
         store_user_settings=Mock(),
     ),

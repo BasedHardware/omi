@@ -896,7 +896,7 @@ async def tool_add_comment(request: Request):
 # ============================================
 
 @app.get("/")
-# TODO(security): setup URL uid must be signed by Omi backend (product)
+# TODO(security): setup URL uid must be signed by Omi backend (product) — tracked in #13463
 async def root(uid: str = Query(None)):
     """Root endpoint - Homepage with repo selection (mobile-first UI)."""
     if not uid:
@@ -1269,7 +1269,7 @@ async def root(uid: str = Query(None)):
                         const resp = await fetch('/save-agent-key', {{
                             method: 'POST',
                             headers: {{ 'Content-Type': 'application/json' }},
-                            body: JSON.stringify({{ uid: '{uid}', provider, key: apiKey }})
+                            body: JSON.stringify({{ uid: '{safe_uid}', provider, key: apiKey }})
                         }});
                         const result = await resp.json().catch(() => ({{}}));
                         if (resp.ok && result.success) {{
@@ -1363,7 +1363,7 @@ async def root(uid: str = Query(None)):
 
 
 @app.get("/auth")
-# TODO(security): OAuth start uid from unsigned query — product must sign setup identity
+# TODO(security): OAuth start uid from unsigned query — product must sign setup identity (tracked in #13463)
 async def auth_start(uid: str = Query(..., description="User ID from OMI")):
     """Start OAuth flow for GitHub authentication."""
     redirect_uri = os.getenv("OAUTH_REDIRECT_URL", "http://localhost:8000/auth/callback")
@@ -1532,7 +1532,7 @@ async def auth_callback(
 
 
 @app.get("/setup-completed")
-# TODO(security): verify X-Omi-* when secret configured
+# TODO(security): verify X-Omi-* when secret configured (tracked in #13463)
 async def check_setup(uid: str = Query(..., description="User ID from OMI")):
     """Check if user has completed setup (authenticated with GitHub)."""
     is_authenticated = SimpleUserStorage.is_authenticated(uid)
