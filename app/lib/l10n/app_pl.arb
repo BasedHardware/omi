@@ -3586,5 +3586,9 @@
     "captureStillRecording": "Nagrywanie trwa",
     "captureMicInUseElsewhere": "Mikrofon używany przez inną aplikację",
     "captureMicInterruptedDetail": "Połączenie lub inna aplikacja zajęła mikrofon, więc Omi teraz nie słyszy. Omi wznowi nagrywanie samo, gdy mikrofon się zwolni. Wszystko nagrane wcześniej jest bezpieczne.",
-    "captureCustomSttUnreachableDetail": "Twoja własna usługa zamiany mowy na tekst jest niedostępna. Omi przechowuje dźwięk na tym telefonie i wyśle go, gdy usługa wróci. Nic nie zostanie utracone."
+    "captureCustomSttUnreachableDetail": "Twoja własna usługa zamiany mowy na tekst jest niedostępna. Omi przechowuje dźwięk na tym telefonie i wyśle go, gdy usługa wróci. Nic nie zostanie utracone.",
+    "captureStarting": "Uruchamianie…",
+    "capturePhoneStorageFull": "Pamięć telefonu pełna",
+    "captureStorageAlmostFull": "Pamięć prawie pełna",
+    "capturePendantDisconnectedDetail": "Wisiorek utracił połączenie z tym telefonem. Omi połączy się ponownie samo, gdy wisiorek będzie włączony i w pobliżu. Wszystko nagrane wcześniej jest bezpieczne."
 }

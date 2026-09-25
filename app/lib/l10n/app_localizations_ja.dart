@@ -11065,4 +11065,17 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String get captureCustomSttUnreachableDetail =>
       'カスタムの音声認識サービスに接続できません。Omiは音声をこのスマートフォンに保持し、サービスが復旧したら送信します。何も失われません。';
+
+  @override
+  String get captureStarting => '開始中…';
+
+  @override
+  String get capturePhoneStorageFull => '端末の空き容量なし';
+
+  @override
+  String get captureStorageAlmostFull => '空き容量わずか';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'ペンダントとこのスマートフォンの接続が切れました。ペンダントの電源が入っていて近くにあれば、Omiは自動で再接続します。それまでに録音した内容は保存されています。';
 }

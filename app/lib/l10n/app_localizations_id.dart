@@ -11260,4 +11260,17 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get captureCustomSttUnreachableDetail =>
       'Layanan ucapan-ke-teks kustom Anda tidak dapat dijangkau. Omi menyimpan audio di ponsel ini dan mengirimnya saat layanan kembali. Tidak ada yang hilang.';
+
+  @override
+  String get captureStarting => 'Memulai…';
+
+  @override
+  String get capturePhoneStorageFull => 'Penyimpanan ponsel penuh';
+
+  @override
+  String get captureStorageAlmostFull => 'Penyimpanan hampir penuh';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Liontin kehilangan koneksi dengan ponsel ini. Omi akan menyambung kembali sendiri saat liontin menyala dan berada di dekat Anda. Semua yang direkam sebelumnya aman.';
 }

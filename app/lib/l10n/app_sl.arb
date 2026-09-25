@@ -11117,5 +11117,9 @@
     "captureStillRecording": "Snemanje se nadaljuje",
     "captureMicInUseElsewhere": "Mikrofon uporablja druga aplikacija",
     "captureMicInterruptedDetail": "Klic ali druga aplikacija je prevzela mikrofon, zato Omi trenutno ne sliši. Omi bo sam nadaljeval, ko bo mikrofon prost. Vse, kar je bilo posneto prej, je varno.",
-    "captureCustomSttUnreachableDetail": "Vaša storitev za pretvorbo govora v besedilo ni dosegljiva. Omi hrani zvok v tem telefonu in ga pošlje, ko bo storitev spet na voljo. Nič se ne izgubi."
+    "captureCustomSttUnreachableDetail": "Vaša storitev za pretvorbo govora v besedilo ni dosegljiva. Omi hrani zvok v tem telefonu in ga pošlje, ko bo storitev spet na voljo. Nič se ne izgubi.",
+    "captureStarting": "Zaganjanje…",
+    "capturePhoneStorageFull": "Pomnilnik telefona je poln",
+    "captureStorageAlmostFull": "Pomnilnik je skoraj poln",
+    "capturePendantDisconnectedDetail": "Obesek je izgubil povezavo s tem telefonom. Omi se bo sam znova povezal, ko bo obesek vklopljen in v bližini. Vse, kar je bilo posneto prej, je varno."
 }

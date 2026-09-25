@@ -3551,5 +3551,9 @@
     "captureStillRecording": "Ierakstīšana turpinās",
     "captureMicInUseElsewhere": "Mikrofonu izmanto cita lietotne",
     "captureMicInterruptedDetail": "Zvans vai cita lietotne aizņēma mikrofonu, tāpēc Omi pašlaik nedzird. Omi turpinās pats, kad mikrofons būs brīvs. Viss, kas ierakstīts līdz šim, ir drošībā.",
-    "captureCustomSttUnreachableDetail": "Jūsu pielāgotais runas pārveides tekstā pakalpojums nav sasniedzams. Omi glabā audio šajā tālrunī un nosūtīs to, kad pakalpojums atjaunosies. Nekas netiek zaudēts."
+    "captureCustomSttUnreachableDetail": "Jūsu pielāgotais runas pārveides tekstā pakalpojums nav sasniedzams. Omi glabā audio šajā tālrunī un nosūtīs to, kad pakalpojums atjaunosies. Nekas netiek zaudēts.",
+    "captureStarting": "Sāk…",
+    "capturePhoneStorageFull": "Tālruņa krātuve ir pilna",
+    "captureStorageAlmostFull": "Krātuve gandrīz pilna",
+    "capturePendantDisconnectedDetail": "Kulons zaudēja savienojumu ar šo tālruni. Omi pats atjaunos savienojumu, kad kulons būs ieslēgts un tuvumā. Viss, kas ierakstīts līdz šim, ir drošībā."
 }

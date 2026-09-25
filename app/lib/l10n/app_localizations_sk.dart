@@ -11241,4 +11241,17 @@ class AppLocalizationsSk extends AppLocalizations {
   @override
   String get captureCustomSttUnreachableDetail =>
       'Vaša vlastná služba prevodu reči na text nie je dostupná. Omi uchováva zvuk v tomto telefóne a odošle ho, keď bude služba opäť k dispozícii. Nič sa nestratí.';
+
+  @override
+  String get captureStarting => 'Spúšťa sa…';
+
+  @override
+  String get capturePhoneStorageFull => 'Úložisko telefónu je plné';
+
+  @override
+  String get captureStorageAlmostFull => 'Úložisko je takmer plné';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Prívesok stratil spojenie s týmto telefónom. Omi sa znova pripojí sám, keď bude prívesok zapnutý a nablízku. Všetko nahraté predtým je v bezpečí.';
 }

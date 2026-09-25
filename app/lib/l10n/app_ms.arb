@@ -3551,5 +3551,9 @@
     "captureStillRecording": "Masih merakam",
     "captureMicInUseElsewhere": "Mikrofon digunakan oleh apl lain",
     "captureMicInterruptedDetail": "Panggilan atau apl lain sedang menggunakan mikrofon, jadi Omi tidak dapat mendengar sekarang. Omi akan bersambung sendiri apabila mikrofon bebas. Semua yang dirakam sebelum ini selamat.",
-    "captureCustomSttUnreachableDetail": "Perkhidmatan pertuturan-ke-teks tersuai anda tidak dapat dicapai. Omi menyimpan audio pada telefon ini dan menghantarnya apabila perkhidmatan kembali. Tiada apa yang hilang."
+    "captureCustomSttUnreachableDetail": "Perkhidmatan pertuturan-ke-teks tersuai anda tidak dapat dicapai. Omi menyimpan audio pada telefon ini dan menghantarnya apabila perkhidmatan kembali. Tiada apa yang hilang.",
+    "captureStarting": "Memulakan…",
+    "capturePhoneStorageFull": "Storan telefon penuh",
+    "captureStorageAlmostFull": "Storan hampir penuh",
+    "capturePendantDisconnectedDetail": "Loket anda terputus sambungan dengan telefon ini. Omi akan bersambung semula sendiri apabila loket dihidupkan dan berdekatan. Semua yang dirakam sebelum ini selamat."
 }

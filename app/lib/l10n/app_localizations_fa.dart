@@ -11247,4 +11247,17 @@ class AppLocalizationsFa extends AppLocalizations {
   @override
   String get captureCustomSttUnreachableDetail =>
       'به سرویس سفارشی تبدیل گفتار به متن شما دسترسی نیست. Omi صدا را روی همین تلفن نگه می‌دارد و وقتی سرویس برگشت آن را ارسال می‌کند. چیزی از دست نمی‌رود.';
+
+  @override
+  String get captureStarting => 'در حال شروع…';
+
+  @override
+  String get capturePhoneStorageFull => 'حافظه تلفن پر است';
+
+  @override
+  String get captureStorageAlmostFull => 'حافظه تقریباً پر است';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'آویز شما اتصالش را با این تلفن از دست داد. وقتی آویز روشن و نزدیک باشد، Omi خودش دوباره وصل می‌شود. هر آنچه پیش از این ضبط شده محفوظ است.';
 }

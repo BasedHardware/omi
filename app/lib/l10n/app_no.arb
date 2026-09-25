@@ -3551,5 +3551,9 @@
     "captureStillRecording": "Tar fortsatt opp",
     "captureMicInUseElsewhere": "Mikrofonen brukes av en annen app",
     "captureMicInterruptedDetail": "En samtale eller en annen app tok mikrofonen, så Omi kan ikke høre akkurat nå. Omi fortsetter av seg selv når mikrofonen er ledig. Alt som ble tatt opp før dette, er trygt.",
-    "captureCustomSttUnreachableDetail": "Din egen tale-til-tekst-tjeneste kan ikke nås. Omi beholder lyden på denne telefonen og sender den når tjenesten er tilbake. Ingenting går tapt."
+    "captureCustomSttUnreachableDetail": "Din egen tale-til-tekst-tjeneste kan ikke nås. Omi beholder lyden på denne telefonen og sender den når tjenesten er tilbake. Ingenting går tapt.",
+    "captureStarting": "Starter…",
+    "capturePhoneStorageFull": "Telefonlagringen er full",
+    "captureStorageAlmostFull": "Lagringen er nesten full",
+    "capturePendantDisconnectedDetail": "Anhenget mistet forbindelsen til denne telefonen. Omi kobler til igjen av seg selv når anhenget er på og i nærheten. Alt som ble tatt opp før dette, er trygt."
 }

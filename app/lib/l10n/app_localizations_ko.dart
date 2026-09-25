@@ -11069,4 +11069,17 @@ class AppLocalizationsKo extends AppLocalizations {
   @override
   String get captureCustomSttUnreachableDetail =>
       '사용자 지정 음성-텍스트 서비스에 연결할 수 없어요. Omi가 오디오를 이 휴대폰에 보관했다가 서비스가 복구되면 보내요. 잃어버리는 건 없어요.';
+
+  @override
+  String get captureStarting => '시작하는 중…';
+
+  @override
+  String get capturePhoneStorageFull => '휴대폰 저장 공간 부족';
+
+  @override
+  String get captureStorageAlmostFull => '저장 공간 거의 참';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      '펜던트와 이 휴대폰의 연결이 끊겼어요. 펜던트가 켜져 있고 가까이 있으면 Omi가 자동으로 다시 연결해요. 그 전에 녹음된 내용은 안전하게 보관돼요.';
 }

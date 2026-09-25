@@ -11271,4 +11271,17 @@ class AppLocalizationsUk extends AppLocalizations {
   @override
   String get captureCustomSttUnreachableDetail =>
       'Ваш власний сервіс розпізнавання мовлення недоступний. Omi зберігає аудіо на цьому телефоні й надішле його, коли сервіс запрацює. Нічого не втратиться.';
+
+  @override
+  String get captureStarting => 'Запуск…';
+
+  @override
+  String get capturePhoneStorageFull => 'Пам’ять телефона заповнена';
+
+  @override
+  String get captureStorageAlmostFull => 'Пам’ять майже заповнена';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Кулон втратив зв’язок із цим телефоном. Omi перепідключиться сам, коли кулон буде ввімкнений і поруч. Усе, що записано до цього, збережено.';
 }

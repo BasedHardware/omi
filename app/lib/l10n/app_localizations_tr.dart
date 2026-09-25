@@ -11262,4 +11262,17 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get captureCustomSttUnreachableDetail =>
       'Özel konuşmadan metne hizmetine ulaşılamıyor. Omi sesi bu telefonda tutar ve hizmet geri geldiğinde gönderir. Hiçbir şey kaybolmaz.';
+
+  @override
+  String get captureStarting => 'Başlatılıyor…';
+
+  @override
+  String get capturePhoneStorageFull => 'Telefon depolama alanı dolu';
+
+  @override
+  String get captureStorageAlmostFull => 'Depolama neredeyse dolu';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Kolyenin bu telefonla bağlantısı kesildi. Kolye açık ve yakındayken Omi kendiliğinden yeniden bağlanır. Bundan önce kaydedilen her şey güvende.';
 }

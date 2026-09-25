@@ -11313,4 +11313,17 @@ class AppLocalizationsIt extends AppLocalizations {
   @override
   String get captureCustomSttUnreachableDetail =>
       'Il tuo servizio personalizzato di trascrizione vocale non è raggiungibile. Omi conserva l\'audio su questo telefono e lo invierà quando il servizio tornerà. Non si perde nulla.';
+
+  @override
+  String get captureStarting => 'Avvio…';
+
+  @override
+  String get capturePhoneStorageFull => 'Memoria del telefono piena';
+
+  @override
+  String get captureStorageAlmostFull => 'Memoria quasi piena';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Il ciondolo ha perso la connessione con questo telefono. Omi si riconnetterà da solo quando il ciondolo sarà acceso e vicino. Tutto ciò che è stato registrato prima è al sicuro.';
 }

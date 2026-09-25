@@ -11314,4 +11314,17 @@ class AppLocalizationsCa extends AppLocalizations {
   @override
   String get captureCustomSttUnreachableDetail =>
       'No es pot accedir al teu servei personalitzat de veu a text. Omi guarda l\'àudio en aquest telèfon i l\'enviarà quan el servei torni. No es perd res.';
+
+  @override
+  String get captureStarting => 'S\'està iniciant…';
+
+  @override
+  String get capturePhoneStorageFull => 'Emmagatzematge del telèfon ple';
+
+  @override
+  String get captureStorageAlmostFull => 'Emmagatzematge gairebé ple';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'El penjoll ha perdut la connexió amb aquest telèfon. Omi es tornarà a connectar sol quan el penjoll estigui encès i a prop. Tot el que s\'ha gravat abans és segur.';
 }

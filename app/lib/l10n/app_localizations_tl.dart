@@ -11348,4 +11348,17 @@ class AppLocalizationsTl extends AppLocalizations {
   @override
   String get captureCustomSttUnreachableDetail =>
       'Hindi maabot ang iyong custom na speech-to-text na serbisyo. Itinatabi ng Omi ang audio sa teleponong ito at ipapadala kapag bumalik ang serbisyo. Walang mawawala.';
+
+  @override
+  String get captureStarting => 'Nagsisimula…';
+
+  @override
+  String get capturePhoneStorageFull => 'Puno na ang storage ng telepono';
+
+  @override
+  String get captureStorageAlmostFull => 'Halos puno na ang storage';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Nawalan ng koneksyon ang iyong pendant sa teleponong ito. Kusang kokonekta muli ang Omi kapag naka-on at malapit ang pendant. Ligtas ang lahat ng na-record bago nito.';
 }

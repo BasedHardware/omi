@@ -11044,4 +11044,16 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get captureCustomSttUnreachableDetail => '无法连接到你的自定义语音转文字服务。Omi 会把音频保存在这部手机上，服务恢复后再发送。不会丢失任何内容。';
+
+  @override
+  String get captureStarting => '正在启动…';
+
+  @override
+  String get capturePhoneStorageFull => '手机存储空间已满';
+
+  @override
+  String get captureStorageAlmostFull => '存储空间即将用完';
+
+  @override
+  String get capturePendantDisconnectedDetail => '吊坠与这部手机的连接已断开。吊坠开机并在附近时，Omi 会自动重新连接。此前录下的内容都已保存。';
 }

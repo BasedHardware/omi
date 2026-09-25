@@ -11161,4 +11161,17 @@ class AppLocalizationsHe extends AppLocalizations {
   @override
   String get captureCustomSttUnreachableDetail =>
       'אין גישה לשירות המרת הדיבור לטקסט המותאם שלך. Omi שומר את השמע בטלפון הזה וישלח אותו כשהשירות יחזור. שום דבר לא הולך לאיבוד.';
+
+  @override
+  String get captureStarting => 'מתחיל…';
+
+  @override
+  String get capturePhoneStorageFull => 'אחסון הטלפון מלא';
+
+  @override
+  String get captureStorageAlmostFull => 'האחסון כמעט מלא';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'התליון איבד את החיבור לטלפון הזה. Omi יתחבר מחדש מעצמו כשהתליון דלוק וקרוב. כל מה שהוקלט עד עכשיו שמור.';
 }

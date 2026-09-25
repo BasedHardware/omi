@@ -11182,4 +11182,17 @@ class AppLocalizationsAr extends AppLocalizations {
   @override
   String get captureCustomSttUnreachableDetail =>
       'تعذّر الوصول إلى خدمة تحويل الكلام إلى نص المخصصة. يحتفظ Omi بالصوت على هذا الهاتف ويرسله عند عودة الخدمة. لن يضيع شيء.';
+
+  @override
+  String get captureStarting => 'جارٍ البدء…';
+
+  @override
+  String get capturePhoneStorageFull => 'مساحة الهاتف ممتلئة';
+
+  @override
+  String get captureStorageAlmostFull => 'المساحة ممتلئة تقريبًا';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'فقد القلادة اتصالها بهذا الهاتف. سيعيد Omi الاتصال تلقائيًا عندما تكون القلادة قيد التشغيل وقريبة. كل ما سُجّل قبل ذلك محفوظ.';
 }

@@ -11247,4 +11247,17 @@ class AppLocalizationsEt extends AppLocalizations {
   @override
   String get captureCustomSttUnreachableDetail =>
       'Sinu kohandatud kõnetuvastusteenus pole kättesaadav. Omi hoiab heli selles telefonis ja saadab selle, kui teenus taastub. Midagi ei lähe kaduma.';
+
+  @override
+  String get captureStarting => 'Käivitamine…';
+
+  @override
+  String get capturePhoneStorageFull => 'Telefoni mälu on täis';
+
+  @override
+  String get captureStorageAlmostFull => 'Mälu on peaaegu täis';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Ripats kaotas ühenduse selle telefoniga. Omi loob ühenduse ise uuesti, kui ripats on sisse lülitatud ja lähedal. Kõik varem salvestatu on alles.';
 }

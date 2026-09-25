@@ -11292,4 +11292,17 @@ class AppLocalizationsBg extends AppLocalizations {
   @override
   String get captureCustomSttUnreachableDetail =>
       'Вашата собствена услуга за преобразуване на реч в текст е недостъпна. Omi пази аудиото на този телефон и ще го изпрати, когато услугата се върне. Нищо не се губи.';
+
+  @override
+  String get captureStarting => 'Стартиране…';
+
+  @override
+  String get capturePhoneStorageFull => 'Паметта на телефона е пълна';
+
+  @override
+  String get captureStorageAlmostFull => 'Паметта е почти пълна';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Висулката загуби връзка с този телефон. Omi ще се свърже отново сам, когато висулката е включена и наблизо. Всичко записано дотук е запазено.';
 }

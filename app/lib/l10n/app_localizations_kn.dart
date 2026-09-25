@@ -11285,4 +11285,17 @@ class AppLocalizationsKn extends AppLocalizations {
   @override
   String get captureCustomSttUnreachableDetail =>
       'ನಿಮ್ಮ ಕಸ್ಟಮ್ ಸ್ಪೀಚ್-ಟು-ಟೆಕ್ಸ್ಟ್ ಸೇವೆಯನ್ನು ತಲುಪಲು ಸಾಧ್ಯವಾಗುತ್ತಿಲ್ಲ. Omi ಆಡಿಯೋವನ್ನು ಈ ಫೋನ್‌ನಲ್ಲಿ ಇರಿಸಿಕೊಂಡು ಸೇವೆ ಮರಳಿದಾಗ ಕಳುಹಿಸುತ್ತದೆ. ಏನೂ ಕಳೆದುಹೋಗುವುದಿಲ್ಲ.';
+
+  @override
+  String get captureStarting => 'ಪ್ರಾರಂಭವಾಗುತ್ತಿದೆ…';
+
+  @override
+  String get capturePhoneStorageFull => 'ಫೋನ್ ಸಂಗ್ರಹಣೆ ತುಂಬಿದೆ';
+
+  @override
+  String get captureStorageAlmostFull => 'ಸಂಗ್ರಹಣೆ ಬಹುತೇಕ ತುಂಬಿದೆ';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'ನಿಮ್ಮ ಪೆಂಡೆಂಟ್ ಈ ಫೋನ್‌ನೊಂದಿಗೆ ಸಂಪರ್ಕ ಕಳೆದುಕೊಂಡಿದೆ. ಪೆಂಡೆಂಟ್ ಆನ್ ಆಗಿದ್ದು ಹತ್ತಿರದಲ್ಲಿದ್ದಾಗ Omi ತಾನಾಗಿಯೇ ಮರುಸಂಪರ್ಕಿಸುತ್ತದೆ. ಇದಕ್ಕೂ ಮೊದಲು ರೆಕಾರ್ಡ್ ಆದದ್ದೆಲ್ಲ ಸುರಕ್ಷಿತವಾಗಿದೆ.';
 }

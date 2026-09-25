@@ -11346,4 +11346,17 @@ class AppLocalizationsFr extends AppLocalizations {
   @override
   String get captureCustomSttUnreachableDetail =>
       'Votre service de reconnaissance vocale personnalisé est injoignable. Omi garde l\'audio sur ce téléphone et l\'enverra quand le service sera de retour. Rien n\'est perdu.';
+
+  @override
+  String get captureStarting => 'Démarrage…';
+
+  @override
+  String get capturePhoneStorageFull => 'Stockage du téléphone plein';
+
+  @override
+  String get captureStorageAlmostFull => 'Stockage presque plein';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Votre pendentif a perdu la connexion avec ce téléphone. Omi se reconnectera tout seul quand le pendentif sera allumé et à proximité. Tout ce qui a été enregistré avant est en sécurité.';
 }

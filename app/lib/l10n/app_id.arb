@@ -3586,5 +3586,9 @@
     "captureStillRecording": "Masih merekam",
     "captureMicInUseElsewhere": "Mikrofon dipakai aplikasi lain",
     "captureMicInterruptedDetail": "Panggilan atau aplikasi lain sedang memakai mikrofon, jadi Omi tidak bisa mendengar sekarang. Omi akan lanjut sendiri saat mikrofon sudah bebas. Semua yang direkam sebelumnya aman.",
-    "captureCustomSttUnreachableDetail": "Layanan ucapan-ke-teks kustom Anda tidak dapat dijangkau. Omi menyimpan audio di ponsel ini dan mengirimnya saat layanan kembali. Tidak ada yang hilang."
+    "captureCustomSttUnreachableDetail": "Layanan ucapan-ke-teks kustom Anda tidak dapat dijangkau. Omi menyimpan audio di ponsel ini dan mengirimnya saat layanan kembali. Tidak ada yang hilang.",
+    "captureStarting": "Memulai…",
+    "capturePhoneStorageFull": "Penyimpanan ponsel penuh",
+    "captureStorageAlmostFull": "Penyimpanan hampir penuh",
+    "capturePendantDisconnectedDetail": "Liontin kehilangan koneksi dengan ponsel ini. Omi akan menyambung kembali sendiri saat liontin menyala dan berada di dekat Anda. Semua yang direkam sebelumnya aman."
 }

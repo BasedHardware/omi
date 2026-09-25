@@ -3551,5 +3551,9 @@
     "captureStillRecording": "Vẫn đang ghi âm",
     "captureMicInUseElsewhere": "Ứng dụng khác đang dùng micrô",
     "captureMicInterruptedDetail": "Một cuộc gọi hoặc ứng dụng khác đang dùng micrô nên Omi hiện không nghe được. Omi sẽ tự tiếp tục khi micrô rảnh. Mọi thứ đã ghi trước đó vẫn an toàn.",
-    "captureCustomSttUnreachableDetail": "Không thể kết nối dịch vụ chuyển giọng nói thành văn bản tùy chỉnh của bạn. Omi giữ âm thanh trên điện thoại này và sẽ gửi khi dịch vụ hoạt động trở lại. Không có gì bị mất."
+    "captureCustomSttUnreachableDetail": "Không thể kết nối dịch vụ chuyển giọng nói thành văn bản tùy chỉnh của bạn. Omi giữ âm thanh trên điện thoại này và sẽ gửi khi dịch vụ hoạt động trở lại. Không có gì bị mất.",
+    "captureStarting": "Đang bắt đầu…",
+    "capturePhoneStorageFull": "Bộ nhớ điện thoại đầy",
+    "captureStorageAlmostFull": "Bộ nhớ gần đầy",
+    "capturePendantDisconnectedDetail": "Mặt dây chuyền đã mất kết nối với điện thoại này. Omi sẽ tự kết nối lại khi mặt dây chuyền bật và ở gần. Mọi thứ đã ghi trước đó vẫn an toàn."
 }

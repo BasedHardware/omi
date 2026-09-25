@@ -20498,6 +20498,30 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Your custom speech-to-text service can\'t be reached. Omi keeps your audio on this phone and sends it when the service is back. Nothing is lost.'**
   String get captureCustomSttUnreachableDetail;
+
+  /// Home live capture card, line 1: the phone microphone recording is starting and audio is not flowing yet.
+  ///
+  /// In en, this message translates to:
+  /// **'Starting…'**
+  String get captureStarting;
+
+  /// Transcribe Later card, line 2 after the timer: recording paused because the phone is out of storage.
+  ///
+  /// In en, this message translates to:
+  /// **'Phone storage full'**
+  String get capturePhoneStorageFull;
+
+  /// Transcribe Later card for a pendant, line 2: the pendant's own storage is almost full.
+  ///
+  /// In en, this message translates to:
+  /// **'Storage almost full'**
+  String get captureStorageAlmostFull;
+
+  /// Details sheet from the Home live capture card when the pendant disconnected in the middle of a capture.
+  ///
+  /// In en, this message translates to:
+  /// **'Your pendant lost its connection to this phone. Omi reconnects on its own when the pendant is on and nearby. Everything recorded before this is safe.'**
+  String get capturePendantDisconnectedDetail;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

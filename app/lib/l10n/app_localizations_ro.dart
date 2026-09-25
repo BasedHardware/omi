@@ -11302,4 +11302,17 @@ class AppLocalizationsRo extends AppLocalizations {
   @override
   String get captureCustomSttUnreachableDetail =>
       'Serviciul tău personalizat de transformare a vorbirii în text nu poate fi accesat. Omi păstrează sunetul pe acest telefon și îl trimite când serviciul revine. Nu se pierde nimic.';
+
+  @override
+  String get captureStarting => 'Se pornește…';
+
+  @override
+  String get capturePhoneStorageFull => 'Spațiul telefonului e plin';
+
+  @override
+  String get captureStorageAlmostFull => 'Spațiul e aproape plin';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Pandantivul a pierdut conexiunea cu acest telefon. Omi se va reconecta singur când pandantivul este pornit și în apropiere. Tot ce s-a înregistrat înainte este în siguranță.';
 }

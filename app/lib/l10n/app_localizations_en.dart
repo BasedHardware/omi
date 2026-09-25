@@ -11239,4 +11239,17 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get captureCustomSttUnreachableDetail =>
       'Your custom speech-to-text service can\'t be reached. Omi keeps your audio on this phone and sends it when the service is back. Nothing is lost.';
+
+  @override
+  String get captureStarting => 'Starting…';
+
+  @override
+  String get capturePhoneStorageFull => 'Phone storage full';
+
+  @override
+  String get captureStorageAlmostFull => 'Storage almost full';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Your pendant lost its connection to this phone. Omi reconnects on its own when the pendant is on and nearby. Everything recorded before this is safe.';
 }

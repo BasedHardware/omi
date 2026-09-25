@@ -11245,4 +11245,17 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get captureCustomSttUnreachableDetail =>
       'Không thể kết nối dịch vụ chuyển giọng nói thành văn bản tùy chỉnh của bạn. Omi giữ âm thanh trên điện thoại này và sẽ gửi khi dịch vụ hoạt động trở lại. Không có gì bị mất.';
+
+  @override
+  String get captureStarting => 'Đang bắt đầu…';
+
+  @override
+  String get capturePhoneStorageFull => 'Bộ nhớ điện thoại đầy';
+
+  @override
+  String get captureStorageAlmostFull => 'Bộ nhớ gần đầy';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Mặt dây chuyền đã mất kết nối với điện thoại này. Omi sẽ tự kết nối lại khi mặt dây chuyền bật và ở gần. Mọi thứ đã ghi trước đó vẫn an toàn.';
 }

@@ -3586,5 +3586,9 @@
     "captureStillRecording": "Enregistrement en cours",
     "captureMicInUseElsewhere": "Micro utilisé par une autre app",
     "captureMicInterruptedDetail": "Un appel ou une autre app utilise le micro, Omi ne peut donc pas écouter pour le moment. Omi reprendra tout seul dès que le micro sera libre. Tout ce qui a été enregistré avant est en sécurité.",
-    "captureCustomSttUnreachableDetail": "Votre service de reconnaissance vocale personnalisé est injoignable. Omi garde l'audio sur ce téléphone et l'enverra quand le service sera de retour. Rien n'est perdu."
+    "captureCustomSttUnreachableDetail": "Votre service de reconnaissance vocale personnalisé est injoignable. Omi garde l'audio sur ce téléphone et l'enverra quand le service sera de retour. Rien n'est perdu.",
+    "captureStarting": "Démarrage…",
+    "capturePhoneStorageFull": "Stockage du téléphone plein",
+    "captureStorageAlmostFull": "Stockage presque plein",
+    "capturePendantDisconnectedDetail": "Votre pendentif a perdu la connexion avec ce téléphone. Omi se reconnectera tout seul quand le pendentif sera allumé et à proximité. Tout ce qui a été enregistré avant est en sécurité."
 }

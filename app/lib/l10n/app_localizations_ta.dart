@@ -11327,4 +11327,17 @@ class AppLocalizationsTa extends AppLocalizations {
   @override
   String get captureCustomSttUnreachableDetail =>
       'உங்கள் தனிப்பயன் பேச்சு-உரை சேவையை அடைய முடியவில்லை. Omi ஆடியோவை இந்த ஃபோனில் வைத்திருந்து சேவை திரும்பியதும் அனுப்பும். எதுவும் இழக்கப்படாது.';
+
+  @override
+  String get captureStarting => 'தொடங்குகிறது…';
+
+  @override
+  String get capturePhoneStorageFull => 'ஃபோன் சேமிப்பகம் நிரம்பியது';
+
+  @override
+  String get captureStorageAlmostFull => 'சேமிப்பகம் கிட்டத்தட்ட நிரம்பியது';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'உங்கள் பதக்கம் இந்த ஃபோனுடனான இணைப்பை இழந்தது. பதக்கம் இயக்கத்தில் இருந்து அருகில் இருக்கும்போது Omi தானாகவே மீண்டும் இணையும். இதற்கு முன் பதிவானவை அனைத்தும் பாதுகாப்பாக உள்ளன.';
 }

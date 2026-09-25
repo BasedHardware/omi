@@ -11287,4 +11287,17 @@ class AppLocalizationsHr extends AppLocalizations {
   @override
   String get captureCustomSttUnreachableDetail =>
       'Vaša prilagođena usluga pretvorbe govora u tekst nije dostupna. Omi čuva zvuk na ovom telefonu i poslat će ga kad se usluga vrati. Ništa se ne gubi.';
+
+  @override
+  String get captureStarting => 'Pokretanje…';
+
+  @override
+  String get capturePhoneStorageFull => 'Pohrana telefona je puna';
+
+  @override
+  String get captureStorageAlmostFull => 'Pohrana je gotovo puna';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Privjesak je izgubio vezu s ovim telefonom. Omi će se sam ponovno povezati kad je privjesak uključen i u blizini. Sve dosad snimljeno je sigurno.';
 }

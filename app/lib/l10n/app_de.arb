@@ -1119,7 +1119,7 @@
     "settingUp": "Einrichten…",
     "preparingSystemAudioCapture": "Systemtonaufnahme wird vorbereitet",
     "startYourFirstRecording": "Starten Sie Ihre erste Aufnahme",
-    "reconnecting": "Verbindung wird wiederhergestellt…",
+    "reconnecting": "Verbinde neu…",
     "recordingPaused": "Aufnahme pausiert",
     "recordingActive": "Aufnahme aktiv",
     "startRecording": "Aufnahme starten",
@@ -3546,10 +3546,14 @@
     "moreWaysToRecord": "Weitere Aufnahmeoptionen",
     "openCall": "Anruf öffnen",
     "captureRecoveryBanner": "Der Ton des Pendants erreicht die App nicht — zum Reparieren tippen",
-    "captureNotTranscribing": "Keine Transkription",
+    "captureNotTranscribing": "Kein Transkript",
     "captureAudioSavedTranscribesLater": "Audio gespeichert, wird später transkribiert",
     "captureStillRecording": "Nimmt weiter auf",
     "captureMicInUseElsewhere": "Mikrofon von anderer App belegt",
     "captureMicInterruptedDetail": "Ein Anruf oder eine andere App nutzt das Mikrofon, daher kann Omi gerade nicht zuhören. Omi macht von selbst weiter, sobald das Mikrofon frei ist. Alles bisher Aufgenommene ist sicher.",
-    "captureCustomSttUnreachableDetail": "Dein eigener Sprache-zu-Text-Dienst ist nicht erreichbar. Omi behält das Audio auf diesem Telefon und sendet es, sobald der Dienst wieder da ist. Nichts geht verloren."
+    "captureCustomSttUnreachableDetail": "Dein eigener Sprache-zu-Text-Dienst ist nicht erreichbar. Omi behält das Audio auf diesem Telefon und sendet es, sobald der Dienst wieder da ist. Nichts geht verloren.",
+    "captureStarting": "Startet…",
+    "capturePhoneStorageFull": "Telefonspeicher voll",
+    "captureStorageAlmostFull": "Speicher fast voll",
+    "capturePendantDisconnectedDetail": "Dein Anhänger hat die Verbindung zu diesem Telefon verloren. Omi verbindet sich von selbst neu, sobald der Anhänger eingeschaltet und in der Nähe ist. Alles bisher Aufgenommene ist sicher."
 }

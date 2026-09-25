@@ -11277,4 +11277,17 @@ class AppLocalizationsLv extends AppLocalizations {
   @override
   String get captureCustomSttUnreachableDetail =>
       'Jūsu pielāgotais runas pārveides tekstā pakalpojums nav sasniedzams. Omi glabā audio šajā tālrunī un nosūtīs to, kad pakalpojums atjaunosies. Nekas netiek zaudēts.';
+
+  @override
+  String get captureStarting => 'Sāk…';
+
+  @override
+  String get capturePhoneStorageFull => 'Tālruņa krātuve ir pilna';
+
+  @override
+  String get captureStorageAlmostFull => 'Krātuve gandrīz pilna';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Kulons zaudēja savienojumu ar šo tālruni. Omi pats atjaunos savienojumu, kad kulons būs ieslēgts un tuvumā. Viss, kas ierakstīts līdz šim, ir drošībā.';
 }

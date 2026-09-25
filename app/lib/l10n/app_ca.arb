@@ -3551,5 +3551,9 @@
     "captureStillRecording": "Encara s'està gravant",
     "captureMicInUseElsewhere": "Una altra app fa servir el micròfon",
     "captureMicInterruptedDetail": "Una trucada o una altra app ha agafat el micròfon, així que ara Omi no pot escoltar. Omi es reprendrà sol quan el micròfon estigui lliure. Tot el que s'ha gravat abans és segur.",
-    "captureCustomSttUnreachableDetail": "No es pot accedir al teu servei personalitzat de veu a text. Omi guarda l'àudio en aquest telèfon i l'enviarà quan el servei torni. No es perd res."
+    "captureCustomSttUnreachableDetail": "No es pot accedir al teu servei personalitzat de veu a text. Omi guarda l'àudio en aquest telèfon i l'enviarà quan el servei torni. No es perd res.",
+    "captureStarting": "S'està iniciant…",
+    "capturePhoneStorageFull": "Emmagatzematge del telèfon ple",
+    "captureStorageAlmostFull": "Emmagatzematge gairebé ple",
+    "capturePendantDisconnectedDetail": "El penjoll ha perdut la connexió amb aquest telèfon. Omi es tornarà a connectar sol quan el penjoll estigui encès i a prop. Tot el que s'ha gravat abans és segur."
 }

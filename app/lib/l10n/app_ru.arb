@@ -1119,7 +1119,7 @@
     "settingUp": "Настройка…",
     "preparingSystemAudioCapture": "Подготовка записи системного аудио",
     "startYourFirstRecording": "Начните свою первую запись",
-    "reconnecting": "Переподключение…",
+    "reconnecting": "Подключение…",
     "recordingPaused": "Запись приостановлена",
     "recordingActive": "Запись активна",
     "startRecording": "Начать запись",
@@ -3581,10 +3581,14 @@
     "moreWaysToRecord": "Другие способы записи",
     "openCall": "Открыть звонок",
     "captureRecoveryBanner": "Звук кулона не доходит до приложения — нажмите, чтобы исправить",
-    "captureNotTranscribing": "Нет расшифровки",
+    "captureNotTranscribing": "Нет текста",
     "captureAudioSavedTranscribesLater": "Аудио сохранено, расшифруется позже",
     "captureStillRecording": "Запись продолжается",
     "captureMicInUseElsewhere": "Микрофон занят другим приложением",
     "captureMicInterruptedDetail": "Звонок или другое приложение заняли микрофон, поэтому Omi сейчас не слышит. Omi продолжит сам, когда микрофон освободится. Всё, что записано до этого, сохранено.",
-    "captureCustomSttUnreachableDetail": "Ваш собственный сервис распознавания речи недоступен. Omi хранит аудио на этом телефоне и отправит его, когда сервис заработает. Ничего не потеряется."
+    "captureCustomSttUnreachableDetail": "Ваш собственный сервис распознавания речи недоступен. Omi хранит аудио на этом телефоне и отправит его, когда сервис заработает. Ничего не потеряется.",
+    "captureStarting": "Запуск…",
+    "capturePhoneStorageFull": "Память телефона заполнена",
+    "captureStorageAlmostFull": "Память почти заполнена",
+    "capturePendantDisconnectedDetail": "Кулон потерял связь с этим телефоном. Omi переподключится сам, когда кулон будет включён и рядом. Всё, что записано до этого, сохранено."
 }

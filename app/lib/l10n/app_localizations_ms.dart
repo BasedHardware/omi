@@ -11279,4 +11279,17 @@ class AppLocalizationsMs extends AppLocalizations {
   @override
   String get captureCustomSttUnreachableDetail =>
       'Perkhidmatan pertuturan-ke-teks tersuai anda tidak dapat dicapai. Omi menyimpan audio pada telefon ini dan menghantarnya apabila perkhidmatan kembali. Tiada apa yang hilang.';
+
+  @override
+  String get captureStarting => 'Memulakan…';
+
+  @override
+  String get capturePhoneStorageFull => 'Storan telefon penuh';
+
+  @override
+  String get captureStorageAlmostFull => 'Storan hampir penuh';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Loket anda terputus sambungan dengan telefon ini. Omi akan bersambung semula sendiri apabila loket dihidupkan dan berdekatan. Semua yang dirakam sebelum ini selamat.';
 }

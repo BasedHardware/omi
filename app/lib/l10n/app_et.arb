@@ -3551,5 +3551,9 @@
     "captureStillRecording": "Salvestamine jätkub",
     "captureMicInUseElsewhere": "Mikrofoni kasutab teine rakendus",
     "captureMicInterruptedDetail": "Kõne või mõni teine rakendus võttis mikrofoni, seega Omi praegu ei kuule. Omi jätkab ise, kui mikrofon vabaneb. Kõik varem salvestatu on alles.",
-    "captureCustomSttUnreachableDetail": "Sinu kohandatud kõnetuvastusteenus pole kättesaadav. Omi hoiab heli selles telefonis ja saadab selle, kui teenus taastub. Midagi ei lähe kaduma."
+    "captureCustomSttUnreachableDetail": "Sinu kohandatud kõnetuvastusteenus pole kättesaadav. Omi hoiab heli selles telefonis ja saadab selle, kui teenus taastub. Midagi ei lähe kaduma.",
+    "captureStarting": "Käivitamine…",
+    "capturePhoneStorageFull": "Telefoni mälu on täis",
+    "captureStorageAlmostFull": "Mälu on peaaegu täis",
+    "capturePendantDisconnectedDetail": "Ripats kaotas ühenduse selle telefoniga. Omi loob ühenduse ise uuesti, kui ripats on sisse lülitatud ja lähedal. Kõik varem salvestatu on alles."
 }

@@ -3551,5 +3551,9 @@
     "captureStillRecording": "録音は継続中",
     "captureMicInUseElsewhere": "別のアプリがマイクを使用中",
     "captureMicInterruptedDetail": "通話または別のアプリがマイクを使用しているため、Omiは今は聞き取れません。マイクが空くとOmiは自動で再開します。それまでに録音した内容は保存されています。",
-    "captureCustomSttUnreachableDetail": "カスタムの音声認識サービスに接続できません。Omiは音声をこのスマートフォンに保持し、サービスが復旧したら送信します。何も失われません。"
+    "captureCustomSttUnreachableDetail": "カスタムの音声認識サービスに接続できません。Omiは音声をこのスマートフォンに保持し、サービスが復旧したら送信します。何も失われません。",
+    "captureStarting": "開始中…",
+    "capturePhoneStorageFull": "端末の空き容量なし",
+    "captureStorageAlmostFull": "空き容量わずか",
+    "capturePendantDisconnectedDetail": "ペンダントとこのスマートフォンの接続が切れました。ペンダントの電源が入っていて近くにあれば、Omiは自動で再接続します。それまでに録音した内容は保存されています。"
 }

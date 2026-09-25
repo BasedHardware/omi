@@ -11117,5 +11117,9 @@
     "captureStillRecording": "Snimanje se nastavlja",
     "captureMicInUseElsewhere": "Mikrofon koristi druga aplikacija",
     "captureMicInterruptedDetail": "Poziv ili druga aplikacija preuzela je mikrofon, pa Omi trenutno ne čuje. Omi će sam nastaviti kad mikrofon bude slobodan. Sve snimljeno do sada je sačuvano.",
-    "captureCustomSttUnreachableDetail": "Vaša prilagođena usluga pretvaranja govora u tekst nije dostupna. Omi čuva zvuk na ovom telefonu i poslat će ga kad se usluga vrati. Ništa se ne gubi."
+    "captureCustomSttUnreachableDetail": "Vaša prilagođena usluga pretvaranja govora u tekst nije dostupna. Omi čuva zvuk na ovom telefonu i poslat će ga kad se usluga vrati. Ništa se ne gubi.",
+    "captureStarting": "Pokretanje…",
+    "capturePhoneStorageFull": "Memorija telefona je puna",
+    "captureStorageAlmostFull": "Memorija je skoro puna",
+    "capturePendantDisconnectedDetail": "Privjesak je izgubio vezu s ovim telefonom. Omi će se sam ponovo povezati kad je privjesak uključen i u blizini. Sve snimljeno do sada je sačuvano."
 }

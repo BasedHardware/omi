@@ -11253,4 +11253,17 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String get captureCustomSttUnreachableDetail =>
       'Omaa puheentunnistuspalveluasi ei tavoiteta. Omi säilyttää äänen tässä puhelimessa ja lähettää sen, kun palvelu palaa. Mitään ei menetetä.';
+
+  @override
+  String get captureStarting => 'Käynnistetään…';
+
+  @override
+  String get capturePhoneStorageFull => 'Puhelimen tallennustila täynnä';
+
+  @override
+  String get captureStorageAlmostFull => 'Tallennustila melkein täynnä';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Riipus menetti yhteyden tähän puhelimeen. Omi yhdistää itsestään uudelleen, kun riipus on päällä ja lähellä. Kaikki tätä ennen tallennettu on tallessa.';
 }

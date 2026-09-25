@@ -11281,4 +11281,17 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get captureCustomSttUnreachableDetail =>
       'No se puede acceder a tu servicio personalizado de voz a texto. Omi guarda el audio en este teléfono y lo enviará cuando el servicio vuelva. No se pierde nada.';
+
+  @override
+  String get captureStarting => 'Iniciando…';
+
+  @override
+  String get capturePhoneStorageFull => 'Almacenamiento del teléfono lleno';
+
+  @override
+  String get captureStorageAlmostFull => 'Almacenamiento casi lleno';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Tu colgante perdió la conexión con este teléfono. Omi se volverá a conectar solo cuando el colgante esté encendido y cerca. Todo lo grabado antes está a salvo.';
 }

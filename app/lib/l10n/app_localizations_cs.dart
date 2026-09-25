@@ -11247,4 +11247,17 @@ class AppLocalizationsCs extends AppLocalizations {
   @override
   String get captureCustomSttUnreachableDetail =>
       'Vaše vlastní služba převodu řeči na text není dostupná. Omi uchovává zvuk v tomto telefonu a odešle ho, až bude služba opět k dispozici. Nic se neztratí.';
+
+  @override
+  String get captureStarting => 'Spouštění…';
+
+  @override
+  String get capturePhoneStorageFull => 'Úložiště telefonu je plné';
+
+  @override
+  String get captureStorageAlmostFull => 'Úložiště je téměř plné';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Přívěsek ztratil spojení s tímto telefonem. Omi se znovu připojí sám, až bude přívěsek zapnutý a poblíž. Vše nahrané předtím je v bezpečí.';
 }

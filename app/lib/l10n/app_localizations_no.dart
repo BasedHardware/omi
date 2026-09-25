@@ -11250,4 +11250,17 @@ class AppLocalizationsNo extends AppLocalizations {
   @override
   String get captureCustomSttUnreachableDetail =>
       'Din egen tale-til-tekst-tjeneste kan ikke nås. Omi beholder lyden på denne telefonen og sender den når tjenesten er tilbake. Ingenting går tapt.';
+
+  @override
+  String get captureStarting => 'Starter…';
+
+  @override
+  String get capturePhoneStorageFull => 'Telefonlagringen er full';
+
+  @override
+  String get captureStorageAlmostFull => 'Lagringen er nesten full';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Anhenget mistet forbindelsen til denne telefonen. Omi kobler til igjen av seg selv når anhenget er på og i nærheten. Alt som ble tatt opp før dette, er trygt.';
 }

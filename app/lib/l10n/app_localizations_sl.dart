@@ -11282,4 +11282,17 @@ class AppLocalizationsSl extends AppLocalizations {
   @override
   String get captureCustomSttUnreachableDetail =>
       'Vaša storitev za pretvorbo govora v besedilo ni dosegljiva. Omi hrani zvok v tem telefonu in ga pošlje, ko bo storitev spet na voljo. Nič se ne izgubi.';
+
+  @override
+  String get captureStarting => 'Zaganjanje…';
+
+  @override
+  String get capturePhoneStorageFull => 'Pomnilnik telefona je poln';
+
+  @override
+  String get captureStorageAlmostFull => 'Pomnilnik je skoraj poln';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Obesek je izgubil povezavo s tem telefonom. Omi se bo sam znova povezal, ko bo obesek vklopljen in v bližini. Vse, kar je bilo posneto prej, je varno.';
 }

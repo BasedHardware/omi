@@ -3551,5 +3551,9 @@
     "captureStillRecording": "Sigue grabando",
     "captureMicInUseElsewhere": "Otra app está usando el micrófono",
     "captureMicInterruptedDetail": "Una llamada u otra app está usando el micrófono, así que Omi no puede escuchar ahora. Omi se reanudará solo cuando el micrófono quede libre. Todo lo grabado antes está a salvo.",
-    "captureCustomSttUnreachableDetail": "No se puede acceder a tu servicio personalizado de voz a texto. Omi guarda el audio en este teléfono y lo enviará cuando el servicio vuelva. No se pierde nada."
+    "captureCustomSttUnreachableDetail": "No se puede acceder a tu servicio personalizado de voz a texto. Omi guarda el audio en este teléfono y lo enviará cuando el servicio vuelva. No se pierde nada.",
+    "captureStarting": "Iniciando…",
+    "capturePhoneStorageFull": "Almacenamiento del teléfono lleno",
+    "captureStorageAlmostFull": "Almacenamiento casi lleno",
+    "capturePendantDisconnectedDetail": "Tu colgante perdió la conexión con este teléfono. Omi se volverá a conectar solo cuando el colgante esté encendido y cerca. Todo lo grabado antes está a salvo."
 }

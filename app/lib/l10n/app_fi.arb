@@ -3551,5 +3551,9 @@
     "captureStillRecording": "Tallennus jatkuu",
     "captureMicInUseElsewhere": "Toinen sovellus käyttää mikrofonia",
     "captureMicInterruptedDetail": "Puhelu tai toinen sovellus otti mikrofonin, joten Omi ei kuule juuri nyt. Omi jatkaa itsestään, kun mikrofoni vapautuu. Kaikki tätä ennen tallennettu on tallessa.",
-    "captureCustomSttUnreachableDetail": "Omaa puheentunnistuspalveluasi ei tavoiteta. Omi säilyttää äänen tässä puhelimessa ja lähettää sen, kun palvelu palaa. Mitään ei menetetä."
+    "captureCustomSttUnreachableDetail": "Omaa puheentunnistuspalveluasi ei tavoiteta. Omi säilyttää äänen tässä puhelimessa ja lähettää sen, kun palvelu palaa. Mitään ei menetetä.",
+    "captureStarting": "Käynnistetään…",
+    "capturePhoneStorageFull": "Puhelimen tallennustila täynnä",
+    "captureStorageAlmostFull": "Tallennustila melkein täynnä",
+    "capturePendantDisconnectedDetail": "Riipus menetti yhteyden tähän puhelimeen. Omi yhdistää itsestään uudelleen, kun riipus on päällä ja lähellä. Kaikki tätä ennen tallennettu on tallessa."
 }

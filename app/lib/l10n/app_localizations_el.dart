@@ -11326,4 +11326,17 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get captureCustomSttUnreachableDetail =>
       'Η προσαρμοσμένη υπηρεσία μετατροπής ομιλίας σε κείμενο δεν είναι προσβάσιμη. Το Omi κρατά τον ήχο σε αυτό το τηλέφωνο και θα τον στείλει όταν επανέλθει η υπηρεσία. Δεν χάνεται τίποτα.';
+
+  @override
+  String get captureStarting => 'Έναρξη…';
+
+  @override
+  String get capturePhoneStorageFull => 'Ο χώρος του τηλεφώνου γέμισε';
+
+  @override
+  String get captureStorageAlmostFull => 'Ο χώρος σχεδόν γέμισε';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Το μενταγιόν έχασε τη σύνδεση με αυτό το τηλέφωνο. Το Omi θα επανασυνδεθεί μόνο του όταν το μενταγιόν είναι αναμμένο και κοντά. Ό,τι ηχογραφήθηκε πριν είναι ασφαλές.';
 }

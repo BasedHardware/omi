@@ -3679,7 +3679,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get preparingSystemAudioCapture => 'Подготовка записи системного аудио';
 
   @override
-  String get reconnecting => 'Переподключение…';
+  String get reconnecting => 'Подключение…';
 
   @override
   String get recordingPaused => 'Запись приостановлена';
@@ -11269,7 +11269,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get captureRecoveryBanner => 'Звук кулона не доходит до приложения — нажмите, чтобы исправить';
 
   @override
-  String get captureNotTranscribing => 'Нет расшифровки';
+  String get captureNotTranscribing => 'Нет текста';
 
   @override
   String get captureAudioSavedTranscribesLater => 'Аудио сохранено, расшифруется позже';
@@ -11287,4 +11287,17 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get captureCustomSttUnreachableDetail =>
       'Ваш собственный сервис распознавания речи недоступен. Omi хранит аудио на этом телефоне и отправит его, когда сервис заработает. Ничего не потеряется.';
+
+  @override
+  String get captureStarting => 'Запуск…';
+
+  @override
+  String get capturePhoneStorageFull => 'Память телефона заполнена';
+
+  @override
+  String get captureStorageAlmostFull => 'Память почти заполнена';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Кулон потерял связь с этим телефоном. Omi переподключится сам, когда кулон будет включён и рядом. Всё, что записано до этого, сохранено.';
 }

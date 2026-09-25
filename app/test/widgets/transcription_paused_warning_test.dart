@@ -23,6 +23,12 @@ class _StubDeviceProvider extends ChangeNotifier implements DeviceProvider {
   BtDevice? get connectedDevice => null;
 
   @override
+  BtDevice? get pairedDevice => null;
+
+  @override
+  bool get isConnecting => false;
+
+  @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
@@ -182,17 +188,16 @@ void main() {
       expect(find.byIcon(Icons.cloud_off), findsNothing);
     });
 
-    testWidgets('shows Listening during initialising state', (tester) async {
+    testWidgets('shows Starting, not Listening, while the phone microphone initialises', (tester) async {
       final captureProvider = CaptureProvider();
       addTearDown(captureProvider.dispose);
       captureProvider.updateRecordingState(RecordingState.initialising);
 
       await pumpCaptureWidget(tester, captureProvider);
 
-      final context = tester.element(find.byType(ConversationCaptureWidget));
-      final listeningText = AppLocalizations.of(context).listening;
-
-      expect(find.text(listeningText), findsWidgets);
+      final l10n = AppLocalizations.of(tester.element(find.byType(ConversationCaptureWidget)));
+      expect(find.text(l10n.captureStarting), findsOneWidget);
+      expect(find.text(l10n.listening), findsNothing);
       expect(find.byIcon(Icons.cloud_off), findsNothing);
     });
 

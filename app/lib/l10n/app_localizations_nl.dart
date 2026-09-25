@@ -11284,4 +11284,17 @@ class AppLocalizationsNl extends AppLocalizations {
   @override
   String get captureCustomSttUnreachableDetail =>
       'Je eigen spraak-naar-tekstdienst is niet bereikbaar. Omi bewaart de audio op deze telefoon en verstuurt die zodra de dienst terug is. Er gaat niets verloren.';
+
+  @override
+  String get captureStarting => 'Starten…';
+
+  @override
+  String get capturePhoneStorageFull => 'Telefoonopslag vol';
+
+  @override
+  String get captureStorageAlmostFull => 'Opslag bijna vol';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Je hanger heeft de verbinding met deze telefoon verloren. Omi maakt vanzelf opnieuw verbinding zodra de hanger aan staat en in de buurt is. Alles wat eerder is opgenomen, is veilig.';
 }

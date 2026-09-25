@@ -11280,4 +11280,17 @@ class AppLocalizationsBe extends AppLocalizations {
   @override
   String get captureCustomSttUnreachableDetail =>
       'Ваш уласны сэрвіс распазнавання маўлення недаступны. Omi захоўвае аўдыя на гэтым тэлефоне і адправіць яго, калі сэрвіс вернецца. Нічога не страціцца.';
+
+  @override
+  String get captureStarting => 'Запуск…';
+
+  @override
+  String get capturePhoneStorageFull => 'Памяць тэлефона запоўнена';
+
+  @override
+  String get captureStorageAlmostFull => 'Памяць амаль запоўнена';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Кулон страціў сувязь з гэтым тэлефонам. Omi перападключыцца сам, калі кулон уключаны і побач. Усё, што запісана да гэтага, захавана.';
 }

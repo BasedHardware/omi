@@ -17,6 +17,7 @@ import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/pages/home/widgets/battery_info_widget.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
+import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/enums.dart';
@@ -24,9 +25,10 @@ import 'package:omi/utils/enums.dart';
 enum _Live { idle, idleDeviceConnected, pendant, pendantPaused, phone, phoneAfterPendant }
 
 class _Capture extends ChangeNotifier implements CaptureProvider {
-  _Capture(this.live, {this.failure = false});
+  _Capture(this.live, {this.failure = false, this.batch = false});
   final _Live live;
   final bool failure;
+  final bool batch;
   int pauses = 0;
   int resumes = 0;
   int phoneStarts = 0;
@@ -57,7 +59,11 @@ class _Capture extends ChangeNotifier implements CaptureProvider {
   @override
   bool get isCallActive => false;
   @override
-  bool get isPhoneMicBatchRecording => false;
+  bool get isPhoneMicBatchRecording => batch;
+  @override
+  bool get offlineMuted => false;
+  @override
+  int? get offlineRecordingElapsedSeconds => batch ? 125 : null;
   @override
   DateTime? get liveCaptureStartedAt => live == _Live.idle || live == _Live.idleDeviceConnected
       ? null
@@ -115,6 +121,26 @@ class _Call extends ChangeNotifier implements PhoneCallProvider {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+class _Device extends ChangeNotifier implements DeviceProvider {
+  _Device({this.connected = true, this.paired = true});
+  bool connected;
+  final bool paired;
+  static final _pendant = BtDevice(id: 'p', name: 'Omi', type: DeviceType.omi, rssi: -40);
+  @override
+  BtDevice? get connectedDevice => connected ? _pendant : null;
+  @override
+  BtDevice? get pairedDevice => paired ? _pendant : null;
+  @override
+  bool get isConnecting => !connected;
+  void drop() {
+    connected = false;
+    notifyListeners();
+  }
+
+  @override
+  dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
+}
+
 class _Connectivity extends ChangeNotifier implements ConnectivityProvider {
   @override
   bool get isConnected => true;
@@ -130,9 +156,11 @@ void main() {
     await SharedPreferencesUtil.init();
   });
 
-  Future<void> pump(WidgetTester tester, Widget child, {required _Capture capture, _Call? call}) async {
+  Future<void> pump(WidgetTester tester, Widget child,
+      {required _Capture capture, _Call? call, _Device? device}) async {
     await tester.pumpWidget(MultiProvider(
       providers: [
+        ChangeNotifierProvider<DeviceProvider>.value(value: device ?? _Device(paired: false)),
         ChangeNotifierProvider<CaptureProvider>.value(value: capture),
         ChangeNotifierProvider<PhoneCallProvider>.value(value: call ?? _Call(PhoneCallState.idle)),
         ChangeNotifierProvider<ConnectivityProvider>.value(value: _Connectivity()),
@@ -250,6 +278,57 @@ void main() {
               source: 'openglass'),
           isFalse);
       expect(LiveCaptureCard.canPause(null, source: 'phone'), isTrue);
+    });
+  });
+
+  group('pendant disconnect', () {
+    testWidgets('a pendant that drops mid-capture shows Disconnected, not nothing', (tester) async {
+      final device = _Device();
+      await pump(tester, const ConversationCaptureWidget(showsCall: true),
+          capture: _Capture(_Live.pendant), device: device);
+      expect(find.text(en.listening), findsOneWidget);
+
+      // The controller forgets the device: no live source, the pendant is paired but not connected.
+      device.drop();
+      await pump(tester, const ConversationCaptureWidget(showsCall: true),
+          capture: _Capture(_Live.idleDeviceConnected), device: device);
+      expect(find.text(en.disconnected), findsOneWidget);
+      expect(find.textContaining(en.reconnecting), findsOneWidget);
+      await tester.tap(find.text(en.disconnected));
+      await tester.pumpAndSettle();
+      expect(find.text(en.capturePendantDisconnectedDetail), findsOneWidget);
+    });
+
+    testWidgets('a paired pendant that was never capturing stays hidden', (tester) async {
+      await pump(tester, const ConversationCaptureWidget(showsCall: true),
+          capture: _Capture(_Live.idle), device: _Device(connected: false));
+      expect(find.byType(LiveCaptureCard), findsNothing);
+    });
+  });
+
+  group('Transcribe Later card', () {
+    testWidgets('storage full: no Pause, a warning that explains, controls at least 44pt', (tester) async {
+      SharedPreferences.setMockInitialValues({'batchStorageFull': true});
+      await SharedPreferencesUtil.init();
+      await pump(tester, const ConversationCaptureWidget(showsCall: true), capture: _Capture(_Live.phone, batch: true));
+      expect(find.text(en.paused), findsOneWidget);
+      expect(find.textContaining(en.capturePhoneStorageFull), findsOneWidget);
+      expect(find.bySemanticsLabel(en.pause), findsNothing);
+      for (final label in [en.newRecording, en.stop]) {
+        final size = tester.getSize(find.ancestor(of: find.text(label), matching: find.byType(TextButton)));
+        expect(size.height, greaterThanOrEqualTo(44));
+      }
+      await tester.tap(find.text(en.paused));
+      await tester.pumpAndSettle();
+      expect(find.text(en.transcribeLaterStorageFull), findsOneWidget);
+    });
+
+    testWidgets('recording: the live card layout with a 0:14-style timer', (tester) async {
+      await pump(tester, const ConversationCaptureWidget(showsCall: true), capture: _Capture(_Live.phone, batch: true));
+      expect(find.text(en.recording), findsOneWidget);
+      expect(find.text('2:05  ·  ${en.captureAudioSavedTranscribesLater}'), findsOneWidget);
+      expect(find.text(en.pause), findsOneWidget);
+      expect(find.text(en.transcribeLaterNote), findsNothing, reason: 'settings copy is not a status');
     });
   });
 

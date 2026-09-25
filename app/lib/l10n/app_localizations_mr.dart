@@ -11259,4 +11259,17 @@ class AppLocalizationsMr extends AppLocalizations {
   @override
   String get captureCustomSttUnreachableDetail =>
       'तुमच्या कस्टम स्पीच-टू-टेक्स्ट सेवेपर्यंत पोहोचता येत नाही. Omi ऑडिओ या फोनवर ठेवतो आणि सेवा परत आल्यावर पाठवेल. काहीही गमावले जात नाही.';
+
+  @override
+  String get captureStarting => 'सुरू होत आहे…';
+
+  @override
+  String get capturePhoneStorageFull => 'फोन स्टोरेज भरले';
+
+  @override
+  String get captureStorageAlmostFull => 'स्टोरेज जवळजवळ भरले';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'तुमच्या पेंडंटचा या फोनशी संपर्क तुटला. पेंडंट चालू आणि जवळ असल्यावर Omi आपोआप पुन्हा कनेक्ट होईल. याआधी रेकॉर्ड झालेले सर्व सुरक्षित आहे.';
 }
