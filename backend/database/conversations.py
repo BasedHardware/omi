@@ -372,9 +372,9 @@ def prepare_conversation_for_read(conversation_data: Optional[Dict[str, Any]], u
             try:
                 decompressed_json = zlib.decompress(data['transcript_segments']).decode('utf-8')
                 data['transcript_segments'] = json.loads(decompressed_json)
-            except (json.JSONDecodeError, TypeError, zlib.error) as e:
+            except (json.JSONDecodeError, TypeError, zlib.error, ValueError) as e:
                 logger.error(e)
-                pass
+                data['transcript_segments'] = []
 
     _reveal_manual_speaker_assignments_for_read(data, uid)
     return data
@@ -553,10 +553,10 @@ def _conversation_matches_list_predicates(
         return False
     if starred is not None and bool(data.get('starred')) != starred:
         return False
-    stamp = data.get(date_field)
-    if start_date is not None and (stamp is None or stamp < start_date):
+    stamp = ensure_timezone_aware(raw_stamp) if isinstance(raw_stamp := data.get(date_field), datetime) else None
+    if start_date is not None and (stamp is None or stamp < ensure_timezone_aware(start_date)):
         return False
-    if end_date is not None and (stamp is None or stamp > end_date):
+    if end_date is not None and (stamp is None or stamp > ensure_timezone_aware(end_date)):
         return False
     return True
 
@@ -2017,7 +2017,7 @@ def update_conversation_action_items(uid: str, conversation_id: str, action_item
 def _page_eligible_action_item_count(conversation: dict, include_completed: bool) -> int:
     """How many of a conversation's action items the flattening below would keep."""
     kept = 0
-    for item in conversation.get('structured', {}).get('action_items', []):
+    for item in (conversation.get('structured') or {}).get('action_items') or []:
         if isinstance(item, dict):
             if item.get('deleted', False):
                 continue
@@ -2063,8 +2063,8 @@ def get_action_items(
             continue
 
         # Check if conversation has action items
-        structured = conversation_data.get('structured', {})
-        raw_action_items = structured.get('action_items', [])
+        structured = conversation_data.get('structured') or {}
+        raw_action_items = structured.get('action_items') or []
 
         if raw_action_items:
             # Decrypt conversation data for proper reading
@@ -2078,10 +2078,10 @@ def get_action_items(
     action_items = []
     for conversation in conversations:
         conversation_id = conversation['id']
-        conversation_title = conversation.get('structured', {}).get('title', 'Untitled')
+        conversation_title = (conversation.get('structured') or {}).get('title') or 'Untitled'
         conversation_created_at = ensure_timezone_aware(conversation['created_at'])
 
-        raw_items = conversation.get('structured', {}).get('action_items', [])
+        raw_items = (conversation.get('structured') or {}).get('action_items') or []
 
         for idx, item in enumerate(raw_items):
             # Skip deleted items
