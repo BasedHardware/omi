@@ -1395,6 +1395,11 @@ checks:
     triggers: ["plugins/omi-twitter-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "process_segments persisted a nullable TweetDetector result and then attempted += on a null legacy accumulator; the hermetic suite covers bare triggers, legacy state recovery, multi-segment collection, posting/reset, and passive listening"
+  - id: twitter-chat-tools-disconnect-auth-tests
+    command: ["python3", "plugins/omi-twitter-chat-tools-app/test_twitter_link_auth.py"]
+    triggers: ["plugins/omi-twitter-chat-tools-app/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "GET /disconnect deleted Twitter tokens for any uid in the query string; the suite rejects a missing or wrong HMAC and only then allows delete_twitter_tokens"
   - id: twitter-chat-tools-max-results-tests
     command: ["python3", "plugins/omi-twitter-chat-tools-app/test_max_results.py"]
     triggers: ["plugins/omi-twitter-chat-tools-app/**", ".github/checks-manifest.yaml"]
