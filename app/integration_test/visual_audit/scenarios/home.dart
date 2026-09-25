@@ -1,42 +1,15 @@
-// Home: the header device pill and record button, the recording source sheet, the announcement
-// dialog, and the screen the app shows when start-up fails.
+// Home: the recording source sheet, the announcement dialog, and the screen the app shows when
+// start-up fails. The Home capture surfaces themselves are in capture.dart.
 import 'package:flutter/material.dart';
-import 'package:provider/provider.dart';
 
-import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/models/announcement.dart';
 import 'package:omi/pages/announcements/announcement_dialog.dart';
 import 'package:omi/pages/home/widgets/battery_info_widget.dart';
-import 'package:omi/providers/device_provider.dart';
 import 'package:omi/startup_failure_app.dart';
 
-import '../fakes.dart';
 import '../harness.dart';
 
 final homeScenarios = <AuditScenario>[
-  AuditScenario(
-    id: 'home-header',
-    title: 'Home header device pill and record button',
-    page: 'lib/pages/home/widgets/battery_info_widget.dart (BatteryInfoWidget, HomeRecordButton)',
-    state: 'An Omi device connected at 72% battery, not charging; nothing recording',
-    run: (a) async {
-      final device = AuditDeviceProvider(
-          connected: true,
-          battery: 72,
-          device: BtDevice(id: 'd1', name: 'Omi Device', type: DeviceType.omi, rssi: -40));
-      await a.pump(
-          const Padding(
-            padding: EdgeInsets.all(24),
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              BatteryInfoWidget(),
-              SizedBox(height: 32),
-              HomeRecordButton(),
-            ]),
-          ),
-          providers: [ChangeNotifierProvider<DeviceProvider>.value(value: device)]);
-      await a.shot('The header slice of Home: device pill and record button');
-    },
-  ),
   AuditScenario(
     id: 'home-record-options',
     title: 'Recording source sheet',

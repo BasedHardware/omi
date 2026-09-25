@@ -114,8 +114,7 @@ void main() {
     await SharedPreferencesUtil.init();
   });
 
-  testWidgets('Process Now without confirmation lands on the Conversations tab', (tester) async {
-    await SharedPreferencesUtil().saveBool('showSummarizeConfirmation', false);
+  testWidgets('Finish processes and lands on the Conversations tab', (tester) async {
     final harness = await _pumpCapturingPage(tester);
 
     expect(find.byKey(const Key('process_now_button')), findsOneWidget);
@@ -124,38 +123,26 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
 
     expect(harness.capture.forceProcessingCalls, 1);
-    expect(find.text('Finished Conversation?'), findsNothing);
     expect(harness.home.selectedIndex, 1);
     await tester.pump(const Duration(seconds: 1));
     expect(find.text('open-capture'), findsOneWidget);
     expect(find.byType(ConversationCapturingPage), findsNothing);
   });
 
-  testWidgets('Process Now with confirmation lands on the Conversations tab', (tester) async {
+  // David, 2026-09-25: Finish is the only stop and is explicit, so the "Finished Conversation?"
+  // confirmation is gone, even for users who had left it switched on.
+  testWidgets('Finish never asks for confirmation, whatever the old preference says', (tester) async {
     await SharedPreferencesUtil().saveBool('showSummarizeConfirmation', true);
     final harness = await _pumpCapturingPage(tester);
 
-    expect(find.byKey(const Key('process_now_button')), findsOneWidget);
     await _stopFromPage(tester, harness.capture);
     await tester.pump();
-    tester.takeException();
     await tester.pump(const Duration(milliseconds: 400));
-    tester.takeException();
 
-    expect(find.text('Finished Conversation?'), findsOneWidget);
-    // The confirm button names the action (docs/ux-contract.md §4); the dialog's is the last one.
-    await tester.tap(find.text('Process Now').last);
-    await tester.pump();
-    tester.takeException();
-    await tester.pump(const Duration(milliseconds: 400));
-    tester.takeException();
-
+    expect(find.text('Finished Conversation?'), findsNothing);
     expect(harness.capture.forceProcessingCalls, 1);
     expect(harness.home.selectedIndex, 1);
     await tester.pump(const Duration(seconds: 1));
-    tester.takeException();
-    expect(find.text('open-capture'), findsOneWidget);
-    expect(find.byType(ConversationCapturingPage), findsNothing);
   });
 
   testWidgets('switchHomeToConversationsTab selects the Conversations tab', (tester) async {

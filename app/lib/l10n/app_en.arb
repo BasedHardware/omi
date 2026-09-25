@@ -1132,7 +1132,6 @@
     "daySummary": "Day Summary",
     "summaryGenerated": "Summary generated",
     "claudeDesktop": "Claude Desktop",
-    "addToClaudeConfig": "Add to claude_desktop_config.json",
     "copyConfig": "Copy Config",
     "configCopied": "Config copied to clipboard",
     "listeningMins": "Listening (mins)",
@@ -2686,10 +2685,6 @@
     "@claudeDesktop": {
         "description": "Claude Desktop integration section"
     },
-    "addToClaudeDesktopConfig": "Add to claude_desktop_config.json",
-    "@addToClaudeDesktopConfig": {
-        "description": "Description for Claude Desktop config"
-    },
     "@configCopiedToClipboard": {
         "description": "Confirmation when config is copied"
     },
@@ -2723,10 +2718,6 @@
     },
     "@clientSecret": {
         "description": "OAuth client secret label"
-    },
-    "useYourMcpApiKey": "Use your MCP API key",
-    "@useYourMcpApiKey": {
-        "description": "Hint for client secret value"
     },
     "@webhooks": {
         "description": "Webhooks section header"
@@ -11818,9 +11809,9 @@
     "@transcriptionNoAudio": {
         "description": "Status when an active call transcription socket receives no audio frames"
     },
-    "tapPlusToStartRecording": "Tap + to start recording",
+    "tapPlusToStartRecording": "Tap the record button to start recording",
     "@tapPlusToStartRecording": {
-        "description": "Empty-home hint pointing at the + record button"
+        "description": "Empty-home hint pointing at the round record button"
     },
     "chatBlockTask": "Task",
     "@chatBlockTask": {
@@ -12027,7 +12018,7 @@
             }
         }
     },
-    "noConversationsHeroMessage": "Conversations you record show up here. Tap + on Home to record your first one.",
+    "noConversationsHeroMessage": "Conversations you record show up here. Tap the record button on Home to record your first one.",
     "@noConversationsHeroMessage": {
         "description": "Empty state message on the Conversations tab for a new user"
     },
@@ -12581,7 +12572,7 @@
     "@deviceConnecting": {
         "description": "Header device pill while a paired device reconnects"
     },
-    "recordOptionsTip": "Tip: press and hold the record button to record a phone call.",
+    "recordOptionsTip": "Tip: tap the arrow on the record button to record a phone call.",
     "@recordOptionsTip": {
         "description": "One-time hint after the first phone-mic recording"
     },
@@ -13234,6 +13225,26 @@
     "@voiceSettingsSaveOthersSubtitle": {
         "description": "Settings switch explanation for remembering voices of people the user names"
     },
+    "leaveBlank": "Leave blank",
+    "@leaveBlank": {
+        "description": "Hint for an intentionally empty field (e.g. OAuth client secret)"
+    },
+    "mcpOAuthSetup": "On claude.ai, add a custom connector and paste the server URL. If Claude asks for an advanced OAuth Client ID, use the value below and leave the secret blank — never use your MCP API key as an OAuth secret.",
+    "@mcpOAuthSetup": {
+        "description": "OAuth connector setup instructions for the hosted MCP server"
+    },
+    "claudeCode": "Claude Code",
+    "@claudeCode": {
+        "description": "Claude Code (CLI) integration section"
+    },
+    "addToClaudeCodeConfig": "Add to ~/.claude.json",
+    "@addToClaudeCodeConfig": {
+        "description": "Subtitle under the Claude Code section: add the snippet to ~/.claude.json"
+    },
+    "claudeDesktopConnectorSetup": "On Claude Desktop → Settings → Connectors, add a custom connector and paste the server URL. If Claude asks for an advanced OAuth Client ID, use the value below and leave the secret blank — never use your MCP API key as an OAuth secret.",
+    "@claudeDesktopConnectorSetup": {
+        "description": "Claude Desktop connector setup instructions for the hosted MCP server"
+    },
     "transcriptionUnavailableRecordingContinues": "Transcriptions are unavailable, recording continues on device and will process later",
     "@transcriptionUnavailableRecordingContinues": {
         "description": "Live capture status while the transcription service is down; audio keeps recording locally."
@@ -13262,6 +13273,76 @@
                 "type": "int"
             }
         }
+    },
+    "captureSourceCall": "Call",
+    "@captureSourceCall": {
+        "description": "Capture source label when an Omi phone call is being recorded, on the live card (e.g. 'Call · Listening · 3:10'). A noun."
+    },
+    "captureSourcePhoneMic": "Phone mic",
+    "@captureSourcePhoneMic": {
+        "description": "The phone's microphone as a capture source: live page title ('Listening · Phone mic') and the first row of the 'Record with' sheet."
+    },
+    "captureStatusWithSource": "{status} · {source}",
+    "@captureStatusWithSource": {
+        "description": "Live page title: recording status followed by the capture source, e.g. 'Listening · Pendant'.",
+        "placeholders": {
+            "status": {
+                "type": "String",
+                "example": "Listening"
+            },
+            "source": {
+                "type": "String",
+                "example": "Pendant"
+            }
+        }
+    },
+    "resume": "Resume",
+    "@resume": {
+        "description": "Button that resumes a paused recording."
+    },
+    "finish": "Finish",
+    "@finish": {
+        "description": "Button that ends the live recording and processes the conversation."
+    },
+    "pendantPausedResumesWhenYouFinish": "Pendant paused · resumes when you finish",
+    "@pendantPausedResumesWhenYouFinish": {
+        "description": "Small note on the live card while the phone records instead of the pendant."
+    },
+    "pendantIsListeningTitle": "Your pendant is listening",
+    "@pendantIsListeningTitle": {
+        "description": "Sheet title shown when the user taps the phone record button while the pendant is recording."
+    },
+    "oneSourceAtATime": "Omi records from one source at a time.",
+    "@oneSourceAtATime": {
+        "description": "Explanation line under the 'Your pendant is listening' sheet title."
+    },
+    "recordWithPhoneInstead": "Record with phone instead",
+    "@recordWithPhoneInstead": {
+        "description": "Option in the 'Your pendant is listening' sheet that switches recording to the phone microphone."
+    },
+    "pendantPausesUntilYouFinish": "Pendant pauses until you finish",
+    "@pendantPausesUntilYouFinish": {
+        "description": "Subtitle of the 'Record with phone instead' option."
+    },
+    "pendantPausesDuringCall": "Pendant pauses during the call",
+    "@pendantPausesDuringCall": {
+        "description": "Subtitle of the Phone call option in the 'Your pendant is listening' sheet."
+    },
+    "keepUsingPendant": "Keep using pendant",
+    "@keepUsingPendant": {
+        "description": "Button that dismisses the 'Your pendant is listening' sheet and keeps the pendant recording."
+    },
+    "recordWith": "Record with",
+    "@recordWith": {
+        "description": "Title of the sheet listing ways to record (Phone mic, Phone call)."
+    },
+    "moreWaysToRecord": "More ways to record",
+    "@moreWaysToRecord": {
+        "description": "Accessibility label of the small arrow badge on the record button that opens the 'Record with' sheet."
+    },
+    "openCall": "Open call",
+    "@openCall": {
+        "description": "Accessibility hint on the live card during a call; tapping opens the call screen."
     },
     "renameDevice": "Rename Device",
     "@renameDevice": {

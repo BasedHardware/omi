@@ -1125,6 +1125,9 @@ environments:
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
               version: latest
+            POSTHOG_EVENTS_API_KEY:
+              secret: POSTHOG_EVENTS_API_KEY
+              version: latest
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
@@ -2608,6 +2611,9 @@ environments:
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
               version: latest
+            POSTHOG_EVENTS_API_KEY:
+              secret: POSTHOG_EVENTS_API_KEY
+              version: latest
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
@@ -3014,7 +3020,7 @@ environments:
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
             DAY3_REENGAGEMENT_EMAIL_ENABLED:
-              value: 'false'
+              value: 'true'
               category: lifecycle_email
             DAY3_REENGAGEMENT_EMAIL_KILL_SWITCH:
               value: 'false'
