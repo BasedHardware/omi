@@ -776,9 +776,13 @@ def upload_audio_chunks_batch(
         List of GCS paths for the uploaded batch.
 
     Raises:
-        ValueError: a v2 upload collides with an existing blob of differing
-            size. The 3-decimal filename key must never overwrite differing
-            bytes; an identical retry is an idempotent no-op.
+        ValueError: a v2 upload collides with an existing blob whose content
+            differs. The 3-decimal filename key must never overwrite differing
+            bytes; an identical retry (same plaintext content) is an
+            idempotent no-op. Identity is compared as a SHA-256 of the
+            plaintext payload: the stored object for enhanced protection is
+            ciphertext with a random nonce, so its bytes — and their length —
+            can never prove or disprove a retry.
     """
     if not chunks:
         return []
@@ -813,18 +817,35 @@ def upload_audio_chunks_batch(
 
     with owner_storage_write_gate(uid, bucket):
         blob = bucket.blob(path)
-        expected_size = sum(len(chunk['data']) for chunk in sorted_chunks)
         if span is not None:
-            existing = None
+            payload_digest = hashlib.sha256()
+            for chunk in sorted_chunks:
+                payload_digest.update(chunk['data'])
             try:
-                existing = blob.exists() and blob.size
+                exists = blob.exists()
             except Exception:
-                existing = None
-            if isinstance(existing, int) and existing > 0:
-                if existing == expected_size:
+                exists = False
+            if exists:
+                identical = False
+                try:
+                    existing_bytes = blob.download_as_bytes()
+                    existing_plain = (
+                        encryption.decrypt_audio_file(existing_bytes, uid)
+                        if protection_level == 'enhanced'
+                        else existing_bytes
+                    )
+                    identical = hashlib.sha256(existing_plain).digest() == payload_digest.digest()
+                    del existing_bytes, existing_plain
+                except NotFound:
+                    identical = False
+                except Exception as error:
+                    # An existing blob we cannot read cannot be proven
+                    # identical; fail closed rather than overwrite it.
+                    raise ValueError(f'v2 audio blob collision at {path}: existing blob unreadable') from error
+                if identical:
                     # Identical retry: never overwrite or double-write.
                     return [path]
-                raise ValueError(f'v2 audio blob collision at {path}: existing {existing}B != upload {expected_size}B')
+                raise ValueError(f'v2 audio blob content conflict at {path}')
             blob.metadata = _span_blob_metadata(span)
         if protection_level == 'enhanced':
             # Encrypt each chunk individually (length-prefixed), stream to GCS

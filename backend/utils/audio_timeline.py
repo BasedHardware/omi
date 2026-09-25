@@ -19,6 +19,17 @@ import math
 from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Mapping, Optional, Sequence, Tuple
 
+# Pure span helpers live in the database-layer module (stdlib only) so
+# database/ can share them without importing utils/.
+from database.audio_timeline import (  # noqa: F401  (re-exported)
+    COVERAGE_TOLERANCE_SECONDS,
+    chunk_span,
+    group_chunks_by_coverage,
+    parse_span_blob_metadata,
+    span_blob_metadata,
+    span_valid,
+)
+
 # Measured inter-arrival gap beyond which a new anchor is set. This is a jitter
 # guard, not a semantic silence boundary: a client still sending PCM silence
 # advances samples normally and never anchors.
@@ -39,9 +50,6 @@ PROVIDER_EDGE_TOLERANCE_SECONDS = 0.25
 # silence gaps / failovers, not chunks. When the front is evicted, mappings for
 # evicted provider time fail closed (None) rather than guessing.
 MAX_SEND_SPANS = 4096
-
-# 1 ms: filename-rounding tolerance for coverage and continuity checks.
-COVERAGE_TOLERANCE_SECONDS = 0.001
 
 AUDIO_TIMELINE_V2 = 2
 
@@ -196,6 +204,10 @@ class CaptureTimeline:
     anchors: List[Tuple[int, float]] = field(default_factory=list)
     last_monotonic: Optional[float] = None
     wall_backward_events: int = 0
+    # Once compaction has dropped interior anchors, samples below the oldest
+    # retained interior anchor can no longer be projected truthfully; see
+    # ``wall_strict``.
+    compacted_below_sample: Optional[int] = None
 
     def accept(self, pcm: bytes, arrival_wall: float, arrival_monotonic: float) -> Tuple[int, int, bool]:
         """Account one accepted decoded frame; returns (start, end, new_anchor)."""
@@ -237,6 +249,13 @@ class CaptureTimeline:
             return
         # Keep the first anchor (early remaps) plus the most recent ones.
         self.anchors = [self.anchors[0]] + self.anchors[-(MAX_ANCHORS - 1) :]
+        # Samples between the first anchor and the oldest retained interior
+        # anchor have lost the anchors that described their wall projection;
+        # strict readers must refuse them instead of extrapolating across the
+        # dropped hiatuses.
+        oldest_retained_interior = self.anchors[1][0]
+        if self.compacted_below_sample is None or self.compacted_below_sample > oldest_retained_interior:
+            self.compacted_below_sample = oldest_retained_interior
 
     def wall(self, sample: int) -> float:
         """Project a capture sample position onto the wall-time axis."""
@@ -254,6 +273,19 @@ class CaptureTimeline:
             else:
                 break
         return anchor_wall + (sample - anchor_sample) / self.sample_rate
+
+    def wall_strict(self, sample: int) -> Optional[float]:
+        """``wall`` that refuses samples whose anchors compaction evicted.
+
+        Compaction keeps the first anchor plus the most recent ones; a sample
+        inside a dropped interval would project from the first anchor's slope
+        as if the evicted hiatuses never happened. Callers that must not
+        guess (persistence, speaker-ID windows) use this and treat None as
+        "position unknowable".
+        """
+        if self.compacted_below_sample is not None and sample < self.compacted_below_sample:
+            return None
+        return self.wall(sample)
 
 
 class SendMap:
@@ -412,8 +444,15 @@ class ProviderEpochTranslator:
                     translated.append(segment)
                 continue
             if self._project_times:
-                segment['start'] = self.timeline.wall(interval[0])
-                segment['end'] = max(segment['start'], self.timeline.wall(interval[1]))
+                start_wall = self.timeline.wall_strict(interval[0])
+                end_wall = self.timeline.wall_strict(interval[1])
+                if start_wall is None or end_wall is None:
+                    # The anchors describing this sample range were compacted
+                    # away; projecting would invent a position. Fail closed.
+                    self._reject(segment, 'evicted_interval')
+                    continue
+                segment['start'] = start_wall
+                segment['end'] = max(segment['start'], end_wall)
             # Private capture interval for owner resolution; the receiver pops
             # these keys before the segment enters any buffer.
             segment['_capture_start_sample'] = interval[0]
@@ -428,90 +467,6 @@ class ProviderEpochTranslator:
                 self._on_reject(reason)
             except Exception:
                 pass
-
-
-def chunk_span(chunk: Mapping) -> Optional[Dict]:
-    """Validated v2 span metadata ('start', 'samples', 'sample_rate') or None."""
-    span = chunk.get('span') if isinstance(chunk, dict) else None
-    if not isinstance(span, dict):
-        return None
-    try:
-        start = float(span['start'])
-        samples = int(span['samples'])
-        rate = int(span['sample_rate'])
-    except (KeyError, TypeError, ValueError):
-        return None
-    if samples <= 0 or rate <= 0:
-        return None
-    return {'start': start, 'samples': samples, 'sample_rate': rate}
-
-
-def span_blob_metadata(span: Dict) -> Dict[str, str]:
-    """Blob metadata keys carrying one authoritative v2 span."""
-    return {
-        'v2_start': repr(span['start']),
-        'v2_samples': str(span['samples']),
-        'v2_sample_rate': str(span['sample_rate']),
-    }
-
-
-def parse_span_blob_metadata(metadata: Optional[Dict]) -> Optional[Dict]:
-    """Rehydrate a v2 span from blob metadata, or None when absent/malformed."""
-    if not metadata:
-        return None
-    try:
-        start = float(metadata['v2_start'])
-        samples = int(metadata['v2_samples'])
-        rate = int(metadata['v2_sample_rate'])
-    except (KeyError, TypeError, ValueError):
-        return None
-    if samples <= 0 or rate <= 0:
-        return None
-    return {'start': start, 'samples': samples, 'sample_rate': rate}
-
-
-def group_chunks_by_coverage(
-    chunks: List[Dict], *, gap_threshold: float, tolerance: float = COVERAGE_TOLERANCE_SECONDS
-) -> List[List[Dict]]:
-    """Group listed chunks into contiguous AudioFile parts.
-
-    v2 listings (every chunk carrying span metadata) split at actual uncovered
-    ends or overlaps — not just start-to-start differences; a single spanless
-    chunk keeps the whole listing legacy so no false coverage is claimed.
-    """
-    spans: List[Optional[Tuple[float, float]]] = []
-    for chunk in chunks:
-        span = chunk.get('span')
-        if not isinstance(span, dict):
-            spans.append(None)
-            continue
-        try:
-            start = float(span['start'])
-            end = start + float(span['samples']) / float(span['sample_rate'])
-        except (KeyError, TypeError, ValueError, ZeroDivisionError):
-            spans.append(None)
-            continue
-        spans.append((start, end) if span_valid(start, end) else None)
-    v2_listing = bool(spans) and all(span is not None for span in spans)
-
-    groups: List[List[Dict]] = []
-    for index, chunk in enumerate(chunks):
-        split = False
-        if groups and v2_listing:
-            prev_end = spans[index - 1]
-            this_start = spans[index]
-            split = prev_end is not None and this_start is not None and abs(this_start[0] - prev_end[1]) > tolerance
-        if not split and groups:
-            split = chunk['timestamp'] - groups[-1][-1]['timestamp'] > gap_threshold
-        if split or not groups:
-            groups.append([chunk])
-        else:
-            groups[-1].append(chunk)
-    return groups
-
-
-def span_valid(start: float, end: float) -> bool:
-    return math.isfinite(start) and math.isfinite(end) and end > start
 
 
 # Private aliases used by utils.other.storage (kept importable for tests).
