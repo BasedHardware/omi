@@ -577,6 +577,12 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "CV1 DFU stale iOS bonds surface as CB error 14; native reconnect must classify pairing_lost reliably"
+  - id: ios-ble-connect-policy
+    command: ["ruby", "app/ios/test/omi_ble_connect_policy_test.rb"]
+    triggers: ["app/ios/Runner/Ble/OmiBleConnectPolicy.swift", "app/ios/Runner/Ble/OmiBleManager.swift", "app/ios/test/omi_ble_connect_policy_test.rb", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "FC-already-satisfied-request-as-noop: a state-restored iOS pendant was already connected, connectPeripheral returned early, and Flutter showed it disconnected until relaunch"
   - id: ios-native-probe-compile
     command: ["python3", "app/ios/test/phone_mic_probe/build.py", "--check"]
     triggers: ["app/ios/Runner/PhoneMic/**", "app/ios/test/phone_mic_probe/**", "app/ios/test/audio_interruption_driver/**", "app/lib/services/devices/models.dart", ".github/checks-manifest.yaml"]
