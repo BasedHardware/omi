@@ -16,12 +16,11 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from typing import Any, Dict, List, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 
 def redis_escape_string(val: str) -> str:
     """Escape string for single-quoted Redis CLI command arguments."""
-    # Escape backslashes and single quotes
     escaped = val.replace("\\", "\\\\").replace("'", "\\'")
     return f"'{escaped}'"
 
@@ -107,7 +106,7 @@ def generate_redis_commands(
     normalized = [format_memory_for_redis(m) for m in dedup.values()]
 
     lines: List[str] = [
-        f"# Redis Stack (RedisJSON + RediSearch) Ingestion Script for Omi Memories",
+        "# Redis Stack (RedisJSON + RediSearch) Ingestion Script for Omi Memories",
         f"# Total records: {len(normalized)}",
         f"# Key prefix: {key_prefix}",
         f"# Search index: {index_name}",
@@ -136,7 +135,8 @@ def generate_redis_commands(
     return "\n".join(lines), len(normalized)
 
 
-def main() -> None:
+def build_parser() -> argparse.ArgumentParser:
+    """Build CLI parser."""
     parser = argparse.ArgumentParser(
         description="Convert Omi memory JSON exports to Redis Stack ingestion commands.",
         epilog="""\
@@ -163,7 +163,7 @@ examples:
     parser.add_argument(
         "--key-prefix",
         default="memory:",
-        help="Key prefix for Redis documents (default: memory:).",
+        help="Redis key prefix for memories (default: memory:).",
     )
     parser.add_argument(
         "--index-name",
@@ -176,8 +176,13 @@ examples:
         action="store_true",
         help="Overwrite output file if it already exists.",
     )
+    return parser
 
-    args = parser.parse_args()
+
+def main(argv: Optional[Sequence[str]] = None) -> int:
+    """CLI entry point."""
+    parser = build_parser()
+    args = parser.parse_args(argv)
 
     if args.output != "-":
         out_path = Path(args.output)
@@ -185,7 +190,7 @@ examples:
             sys.stderr.write(
                 f"Error: Output file already exists: {args.output} (use --force to overwrite)\n"
             )
-            sys.exit(1)
+            return 1
 
     try:
         content, count = generate_redis_commands(
@@ -195,7 +200,7 @@ examples:
         )
     except Exception as e:
         sys.stderr.write(f"Error: {e}\n")
-        sys.exit(1)
+        return 1
 
     if args.output == "-":
         sys.stdout.write(content + "\n")
@@ -206,7 +211,8 @@ examples:
         sys.stderr.write(
             f"Successfully generated Redis script: {args.output} ({count} memories)\n"
         )
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

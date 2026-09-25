@@ -1,6 +1,13 @@
 #!/usr/bin/env python3
-"""Unit tests for memories_to_redis converter."""
+"""Unit tests for memories_to_redis converter.
 
+Pins RedisJSON command generation, RediSearch index schema, deduplication,
+stdin piping, and overwrite protection.
+"""
+
+from __future__ import annotations
+
+import importlib.util
 import io
 import json
 import os
@@ -8,15 +15,23 @@ import sys
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import patch
 
-from memories_to_redis import (
-    format_memory_for_redis,
-    generate_redis_commands,
-    parse_memories_data,
-    redis_escape_string,
-    main,
-)
+# Load memories_to_redis dynamically per repository convention
+script_path = Path(__file__).resolve().parent.parent / "examples" / "memories_to_redis.py"
+if not script_path.exists():
+    script_path = Path(__file__).resolve().parent / "memories_to_redis.py"
+
+spec = importlib.util.spec_from_file_location("memories_to_redis", script_path)
+if spec is None or spec.loader is None:
+    raise RuntimeError(f"Could not load module spec from {script_path}")
+m2r = importlib.util.module_from_spec(spec)
+spec.loader.exec_module(m2r)
+
+format_memory_for_redis = m2r.format_memory_for_redis
+generate_redis_commands = m2r.generate_redis_commands
+parse_memories_data = m2r.parse_memories_data
+redis_escape_string = m2r.redis_escape_string
+main = m2r.main
 
 
 class TestMemoriesToRedis(unittest.TestCase):
@@ -62,7 +77,7 @@ class TestMemoriesToRedis(unittest.TestCase):
                 "id": "mem_1",  # duplicate ID
                 "content": "Duplicate memory",
                 "category": "notes",
-            }
+            },
         ]
         with tempfile.NamedTemporaryFile("w+", delete=False, suffix=".json", encoding="utf-8") as f:
             json.dump(sample_data, f)
@@ -84,14 +99,29 @@ class TestMemoriesToRedis(unittest.TestCase):
             in_file = Path(tmpdir) / "input.json"
             in_file.write_text(json.dumps([{"id": "1", "content": "test"}]), encoding="utf-8")
 
-            with patch.object(sys, "argv", ["memories_to_redis.py", str(in_file), "-o", str(out_file)]):
-                with self.assertRaises(SystemExit) as cm:
-                    main()
-                self.assertEqual(cm.exception.code, 1)
+            # Exits with error code 1 without --force
+            code = main([str(in_file), "-o", str(out_file)])
+            self.assertEqual(code, 1)
+            self.assertEqual(out_file.read_text(encoding="utf-8"), "existing")
 
-            with patch.object(sys, "argv", ["memories_to_redis.py", str(in_file), "-o", str(out_file), "--force"]):
-                main()
-                self.assertIn("JSON.SET memory:1 $", out_file.read_text(encoding="utf-8"))
+            # Overwrites cleanly with --force
+            code_force = main([str(in_file), "-o", str(out_file), "--force"])
+            self.assertEqual(code_force, 0)
+            self.assertIn("JSON.SET memory:1 $", out_file.read_text(encoding="utf-8"))
+
+    def test_cli_stdin(self):
+        sample = json.dumps([{"id": "stdin_1", "content": "Piped redis"}])
+        old_stdin = sys.stdin
+        try:
+            sys.stdin = io.StringIO(sample)
+            with tempfile.TemporaryDirectory() as tmpdir:
+                out_path = Path(tmpdir) / "stdin.redis"
+                code = main(["-", "-o", str(out_path)])
+                self.assertEqual(code, 0)
+                self.assertTrue(out_path.exists())
+                self.assertIn("JSON.SET memory:stdin_1 $", out_path.read_text(encoding="utf-8"))
+        finally:
+            sys.stdin = old_stdin
 
 
 if __name__ == "__main__":
