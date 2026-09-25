@@ -41,8 +41,15 @@ def render_sections_markdown(sections: Any) -> str:
     omitted, while body-only sections remain readable and preserve their text.
     """
 
+    section_list = list(sections or [])
+    if any(_value(section, 'kind') == 'side_notes' for section in section_list):
+        # A side-notes section always renders last even when the stored order
+        # placed it elsewhere; without any side_notes the order is unchanged.
+        section_list = [s for s in section_list if _value(s, 'kind') != 'side_notes'] + [
+            s for s in section_list if _value(s, 'kind') == 'side_notes'
+        ]
     rendered: list[str] = []
-    for section in sections or []:
+    for section in section_list:
         heading = _text(_value(section, 'heading'))
         body = _text(_value(section, 'body_markdown'))
         if heading and body:

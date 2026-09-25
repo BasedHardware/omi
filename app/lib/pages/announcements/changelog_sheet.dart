@@ -3,7 +3,7 @@ import 'package:omi/widgets/shimmer_with_timeout.dart';
 
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/models/announcement.dart';
-import 'package:omi/utils/responsive/responsive_helper.dart';
+import 'package:omi/ui/ui.dart';
 
 class ChangelogSheet extends StatefulWidget {
   final List<Announcement>? changelogs;
@@ -16,19 +16,19 @@ class ChangelogSheet extends StatefulWidget {
   static Future<void> show(BuildContext context, List<Announcement> changelogs) {
     if (changelogs.isEmpty) return Future.value();
 
-    return showModalBottomSheet(
+    return showOmiSheet(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      showCloseButton: false,
+      padding: EdgeInsets.zero,
       builder: (context) => ChangelogSheet(changelogs: changelogs),
     );
   }
 
   static Future<void> showWithLoading(BuildContext context, Future<List<Announcement>> Function() fetchChangelogs) {
-    return showModalBottomSheet(
+    return showOmiSheet(
       context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
+      showCloseButton: false,
+      padding: EdgeInsets.zero,
       builder: (context) => ChangelogSheet(changelogsFuture: fetchChangelogs),
     );
   }
@@ -42,7 +42,7 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
   int _currentPage = 0;
   List<Announcement> _orderedChangelogs = [];
   bool _isLoading = true;
-  String? _error;
+  bool _failed = false;
 
   @override
   void initState() {
@@ -82,7 +82,7 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
     } catch (e) {
       if (mounted) {
         setState(() {
-          _error = 'Failed to load changelogs';
+          _failed = true;
           _isLoading = false;
         });
       }
@@ -97,22 +97,27 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
 
   @override
   Widget build(BuildContext context) {
-    final screenHeight = MediaQuery.of(context).size.height;
-
-    return Container(
-      height: screenHeight * 0.75,
-      decoration: const BoxDecoration(
-        color: ResponsiveHelper.backgroundSecondary,
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+    // The sheet shell (showOmiSheet) owns the surface, corners and drag handle; the title changes
+    // with the version on screen, so the header row lives here.
+    return SizedBox(
+      height: MediaQuery.sizeOf(context).height * 0.75,
       child: Column(
         children: [
           _buildHeader(),
           Expanded(
             child: _isLoading
                 ? _buildLoadingState()
-                : _error != null
-                    ? _buildErrorState()
+                : _failed
+                    ? OmiErrorState(
+                        message: context.l10n.couldNotLoadWhatsNew,
+                        onRetry: () {
+                          setState(() {
+                            _isLoading = true;
+                            _failed = false;
+                          });
+                          return _loadChangelogs();
+                        },
+                      )
                     : PageView.builder(
                         controller: _pageController,
                         itemCount: _orderedChangelogs.length,
@@ -124,7 +129,7 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
                         },
                       ),
           ),
-          if (!_isLoading && _error == null) _buildFooter(),
+          if (!_isLoading && !_failed) _buildFooter(),
         ],
       ),
     );
@@ -138,38 +143,28 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
     }
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 12, 12, 12),
+      padding: const EdgeInsets.fromLTRB(OmiSpacing.lg, 0, OmiSpacing.xxs, OmiSpacing.xxs),
       decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: ResponsiveHelper.backgroundTertiary, width: 1)),
+        border: Border(bottom: BorderSide(color: OmiColors.surface2, width: 1)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           _isLoading
               ? ShimmerWithTimeout(
-                  baseColor: ResponsiveHelper.backgroundTertiary,
-                  highlightColor: ResponsiveHelper.backgroundSecondary,
+                  baseColor: OmiColors.surface2,
+                  highlightColor: OmiColors.surface1,
                   child: Container(
                     width: 180,
                     height: 22,
-                    decoration: BoxDecoration(
-                      color: ResponsiveHelper.backgroundTertiary,
-                      borderRadius: BorderRadius.circular(4),
+                    decoration: const BoxDecoration(
+                      color: OmiColors.surface2,
+                      borderRadius: OmiRadius.smAll,
                     ),
                   ),
                 )
-              : Text(
-                  title,
-                  style: const TextStyle(
-                    color: ResponsiveHelper.textPrimary,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-          IconButton(
-            onPressed: () => Navigator.pop(context),
-            icon: const Icon(Icons.close, color: ResponsiveHelper.textSecondary, size: 24),
-          ),
+              : Expanded(child: Semantics(header: true, child: Text(title, style: OmiType.headline))),
+          const OmiCloseButton(color: OmiColors.textSecondary),
         ],
       ),
     );
@@ -177,8 +172,8 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
 
   Widget _buildLoadingState() {
     return ShimmerWithTimeout(
-      baseColor: ResponsiveHelper.backgroundTertiary,
-      highlightColor: ResponsiveHelper.backgroundSecondary,
+      baseColor: OmiColors.surface2,
+      highlightColor: OmiColors.surface1,
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
@@ -193,9 +188,9 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
                   Container(
                     width: 24,
                     height: 24,
-                    decoration: BoxDecoration(
-                      color: ResponsiveHelper.backgroundTertiary,
-                      borderRadius: BorderRadius.circular(4),
+                    decoration: const BoxDecoration(
+                      color: OmiColors.surface2,
+                      borderRadius: OmiRadius.smAll,
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -203,9 +198,9 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
                   Expanded(
                     child: Container(
                       height: 20,
-                      decoration: BoxDecoration(
-                        color: ResponsiveHelper.backgroundTertiary,
-                        borderRadius: BorderRadius.circular(4),
+                      decoration: const BoxDecoration(
+                        color: OmiColors.surface2,
+                        borderRadius: OmiRadius.smAll,
                       ),
                     ),
                   ),
@@ -219,18 +214,18 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
                   children: [
                     Container(
                       height: 14,
-                      decoration: BoxDecoration(
-                        color: ResponsiveHelper.backgroundTertiary,
-                        borderRadius: BorderRadius.circular(4),
+                      decoration: const BoxDecoration(
+                        color: OmiColors.surface2,
+                        borderRadius: OmiRadius.smAll,
                       ),
                     ),
                     const SizedBox(height: 8),
                     Container(
                       height: 14,
                       width: MediaQuery.of(context).size.width * 0.6,
-                      decoration: BoxDecoration(
-                        color: ResponsiveHelper.backgroundTertiary,
-                        borderRadius: BorderRadius.circular(4),
+                      decoration: const BoxDecoration(
+                        color: OmiColors.surface2,
+                        borderRadius: OmiRadius.smAll,
                       ),
                     ),
                   ],
@@ -240,30 +235,6 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
             ],
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _buildErrorState() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.error_outline, color: Colors.grey.shade500, size: 48),
-          const SizedBox(height: 16),
-          Text(_error ?? 'Something went wrong', style: TextStyle(color: Colors.grey.shade400, fontSize: 16)),
-          const SizedBox(height: 16),
-          TextButton(
-            onPressed: () {
-              setState(() {
-                _isLoading = true;
-                _error = null;
-              });
-              _loadChangelogs();
-            },
-            child: Text(context.l10n.retry),
-          ),
-        ],
       ),
     );
   }
@@ -293,17 +264,12 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
         Row(
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
-            Text(item.icon ?? '✨', style: const TextStyle(fontSize: 20)),
+            ExcludeSemantics(child: Text(item.icon ?? '✨', style: OmiType.title3)),
             const SizedBox(width: 12),
             Expanded(
               child: Text(
                 item.title,
-                style: const TextStyle(
-                  color: ResponsiveHelper.textPrimary,
-                  fontSize: 17,
-                  fontWeight: FontWeight.w600,
-                  height: 1.3,
-                ),
+                style: OmiType.headline.copyWith(height: 1.3),
               ),
             ),
           ],
@@ -314,7 +280,7 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
           padding: const EdgeInsets.only(left: 32),
           child: Text(
             item.description,
-            style: const TextStyle(color: ResponsiveHelper.textSecondary, fontSize: 15, height: 1.5),
+            style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.5),
           ),
         ),
       ],
@@ -327,9 +293,9 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
     }
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 32),
+      padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.md, OmiSpacing.md, OmiSpacing.md),
       decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: ResponsiveHelper.backgroundTertiary, width: 1)),
+        border: Border(top: BorderSide(color: OmiColors.surface2, width: 1)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -337,6 +303,7 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
           // Left arrow - go to older version (lower index)
           _buildNavigationButton(
             icon: Icons.chevron_left,
+            label: MaterialLocalizations.of(context).previousPageTooltip,
             enabled: _currentPage > 0,
             onTap: () {
               _pageController.previousPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
@@ -346,12 +313,8 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
           Column(
             children: [
               Text(
-                'Version ${_orderedChangelogs[_currentPage].appVersion ?? ''}',
-                style: const TextStyle(
-                  color: ResponsiveHelper.textSecondary,
-                  fontSize: 14,
-                  fontWeight: FontWeight.w500,
-                ),
+                context.l10n.versionLabel(_orderedChangelogs[_currentPage].appVersion ?? ''),
+                style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
               ),
               const SizedBox(height: 8),
               Row(
@@ -363,6 +326,7 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
           // Right arrow - go to newer version (higher index)
           _buildNavigationButton(
             icon: Icons.chevron_right,
+            label: MaterialLocalizations.of(context).nextPageTooltip,
             enabled: _currentPage < _orderedChangelogs.length - 1,
             onTap: () {
               _pageController.nextPage(duration: const Duration(milliseconds: 300), curve: Curves.easeInOut);
@@ -373,18 +337,18 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
     );
   }
 
-  Widget _buildNavigationButton({required IconData icon, required bool enabled, required VoidCallback onTap}) {
-    return GestureDetector(
-      onTap: enabled ? onTap : null,
-      child: Container(
-        width: 44,
-        height: 44,
-        decoration: BoxDecoration(
-          color: enabled ? const Color(0xFF2A2A2E) : ResponsiveHelper.backgroundTertiary,
-          shape: BoxShape.circle,
-        ),
-        child: Icon(icon, color: enabled ? ResponsiveHelper.textPrimary : ResponsiveHelper.textQuaternary, size: 24),
-      ),
+  Widget _buildNavigationButton({
+    required IconData icon,
+    required String label,
+    required bool enabled,
+    required VoidCallback onTap,
+  }) {
+    return OmiIconButton.filled(
+      icon: Icon(icon, size: 24),
+      label: label,
+      diameter: kOmiMinTapTarget,
+      fillColor: OmiColors.surface2,
+      onPressed: enabled ? onTap : null,
     );
   }
 
@@ -396,8 +360,8 @@ class _ChangelogSheetState extends State<ChangelogSheet> {
       width: isActive ? 20 : 6,
       height: 6,
       decoration: BoxDecoration(
-        color: isActive ? ResponsiveHelper.textPrimary : ResponsiveHelper.textQuaternary,
-        borderRadius: BorderRadius.circular(3),
+        color: isActive ? OmiColors.textPrimary : OmiColors.textTertiary,
+        borderRadius: OmiRadius.pillAll,
       ),
     );
   }

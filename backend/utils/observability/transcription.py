@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
+import sys
 from time import monotonic
 from typing import Any, Callable, Literal, Mapping
 
@@ -17,7 +19,10 @@ from utils.metrics import (
     OMI_LIVE_STT_TERMINAL_FAILURES_TOTAL,
     OMI_LISTEN_ACCEPTED_TOTAL,
     OMI_LISTEN_AUDIO_OUTCOME_TOTAL,
+    OMI_LISTEN_NO_AUDIO_TEARDOWN_TOTAL,
+    OMI_LISTEN_REALTIME_DEMAND_SECONDS_TOTAL,
     OMI_LISTEN_UNKNOWN_CHANNEL_PREFIX_TOTAL,
+    OMI_LISTEN_ZERO_BYTE_SESSION_TOTAL,
     OMI_SYNC_INTAKE_TOTAL,
     OMI_SYNC_TRANSCRIPTION_JOBS_TOTAL,
     OMI_SYNC_TRANSCRIPTION_SEGMENTS_TOTAL,
@@ -375,6 +380,63 @@ def record_listen_audio_outcome(*, source: str | None, outcome: str, platform: s
         outcome=outcome,
         client_platform=_bounded_platform(platform),
     ).inc()
+
+
+def emit_listen_vad_gate_metrics(payload: Mapping[str, Any], *, source: str | None, platform: str | None) -> dict:
+    """Emit the vad_gate_metrics payload as one pure JSON line on stdout.
+
+    A logger-prefixed line is not guaranteed to arrive as ``jsonPayload`` in
+    Cloud Logging; the self-heal wedge detector reads this event as structured
+    JSON, so the line must contain nothing but the payload. Adds the bounded
+    funnel labels and returns the emitted mapping for the caller's zero-byte
+    check.
+    """
+
+    enriched = dict(payload)
+    enriched['transcription_source'] = _bounded_source(source)
+    enriched['client_platform'] = _bounded_platform(platform)
+    sys.stdout.write(json.dumps(enriched) + '\n')
+    sys.stdout.flush()
+    return enriched
+
+
+def record_listen_zero_byte_session(*, source: str | None, platform: str | None) -> None:
+    """Count one VAD-gated session that tore down having received literally no audio."""
+
+    OMI_LISTEN_ZERO_BYTE_SESSION_TOTAL.labels(
+        transcription_source=_bounded_source(source),
+        client_platform=_bounded_platform(platform),
+    ).inc()
+
+
+def record_listen_no_audio_teardown(*, source: str | None, platform: str | None) -> None:
+    """Count one accepted listen session that ended before its first audio byte.
+
+    Emitted for every accepted session regardless of VAD or phone-call status so
+    the accepted -> first_audio -> no-audio funnel covers all sources. Never
+    labeled by uid.
+    """
+
+    OMI_LISTEN_NO_AUDIO_TEARDOWN_TOTAL.labels(
+        transcription_source=_bounded_source(source),
+        client_platform=_bounded_platform(platform),
+    ).inc()
+
+
+_REALTIME_DEMAND_BUCKETS = frozenset({'visible', 'foreground', 'background', 'unreported'})
+
+
+def record_listen_realtime_demand(*, source: str | None, platform: str | None, seconds: Mapping[str, float]) -> None:
+    """Add one session's wall seconds per real-time demand bucket."""
+
+    for bucket, value in seconds.items():
+        if bucket not in _REALTIME_DEMAND_BUCKETS or value <= 0:
+            continue
+        OMI_LISTEN_REALTIME_DEMAND_SECONDS_TOTAL.labels(
+            transcription_source=_bounded_source(source),
+            client_platform=_bounded_platform(platform),
+            realtime_demand=bucket,
+        ).inc(value)
 
 
 def record_listen_unknown_channel_prefix(*, source: str | None, platform: str | None) -> None:
