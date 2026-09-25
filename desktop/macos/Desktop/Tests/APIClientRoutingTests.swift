@@ -231,6 +231,66 @@ final class APIClientRoutingTests: XCTestCase {
     )
   }
 
+  func testJITQATranscriptionBackendIsResolvedAtUseTime() {
+    let original = ProcessInfo.processInfo.environment["OMI_PYTHON_API_URL"]
+    defer {
+      if let original {
+        setenv("OMI_PYTHON_API_URL", original, 1)
+      } else {
+        unsetenv("OMI_PYTHON_API_URL")
+      }
+    }
+
+    setenv("OMI_PYTHON_API_URL", "http://127.0.0.1:18080", 1)
+    XCTAssertEqual(TranscriptionService.pythonBackendBaseURL, "http://127.0.0.1:18080/")
+
+    setenv("OMI_PYTHON_API_URL", "https://api.omiapi.com", 1)
+    XCTAssertEqual(TranscriptionService.pythonBackendBaseURL, "https://api.omiapi.com/")
+  }
+
+  func testJITQAExactTuplesResolveAcrossPythonDesktopAndAuthAuthorities() {
+    let bundleIdentifier = "com.omi.omi-jit-qa"
+    let tuples = [
+      (
+        python: "http://127.0.0.1:18080", desktop: "http://127.0.0.1:18081",
+        auth: "http://127.0.0.1:18080"
+      ),
+      (
+        python: "https://api.omiapi.com",
+        desktop: "https://desktop-backend-dt5lrfkkoa-uc.a.run.app",
+        auth: "https://api.omiapi.com"
+      ),
+    ]
+
+    for tuple in tuples {
+      XCTAssertEqual(
+        DesktopBackendEnvironment.pythonBaseURL(
+          useDevelopmentBackends: true,
+          bundleIdentifier: bundleIdentifier,
+          environmentValue: tuple.python
+        ),
+        "\(tuple.python)/"
+      )
+      XCTAssertEqual(
+        DesktopBackendEnvironment.rustBackendURL(
+          useDevelopmentBackends: true,
+          bundleIdentifier: bundleIdentifier,
+          environmentValue: tuple.desktop,
+          launchEnvironmentValue: tuple.desktop
+        ),
+        "\(tuple.desktop)/"
+      )
+      XCTAssertEqual(
+        DesktopBackendEnvironment.authBaseURL(
+          useDevelopmentBackends: true,
+          bundleIdentifier: bundleIdentifier,
+          environmentValue: tuple.auth
+        ),
+        "\(tuple.auth)/"
+      )
+    }
+  }
+
   func testBundleEnvironmentDoesNotOverwriteExplicitLaunchBackendURLs() {
     let launchEnvironment = [
       "OMI_DESKTOP_API_URL": "http://127.0.0.1:10343",
@@ -402,7 +462,14 @@ final class APIClientRoutingTests: XCTestCase {
         bundleIdentifier: AppBuild.betaProductionBundleIdentifier,
         environmentValue: DesktopBackendEnvironment.productionPythonAPIURL
       ),
-      "https://api.omiapi.com/v1/mcp/sse"
+      "https://api.omiapi.com/v1/mcp"
+    )
+    XCTAssertEqual(
+      MemoryExportDestination.mcpServerURL(
+        bundleIdentifier: AppBuild.productionBundleIdentifier,
+        environmentValue: DesktopBackendEnvironment.productionPythonAPIURL
+      ),
+      "https://api.omi.me/v1/mcp"
     )
     XCTAssertEqual(
       MemoryExportDestination.mcpAuthorizeURL(
@@ -610,6 +677,7 @@ final class APIClientRoutingTests: XCTestCase {
   override func tearDown() {
     unsetenv("OMI_PYTHON_API_URL")
     unsetenv("OMI_DESKTOP_API_URL")
+    unsetenv("OMI_AUTH_API_URL")
     URLCapture.reset()
     super.tearDown()
   }
@@ -812,6 +880,16 @@ final class APIClientRoutingTests: XCTestCase {
       label: "getUserSubscription")
   }
 
+  func testGetReferralLinkRoutesToAuthAuthority() async {
+    setenv("OMI_AUTH_API_URL", "http://auth-test:9003", 1)
+    let client = await makeTestClient()
+    _ = try? await client.getReferralLink() as ReferralLinkResponse
+    assertRoutes(
+      URLCapture.capturedRequests, host: "auth-test", port: 9003,
+      pathContains: "v1/users/me/referral", method: "GET",
+      label: "getReferralLink")
+  }
+
   // MARK: - Routing behavior: Rust-routed endpoints (customBaseURL: rustBackendURL)
 
   // -- Config/API keys (GET → Rust) --
@@ -945,25 +1023,7 @@ final class APIClientRoutingTests: XCTestCase {
     XCTAssertEqual(ids, ["task-1"])
   }
 
-  // -- Chat sessions (GET, POST, DELETE → Python, migrated from Rust) --
-
-  func testGetChatSessionsRoutesToPython() async {
-    let client = await makeTestClient()
-    _ = try? await client.getChatSessions() as [ChatSession]
-    assertRoutes(
-      URLCapture.capturedRequests, host: "python-test", port: 9001,
-      pathContains: "v2/chat-sessions", method: "GET",
-      label: "getChatSessions")
-  }
-
-  func testCreateChatSessionRoutesToPython() async {
-    let client = await makeTestClient()
-    _ = try? await client.createChatSession(title: "test") as ChatSession
-    assertRoutes(
-      URLCapture.capturedRequests, host: "python-test", port: 9001,
-      pathContains: "v2/chat-sessions", method: "POST",
-      label: "createChatSession")
-  }
+  // -- Chat sessions (DELETE → Python, migrated from Rust) --
 
   func testDeleteChatSessionRoutesToPython() async {
     let client = await makeTestClient()
@@ -1065,24 +1125,6 @@ final class APIClientRoutingTests: XCTestCase {
   }
 
   // -- Chat AI endpoints (migrated from Rust to Python) --
-
-  func testGetInitialMessageRoutesToPython() async {
-    let client = await makeTestClient()
-    _ = try? await client.getInitialMessage(sessionId: "s1")
-    assertRoutes(
-      URLCapture.capturedRequests, host: "python-test", port: 9001,
-      pathContains: "v2/chat/initial-message", method: "POST",
-      label: "getInitialMessage")
-  }
-
-  func testGenerateSessionTitleRoutesToPython() async {
-    let client = await makeTestClient()
-    _ = try? await client.generateSessionTitle(sessionId: "s1", messages: [("hi", "human")])
-    assertRoutes(
-      URLCapture.capturedRequests, host: "python-test", port: 9001,
-      pathContains: "v2/chat/generate-title", method: "POST",
-      label: "generateSessionTitle")
-  }
 
   func testGetChatMessageCountRoutesToPython() async {
     let client = await makeTestClient()

@@ -1538,10 +1538,19 @@ def test_historical_read_path_is_non_mutating_for_arbitrary_uid(_trusted_account
     _seed_legacy_memories_in_db(db, arbitrary_uid, arbitrary_rows)
     arbitrary_before = _legacy_memory_docs_snapshot(db, arbitrary_uid)
 
+    def _index_from_fake_db(uid, limit, offset=0, **kwargs):
+        return _get_memories_from_fake_db(db, uid, limit=limit, offset=offset)
+
+    def _ids_from_fake_db(uid, memory_ids, **kwargs):
+        wanted = set(memory_ids)
+        return [row for row in _get_memories_from_fake_db(db, uid, limit=10_000) if row.get("id") in wanted]
+
+    monkeypatch.setattr("utils.memory.memory_service.memories_db.get_memories", _index_from_fake_db)
     monkeypatch.setattr(
-        "utils.memory.memory_service.memories_db.get_memories",
-        lambda uid, limit, offset=0, **kwargs: _get_memories_from_fake_db(db, uid, limit=limit, offset=offset),
+        "utils.memory.memory_service.memories_db.list_memory_updated_or_created_index",
+        _index_from_fake_db,
     )
+    monkeypatch.setattr("utils.memory.memory_service.memories_db.get_memories_by_ids", _ids_from_fake_db)
     service = MemoryService(db_client=db)
     legacy_memories = service.read(arbitrary_uid, limit=10)
 

@@ -6,6 +6,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, cast
 from uuid import uuid4
+from zoneinfo import ZoneInfo
 
 from google.cloud import firestore
 
@@ -13,6 +14,8 @@ from google.cloud.firestore_v1 import FieldFilter
 from pydantic import ValidationError
 
 from database import _client
+from database.action_items_cache import bump_action_items_list_version
+from database.account_deletion_policy import account_deletion_blocks_access, normalize_account_deletion_status
 from database.read_boundary import parse_snapshot_strict, parse_snapshots
 from models.goal import (
     GoalMetric,
@@ -25,12 +28,45 @@ from models.goal import (
     GoalType,
 )
 from models.task_intelligence import TaskWorkflowControl
+from models.memory_apply import MemoryControlState
 
 logger = logging.getLogger(__name__)
 
 goals_collection = 'goals'
 goal_history_collection = 'goal_history'
 goal_events_collection = 'events'
+
+
+def _history_date_str(uid: str, now: datetime, *, firestore_client: Any = None) -> str:
+    """The goal-history document id: the user's own calendar day, not UTC's.
+
+    ``goal_history`` is keyed one document per day (``write_transaction.set``/
+    ``.set(merge=True)`` on ``document(<date>)``), so bucketing by UTC date splits
+    or merges a user's day at the wrong boundary for anyone not on UTC — the same
+    class of bug already fixed for the proactive-notification cap, which resolves
+    the zone via ``database.notifications.resolve_user_timezone``.
+
+    Reads ``time_zone`` directly through ``_get_db(firestore_client)`` (the same
+    seam every other read in this module goes through) rather than calling into
+    ``database.notifications``: that function has no ``firestore_client`` seam of
+    its own, so it always hit the real client — invisible in this module's own
+    tests, which inject a fake client, but it broke a *different* module's tests
+    that exercise ``goals.py`` through ``firestore_client=fake_db`` and don't know
+    to fake out `database.notifications` too. Any failure (missing field, bad
+    zone, a transient read error) falls back to UTC rather than raising, matching
+    the fail-soft posture the rest of this codebase uses for non-critical reads.
+    """
+    try:
+        snapshot = _get_db(firestore_client).collection(users_collection).document(uid).get()
+        payload = snapshot.to_dict() if getattr(snapshot, 'exists', False) else None
+        tz = payload.get('time_zone') if isinstance(payload, dict) else None
+        if not tz:
+            return now.strftime('%Y-%m-%d')
+        return now.astimezone(ZoneInfo(str(tz))).strftime('%Y-%m-%d')
+    except Exception:
+        return now.strftime('%Y-%m-%d')
+
+
 users_collection = 'users'
 DEFAULT_FOCUS_CAP = 5
 TASK_INTELLIGENCE_CONTROL_COLLECTION = 'task_intelligence_control'
@@ -93,6 +129,39 @@ def _validate_write_control(snapshot: Any, *, uid: str, account_generation: int)
         control = parse_snapshot_strict(TaskWorkflowControl, snapshot)
     if control.account_generation != account_generation:
         raise GoalConflictError('account generation mismatch')
+
+
+def validate_first_open_authority(
+    write_transaction: Any,
+    *,
+    uid: str,
+    account_generation: int,
+    source_generation: int,
+    firestore_client: Any,
+) -> None:
+    """Fence internal goal mutation against deletion and account recreation."""
+    client = _get_db(firestore_client)
+    user_ref = client.collection(users_collection).document(uid)
+    user_snapshot = user_ref.get(transaction=write_transaction)
+    deletion_snapshot = client.collection('account_deletions').document(uid).get(transaction=write_transaction)
+    control_snapshot = user_ref.collection('memory_state').document('apply_control').get(transaction=write_transaction)
+    deletion_payload = deletion_snapshot.to_dict() if deletion_snapshot.exists else None
+    status = normalize_account_deletion_status(
+        marker_exists=deletion_snapshot.exists,
+        raw_status=deletion_payload.get('wipe_status') if isinstance(deletion_payload, dict) else None,
+    )
+    if not user_snapshot.exists or account_deletion_blocks_access(status) or not control_snapshot.exists:
+        raise GoalConflictError('first-open account authority unavailable')
+    try:
+        control = parse_snapshot_strict(MemoryControlState, control_snapshot)
+    except Exception as exc:
+        raise GoalConflictError('first-open account authority malformed') from exc
+    if (
+        control.uid != uid
+        or control.account_generation != account_generation
+        or control.source_generation != source_generation
+    ):
+        raise GoalConflictError('first-open account/source generation mismatch')
 
 
 def _goal_mutation_receipt_ref(
@@ -739,7 +808,12 @@ def transition_goal_lifecycle(
         )
         return result
 
-    return apply(transaction)
+    lifecycle_result = apply(transaction)
+    # A `detach` disposition clears goal_id on up to 450 action items, which
+    # changes what GET /v1/action-items returns. Invalidate the list cache here
+    # because this write does not go through database.action_items.
+    bump_action_items_list_version(uid)
+    return lifecycle_result
 
 
 def _append_goal_progress_event(
@@ -749,12 +823,19 @@ def _append_goal_progress_event(
     *,
     idempotency_key: Optional[str],
     account_generation: Optional[int],
+    authority_account_generation: Optional[int] = None,
+    authority_source_generation: Optional[int] = None,
+    first_write_wins: bool = False,
     firestore_client: Any = None,
 ) -> GoalProgressEvent:
     client = _get_db(firestore_client)
     goal_ref = _goal_ref(uid, goal_id, firestore_client=client)
     transaction = client.transaction()
     now = datetime.now(timezone.utc)
+    # Resolved once, outside the transaction: `apply` below can retry on contention,
+    # and _history_date_str is a Firestore read of its own — repeating it on every
+    # retry would multiply reads for no benefit, since `now` doesn't change.
+    history_date = _history_date_str(uid, now, firestore_client=client)
     event_id = (
         f'gpe_{hashlib.sha256(f"{uid}:{account_generation}:{goal_id}:{idempotency_key}".encode()).hexdigest()[:32]}'
         if idempotency_key is not None and account_generation is not None
@@ -764,6 +845,14 @@ def _append_goal_progress_event(
 
     @firestore.transactional
     def apply(write_transaction):
+        if authority_account_generation is not None and authority_source_generation is not None:
+            validate_first_open_authority(
+                write_transaction,
+                uid=uid,
+                account_generation=authority_account_generation,
+                source_generation=authority_source_generation,
+                firestore_client=client,
+            )
         if account_generation is not None:
             control_snapshot = _goal_control_ref(uid, firestore_client=client).get(transaction=write_transaction)
             _validate_write_control(control_snapshot, uid=uid, account_generation=account_generation)
@@ -779,7 +868,7 @@ def _append_goal_progress_event(
                 evidence_refs=record.evidence_refs,
                 metric=record.metric,
             )
-            if stored_proposal != event:
+            if stored_proposal != event and not first_write_wins:
                 raise GoalConflictError('progress event idempotency key was reused with different content')
             return record
         goal = normalize_goal_storage(_goal_dict(goal_snapshot), goal_id=goal_id)
@@ -800,6 +889,12 @@ def _append_goal_progress_event(
             goal_patch['metric'] = event.metric.model_dump(mode='python')
             goal_patch.update(_metric_aliases(event.metric))
         write_transaction.update(goal_ref, goal_patch)
+        if authority_account_generation is not None and record.metric is not None:
+            history_ref = goal_ref.collection(goal_history_collection).document(history_date)
+            write_transaction.set(
+                history_ref,
+                {'date': history_date, 'value': record.metric.current, 'recorded_at': now},
+            )
         return record
 
     return apply(transaction)
@@ -845,6 +940,10 @@ def update_goal_progress(
     goal_id: str,
     current_value: float,
     *,
+    idempotency_key: Optional[str] = None,
+    account_generation: Optional[int] = None,
+    authority_account_generation: Optional[int] = None,
+    authority_source_generation: Optional[int] = None,
     firestore_client: Any = None,
 ) -> Optional[Dict[str, Any]]:
     goal = get_goal_by_id(uid, goal_id, firestore_client=firestore_client)
@@ -852,7 +951,7 @@ def update_goal_progress(
         return None
     metric = _metric_from_storage(goal) or GoalMetric(type=GoalType.numeric, current=0, target=0)
     metric = metric.model_copy(update={'current': current_value})
-    _append_goal_progress_event(
+    record = _append_goal_progress_event(
         uid,
         goal_id,
         GoalProgressEventCreate(
@@ -860,12 +959,29 @@ def update_goal_progress(
             summary='Metric updated',
             metric=metric,
         ),
-        idempotency_key=None,
-        account_generation=None,
+        idempotency_key=idempotency_key,
+        account_generation=account_generation,
+        authority_account_generation=authority_account_generation,
+        authority_source_generation=authority_source_generation,
+        # First-open retries may re-run a nondeterministic extraction after a
+        # process crash. The event selected by the first committed attempt is
+        # authoritative for this internal conversation/goal identity.
+        first_write_wins=idempotency_key is not None,
         firestore_client=firestore_client,
     )
-    save_goal_progress_history(uid, goal_id, current_value, firestore_client=firestore_client)
+    persisted_value = record.metric.current if record.metric is not None else current_value
+    if authority_account_generation is None:
+        save_goal_progress_history(uid, goal_id, persisted_value, firestore_client=firestore_client)
     return get_goal_by_id(uid, goal_id, firestore_client=firestore_client)
+
+
+def get_task_workflow_account_generation(uid: str, *, firestore_client: Any = None) -> int:
+    """Read the generation fence needed by internal idempotent goal events."""
+    client = _get_db(firestore_client)
+    snapshot = _goal_control_ref(uid, firestore_client=client).get()
+    if not snapshot.exists:
+        return 0
+    return int(parse_snapshot_strict(TaskWorkflowControl, snapshot).account_generation)
 
 
 def save_goal_progress_history(
@@ -876,10 +992,9 @@ def save_goal_progress_history(
     firestore_client: Any = None,
 ) -> None:
     now = datetime.now(timezone.utc)
+    history_date = _history_date_str(uid, now, firestore_client=firestore_client)
     history_ref = _goal_ref(uid, goal_id, firestore_client=firestore_client).collection(goal_history_collection)
-    history_ref.document(now.strftime('%Y-%m-%d')).set(
-        {'date': now.strftime('%Y-%m-%d'), 'value': value, 'recorded_at': now}, merge=True
-    )
+    history_ref.document(history_date).set({'date': history_date, 'value': value, 'recorded_at': now}, merge=True)
 
 
 def get_goal_history(

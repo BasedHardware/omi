@@ -161,6 +161,7 @@ jobs:
           fetch-depth: 1
 
       - name: Start the trusted Codemagic preview workflow
+        id: dispatch
         env:
           CODEMAGIC_APP_ID: ${{ vars.CODEMAGIC_APP_ID || '66c95e6ec76853c447b8bcbb' }}
           CODEMAGIC_API_TOKEN: ${{ secrets.CODEMAGIC_API_TOKEN }}
@@ -197,6 +198,11 @@ jobs:
             https://api.codemagic.io/builds)"
           build_id="$(jq -r '.buildId // empty' <<<"$response")"
           test -n "$build_id" || { echo "Codemagic did not return a build ID." >&2; exit 1; }
+          [[ "$build_id" =~ ^[A-Za-z0-9_-]+$ ]] || {
+            echo "Codemagic returned an invalid build ID." >&2
+            exit 1
+          }
+          echo "build_id=$build_id" >> "$GITHUB_OUTPUT"
           {
             echo "### Desktop preview requested"
             echo
@@ -206,3 +212,42 @@ jobs:
             echo "- Landing page: \`https://macos.omi.me/preview/${PREVIEW_SLUG}\`"
             echo "- Codemagic build: \`${build_id}\`"
           } >> "$GITHUB_STEP_SUMMARY"
+
+      # Dispatch alone is not proof the preview published. Without this poll the
+      # GitHub job went green while Codemagic died at startup (#10145 / #9895).
+      - name: Observe Codemagic preview build to a terminal status
+        env:
+          CODEMAGIC_API_TOKEN: ${{ secrets.CODEMAGIC_API_TOKEN }}
+          # Pass provider IDs via env (not ${{ }} inside run) so malformed
+          # Codemagic values cannot become shell syntax (#10145 cubic P1).
+          CODEMAGIC_APP_ID: ${{ vars.CODEMAGIC_APP_ID || '66c95e6ec76853c447b8bcbb' }}
+          CODEMAGIC_BUILD_ID: ${{ steps.dispatch.outputs.build_id }}
+          PREVIEW_SLUG: ${{ needs.resolve.outputs.slug }}
+          PREVIEW_SOURCE_SHA: ${{ needs.resolve.outputs.source_sha }}
+        run: |
+          set -euo pipefail
+          python3 .github/scripts/observe-codemagic-preview-build.py \
+            --app-id "$CODEMAGIC_APP_ID" \
+            --build-id "$CODEMAGIC_BUILD_ID" \
+            --preview-slug "$PREVIEW_SLUG" \
+            --source-sha "$PREVIEW_SOURCE_SHA" \
+            --timeout-seconds 7200 \
+            --poll-seconds 30 \
+            --output "$RUNNER_TEMP/codemagic-preview-build-observation.json"
+          {
+            echo
+            echo "### Codemagic preview observation"
+            echo
+            echo '```json'
+            jq -c . "$RUNNER_TEMP/codemagic-preview-build-observation.json"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Retain Codemagic preview build observation evidence
+        if: always() && steps.dispatch.outcome == 'success'
+        uses: actions/upload-artifact@v7
+        with:
+          name: codemagic-preview-build-observation-${{ needs.resolve.outputs.slug }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/codemagic-preview-build-observation.json
+          if-no-files-found: warn
+          retention-days: 30

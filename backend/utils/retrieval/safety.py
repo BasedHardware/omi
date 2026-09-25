@@ -27,6 +27,44 @@ class SafetyGuardError(Exception):
     pass
 
 
+class CollectedContextReady(Exception):
+    """Identical tool call after retrieval already collected context.
+
+    The agent should stop the tool loop and answer from collected results
+    instead of emitting the canned stuck message.
+    """
+
+
+def _canonical_params(params: Dict[str, Any]) -> tuple:
+    """Stable comparable form. Missing keys and None are equivalent."""
+    if not params:
+        return ()
+    items = []
+    for key in sorted(params):
+        value = params[key]
+        if value is None:
+            continue
+        items.append((key, _canonical_value(value)))
+    return tuple(items)
+
+
+def _canonical_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        return _canonical_params(value)
+    if isinstance(value, (list, tuple)):
+        return tuple(_canonical_value(item) for item in value)
+    return value
+
+
+def _has_collected_results(collected_results: Any) -> bool:
+    if not collected_results:
+        return False
+    try:
+        return len(collected_results) > 0
+    except TypeError:
+        return True
+
+
 class AgentSafetyGuard:
     """
     Safety guard for ReAct agents to prevent:
@@ -49,16 +87,25 @@ class AgentSafetyGuard:
         # Loop detection window (check last N calls)
         self.loop_detection_window = 3
 
-    def validate_tool_call(self, tool_name: str, params: Dict[str, Any]) -> None:
+    def validate_tool_call(
+        self,
+        tool_name: str,
+        params: Dict[str, Any],
+        *,
+        collected_results: Any = None,
+    ) -> None:
         """
         Validate a tool call before execution.
 
         Args:
             tool_name: Name of the tool being called
             params: Parameters for the tool call
+            collected_results: Conversations (or equivalent) already gathered this turn.
+                A loop after a non-empty collection must not emit the stuck message.
 
         Raises:
-            SafetyGuardError: If any safety limit is exceeded
+            SafetyGuardError: If a hard safety limit is exceeded
+            CollectedContextReady: Exact-duplicate tool call after useful results exist
         """
         # Check tool call limit
         if self.tool_call_count >= self.max_tool_calls:
@@ -69,6 +116,8 @@ class AgentSafetyGuard:
 
         # Check for tool call loops
         if self._is_loop_detected(tool_name, params):
+            if _has_collected_results(collected_results):
+                raise CollectedContextReady()
             raise SafetyGuardError(
                 "I seem to be stuck trying to answer your question. " "Could you rephrase it in a different way?"
             )
@@ -118,63 +167,29 @@ class AgentSafetyGuard:
         )
 
     def _is_loop_detected(self, tool_name: str, params: Dict[str, Any]) -> bool:
-        """
-        Detect if the same tool is being called repeatedly with similar parameters.
+        """Detect an exact ``(tool_name, canonical params)`` repeat in the recent window.
 
-        Args:
-            tool_name: Name of the tool
-            params: Tool parameters
-
-        Returns:
-            True if a loop is detected
+        Shared defaults must not trip the gate: two ``search_conversations`` calls that
+        differ only in ``query`` are not a loop. A second call with identical params is.
         """
-        if len(self.tool_call_history) < self.loop_detection_window:
+        if not self.tool_call_history:
             return False
 
-        # Check last N calls
+        canonical = _canonical_params(params)
         recent_calls = self.tool_call_history[-self.loop_detection_window :]
-
-        # Count how many times this exact tool+params combination appears
-        similar_count = 0
         for past_tool, past_params, _ in recent_calls:
-            if past_tool == tool_name and self._params_similar(params, past_params):
-                similar_count += 1
-
-        # If more than half of recent calls are the same tool with similar params, it's likely a loop
-        return similar_count >= (self.loop_detection_window // 2 + 1)
+            if past_tool == tool_name and _canonical_params(past_params) == canonical:
+                return True
+        return False
 
     def _params_similar(self, params1: Dict[str, Any], params2: Dict[str, Any], threshold: float = 0.8) -> bool:
+        """Exact canonical match. Shared defaults plus a different query are not similar.
+
+        ``threshold`` is retained for call-site compatibility and ignored: key-overlap
+        ratios treated ``query`` as one of N keys and aborted David's recall searches.
         """
-        Check if two parameter sets are similar (for loop detection).
-
-        Args:
-            params1: First parameter set
-            params2: Second parameter set
-            threshold: Similarity threshold (0-1)
-
-        Returns:
-            True if parameters are similar
-        """
-        # Get keys from both dicts
-        all_keys = set(params1.keys()) | set(params2.keys())
-        if not all_keys:
-            return True
-
-        # Count matching values
-        matching = 0
-        for key in all_keys:
-            val1 = params1.get(key)
-            val2 = params2.get(key)
-
-            # Consider None and missing keys as equivalent
-            if val1 is None and val2 is None:
-                matching += 1
-            elif val1 == val2:
-                matching += 1
-
-        # Calculate similarity ratio
-        similarity = matching / len(all_keys)
-        return similarity >= threshold
+        del threshold
+        return _canonical_params(params1) == _canonical_params(params2)
 
     def get_stats(self) -> Dict[str, Any]:
         """

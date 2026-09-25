@@ -2,6 +2,7 @@
 
 import os
 from datetime import datetime, timezone
+from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -71,6 +72,7 @@ def _sample_tiered_memory_dict(memory_id: str = "mem-1") -> dict:
 
 def _purge_stub_memory_modules() -> None:
     import sys
+    from types import ModuleType
 
     for name in list(sys.modules):
         if not (name.startswith("utils.memory") or name in {"database.memories", "database.vector_db"}):
@@ -78,6 +80,21 @@ def _purge_stub_memory_modules() -> None:
         mod = sys.modules.get(name)
         if not isinstance(getattr(mod, "__file__", None), str):
             sys.modules.pop(name, None)
+
+    # Pytest collects later test modules before fixture teardown.  Their real,
+    # file-backed submodules therefore remain in sys.modules even when the
+    # synthetic package shell used above is removed.  Restore the corresponding
+    # parent attributes so dotted monkeypatch resolution observes the same module
+    # graph as a normal Python import.
+    for name, mod in list(sys.modules.items()):
+        if not (name.startswith("utils.memory.") or name in {"database.memories", "database.vector_db"}):
+            continue
+        if not isinstance(getattr(mod, "__file__", None), str):
+            continue
+        parent_name, child_name = name.rsplit(".", 1)
+        parent = sys.modules.get(parent_name)
+        if isinstance(parent, ModuleType):
+            setattr(parent, child_name, mod)
 
 
 def _load_memory_service(monkeypatch):
@@ -103,7 +120,16 @@ def _load_memory_service(monkeypatch):
 
         database.memories = memories_db_mod
         database.vector_db = vector_db_mod
+    service_mod._prod_get_memories = service_mod.memories_db.get_memories
+    service_mod._prod_list_memory_updated_or_created_index = (
+        service_mod.memories_db.list_memory_updated_or_created_index
+    )
     monkeypatch.setattr(service_mod.memories_db, "get_memories", lambda *args, **kwargs: [])
+    monkeypatch.setattr(
+        service_mod.memories_db,
+        "list_memory_updated_or_created_index",
+        lambda *args, **kwargs: [],
+    )
     monkeypatch.setattr(service_mod.memories_db, "get_memories_by_ids", lambda *args, **kwargs: [])
     monkeypatch.setattr(service_mod.memories_db, "get_memory", lambda *args, **kwargs: None)
     monkeypatch.setattr(service_mod.memories_db, "get_memory_ids", lambda *args, **kwargs: [])
@@ -123,7 +149,14 @@ def _reset_universal_memory(monkeypatch):
 def service_mod(monkeypatch):
     # Import isolation and module graph repair belong to setup, not the unit
     # behavior's measured call phase.
-    return _load_memory_service(monkeypatch)
+    module = _load_memory_service(monkeypatch)
+    try:
+        yield module
+    finally:
+        # Do not leak synthetic package shells into later test modules in the
+        # same pytest process; string-based monkeypatch resolution must see the
+        # real utils.memory package topology regardless of collection order.
+        _purge_stub_memory_modules()
 
 
 def test_arbitrary_uids_share_one_universal_reader(service_mod):
@@ -173,6 +206,80 @@ def test_canonical_failure_does_not_fall_back_to_historical_writer(monkeypatch, 
             operation="create",
         )
     legacy_create.assert_not_called()
+
+
+def test_evidence_identity_conflict_is_a_client_conflict_not_a_server_fault(service_mod):
+    conflict = service_mod.EvidenceIdentityConflict("conflict")
+    service = service_mod.MemoryService(db_client=_FirestoreFake())
+    service._canonical_write = MagicMock(side_effect=conflict)
+    service._canonical.write_batch = MagicMock(side_effect=conflict)
+    memory_db = service_mod.MemoryDB.model_validate(_sample_memory_dict())
+    service.ensure_canonical_mutation_ready = MagicMock()
+
+    with pytest.raises(service_mod.HTTPException) as single:
+        service.create_external_memory(
+            "uid-test",
+            memory_db,
+            memory_system=service_mod.MemorySystem.CANONICAL,
+            consumer="developer_api",
+            operation="create_memory",
+        )
+    with pytest.raises(service_mod.HTTPException) as batch:
+        service.create_external_memory_batch(
+            "uid-test",
+            [memory_db],
+            memory_system=service_mod.MemorySystem.CANONICAL,
+            consumer="developer_api",
+            operation="batch_create_memories",
+        )
+
+    assert single.value.status_code == 409
+    assert batch.value.status_code == 409
+
+
+def test_manual_memory_without_route_capability_stays_on_external_contract(service_mod):
+    service = service_mod.MemoryService(db_client=_FirestoreFake())
+    memory_db = service_mod.MemoryDB.model_validate(
+        _sample_memory_dict(memory_id="manual-memory", locked=False) | {"category": "manual", "manually_added": True}
+    )
+    compatibility_result = MagicMock(return_value=memory_db)
+    direct_result = MagicMock(return_value=memory_db)
+    service._canonical_write = compatibility_result
+    service._write_direct_user_fact = direct_result
+
+    result = service.create_external_memory(
+        "uid-test",
+        memory_db,
+        memory_system=service_mod.MemorySystem.CANONICAL,
+        consumer="internal-test",
+        operation="create",
+        direct_user_authority=None,
+    )
+
+    assert result is memory_db
+    compatibility_result.assert_called_once()
+    direct_result.assert_not_called()
+
+
+def test_direct_user_ledger_admission_requires_fresh_ingress_and_ledger_mode(monkeypatch, service_mod):
+    service = service_mod.MemoryService(db_client=_FirestoreFake())
+    authority = object()
+    calls = []
+    monkeypatch.setattr(service_mod, "is_direct_user_write_authority", lambda value: value is authority)
+
+    def resolve(uid, *, stage, force_refresh):
+        calls.append((uid, stage, force_refresh))
+        return SimpleNamespace(permits_work=True)
+
+    monkeypatch.setattr(service_mod, "resolve_jit_rollout_sync", resolve)
+    monkeypatch.setattr(
+        service_mod,
+        "ensure_canonical_apply_control_state",
+        lambda uid, *, db_client: SimpleNamespace(writer_mode=service_mod.WriterMode.ledger),
+    )
+
+    assert service._direct_user_ledger_admitted("uid-test", authority) is True
+    assert calls == [("uid-test", service_mod.JITDecisionStage.INGRESS, True)]
 
 
 def test_canonical_backend_preserves_released_adapter_signatures(service_mod):

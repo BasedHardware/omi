@@ -41,7 +41,9 @@ export function ManagePeopleModal({ isOpen, onClose }: ManagePeopleModalProps) {
 
     // Check for duplicates
     const normalizedName = editingName.trim().toLowerCase();
-    if (people.some((p) => p.id !== editingId && p.name.toLowerCase() === normalizedName)) {
+    if (
+      people.some((p) => p.id !== editingId && p.name.toLowerCase() === normalizedName)
+    ) {
       setError('A person with this name already exists');
       return;
     }
@@ -103,7 +105,7 @@ export function ManagePeopleModal({ isOpen, onClose }: ManagePeopleModalProps) {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             onClick={onClose}
-            className="fixed inset-0 bg-black/50 z-50"
+            className="fixed inset-0 z-50 bg-black/50"
           />
 
           {/* Modal */}
@@ -112,23 +114,23 @@ export function ManagePeopleModal({ isOpen, onClose }: ManagePeopleModalProps) {
             animate={{ opacity: 1, scale: 1 }}
             exit={{ opacity: 0, scale: 0.95 }}
             className={cn(
-              'fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-50',
-              'w-full max-w-md bg-bg-secondary rounded-2xl',
-              'shadow-xl border border-bg-tertiary',
-              'max-h-[85vh] overflow-hidden flex flex-col'
+              'fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2',
+              'w-full max-w-md rounded-2xl bg-bg-secondary',
+              'border border-bg-tertiary shadow-xl',
+              'flex max-h-[85vh] flex-col overflow-hidden',
             )}
           >
             {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b border-bg-tertiary">
+            <div className="flex items-center justify-between border-b border-bg-tertiary p-4">
               <div className="flex items-center gap-2">
-                <User className="w-5 h-5 text-purple-primary" />
+                <User className="h-5 w-5 text-text-primary" />
                 <h2 className="text-lg font-semibold text-text-primary">Manage People</h2>
               </div>
               <button
                 onClick={onClose}
-                className="p-2 rounded-lg hover:bg-bg-tertiary transition-colors"
+                className="rounded-lg p-2 transition-colors hover:bg-bg-tertiary"
               >
-                <X className="w-5 h-5 text-text-tertiary" />
+                <X className="h-5 w-5 text-text-tertiary" />
               </button>
             </div>
 
@@ -136,15 +138,17 @@ export function ManagePeopleModal({ isOpen, onClose }: ManagePeopleModalProps) {
             <div className="flex-1 overflow-y-auto p-4">
               {/* Error */}
               {error && (
-                <div className="mb-4 p-3 rounded-lg bg-error/10 border border-error/20 text-error text-sm">
+                <div className="mb-4 rounded-lg border border-error/20 bg-error/10 p-3 text-sm text-error">
                   {error}
                 </div>
               )}
 
               {/* Add Person Form */}
               {showAddForm ? (
-                <div className="mb-4 p-3 rounded-lg bg-bg-tertiary border border-bg-quaternary">
-                  <p className="text-sm font-medium text-text-primary mb-2">Add New Person</p>
+                <div className="mb-4 rounded-lg border border-bg-quaternary bg-bg-tertiary p-3">
+                  <p className="mb-2 text-sm font-medium text-text-primary">
+                    Add New Person
+                  </p>
                   <div className="flex gap-2">
                     <input
                       type="text"
@@ -153,10 +157,10 @@ export function ManagePeopleModal({ isOpen, onClose }: ManagePeopleModalProps) {
                       placeholder="Enter name..."
                       autoFocus
                       className={cn(
-                        'flex-1 px-3 py-2 rounded-lg',
-                        'bg-bg-secondary border border-bg-quaternary',
+                        'flex-1 rounded-lg px-3 py-2',
+                        'border border-bg-quaternary bg-bg-secondary',
                         'text-sm text-text-primary placeholder:text-text-quaternary',
-                        'focus:outline-none focus:ring-2 focus:ring-purple-primary/50'
+                        'focus:outline-none focus:ring-2 focus:ring-white/25',
                       )}
                       onKeyDown={(e) => {
                         if (e.key === 'Enter') handleCreatePerson();
@@ -170,14 +174,14 @@ export function ManagePeopleModal({ isOpen, onClose }: ManagePeopleModalProps) {
                       onClick={handleCreatePerson}
                       disabled={!newPersonName.trim() || actionLoading === 'new'}
                       className={cn(
-                        'px-4 py-2 rounded-lg text-sm font-medium',
-                        'bg-purple-primary hover:bg-purple-secondary text-white',
-                        'disabled:opacity-50 disabled:cursor-not-allowed',
-                        'transition-colors'
+                        'rounded-lg px-4 py-2 text-sm font-medium',
+                        'bg-text-primary text-bg-primary hover:bg-text-primary/90',
+                        'disabled:cursor-not-allowed disabled:opacity-50',
+                        'transition-colors',
                       )}
                     >
                       {actionLoading === 'new' ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
+                        <Loader2 className="h-4 w-4 animate-spin" />
                       ) : (
                         'Add'
                       )}
@@ -187,7 +191,7 @@ export function ManagePeopleModal({ isOpen, onClose }: ManagePeopleModalProps) {
                         setShowAddForm(false);
                         setNewPersonName('');
                       }}
-                      className="px-3 py-2 rounded-lg text-sm text-text-secondary hover:bg-bg-quaternary transition-colors"
+                      className="rounded-lg px-3 py-2 text-sm text-text-secondary transition-colors hover:bg-bg-quaternary"
                     >
                       Cancel
                     </button>
@@ -197,14 +201,14 @@ export function ManagePeopleModal({ isOpen, onClose }: ManagePeopleModalProps) {
                 <button
                   onClick={() => setShowAddForm(true)}
                   className={cn(
-                    'mb-4 w-full flex items-center justify-center gap-2 p-3 rounded-lg',
+                    'mb-4 flex w-full items-center justify-center gap-2 rounded-lg p-3',
                     'border border-dashed border-bg-quaternary',
                     'text-sm font-medium text-text-tertiary',
-                    'hover:bg-bg-tertiary hover:text-text-secondary hover:border-text-quaternary',
-                    'transition-colors'
+                    'hover:border-text-quaternary hover:bg-bg-tertiary hover:text-text-secondary',
+                    'transition-colors',
                   )}
                 >
-                  <Plus className="w-4 h-4" />
+                  <Plus className="h-4 w-4" />
                   <span>Add Person</span>
                 </button>
               )}
@@ -212,17 +216,19 @@ export function ManagePeopleModal({ isOpen, onClose }: ManagePeopleModalProps) {
               {/* Loading */}
               {loading && (
                 <div className="flex items-center justify-center gap-2 py-8 text-text-tertiary">
-                  <Loader2 className="w-5 h-5 animate-spin" />
+                  <Loader2 className="h-5 w-5 animate-spin" />
                   <span className="text-sm">Loading people...</span>
                 </div>
               )}
 
               {/* People List */}
               {!loading && people.length === 0 && (
-                <div className="text-center py-8 text-text-tertiary">
-                  <User className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                <div className="py-8 text-center text-text-tertiary">
+                  <User className="mx-auto mb-3 h-12 w-12 opacity-50" />
                   <p className="text-sm">No people added yet</p>
-                  <p className="text-xs mt-1">Add people to tag speakers in transcripts</p>
+                  <p className="mt-1 text-xs">
+                    Add people to tag speakers in transcripts
+                  </p>
                 </div>
               )}
 
@@ -232,12 +238,12 @@ export function ManagePeopleModal({ isOpen, onClose }: ManagePeopleModalProps) {
                     <div
                       key={person.id}
                       className={cn(
-                        'flex items-center gap-3 p-3 rounded-lg',
-                        'bg-bg-tertiary border border-bg-quaternary'
+                        'flex items-center gap-3 rounded-lg p-3',
+                        'border border-bg-quaternary bg-bg-tertiary',
                       )}
                     >
                       {/* Avatar */}
-                      <div className="w-10 h-10 rounded-full bg-purple-primary/20 flex items-center justify-center text-purple-primary font-medium">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-full bg-white/[0.14] font-medium text-text-primary">
                         {person.name.charAt(0).toUpperCase()}
                       </div>
 
@@ -249,10 +255,10 @@ export function ManagePeopleModal({ isOpen, onClose }: ManagePeopleModalProps) {
                           onChange={(e) => setEditingName(e.target.value)}
                           autoFocus
                           className={cn(
-                            'flex-1 px-3 py-1.5 rounded-lg',
-                            'bg-bg-secondary border border-purple-primary',
+                            'flex-1 rounded-lg px-3 py-1.5',
+                            'border border-white/25 bg-bg-secondary',
                             'text-sm text-text-primary',
-                            'focus:outline-none'
+                            'focus:outline-none',
                           )}
                           onKeyDown={(e) => {
                             if (e.key === 'Enter') handleSaveEdit();
@@ -260,8 +266,8 @@ export function ManagePeopleModal({ isOpen, onClose }: ManagePeopleModalProps) {
                           }}
                         />
                       ) : (
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-text-primary truncate">
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-sm font-medium text-text-primary">
                             {person.name}
                           </p>
                           {person.speech_samples_count > 0 && (
@@ -280,22 +286,22 @@ export function ManagePeopleModal({ isOpen, onClose }: ManagePeopleModalProps) {
                             onClick={handleSaveEdit}
                             disabled={!editingName.trim() || actionLoading === person.id}
                             className={cn(
-                              'p-2 rounded-lg transition-colors',
+                              'rounded-lg p-2 transition-colors',
                               'text-success hover:bg-success/10',
-                              'disabled:opacity-50'
+                              'disabled:opacity-50',
                             )}
                           >
                             {actionLoading === person.id ? (
-                              <Loader2 className="w-4 h-4 animate-spin" />
+                              <Loader2 className="h-4 w-4 animate-spin" />
                             ) : (
-                              <Check className="w-4 h-4" />
+                              <Check className="h-4 w-4" />
                             )}
                           </button>
                           <button
                             onClick={handleCancelEdit}
-                            className="p-2 rounded-lg text-text-tertiary hover:bg-bg-quaternary transition-colors"
+                            className="rounded-lg p-2 text-text-tertiary transition-colors hover:bg-bg-quaternary"
                           >
-                            <X className="w-4 h-4" />
+                            <X className="h-4 w-4" />
                           </button>
                         </div>
                       ) : deleteConfirmId === person.id ? (
@@ -304,20 +310,20 @@ export function ManagePeopleModal({ isOpen, onClose }: ManagePeopleModalProps) {
                             onClick={() => handleDeletePerson(person.id)}
                             disabled={actionLoading === person.id}
                             className={cn(
-                              'px-3 py-1.5 rounded-lg text-xs font-medium',
+                              'rounded-lg px-3 py-1.5 text-xs font-medium',
                               'bg-error/20 text-error hover:bg-error/30',
-                              'transition-colors'
+                              'transition-colors',
                             )}
                           >
                             {actionLoading === person.id ? (
-                              <Loader2 className="w-3 h-3 animate-spin" />
+                              <Loader2 className="h-3 w-3 animate-spin" />
                             ) : (
                               'Delete'
                             )}
                           </button>
                           <button
                             onClick={() => setDeleteConfirmId(null)}
-                            className="px-3 py-1.5 rounded-lg text-xs text-text-secondary hover:bg-bg-quaternary transition-colors"
+                            className="rounded-lg px-3 py-1.5 text-xs text-text-secondary transition-colors hover:bg-bg-quaternary"
                           >
                             Cancel
                           </button>
@@ -326,15 +332,15 @@ export function ManagePeopleModal({ isOpen, onClose }: ManagePeopleModalProps) {
                         <div className="flex items-center gap-1">
                           <button
                             onClick={() => handleStartEdit(person)}
-                            className="p-2 rounded-lg text-text-tertiary hover:text-text-secondary hover:bg-bg-quaternary transition-colors"
+                            className="rounded-lg p-2 text-text-tertiary transition-colors hover:bg-bg-quaternary hover:text-text-secondary"
                           >
-                            <Pencil className="w-4 h-4" />
+                            <Pencil className="h-4 w-4" />
                           </button>
                           <button
                             onClick={() => setDeleteConfirmId(person.id)}
-                            className="p-2 rounded-lg text-text-tertiary hover:text-error hover:bg-error/10 transition-colors"
+                            className="rounded-lg p-2 text-text-tertiary transition-colors hover:bg-error/10 hover:text-error"
                           >
-                            <Trash2 className="w-4 h-4" />
+                            <Trash2 className="h-4 w-4" />
                           </button>
                         </div>
                       )}
@@ -345,14 +351,14 @@ export function ManagePeopleModal({ isOpen, onClose }: ManagePeopleModalProps) {
             </div>
 
             {/* Footer */}
-            <div className="p-4 border-t border-bg-tertiary">
+            <div className="border-t border-bg-tertiary p-4">
               <button
                 onClick={onClose}
                 className={cn(
-                  'w-full px-4 py-2.5 rounded-xl',
+                  'w-full rounded-xl px-4 py-2.5',
                   'text-sm font-medium',
-                  'bg-bg-tertiary hover:bg-bg-quaternary text-text-primary',
-                  'transition-colors'
+                  'bg-bg-tertiary text-text-primary hover:bg-bg-quaternary',
+                  'transition-colors',
                 )}
               >
                 Done

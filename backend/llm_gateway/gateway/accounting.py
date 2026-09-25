@@ -7,6 +7,8 @@ provider payloads, headers, and credentials never enter the accounting path.
 
 from __future__ import annotations
 
+import base64
+import json
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -151,6 +153,10 @@ class AccountingContext:
     feature: str | None
     api_surface: str
     payer: str
+    app_platform: str | None = None
+    # Opaque qualification-run correlation. Normal chat leaves this absent.
+    jit_run_id: str | None = None
+    jit_contract_version: str | None = None
 
     @classmethod
     def create(
@@ -162,6 +168,9 @@ class AccountingContext:
         feature: str | None,
         api_surface: str,
         payer: str,
+        app_platform: str | None = None,
+        jit_run_id: str | None = None,
+        jit_contract_version: str | None = None,
     ) -> 'AccountingContext':
         return cls(
             invocation_id=str(uuid4()),
@@ -171,7 +180,21 @@ class AccountingContext:
             feature=feature,
             api_surface=api_surface,
             payer=payer,
+            app_platform=app_platform,
+            jit_run_id=jit_run_id,
+            jit_contract_version=jit_contract_version,
         )
+
+
+@dataclass(frozen=True)
+class RateCardTier:
+    """The four-ish per-token rates that actually apply to one request."""
+
+    input_micro_usd_per_million: int
+    cached_input_micro_usd_per_million: int
+    output_micro_usd_per_million: int
+    cache_write_micro_usd_per_million: int | None
+    cache_write_1h_micro_usd_per_million: int | None
 
 
 @dataclass(frozen=True)
@@ -184,6 +207,44 @@ class RateCard:
     output_micro_usd_per_million: int
     cache_write_micro_usd_per_million: int | None = None
     cache_write_1h_micro_usd_per_million: int | None = None
+    # Some providers publish a second, more expensive price band once a
+    # request's total context crosses a token threshold (e.g. OpenAI's
+    # >272K-input-token band for the GPT-5.6 family). A card with no
+    # `long_context_threshold_tokens` has only the single tier above, and
+    # `effective_rates` always returns it regardless of token count.
+    long_context_threshold_tokens: int | None = None
+    long_context_input_micro_usd_per_million: int | None = None
+    long_context_cached_input_micro_usd_per_million: int | None = None
+    long_context_output_micro_usd_per_million: int | None = None
+    long_context_cache_write_micro_usd_per_million: int | None = None
+    long_context_cache_write_1h_micro_usd_per_million: int | None = None
+
+    def effective_rates(self, total_context_tokens: int) -> RateCardTier:
+        """Pick the short- or long-context tier for a request.
+
+        `total_context_tokens` must be the request's total prompt/input token
+        count (cached + uncached + cache-write) — never output tokens, which
+        do not affect which price band applies.
+        """
+        if (
+            self.long_context_threshold_tokens is not None
+            and total_context_tokens > self.long_context_threshold_tokens
+            and self.long_context_input_micro_usd_per_million is not None
+        ):
+            return RateCardTier(
+                input_micro_usd_per_million=self.long_context_input_micro_usd_per_million,
+                cached_input_micro_usd_per_million=self.long_context_cached_input_micro_usd_per_million or 0,
+                output_micro_usd_per_million=self.long_context_output_micro_usd_per_million or 0,
+                cache_write_micro_usd_per_million=self.long_context_cache_write_micro_usd_per_million,
+                cache_write_1h_micro_usd_per_million=self.long_context_cache_write_1h_micro_usd_per_million,
+            )
+        return RateCardTier(
+            input_micro_usd_per_million=self.input_micro_usd_per_million,
+            cached_input_micro_usd_per_million=self.cached_input_micro_usd_per_million,
+            output_micro_usd_per_million=self.output_micro_usd_per_million,
+            cache_write_micro_usd_per_million=self.cache_write_micro_usd_per_million,
+            cache_write_1h_micro_usd_per_million=self.cache_write_1h_micro_usd_per_million,
+        )
 
 
 @dataclass(frozen=True)
@@ -194,6 +255,21 @@ class ImageRateCard:
     size: str
     quality: str
     micro_usd_per_image: int
+
+
+@dataclass(frozen=True)
+class PricedUsage:
+    """A cost the caller computed itself, for usage the YAML rate cards cannot price.
+
+    The token rate cards are text-only. Realtime voice bills audio and text
+    tokens at different rates, so a surface that knows the modality split
+    prices the attempt and hands the ledger the result together with the
+    identifier of the rates it used, the same way a rate card would.
+    """
+
+    micro_usd: int
+    rate_card_id: str
+    cost_basis: str
 
 
 @dataclass(frozen=True)
@@ -239,6 +315,9 @@ class AccountingEvent:
     rate_card_id: str | None
     cost_basis: str
     provider_response_id: str | None
+    app_platform: str | None = None
+    jit_run_id: str | None = None
+    jit_contract_version: str | None = None
 
     def as_dict(self) -> dict[str, Any]:
         return {
@@ -252,6 +331,9 @@ class AccountingEvent:
             'feature': self.feature,
             'api_surface': self.api_surface,
             'payer': self.payer,
+            'app_platform': self.app_platform,
+            'jit_run_id': self.jit_run_id,
+            'jit_contract_version': self.jit_contract_version,
             'provider': self.provider,
             'configured_model': self.configured_model,
             'actual_model_version': self.actual_model_version,
@@ -472,7 +554,12 @@ def cache_write_ttl_for_anthropic_request(request: Mapping[str, Any]) -> str | N
     return 'mixed' if ttls else None
 
 
-def build_accounting_event(context: AccountingContext, attempt: ProviderAttempt) -> AccountingEvent:
+def build_accounting_event(
+    context: AccountingContext,
+    attempt: ProviderAttempt,
+    *,
+    priced: PricedUsage | None = None,
+) -> AccountingEvent:
     now = datetime.now(timezone.utc)
     usage = attempt.usage or ProviderUsage()
     cost_status, estimated_cost, cache_savings, rate_card_id, cost_basis = _estimate_cost(
@@ -483,6 +570,15 @@ def build_accounting_event(context: AccountingContext, attempt: ProviderAttempt)
         usage_status=attempt.usage_status,
         traffic_type=attempt.traffic_type,
     )
+    if priced is not None and cost_status in {CostStatus.UNPRICED, CostStatus.ESTIMATED}:
+        # A caller-priced attempt is still an Omi cost, so BYOK (not_omi_cost)
+        # and indeterminate usage keep the estimator's verdict; only the
+        # rate-card estimate is replaced, and the basis says by what.
+        cost_status = CostStatus.ESTIMATED
+        estimated_cost = max(priced.micro_usd, 0)
+        cache_savings = None
+        rate_card_id = priced.rate_card_id
+        cost_basis = priced.cost_basis
     return AccountingEvent(
         attempt_id=f'{context.invocation_id}:{attempt.ordinal}',
         invocation_id=context.invocation_id,
@@ -494,6 +590,7 @@ def build_accounting_event(context: AccountingContext, attempt: ProviderAttempt)
         feature=context.feature,
         api_surface=context.api_surface,
         payer=context.payer,
+        app_platform=context.app_platform,
         provider=attempt.provider,
         configured_model=attempt.configured_model,
         actual_model_version=attempt.actual_model_version,
@@ -525,7 +622,168 @@ def build_accounting_event(context: AccountingContext, attempt: ProviderAttempt)
         rate_card_id=rate_card_id,
         cost_basis=cost_basis,
         provider_response_id=attempt.provider_response_id,
+        jit_run_id=context.jit_run_id,
+        jit_contract_version=context.jit_contract_version,
     )
+
+
+def estimated_provider_cost_micro_usd(
+    *,
+    payer: str,
+    provider: str,
+    model: str,
+    metadata: ProviderResponseMetadata,
+) -> tuple[CostStatus, int | None]:
+    """Return the same rate-card estimate used by the persisted ledger event.
+
+    JIT reservations must settle before a retry or fallback can spend again.
+    Keep that decision on the gateway's existing accounting estimator so the
+    reservation authority and the durable AccountingEvent cannot drift into
+    separate pricing rules.
+    """
+    cost_status, estimated_cost, _cache_savings, _rate_card_id, _cost_basis = _estimate_cost(
+        payer=payer,
+        provider=provider,
+        model=model,
+        usage=metadata.usage,
+        usage_status=UsageStatus.CONFIRMED if metadata.usage is not None else UsageStatus.NOT_REPORTED,
+        traffic_type=metadata.traffic_type,
+    )
+    return cost_status, estimated_cost
+
+
+@dataclass(frozen=True)
+class AccountingAggregate:
+    """Run-level view over every provider attempt, including failures/retries."""
+
+    jit_run_id: str
+    attempt_count: int
+    normalized_uncached_input_tokens: int
+    cached_input_tokens: int
+    cache_write_tokens: int
+    output_tokens: int
+    reasoning_tokens: int
+    estimated_cost_micro_usd: int | None
+    cost_status: CostStatus
+
+    @property
+    def cost_is_known(self) -> bool:
+        return self.estimated_cost_micro_usd is not None and self.cost_status == CostStatus.ESTIMATED
+
+
+def aggregate_accounting_events(events: list[AccountingEvent]) -> AccountingAggregate | None:
+    """Aggregate a JIT run without treating missing cost as zero.
+
+    The gateway persists one immutable event per provider attempt.  A full
+    agent turn can contain retries, fallbacks, and read-only tool rounds, so a
+    final-message usage value is insufficient.  Any unpriced/indeterminate
+    attempt makes the aggregate cost unknown and therefore ineligible for a
+    subsequent paid attempt.
+    """
+    jit_events = [event for event in events if event.jit_run_id]
+    if not jit_events:
+        return None
+    run_ids = {event.jit_run_id for event in jit_events if event.jit_run_id is not None}
+    if len(run_ids) != 1:
+        raise ValueError('cannot aggregate multiple JIT run IDs')
+    cost_known = all(
+        event.cost_status == CostStatus.ESTIMATED and event.estimated_cost_micro_usd is not None for event in jit_events
+    )
+    return AccountingAggregate(
+        jit_run_id=next(iter(run_ids)),
+        attempt_count=len(jit_events),
+        normalized_uncached_input_tokens=sum(event.uncached_input_tokens for event in jit_events),
+        cached_input_tokens=sum(event.cached_input_tokens for event in jit_events),
+        cache_write_tokens=sum(event.cache_write_tokens for event in jit_events),
+        output_tokens=sum(event.output_tokens for event in jit_events),
+        reasoning_tokens=sum(event.reasoning_tokens for event in jit_events),
+        estimated_cost_micro_usd=(
+            sum(event.estimated_cost_micro_usd or 0 for event in jit_events) if cost_known else None
+        ),
+        cost_status=CostStatus.ESTIMATED if cost_known else CostStatus.INDETERMINATE,
+    )
+
+
+JIT_GATEWAY_RECEIPT_SCHEMA = 'jit-gateway-receipt-v1'
+
+
+@dataclass(frozen=True)
+class JITGatewayReceipt:
+    """Small, prompt-free billing receipt returned to a qualified JIT caller."""
+
+    run_id: str
+    contract_version: str
+    attempts: tuple[dict[str, Any], ...]
+    aggregate: AccountingAggregate
+
+    def as_dict(self) -> dict[str, Any]:
+        return {
+            'schema_version': JIT_GATEWAY_RECEIPT_SCHEMA,
+            'run_id': self.run_id,
+            'contract_version': self.contract_version,
+            'attempts': list(self.attempts),
+            'aggregate': {
+                'attempt_count': self.aggregate.attempt_count,
+                'normalized_uncached_input_tokens': self.aggregate.normalized_uncached_input_tokens,
+                'cached_input_tokens': self.aggregate.cached_input_tokens,
+                'cache_write_tokens': self.aggregate.cache_write_tokens,
+                'output_tokens': self.aggregate.output_tokens,
+                'reasoning_tokens': self.aggregate.reasoning_tokens,
+                'estimated_cost_micro_usd': self.aggregate.estimated_cost_micro_usd,
+                'cost_status': self.aggregate.cost_status.value,
+            },
+        }
+
+
+def jit_gateway_receipt_for_trace(
+    context: AccountingContext,
+    trace: AttemptTrace,
+) -> JITGatewayReceipt | None:
+    """Build the trusted wire receipt after all attempts in one request settle."""
+    if not context.jit_run_id or not context.jit_contract_version or not trace.attempts:
+        return None
+    events = [build_accounting_event(context, attempt) for attempt in trace.attempts]
+    aggregate = aggregate_accounting_events(events)
+    if aggregate is None:
+        return None
+    attempts = tuple(
+        {
+            'attempt_id': event.attempt_id,
+            'provider': event.provider,
+            'configured_model': event.configured_model,
+            'actual_model_version': event.actual_model_version,
+            'provider_response_id': event.provider_response_id,
+            'rate_card_id': event.rate_card_id,
+            'cost_basis': event.cost_basis,
+            'usage_status': event.usage_status.value,
+            'cost_status': event.cost_status.value,
+            'normalized_uncached_input_tokens': event.uncached_input_tokens,
+            'cached_input_tokens': event.cached_input_tokens,
+            'cache_write_tokens': event.cache_write_tokens,
+            'output_tokens': event.output_tokens,
+            'reasoning_tokens': event.reasoning_tokens,
+            'estimated_cost_micro_usd': event.estimated_cost_micro_usd,
+        }
+        for event in events
+    )
+    return JITGatewayReceipt(
+        run_id=context.jit_run_id,
+        contract_version=context.jit_contract_version,
+        attempts=attempts,
+        aggregate=aggregate,
+    )
+
+
+def encode_jit_gateway_receipt(receipt: JITGatewayReceipt) -> str:
+    """Encode a compact, header-safe copy for non-streaming callers."""
+    payload = json.dumps(receipt.as_dict(), separators=(',', ':'), sort_keys=True).encode('utf-8')
+    return base64.urlsafe_b64encode(payload).decode('ascii').rstrip('=')
+
+
+def jit_gateway_receipt_sse_frame(receipt: JITGatewayReceipt) -> bytes:
+    """Frame the same receipt as a terminal SSE event before ``[DONE]``."""
+    payload = json.dumps({'omi_jit_receipt': receipt.as_dict()}, separators=(',', ':'), sort_keys=True)
+    return f'event: omi_jit_receipt\ndata: {payload}\n\n'.encode('utf-8')
 
 
 def _openai_usage(raw: Mapping[str, Any], *, cache_requested: bool) -> ProviderUsage:
@@ -640,19 +898,30 @@ def _estimate_cost(
         )
     if usage.unit_type != 'tokens':
         return CostStatus.UNPRICED, None, None, None, 'non_token_unit_rate_missing'
-    rate_card = _rate_card_for(provider, model)
+    rate_card = rate_card_for(provider, model)
     if rate_card is None:
         return CostStatus.UNPRICED, None, None, None, 'rate_card_missing'
-    cache_write_rate = rate_card.cache_write_micro_usd_per_million
+    # The tier that applies is decided by total request context — cached,
+    # uncached, and cache-write input tokens together — never by output
+    # tokens, which some providers price at a different multiplier entirely.
+    # Built from the split fields rather than `usage.prompt_tokens` because
+    # that field's relationship to cache-write tokens differs by provider:
+    # OpenAI's raw `prompt_tokens` already includes cache-write tokens, while
+    # Anthropic's `input_tokens` (this codebase's `prompt_tokens`) excludes
+    # `cache_creation_input_tokens`. Summing the three split components is
+    # correct for both.
+    total_context_tokens = usage.uncached_input_tokens + usage.cached_input_tokens + usage.cache_write_tokens
+    rates = rate_card.effective_rates(total_context_tokens)
+    cache_write_rate = rates.cache_write_micro_usd_per_million
     if usage.cache_write_ttl == '1h':
-        cache_write_rate = rate_card.cache_write_1h_micro_usd_per_million
+        cache_write_rate = rates.cache_write_1h_micro_usd_per_million
     if usage.cache_write_tokens and (cache_write_rate is None or usage.cache_write_ttl == 'mixed'):
         return CostStatus.UNPRICED, None, None, rate_card.rate_card_id, 'cache_write_rate_missing_or_mixed_ttl'
 
     numerator = (
-        usage.uncached_input_tokens * rate_card.input_micro_usd_per_million
-        + usage.cached_input_tokens * rate_card.cached_input_micro_usd_per_million
-        + usage.billable_output_tokens * rate_card.output_micro_usd_per_million
+        usage.uncached_input_tokens * rates.input_micro_usd_per_million
+        + usage.cached_input_tokens * rates.cached_input_micro_usd_per_million
+        + usage.billable_output_tokens * rates.output_micro_usd_per_million
     )
     if cache_write_rate is not None:
         numerator += usage.cache_write_tokens * cache_write_rate
@@ -661,14 +930,20 @@ def _estimate_cost(
     # of that prompt-token counterfactual too, so their premium (or discount)
     # is included in the net savings.  This intentionally may be negative for
     # a cache miss whose write has not yet been amortized by a later read.
+    #
+    # "This tier's" is now literal: the counterfactual is priced with the same
+    # `rates` the bill above used, so a long-context request is compared against
+    # the long-context input rate rather than the short-context one.  Reading
+    # them from the card instead would understate the savings on exactly the
+    # requests where caching is worth the most.
     cache_savings_numerator = usage.cached_input_tokens * (
-        rate_card.input_micro_usd_per_million - rate_card.cached_input_micro_usd_per_million
+        rates.input_micro_usd_per_million - rates.cached_input_micro_usd_per_million
     )
     if usage.cache_write_tokens:
         # A missing write rate was rejected above whenever write tokens are
         # present, so this is safe after the guard at the top of this block.
         assert cache_write_rate is not None
-        cache_savings_numerator += usage.cache_write_tokens * (rate_card.input_micro_usd_per_million - cache_write_rate)
+        cache_savings_numerator += usage.cache_write_tokens * (rates.input_micro_usd_per_million - cache_write_rate)
     if provider.strip().lower() == 'openai' and traffic_type == 'flex':
         # OpenAI documents Flex tokens at Batch API rates (50% below the
         # synchronous Standard rates represented by this rate card).
@@ -677,12 +952,12 @@ def _estimate_cost(
         cost_basis = 'flex_batch_token_rates_excludes_cache_storage'
     else:
         cost_basis = 'marginal_token_rates_excludes_cache_storage'
-    cost = _rounded_micro_usd(numerator)
-    savings = _rounded_micro_usd(cache_savings_numerator)
+    cost = rounded_micro_usd(numerator)
+    savings = rounded_micro_usd(cache_savings_numerator)
     return CostStatus.ESTIMATED, cost, savings, rate_card.rate_card_id, cost_basis
 
 
-def _rounded_micro_usd(numerator: int) -> int:
+def rounded_micro_usd(numerator: int) -> int:
     if numerator >= 0:
         return (numerator + TOKENS_PER_MILLION // 2) // TOKENS_PER_MILLION
     return -((-numerator + TOKENS_PER_MILLION // 2) // TOKENS_PER_MILLION)
@@ -711,15 +986,25 @@ def _load_rate_cards() -> dict[tuple[str, str], RateCard]:
             input_micro_usd_per_million=_nonnegative_int(item.get('input_micro_usd_per_million')),
             cached_input_micro_usd_per_million=_nonnegative_int(item.get('cached_input_micro_usd_per_million')),
             output_micro_usd_per_million=_nonnegative_int(item.get('output_micro_usd_per_million')),
-            cache_write_micro_usd_per_million=(
-                _nonnegative_int(item['cache_write_micro_usd_per_million'])
-                if item.get('cache_write_micro_usd_per_million') is not None
-                else None
+            cache_write_micro_usd_per_million=_optional_nonnegative_int(item, 'cache_write_micro_usd_per_million'),
+            cache_write_1h_micro_usd_per_million=_optional_nonnegative_int(
+                item, 'cache_write_1h_micro_usd_per_million'
             ),
-            cache_write_1h_micro_usd_per_million=(
-                _nonnegative_int(item['cache_write_1h_micro_usd_per_million'])
-                if item.get('cache_write_1h_micro_usd_per_million') is not None
-                else None
+            long_context_threshold_tokens=_optional_nonnegative_int(item, 'long_context_threshold_tokens'),
+            long_context_input_micro_usd_per_million=_optional_nonnegative_int(
+                item, 'long_context_input_micro_usd_per_million'
+            ),
+            long_context_cached_input_micro_usd_per_million=_optional_nonnegative_int(
+                item, 'long_context_cached_input_micro_usd_per_million'
+            ),
+            long_context_output_micro_usd_per_million=_optional_nonnegative_int(
+                item, 'long_context_output_micro_usd_per_million'
+            ),
+            long_context_cache_write_micro_usd_per_million=_optional_nonnegative_int(
+                item, 'long_context_cache_write_micro_usd_per_million'
+            ),
+            long_context_cache_write_1h_micro_usd_per_million=_optional_nonnegative_int(
+                item, 'long_context_cache_write_1h_micro_usd_per_million'
             ),
         )
         key = (card.provider, card.model)
@@ -729,7 +1014,7 @@ def _load_rate_cards() -> dict[tuple[str, str], RateCard]:
     return cards
 
 
-def _rate_card_for(provider: str, model: str) -> RateCard | None:
+def rate_card_for(provider: str, model: str) -> RateCard | None:
     return _load_rate_cards().get((provider.strip().lower(), model.strip()))
 
 
@@ -789,6 +1074,10 @@ def _nonnegative_int(value: object) -> int:
     if isinstance(value, float):
         return max(int(value), 0)
     return 0
+
+
+def _optional_nonnegative_int(item: Mapping[str, Any], key: str) -> int | None:
+    return _nonnegative_int(item[key]) if item.get(key) is not None else None
 
 
 def _string_or_none(value: object) -> str | None:

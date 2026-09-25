@@ -13,10 +13,15 @@ import type { App } from '@/types/apps';
  * Parse markdown content into sections based on h2 headers
  * Returns an array of { title, content } objects
  */
-function parseMarkdownSections(content: string): { title: string | null; content: string }[] {
+function parseMarkdownSections(
+  content: string,
+): { title: string | null; content: string }[] {
   const lines = content.split('\n');
   const sections: { title: string | null; content: string }[] = [];
-  let currentSection: { title: string | null; content: string[] } = { title: null, content: [] };
+  let currentSection: { title: string | null; content: string[] } = {
+    title: null,
+    content: [],
+  };
 
   for (const line of lines) {
     // Check for ## headers (h2)
@@ -63,7 +68,8 @@ export function AppSummaryCard({ appResponse, className }: AppSummaryCardProps) 
   }, [appResponse.content]);
 
   // Check if content has multiple sections (h2 headers)
-  const hasMultipleSections = sections.length > 1 || (sections.length === 1 && sections[0].title);
+  const hasMultipleSections =
+    sections.length > 1 || (sections.length === 1 && sections[0].title);
 
   useEffect(() => {
     async function fetchAppInfo() {
@@ -100,44 +106,44 @@ export function AppSummaryCard({ appResponse, className }: AppSummaryCardProps) 
       initial={{ opacity: 0, y: 10 }}
       animate={{ opacity: 1, y: 0 }}
       className={cn(
-        'noise-overlay p-4 rounded-xl',
-        'bg-white/[0.02] border border-white/[0.06]',
-        className
+        'noise-overlay rounded-xl p-4',
+        'border border-white/[0.06] bg-white/[0.02]',
+        className,
       )}
     >
       {/* App Header */}
-      <div className="flex items-center gap-3 mb-3">
+      <div className="mb-3 flex items-center gap-3">
         {loading ? (
-          <div className="w-8 h-8 rounded-lg bg-bg-quaternary animate-pulse" />
+          <div className="h-8 w-8 animate-pulse rounded-lg bg-bg-quaternary" />
         ) : isDeleted ? (
-          <div className="w-8 h-8 rounded-lg bg-bg-quaternary flex items-center justify-center">
-            <Sparkles className="w-4 h-4 text-text-tertiary" />
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-bg-quaternary">
+            <Sparkles className="h-4 w-4 text-text-tertiary" />
           </div>
         ) : app?.image ? (
           <img
             src={app.image}
             alt={app.name}
-            className="w-8 h-8 rounded-lg object-cover"
+            className="h-8 w-8 rounded-lg object-cover"
           />
         ) : (
-          <div className="w-8 h-8 rounded-lg bg-purple-primary/20 flex items-center justify-center">
-            <Sparkles className="w-4 h-4 text-purple-primary" />
+          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-white/[0.14]">
+            <Sparkles className="h-4 w-4 text-text-primary" />
           </div>
         )}
-        <div className="flex-1 min-w-0">
-          <h4 className="text-sm font-medium text-text-primary truncate">
+        <div className="min-w-0 flex-1">
+          <h4 className="truncate text-sm font-medium text-text-primary">
             {loading ? (
               <span className="text-text-tertiary">Loading...</span>
             ) : isDeleted ? (
-              <span className="text-text-tertiary italic">Template no longer available</span>
+              <span className="italic text-text-tertiary">
+                Template no longer available
+              </span>
             ) : (
               app?.name || 'App Summary'
             )}
           </h4>
           {!isDeleted && app?.description && (
-            <p className="text-xs text-text-tertiary truncate">
-              {app.description}
-            </p>
+            <p className="truncate text-xs text-text-tertiary">{app.description}</p>
           )}
         </div>
       </div>
@@ -148,15 +154,15 @@ export function AppSummaryCard({ appResponse, className }: AppSummaryCardProps) 
           {sections.map((section, index) => (
             <div
               key={index}
-              className="p-3 rounded-lg bg-gradient-to-b from-white/[0.06] to-white/[0.02] border border-white/[0.08]"
+              className="rounded-lg border border-white/[0.08] bg-gradient-to-b from-white/[0.06] to-white/[0.02] p-3"
             >
               {section.title && (
-                <h3 className="text-sm font-medium text-text-primary mb-2">
+                <h3 className="mb-2 text-sm font-medium text-text-primary">
                   {section.title}
                 </h3>
               )}
               {section.content && (
-                <div className="text-sm text-text-secondary leading-relaxed prose prose-sm prose-invert max-w-none prose-p:my-3 prose-headings:text-text-primary prose-headings:font-medium prose-h3:text-xs prose-h3:mt-4 prose-h3:mb-2 prose-ul:my-3 prose-li:my-1.5 prose-strong:text-text-primary prose-code:text-purple-primary prose-code:bg-bg-quaternary prose-code:px-1 prose-code:py-0.5 prose-code:rounded">
+                <div className="prose prose-sm prose-invert max-w-none text-sm leading-relaxed text-text-secondary prose-headings:font-medium prose-headings:text-text-primary prose-h3:mb-2 prose-h3:mt-4 prose-h3:text-xs prose-p:my-3 prose-strong:text-text-primary prose-code:rounded prose-code:bg-bg-quaternary prose-code:px-1 prose-code:py-0.5 prose-code:text-text-primary prose-ul:my-3 prose-li:my-1.5">
                   <ReactMarkdown>{section.content}</ReactMarkdown>
                 </div>
               )}
@@ -164,7 +170,7 @@ export function AppSummaryCard({ appResponse, className }: AppSummaryCardProps) 
           ))}
         </div>
       ) : (
-        <div className="text-sm text-text-secondary leading-relaxed prose prose-sm prose-invert max-w-none prose-p:my-3 prose-headings:text-text-primary prose-headings:font-medium prose-h2:text-base prose-h2:mt-5 prose-h2:mb-3 prose-h3:text-sm prose-h3:mt-4 prose-h3:mb-2 prose-ul:my-3 prose-li:my-1.5 prose-strong:text-text-primary prose-code:text-purple-primary prose-code:bg-bg-quaternary prose-code:px-1 prose-code:py-0.5 prose-code:rounded">
+        <div className="prose prose-sm prose-invert max-w-none text-sm leading-relaxed text-text-secondary prose-headings:font-medium prose-headings:text-text-primary prose-h2:mb-3 prose-h2:mt-5 prose-h2:text-base prose-h3:mb-2 prose-h3:mt-4 prose-h3:text-sm prose-p:my-3 prose-strong:text-text-primary prose-code:rounded prose-code:bg-bg-quaternary prose-code:px-1 prose-code:py-0.5 prose-code:text-text-primary prose-ul:my-3 prose-li:my-1.5">
           <ReactMarkdown>{appResponse.content}</ReactMarkdown>
         </div>
       )}
@@ -177,17 +183,17 @@ export function AppSummaryCard({ appResponse, className }: AppSummaryCardProps) 
  */
 export function AppSummaryCardSkeleton() {
   return (
-    <div className="p-4 rounded-xl bg-bg-tertiary border border-bg-quaternary/50 animate-pulse">
-      <div className="flex items-center gap-3 mb-3">
-        <div className="w-8 h-8 rounded-lg bg-bg-quaternary" />
+    <div className="animate-pulse rounded-xl border border-bg-quaternary/50 bg-bg-tertiary p-4">
+      <div className="mb-3 flex items-center gap-3">
+        <div className="h-8 w-8 rounded-lg bg-bg-quaternary" />
         <div className="flex-1">
-          <div className="h-4 w-24 bg-bg-quaternary rounded" />
+          <div className="h-4 w-24 rounded bg-bg-quaternary" />
         </div>
       </div>
       <div className="space-y-2">
-        <div className="h-3 w-full bg-bg-quaternary rounded" />
-        <div className="h-3 w-5/6 bg-bg-quaternary rounded" />
-        <div className="h-3 w-4/6 bg-bg-quaternary rounded" />
+        <div className="h-3 w-full rounded bg-bg-quaternary" />
+        <div className="h-3 w-5/6 rounded bg-bg-quaternary" />
+        <div className="h-3 w-4/6 rounded bg-bg-quaternary" />
       </div>
     </div>
   );

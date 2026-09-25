@@ -15,6 +15,7 @@ from database.desktop_update_channels import (
     get_channel_release,
     get_release_manifest,
     normalize_release_manifest,
+    normalize_serving_backends,
     promote_channel,
     register_release_manifest,
     reserve_beta_candidate,
@@ -619,6 +620,130 @@ class TestPointerRepointRules:
                 expected_current_release_id=current["release_id"],
                 expected_generation=7,
             )
+
+
+def _serving_backends(**overrides):
+    data = {
+        "desktop_backend": {
+            "release_sha": "a" * 40,
+            "release_channel": "production",
+            "chat_contract_version": "1",
+            "health_url": "https://desktop-backend-hhibjajaja-uc.a.run.app/health",
+        },
+        "api_backend": {
+            "release_sha": "b" * 40,
+            "health_url": "https://api.omi.me/health",
+        },
+        "captured_at": "2026-09-01T15:35:00Z",
+    }
+    data.update(overrides)
+    return data
+
+
+class TestServingBackendsProvenance:
+    def test_promote_persists_serving_backends_on_the_pointer_not_the_manifest(self):
+        client = StrictFirestore()
+        manifest = _manifest()
+        register_release_manifest(manifest, firestore_client=client)
+        serving = _serving_backends()
+
+        pointer = promote_channel(
+            "macos",
+            "stable",
+            manifest["release_id"],
+            expected_generation=0,
+            serving_backends=serving,
+            firestore_client=client,
+        )
+        resolved = get_channel_release("macos", "stable", firestore_client=client)
+        stored_pointer = client.rows[("desktop_update_channels", "macos-stable")]
+        stored_manifest = client.rows[("desktop_release_manifests", manifest["release_id"])]
+
+        assert pointer["serving_backends"] == normalize_serving_backends(serving)
+        assert resolved is not None
+        assert resolved["pointer"]["serving_backends"] == pointer["serving_backends"]
+        assert stored_pointer["serving_backends"] == pointer["serving_backends"]
+        assert "serving_backends" not in stored_manifest
+        assert stored_manifest == manifest
+
+    def test_exact_retry_returns_the_existing_pointer_without_rewriting_provenance(self):
+        client = StrictFirestore()
+        manifest = _manifest()
+        register_release_manifest(manifest, firestore_client=client)
+        first = promote_channel(
+            "macos",
+            "stable",
+            manifest["release_id"],
+            expected_generation=0,
+            serving_backends=_serving_backends(),
+            firestore_client=client,
+        )
+        retry = promote_channel(
+            "macos",
+            "stable",
+            manifest["release_id"],
+            expected_generation=0,
+            serving_backends=_serving_backends(
+                api_backend={"release_sha": "c" * 40, "health_url": "https://api.omi.me/health"}
+            ),
+            firestore_client=client,
+        )
+
+        assert retry == first
+        assert retry["serving_backends"]["api_backend"]["release_sha"] == "b" * 40
+        assert retry["generation"] == 1
+
+    def test_omitted_serving_backends_keeps_the_pointer_shape_unchanged(self):
+        pointer = _build_pointer(
+            {},
+            normalize_release_manifest(_manifest()),
+            transition="promote",
+            platform="macos",
+            channel="stable",
+            release_id=_manifest()["release_id"],
+            expected_generation=0,
+        )
+        assert "serving_backends" not in pointer
+
+    def test_rejects_unknown_keys_and_malformed_shas(self):
+        with pytest.raises(ValueError, match="serving_backends schema"):
+            normalize_serving_backends({**_serving_backends(), "extra": "nope"})
+        with pytest.raises(ValueError, match="release_sha"):
+            normalize_serving_backends(
+                _serving_backends(
+                    desktop_backend={
+                        "release_sha": "not-a-sha",
+                        "release_channel": "production",
+                        "chat_contract_version": "1",
+                        "health_url": "https://desktop-backend-hhibjajaja-uc.a.run.app/health",
+                    }
+                )
+            )
+        with pytest.raises(ValueError, match="desktop_backend serving schema"):
+            normalize_serving_backends(
+                _serving_backends(
+                    desktop_backend={
+                        "release_sha": "a" * 40,
+                        "release_channel": "production",
+                        "chat_contract_version": "1",
+                        "health_url": "https://desktop-backend-hhibjajaja-uc.a.run.app/health",
+                        "unexpected": True,
+                    }
+                )
+            )
+        null_sha = normalize_serving_backends(
+            _serving_backends(
+                desktop_backend={
+                    "release_sha": None,
+                    "release_channel": None,
+                    "chat_contract_version": "1",
+                    "health_url": "https://desktop-backend-hhibjajaja-uc.a.run.app/health",
+                },
+                api_backend={"release_sha": None, "health_url": "https://api.omi.me/health"},
+            )
+        )
+        assert null_sha["desktop_backend"]["release_sha"] is None
+        assert null_sha["api_backend"]["release_sha"] is None
 
 
 class TestBetaBreakglass:

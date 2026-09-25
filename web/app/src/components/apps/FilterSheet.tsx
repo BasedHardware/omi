@@ -57,28 +57,28 @@ export function FilterSheet({
   };
 
   const toggleCategory = (categoryId: string) => {
-    setLocalFilters(prev => ({
+    setLocalFilters((prev) => ({
       ...prev,
       category: prev.category === categoryId ? undefined : categoryId,
     }));
   };
 
   const toggleCapability = (capabilityId: string) => {
-    setLocalFilters(prev => ({
+    setLocalFilters((prev) => ({
       ...prev,
       capability: prev.capability === capabilityId ? undefined : capabilityId,
     }));
   };
 
   const toggleRating = (rating: number) => {
-    setLocalFilters(prev => ({
+    setLocalFilters((prev) => ({
       ...prev,
       rating: prev.rating === rating ? undefined : rating,
     }));
   };
 
   const toggleSort = (sort: SortOption) => {
-    setLocalFilters(prev => ({
+    setLocalFilters((prev) => ({
       ...prev,
       sort: prev.sort === sort ? undefined : sort,
     }));
@@ -93,7 +93,7 @@ export function FilterSheet({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 bg-black/50 z-40"
+            className="fixed inset-0 z-40 bg-black/50"
             onClick={onClose}
           />
 
@@ -104,30 +104,30 @@ export function FilterSheet({
             exit={{ x: '100%' }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
             className={cn(
-              'fixed top-0 right-0 bottom-0 z-50',
-              'w-full sm:w-[400px] max-w-full',
-              'bg-bg-secondary border-l border-bg-tertiary',
+              'fixed bottom-0 right-0 top-0 z-50',
+              'w-full max-w-full sm:w-[400px]',
+              'border-l border-bg-tertiary bg-bg-secondary',
               'flex flex-col',
-              'shadow-2xl'
+              'shadow-2xl',
             )}
           >
             {/* Header */}
-            <div className="flex items-center justify-between p-4 border-b border-bg-tertiary">
+            <div className="flex items-center justify-between border-b border-bg-tertiary p-4">
               <h2 className="text-lg font-semibold text-text-primary">Filters</h2>
               <button
                 onClick={onClose}
-                className="p-2 rounded-lg hover:bg-bg-tertiary transition-colors"
+                className="rounded-lg p-2 transition-colors hover:bg-bg-tertiary"
               >
-                <X className="w-5 h-5 text-text-secondary" />
+                <X className="h-5 w-5 text-text-secondary" />
               </button>
             </div>
 
             {/* Content */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-6">
+            <div className="flex-1 space-y-6 overflow-y-auto p-4">
               {/* Categories */}
               <FilterSection title="Category">
                 <div className="flex flex-wrap gap-2">
-                  {categories.map(category => (
+                  {categories.map((category) => (
                     <FilterChip
                       key={category.id}
                       label={category.title}
@@ -141,7 +141,7 @@ export function FilterSheet({
               {/* Capabilities */}
               <FilterSection title="Capability">
                 <div className="flex flex-wrap gap-2">
-                  {capabilities.map(capability => (
+                  {capabilities.map((capability) => (
                     <FilterChip
                       key={capability.id}
                       label={capability.title}
@@ -155,11 +155,11 @@ export function FilterSheet({
               {/* Rating */}
               <FilterSection title="Minimum Rating">
                 <div className="flex flex-wrap gap-2">
-                  {RATING_OPTIONS.map(option => (
+                  {RATING_OPTIONS.map((option) => (
                     <FilterChip
                       key={option.value}
                       label={option.label}
-                      icon={<Star className="w-3 h-3 fill-yellow-400 text-yellow-400" />}
+                      icon={<Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />}
                       selected={localFilters.rating === option.value}
                       onClick={() => toggleRating(option.value)}
                     />
@@ -170,7 +170,7 @@ export function FilterSheet({
               {/* Sort */}
               <FilterSection title="Sort By">
                 <div className="flex flex-wrap gap-2">
-                  {SORT_OPTIONS.map(option => (
+                  {SORT_OPTIONS.map((option) => (
                     <FilterChip
                       key={option.value}
                       label={option.label}
@@ -183,14 +183,14 @@ export function FilterSheet({
             </div>
 
             {/* Footer */}
-            <div className="flex gap-3 p-4 border-t border-bg-tertiary">
+            <div className="flex gap-3 border-t border-bg-tertiary p-4">
               <button
                 onClick={handleReset}
                 className={cn(
-                  'flex-1 px-4 py-2.5 rounded-xl',
+                  'flex-1 rounded-xl px-4 py-2.5',
                   'border border-bg-quaternary',
                   'text-text-secondary hover:bg-bg-tertiary',
-                  'transition-colors'
+                  'transition-colors',
                 )}
               >
                 Reset
@@ -198,10 +198,10 @@ export function FilterSheet({
               <button
                 onClick={handleApply}
                 className={cn(
-                  'flex-1 px-4 py-2.5 rounded-xl',
-                  'bg-purple-primary text-white',
-                  'hover:bg-purple-secondary',
-                  'transition-colors'
+                  'flex-1 rounded-xl px-4 py-2.5',
+                  'bg-white text-black',
+                  'hover:bg-white/90',
+                  'transition-colors',
                 )}
               >
                 Apply Filters
@@ -214,10 +214,16 @@ export function FilterSheet({
   );
 }
 
-function FilterSection({ title, children }: { title: string; children: React.ReactNode }) {
+function FilterSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
   return (
     <div>
-      <h3 className="text-sm font-medium text-text-secondary mb-3">{title}</h3>
+      <h3 className="mb-3 text-sm font-medium text-text-secondary">{title}</h3>
       {children}
     </div>
   );
@@ -235,17 +241,17 @@ function FilterChip({ label, icon, selected, onClick }: FilterChipProps) {
     <button
       onClick={onClick}
       className={cn(
-        'px-3 py-1.5 rounded-lg text-sm',
+        'rounded-lg px-3 py-1.5 text-sm',
         'flex items-center gap-1.5',
         'transition-colors',
         selected
-          ? 'bg-purple-primary text-white'
-          : 'bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary'
+          ? 'bg-white text-black'
+          : 'bg-bg-tertiary text-text-secondary hover:bg-bg-quaternary',
       )}
     >
       {icon}
       {label}
-      {selected && <Check className="w-3 h-3" />}
+      {selected && <Check className="h-3 w-3" />}
     </button>
   );
 }

@@ -29,6 +29,24 @@ Schema = dict[str, Any]
 Direction = Literal['request', 'response']
 
 
+# Endpoints deliberately removed from the app-client surface after an explicit
+# retirement decision, recorded here so the gate keeps rejecting every other
+# removal. Each entry must name the retiring change; never add to this set
+# speculatively.
+DELIBERATELY_REMOVED_ENDPOINTS: frozenset[str] = frozenset(
+    {
+        # Cloud Agent VM retirement (SCA-342): zero desktop callers, mobile door
+        # removed in the same change. These serve nothing once the VM is gone.
+        '/v1/agent/vm-status',
+        '/v1/agent/vm-ensure',
+        '/v1/agent/keepalive',
+        # Desktop Crisp client removed in macOS 0.12.162+; endpoint had no other
+        # callers. Screen-activity sync stays on the same router (#11429).
+        '/v1/crisp/unread',
+    }
+)
+
+
 class OpenAPICompatibilityError(RuntimeError):
     """The contracts cannot be compared safely."""
 
@@ -88,6 +106,8 @@ class CompatibilityChecker:
         for route in sorted(base_paths):
             base_path_item = _mapping(self.base_refs.resolve(base_paths[route]))
             head_raw = head_paths.get(route)
+            if head_raw is None and route in DELIBERATELY_REMOVED_ENDPOINTS:
+                continue
             if head_raw is None:
                 self._issue(f'paths.{route}', 'released endpoint was removed')
                 continue
@@ -678,6 +698,7 @@ def main(argv: list[str] | None = None) -> int:
     source.add_argument('--base-spec', type=Path, help='released/base app-client OpenAPI JSON')
     source.add_argument('--base-ref', help='git ref whose merge-base with HEAD contains the released contract')
     parser.add_argument('--head-spec', type=Path, default=DEFAULT_SPEC, help='candidate app-client OpenAPI JSON')
+    parser.add_argument('--label', default='App-client', help='contract name used in messages')
     args = parser.parse_args(argv)
 
     try:
@@ -695,15 +716,15 @@ def main(argv: list[str] | None = None) -> int:
 
     if issues:
         print(
-            f'App-client OpenAPI compatibility failed: {len(issues)} breaking change(s) relative to {base_label}.',
+            f'{args.label} OpenAPI compatibility failed: {len(issues)} breaking change(s) relative to {base_label}.',
             file=sys.stderr,
         )
         for issue in issues:
             print(f'  BREAKING {issue}', file=sys.stderr)
-        print('Version the endpoint instead of breaking a released app-client contract.', file=sys.stderr)
+        print(f'Version the endpoint instead of breaking a released {args.label} contract.', file=sys.stderr)
         return 1
 
-    print(f'App-client OpenAPI compatibility passed against {base_label}.')
+    print(f'{args.label} OpenAPI compatibility passed against {base_label}.')
     return 0
 
 

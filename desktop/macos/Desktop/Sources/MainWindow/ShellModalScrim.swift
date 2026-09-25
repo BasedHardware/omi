@@ -205,6 +205,9 @@ struct ShellModalScrim: View {
             .contentShape(Rectangle())
             .onTapGesture { onTap?() }
             .background(InkGlassHitRegionReporter())
+            // Modality for the keyboard too: a stray key over the modal must not start a search in
+            // the bar behind it (`StrayTypingRouter`).
+            .straysTypingBlocked()
         }
 
         RoundedRectangle(cornerRadius: ShellModalScrimLayout.cornerRadius, style: .continuous)

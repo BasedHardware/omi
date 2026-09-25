@@ -23,6 +23,7 @@ import 'package:omi/services/services.dart';
 import 'package:omi/utils/audio/foreground.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
+import 'package:omi/utils/analytics/product_telemetry.dart';
 
 class OnboardingProvider extends BaseProvider with MessageNotifierMixin implements IDeviceServiceSubsciption {
   DeviceProvider? deviceProvider;
@@ -36,6 +37,9 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   List<BtDevice> deviceList = [];
   List<BtDevice> savedDeviceList = [];
   Timer? _didNotMakeItTimer;
+  Timer? _connectSettleTimer;
+  int _scanEpoch = 0;
+  bool _isDisposed = false;
   bool enableInstructions = false;
   Map<String, BtDevice> foundDevicesMap = {};
 
@@ -125,49 +129,102 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   }
 
   Future askForBluetoothPermissions() async {
-    if (Platform.isIOS) {
-      PermissionStatus bleStatus = await Permission.bluetooth.request();
-      Logger.debug('bleStatus: $bleStatus');
-      updateBluetoothPermission(bleStatus.isGranted);
-    } else {
-      PermissionStatus bleScanStatus = await Permission.bluetoothScan.request();
-      PermissionStatus bleConnectStatus = await Permission.bluetoothConnect.request();
-      updateBluetoothPermission(bleConnectStatus.isGranted && bleScanStatus.isGranted);
-      // Android 11 and below require location permission for BLE scanning
-      if (PlatformService.isAndroid) {
-        final deviceInfo = await DeviceInfoPlugin().androidInfo;
-        if (deviceInfo.version.sdkInt <= 30) {
-          PermissionStatus locationStatus = await Permission.locationWhenInUse.request();
-          updateLocationPermission(locationStatus.isGranted);
+    final attempt = ProductTelemetry.instance.start(
+      ProductJourney.permission,
+      surface: ProductSurface.onboarding,
+    );
+    try {
+      if (Platform.isIOS) {
+        PermissionStatus bleStatus = await Permission.bluetooth.request();
+        Logger.debug('bleStatus: $bleStatus');
+        updateBluetoothPermission(bleStatus.isGranted);
+      } else {
+        PermissionStatus bleScanStatus = await Permission.bluetoothScan.request();
+        PermissionStatus bleConnectStatus = await Permission.bluetoothConnect.request();
+        updateBluetoothPermission(bleConnectStatus.isGranted && bleScanStatus.isGranted);
+        // Android 11 and below require location permission for BLE scanning
+        if (PlatformService.isAndroid) {
+          final deviceInfo = await DeviceInfoPlugin().androidInfo;
+          if (deviceInfo.version.sdkInt <= 30) {
+            PermissionStatus locationStatus = await Permission.locationWhenInUse.request();
+            updateLocationPermission(locationStatus.isGranted);
+          }
         }
       }
-    }
-    if (hasBluetoothPermission) {
-      await BluetoothReadiness.instance.ensureReady(BluetoothUse.discovery);
+      if (hasBluetoothPermission) {
+        await BluetoothReadiness.instance.ensureReady(BluetoothUse.discovery);
+      }
+      attempt.complete(
+        hasBluetoothPermission ? ProductOutcome.success : ProductOutcome.failure,
+        failure: hasBluetoothPermission ? ProductFailure.none : ProductFailure.permissionDenied,
+      );
+    } catch (e) {
+      attempt.complete(ProductOutcome.failure, failure: ProductFailure.unknown);
+      notifyListeners();
     }
     notifyListeners();
   }
 
   Future askForNotificationPermissions() async {
-    var isAllowed = await NotificationService.instance.requestNotificationPermissions();
-    updateNotificationPermission(isAllowed);
-    notifyListeners();
+    final attempt = ProductTelemetry.instance.start(
+      ProductJourney.permission,
+      surface: ProductSurface.onboarding,
+    );
+    try {
+      var isAllowed = await NotificationService.instance.requestNotificationPermissions();
+      updateNotificationPermission(isAllowed);
+      attempt.complete(
+        isAllowed ? ProductOutcome.success : ProductOutcome.failure,
+        failure: isAllowed ? ProductFailure.none : ProductFailure.permissionDenied,
+      );
+      notifyListeners();
+    } catch (e) {
+      attempt.complete(ProductOutcome.failure, failure: ProductFailure.unknown);
+      notifyListeners();
+      return false;
+    }
   }
 
   Future askForBackgroundPermissions() async {
-    await FlutterForegroundTask.requestIgnoreBatteryOptimization();
-    var isAllowed = await ForegroundUtil().isIgnoringBatteryOptimizations;
-    updateBackgroundPermission(isAllowed);
-    notifyListeners();
+    final attempt = ProductTelemetry.instance.start(
+      ProductJourney.permission,
+      surface: ProductSurface.onboarding,
+    );
+    try {
+      await FlutterForegroundTask.requestIgnoreBatteryOptimization();
+      var isAllowed = await ForegroundUtil().isIgnoringBatteryOptimizations;
+      updateBackgroundPermission(isAllowed);
+      attempt.complete(
+        isAllowed ? ProductOutcome.success : ProductOutcome.failure,
+        failure: isAllowed ? ProductFailure.none : ProductFailure.permissionDenied,
+      );
+      notifyListeners();
+    } catch (e) {
+      attempt.complete(ProductOutcome.failure, failure: ProductFailure.unknown);
+      return false;
+    }
   }
 
   Future<(bool, PermissionStatus)> askForLocationPermissions() async {
-    if (await Permission.location.serviceStatus.isDisabled) {
-      Logger.debug('Location service is disabled');
-      return (false, PermissionStatus.permanentlyDenied);
-    } else {
+    final attempt = ProductTelemetry.instance.start(
+      ProductJourney.permission,
+      surface: ProductSurface.onboarding,
+    );
+    try {
+      if (await Permission.location.serviceStatus.isDisabled) {
+        Logger.debug('Location service is disabled');
+        attempt.complete(ProductOutcome.failure, failure: ProductFailure.permissionDenied);
+        return (false, PermissionStatus.permanentlyDenied);
+      }
       var res = await Permission.locationWhenInUse.request();
+      attempt.complete(
+        res.isGranted ? ProductOutcome.success : ProductOutcome.failure,
+        failure: res.isGranted ? ProductFailure.none : ProductFailure.permissionDenied,
+      );
       return (true, res);
+    } catch (e) {
+      attempt.complete(ProductOutcome.failure, failure: ProductFailure.unknown);
+      return (false, PermissionStatus.denied);
     }
   }
 
@@ -184,10 +241,23 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   }
 
   Future askForMicrophonePermissions() async {
-    PermissionStatus micStatus = await Permission.microphone.request();
-    Logger.debug('micStatus: $micStatus');
-    updateMicrophonePermission(micStatus.isGranted);
-    return micStatus.isGranted;
+    final attempt = ProductTelemetry.instance.start(
+      ProductJourney.permission,
+      surface: ProductSurface.onboarding,
+    );
+    try {
+      PermissionStatus micStatus = await Permission.microphone.request();
+      Logger.debug('micStatus: $micStatus');
+      updateMicrophonePermission(micStatus.isGranted);
+      attempt.complete(
+        micStatus.isGranted ? ProductOutcome.success : ProductOutcome.failure,
+        failure: micStatus.isGranted ? ProductFailure.none : ProductFailure.permissionDenied,
+      );
+      return micStatus.isGranted;
+    } catch (e) {
+      attempt.complete(ProductOutcome.failure, failure: ProductFailure.unknown);
+      rethrow;
+    }
   }
   //----------------- Onboarding Permissions -----------------
 
@@ -237,7 +307,14 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
       isClicked = false;
       connectingToDeviceId = null; // Reset the connecting device
       notifyListeners();
-      await Future.delayed(const Duration(seconds: 2));
+      _connectSettleTimer?.cancel();
+      final settle = Completer<void>();
+      _connectSettleTimer = Timer(const Duration(seconds: 2), () {
+        if (!settle.isCompleted) settle.complete();
+      });
+      await settle.future;
+      _connectSettleTimer = null;
+      if (_isDisposed) return;
       SharedPreferencesUtil().btDevice = connectedDevice!;
       _syncSavedDevices();
       SharedPreferencesUtil().deviceName = connectedDevice.name;
@@ -283,10 +360,12 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
   }
 
   Future<void> scanDevices({required VoidCallback onShowDialog, VoidCallback? onShowLocationDialog}) async {
+    final epoch = ++_scanEpoch;
     if (SharedPreferencesUtil().btDevice.id.isEmpty) {
       // it means the device has been unpaired
       deviceAlreadyUnpaired();
     }
+    if (_isDisposed || epoch != _scanEpoch) return;
 
     // Subscribe before checking the adapter so a successful enable action can
     // retry discovery and publish its results back to this page.
@@ -295,6 +374,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     // check if bluetooth is enabled on both platforms
     if (!hasBluetoothPermission) {
       await askForBluetoothPermissions();
+      if (_isDisposed || epoch != _scanEpoch) return;
       if (!hasBluetoothPermission) {
         onShowDialog();
         return;
@@ -304,6 +384,7 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     // Android 11 and below: location permission required for BLE scanning
     if (PlatformService.isAndroid) {
       final deviceInfo = await DeviceInfoPlugin().androidInfo;
+      if (_isDisposed || epoch != _scanEpoch) return;
       if (deviceInfo.version.sdkInt <= 30) {
         final locationGranted = await Permission.locationWhenInUse.isGranted;
         updateLocationPermission(locationGranted);
@@ -317,8 +398,10 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     if (!await BluetoothReadiness.instance.ensureReady(BluetoothUse.discovery)) {
       return;
     }
+    if (_isDisposed || epoch != _scanEpoch) return;
 
     _didNotMakeItTimer = Timer(const Duration(seconds: 10), () {
+      if (_isDisposed) return;
       enableInstructions = true;
       notifyListeners();
     });
@@ -326,9 +409,19 @@ class OnboardingProvider extends BaseProvider with MessageNotifierMixin implemen
     await deviceProvider?.initiateConnection("Onboarding");
   }
 
+  void cancelActiveScan() {
+    _scanEpoch++;
+    _didNotMakeItTimer?.cancel();
+    _didNotMakeItTimer = null;
+    deviceProvider?.stopDiscoveryScanning();
+  }
+
   @override
   void dispose() {
-    _didNotMakeItTimer?.cancel();
+    _isDisposed = true;
+    cancelActiveScan();
+    _connectSettleTimer?.cancel();
+    _connectSettleTimer = null;
     ServiceManager.instance().device.unsubscribe(this);
     super.dispose();
   }

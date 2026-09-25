@@ -243,6 +243,52 @@ def expected_index_states(
     return states
 
 
+def unmanaged_live_indexes(
+    *,
+    expected: Iterable[IndexSignature],
+    live_indexes: Iterable[LiveIndex],
+) -> list[LiveIndex]:
+    """Return live composite indexes the repository manifest does not declare.
+
+    Reconciliation is create-only by design: an index dropped from the manifest,
+    or created by hand in the console during an incident, survives forever with
+    nothing pointing at it. Deleting it automatically would be an outage
+    primitive -- a still-serving older Cloud Run revision can need an index the
+    new manifest no longer declares -- so this reports drift instead of acting
+    on it, and deletion stays a deliberate human operation.
+    """
+
+    expected_set = set(expected)
+    unmanaged: list[LiveIndex] = []
+    for index in live_indexes:
+        if index.api_scope != 'ANY_API':
+            continue
+        if index.signature in expected_set:
+            continue
+        alias = _implicit_terminal_document_id_alias(index.signature)
+        if alias is not None and alias in expected_set:
+            continue
+        unmanaged.append(index)
+    return unmanaged
+
+
+def report_unmanaged_live_indexes(
+    *,
+    expected: Iterable[IndexSignature],
+    live_indexes: Iterable[LiveIndex],
+) -> list[LiveIndex]:
+    """Surface create-only drift as non-blocking annotations on an existing gate."""
+
+    unmanaged = unmanaged_live_indexes(expected=expected, live_indexes=live_indexes)
+    for index in sorted(unmanaged, key=lambda live: live.resource_name):
+        print(
+            '::warning title=Unmanaged Firestore index::'
+            f'{format_signature(index.signature)} is serving but is not declared by '
+            'firestore.indexes.json; reconciliation is create-only and will never remove it'
+        )
+    return unmanaged
+
+
 def format_signature(signature: IndexSignature) -> str:
     collection_group, query_scope, fields = signature
     field_text = ', '.join(f'{field}:{direction}' for field, direction in fields)
@@ -535,12 +581,14 @@ def check_indexes_and_write_proposal(
     """Check one live snapshot and emit a bounded proposal when readiness fails."""
 
     expected_set = set(expected)
+    live_indexes = list_live_indexes(project=project, database=database, runner=runner)
     states = expected_index_states(
         expected=expected_set,
-        live_indexes=list_live_indexes(project=project, database=database, runner=runner),
+        live_indexes=live_indexes,
         project=project,
         database=database,
     )
+    report_unmanaged_live_indexes(expected=expected_set, live_indexes=live_indexes)
     pending = {signature: state for signature, state in states.items() if state != 'READY'}
     if not pending:
         print(f'Firestore index readiness passed: {len(expected_set)} composite indexes READY')
@@ -700,6 +748,7 @@ def reconcile(
         )
         for signature in sorted(missing):
             print(f'Firestore index provisioning dry run: would create {format_signature(signature)}')
+        report_unmanaged_live_indexes(expected=expected, live_indexes=live_indexes)
         return
     if check_only:
         assert proposal_output is not None and source_commit is not None

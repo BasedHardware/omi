@@ -7,6 +7,35 @@ import SwiftUI
 /// Choices are controls only while the kernel-backed parent is the completed
 /// tail of Main Chat. The runtime remains authoritative at selection time;
 /// this view's gate simply avoids presenting obsolete choices as actionable.
+/// Whether a question card's options are pressable, dimmed, or gone.
+///
+/// Three different situations used to collapse into one boolean, and the losing
+/// two both rendered as "no options at all": a question already answered (right),
+/// a question whose turn is no longer the tail (right), and a question on an
+/// account whose capability has not resolved (wrong — that reader saw a question
+/// with no visible answers and no explanation).
+enum ChatFirstQuestionCardOptionsPolicy: Equatable {
+  case hidden
+  case enabled
+  case disabled
+
+  static func presentation(
+    isActionable: Bool,
+    isCapabilityAvailable: Bool,
+    hasSelection: Bool,
+    hasOptions: Bool
+  ) -> Self {
+    guard hasOptions, !hasSelection else { return .hidden }
+    if isActionable { return .enabled }
+    // Capability-off is the only reason to show unpressable options: the
+    // question is live, we simply cannot answer it yet.
+    return isCapabilityAvailable ? .hidden : .disabled
+  }
+
+  var isVisible: Bool { self != .hidden }
+  var isPressable: Bool { self == .enabled }
+}
+
 struct QuestionCardView: View {
   private struct Option: Identifiable {
     let id: String
@@ -30,6 +59,10 @@ struct QuestionCardView: View {
   let options: [[String: Any]]
   let selectedOptionID: String?
   let isActionable: Bool
+  /// False while the server-owned capability has not resolved, or for an account
+  /// it does not cover. The options still render — a question with its answers
+  /// hidden reads as a question nobody asked — but they cannot be pressed.
+  let isCapabilityAvailable: Bool
   let onSelect: (String, Bool) -> Void
 
   private var validOptions: [Option] { options.compactMap(Option.init) }
@@ -48,7 +81,17 @@ struct QuestionCardView: View {
       // A completed question remains useful transcript context, but its
       // suggestions disappear as soon as an answer exists or another bubble
       // has taken the tail. We never leave stale chips that look tappable.
-      if isActionable, selectedOptionID == nil, !validOptions.isEmpty {
+      //
+      // Capability-off is the one case that shows the chips *without* making
+      // them pressable: the question is real and its answers are the only thing
+      // that explains it, so they are dimmed rather than deleted.
+      let optionsPresentation = ChatFirstQuestionCardOptionsPolicy.presentation(
+        isActionable: isActionable,
+        isCapabilityAvailable: isCapabilityAvailable,
+        hasSelection: selectedOptionID != nil,
+        hasOptions: !validOptions.isEmpty
+      )
+      if optionsPresentation.isVisible {
         FlowLayout(spacing: OmiSpacing.sm) {
           ForEach(validOptions) { option in
             Button {
@@ -62,9 +105,18 @@ struct QuestionCardView: View {
                 .glassChip()
             }
             .buttonStyle(.plain)
+            .disabled(!optionsPresentation.isPressable)
+            .opacity(optionsPresentation.isPressable ? 1 : 0.45)
             .accessibilityLabel("Send suggestion: \(option.label)")
             .accessibilityIdentifier("chat-first-question-\(questionID)-option-\(option.id)")
           }
+        }
+
+        if !optionsPresentation.isPressable {
+          Text("Answering is unavailable right now")
+            .scaledFont(size: OmiType.caption)
+            .foregroundStyle(Ink.secondary)
+            .accessibilityIdentifier("chat-first-question-\(questionID)-unavailable")
         }
       }
     }
@@ -103,6 +155,9 @@ struct TaskCardView: View {
   @State private var showCompletionAcknowledgement = false
   @State private var hydrationFinished = false
   @State private var retainedCompletedTask: TaskActionItem?
+  /// The completion the reader performed on this card, kept whatever the store
+  /// says afterwards. See `ChatFirstTaskCardPresentation.displayTask`.
+  @State private var locallyCompletedTask: TaskActionItem?
 
   init(taskID: String, tasksStore: TasksStore, navigation: ChatFirstShellNavigation) {
     self.taskID = taskID
@@ -118,10 +173,21 @@ struct TaskCardView: View {
     (tasksStore.tasks + tasksStore.deletedTasks).contains { $0.id == taskID && $0.isRetired }
   }
 
+  /// The store's row for this card, retired or not.
+  ///
+  /// `liveTask` is a presentation filter, so it answers nil for a retired row —
+  /// which made it the wrong thing to reconcile a toggle against. Completing a
+  /// task whose local row carried a stale tombstone read back as "the mutation
+  /// did not land", and the card retired itself over the reader's own tick.
+  private var storeRecord: TaskActionItem? {
+    tasksStore.tasks.first { $0.id == taskID }
+  }
+
   private var task: TaskActionItem? {
     ChatFirstTaskCardPresentation.displayTask(
       liveTask: liveTask,
-      retainedCompletedTask: retainedCompletedTask?.id == taskID ? retainedCompletedTask : nil
+      retainedCompletedTask: retainedCompletedTask?.id == taskID ? retainedCompletedTask : nil,
+      locallyCompletedTask: locallyCompletedTask?.id == taskID ? locallyCompletedTask : nil
     )
   }
 
@@ -129,23 +195,15 @@ struct TaskCardView: View {
     "\(taskID):\(liveTask == nil)"
   }
 
+  // The body's branches are extracted so release optimization can type-check
+  // each in reasonable time; the whole expression as one literal timed out the
+  // compiler ("unable to type-check this expression in reasonable time").
   var body: some View {
     Group {
       if let task {
-        card(task)
-          .onAppear {
-            retainCompletedTaskIfNeeded(liveTask)
-            AnalyticsManager.shared.chatFirst(
-              .richBlock(kind: .taskCard, outcome: .rendered, action: .none)
-            )
-          }
+        renderedCard(task)
       } else if hydrationFinished {
-        ChatFirstUnavailableBlockView(entityName: "Task")
-          .onAppear {
-            AnalyticsManager.shared.chatFirst(
-              .richBlock(kind: .taskCard, outcome: .stalePlaceholder, action: .none)
-            )
-          }
+        unavailableBlock
       } else {
         ChatFirstLoadingBlockView(entityName: "Task")
       }
@@ -168,12 +226,58 @@ struct TaskCardView: View {
         hydrationFinished = false
       }
       let resolvedTask = await tasksStore.resolveCanonicalTask(id: taskID)
-      retainCompletedTaskIfNeeded(resolvedTask)
-      if resolvedTask == nil {
-        retainedCompletedTask = nil
+      switch ChatFirstTaskCardHydration.resolution(
+        isCancelled: Task.isCancelled, hasLiveTask: liveTask != nil)
+      {
+      case .abandon:
+        return
+      case .settle:
+        // The toggle won the race and put the task back in the store. That is
+        // a better answer than this hydration's, so take it.
+        retainCompletedTaskIfNeeded(liveTask)
+        hydrationFinished = true
+      case .adopt:
+        if resolvedTask == nil {
+          log("TaskCardView: \(taskID) hydrated to nothing — the store cannot vouch for this task")
+        }
+        // A store that cannot vouch for the row is not the same as a row the
+        // user retired, and only the second is grounds for taking a card away.
+        // `.onChange(of: isExplicitlyRetired)` is the one clearer.
+        retainCompletedTaskIfNeeded(resolvedTask)
+        hydrationFinished = true
       }
-      hydrationFinished = true
     }
+  }
+
+  private func renderedCard(_ task: TaskActionItem) -> some View {
+    card(task)
+      .onAppear {
+        retainCompletedTaskIfNeeded(liveTask)
+        AnalyticsManager.shared.chatFirst(
+          .richBlock(kind: .taskCard, outcome: .rendered, action: .none)
+        )
+      }
+  }
+
+  private var unavailableBlock: some View {
+    ChatFirstUnavailableBlockView(entityName: "Task")
+      .onAppear {
+        log(unavailableDescription)
+        AnalyticsManager.shared.chatFirst(
+          .richBlock(kind: .taskCard, outcome: .stalePlaceholder, action: .none)
+        )
+      }
+  }
+
+  private var unavailableDescription: String {
+    "TaskCardView: \(taskID) unavailable"
+      + " store=\(tasksStore.tasks.count)"
+      + " incomplete=\(tasksStore.incompleteTasks.count)"
+      + " completed=\(tasksStore.completedTasks.count)"
+      + " deleted=\(tasksStore.deletedTasks.count)"
+      + " present=\(tasksStore.tasks.contains { $0.id == taskID })"
+      + " retiredHere=\(isExplicitlyRetired)"
+      + " retained=\(retainedCompletedTask?.id ?? "none")"
   }
 
   @ViewBuilder
@@ -271,7 +375,16 @@ struct TaskCardView: View {
       await tasksStore.toggleTask(task)
       isToggling = false
 
-      let reconciledTask = self.task
+      let reconciledTask = self.storeRecord
+      // The reader ticked this card and the store took the mutation. That is
+      // the answer the card shows from here on: a retirement discovered
+      // afterwards — a stale local tombstone, a lane that cannot vouch for the
+      // row — is not grounds for erasing a completion they performed.
+      if intendedCompletion {
+        locallyCompletedTask = reconciledTask?.completed == true ? reconciledTask : nil
+      } else {
+        locallyCompletedTask = nil
+      }
       AnalyticsManager.shared.chatFirst(
         .taskMutation(
           lifecycle: reconciledTask?.completed == intendedCompletion ? .success : .rollback,
@@ -306,11 +419,57 @@ struct TaskCardView: View {
   }
 }
 
+/// What a finished hydration is allowed to write back to the card.
+///
+/// `.task(id:)` cancels the in-flight hydration when its key changes, but Swift
+/// cancellation is cooperative: the body keeps running and its `await` still
+/// returns. A hydration that started while the card had no task can therefore
+/// land *after* the reader has ticked that task, carrying an answer from before
+/// the tick — and `resolveCanonicalTask` answers nil for any row it cannot
+/// vouch for, including one whose owner lease turned over mid-flight. Applying
+/// that late nil cleared the retained task and marked hydration finished, which
+/// is exactly the pair that renders "Task is no longer available" under a task
+/// the reader had just completed.
+///
+/// Observed directly: a card visibly showing its task logged
+/// `hydrated resolved=nil` from a hydration still in flight behind it.
+enum ChatFirstTaskCardHydration {
+  enum Resolution: Equatable {
+    /// Nothing newer arrived; the answer is the card's state.
+    case adopt
+    /// The card already has a live task, so there is nothing to adopt — but
+    /// this hydration is genuinely over.
+    case settle
+    /// A successor hydration owns the card's state. Write nothing at all:
+    /// even `hydrationFinished` would flash the unavailable placeholder in
+    /// the gap before the successor answers.
+    case abandon
+  }
+
+  static func resolution(isCancelled: Bool, hasLiveTask: Bool) -> Resolution {
+    if isCancelled { return .abandon }
+    return hasLiveTask ? .settle : .adopt
+  }
+}
+
 enum ChatFirstTaskCardPresentation {
+  /// `locallyCompletedTask` is the completion the reader performed on this card
+  /// and it outranks everything, retirement included.
+  ///
+  /// Every other input is a projection of store state, and store state can say
+  /// a task is gone for reasons that have nothing to do with the reader: the
+  /// Removed lane used to tombstone live rows locally, so ticking one of them
+  /// swapped their own completed card for "Task is no longer available". A
+  /// gesture the app accepted is not something a later read gets to deny — the
+  /// card keeps showing the tick until the reader themselves unticks it.
   static func displayTask(
     liveTask: TaskActionItem?,
-    retainedCompletedTask: TaskActionItem?
+    retainedCompletedTask: TaskActionItem?,
+    locallyCompletedTask: TaskActionItem? = nil
   ) -> TaskActionItem? {
+    if let locallyCompletedTask, locallyCompletedTask.completed {
+      return locallyCompletedTask
+    }
     if let liveTask {
       return liveTask.isRetired ? nil : liveTask
     }
@@ -452,6 +611,7 @@ struct CaptureLinkView: View {
 struct ConversationLinkView: View {
   let conversationID: String
   let summary: String
+  let recommendedActionItems: [ConversationLinkActionItem]
   let navigation: ChatFirstShellNavigation
 
   @State private var isOpening = false
@@ -459,6 +619,33 @@ struct ConversationLinkView: View {
   @State private var isCopyingLink = false
   @State private var shareLinkFeedback: ConversationShareLinkFeedback?
   @State private var shareLinkFeedbackGeneration = 0
+  @State private var shareRecipients: [ConversationShareRecipient] = []
+  @State private var isSendingSummary = false
+  @State private var summarySendStatus: (message: String, success: Bool)?
+
+  private var sendSummaryTitle: String? {
+    guard let first = shareRecipients.first else { return nil }
+    let extra = shareRecipients.count - 1
+    return extra > 0 ? "Send to \(first.shortLabel) +\(extra)" : "Send to \(first.shortLabel)"
+  }
+
+  private var statusLine: (message: String, systemImage: String, color: Color)? {
+    if let summarySendStatus {
+      return (
+        summarySendStatus.message,
+        summarySendStatus.success ? "checkmark" : "exclamationmark.triangle",
+        summarySendStatus.success ? Ink.listeningGreen : Ink.errorRed
+      )
+    }
+    if let shareLinkFeedback {
+      return (
+        shareLinkFeedback.message,
+        shareLinkFeedback.systemImage,
+        shareLinkFeedback == .copied ? Ink.listeningGreen : Ink.errorRed
+      )
+    }
+    return nil
+  }
 
   var body: some View {
     Group {
@@ -473,15 +660,26 @@ struct ConversationLinkView: View {
           isOpening: isOpening,
           accessibilityID: "chat-first-conversation-\(conversationID)-open",
           action: { openConversation() },
+          recommendedActionItems: recommendedActionItems,
+          recommendedActionItemAction: { item in
+            guard let taskID = item.taskID else { return }
+            navigation.open(focus: .task(id: taskID))
+          },
           secondaryActionTitle: "Copy share link",
           secondaryActionSystemImage: "link",
           isSecondaryBusy: isCopyingLink,
           secondaryAccessibilityID: "chat-first-conversation-\(conversationID)-copy-link",
           secondaryHelp: "Copy share link — anyone with the link can view",
           secondaryAction: { copyShareLink() },
-          statusMessage: shareLinkFeedback?.message,
-          statusSystemImage: shareLinkFeedback?.systemImage,
-          statusColor: shareLinkFeedback == .copied ? Ink.listeningGreen : Ink.errorRed
+          tertiaryActionTitle: sendSummaryTitle,
+          tertiaryActionSystemImage: "paperplane",
+          isTertiaryBusy: isSendingSummary,
+          tertiaryAccessibilityID: "chat-first-conversation-\(conversationID)-send-summary",
+          tertiaryHelp: shareRecipients.first.map { "Email the summary to \($0.email)" },
+          tertiaryAction: { sendSummary() },
+          statusMessage: statusLine?.message,
+          statusSystemImage: statusLine?.systemImage,
+          statusColor: statusLine?.color ?? Ink.secondary
         )
       }
     }
@@ -489,6 +687,34 @@ struct ConversationLinkView: View {
       AnalyticsManager.shared.chatFirst(
         .richBlock(kind: .conversationLink, outcome: .rendered, action: .none)
       )
+    }
+    .task {
+      // Calendar-detected participants make the one-click "Send to …" chip
+      // appear; no detection (or a fetch failure) just means no chip.
+      shareRecipients =
+        (try? await APIClient.shared.getConversationShareRecipients(id: conversationID)) ?? []
+    }
+  }
+
+  /// One-click email of the summary to the calendar-detected participants.
+  /// The backend validates recipients and flips visibility to shared, so this
+  /// discloses the audience in the confirmation just like copying the link.
+  private func sendSummary() {
+    guard !isSendingSummary, !shareRecipients.isEmpty else { return }
+    isSendingSummary = true
+    Task { @MainActor in
+      defer { isSendingSummary = false }
+      do {
+        let sent = try await APIClient.shared.sendConversationSummaryEmail(
+          id: conversationID,
+          recipientEmails: shareRecipients.map(\.email)
+        )
+        summarySendStatus = (
+          "Summary sent to \(sent.joined(separator: ", ")) — anyone with the link can view", true
+        )
+      } catch {
+        summarySendStatus = ("Couldn't send the summary — try again", false)
+      }
     }
   }
 
@@ -573,6 +799,39 @@ enum ChatFirstConversationLinkPolicy {
   }
 }
 
+/// Where a chat citation for a conversation opens, decided from the record the
+/// server returns for the cited ID.
+enum ChatFirstConversationCitationRoute: Equatable {
+  /// An Omi-device capture. The capture focus routes through the capture
+  /// archive, which carries the transcript moment into playback.
+  case captureFocus(momentTs: TimeInterval?)
+  /// Any other recorded conversation — a desktop or phone session the agent
+  /// retrieved. Opens as the exact fetched record, which the paginated
+  /// Conversations list may not currently contain.
+  case exactRecord
+}
+
+extension ChatFirstConversationLinkPolicy {
+  /// Chat citations name whatever conversation the agent retrieved, but the
+  /// capture focus resolves only through the archive's strictly source-scoped
+  /// fetch — routing a non-capture citation there landed the reader on the
+  /// Conversations list with nothing opened. Let the fetched record's own
+  /// provenance pick the route instead of the citation's kind alone.
+  static func citationRoute(
+    forFetched conversation: ServerConversation?,
+    requestedID: String,
+    momentTimestampMs: Int?
+  ) -> ChatFirstConversationCitationRoute? {
+    guard let conversation = validatedConversation(conversation, requestedID: requestedID) else {
+      return nil
+    }
+    if conversation.isOmiCaptureArchiveRecord {
+      return .captureFocus(momentTs: momentTimestampMs.map { TimeInterval($0) / 1_000 })
+    }
+    return .exactRecord
+  }
+}
+
 struct MemoryLinkView: View {
   let memoryID: String
   let summary: String
@@ -600,6 +859,25 @@ struct MemoryLinkView: View {
   }
 }
 
+// MARK: - Memory review card
+
+/// The `memoryReviewCard` block, rendered as the same rows the daily summary card uses.
+///
+/// One row view, two arrival paths. The desktop's live path is the summary record — this app has
+/// no `day_summary` chat row today — but the block is the contract both shells share, and giving it
+/// a second row implementation is how the two surfaces would drift into disagreeing about what a
+/// verdict means.
+struct MemoryReviewCardView: View {
+  let summaryID: String
+  let date: String
+  let items: [MemoryReviewItem]
+
+  var body: some View {
+    MemoryReviewSection(items: items, source: .chatBlock)
+      .id("memory-review-block-\(summaryID)-\(date)")
+  }
+}
+
 private struct ChatFirstLinkBlockView: View {
   let eyebrow: String
   let systemImage: String
@@ -608,6 +886,8 @@ private struct ChatFirstLinkBlockView: View {
   let isOpening: Bool
   let accessibilityID: String
   let action: () -> Void
+  var recommendedActionItems: [ConversationLinkActionItem] = []
+  var recommendedActionItemAction: ((ConversationLinkActionItem) -> Void)? = nil
   // Optional secondary chip rendered beside the primary destination chip
   // (e.g. "Copy share link" beside "Open conversation"). The transient
   // status renders on its own caption line under the chips so a long
@@ -618,6 +898,14 @@ private struct ChatFirstLinkBlockView: View {
   var secondaryAccessibilityID: String = ""
   var secondaryHelp: String? = nil
   var secondaryAction: (() -> Void)? = nil
+  // Optional tertiary chip (e.g. "Send to Sarah" beside "Copy share link"),
+  // same chrome and busy semantics as the secondary chip.
+  var tertiaryActionTitle: String? = nil
+  var tertiaryActionSystemImage: String = "paperplane"
+  var isTertiaryBusy: Bool = false
+  var tertiaryAccessibilityID: String = ""
+  var tertiaryHelp: String? = nil
+  var tertiaryAction: (() -> Void)? = nil
   var statusMessage: String? = nil
   var statusSystemImage: String? = nil
   var statusColor: Color = Ink.secondary
@@ -632,6 +920,18 @@ private struct ChatFirstLinkBlockView: View {
         .scaledFont(size: OmiType.body, weight: .medium)
         .foregroundStyle(Ink.primary)
         .fixedSize(horizontal: false, vertical: true)
+
+      if !recommendedActionItems.isEmpty {
+        VStack(alignment: .leading, spacing: OmiSpacing.xs) {
+          Text("Recommended next steps")
+            .scaledFont(size: OmiType.micro, weight: .semibold)
+            .foregroundStyle(Ink.secondary)
+
+          ForEach(recommendedActionItems.indices, id: \.self) { index in
+            recommendedActionItemRow(recommendedActionItems[index])
+          }
+        }
+      }
 
       HStack(spacing: OmiSpacing.sm) {
         Button(action: action) {
@@ -676,6 +976,29 @@ private struct ChatFirstLinkBlockView: View {
           .accessibilityLabel(secondaryHelp ?? secondaryActionTitle)
           .accessibilityIdentifier(secondaryAccessibilityID)
         }
+
+        if let tertiaryActionTitle, let tertiaryAction {
+          Button(action: tertiaryAction) {
+            HStack(spacing: OmiSpacing.xs) {
+              if isTertiaryBusy {
+                ProgressView()
+                  .controlSize(.small)
+              }
+              Text(tertiaryActionTitle)
+              Image(systemName: tertiaryActionSystemImage)
+            }
+            .scaledFont(size: OmiType.caption, weight: .semibold)
+            .foregroundStyle(Ink.primary)
+            .padding(.horizontal, OmiSpacing.sm)
+            .padding(.vertical, OmiSpacing.xs)
+            .glassChip()
+          }
+          .buttonStyle(.plain)
+          .disabled(isTertiaryBusy)
+          .help(tertiaryHelp ?? tertiaryActionTitle)
+          .accessibilityLabel(tertiaryHelp ?? tertiaryActionTitle)
+          .accessibilityIdentifier(tertiaryAccessibilityID)
+        }
       }
 
       if let statusMessage {
@@ -694,6 +1017,41 @@ private struct ChatFirstLinkBlockView: View {
       RoundedRectangle(cornerRadius: PageGlass.rowRadius, style: .continuous)
         .stroke(Ink.glassEdge, lineWidth: 1)
     )
+  }
+
+  @ViewBuilder
+  private func recommendedActionItemRow(_ item: ConversationLinkActionItem) -> some View {
+    if item.taskID != nil, let recommendedActionItemAction {
+      Button {
+        recommendedActionItemAction(item)
+      } label: {
+        recommendedActionItemLabel(item, showsOpenIndicator: true)
+      }
+      .buttonStyle(.plain)
+      .accessibilityLabel("Open task: \(item.description)")
+    } else {
+      recommendedActionItemLabel(item, showsOpenIndicator: false)
+    }
+  }
+
+  private func recommendedActionItemLabel(
+    _ item: ConversationLinkActionItem,
+    showsOpenIndicator: Bool
+  ) -> some View {
+    HStack(alignment: .firstTextBaseline, spacing: OmiSpacing.xs) {
+      Image(systemName: "circle")
+        .scaledFont(size: OmiType.micro, weight: .medium)
+        .foregroundStyle(Ink.secondary)
+      Text(item.description)
+        .scaledFont(size: OmiType.caption, weight: .medium)
+        .foregroundStyle(Ink.primary)
+        .fixedSize(horizontal: false, vertical: true)
+      if showsOpenIndicator {
+        Image(systemName: "chevron.right")
+          .scaledFont(size: OmiType.micro, weight: .semibold)
+          .foregroundStyle(Ink.secondary)
+      }
+    }
   }
 }
 

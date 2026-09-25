@@ -330,7 +330,7 @@ async def test_stale_inflight_success_does_not_close_open_breaker():
     started = asyncio.Event()
     release = asyncio.Event()
 
-    async def connect(uid, sample_rate):
+    async def connect(uid, sample_rate, client_kind='unknown'):
         if uid == "slow":
             started.set()
             await release.wait()
@@ -357,11 +357,28 @@ async def test_connect_builds_encoded_websocket_url():
     with patch('utils.pusher.PusherAPI', 'https://pusher.example/base?existing=1'), patch(
         'utils.pusher.websockets.connect', return_value=socket
     ) as connect:
-        assert await _connect_to_trigger_pusher('user&admin=true', 16000) is socket
+        assert await _connect_to_trigger_pusher('user&admin=true', 16000, 'desktop_macos') is socket
 
     assert connect.await_args.args[0] == (
-        'wss://pusher.example/base/v1/trigger/listen?existing=1&uid=user%26admin%3Dtrue&sample_rate=16000'
+        'wss://pusher.example/base/v1/trigger/listen?existing=1&uid=user%26admin%3Dtrue'
+        '&sample_rate=16000&client_kind=desktop_macos'
     )
+
+
+@pytest.mark.asyncio
+async def test_connect_encodes_a_hostile_client_kind_rather_than_trusting_it():
+    """client_kind reaches the URL, so it must be encoded like every other value.
+
+    The resolver bounds it to a closed vocabulary before it gets here, but this
+    query string is built by hand and must not depend on that for its safety.
+    """
+    socket = MagicMock()
+    with patch('utils.pusher.PusherAPI', 'https://pusher.example/base'), patch(
+        'utils.pusher.websockets.connect', return_value=socket
+    ) as connect:
+        assert await _connect_to_trigger_pusher('user', 16000, 'evil&admin=true') is socket
+
+    assert connect.await_args.args[0].endswith('&client_kind=evil%26admin%3Dtrue')
 
 
 @pytest.mark.asyncio

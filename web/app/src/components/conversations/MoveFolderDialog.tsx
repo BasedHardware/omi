@@ -46,10 +46,10 @@ export function MoveFolderDialog({
             exit={{ opacity: 0, scale: 0.95, y: 20 }}
             transition={{ type: 'spring', damping: 25, stiffness: 300 }}
             className={cn(
-              'fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50',
-              'w-full max-w-sm p-6 rounded-2xl',
-              'bg-bg-secondary border border-bg-tertiary',
-              'shadow-[0_16px_64px_rgba(0,0,0,0.5)]'
+              'fixed left-1/2 top-1/2 z-50 -translate-x-1/2 -translate-y-1/2',
+              'w-full max-w-sm rounded-2xl p-6',
+              'border border-bg-tertiary bg-bg-secondary',
+              'shadow-[0_16px_64px_rgba(0,0,0,0.5)]',
             )}
           >
             {/* Close button */}
@@ -57,32 +57,34 @@ export function MoveFolderDialog({
               onClick={onClose}
               disabled={isLoading}
               className={cn(
-                'absolute top-4 right-4 p-2 rounded-lg',
+                'absolute right-4 top-4 rounded-lg p-2',
                 'text-text-quaternary hover:text-text-primary',
-                'hover:bg-bg-tertiary transition-colors',
-                'disabled:opacity-50 disabled:cursor-not-allowed'
+                'transition-colors hover:bg-bg-tertiary',
+                'disabled:cursor-not-allowed disabled:opacity-50',
               )}
             >
-              <X className="w-4 h-4" />
+              <X className="h-4 w-4" />
             </button>
 
             {/* Icon */}
-            <div className={cn(
-              'w-12 h-12 rounded-xl mb-4',
-              'bg-purple-primary/20 flex items-center justify-center'
-            )}>
-              <FolderInput className="w-6 h-6 text-purple-primary" />
+            <div
+              className={cn(
+                'mb-4 h-12 w-12 rounded-xl',
+                'flex items-center justify-center bg-white/[0.14]',
+              )}
+            >
+              <FolderInput className="h-6 w-6 text-text-primary" />
             </div>
 
             {/* Title */}
-            <h2 className="text-lg font-semibold text-text-primary mb-2">
+            <h2 className="mb-2 text-lg font-semibold text-text-primary">
               Move {selectedCount} conversation{selectedCount !== 1 ? 's' : ''} to
             </h2>
 
             {/* Folder list */}
-            <div className="space-y-2 mb-4 max-h-64 overflow-y-auto">
+            <div className="mb-4 max-h-64 space-y-2 overflow-y-auto">
               {folders.length === 0 ? (
-                <p className="text-sm text-text-tertiary py-4 text-center">
+                <p className="py-4 text-center text-sm text-text-tertiary">
                   No folders yet. Create one to organize your conversations.
                 </p>
               ) : (
@@ -92,10 +94,10 @@ export function MoveFolderDialog({
                     onClick={() => onSelectFolder(folder.id)}
                     disabled={isLoading}
                     className={cn(
-                      'w-full flex items-center gap-3 px-4 py-3 rounded-xl',
+                      'flex w-full items-center gap-3 rounded-xl px-4 py-3',
                       'bg-bg-tertiary hover:bg-bg-quaternary',
                       'transition-colors duration-150',
-                      'disabled:opacity-50 disabled:cursor-not-allowed'
+                      'disabled:cursor-not-allowed disabled:opacity-50',
                     )}
                   >
                     <span className="text-xl">{folder.emoji || '📁'}</span>
@@ -108,7 +110,7 @@ export function MoveFolderDialog({
                       </span>
                     )}
                     {loadingFolderId === folder.id && (
-                      <Loader2 className="w-4 h-4 animate-spin text-purple-primary" />
+                      <Loader2 className="h-4 w-4 animate-spin text-text-primary" />
                     )}
                   </button>
                 ))
@@ -116,21 +118,21 @@ export function MoveFolderDialog({
             </div>
 
             {/* Divider */}
-            <div className="border-t border-bg-tertiary my-4" />
+            <div className="my-4 border-t border-bg-tertiary" />
 
             {/* Create new folder button */}
             <button
               onClick={onCreateFolder}
               disabled={isLoading}
               className={cn(
-                'w-full flex items-center gap-3 px-4 py-3 rounded-xl',
-                'bg-purple-primary/10 hover:bg-purple-primary/20',
-                'text-purple-primary',
+                'flex w-full items-center gap-3 rounded-xl px-4 py-3',
+                'bg-white/[0.08] hover:bg-white/[0.14]',
+                'text-text-primary',
                 'transition-colors duration-150',
-                'disabled:opacity-50 disabled:cursor-not-allowed'
+                'disabled:cursor-not-allowed disabled:opacity-50',
               )}
             >
-              <Plus className="w-5 h-5" />
+              <Plus className="h-5 w-5" />
               <span className="text-sm font-medium">Create new folder</span>
             </button>
 
@@ -139,11 +141,11 @@ export function MoveFolderDialog({
               onClick={onClose}
               disabled={isLoading}
               className={cn(
-                'w-full mt-3 px-4 py-2.5 rounded-xl',
+                'mt-3 w-full rounded-xl px-4 py-2.5',
                 'text-sm font-medium text-text-secondary',
                 'bg-bg-tertiary hover:bg-bg-quaternary',
                 'transition-colors duration-150',
-                'disabled:opacity-50 disabled:cursor-not-allowed'
+                'disabled:cursor-not-allowed disabled:opacity-50',
               )}
             >
               Cancel

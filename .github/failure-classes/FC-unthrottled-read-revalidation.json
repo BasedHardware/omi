@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-unthrottled-read-revalidation",
+  "violated_contract": "A local-first read served from a local cache must not re-derive its full backing dataset from the backend on every read. Background revalidation must be bounded in time and volume (one time-throttled, in-flight-deduped entry point that every trigger funnels through), because UI read frequency is unbounded: a store-change broadcast that makes the UI re-read turns per-read revalidation into a self-feeding loop, and a per-read full scan multiplies backend cost by UI event frequency instead of data-change frequency.",
+  "canonical_prevention": "Route reads, timers, and focus events through a single throttled revalidation entry point; revalidate by cheap id census plus per-item fetch of only new/changed items; reserve full scans for one-time versioned population and explicit user refresh; and broadcast store-change events only when a sync actually changed a row so the read-to-sync-to-broadcast cycle cannot self-feed.",
+  "canonical_prevention_artifact": [
+    "desktop/windows/src/main/tasks/taskSyncEngine.ts",
+    "desktop/windows/src/main/tasks/taskSyncEngine.test.ts"
+  ],
+  "evidence_prs": [9891],
+  "scope_hints": [
+    "desktop/windows/src/main/tasks/**",
+    "desktop/macos/Desktop/Sources/Stores/TasksStore.swift"
+  ],
+  "status": "open"
+}

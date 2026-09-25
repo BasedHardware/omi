@@ -1,37 +1,40 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { getDb } from '@/lib/firebase/admin';
-import { verifyAdmin } from '@/lib/auth';
-import { getStripe } from '@/lib/stripe';
-import { updateUserSubscriptionDetails } from '@/lib/utils/user-subscription';
-export const dynamic = 'force-dynamic';
-
+import { NextRequest, NextResponse } from "next/server";
+import { getDb } from "@/lib/firebase/admin";
+import { verifyAdmin } from "@/lib/auth";
+import { isSafeDocumentId } from "@/lib/firestore-doc-id.mjs";
+import { getStripe } from "@/lib/stripe";
+import { updateUserSubscriptionDetails } from "@/lib/utils/user-subscription";
+export const dynamic = "force-dynamic";
 
 // Function to fetch Stripe payment details
 async function fetchStripePaymentDetails(paymentId: string) {
   const stripe = getStripe();
   try {
     const paymentIntent = await stripe.paymentIntents.retrieve(paymentId);
-    
+
     // Calculate period end as 1 year from payment date (Unix timestamp)
     const paymentDate = new Date(paymentIntent.created * 1000);
     const periodEnd = new Date(paymentDate);
     periodEnd.setFullYear(periodEnd.getFullYear() + 1);
-    
+
     return {
       subscription_id: paymentIntent.id, // Database field name
       customer_id: paymentIntent.customer as string,
       current_period_end: Math.floor(periodEnd.getTime() / 1000), // Unix timestamp (epoch seconds)
       cancel_at_period_end: false, // One-time payments don't auto-cancel
-      plan: 'unlimited',
-      status: 'active'
+      plan: "unlimited",
+      status: "active",
     };
   } catch (error) {
-    console.error('Error fetching Stripe payment:', error);
-    throw new Error('Invalid Stripe payment ID or payment not found');
+    console.error("Error fetching Stripe payment:", error);
+    throw new Error("Invalid Stripe payment ID or payment not found");
   }
 }
 
-export async function PATCH(request: NextRequest, props: { params: Promise<{ id: string }> }) {
+export async function PATCH(
+  request: NextRequest,
+  props: { params: Promise<{ id: string }> }
+) {
   const params = await props.params;
   const authResult = await verifyAdmin(request);
   if (authResult instanceof NextResponse) return authResult;
@@ -39,59 +42,80 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
   try {
     const db = getDb();
     const body = await request.json();
-    const { is_active, max_seats, organisation_name, website, employees, stripe_payment_id } = body;
+    const {
+      is_active,
+      max_seats,
+      organisation_name,
+      website,
+      employees,
+      stripe_payment_id,
+    } = body;
     const organizationId = params.id;
+    if (!isSafeDocumentId(organizationId)) {
+      return NextResponse.json({ error: "Invalid id" }, { status: 400 });
+    }
 
     // Exclude employees from updates - employees should not be editable through this endpoint
     if (employees !== undefined) {
       return NextResponse.json(
-        { error: 'Employees cannot be updated through this endpoint' },
+        { error: "Employees cannot be updated through this endpoint" },
         { status: 400 }
       );
     }
 
     // Validate the fields being updated
-    if (is_active !== undefined && typeof is_active !== 'boolean') {
+    if (is_active !== undefined && typeof is_active !== "boolean") {
       return NextResponse.json(
-        { error: 'is_active must be a boolean value' },
+        { error: "is_active must be a boolean value" },
         { status: 400 }
       );
     }
 
-    if (max_seats !== undefined && (typeof max_seats !== 'number' || max_seats < 0)) {
+    if (
+      max_seats !== undefined &&
+      (typeof max_seats !== "number" || max_seats < 0)
+    ) {
       return NextResponse.json(
-        { error: 'max_seats must be a non-negative number' },
+        { error: "max_seats must be a non-negative number" },
         { status: 400 }
       );
     }
 
-    if (organisation_name !== undefined && (typeof organisation_name !== 'string' || organisation_name.trim().length === 0)) {
+    if (
+      organisation_name !== undefined &&
+      (typeof organisation_name !== "string" ||
+        organisation_name.trim().length === 0)
+    ) {
       return NextResponse.json(
-        { error: 'organisation_name must be a non-empty string' },
+        { error: "organisation_name must be a non-empty string" },
         { status: 400 }
       );
     }
 
-    if (website !== undefined && typeof website !== 'string') {
+    if (website !== undefined && typeof website !== "string") {
       return NextResponse.json(
-        { error: 'website must be a string' },
+        { error: "website must be a string" },
         { status: 400 }
       );
     }
 
-    if (stripe_payment_id !== undefined && stripe_payment_id && !stripe_payment_id.startsWith('pi_')) {
+    if (
+      stripe_payment_id !== undefined &&
+      stripe_payment_id &&
+      !stripe_payment_id.startsWith("pi_")
+    ) {
       return NextResponse.json(
         { error: 'Invalid Stripe payment ID format. Must start with "pi_"' },
         { status: 400 }
       );
     }
 
-    const orgRef = db.collection('organisations').doc(organizationId);
+    const orgRef = db.collection("organisations").doc(organizationId);
     const orgDoc = await orgRef.get();
 
     if (!orgDoc.exists) {
       return NextResponse.json(
-        { error: 'Organization not found' },
+        { error: "Organization not found" },
         { status: 404 }
       );
     }
@@ -104,7 +128,12 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
           paymentData = await fetchStripePaymentDetails(stripe_payment_id);
         } catch (error) {
           return NextResponse.json(
-            { error: error instanceof Error ? error.message : 'Failed to fetch Stripe payment details' },
+            {
+              error:
+                error instanceof Error
+                  ? error.message
+                  : "Failed to fetch Stripe payment details",
+            },
             { status: 400 }
           );
         }
@@ -152,18 +181,18 @@ export async function PATCH(request: NextRequest, props: { params: Promise<{ id:
         added_on: updatedData?.added_on?.toDate?.()?.toISOString() || null,
         max_seats: updatedData?.max_seats || null,
         subscription: updatedData?.subscription || null, // Database field name
-        employees: updatedData?.employees?.map((emp: any) => ({
-          ...emp,
-          added_at: emp.added_at?.toDate?.()?.toISOString() || null,
-          removed_at: emp.removed_at?.toDate?.()?.toISOString() || null,
-        })) || []
-      }
+        employees:
+          updatedData?.employees?.map((emp: any) => ({
+            ...emp,
+            added_at: emp.added_at?.toDate?.()?.toISOString() || null,
+            removed_at: emp.removed_at?.toDate?.()?.toISOString() || null,
+          })) || [],
+      },
     });
-
   } catch (error) {
-    console.error('Error updating organization:', error);
+    console.error("Error updating organization:", error);
     return NextResponse.json(
-      { error: 'Failed to update organization' },
+      { error: "Failed to update organization" },
       { status: 500 }
     );
   }

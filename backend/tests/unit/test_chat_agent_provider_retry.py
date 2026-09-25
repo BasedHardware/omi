@@ -519,9 +519,10 @@ async def test_gateway_mode_selects_openai_agent_runner(agentic_mod):
     assert [schema['function']['name'] for schema in seen['schemas']] == ['perplexity_web_search_tool']
 
 
-async def test_anthropic_byok_keeps_agentic_chat_on_direct_runner(agentic_mod):
+async def test_anthropic_byok_stays_on_openai_agent_runner(agentic_mod):
+    """Chat-agent BYOK Anthropic is dropped: one Luna/OpenAI path, no second Messages lane."""
     callback_data = {}
-    seen = {'direct': False}
+    seen = {'openai': False}
 
     async def fake_run_blocking(_executor, function, *_args, **_kwargs):
         if function is agentic_mod.get_user_timezone:
@@ -532,28 +533,26 @@ async def test_anthropic_byok_keeps_agentic_chat_on_direct_runner(agentic_mod):
             return []
         raise AssertionError(f'unexpected blocking setup call: {function}')
 
-    async def direct_runner(_system, _messages, _schemas, _registry, callback, full_response, _guard, _configurable):
-        seen['direct'] = True
-        full_response.append('direct answer')
-        await callback.put_data('direct answer')
+    async def openai_runner(_system, _messages, _schemas, _registry, callback, full_response, _guard, _configurable):
+        seen['openai'] = True
+        full_response.append('managed answer')
+        await callback.put_data('managed answer')
         await callback.end()
         return None
 
-    async def gateway_runner(*_args):
-        raise AssertionError('Anthropic BYOK must not select the gateway runner')
+    async def anthropic_runner(*_args):
+        raise AssertionError('Anthropic BYOK must not select the leftover Messages runner')
 
     with patch.object(agentic_mod, 'should_route_chat_agent_through_gateway', return_value=True), patch.object(
-        agentic_mod, 'get_byok_key', return_value='sk-ant-test'
-    ), patch.object(agentic_mod, 'run_blocking', new=fake_run_blocking), patch.object(
-        agentic_mod, '_convert_tools', return_value=([], {})
-    ), patch.object(
+        agentic_mod, 'run_blocking', new=fake_run_blocking
+    ), patch.object(agentic_mod, '_convert_tools', return_value=([], {})), patch.object(
         agentic_mod, '_messages_to_anthropic', return_value=[{'role': 'user', 'content': 'hello'}]
     ), patch.object(
         agentic_mod, '_inject_current_datetime', side_effect=lambda messages, _block: messages
     ), patch.object(
-        agentic_mod, '_run_openai_agent_stream', new=gateway_runner
+        agentic_mod, '_run_openai_agent_stream', new=openai_runner
     ), patch.object(
-        agentic_mod, '_run_anthropic_agent_stream', new=direct_runner
+        agentic_mod, '_run_anthropic_agent_stream', new=anthropic_runner
     ):
         chunks = [
             chunk
@@ -565,8 +564,8 @@ async def test_anthropic_byok_keeps_agentic_chat_on_direct_runner(agentic_mod):
             )
         ]
 
-    assert chunks == [f'think: {agentic_mod.AGENT_STREAM_SETUP_PROGRESS}', 'data: direct answer', None]
-    assert seen['direct'] is True
+    assert chunks == [f'think: {agentic_mod.AGENT_STREAM_SETUP_PROGRESS}', 'data: managed answer', None]
+    assert seen['openai'] is True
 
 
 async def test_safety_guard_message_becomes_the_answer(agentic_mod):
@@ -610,7 +609,7 @@ async def test_unrecovered_provider_failure_is_reported_to_the_caller(agentic_mo
         return 'provider_ReadTimeout'
 
     callback_data = {}
-    with patch.object(agentic_mod, '_run_anthropic_agent_stream', new=producer):
+    with patch.object(agentic_mod, '_run_openai_agent_stream', new=producer):
         await _drain(
             agentic_mod.execute_agentic_chat_stream(
                 'uid_test',
@@ -632,7 +631,7 @@ async def test_successful_turn_reports_no_error(agentic_mod):
         return None
 
     callback_data = {}
-    with patch.object(agentic_mod, '_run_anthropic_agent_stream', new=producer):
+    with patch.object(agentic_mod, '_run_openai_agent_stream', new=producer):
         await _drain(
             agentic_mod.execute_agentic_chat_stream(
                 'uid_test',

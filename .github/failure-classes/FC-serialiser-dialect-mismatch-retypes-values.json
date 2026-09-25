@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-serialiser-dialect-mismatch-retypes-values",
+  "violated_contract": "A tool that reads another tool's serialized output, edits it, and writes it back must parse under the same dialect the producer emitted. When the reader's dialect types a plain scalar differently from the writer's, the round trip silently rewrites values the edit never touched, and the corruption is attributed to whoever reads the record next rather than to the tool that rewrote it.",
+  "canonical_prevention": "Pin the reader to the producer's dialect rather than the library default, and prove the round trip is value-preserving with a fixture copied verbatim from the producer's real output -- not a hand-written approximation, which will be written in the dialect the author already assumes.",
+  "canonical_prevention_artifact": [
+    "backend/scripts/attach_cloud_run_gmp_sidecar.py",
+    "backend/tests/unit/test_attach_cloud_run_gmp_sidecar.py"
+  ],
+  "evidence_prs": [11998],
+  "scope_hints": [
+    "backend/scripts/attach_cloud_run_gmp_sidecar.py",
+    "backend/deploy/runtime_env.yaml",
+    ".github/actions/deploy-backend-stack/action.yml"
+  ],
+  "status": "open"
+}

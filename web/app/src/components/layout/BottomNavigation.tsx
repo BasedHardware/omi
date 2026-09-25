@@ -1,9 +1,9 @@
 'use client';
 
-import { usePathname, useRouter } from 'next/navigation';
-import Link from 'next/link';
+import { usePathname, useRouter } from '@tschk/moonshine-next/navigation';
+import Link from '@tschk/moonshine-next/link';
 import { motion } from 'framer-motion';
-import { GanttChartSquare, MessageCircle, Mic, CheckSquare, Menu } from 'lucide-react';
+import { GanttChartSquare, House, Mic, CheckSquare, Menu } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useRecordingContext } from '@/components/recording/RecordingContext';
 
@@ -13,8 +13,8 @@ interface BottomNavigationProps {
 
 // Core navigation items (excluding More)
 const navItems = [
-  { label: 'Conversations', href: '/conversations', icon: GanttChartSquare },
-  { label: 'Chat', href: '/chat', icon: MessageCircle },
+  { label: 'Home', href: '/home', icon: House },
+  { label: 'Timeline', href: '/conversations', icon: GanttChartSquare },
   { label: 'Record', href: '/record', icon: Mic },
   { label: 'Tasks', href: '/tasks', icon: CheckSquare },
 ];
@@ -28,8 +28,8 @@ export function BottomNavigation({ onOpenSidebar }: BottomNavigationProps) {
   // Handle conversations click - always go to list view
   const handleConversationsClick = (e: React.MouseEvent) => {
     e.preventDefault();
-    // Always navigate to /conversations with a timestamp to force navigation
-    // This ensures the URL change is detected even if we're already on /conversations
+    // Always navigate to /timeline with a timestamp to force navigation
+    // This ensures the URL change is detected even if we're already on /timeline
     router.push('/conversations?v=' + Date.now(), { scroll: false });
   };
 
@@ -39,15 +39,15 @@ export function BottomNavigation({ onOpenSidebar }: BottomNavigationProps) {
       animate={{ y: 0, opacity: 1 }}
       transition={{ duration: 0.2, ease: 'easeOut' }}
       className={cn(
-        'fixed bottom-0 inset-x-0 z-40',
+        'fixed inset-x-0 bottom-0 z-40',
         'lg:hidden', // Only show on mobile
         'bg-bg-secondary/80 backdrop-blur-md',
         'border-t border-bg-tertiary',
-        'pb-safe' // Safe area inset for devices with home indicators
+        'pb-safe', // Safe area inset for devices with home indicators
       )}
       aria-label="Primary navigation"
     >
-      <div className="flex items-center justify-around h-16 px-2">
+      <div className="flex h-16 items-center justify-around px-2">
         {navItems.map((item) => {
           const isActive =
             pathname === item.href ||
@@ -63,21 +63,21 @@ export function BottomNavigation({ onOpenSidebar }: BottomNavigationProps) {
               onClick={isConversations ? handleConversationsClick : undefined}
               className={cn(
                 'flex flex-col items-center justify-center',
-                'w-14 h-14 rounded-xl',
+                'h-14 w-14 rounded-xl',
                 'transition-colors duration-150',
                 isActive
-                  ? 'bg-purple-primary/10 text-purple-primary'
-                  : 'text-text-tertiary hover:text-text-secondary'
+                  ? 'bg-text-primary text-bg-primary'
+                  : 'text-text-tertiary hover:text-text-secondary',
               )}
               aria-label={item.label}
               aria-current={isActive ? 'page' : undefined}
             >
               <div className="relative">
-                <item.icon className="w-6 h-6" />
+                <item.icon className="h-6 w-6" />
                 {showRecordingBadge && (
-                  <span className="absolute -top-1 -right-1 flex h-3 w-3">
-                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
-                    <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500" />
+                  <span className="absolute -right-1 -top-1 flex h-3 w-3">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-400 opacity-75" />
+                    <span className="relative inline-flex h-3 w-3 rounded-full bg-red-500" />
                   </span>
                 )}
               </div>
@@ -90,13 +90,13 @@ export function BottomNavigation({ onOpenSidebar }: BottomNavigationProps) {
           onClick={onOpenSidebar}
           className={cn(
             'flex flex-col items-center justify-center',
-            'w-14 h-14 rounded-xl',
+            'h-14 w-14 rounded-xl',
             'text-text-tertiary hover:text-text-secondary',
-            'transition-colors duration-150'
+            'transition-colors duration-150',
           )}
           aria-label="More options"
         >
-          <Menu className="w-6 h-6" />
+          <Menu className="h-6 w-6" />
         </button>
       </div>
     </motion.nav>

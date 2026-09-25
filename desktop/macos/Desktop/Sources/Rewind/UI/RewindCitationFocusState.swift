@@ -6,13 +6,18 @@ import Foundation
 final class RewindCitationFocusState {
   static let shared = RewindCitationFocusState()
 
-  private(set) var pendingScreenshotID: Int64?
-  private var pendingOwnerScope: OwnerScope?
-
-  private struct OwnerScope: Equatable {
-    let ownerID: String
-    let generation: UInt64
+  /// The one-shot request carries the complete authorization snapshot rather than only a user id
+  /// and generation. A same-uid sign-out/sign-in must not be able to reuse a row id while an async
+  /// destination lookup is suspended.
+  struct Request: Equatable, Sendable {
+    let screenshotID: Int64
+    let owner: RewindCaptureOwnerSnapshot
   }
+
+  private(set) var pendingRequest: Request?
+
+  /// Compatibility projection for callers/tests that only need to inspect the queued row id.
+  var pendingScreenshotID: Int64? { pendingRequest?.screenshotID }
 
   private init() {
     // The singleton lives for the process lifetime, so the notification token does not need a
@@ -42,31 +47,47 @@ final class RewindCitationFocusState {
       clear()
       return
     }
-    pendingScreenshotID = screenshotID
-    pendingOwnerScope = OwnerScope(ownerID: ownerSnapshot.ownerID, generation: ownerSnapshot.generation)
+    pendingRequest = Request(screenshotID: screenshotID, owner: ownerSnapshot)
     NotificationCenter.default.post(name: .rewindCitationFocusRequested, object: nil)
   }
 
-  func consume() -> Int64? {
+  /// Consume the request only when the complete owner lease is still current. The returned lease
+  /// must be passed through every asynchronous read and into the timeline admission boundary.
+  func consumeRequest() -> Request? {
     defer { clear() }
-    guard let pendingScreenshotID, let pendingOwnerScope,
-      let currentOwner = RewindCaptureOwnerSnapshot.capture(),
-      pendingOwnerScope == OwnerScope(ownerID: currentOwner.ownerID, generation: currentOwner.generation),
-      currentOwner.isCurrent()
+    guard let request = pendingRequest,
+      Self.isCurrent(owner: request.owner)
     else {
       // A request that outlives its owner is never allowed to resolve by numeric id. Rowids are
       // local to each owner's database, so treating this as a miss is the fail-closed behavior.
       return nil
     }
-    return pendingScreenshotID
+    return request
+  }
+
+  func consume() -> Int64? {
+    consumeRequest()?.screenshotID
+  }
+
+  static func isCurrent(owner: RewindCaptureOwnerSnapshot) -> Bool {
+    guard let currentOwner = RewindCaptureOwnerSnapshot.capture() else { return false }
+    return currentOwner == owner && owner.isCurrent()
   }
 
   private func clear() {
-    pendingScreenshotID = nil
-    pendingOwnerScope = nil
+    pendingRequest = nil
   }
 }
 
 extension Notification.Name {
   static let rewindCitationFocusRequested = Notification.Name("rewindCitationFocusRequested")
+}
+
+enum RewindCitationUnavailablePresentationPolicy {
+  static let title = "Rewind frame unavailable"
+  static let hint = "No frame was opened because it is no longer available on this Mac."
+
+  static func message(for screenshotID: Int64) -> String {
+    "Frame \(screenshotID) is no longer available locally. It may have been pruned."
+  }
 }

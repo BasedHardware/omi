@@ -44,7 +44,7 @@ final class RewindTrackNSView: NSView {
   private(set) var searchResultIndices: Set<Int>?
   var trackStart: Double = 0
   var trackSpan: Double = 1
-  var spanBounds: ClosedRange<Double> = 60...86_400
+  var spanBounds: ClosedRange<Double> = RewindTrackWindow.minimumSpan...86_400
   var playheadAt: Double?
 
   /// Called with an index while the user scrubs. Coalesced to one call per display frame — see
@@ -64,7 +64,12 @@ final class RewindTrackNSView: NSView {
   private var isScrubbing = false
   private var lastReportedIndex: Int?
   private var pendingScrubIndex: Int?
-  private var pinch: (anchor: Double, fraction: Double, startSpan: Double)?
+  /// The pinch in progress: the instant under the fingers when it began, where along the bar that
+  /// was, the span it began from, and the gesture's magnification summed so far.
+  private var pinch: (anchor: Double, fraction: Double, startSpan: Double, magnification: Double)?
+  /// How far one unit of summed `NSEvent.magnification` zooms, in octaves: a full pinch out
+  /// (+1.0) shows an eighth of the time, a full pinch in (-1.0) eight times as much.
+  static let pinchOctavesPerUnit: Double = 3
   private var colorCache: [String: NSColor] = [:]
 
   override var isFlipped: Bool { true }
@@ -166,7 +171,7 @@ final class RewindTrackNSView: NSView {
 
     NSGraphicsContext.saveGraphicsState()
     shape.addClip()
-    for block in blocks { draw(block, in: bar) }
+    for index in blocks.indices { draw(at: index, in: bar) }
     if let searchResultIndices, !searchResultIndices.isEmpty {
       drawSearchMarkers(searchResultIndices, in: bar)
     }
@@ -218,24 +223,50 @@ final class RewindTrackNSView: NSView {
     return placed
   }
 
-  private func draw(_ block: RewindActivityBlock, in bar: NSRect) {
+  /// One segment, eased into its neighbours — see `RewindTrackGradient`.
+  ///
+  /// The blend is anchored to the segment's real ends, so its geometry is computed at full extent;
+  /// the paint itself is bounded to the visible part of the bar. A segment that is hours long at
+  /// minute zoom is hundreds of thousands of points wide, and only the slice on screen is drawn.
+  private func draw(at index: Int, in bar: NSRect) {
+    let block = blocks[index]
     let left = x(for: block.startedAt)
     let right = x(for: block.endedAt)
     guard right >= 0, left <= bounds.width else { return }
-    let clippedLeft = max(0, left)
     // A sub-pixel block still happened; give it a visible sliver rather than nothing.
-    let width = max(2, min(bounds.width, right) - clippedLeft)
-    color(forApp: block.app).setFill()
-    NSRect(x: clippedLeft, y: bar.minY, width: width, height: bar.height).fill()
+    let width = max(2, right - left)
+    let rect = NSRect(x: left, y: bar.minY, width: width, height: bar.height)
+    let visible = rect.intersection(NSRect(x: -1, y: bar.minY, width: bounds.width + 2, height: bar.height))
+    guard !visible.isEmpty else { return }
+    let body = color(forApp: block.app)
+    let edges = RewindTrackGradient.edges(
+      for: block,
+      previous: index > blocks.startIndex ? blocks[index - 1] : nil,
+      next: index + 1 < blocks.endIndex ? blocks[index + 1] : nil,
+      width: width,
+      colour: color(forApp:))
+    guard let gradient = RewindTrackGradient.gradient(body: body, edges: edges, width: width) else {
+      body.setFill()
+      visible.fill()
+      return
+    }
+    NSGraphicsContext.saveGraphicsState()
+    visible.clip()
+    gradient.draw(
+      from: NSPoint(x: rect.minX, y: rect.midY),
+      to: NSPoint(x: rect.maxX, y: rect.midY),
+      options: [.drawsBeforeStartingLocation, .drawsAfterEndingLocation])
+    NSGraphicsContext.restoreGraphicsState()
   }
 
   /// The app's track colour, memoised for the length of this view's life.
   ///
   /// `RewindPalette` is the single definition of the hue — this only remembers the answer, because
   /// deriving it involves a string hash and the drawing loop asks the same question every redraw.
+  /// The track's pastel, not the badge's vivid disc: nothing is lettered onto a segment.
   private func color(forApp app: String) -> NSColor {
     if let hit = colorCache[app] { return hit }
-    let colour = RewindPalette.nsColor(forApp: app)
+    let colour = RewindPalette.trackNSColor(forApp: app)
     colorCache[app] = colour
     return colour
   }
@@ -358,7 +389,7 @@ final class RewindTrackNSView: NSView {
 
   static func tickInterval(forSpan span: Double) -> Double {
     let candidates: [Double] = [
-      60, 300, 600, 900, 1800, 3600, 2 * 3600, 3 * 3600, 6 * 3600, 12 * 3600,
+      1, 2, 5, 10, 15, 30, 60, 300, 600, 900, 1800, 3600, 2 * 3600, 3 * 3600, 6 * 3600, 12 * 3600,
     ]
     return candidates.first { span / $0 <= 12 } ?? 24 * 3600
   }
@@ -370,13 +401,15 @@ final class RewindTrackNSView: NSView {
   /// looks like just after midnight — the ladder picks a one-minute interval and every label on the
   /// track reads `12 AM`. Five identical labels are worse than none: they say the axis is not moving.
   /// Below an hour the minutes are the information, and the hour is the one thing the reader can
-  /// infer from the pill under the frame.
+  /// infer from the pill under the frame. Below a minute the same argument repeats one rung down:
+  /// the seconds are the information, so the label carries them.
   /// Both are built once. `drawHourTicks` runs on every redraw, and a redraw happens on every pointer
   /// sample of a scrub; constructing a `DateFormatter` there would put a locale lookup on the frame
   /// budget this rebuild exists to protect.
   static func tickFormatter(forInterval interval: Double) -> DateFormatter {
     if interval >= 24 * 3600 { return dayTickFormatter }
-    return interval >= 3600 ? hourTickFormatter : minuteTickFormatter
+    if interval >= 3600 { return hourTickFormatter }
+    return interval >= 60 ? minuteTickFormatter : secondTickFormatter
   }
 
   private static let hourTickFormatter: DateFormatter = {
@@ -388,6 +421,11 @@ final class RewindTrackNSView: NSView {
   private static let minuteTickFormatter: DateFormatter = {
     let formatter = DateFormatter()
     formatter.dateFormat = "h:mm"
+    return formatter
+  }()
+  private static let secondTickFormatter: DateFormatter = {
+    let formatter = DateFormatter()
+    formatter.dateFormat = "h:mm:ss"
     return formatter
   }()
 
@@ -526,10 +564,16 @@ final class RewindTrackNSView: NSView {
     }
     if phase.contains(.began) || pinch == nil {
       let fraction = min(max(0, Double(x / bounds.width)), 1)
-      pinch = (trackStart + fraction * trackSpan, fraction, trackSpan)
+      pinch = (trackStart + fraction * trackSpan, fraction, trackSpan, 0)
     }
-    guard let gesture = pinch else { return }
-    let span = min(max(gesture.startSpan / (1 + delta * 4), spanBounds.lowerBound), spanBounds.upperBound)
+    guard var gesture = pinch else { return }
+    // `NSEvent.magnification` is the change since the previous event, not the gesture's total.
+    // Reading it as the total made every event zoom from the start span by a few percent, so a
+    // pinch hardly moved and could never reach the floor however far the fingers travelled.
+    gesture.magnification += delta
+    pinch = gesture
+    let zoomed = gesture.startSpan * pow(2, -gesture.magnification * Self.pinchOctavesPerUnit)
+    let span = min(max(zoomed, spanBounds.lowerBound), spanBounds.upperBound)
     onZoom?(gesture.anchor - gesture.fraction * span, span)
   }
 

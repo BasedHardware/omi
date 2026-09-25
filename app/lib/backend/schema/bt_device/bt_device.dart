@@ -86,6 +86,29 @@ enum BleAudioCodec {
     return this == BleAudioCodec.opusFS320 ? 320 : 160;
   }
 
+  /// Encoded bytes produced per second for the fixed-rate Opus wire formats.
+  int get encodedBytesPerSecond {
+    return switch (this) {
+      BleAudioCodec.opus => 8000,
+      BleAudioCodec.opusFS320 => 16000,
+      _ => 8000,
+    };
+  }
+
+  /// Best-effort encoded size rate used by recording/storage UI.
+  int estimatedBytesPerSecond({required int sampleRate, required int channels}) {
+    return switch (this) {
+      BleAudioCodec.opus || BleAudioCodec.opusFS320 => encodedBytesPerSecond,
+      BleAudioCodec.pcm16 => sampleRate * 2 * channels,
+      BleAudioCodec.pcm8 || BleAudioCodec.mulaw16 || BleAudioCodec.mulaw8 => sampleRate * channels,
+      _ => 8000,
+    };
+  }
+
+  int estimatedRecordingBytes({required int seconds, required int sampleRate, required int channels}) {
+    return estimatedBytesPerSecond(sampleRate: sampleRate, channels: channels) * seconds;
+  }
+
   /// Check if this codec is supported for custom STT providers
   bool get isCustomSttSupported {
     return this == BleAudioCodec.pcm8 ||

@@ -23,6 +23,7 @@ _NOTIFICATIONS_JOB_FORBIDDEN_MEMORY_ENV = frozenset(
         'MEMORY_MODE',
         'MEMORY_V3_GET_ENABLED',
         'MEMORY_CANONICAL_MAINTENANCE_ENABLED',
+        'MEMORY_CANONICAL_MAINTENANCE_FLEX',
         'MEMORY_CANONICAL_CONSOLIDATION_ENABLED',
         'MEMORY_TYPESENSE_COLLECTION',
         'TYPESENSE_HOST',
@@ -254,7 +255,10 @@ def _validate_env_entries(
             if actual_value != expected_value:
                 errors.append(ValidationError(scope, f'env {name} value mismatch: expected {expected_value!r}'))
         elif 'env_var' in expected_entry:
-            if not _has_literal_value(actual_entry):
+            # An explicitly empty default is a meaningful fail-closed value
+            # for optional cohorts; missing/valueFrom entries still fail.
+            declared_empty = expected_entry.get('default') == '' and actual_entry.get('value') == ''
+            if not _has_literal_value(actual_entry) and not declared_empty:
                 errors.append(ValidationError(scope, f'env {name} must have a literal value'))
         elif 'secret' in expected_entry:
             expected_secret = expected_entry['secret']

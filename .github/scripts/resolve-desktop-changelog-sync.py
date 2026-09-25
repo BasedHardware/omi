@@ -1,24 +1,22 @@
 #!/usr/bin/env python3
 """Resolve a main-reachable desktop changelog consolidate commit for tag-release.
 
-When a prior tag-release merged the changelog PR but failed before publishing the
-immutable tag, retries can see:
+When a prior tag-release failed before publishing the immutable tag, retries can
+see:
 
 - a source-qualified remote branch tip that is *not* an ancestor of origin/main
-  (orphan rewrite of the consolidate commit), while the merge's second parent
-  *is* on main;
+  after a manual squash merge;
 - consolidate dirt left in the worktree that blocks ``git checkout -B`` reuse;
-- a newer planned source SHA (tip-bumps) that is a descendant of the already
-  merged changelog, so consolidate^1 != planned source.
+- an exact-parent consolidate already merged on main.
 
-This helper prefers any consolidate commit that is reachable from origin/main
-for the exact version subject. When the planned source still matches the
-consolidate parent that binding is preferred; otherwise a version-matched
-main-reachable consolidate is accepted for already-on-main recovery.
+This helper reuses only a main-reachable consolidate whose first parent is the
+exact planned source. An orphan returns a recoverable mode so the workflow can
+publish a run-qualified branch instead of wedging every later train.
 
 Never scan every commit on main (rev-list + per-sha rev-parse): that path is
 O(history) and hung M1 tag-release for 15+ minutes while v0.12.143 was blocked.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -28,7 +26,6 @@ import re
 import subprocess
 import sys
 from pathlib import Path
-
 
 SHA_RE = re.compile(r"^[0-9a-f]{40}$")
 
@@ -64,62 +61,12 @@ def is_ancestor(repository_root: Path, maybe_ancestor: str, descendant: str) -> 
     return result.returncode == 0
 
 
-def consolidate_subject(version: str) -> str:
-    return f"chore: consolidate changelog for v{version}"
+def consolidate_subject_re(version: str) -> re.Pattern[str]:
+    return re.compile(rf"^chore: consolidate changelog for v{re.escape(version)}(?: \(#([1-9][0-9]*)\))?$")
 
 
 def merge_subject_re(version: str) -> re.Pattern[str]:
-    return re.compile(
-        rf"^Update desktop changelog for v{re.escape(version)}\b.*\(#([1-9][0-9]*)\)\s*$"
-    )
-
-
-def changelog_inputs_changed_since(
-    repository_root: Path,
-    *,
-    base_sha: str,
-    planned_source_sha: str,
-) -> bool:
-    """True when planned source carries newer changelog inputs than base.
-
-    Parent-mismatch already-on-main recovery is only safe when tip-bumps (or
-    other non-changelog commits) advanced the planned source. New unreleased
-    fragments or release notes after the consolidate must force a fresh
-    consolidation so they are not silently attributed to a later version.
-    """
-
-    base_sha = require_sha("base_sha", base_sha)
-    planned_source_sha = require_sha("planned_source_sha", planned_source_sha)
-    changed = git(
-        repository_root,
-        [
-            "diff",
-            "--name-only",
-            "--diff-filter=ACDMR",
-            f"{base_sha}..{planned_source_sha}",
-            "--",
-            "desktop/macos/changelog/unreleased",
-            "desktop/macos/changelog/releases",
-            "desktop/macos/CHANGELOG.json",
-        ],
-    )
-    if changed.strip():
-        return True
-    # Also treat any unreleased fragment present on the planned tree as pending
-    # input even if the path was unchanged (empty tree edge cases).
-    unreleased = git(
-        repository_root,
-        [
-            "ls-tree",
-            "-r",
-            "--name-only",
-            planned_source_sha,
-            "--",
-            "desktop/macos/changelog/unreleased",
-        ],
-        check=False,
-    )
-    return any(path.endswith(".json") for path in unreleased.splitlines())
+    return re.compile(rf"^Update desktop changelog for v{re.escape(version)}\b.*\(#([1-9][0-9]*)\)\s*$")
 
 
 def find_main_reachable_consolidate(
@@ -131,18 +78,16 @@ def find_main_reachable_consolidate(
 ) -> str | None:
     """Return consolidate commit on main for this version.
 
-    Prefer parent == planned source. Fall back to a main-reachable consolidate
-    with the exact version subject only when changelog inputs did not advance
-    after that consolidate (tip-bump / partial tag recovery).
+    Only a consolidate whose first parent is the exact green planner source is
+    reusable. A later planned source simply consolidates again (or finds no
+    diff), which avoids binding a candidate to stale release notes.
     """
     planned_source_sha = require_sha("planned_source_sha", planned_source_sha)
-    want = consolidate_subject(version)
+    subject_pattern = consolidate_subject_re(version)
     log = git(
         repository_root,
         ["log", main_ref, "--format=%H%x00%P%x00%s", "--grep", f"consolidate changelog for v{version}"],
     )
-    parent_match: str | None = None
-    version_match: str | None = None
     for line in log.splitlines():
         if not line.strip():
             continue
@@ -150,26 +95,13 @@ def find_main_reachable_consolidate(
         parent_list = parents.split()
         if not parent_list:
             continue
-        if subject.strip() != want:
+        if subject_pattern.fullmatch(subject.strip()) is None:
             continue
         if not is_ancestor(repository_root, sha, main_ref):
             continue
         if parent_list[0] == planned_source_sha:
-            parent_match = sha
-            break
-        if version_match is None:
-            version_match = sha
-    if parent_match is not None:
-        return parent_match
-    if version_match is None:
-        return None
-    if changelog_inputs_changed_since(
-        repository_root,
-        base_sha=version_match,
-        planned_source_sha=planned_source_sha,
-    ):
-        return None
-    return version_match
+            return sha
+    return None
 
 
 def find_changelog_merge_on_main(
@@ -203,6 +135,24 @@ def find_changelog_merge_on_main(
         else:
             pr_url = f"pull/{pr_number}"
         return sha, pr_url
+    # GitHub squash merges append the PR number to the consolidate subject. If
+    # the squash commit is itself the exact parent-bound consolidate, it is a
+    # valid changelog-only candidate and carries its own PR evidence.
+    squash_log = git(
+        repository_root,
+        ["log", main_ref, "--format=%H%x00%s", "--grep", f"consolidate changelog for v{version}"],
+    )
+    subject_pattern = consolidate_subject_re(version)
+    for line in squash_log.splitlines():
+        if not line.strip():
+            continue
+        sha, subject = line.split("\x00", 1)
+        match = subject_pattern.fullmatch(subject.strip())
+        if sha != consolidate_commit or match is None or match.group(1) is None:
+            continue
+        pr_number = match.group(1)
+        pr_url = f"https://github.com/{repository_slug}/pull/{pr_number}" if repository_slug else f"pull/{pr_number}"
+        return sha, pr_url
     return None
 
 
@@ -219,18 +169,6 @@ def resolve_changelog_sync(
     planned_source_sha = require_sha("planned_source_sha", planned_source_sha)
     main_tip = git(repository_root, ["rev-parse", f"{main_ref}^{{commit}}"])
 
-    preferred = ""
-    if branch_tip:
-        branch_tip = require_sha("branch_tip", branch_tip)
-        parent = git(repository_root, ["rev-parse", f"{branch_tip}^1"])
-        if parent != planned_source_sha:
-            raise ValueError(
-                "changelog branch tip first parent must equal the planned source SHA "
-                f"(got {parent}, want {planned_source_sha})"
-            )
-        if is_ancestor(repository_root, branch_tip, main_ref):
-            preferred = branch_tip
-
     main_commit = find_main_reachable_consolidate(
         repository_root,
         planned_source_sha=planned_source_sha,
@@ -238,19 +176,20 @@ def resolve_changelog_sync(
         main_ref=main_ref,
     )
 
-    commit = preferred or main_commit or ""
-    if not commit and branch_tip and preferred == "":
-        if main_commit:
-            commit = main_commit
-        else:
-            raise ValueError(
-                "changelog branch tip is not reachable from main and no main-reachable "
-                f"consolidate commit exists for v{version}"
-            )
+    preferred = ""
+    orphaned_branch = False
+    if branch_tip:
+        branch_tip = require_sha("branch_tip", branch_tip)
+        parent = git(repository_root, ["rev-parse", f"{branch_tip}^1"])
+        if parent == planned_source_sha and is_ancestor(repository_root, branch_tip, main_ref):
+            preferred = branch_tip
+        elif main_commit is None:
+            orphaned_branch = True
 
+    commit = preferred or main_commit or ""
     if not commit:
         return {
-            "mode": "missing",
+            "mode": "stale-orphan" if orphaned_branch else "missing",
             "commit": "",
             "pr_url": "",
             "merged_main_sha": "",

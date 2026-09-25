@@ -8,8 +8,8 @@ These route-level tests are based on high-value Flutter/desktop callers:
 - app/lib/backend/http/api/memories.dart expects /v3/memories to return a list
   of Memory objects with stable id/content/category/timestamps/visibility fields.
 - app/lib/backend/http/api/action_items.dart expects /v1/action-items to return
-  {action_items, has_more}, item metadata defaults, batch updates, and sync-ish
-  pending-export/synced response buckets.
+  {action_items, has_more} (plus the optional #11831 truncated flag), item metadata
+  defaults, batch updates, and sync-ish pending-export/synced response buckets.
 - app/lib/backend/http/api/users.dart expects language and transcription prefs to
   round-trip in the same bootstrapping flow as the data reads above.
 """
@@ -135,9 +135,13 @@ def test_mobile_bootstrap_lifecycle_shapes(client, auth_headers, sample_conversa
     action_items = client.get("/v1/action-items?limit=50&offset=0", headers=auth_headers)
     assert action_items.status_code == 200, action_items.text
     action_body = action_items.json()
-    assert set(action_body) == {"action_items", "has_more"}
+    # `truncated` joins the envelope on the budget-bound list route (#11831):
+    # it is a plain boolean with a stable default, so the mobile shape stays
+    # compatible — released clients ignore the extra key.
+    assert set(action_body) == {"action_items", "has_more", "truncated"}
     assert isinstance(action_body["action_items"], list)
     assert isinstance(action_body["has_more"], bool)
+    assert isinstance(action_body["truncated"], bool)
     listed_action = next(item for item in action_body["action_items"] if item["id"] == action_create.json()["id"])
     _assert_mobile_action_item_shape(listed_action, "Mobile-visible task")
 

@@ -30,9 +30,7 @@ PROMOTION_LAG_SECONDS = 3 * 60 * 60
 WEDGED_TRAIN_SECONDS = 6 * 60 * 60
 AUTO_RELEASE_WORKFLOW = "desktop_auto_release.yml"
 TAG_BUILD_RE = re.compile(r"^v[0-9]+\.[0-9]+\.[0-9]+\+(\d+)-macos$")
-SPARKLE_VERSION_RE = re.compile(
-    r"<sparkle:version>(\d+)</sparkle:version>|sparkle:version=\"(\d+)\""
-)
+SPARKLE_VERSION_RE = re.compile(r"<sparkle:version>(\d+)</sparkle:version>|sparkle:version=\"(\d+)\"")
 
 
 class FreshnessError(RuntimeError):
@@ -70,10 +68,19 @@ def is_releasable_path(path: str) -> bool:
     return True
 
 
-def newest_releasable_main_commit() -> tuple[str, int] | None:
+def oldest_unreleased_releasable_main_commit(latest_tag: str) -> tuple[str, int] | None:
+    """Return the oldest unshipped macOS update so merge churn cannot reset age."""
     try:
         output = planner.git(
-            ["log", "--first-parent", "--format=%H", "HEAD", "--", *planner.DESKTOP_RELEASE_PATHS]
+            [
+                "log",
+                "--first-parent",
+                "--reverse",
+                "--format=%H",
+                f"{latest_tag}..HEAD",
+                "--",
+                *planner.DESKTOP_RELEASE_PATHS,
+            ]
         )
     except subprocess.CalledProcessError:
         return None
@@ -81,7 +88,19 @@ def newest_releasable_main_commit() -> tuple[str, int] | None:
         if not sha:
             continue
         try:
-            files = planner.git(["diff-tree", "--no-commit-id", "--name-only", "-r", sha])
+            files = planner.git(
+                [
+                    "diff-tree",
+                    "--no-commit-id",
+                    "--name-only",
+                    "--diff-filter=ACDMR",
+                    "-r",
+                    f"{sha}^1",
+                    sha,
+                    "--",
+                    *planner.DESKTOP_RELEASE_PATHS,
+                ]
+            )
         except subprocess.CalledProcessError:
             continue
         if any(is_releasable_path(path) for path in files.splitlines() if path):
@@ -128,15 +147,10 @@ def latest_auto_release_run_url(repository: str) -> str:
 
 
 def diagnose_promotion_lag(repository: str, tag: str, tag_sha: str) -> str:
-    status, conclusion, html_url, error = planner.github_check_status(
-        repository, tag_sha, CODEMAGIC_CHECK_NAME
-    )
+    status, conclusion, html_url, error = planner.github_check_status(repository, tag_sha, CODEMAGIC_CHECK_NAME)
     check_url = html_url or f"(no {CODEMAGIC_CHECK_NAME} URL)"
     if error:
-        return (
-            f"could not read {CODEMAGIC_CHECK_NAME} on {tag} ({tag_sha}): {error}. "
-            f"Inspect {check_url}."
-        )
+        return f"could not read {CODEMAGIC_CHECK_NAME} on {tag} ({tag_sha}): {error}. " f"Inspect {check_url}."
     if status is None:
         return (
             f"{CODEMAGIC_CHECK_NAME} is absent on {tag} ({tag_sha}): no Codemagic intake. "
@@ -193,21 +207,21 @@ def evaluate(*, repository: str) -> tuple[int, list[str]]:
             f"and {tag} is {tag_age}s old (>{PROMOTION_LAG_SECONDS}s). {diagnosis}"
         )
 
-    newest = newest_releasable_main_commit()
-    if newest is not None:
-        sha, age = newest
-        lines.append(f"newest_releasable_main_sha={sha}")
-        lines.append(f"newest_releasable_main_age_seconds={age}")
+    oldest_unreleased = oldest_unreleased_releasable_main_commit(tag)
+    if oldest_unreleased is not None:
+        sha, age = oldest_unreleased
+        lines.append(f"oldest_unreleased_main_sha={sha}")
+        lines.append(f"oldest_unreleased_main_age_seconds={age}")
         if age > WEDGED_TRAIN_SECONDS and not is_ancestor(sha, tag):
             run_url = latest_auto_release_run_url(repository)
             alarms.append(
-                f"Wedged train: newest releasable first-parent main commit {sha} is {age}s old "
+                f"Wedged train: oldest unshipped releasable first-parent main commit {sha} is {age}s old "
                 f"(>{WEDGED_TRAIN_SECONDS}s) and is not an ancestor of {tag}. "
                 f"Inspect the latest \"Build Desktop Release Candidate\" run: {run_url}. "
                 f"Dispatch .github/workflows/{AUTO_RELEASE_WORKFLOW} to retry tagging."
             )
     else:
-        lines.append("newest_releasable_main_sha=none")
+        lines.append("oldest_unreleased_main_sha=none")
 
     if alarms:
         lines.append("status=unhealthy")

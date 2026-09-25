@@ -69,7 +69,6 @@ Local full T0 (includes backend preflight + pytest desktop contracts):
 | Rewind artifact persistence / recovery / privacy admission | T2 |
 | ChatProvider / agent runtime | T0 + T3 |
 | Sidebar / navigation | T1 |
-| Home stage (hub/chat/connect), chat-first shell | T2 (`home-stage.yaml`, cohort bundle) |
 | Spatial overlay | T1 (`spatial-overlay-harness.sh`) |
 | Memories / tasks CRUD surfaces | T2 |
 | Secondary surfaces (detail, vocabulary, goals, billing, privacy mutations) | T2 + Live P2 for manual-only |
@@ -93,7 +92,6 @@ Local T2 and fault suites remain available as engineering QA tools. They do not 
 | `tasks` | v2 | typed bridge | 2 | Navigate + snapshot |
 | `settings-basic` | v2 | typed bridge | 2 | Settings sections + Advanced snapshot |
 | `dashboard` | v2 | typed bridge | 2 | Dashboard load + conversation list snapshot |
-| `home-stage` | v2 | typed bridge | 2 | Home hub/chat/connect via `homeMode` assertions — chat-first bundle only (that shell mounts the stage) |
 | `chat-fault-5xx` | v2 | typed bridge | fault | Backend 5xx via `omi-fault-inject` (`--fault-suite`) |
 | `language` | v2 | typed bridge | 2 | Transcription language set + snapshot |
 | `tasks-crud` | v2 | typed bridge | 2 | Task create/toggle/delete via bridge |
@@ -122,7 +120,7 @@ Local T2 and fault suites remain available as engineering QA tools. They do not 
 | `subagent-row-benchmark` | v1 | typed bridge | 3 | Perf |
 | `apps` | v2 | manual `do:` | manual | Marketplace walker journey |
 | `audio-recording` | v2 | manual `do:` | manual | Needs mic permission |
-| `refer-external` | v2 | manual `do:` | manual | Profile menu → affiliate URL |
+| `refer-external` | v2 | manual `do:` | manual | Top bar + Settings → unique referral link |
 | `delete-account` | v2 | manual `do:` | manual | Confirmation sheet only; never confirm |
 | `logout` | v2 | manual bridge | manual | `sign_out` bridge action; local Auth emulator only |
 | `onboarding-smoke` | v2 | manual `do:` + bridge | manual | `reset_onboarding`; Wave 7 fix — manual until 2× local green |
@@ -146,7 +144,7 @@ Local T2 and fault suites remain available as engineering QA tools. They do not 
 | Plan / usage | T2 | bridge | read subscription | ✅ `plan-usage.yaml` |
 | Apps catalog | T2 + Live P2 | bridge + manual | catalog snapshot + walker | ✅ `apps-marketplace.yaml` / ⚠️ `apps.yaml` |
 | Connector import | T2 + Live P2 | bridge + manual | API probe + sheet UI | ✅ `connector-import.yaml` / ⚠️ `connector-import-progress.yaml` |
-| Refer external | Live P2 | manual | opens browser | ⚠️ `refer-external.yaml` |
+| Referrals | Live P2 | manual | copies unique link | ⚠️ `refer-external.yaml` |
 | Delete account | Live P2 | manual | confirm sheet only | ⚠️ `delete-account.yaml` |
 | Logout | Live P2 | manual bridge | `sign_out` action | ⚠️ `logout.yaml` (local emulator; stays manual — destructive to session) |
 | Onboarding reset | Live P2 | manual + bridge | reset + restart | ⚠️ `onboarding-smoke.yaml` (fix landed; manual gate) |
@@ -155,12 +153,18 @@ Local T2 and fault suites remain available as engineering QA tools. They do not 
 
 Evidence contract: `.harness/desktop-core/<run-id>/{manifest.json, flows/, summary.md}` plus `latest-green` on pass. T2+ manifests include `provider_mode` (must be `offline` for qualification-eligible runs).
 
+Before a tier runs, the harness compares the running bundle's `/health`
+`sourceIdentity` receipt (full commit SHA plus `clean`/`dirty` state) with the
+current checkout. A stale pool bundle, a bundle built from another worktree, or
+an older bundle that reports `unknown` fails before its results can be treated
+as revision-specific evidence.
+
 ## Failure playbook
 
 1. Read `manifest.json` for tier, git SHA, per-flow pass/fail.
 2. Read `summary.md` for human summary.
 3. For failed flows, open `flows/<name>/` for `omi-harness` step artifacts.
-4. T2 hermetic failures: confirm `provider_mode: offline` in `manifest.json`, `PROVIDER_MODE=offline` in dev-harness `config-digest.json`, `OMI_LLM_STUB=1` on Rust backend, bridge `/health`. If a live stack is already up, the harness fails loudly instead of reusing it.
+4. T2 hermetic failures: confirm `provider_mode: offline` in `manifest.json`, `PROVIDER_MODE=offline` in dev-harness `config-digest.json`, `OMI_LLM_STUB=1` on Rust backend, and the bridge `/health` source receipt. If a live stack or differently built bundle is already up, the harness fails loudly instead of reusing it.
 5. **`dev-up failed: Port 8085 for firestore is already in use by a foreign process`:** Another harness instance (or stale Firebase emulator) owns the default ports. Either `make dev-down` on the owning worktree, or set a separate `OMI_INSTANCE` / harness state root before `PROVIDER_MODE=offline make dev-up`. If emulators are healthy but process records are stale, flows can still be qualified manually: launch `make desktop-run-local DESKTOP_APP_NAME=omi-core-e2e DESKTOP_USER=alice`, note the automation port, then run each T2 flow with `python3 scripts/omi-harness run e2e/flows/<name>.yaml --lane bridge --port <PORT>`.
 6. T3 failures: check LLM credentials / quota; inspect gauntlet evidence under `.harness/agent-continuity-gauntlet/`.
 

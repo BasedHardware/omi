@@ -62,15 +62,15 @@ export function MemoryQuickAdd({ onAdd, disabled = false }: MemoryQuickAddProps)
         onClick={() => setIsExpanded(true)}
         disabled={disabled}
         className={cn(
-          'flex items-center gap-2 w-full px-3 py-2.5',
+          'flex w-full items-center gap-2 px-3 py-2.5',
           'rounded-lg border border-dashed border-bg-quaternary',
           'text-text-tertiary hover:text-text-secondary',
-          'hover:border-purple-primary/50 hover:bg-bg-tertiary',
+          'hover:border-white/50 hover:bg-bg-tertiary',
           'transition-all duration-150',
-          disabled && 'opacity-50 cursor-not-allowed'
+          disabled && 'cursor-not-allowed opacity-50',
         )}
       >
-        <Plus className="w-4 h-4" />
+        <Plus className="h-4 w-4" />
         <span className="text-sm">Add a memory...</span>
       </button>
     );
@@ -83,10 +83,7 @@ export function MemoryQuickAdd({ onAdd, disabled = false }: MemoryQuickAddProps)
       exit={{ opacity: 0, y: -10 }}
       transition={{ duration: 0.15 }}
       onSubmit={handleSubmit}
-      className={cn(
-        'rounded-lg border border-purple-primary/50',
-        'bg-bg-secondary p-3 space-y-3'
-      )}
+      className={cn('rounded-lg border border-white/50', 'space-y-3 bg-bg-secondary p-3')}
     >
       {/* Input */}
       <input
@@ -100,7 +97,7 @@ export function MemoryQuickAdd({ onAdd, disabled = false }: MemoryQuickAddProps)
         className={cn(
           'w-full bg-transparent',
           'text-sm text-text-primary placeholder:text-text-quaternary',
-          'outline-none'
+          'outline-none',
         )}
       />
 
@@ -112,21 +109,21 @@ export function MemoryQuickAdd({ onAdd, disabled = false }: MemoryQuickAddProps)
           onClick={() => setVisibility(visibility === 'public' ? 'private' : 'public')}
           disabled={isSubmitting}
           className={cn(
-            'flex items-center gap-1.5 px-2 py-1 rounded text-xs',
+            'flex items-center gap-1.5 rounded px-2 py-1 text-xs',
             'transition-colors',
             visibility === 'public'
               ? 'text-success hover:bg-success/10'
-              : 'text-warning hover:bg-warning/10'
+              : 'text-warning hover:bg-warning/10',
           )}
         >
           {visibility === 'public' ? (
             <>
-              <Eye className="w-3 h-3" />
+              <Eye className="h-3 w-3" />
               Public
             </>
           ) : (
             <>
-              <EyeOff className="w-3 h-3" />
+              <EyeOff className="h-3 w-3" />
               Private
             </>
           )}
@@ -139,9 +136,9 @@ export function MemoryQuickAdd({ onAdd, disabled = false }: MemoryQuickAddProps)
             onClick={handleCancel}
             disabled={isSubmitting}
             className={cn(
-              'px-3 py-1 text-xs rounded',
+              'rounded px-3 py-1 text-xs',
               'text-text-tertiary hover:text-text-secondary',
-              'transition-colors'
+              'transition-colors',
             )}
           >
             Cancel
@@ -150,11 +147,11 @@ export function MemoryQuickAdd({ onAdd, disabled = false }: MemoryQuickAddProps)
             type="submit"
             disabled={!content.trim() || isSubmitting}
             className={cn(
-              'px-3 py-1 text-xs rounded',
-              'bg-purple-primary hover:bg-purple-secondary',
-              'text-white font-medium',
+              'rounded px-3 py-1 text-xs',
+              'bg-white hover:bg-white/90',
+              'font-medium text-black',
               'transition-colors',
-              'disabled:opacity-50 disabled:cursor-not-allowed'
+              'disabled:cursor-not-allowed disabled:opacity-50',
             )}
           >
             {isSubmitting ? 'Adding...' : 'Add Memory'}

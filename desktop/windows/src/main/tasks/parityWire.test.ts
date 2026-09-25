@@ -19,7 +19,7 @@ vi.mock('electron', () => ({
 vi.mock('../ipc/db', () => ({
   getLocalActionItems: vi.fn(() => []),
   getFilteredActionItems: vi.fn(() => []),
-  getUnsyncedActionItems: vi.fn(() => []),
+  getSyncedActionItemIds: vi.fn(() => []),
   insertLocalActionItem: vi.fn(),
   updateCompletionStatus: vi.fn(),
   updateActionItemFields: vi.fn(),
@@ -41,7 +41,12 @@ vi.mock('../observability/backendDegraded', () => ({
 
 import { mapBackendItem } from './taskSyncEngine'
 
-type WireExpectation = { parses: boolean; description?: string; completed?: boolean; due_utc?: string | null }
+type WireExpectation = {
+  parses: boolean
+  description?: string
+  completed?: boolean
+  due_utc?: string | null
+}
 type WireCase = {
   name: string
   payload: Record<string, unknown>
@@ -58,11 +63,14 @@ type WireCase = {
 const SYNC_NOW = Date.parse('2026-08-15T00:00:00Z')
 
 describe('action item wire decode (parity contract)', () => {
-  const path = fileURLToPath(new URL('../../../../../contracts/parity/wire_action_item.json', import.meta.url))
+  const path = fileURLToPath(
+    new URL('../../../../../contracts/parity/wire_action_item.json', import.meta.url)
+  )
   const { cases } = JSON.parse(readFileSync(path, 'utf8')) as { cases: WireCase[] }
   it.each(cases)('$name', (c) => {
     const expected = c.expected_by_model ? c.expected_by_model.tolerant_decode : c.expected
-    if (!expected) throw new Error(`${c.name}: fixture case has neither expected nor expected_by_model`)
+    if (!expected)
+      throw new Error(`${c.name}: fixture case has neither expected nor expected_by_model`)
     const mapped = mapBackendItem(c.payload as never, SYNC_NOW)
     expect(expected.parses).toBe(true)
     expect(mapped.description).toBe(expected.description)

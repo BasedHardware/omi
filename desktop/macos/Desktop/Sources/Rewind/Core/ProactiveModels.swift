@@ -86,77 +86,6 @@ struct ProactiveExtractionRecord: Codable, FetchableRecord, PersistableRecord, I
   }
 }
 
-// MARK: - Focus Session Record
-
-/// Database record for focus tracking sessions
-struct FocusSessionRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
-  var id: Int64?
-  var screenshotId: Int64?
-  var status: String  // "focused" or "distracted"
-  var appOrSite: String
-  var windowTitle: String?
-  var description: String
-  var message: String?
-  var durationSeconds: Int?
-  var backendId: String?
-  var backendSynced: Bool
-  var createdAt: Date
-
-  static let databaseTableName = "focus_sessions"
-
-  // MARK: - Initialization
-
-  init(
-    id: Int64? = nil,
-    screenshotId: Int64? = nil,
-    status: String,
-    appOrSite: String,
-    windowTitle: String? = nil,
-    description: String,
-    message: String? = nil,
-    durationSeconds: Int? = nil,
-    backendId: String? = nil,
-    backendSynced: Bool = false,
-    createdAt: Date = Date()
-  ) {
-    self.id = id
-    self.screenshotId = screenshotId
-    self.status = status
-    self.appOrSite = appOrSite
-    self.windowTitle = windowTitle
-    self.description = description
-    self.message = message
-    self.durationSeconds = durationSeconds
-    self.backendId = backendId
-    self.backendSynced = backendSynced
-    self.createdAt = createdAt
-  }
-
-  // MARK: - Persistence Callbacks
-
-  mutating func didInsert(_ inserted: InsertionSuccess) {
-    id = inserted.rowID
-  }
-
-  // MARK: - Computed Properties
-
-  var isFocused: Bool {
-    status == "focused"
-  }
-
-  var isDistracted: Bool {
-    status == "distracted"
-  }
-
-  // MARK: - Relationships
-
-  static let screenshot = belongsTo(Screenshot.self)
-
-  var screenshot: QueryInterfaceRequest<Screenshot> {
-    request(for: FocusSessionRecord.screenshot)
-  }
-}
-
 // MARK: - Task Dedup Log Record
 
 /// Database record for AI-driven task deduplication deletions
@@ -198,14 +127,9 @@ struct TaskDedupLogRecord: Codable, FetchableRecord, PersistableRecord, Identifi
 
 extension Screenshot {
   static let extractions = hasMany(ProactiveExtractionRecord.self)
-  static let focusSessions = hasMany(FocusSessionRecord.self)
 
   var extractions: QueryInterfaceRequest<ProactiveExtractionRecord> {
     request(for: Screenshot.extractions)
-  }
-
-  var focusSessions: QueryInterfaceRequest<FocusSessionRecord> {
-    request(for: Screenshot.focusSessions)
   }
 }
 
@@ -230,9 +154,4 @@ struct ExtractionWithScreenshot {
 extension ProactiveExtractionRecord: TableDocumented {
   static var tableDescription: String { ChatPrompts.tableAnnotations["proactive_extractions"]! }
   static var columnDescriptions: [String: String] { ChatPrompts.columnAnnotations["proactive_extractions"] ?? [:] }
-}
-
-extension FocusSessionRecord: TableDocumented {
-  static var tableDescription: String { ChatPrompts.tableAnnotations["focus_sessions"]! }
-  static var columnDescriptions: [String: String] { ChatPrompts.columnAnnotations["focus_sessions"] ?? [:] }
 }

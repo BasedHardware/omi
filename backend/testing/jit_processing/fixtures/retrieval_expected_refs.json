@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "set_version": "jit-retrieval-v1",
+  "expected_evidence_refs": {
+    "literal-editor": ["ev:conv-literal-1:turn-3"],
+    "paraphrased-morning-drink": ["ev:conv-paraphrase-1:turn-5"],
+    "entity-project-atlas": ["ev:conv-entity-1:turn-7"],
+    "temporal-dentist": ["ev:conv-temporal-1:turn-2"],
+    "multi-conversation-accessibility": [
+      "ev:conv-multi-1:turn-4",
+      "ev:conv-multi-2:turn-6"
+    ],
+    "ambiguous-person-alex": [],
+    "not-found-constellation": []
+  },
+  "notes": {
+    "ambiguous-person-alex": "No single Alex is adjudicated without a disambiguating person signal.",
+    "not-found-constellation": "An empty reference set means the expected behavior is no-source abstention."
+  }
+}

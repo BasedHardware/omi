@@ -16,6 +16,7 @@ import Foundation
 
 /// Keys that participate in the BYOK free-plan flow.
 enum BYOKProvider: String, CaseIterable {
+  case openrouter
   case openai
   case anthropic
   case gemini
@@ -23,6 +24,7 @@ enum BYOKProvider: String, CaseIterable {
 
   var storageKey: String {
     switch self {
+    case .openrouter: return "dev_openrouter_api_key"
     case .openai: return "dev_openai_api_key"
     case .anthropic: return "dev_anthropic_api_key"
     case .gemini: return "dev_gemini_api_key"
@@ -32,6 +34,7 @@ enum BYOKProvider: String, CaseIterable {
 
   var headerName: String {
     switch self {
+    case .openrouter: return "X-BYOK-OpenRouter"
     case .openai: return "X-BYOK-OpenAI"
     case .anthropic: return "X-BYOK-Anthropic"
     case .gemini: return "X-BYOK-Gemini"
@@ -41,6 +44,7 @@ enum BYOKProvider: String, CaseIterable {
 
   var displayName: String {
     switch self {
+    case .openrouter: return "OpenRouter"
     case .openai: return "OpenAI"
     case .anthropic: return "Anthropic"
     case .gemini: return "Gemini"
@@ -48,6 +52,57 @@ enum BYOKProvider: String, CaseIterable {
     }
   }
 }
+
+enum BYOKLLMProvider: String, CaseIterable, Identifiable {
+  case openrouter
+  case openai
+  case gemini
+  case anthropic
+
+  var id: String { rawValue }
+
+  var displayName: String {
+    switch self {
+    case .openrouter: return "OpenRouter"
+    case .openai: return "OpenAI Direct"
+    case .gemini: return "Gemini"
+    case .anthropic: return "Anthropic"
+    }
+  }
+
+  var provider: BYOKProvider {
+    switch self {
+    case .openrouter: return .openrouter
+    case .openai: return .openai
+    case .gemini: return .gemini
+    case .anthropic: return .anthropic
+    }
+  }
+}
+
+enum BYOKOwnerResetReason: String, Codable {
+  case legacyUnownedKeys
+  case differentOwner
+}
+
+struct BYOKOwnerResetNotice: Codable, Equatable {
+  let ownerUid: String
+  let reason: BYOKOwnerResetReason
+
+  var title: String { "Re-add your custom API keys" }
+
+  var message: String {
+    switch reason {
+    case .legacyUnownedKeys:
+      return
+        "Omi cleared custom API keys saved before keys were linked to an account. This keeps them from being used by another account on this Mac. Add them again in Settings → Advanced → Developer Keys."
+    case .differentOwner:
+      return
+        "Omi cleared custom API keys saved by another account on this Mac. Add your keys in Settings → Advanced → Developer Keys."
+    }
+  }
+}
+
 @MainActor
 final class APIKeyService: ObservableObject {
   static let shared = APIKeyService()
@@ -206,11 +261,131 @@ final class APIKeyService: ObservableObject {
     nonEmptyStatic(UserDefaults.standard.string(forKey: provider.storageKey))
   }
 
-  /// True when the user has supplied keys for all four BYOK providers.
+  /// True when the user has supplied a selected LLM key.
   /// The subscription-bypass gate: when this is true, the user is on the free
-  /// plan and we attach their keys to every backend request.
+  /// plan and we attach their selected LLM key to every backend request.
   nonisolated static var isByokActive: Bool {
-    BYOKProvider.allCases.allSatisfy { byokKey($0) != nil }
+    guard let provider = selectedBYOKLLMProvider, let key = byokKey(provider) else { return false }
+    return enrolledFingerprints()[provider.rawValue] == byokFingerprint(key)
+  }
+
+  nonisolated static var hasTranscriptionBYOK: Bool {
+    selectedBYOKLLMProvider != nil && activeBYOKSnapshot[.deepgram] != nil
+  }
+
+  /// Persist fingerprints that passed BYOKValidator and were sent to activateBYOK.
+  nonisolated static func clearPersistedBYOKKeys() {
+    let defaults = UserDefaults.standard
+    for provider in BYOKProvider.allCases {
+      defaults.removeObject(forKey: provider.storageKey)
+    }
+    defaults.removeObject(forKey: DefaultsKey.byokLLMProvider.rawValue)
+    persistEnrolledFingerprints([:])
+  }
+
+  nonisolated static func bindBYOKOwner(_ uid: String?) {
+    guard let uid, !uid.isEmpty else { return }
+    let defaults = UserDefaults.standard
+    let last = defaults.string(forKey: DefaultsKey.byokOwnerUid.rawValue)
+    if last != uid {
+      // Unowned pre-upgrade keys (last == nil) are unsafe to inherit: the next
+      // signed-in account would otherwise enroll someone else's credentials.
+      let hadKeys = BYOKProvider.allCases.contains { byokKey($0) != nil }
+      clearPersistedBYOKKeys()
+      defaults.set(uid, forKey: DefaultsKey.byokOwnerUid.rawValue)
+      defaults.removeObject(forKey: DefaultsKey.byokOwnerResetNotice.rawValue)
+
+      guard hadKeys else { return }
+      let reason: BYOKOwnerResetReason = last == nil ? .legacyUnownedKeys : .differentOwner
+      persistBYOKOwnerResetNotice(.init(ownerUid: uid, reason: reason))
+    }
+  }
+
+  nonisolated static func pendingBYOKOwnerResetNotice(for uid: String?) -> BYOKOwnerResetNotice? {
+    guard let uid, !uid.isEmpty,
+      let data = UserDefaults.standard.data(forKey: DefaultsKey.byokOwnerResetNotice.rawValue),
+      let notice = try? JSONDecoder().decode(BYOKOwnerResetNotice.self, from: data),
+      notice.ownerUid == uid
+    else {
+      return nil
+    }
+    return notice
+  }
+
+  private nonisolated static func persistBYOKOwnerResetNotice(_ notice: BYOKOwnerResetNotice) {
+    guard let data = try? JSONEncoder().encode(notice) else { return }
+    UserDefaults.standard.set(data, forKey: DefaultsKey.byokOwnerResetNotice.rawValue)
+  }
+
+  private nonisolated static func acknowledgeBYOKOwnerResetNotice(_ notice: BYOKOwnerResetNotice) {
+    guard pendingBYOKOwnerResetNotice(for: notice.ownerUid) == notice else { return }
+    UserDefaults.standard.removeObject(forKey: DefaultsKey.byokOwnerResetNotice.rawValue)
+  }
+
+  func presentPendingBYOKOwnerResetNotice(
+    for uid: String?,
+    through presenter: (any DesktopAlertPresenting)? = nil
+  ) {
+    guard let notice = Self.pendingBYOKOwnerResetNotice(for: uid),
+      let presenter = presenter ?? AppState.current?.alertPresenter
+    else {
+      return
+    }
+    presenter.present(title: notice.title, message: notice.message) {
+      Self.acknowledgeBYOKOwnerResetNotice(notice)
+    }
+  }
+
+  nonisolated static func persistEnrolledFingerprints(_ fingerprints: [String: String]) {
+    if fingerprints.isEmpty {
+      UserDefaults.standard.removeObject(forKey: DefaultsKey.byokEnrolledFingerprints.rawValue)
+    } else {
+      UserDefaults.standard.set(fingerprints, forKey: DefaultsKey.byokEnrolledFingerprints.rawValue)
+    }
+  }
+
+  nonisolated static func enrolledFingerprints() -> [String: String] {
+    UserDefaults.standard.dictionary(forKey: DefaultsKey.byokEnrolledFingerprints.rawValue) as? [String: String]
+      ?? [:]
+  }
+
+  /// The realtime key for `provider`, or nil when using it would spend a key the user
+  /// never chose.
+  ///
+  /// "Chose" has two forms, and the guard originally recognised only one. Selecting a
+  /// provider under Developer Keys is a choice. So is selecting its model under
+  /// Advanced → Voice Model: the realtime hub speaks through OpenAI Realtime or Gemini
+  /// Live and nothing else, so picking one of those *is* picking that provider for
+  /// voice. Requiring the Developer Keys selection to agree meant a user whose text
+  /// provider is OpenRouter — the default — could hold a valid Gemini key, pick Gemini
+  /// Live, and still be refused their own key, because OpenRouter has no realtime API
+  /// and can never be the hub's provider. The turn then fell through to the managed
+  /// lane and failed on Omi billing while a paid-for key sat unused.
+  ///
+  /// `chosenForVoice` is what separates that from the case the guard exists for: a key
+  /// left behind by a provider the user has since moved off, which the failover path
+  /// must still not spend. Callers resolving the provider from the Voice Model pass
+  /// true; the failover leaves it false.
+  nonisolated static func selectedRealtimeBYOKKey(
+    for provider: BYOKProvider,
+    chosenForVoice: Bool = false
+  ) -> String? {
+    guard chosenForVoice || selectedBYOKLLMProvider == provider else { return nil }
+    return byokKey(provider)
+  }
+
+  nonisolated static var selectedBYOKLLMProvider: BYOKProvider? {
+    let requested: BYOKLLMProvider
+    if let stored = UserDefaults.standard.string(forKey: .byokLLMProvider),
+      let selected = BYOKLLMProvider(rawValue: stored)
+    {
+      requested = selected
+    } else if let legacy = BYOKLLMProvider.allCases.first(where: { byokKey($0.provider) != nil }) {
+      requested = legacy
+    } else {
+      requested = .openrouter
+    }
+    return byokKey(requested.provider) == nil ? nil : requested.provider
   }
 
   /// SHA-256 fingerprint of a key, used by the backend to detect when the
@@ -229,5 +404,79 @@ final class APIKeyService: ObservableObject {
       }
     }
     return out
+  }
+
+  /// The selected keys that need validation. Runtime request builders must use
+  /// `activeBYOKSnapshot` instead so a raw or rotated key is never attached before enrollment.
+  nonisolated static var byokActivationCandidateSnapshot: [BYOKProvider: (key: String, fingerprint: String)] {
+    var snapshot: [BYOKProvider: (String, String)] = [:]
+    if let provider = selectedBYOKLLMProvider, let key = byokKey(provider) {
+      snapshot[provider] = (key, byokFingerprint(key))
+    }
+    if let key = byokKey(.deepgram) {
+      snapshot[.deepgram] = (key, byokFingerprint(key))
+    }
+    return snapshot
+  }
+
+  /// Provider credentials whose current fingerprint was successfully enrolled.
+  /// Each capability is checked independently so an enrolled Deepgram key can
+  /// still transcribe while a rotated LLM key waits for revalidation, and vice versa.
+  nonisolated static var activeBYOKSnapshot: [BYOKProvider: (key: String, fingerprint: String)] {
+    let enrolled = enrolledFingerprints()
+    return byokActivationCandidateSnapshot.filter { provider, entry in
+      enrolled[provider.rawValue] == entry.fingerprint
+    }
+  }
+
+  private static let reconcileLock = NSLock()
+  private static var reconcileGeneration: UInt64 = 0
+
+  private static func nextReconciliationGeneration() -> UInt64 {
+    reconcileLock.lock()
+    defer { reconcileLock.unlock() }
+    reconcileGeneration += 1
+    return reconcileGeneration
+  }
+
+  private static func isCurrentReconciliation(_ generation: UInt64) -> Bool {
+    reconcileLock.lock()
+    defer { reconcileLock.unlock() }
+    return reconcileGeneration == generation
+  }
+
+  func reconcileBYOKActivation() async {
+    let ownerUid = UserDefaults.standard.string(forKey: .authUserId)
+    Self.bindBYOKOwner(ownerUid)
+    presentPendingBYOKOwnerResetNotice(for: ownerUid)
+    guard let selectedProvider = Self.selectedBYOKLLMProvider, Self.byokKey(selectedProvider) != nil else { return }
+    let generation = Self.nextReconciliationGeneration()
+
+    let snapshot = Self.byokActivationCandidateSnapshot.reduce(into: [BYOKProvider: String]()) { result, entry in
+      result[entry.key] = entry.value.key
+    }
+    let statuses = await BYOKValidator.validateAll(snapshot)
+    guard Self.isCurrentReconciliation(generation) else { return }
+    guard statuses[selectedProvider] == .ok else {
+      try? await APIClient.shared.deactivateBYOK()
+      guard Self.isCurrentReconciliation(generation) else { return }
+      Self.persistEnrolledFingerprints([:])
+      return
+    }
+
+    // Fingerprints must come from the captured snapshot, not a later UserDefaults
+    // edit that raced the provider check.
+    let fingerprints = snapshot.reduce(into: [String: String]()) { result, entry in
+      if statuses[entry.key] == .ok {
+        result[entry.key.rawValue] = Self.byokFingerprint(entry.value)
+      }
+    }
+    do {
+      try await APIClient.shared.activateBYOK(fingerprints: fingerprints)
+      guard Self.isCurrentReconciliation(generation) else { return }
+      Self.persistEnrolledFingerprints(fingerprints)
+    } catch {
+      // Leave local capability inactive when the backend never enrolled.
+    }
   }
 }

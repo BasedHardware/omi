@@ -56,6 +56,7 @@ enum AgentClient {
   typealias TextDeltaHandler = AgentBridge.TextDeltaHandler
   typealias ToolCallHandler = AgentBridge.ToolCallHandler
   typealias ToolActivityHandler = AgentBridge.ToolActivityHandler
+  typealias TurnActivityHandler = AgentBridge.TurnActivityHandler
   typealias ThinkingDeltaHandler = AgentBridge.ThinkingDeltaHandler
   typealias ToolResultDisplayHandler = AgentBridge.ToolResultDisplayHandler
   typealias AuthRequiredHandler = AgentBridge.AuthRequiredHandler
@@ -74,8 +75,14 @@ enum AgentClient {
     let outputTokens: Int
     let cacheReadTokens: Int
     let cacheWriteTokens: Int
+    let modelsUsed: [String]
+    let providerTargets: [String]
     let artifacts: [AgentArtifactProjection]
     let completionDeltaArtifacts: [AgentArtifactProjection]
+    let jitCostStatus: String?
+    let jitEstimatedCostUsd: Double?
+    let jitProviderAttempts: Int?
+    let jitReceiptAttemptIDs: [String]
 
     init(_ result: AgentBridge.QueryResult) {
       text = result.text
@@ -90,8 +97,14 @@ enum AgentClient {
       outputTokens = result.outputTokens
       cacheReadTokens = result.cacheReadTokens
       cacheWriteTokens = result.cacheWriteTokens
+      modelsUsed = result.modelsUsed
+      providerTargets = result.providerTargets
       artifacts = result.artifacts
       completionDeltaArtifacts = result.completionDeltaArtifacts
+      jitCostStatus = result.jitCostStatus
+      jitEstimatedCostUsd = result.jitEstimatedCostUsd
+      jitProviderAttempts = result.jitProviderAttempts
+      jitReceiptAttemptIDs = result.jitReceiptAttemptIDs
     }
 
     @discardableResult
@@ -506,6 +519,18 @@ enum AgentClient {
       await bridge.interrupt()
     }
 
+    func bindRealtimeChatLaneInterrupt(_ identity: String) async {
+      await bridge.bindRealtimeChatLaneInterrupt(identity)
+    }
+
+    func unbindRealtimeChatLaneInterrupt(_ identity: String) async {
+      await bridge.unbindRealtimeChatLaneInterrupt(identity)
+    }
+
+    func interruptRealtimeChatLane(identity: String) async {
+      await bridge.interruptRealtimeChatLane(identity: identity)
+    }
+
     func query(
       prompt: String,
       surface: AgentSurfaceReference,
@@ -517,6 +542,7 @@ enum AgentClient {
       reasoningEffort: String? = nil,
       onTextDelta: @escaping TextDeltaHandler,
       onToolActivity: @escaping ToolActivityHandler,
+      onTurnActivity: @escaping TurnActivityHandler = {},
       onThinkingDelta: @escaping ThinkingDeltaHandler = { _ in },
       onToolResultDisplay: @escaping ToolResultDisplayHandler = { _, _, _ in },
       onAuthRequired: @escaping AuthRequiredHandler = { _, _ in },
@@ -535,6 +561,7 @@ enum AgentClient {
         reasoningEffort: reasoningEffort,
         onTextDelta: onTextDelta,
         onToolActivity: onToolActivity,
+        onTurnActivity: onTurnActivity,
         onThinkingDelta: onThinkingDelta,
         onToolResultDisplay: onToolResultDisplay,
         onAuthRequired: onAuthRequired,
@@ -555,6 +582,7 @@ enum AgentClient {
       reasoningEffort: String? = nil,
       onTextDelta: @escaping TextDeltaHandler,
       onToolActivity: @escaping ToolActivityHandler,
+      onTurnActivity: @escaping TurnActivityHandler = {},
       onThinkingDelta: @escaping ThinkingDeltaHandler = { _ in },
       onToolResultDisplay: @escaping ToolResultDisplayHandler = { _, _, _ in },
       onAuthRequired: @escaping AuthRequiredHandler = { _, _ in },
@@ -585,6 +613,7 @@ enum AgentClient {
               reasoningEffort: reasoningEffort,
               onTextDelta: onTextDelta,
               onToolActivity: onToolActivity,
+              onTurnActivity: onTurnActivity,
               onThinkingDelta: onThinkingDelta,
               onToolResultDisplay: onToolResultDisplay,
               onAuthRequired: onAuthRequired,
@@ -611,34 +640,63 @@ enum AgentClient {
     harnessMode: String = "piMono",
     mode: String? = nil,
     cwd: String? = nil,
+    jitBudget: JITProactivityAgentBudget? = nil,
+    jitSourceProjection: JITProactivitySourceProjection? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
     onTextDelta: @escaping TextDeltaHandler = { _ in },
     onToolCall _: @escaping ToolCallHandler = { _, _, _ in "" },
     onToolActivity: @escaping ToolActivityHandler = { _, _, _, _ in },
+    onTurnActivity: @escaping TurnActivityHandler = {},
     onThinkingDelta: @escaping ThinkingDeltaHandler = { _ in },
     onToolResultDisplay: @escaping ToolResultDisplayHandler = { _, _, _ in },
     onAuthRequired: @escaping AuthRequiredHandler = { _, _ in },
     onAuthSuccess: @escaping AuthSuccessHandler = {}
   ) async throws -> QueryResult {
+    guard
+      let authorization = authorizationSnapshot ?? RuntimeOwnerIdentity.captureAuthorizationSnapshot(),
+      RuntimeOwnerIdentity.isAuthorizationCurrent(authorization)
+    else { throw BridgeError.authMissing }
+    if jitSourceProjection != nil,
+      !AgentRuntimeProcess.hasPrivateJITQAStateDirectory(requireDatabase: false)
+    {
+      throw BridgeError.agentError("JIT QA source capture requires owner-only runtime state")
+    }
     let bridge = AgentClient.makeBridge(harnessMode: harnessMode)
-    try await bridge.start()
+    try await bridge.start(authorizationSnapshot: authorization)
     do {
+      // SQLite may create WAL/SHM sidecars during startup. Recheck after the
+      // daemon has opened its owner-scoped database and before sending any
+      // source prompt bytes.
+      if jitSourceProjection != nil,
+        !AgentRuntimeProcess.hasPrivateJITQAStateDirectory()
+      {
+        throw BridgeError.agentError("JIT QA source capture requires owner-only runtime state")
+      }
 
       guard let requestedAdapter = AgentRuntimeProcess.adapterId(forHarnessMode: harnessMode) else {
         throw BridgeError.agentError("Unknown AI runtime mode: \(harnessMode)")
       }
-      let usesNativeModelChoice = ["hermes", "openclaw"].contains(harnessMode)
+      let persistedChatBridgeMode =
+        UserDefaults.standard.string(forKey: .chatBridgeMode)
+        ?? ChatProvider.BridgeMode.piMono.rawValue
       let creationProfile = AgentSessionCreationProfile(
         adapterId: requestedAdapter,
-        modelProfile: model ?? (usesNativeModelChoice ? nil : ModelQoS.Claude.chat),
+        modelProfile: model
+          ?? AgentRuntimeRouting.defaultModelProfileForRunHarness(
+            harnessMode,
+            persistedChatBridgeMode: persistedChatBridgeMode
+          ),
         workingDirectory: cwd?.isEmpty == false ? cwd! : AgentRuntimeProcess.defaultArtifactsDirectory()
       )
       let session = try await bridge.resolveSurfaceSession(
         surface,
-        creationProfile: creationProfile
+        creationProfile: creationProfile,
+        authorizationSnapshot: authorization
       )
       var snapshot = try await bridge.getContextSnapshot(
         sessionId: session.sessionId,
-        surfaceKind: surface.surfaceKind)
+        surfaceKind: surface.surfaceKind,
+        authorizationSnapshot: authorization)
       let contextInputs: [(AgentContextSource, AgentContextSourceOutcome, [String: Any])] = [
         (
           .surface,
@@ -661,13 +719,19 @@ enum AgentClient {
           sourceRevision: revision,
           outcome: outcome,
           capturedAtMs: Int(Date().timeIntervalSince1970 * 1_000),
-          payload: RuntimeJSONPayloadBox(payload)
+          payload: RuntimeJSONPayloadBox(payload),
+          authorizationSnapshot: authorization
         )
         snapshot = try await bridge.getContextSnapshot(
           sessionId: session.sessionId,
-          surfaceKind: surface.surfaceKind)
+          surfaceKind: surface.surfaceKind,
+          authorizationSnapshot: authorization)
       }
-      await bridge.warmupSession(session)
+      await bridge.warmupSession(session, authorizationSnapshot: authorization)
+
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else {
+        throw BridgeError.authMissing
+      }
 
       let result = try await bridge.query(
         prompt: prompt,
@@ -675,13 +739,22 @@ enum AgentClient {
         surface: surface,
         mode: mode,
         expectedContext: snapshot.freshness,
+        jitBudget: jitBudget,
+        jitCostEvidenceProjection: jitSourceProjection.map {
+          RuntimeJSONPayloadBox($0.wireDictionary)
+        },
+        authorizationSnapshot: authorization,
         onTextDelta: onTextDelta,
         onToolActivity: onToolActivity,
+        onTurnActivity: onTurnActivity,
         onThinkingDelta: onThinkingDelta,
         onToolResultDisplay: onToolResultDisplay,
         onAuthRequired: onAuthRequired,
         onAuthSuccess: onAuthSuccess
       )
+      guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else {
+        throw BridgeError.authMissing
+      }
       let output = try QueryResult(result).requireSucceeded()
       await bridge.stop()
       return output

@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import sys
 import tempfile
@@ -10,12 +11,17 @@ import unittest
 from pathlib import Path
 
 from check_product_invariants import (
+    audit_registry,
+    format_invariant_briefing,
     format_suggest_block,
+    load_changed_paths,
     matched_invariants,
+    missing_invariant_hits,
     parse_invariant,
     path_matches,
     pr_body_cites_id,
     load_locked_invariants,
+    whole_tree_globs,
 )
 
 
@@ -234,7 +240,7 @@ class FailClosedTests(unittest.TestCase):
 
     def test_malformed_doc_raises(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            inv_dir = Path(tmp) / "docs" / "product" / "invariants"
+            inv_dir = Path(tmp) / "product" / "invariants"
             inv_dir.mkdir(parents=True)
             # Missing the '# INV-XXX-N: Title' header
             (inv_dir / "broken.md").write_text(
@@ -246,12 +252,321 @@ class FailClosedTests(unittest.TestCase):
 
     def test_valid_doc_loads(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
-            inv_dir = Path(tmp) / "docs" / "product" / "invariants"
+            inv_dir = Path(tmp) / "product" / "invariants"
             inv_dir.mkdir(parents=True)
             (inv_dir / "chat.md").write_text(SAMPLE, encoding="utf-8")
             result = load_locked_invariants(Path(tmp))
             self.assertEqual(len(result), 1)
             self.assertEqual(result[0]["id"], "INV-CHAT-1")
+
+
+class SquashCommitBodyTests(unittest.TestCase):
+    """#11835: squash commit list is not a substitute for the PR body."""
+
+    def test_about_user_voice_paths_require_inv_chat_1(self) -> None:
+        root = Path(__file__).resolve().parents[1].parent
+        invariants = load_locked_invariants(root)
+        hits = matched_invariants(
+            [
+                "desktop/windows/src/renderer/src/lib/voice/aboutUser.ts",
+                "desktop/windows/src/renderer/src/lib/voice/aboutUser.test.ts",
+            ],
+            invariants,
+        )
+        ids = {hit["id"] for hit in hits}
+        self.assertIn("INV-CHAT-1", ids)
+
+    def test_squash_commit_list_without_citation_fails(self) -> None:
+        root = Path(__file__).resolve().parents[1].parent
+        invariants = load_locked_invariants(root)
+        hits = matched_invariants(
+            ["desktop/windows/src/renderer/src/lib/voice/aboutUser.ts"],
+            invariants,
+        )
+        squash_body = (
+            "Cut the Windows app's idle and focus-driven backend request volume (#11835)\n\n"
+            "* Stop rebuilding the about-user card on every voice hub warm\n"
+        )
+        missing = missing_invariant_hits(hits, squash_body)
+        self.assertTrue(any(hit["id"] == "INV-CHAT-1" for hit in missing))
+
+    def test_appended_pr_body_citation_passes(self) -> None:
+        root = Path(__file__).resolve().parents[1].parent
+        invariants = load_locked_invariants(root)
+        hits = matched_invariants(
+            ["desktop/windows/src/renderer/src/lib/voice/aboutUser.ts"],
+            invariants,
+        )
+        combined = (
+            "Cut the Windows app's idle and focus-driven backend request volume (#11835)\n\n"
+            "* Stop rebuilding the about-user card\n\n"
+            "## Product invariants affected\n\n- INV-CHAT-1\n"
+        )
+        self.assertEqual(missing_invariant_hits(hits, combined), [])
+
+
+
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+
+def _registry(tmp: Path, docs: dict[str, str], index_rows: str = "") -> Path:
+    """Build a throwaway registry so the audit can be tested on real shapes."""
+    directory = tmp / "product" / "invariants"
+    directory.mkdir(parents=True)
+    for name, body in docs.items():
+        (directory / name).write_text(body, encoding="utf-8")
+    (directory / "README.md").write_text(
+        "# Product Invariant Registry\n\n| ID | Title | Status | Doc |\n|----|----|----|----|\n" + index_rows,
+        encoding="utf-8",
+    )
+    (tmp / ".github").mkdir(exist_ok=True)
+    return tmp
+
+
+LOCKED_DOC = """# INV-TEST-1: Example
+
+**Status:** locked
+**Statement:** Example statement.
+
+## MUST NOT
+
+- Do the bad thing.
+
+## Guard tests
+
+- `guards/present.py`
+
+## Path globs
+
+- `backend/utils/example/**`
+
+## PR rule
+
+Name this invariant ID in the PR body if you touch the path globs above.
+"""
+
+
+class RegistryAuditTests(unittest.TestCase):
+    """The registry must hold up its own claims, continuously."""
+
+    def test_this_repository_registry_is_clean(self):
+        self.assertEqual(audit_registry(REPO_ROOT), [])
+
+    def test_locked_invariant_naming_a_missing_guard_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _registry(
+                Path(tmp),
+                {"example.md": LOCKED_DOC},
+                "| INV-TEST-1 | Example | locked | [example.md](./example.md) |\n",
+            )
+            problems = audit_registry(root)
+            self.assertTrue(any("does not exist: guards/present.py" in p for p in problems), problems)
+
+    def test_guard_present_but_unwired_check_script_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            doc = LOCKED_DOC.replace("`guards/present.py`", "`.github/scripts/check_example.py`")
+            _registry(root, {"example.md": doc}, "| INV-TEST-1 | Example | locked | [example.md](./example.md) |\n")
+            (root / ".github" / "scripts").mkdir(parents=True)
+            (root / ".github" / "scripts" / "check_example.py").write_text("", encoding="utf-8")
+            problems = audit_registry(root)
+            self.assertTrue(any("no checks-manifest entry runs" in p for p in problems), problems)
+
+            (root / ".github" / "checks-manifest.yaml").write_text(
+                'checks:\n  - id: example\n    command: ["python3", ".github/scripts/check_example.py"]\n',
+                encoding="utf-8",
+            )
+            self.assertEqual(audit_registry(root), [])
+
+    def test_doc_missing_from_index_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _registry(Path(tmp), {"example.md": LOCKED_DOC.replace("`guards/present.py`", "`README.md`")}, "")
+            self.assertTrue(any("missing from the README index" in p for p in audit_registry(root)), root)
+
+    def test_index_row_without_a_doc_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _registry(
+                Path(tmp),
+                {},
+                "| INV-GHOST-1 | Ghost | locked | [ghost.md](./ghost.md) |\n",
+            )
+            self.assertTrue(any("no matching doc" in p for p in audit_registry(root)), root)
+
+    def test_unbackticked_glob_bullet_fails_instead_of_being_ignored(self):
+        doc = LOCKED_DOC.replace("- `backend/utils/example/**`", "- backend/utils/example/**")
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _registry(
+                Path(tmp), {"example.md": doc.replace("`guards/present.py`", "`README.md`")},
+                "| INV-TEST-1 | Example | locked | [example.md](./example.md) |\n",
+            )
+            self.assertTrue(any("silently ignored" in p for p in audit_registry(root)), root)
+
+    def test_glob_may_carry_a_trailing_note(self):
+        doc = LOCKED_DOC.replace(
+            "- `backend/utils/example/**`", "- `backend/utils/example/**` (retired: must not return)"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "example.md"
+            path.write_text(doc, encoding="utf-8")
+            self.assertEqual(parse_invariant(path)["globs"], ["backend/utils/example/**"])
+            self.assertEqual(parse_invariant(path)["unparsed_globs"], [])
+
+
+class WholeTreeGlobTests(unittest.TestCase):
+    def test_app_roots_are_whole_tree(self):
+        self.assertEqual(
+            whole_tree_globs(["backend/**", "desktop/macos/Desktop/Sources/**"]),
+            ["backend/**", "desktop/macos/Desktop/Sources/**"],
+        )
+
+    def test_a_scoped_subtree_is_not_whole_tree(self):
+        self.assertEqual(whole_tree_globs(["backend/utils/task_intelligence/**"]), [])
+
+    def test_citation_on_a_whole_tree_glob_fails(self):
+        doc = LOCKED_DOC.replace("- `backend/utils/example/**`", "- `backend/**`").replace(
+            "`guards/present.py`", "`README.md`"
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _registry(
+                Path(tmp), {"example.md": doc},
+                "| INV-TEST-1 | Example | locked | [example.md](./example.md) |\n",
+            )
+            self.assertTrue(any("whole-tree glob" in p for p in audit_registry(root)), root)
+
+    def test_opting_out_of_naming_clears_it(self):
+        doc = (
+            LOCKED_DOC.replace("- `backend/utils/example/**`", "- `backend/**`")
+            .replace("`guards/present.py`", "`README.md`")
+            .replace(
+                "Name this invariant ID in the PR body if you touch the path globs above.",
+                "Do **not** require naming; the guard enforces the floor.",
+            )
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            root = _registry(
+                Path(tmp), {"example.md": doc},
+                "| INV-TEST-1 | Example | locked | [example.md](./example.md) |\n",
+            )
+            self.assertEqual(audit_registry(root), [])
+
+
+class BriefingTests(unittest.TestCase):
+    """A failure must carry the rule, not just the token."""
+
+    def test_briefing_includes_statement_and_must_nots(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "example.md"
+            path.write_text(LOCKED_DOC, encoding="utf-8")
+            hit = {
+                **parse_invariant(path),
+                "matched_files": ["backend/utils/example/a.py"],
+                "matched_by_glob": {"backend/utils/example/**": ["backend/utils/example/a.py"]},
+            }
+            text = format_invariant_briefing([hit])
+            self.assertIn("Example statement.", text)
+            self.assertIn("- Do the bad thing.", text)
+            self.assertIn("backend/utils/example/a.py", text)
+
+    def test_briefing_says_which_glob_made_it_apply(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "example.md"
+            path.write_text(LOCKED_DOC, encoding="utf-8")
+            hit = {
+                **parse_invariant(path),
+                "matched_files": ["backend/utils/example/a.py"],
+                "matched_by_glob": {"backend/utils/example/**": ["backend/utils/example/a.py"]},
+            }
+            text = format_invariant_briefing([hit])
+            self.assertIn("Why it applies:", text)
+            self.assertIn("`backend/utils/example/**` matched 1 changed file(s)", text)
+
+    def test_briefing_lists_every_must_not_rather_than_a_sample(self):
+        doc = LOCKED_DOC.replace(
+            "- Do the bad thing.",
+            "\n".join(f"- Rule number {i}." for i in range(1, 10)),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "example.md"
+            path.write_text(doc, encoding="utf-8")
+            hit = {**parse_invariant(path), "matched_files": [], "matched_by_glob": {}}
+            text = format_invariant_briefing([hit])
+            self.assertIn("MUST NOT (9):", text)
+            self.assertIn("- Rule number 9.", text)
+
+
+class GlobAttributionTests(unittest.TestCase):
+    def test_a_file_is_attributed_to_every_glob_that_caught_it(self):
+        inv = {
+            "id": "INV-TEST-1",
+            "globs": ["backend/**", "backend/utils/example/**"],
+            "require_naming": True,
+        }
+        hit = matched_invariants(["backend/utils/example/a.py"], [inv])[0]
+        self.assertEqual(
+            hit["matched_by_glob"],
+            {
+                "backend/**": ["backend/utils/example/a.py"],
+                "backend/utils/example/**": ["backend/utils/example/a.py"],
+            },
+        )
+
+    def test_unmatched_globs_are_absent_from_the_attribution(self):
+        inv = {"id": "INV-TEST-1", "globs": ["backend/**", "web/**"], "require_naming": True}
+        hit = matched_invariants(["backend/a.py"], [inv])[0]
+        self.assertEqual(list(hit["matched_by_glob"]), ["backend/**"])
+
+
+class ThreeDotChangeSetTests(unittest.TestCase):
+    def test_load_changed_paths_agrees_on_both_merge_parent_orders(self) -> None:
+        git_iso = ["-c", "core.hooksPath=/dev/null", "-c", "commit.gpgsign=false"]
+
+        def git(cwd: Path, *args: str) -> str:
+            env = {key: value for key, value in os.environ.items() if not key.startswith("GIT_")}
+            result = subprocess.run(
+                ["git", *git_iso, *args],
+                cwd=cwd,
+                check=True,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                env=env,
+            )
+            return result.stdout.strip()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            git(root, "init", "-q", "-b", "main")
+            git(root, "config", "user.email", "test@example.com")
+            git(root, "config", "user.name", "Test")
+            (root / "root.txt").write_text("root\n", encoding="utf-8")
+            git(root, "add", "root.txt")
+            git(root, "commit", "-qm", "root")
+            git(root, "switch", "-q", "-c", "pr")
+            (root / "pr_file.txt").write_text("pr\n", encoding="utf-8")
+            git(root, "add", "pr_file.txt")
+            git(root, "commit", "-qm", "pr")
+            pr_sha = git(root, "rev-parse", "HEAD")
+            git(root, "switch", "-q", "main")
+            (root / "unrelated.txt").write_text("main\n", encoding="utf-8")
+            git(root, "add", "unrelated.txt")
+            git(root, "commit", "-qm", "main advanced")
+            main_sha = git(root, "rev-parse", "HEAD")
+            git(root, "switch", "-q", "--detach", pr_sha)
+            git(root, "merge", "--no-ff", "-q", "--no-edit", main_sha)
+            branch_first = git(root, "rev-parse", "HEAD")
+            git(root, "switch", "-q", "--detach", main_sha)
+            git(root, "merge", "--no-ff", "-q", "--no-edit", pr_sha)
+            base_first = git(root, "rev-parse", "HEAD")
+
+            from argparse import Namespace
+
+            expected = ["pr_file.txt"]
+            for head in (pr_sha, branch_first, base_first):
+                args = Namespace(base="main", head=head, changed_files=None)
+                self.assertEqual(load_changed_paths(args, root), expected)
+            two_dot = git(root, "diff", "--name-only", main_sha, pr_sha).splitlines()
+            self.assertIn("unrelated.txt", two_dot)
 
 
 if __name__ == "__main__":

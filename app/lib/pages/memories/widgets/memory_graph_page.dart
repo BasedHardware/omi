@@ -12,10 +12,12 @@ import 'package:flutter/scheduler.dart';
 
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:omi/utils/share_sheet.dart';
 import 'package:vector_math/vector_math_64.dart' as v;
 
 import 'package:omi/backend/http/api/knowledge_graph_api.dart';
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -223,8 +225,6 @@ class MemoryGraphPage extends StatefulWidget {
   final bool showAppBar;
   final bool showShareButton;
   final bool trackOpenEvent;
-  final bool autoRebuildIfEmpty;
-  final bool hideRebuildButtonWhenEmpty;
   final double initialZoom;
 
   const MemoryGraphPage({
@@ -233,8 +233,6 @@ class MemoryGraphPage extends StatefulWidget {
     this.showAppBar = true,
     this.showShareButton = true,
     this.trackOpenEvent = true,
-    this.autoRebuildIfEmpty = false,
-    this.hideRebuildButtonWhenEmpty = false,
     this.initialZoom = 1.0,
   });
 
@@ -248,6 +246,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
 
   final Random _rnd = Random();
   final GlobalKey _graphKey = GlobalKey();
+  final GlobalKey _shareButtonKey = GlobalKey();
 
   double _rotationX = 0.0;
   double _rotationY = 0.0;
@@ -259,14 +258,12 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
   Offset? _lastPanStart;
 
   bool _isLoading = true;
-  bool _isRebuilding = false;
   String? _error;
 
   final _repaintNotifier = ValueNotifier<int>(0);
 
   String? _selectedNodeId;
   final Set<String> _highlightedNodeIds = {};
-  int _autoRebuildAttempts = 0;
 
   @override
   void initState() {
@@ -345,10 +342,11 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       _populateGraph(data);
       _runLayoutSync();
     } catch (e) {
+      Logger.debug('Knowledge graph load failed: $e');
       if (!mounted) return;
       if (!silent) {
         setState(() {
-          _error = e.toString();
+          _error = context.l10n.couldNotLoadKnowledgeGraph;
         });
       }
     } finally {
@@ -371,38 +369,6 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       if (!currentIds.contains(n['id'])) return false;
     }
     return true;
-  }
-
-  Future<void> _rebuildGraph() async {
-    setState(() {
-      _isRebuilding = true;
-      _error = null;
-    });
-
-    try {
-      PlatformManager.instance.analytics.brainMapRebuilt();
-      await KnowledgeGraphApi.rebuildKnowledgeGraph();
-      if (!mounted) return;
-
-      final data = await KnowledgeGraphApi.waitForGraphStability();
-      if (!mounted) return;
-
-      _populateGraph(data);
-      _runLayoutSync();
-
-      simulation.wake();
-    } catch (e) {
-      if (!mounted) return;
-      setState(() {
-        _error = e.toString();
-      });
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isRebuilding = false;
-        });
-      }
-    }
   }
 
   void _populateGraph(Map<String, dynamic> data) {
@@ -523,7 +489,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       case 'organization':
         return Colors.orangeAccent;
       case 'thing':
-        return Colors.purpleAccent;
+        return Colors.yellowAccent;
       default:
         return Colors.blueAccent;
     }
@@ -570,7 +536,11 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
       await file.writeAsBytes(finalByteData.buffer.asUint8List());
 
       if (mounted) {
-        await Share.shareXFiles([XFile(file.path)], text: context.l10n.checkOutMyMemoryGraph);
+        await Share.shareXFiles(
+          [XFile(file.path)],
+          text: context.l10n.checkOutMyMemoryGraph,
+          sharePositionOrigin: shareSheetOrigin(_shareButtonKey),
+        );
       }
     } catch (e) {
       Logger.debug('Error sharing graph: $e');
@@ -580,21 +550,26 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
   @override
   Widget build(BuildContext context) {
     if (widget.embedded) {
-      return ColoredBox(color: Colors.black, child: _buildBody());
+      return ColoredBox(color: OmiColors.surface0, child: _buildBody());
     }
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: OmiColors.surface0,
       extendBodyBehindAppBar: widget.showAppBar,
       appBar: widget.showAppBar
           ? AppBar(
-              title: const Text('omi.me', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
-              centerTitle: true,
+              title: Text(context.l10n.memoryGraphTitle),
               backgroundColor: Colors.transparent,
-              elevation: 0,
-              leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: () => Navigator.of(context).pop()),
+              leading: const OmiBackButton(),
               actions: widget.showShareButton
-                  ? [IconButton(icon: const FaIcon(FontAwesomeIcons.share, size: 20), onPressed: _shareGraph)]
+                  ? [
+                      OmiIconButton(
+                        key: _shareButtonKey,
+                        icon: const FaIcon(FontAwesomeIcons.share, size: 20),
+                        label: context.l10n.share,
+                        onPressed: _shareGraph,
+                      ),
+                    ]
                   : null,
             )
           : null,
@@ -604,44 +579,11 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
 
   Widget _buildBody() {
     if (_isLoading) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const CircularProgressIndicator(color: Colors.purpleAccent),
-            const SizedBox(height: 16),
-            Text(context.l10n.loadingKnowledgeGraph, style: const TextStyle(color: Colors.white70)),
-          ],
-        ),
-      );
+      return OmiLoadingState(label: context.l10n.loadingKnowledgeGraph);
     }
 
     if (_error != null) {
-      return Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.error_outline, color: Colors.redAccent, size: 48),
-              const SizedBox(height: 16),
-              Text(
-                _error!,
-                style: const TextStyle(color: Colors.white70),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 16),
-              // Explicit colors: the bare button resolved to theme primary/onPrimary
-              // (black-on-black on this theme), an invisible label.
-              ElevatedButton(
-                onPressed: _loadGraph,
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.black),
-                child: Text(context.l10n.retry),
-              ),
-            ],
-          ),
-        ),
-      );
+      return SingleChildScrollView(child: OmiErrorState(message: _error!, onRetry: _loadGraph));
     }
 
     // Check if graph is effectively empty (only has user node or truly empty)
@@ -649,56 +591,13 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
         simulation.nodes.isEmpty || (simulation.nodes.length == 1 && simulation.nodes.first.id == 'user-node');
 
     if (isEmpty) {
-      if (widget.autoRebuildIfEmpty && !_isRebuilding && _autoRebuildAttempts < 3) {
-        _autoRebuildAttempts++;
-        WidgetsBinding.instance.addPostFrameCallback((_) {
-          if (mounted) _rebuildGraph();
-        });
-      }
-
-      return Center(
-        child: Padding(
-          padding: EdgeInsets.all(widget.embedded ? 16.0 : 32.0),
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Icon(Icons.hub_outlined, color: Colors.white30, size: 64),
-                const SizedBox(height: 16),
-                Text(context.l10n.noKnowledgeGraphYet, style: const TextStyle(color: Colors.white70, fontSize: 18)),
-                const SizedBox(height: 12),
-                Text(
-                  _isRebuilding
-                      ? context.l10n.buildingKnowledgeGraphFromMemories
-                      : context.l10n.knowledgeGraphWillBuildAutomatically,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white38, fontSize: 14),
-                ),
-                const SizedBox(height: 24),
-                if (_isRebuilding)
-                  SizedBox(
-                    width: 200,
-                    child: LinearProgressIndicator(
-                      backgroundColor: Colors.white10,
-                      color: Colors.purpleAccent,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  )
-                else if (!widget.hideRebuildButtonWhenEmpty)
-                  ElevatedButton.icon(
-                    onPressed: _rebuildGraph,
-                    icon: const Icon(Icons.auto_fix_high),
-                    label: Text(context.l10n.buildGraphButton),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.purpleAccent.withValues(alpha: 0.2),
-                      foregroundColor: Colors.purpleAccent,
-                    ),
-                  ),
-              ],
-            ),
-          ),
+      // Scaled down to fit when embedded in the small Home card.
+      return FittedBox(
+        fit: BoxFit.scaleDown,
+        child: OmiEmptyState(
+          icon: Icons.hub_outlined,
+          title: context.l10n.noKnowledgeGraphYet,
+          message: context.l10n.knowledgeGraphWillBuildAutomatically,
         ),
       );
     }

@@ -7,6 +7,10 @@ on:
         description: 'Select the environment to deploy to'
         required: true
         default: 'development'
+        type: choice
+        options:
+          - development
+          - prod
       branch:
         description: 'Branch to deploy from'
         required: true
@@ -50,7 +54,7 @@ env:
 
 jobs:
   deploy:
-    environment: ${{ github.event.inputs.environment }}
+    environment: ${{ github.event.inputs.environment == 'prod' && 'prod' || 'development' }}
     permissions:
       actions: 'read'
       contents: 'read'
@@ -147,11 +151,24 @@ jobs:
             printf 'admitted_sha=%s\n' "$DEPLOY_SHA" >> "$GITHUB_OUTPUT"
           fi
 
+      # Prod: GitHub WIF as omi-ci-deployer-prod@ (credential-hygiene WS-C, plan v2 Phase E).
+      # Development keeps its JSON lane.
+      - name: Google Auth (prod WIF)
+        id: auth-wif
+        if: github.event.inputs.environment == 'prod'
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
+          service_account: omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com
+
       - name: Google Auth
         id: auth
-        uses: 'google-github-actions/auth@v3'
+        if: github.event.inputs.environment != 'prod'
+        uses: google-github-actions/auth@v3
         with:
-          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+          # Development: GitHub WIF as the dev deployer, no JSON key (credential hygiene WS-D).
+          workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
+          service_account: omi-ci-deployer-dev@based-hardware-dev.iam.gserviceaccount.com
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v3
@@ -261,6 +278,20 @@ jobs:
           BREAK_GLASS_REASON: ${{ github.event.inputs.break_glass_reason }}
         run: |
           set -euo pipefail
+          # A missing release-gate-failure label made gh issue create fail hard,
+          # so the audit issue was never filed (see #10301 / #10389). Ensure the
+          # label exists first — idempotent, so a concurrent run cannot race it.
+          # Only tolerate the explicit "already exists" case; fail loudly on
+          # any other label-creation error (permissions, rate limits, etc.).
+          label_output="$(gh label create release-gate-failure \
+              --repo "$REPO" \
+              --description "Release Eligibility gate was bypassed (break-glass audit trail)" \
+              --color "b60205" 2>&1)" || {
+            if ! grep -qi 'already exists' <<< "$label_output"; then
+              echo "::error::Failed to ensure release-gate-failure label: $label_output" >&2
+              exit 1
+            fi
+          }
           gh issue create --repo "$REPO" \
             --title "Release Eligibility bypassed for ${DEPLOY_SHA:0:10} (${DEPLOY_ENVIRONMENT})" \
             --label release-gate-failure \

@@ -268,8 +268,33 @@ final class ContextBucketSchemaTests: XCTestCase {
     XCTAssertEqual(remaining, ["armed-live"])
   }
 
-  func testContextTablesAreExcludedFromAgentSync() {
+  func testDerivedDataEgressIsDefaultDenyAndContextTablesStayOutOfAgentSync() throws {
     XCTAssertTrue(ContextBucketSchema.tableNames.isDisjoint(with: AgentSyncService.syncedTableNames))
+
+    XCTAssertEqual(DerivedDataEgressPolicy.declarations.count, DerivedDataClass.allCases.count)
+    XCTAssertEqual(
+      DerivedDataClass.allCases.filter {
+        if case .allow = DerivedDataEgressPolicy.decision(for: $0) { return true }
+        return false
+      },
+      [.meetingIdentity])
+    XCTAssertTrue(
+      DerivedDataEgressPolicy.declaredRoutes.allSatisfy {
+        if case .allow = DerivedDataEgressPolicy.decision(for: $0.dataClass) { return true }
+        return false
+      })
+    XCTAssertEqual(
+      Set(DerivedDataEgressPolicy.declaredRoutes.map(\.route)),
+      Set(DerivedDataEgressRoute.allCases),
+      "A new derived-data route must be declared in the policy before it can pass CI")
+
+    let denied = DerivedDataEgressRequest(
+      dataClass: .contextBucketFacts,
+      route: .calendarMeetings,
+      purpose: DerivedDataEgressPolicy.meetingIdentityPurpose)
+    XCTAssertThrowsError(try DerivedDataEgressPolicy.authorize(denied)) { error in
+      XCTAssertEqual(error as? DerivedDataEgressPolicyError, .denied(.contextBucketFacts))
+    }
   }
 
   func testOneBucketPerDurableSubjectWhenWorkstreamIsNil() throws {

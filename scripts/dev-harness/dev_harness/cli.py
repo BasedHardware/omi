@@ -7,6 +7,7 @@ import functools
 import hashlib
 import json
 import os
+import re
 import shutil
 import signal
 import socket
@@ -99,8 +100,14 @@ def _service_record(cfg: config.HarnessConfig, service: str) -> dict[str, object
 def _native_typesense_binary() -> str | None:
     override = os.environ.get("OMI_TYPESENSE_SERVER_BIN", "").strip()
     if override:
-        if not Path(override).is_file():
+        binary = Path(override)
+        if not binary.is_file():
             raise SystemExit(f"OMI_TYPESENSE_SERVER_BIN points to a missing binary: {override}")
+        if not os.access(binary, os.X_OK):
+            raise SystemExit(
+                f"OMI_TYPESENSE_SERVER_BIN points to a file that is not executable: {override}; "
+                "make it executable (for example, chmod +x on macOS/Linux) or choose another binary"
+            )
         return override
     return shutil.which("typesense-server")
 
@@ -285,25 +292,67 @@ def _python_importable(module: str) -> bool:
     )
 
 
-def _java_runtime_present() -> bool:
-    """Report whether a usable JVM exists, not merely whether `java` is on PATH.
+# firebase-tools refuses to start the emulators on a JDK older than 21
+# ("firebase-tools no longer supports Java version before 21"), so the harness
+# rejects it at prereq time instead of failing firestore/auth health checks.
+FIREBASE_EMULATORS_MIN_JAVA_MAJOR = 21
+
+
+def _java_major_version() -> int | None:
+    """Major JDK version `java -version` reports, or None when unusable.
 
     macOS ships a stub at /usr/bin/java that is always present and exits 1 with
     "Unable to locate a Java Runtime" when no JDK is installed, so a PATH lookup
-    passes on every Mac. Running the binary is the only check that distinguishes
-    the stub from a real runtime.
+    passes on every Mac. Running the binary and parsing its version line is the
+    only check that distinguishes the stub from a real runtime — and reports the
+    version firebase-tools would otherwise reject only at emulator start.
     """
     if not _which("java"):
-        return False
+        return None
     try:
-        return (
-            subprocess.run(
-                ["java", "-version"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=30
-            ).returncode
-            == 0
+        proc = subprocess.run(["java", "-version"], capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.SubprocessError):
+        return None
+    if proc.returncode != 0:
+        return None
+    match = re.search(r'version "([0-9][0-9._]*)', proc.stderr)
+    if not match:
+        return None
+    parts = match.group(1).split(".")  # "21.0.1" → 21; legacy "1.8.0_191" → 8
+    if parts[0] == "1" and len(parts) > 1:
+        return int(parts[1])
+    return int(parts[0])
+
+
+def _node_major_version() -> int | None:
+    try:
+        result = subprocess.run(
+            ["node", "--version"], stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=10, text=True
         )
     except (OSError, subprocess.SubprocessError):
-        return False
+        return None
+    if result.returncode != 0:
+        return None
+    match = re.match(r"v(\d+)", result.stdout.strip())
+    return int(match.group(1)) if match else None
+
+
+def _minimum_node_major_for_firebase_tools(repo_root: Path) -> int | None:
+    """Read the minimum Node major version pinned firebase-tools declares via `engines.node`.
+
+    package-lock.json is the source of truth for the resolved firebase-tools version (see
+    package.json); its `engines.node` range (e.g. ">=20.0.0 || >=22.0.0 || >=24.0.0") lists
+    the lowest major first, so the lowest `>=N` bound is the minimum this repo requires.
+    """
+    try:
+        data = json.loads((repo_root / "package-lock.json").read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    node_range = data.get("packages", {}).get("node_modules/firebase-tools", {}).get("engines", {}).get("node")
+    if not node_range:
+        return None
+    majors = [int(major) for major in re.findall(r">=\s*(\d+)", node_range)]
+    return min(majors) if majors else None
 
 
 def prerequisite_report(cfg: config.HarnessConfig) -> tuple[list[str], list[str]]:
@@ -311,14 +360,29 @@ def prerequisite_report(cfg: config.HarnessConfig) -> tuple[list[str], list[str]
     warnings: list[str] = []
     if not _which("node"):
         missing.append("node (required by Firebase emulator CLI)")
+    else:
+        node_major = _node_major_version()
+        min_major = _minimum_node_major_for_firebase_tools(cfg.repo_root)
+        if node_major is not None and min_major is not None and node_major < min_major:
+            missing.append(
+                f"node >= {min_major} (found v{node_major}; required by the pinned firebase-tools "
+                "version in package-lock.json)"
+            )
     if not (_which("firebase") or _which("npx")):
         missing.append(
             "firebase-tools CLI or npx (install with npm install, npm install -g firebase-tools, or use npx)"
         )
-    if not _java_runtime_present():
+    java_major = _java_major_version()
+    if java_major is None:
         missing.append(
             "java runtime (required by the Firestore and Auth emulators; "
             "install one with `brew install --cask temurin` or from https://adoptium.net)"
+        )
+    elif java_major < FIREBASE_EMULATORS_MIN_JAVA_MAJOR:
+        missing.append(
+            f"java {java_major} is too old for the Firebase emulators (firebase-tools requires "
+            f"Java {FIREBASE_EMULATORS_MIN_JAVA_MAJOR}+; install e.g. `brew install openjdk@21` "
+            "and put it first on PATH)"
         )
     if not _which("redis-server"):
         missing.append("redis-server (required for local Redis on loopback)")
@@ -348,7 +412,7 @@ def prerequisite_report(cfg: config.HarnessConfig) -> tuple[list[str], list[str]
     if not (cfg.repo_root / "backend" / "main.py").is_file():
         missing.append("backend/main.py")
     if not _python_importable("uvicorn"):
-        missing.append("Python package uvicorn (install backend requirements before starting backend)")
+        missing.append("Python package uvicorn (run: make lane-backend)")
     provider_report = providers.provider_preflight(cfg.repo_root, env=config.preflight_env(cfg))
     missing.extend(provider_report.missing)
     warnings.extend(provider_report.warnings)
@@ -372,6 +436,8 @@ def print_config(cfg: config.HarnessConfig) -> None:
     print(f"llm_gateway: {cfg.llm_gateway_url}")
     print(f"backend: {cfg.backend_url}")
     print(f"desktop_backend: {cfg.desktop_backend_url}")
+    if cfg.dev_bind_host != "127.0.0.1":
+        print(f"dev_bind_host: {cfg.dev_bind_host} (set via {config.DEV_BIND_HOST_ENV} or {config.APP_DEV_HOST_ENV})")
 
 
 def print_provider_status(cfg: config.HarnessConfig) -> providers.ProviderPreflight:
@@ -606,17 +672,26 @@ def _firebase_command(cfg: config.HarnessConfig) -> list[str]:
     emulators = payload.setdefault("emulators", {})
     for name, port in (("firestore", cfg.firestore_port), ("auth", cfg.auth_port)):
         emulator = emulators.setdefault(name, {})
-        emulator["host"] = "127.0.0.1"
+        # The Auth emulator is what a physical device's Firebase SDK connects to
+        # directly (not through the backend), so it must bind wherever the
+        # backend does for device reachability to work at all (#11774).
+        emulator["host"] = cfg.dev_bind_host
         emulator["port"] = port
     firestore = payload.setdefault("firestore", {})
     firestore["rules"] = str(cfg.repo_root / "firestore.rules")
     firestore["indexes"] = str(cfg.repo_root / "firestore.indexes.json")
     _write_json(config_path, payload)
-    # `--yes` is required: the emulator runs detached with its output redirected to a
-    # log file, so npx's "Need to install the following packages / Ok to proceed? (y)"
-    # prompt has no terminal to answer it and the process blocks there forever. The
-    # health check then fails on a timeout that says nothing about the real cause.
-    base = ["firebase"] if _which("firebase") else ["npx", "--yes", "firebase-tools"]
+    # Always invoke the exact repo-pinned CLI through npx. A globally installed
+    # Firebase CLI can silently drift from package.json (and commonly runs under an
+    # unsupported Node version), leaving the detached emulator stuck until health
+    # checks time out. `--yes` prevents an install prompt and `--prefix` scopes
+    # resolution to this checkout instead of global state.
+    package = _load_json(cfg.repo_root / "package.json", {})
+    dev_dependencies = package.get("devDependencies", {})
+    pinned = dev_dependencies.get("firebase-tools") if isinstance(dev_dependencies, dict) else None
+    if not isinstance(pinned, str) or not pinned or any(marker in pinned for marker in ("^", "~", "*", ">", "<")):
+        raise RuntimeError("package.json must pin an exact firebase-tools version")
+    base = ["npx", "--prefix", str(cfg.repo_root), "--yes", f"firebase-tools@{pinned}"]
     return [
         *base,
         "emulators:start",
@@ -753,7 +828,7 @@ def _start_app_services(cfg: config.HarnessConfig) -> None:
             "uvicorn",
             "llm_gateway.main:app",
             "--host",
-            "127.0.0.1",
+            cfg.dev_bind_host,
             "--port",
             str(cfg.llm_gateway_port),
         ],
@@ -764,7 +839,7 @@ def _start_app_services(cfg: config.HarnessConfig) -> None:
     _start_process(
         cfg,
         "backend",
-        [sys.executable, "-m", "uvicorn", "main:app", "--host", "127.0.0.1", "--port", str(cfg.backend_port)],
+        [sys.executable, "-m", "uvicorn", "main:app", "--host", cfg.dev_bind_host, "--port", str(cfg.backend_port)],
         cwd=cfg.repo_root / "backend",
         log_name="backend.log",
         port=cfg.backend_port,
@@ -778,7 +853,7 @@ def _start_app_services(cfg: config.HarnessConfig) -> None:
             "uvicorn",
             "desktop_backend:app",
             "--host",
-            "127.0.0.1",
+            cfg.dev_bind_host,
             "--port",
             str(cfg.desktop_backend_port),
         ],

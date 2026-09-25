@@ -89,6 +89,7 @@ langchain_prompts.ChatPromptTemplate = MagicMock()
 # Stub utils packages and the LLM client module.
 _stub_package("utils")
 _stub_package("utils.llm")
+_stub_package("utils.conversations")
 llm_clients_stub = _stub_module("utils.llm.clients")
 llm_clients_stub.get_llm = MagicMock(return_value=MagicMock())
 llm_clients_stub.get_llm_gateway_chat_structured = MagicMock(return_value=MagicMock())
@@ -141,6 +142,50 @@ _load_module_from_file("utils.llm.discard_parser", BACKEND_DIR / "utils" / "llm"
 # prompt_cache only needs tiktoken, so load the real module rather than stub the
 # cache floor the preflight assertions below depend on.
 _load_module_from_file("utils.llm.prompt_cache", BACKEND_DIR / "utils" / "llm" / "prompt_cache.py")
+
+# model_config pulls in gateway_client; stub the one constant conversation_processing
+# imports so the isolated load does not need the real module tree.
+model_config_stub = _stub_module("utils.llm.model_config")
+model_config_stub.FOREGROUND_REQUEST_TIMEOUT_SECONDS = 60.0
+
+prompt_prefix_stub = _stub_module("utils.llm.conversation_prompt_prefix")
+prompt_prefix_stub.ConversationPromptPrefix = MagicMock
+prompt_prefix_stub.shared_conversation_cache_supported = MagicMock(return_value=False)
+prompt_prefix_stub.SHARED_CONVERSATION_PREAMBLE = 'You are analyzing one Omi conversation for the account owner.'
+
+# wake_word is stdlib-only; load the real trust-boundary helper before the
+# isolated conversation-processing module imports it.
+_load_module_from_file(
+    "utils.conversations.wake_word",
+    BACKEND_DIR / "utils" / "conversations" / "wake_word.py",
+)
+_load_module_from_file(
+    "utils.conversations.summary_selection",
+    BACKEND_DIR / "utils" / "conversations" / "summary_selection.py",
+)
+# relevance_rules is stdlib-only; load the real module so conversation_processing's
+# module-scope `from utils.conversations.relevance_rules import KEEP_WORD_COUNT`
+# resolves against production's threshold, not a stub package.
+_load_module_from_file(
+    "utils.conversations.relevance_rules",
+    BACKEND_DIR / "utils" / "conversations" / "relevance_rules.py",
+)
+
+# Pure helpers imported by conversation_processing; load the real modules so
+# the isolated import chain exercises production code. meeting_participants and
+# meeting_notes_validation resolve models/* through the real models.__path__.
+_load_module_from_file(
+    "utils.conversations.meeting_participants",
+    BACKEND_DIR / "utils" / "conversations" / "meeting_participants.py",
+)
+_load_module_from_file(
+    "utils.llm.meeting_notes_rich_prompts",
+    BACKEND_DIR / "utils" / "llm" / "meeting_notes_rich_prompts.py",
+)
+_load_module_from_file(
+    "utils.llm.meeting_notes_validation",
+    BACKEND_DIR / "utils" / "llm" / "meeting_notes_validation.py",
+)
 
 conv_proc = _load_module_from_file(
     "utils.llm.conversation_processing",
@@ -225,8 +270,9 @@ def _capture_structure(fn, **kwargs):
 
     Returns {'invoke': <dict passed to chain.invoke>, 'system_text': <joined system prompt text>}.
     """
-    mock_response = MagicMock()
-    mock_response.events = []
+    # The writers now sanitize the returned Structured (#12503 follow-up), so the
+    # mocked chain response must be a real model, not a bare MagicMock.
+    mock_response = conv_proc.Structured()
 
     mock_chain = MagicMock()
     mock_chain.invoke.return_value = mock_response
@@ -377,7 +423,8 @@ def test_unique_prompt_routes_drop_legacy_cache_key_whenever_gateway_mode_is_on(
             return self
 
         def invoke(self, *_args, **_kwargs):
-            return MagicMock(events=[])
+            # Reprocess sanitizes the returned Structured; return a real model, not a MagicMock.
+            return conv_proc.Structured()
 
     class _LLM:
         def __or__(self, _parser):

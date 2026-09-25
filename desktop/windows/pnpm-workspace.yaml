@@ -1,3 +1,25 @@
+# jiti/glob/minimatch/hosted-git-info/ignore/semver pinned to a single version each,
+# workspace-wide: @earendil-works/pi-coding-agent needs jiti@2.7.0, glob@13.0.6,
+# minimatch@10.2.5, hosted-git-info@9.0.3, ignore@7.0.5, semver@7.8.0 as real runtime
+# dependencies, but electron-builder's own toolchain (app-builder-lib, builder-util,
+# @electron/asar, @electron/get, @electron/universal, dir-compare, node-gyp, …) and
+# eslint/@babel/@typescript-eslint pull in much older versions of the SAME package names
+# as their own (dev-only, never-shipped) deps. pnpm's hoisted layout keeps both — one
+# nested under pi-coding-agent, one flat at top-level — which is fine for dev, but
+# electron-builder's asar packing collapses same-named node_modules entries to one
+# `node_modules/<name>` and (empirically, reproducibly) keeps the OLD flat one, discarding
+# the nested copy pi-coding-agent actually needs. That silently broke the packaged app's
+# AI chat at runtime with a chain of `ERR_MODULE_NOT_FOUND`/`SyntaxError: Named export ...
+# not found` errors (jiti's "./static" subpath only exists in 2.x; glob/minimatch's named
+# ESM exports only exist in their modern majors) — confirmed by spawning the actual
+# packaged pi-coding-agent CLI the same way src/main/codingAgent/piMono.ts does. Every
+# other consumer of the old versions is exclusively dev/build-time tooling that never
+# ships in the packaged app (electron-builder, eslint, babel, typescript-eslint), except
+# electron-updater's semver@7.7.4 need — 7.8.0 is a same-major minor bump, safe. This
+# removes the duplicate instead of picking a side; deliberately does NOT include `chalk`
+# (also collides, 4.1.2 vs pi-coding-agent's 5.6.2) because chalk 5 is ESM-only and would
+# break electron-builder/eslint's CJS `require('chalk')` — needs its own targeted fix if
+# it turns out to actually matter for pi-coding-agent's runtime behavior.
 overrides:
   '@hono/node-server': '~2.0.5'
   adm-zip: '>=0.5.16'
@@ -8,9 +30,15 @@ overrides:
   esbuild: '>=0.28.1'
   fast-uri: '~3.1.4'
   form-data: '>=4.0.6'
+  hosted-git-info: '9.0.3'
+  ignore: '7.0.5'
+  jiti: '2.7.0'
   js-yaml: '~4.3.0'
+  glob: '13.0.6'
+  minimatch: '10.2.5'
   postcss: '~8.5.18'
   protobufjs: '>=7.6.3'
+  semver: '7.8.0'
   tar: '~7.5.18'
   undici: '>=7.28.0'
   websocket-driver: '>=0.7.5'

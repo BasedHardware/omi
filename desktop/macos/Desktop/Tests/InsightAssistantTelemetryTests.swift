@@ -58,6 +58,7 @@ final class InsightAssistantTelemetryTests: XCTestCase {
       title: "title",
       message: "message",
       assistantId: "insight",
+      kind: .insight,
       insightDeliveryID: deliveryID
     )
 

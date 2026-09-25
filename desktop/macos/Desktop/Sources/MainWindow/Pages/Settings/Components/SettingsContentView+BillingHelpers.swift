@@ -4,6 +4,10 @@ import SwiftUI
 import UniformTypeIdentifiers
 import WebKit
 
+/// Single edit point for the Operator price quoted in the deprecation-banner
+/// fallback (used only when the backend omits `deprecationMessage`).
+let operatorDeprecationFallbackPrice = "$49/mo"
+
 enum SubscriptionPlanPresentation {
   static func selectionLabel(planTitle: String, startingPrice: String?) -> String {
     guard let startingPrice, !startingPrice.isEmpty else {
@@ -17,7 +21,7 @@ extension SettingsContentView {
   var hasPaidSubscription: Bool {
     guard let subscription = userSubscription?.subscription else { return false }
     if subscription.features.contains("byok") { return false }
-    return subscription.plan != .basic && subscription.status == .active
+    return subscription.plan.hasPaidCapability && subscription.status == .active
   }
 
   var shouldShowPlanPurchaseOptions: Bool {
@@ -44,7 +48,7 @@ extension SettingsContentView {
 
   var currentPlanTitle: String {
     guard let subscription = userSubscription?.subscription else {
-      return isLoadingSubscription ? "Loading plan..." : "Free"
+      return isLoadingSubscription ? "Loading plan…" : "Free"
     }
     // BYOK users: the backend returns plan=unlimited to turn off metering
     // but that's an implementation detail — to the user, they're on the
@@ -55,6 +59,8 @@ extension SettingsContentView {
     switch subscription.plan {
     case .basic:
       return "Free"
+    case .plus:
+      return "Plus"
     case .unlimited:
       // Backend serializes Operator subscribers as plan="unlimited" for
       // backward compat with old mobile builds that don't know the
@@ -64,10 +70,14 @@ extension SettingsContentView {
         return "Operator"
       }
       return "Neo"
+    case .unlimitedV2:
+      return "Unlimited"
     case .architect, .pro:
       return "Architect"
     case .operator:
       return "Operator"
+    case .unknown:
+      return subscription.plan.displayName
     }
   }
 
@@ -89,7 +99,7 @@ extension SettingsContentView {
 
   var currentPlanSubtitle: String {
     if isLoadingSubscription {
-      return "Fetching subscription details from omi."
+      return "Fetching subscription details from Omi."
     }
     if let detail = currentPlanBillingDetail {
       return detail
@@ -128,7 +138,7 @@ extension SettingsContentView {
     return "\(prefix) on \(formatter.string(from: date))"
   }
 
-  func planSubtitle(for planId: String) -> String? {
+  static func planSubtitle(for planId: String) -> String? {
     switch planId {
     case "unlimited":
       return "200 questions per month"
@@ -169,7 +179,7 @@ extension SettingsContentView {
     return prices.first
   }
 
-  func planEyebrow(for planId: String) -> String {
+  static func planEyebrow(for planId: String) -> String {
     switch planId {
     case "unlimited":
       return "Starter"
@@ -182,10 +192,10 @@ extension SettingsContentView {
     }
   }
 
-  func planDescription(for planId: String) -> String {
+  static func planDescription(for planId: String) -> String {
     switch planId {
     case "unlimited":
-      return "100 chat questions per month. Shared with mobile and web."
+      return "200 chat questions per month. Shared with mobile and web."
     case "operator":
       return "500 chat questions per month. Shared with mobile and web."
     case "architect":
@@ -230,7 +240,7 @@ extension SettingsContentView {
     SubscriptionPlanCatalogMerger.merge(primary: primary, fallback: fallback)
   }
 
-  func fallbackFeatures(for planId: String) -> [String] {
+  static func fallbackFeatures(for planId: String) -> [String] {
     switch planId {
     case "architect":
       return [
@@ -307,7 +317,7 @@ extension SettingsContentView {
       return SubscriptionPlanOption(
         id: planId,
         title: title,
-        features: fallbackFeatures(for: planId),
+        features: Self.fallbackFeatures(for: planId),
         prices: mappedPrices
       )
     }
@@ -336,7 +346,7 @@ extension SettingsContentView {
             Circle()
               .fill(accent)
               .frame(width: 6, height: 6)
-            Text((plan.eyebrow ?? planEyebrow(for: plan.id)).uppercased())
+            Text((plan.eyebrow ?? Self.planEyebrow(for: plan.id)).uppercased())
               .scaledFont(size: OmiType.micro, weight: .bold)
               .foregroundColor(Ink.secondary)
               .tracking(0.8)
@@ -346,7 +356,7 @@ extension SettingsContentView {
             .scaledFont(size: OmiType.heading, weight: .bold)
             .foregroundColor(Ink.primary)
 
-          if let subtitle = plan.subtitle ?? planSubtitle(for: plan.id) {
+          if let subtitle = plan.subtitle ?? Self.planSubtitle(for: plan.id) {
             Text(subtitle)
               .scaledFont(size: OmiType.caption)
               .foregroundColor(Ink.secondary)
@@ -373,7 +383,7 @@ extension SettingsContentView {
         .fixedSize(horizontal: true, vertical: false)
       }
 
-      Text(plan.description ?? planDescription(for: plan.id))
+      Text(plan.description ?? Self.planDescription(for: plan.id))
         .scaledFont(size: OmiType.body)
         .foregroundColor(Ink.secondary)
 
@@ -831,7 +841,7 @@ extension SettingsContentView {
           // hit the paywall once (e.g. WS connected before payment cleared
           // the trial cache) — without this they'd stay paywalled until the
           // next app restart even after their Operator/Architect plan is active.
-          if subscription.subscription.plan != .basic,
+          if subscription.subscription.plan.hasPaidCapability,
             subscription.subscription.status == .active,
             AppState.current?.isPaywalled == true
           {
@@ -909,7 +919,7 @@ extension SettingsContentView {
       desktopGrandfatherUntil: subscription.desktopGrandfatherUntil
     )
 
-    if subscription.subscription.plan != .basic,
+    if subscription.subscription.plan.hasPaidCapability,
       subscription.subscription.status == .active,
       AppState.current?.isPaywalled == true
     {
@@ -1076,7 +1086,7 @@ extension SettingsContentView {
           let matchedPrice =
             expectedPriceId == nil || subscription.subscription.currentPriceId == expectedPriceId
           let hasPaidPlan =
-            subscription.subscription.plan != .basic && subscription.subscription.status == .active
+            subscription.subscription.plan.hasPaidCapability && subscription.subscription.status == .active
 
           if matchedPrice && hasPaidPlan {
             await MainActor.run {

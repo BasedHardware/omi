@@ -1,0 +1,8 @@
+{
+  "version": "0.12.249",
+  "date": "2026-08-31",
+  "changes": [
+    "Connecting Calendar now signs you in with Google instead of relying on a Chrome-family browser session, so it works on Safari and Firefox too — and when a connection does fail, Omi tells you what went wrong instead of just \"try again\"",
+    "Stopped ambient proactive notifications when you have no standing watches"
+  ]
+}

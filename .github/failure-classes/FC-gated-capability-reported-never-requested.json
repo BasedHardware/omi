@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-gated-capability-reported-never-requested",
+  "violated_contract": "A feature gated on a platform permission must ask for that permission. Reporting the missing grant is not a substitute for requesting it, and a remedy that sends the user to a settings pane the process has never asked to appear in cannot grant it. Context for Claude's advertised way in is ⌘ + ⌘, which can only be watched for via a global flagsChanged monitor, which macOS gates behind Accessibility. The shortcut layer knew the grant was missing — it declined to install the monitors and readiness(for:) answered .needsAccessibility — and every surface built on that knowledge was a description: a note under a Settings row, and a button opening Privacy & Security ▸ Accessibility. macOS lists an application in that pane only once it has called AXIsProcessTrustedWithOptions, so the app was absent from the very list its own button opened, and the user's only route was the pane's `+` button and a hunt for the bundle. The product's headline gesture did nothing, honestly, forever.",
+  "canonical_prevention": "Ask at the boundary that discovers the gap, not at a surface the user has to go looking for. Wherever a capability check decides that a feature cannot function, that same branch either raises the platform's own request or records why it may not — never merely records the state for a pane to render. Bound the ask by the three things that make it not a nag: only while the binding that needs the grant is actually in force (a user who rebound to a key equivalent needs no grant at all), only after first-run has finished so it cannot race the onboarding flow's own choreography, and at most once per launch. Per launch and never persisted: platform grants are dropped when the code signature changes, so a flag written once would silence the ask exactly when an update has just broken the feature. Keep the honest report as well — a user who dismisses the alert still needs the control to admit it does not work.",
+  "canonical_prevention_artifact": [
+    "desktop/context-for-claude/Tests/ContextAppTests/ShortcutsTests.swift"
+  ],
+  "evidence_prs": [
+    11641
+  ],
+  "scope_hints": [
+    "desktop/context-for-claude/Sources/ContextApp/Shortcuts/GlobalShortcuts.swift",
+    "desktop/context-for-claude/Sources/ContextApp/Capture/AXElement.swift",
+    "desktop/context-for-claude/Sources/ContextApp/Permissions.swift"
+  ],
+  "status": "open"
+}

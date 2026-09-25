@@ -74,7 +74,8 @@ class SettingsSyncManager {
           v,
           overLocalPrompt: TaskAssistantSettings.shared.analysisPrompt,
           assistantName: "task",
-          maximumLength: TaskAssistantSettings.maximumSyncedAnalysisPromptLength
+          maximumLength: TaskAssistantSettings.maximumSyncedAnalysisPromptLength,
+          shippedDefault: TaskAssistantSettings.defaultAnalysisPrompt
         ) { TaskAssistantSettings.shared.analysisPrompt = $0 }
       }
       if let v = task.extractionInterval { TaskAssistantSettings.shared.extractionInterval = v }
@@ -92,7 +93,8 @@ class SettingsSyncManager {
           v,
           overLocalPrompt: InsightAssistantSettings.shared.analysisPrompt,
           assistantName: "insight",
-          maximumLength: 10_000
+          maximumLength: 10_000,
+          shippedDefault: InsightAssistantSettings.defaultAnalysisPrompt
         ) { InsightAssistantSettings.shared.analysisPrompt = $0 }
       }
       if let v = insight.extractionInterval { InsightAssistantSettings.shared.extractionInterval = v }
@@ -109,7 +111,8 @@ class SettingsSyncManager {
           v,
           overLocalPrompt: MemoryAssistantSettings.shared.analysisPrompt,
           assistantName: "memory",
-          maximumLength: 10_000
+          maximumLength: 10_000,
+          shippedDefault: MemoryAssistantSettings.defaultAnalysisPrompt
         ) { MemoryAssistantSettings.shared.analysisPrompt = $0 }
       }
       if let v = memory.extractionInterval { MemoryAssistantSettings.shared.extractionInterval = v }
@@ -146,7 +149,8 @@ class SettingsSyncManager {
       analysisPrompt: Self.promptForSync(
         TaskAssistantSettings.shared.analysisPrompt,
         assistantName: "task",
-        maximumLength: TaskAssistantSettings.maximumSyncedAnalysisPromptLength),
+        maximumLength: TaskAssistantSettings.maximumSyncedAnalysisPromptLength,
+        shippedDefault: TaskAssistantSettings.defaultAnalysisPrompt),
       extractionInterval: TaskAssistantSettings.shared.extractionInterval,
       minConfidence: TaskAssistantSettings.shared.minConfidence,
       notificationsEnabled: TaskAssistantSettings.shared.notificationsEnabled,
@@ -159,7 +163,8 @@ class SettingsSyncManager {
       analysisPrompt: Self.promptForSync(
         InsightAssistantSettings.shared.analysisPrompt,
         assistantName: "insight",
-        maximumLength: 10_000),
+        maximumLength: 10_000,
+        shippedDefault: InsightAssistantSettings.defaultAnalysisPrompt),
       extractionInterval: InsightAssistantSettings.shared.extractionInterval,
       minConfidence: InsightAssistantSettings.shared.minConfidence,
       notificationsEnabled: InsightAssistantSettings.shared.notificationsEnabled,
@@ -171,7 +176,8 @@ class SettingsSyncManager {
       analysisPrompt: Self.promptForSync(
         MemoryAssistantSettings.shared.analysisPrompt,
         assistantName: "memory",
-        maximumLength: 10_000),
+        maximumLength: 10_000,
+        shippedDefault: MemoryAssistantSettings.defaultAnalysisPrompt),
       extractionInterval: MemoryAssistantSettings.shared.extractionInterval,
       minConfidence: MemoryAssistantSettings.shared.minConfidence,
       notificationsEnabled: MemoryAssistantSettings.shared.notificationsEnabled,
@@ -198,13 +204,25 @@ class SettingsSyncManager {
   static func promptForSync(
     _ prompt: String,
     assistantName: String,
-    maximumLength: Int
+    maximumLength: Int,
+    shippedDefault: String
   ) -> String? {
     // Pydantic validates Python string length in Unicode code points. Swift's
     // unicodeScalars is the corresponding count; String.count measures extended
     // grapheme clusters and can undercount emoji and composed scripts.
     let length = prompt.unicodeScalars.count
     guard length <= maximumLength else {
+      if isShippedDefault(prompt, shippedDefault: shippedDefault, assistantName: assistantName) {
+        // Every install already ships this text, so an oversized default is not unsynced
+        // user data — a later pull has nothing of the user's to destroy. Claiming
+        // ownership here is what made `applyRemotePrompt` refuse the account's real
+        // prompt forever on any Mac still sitting on the default (#11481).
+        UserDefaults.standard.removeObject(forKey: oversizedPromptOwnerKey(assistantName))
+        log(
+          "SettingsSyncManager: omitted oversized shipped \(assistantName) default from sync "
+            + "(\(length) Unicode scalars; max \(maximumLength))")
+        return nil
+      }
       if let owner = currentOwnerID {
         UserDefaults.standard.set(owner, forKey: oversizedPromptOwnerKey(assistantName))
       }
@@ -217,26 +235,64 @@ class SettingsSyncManager {
     return prompt
   }
 
-  /// Record prompt ownership at the local write boundary so an oversized value is
-  /// protected even before the next network sync attempt.
-  static func recordLocalPromptOwner(_ assistantName: String) {
+  /// Record prompt provenance and ownership at the local write boundary, so an oversized
+  /// user-authored value is protected even before the next network sync attempt.
+  ///
+  /// The provenance marker is what keeps a *previously* shipped default recognisable after
+  /// the app ships a new one. By then the persisted text no longer matches the current
+  /// default, but this recorded the answer while it still did.
+  static func recordLocalPromptOwner(_ assistantName: String, isShippedDefault: Bool) {
+    UserDefaults.standard.set(
+      isShippedDefault, forKey: storedPromptIsShippedDefaultKey(assistantName))
+    guard !isShippedDefault else {
+      // Writing a shipped default releases any claim the previous value held: there is no
+      // longer unsynced user text here for a pull to destroy.
+      UserDefaults.standard.removeObject(forKey: oversizedPromptOwnerKey(assistantName))
+      return
+    }
     guard let owner = currentOwnerID else { return }
     UserDefaults.standard.set(owner, forKey: oversizedPromptOwnerKey(assistantName))
   }
 
-  /// An oversized local prompt is unsynced user data. Preserve it across pulls until
-  /// the user edits it back within the contract; otherwise a later server hydration
-  /// would destroy the exact value deliberately omitted from PATCH.
+  /// Whether a local prompt is a shipped default rather than something the user authored.
+  ///
+  /// Text comparison alone only recognises the *current* default, and the reset path
+  /// persists the default it saw. After the app ships a new one, that stored text stops
+  /// matching and would be misread as user-authored — claiming ownership and blocking the
+  /// account's prompt all over again. The recorded marker covers exactly that window.
+  ///
+  /// An absent marker means a build older than this one wrote the value, so the text
+  /// comparison stands alone and behaviour is unchanged for it.
+  private static func isShippedDefault(
+    _ prompt: String,
+    shippedDefault: String,
+    assistantName: String
+  ) -> Bool {
+    if prompt == shippedDefault { return true }
+    return UserDefaults.standard.bool(forKey: storedPromptIsShippedDefaultKey(assistantName))
+  }
+
+  /// An oversized local prompt that the user wrote is unsynced data. Preserve it across
+  /// pulls until they edit it back within the contract; otherwise a later server
+  /// hydration would destroy the exact value deliberately omitted from PATCH.
+  ///
+  /// The shipped default is excluded: it is text every install already has, so there is
+  /// nothing unsynced to lose, and a default that happens to exceed the bound must not
+  /// veto the account's real prompt. That exclusion is what a fresh install, and a Mac
+  /// that has just reset to the default, both depend on to receive it (#11481).
   private func applyRemotePrompt(
     _ remotePrompt: String,
     overLocalPrompt localPrompt: String,
     assistantName: String,
     maximumLength: Int,
+    shippedDefault: String,
     apply: (String) -> Void
   ) {
     let localLength = localPrompt.unicodeScalars.count
     let recordedOwner = UserDefaults.standard.string(forKey: Self.oversizedPromptOwnerKey(assistantName))
-    if localLength > maximumLength,
+    if !Self.isShippedDefault(
+      localPrompt, shippedDefault: shippedDefault, assistantName: assistantName),
+      localLength > maximumLength,
       let currentOwner = Self.currentOwnerID,
       recordedOwner == currentOwner
     {
@@ -259,5 +315,9 @@ class SettingsSyncManager {
 
   private static func oversizedPromptOwnerKey(_ assistantName: String) -> String {
     "assistantPrompt.unsyncedOversizedOwner.\(assistantName)"
+  }
+
+  private static func storedPromptIsShippedDefaultKey(_ assistantName: String) -> String {
+    "assistantPrompt.storedIsShippedDefault.\(assistantName)"
   }
 }

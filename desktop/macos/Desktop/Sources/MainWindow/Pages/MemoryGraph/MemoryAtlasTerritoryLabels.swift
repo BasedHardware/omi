@@ -291,6 +291,17 @@ enum MemoryAtlasNeighbourhoodLabels {
     return departure > minimumZoom ? departure : nil
   }
 
+  /// Zoom-out floor after Escape (or inspector close) has sent the camera
+  /// home while the neighbourhood is still the next layer on the stack.
+  ///
+  /// The original threshold sits above zoom 1, so a selection-clear that
+  /// resets the viewport would otherwise also end the island. Rebinding from
+  /// the overview camera keeps that layer for the next Escape; a later
+  /// pinch below this floor can still leave.
+  static func overviewDepartureZoom(neighbourhoodZoom: CGFloat, minimumZoom: CGFloat) -> CGFloat? {
+    departureZoom(enteredAt: 1, neighbourhoodZoom: neighbourhoodZoom, minimumZoom: minimumZoom)
+  }
+
   /// Places on the island where its whole name would sit on land, nearest the
   /// middle first.
   ///

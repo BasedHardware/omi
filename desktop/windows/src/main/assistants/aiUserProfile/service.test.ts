@@ -83,9 +83,9 @@ describe('generateProfile (orchestrator core)', () => {
     expect(record.id).toBe(42)
     // The failed source was named as a degraded (not silent) outcome.
     expect(warn).toHaveBeenCalledWith(
-      '[ai-profile] fallback',
+      '[fallback]',
       expect.objectContaining({
-        component: 'ai_profile',
+        component: 'backend_fetch',
         outcome: 'degraded',
         reason: 'source_fetch_failed',
         source: 'memories',
@@ -115,9 +115,9 @@ describe('generateProfile (orchestrator core)', () => {
     await flush()
     // The sync failure surfaced as a degraded (not silent) outcome.
     expect(warn).toHaveBeenCalledWith(
-      '[ai-profile] fallback',
+      '[fallback]',
       expect.objectContaining({
-        component: 'ai_profile',
+        component: 'sync_dispatch',
         outcome: 'degraded',
         reason: 'backend_sync_failed',
         op: 'generate'

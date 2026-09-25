@@ -19,6 +19,9 @@ extension SettingsContentView {
             .toggleStyle(OmiToggleStyle())
             .labelsHidden()
             .onChange(of: showAskOmiBar) { _, newValue in
+              // A change that merely mirrors the preference (arriving via
+              // `.floatingBarEnabledDidChange`) is already applied; only a user flip acts.
+              guard newValue != FloatingControlBarManager.shared.isEnabled else { return }
               if newValue {
                 FloatingControlBarManager.shared.show()
               } else {
@@ -28,65 +31,68 @@ extension SettingsContentView {
         }
       }
 
-      settingsCard(settingId: "floatingbar.notificationpreviews") {
-        HStack(spacing: OmiSpacing.lg) {
-          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-            Text("Notification Previews")
-              .scaledFont(size: OmiType.subheading, weight: .semibold)
-              .foregroundColor(Ink.primary)
-            Text(
-              "Show assistant notifications under the Floating Bar. When off, notifications use macOS banners instead."
-            )
-            .scaledFont(size: OmiType.body)
-            .foregroundColor(Ink.secondary)
-          }
-          Spacer()
-          Toggle("", isOn: $shortcutSettings.floatingBarNotificationPreviewsEnabled)
-            .toggleStyle(OmiToggleStyle())
-        }
-      }
+      // HIDDEN DELIBERATELY (Nik, 2026-08-25): Notification Previews, Background Style, and
+      // Draggable Floating Bar are intentionally not rendered (their stored settings still
+      // apply). Product direction, not dead code — do not re-wire without asking Nik.
+      // settingsCard(settingId: "floatingbar.notificationpreviews") {
+      // HStack(spacing: OmiSpacing.lg) {
+      // VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+      // Text("Notification Previews")
+      // .scaledFont(size: OmiType.subheading, weight: .semibold)
+      // .foregroundColor(Ink.primary)
+      // Text(
+      // "Show assistant notifications under the Floating Bar. When off, notifications use macOS banners instead."
+      // )
+      // .scaledFont(size: OmiType.body)
+      // .foregroundColor(Ink.secondary)
+      // }
+      // Spacer()
+      // Toggle("", isOn: $shortcutSettings.floatingBarNotificationPreviewsEnabled)
+      // .toggleStyle(OmiToggleStyle())
+      // }
+      // }
 
-      settingsCard(settingId: "floatingbar.background") {
-        VStack(alignment: .leading, spacing: OmiSpacing.lg) {
-          Text("Background Style")
-            .scaledFont(size: OmiType.subheading, weight: .semibold)
-            .foregroundColor(Ink.primary)
+      // settingsCard(settingId: "floatingbar.background") {
+      // VStack(alignment: .leading, spacing: OmiSpacing.lg) {
+      // Text("Background Style")
+      // .scaledFont(size: OmiType.subheading, weight: .semibold)
+      // .foregroundColor(Ink.primary)
+      //
+      // HStack(spacing: OmiSpacing.lg) {
+      // Text("Transparent")
+      // .scaledFont(size: OmiType.body, weight: shortcutSettings.solidBackground ? .regular : .semibold)
+      // .foregroundColor(
+      // shortcutSettings.solidBackground ? Ink.secondary : Ink.primary)
+      //
+      // Toggle("", isOn: $shortcutSettings.solidBackground)
+      // .toggleStyle(OmiToggleStyle())
+      // .labelsHidden()
+      //
+      // Text("Solid Dark")
+      // .scaledFont(size: OmiType.body, weight: shortcutSettings.solidBackground ? .semibold : .regular)
+      // .foregroundColor(
+      // shortcutSettings.solidBackground ? Ink.primary : Ink.secondary)
+      //
+      // Spacer()
+      // }
+      // }
+      // }
 
-          HStack(spacing: OmiSpacing.lg) {
-            Text("Transparent")
-              .scaledFont(size: OmiType.body, weight: shortcutSettings.solidBackground ? .regular : .semibold)
-              .foregroundColor(
-                shortcutSettings.solidBackground ? Ink.secondary : Ink.primary)
-
-            Toggle("", isOn: $shortcutSettings.solidBackground)
-              .toggleStyle(OmiToggleStyle())
-              .labelsHidden()
-
-            Text("Solid Dark")
-              .scaledFont(size: OmiType.body, weight: shortcutSettings.solidBackground ? .semibold : .regular)
-              .foregroundColor(
-                shortcutSettings.solidBackground ? Ink.primary : Ink.secondary)
-
-            Spacer()
-          }
-        }
-      }
-
-      settingsCard(settingId: "floatingbar.draggable") {
-        HStack(spacing: OmiSpacing.lg) {
-          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-            Text("Draggable Floating Bar")
-              .scaledFont(size: OmiType.subheading, weight: .semibold)
-              .foregroundColor(Ink.primary)
-            Text("Allow repositioning the floating bar by dragging it.")
-              .scaledFont(size: OmiType.body)
-              .foregroundColor(Ink.secondary)
-          }
-          Spacer()
-          Toggle("", isOn: $shortcutSettings.draggableBarEnabled)
-            .toggleStyle(OmiToggleStyle())
-        }
-      }
+      // settingsCard(settingId: "floatingbar.draggable") {
+      // HStack(spacing: OmiSpacing.lg) {
+      // VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+      // Text("Draggable Floating Bar")
+      // .scaledFont(size: OmiType.subheading, weight: .semibold)
+      // .foregroundColor(Ink.primary)
+      // Text("Allow repositioning the floating bar by dragging it.")
+      // .scaledFont(size: OmiType.body)
+      // .foregroundColor(Ink.secondary)
+      // }
+      // Spacer()
+      // Toggle("", isOn: $shortcutSettings.draggableBarEnabled)
+      // .toggleStyle(OmiToggleStyle())
+      // }
+      // }
 
       settingsCard(settingId: "floatingbar.typedvoiceanswers") {
         HStack(spacing: OmiSpacing.lg) {
@@ -273,7 +279,7 @@ extension SettingsContentView {
 
             Spacer()
 
-            Button("Browse...") {
+            Button("Browse…") {
               let panel = NSOpenPanel()
               panel.canChooseFiles = false
               panel.canChooseDirectories = true
@@ -476,18 +482,13 @@ extension SettingsContentView {
                 .scaledFont(size: OmiType.caption)
                 .foregroundColor(Ink.secondary)
 
-              TextField("Search skills...", text: $skillSearchQuery)
+              TextField("Search skills…", text: $skillSearchQuery)
                 .textFieldStyle(.plain)
                 .scaledFont(size: OmiType.body)
                 .foregroundColor(Ink.primary)
 
               if !skillSearchQuery.isEmpty {
-                Button(action: { skillSearchQuery = "" }) {
-                  Image(systemName: "xmark.circle.fill")
-                    .scaledFont(size: OmiType.caption)
-                    .foregroundColor(Ink.secondary)
-                }
-                .buttonStyle(.plain)
+                ClearFieldButton { skillSearchQuery = "" }
               }
             }
             .padding(OmiSpacing.sm)
@@ -666,13 +667,13 @@ extension SettingsContentView {
                   UserDefaults.standard.set("", forKey: "playwrightExtensionToken")
                 }) {
                   HStack(spacing: OmiSpacing.xxs) {
-                    Image(systemName: "xmark")
+                    Image(systemName: "arrow.counterclockwise")
                       .scaledFont(size: OmiType.caption)
                     Text("Reset")
                       .scaledFont(size: OmiType.caption)
                   }
                 }
-                .buttonStyle(OmiButtonStyle(.primary, size: .compact))
+                .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
               }
             }
           }
@@ -754,12 +755,7 @@ extension SettingsContentView {
 
         Spacer()
 
-        Button(action: { showFileViewer = false }) {
-          Image(systemName: "xmark.circle.fill")
-            .scaledFont(size: OmiType.heading)
-            .foregroundColor(Ink.secondary)
-        }
-        .buttonStyle(.plain)
+        DismissButton(action: { showFileViewer = false })
       }
       .padding(OmiSpacing.lg)
 

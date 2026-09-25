@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "id": "FC-content-derived-identity-retired-by-deletion",
+  "violated_contract": "When a durable identity is derived from user content and its lifecycle state is monotonic, a later authorized submission of the same content must mint a fresh identity. Reusing the identity a deletion retired binds the new write to a tombstone that no retry can ever satisfy, so the user-facing operation fails permanently for that exact text.",
+  "canonical_prevention": "Resolve the derived identity against its stored lifecycle state on the write path and reissue it when the stored state is not active, keeping the retired identity retired; prove it with a write -> delete -> rewrite test through the production write path.",
+  "canonical_prevention_artifact": [
+    "backend/utils/memory/canonical_memory_adapter.py"
+  ],
+  "evidence_prs": [
+    11813
+  ],
+  "scope_hints": [
+    "backend/utils/memory/**",
+    "backend/database/memory_apply_store.py"
+  ],
+  "status": "open"
+}

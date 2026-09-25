@@ -1,0 +1,7 @@
+{
+  "version": "0.12.259",
+  "date": "2026-09-02",
+  "changes": [
+    "Voice questions about what is on screen now always see the current screen: the frame captured when you press the key is attached to every turn, and think-deeper answers read its text too"
+  ]
+}

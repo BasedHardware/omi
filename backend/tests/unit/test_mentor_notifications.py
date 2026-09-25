@@ -81,6 +81,7 @@ mock_is_trial_paywalled = MagicMock(return_value=False)
 mock_get_freq = MagicMock(return_value=3)
 mock_get_dev_keys = MagicMock(return_value=[])
 mock_send_notification = MagicMock()
+mock_dispatch_notification = MagicMock()
 
 # redis_mod / mem_mod aggregate the redis/mem-backed mocks. Each attribute is the
 # very mock object patched at the consumption site, so legacy test lines such as
@@ -130,6 +131,8 @@ def _apply_fakes(monkeypatch):
 
     # app_integrations local bindings (from X import Y).
     monkeypatch.setattr(app_int, 'get_user_goals', mock_get_user_goals)
+    # Date grounding reads a user timezone in production; this lane is hermetic.
+    monkeypatch.setattr(app_int, 'current_date_for_uid', lambda uid: '2026-09-21')
     monkeypatch.setattr(app_int, 'get_prompt_memories', mock_get_prompt_memories)
     monkeypatch.setattr(app_int, 'get_app_messages', mock_get_app_messages)
     monkeypatch.setattr(app_int, 'get_user_language_preference', mock_get_user_language)
@@ -140,10 +143,10 @@ def _apply_fakes(monkeypatch):
     monkeypatch.setattr(app_int, 'get_available_apps', mock_get_available_apps)
     monkeypatch.setattr(app_int, 'is_trial_paywalled', mock_is_trial_paywalled)
     monkeypatch.setattr(app_int, 'send_notification', mock_send_notification)
+    monkeypatch.setattr(app_int, 'dispatch_notification', mock_dispatch_notification)
     monkeypatch.setattr(app_int, 'incr_daily_notification_count', redis_mod.incr_daily_notification_count)
     monkeypatch.setattr(app_int, 'get_daily_notification_count', redis_mod.get_daily_notification_count)
     monkeypatch.setattr(app_int, 'delete_app_cache_by_id', redis_mod.delete_app_cache_by_id)
-    monkeypatch.setattr(app_int, 'NotificationMessage', MagicMock())
     monkeypatch.setattr(app_int, 'Conversation', MagicMock())
     monkeypatch.setattr(app_int, 'ConversationSource', MagicMock())
     monkeypatch.setattr(app_int, 'Message', MagicMock())
@@ -177,6 +180,7 @@ def _apply_fakes(monkeypatch):
 def _setup_app_integrations_stubs():
     """Reset the app_integrations-runtime shared mocks to a clean default state."""
     mock_send_notification.reset_mock()
+    mock_dispatch_notification.reset_mock()
     mock_get_dev_keys.reset_mock()
     mock_get_dev_keys.return_value = []
     mock_get_freq.return_value = 3
@@ -186,7 +190,7 @@ def _setup_app_integrations_stubs():
     redis_mod.incr_daily_notification_count.reset_mock()
     mem_mod.get_proactive_noti_sent_at.return_value = None
     mem_mod.set_proactive_noti_sent_at.reset_mock()
-    return mock_send_notification
+    return mock_dispatch_notification
 
 
 def _make_segments(count: int) -> list:
@@ -688,6 +692,99 @@ def test_process_mentor_proactive_notification_sends():
     mock_send.assert_called()
 
 
+def _pass_all_three_steps():
+    """Configure mock_llm_mini so gate, generate and critic all approve."""
+    results = [
+        RelevanceResult(
+            is_relevant=True,
+            relevance_score=0.85,
+            reasoning="User is skipping gym despite their 3x/week goal.",
+            context_summary="User discussing skipping exercise.",
+        ),
+        NotificationDraft(
+            notification_text="You've been skipping gym — remember your 3x/week goal!",
+            reasoning="User's goal is 'Exercise 3x per week' and they mentioned skipping today.",
+            confidence=0.82,
+            category="goal_connection",
+        ),
+        ValidationResult(approved=True, reasoning="Concrete, tied to a goal and the current action."),
+    ]
+    call_count = [0]
+
+    def side_effect_structured_output(model_class):
+        parser = MagicMock()
+        parser.invoke = MagicMock(return_value=results[min(call_count[0], len(results) - 1)])
+        call_count[0] += 1
+        return parser
+
+    mock_llm_mini.with_structured_output = MagicMock(side_effect=side_effect_structured_output)
+
+
+def test_mentor_past_context_survives_embedding_failure():
+    """A failing embedding provider must not also drop the recent-conversations context.
+
+    Semantic search and recent-by-time are separate sources: the first needs an embedding
+    provider and a vector store, the second needs neither. When they shared one try/except,
+    one embedding error (missing key, quota, outage) silently stripped both.
+    """
+    _setup_app_integrations_stubs()
+    _pass_all_three_steps()
+
+    mock_generate_embedding.side_effect = RuntimeError("no embedding provider configured")
+    mock_get_convos.reset_mock()
+    mock_get_convos.return_value = [{'id': 'conv-1', 'is_locked': False}]
+    mock_convos_to_string.reset_mock()
+    mock_convos_to_string.return_value = 'yesterday: user talked about the gym'
+
+    try:
+        result = app_int._process_mentor_proactive_notification(
+            "uid_embed_fail", [{"text": "I'll skip the gym today", "is_user": True}]
+        )
+    finally:
+        mock_generate_embedding.side_effect = None
+        mock_get_convos.return_value = []
+        mock_convos_to_string.return_value = ''
+
+    assert result is not None
+    # The recent-conversations fetch ran and its result was rendered for the prompt.
+    mock_get_convos.assert_called()
+    mock_convos_to_string.assert_called()
+
+
+def test_mentor_vector_context_survives_recent_conversations_failure():
+    """The mirror case: a failing recent-by-time fetch must not discard the vector hits.
+
+    The rendering step runs after both sources, so under the shared try/except a
+    conversations-store error thrown by the second source also threw away the
+    semantically relevant conversations the first source had already collected.
+    """
+    _setup_app_integrations_stubs()
+    _pass_all_three_steps()
+
+    mock_query_vectors.return_value = ['conv-vector-1']
+    mock_get_convos_by_id.return_value = [{'id': 'conv-vector-1', 'is_locked': False}]
+    mock_get_convos.reset_mock()
+    mock_get_convos.side_effect = RuntimeError("conversations store unavailable")
+    mock_convos_to_string.reset_mock()
+    mock_convos_to_string.return_value = 'last week: user set a 3x/week gym goal'
+
+    try:
+        result = app_int._process_mentor_proactive_notification(
+            "uid_convos_fail", [{"text": "I'll skip the gym today", "is_user": True}]
+        )
+    finally:
+        mock_query_vectors.return_value = []
+        mock_get_convos_by_id.return_value = []
+        mock_get_convos.side_effect = None
+        mock_convos_to_string.return_value = ''
+
+    assert result is not None
+    # The vector-search hit was still rendered into the prompt context.
+    mock_deserialize_convos.assert_called()
+    assert mock_deserialize_convos.call_args[0][0] == [{'id': 'conv-vector-1', 'is_locked': False}]
+    mock_convos_to_string.assert_called()
+
+
 def test_process_mentor_proactive_notification_gate_rejects():
     """_process_mentor_proactive_notification should return None when gate rejects."""
     _setup_app_integrations_stubs()
@@ -1056,3 +1153,80 @@ def test_validation_result_model():
         reasoning="This would genuinely help the user.",
     )
     assert result.approved is True
+
+
+def _prompt_text(invoked):
+    """Flatten what the builder handed the LLM into the text the model actually reads.
+
+    The gate now sends its prompt as two content parts of one message so the stable
+    half can end on a cache breakpoint (see test_mentor_gate_prompt_cache); the other
+    builders still send a plain string. Both render to the same bytes.
+    """
+    if isinstance(invoked, str):
+        return invoked
+    parts = []
+    for message in invoked:
+        content = message.content
+        if isinstance(content, str):
+            parts.append(content)
+        else:
+            parts.extend(part["text"] for part in content)
+    return "".join(parts)
+
+
+def test_pipeline_anchors_prompts_to_user_timezone_date(monkeypatch):
+    """All three pipeline prompts must carry the user's timezone date, not the UTC default.
+
+    SCA-358 sibling fix: the production caller never passed ``current_date``, so the
+    gate/generate/critic prompts silently fell back to ``current_date_in_tz(None)`` —
+    UTC — wrong by up to a day for non-UTC users and desyncing the never-say-the-year-
+    is-wrong guard near local midnight. The sentinel date proves the plumbing
+    end-to-end: a caller that dropped the parameter would render the runner's real
+    UTC date instead of 2031-02-03.
+    """
+    monkeypatch.setattr(app_int, 'current_date_for_uid', lambda uid: '2031-02-03')
+    _setup_app_integrations_stubs()
+
+    prompts: list = []
+    results = [
+        RelevanceResult(
+            is_relevant=True,
+            relevance_score=0.85,
+            reasoning="User is skipping gym despite their 3x/week goal.",
+            context_summary="User discussing skipping exercise.",
+        ),
+        NotificationDraft(
+            notification_text="You've been skipping gym — remember your 3x/week goal!",
+            reasoning="User's goal is 'Exercise 3x per week' and they mentioned skipping today.",
+            confidence=0.82,
+            category="goal_connection",
+        ),
+        ValidationResult(approved=True, reasoning="Concrete, tied to a goal and the current action."),
+    ]
+    call_count = [0]
+
+    def side_effect_structured_output(model_class):
+        parser = MagicMock()
+        idx = min(call_count[0], len(results) - 1)
+        call_count[0] += 1
+
+        def _invoke(prompt, *args, **kwargs):
+            prompts.append(prompt)
+            return results[idx]
+
+        parser.invoke = MagicMock(side_effect=_invoke)
+        return parser
+
+    mock_llm_mini.with_structured_output = MagicMock(side_effect=side_effect_structured_output)
+
+    messages = [
+        {"text": "I'll skip the gym today", "is_user": True},
+        {"text": "You sure?", "is_user": False},
+    ]
+
+    result = app_int._process_mentor_proactive_notification("test_uid_tz_date", messages)
+
+    assert result is not None
+    assert len(prompts) >= 3
+    for prompt in prompts:
+        assert "2031-02-03" in _prompt_text(prompt), "pipeline prompt lost the user-timezone date anchor"

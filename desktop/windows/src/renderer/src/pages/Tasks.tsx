@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
 import { ListChecks, Check, RefreshCw, Plus, Trash2, Calendar, X, Loader2 } from 'lucide-react'
 import { omiApi } from '../lib/apiClient'
 import { fetchAllActionItems } from '../lib/actionItems'
@@ -29,6 +29,9 @@ function apiError(e: unknown): string {
     (e as Error).message
   )
 }
+
+/** Must stay in sync with the `tasks` entry in `routes/manifest.ts`. */
+const TASKS_PATH = '/tasks'
 
 // Best-effort conversation title/emoji map for the per-task source links. A failed
 // conversations call still leaves the map empty (tasks come from the local store).
@@ -97,6 +100,10 @@ function moveSelection(
 }
 
 export function Tasks(): React.JSX.Element {
+  const { pathname } = useLocation()
+  // This panel stays mounted while the user is on another tab, so "mounted" is not
+  // "on screen". Same signal the Conversations panel gates its fetches on.
+  const tasksPanelIsActive = pathname === TASKS_PATH
   const [items, setItems] = useState<ActionItemRecord[]>(cache.items ?? [])
   const [convs, setConvs] = useState<Record<string, ConvMeta>>(cache.convs)
   const [loading, setLoading] = useState(!cache.loaded)
@@ -136,6 +143,10 @@ export function Tasks(): React.JSX.Element {
   }, [])
 
   const readConvs = useCallback(async (): Promise<void> => {
+    // `cache.convs` was written on every load and never consulted, so this re-paid a
+    // 200-conversation fetch for a label map it already had. Once per session is what
+    // the old mount-only call effectively gave us, and this keeps that.
+    if (Object.keys(cache.convs).length > 0) return
     try {
       const map = await fetchConvMeta()
       cache.convs = map
@@ -145,15 +156,28 @@ export function Tasks(): React.JSX.Element {
     }
   }, [])
 
-  // Cold load: local rows (instant) + the conversation title map. Both loaders do
-  // their setState after an await, so nest them in a callback rather than invoking
-  // them straight from the effect body (their state updates are deferred, not sync).
+  // Cold load of the local rows. Both loaders do their setState after an await, so
+  // nest them in a callback rather than invoking them straight from the effect body
+  // (their state updates are deferred, not sync). Kept in its own effect, keyed only
+  // on `readTasks`, so it stays a once-per-mount read: folding the route into these
+  // deps would re-run it on every navigation in and out of the tab.
   useEffect(() => {
     void (async () => {
       await readTasks()
+    })()
+  }, [readTasks])
+
+  // The conversation title map waits until this panel is actually on screen. MainViews
+  // mounts every panel 1.8s after launch and never unmounts them, so an unconditional
+  // call fetched 200 conversations at every launch to label source links on a page the
+  // user may never open. `readConvs` short-circuits on the populated cache, so
+  // revisiting the tab costs nothing.
+  useEffect(() => {
+    if (!tasksPanelIsActive) return
+    void (async () => {
       await readConvs()
     })()
-  }, [readTasks, readConvs])
+  }, [readConvs, tasksPanelIsActive])
 
   // Local-first freshness: main fires `onTasksChanged` on every optimistic write
   // and whenever a background sync lands, so a single subscription replaces the old

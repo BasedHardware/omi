@@ -54,7 +54,58 @@ def test_the_retraction_call_is_inside_the_guard():
     # gate the call would satisfy the ordering check above but fix nothing.
     body = _delete_conversation_source()
     guarded = re.search(
-        r"if not retraction_can_be_skipped\([^)]*\):\s*\n\s+memory_service\.retract_conversation_memories\(",
+        r"if not retraction_can_be_skipped\([^)]*\):\s*\n"
+        r"\s+try:\s*\n\s+memory_service\.retract_conversation_memories\(",
         body,
     )
     assert guarded, "retraction must be inside the `if not retraction_can_be_skipped(...)` branch"
+
+
+def test_exhausted_replacement_conflict_maps_to_retryable_503_before_any_delete():
+    # #11726: concurrent same-uid deletes raced the account-global memory
+    # control CAS into an unhandled RuntimeError → 500. The exhausted conflict
+    # is retryable (retraction is idempotent), and nothing has been deleted
+    # yet at that point, so the route must answer 503 while the conversation
+    # and its live memories stay intact.
+    body = _delete_conversation_source()
+    mapped = re.search(
+        r"try:\s*\n\s+memory_service\.retract_conversation_memories\([^)]*\)\s*\n"
+        r"\s+except ConversationReplacementConflictError[^:]*:\s*\n"
+        r"((?:\s+.*\n)*?)\s+raise HTTPException\(\s*\n\s+status_code=503,",
+        body,
+    )
+    assert mapped, "the retract call must map ConversationReplacementConflictError to a 503"
+    assert (
+        "delete_conversation_and_frame_evidence" in body.split("except ConversationReplacementConflictError")[1]
+    ), "conversation and frame-evidence deletion must stay in the post-retract success path"
+
+
+def test_gate_contention_maps_to_409_with_retry_after():
+    """Static checker: importing routers.conversations is too heavy for unit isolation.
+
+    Concurrent account-gated deletes used to escape as 500. The retract path
+    must map DestructiveOperationInProgress to the shared 409 helper — same
+    structural-regex approach as the 503 test above, so a regression that maps
+    it to anything else (500/503) or moves the mapping to an unrelated handler
+    fails this guard.
+    """
+    body = _delete_conversation_source()
+    # Import-isolated catch: the router catches RuntimeError and name-checks for
+    # DestructiveOperationInProgress (see the except block), because importing
+    # the real exception class breaks stubbed router imports.
+    mapped = re.search(
+        r"except RuntimeError as error:\s*\n"
+        r"\s+#.*\n"
+        r'\s+if type\(error\)\.__name__ != "DestructiveOperationInProgress":\s*\n'
+        r"\s+raise\s*\n"
+        r"\s+from utils\.other\.account_gate_http import account_gate_busy_http_exception\s*\n"
+        r"\s+raise account_gate_busy_http_exception\(\) from error",
+        body,
+    )
+    assert mapped, (
+        "the retract path must catch the gate-contention RuntimeError and raise "
+        "account_gate_busy_http_exception (409 + Retry-After), not let it escape as 500"
+    )
+    assert (
+        "delete_conversation_screen_frames" in body[mapped.end() :]
+    ), "screen-frame deletion must stay after the gate-contention mapping in the delete flow"

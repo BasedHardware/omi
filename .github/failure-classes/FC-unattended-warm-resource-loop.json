@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "id": "FC-unattended-warm-resource-loop",
+  "violated_contract": "A warm resource kept open purely to hide first-use latency (a pre-warmed provider session, connection, or cache) exists for the user's presence; its refresh loop must be gated on evidence the user can still benefit. Rebuilding it unconditionally after every provider-side idle teardown turns a latency optimization into an unbounded background spend loop — per running app, around the clock — whose cost (metered tokens re-billed on every rebuild) accrues while the user is asleep or away, and whose fleet-wide aggregate can exhaust a shared project quota and degrade every user at once.",
+  "canonical_prevention": "Gate idle-teardown re-warms behind RealtimeHubWarmPresencePolicy: defer the rebuild once HID input idle exceeds the threshold, resume on the first returned input event, and fail open (always warm) when the presence sample is unavailable. Any explicit warm intent (PTT-down, settings change) clears the deferral so a present user never waits on the gate.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Tests/RealtimeHubWarmPresencePolicyTests.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHub*"
+  ],
+  "status": "open"
+}

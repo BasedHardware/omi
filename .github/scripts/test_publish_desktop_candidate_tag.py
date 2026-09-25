@@ -20,6 +20,7 @@ SPEC.loader.exec_module(publisher)
 
 REPOSITORY = "BasedHardware/omi"
 CANDIDATE_SHA = "a" * 40
+MAIN_SHA = "b" * 40
 RELEASE_TAG = "v1.2.3+10203-macos"
 
 
@@ -29,7 +30,7 @@ def planner_evidence(*, release_tag: str = RELEASE_TAG, candidate_sha: str = CAN
             "schema": publisher.SOURCE_IDENTITY_SCHEMA,
             "release_tag": release_tag,
             "candidate_source_sha": candidate_sha,
-            "origin_main_sha": candidate_sha,
+            "origin_main_sha": MAIN_SHA,
         }
     )
 
@@ -42,11 +43,11 @@ class PublishDesktopCandidateTagTests(unittest.TestCase):
         job = workflow.split("  plan-and-tag:\n", 1)[1]
         self.assertLess(job.index("- name: Generate Omi Bot token"), job.index("- name: Checkout with Omi Bot token"))
         self.assertEqual(job.count("token: ${{ steps.app-token.outputs.token }}"), 2)
-        self.assertIn("Verify native Codemagic tag intake or dispatch fenced fallback", job)
+        self.assertIn("Dispatch or reuse the exact-tag Codemagic build", job)
         self.assertIn("check-codemagic-tag-intake.py", job)
-        self.assertIn("if: always() && steps.final-plan.outputs.should_release == 'true'", job)
+        self.assertIn("if: always() && steps.plan.outputs.should_release == 'true'", job)
 
-    def test_native_git_transport_publishes_a_lightweight_tag_not_an_annotated_tag(self) -> None:
+    def test_git_transport_publishes_a_timestamped_annotated_tag(self) -> None:
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             source = root / "source"
@@ -79,7 +80,7 @@ class PublishDesktopCandidateTagTests(unittest.TestCase):
             original_directory = Path.cwd()
             try:
                 os.chdir(source)
-                publisher.create_local_lightweight_tag(
+                publisher.create_local_candidate_tag(
                     release_tag=RELEASE_TAG,
                     candidate_sha=candidate_sha,
                 )
@@ -88,13 +89,16 @@ class PublishDesktopCandidateTagTests(unittest.TestCase):
                 os.chdir(original_directory)
 
             tag_type = git("cat-file", "-t", f"refs/tags/{RELEASE_TAG}", cwd=remote)
-            self.assertEqual(tag_type, "commit")
-            self.assertNotEqual(tag_type, "tag")
+            self.assertEqual(tag_type, "tag")
             self.assertEqual(git("rev-parse", f"{RELEASE_TAG}^{{commit}}", cwd=remote), candidate_sha)
 
-    def test_publishes_only_after_refetching_exact_live_main_via_native_tag_push(self) -> None:
+    def test_publishes_merged_candidate_after_main_advances(self) -> None:
         with (
-            patch.object(publisher, "run_gh_json", return_value={"object": {"sha": CANDIDATE_SHA}}) as run_gh,
+            patch.object(
+                publisher,
+                "run_gh_json",
+                return_value={"merge_base_commit": {"sha": CANDIDATE_SHA}, "status": "ahead"},
+            ) as run_gh,
             patch.object(publisher, "run_git") as run_git,
         ):
             publisher.publish_candidate_tag(
@@ -106,23 +110,36 @@ class PublishDesktopCandidateTagTests(unittest.TestCase):
 
         self.assertEqual(
             run_gh.call_args_list,
-            [call(["api", "--method", "GET", f"repos/{REPOSITORY}/git/ref/heads/main"])],
+            [call(["api", "--method", "GET", f"repos/{REPOSITORY}/compare/{CANDIDATE_SHA}...main"])],
         )
         self.assertEqual(
             run_git.call_args_list[0].args,
-            (["tag", RELEASE_TAG, CANDIDATE_SHA],),
+            (
+                [
+                    "tag",
+                    "--annotate",
+                    "--message",
+                    f"Omi Desktop candidate {RELEASE_TAG}",
+                    RELEASE_TAG,
+                    CANDIDATE_SHA,
+                ],
+            ),
         )
         self.assertEqual(
             run_git.call_args_list[1],
             call(["push", "origin", f"refs/tags/{RELEASE_TAG}"]),
         )
 
-    def test_main_advance_rejection_never_pushes_the_tag(self) -> None:
+    def test_unmerged_candidate_rejection_never_creates_or_pushes_the_tag(self) -> None:
         with (
-            patch.object(publisher, "run_gh_json", return_value={"object": {"sha": "c" * 40}}) as run_gh,
+            patch.object(
+                publisher,
+                "run_gh_json",
+                return_value={"merge_base_commit": {"sha": "c" * 40}, "status": "diverged"},
+            ) as run_gh,
             patch.object(publisher, "run_git") as run_git,
         ):
-            with self.assertRaisesRegex(ValueError, "GitHub main moved before candidate publication"):
+            with self.assertRaisesRegex(ValueError, "not reachable from current GitHub main"):
                 publisher.publish_candidate_tag(
                     repository=REPOSITORY,
                     release_tag=RELEASE_TAG,
@@ -131,13 +148,9 @@ class PublishDesktopCandidateTagTests(unittest.TestCase):
                 )
         self.assertEqual(
             run_gh.call_args_list,
-            [call(["api", "--method", "GET", f"repos/{REPOSITORY}/git/ref/heads/main"])],
+            [call(["api", "--method", "GET", f"repos/{REPOSITORY}/compare/{CANDIDATE_SHA}...main"])],
         )
-        self.assertEqual(run_git.call_count, 1)
-        self.assertEqual(
-            run_git.call_args_list[0].args,
-            (["tag", RELEASE_TAG, CANDIDATE_SHA],),
-        )
+        run_git.assert_not_called()
 
     def test_mismatched_planner_evidence_never_creates_or_pushes_a_tag(self) -> None:
         with patch.object(publisher, "run_git") as run_git:

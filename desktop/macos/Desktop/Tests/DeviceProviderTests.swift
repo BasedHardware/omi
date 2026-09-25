@@ -15,6 +15,7 @@ final class DeviceProviderTests: XCTestCase {
 
   override func tearDown() async throws {
     AnalyticsManager.shared.setDevicePairingTelemetryCaptureForTests(nil)
+    AnalyticsManager.shared.setDeviceConnectionTelemetryCaptureForTests(nil)
     for defaults in defaultsToRemove {
       removeDefaults(defaults)
     }
@@ -406,6 +407,27 @@ final class DeviceProviderTests: XCTestCase {
 
     XCTAssertEqual(connectionFactoryCallCount, 0)
     XCTAssertFalse(provider.isConnected)
+  }
+
+  func testDisconnectAndUnpairEmitDeviceDisconnectedOnce() async {
+    let defaults = makeDefaults()
+    defer { removeDefaults(defaults) }
+    var events: [String] = []
+    AnalyticsManager.shared.setDeviceConnectionTelemetryCaptureForTests { events.append($0) }
+    let provider = makeProvider(defaults: defaults)
+
+    await provider.connect(to: testDevice)
+    await provider.disconnect()
+    XCTAssertEqual(events, ["Device Connected", "Device Disconnected"])
+
+    events.removeAll()
+    await provider.connect(to: testDevice)
+    await provider.unpair()
+    XCTAssertEqual(events, ["Device Connected", "Device Disconnected"])
+
+    events.removeAll()
+    await provider.unpair()
+    XCTAssertEqual(events, [], "Unpair of a disconnected device must not emit Device Disconnected")
   }
 
   func testUnpairDisconnectsAndClearsPersistedPairing() async {

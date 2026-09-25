@@ -73,6 +73,18 @@ describe('wrapped / unlimited acquisition parity contract', () => {
     assert.doesNotMatch(unlimitedSource, /omi:\/\/h\.omi\.me\/unlimited/);
   });
 
+  it('routes chat and tasks Open-in-Omi through the shared deep-link helper', () => {
+    const chatSource = readFileSync(new URL('../app/chat/[token]/page.tsx', import.meta.url), 'utf8');
+    const tasksSource = readFileSync(
+      new URL('../app/tasks/[token]/page.tsx', import.meta.url),
+      'utf8',
+    );
+    assert.match(chatSource, /getOmiPlatformDeepLink/);
+    assert.match(tasksSource, /getOmiPlatformDeepLink/);
+    assert.doesNotMatch(chatSource, /intent:\/\/h\.omi\.me\/chat/);
+    assert.doesNotMatch(tasksSource, /omi:\/\/h\.omi\.me\/tasks/);
+  });
+
   it('registers Android App Link for /wrapped', () => {
     assert.match(manifestSource, /android:path="\/wrapped"/);
     assert.match(manifestSource, /android:path="\/unlimited"/);

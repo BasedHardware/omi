@@ -1,0 +1,114 @@
+[
+  {
+    "id": "explicit-think-minimal",
+    "prompt": "Think carefully: should I take a new job?",
+    "expected": ["web_search"],
+    "kind": "hard"
+  },
+  {
+    "id": "explicit-think-hard",
+    "prompt": "Think carefully and really reason this out: should I take a new job? Don't just guess.",
+    "expected": ["web_search"],
+    "kind": "hard"
+  },
+  {
+    "id": "first-turn-advice",
+    "prompt": "What should I do about a manager who keeps taking credit for my work without damaging my career?",
+    "expected": ["think_deeper"],
+    "kind": "hard"
+  },
+  {
+    "id": "brief-what-should-i-do",
+    "prompt": "What should I do about my career?",
+    "expected": ["think_deeper"],
+    "kind": "hard"
+  },
+  {
+    "id": "consequential-tradeoff",
+    "prompt": "Help me weigh quitting now to start a company versus staying six months to vest. Consider money, risk, timing, and relationships.",
+    "expected": ["think_deeper"],
+    "kind": "hard"
+  },
+  {
+    "id": "personal-synthesis",
+    "prompt": "Use what you know about my work, goals, and recent conversations to tell me which project I should prioritize this quarter.",
+    "expected": ["think_deeper"],
+    "kind": "hard"
+  },
+  {
+    "id": "weak-answer-pushback",
+    "prompt": "That answer was shallow. Reconsider it, go deep, and give me a genuinely thoughtful recommendation.",
+    "expected": ["think_deeper"],
+    "kind": "hard"
+  },
+  {
+    "id": "multi-step-plan",
+    "prompt": "Build me a multi-step plan to negotiate an offer, choose a start date, and leave my current team well.",
+    "expected": ["think_deeper"],
+    "kind": "hard"
+  },
+  {
+    "id": "current-facts-then-judgment",
+    "prompt": "Look up the latest mortgage rates, then think carefully about whether I should refinance given a seven-year horizon.",
+    "expected": ["web_search"],
+    "expectedArgsContain": {"scope": ["historical_research"]},
+    "kind": "composed"
+  },
+  {
+    "id": "single-current-weather-fact",
+    "prompt": "What's the weather in New York right now?",
+    "expected": ["web_search"],
+    "expectedArgsContain": {"scope": ["narrow_current"]},
+    "kind": "fast-tool"
+  },
+  {
+    "id": "historical-product-build-time",
+    "prompt": "How long did Whisper Flow take to build the first version of their product, like the desktop app?",
+    "expected": ["web_search"],
+    "expectedArgsContain": {"query": ["Wispr Flow"], "scope": ["historical_research"]},
+    "kind": "hard"
+  },
+  {
+    "id": "historical-company-origin",
+    "prompt": "How did Granola build and launch its first version?",
+    "expected": ["web_search"],
+    "expectedArgsContain": {"scope": ["historical_research"]},
+    "kind": "hard"
+  },
+  {
+    "id": "chit-chat",
+    "prompt": "Hey, how's it going?",
+    "expected": ["direct"],
+    "kind": "easy"
+  },
+  {
+    "id": "stable-fact",
+    "prompt": "What is the capital of France?",
+    "expected": ["direct"],
+    "kind": "easy"
+  },
+  {
+    "id": "single-screen-tool",
+    "prompt": "What's on my screen right now?",
+    "expected": ["screenshot"],
+    "kind": "fast-tool"
+  },
+  {
+    "id": "single-tasks-tool",
+    "prompt": "What's on my task list?",
+    "expected": ["get_tasks"],
+    "kind": "fast-tool"
+  },
+  {
+    "id": "simple-creative",
+    "prompt": "Give me a playful one-line name for a coffee shop.",
+    "expected": ["direct"],
+    "kind": "easy"
+  },
+  {
+    "id": "complex-creative",
+    "prompt": "Develop a launch narrative for a privacy-first wearable, including positioning tradeoffs, audience objections, and a three-phase campaign.",
+    "expected": ["think_deeper"],
+    "kind": "hard"
+  }
+]

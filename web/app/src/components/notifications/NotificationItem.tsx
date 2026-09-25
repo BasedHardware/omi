@@ -1,6 +1,6 @@
 'use client';
 
-import Image from 'next/image';
+import Image from '@tschk/moonshine-next/image';
 import {
   Clock,
   CalendarDays,
@@ -58,7 +58,7 @@ function getNotificationIconColor(type: NotificationType): string {
     case 'action_item_delete':
       return 'text-blue-400';
     case 'daily_summary':
-      return 'text-purple-400';
+      return 'text-text-secondary';
     case 'plugin':
       return 'text-green-400';
     case 'merge_completed':
@@ -97,17 +97,17 @@ export function NotificationItem({
     <div
       onClick={onClick}
       className={cn(
-        'flex items-start gap-3 px-4 py-3 cursor-pointer',
-        'hover:bg-bg-tertiary/50 transition-colors',
+        'flex cursor-pointer items-start gap-3 px-4 py-3',
+        'transition-colors hover:bg-bg-tertiary/50',
         'group relative',
-        !notification.read && 'bg-purple-primary/5'
+        !notification.read && 'bg-white/[0.08]',
       )}
     >
       {/* Icon or App Image */}
       <div
         className={cn(
-          'w-9 h-9 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden',
-          'bg-bg-tertiary'
+          'flex h-9 w-9 flex-shrink-0 items-center justify-center overflow-hidden rounded-full',
+          'bg-bg-tertiary',
         )}
       >
         {showAppImage ? (
@@ -116,32 +116,32 @@ export function NotificationItem({
             alt=""
             width={36}
             height={36}
-            className="w-full h-full object-cover"
+            className="h-full w-full object-cover"
           />
         ) : (
-          <Icon className={cn('w-4 h-4', iconColor)} />
+          <Icon className={cn('h-4 w-4', iconColor)} />
         )}
       </div>
 
       {/* Content */}
-      <div className="flex-1 min-w-0">
+      <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-2">
           <p
             className={cn(
-              'text-sm font-medium truncate',
-              notification.read ? 'text-text-secondary' : 'text-text-primary'
+              'truncate text-sm font-medium',
+              notification.read ? 'text-text-secondary' : 'text-text-primary',
             )}
           >
             {notification.title}
           </p>
-          <span className="text-xs text-text-quaternary flex-shrink-0">
+          <span className="flex-shrink-0 text-xs text-text-quaternary">
             {formatNotificationTimestamp(new Date(notification.timestamp))}
           </span>
         </div>
         <p
           className={cn(
-            'text-sm mt-0.5 line-clamp-2',
-            notification.read ? 'text-text-quaternary' : 'text-text-tertiary'
+            'mt-0.5 line-clamp-2 text-sm',
+            notification.read ? 'text-text-quaternary' : 'text-text-tertiary',
           )}
         >
           {notification.body}
@@ -151,7 +151,7 @@ export function NotificationItem({
       {/* Unread indicator */}
       {!notification.read && (
         <div
-          className="w-2 h-2 rounded-full bg-purple-primary flex-shrink-0 mt-2"
+          className="mt-2 h-2 w-2 flex-shrink-0 rounded-full bg-text-primary"
           title="Unread"
         />
       )}
@@ -161,25 +161,25 @@ export function NotificationItem({
         className={cn(
           'absolute right-2 top-1/2 -translate-y-1/2',
           'flex items-center gap-1',
-          'opacity-0 group-hover:opacity-100 transition-opacity',
-          'bg-bg-secondary/90 backdrop-blur-sm rounded-lg px-1 py-1'
+          'opacity-0 transition-opacity group-hover:opacity-100',
+          'rounded-lg bg-bg-secondary/90 px-1 py-1 backdrop-blur-sm',
         )}
       >
         {!notification.read && (
           <button
             onClick={handleMarkAsRead}
-            className="p-1.5 rounded-md hover:bg-bg-tertiary transition-colors"
+            className="rounded-md p-1.5 transition-colors hover:bg-bg-tertiary"
             title="Mark as read"
           >
-            <Clock className="w-3.5 h-3.5 text-text-quaternary" />
+            <Clock className="h-3.5 w-3.5 text-text-quaternary" />
           </button>
         )}
         <button
           onClick={handleClear}
-          className="p-1.5 rounded-md hover:bg-bg-tertiary transition-colors"
+          className="rounded-md p-1.5 transition-colors hover:bg-bg-tertiary"
           title="Remove"
         >
-          <X className="w-3.5 h-3.5 text-text-quaternary" />
+          <X className="h-3.5 w-3.5 text-text-quaternary" />
         </button>
       </div>
     </div>

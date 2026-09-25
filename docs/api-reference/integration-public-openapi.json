@@ -479,10 +479,33 @@
             "title": "Artifact Ref",
             "type": "object"
           },
+          "attribution": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attribution"
+          },
           "capture_confidence": {
             "default": 0.5,
             "title": "Capture Confidence",
             "type": "number"
+          },
+          "captured_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captured At"
           },
           "client_device_id": {
             "anyOf": [
@@ -518,6 +541,25 @@
             "title": "Independence Group",
             "type": "string"
           },
+          "lineage_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lineage Id"
+          },
+          "quote_refs": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Quote Refs",
+            "type": "array"
+          },
           "redaction_status": {
             "default": "active",
             "title": "Redaction Status",
@@ -543,6 +585,17 @@
             "default": "unknown",
             "title": "Source Type",
             "type": "string"
+          },
+          "source_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Version"
           }
         },
         "required": [
@@ -846,6 +899,18 @@
       },
       "Geolocation": {
         "properties": {
+          "accuracy": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Accuracy"
+          },
           "address": {
             "anyOf": [
               {
@@ -856,6 +921,46 @@
               }
             ],
             "title": "Address"
+          },
+          "altitude": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Altitude"
+          },
+          "capture_source": {
+            "anyOf": [
+              {
+                "enum": [
+                  "current_position",
+                  "last_known_position",
+                  "manual",
+                  "integration"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Capture Source"
+          },
+          "captured_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captured At"
           },
           "google_place_id": {
             "anyOf": [
@@ -925,6 +1030,20 @@
         "title": "IntegrationNotificationResponse",
         "type": "object"
       },
+      "LedgerWriteReason": {
+        "enum": [
+          "direct_user_statement",
+          "explicit_remember",
+          "agent_reusable_conclusion",
+          "recurring_workflow",
+          "standing_trigger",
+          "onboarding",
+          "daily_reconciliation",
+          "legacy_migration"
+        ],
+        "title": "LedgerWriteReason",
+        "type": "string"
+      },
       "MemoriesResponse": {
         "properties": {
           "memories": {
@@ -940,6 +1059,122 @@
           "memories"
         ],
         "title": "MemoriesResponse",
+        "type": "object"
+      },
+      "MemoryCaptureContext": {
+        "description": "Original capture metadata, separate from API transport and device.",
+        "properties": {
+          "attribution": {
+            "anyOf": [
+              {
+                "enum": [
+                  "unknown",
+                  "assistant",
+                  "inferred",
+                  "third_party",
+                  "screen",
+                  "user_spoken",
+                  "user_written"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Attribution"
+          },
+          "captured_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Captured At"
+          },
+          "independence_group": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Independence Group"
+          },
+          "lineage_id": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Lineage Id"
+          },
+          "quote_refs": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "maxItems": 5,
+            "title": "Quote Refs",
+            "type": "array"
+          },
+          "source_id": {
+            "anyOf": [
+              {
+                "maxLength": 512,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Id"
+          },
+          "source_signal": {
+            "anyOf": [
+              {
+                "maxLength": 64,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Signal"
+          },
+          "source_type": {
+            "maxLength": 64,
+            "title": "Source Type",
+            "type": "string"
+          },
+          "source_version": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source Version"
+          }
+        },
+        "required": [
+          "source_type"
+        ],
+        "title": "MemoryCaptureContext",
         "type": "object"
       },
       "MemoryCategory": {
@@ -982,6 +1217,63 @@
             "title": "Arguments",
             "type": "object"
           },
+          "as_of": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "As Of"
+          },
+          "belief_class": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Belief Class"
+          },
+          "belief_computed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Belief Computed At"
+          },
+          "body": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Body"
+          },
+          "canonical_memory_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Canonical Memory Id"
+          },
           "capture_confidence": {
             "anyOf": [
               {
@@ -993,6 +1285,16 @@
             ],
             "description": "Fixed confidence that the source was captured correctly",
             "title": "Capture Confidence"
+          },
+          "capture_context": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MemoryCaptureContext"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "capture_device_ids": {
             "items": {
@@ -1026,6 +1328,33 @@
             "format": "date-time",
             "title": "Created At",
             "type": "string"
+          },
+          "curation_weight": {
+            "default": 0,
+            "title": "Curation Weight",
+            "type": "integer"
+          },
+          "currency": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency"
+          },
+          "currency_band": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Currency Band"
           },
           "data_protection_level": {
             "anyOf": [
@@ -1062,6 +1391,17 @@
             "title": "Evidence",
             "type": "array"
           },
+          "half_life_days": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Half Life Days"
+          },
           "headline": {
             "anyOf": [
               {
@@ -1077,6 +1417,11 @@
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "intent_backed": {
+            "default": false,
+            "title": "Intent Backed",
+            "type": "boolean"
           },
           "invalid_at": {
             "anyOf": [
@@ -1115,6 +1460,16 @@
             "title": "Kg Extracted",
             "type": "boolean"
           },
+          "kind": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MemoryKind"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "layer": {
             "anyOf": [
               {
@@ -1127,6 +1482,27 @@
             "description": "Canonical product lifecycle layer (Q6/WS-K); derived from memory_tier at serialization only.",
             "readOnly": true,
             "title": "Layer"
+          },
+          "ledger_schema_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ledger Schema Version"
+          },
+          "ledger_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MemoryItemStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "manually_added": {
             "default": false,
@@ -1207,6 +1583,17 @@
             ],
             "title": "Scoring"
           },
+          "slot": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Slot"
+          },
           "subject_attribution": {
             "$ref": "#/components/schemas/SubjectAttribution",
             "default": "unknown",
@@ -1223,6 +1610,16 @@
             ],
             "description": "Stable entity id for who/what the fact is about",
             "title": "Subject Entity Id"
+          },
+          "subject_scope": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/MemorySubjectScope"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "superseded_by": {
             "anyOf": [
@@ -1242,6 +1639,11 @@
             },
             "title": "Tags",
             "type": "array"
+          },
+          "trigger_condition": {
+            "additionalProperties": true,
+            "title": "Trigger Condition",
+            "type": "object"
           },
           "uid": {
             "title": "Uid",
@@ -1283,6 +1685,18 @@
             ],
             "title": "Valid At"
           },
+          "valid_to": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Valid To"
+          },
           "veracity": {
             "anyOf": [
               {
@@ -1306,6 +1720,16 @@
             ],
             "default": "public",
             "title": "Visibility"
+          },
+          "write_reason": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/LedgerWriteReason"
+              },
+              {
+                "type": "null"
+              }
+            ]
           }
         },
         "required": [
@@ -1319,6 +1743,26 @@
         "title": "MemoryItem",
         "type": "object"
       },
+      "MemoryItemStatus": {
+        "enum": [
+          "active",
+          "superseded",
+          "hidden",
+          "tombstoned"
+        ],
+        "title": "MemoryItemStatus",
+        "type": "string"
+      },
+      "MemoryKind": {
+        "description": "Semantic kind for the intent-backed knowledge ledger.\n\n``tier`` remains a storage-compatibility projection during the client\nmigration. It is not the lifecycle authority for ledger rows.",
+        "enum": [
+          "fact",
+          "document",
+          "trigger"
+        ],
+        "title": "MemoryKind",
+        "type": "string"
+      },
       "MemoryLayer": {
         "enum": [
           "short_term",
@@ -1326,6 +1770,16 @@
           "archive"
         ],
         "title": "MemoryLayer",
+        "type": "string"
+      },
+      "MemorySubjectScope": {
+        "enum": [
+          "primary_user",
+          "user_owned_project",
+          "user_relationship",
+          "third_party"
+        ],
+        "title": "MemorySubjectScope",
         "type": "string"
       },
       "SearchConversationsResponse": {

@@ -3,16 +3,11 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOWS = ROOT / ".github" / "workflows"
-PRIVATE_AGENT_VM_READINESS_CONTRACT = (
-    "--network=default",
-    "--subnet=default",
-    "--vpc-egress=private-ranges-only",
-    "AGENT_VM_TRUSTED_HEALTH_CHANNEL=private-vpc",
-)
 
 
 def _ordered(text: str, fragments: tuple[str, ...], *, workflow: str) -> list[str]:
@@ -23,6 +18,47 @@ def _ordered(text: str, fragments: tuple[str, ...], *, workflow: str) -> list[st
     if locations != sorted(locations):
         return [f"{workflow}: release steps are not ordered as {fragments!r}"]
     return []
+
+
+_BROKEN_REUSE_EXTRACT = 'print(json.load(open(sys.argv[1], encoding="utf-8"))["reuse"])'
+_SHELL_SAFE_JSON_DUMPS_REUSE = 'json.dumps(json.load(open(sys.argv[1], encoding="utf-8"))["reuse"])'
+_REUSE_COMPARES_TO_JSON_TRUE = re.compile(
+    r'\[\[\s*(?:["\']?\$\{reuse\}|["\']?\$reuse["\']?)\s*==\s*["\']true["\']\s*\]\]',
+)
+_AGENT_VM_RESOLVER = "resolve_agent_vm_sha_release.py"
+
+
+def _agent_vm_resolver_step_contexts(text: str) -> list[str]:
+    """Return workflow step blocks that invoke the SHA-keyed Agent VM resolver."""
+    contexts: list[str] = []
+    start = 0
+    while True:
+        idx = text.find(_AGENT_VM_RESOLVER, start)
+        if idx < 0:
+            break
+        block_start = text.rfind("\n      - ", 0, idx)
+        if block_start < 0:
+            block_start = 0
+        block_end = text.find("\n      - ", idx)
+        if block_end < 0:
+            block_end = len(text)
+        contexts.append(text[block_start:block_end])
+        start = idx + len(_AGENT_VM_RESOLVER)
+    return contexts
+
+
+def _context_has_shell_safe_reuse_extract(context: str) -> bool:
+    if _SHELL_SAFE_JSON_DUMPS_REUSE in context and "reuse=" in context:
+        return True
+    if "reuse=" not in context:
+        return False
+    return bool(
+        re.search(
+            r'reuse\s*=\s*"\$\([^)]*workflow_json_field_for_shell\.py[^)]*\breuse\b',
+            context,
+            flags=re.DOTALL,
+        )
+    )
 
 
 def _step_block(text: str, name: str) -> str | None:
@@ -48,27 +84,27 @@ def _validate_production_python_runtime(text: str, *, workflow: str) -> list[str
         "Preflight production desktop secret resource names",
         'gcloud secrets describe "$secret"',
         "--format='none'",
-        "SERVICE_ACCOUNT_JSON",
-        "GOOGLE_APPLICATION_CREDENTIALS=/secrets/firebase/service-account.json",
-        "/secrets/firebase/service-account.json=SERVICE_ACCOUNT_JSON:latest",
-        "AGENT_GCS_BUCKET: ${{ vars.AGENT_GCS_BUCKET }}",
-        "AGENT_GCS_BUCKET=${{ env.AGENT_GCS_BUCKET }}",
-        "Build and publish Agent VM image",
-        "backend/agent_vm/Dockerfile",
-        "gs://$AGENT_GCS_BUCKET/startup.sh",
+        "--service-account=desktop-backend-runtime@based-hardware.iam.gserviceaccount.com",
+        "USE_VERTEX_AI=true",
+        "GOOGLE_CLOUD_PROJECT=${{ vars.GCP_PROJECT_ID }}",
+        "GCP_LOCATION=us-central1",
+        "POSTHOG_PROJECT_API_KEY=POSTHOG_PROJECT_API_KEY:latest",
         "GEMINI_API_KEY=DESKTOP_GEMINI_API_KEY:latest",
         "FIREBASE_API_KEY=DESKTOP_FIREBASE_API_KEY:latest",
         "REDIS_DB_PASSWORD=DESKTOP_REDIS_DB_PASSWORD:latest",
         "REDIS_DB_HOST=DESKTOP_REDIS_DB_HOST:latest",
         "REDIS_DB_PORT=DESKTOP_REDIS_DB_PORT:latest",
-        "--remove-secrets=PINECONE_API_KEY,PINECONE_HOST",
+        "--remove-secrets=PINECONE_API_KEY,PINECONE_HOST,/secrets/firebase/service-account.json",
+        "--remove-env-vars=GOOGLE_APPLICATION_CREDENTIALS,",
     ):
         if fragment not in text:
             errors.append(f"{workflow}: missing Python production runtime contract {fragment!r}")
     for forbidden in (
         "Rust -> Python",
         "Rust → Python",
-        "--remove-env-vars=GOOGLE_APPLICATION_CREDENTIALS",
+        # Keyless since WS-B (2026-09-23): the nik-164 JSON key must never be mounted again.
+        "SERVICE_ACCOUNT_JSON:latest",
+        "GOOGLE_APPLICATION_CREDENTIALS=/secrets/firebase/service-account.json",
         f"context: {retired_desktop_context}",
         f"file: {retired_desktop_context}/Dockerfile",
         "GEMINI_API_KEY=GEMINI_API_KEY:latest",
@@ -87,7 +123,6 @@ def _validate_production_python_runtime(text: str, *, workflow: str) -> list[str
             (
                 "Preflight production desktop secret resource names",
                 "Build and push immutable Docker image",
-                "Build and publish Agent VM image",
             ),
             workflow=workflow,
         )
@@ -95,17 +130,57 @@ def _validate_production_python_runtime(text: str, *, workflow: str) -> list[str
     return errors
 
 
-def _validate_private_agent_vm_readiness(text: str, *, workflow: str, request_step: str) -> list[str]:
+def _validate_private_network_egress(text: str, *, workflow: str, request_step: str) -> list[str]:
+    """Pin the desktop backend to the backend VPC that carries the LLM gateway.
+
+    This used to require ``--network=default``, which dated from the retired
+    per-user Agent VMs. The LLM gateway is only published on an internal L7
+    load balancer inside ``CLOUD_RUN_VPC_NETWORK`` and that VPC has no peering
+    with ``default``, so the desktop backend could not reach it and silently
+    served managed chat straight from Anthropic. Keep the service on the same
+    VPC as the other backend Cloud Run services.
+    """
     errors: list[str] = []
-    reconciler_block = _step_block(text, "Deploy Agent VM reconciler Cloud Run Job")
     request_block = _step_block(text, request_step)
-    for block_name, block in (("reconciler", reconciler_block), ("request service", request_block)):
-        if block is None:
-            errors.append(f"{workflow}: missing {block_name} deployment step for private Agent VM readiness")
-            continue
-        for fragment in PRIVATE_AGENT_VM_READINESS_CONTRACT:
-            if fragment not in block:
-                errors.append(f"{workflow}: {block_name} missing private Agent VM readiness contract {fragment!r}")
+    if request_block is None:
+        errors.append(f"{workflow}: missing request service deployment step for private network egress")
+        return errors
+    for fragment in (
+        "--network=${{ vars.CLOUD_RUN_VPC_NETWORK }}",
+        "--subnet=${{ vars.CLOUD_RUN_VPC_SUBNET }}",
+        "--vpc-egress=private-ranges-only",
+    ):
+        if fragment not in request_block:
+            errors.append(f"{workflow}: request service missing private network egress contract {fragment!r}")
+    return errors
+
+
+def _validate_llm_gateway_wiring(text: str, *, workflow: str, request_step: str) -> list[str]:
+    """Keep managed desktop chat on the gateway instead of a direct provider.
+
+    ``should_route_features_through_gateway`` treats an unset feature mode as
+    "direct", so omitting these bindings does not fail loudly - it bills
+    Anthropic. It also raises outside dev/local when the feature mode is on
+    without ``ALLOW_PROD_FEATURE_MODE`` and a URL, so the three must land
+    together. The URL is resolved by the gateway serving gate, which fails the
+    deploy when the data plane is not actually serving.
+    """
+    errors: list[str] = []
+    if "verify-llm-gateway-serving.py" not in text:
+        errors.append(f"{workflow}: missing LLM gateway serving gate before deployment")
+    request_block = _step_block(text, request_step)
+    if request_block is None:
+        errors.append(f"{workflow}: missing request service deployment step for LLM gateway wiring")
+        return errors
+    for fragment in (
+        "OMI_LLM_GATEWAY_URL=${{ steps.gateway-serving.outputs.gateway_url }}",
+        "OMI_LLM_GATEWAY_FEATURE_MODE=gateway",
+        "OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE=true",
+        "OMI_LLM_CHAT_AGENT_ROUTE=gateway",
+        "OMI_LLM_GATEWAY_SERVICE_TOKEN=OMI_LLM_GATEWAY_SERVICE_TOKEN:latest",
+    ):
+        if fragment not in request_block:
+            errors.append(f"{workflow}: request service missing LLM gateway binding {fragment!r}")
     return errors
 
 
@@ -119,6 +194,12 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
         "verify_desktop_backend_image_lineage.py",
         "voice-provider-probe.sh",
         "wait_cloud_run_candidate_readiness.py",
+        "attach_cloud_run_gmp_sidecar.py",
+        "cloud_run_gmp_sidecar.yaml",
+        "PROMETHEUS_SIDECAR_PORT=9090",
+        "METRICS_SECRET=METRICS_SECRET:latest",
+        "POSTHOG_PROJECT_API_KEY=POSTHOG_PROJECT_API_KEY:latest",
+        "Attach Managed Prometheus sidecar",
         "Verify candidate image lineage",
         "@${{ steps.build-image.outputs.digest }}",
         '--build-image-ref="$BUILD_IMAGE_REF"',
@@ -142,6 +223,44 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
     for fragment in required:
         if fragment not in text:
             errors.append(f"{workflow}: missing release boundary {fragment!r}")
+
+    for context in _agent_vm_resolver_step_contexts(text):
+        if _BROKEN_REUSE_EXTRACT in context:
+            errors.append(
+                f"{workflow}: Agent VM SHA reuse guard must not print a JSON boolean with Python repr "
+                '(use json.dumps or .github/scripts/workflow_json_field_for_shell.py)'
+            )
+        if _REUSE_COMPARES_TO_JSON_TRUE.search(context) and not _context_has_shell_safe_reuse_extract(context):
+            errors.append(
+                f"{workflow}: reuse branch compares to JSON true but no shell-safe reuse extraction is present "
+                "in the Agent VM resolver step"
+            )
+
+    # Bound to the step, not to the file. attach_cloud_run_gmp_sidecar.py made
+    # --expected-env-state required and only the backend caller was updated;
+    # argparse exits before the attach runs, so both desktop deploy paths failed
+    # at the same step while every fragment above was still present.
+    attach_name = (
+        "Attach Managed Prometheus sidecar to production candidate"
+        if production
+        else "Attach Managed Prometheus sidecar to development candidate"
+    )
+    attach_step = _step_block(text, attach_name)
+    if attach_step is None:
+        errors.append(f"{workflow}: missing step {attach_name!r}")
+    elif "--expected-env-state=" not in attach_step:
+        errors.append(
+            f"{workflow}: {attach_name!r} must pass --expected-env-state; the sidecar script requires it"
+        )
+
+    render_name = "Render desktop backend expected env state"
+    render_step = _step_block(text, render_name)
+    if render_step is None:
+        errors.append(f"{workflow}: missing step {render_name!r}")
+    elif "--desktop-state-output" not in render_step:
+        errors.append(f"{workflow}: {render_name!r} must render the state with --desktop-state-output")
+    elif attach_step is not None and text.find(render_name) > text.find(attach_name):
+        errors.append(f"{workflow}: {render_name!r} must run before {attach_name!r}")
     if ":latest" in "\n".join(line for line in text.splitlines() if "image:" in line or "tags:" in line):
         errors.append(f"{workflow}: deployment image must use an immutable source tag")
 
@@ -158,7 +277,6 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
         ("Mint candidate probe identity",)
         if production
         else (
-            "Stage candidate probe signer",
             "Mint candidate probe identity",
         )
     )
@@ -167,6 +285,7 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
             text,
             (
                 "Capture current serving revision",
+                "Attach Managed Prometheus sidecar",
                 "Wait for no-traffic candidate readiness",
                 "Verify candidate image lineage",
                 "Resolve exact no-traffic candidate URL",
@@ -180,14 +299,11 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
             workflow=workflow,
         )
     )
-    request_step = "Deploy production candidate at zero traffic" if production else "Deploy desktop-backend to Cloud Run"
-    errors.extend(_validate_private_agent_vm_readiness(text, workflow=workflow, request_step=request_step))
-    # Static workflow tripwire: deploy-cloudrun's parseFlags splits an unquoted
-    # --args=-m,... token, making Python treat -m as a gcloud flag instead of a
-    # container argument.  The quoted full token preserves the intended argv.
-    if "'--args=-m,jobs.agent_vm_reconciler'" not in text:
-        errors.append(f"{workflow}: Agent VM reconciler Python module argument must remain action-parser-safe")
-
+    request_step = (
+        "Deploy production candidate at zero traffic" if production else "Deploy desktop-backend to Cloud Run"
+    )
+    errors.extend(_validate_private_network_egress(text, workflow=workflow, request_step=request_step))
+    errors.extend(_validate_llm_gateway_wiring(text, workflow=workflow, request_step=request_step))
     if production:
         for fragment in (
             "on:\n  workflow_dispatch:",
@@ -222,17 +338,17 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
             "FIREBASE_AUTH_PROJECT_ID: based-hardware",
             "DEVELOPMENT_DESKTOP_BACKEND_URL: https://desktop-backend-dt5lrfkkoa-uc.a.run.app",
             'revision_suffix="${image_tag}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"',
-            "FIREBASE_AUTH_CREDENTIALS_PATH=/secrets/firebase/service-account.json",
+            "--service-account=dev-backend-runtime@based-hardware-dev.iam.gserviceaccount.com",
+            "--remove-secrets=/secrets/firebase/service-account.json",
             "FIREBASE_AUTH_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}",
             "FIREBASE_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}",
             "GOOGLE_CLOUD_PROJECT=${{ vars.GCP_PROJECT_ID }}",
-            "/secrets/firebase/service-account.json=SERVICE_ACCOUNT_JSON:latest",
+            "USE_VERTEX_AI=true",
+            "GCP_LOCATION=us-central1",
             "FIREBASE_API_KEY=FIREBASE_API_KEY:latest",
-            "${{ secrets.GCP_SERVICE_ACCOUNT }}",
-            'chmod 600 "$signer_file"',
-            "base64 --decode",
-            '--signer-credentials-file="$DESKTOP_BACKEND_PROBE_SIGNER_FILE"',
-            'rm -f "$DESKTOP_BACKEND_PROBE_SIGNER_FILE"',
+            "FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT: ${{ vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT }}",
+            '--signer-service-account "$FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT"',
+            'if [[ -z "${FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT:-}" ]]; then',
         ):
             if fragment not in text:
                 errors.append(f"{workflow}: missing development traffic guard {fragment!r}")
@@ -249,17 +365,22 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
             errors.append(
                 f"{workflow}: the Firebase probe signer must never become desktop-backend runtime configuration"
             )
+        if "${{ secrets.GCP_SERVICE_ACCOUNT }}" in text:
+            # Phase C credential rotation: the development probe signs via IAM
+            # signJwt as vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT. A JSON
+            # key staged through this secret is exactly the material this
+            # policy exists to keep out of the runner.
+            errors.append(
+                f"{workflow}: development probe signing must use the named signer "
+                'vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT, not the GCP_SERVICE_ACCOUNT key secret'
+            )
         if "FIREBASE_AUTH_PROJECT_ID: based-hardware-dev" in text or "FIREBASE_PROJECT_ID=based-hardware-dev" in text:
             errors.append(f"{workflow}: development serving must retain the production Firebase project")
-        dev_runtime_steps = (
-            "Deploy desktop-backend to Cloud Run",
-            "Deploy Agent VM reconciler Cloud Run Job",
-        )
+        dev_runtime_steps = ("Deploy desktop-backend to Cloud Run",)
         dev_runtime_env = (
             "FIREBASE_AUTH_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}",
             "FIREBASE_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}",
             "GOOGLE_CLOUD_PROJECT=${{ vars.GCP_PROJECT_ID }}",
-            "GCE_PROJECT_ID=${{ vars.GCP_PROJECT_ID }}",
         )
         for step in dev_runtime_steps:
             block = _step_block(text, step)
@@ -272,11 +393,20 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
                 # required runtime project binding.
                 if not any(line.strip() == env_var for line in block.splitlines()):
                     errors.append(f"{workflow}: {step} missing isolated development runtime env {env_var!r}")
-        if desktop_block is not None and not any(
-            line.strip() == "FIREBASE_AUTH_CREDENTIALS_PATH=/secrets/firebase/service-account.json"
-            for line in desktop_block.splitlines()
-        ):
-            errors.append(f"{workflow}: desktop candidate must isolate Firebase auth credentials from dev ADC")
+        if desktop_block is not None:
+            # Development runs keyless on its own runtime identity (WS-B, 2026-09-23): the
+            # production nik-164 JSON key must never be mounted into the dev candidate again.
+            block_lines = [line.strip() for line in desktop_block.splitlines()]
+            if "--service-account=dev-backend-runtime@based-hardware-dev.iam.gserviceaccount.com" not in block_lines:
+                errors.append(f"{workflow}: desktop candidate must run as the keyless dev-backend-runtime identity")
+            if any("SERVICE_ACCOUNT_JSON:" in line for line in block_lines) or any(
+                line.startswith("FIREBASE_AUTH_CREDENTIALS_PATH=") for line in block_lines
+            ):
+                errors.append(f"{workflow}: desktop candidate must not mount a SERVICE_ACCOUNT_JSON key")
+        if desktop_block is not None:
+            for env_var in ("USE_VERTEX_AI=true", "GCP_LOCATION=us-central1"):
+                if not any(line.strip() == env_var for line in desktop_block.splitlines()):
+                    errors.append(f"{workflow}: desktop candidate missing Vertex PT runtime env {env_var!r}")
     return errors
 
 

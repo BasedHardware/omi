@@ -12,7 +12,16 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
+import pytest
+
 from database.conversations import eligible_merge_target, select_closest_conversation
+
+
+@pytest.fixture(scope="module", autouse=True)
+def warm_pipeline():
+    from utils.sync import pipeline
+    from utils.conversations import lifecycle
+
 
 _BASE = datetime(2026, 7, 20, 12, 0, tzinfo=timezone.utc)
 
@@ -63,17 +72,30 @@ def test_eligible_merge_target_predicate():
 @patch('utils.sync.pipeline.conversations_db.get_conversation', return_value={'id': 'deleted', 'deleted': True})
 @patch('utils.sync.pipeline.get_timestamp_from_path', return_value=123)
 @patch('utils.sync.pipeline.get_closest_conversation_to_timestamps', side_effect=RuntimeError("FALLBACK_TAKEN"))
-def test_sync_target_attach_fallback_to_closest(
+def test_sync_target_attach_preserves_identity_and_excludes_deleted(
     mock_closest, mock_timestamp, mock_get_conv, mock_postprocess, mock_prerecorded, mock_schedule, mock_signed_url
 ):
-    """Behavior-level test: if the specified target conversation is deleted/ineligible,
-    the pipeline must fall back to the timestamp-based closest match."""
+    """The transaction now owns deletion/absence, not a lossy preflight fallback.
+
+    The 2026-09-19 capture evidence requires retaining the supplied identity;
+    the original assertion that deleted content never absorbs speech remains.
+    """
+    from models.transcript_segment import TranscriptSegment
     from utils.sync.pipeline import process_segment
+    from tests.unit.test_sync_cross_job_assignment import intake, chunk
+    from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 
-    mock_postprocess.return_value = [MagicMock(end=1.0)]
-
-    # process_segment catches exceptions internally, so it will swallow our RuntimeError and return False.
-    result = process_segment('seg_123.wav', 'uid', {'segments': []}, MagicMock(), [], target_conversation_id='deleted')
-
-    assert result is False
-    assert mock_closest.called, "Pipeline did not fall back to get_closest_conversation_to_timestamps"
+    store = StrictFirestore()
+    store.rows[('users', 'u', 'conversations', 'deleted')] = {**chunk('deleted', 123), 'deleted': True}
+    mock_postprocess.return_value = [TranscriptSegment(text='Retain this speech', start=0, end=1, is_user=False)]
+    response = {'new_memories': set(), 'updated_memories': set()}
+    errors = []
+    with patch('utils.sync.pipeline.get_wav_duration', return_value=60), patch(
+        'utils.conversations.lifecycle.ingest_sync_conversation',
+        side_effect=lambda uid, incoming, **kw: intake(store, incoming, **kw),
+    ), patch('utils.sync.pipeline.identify_speakers_for_segments'):
+        result = process_segment('seg_123.wav', 'u', response, MagicMock(), errors, target_conversation_id='deleted')
+    assert result and errors == []
+    mock_closest.assert_not_called()
+    assert 'deleted' not in response['new_memories']
+    assert store.rows[('users', 'u', 'conversations', 'deleted')]['deleted']

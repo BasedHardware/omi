@@ -143,6 +143,19 @@ enum ContextDeliveryBudget {
     return base * max(1, planMultiplier)
   }
 
+  /// Ceiling on candidate-sourced deliveries per 24-hour window, inside the
+  /// overall daily budget.
+  ///
+  /// The rewritten candidate gate swung from a 4% to a 71% pass rate (n=7 —
+  /// far too small to size the true rate, which is exactly why a ceiling is
+  /// warranted while dogfood measures it): a gate that now returns parseable
+  /// JSON will act on its own `show=true` default. Cooldown and the daily
+  /// budget bound the total interruption rate, but not the *mix* — without a
+  /// ceiling, armed candidates could crowd the entire budget. The check runs
+  /// before the gate's model call, so a capped candidate costs no tokens and
+  /// stays armed for a quieter window rather than being retired.
+  static let candidateDailyShowCeiling = 8
+
   static func cooldownSeconds(frequencyLevel: Int) -> TimeInterval {
     switch frequencyLevel {
     case 1: return 60 * 60

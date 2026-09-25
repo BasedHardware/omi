@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { useLocation } from 'react-router-dom'
 import { Search, Play, Pause, X, ChevronLeft, List, Clock } from 'lucide-react'
 import { useRewind } from '../hooks/useRewind'
 import { useIsVisible } from '../hooks/useIsVisible'
@@ -23,9 +24,36 @@ export function Rewind(): React.JSX.Element {
   const pageRef = useRef<HTMLDivElement>(null)
   const visible = useIsVisible(pageRef)
   const r = useRewind({ active: visible })
+  const location = useLocation()
   // Stable useCallbacks — destructured so effects can depend on them without
   // re-running on every render (the `r` object identity changes each render).
   const { search, jumpTo } = r
+  const requestedFrameId = useMemo(() => {
+    const hashQuery = location.hash.includes('?')
+      ? location.hash.slice(location.hash.indexOf('?') + 1)
+      : ''
+    const raw = new URLSearchParams(location.search || hashQuery).get('frame_id')
+    const id = raw === null ? NaN : Number(raw)
+    return Number.isInteger(id) && id >= 0 ? id : null
+  }, [location.hash, location.search])
+  const [frameStatus, setFrameStatus] = useState<{
+    id: number
+    state: 'available' | 'unavailable' | 'pruned'
+  } | null>(null)
+  useEffect(() => {
+    if (requestedFrameId === null) return
+    const id = requestedFrameId
+    void window.omi.rewindFrameById(id).then((frame) => {
+      if (frame) {
+        jumpTo(frame.ts)
+        setFrameStatus({ id, state: 'available' })
+        return
+      }
+      void window.omi.rewindFocusFrame(id).then((result) => {
+        setFrameStatus({ id, state: result.state })
+      })
+    })
+  }, [jumpTo, requestedFrameId])
   // The search field is always present in the top bar (macOS keeps one page — the
   // content switches between the day timeline and the search results, it is not a
   // separate mode/route). A non-empty query IS "searching".
@@ -92,6 +120,16 @@ export function Rewind(): React.JSX.Element {
     <div ref={pageRef} data-testid="rewind-page" className="flex h-full min-h-0 flex-col gap-3 p-4">
       <div className="flex items-center justify-between gap-3">
         <h1 className="shrink-0 text-lg font-semibold text-white">Rewind</h1>
+        {frameStatus?.id === requestedFrameId && frameStatus.state === 'unavailable' && (
+          <div role="status" className="text-xs text-white/55">
+            This Rewind frame is unavailable.
+          </div>
+        )}
+        {frameStatus?.id === requestedFrameId && frameStatus.state === 'pruned' && (
+          <div role="status" className="text-xs text-white/55">
+            This Rewind frame was pruned.
+          </div>
+        )}
         <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
           <div className="relative min-w-0 max-w-xs flex-1">
             <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-white/35" />

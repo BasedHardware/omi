@@ -77,6 +77,8 @@ interface FakeAdapterOptions {
    *  (the adapter-returned failure path — payload.failure.userMessage, no
    *  errorMessage), rather than throwing. */
   fail?: string
+  /** Additive evidence envelope carried in the adapter result JSON. */
+  evidence?: Record<string, unknown>
 }
 
 let nativeSessionCounter = 0
@@ -141,6 +143,7 @@ function fakeAdapter(options: FakeAdapterOptions = {}): FakeAdapter {
       signal: AbortSignal
     ): Promise<AdapterAttemptResult> {
       calls.executeAttempt.push(context)
+      sink({ type: 'hosted_request_started' })
       const promptText = context.prompt.map((b) => (b.type === 'text' ? b.text : '')).join('')
       for (const event of options.stream?.(promptText) ?? [
         { type: 'text_delta', text: 'streaming' }
@@ -172,7 +175,8 @@ function fakeAdapter(options: FakeAdapterOptions = {}): FakeAdapter {
         terminalStatus: 'succeeded',
         inputTokens: 10,
         outputTokens: 20,
-        costUsd: 0.01
+        costUsd: 0.01,
+        ...(options.evidence ? { evidence: options.evidence } : {})
       }
     },
     async cancelAttempt(context: CancelAttemptContext): Promise<CancelDispatchResult> {
@@ -228,6 +232,26 @@ function agentEvent(type: string, payload: unknown, runId = 'run-1'): AgentEvent
 describe('projectKernelEvent', () => {
   const REQ = 'req-1'
   const RUN = 'run-1'
+
+  it('maps adapter dispatch separately from local run lifecycle events', () => {
+    expect(projectKernelEvent(agentEvent('run.starting', {}), REQ, RUN)).toEqual({
+      type: 'status',
+      requestId: REQ,
+      runId: RUN,
+      message: 'run.starting'
+    })
+    expect(projectKernelEvent(agentEvent('run.running', {}), REQ, RUN)).toEqual({
+      type: 'status',
+      requestId: REQ,
+      runId: RUN,
+      message: 'run.running'
+    })
+    expect(projectKernelEvent(agentEvent('hosted.request_started', {}), REQ, RUN)).toEqual({
+      type: 'hosted_request_started',
+      requestId: REQ,
+      runId: RUN
+    })
+  })
 
   it('maps message.delta -> text_delta', () => {
     expect(
@@ -336,6 +360,17 @@ describe('projectKernelEvent', () => {
 
 describe('runMainChatTurn', () => {
   it('streams projected events in order and resolves with the final outcome', async () => {
+    const evidence = {
+      schema_version: 1,
+      references: [
+        {
+          id: 'conversation-1',
+          kind: 'conversation_summary',
+          state: 'available',
+          conversation_id: 'conversation-1'
+        }
+      ]
+    }
     const adapter = fakeAdapter({
       stream: () => [
         { type: 'text_delta', text: 'Hello ' },
@@ -343,7 +378,8 @@ describe('runMainChatTurn', () => {
         { type: 'tool_activity', name: 'search', status: 'started', toolUseId: 't1' },
         { type: 'tool_activity', name: 'search', status: 'completed', toolUseId: 't1' }
       ],
-      reply: () => 'Hello world'
+      reply: () => 'Hello world',
+      evidence
     })
     const kernel = newKernel(adapter)
     const events: MainChatEvent[] = []
@@ -358,12 +394,23 @@ describe('runMainChatTurn', () => {
       ok: true,
       terminalStatus: 'succeeded',
       text: 'Hello world',
+      evidence: {
+        schemaVersion: 1,
+        references: [
+          expect.objectContaining({
+            id: 'conversation-1',
+            kind: 'conversation_summary',
+            state: 'available'
+          })
+        ]
+      },
       requestId: 'req-1'
     })
     expect(result.runId).toBeTruthy()
 
     const types = events.map((e) => e.type)
     expect(types[0]).toBe('accepted')
+    expect(types).toContain('hosted_request_started')
     expect(types).toContain('text_delta')
     expect(types).toContain('tool_activity')
     expect(types).toContain('completed')
@@ -797,5 +844,25 @@ describe('runMainChatTurn', () => {
     const terminal = events.at(-1) as Extract<MainChatEvent, { type: 'run_finished' }>
     expect(terminal.status).toBe('failed')
     expect(terminal.error).toMatch(/sign-in has not completed/i)
+  })
+
+  it('does not emit hosted_request_started when the adapter fails before dispatch', async () => {
+    const kernel = new AgentRuntimeKernel({
+      store: newStore(),
+      registry: new AdapterRegistry(),
+      runtimeNodeId: 'node-a'
+    })
+    const events: MainChatEvent[] = []
+
+    const result = await runMainChatTurn(
+      { requestId: 'req-no-adapter', prompt: 'hello', cleanUserText: 'hello' },
+      (event) => events.push(event),
+      { kernel, ownerId: OWNER }
+    )
+
+    expect(result.ok).toBe(false)
+    expect(result.error).toMatch(/adapter not registered/i)
+    expect(events.some((event) => event.type === 'accepted')).toBe(true)
+    expect(events.some((event) => event.type === 'hosted_request_started')).toBe(false)
   })
 })

@@ -5,8 +5,8 @@ shapes mirror what ``database.chat`` returns:
 
 * Chat sessions (v2) carry ``title``, ``preview``, ``message_count``,
   ``starred`` and ``updated_at``. This is distinct from the legacy v1
-  ``models.chat.ChatSession`` (``message_ids`` / ``file_ids`` /
-  ``openai_thread_id``), so the v2 shape gets its own model.
+  ``models.chat.ChatSession`` (``message_ids`` / ``file_ids``), so the v2
+  shape gets its own model.
 * ``save_message`` returns a small ack-shaped dict (``id`` / ``created_at`` as
   an ISO string / ``session_id`` / ``created``), not a full ``Message``.
 

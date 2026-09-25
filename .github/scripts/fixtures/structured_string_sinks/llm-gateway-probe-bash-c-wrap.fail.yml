@@ -1,0 +1,8 @@
+# bash -c wrapper evasion tracked by #12860; joined argv must still fail.
+name: probe bash-c wrap historical failure
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - run: |-
+          bash -c 'bash backend/scripts/probe-llm-gateway-from-cloud-run.sh --project=test-project'

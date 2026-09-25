@@ -113,7 +113,7 @@ data requires the explicit `beta` profile (see [Mobile beta](https://github.com/
 
     Check what came up with `make dev-status`, and stop it later with
     `make dev-down`. Ports, seeded local users, and troubleshooting live in the
-    [local emulator runbook](https://github.com/BasedHardware/omi/blob/main/docs/runbooks/local-emulator-manual-qa.md).
+    [local emulator runbook](https://github.com/BasedHardware/omi/blob/main/backend/docs/runbooks/local-emulator-manual-qa.md).
   </Step>
   <Step title="Navigate to the app directory" icon="folder">
     ```bash
@@ -149,8 +149,13 @@ data requires the explicit `beta` profile (see [Mobile beta](https://github.com/
 <Tip>
 The automatic setup runs entirely on your machine — local API, local emulators,
 no production data — making it the fastest way to start building apps and making
-changes. On a physical iPhone, set `OMI_DEV_HOST` to your Mac's LAN address so
-the device can reach the harness.
+changes. On a physical iPhone, set `OMI_DEV_HOST` to your Mac's LAN or Tailscale
+address before running both `setup.sh ios` and `make dev-up` (in the same shell,
+or exported so both commands see it) — this now makes the harness itself listen
+there too, not just the app you build. Only a private address works (LAN, e.g.
+`192.168.x.x`, or Tailscale/CGNAT, e.g. `100.x.x.x`); a public address is
+rejected. Use `OMI_DEV_BIND_HOST` instead if you want the harness to bind a
+different address than the one the app is compiled to reach.
 </Tip>
 
 ---
@@ -326,8 +331,11 @@ ln -s -f ../../scripts/pre-commit .git/hooks/pre-commit
     Run `make dev-up` from the repo root first, and confirm with `make dev-status`.
 
     On a physical device, `127.0.0.1` is the phone — set `OMI_DEV_HOST` to your
-    Mac's LAN address before running `setup.sh` so the build points at your
-    machine. The Android emulator uses `10.0.2.2` by default.
+    Mac's LAN or Tailscale address before running **both** `setup.sh` (so the
+    build points at your machine) and `make dev-up` (so the harness actually
+    listens there — it defaults to loopback-only otherwise, which is why a
+    device build alone used to reach nothing). Export it in the same shell so
+    both commands see it. The Android emulator uses `10.0.2.2` by default.
   </Accordion>
   <Accordion title="Sign-in works but every request returns 401" icon="triangle-exclamation">
     The app and the backend are on **different Firebase projects**. Firebase ID
@@ -346,30 +354,37 @@ ln -s -f ../../scripts/pre-commit .git/hooks/pre-commit
     no hosted backend can verify. Production data requires the explicit `beta`
     profile.
   </Accordion>
-  <Accordion title="iOS: Unable to flip between RX and RW memory protection" icon="apple">
-    **Error Message:**
-    ```
-    error: Unable to flip between RX and RW memory protection on pages
-    ```
+  <Accordion title="iOS: works under flutter run, crashes when opened from the Home Screen" icon="apple">
+    **Symptoms:**
+    - The dev build runs fine while `flutter run` is attached, then crashes instantly
+      when you open it from the Home Screen after disconnecting (or iOS relaunches it
+      in the background for Bluetooth/VoIP). The phone's crash report ends in
+      `SwiftAwesomeNotificationsPlugin.register(with:)` with `KERN_INVALID_ADDRESS at 0x0`.
+    - `flutter run` itself prints:
+      ```
+      error: Unable to flip between RX and RW memory protection on pages
+      ```
 
     **Cause:**
-    This error occurs because iOS security restrictions prevent the Dart VM from changing memory protection during JIT compilation in Debug mode on physical devices.
+    Debug builds run the Dart VM in JIT mode, and iOS only lets Flutter tooling
+    start a JIT VM on a physical device. Without it, `FlutterEngine` init returns
+    nil, the app's `FlutterViewController` has no engine, and plugin registration
+    has nothing to register against. The app now shows a notice explaining this
+    instead of crashing, but it still cannot run.
 
     **Solutions:**
 
-    1. **Use iOS Simulator (Recommended for Development):**
-       - In Xcode, select an iOS Simulator (e.g., "iPhone 16 Pro") instead of your physical device
-       - The simulator doesn't have this restriction, so Debug mode works normally
-       - Or run: `flutter run --flavor dev` (it will use a simulator if available)
+    1. **Install an AOT build for untethered use (physical devices):**
+       ```bash
+       OMI_MOBILE_BUILD_MODE=profile bash setup.sh ios
+       ```
+       Profile (or `release`) builds open from the Home Screen on their own. You
+       lose hot reload; press `d` in `flutter run` to detach and keep the app running.
+       `setup.sh ios` warns whenever a debug build is about to land on a physical iPhone.
 
-    2. **Use Release/Profile Mode for Physical Devices:**
-       - If you need to test on a physical device, build in Release or Profile mode:
-         ```bash
-         flutter run --release --flavor dev
-         ```
-       - Or in Xcode, select "Release" or "Profile" scheme instead of "Debug"
-
-    **Note:** This is a known Flutter/iOS limitation. Debug mode with JIT compilation requires memory protection changes that iOS blocks on physical devices for security reasons.
+    2. **Use the iOS Simulator for debug-mode development:**
+       - The simulator has no JIT restriction, so `flutter run --flavor dev` works
+         from the Home Screen too.
   </Accordion>
 </AccordionGroup>
 
@@ -404,3 +419,19 @@ ln -s -f ../../scripts/pre-commit .git/hooks/pre-commit
     How to contribute to Omi
   </Card>
 </CardGroup>
+
+
+## Testing mobile voice enrollment
+
+First-run speech-profile enrollment asks for a short sample about any topic.
+Its progress uses approximately five seconds of user transcript spans; the
+server still validates the uploaded WAV. Settings redo uses its existing
+sentence target. Run the provider and onboarding widget regressions from `app/`:
+
+```bash
+flutter test test/providers/speech_profile_provider_test.dart test/widgets/speech_profile_onboarding_test.dart
+```
+
+For device verification, use the dev flavor and dev backend. Check speaking,
+Skip, and upload failure on the actual onboarding step. Advancing through All
+Done is a navigation event; verify the upload result separately.

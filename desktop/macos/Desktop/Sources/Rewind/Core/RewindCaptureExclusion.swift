@@ -5,17 +5,27 @@ struct RewindCaptureOwnerSnapshot: Equatable, Sendable {
   let generation: UInt64
   let authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
 
+  /// Prefer authenticated owner, then Rewind DB owner, then anonymous.
+  /// `capture()` and `isCurrent()` must use the same order (#11572).
+  static func resolvedOwnerID(
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? =
+      RuntimeOwnerIdentity
+      .captureAuthorizationSnapshot()
+  ) -> String {
+    authorizationSnapshot?.ownerID ?? RewindDatabase.currentUserId ?? "anonymous"
+  }
+
   static func capture() -> RewindCaptureOwnerSnapshot? {
     let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
     guard let generation = RewindCaptureOwnerGeneration.snapshot() else { return nil }
     return RewindCaptureOwnerSnapshot(
-      ownerID: authorizationSnapshot?.ownerID ?? RewindDatabase.currentUserId ?? "anonymous",
+      ownerID: resolvedOwnerID(authorizationSnapshot: authorizationSnapshot),
       generation: generation,
       authorizationSnapshot: authorizationSnapshot)
   }
 
   func isCurrent() -> Bool {
-    let currentOwnerID = RewindDatabase.currentUserId ?? "anonymous"
+    let currentOwnerID = Self.resolvedOwnerID()
     guard currentOwnerID == ownerID,
       RewindCaptureOwnerGeneration.isCurrent(generation)
     else { return false }

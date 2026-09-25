@@ -1,0 +1,8 @@
+{
+  "version": "0.12.213",
+  "date": "2026-08-23",
+  "changes": [
+    "Fixed local-profile saves and Accessibility setup, and clarified the one-month referral reward",
+    "Onboarding music now stops after 10 seconds instead of looping for as long as the app is open"
+  ]
+}

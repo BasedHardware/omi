@@ -111,6 +111,104 @@ void main() {
       expect(harness.coordinator.nextCooldownAt, isNull);
     });
 
+    test('an in-flight drain finishes after the screen turns off (#5221)', () async {
+      final harness = _TransferHarness();
+      addTearDown(harness.dispose);
+      final drainGate = Completer<void>();
+      harness.drainGate = drainGate;
+
+      final wake = harness.coordinator.wake(WakeTrigger.startup);
+      await _settle();
+      expect(harness.drainPasses, 1);
+
+      harness.coordinator.setForeground(false);
+      drainGate.complete();
+      await wake;
+
+      expect(harness.drainPasses, 1);
+      expect(harness.walState, 'uploaded');
+    });
+
+    test('background connectivity during an in-flight drain does not start another pass (#5221)', () async {
+      final harness = _TransferHarness();
+      addTearDown(harness.dispose);
+      final drainGate = Completer<void>();
+      harness.drainGate = drainGate;
+
+      final wake = harness.coordinator.wake(WakeTrigger.startup);
+      await _settle();
+      expect(harness.drainPasses, 1);
+
+      harness.coordinator.setForeground(false);
+      harness.backlog.add('wal-after-lock');
+      harness.connectivity.add(false);
+      harness.connectivity.add(true);
+      drainGate.complete();
+      await wake;
+      await _settle();
+
+      expect(harness.reconcilePasses, 1);
+      expect(harness.discoveryPasses, 1);
+      expect(harness.drainPasses, 1);
+      expect(harness.drainedWalIds, ['wal-1']);
+      expect(harness.backlog, ['wal-after-lock']);
+    });
+
+    test('a coalesced extra pass is dropped when the screen turns off mid-drain (#5221)', () async {
+      final harness = _TransferHarness();
+      addTearDown(harness.dispose);
+      final drainGate = Completer<void>();
+      harness.drainGate = drainGate;
+
+      final wake = harness.coordinator.wake(WakeTrigger.startup);
+      await _settle();
+      unawaited(harness.coordinator.wake(WakeTrigger.deviceConnected));
+      harness.coordinator.setForeground(false);
+      harness.backlog.add('wal-after-lock');
+      drainGate.complete();
+      await wake;
+      await _settle();
+
+      expect(harness.reconcilePasses, 1);
+      expect(harness.drainPasses, 1);
+      expect(harness.drainedWalIds, ['wal-1']);
+      expect(harness.backlog, ['wal-after-lock']);
+    });
+
+    test('a transfer pass acquires keep-alive and releases it when the pass ends', () async {
+      var acquired = 0;
+      var released = 0;
+      final harness = _TransferHarness(
+        onTransferStarted: () async {
+          acquired++;
+        },
+        onTransferFinished: () async {
+          released++;
+        },
+      );
+      addTearDown(harness.dispose);
+
+      await harness.coordinator.wake(WakeTrigger.startup);
+
+      expect(acquired, 1);
+      expect(released, 1);
+    });
+
+    test('keep-alive is released when a pass throws', () async {
+      var released = 0;
+      final harness = _TransferHarness(
+        onTransferFinished: () async {
+          released++;
+        },
+      )..drainThrows = true;
+      addTearDown(harness.dispose);
+
+      await harness.coordinator.wake(WakeTrigger.startup);
+
+      expect(released, 1);
+      expect(harness.scheduledCooldowns, hasLength(1));
+    });
+
     test('background recovery wakes wait for the foreground before draining', () async {
       final harness = _TransferHarness();
       addTearDown(harness.dispose);
@@ -195,6 +293,34 @@ void main() {
       expect(harness.scheduledCooldowns, hasLength(1));
       expect(harness.coordinator.nextCooldownAt, DateTime.utc(2026, 1, 1, 0, 0, 5));
     });
+
+    test('waitUntilIdle observes an unawaited injected cooldown wake', () async {
+      final harness = _TransferHarness()..drainFails = true;
+      addTearDown(harness.dispose);
+
+      await harness.coordinator.wake(WakeTrigger.startup);
+      expect(harness.drainPasses, 1);
+      expect(harness.scheduledCooldowns, hasLength(1));
+
+      harness.drainFails = false;
+      harness.scheduledCooldowns.single.callback();
+      expect(harness.coordinator.hasInFlight, isTrue);
+      await harness.coordinator.waitUntilIdle();
+      expect(harness.coordinator.hasInFlight, isFalse);
+      expect(harness.drainPasses, 2);
+    });
+
+    test('dispose invalidates a pending injected cooldown so it cannot start a new drain', () async {
+      final harness = _TransferHarness()..drainFails = true;
+      addTearDown(harness.dispose);
+
+      await harness.coordinator.wake(WakeTrigger.startup);
+      final pending = harness.scheduledCooldowns.single;
+      harness.coordinator.dispose();
+      pending.callback();
+      await harness.coordinator.waitUntilIdle();
+      expect(harness.drainPasses, 1);
+    });
   });
 }
 
@@ -208,8 +334,13 @@ class _ScheduledCooldown {
 }
 
 class _TransferHarness {
-  _TransferHarness({bool autoUploadEnabled = true, List<String>? backlog, List<String>? drainedWalIds})
-      : _autoUploadEnabled = autoUploadEnabled,
+  _TransferHarness({
+    bool autoUploadEnabled = true,
+    List<String>? backlog,
+    List<String>? drainedWalIds,
+    Future<void> Function()? onTransferStarted,
+    Future<void> Function()? onTransferFinished,
+  })  : _autoUploadEnabled = autoUploadEnabled,
         backlog = backlog ?? <String>['wal-1'],
         drainedWalIds = drainedWalIds ?? <String>[] {
     coordinator = RecordingTransferCoordinator(
@@ -222,6 +353,8 @@ class _TransferHarness {
       initiallyConnected: true,
       clock: () => DateTime.utc(2026, 1, 1),
       scheduleCooldown: (delay, callback) => scheduledCooldowns.add(_ScheduledCooldown(delay, callback)),
+      onTransferStarted: onTransferStarted,
+      onTransferFinished: onTransferFinished,
     );
   }
 
@@ -233,8 +366,10 @@ class _TransferHarness {
   late final RecordingTransferCoordinator coordinator;
 
   Completer<void>? reconcileGate;
+  Completer<void>? drainGate;
   bool reconcileFails = false;
   bool drainFails = false;
+  bool drainThrows = false;
   bool drainNeedsReconciliation = false;
   bool drainContended = false;
   bool uploadedWalAwaitingReconcile = false;
@@ -274,7 +409,15 @@ class _TransferHarness {
     drainPasses++;
     _concurrentDrains++;
     maximumConcurrentDrains = maximumConcurrentDrains < _concurrentDrains ? _concurrentDrains : maximumConcurrentDrains;
+    // Claim the backlog at pass start so a WAL added while this drain is gated
+    // can only appear in drainedWalIds if a second pass starts (#5221).
+    final claimed = List<String>.from(backlog);
     try {
+      final gate = drainGate;
+      if (gate != null) await gate.future;
+      if (drainThrows) {
+        throw StateError('drain pass failed');
+      }
       if (drainContended) {
         return const RecordingTransferDrainResult.contended();
       }
@@ -289,8 +432,8 @@ class _TransferHarness {
           needsReconciliation: drainNeedsReconciliation,
         );
       }
-      drainedWalIds.addAll(backlog);
-      backlog.clear();
+      drainedWalIds.addAll(claimed);
+      backlog.removeWhere(claimed.contains);
       walState = 'uploaded';
       return const RecordingTransferDrainResult(attempted: true, failed: false, needsReconciliation: false);
     } finally {

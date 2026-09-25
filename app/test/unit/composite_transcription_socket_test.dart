@@ -50,15 +50,17 @@ void main() {
       );
 
       expect(await socket.connect(), isTrue);
-      primary.emitMessage(jsonEncode([
-        {'text': 'private audio, shared transcript'}
-      ]));
+      primary.emitMessage(
+        jsonEncode([
+          {'text': 'private audio, shared transcript'},
+        ]),
+      );
 
       expect(secondary.sent, hasLength(1));
       expect(jsonDecode(secondary.sent.single as String), {
         'type': 'suggested_transcript',
         'segments': [
-          {'text': 'private audio, shared transcript'}
+          {'text': 'private audio, shared transcript'},
         ],
         'stt_provider': 'customLive',
       });
@@ -84,10 +86,7 @@ void main() {
     test('keeps forwarding input frames by default', () async {
       final primary = _FakeSocket();
       final secondary = _FakeSocket();
-      final socket = CompositeTranscriptionSocket(
-        primarySocket: primary,
-        secondarySocket: secondary,
-      );
+      final socket = CompositeTranscriptionSocket(primarySocket: primary, secondarySocket: secondary);
 
       expect(await socket.connect(), isTrue);
       final audio = Uint8List.fromList([4, 5, 6]);
@@ -97,6 +96,29 @@ void main() {
       expect(secondary.sent, [same(audio)]);
     });
 
+    test('freemium on-device composite stays unnamed and does not forward audio', () {
+      const config = CustomSttConfig(
+        provider: SttProvider.customLive,
+        url: 'wss://stt.example.test/live',
+        identity: 'freemium:on-device',
+        sendRawAudioToOmi: false,
+      );
+
+      expect(TranscriptSocketServiceFactory.includeSpeechProfileForCustomSecondary(config.sttConfigId), isFalse);
+
+      final service = TranscriptSocketServiceFactory.createFromCustomConfig(16000, BleAudioCodec.pcm16, 'en', config);
+
+      expect(service.socket, isA<CompositeTranscriptionSocket>());
+      expect((service.socket as CompositeTranscriptionSocket).forwardRawAudioToSecondary, isFalse);
+    });
+
+    test('user custom STT still requests a speech profile on the Omi secondary', () {
+      expect(
+        TranscriptSocketServiceFactory.includeSpeechProfileForCustomSecondary('custom:deepgram'),
+        isTrue,
+      );
+    });
+
     test('factory applies the persisted forwarding setting', () {
       const config = CustomSttConfig(
         provider: SttProvider.customLive,
@@ -104,7 +126,23 @@ void main() {
         sendRawAudioToOmi: false,
       );
 
-      final service = TranscriptSocketServiceFactory.createFromCustomConfig(
+      final service = TranscriptSocketServiceFactory.createFromCustomConfig(16000, BleAudioCodec.pcm16, 'en', config);
+
+      expect(service.socket, isA<CompositeTranscriptionSocket>());
+      expect((service.socket as CompositeTranscriptionSocket).forwardRawAudioToSecondary, isFalse);
+    });
+
+    test('speech-profile on-device fallback honors the raw-audio setting too', () {
+      // A local-only config must not leak raw audio to the Omi secondary in
+      // the speech-profile flow either; suggested transcripts still flow.
+      const config = CustomSttConfig(
+        provider: SttProvider.custom,
+        url: 'https://stt.example.test/poll',
+        requestType: SttRequestType.multipartForm,
+        sendRawAudioToOmi: false,
+      );
+
+      final service = TranscriptSocketServiceFactory.createSpeechProfileOnDevice(
         16000,
         BleAudioCodec.pcm16,
         'en',
@@ -148,10 +186,7 @@ void main() {
         sendRawAudioToOmi: false,
       );
 
-      expect(
-        TranscriptSocketServiceFactory.shouldBlockUnsupportedCodecFallback(BleAudioCodec.pcm16, config),
-        isFalse,
-      );
+      expect(TranscriptSocketServiceFactory.shouldBlockUnsupportedCodecFallback(BleAudioCodec.pcm16, config), isFalse);
     });
   });
 }
@@ -167,8 +202,6 @@ class _TestEnvFields implements EnvFields {
   String? get googleClientSecret => null;
 
   @override
-  String? get googleMapsApiKey => null;
-
   @override
   String? get intercomAndroidApiKey => null;
 

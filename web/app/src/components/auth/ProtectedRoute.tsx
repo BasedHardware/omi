@@ -1,8 +1,8 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import Image from 'next/image';
+import { useRouter } from '@tschk/moonshine-next/navigation';
+import Image from '@tschk/moonshine-next/image';
 import { useAuth } from './AuthProvider';
 
 interface ProtectedRouteProps {
@@ -22,15 +22,15 @@ export function ProtectedRoute({ children }: ProtectedRouteProps) {
   // Show loading state while checking auth
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-bg-primary">
-        <div className="w-16 h-16 relative">
+      <div className="flex min-h-screen items-center justify-center bg-bg-primary">
+        <div className="relative h-16 w-16">
           <Image
             src="/logo.png"
             alt="Omi"
             fill
             sizes="64px"
             priority
-            className="object-contain animate-pulse"
+            className="animate-pulse object-contain"
           />
         </div>
       </div>

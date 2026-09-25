@@ -266,6 +266,11 @@ final class SuggestedFeedbackOutboxDefaults: SuggestedFeedbackOutboxPersisting {
 
 @MainActor
 final class SuggestedTasksStore: ObservableObject {
+  /// One suggestion store per process. The Tasks page and the chat's suggested-task
+  /// card both accept from the same pending set, so they must not hold divergent
+  /// copies: accepting in chat has to remove the row from Tasks, and vice versa.
+  @MainActor static let shared = SuggestedTasksStore()
+
   private struct OwnerScope: Equatable {
     let suppressionOwnerID: String
     let feedbackOwnerID: String

@@ -33,18 +33,20 @@ export function MergeActionBar({
       initial={inline ? { opacity: 0 } : { y: 100, opacity: 0 }}
       animate={inline ? { opacity: 1 } : { y: 0, opacity: 1 }}
       exit={inline ? { opacity: 0 } : { y: 100, opacity: 0 }}
-      transition={inline ? { duration: 0.15 } : { type: 'spring', damping: 25, stiffness: 300 }}
+      transition={
+        inline ? { duration: 0.15 } : { type: 'spring', damping: 25, stiffness: 300 }
+      }
       className={cn(
         'flex items-center',
         inline ? 'flex-wrap gap-2' : 'gap-3',
-        'px-4 py-2.5 rounded-xl',
+        'rounded-xl px-4 py-2.5',
         'bg-bg-tertiary/80',
         'border border-bg-tertiary',
         !inline && [
-          'fixed bottom-6 left-1/2 -translate-x-1/2 z-50',
+          'fixed bottom-6 left-1/2 z-50 -translate-x-1/2',
           'rounded-2xl backdrop-blur-lg',
-          'shadow-[0_8px_32px_rgba(0,0,0,0.4)]'
-        ]
+          'shadow-[0_8px_32px_rgba(0,0,0,0.4)]',
+        ],
       )}
     >
       {/* Cancel button */}
@@ -52,24 +54,26 @@ export function MergeActionBar({
         onClick={onCancel}
         disabled={isLoading}
         className={cn(
-          'flex items-center justify-center gap-2 px-3 py-2 rounded-xl',
+          'flex items-center justify-center gap-2 rounded-xl px-3 py-2',
           'text-sm font-medium text-text-secondary',
           'hover:bg-bg-tertiary hover:text-text-primary',
           'transition-colors duration-150',
-          'disabled:opacity-50 disabled:cursor-not-allowed',
-          inline && 'flex-1'
+          'disabled:cursor-not-allowed disabled:opacity-50',
+          inline && 'flex-1',
         )}
       >
-        <X className="w-4 h-4" />
+        <X className="h-4 w-4" />
         <span>Cancel</span>
       </button>
 
       {/* Selection count badge */}
-      <div className={cn(
-        'px-3 py-1.5 rounded-full',
-        'bg-purple-primary/20 text-purple-primary',
-        'text-sm font-medium'
-      )}>
+      <div
+        className={cn(
+          'rounded-full px-3 py-1.5',
+          'bg-white/[0.14] text-text-primary',
+          'text-sm font-medium',
+        )}
+      >
         {selectedCount} selected
       </div>
 
@@ -79,16 +83,16 @@ export function MergeActionBar({
           onClick={onMoveToFolder}
           disabled={!canMove || isLoading}
           className={cn(
-            'flex items-center justify-center gap-2 px-4 py-2 rounded-xl',
+            'flex items-center justify-center gap-2 rounded-xl px-4 py-2',
             'text-sm font-medium',
             'transition-all duration-150',
             canMove && !isLoading
               ? 'bg-bg-tertiary text-text-primary hover:bg-bg-quaternary'
-              : 'bg-bg-tertiary text-text-quaternary cursor-not-allowed',
-            inline && 'flex-1'
+              : 'cursor-not-allowed bg-bg-tertiary text-text-quaternary',
+            inline && 'flex-1',
           )}
         >
-          <FolderInput className="w-4 h-4" />
+          <FolderInput className="h-4 w-4" />
           <span>Move</span>
         </button>
       )}
@@ -99,16 +103,16 @@ export function MergeActionBar({
           onClick={onDelete}
           disabled={!canDelete || isLoading}
           className={cn(
-            'flex items-center justify-center gap-2 px-4 py-2 rounded-xl',
+            'flex items-center justify-center gap-2 rounded-xl px-4 py-2',
             'text-sm font-medium',
             'transition-all duration-150',
             canDelete && !isLoading
               ? 'bg-error/10 text-error hover:bg-error/20'
-              : 'bg-bg-tertiary text-text-quaternary cursor-not-allowed',
-            inline && 'flex-1'
+              : 'cursor-not-allowed bg-bg-tertiary text-text-quaternary',
+            inline && 'flex-1',
           )}
         >
-          <Trash2 className="w-4 h-4" />
+          <Trash2 className="h-4 w-4" />
           <span>Delete</span>
         </button>
       )}
@@ -118,19 +122,19 @@ export function MergeActionBar({
         onClick={onMerge}
         disabled={!canMerge || isLoading}
         className={cn(
-          'flex items-center justify-center gap-2 px-4 py-2 rounded-xl',
+          'flex items-center justify-center gap-2 rounded-xl px-4 py-2',
           'text-sm font-medium',
           'transition-all duration-150',
           canMerge && !isLoading
-            ? 'bg-purple-primary text-white hover:bg-purple-primary/90'
-            : 'bg-bg-tertiary text-text-quaternary cursor-not-allowed',
-          inline && 'flex-1'
+            ? 'bg-text-primary text-bg-primary hover:bg-text-primary/90'
+            : 'cursor-not-allowed bg-bg-tertiary text-text-quaternary',
+          inline && 'flex-1',
         )}
       >
         {isLoading ? (
-          <Loader2 className="w-4 h-4 animate-spin" />
+          <Loader2 className="h-4 w-4 animate-spin" />
         ) : (
-          <Merge className="w-4 h-4" />
+          <Merge className="h-4 w-4" />
         )}
         <span>Merge</span>
       </button>

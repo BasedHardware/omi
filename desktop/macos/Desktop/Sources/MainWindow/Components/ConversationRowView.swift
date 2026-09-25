@@ -11,6 +11,8 @@ struct ConversationRowView: View {
 
   // View mode
   var isCompactView: Bool = true
+  /// True when the row is not inside a day group, so its time needs its date.
+  var showsFullTimestamp: Bool = false
 
   // Multi-select support
   var isMultiSelectMode: Bool = false
@@ -21,13 +23,10 @@ struct ConversationRowView: View {
   @State private var isStarring = false
   @State private var isHovering = false
 
-  // Context menu action states
-  @State private var showEditDialog = false
-  @State private var showDeleteConfirmation = false
-  @State private var editedTitle: String = ""
-  @State private var isDeleting = false
-  @State private var isUpdatingTitle = false
+  /// The page that owns this list presents rename and delete, so their dim covers the page.
+  @EnvironmentObject private var prompts: ConversationRowPrompts
   @State private var isCopyingLink = false
+  @State private var isReprocessing = false
 
   /// The timestamp to display (prefer startedAt, fall back to createdAt)
   private var displayDate: Date {
@@ -39,43 +38,10 @@ struct ConversationRowView: View {
     Date().timeIntervalSince(conversation.createdAt) < 60
   }
 
-  private static let timeFormatter: DateFormatter = {
-    let f = DateFormatter()
-    f.dateFormat = "h:mm a"
-    return f
-  }()
-  private static let yesterdayFormatter: DateFormatter = {
-    let f = DateFormatter()
-    f.dateFormat = "'Yesterday,' h:mm a"
-    return f
-  }()
-  private static let sameYearFormatter: DateFormatter = {
-    let f = DateFormatter()
-    f.dateFormat = "MMM d, h:mm a"
-    return f
-  }()
-  private static let otherYearFormatter: DateFormatter = {
-    let f = DateFormatter()
-    f.dateFormat = "MMM d, yyyy, h:mm a"
-    return f
-  }()
-
-  /// Format timestamp (e.g., "10:43 AM" for today, "Jan 29, 10:43 AM" for other days)
+  /// Rows under a day header ("Today", "Sep 21") show only the time; rows with no header to lean
+  /// on (search results) show the full timestamp.
   private var formattedTimestamp: String {
-    let calendar = Calendar.current
-    let formatter: DateFormatter
-
-    if calendar.isDateInToday(displayDate) {
-      formatter = Self.timeFormatter
-    } else if calendar.isDateInYesterday(displayDate) {
-      formatter = Self.yesterdayFormatter
-    } else if calendar.isDate(displayDate, equalTo: Date(), toGranularity: .year) {
-      formatter = Self.sameYearFormatter
-    } else {
-      formatter = Self.otherYearFormatter
-    }
-
-    return formatter.string(from: displayDate)
+    showsFullTimestamp ? OmiDateFormat.timestamp(displayDate) : OmiDateFormat.time(displayDate)
   }
 
   /// Folder name for inline display
@@ -84,23 +50,142 @@ struct ConversationRowView: View {
     return folders.first(where: { $0.id == folderId })?.name
   }
 
-  /// Label for the conversation source
-  private var sourceLabel: String {
-    switch conversation.source {
-    case .desktop: return "Desktop"
-    case .omi: return "omi"
-    case .phone: return "Phone"
-    case .appleWatch: return "Watch"
-    case .workflow: return "Workflow"
-    case .screenpipe: return "Screenpipe"
-    case .friend, .friendCom: return "Friend"
-    case .openglass: return "OpenGlass"
-    case .frame: return "Frame"
-    case .bee: return "Bee"
-    case .limitless: return "Limitless"
-    case .plaud: return "Plaud"
-    default: return "Unknown"
+  /// Title color — dim placeholders (Locked / Untitled / clock-only
+  /// provisional titles) so they read as secondary text. A provisional title
+  /// quoted from the transcript is real content and reads as primary.
+  private var titleColor: Color {
+    switch conversation.displayState {
+    case .titled: return Ink.primary
+    case .processing, .awaitingFirstOpen:
+      return conversation.hasTranscriptProvisionalTitle ? Ink.primary : Ink.secondary
+    default: return Ink.secondary
     }
+  }
+
+  /// A live pipeline row re-evaluates its phase on a slow clock; every other
+  /// row is static and must not pay for a timeline.
+  private var isLivePipelineRow: Bool {
+    conversation.displayState == .processing
+  }
+
+  private var isSettlingDerived: Bool {
+    ConversationProcessingProgress.showsSettlingDerived(
+      displayState: conversation.displayState,
+      isSettling: appState.processingWatcher.isSettlingDerived(conversation.id)
+    )
+  }
+
+  private func processingPhase(now: Date) -> ConversationProcessingPhase {
+    ConversationProcessingProgress.phase(for: conversation, now: now)
+  }
+
+  /// Emoji tile, or a waveform while the conversation has no emoji of its
+  /// own. A fallback 💬 would claim an identity the pipeline has not produced.
+  @ViewBuilder
+  private func leadingTile(size: CGFloat, fontSize: CGFloat, cornerRadius: CGFloat) -> some View {
+    let tile = RoundedRectangle(cornerRadius: cornerRadius, style: .continuous).fill(Ink.rowFill)
+    if conversation.structured.emoji.isEmpty {
+      Image(systemName: "waveform")
+        .scaledFont(size: fontSize * 0.8, weight: .medium)
+        .foregroundColor(Ink.secondary)
+        .frame(width: size, height: size)
+        .background(tile)
+    } else {
+      Text(conversation.structured.emoji)
+        .scaledFont(size: fontSize)
+        .frame(width: size, height: size)
+        .background(tile)
+    }
+  }
+
+  /// Status pill plus, once stalled, the way out — inline, not hidden behind
+  /// a hover menu.
+  @ViewBuilder
+  private func statusCluster(phase: ConversationProcessingPhase) -> some View {
+    ConversationStatusBadge(state: conversation.displayState, phase: phase)
+    if isLivePipelineRow && phase == .stalled {
+      Button {
+        Task { await reprocessConversation() }
+      } label: {
+        HStack(spacing: 4) {
+          Image(systemName: isReprocessing ? "arrow.triangle.2.circlepath" : "wand.and.stars")
+            .scaledFont(size: 9, weight: .semibold)
+          Text(isReprocessing ? "Reprocessing…" : "Reprocess")
+            .scaledFont(size: 10, weight: .semibold)
+        }
+        .foregroundColor(Ink.primary)
+        .padding(.horizontal, 7)
+        .padding(.vertical, 3)
+        .background(Capsule(style: .continuous).fill(Ink.rowFillHover))
+      }
+      .buttonStyle(.plain)
+      .disabled(isReprocessing)
+      .help("Run the title and summary again")
+      .accessibilityIdentifier("conversation-row-reprocess-\(conversation.id)")
+    }
+  }
+
+  /// Second line: time · duration, plus the second wave of processing when
+  /// the title has landed but memories and tasks are still being added.
+  private var metadataLine: some View {
+    HStack(spacing: OmiSpacing.xs) {
+      Text(formattedTimestamp)
+        .scaledFont(size: OmiType.caption)
+        .foregroundColor(Ink.secondary)
+
+      Text("·")
+        .scaledFont(size: OmiType.caption)
+        .foregroundColor(Ink.secondary)
+
+      Text(conversation.formattedDuration)
+        .scaledFont(size: OmiType.caption)
+        .foregroundColor(Ink.secondary)
+
+      if captureSources.count > 1 {
+        Text("·")
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(Ink.secondary)
+        captureSourcesBadge
+      }
+
+      if isSettlingDerived {
+        Text("·")
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(Ink.secondary)
+        Text("Adding memories & tasks…")
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(Ink.secondary)
+          .transition(.opacity)
+      }
+    }
+  }
+
+  /// Whether the actions menu should offer Reprocess. `canReprocess` covers
+  /// failed/untitled rows; a stalled pipeline is the third case.
+  private func offersReprocess(now: Date) -> Bool {
+    conversation.canReprocess || (isLivePipelineRow && processingPhase(now: now) == .stalled)
+  }
+
+  /// Distinct surfaces that recorded this event, in the order the server lists members.
+  private var captureSources: [ConversationSource] {
+    var seen: [ConversationSource] = []
+    for member in conversation.captureGroup?.members ?? [] where !seen.contains(member.source) {
+      seen.append(member.source)
+    }
+    return seen
+  }
+
+  private var captureSourcesBadge: some View {
+    HStack(spacing: OmiSpacing.hairline) {
+      ForEach(captureSources, id: \.rawValue) { source in
+        Image(systemName: source.captureSymbol)
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(Ink.secondary)
+      }
+    }
+    .help("Recorded by " + captureSources.map(\.captureLabel).joined(separator: " and "))
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel("Recorded by " + captureSources.map(\.captureLabel).joined(separator: " and "))
   }
 
   private func toggleStar() async {
@@ -115,11 +200,20 @@ struct ConversationRowView: View {
 
   // MARK: - Context Menu Actions
 
-  private func copyTranscript() {
-    let pasteboard = NSPasteboard.general
-    pasteboard.clearContents()
-    pasteboard.setString(conversation.transcript, forType: .string)
-    log("Copied transcript to clipboard")
+  /// Copies the same transcript the detail's copy button produces. A list row often carries no
+  /// segments (the list response omits them), so fetch the detail first rather than copy nothing,
+  /// and honor the same lock the detail enforces.
+  private func copyTranscript() async {
+    var source = conversation
+    if source.transcriptPresenceState == .omittedFromResponse {
+      source = await appState.loadConversationDetail(source)
+    }
+    guard source.transcriptPresenceState != .lockedOrRedacted else {
+      OmiToastCenter.shared.confirm("This transcript is locked")
+      return
+    }
+    let text = SpeakerLabelFormatter(people: appState.people).transcript(source.transcriptSegments)
+    OmiToastCenter.shared.copy(text, confirming: "Transcript copied")
   }
 
   private func copyLink() async {
@@ -140,110 +234,146 @@ struct ConversationRowView: View {
       onFailure: { log("Failed to get share link: \($0)") }
     )
     if feedback == .copied {
-      log("Copied conversation share link to clipboard (visibility set to shared)")
+      OmiToastCenter.shared.confirm("Share link copied — anyone with the link can view")
     }
   }
 
-  private func deleteConversation() async {
-    guard !isDeleting else { return }
-    isDeleting = true
+  /// Re-runs LLM processing for this conversation. Used when a conversation
+  /// finished processing but ended up with no title — usually a transient
+  /// LLM failure that resolves on retry. Replaces the row with the refreshed
+  /// payload so the badge/CTA also update (a `.failed` conversation that
+  /// reprocesses successfully should flip to `.completed`, not just gain a
+  /// title — otherwise `displayState` keeps returning `.failed`).
+  private func reprocessConversation() async {
+    guard !isReprocessing else { return }
+    isReprocessing = true
 
-    if await appState.deleteConversation(conversation.id) {
-      log("Deleted conversation \(conversation.id)")
+    AnalyticsManager.shared.conversationReprocessedDefault(conversationId: conversation.id)
+
+    do {
+      let refreshed = try await APIClient.shared.reprocessConversation(
+        conversationId: conversation.id)
+
+      // Sync to local SQLite cache so a reload doesn't revert the new title.
+      try? await TranscriptionStorage.shared.updateTitleByBackendId(
+        conversation.id, title: refreshed.structured.title)
+
+      await MainActor.run {
+        // Replace the whole conversation, not just the title — `status`,
+        // `structured.overview`, action items etc. all change on reprocess
+        // and the row's display state derives from `status` AND title.
+        appState.replaceConversation(refreshed)
+      }
+      log("Reprocessed conversation \(conversation.id) → \(refreshed.structured.title)")
+    } catch {
+      log("Failed to reprocess conversation \(conversation.id): \(error)")
     }
 
-    isDeleting = false
+    isReprocessing = false
   }
 
-  private func updateTitle() async {
-    guard !isUpdatingTitle, !editedTitle.isEmpty else { return }
-    isUpdatingTitle = true
+  // MARK: - Row Actions
 
-    await appState.updateConversationTitle(conversation.id, title: editedTitle)
-    log("Updated conversation title to: \(editedTitle)")
-
-    isUpdatingTitle = false
-  }
-
-  // MARK: - Inline Action Buttons
-
-  private var inlineActionButtons: some View {
-    HStack(spacing: OmiSpacing.xxs) {
-      // Edit title
-      Button(action: {
-        editedTitle = conversation.title
-        showEditDialog = true
-      }) {
-        Image(systemName: "pencil")
-          .scaledFont(size: OmiType.caption)
-          .foregroundColor(Ink.secondary)
-          .frame(width: 22, height: 22)
-          .background(Circle().fill(Ink.rowFill))
+  /// One list of row actions, used by both the hover "…" menu and the right-click menu, so the two
+  /// can never again disagree on order, casing or wording.
+  @ViewBuilder
+  private var actionMenuItems: some View {
+    if offersReprocess(now: Date()) {
+      Button {
+        Task { await reprocessConversation() }
+      } label: {
+        Label(
+          isReprocessing ? "Reprocessing…" : "Reprocess Title & Summary",
+          systemImage: isReprocessing ? "arrow.triangle.2.circlepath" : "wand.and.stars")
       }
-      .buttonStyle(.plain)
-      .help("Edit title")
+      .disabled(isReprocessing)
+    }
 
-      // Copy link
-      Button(action: { Task { await copyLink() } }) {
-        Image(systemName: isCopyingLink ? "arrow.triangle.2.circlepath" : "link")
-          .scaledFont(size: OmiType.caption)
-          .foregroundColor(Ink.secondary)
-          .frame(width: 22, height: 22)
-          .background(Circle().fill(Ink.rowFill))
-      }
-      .buttonStyle(.plain)
-      .disabled(isCopyingLink)
-      .help("Copy share link — anyone with the link can view")
+    Button {
+      prompts.requestRename(conversation)
+    } label: {
+      Label("Edit Title…", systemImage: "pencil")
+    }
 
-      // Move to folder (if folders exist)
-      if !folders.isEmpty {
-        Menu {
-          if conversation.folderId != nil {
-            Button(action: { Task { await onMoveToFolder(conversation.id, nil) } }) {
-              Label("Remove from Folder", systemImage: "folder.badge.minus")
-            }
-            Divider()
+    Button {
+      Task { await copyTranscript() }
+    } label: {
+      Label("Copy Transcript", systemImage: "doc.on.doc")
+    }
+
+    Button {
+      Task { await copyLink() }
+    } label: {
+      Label(
+        isCopyingLink ? "Generating Link…" : "Copy Share Link",
+        systemImage: isCopyingLink ? "arrow.triangle.2.circlepath" : "link")
+    }
+    .disabled(isCopyingLink)
+
+    if !folders.isEmpty {
+      Menu {
+        if conversation.folderId != nil {
+          Button {
+            Task { await onMoveToFolder(conversation.id, nil) }
+          } label: {
+            Label("Remove from Folder", systemImage: "folder.badge.minus")
           }
-          ForEach(folders) { folder in
-            Button(action: { Task { await onMoveToFolder(conversation.id, folder.id) } }) {
-              HStack {
-                Text(folder.name)
-                if conversation.folderId == folder.id {
-                  Image(systemName: "checkmark")
-                }
+          Divider()
+        }
+        ForEach(folders) { folder in
+          Button {
+            Task { await onMoveToFolder(conversation.id, folder.id) }
+          } label: {
+            HStack {
+              Text(folder.name)
+              if conversation.folderId == folder.id {
+                Image(systemName: "checkmark")
               }
             }
-            .disabled(conversation.folderId == folder.id)
           }
-        } label: {
-          Image(systemName: conversation.folderId != nil ? "folder.fill" : "folder")
-            .scaledFont(size: OmiType.caption)
-            .foregroundColor(conversation.folderId != nil ? Ink.primary : Ink.secondary)
-            .frame(width: 22, height: 22)
-            .background(Circle().fill(Ink.rowFill))
+          .disabled(conversation.folderId == folder.id)
         }
-        .tint(Ink.primary)
-        .menuStyle(.borderlessButton)
-        .frame(width: 22)
-        .help("Move to folder")
+      } label: {
+        Label("Move to Folder", systemImage: "folder")
       }
-
-      // Delete
-      Button(action: { showDeleteConfirmation = true }) {
-        Image(systemName: "trash")
-          .scaledFont(size: OmiType.caption)
-          .foregroundColor(Ink.errorRed)
-          .frame(width: 22, height: 22)
-          .background(Circle().fill(Ink.rowFill))
-      }
-      .buttonStyle(.plain)
-      .help("Delete")
     }
+
+    Divider()
+
+    Button(role: .destructive) {
+      prompts.requestDelete(conversation)
+    } label: {
+      Label("Delete Conversation…", systemImage: "trash")
+    }
+  }
+
+  private var inlineActionMenu: some View {
+    OmiIconMenu(systemName: "ellipsis", help: "Conversation Actions", size: .compact) {
+      actionMenuItems
+    }
+    .accessibilityLabel("Actions for \(conversation.displayTitle)")
+    .accessibilityIdentifier("conversation-row-actions-\(conversation.id)")
+  }
+
+  private var starButton: some View {
+    Button {
+      Task { await toggleStar() }
+    } label: {
+      Image(systemName: conversation.starred ? "star.fill" : "star")
+        .scaledFont(size: isCompactView ? OmiType.caption : OmiType.body)
+        .foregroundColor(conversation.starred ? PageGlass.starred : Ink.secondary)
+        .opacity(isStarring ? 0.5 : 1.0)
+        .frame(width: 26, height: 26)
+    }
+    .buttonStyle(.plain)
+    .disabled(isStarring)
+    .help(conversation.starred ? "Remove from Starred" : "Add to Starred")
+    .accessibilityLabel(conversation.starred ? "Remove from Starred" : "Add to Starred")
   }
 
   // MARK: - Compact Row (single line)
 
-  private var compactRowContent: some View {
+  private func compactRowContent(phase: ConversationProcessingPhase) -> some View {
     HStack(spacing: OmiSpacing.sm) {
       // Checkbox for multi-select mode
       if isMultiSelectMode {
@@ -252,60 +382,30 @@ struct ConversationRowView: View {
           .foregroundColor(isSelected ? Ink.primary : Ink.secondary)
       }
 
-      // Emoji
-      Text(conversation.structured.emoji.isEmpty ? "💬" : conversation.structured.emoji)
-        .scaledFont(size: OmiType.subheading)
-        .frame(width: 36, height: 36)
-        .background(
-          RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous).fill(
-            Ink.rowFill))
+      leadingTile(size: 36, fontSize: OmiType.subheading, cornerRadius: OmiChrome.smallControlRadius)
 
       // Title + metadata below
       VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
         HStack(spacing: OmiSpacing.sm) {
-          Text(conversation.title)
+          Text(conversation.displayTitle)
             .scaledFont(size: OmiType.body, weight: .medium)
-            .foregroundColor(Ink.primary)
+            .foregroundColor(titleColor)
             .lineLimit(1)
+            .help(conversation.displayTitle)
+
+          statusCluster(phase: phase)
 
           if isNewlyCreated {
             NewBadge()
           }
 
-          // Inline action buttons (show on hover)
-          if isHovering && !isMultiSelectMode {
-            inlineActionButtons
-              .transition(.opacity)
-          }
         }
 
-        HStack(spacing: OmiSpacing.xs) {
-          Text(formattedTimestamp)
-            .scaledFont(size: OmiType.caption)
-            .foregroundColor(Ink.secondary)
-
-          Text("·")
-            .scaledFont(size: OmiType.caption)
-            .foregroundColor(Ink.secondary)
-
-          Text(conversation.formattedDuration)
-            .scaledFont(size: OmiType.caption)
-            .foregroundColor(Ink.secondary)
-        }
+        metadataLine
       }
 
       Spacer()
-
-      // Star button
-      Button(action: {
-        Task { await toggleStar() }
-      }) {
-        Image(systemName: conversation.starred ? "star.fill" : "star")
-          .scaledFont(size: OmiType.caption)
-          .foregroundColor(conversation.starred ? PageGlass.starred : Ink.secondary)
-          .opacity(isStarring ? 0.5 : 1.0)
-      }
-      .buttonStyle(.plain)
+      Color.clear.frame(width: 58, height: 26)
     }
     .padding(.horizontal, OmiSpacing.md)
     .padding(.vertical, OmiSpacing.md)
@@ -319,7 +419,7 @@ struct ConversationRowView: View {
 
   // MARK: - Expanded Row (title + time/duration)
 
-  private var expandedRowContent: some View {
+  private func expandedRowContent(phase: ConversationProcessingPhase) -> some View {
     HStack(spacing: OmiSpacing.md) {
       // Checkbox for multi-select mode
       if isMultiSelectMode {
@@ -328,59 +428,30 @@ struct ConversationRowView: View {
           .foregroundColor(isSelected ? Ink.primary : Ink.secondary)
       }
 
-      // Emoji
-      Text(conversation.structured.emoji.isEmpty ? "💬" : conversation.structured.emoji)
-        .scaledFont(size: OmiType.heading)
-        .frame(width: 40, height: 40)
-        .background(
-          RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous).fill(Ink.rowFill))
+      leadingTile(size: 40, fontSize: OmiType.heading, cornerRadius: OmiChrome.chipRadius)
 
       // Title + time/duration below
       VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
         HStack(spacing: OmiSpacing.sm) {
-          Text(conversation.title)
+          Text(conversation.displayTitle)
             .scaledFont(size: OmiType.subheading, weight: .medium)
-            .foregroundColor(Ink.primary)
+            .foregroundColor(titleColor)
             .lineLimit(1)
+            .help(conversation.displayTitle)
+
+          statusCluster(phase: phase)
 
           if isNewlyCreated {
             NewBadge()
           }
 
-          // Inline action buttons (show on hover)
-          if isHovering && !isMultiSelectMode {
-            inlineActionButtons
-              .transition(.opacity)
-          }
         }
 
-        HStack(spacing: OmiSpacing.xs) {
-          Text(formattedTimestamp)
-            .scaledFont(size: OmiType.caption)
-            .foregroundColor(Ink.secondary)
-
-          Text("·")
-            .scaledFont(size: OmiType.caption)
-            .foregroundColor(Ink.secondary)
-
-          Text(conversation.formattedDuration)
-            .scaledFont(size: OmiType.caption)
-            .foregroundColor(Ink.secondary)
-        }
+        metadataLine
       }
 
       Spacer()
-
-      // Star button
-      Button(action: {
-        Task { await toggleStar() }
-      }) {
-        Image(systemName: conversation.starred ? "star.fill" : "star")
-          .scaledFont(size: OmiType.body)
-          .foregroundColor(conversation.starred ? PageGlass.starred : Ink.secondary)
-          .opacity(isStarring ? 0.5 : 1.0)
-      }
-      .buttonStyle(.plain)
+      Color.clear.frame(width: 58, height: 26)
     }
     .padding(OmiSpacing.lg)
     // The shared row states: nothing at rest, a wash under the pointer, the heavier
@@ -391,125 +462,59 @@ struct ConversationRowView: View {
       cornerRadius: PageGlass.cardRadius)
   }
 
-  var body: some View {
-    Button(action: {
-      if isMultiSelectMode {
-        onToggleSelection?()
-      } else {
-        onTap()
-      }
-    }) {
-      Group {
-        if isCompactView {
-          // Compact mode: single line with all info
-          compactRowContent
-        } else {
-          // Expanded mode: title + overview with metadata below
-          expandedRowContent
-        }
-      }
-      .frame(maxWidth: .infinity, alignment: .leading)
-      .contentShape(Rectangle())
+  @ViewBuilder
+  private func rowContent(phase: ConversationProcessingPhase) -> some View {
+    if isCompactView {
+      // Compact mode: single line with all info
+      compactRowContent(phase: phase)
+    } else {
+      // Expanded mode: title + overview with metadata below
+      expandedRowContent(phase: phase)
     }
-    .buttonStyle(.plain)
-    .onHover { hovering in
-      isHovering = hovering
-      if hovering {
-        NSCursor.pointingHand.push()
-      } else {
-        NSCursor.pop()
+  }
+
+  var body: some View {
+    ZStack(alignment: .trailing) {
+      Button(action: {
+        if isMultiSelectMode {
+          onToggleSelection?()
+        } else {
+          onTap()
+        }
+      }) {
+        Group {
+          if isLivePipelineRow {
+            // Bound the wait: the phase moves on a 15s clock so "Summarizing"
+            // becomes "Taking longer than usual" and then "Stuck" without any
+            // network event, and the Reprocess exit appears when it should.
+            TimelineView(.periodic(from: .now, by: 15)) { timeline in
+              rowContent(phase: processingPhase(now: timeline.date))
+            }
+          } else {
+            rowContent(phase: .summarizing)
+          }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .contentShape(Rectangle())
       }
+      .buttonStyle(.plain)
+
+      if !isMultiSelectMode {
+        HStack(spacing: OmiSpacing.xxs) {
+          if isHovering {
+            inlineActionMenu
+              .transition(.opacity)
+          }
+          starButton
+        }
+        .padding(.trailing, isCompactView ? OmiSpacing.md : OmiSpacing.lg)
+      }
+    }
+    .pointingHandOnHover { hovering in
+      isHovering = hovering
     }
     .contextMenu {
-      Button(action: copyTranscript) {
-        Label("Copy Transcript", systemImage: "doc.on.doc")
-      }
-
-      Button(action: { Task { await copyLink() } }) {
-        Label(
-          isCopyingLink ? "Generating Link..." : "Copy Share Link",
-          systemImage: isCopyingLink ? "arrow.triangle.2.circlepath" : "link")
-      }
-      .disabled(isCopyingLink)
-      .help("Anyone with the link can view")
-
-      Divider()
-
-      Button(action: {
-        editedTitle = conversation.title
-        showEditDialog = true
-      }) {
-        Label("Edit Title", systemImage: "pencil")
-      }
-
-      // Move to Folder submenu
-      if !folders.isEmpty {
-        Menu {
-          // Option to remove from folder
-          if conversation.folderId != nil {
-            Button(action: {
-              Task {
-                await onMoveToFolder(conversation.id, nil)
-              }
-            }) {
-              Label("Remove from Folder", systemImage: "folder.badge.minus")
-            }
-            Divider()
-          }
-
-          // List available folders
-          ForEach(folders) { folder in
-            Button(action: {
-              Task {
-                await onMoveToFolder(conversation.id, folder.id)
-              }
-            }) {
-              HStack {
-                Text(folder.name)
-                if conversation.folderId == folder.id {
-                  Image(systemName: "checkmark")
-                }
-              }
-            }
-            .disabled(conversation.folderId == folder.id)
-          }
-        } label: {
-          Label("Move to Folder", systemImage: "folder")
-        }
-      }
-
-      Divider()
-
-      Button(
-        role: .destructive,
-        action: {
-          showDeleteConfirmation = true
-        }
-      ) {
-        Label("Delete", systemImage: "trash")
-      }
-    }
-    .alert("Edit Conversation Title", isPresented: $showEditDialog) {
-      TextField("Title", text: $editedTitle)
-      Button("Cancel", role: .cancel) {}
-      Button("Save") {
-        Task {
-          await updateTitle()
-        }
-      }
-      .disabled(editedTitle.isEmpty || isUpdatingTitle)
-    } message: {
-      Text("Enter a new title for this conversation")
-    }
-    .alert("Delete Conversation", isPresented: $showDeleteConfirmation) {
-      Button("Cancel", role: .cancel) {}
-      Button("Delete", role: .destructive) {
-        Task {
-          await deleteConversation()
-        }
-      }
-    } message: {
-      Text("Are you sure you want to delete this conversation? This action cannot be undone.")
+      actionMenuItems
     }
   }
 }

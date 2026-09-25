@@ -1,0 +1,7 @@
+{
+  "version": "0.12.279",
+  "date": "2026-09-03",
+  "changes": [
+    "Push-to-talk deep-think answers now come from a dedicated thinking agent that sees the same screenshots you showed Omi and can think extra hard when you ask for it"
+  ]
+}

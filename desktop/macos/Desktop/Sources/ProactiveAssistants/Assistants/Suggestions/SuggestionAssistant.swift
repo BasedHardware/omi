@@ -16,7 +16,7 @@ actor SuggestionAssistant: ProactiveAssistant {
   // MARK: - ProactiveAssistant Protocol
 
   nonisolated let identifier = "suggestion"
-  nonisolated let displayName = "Live Suggestions"
+  nonisolated let displayName = "Focus Notifications"
 
   var isEnabled: Bool {
     get async {
@@ -24,10 +24,16 @@ actor SuggestionAssistant: ProactiveAssistant {
       // on `!ContextBucketsFeature.isEnabled`, betting the context director would replace
       // live suggestions — it delivered almost nothing, and with the flag at 100% of all
       // users focus nudges went silent fleet-wide with no error logged (Aug 13–14 2026).
-      // If the director is ever meant to replace this assistant again, that must be an
-      // explicit, evidenced change — never a side effect of a rollout flag.
+      //
+      // The JIT ambient lane *is* the explicit, evidenced replacement (owner decision
+      // 2026-09-01): it emits `focus_nudge` under the same Focus badge and Settings toggle,
+      // and `JITProactivityLaneState` is set only from the backend's own admission verdict
+      // per context visit — so an unknown or disabled rollout keeps this assistant live.
+      // The migration is judged by delivered-per-kind-per-day on the dogfood account, not
+      // by the flag flipping.
       await MainActor.run {
         SuggestionAssistantSettings.shared.isEnabled
+          && !JITProactivityLaneState.isActive(ownerID: RuntimeOwnerIdentity.currentOwnerId())
       }
     }
   }
@@ -64,7 +70,8 @@ actor SuggestionAssistant: ProactiveAssistant {
 
   /// The commitments handed to the evaluation currently in flight, kept so delivery can
   /// hold a `commitment` nudge to what the model was actually shown.
-  private var commitmentsInFlight: [String] = []
+  private var commitmentsInFlight: [SuggestionCommitment] = []
+  private var nudgeLedgerPersistence: SuggestionTaskNudgeLedgerPersisting = SuggestionTaskNudgeLedgerDefaults()
 
   /// Goals, cached because grounding must stay off the network — a fetch on this path would
   /// blow through the window in which a suggestion is still about the current screen. A
@@ -96,7 +103,8 @@ actor SuggestionAssistant: ProactiveAssistant {
     self.geminiClient = try GeminiClient(
       apiKey: apiKey,
       model: model,
-      fallbackModel: "gemini-2.5-flash"
+      fallbackModel: "gemini-2.5-flash",
+      workload: .maintenance
     )
     telemetryModel = SuggestionAssistantTelemetry.Model(configuredModel: model)
   }
@@ -195,7 +203,7 @@ actor SuggestionAssistant: ProactiveAssistant {
     }
     lastEvaluationAt = now
     dailyBudget.recordEvaluation(now: now)
-    commitmentsInFlight = grounding.openCommitments
+    commitmentsInFlight = grounding.commitmentRecords
 
     do {
       return try await evaluate(frame: frame, grounding: grounding)
@@ -228,12 +236,23 @@ actor SuggestionAssistant: ProactiveAssistant {
 
     // Overdue and due-today work is relevant regardless of what is on screen, and reading
     // it is free — it is already resident in the store.
-    let alwaysRelevant = await MainActor.run {
-      (TasksStore.shared.overdueTasks + TasksStore.shared.todaysTasks)
+    let alwaysRelevant = await MainActor.run { () -> [SuggestionCommitment] in
+      let flagOn = NegativeFeedbackRemediationFeature.isEnabled
+      let ledger = flagOn ? SuggestionTaskNudgeLedgerDefaults().load() : SuggestionTaskNudgeLedger()
+      let now = Date()
+      return (TasksStore.shared.overdueTasks + TasksStore.shared.todaysTasks)
         .prefix(15)
-        .map(Self.describeCommitment)
+        .compactMap { task in
+          if flagOn {
+            guard
+              SuggestionTaskNudgePolicy.isEligible(
+                taskId: task.id, dueAt: task.dueAt, ledger: ledger, now: now)
+            else { return nil }
+          }
+          return SuggestionCommitment(id: task.id, text: Self.describeCommitment(task))
+        }
     }
-    grounding.openCommitments = Array(alwaysRelevant)
+    grounding.commitmentRecords = Array(alwaysRelevant)
 
     grounding.goals = currentOwnerGoals()
     refreshGoalsIfStale()
@@ -248,13 +267,19 @@ actor SuggestionAssistant: ProactiveAssistant {
     let lookbackStart = Date().addingTimeInterval(-30 * 24 * 60 * 60)
 
     do {
-      let commitments = try await ActionItemStorage.shared.searchFTS(
-        query: searchTerm,
-        limit: 10,
-        includeCompleted: false
-      )
-      let scoped = commitments.map(\.description).filter { !grounding.openCommitments.contains($0) }
-      grounding.openCommitments.append(contentsOf: scoped)
+      let flagOn = await MainActor.run { NegativeFeedbackRemediationFeature.isEnabled }
+      if !flagOn {
+        let commitments = try await ActionItemStorage.shared.searchFTS(
+          query: searchTerm,
+          limit: 10,
+          includeCompleted: false
+        )
+        let existingTexts = Set(grounding.commitmentRecords.map(\.text))
+        for item in commitments where !existingTexts.contains(item.description) {
+          let id = item.backendId ?? item.description
+          grounding.commitmentRecords.append(SuggestionCommitment(id: id, text: item.description))
+        }
+      }
     } catch {
       logError("Suggestion: commitment grounding unavailable", error: error)
     }
@@ -438,18 +463,40 @@ actor SuggestionAssistant: ProactiveAssistant {
   }
 
   private func buildPrompt(frame: CapturedFrame, grounding: SuggestionGrounding) -> String {
+    Self.userPrompt(
+      appName: frame.appName,
+      windowTitle: frame.windowTitle,
+      groundingText: grounding.promptSections(),
+      recentSuggestions: recentSuggestions.map(\.text),
+      now: Date()
+    )
+  }
+
+  /// The per-evaluation user prompt. Static with an injected clock so tests can pin
+  /// the rendered request from a fixed instant. The suggestion lane judges on-screen
+  /// dates (the "scheduled this for 2026" class) and commitment timing, so every
+  /// request carries today's date — date-only, in the user turn, keeping the system
+  /// prompt byte-stable for prefix caching (SCA-358).
+  static func userPrompt(
+    appName: String,
+    windowTitle: String?,
+    groundingText: String,
+    recentSuggestions: [String],
+    now: Date,
+    timeZone: TimeZone = .current
+  ) -> String {
     var sections: [String] = []
 
     sections.append(
       """
       == WHAT THE USER IS DOING RIGHT NOW ==
-      App: \(frame.appName)
-      Window: \(frame.windowTitle ?? "(no title)")
+      App: \(appName)
+      Window: \(windowTitle ?? "(no title)")
+      Today is \(ChatPromptBuilder.currentCalendarDay(at: now, timeZone: timeZone)).
       The attached screenshot is their screen at this moment.
       """
     )
 
-    let groundingText = grounding.promptSections()
     if !groundingText.isEmpty {
       sections.append(groundingText)
     }
@@ -457,7 +504,7 @@ actor SuggestionAssistant: ProactiveAssistant {
     if !recentSuggestions.isEmpty {
       sections.append(
         "== RECENT SUGGESTIONS (do not repeat these) ==\n"
-          + recentSuggestions.map(\.text).joined(separator: "\n")
+          + recentSuggestions.joined(separator: "\n")
       )
     }
 
@@ -530,7 +577,7 @@ actor SuggestionAssistant: ProactiveAssistant {
       isGroundedCommitment: SuggestionCommitmentGuard.isGrounded(
         suggestion: suggestion.suggestion,
         category: suggestion.category,
-        openCommitments: commitmentsInFlight
+        openCommitments: commitmentsInFlight.map(\.text)
       )
     )
 
@@ -596,15 +643,24 @@ actor SuggestionAssistant: ProactiveAssistant {
     ownerID: String,
     telemetryIdentity: SuggestionAssistantTelemetry.NotificationIdentity?
   ) async {
+    let taskId = SuggestionCommitmentGuard.groundedTaskId(
+      suggestion: suggestion.suggestion,
+      category: suggestion.category,
+      commitments: commitmentsInFlight
+    )
+    var detail = suggestion.suggestion
+    if let taskId {
+      detail = "task_id=\(taskId)\n\(suggestion.suggestion)"
+    }
     let context = FloatingBarNotificationContext(
-      sourceTitle: "Suggestion",
+      sourceTitle: "Focus",
       assistantId: identifier,
       sourceApp: nil,
       windowTitle: nil,
       contextSummary: result.contextSummary,
       currentActivity: result.currentActivity,
       reasoning: suggestion.reasoning,
-      detail: suggestion.suggestion
+      detail: detail
     )
 
     log("Suggestion: delivering [\(Int(suggestion.confidence * 100))%] \"\(suggestion.suggestion)\"")
@@ -612,12 +668,17 @@ actor SuggestionAssistant: ProactiveAssistant {
     await MainActor.run {
       NotificationService.shared.sendNotification(
         ownerID: ownerID,
-        title: "Suggestion",
+        title: "Focus",
         message: suggestion.suggestion,
         assistantId: identifier,
         context: context,
         suggestionTelemetryIdentity: telemetryIdentity
       )
+      if NegativeFeedbackRemediationFeature.isEnabled, let taskId {
+        var ledger = SuggestionTaskNudgeLedgerDefaults(ownerID: ownerID).load()
+        SuggestionTaskNudgePolicy.recordingDelivery(taskId: taskId, in: &ledger, now: Date())
+        SuggestionTaskNudgeLedgerDefaults(ownerID: ownerID).save(ledger)
+      }
     }
   }
 
@@ -664,7 +725,7 @@ actor SuggestionAssistant: ProactiveAssistant {
     }
 
     let grounding = await assembleGrounding(for: frame)
-    commitmentsInFlight = grounding.openCommitments
+    commitmentsInFlight = grounding.commitmentRecords
 
     guard !grounding.isEmpty else {
       return ["outcome": "no_grounding", "commitments": "0"]

@@ -39,12 +39,32 @@ export function reconnectDelayJitteredMs(
   return Math.round(base + rand() * RECONNECT_JITTER_MS)
 }
 
+// getUserMedia/getDisplayMedia DOMException names for a PERMANENT source
+// failure (no device, permission denied, device unusable, constraints
+// impossible to satisfy) — see AudioSessionHost.ts's audio-source-error and
+// omiListenClient.ts, which relays the DOMException's `name` onto the Error it
+// hands to onError. Reconnecting the /v4/listen socket can never fix these:
+// the mic/loopback SOURCE is the problem, not the transport. Before this, only
+// the message text was checked, so a dead mic (e.g. no PipeWire source
+// enumerable — confirmed live via CDP: enumerateDevices() returned zero
+// audioinputs, getUserMedia threw NotFoundError) retried silently for the full
+// ~4.5min backoff budget with no error ever reaching the UI.
+const PERMANENT_SOURCE_ERROR_NAMES = new Set([
+  'NotFoundError',
+  'NotAllowedError',
+  'NotReadableError',
+  'OverconstrainedError'
+])
+
 /** Whether a transcription error is worth reconnecting for. Quota/entitlement
- *  exhaustion (1008 / trial_expired) and a missing sign-in are terminal —
- *  reconnecting just re-hits the same wall, so surface them at once instead of
- *  burning the whole backoff budget (~55s) first. Everything else (network drops,
- *  timeouts, transient server closes) is retryable. */
-export function isRetryableDropError(message: string): boolean {
+ *  exhaustion (1008 / trial_expired), a missing sign-in, and a permanent
+ *  mic/loopback source failure are terminal — reconnecting just re-hits the
+ *  same wall, so surface them at once instead of burning the whole backoff
+ *  budget (~55s) first. Everything else (network drops, timeouts, transient
+ *  server closes) is retryable. `name` is the source error's DOMException name
+ *  when available (omitted for backend/network drops, which have none). */
+export function isRetryableDropError(message: string, name?: string): boolean {
+  if (name && PERMANENT_SOURCE_ERROR_NAMES.has(name)) return false
   return !isQuotaExhaustedMessage(message) && !/not signed in|requires sign-in/i.test(message)
 }
 

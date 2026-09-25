@@ -104,3 +104,14 @@ class TestDeleteImportJob:
             with pytest.raises(HTTPException) as ei:
                 imports_mod.delete_import_job("j1", uid=UID)
         assert ei.value.status_code == 403
+
+
+class TestDeleteLimitlessConversationsStub:
+    """Selective delete stays stubbed until callers filter on imported=True."""
+
+    def test_delete_limitless_conversations_still_stubbed(self):
+        result = imports_mod.delete_limitless_conversations(uid=UID)
+        assert result == {
+            "deleted_count": 0,
+            "message": "Successfully deleted 0 Limitless conversations",
+        }

@@ -121,6 +121,9 @@ OAUTH_REDIRECT_URL=http://localhost:8000/auth/callback
 # OpenAI API Key (for AI issue generation)
 OPENAI_API_KEY=your_openai_key
 
+# Shared secret guarding the chat-tool endpoints (see below)
+GITHUB_TOOLS_SECRET=change-me
+
 # App Settings
 APP_HOST=0.0.0.0
 APP_PORT=8000
@@ -184,6 +187,7 @@ Add these in Railway dashboard:
 GITHUB_CLIENT_ID
 GITHUB_CLIENT_SECRET
 OPENAI_API_KEY
+GITHUB_TOOLS_SECRET
 OAUTH_REDIRECT_URL=https://your-app.up.railway.app/auth/callback
 APP_HOST=0.0.0.0
 APP_PORT=8000
@@ -337,6 +341,16 @@ github/
 | `/refresh-repos` | POST | Refresh repository list |
 | `/test` | GET | Web testing interface |
 | `/health` | GET | Health check |
+| `/tools/*` | POST | Server-to-server chat tools (issue/repo management) |
+
+## Chat Tool Authentication
+
+All chat-tool endpoints (`/tools/*`) require a shared secret so only the trusted
+OMI backend can invoke them. The caller presents `GITHUB_TOOLS_SECRET` either as an
+`Authorization: Bearer <secret>` header or a `github_tools_token` query parameter.
+Requests without a valid secret are rejected with `401` (or `503` when the secret is
+not configured). Browser setup and settings endpoints (`/`, `/auth`, `/auth/callback`,
+`/setup-completed`, `/update-repo`, `/refresh-repos`) remain open without this guard.
 
 ## 🤝 Contributing
 

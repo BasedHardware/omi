@@ -11,7 +11,8 @@ import os
 import re
 import sys
 from pathlib import Path
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock
+from unittest.mock import MagicMock as _MagicMock, patch
 
 import pytest
 
@@ -46,6 +47,13 @@ def _get_build_subscription_fn():
         'get_plan_type_from_price_id': None,  # set per-test
         'get_plan_limits': None,  # set per-test
         'get_basic_plan_limits': lambda: {'daily_chat_message_limit': 10, 'daily_speech_hours_limit': 1},
+        # The unresolvable-price branch now emits fallback telemetry before returning
+        # None, so the extracted source needs these names. This namespace execs source
+        # text, so any new call in the copied function must be mirrored here or the
+        # test fails with NameError rather than on behavior.
+        'record_fallback': lambda **kwargs: None,
+        'logger': _MagicMock(),
+        'sanitize': lambda value: value,
     }
     exec(compile(func_source, '<payment.py>', 'exec'), namespace)
     return namespace['_build_subscription_from_stripe_object'], namespace
@@ -222,6 +230,20 @@ class TestStripeWebhookDuplicateAndCustomerSourceLevel:
         guard_block = handler_block[max(0, set_customer_idx - 400) : set_customer_idx]
         assert "not adopted_active_paid" in guard_block, "customer id write must be gated on not adopted_active_paid"
 
+    def test_billing_projection_follows_reconciliation_and_durable_subscription_write(self):
+        source = self._read_source()
+        handler_start = source.index("'customer.subscription.updated'")
+        handler_end = source.index("subscription_schedule.completed", handler_start)
+        handler = source[handler_start:handler_end]
+        projection = handler.find("emit_billing_product_event(")
+        guard = handler.find("adopted_active_paid = False")
+        durable_write = handler.find("users_db.update_user_subscription")
+        assert projection != -1
+        assert guard != -1
+        assert durable_write != -1
+        assert guard < projection, "billing events must follow stale-subscription reconciliation"
+        assert durable_write < projection, "billing events must follow durable entitlement persistence"
+
 
 class TestStripeSubscriptionEventPrecedence:
     PAYMENT_SOURCE_FILE = Path(__file__).resolve().parents[2] / "routers" / "payment.py"
@@ -307,40 +329,10 @@ class TestStripeSubscriptionEventPrecedence:
         assert 'get_default_basic_subscription' not in func_body
 
 
-class TestStripeEntitlementMismatchScannerDrift:
-    """Guard against price→plan mapping drift between the standalone support
-    scanner and the backend subscription mapping.
+def test_entitlement_scanner_consumes_catalog_instead_of_copying_price_ids():
+    support_file = Path(__file__).resolve().parents[2] / "scripts" / "support" / "find_stripe_entitlement_mismatches.py"
+    support_source = support_file.read_text(encoding="utf-8")
 
-    find_stripe_entitlement_mismatches.py cannot import the backend chain
-    (Firestore/Google Cloud deps), so it keeps its own DEFAULT_PRICE_TO_PLAN.
-    If it drifts from backend/utils/subscription.py LEGACY_PRICE_MAP, the
-    scanner silently skips active paid subscriptions and under-reports
-    entitlement mismatches. This test catches that drift.
-    """
-
-    SUPPORT_FILE = Path(__file__).resolve().parents[2] / "scripts" / "support" / "find_stripe_entitlement_mismatches.py"
-    SUBSCRIPTION_FILE = Path(__file__).resolve().parents[2] / "utils" / "subscription.py"
-
-    def _extract_price_ids(self, source: str, start_marker: str) -> set:
-        """Extract quoted price_ IDs between start_marker and the closing brace."""
-        start = source.find(start_marker)
-        assert start != -1, f"{start_marker} not found"
-        end = source.find("\n}", start)
-        block = source[start:end]
-        return set(re.findall(r"['\"](price_[A-Za-z0-9]+)['\"]", block))
-
-    def test_support_scanner_legacy_price_ids_match_backend(self):
-        """Every legacy price id in the backend LEGACY_PRICE_MAP must appear in
-        the support scanner's DEFAULT_PRICE_TO_PLAN so the scanner never silently
-        skips a known paid price."""
-        support_src = self.SUPPORT_FILE.read_text(encoding="utf-8")
-        sub_src = self.SUBSCRIPTION_FILE.read_text(encoding="utf-8")
-
-        backend_legacy = self._extract_price_ids(sub_src, "LEGACY_PRICE_MAP = {")
-        support_default = self._extract_price_ids(support_src, "DEFAULT_PRICE_TO_PLAN = {")
-
-        missing = backend_legacy - support_default
-        assert not missing, (
-            f"Support scanner is missing legacy price IDs that the backend knows about: {missing}. "
-            "Add them to DEFAULT_PRICE_TO_PLAN to avoid under-reporting entitlement mismatches."
-        )
+    assert "RECOGNIZED_STRIPE_PRICE_PLAN_TYPES" in support_source
+    assert "BILLING_ENV_VAR_PLAN_TYPES" in support_source
+    assert not re.search(r"['\"]price_[0-9][A-Za-z0-9]{10,}['\"]", support_source)

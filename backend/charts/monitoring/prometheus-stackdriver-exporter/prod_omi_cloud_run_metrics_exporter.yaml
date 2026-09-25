@@ -1,0 +1,42 @@
+fullnameOverride: "prod-omi-cloud-run-metrics-exporter"
+
+stackdriver:
+  projectIds:
+    - "based-hardware"
+  metrics:
+    prefixes:
+      - 'prometheus.googleapis.com/omi_'
+    filters:
+      - 'prometheus.googleapis.com/omi_:resource.labels.cluster="__run__" AND resource.labels.namespace=one_of("backend","desktop-backend")'
+    interval: '2m'
+    offset: '1m'
+
+serviceAccount:
+  create: false
+  name: "prod-omi-prometheus-stackdriver-exporter"
+
+# Sized from measurement, not from the idle case. A prod scrape returns ~28MB /
+# ~52k series and takes 6-10s of mostly-CPU work, and steady-state usage is
+# ~238m CPU / ~331Mi -- already above the previous 200m/256Mi ceiling. Under that
+# ceiling the process was throttled hard enough to miss both the 10s scrape
+# timeout and the 10s liveness timeout, so kubelet killed it before it could ever
+# deliver a sample: 120 restarts, up=0, scrape_samples_scraped=0. It looked
+# healthy for a day only because prod had no Cloud Run metrics to collect yet.
+resources:
+  requests:
+    cpu: 200m
+    memory: 256Mi
+  limits:
+    cpu: '2'
+    memory: 2Gi
+
+# Do not add livenessProbe/readinessProbe here. prometheus-stackdriver-exporter
+# hardcodes both probes in its Deployment template -- path /, timeoutSeconds 10 --
+# and exposes no values key for them, in 4.8.3 and in every later 4.x. A probe
+# block in this file renders nothing and reverts silently on the next upgrade,
+# which is worse than not having one: it reads as configuration.
+#
+# That makes CPU the only lever over probe survival. Both probes hit '/', which is
+# trivial to serve, so they only ever time out when the process is starved --
+# which is exactly what a 200m limit did while a collection was in flight. With
+# headroom, an in-cluster scrape completes in ~4.8s against the fixed 10s budget.

@@ -15,5 +15,6 @@
     ".github/scripts/check-desktop-changelog.py",
     ".github/scripts/"
   ],
-  "status": "open"
+  "status": "dormant",
+  "dormant_since": "2026-08-17T09:20:14.389544Z"
 }

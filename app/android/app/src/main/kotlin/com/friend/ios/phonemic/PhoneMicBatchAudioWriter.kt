@@ -1,8 +1,13 @@
 package com.friend.ios.phonemic
 
 import com.friend.ios.batch.BaseBatchAudioWriter
+import com.friend.ios.batch.persistNativeBatchGeolocationSidecar
+import com.friend.ios.ble.OmiBleManager
 
 import android.content.Context
+import android.content.SharedPreferences
+import java.io.File
+import android.util.Log
 
 /**
  * Batch (transcribe-later) capture sink for the phone microphone — the Kotlin peer of
@@ -31,8 +36,24 @@ import android.content.Context
  * markers, and nothing else — it is disjoint from the BLE writer's `audio_omibatch_` and
  * the Limitless writer's `audio_omibatchlimitless_`.
  */
-class PhoneMicBatchAudioWriter(context: Context, private val dirPath: String) :
-    BaseBatchAudioWriter(context, TAG, "audio_omibatchphone") {
+class PhoneMicBatchAudioWriter internal constructor(
+    private val dirPath: String,
+    preferences: () -> SharedPreferences,
+    notifyFinalized: (String) -> Unit,
+    log: (Int, String) -> Unit,
+) : BaseBatchAudioWriter("audio_omibatchphone", preferences, notifyFinalized, log) {
+
+    constructor(context: Context, dirPath: String) : this(
+        dirPath,
+        { context.getSharedPreferences(BaseBatchAudioWriter.FLUTTER_PREFS, Context.MODE_PRIVATE) },
+        { fileName ->
+            if (OmiBleManager.isFlutterAlive) {
+                val manager = OmiBleManager.instance
+                manager.mainHandler.post { manager.flutterApi?.onBatchRecordingFinalized(fileName) {} }
+            }
+        },
+        { priority, message -> Log.println(priority, TAG, message) },
+    )
 
     /**
      * Session total of frames durably accepted by the writer (each = one 20ms opus
@@ -44,11 +65,23 @@ class PhoneMicBatchAudioWriter(context: Context, private val dirPath: String) :
         private set
 
     private var lastFrameMs: Long = 0
+    private var currentAudioFile: File? = null
 
     // Latched false->true storage-full edge, drained once per transition by the
     // controller's heartbeat so a single onCaptureError fires per storage-full event.
     private var pendingStorageFullReport = false
     private var wasStorageFull = false
+
+    override fun onOpenedLocked(partFile: File) {
+        val audioFile = File(partFile.parentFile, partFile.name.removeSuffix(PART_SUFFIX))
+        currentAudioFile = audioFile
+        persistCurrentGeolocationSidecar()
+    }
+
+    private fun persistCurrentGeolocationSidecar() {
+        val audioFile = currentAudioFile ?: return
+        persistNativeBatchGeolocationSidecar(audioFile, stringPref("phoneBatchGeolocation"), TAG)
+    }
 
     /**
      * Append the opus packets for one converted PCM chunk. Called on the writer's serial
@@ -61,9 +94,16 @@ class PhoneMicBatchAudioWriter(context: Context, private val dirPath: String) :
         synchronized(lock) {
             val now = System.currentTimeMillis()
 
-            // Muted: drop packets but keep the open file's gap timer fresh so unmute
-            // resumes the SAME file instead of opening a new one.
-            if (boolPref("batchMuted", false)) {
+            // Stamp the packet before doing any work. The policy is checked again
+            // under the write lock so queued audio admitted before a mute/revision
+            // change cannot cross the native file boundary.
+            val admittedRevision = captureAdmissionPolicy().revision
+            if (captureAdmissionPolicy().muted) {
+                if (isOpenLocked) lastFrameMs = now
+                return
+            }
+            val currentPolicy = captureAdmissionPolicy()
+            if (!currentPolicy.permits(admittedRevision)) {
                 if (isOpenLocked) lastFrameMs = now
                 return
             }
@@ -85,9 +125,9 @@ class PhoneMicBatchAudioWriter(context: Context, private val dirPath: String) :
             }
 
             if (!isOpenLocked) {
-                val startSec = now / 1000
                 // codec opus_fs320 (20ms frames), 16kHz mono — mirrors the BLE/pendant
                 // batch naming so the Dart scanner (`audio_omibatch*`) and backend both match.
+                val startSec = nextPhoneMicBatchStartSec(File(dirPath), marker, now / 1000)
                 val name = "audio_${marker}_opus_fs320_16000_1_fs320_${startSec}.bin$PART_SUFFIX"
                 if (!openLocked(dirPath, name, startSec, now)) {
                     noteStorageFullTransitionLocked() // open refused — likely the free-space guard
@@ -96,7 +136,18 @@ class PhoneMicBatchAudioWriter(context: Context, private val dirPath: String) :
                 wasStorageFull = false // a successful open means storage recovered
             }
 
+            // Opening/rotating a file can run arbitrary filesystem work. Re-read
+            // immediately before the write so a policy transition during that
+            // work cannot admit this packet.
+            if (!captureAdmissionPolicy().permits(admittedRevision)) {
+                if (isOpenLocked) lastFrameMs = now
+                return
+            }
             if (!writeFramesLocked(packets)) return
+            // Location capture intentionally starts after native audio. Retry
+            // until its fenced preference arrives; the sidecar helper never
+            // overwrites an existing recording-owned snapshot.
+            persistCurrentGeolocationSidecar()
             sessionFramesWritten += packets.size
             lastFrameMs = now
             maybeFsyncLocked(now)
@@ -124,6 +175,8 @@ class PhoneMicBatchAudioWriter(context: Context, private val dirPath: String) :
         }
 
     override fun onClosedLocked() {
+        persistCurrentGeolocationSidecar()
+        currentAudioFile = null
         lastFrameMs = 0
     }
 
@@ -146,4 +199,15 @@ class PhoneMicBatchAudioWriter(context: Context, private val dirPath: String) :
         private const val MAX_FILE_SECONDS = 900L // 15 min per file
         private const val GAP_MS = 30_000L // start a new file after this silence gap
     }
+}
+
+internal fun nextPhoneMicBatchStartSec(dir: File, marker: String, initialStartSec: Long): Long {
+    var startSec = initialStartSec
+    while (File(dir, "audio_${marker}_opus_fs320_16000_1_fs320_${startSec}.bin").exists() ||
+        File(dir, "audio_${marker}_opus_fs320_16000_1_fs320_${startSec}.bin${BaseBatchAudioWriter.PART_SUFFIX}")
+            .exists()
+    ) {
+        startSec++
+    }
+    return startSec
 }

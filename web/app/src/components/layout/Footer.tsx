@@ -1,7 +1,7 @@
 'use client';
 
 import { Twitter, Linkedin, Github } from 'lucide-react';
-import Image from 'next/image';
+import Image from '@tschk/moonshine-next/image';
 
 export function Footer() {
   return (
@@ -24,7 +24,7 @@ export function Footer() {
               href="https://x.com/based_hardware"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-gray-400 hover:text-white transition-colors"
+              className="text-gray-400 transition-colors hover:text-white"
             >
               <Twitter className="h-5 w-5" />
             </a>
@@ -32,7 +32,7 @@ export function Footer() {
               href="https://www.linkedin.com/company/omi-ai/"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-gray-400 hover:text-white transition-colors"
+              className="text-gray-400 transition-colors hover:text-white"
             >
               <Linkedin className="h-5 w-5" />
             </a>
@@ -40,7 +40,7 @@ export function Footer() {
               href="https://github.com/BasedHardware"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-gray-400 hover:text-white transition-colors"
+              className="text-gray-400 transition-colors hover:text-white"
             >
               <Github className="h-5 w-5" />
             </a>
@@ -73,11 +73,11 @@ export function Footer() {
             <li>
               <a
                 className="text-zinc-400 hover:text-white hover:underline md:text-base"
-                href="https://www.omi.me/products/omi-dev-kit-2"
+                href="https://www.omi.me/"
                 target="_blank"
                 rel="noreferrer"
               >
-                Omi DEV KIT 2
+                Buy Omi
               </a>
             </li>
           </ul>

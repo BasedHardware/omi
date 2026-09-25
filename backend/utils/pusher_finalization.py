@@ -1,24 +1,51 @@
 import json
 import logging
 import struct
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 
 from fastapi.websockets import WebSocket, WebSocketDisconnect
 
 from database import conversation_finalization_jobs as finalization_jobs_db
 from services.conversation_finalization import final_attempt_failed
-from utils.byok import set_byok_keys, set_byok_uid
+from utils.byok import set_validated_byok_keys
 from utils.cloud_tasks import get_listen_finalization_tasks_max_attempts
+from utils.metrics import LISTEN_FINALIZATION_RETRIES_TOTAL
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.finalizer import (
     ConversationFinalizationDisposition,
     ConversationFinalizationError,
     finalize_persisted_conversation,
 )
+from utils.durable_queue_policy import ProcessOutcome, QueuePolicy, decide_attempt
 from utils.executors import db_executor, run_blocking
-from utils.observability.journeys import record_capture_finalization_terminal
+from utils.observability.journeys import (
+    record_capture_finalization_terminal,
+    record_conversation_finalization_client_terminal,
+)
 
 logger = logging.getLogger('routers.pusher')
+
+FINALIZATION_RESULT_PROTOCOL_LEGACY = 1
+FINALIZATION_RESULT_PROTOCOL_V2 = 2
+
+
+def _processing_attempt_number(failed_processing_attempts: int) -> int:
+    """Return the 1-based attempt index for this processing try.
+
+    ``claim_finalization_job`` no longer burns the budget on lease handoffs;
+    ``attempt_count`` is failed processing so far. This try is the next one.
+    """
+    return max(int(failed_processing_attempts), 0) + 1
+
+
+def _finalization_attempt_decision(attempt_count: int, *, reason: str):
+    return decide_attempt(
+        attempt_count=_processing_attempt_number(attempt_count),
+        outcome=ProcessOutcome.retry(reason, reason=reason),
+        policy=QueuePolicy(max_attempts=get_listen_finalization_tasks_max_attempts()),
+        now=datetime.now(timezone.utc),
+    )
 
 
 async def process_conversation_task(
@@ -29,6 +56,8 @@ async def process_conversation_task(
     byok_keys: Optional[Dict[str, str]] = None,
     finalization_job_id: Optional[str] = None,
     dispatch_generation: Optional[int] = None,
+    client_kind: str = 'unknown',
+    finalization_result_protocol: int = FINALIZATION_RESULT_PROTOCOL_LEGACY,
 ) -> None:
     """Process a leased conversation job and send a minimal result to listen.
 
@@ -37,8 +66,9 @@ async def process_conversation_task(
     provider keys instead of Omi's env keys.
     """
     if byok_keys:
-        set_byok_keys(byok_keys)
-        set_byok_uid(uid)
+        # Listen already validated these against enrollment; mark them validated
+        # so the LLM/STT clients inside process_conversation route through them.
+        set_validated_byok_keys(byok_keys, uid)
 
     async def send_result(result: Dict[str, Any]) -> None:
         """Attempt the optional live acknowledgement after durable work.
@@ -74,7 +104,8 @@ async def process_conversation_task(
         """
         if job_id is None or generation is None or lease_epoch is None:
             return False
-        terminal = attempt_count >= get_listen_finalization_tasks_max_attempts()
+        this_try = _processing_attempt_number(attempt_count)
+        terminal = _finalization_attempt_decision(attempt_count, reason=failure_code).terminal
         try:
             if terminal:
                 marked_dead_letter = await run_blocking(
@@ -83,7 +114,7 @@ async def process_conversation_task(
                     job_id,
                     generation,
                     lease_epoch,
-                    attempt_count,
+                    this_try,
                 )
                 if not marked_dead_letter:
                     return False
@@ -96,6 +127,7 @@ async def process_conversation_task(
                 lease_epoch,
                 failure_code,
             )
+            LISTEN_FINALIZATION_RETRIES_TOTAL.inc()
         except Exception:
             logger.error(
                 'pusher finalization recovery update failed uid=%s conversation=%s failure=%s terminal=%s',
@@ -134,6 +166,20 @@ async def process_conversation_task(
         if claim_status == 'completed':
             await send_result({'conversation_id': conversation_id, 'success': True})
             return
+        if claim_status == 'stale_generation':
+            # The generation-aware response is opt-in so either side can be
+            # rolled out first. Legacy listeners treat unknown non-terminal
+            # errors as their existing bounded retry path; only a v2 listener
+            # can safely match and drop the superseded pending generation.
+            result: Dict[str, Any] = {
+                'conversation_id': conversation_id,
+                'error': 'job_stale_generation',
+                'terminal': False,
+            }
+            if finalization_result_protocol >= FINALIZATION_RESULT_PROTOCOL_V2:
+                result['dispatch_generation'] = generation
+            await send_result(result)
+            return
         if claim_status != 'claimed':
             await send_result(
                 {
@@ -161,6 +207,7 @@ async def process_conversation_task(
             finalization_job_id=job_id,
             dispatch_generation=generation,
             lease_epoch=lease_epoch,
+            final_attempt=_finalization_attempt_decision(attempt_count, reason='finalization_preflight').terminal,
         )
 
         if disposition == ConversationFinalizationDisposition.fenced:
@@ -184,13 +231,21 @@ async def process_conversation_task(
             return
         if disposition == ConversationFinalizationDisposition.fenced:
             record_capture_finalization_terminal('stale', claim.get('created_at'))
+            record_conversation_finalization_client_terminal('cancelled', claim, client_kind=client_kind)
             await send_result({'conversation_id': conversation_id, 'fenced': True})
             return
         record_capture_finalization_terminal('success', claim.get('created_at'))
+        record_conversation_finalization_client_terminal('success', claim, client_kind=client_kind)
         await send_result({'conversation_id': conversation_id, 'success': True})
     except ConversationFinalizationError:
         terminal = await record_failure('processing_failed')
-        logger.error(
+        # Severity follows the fault origin, mirroring the session-side
+        # reclassification of the will-retry branch (listen_pusher_session,
+        # FC-request-input-rejection-escapes-as-server-fault): a non-terminal
+        # failure stays armed for bounded retry — healthy in-flight work —
+        # while terminal dead-lettering is the genuine fault signal at ERROR.
+        log = logger.error if terminal else logger.warning
+        log(
             'pusher finalization failed uid=%s conversation=%s failure=processing_failed terminal=%s',
             uid,
             conversation_id,
@@ -202,7 +257,8 @@ async def process_conversation_task(
             pass
     except Exception:
         terminal = await record_failure('worker_failed')
-        logger.error(
+        log = logger.error if terminal else logger.warning
+        log(
             'pusher finalization task failed uid=%s conversation=%s failure=worker_failed terminal=%s',
             uid,
             conversation_id,

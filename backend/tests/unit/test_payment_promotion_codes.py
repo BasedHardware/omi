@@ -279,10 +279,15 @@ def _setup_payment_module(include_client: bool = True) -> Any:
     sub_mod.clear_trial_paywall_cache = MagicMock()
     sub_mod.find_active_paid_subscription_for_user = MagicMock()
     sub_mod.price_ids_match_plan_and_interval = MagicMock(return_value=True)
+    sub_mod.desktop_to_consumer_plan_change_error = MagicMock(return_value=None)
 
     fallback_mod = types.ModuleType("utils.observability.fallback")
     fallback_mod.record_fallback = MagicMock()
     sys.modules["utils.observability.fallback"] = fallback_mod
+
+    subscription_events_mod = types.ModuleType("utils.observability.subscription_events")
+    subscription_events_mod.record_subscription_event = MagicMock()
+    sys.modules["utils.observability.subscription_events"] = subscription_events_mod
 
     stripe_utils_mod = sys.modules["utils.stripe"]
     stripe_utils_mod.base_url = "http://test/"

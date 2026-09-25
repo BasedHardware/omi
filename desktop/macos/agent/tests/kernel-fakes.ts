@@ -49,6 +49,7 @@ export class FakeRuntimeAdapter implements RuntimeAdapter {
   sinks = new Map<string, AdapterEventSink>();
   failNextOpenError: unknown;
   failNextExecutionError: unknown;
+  failNextStop = false;
   eventBeforeExecutionError: OutboundMessage | undefined;
   failNextResume = false;
   failNextExecutionAsStale = false;
@@ -78,6 +79,10 @@ export class FakeRuntimeAdapter implements RuntimeAdapter {
 
   async stop(): Promise<void> {
     this.stopped += 1;
+    if (this.failNextStop) {
+      this.failNextStop = false;
+      throw new Error("stop failed");
+    }
   }
 
   async openBinding(input: OpenBindingInput): Promise<OpenedBinding> {

@@ -155,6 +155,41 @@ final class ConversationRepositoryTests: XCTestCase {
     XCTAssertEqual(repository.conversations[0].structured.overview, "Fresh server summary")
   }
 
+  func testDetailByIdFetchesAConversationTheListNeverLoaded() async throws {
+    let member = makeConversation(id: "other-device", title: "Pendant recording", revision: 2)
+    let remote = FakeConversationRemote(detailResult: .success(member))
+    let local = FakeConversationLocal()
+    let repository = ConversationRepository(remote: remote, local: local)
+
+    let result = try await repository.detail(id: "other-device")
+
+    XCTAssertEqual(result.structured.title, "Pendant recording")
+    XCTAssertEqual(local.stored.map(\.id), ["other-device"], "A fetched member is cached like any detail")
+  }
+
+  func testDetailByIdWithNothingCachedThrowsInsteadOfInventingARow() async {
+    let repository = ConversationRepository(
+      remote: FakeConversationRemote(detailResult: .failure(TestFailure.offline)),
+      local: FakeConversationLocal()
+    )
+    do {
+      _ = try await repository.detail(id: "missing")
+      XCTFail("A failed by-id fetch with no cache and no seed must throw")
+    } catch {
+      XCTAssertTrue(error is TestFailure)
+    }
+  }
+
+  func testDetailByIdFallsBackToTheCacheWhenOffline() async throws {
+    let cached = makeConversation(id: "other-device", title: "Cached pendant", revision: 1)
+    let repository = ConversationRepository(
+      remote: FakeConversationRemote(detailResult: .failure(TestFailure.offline)),
+      local: FakeConversationLocal(detailResult: cached)
+    )
+    let result = try await repository.detail(id: "other-device")
+    XCTAssertEqual(result.structured.title, "Cached pendant")
+  }
+
   func testResetRejectsDetailResponseFromPreviousSessionBeforeCacheWrite() async {
     let initial = makeConversation(title: "Previous account", revision: 1)
     let staleDetail = makeConversation(title: "Stale detail", revision: 2, transcript: "private transcript")

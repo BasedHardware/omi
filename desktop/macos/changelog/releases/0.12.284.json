@@ -1,0 +1,8 @@
+{
+  "version": "0.12.284",
+  "date": "2026-09-04",
+  "changes": [
+    "Reminders can now bind to the app or document you were in, and come back the next time you open it",
+    "Daily recaps now generate without a phone, fill missed days, and show on the Activity timeline"
+  ]
+}

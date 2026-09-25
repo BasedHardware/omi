@@ -1,0 +1,18 @@
+{
+  "schema_version": 1,
+  "id": "FC-client-rederives-authority-verdict",
+  "violated_contract": "A client that consumes an authority's decision response must act on the authority's own verdict field, never re-derive a stricter verdict from the raw inputs the authority also returns. The re-derivation diverges silently the day the authority's computation changes: the client keeps issuing the decision read, receives a 200, and gates off anyway — no decode error, no failing test, and the server log looks healthy. #12369 collapsed backend JIT admission onto one exposure flag plus a two-UID allowlist and returns effective=enabled for admitted owners; the macOS client kept requiring rollout == enabled && kill_switch == .disabled, so Omi Beta 12237 repeatedly read /v1/jit/rollout-decision with a 200, never issued GET /v1/jit/trigger-snapshot, and persisted zero jit_trigger_snapshot_receipts rows. The Windows client parses and uses effective and was not affected.",
+  "canonical_prevention": "Point the admission predicate at the same value the authority computes: JITProactivityFlags.permitsNewLane admits on effective == .enabled and fails closed on .disabled, keeping the raw rollout + kill-switch pair only as an older-server fallback that distinguishes an absent kill_switch (wire compatibility) from a present unknown (fail closed). Exercise the full truth table through URLProtocol-level wire tests against the response shape the router actually emits, plus a runtime test that an effective-enabled authority reads the trigger snapshot and persists its receipt even for a complete empty watchlist. A downstream projection failure (ledger mirror sync) must fail that projection closed, not the authoritative receipt the client already holds.",
+  "canonical_prevention_artifact": [
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/Core/JITProactivityPolicy.swift",
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ProactiveLaneClient.swift",
+    "desktop/macos/Desktop/Tests/ProactiveLaneClientTests.swift",
+    "desktop/macos/Desktop/Tests/JITProactivityRuntimeTests.swift"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/**",
+    "desktop/windows/src/main/jit/**"
+  ],
+  "status": "open"
+}

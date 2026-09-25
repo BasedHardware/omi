@@ -206,6 +206,90 @@ final class WorkHistoryIndexTests: XCTestCase {
     }
   }
 
+  /// `get_work_context` now reads this window on its default path. Without a startedAt
+  /// index the query is a full scan plus sort of every visit ever recorded, which is a
+  /// regression that only shows up on a long-lived profile — so assert the plan, not the
+  /// wall clock.
+  func testRecentVisitsWindowUsesStartedAtIndex() throws {
+    let queue = try migratedQueue()
+    try queue.read { db in
+      let plan = try Row.fetchAll(
+        db,
+        sql: """
+          EXPLAIN QUERY PLAN
+          SELECT startedAt, endedAt, appName, rawContextKey, handlesJson, bucketID, outcome
+          FROM context_visits
+          WHERE startedAt >= ? AND startedAt <= ?
+            AND outcome IN ('completed', 'interrupted', 'active')
+          ORDER BY startedAt DESC
+          LIMIT 20
+          """,
+        arguments: [Date(timeIntervalSince1970: 0), Date()]
+      ).compactMap { $0["detail"] as String? }.joined(separator: " ")
+      XCTAssertTrue(
+        plan.contains("idx_context_visits_outcome_startedAt"),
+        "recent-visit window must be served by the outcome+startedAt index, got: \(plan)")
+      XCTAssertTrue(
+        plan.contains("startedAt>?"),
+        "index must serve the startedAt range, not only the outcome equality: \(plan)")
+      XCTAssertFalse(plan.contains("SCAN context_visits"), "plan still scans: \(plan)")
+    }
+  }
+
+  /// The cheap default path answers "where was that doc" from handles alone. Attaching the
+  /// index must not depend on the screen half of the payload having been built.
+  func testWorkContextIndexAttachesWithoutScreenFields() throws {
+    let url = try XCTUnwrap(WorkHistoryHandle.url("https://docs.google.com/document/d/abc"))
+    let start = Date(timeIntervalSince1970: 1_725_000_000)
+    let snapshot = ScreenContextWorkContextBuilder.WorkHistorySnapshot(
+      visits: [
+        WorkHistoryVisitRecord(
+          startedAt: start,
+          endedAt: start.addingTimeInterval(30),
+          appName: "Arc",
+          title: "Pricing proposal",
+          handles: [url],
+          bucketID: "bucket-1",
+          outcome: "completed")
+      ],
+      briefs: [
+        WorkstreamBrief(
+          bucketID: "bucket-1", name: "Pricing proposal", lastVisitAt: start, handles: [url],
+          facts: ["Pricing doc is the source of truth"])
+      ])
+
+    var payload: [String: Any] = ["ok": true, "name": "get_work_context"]
+    ScreenContextWorkContextBuilder.attach(snapshot, to: &payload, now: start)
+
+    let visits = try XCTUnwrap(payload["visits"] as? [[String: Any]])
+    XCTAssertEqual(visits.count, 1)
+    let handles = try XCTUnwrap(visits.first?["handles"] as? [[String: Any]])
+    XCTAssertEqual(handles.first?["value"] as? String, url.value)
+    let briefs = try XCTUnwrap(payload["briefs"] as? [[String: Any]])
+    XCTAssertEqual(briefs.first?["bucket_id"] as? String, "bucket-1")
+    XCTAssertNil(payload["timeline"], "index attach must not synthesize tape fields")
+  }
+
+  /// An empty index must leave the payload alone, so a profile with no visits still falls
+  /// through to the existing tape path instead of returning an empty answer.
+  func testEmptyIndexAttachesNothing() {
+    var payload: [String: Any] = ["ok": true]
+    ScreenContextWorkContextBuilder.attach(
+      ScreenContextWorkContextBuilder.WorkHistorySnapshot(), to: &payload, now: Date())
+    XCTAssertNil(payload["visits"])
+    XCTAssertNil(payload["briefs"])
+  }
+
+  func testIncludeScreenArgumentParsing() {
+    XCTAssertEqual(ScreenContextWorkContextBuilder.parseBool(true), true)
+    XCTAssertEqual(ScreenContextWorkContextBuilder.parseBool("true"), true)
+    XCTAssertEqual(ScreenContextWorkContextBuilder.parseBool(1), true)
+    XCTAssertEqual(ScreenContextWorkContextBuilder.parseBool("false"), false)
+    XCTAssertEqual(ScreenContextWorkContextBuilder.parseBool(0), false)
+    XCTAssertNil(ScreenContextWorkContextBuilder.parseBool("maybe"))
+    XCTAssertNil(ScreenContextWorkContextBuilder.parseBool(nil))
+  }
+
   private func migratedQueue() throws -> DatabaseQueue {
     let queue = try DatabaseQueue()
     try queue.write { db in

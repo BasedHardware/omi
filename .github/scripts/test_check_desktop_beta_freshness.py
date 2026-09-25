@@ -44,7 +44,7 @@ class FreshnessTests(unittest.TestCase):
             patch.object(freshness, "fetch_beta_appcast", return_value=_appcast(12172)),
             patch.object(freshness.planner, "tag_sha", return_value=TAG_SHA),
             patch.object(freshness.planner, "tag_age_seconds", return_value=20_000),
-            patch.object(freshness, "newest_releasable_main_commit", return_value=(MAIN_SHA, 100)),
+            patch.object(freshness, "oldest_unreleased_releasable_main_commit", return_value=(MAIN_SHA, 100)),
             patch.object(freshness, "is_ancestor", return_value=True),
         ):
             code, lines = freshness.evaluate(repository=REPOSITORY)
@@ -62,7 +62,7 @@ class FreshnessTests(unittest.TestCase):
                 "github_check_status",
                 return_value=("completed", "failure", "https://example.test/codemagic", None),
             ),
-            patch.object(freshness, "newest_releasable_main_commit", return_value=(MAIN_SHA, 100)),
+            patch.object(freshness, "oldest_unreleased_releasable_main_commit", return_value=(MAIN_SHA, 100)),
             patch.object(freshness, "is_ancestor", return_value=True),
         ):
             code, lines = freshness.evaluate(repository=REPOSITORY)
@@ -83,7 +83,7 @@ class FreshnessTests(unittest.TestCase):
                 "github_check_status",
                 return_value=("completed", "success", "https://example.test/ok", None),
             ),
-            patch.object(freshness, "newest_releasable_main_commit", return_value=(MAIN_SHA, 100)),
+            patch.object(freshness, "oldest_unreleased_releasable_main_commit", return_value=(MAIN_SHA, 100)),
             patch.object(freshness, "is_ancestor", return_value=True),
         ):
             code, lines = freshness.evaluate(repository=REPOSITORY)
@@ -103,7 +103,7 @@ class FreshnessTests(unittest.TestCase):
                 "github_check_status",
                 return_value=(None, None, None, None),
             ),
-            patch.object(freshness, "newest_releasable_main_commit", return_value=(MAIN_SHA, 100)),
+            patch.object(freshness, "oldest_unreleased_releasable_main_commit", return_value=(MAIN_SHA, 100)),
             patch.object(freshness, "is_ancestor", return_value=True),
         ):
             code, lines = freshness.evaluate(repository=REPOSITORY)
@@ -116,7 +116,7 @@ class FreshnessTests(unittest.TestCase):
             patch.object(freshness, "fetch_beta_appcast", return_value=_appcast(12100)),
             patch.object(freshness.planner, "tag_sha", return_value=TAG_SHA),
             patch.object(freshness.planner, "tag_age_seconds", return_value=60),
-            patch.object(freshness, "newest_releasable_main_commit", return_value=(MAIN_SHA, 100)),
+            patch.object(freshness, "oldest_unreleased_releasable_main_commit", return_value=(MAIN_SHA, 100)),
             patch.object(freshness, "is_ancestor", return_value=True),
         ):
             code, lines = freshness.evaluate(repository=REPOSITORY)
@@ -129,7 +129,7 @@ class FreshnessTests(unittest.TestCase):
             patch.object(freshness, "fetch_beta_appcast", return_value=_appcast(12172)),
             patch.object(freshness.planner, "tag_sha", return_value=TAG_SHA),
             patch.object(freshness.planner, "tag_age_seconds", return_value=60),
-            patch.object(freshness, "newest_releasable_main_commit", return_value=(MAIN_SHA, 22_000)),
+            patch.object(freshness, "oldest_unreleased_releasable_main_commit", return_value=(MAIN_SHA, 22_000)),
             patch.object(freshness, "is_ancestor", return_value=False),
             patch.object(
                 freshness,
@@ -143,6 +143,35 @@ class FreshnessTests(unittest.TestCase):
         self.assertIn("Wedged train", joined)
         self.assertIn(MAIN_SHA, joined)
         self.assertIn("https://github.com/BasedHardware/omi/actions/runs/1", joined)
+
+    def test_merge_churn_cannot_reset_the_oldest_unreleased_update_age(self) -> None:
+        changelog_only = "1" * 40
+        oldest_desktop = "2" * 40
+        newest_desktop = "3" * 40
+
+        def fake_git(args: list[str], *, check: bool = True) -> str:
+            del check
+            if args[:3] == ["log", "--first-parent", "--reverse"]:
+                self.assertIn(f"{TAG}..HEAD", args)
+                return "\n".join((changelog_only, oldest_desktop, newest_desktop))
+            if args[0] == "diff-tree":
+                sha = args[6]
+                self.assertEqual(args[5], f"{sha}^1")
+                return {
+                    changelog_only: "desktop/macos/changelog/unreleased/note.json",
+                    oldest_desktop: "desktop/macos/Desktop/Sources/App.swift",
+                    newest_desktop: "desktop/macos/Desktop/Sources/New.swift",
+                }[sha]
+            self.fail(f"unexpected git call: {args}")
+
+        with (
+            patch.object(freshness.planner, "git", side_effect=fake_git),
+            patch.object(freshness.planner, "commit_age_seconds", return_value=30_000) as age,
+        ):
+            result = freshness.oldest_unreleased_releasable_main_commit(TAG)
+
+        self.assertEqual(result, (oldest_desktop, 30_000))
+        age.assert_called_once_with(oldest_desktop)
 
 
 if __name__ == "__main__":
