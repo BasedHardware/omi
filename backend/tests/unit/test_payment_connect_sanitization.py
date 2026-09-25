@@ -94,16 +94,16 @@ def test_cancel_app_subscription_masks_stripe_error(monkeypatch):
     """App subscription cancellation errors must not leak raw exception detail."""
     monkeypatch.setattr(payment_routes.stripe.error, "StripeError", _FakeStripeError)
     monkeypatch.setattr(
-        payment_routes.apps,
+        payment_routes,
         "find_app_subscription",
-        lambda uid, app_id: {"subscription_id": "sub_app_777", "customer_id": "cus_123"},
+        lambda app_id, uid, status_filter='active': {"subscription_id": "sub_app_777", "customer_id": "cus_123"},
     )
 
     leak_msg = "No such subscription: 'sub_app_777'; live mode key used in test environment"
 
     with patch.object(payment_routes.stripe.Subscription, "modify", side_effect=_FakeStripeError(leak_msg)):
         with pytest.raises(HTTPException) as exc_info:
-            payment_routes.cancel_app_subscription_endpoint(app_id="app_123", uid="user_123")
+            payment_routes.cancel_app_subscription(app_id="app_123", uid="user_123")
 
     assert exc_info.value.status_code == 400
     assert "sub_app_777" not in exc_info.value.detail
@@ -128,9 +128,9 @@ def test_checkout_session_fallback_masks_invalid_request_error(monkeypatch):
     fake_req.promotion_code_id = None
 
     with pytest.raises(HTTPException) as exc_info:
-        payment_routes.create_checkout_session(request=fake_req, uid="user_123")
+        payment_routes.create_checkout_session_endpoint(request=fake_req, uid="user_123")
 
     assert exc_info.value.status_code == 400
     assert "sk_test_51" not in exc_info.value.detail
     assert "Invalid API key" not in exc_info.value.detail
-    assert exc_info.value.detail == "Invalid payment request. Please check your payment details."
+    assert exc_info.value.detail == "Invalid payment configuration. Please try again."
