@@ -217,18 +217,24 @@ class ListenReceiver:
             if start <= sample < end:
                 return conversation_id
         # Outside every retained run. A sample below the oldest retained run
-        # whose retained history shows a single conversation fails open to that
-        # conversation (no recorded boundary contradicts it); anything else —
-        # boundaries in the retained window, or a sample past the newest run —
-        # is genuinely ambiguous and fails closed.
+        # fails closed: retention may have evicted the run — and every
+        # boundary — that owned it, so a single retained conversation is not
+        # evidence (the evicted runs could have been a different conversation
+        # trimmed by the 120 s window). A sample past the newest run belongs
+        # to whatever the session is recording now. Between two retained runs
+        # the history is provably complete inside the retention horizon — no
+        # run covering the sample was eligible for eviction — so a single
+        # retained conversation fails open there; anything else is ambiguous.
         oldest_start = ranges[0][0]
         newest_end = ranges[-1][1]
         if sample < oldest_start:
+            return None
+        if sample >= newest_end:
+            return self.host.state.current_conversation_id
+        if newest_end - sample <= CAPTURE_RANGE_RETENTION_SECONDS * self.capture_timeline.sample_rate:
             owners = {conversation_id for _, _, conversation_id in ranges}
             if len(owners) == 1:
                 return next(iter(owners))
-        elif sample >= newest_end:
-            return self.host.state.current_conversation_id
         return None
 
     def _note_accepted_frame(self, start_sample: int, end_sample: int) -> None:
