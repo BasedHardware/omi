@@ -19,6 +19,10 @@ Deploying a notifications-job image that no longer runs X sync **before** this j
 
 1. Ensure Secret Manager has `X_OAUTH_CLIENT_SECRET` / `RAPID_API_KEY`, and GitHub env vars `X_OAUTH_CLIENT_ID` / `X_OAUTH_REDIRECT_URI` / `RAPID_API_HOST` for the deploy environment.
 2. Create Scheduler SA + `x-connector-sync-6h` (below) after the Cloud Run Job resource exists (or create the job stub first).
+   If you deploy before the trigger exists, run `gcp_x_connector_sync_job.yml` with
+   `allow_missing_scheduler=true` — that is the only way the scheduler-contract step
+   tolerates a missing trigger, and it warns loudly instead of passing quietly. Every
+   later run must leave it `false` so a deleted or drifted trigger fails the deploy.
 3. Run `gcp_x_connector_sync_job.yml` until deploy + scheduler validation both pass.
 4. Only then deploy the notifications-job revision that dropped X sync.
 

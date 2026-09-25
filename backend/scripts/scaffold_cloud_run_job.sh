@@ -49,8 +49,12 @@ if [[ -z "$JOB_NAME" ]]; then
   exit 2
 fi
 
-if [[ ! "$JOB_NAME" =~ ^[a-z][a-z0-9-]*$ ]]; then
-  echo "job name must be kebab-case: $JOB_NAME" >&2
+# Cloud Run's own resource-name grammar: 1-63 chars, leading letter, trailing
+# alphanumeric. The looser ^[a-z][a-z0-9-]*$ accepted "foo-" and 80-character
+# names, so scaffolding succeeded and `gcloud run jobs deploy` rejected the name
+# later, after the stubs were already written.
+if [[ ! "$JOB_NAME" =~ ^[a-z]([a-z0-9-]{0,61}[a-z0-9])?$ ]]; then
+  echo "job name must be 1-63 chars, start with a letter, end alphanumeric, kebab-case: $JOB_NAME" >&2
   exit 2
 fi
 

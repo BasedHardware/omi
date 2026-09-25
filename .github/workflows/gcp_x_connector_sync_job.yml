@@ -17,6 +17,11 @@ on:
         description: 'Release version (optional)'
         required: false
         default: ''
+      allow_missing_scheduler:
+        description: 'First deploy only: the x-connector-sync-6h Scheduler job does not exist yet'
+        required: false
+        default: false
+        type: boolean
 
 env:
   SERVICE: x-connector-sync-job
@@ -169,13 +174,28 @@ jobs:
           secrets: ${{ steps.runtime-env.outputs.x_connector_sync_job_secrets }}
 
       - name: Validate 6h Scheduler trigger
+        env:
+          ALLOW_MISSING_SCHEDULER: ${{ inputs.allow_missing_scheduler }}
         run: |
           scheduler_state_file=$(mktemp)
           trap 'rm -f "$scheduler_state_file"' EXIT
-          gcloud scheduler jobs describe "$SCHEDULER_JOB" \
+          # The Scheduler job is created once per environment by the runbook, not by
+          # this workflow, so the very first deploy has nothing to describe. Failing
+          # there reports a red deploy after the Cloud Run job already shipped, but
+          # skipping silently would also hide a deleted trigger forever -- so the
+          # bootstrap case is an explicit opt-in and every other run still hard-fails.
+          if ! gcloud scheduler jobs describe "$SCHEDULER_JOB" \
             --location="$REGION" \
             --project="${{ vars.GCP_PROJECT_ID }}" \
-            --format=json > "$scheduler_state_file"
+            --format=json > "$scheduler_state_file" 2>/tmp/scheduler_describe_err; then
+            cat /tmp/scheduler_describe_err >&2
+            if [ "$ALLOW_MISSING_SCHEDULER" = "true" ]; then
+              echo "::warning::$SCHEDULER_JOB not found and allow_missing_scheduler=true; skipping contract validation. Create it now per backend/docs/runbooks/x-connector-sync-job.md -- until it exists, X sync does not run."
+              exit 0
+            fi
+            echo "::error::$SCHEDULER_JOB could not be described. If this is the first deploy for this environment, re-run with allow_missing_scheduler=true and then create the trigger per backend/docs/runbooks/x-connector-sync-job.md." >&2
+            exit 1
+          fi
           python3 backend/scripts/validate_x_connector_sync_scheduler.py \
             --state-file "$scheduler_state_file" \
             --project "${{ vars.GCP_PROJECT_ID }}" \
