@@ -9,6 +9,10 @@ import { REAL_MODEL_GENERATION_LIVENESS } from "../chat/real-model-liveness";
 import { createGatewayChatGenerationSource } from "../chat/generation-source";
 import { LOOPBACK_IDLE_TIMEOUT_SECONDS } from "../net/loopback";
 import { CHAT_GENERATION_SSE_HEARTBEAT_INTERVAL_MS } from "./chat-messages";
+import {
+  CHAT_ROUTE_TEST_AT,
+  chatCreatePayload,
+} from "../../../harness/chat-route-fixtures";
 
 /**
  * Incident replay. Bun's default `idleTimeout` is 10s. glm-4.7 reasoned for
@@ -140,21 +144,10 @@ describe("reasoning preamble vs Bun idleTimeout", () => {
         authorization: `Bearer ${local.devToken}`,
         "content-type": "application/json",
       },
-      body: JSON.stringify({
-        op: "create",
+      body: JSON.stringify(chatCreatePayload("msg-reasoning-idle", CHAT_ROUTE_TEST_AT, {
         opId: "op-reasoning-idle",
-        id: "msg-reasoning-idle",
-        at: 1_786_352_400_000,
         text: "Is Harborline open?",
-        sender: "human",
-        journalRevision: 1,
-        type: "text",
-        appId: null,
-        chatSessionId: null,
-        messageSource: "desktop_chat",
-        metadata: null,
-        attachmentIds: [],
-      }),
+      })),
     });
     expect(admissionResponse.status).toBe(201);
     const admission = await admissionResponse.json() as { generation: { id: string } };

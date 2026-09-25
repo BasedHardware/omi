@@ -5,6 +5,7 @@ import {
   parseOmiChatStream,
 } from './legacyOmiChat';
 import type {NativeHttpResponse, OmiBackend} from './omiNative';
+import {nativeTransportErrorKind} from './nativeTransportError';
 import {
   parseChatGenerationEventStream,
   wireToChatAdmissionEnvelope,
@@ -73,14 +74,6 @@ export function chatErrorCopy(error: unknown): string {
   return 'This request cannot be completed.';
 }
 
-function nativeErrorCode(value: unknown): string | null {
-  if (value === null || typeof value !== 'object') {
-    return null;
-  }
-  const code = (value as {code?: unknown}).code;
-  return typeof code === 'string' ? code : null;
-}
-
 // A chat failure that means "this client no longer holds a usable cloud
 // session": a backend 401 / reauthenticate action, or native credentials that
 // never resolved. Callers use it to re-probe the session instead of keeping a
@@ -105,7 +98,7 @@ export function chatHistoryErrorCopy(error: unknown): string {
   if (error instanceof ChatBackendError) {
     return chatErrorCopy(error);
   }
-  const code = nativeErrorCode(error);
+  const code = nativeTransportErrorKind(error);
   if (
     code === 'OMI_HTTP_UNCONFIGURED' ||
     code === 'OMI_HTTP_UNAUTHORIZED' ||

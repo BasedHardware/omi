@@ -4,6 +4,7 @@ import {
   loadOmiTasks,
 } from './legacyOmiReads';
 import {isOptionalCaptureTimestamp} from './captureTimestamp';
+import {nativeTransportErrorKind} from './nativeTransportError';
 import type {OmiBackend} from './omiNative';
 
 export type ConversationProjection = {
@@ -228,16 +229,8 @@ class DesktopProjectionUnavailableError extends Error {}
 export class ConversationCursorExpiredError extends Error {}
 export class TaskCursorExpiredError extends Error {}
 
-function nativeErrorCode(value: unknown): string | null {
-  if (value === null || typeof value !== 'object') {
-    return null;
-  }
-  const code = (value as {code?: unknown}).code;
-  return typeof code === 'string' ? code : null;
-}
-
 export function desktopReadErrorCopy(error: unknown): string {
-  const code = nativeErrorCode(error);
+  const code = nativeTransportErrorKind(error);
   if (
     code === 'OMI_HTTP_UNCONFIGURED' ||
     (error instanceof Error &&

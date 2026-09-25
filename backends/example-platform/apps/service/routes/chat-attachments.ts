@@ -6,6 +6,7 @@ import {
 } from "@omi-core/ratified-contracts/projections/synthesized";
 
 import type { DevPrincipal } from "../auth/dev-token";
+import { bearerToken } from "../auth/authorization-header";
 import {
   ATTACHMENT_STAGING_TTL_MS,
   CHAT_MAX_ATTACHMENT_BYTES,
@@ -55,9 +56,8 @@ const principalFrom = (
   authorization: string | undefined,
   resolvePrincipal: ChatAttachmentsRouteDependencies["resolvePrincipal"],
 ): DevPrincipal | null => {
-  if (authorization === undefined || !authorization.startsWith("Bearer ")) return null;
-  const token = authorization.slice("Bearer ".length);
-  return token.length === 0 ? null : resolvePrincipal(token);
+  const token = bearerToken(authorization);
+  return token === null ? null : resolvePrincipal(token);
 };
 
 const normalizedDisplayName = (raw: unknown): string | null => {

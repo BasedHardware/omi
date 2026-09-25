@@ -55,7 +55,12 @@ import {TaskPagination} from '../ui/TaskPagination';
 import {ConnectorsPage} from '../pages/Connectors';
 import {SettingsPage} from '../pages/Settings';
 import {resolveInitialRoute, type Route} from './routes';
-import {DeviceSession, homeConnectionStatus} from './DeviceSession';
+import {
+  DeviceSession,
+  type DeviceSessionVariant,
+  homeConnectionStatus,
+} from './DeviceSession';
+import {matchesSearchQuery} from '../searchText';
 import {useDesktopReads} from './useDesktopReads';
 import {useTaskMutations} from './useTaskMutations';
 import {useOnboarding} from './useOnboarding';
@@ -91,6 +96,26 @@ const quickPrompts = [
   'What should I remember?',
   'Summarize my recent conversations',
 ];
+
+// Paired, exhaustive Route <-> MobileRoute maps. Keep both directions here so
+// the mobile surface and the app route can never drift apart. Memories has no
+// mobile surface of its own and lands on the mobile home route.
+const mobileRouteByRoute: Record<Route, MobileRoute> = {
+  Home: 'home',
+  Conversations: 'chat',
+  Memories: 'home',
+  Tasks: 'tasks',
+  Settings: 'settings',
+  Connectors: 'apps',
+};
+
+const routeByMobileRoute: Record<MobileRoute, Route> = {
+  home: 'Home',
+  chat: 'Conversations',
+  tasks: 'Tasks',
+  settings: 'Settings',
+  apps: 'Connectors',
+};
 
 function App({initialRoute}: AppProps): React.JSX.Element {
   const {width} = useWindowDimensions();
@@ -253,6 +278,36 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     enabled: onboardingRequired === false,
   });
   const searchRef = useRef<TextInput>(null);
+  // Drops the previous session's transcript, cursors, and message bookkeeping
+  // so nothing leaks across accounts or flashes on the next sign-in. Busy
+  // flags reset too: send() refuses to start while chatBusy, so a send that
+  // never settled must not brick the next session's composer. Shared by the
+  // gate-drop path in the history effect and retireWorkspace.
+  const resetChatSession = useCallback(() => {
+    setChatError(null);
+    setDraft('');
+    setMessages([]);
+    setOlderChatCursor(null);
+    setHasOlderChat(false);
+    setChatBusy(false);
+    setLoadingOlderChat(false);
+    setChatHistorySettled(false);
+    setActiveGenerationId(null);
+    sendInFlightRef.current = null;
+    stableChatMessageIds.clear();
+    animatedChatMessageIds.clear();
+  }, [animatedChatMessageIds, stableChatMessageIds]);
+  // Scroll-follow fence shared by the mobile chat surface and the desktop
+  // chat ScrollView: keep following the newest message while the user is
+  // within 40px of the bottom, stop once they scroll away.
+  const handleChatScroll = useCallback(
+    (event: NativeSyntheticEvent<NativeScrollEvent>) => {
+      const {contentOffset, contentSize, layoutMeasurement} = event.nativeEvent;
+      shouldFollowChat.current =
+        contentOffset.y + layoutMeasurement.height >= contentSize.height - 40;
+    },
+    [],
+  );
   useEffect(() => {
     let active = true;
     chatSessionEpochRef.current += 1;
@@ -262,23 +317,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     if (retiredRequest !== null)
       void omiBackend?.cancelOmiChat?.(retiredRequest).catch(() => undefined);
     if (onboardingRequired !== false) {
-      // Leaving a ready session drops the previous session's transcript,
-      // cursors, and message bookkeeping so nothing leaks across accounts or
-      // flashes on the next sign-in. Busy flags reset too: send() refuses to
-      // start while chatBusy, so a send that never settled must not brick the
-      // next session's composer.
-      setChatError(null);
-      setDraft('');
-      setMessages([]);
-      setOlderChatCursor(null);
-      setHasOlderChat(false);
-      setChatBusy(false);
-      setLoadingOlderChat(false);
-      setChatHistorySettled(false);
-      setActiveGenerationId(null);
-      sendInFlightRef.current = null;
-      stableChatMessageIds.clear();
-      animatedChatMessageIds.clear();
+      resetChatSession();
       return () => {
         active = false;
       };
@@ -333,10 +372,10 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         void backend.cancelOmiChat?.(requestId).catch(() => undefined);
     };
   }, [
-    animatedChatMessageIds,
     chatEpoch,
     nativeSessionRequired,
     onboardingRequired,
+    resetChatSession,
     revalidateSession,
     stableChatMessageIds,
   ]);
@@ -369,13 +408,13 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       : null;
   }, [readOutcomes, route]);
 
-  const homeResults = useMemo(() => {
-    const query = searchQuery.trim().toLocaleLowerCase();
-    return reads.filter(
-      item =>
-        query === '' || item.searchableText.toLocaleLowerCase().includes(query),
-    );
-  }, [reads, searchQuery]);
+  const homeResults = useMemo(
+    () =>
+      reads.filter(item =>
+        matchesSearchQuery(item.searchableText, searchQuery),
+      ),
+    [reads, searchQuery],
+  );
   const homeSearching = searchQuery.trim() !== '';
   // An unavailable Omi cloud read is a single truthful empty state, not a result row. Keeping the
   // results panel content-sized here preserves the upstream two-island hierarchy instead of
@@ -804,24 +843,13 @@ function App({initialRoute}: AppProps): React.JSX.Element {
   const retireWorkspace = useCallback(() => {
     chatSessionEpochRef.current += 1;
     chatMutationSeqRef.current += 1;
-    setChatError(null);
-    setDraft('');
-    setMessages([]);
-    setOlderChatCursor(null);
-    setHasOlderChat(false);
-    setChatBusy(false);
-    setLoadingOlderChat(false);
-    setChatHistorySettled(false);
-    setActiveGenerationId(null);
+    resetChatSession();
     setActiveOmiRequestId(null);
     omiRequestRef.current = null;
-    sendInFlightRef.current = null;
-    stableChatMessageIds.clear();
-    animatedChatMessageIds.clear();
     resetReads();
     refreshReads(true).catch(() => undefined);
     setChatEpoch(current => current + 1);
-  }, [animatedChatMessageIds, refreshReads, resetReads, stableChatMessageIds]);
+  }, [refreshReads, resetChatSession, resetReads]);
 
   const shouldAnimateChatMessage = (id: string) => {
     if (stableChatMessageIds.has(id) || animatedChatMessageIds.has(id)) {
@@ -870,6 +898,24 @@ function App({initialRoute}: AppProps): React.JSX.Element {
     />
   );
   const currentItems = reads.slice(0, 2);
+
+  // Shared DeviceSession element: every surface passes the same device props
+  // and only varies the variant. Only the compact affordance takes the
+  // Bluetooth status color; the overview header never did.
+  const renderDeviceSession = (variant: DeviceSessionVariant) => (
+    <DeviceSession
+      rememberedDevice={rememberedDevice}
+      rememberedBusy={rememberedBusy}
+      onForgetRemembered={forgetRememberedDevice}
+      {...(variant === 'compact' ? {bluetoothStatusColor} : {})}
+      deviceBusy={deviceBusy}
+      deviceScanMessage={deviceScanMessage}
+      nativeSnapshot={nativeSnapshot}
+      onScan={scanForOmi}
+      onToggle={toggleDevice}
+      variant={variant}
+    />
+  );
 
   const OnboardingSurface = macDesktop ? DesktopOnboarding : Onboarding;
   const firstRunOnboarding = (
@@ -977,18 +1023,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
             )}
           </View>
 
-          <DeviceSession
-            rememberedDevice={rememberedDevice}
-            rememberedBusy={rememberedBusy}
-            onForgetRemembered={forgetRememberedDevice}
-            bluetoothStatusColor={bluetoothStatusColor}
-            deviceBusy={deviceBusy}
-            deviceScanMessage={deviceScanMessage}
-            nativeSnapshot={nativeSnapshot}
-            onScan={scanForOmi}
-            onToggle={toggleDevice}
-            variant="compact"
-          />
+          {renderDeviceSession('compact')}
         </>
       )}
     </ScrollView>
@@ -1026,6 +1061,8 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           chatBusy={chatBusy}
           chatError={chatError}
           deviceContent={
+            // Kept explicit: the static session-probe guard in App.test.tsx
+            // pins the literal device wiring inside the DesktopApp mount.
             <DeviceSession
               rememberedDevice={rememberedDevice}
               rememberedBusy={rememberedBusy}
@@ -1110,12 +1147,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
       prompts={quickPrompts}
       scrollRef={chatScrollRef}
       shouldAnimate={shouldAnimateChatMessage}
-      onScroll={event => {
-        const {contentOffset, contentSize, layoutMeasurement} =
-          event.nativeEvent;
-        shouldFollowChat.current =
-          contentOffset.y + layoutMeasurement.height >= contentSize.height - 40;
-      }}
+      onScroll={handleChatScroll}
     />
   ) : undefined;
 
@@ -1144,16 +1176,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
           readsPhase === 'saved-but-refresh-failed'
         ? 'offline'
         : 'ready';
-    const activeMobileRoute: MobileRoute =
-      route === 'Tasks'
-        ? 'tasks'
-        : route === 'Conversations'
-        ? 'chat'
-        : route === 'Settings'
-        ? 'settings'
-        : route === 'Connectors'
-        ? 'apps'
-        : 'home';
+    const activeMobileRoute: MobileRoute = mobileRouteByRoute[route];
     return (
       <MobileAppSurface
         taskPagination={taskPagination}
@@ -1202,11 +1225,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                 ...(readOutcomes?.tasks.status === 'success'
                   ? readOutcomes.tasks.value.items
                   : []),
-              ].filter(item =>
-                item.searchableText
-                  .toLocaleLowerCase()
-                  .includes(draft.trim().toLocaleLowerCase()),
-              )}
+              ].filter(item => matchesSearchQuery(item.searchableText, draft))}
               loading={
                 readsPhase === 'initial-loading' || readsPhase === 'refreshing'
               }
@@ -1265,36 +1284,11 @@ function App({initialRoute}: AppProps): React.JSX.Element {
         }}
         device={{connected: connectedDevice !== null, label: homeStatus}}
         deviceMessage={devicePanelOpen ? null : deviceScanMessage}
-        devicePanel={
-          devicePanelOpen ? (
-            <DeviceSession
-              rememberedDevice={rememberedDevice}
-              rememberedBusy={rememberedBusy}
-              onForgetRemembered={forgetRememberedDevice}
-              bluetoothStatusColor={bluetoothStatusColor}
-              deviceBusy={deviceBusy}
-              deviceScanMessage={deviceScanMessage}
-              nativeSnapshot={nativeSnapshot}
-              onScan={scanForOmi}
-              onToggle={toggleDevice}
-              variant="compact"
-            />
-          ) : null
-        }
+        devicePanel={devicePanelOpen ? renderDeviceSession('compact') : null}
         onOpenDevice={() => setDevicePanelOpen(open => !open)}
         onRouteChange={destination => {
           setHomeChatOpen(false);
-          setRoute(
-            destination === 'settings'
-              ? 'Settings'
-              : destination === 'tasks'
-              ? 'Tasks'
-              : destination === 'apps'
-              ? 'Connectors'
-              : destination === 'chat'
-              ? 'Conversations'
-              : 'Home',
-          );
+          setRoute(routeByMobileRoute[destination]);
         }}
         onViewConversations={() => setRoute('Conversations')}
         onViewTasks={() => setRoute('Tasks')}
@@ -1506,17 +1500,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                           }
                           header={
                             <View style={styles.homeOverview}>
-                              <DeviceSession
-                                rememberedDevice={rememberedDevice}
-                                rememberedBusy={rememberedBusy}
-                                onForgetRemembered={forgetRememberedDevice}
-                                deviceBusy={deviceBusy}
-                                deviceScanMessage={deviceScanMessage}
-                                nativeSnapshot={nativeSnapshot}
-                                onScan={scanForOmi}
-                                onToggle={toggleDevice}
-                                variant="overview"
-                              />
+                              {renderDeviceSession('overview')}
                               <Text style={styles.sectionLabel}>Currents</Text>
                             </View>
                           }
@@ -1544,15 +1528,7 @@ function App({initialRoute}: AppProps): React.JSX.Element {
                   <ScrollView
                     accessibilityLabel="Chat scroll region"
                     contentContainerStyle={styles.chatScrollContent}
-                    onScroll={(
-                      event: NativeSyntheticEvent<NativeScrollEvent>,
-                    ) => {
-                      const {contentOffset, contentSize, layoutMeasurement} =
-                        event.nativeEvent;
-                      shouldFollowChat.current =
-                        contentOffset.y + layoutMeasurement.height >=
-                        contentSize.height - 40;
-                    }}
+                    onScroll={handleChatScroll}
                     ref={chatScrollRef}
                     scrollEventThrottle={16}
                     style={styles.chatScroll}>

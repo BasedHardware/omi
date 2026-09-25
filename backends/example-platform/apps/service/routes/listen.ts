@@ -1,6 +1,7 @@
 // domain-pending(DIV-DOMCORE-012)
 // domain-pending(UNK-DOMAPPS-001)
 
+import { bearerToken } from "../auth/authorization-header";
 import { randomUUID } from "node:crypto";
 import type { Hono } from "hono";
 import { upgradeWebSocket } from "hono/bun";
@@ -100,12 +101,6 @@ export interface ListenRouteDependencies {
 
 const response = (body: Readonly<Record<string, string>>, status: number): Response =>
   new Response(JSON.stringify(body), { status, headers: JSON_HEADERS });
-
-const bearerToken = (header: string | undefined): string | null => {
-  if (typeof header !== "string" || !header.startsWith("Bearer ")) return null;
-  const token = header.slice("Bearer ".length);
-  return token.length === 0 ? null : token;
-};
 
 const integerParam = (value: string | null, fallback: number): number | null => {
   if (value === null) return fallback;

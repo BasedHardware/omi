@@ -506,39 +506,35 @@ export const planDeletionDominance = (inputValue: unknown): DeletionDominancePla
     && accountIds.length > 0 && restoreReplay.checkpoint.account_id !== accountIds[0]) {
     fail("account_coordinate_mismatch");
   }
-  if (exportReceipt !== null) {
+  const requireTombstoneCoordinates = (
+    controlRevision: number,
+    deletionEpoch: number,
+    accountGeneration?: AccountGeneration,
+  ): void => {
     if (tombstone === null
-      || exportReceipt.control_revision !== tombstone.control_revision
-      || exportReceipt.deletion_epoch !== tombstone.deletion_epoch
-      || exportReceipt.account_generation !== tombstone.account_generation) {
+      || tombstone.control_revision !== controlRevision
+      || tombstone.deletion_epoch !== deletionEpoch
+      || (accountGeneration !== undefined && tombstone.account_generation !== accountGeneration)) {
       fail("terminal_coordinate_mismatch");
     }
+  };
+  if (exportReceipt !== null) {
+    requireTombstoneCoordinates(
+      exportReceipt.control_revision, exportReceipt.deletion_epoch, exportReceipt.account_generation);
     if (exportReceipt.stranded_data_present
       !== (exportReceipt.account_generation === "rolled_back_stranded")) {
       fail("terminal_coordinate_mismatch");
     }
   }
   if (legalHold.status !== "unverified") {
-    if (tombstone === null
-      || legalHold.control_revision !== tombstone.control_revision
-      || legalHold.deletion_epoch !== tombstone.deletion_epoch) {
-      fail("terminal_coordinate_mismatch");
-    }
+    requireTombstoneCoordinates(legalHold.control_revision, legalHold.deletion_epoch);
   }
   if (verifiedInventory !== null) {
-    if (tombstone === null
-      || verifiedInventory.control_revision !== tombstone.control_revision
-      || verifiedInventory.deletion_epoch !== tombstone.deletion_epoch) {
-      fail("terminal_coordinate_mismatch");
-    }
+    requireTombstoneCoordinates(verifiedInventory.control_revision, verifiedInventory.deletion_epoch);
   }
   if (projection?.lifecycle_state === "deleted") {
-    if (tombstone === null
-      || tombstone.control_revision !== projection.control_revision
-      || tombstone.deletion_epoch !== projection.deletion_epoch
-      || tombstone.account_generation !== projection.account_generation) {
-      fail("terminal_coordinate_mismatch");
-    }
+    requireTombstoneCoordinates(
+      projection.control_revision, projection.deletion_epoch, projection.account_generation);
   }
   if (tombstone !== null && projection !== null) {
     if (projection.control_revision > tombstone.control_revision
@@ -570,16 +566,39 @@ export const planDeletionDominance = (inputValue: unknown): DeletionDominancePla
     });
   }
 
-  const restoredBehindTerminal = tombstone !== null
-    && projection.control_revision < tombstone.control_revision;
-  if (restoredBehindTerminal) {
-    const blockers: DeletionCleanupBlocker[] = ["terminal_control_not_replayed"];
+  const terminalCleanupBlockers = (
+    midBlockers: readonly DeletionCleanupBlocker[] = [],
+  ): DeletionCleanupBlocker[] => {
+    const blockers: DeletionCleanupBlocker[] = [];
     if (exportReceipt === null) blockers.push("terminal_export_receipt_missing");
     if (verifiedInventory === null) blockers.push("cleanup_inventory_unverified");
+    blockers.push(...midBlockers);
     if (legalHold.status === "unverified") blockers.push("legal_hold_unverified");
     if (legalHold.status === "held") blockers.push("legal_hold_active");
     if (retention.status !== "ratified") blockers.push("retention_disposition_unratified");
     if (recovery.status !== "ratified") blockers.push("recovery_objectives_unratified");
+    return blockers;
+  };
+
+  const terminalDeletionObligations = (): DeletionDominanceObligation[] => [
+    ...baseDeletionObligations,
+    ...(projection.activation === null ? [] : ["deactivate_destination_epoch" as const]),
+    "retain_terminal_control_tombstone",
+    ...(exportReceipt === null ? ["require_terminal_export_receipt" as const] : []),
+    ...(verifiedInventory === null ? ["require_verified_cleanup_inventory" as const] : []),
+    "replay_tombstones_before_restore_traffic",
+    ...(legalHold.status === "unverified"
+      ? ["require_legal_hold_verification" as const]
+      : legalHold.status === "held"
+        ? ["isolate_legal_hold_content" as const]
+        : []),
+    ...(retention.status === "ratified" ? [] : ["require_retention_disposition_approval" as const]),
+    ...(recovery.status === "ratified" ? [] : ["require_recovery_objectives_approval" as const]),
+  ];
+
+  const restoredBehindTerminal = tombstone !== null
+    && projection.control_revision < tombstone.control_revision;
+  if (restoredBehindTerminal) {
     return Object.freeze({
       version: DELETION_DOMINANCE_PLAN_VERSION,
       mode: "deleted_blocked",
@@ -587,22 +606,9 @@ export const planDeletionDominance = (inputValue: unknown): DeletionDominancePla
       control_revision: tombstone.control_revision,
       deletion_epoch: tombstone.deletion_epoch,
       fences: fenceAll(),
-      obligations: freezeObligations([
-        ...baseDeletionObligations,
-        ...(projection.activation === null ? [] : ["deactivate_destination_epoch" as const]),
-        "retain_terminal_control_tombstone",
-        ...(exportReceipt === null ? ["require_terminal_export_receipt" as const] : []),
-        ...(verifiedInventory === null ? ["require_verified_cleanup_inventory" as const] : []),
-        "replay_tombstones_before_restore_traffic",
-        ...(legalHold.status === "unverified"
-          ? ["require_legal_hold_verification" as const]
-          : legalHold.status === "held"
-            ? ["isolate_legal_hold_content" as const]
-            : []),
-        ...(retention.status === "ratified" ? [] : ["require_retention_disposition_approval" as const]),
-        ...(recovery.status === "ratified" ? [] : ["require_recovery_objectives_approval" as const]),
-      ]),
-      cleanup: freezeCleanup("blocked", blockers, inventory),
+      obligations: freezeObligations(terminalDeletionObligations()),
+      cleanup: freezeCleanup(
+        "blocked", ["terminal_control_not_replayed", ...terminalCleanupBlockers()], inventory),
     });
   }
 
@@ -659,20 +665,13 @@ export const planDeletionDominance = (inputValue: unknown): DeletionDominancePla
   }
 
   if (tombstone === null) fail("terminal_coordinate_mismatch");
-  const blockers: DeletionCleanupBlocker[] = [];
-  if (exportReceipt === null) blockers.push("terminal_export_receipt_missing");
-  if (verifiedInventory === null) blockers.push("cleanup_inventory_unverified");
   const restoreCheckpoint = restoreReplay.state === "required" ? restoreReplay.checkpoint : null;
-  if (restoreReplay.state === "required"
+  const restoreReplayIncomplete = restoreReplay.state === "required"
     && (restoreCheckpoint === null
       || restoreCheckpoint.through_control_revision < tombstone.control_revision
-      || restoreCheckpoint.through_deletion_epoch < tombstone.deletion_epoch)) {
-    blockers.push("restore_replay_incomplete");
-  }
-  if (legalHold.status === "unverified") blockers.push("legal_hold_unverified");
-  if (legalHold.status === "held") blockers.push("legal_hold_active");
-  if (retention.status !== "ratified") blockers.push("retention_disposition_unratified");
-  if (recovery.status !== "ratified") blockers.push("recovery_objectives_unratified");
+      || restoreCheckpoint.through_deletion_epoch < tombstone.deletion_epoch);
+  const blockers = terminalCleanupBlockers(
+    restoreReplayIncomplete ? ["restore_replay_incomplete"] : []);
 
   const remainingTotal = inventory.reduce((total, row) => total + row.remaining_count, 0);
   const cleanupState = blockers.length > 0 ? "blocked" : remainingTotal > 0 ? "ready" : "complete";
@@ -682,19 +681,7 @@ export const planDeletionDominance = (inputValue: unknown): DeletionDominancePla
       ? "deleted_cleanup_ready"
       : "deleted_complete";
   const obligations: DeletionDominanceObligation[] = [
-    ...baseDeletionObligations,
-    ...(projection.activation === null ? [] : ["deactivate_destination_epoch" as const]),
-    "retain_terminal_control_tombstone",
-    ...(exportReceipt === null ? ["require_terminal_export_receipt" as const] : []),
-    ...(verifiedInventory === null ? ["require_verified_cleanup_inventory" as const] : []),
-    "replay_tombstones_before_restore_traffic",
-    ...(legalHold.status === "unverified"
-      ? ["require_legal_hold_verification" as const]
-      : legalHold.status === "held"
-        ? ["isolate_legal_hold_content" as const]
-        : []),
-    ...(retention.status === "ratified" ? [] : ["require_retention_disposition_approval" as const]),
-    ...(recovery.status === "ratified" ? [] : ["require_recovery_objectives_approval" as const]),
+    ...terminalDeletionObligations(),
     ...(cleanupState === "ready" ? ["dispose_policy_authorized_surfaces" as const] : []),
   ];
   return Object.freeze({

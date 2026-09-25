@@ -140,17 +140,50 @@ export interface ChatGenerationFailure {
   readonly retryable: boolean;
 }
 
-const defaultFailure = (
-  stage: "provider" | "context" | "attachment" | "callback" | "timeout",
-): ChatGenerationFailure => stage === "context"
-  ? { code: "generation_context_failed", retryable: true }
-  : stage === "attachment"
-    ? { code: "generation_attachment_failed", retryable: true }
-    : stage === "callback"
-      ? { code: "generation_interrupted", retryable: true }
-      : stage === "timeout"
-        ? { code: "generation_timeout", retryable: true }
-        : { code: "generation_provider_failed", retryable: true };
+/** Failure-classification stages; every default failure is retryable. */
+type GenerationFailureStage = "provider" | "context" | "attachment" | "callback" | "timeout";
+
+const DEFAULT_FAILURE_CODE_BY_STAGE = Object.freeze({
+  provider: "generation_provider_failed",
+  context: "generation_context_failed",
+  attachment: "generation_attachment_failed",
+  callback: "generation_interrupted",
+  timeout: "generation_timeout",
+} as const satisfies Record<GenerationFailureStage, ChatGenerationFailureCode>);
+
+const ALLOWED_DECLARED_CODES_BY_STAGE: Record<GenerationFailureStage, readonly ChatGenerationFailureCode[]>
+  = Object.freeze({
+    provider: ["generation_provider_failed", "generation_timeout", "generation_rate_limited"],
+    context: ["generation_context_failed", "generation_timeout"],
+    attachment: ["generation_attachment_failed", "generation_timeout"],
+    callback: ["generation_interrupted", "generation_timeout"],
+    timeout: ["generation_timeout"],
+  });
+
+const defaultFailure = (stage: GenerationFailureStage): ChatGenerationFailure =>
+  ({ code: DEFAULT_FAILURE_CODE_BY_STAGE[stage], retryable: true });
+
+/**
+ * Terminal outcome/code/retryable mapping shared by the live and recovered
+ * agent-terminal paths. A failed terminal without a failure declaration
+ * reports the conservative interrupted/retryable defaults.
+ */
+const terminalFields = (
+  kind: "done" | "cancelled" | "failed",
+  failure: ChatGenerationFailure | null,
+): {
+  readonly terminalOutcome: "completed" | "cancelled" | "failed";
+  readonly terminalCode: ChatGenerationFailureCode | "completed" | "cancelled";
+  readonly retryable: boolean;
+} => ({
+  terminalOutcome: kind === "done" ? "completed" : kind,
+  terminalCode: kind === "done"
+    ? "completed"
+    : kind === "cancelled"
+      ? "cancelled"
+      : (failure?.code ?? "generation_interrupted"),
+  retryable: kind === "failed" ? (failure?.retryable ?? true) : false,
+});
 
 const validDeadline = (value: unknown, allowZero = false): value is number =>
   typeof value === "number" && Number.isSafeInteger(value) && (allowZero ? value >= 0 : value > 0);
@@ -269,19 +302,11 @@ const readFailureDeclaration = (
 
 const classifyFailure = (
   error: unknown,
-  stage: "provider" | "context" | "attachment" | "callback" | "timeout",
+  stage: GenerationFailureStage,
 ): ChatGenerationFailure => {
   try {
     const candidate = readFailureDeclaration(error);
-    const allowed = stage === "provider"
-      ? ["generation_provider_failed", "generation_timeout", "generation_rate_limited"]
-      : stage === "context"
-        ? ["generation_context_failed", "generation_timeout"]
-        : stage === "attachment"
-          ? ["generation_attachment_failed", "generation_timeout"]
-          : stage === "callback"
-            ? ["generation_interrupted", "generation_timeout"]
-            : ["generation_timeout"];
+    const allowed = ALLOWED_DECLARED_CODES_BY_STAGE[stage];
     if (candidate !== null && typeof candidate.code === "string"
       && allowed.includes(candidate.code) && typeof candidate.retryable === "boolean") {
       return { code: candidate.code as ChatGenerationFailureCode, retryable: candidate.retryable };
@@ -434,18 +459,13 @@ export const createChatGenerationSupervisor = (
     kind: "done" | "cancelled" | "failed",
     failure: ChatGenerationFailure | null,
   ): void => {
-    const terminalOutcome = kind === "done" ? "completed" : kind;
-    const terminalCode = kind === "done"
-      ? "completed"
-      : kind === "cancelled"
-        ? "cancelled"
-        : (failure?.code ?? "generation_interrupted");
+    const { terminalOutcome, terminalCode, retryable } = terminalFields(kind, failure);
     recordAgent(() => agentEvents!.terminal({
       runId: state.generationId,
       attemptId: state.attemptId,
       terminalOutcome,
       terminalCode,
-      retryable: kind === "failed" ? (failure?.retryable ?? true) : false,
+      retryable,
       // No retry/recovery route exists at this layer; do not advertise one.
       recoveryAction: null,
     }));
@@ -501,16 +521,13 @@ export const createChatGenerationSupervisor = (
       const latest = deps.agentRunEvents.list(generationId);
       if (latest.some((event) => event.kind === "terminal")) return;
       const failure = frame.kind === "failed" ? frame.error : null;
+      const { terminalOutcome, terminalCode, retryable } = terminalFields(frame.kind, failure);
       agentEvents.terminal({
         runId: generationId,
         attemptId: recoveryAttemptId,
-        terminalOutcome: frame.kind === "done" ? "completed" : frame.kind,
-        terminalCode: frame.kind === "done"
-          ? "completed"
-          : frame.kind === "cancelled"
-            ? "cancelled"
-            : failure.code,
-        retryable: frame.kind === "failed" ? failure.retryable : false,
+        terminalOutcome,
+        terminalCode,
+        retryable,
         recoveryAction: null,
       });
     } catch {
@@ -753,34 +770,43 @@ export const createChatGenerationSupervisor = (
     }
   };
 
+  /** Fresh supervisor state with the dormant-generation defaults filled in. */
+  const baseActiveGeneration = (
+    core: Pick<ActiveGeneration,
+      | "accountId" | "generationId" | "admitted" | "attemptId" | "admissionId" | "text"
+      | "providerEventSeen" | "cancelRequested" | "recovered">,
+  ): ActiveGeneration => ({
+    run: null,
+    runCancelled: false,
+    terminal: false,
+    failure: null,
+    providerStartedAt: null,
+    firstEventTimer: null,
+    maxDurationTimer: null,
+    heartbeatTimer: null,
+    cancelGraceTimer: null,
+    progressPct: null,
+    usage: null,
+    ...core,
+  });
+
   const cancelFromDurableState = (accountId: string, generationId: string): boolean => {
     const admitted = deps.messages.readHumanByGeneration(accountId, generationId);
     const events = deps.events.listAfter(accountId, generationId, null);
     if (admitted === null || events === null) {
       return failInterrupted(accountId, generationId);
     }
-    const state: ActiveGeneration = {
+    const state: ActiveGeneration = baseActiveGeneration({
       accountId,
       generationId,
       admitted,
       attemptId: `${generationId}:attempt:recovery`,
       admissionId: admitted.message.id,
       text: accumulatedText(events),
-      run: null,
-      runCancelled: false,
-      terminal: false,
-      failure: null,
-      providerStartedAt: null,
       providerEventSeen: true,
       cancelRequested: true,
       recovered: true,
-      firstEventTimer: null,
-      maxDurationTimer: null,
-      heartbeatTimer: null,
-      cancelGraceTimer: null,
-      progressPct: null,
-      usage: null,
-    };
+    });
     return finalize(state, "cancelled", state.text);
   };
 
@@ -798,28 +824,17 @@ export const createChatGenerationSupervisor = (
         return;
       }
       if (active.has(key)) return;
-      const state: ActiveGeneration = {
+      const state: ActiveGeneration = baseActiveGeneration({
         accountId: input.accountId,
         generationId,
         admitted: input.stored,
         attemptId: `${generationId}:attempt:1`,
         admissionId: input.acceptedEvent.id,
         text: "",
-        run: null,
-        runCancelled: false,
-        terminal: false,
-        failure: null,
-        providerStartedAt: null,
         providerEventSeen: false,
         cancelRequested: false,
         recovered: false,
-        firstEventTimer: null,
-        maxDurationTimer: null,
-        heartbeatTimer: null,
-        cancelGraceTimer: null,
-        progressPct: null,
-        usage: null,
-      };
+      });
       active.set(key, state);
       chatLog("info", "generation_admitted", {
         generationId,

@@ -12,6 +12,7 @@
  * migration/default flip.
  */
 
+import { bearerToken } from "../auth/authorization-header";
 import { createHash } from "node:crypto";
 import type { Context, Hono } from "hono";
 
@@ -99,12 +100,6 @@ const fixedResponse = (body: string, status: number): Response =>
 
 const jsonResponse = (value: unknown, status = 200): Response =>
   new Response(JSON.stringify(value), { status, headers: JSON_HEADERS });
-
-const bearerToken = (header: string | undefined): string | null => {
-  if (typeof header !== "string" || !header.startsWith("Bearer ")) return null;
-  const token = header.slice("Bearer ".length);
-  return token.length > 0 ? token : null;
-};
 
 const principalOf = (
   context: Context,

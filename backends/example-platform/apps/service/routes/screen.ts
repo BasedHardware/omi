@@ -1,6 +1,7 @@
 // domain-pending(DIV-DOMAPPS-007)
 // domain-pending(UNK-DOMAPPS-001)
 
+import { bearerToken } from "../auth/authorization-header";
 import type { Hono } from "hono";
 
 import type { DevPrincipal } from "../auth/dev-token";
@@ -38,12 +39,6 @@ const jsonResponse = (value: unknown, status = 200): Response =>
 
 const errorResponse = (status: number, code: string): Response =>
   jsonResponse({ error: code }, status);
-
-const bearerToken = (header: string | undefined): string | null => {
-  if (typeof header !== "string" || !header.startsWith("Bearer ")) return null;
-  const token = header.slice("Bearer ".length);
-  return token.length > 0 ? token : null;
-};
 
 const authenticate = (
   header: string | undefined,

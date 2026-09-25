@@ -7,6 +7,7 @@ import {
   projectionTimestamp,
   type DesktopReadOutcomes,
 } from '../desktopReadClient';
+import {matchesSearchQuery} from '../searchText';
 import {omiBackend, subscribeOmiBackendSessionInvalidated} from '../omiNative';
 import {ReadStatus} from '../ui/ReadStatus';
 import {ConversationDetail} from '../ui/ConversationDetail';
@@ -50,16 +51,11 @@ export function LibraryPage({
   );
   const outcome = outcomes?.conversations ?? null;
   const memoryOutcome = outcomes?.memories ?? null;
-  const normalized = query.trim().toLocaleLowerCase();
   const items = [
     ...(outcome?.status === 'success' ? outcome.value.items : []),
     ...(memoryOutcome?.status === 'success' ? memoryOutcome.value.items : []),
   ]
-    .filter(
-      item =>
-        normalized === '' ||
-        item.searchableText.toLocaleLowerCase().includes(normalized),
-    )
+    .filter(item => matchesSearchQuery(item.searchableText, query))
     .sort(
       (left, right) =>
         (projectionTimestamp(right) ?? 0) - (projectionTimestamp(left) ?? 0),
@@ -80,7 +76,7 @@ export function LibraryPage({
       ? 'Loading conversations…'
       : outcome.status === 'error'
       ? outcome.error
-      : normalized
+      : query.trim() !== ''
       ? 'No loaded conversations or memories match.'
       : 'Nothing captured in this window yet.';
   return (
@@ -88,7 +84,7 @@ export function LibraryPage({
       <PageHeading
         title="Conversations & memories"
         subtitle={
-          normalized
+          query.trim() !== ''
             ? `From your loaded history, matching “${query.trim()}”.`
             : 'The moments worth coming back to.'
         }
@@ -167,7 +163,7 @@ export function LibraryPage({
                     ? 'History is unavailable'
                     : outcome === null
                     ? 'Finding your moments…'
-                    : normalized
+                    : query.trim() !== ''
                     ? 'Nothing matches yet'
                     : 'Your story starts here.'
                 }

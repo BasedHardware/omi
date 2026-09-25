@@ -1,6 +1,7 @@
 // domain-pending(DIV-DOMCORE-001)
 // domain-pending(DIV-DOMAPPS-001)
 // domain-pending(DIV-DOMAPPS-006)
+import { bearerToken } from "../auth/authorization-header";
 import type { Hono } from "hono";
 import { isProxy } from "node:util/types";
 
@@ -116,15 +117,6 @@ export const createPreparedMemoryRouteReadPort = (
 
 const fixedResponse = (body: string, status: number): Response =>
   new Response(body, { status, headers: JSON_HEADERS });
-
-/** Extracts a bearer token without revealing which part of the header was wrong. */
-const bearerToken = (header: string | undefined): string | null => {
-  if (typeof header !== "string") return null;
-  const prefix = "Bearer ";
-  if (!header.startsWith(prefix)) return null;
-  const token = header.slice(prefix.length);
-  return token.length > 0 ? token : null;
-};
 
 /**
  * Parses the page request. `limit` and `cursor` are both optional: a client

@@ -50,24 +50,16 @@ import type { ChatGenerationFinalization } from "../stores/chat-generation-final
 import { createInMemoryChatGenerationFinalization } from "../stores/chat-generation-finalization";
 import type { ChatMessageRecord } from "../stores/chat-messages-store";
 import { createSqliteLocalServiceStores } from "../../../drivers/sqlite/service-stores";
+import {
+  CHAT_ROUTE_TEST_AT,
+  chatCreatePayload,
+  postChatMessage as post,
+} from "../../../harness/chat-route-fixtures";
 
 const ACCOUNT = "chat-generation-account";
 const auth = (token: string): HeadersInit => ({ authorization: `Bearer ${token}` });
-const create = (id: string, text = "Tell me something useful") => ({
-  op: "create",
-  opId: `op-${id}`,
-  id,
-  at: 1_786_352_400_000,
-  text,
-  sender: "human",
-  journalRevision: 1,
-  type: "text",
-  appId: null,
-  chatSessionId: null,
-  messageSource: "desktop_chat",
-  metadata: null,
-  attachmentIds: [],
-});
+const create = (id: string, text = "Tell me something useful") =>
+  chatCreatePayload(id, CHAT_ROUTE_TEST_AT, { text });
 
 const boot = (
   stores = createInMemoryLocalServiceStores(),
@@ -103,13 +95,6 @@ const boot = (
   });
   return { db, local, stores };
 };
-
-const post = (local: ReturnType<typeof createLocalDevService>, body: unknown): Promise<Response> =>
-  Promise.resolve(local.app.request("/v1/chat-messages", {
-    method: "POST",
-    headers: { ...auth(local.devToken), "content-type": "application/json" },
-    body: JSON.stringify(body),
-  }));
 
 interface ChatAdmissionBody {
   readonly message: ChatMessageRecord & { readonly generationOutcome: null };

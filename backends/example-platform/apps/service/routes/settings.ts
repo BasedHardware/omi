@@ -1,4 +1,5 @@
 // domain-pending(UNK-DOMAPPS-001)
+import { bearerToken } from "../auth/authorization-header";
 import type { Hono } from "hono";
 
 import {
@@ -39,12 +40,6 @@ const response = (
   status: number,
   headers: Readonly<Record<string, string>> = JSON_HEADERS,
 ): Response => new Response(body, { status, headers });
-
-const bearerToken = (presentHeader: string): string | null => {
-  if (!presentHeader.startsWith("Bearer ")) return null;
-  const token = presentHeader.slice("Bearer ".length);
-  return token.length > 0 ? token : null;
-};
 
 const hasInvalidRequestGrammar = (request: Request): boolean => {
   let url: URL;

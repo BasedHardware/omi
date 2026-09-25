@@ -23,34 +23,56 @@ export type AgentRunEventSchemaVersion =
   | typeof CURRENT_AGENT_RUN_EVENT_SCHEMA_VERSION;
 export type AgentRunEventVisibility = "ui" | "internal";
 
-export type AgentRunStatus =
-  | "queued"
-  | "gathering_context"
-  | "generating"
-  | "using_tool"
-  | "waiting_approval"
-  | "reconnecting"
-  | "recovering"
-  | "cancelled"
-  | "failed"
-  | "complete";
+export const AGENT_RUN_STATUSES = Object.freeze([
+  "queued",
+  "gathering_context",
+  "generating",
+  "using_tool",
+  "waiting_approval",
+  "reconnecting",
+  "recovering",
+  "cancelled",
+  "failed",
+  "complete",
+] as const);
+export type AgentRunStatus = typeof AGENT_RUN_STATUSES[number];
 
-export type AgentRunTerminalOutcome = "completed" | "degraded" | "failed" | "cancelled";
-export type AgentRunTerminalCode =
-  | "completed"
-  | "cancelled"
-  | "generation_provider_failed"
-  | "generation_context_failed"
-  | "generation_attachment_failed"
-  | "generation_interrupted"
-  | "generation_timeout"
-  | "generation_rate_limited"
-  | "tool_failed"
-  | "approval_denied"
-  | "approval_expired"
-  | "recovery_exhausted";
-export type AgentRunApprovalResolution = "approved" | "denied" | "expired" | "cancelled";
-export type AgentRunRecoveryAction = "retry" | "reconnect" | "resume" | "manual";
+export const AGENT_RUN_TERMINAL_OUTCOMES = Object.freeze([
+  "completed",
+  "degraded",
+  "failed",
+  "cancelled",
+] as const);
+export type AgentRunTerminalOutcome = typeof AGENT_RUN_TERMINAL_OUTCOMES[number];
+export const AGENT_RUN_TERMINAL_CODES = Object.freeze([
+  "completed",
+  "cancelled",
+  "generation_provider_failed",
+  "generation_context_failed",
+  "generation_attachment_failed",
+  "generation_interrupted",
+  "generation_timeout",
+  "generation_rate_limited",
+  "tool_failed",
+  "approval_denied",
+  "approval_expired",
+  "recovery_exhausted",
+] as const);
+export type AgentRunTerminalCode = typeof AGENT_RUN_TERMINAL_CODES[number];
+export const AGENT_RUN_APPROVAL_RESOLUTIONS = Object.freeze([
+  "approved",
+  "denied",
+  "expired",
+  "cancelled",
+] as const);
+export type AgentRunApprovalResolution = typeof AGENT_RUN_APPROVAL_RESOLUTIONS[number];
+export const AGENT_RUN_RECOVERY_ACTIONS = Object.freeze([
+  "retry",
+  "reconnect",
+  "resume",
+  "manual",
+] as const);
+export type AgentRunRecoveryAction = typeof AGENT_RUN_RECOVERY_ACTIONS[number];
 
 interface AgentRunEventBase {
   readonly schemaVersion: AgentRunEventSchemaVersion;
@@ -359,10 +381,8 @@ const asEvent = (record: Record<string, unknown>, kind: AgentRunEventKind): Agen
           policyDecision: record.policyDecision })
         : null;
     case "status":
-      return EVENT_KINDS.includes(kind) && typeof record.status === "string"
-        && (["queued", "gathering_context", "generating", "using_tool", "waiting_approval",
-          "reconnecting", "recovering", "cancelled", "failed", "complete"] as readonly string[])
-          .includes(record.status)
+      return typeof record.status === "string"
+        && includesString(AGENT_RUN_STATUSES, record.status)
         && isSafeEpoch(record.progressPct, true)
         && (record.progressPct === null || record.progressPct <= 100)
         ? Object.freeze({ ...base, kind, status: record.status as AgentRunStatus,
@@ -399,7 +419,7 @@ const asEvent = (record: Record<string, unknown>, kind: AgentRunEventKind): Agen
     }
     case "approval_resolved":
       return isSafeToken(record.approvalId) && isSafeToken(record.callId)
-        && includesString(["approved", "denied", "expired", "cancelled"], record.resolution)
+        && includesString(AGENT_RUN_APPROVAL_RESOLUTIONS, record.resolution)
         ? Object.freeze({ ...base, kind, approvalId: record.approvalId, callId: record.callId,
           resolution: record.resolution as AgentRunApprovalResolution })
         : null;
@@ -414,20 +434,17 @@ const asEvent = (record: Record<string, unknown>, kind: AgentRunEventKind): Agen
     case "recovery":
       return isSafeToken(record.recoveryId) && isSafeToken(record.fromAttemptId)
         && isSafeToken(record.toAttemptId) && isSafeSummary(record.reason)
-        && includesString(["retry", "reconnect", "resume", "manual"], record.action)
+        && includesString(AGENT_RUN_RECOVERY_ACTIONS, record.action)
         ? Object.freeze({ ...base, kind, recoveryId: record.recoveryId,
           action: record.action as AgentRunRecoveryAction, reason: record.reason,
           fromAttemptId: record.fromAttemptId, toAttemptId: record.toAttemptId })
         : null;
     case "terminal":
-      return includesString(["completed", "degraded", "failed", "cancelled"], record.terminalOutcome)
-        && includesString(["completed", "cancelled", "generation_provider_failed", "generation_context_failed",
-          "generation_attachment_failed", "generation_interrupted", "generation_timeout",
-          "generation_rate_limited", "tool_failed",
-          "approval_denied", "approval_expired", "recovery_exhausted"], record.terminalCode)
+      return includesString(AGENT_RUN_TERMINAL_OUTCOMES, record.terminalOutcome)
+        && includesString(AGENT_RUN_TERMINAL_CODES, record.terminalCode)
         && isBoolean(record.retryable)
         && (record.recoveryAction === null
-          || includesString(["retry", "reconnect", "resume", "manual"], record.recoveryAction))
+          || includesString(AGENT_RUN_RECOVERY_ACTIONS, record.recoveryAction))
         && ((record.terminalOutcome === "completed" && record.terminalCode === "completed"
           && record.retryable === false && record.recoveryAction === null)
           || (record.terminalOutcome === "cancelled" && record.terminalCode === "cancelled"
@@ -504,6 +521,35 @@ const canonicalSnapshot = (logs: Map<string, AgentRunLog>): AgentRunEventStoreSn
     }))),
 });
 
+/**
+ * Run-ordering invariants, shared by the in-memory append path, snapshot
+ * restore validation, and the visible-timeline projector so the three cannot
+ * drift. Each predicate is vacuously true for event kinds it does not govern.
+ */
+const toolOutcomeFollowsRequest = (event: AgentRunEvent, prior: readonly AgentRunEvent[]): boolean =>
+  event.kind === "tool_result" || event.kind === "tool_error"
+    ? prior.some((candidate) => candidate.kind === "tool_request" && candidate.callId === event.callId
+      && candidate.toolName === event.toolName && candidate.attemptId === event.attemptId)
+    : true;
+
+const isFirstToolOutcomeForCall = (event: AgentRunEvent, prior: readonly AgentRunEvent[]): boolean =>
+  event.kind === "tool_result" || event.kind === "tool_error"
+    ? !prior.some((candidate) => (candidate.kind === "tool_result" || candidate.kind === "tool_error")
+      && candidate.callId === event.callId)
+    : true;
+
+const approvalResolutionFollowsRequest = (event: AgentRunEvent, prior: readonly AgentRunEvent[]): boolean =>
+  event.kind === "approval_resolved"
+    ? prior.some((candidate) => candidate.kind === "approval_requested"
+      && candidate.approvalId === event.approvalId && candidate.callId === event.callId)
+    : true;
+
+const isFirstApprovalResolution = (event: AgentRunEvent, prior: readonly AgentRunEvent[]): boolean =>
+  event.kind === "approval_resolved"
+    ? !prior.some((candidate) => candidate.kind === "approval_resolved"
+      && candidate.approvalId === event.approvalId && candidate.callId === event.callId)
+    : true;
+
 export const createInMemoryAgentRunEventStore = (): AgentRunEventStore => {
   const logs = new Map<string, AgentRunLog>();
   const list = (runId: string): readonly AgentRunEvent[] => {
@@ -537,24 +583,9 @@ export const createInMemoryAgentRunEventStore = (): AgentRunEventStore => {
       if (log.terminal) return { kind: "rejected", reason: "terminal" };
       if (event.sequence !== log.events.length + 1) return { kind: "rejected", reason: "sequence" };
       if (event.kind === "run_accepted") return { kind: "rejected", reason: "ordering" };
-      if ((event.kind === "tool_result" || event.kind === "tool_error")
-        && !log.events.some((prior) => prior.kind === "tool_request" && prior.callId === event.callId
-          && prior.toolName === event.toolName && prior.attemptId === event.attemptId)) {
-        return { kind: "rejected", reason: "ordering" };
-      }
-      if ((event.kind === "tool_result" || event.kind === "tool_error")
-        && log.events.some((prior) => (prior.kind === "tool_result" || prior.kind === "tool_error")
-          && prior.callId === event.callId)) {
-        return { kind: "rejected", reason: "ordering" };
-      }
-      if (event.kind === "approval_resolved"
-        && !log.events.some((prior) => prior.kind === "approval_requested"
-          && prior.approvalId === event.approvalId && prior.callId === event.callId)) {
-        return { kind: "rejected", reason: "ordering" };
-      }
-      if (event.kind === "approval_resolved"
-        && log.events.some((prior) => prior.kind === "approval_resolved"
-          && prior.approvalId === event.approvalId && prior.callId === event.callId)) {
+      if (!toolOutcomeFollowsRequest(event, log.events) || !isFirstToolOutcomeForCall(event, log.events)
+        || !approvalResolutionFollowsRequest(event, log.events)
+        || !isFirstApprovalResolution(event, log.events)) {
         return { kind: "rejected", reason: "ordering" };
       }
       log.events.push(event);
@@ -599,24 +630,11 @@ export const createInMemoryAgentRunEventStore = (): AgentRunEventStore => {
           throw new TypeError("invalid agent run snapshot terminal");
         }
         for (const [index, event] of events.entries()) {
-          if ((event.kind === "tool_result" || event.kind === "tool_error")
-            && !events.slice(0, index).some((prior) => prior.kind === "tool_request" && prior.callId === event.callId
-              && prior.toolName === event.toolName && prior.attemptId === event.attemptId)) {
+          const prior = events.slice(0, index);
+          if (!toolOutcomeFollowsRequest(event, prior) || !isFirstToolOutcomeForCall(event, prior)) {
             throw new TypeError("invalid agent run snapshot tool ordering");
           }
-          if ((event.kind === "tool_result" || event.kind === "tool_error")
-            && events.slice(0, index).some((prior) => (prior.kind === "tool_result" || prior.kind === "tool_error")
-              && prior.callId === event.callId)) {
-            throw new TypeError("invalid agent run snapshot tool ordering");
-          }
-          if (event.kind === "approval_resolved"
-            && !events.slice(0, index).some((prior) => prior.kind === "approval_requested"
-              && prior.approvalId === event.approvalId && prior.callId === event.callId)) {
-            throw new TypeError("invalid agent run snapshot approval ordering");
-          }
-          if (event.kind === "approval_resolved"
-            && events.slice(0, index).some((prior) => prior.kind === "approval_resolved"
-              && prior.approvalId === event.approvalId && prior.callId === event.callId)) {
+          if (!approvalResolutionFollowsRequest(event, prior) || !isFirstApprovalResolution(event, prior)) {
             throw new TypeError("invalid agent run snapshot approval ordering");
           }
         }
@@ -753,14 +771,8 @@ export const projectAgentRunTimeline = (
       if (index !== parsed.length - 1) return null;
       terminalSeen = true;
     }
-    if ((event.kind === "tool_result" || event.kind === "tool_error")
-      && !parsed.slice(0, index).some((prior) => prior.kind === "tool_request" && prior.callId === event.callId
-        && prior.toolName === event.toolName && prior.attemptId === event.attemptId)) {
-      return null;
-    }
-    if (event.kind === "approval_resolved"
-      && !parsed.slice(0, index).some((prior) => prior.kind === "approval_requested"
-        && prior.approvalId === event.approvalId && prior.callId === event.callId)) {
+    const prior = parsed.slice(0, index);
+    if (!toolOutcomeFollowsRequest(event, prior) || !approvalResolutionFollowsRequest(event, prior)) {
       return null;
     }
   }

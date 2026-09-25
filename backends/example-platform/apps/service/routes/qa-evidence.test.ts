@@ -10,6 +10,10 @@ import type {
   QaProducerEvidenceDocument,
   QaProducerEvidenceRow,
 } from "../observability/producer-evidence";
+import {
+  CHAT_ROUTE_TEST_AT,
+  chatCreatePayload,
+} from "../../../harness/chat-route-fixtures";
 
 const OWNER = "producer-evidence-owner";
 const RUN = "run-producer-evidence-01";
@@ -62,21 +66,8 @@ const row = (
 ): QaProducerEvidenceRow => document.rows.find((candidate) =>
   candidate.shell === shell && candidate.domain === domain)!;
 
-const chatPayload = (id: string): Readonly<Record<string, unknown>> => Object.freeze({
-  op: "create",
-  opId: `op-${id}`,
-  id,
-  at: 1_786_352_400_000,
-  text: "synthetic chat evidence",
-  sender: "human",
-  journalRevision: 1,
-  type: "text",
-  appId: null,
-  chatSessionId: null,
-  messageSource: "desktop_chat",
-  metadata: null,
-  attachmentIds: [],
-});
+const chatPayload = (id: string): Readonly<Record<string, unknown>> =>
+  chatCreatePayload(id, CHAT_ROUTE_TEST_AT, { text: "synthetic chat evidence" });
 
 const waitUntil = async (condition: () => boolean, timeoutMs = 2_000): Promise<void> => {
   const deadline = Date.now() + timeoutMs;
