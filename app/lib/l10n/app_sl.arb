@@ -11111,5 +11111,6 @@
     "keepUsingPendant": "Še naprej uporabljaj obesek",
     "recordWith": "Snemaj z",
     "moreWaysToRecord": "Več načinov snemanja",
-    "openCall": "Odpri klic"
+    "openCall": "Odpri klic",
+    "captureRecoveryBanner": "Zvuk obeska ne prihaja v aplikacijo — tapnite za popravilo"
 }

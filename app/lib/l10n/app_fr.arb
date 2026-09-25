@@ -3580,5 +3580,6 @@
     "keepUsingPendant": "Continuer avec le pendentif",
     "recordWith": "Enregistrer avec",
     "moreWaysToRecord": "Autres façons d'enregistrer",
-    "openCall": "Ouvrir l'appel"
+    "openCall": "Ouvrir l'appel",
+    "captureRecoveryBanner": "Le son du pendentif n'arrive pas à l'application — touchez pour réparer"
 }

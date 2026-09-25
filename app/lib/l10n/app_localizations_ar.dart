@@ -11162,4 +11162,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get openCall => 'فتح المكالمة';
+
+  @override
+  String get captureRecoveryBanner => 'صوت القلادة لا يصل إلى التطبيق — انقر للإصلاح';
 }

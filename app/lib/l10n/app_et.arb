@@ -3545,5 +3545,6 @@
     "keepUsingPendant": "Jätka ripatsiga",
     "recordWith": "Salvestusviis",
     "moreWaysToRecord": "Rohkem salvestusviise",
-    "openCall": "Ava kõne"
+    "openCall": "Ava kõne",
+    "captureRecoveryBanner": "Ripatsi heli ei jõua rakendusse — parandamiseks puudutage"
 }

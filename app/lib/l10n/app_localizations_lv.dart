@@ -11257,4 +11257,7 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get openCall => 'Atvērt zvanu';
+
+  @override
+  String get captureRecoveryBanner => 'Kulona audio nesasniedz lietotni — pieskarieties, lai salabotu';
 }

@@ -11265,4 +11265,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get openCall => 'Otwórz połączenie';
+
+  @override
+  String get captureRecoveryBanner => 'Dźwięk z zawieszki nie dociera do aplikacji — dotknij, aby naprawić';
 }

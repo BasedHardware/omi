@@ -123,7 +123,7 @@ def _historical(service_mod, memory_id, *, content=None):
 
 @pytest.fixture
 def service_mod(monkeypatch):
-    monkeypatch.setenv("MEMORY_MODE", "read")
+    monkeypatch.setenv("MEMORY_ENABLED", "on")
     module = _load_memory_service(monkeypatch)
 
     @contextmanager
@@ -152,7 +152,7 @@ def test_global_write_pause_blocks_intake_but_not_reads_or_privacy_delete(servic
     review_cleanup = MagicMock()
     monkeypatch.setattr(service_mod, "purge_stale_review_conflicts_for_memories", review_cleanup)
     monkeypatch.setattr(service_mod.HistoricalMemoryAdapter, "cleanup", MagicMock())
-    monkeypatch.setenv("MEMORY_MODE", "off")
+    monkeypatch.setenv("MEMORY_ENABLED", "off")
 
     assert service.read("uid-test") == []
     with pytest.raises(service_mod.HTTPException) as exc_info:

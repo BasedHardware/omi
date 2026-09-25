@@ -11328,4 +11328,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get openCall => 'Buksan ang tawag';
+
+  @override
+  String get captureRecoveryBanner => 'Hindi nakakarating sa app ang audio ng pendant — i-tap para ayusin';
 }
