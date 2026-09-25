@@ -884,10 +884,10 @@ def cancel_subscription_endpoint(
             return {"status": "ok", "message": "Subscription scheduled for cancellation."}
 
     except stripe.error.StripeError as e:
-        logger.error(f"Stripe error canceling subscription: {e}")
-        raise HTTPException(status_code=500, detail=f"Could not cancel subscription: {str(e)}")
+        logger.error(f"Stripe error canceling subscription: {type(e).__name__}")
+        raise HTTPException(status_code=500, detail="Could not cancel subscription. Please try again.")
     except Exception as e:
-        logger.error(f"Error canceling subscription: {e}")
+        logger.error(f"Error canceling subscription: {type(e).__name__}")
         raise HTTPException(status_code=500, detail="Could not cancel subscription. Please try again.")
 
 
@@ -1313,7 +1313,8 @@ def create_connect_account_endpoint(
 
         return account
     except stripe.error.StripeError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.error(f"Stripe error creating connect account: {type(e).__name__}")
+        raise HTTPException(status_code=400, detail="Failed to create Stripe connect account.")
 
 
 @router.get('/v1/stripe/supported-countries', response_model=List[StripeSupportedCountryResponse])
@@ -1332,7 +1333,8 @@ def check_onboarding_status(uid: str = Depends(auth.get_current_user_uid)):
             return {"onboarding_complete": False}
         return {"onboarding_complete": is_onboarding_complete(account_id)}
     except stripe.error.StripeError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.error(f"Stripe error checking onboarding status: {type(e).__name__}")
+        raise HTTPException(status_code=400, detail="Failed to check onboarding status.")
 
 
 @router.post("/v1/stripe/refresh/{account_id}", response_model=StripeConnectAccountResponse)
@@ -1344,7 +1346,8 @@ def refresh_account_link_endpoint(request: Request, account_id: str, uid: str = 
         account = refresh_connect_account_link(account_id)
         return account
     except stripe.error.StripeError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.error(f"Stripe error refreshing account link: {type(e).__name__}")
+        raise HTTPException(status_code=400, detail="Failed to refresh Stripe account link.")
 
 
 @router.get("/v1/stripe/return/{account_id}", response_class=HTMLResponse)
@@ -1605,8 +1608,8 @@ def cancel_app_subscription(app_id: str, uid: str = Depends(auth.get_current_use
             "current_period_end": updated_sub_dict.get('current_period_end'),
         }
     except stripe.error.StripeError as e:
-        logger.error(f"Stripe error canceling app subscription: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
+        logger.error(f"Stripe error canceling app subscription: {type(e).__name__}")
+        raise HTTPException(status_code=400, detail="Could not cancel subscription.")
     except Exception as e:
-        logger.error(f"Error canceling app subscription: {e}")
-        raise HTTPException(status_code=500, detail="Could not cancel subscription")
+        logger.error(f"Error canceling app subscription: {type(e).__name__}")
+        raise HTTPException(status_code=500, detail="Could not cancel subscription.")
