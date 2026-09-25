@@ -1,4 +1,5 @@
 import io
+import json
 import struct
 import wave
 from datetime import datetime, timezone
@@ -292,3 +293,25 @@ def test_a_run_cut_short_reports_uncountable_then_resumes_to_resolved(env, monke
     assert diarizer.calls == len(plan)
     assert conversation.speaker_resolution.status == 'resolved'
     assert len({s.speaker_id for s in conversation.transcript_segments}) == 2
+
+
+def test_decode_cache_handles_corrupted_or_truncated_bytes_gracefully():
+    # Invalid length, bad json, truncated matrix, or wrong dim should return {} rather than raising
+    assert stage.decode_cache(b'') == {}
+    assert stage.decode_cache(b'\x00\x00\x00\x10invalidjsonhere') == {}
+    assert stage.decode_cache(b'\x00\x00\x00\x02{}') == {}
+    header = json.dumps({'v': 1, 'ids': ['s1'], 'durations': [2.5], 'dim': 256}).encode()
+    truncated_matrix = struct.pack('>I', len(header)) + header + b'tooshort'
+    assert stage.decode_cache(truncated_matrix) == {}
+
+
+def test_started_at_anchors_naive_datetime_to_utc():
+    naive_dt = datetime(2026, 9, 25, 12, 0, 0)
+    aware_dt = datetime(2026, 9, 25, 12, 0, 0, tzinfo=timezone.utc)
+    conv_naive = _conversation([])
+    conv_naive.started_at = naive_dt
+    conv_naive.created_at = naive_dt
+    conv_aware = _conversation([])
+    conv_aware.started_at = aware_dt
+    conv_aware.created_at = aware_dt
+    assert stage._started_at(conv_naive) == stage._started_at(conv_aware)

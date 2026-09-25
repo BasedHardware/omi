@@ -21,7 +21,7 @@ import logging
 import os
 import struct
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 import httpx
@@ -54,14 +54,11 @@ from utils.stt.voiceprints import usable_person_voiceprint
 logger = logging.getLogger(__name__)
 
 SAMPLE_RATE = 16000
-# Long segments often hold more than one voice; the middle is the most representative.
 MAX_CLIP_SECONDS = 15.0
 EMBED_TIMEOUT_SECONDS = 10.0
-# Consecutive embedding failures that mean the diarizer is down, not one bad clip.
 MAX_CONSECUTIVE_EMBED_FAILURES = 3
 CACHE_FORMAT_VERSION = 1
 MATCH_SOURCE = 'conversation_voice'
-# Participants are only counted once voice evidence placed this much of the speech.
 MIN_RESOLVED_COVERAGE = 0.9
 
 
@@ -99,13 +96,16 @@ def encode_cache(entries: CacheEntries) -> bytes:
 def decode_cache(data: Optional[bytes]) -> CacheEntries:
     if not data or len(data) < 4:
         return {}
-    (length,) = struct.unpack('>I', data[:4])
-    header = json.loads(data[4 : 4 + length])
-    if header.get('v') != CACHE_FORMAT_VERSION or not header.get('ids'):
+    try:
+        (length,) = struct.unpack('>I', data[:4])
+        header = json.loads(data[4 : 4 + length])
+        if header.get('v') != CACHE_FORMAT_VERSION or not header.get('ids'):
+            return {}
+        dim = int(header['dim'])
+        matrix = np.frombuffer(data[4 + length :], dtype='<f2').astype(np.float32).reshape(len(header['ids']), dim)
+        return {sid: (float(d), matrix[i]) for i, (sid, d) in enumerate(zip(header['ids'], header['durations']))}
+    except Exception:
         return {}
-    dim = int(header['dim'])
-    matrix = np.frombuffer(data[4 + length :], dtype='<f2').astype(np.float32).reshape(len(header['ids']), dim)
-    return {sid: (float(d), matrix[i]) for i, (sid, d) in enumerate(zip(header['ids'], header['durations']))}
 
 
 # --- inputs ------------------------------------------------------------------
@@ -113,6 +113,8 @@ def decode_cache(data: Optional[bytes]) -> CacheEntries:
 
 def _started_at(conversation: Conversation) -> Optional[float]:
     moment: Optional[datetime] = conversation.started_at or conversation.created_at
+    if moment and moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
     return moment.timestamp() if moment else None
 
 
@@ -201,9 +203,7 @@ def _embed_missing(
                     )
                 except Exception as error:
                     failures += 1
-                    logger.warning(
-                        'event=conversation_speaker_embed outcome=failed exception_type=%s', type(error).__name__
-                    )
+                    logger.warning('event=conversation_speaker_embed outcome=failed err=%s', type(error).__name__)
                     if failures >= MAX_CONSECUTIVE_EMBED_FAILURES:
                         return embedded, 'diarizer_unavailable'
                     continue
