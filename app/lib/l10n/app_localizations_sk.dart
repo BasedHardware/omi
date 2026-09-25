@@ -2494,12 +2494,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Podrobné diagnostické správy';
 
   @override
-  String get autoCreateSpeakers => 'Automaticky vytvoriť rečníkov';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Automaticky vytvoriť pri zistení mena';
-
-  @override
   String get followUpQuestions => 'Následné otázky';
 
   @override

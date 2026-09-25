@@ -2712,14 +2712,6 @@
     "@detailedDiagnosticMessages": {
         "description": "Description for transcription diagnostics"
     },
-    "autoCreateSpeakers": "स्वयंचलितपणे व्यक्तीची निर्मिती करा",
-    "@autoCreateSpeakers": {
-        "description": "Experimental feature name"
-    },
-    "autoCreateWhenNameDetected": "नाव सापडल्यावर स्वयंचलितपणे निर्मिती करा",
-    "@autoCreateWhenNameDetected": {
-        "description": "Description for auto-create speakers"
-    },
     "followUpQuestions": "अनुवर्तन प्रश्न",
     "@followUpQuestions": {
         "description": "Experimental feature name"

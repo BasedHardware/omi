@@ -2491,12 +2491,6 @@ class AppLocalizationsSv extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Detaljerade diagnostiska meddelanden';
 
   @override
-  String get autoCreateSpeakers => 'Skapa talare automatiskt';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Skapa automatiskt när namn upptäcks';
-
-  @override
   String get followUpQuestions => 'Uppföljningsfrågor';
 
   @override

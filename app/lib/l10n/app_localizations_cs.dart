@@ -2490,12 +2490,6 @@ class AppLocalizationsCs extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Podrobné diagnostické zprávy';
 
   @override
-  String get autoCreateSpeakers => 'Automaticky vytvářet řečníky';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Automaticky vytvořit při detekci jména';
-
-  @override
   String get followUpQuestions => 'Následné otázky';
 
   @override

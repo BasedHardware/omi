@@ -2496,12 +2496,6 @@ class AppLocalizationsSl extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Podrobna diagnostična sporočila';
 
   @override
-  String get autoCreateSpeakers => 'Samodejno ustvari govorce';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Samodejno ustvari, ko je ime zaznano';
-
-  @override
   String get followUpQuestions => 'Nadaljujoča vprašanja';
 
   @override

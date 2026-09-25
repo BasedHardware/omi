@@ -2500,12 +2500,6 @@ class AppLocalizationsKn extends AppLocalizations {
   String get detailedDiagnosticMessages => 'ವಿವರವಾದ ರೋಗನಿರ್ಣಯ ಸಂದೇಶಗಳು';
 
   @override
-  String get autoCreateSpeakers => 'ವಕ್ತೃ ಸ್ವಯಂ ರಚನೆ';
-
-  @override
-  String get autoCreateWhenNameDetected => 'ಹೆಸರು ಕಂಡುಬಂದಾಗ ಸ್ವಯಂ ರಚಿಸಿ';
-
-  @override
   String get followUpQuestions => 'ಫಾಲೋ-ಅಪ್ ಪ್ರಶ್ನೆಗಳು';
 
   @override

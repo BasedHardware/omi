@@ -2464,12 +2464,6 @@ class AppLocalizationsHi extends AppLocalizations {
   String get detailedDiagnosticMessages => 'विस्तृत नैदानिक संदेश';
 
   @override
-  String get autoCreateSpeakers => 'स्पीकर स्वतः बनाएं';
-
-  @override
-  String get autoCreateWhenNameDetected => 'नाम पता चलने पर स्वचालित रूप से बनाएं';
-
-  @override
   String get followUpQuestions => 'फॉलो-अप प्रश्न';
 
   @override

@@ -2494,12 +2494,6 @@ class AppLocalizationsBn extends AppLocalizations {
   String get detailedDiagnosticMessages => 'বিস্তারিত ডায়াগনস্টিক বার্তা';
 
   @override
-  String get autoCreateSpeakers => 'স্বয়ংক্রিয় বক্তা তৈরি করুন';
-
-  @override
-  String get autoCreateWhenNameDetected => 'নাম সনাক্ত হলে স্বয়ংক্রিয়ভাবে তৈরি করুন';
-
-  @override
   String get followUpQuestions => 'অনুসরণকারী প্রশ্ন';
 
   @override

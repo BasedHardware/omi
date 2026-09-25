@@ -20,7 +20,7 @@ import re
 IDENTIFIER = re.compile(r"^[a-z][a-z0-9_-]{0,79}$")
 
 
-def validate(spec, now=None):
+def validate(spec, now=None, registry=None):
     now = now or dt.datetime.now(dt.timezone.utc)
     for field in ("key", "owner", "hypothesis", "default_variant", "expires_at"):
         if not isinstance(spec.get(field), str) or not spec[field].strip():
@@ -37,8 +37,9 @@ def validate(spec, now=None):
     if not isinstance(spec.get("guardrails"), list) or not spec["guardrails"]:
         raise ValueError("Guardrails required")
     metrics = [spec.get("primary_metric")] + spec["guardrails"]
-    registry_path = Path(__file__).parents[3] / "contracts/analytics/events.json"
-    registry = json.loads(registry_path.read_text())
+    if registry is None:
+        registry_path = Path(__file__).parents[3] / "contracts/analytics/events.json"
+        registry = json.loads(registry_path.read_text())
     registered = {event["wire_name"]: event for event in registry["events"]}
     for metric in metrics:
         if not isinstance(metric, dict) or metric.get("event") not in registered or not isinstance(metric.get("filters"), dict):
@@ -52,8 +53,9 @@ def validate(spec, now=None):
         raise ValueError("Expiry must be a future timestamp with timezone")
     targeting = spec.get("targeting", {})
     namespaces = targeting.get("namespaces", [])
+    allowed_namespaces = registry.get("namespaces", ("mobile-dev", "mobile-prod"))
     if not namespaces or not isinstance(namespaces, list) or not all(
-        namespace in ("mobile-dev", "mobile-prod") for namespace in namespaces
+        namespace in allowed_namespaces for namespace in namespaces
     ):
         raise ValueError("Explicit mobile namespace targeting required")
     if type(targeting.get("minimum_build")) is not int or targeting["minimum_build"] < 0:
@@ -103,8 +105,8 @@ def metric_payload(metric, spec, index, goal):
                             f"$feature/{spec['key']}": [variant["key"] for variant in spec["variants"]]})}]}
 
 
-def plan(spec, project_id, now=None):
-    validate(spec, now)
+def plan(spec, project_id, now=None, registry=None):
+    validate(spec, now, registry)
     if not re.fullmatch(r"[1-9][0-9]*", str(project_id)):
         raise ValueError("Explicit numeric PostHog project ID required")
     targeting = spec["targeting"]

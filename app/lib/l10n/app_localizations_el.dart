@@ -2508,12 +2508,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Λεπτομερή διαγνωστικά μηνύματα';
 
   @override
-  String get autoCreateSpeakers => 'Αυτόματη δημιουργία ομιλητών';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Αυτόματη δημιουργία όταν ανιχνευθεί όνομα';
-
-  @override
   String get followUpQuestions => 'Συμπληρωματικές ερωτήσεις';
 
   @override

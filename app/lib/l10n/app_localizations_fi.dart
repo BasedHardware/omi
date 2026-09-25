@@ -2488,12 +2488,6 @@ class AppLocalizationsFi extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Yksityiskohtaiset diagnostiikkaviestit';
 
   @override
-  String get autoCreateSpeakers => 'Luo puhujat automaattisesti';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Luo automaattisesti kun nimi havaitaan';
-
-  @override
   String get followUpQuestions => 'Jatkokysymykset';
 
   @override

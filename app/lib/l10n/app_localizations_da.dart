@@ -2473,12 +2473,6 @@ class AppLocalizationsDa extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Detaljerede diagnostiske beskeder';
 
   @override
-  String get autoCreateSpeakers => 'Opret talere automatisk';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Opret automatisk når navn registreres';
-
-  @override
   String get followUpQuestions => 'Opfølgende spørgsmål';
 
   @override

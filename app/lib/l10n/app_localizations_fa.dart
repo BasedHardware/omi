@@ -2493,12 +2493,6 @@ class AppLocalizationsFa extends AppLocalizations {
   String get detailedDiagnosticMessages => 'پیام‌های تشخیص تفصیلی';
 
   @override
-  String get autoCreateSpeakers => 'ایجاد خودکار سخنرانان';
-
-  @override
-  String get autoCreateWhenNameDetected => 'ایجاد خودکار هنگام تشخیص نام';
-
-  @override
   String get followUpQuestions => 'سؤالات دنبال‌کننده';
 
   @override

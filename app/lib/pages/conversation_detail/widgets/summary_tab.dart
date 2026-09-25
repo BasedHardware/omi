@@ -12,9 +12,7 @@ import 'package:omi/services/app_review_service.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/analytics/product_telemetry.dart';
 import 'package:omi/utils/analytics/analytics_manager.dart';
-import 'package:omi/services/experiments/experiment_registry.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-import 'package:omi/widgets/experiments/experiment_builder.dart';
 import 'package:omi/widgets/app_review_prompt.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:visibility_detector/visibility_detector.dart';
@@ -451,9 +449,7 @@ class _SummaryFeedbackPromptState extends State<SummaryFeedbackPrompt> {
       return;
     }
     setState(() => _policyClaimed = true);
-    // ExperimentBuilder owns the exposure ordering when a lease is present;
-    // its selected builder starts the attempt after the lease paints.
-    if (AnalyticsManager().experiments == null) _ensureExposed();
+    _ensureExposed();
   }
 
   void _ensureExposed() {
@@ -556,21 +552,6 @@ class _SummaryFeedbackPromptState extends State<SummaryFeedbackPrompt> {
         _eligible != true) {
       return const SliverToBoxAdapter(child: SizedBox.shrink());
     }
-    final experiments = AnalyticsManager().experiments;
-    final prompt = experiments == null
-        ? _buildPrompt(context, compact: false, waitForExperimentExposure: false)
-        : ExperimentBuilder<SummaryFeedbackLayout>(
-            service: experiments,
-            definition: MobileExperiments.summaryFeedbackLayout,
-            surface: 'summary-feedback',
-            visible: _visible && _policyClaimed,
-            loadingBuilder: _buildLoadingPrompt,
-            builder: (context, layout, child) => _buildPrompt(
-              context,
-              compact: layout == SummaryFeedbackLayout.compact,
-              waitForExperimentExposure: true,
-            ),
-          );
     return SliverToBoxAdapter(
       child: VisibilityDetector(
         key: ValueKey('summary-feedback-visibility-${widget.conversationId}'),
@@ -580,61 +561,41 @@ class _SummaryFeedbackPromptState extends State<SummaryFeedbackPrompt> {
           setState(() => _visible = visible);
           if (visible) unawaited(_claimIfVisible());
         },
-        child: prompt,
+        child: _buildPrompt(context),
       ),
     );
   }
 
-  Widget _buildLoadingPrompt(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.fromLTRB(20, 12, 20, 8),
-      child: SizedBox(
-        height: 48,
-        child: DecoratedBox(
-          decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildPrompt(BuildContext context, {required bool compact, required bool waitForExperimentExposure}) {
-    if (waitForExperimentExposure) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted && _visible && _policyClaimed) _ensureExposed();
-      });
-    }
+  Widget _buildPrompt(BuildContext context) {
     return Padding(
-      padding: EdgeInsets.fromLTRB(20, compact ? 8 : 12, 20, compact ? 4 : 8),
+      padding: const EdgeInsets.fromLTRB(20, 12, 20, 8),
       child: Container(
-        padding: EdgeInsets.symmetric(horizontal: compact ? 10 : 16, vertical: compact ? 6 : 12),
-        decoration: BoxDecoration(
-          color: OmiColors.surface1,
-          borderRadius: BorderRadius.circular(compact ? 12 : 16),
-        ),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
         child: Row(
           children: [
             Expanded(
               child: Text(
                 context.l10n.wasThisHelpful,
-                style: TextStyle(color: Colors.white, fontSize: compact ? 13 : 14, fontWeight: FontWeight.w500),
+                style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
               ),
             ),
             IconButton(
               tooltip: context.l10n.wasThisHelpful,
               onPressed: _saving || !_policyClaimed ? null : () => _submit(1),
-              icon: Icon(Icons.thumb_up_alt_outlined, size: compact ? 18 : 19),
+              icon: const Icon(Icons.thumb_up_alt_outlined, size: 19),
               color: Colors.white70,
             ),
             IconButton(
               tooltip: context.l10n.notHelpful,
               onPressed: _saving || !_policyClaimed ? null : () => _submit(-1),
-              icon: Icon(Icons.thumb_down_alt_outlined, size: compact ? 18 : 19),
+              icon: const Icon(Icons.thumb_down_alt_outlined, size: 19),
               color: Colors.white70,
             ),
             IconButton(
               tooltip: context.l10n.close,
               onPressed: _saving || !_policyClaimed ? null : _dismiss,
-              icon: Icon(Icons.close, size: compact ? 17 : 18),
+              icon: const Icon(Icons.close, size: 18),
               color: Colors.white54,
             ),
           ],

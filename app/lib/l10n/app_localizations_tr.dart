@@ -2495,12 +2495,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Ayrıntılı tanılama mesajları';
 
   @override
-  String get autoCreateSpeakers => 'Konuşmacıları Otomatik Oluştur';
-
-  @override
-  String get autoCreateWhenNameDetected => 'İsim algılandığında otomatik oluştur';
-
-  @override
   String get followUpQuestions => 'Takip Soruları';
 
   @override
