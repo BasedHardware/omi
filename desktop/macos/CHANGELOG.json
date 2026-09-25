@@ -2,6 +2,41 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.390",
+      "date": "2026-09-25",
+      "changes": [
+        "Fixed automatic updates restarting Omi in the middle of a call, which split one meeting into two conversations"
+      ]
+    },
+    {
+      "version": "0.12.389",
+      "date": "2026-09-25",
+      "changes": [
+        "Memory export and AI-assistant connections now use Omi's canonical MCP endpoint, and connection checks show the server's actual error instead of a generic failure."
+      ]
+    },
+    {
+      "version": "0.12.388",
+      "date": "2026-09-25",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.387",
+      "date": "2026-09-25",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
+      "version": "0.12.386",
+      "date": "2026-09-24",
+      "changes": [
+        "Bug fixes and improvements"
+      ]
+    },
+    {
       "version": "0.12.385",
       "date": "2026-09-24",
       "changes": [

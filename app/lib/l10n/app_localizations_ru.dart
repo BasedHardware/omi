@@ -936,9 +936,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'Добавить в claude_desktop_config.json';
-
-  @override
   String get copyConfig => 'Копировать конфигурацию';
 
   @override
@@ -2483,13 +2480,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get clearAllNodesAndConnections => 'Очистить все узлы и соединения';
 
   @override
-  String get addToClaudeDesktopConfig => 'Добавить в claude_desktop_config.json';
-
-  @override
   String get connectAiAssistantsToData => 'Подключите AI-помощников к вашим данным';
-
-  @override
-  String get useYourMcpApiKey => 'Используйте свой MCP API-ключ';
 
   @override
   String get realTimeTranscript => 'Транскрипция в реальном времени';
@@ -10003,7 +9994,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get transcriptionNoAudio => 'Транскрипция не получает аудио';
 
   @override
-  String get tapPlusToStartRecording => 'Нажмите +, чтобы начать запись';
+  String get tapPlusToStartRecording => 'Нажмите кнопку записи, чтобы начать запись';
 
   @override
   String get chatBlockTask => 'Задача';
@@ -10246,7 +10237,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'Здесь появляются записанные разговоры. Нажмите + на главной, чтобы записать первый.';
+      'Здесь появляются записанные разговоры. Нажмите кнопку записи на главной, чтобы записать первый.';
 
   @override
   String get conversationMap => 'Карта разговоров';
@@ -10724,7 +10715,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String get deviceConnecting => 'Подключение…';
 
   @override
-  String get recordOptionsTip => 'Совет: нажмите и удерживайте кнопку записи, чтобы записать телефонный звонок.';
+  String get recordOptionsTip => 'Совет: нажмите стрелку на кнопке записи, чтобы записать телефонный звонок.';
 
   @override
   String get firmwareUpdateFailedTitle => 'Не удалось обновить';
@@ -11125,4 +11116,158 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get helpAndAbout => 'Помощь и о программе';
+
+  @override
+  String get speakerTagPromptTitle => 'Помогите Omi узнавать голоса';
+
+  @override
+  String get speakerTagPromptSubtitle => 'Быстрая проверка голосов за последние два дня';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'Это вы?';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'Это $name?';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'Кто это?';
+
+  @override
+  String get speakerTagPromptThatsMe => 'Это я';
+
+  @override
+  String get speakerTagPromptNotMe => 'Не я';
+
+  @override
+  String get speakerTagPromptSomeoneNew => 'Кто-то новый';
+
+  @override
+  String get speakerTagPromptDontKnow => 'Незнакомый человек';
+
+  @override
+  String get speakerTagPromptNotSure => 'Не уверен';
+
+  @override
+  String get speakerTagPromptPlayClip => 'Воспроизвести фрагмент';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current из $total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => 'Запоминать голоса людей, которых вы назвали';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody =>
+      'Omi сохраняет короткий образец голоса, чтобы узнать человека в следующий раз. Это можно изменить в любой момент в Настройках.';
+
+  @override
+  String get speakerTagPromptThanks => 'Спасибо! Omi будет лучше узнавать голоса.';
+
+  @override
+  String get speakerTagPromptNameHint => 'Имя';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'Не удалось воспроизвести фрагмент';
+
+  @override
+  String get speakerTagPromptAnswerFailed => 'Не удалось сохранить. Попробуйте ещё раз.';
+
+  @override
+  String get voiceSettingsAskToTag => 'Просить меня отмечать голоса';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle =>
+      'Время от времени Omi спрашивает, кто говорил в ваших недавних разговорах';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle =>
+      'Когда вы называете человека, Omi сохраняет короткий образец голоса, чтобы узнать его в следующий раз';
+
+  @override
+  String get leaveBlank => 'Оставьте пустым';
+
+  @override
+  String get mcpOAuthSetup =>
+      'На claude.ai добавьте пользовательский коннектор и вставьте URL сервера. Если Claude запросит расширенный OAuth Client ID, используйте значение ниже и оставьте секрет пустым — никогда не используйте свой MCP API-ключ как секрет OAuth.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'Добавить в ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'На Claude Desktop → Settings → Connectors добавьте пользовательский коннектор и вставьте URL сервера. Если Claude запросит расширенный OAuth Client ID, используйте значение ниже и оставьте секрет пустым — никогда не используйте свой MCP API-ключ как секрет OAuth.';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Транскрипция недоступна, запись продолжается на устройстве и будет обработана позже';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Транскрипция недоступна · сохраняется на устройстве';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Транскрипций в ожидании $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Транскрипций в ожидании $count';
+  }
+
+  @override
+  String get captureSourceCall => 'Звонок';
+
+  @override
+  String get captureSourcePhoneMic => 'Микрофон телефона';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Продолжить';
+
+  @override
+  String get finish => 'Завершить';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Кулон на паузе · продолжит после завершения';
+
+  @override
+  String get pendantIsListeningTitle => 'Ваш кулон слушает';
+
+  @override
+  String get oneSourceAtATime => 'Omi записывает только из одного источника за раз.';
+
+  @override
+  String get recordWithPhoneInstead => 'Записать телефоном вместо кулона';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'Кулон на паузе до завершения записи';
+
+  @override
+  String get pendantPausesDuringCall => 'Кулон на паузе во время звонка';
+
+  @override
+  String get keepUsingPendant => 'Продолжить с кулоном';
+
+  @override
+  String get recordWith => 'Записать через';
+
+  @override
+  String get moreWaysToRecord => 'Другие способы записи';
+
+  @override
+  String get openCall => 'Открыть звонок';
+
+  @override
+  String get captureRecoveryBanner => 'Звук кулона не доходит до приложения — нажмите, чтобы исправить';
 }

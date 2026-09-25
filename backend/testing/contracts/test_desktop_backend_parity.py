@@ -83,7 +83,7 @@ def filter_parts(field_filter):
 
 def test_python_conversation_codec_reads_shared_standard_and_enhanced_fixtures():
     data = fixture("conversations.json")
-    standard = conversations_db._prepare_conversation_for_read(
+    standard = conversations_db.prepare_conversation_for_read(
         {
             "data_protection_level": "standard",
             "transcript_segments": base64.b64decode(data["standard_compressed_transcript_b64"]),
@@ -91,7 +91,7 @@ def test_python_conversation_codec_reads_shared_standard_and_enhanced_fixtures()
         },
         data["uid"],
     )
-    enhanced = conversations_db._prepare_conversation_for_read(
+    enhanced = conversations_db.prepare_conversation_for_read(
         {
             "data_protection_level": "enhanced",
             "transcript_segments": data["enhanced_encrypted_transcript"],
