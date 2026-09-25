@@ -530,9 +530,11 @@ async def test_selection_skips_the_benched_modulate_primary_on_the_next_connect(
 
 def test_the_circuit_recovers_through_the_half_open_probe():
     """Benching Velma must not brick it: after the serve-error cooldown a
-    probe is offered, and enough consecutive probe successes close it again.
-    A single half-open connect is not recovery during a 5xx storm
-    (first transcript succeeds, then teardown fails)."""
+    probe is offered, and enough consecutive SERVING probe successes close it
+    again. A grace-only connect success keeps the breaker half-open — during a
+    5xx storm the probe the grace admits is exactly the stream that dies
+    mid-session (2026-09-22: the re-close re-admitted the failing provider
+    every ~3 minutes for hours)."""
     now = [0.0]
     circuit = ProviderCircuitBreaker(
         failure_threshold=3,
@@ -555,8 +557,11 @@ def test_the_circuit_recovers_through_the_half_open_probe():
     circuit.record_success()
     assert circuit.state == 'half_open'
     assert circuit.allow_request() is True
-    circuit.record_success()
+    circuit.record_success(serving=True)
     assert circuit.state == 'half_open'
     assert circuit.allow_request() is True
-    circuit.record_success()
+    circuit.record_success(serving=True)
+    assert circuit.state == 'half_open'
+    assert circuit.allow_request() is True
+    circuit.record_success(serving=True)
     assert circuit.state == 'closed'

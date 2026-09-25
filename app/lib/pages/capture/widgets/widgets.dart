@@ -9,10 +9,11 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/home/firmware_update.dart';
 import 'package:omi/pages/home/omiglass_ota_update.dart';
-import 'package:omi/pages/speech_profile/page.dart';
+import 'package:omi/pages/settings/settings_destinations.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/conversation_photo_image.dart';
@@ -36,58 +37,72 @@ class SpeechProfileCardWidget extends StatelessWidget {
                       device.pairedDevice?.firmwareRevision == '1.0.2') {
                     return const SizedBox();
                   }
-                  return Stack(
-                    children: [
-                      GestureDetector(
-                        onTap: () async {
-                          PlatformManager.instance.analytics.pageOpened('Speech Profile Memories');
-                          bool hasSpeakerProfile = SharedPreferencesUtil().hasSpeakerProfile;
-                          await routeToPage(context, const SpeechProfilePage());
-                          final newHasSpeakerProfile = SharedPreferencesUtil().hasSpeakerProfile;
-                          if (hasSpeakerProfile != newHasSpeakerProfile) {
-                            if (!context.mounted) return;
-                            await context.read<CaptureProvider>().onRecordProfileSettingChanged();
-                            if (!context.mounted) return;
-                            context.read<HomeProvider>().setSpeakerProfile(newHasSpeakerProfile);
-                          }
-                        },
-                        child: Container(
-                          decoration: const BoxDecoration(
-                            color: Color(0xFF1F1F25),
-                            borderRadius: BorderRadius.all(Radius.circular(24)),
-                          ),
-                          margin: const EdgeInsets.fromLTRB(16, 15, 16, 0),
-                          padding: const EdgeInsets.all(16),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Expanded(
-                                child: Row(
-                                  children: [
-                                    const Icon(Icons.multitrack_audio),
-                                    const SizedBox(width: 16),
-                                    Text(
-                                      context.l10n.teachOmiYourVoice,
-                                      style: const TextStyle(color: Colors.white, fontSize: 16),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
-                            ],
-                          ),
-                        ),
-                      ),
-                      const Positioned(
-                        top: 6,
-                        right: 24,
-                        child: Icon(Icons.fiber_manual_record, color: Colors.red, size: 16.0),
-                      ),
-                    ],
+                  return _CardRow(
+                    icon: Icons.multitrack_audio,
+                    label: context.l10n.teachOmiYourVoice,
+                    // A dot marks a setup step still to do.
+                    badge: true,
+                    onTap: () async {
+                      PlatformManager.instance.analytics.pageOpened('Speech Profile Memories');
+                      bool hasSpeakerProfile = SharedPreferencesUtil().hasSpeakerProfile;
+                      await openVoiceProfile(context);
+                      final newHasSpeakerProfile = SharedPreferencesUtil().hasSpeakerProfile;
+                      if (hasSpeakerProfile != newHasSpeakerProfile) {
+                        if (!context.mounted) return;
+                        await context.read<CaptureProvider>().onRecordProfileSettingChanged();
+                        if (!context.mounted) return;
+                        context.read<HomeProvider>().setSpeakerProfile(newHasSpeakerProfile);
+                      }
+                    },
                   );
                 },
               );
       },
+    );
+  }
+}
+
+/// A tappable card row on the capture surfaces: icon, label, chevron; announced as a button.
+class _CardRow extends StatelessWidget {
+  const _CardRow({required this.icon, required this.label, required this.onTap, this.badge = false});
+
+  final IconData icon;
+  final String label;
+  final VoidCallback onTap;
+  final bool badge;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.md, OmiSpacing.md, 0),
+      child: Semantics(
+        button: true,
+        label: label,
+        excludeSemantics: true,
+        child: Material(
+          color: OmiColors.surface1,
+          borderRadius: OmiRadius.xlAll,
+          clipBehavior: Clip.antiAlias,
+          child: InkWell(
+            onTap: onTap,
+            child: Padding(
+              padding: const EdgeInsets.all(OmiSpacing.md),
+              child: Row(
+                children: [
+                  Icon(icon, color: OmiColors.textPrimary),
+                  const SizedBox(width: OmiSpacing.md),
+                  Expanded(child: Text(label, style: OmiType.callout)),
+                  if (badge) ...[
+                    const Icon(Icons.fiber_manual_record, color: OmiColors.danger, size: 10),
+                    const SizedBox(width: OmiSpacing.xs),
+                  ],
+                  const Icon(Icons.arrow_forward_ios, color: OmiColors.textPrimary, size: 16),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
@@ -104,51 +119,23 @@ class UpdateFirmwareCardWidget extends StatelessWidget {
         final isOmiGlass = provider.pairedDevice?.type == DeviceType.openglass ||
             (provider.pairedDevice?.name.toLowerCase().contains('glass') ?? false);
 
-        return Stack(
-          children: [
-            GestureDetector(
-              onTap: () {
-                PlatformManager.instance.analytics.pageOpened('Update Firmware Memories');
-                if (isOmiGlass) {
-                  routeToPage(
-                    context,
-                    OmiGlassOtaUpdate(
-                      device: provider.pairedDevice,
-                      latestFirmwareDetails: provider.latestOmiGlassFirmwareDetails,
-                    ),
-                  );
-                } else {
-                  routeToPage(context, FirmwareUpdate(device: provider.pairedDevice));
-                }
-              },
-              child: Container(
-                decoration: const BoxDecoration(
-                  color: Color(0xFF1F1F25),
-                  borderRadius: BorderRadius.all(Radius.circular(20)),
+        return _CardRow(
+          icon: Icons.upload,
+          label: isOmiGlass ? context.l10n.updateOmiGlassFirmware : context.l10n.updateOmiFirmware,
+          onTap: () {
+            PlatformManager.instance.analytics.pageOpened('Update Firmware Memories');
+            if (isOmiGlass) {
+              routeToPage(
+                context,
+                OmiGlassOtaUpdate(
+                  device: provider.pairedDevice,
+                  latestFirmwareDetails: provider.latestOmiGlassFirmwareDetails,
                 ),
-                margin: const EdgeInsets.fromLTRB(16, 16, 16, 0),
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Row(
-                        children: [
-                          const Icon(Icons.upload),
-                          const SizedBox(width: 16),
-                          Text(
-                            isOmiGlass ? 'Update OmiGlass Firmware' : context.l10n.updateOmiFirmware,
-                            style: const TextStyle(color: Colors.white, fontSize: 16),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
-                  ],
-                ),
-              ),
-            ),
-          ],
+              );
+            } else {
+              routeToPage(context, FirmwareUpdate(device: provider.pairedDevice));
+            }
+          },
         );
       },
     );
@@ -176,7 +163,7 @@ class PhotosPreviewWidget extends StatelessWidget {
               child: AspectRatio(
                 aspectRatio: 800 / 600,
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(8.0),
+                  borderRadius: OmiRadius.smAll,
                   child: ConversationPhotoImage(
                     photo: photo,
                     conversationId: resolvedConversationId,
@@ -221,10 +208,7 @@ getTranscriptWidget(
   TranscriptSegmentBuilder? segmentBuilder,
 }) {
   if (conversationCreating) {
-    return const Padding(
-      padding: EdgeInsets.only(top: 80),
-      child: Center(child: CircularProgressIndicator(color: Colors.white)),
-    );
+    return const Padding(padding: EdgeInsets.only(top: 80), child: Center(child: OmiSpinner()));
   }
 
   final bool showPhotos = photos.isNotEmpty;

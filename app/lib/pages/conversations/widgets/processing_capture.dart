@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
@@ -12,30 +11,33 @@ import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/backend/schema/conversation.dart';
-import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/pages/conversation_capturing/page.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
-import 'package:omi/pages/conversations/widgets/capture.dart';
+import 'package:omi/pages/conversations/capture_state_labels.dart';
 import 'package:omi/pages/processing_conversations/page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/enums.dart';
-import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/processing_timeout.dart';
 import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/providers/phone_call_provider.dart';
+import 'package:omi/pages/conversations/widgets/live_capture_card.dart';
+import 'package:omi/pages/phone_calls/active_call_page.dart';
+import 'package:omi/ui/ui.dart';
 
 class ConversationCaptureWidget extends StatefulWidget {
-  const ConversationCaptureWidget({super.key});
+  const ConversationCaptureWidget({super.key, this.showsCall = false});
+
+  /// Home shows an Omi call on this card; the Conversations tab has its own call banner.
+  final bool showsCall;
 
   @override
   State<ConversationCaptureWidget> createState() => _ConversationCaptureWidgetState();
 }
 
 class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
-  bool _isPhoneMicPaused = false;
   Timer? _offlineTicker;
   int _offlineTick = 0;
 
@@ -47,8 +49,11 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     _offlineTicker = Timer.periodic(const Duration(seconds: 1), (_) async {
       if (!mounted) return;
       final provider = context.read<CaptureProvider>();
-      if (provider.offlineRecordingStartedAt != null || provider.customSttBufferingDuration != null) {
-        setState(() {});
+      if (provider.offlineRecordingStartedAt != null ||
+          provider.customSttBufferingDuration != null ||
+          provider.liveCaptureStartedAt != null ||
+          (widget.showsCall && context.read<PhoneCallProvider>().callState == PhoneCallState.active)) {
+        setState(() {}); // the elapsed time on the card
       }
       _offlineTick++;
       // The pendant card is fed by prefs the native drain engine writes; reload
@@ -70,18 +75,50 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
 
   @override
   Widget build(BuildContext context) {
-    // Hide capture widget when a phone call is in progress (banner replaces it)
-    var phoneCallState = context.watch<PhoneCallProvider>().callState;
+    // During an Omi call the call is what's recording now. Home shows it here (the call page owns
+    // its controls); the Conversations tab has its own call banner instead.
+    final call = context.watch<PhoneCallProvider>();
+    final phoneCallState = call.callState;
     if (phoneCallState == PhoneCallState.active ||
         phoneCallState == PhoneCallState.connecting ||
         phoneCallState == PhoneCallState.ringing) {
-      return const SizedBox.shrink();
+      if (!widget.showsCall) return const SizedBox.shrink();
+      final l10n = context.l10n;
+      return Semantics(
+        button: true,
+        hint: l10n.openCall,
+        child: GestureDetector(
+          onTap: () => routeToPage(context, const ActiveCallPage()),
+          child: _cardShell(
+            LiveCaptureCard(
+              source: LiveCaptureCard.callSource,
+              stateLabel: switch (phoneCallState) {
+                PhoneCallState.connecting => l10n.callStateConnecting,
+                PhoneCallState.ringing => l10n.callStateRinging,
+                _ => captureStateLabel(l10n, CaptureDisplayState.listening),
+              },
+              // Amber until audio flows: connecting and ringing are not listening yet.
+              paused: phoneCallState != PhoneCallState.active,
+              elapsed: phoneCallState == PhoneCallState.active ? call.callDuration : null,
+              lastLine: call.transcriptSegments.lastOrNull?.text,
+            ),
+          ),
+        ),
+      );
     }
 
     return Consumer<CaptureProvider>(
       builder: (context, provider, child) {
-        var header = _getConversationHeader(context);
-        if (header == null) {
+        // The card means "what's recording now": hidden when nothing is (a connected pendant
+        // that is not capturing, or a stopped phone). Transcribe Later keeps its own card.
+        final batch = provider.isPhoneMicBatchRecording ||
+            (SharedPreferencesUtil().batchModeEnabled && provider.havingRecordingDevice);
+        final phoneLive = provider.recordingState == RecordingState.record ||
+            provider.recordingState == RecordingState.initialising ||
+            provider.recordingState == RecordingState.interrupted ||
+            provider.recordingState == RecordingState.systemAudioRecord ||
+            provider.isPhoneMicPaused;
+        if (provider.liveCaptureSource == null && !phoneLive && !batch) {
           return const SizedBox.shrink();
         }
 
@@ -111,244 +148,46 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
             );
             routeToPage(context, ConversationCapturingPage(topConversationId: provider.topConversationId));
           },
-          child: Container(
-            margin: const EdgeInsets.fromLTRB(16, 12, 16, 12),
-            width: double.maxFinite,
-            decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(24)),
-            child: Padding(
-              padding: EdgeInsets.fromLTRB(
-                10,
-                18,
-                10,
-                (provider.segments.isNotEmpty || provider.photos.isNotEmpty) ? 22 : 16,
-              ),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [_buildUnifiedRecordingUI(provider, header)],
-              ),
-            ),
+          child: Semantics(
+            button: !batch,
+            hint: batch ? null : context.l10n.liveTranscript,
+            child: _cardShell(_buildUnifiedRecordingUI(provider)),
           ),
         );
       },
     );
   }
 
-  // When a phone-mic session silently became a local (batch) capture because there
-  // was no network, tell the user once so the missing live transcript isn't confusing.
-  void _maybeShowOfflineFallbackSnackbar(CaptureProvider provider) {
-    if (provider.isPhoneMicBatchRecording && SharedPreferencesUtil().phoneBatchAuto) {
-      AppSnackbar.showSnackbar(context.l10n.phoneMicOfflineFallbackMessage);
-    }
-  }
-
-  _toggleRecording(BuildContext context, CaptureProvider provider) async {
-    var recordingState = provider.recordingState;
-
-    if (provider.havingRecordingDevice) {
-      // Device recording logic - add pause/resume for device recording
-      if (recordingState == RecordingState.deviceRecord && !provider.isPaused) {
-        // Pause device recording
-        await provider.pauseDeviceRecording();
-      } else if (provider.isPaused && recordingState == RecordingState.pause) {
-        // Resume device recording
-        await provider.resumeDeviceRecording();
-      }
-    } else {
-      // Phone mic logic - use local state to track pause
-      if (recordingState == RecordingState.record && !_isPhoneMicPaused) {
-        // Pause recording
-        setState(() {
-          _isPhoneMicPaused = true;
-        });
-        await provider.stopStreamRecording();
-        PlatformManager.instance.analytics.phoneMicRecordingStopped();
-      } else if (_isPhoneMicPaused) {
-        // Resume recording
-        setState(() {
-          _isPhoneMicPaused = false;
-        });
-        await provider.streamRecording();
-        PlatformManager.instance.analytics.phoneMicRecordingStarted();
-        _maybeShowOfflineFallbackSnackbar(provider);
-      } else if (recordingState == RecordingState.initialising) {
-        Logger.debug('initialising, have to wait');
-      } else {
-        setState(() {
-          _isPhoneMicPaused = false;
-        });
-        await provider.streamRecording();
-        PlatformManager.instance.analytics.phoneMicRecordingStarted();
-        _maybeShowOfflineFallbackSnackbar(provider);
-      }
-    }
-  }
-
-  Widget? _getConversationHeader(BuildContext context) {
-    var captureProvider = context.read<CaptureProvider>();
-    bool deviceServiceStateOk = captureProvider.recordingDeviceServiceReady;
-    bool transcriptServiceStateOk = captureProvider.transcriptServiceReady;
-    bool isHavingTranscript = captureProvider.segments.isNotEmpty;
-    bool isHavingPhotos = captureProvider.photos.isNotEmpty;
-    bool isHavingDesireDevice = SharedPreferencesUtil().btDevice.id.isNotEmpty;
-    bool isHavingRecordingDevice = captureProvider.havingRecordingDevice;
-
-    bool isUsingPhoneMic = captureProvider.recordingState == RecordingState.record ||
-        captureProvider.recordingState == RecordingState.initialising ||
-        captureProvider.recordingState == RecordingState.pause ||
-        captureProvider.recordingState == RecordingState.interrupted;
-
-    // Check if any recording is active (phone mic, system audio, or device recording).
-    // `interrupted` is included so the in-session UI stays visible while the
-    // pipeline is transiently broken (e.g., iOS audio session interruption).
-    bool isAnyRecordingActive = captureProvider.recordingState == RecordingState.record ||
-        captureProvider.recordingState == RecordingState.systemAudioRecord ||
-        captureProvider.recordingState == RecordingState.deviceRecord ||
-        captureProvider.recordingState == RecordingState.initialising ||
-        captureProvider.recordingState == RecordingState.pause ||
-        captureProvider.recordingState == RecordingState.interrupted ||
-        captureProvider.isPaused ||
-        _isPhoneMicPaused;
-
-    // Hide the widget when no recording is active and there are no segments or photos
-    if (!isAnyRecordingActive && !isHavingTranscript && !isHavingPhotos && !isHavingRecordingDevice) {
-      return null;
-    }
-
-    // Left
-    Widget? left;
-    if (isUsingPhoneMic || !isHavingDesireDevice) {
-      // Hidden for now: the phone-mic "Continue Recording" button here is redundant
-      // with the bottom recording button, which performs the same action. Keep the
-      // right-side status indicator (Listening/Paused). See getPhoneMicRecordingButton.
-      left = const SizedBox.shrink();
-    } else if (!isAnyRecordingActive &&
-        !deviceServiceStateOk &&
-        !transcriptServiceStateOk &&
-        !isHavingTranscript &&
-        !isHavingDesireDevice) {
-      return null; // not recording and not ready
-    } else if (!deviceServiceStateOk) {
-      left = Row(
-        children: [
-          const SizedBox(width: 14),
-          const Icon(Icons.record_voice_over),
-          const SizedBox(width: 12),
-          Container(
-            decoration: BoxDecoration(color: const Color(0xFF35343B), borderRadius: BorderRadius.circular(16)),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            child: Text(
-              context.l10n.waitingForDevice,
-              style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
-              maxLines: 1,
-            ),
-          ),
-          if (isHavingTranscript || isHavingPhotos) const Flexible(child: LiteCaptureWidget()),
-        ],
+  Widget _cardShell(Widget child) => Container(
+        margin: const EdgeInsets.fromLTRB(16, 12, 16, 12),
+        width: double.maxFinite,
+        padding: const EdgeInsets.fromLTRB(18, 14, 12, 16),
+        decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(24)),
+        child: child,
       );
+
+  Future<void> _togglePause(CaptureProvider provider) async {
+    final phone = provider.liveCaptureSource == 'phone';
+    if (provider.isPaused) {
+      OmiHaptics.medium();
+      await provider.resumeCapture();
+      if (phone) PlatformManager.instance.analytics.phoneMicRecordingStarted();
     } else {
-      left = Row(
-        children: [
-          const SizedBox(width: 14),
-          const Icon(Icons.record_voice_over),
-          const SizedBox(width: 12),
-          Container(
-            decoration: BoxDecoration(color: const Color(0xFF35343B), borderRadius: BorderRadius.circular(16)),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            child: Text(
-              (isHavingTranscript || isHavingPhotos) ? context.l10n.inProgress : context.l10n.saySomething,
-              style: Theme.of(context).textTheme.bodyMedium!.copyWith(color: Colors.white),
-              maxLines: 1,
-            ),
-          ),
-        ],
-      );
+      OmiHaptics.medium();
+      await provider.pauseCapture();
+      if (phone) PlatformManager.instance.analytics.phoneMicRecordingStopped();
     }
-
-    // Right
-    Widget? statusIndicator;
-    var stateText = "";
-
-    // Always check pause state first with highest priority (both desktop and phone)
-    if (captureProvider.recordingState == RecordingState.interrupted && captureProvider.isCallActive) {
-      stateText = context.l10n.paused;
-      statusIndicator = const PausedStatusIndicator();
-    } else if (captureProvider.isPaused || _isPhoneMicPaused) {
-      stateText = context.l10n.paused;
-      statusIndicator = const PausedStatusIndicator();
-    } else if (!isHavingRecordingDevice && !isUsingPhoneMic) {
-      stateText = "";
-    } else if (isUsingPhoneMic || isHavingRecordingDevice) {
-      final bufferingFor = captureProvider.customSttBufferingDuration;
-      if (captureProvider.terminalTranscriptionFailure != null) {
-        // Audio remains in the WAL while reconnecting, but the server has
-        // explicitly said live STT is unavailable. Do not claim "Listening".
-        stateText = context.l10n.transcriptionUnavailable;
-        statusIndicator = const PausedStatusIndicator();
-      } else if (bufferingFor != null) {
-        // Custom STT endpoint unreachable. Audio keeps recording
-        // and buffering locally (see PurePollingSocket) — say so instead of
-        // silently claiming "Listening" while nothing is being transcribed.
-        stateText = _customSttBufferingText(bufferingFor);
-        statusIndicator = const PausedStatusIndicator();
-      } else {
-        // Show "Listening" for all active recording states — WAL ensures audio is
-        // saved locally regardless of transcription connection status.
-        if (transcriptServiceStateOk) {
-          var lastEvent = captureProvider.transcriptionServiceStatuses.lastOrNull;
-          if (lastEvent is MessageServiceStatusEvent) {
-            bool transcriptionDiagnosticEnabled = SharedPreferencesUtil().transcriptionDiagnosticEnabled;
-            stateText = transcriptionDiagnosticEnabled
-                ? (lastEvent.statusText ?? context.l10n.listening)
-                : context.l10n.listening;
-          } else {
-            stateText = context.l10n.listening;
-          }
-        } else {
-          stateText = context.l10n.listening;
-        }
-        statusIndicator = const RecordingStatusIndicator();
-      }
-    }
-    Widget right = stateText.isNotEmpty || statusIndicator != null
-        ? Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                stateText,
-                style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-              if (statusIndicator != null) ...[
-                const SizedBox(width: 8),
-                SizedBox(width: 16, height: 16, child: statusIndicator),
-              ],
-            ],
-          )
-        : const SizedBox.shrink();
-
-    return Padding(
-      padding: const EdgeInsets.only(left: 0, right: 12),
-      child: Row(
-        children: [
-          Expanded(child: left),
-          if (right is! SizedBox) right,
-        ],
-      ),
+    PlatformManager.instance.analytics.recordingMuteToggled(
+      isMuted: provider.isPaused,
+      recordingType: phone ? 'phone_mic' : 'device',
     );
   }
 
-  // Short status text for how long the custom STT endpoint has
-  // been unreachable while audio keeps recording and buffering locally.
-  String _customSttBufferingText(Duration bufferingFor) {
-    if (bufferingFor.inMinutes < 1) return 'Offline, buffering';
-    return 'Offline, buffering ${bufferingFor.inMinutes}m';
-  }
-
-  Widget _buildUnifiedRecordingUI(CaptureProvider provider, Widget? header) {
-    bool isDeviceRecording = provider.havingRecordingDevice &&
-        (provider.recordingState == RecordingState.deviceRecord || provider.recordingState == RecordingState.pause);
+  Widget _buildUnifiedRecordingUI(CaptureProvider provider) {
+    // The controller names the source that owns the capture: a connected pendant the phone took
+    // over from is not "device recording".
+    final liveSource = provider.liveCaptureSource;
+    bool isDeviceRecording = liveSource != null && liveSource != 'phone';
 
     // Offline/batch mode: device or phone-mic audio is saved locally with no live
     // transcription, so show a dedicated, self-explanatory card instead of the
@@ -364,7 +203,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
             provider.recordingState == RecordingState.systemAudioRecord ||
             provider.recordingState == RecordingState.initialising ||
             provider.recordingState == RecordingState.interrupted ||
-            _isPhoneMicPaused);
+            provider.isPhoneMicPaused);
 
     // Determine pause state based on recording type.
     // Any audio-session interruption (call, other-app audio, system alert) is
@@ -374,7 +213,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     if (isDeviceRecording) {
       isPaused = provider.isPaused && provider.recordingState == RecordingState.pause;
     } else if (isPhoneRecording) {
-      isPaused = _isPhoneMicPaused || provider.isPaused || isAudioInterrupted;
+      isPaused = provider.isPhoneMicPaused || provider.isPaused || isAudioInterrupted;
     }
     final hasTerminalTranscriptionFailure = provider.terminalTranscriptionFailure != null;
     final bufferingFor = provider.customSttBufferingDuration;
@@ -383,189 +222,62 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     bool hasPhotos = provider.photos.isNotEmpty;
     // Show "Listening" for all active recording states — WAL ensures audio is
     // saved locally regardless of transcription connection status.
-    String statusText = isAudioInterrupted
-        ? context.l10n.paused
-        : isPaused
-            ? (isDeviceRecording ? context.l10n.muted : context.l10n.paused)
-            : hasTerminalTranscriptionFailure
-                ? context.l10n.transcriptionUnavailable
-                // Custom STT endpoint unreachable, audio still buffering
-                // locally (see customSttBufferingDuration / PurePollingSocket).
-                : bufferingFor != null
-                    ? _customSttBufferingText(bufferingFor)
-                    : hasPhotos
-                        ? 'Capturing'
-                        : context.l10n.listening;
+    // Custom STT endpoint unreachable means audio is still buffering locally
+    // (see customSttBufferingDuration / PurePollingSocket).
+    String statusText = captureStateLabel(
+      context.l10n,
+      liveCaptureDisplayState(
+        audioInterrupted: isAudioInterrupted,
+        paused: isPaused,
+        // One word for a pause, whatever the source: the control is Pause/Resume.
+        transcriptionUnavailable: hasTerminalTranscriptionFailure,
+        bufferingFor: bufferingFor,
+        capturingPhotos: hasPhotos,
+      ),
+      bufferingFor: bufferingFor,
+      compact: true,
+    );
 
-    // When recording is active, show the unified UI design
+    // When recording is active: the one capture status and control surface.
     if (isDeviceRecording || isPhoneRecording) {
-      Widget statusRow = Row(
+      final startedAt = provider.liveCaptureStartedAt;
+      final card = LiveCaptureCard(
+        source: isDeviceRecording ? liveSource : 'phone',
+        stateLabel: statusText,
+        paused: isPaused || hasTerminalTranscriptionFailure || bufferingFor != null,
+        elapsed: startedAt == null ? null : DateTime.now().difference(startedAt),
+        lastLine: provider.segments.lastOrNull?.text,
+        note:
+            isPhoneRecording && provider.pendantPausedForPhone ? context.l10n.pendantPausedResumesWhenYouFinish : null,
+        // Photo-capture devices (OmiGlass) keep capturing photos; there is nothing to pause.
+        onPauseToggle: !LiveCaptureCard.canPause(provider.recordingDevice, source: liveSource) || isAudioInterrupted
+            ? null
+            : () => _togglePause(provider),
+      );
+      return Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Left: Status tag
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(color: const Color(0xFF35343B), borderRadius: BorderRadius.circular(20)),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  statusText,
-                  style: const TextStyle(color: Color(0xFFC9CBCF), fontSize: 14, fontWeight: FontWeight.w500),
-                ),
-                const SizedBox(width: 6),
-                Container(
-                  width: 6,
-                  height: 6,
-                  decoration: BoxDecoration(
-                    color: isPaused ? const Color(0xFFFF9500) : const Color(0xFFFE5D50),
-                    shape: BoxShape.circle,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          // Star indicator when conversation is marked for starring
+          card,
           if (provider.isConversationMarkedForStarring) ...[
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: Colors.amber.withValues(alpha: 0.2),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const FaIcon(FontAwesomeIcons.solidStar, size: 12, color: Colors.amber),
-                  const SizedBox(width: 4),
-                  Text(
-                    context.l10n.starred,
-                    style: const TextStyle(color: Colors.amber, fontSize: 12, fontWeight: FontWeight.w500),
-                  ),
-                ],
-              ),
-            ),
+            const SizedBox(height: OmiSpacing.sm),
+            Row(children: [
+              const FaIcon(FontAwesomeIcons.solidStar, size: 12, color: OmiColors.textSecondary),
+              const SizedBox(width: OmiSpacing.xs),
+              Text(context.l10n.starred, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+            ]),
           ],
-          // Photo count badge when photos exist
           if (hasPhotos) ...[
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(color: const Color(0xFF35343B), borderRadius: BorderRadius.circular(20)),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const FaIcon(FontAwesomeIcons.camera, size: 12, color: Color(0xFFC9CBCF)),
-                  const SizedBox(width: 6),
-                  Text(
-                    '${provider.photos.length}',
-                    style: const TextStyle(color: Color(0xFFC9CBCF), fontSize: 13, fontWeight: FontWeight.w500),
-                  ),
-                ],
-              ),
-            ),
+            const SizedBox(height: 12),
+            PhotosPreviewWidget(photos: provider.photos),
           ],
-          // Middle: Transcript text (takes remaining space)
-          if (provider.segments.isNotEmpty)
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.fromLTRB(8, 0, 8, 0),
-                child: Text(
-                  '... ${provider.segments.last.text} ...',
-                  style: TextStyle(color: Colors.grey.shade400, fontSize: 13),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            )
-          else
-            const Spacer(),
-          // Right: Pause/Resume button (hidden for OmiGlass photo-capture devices)
-          if (!hasPhotos)
-            GestureDetector(
-              onTap: () async {
-                if (!isPaused) {
-                  HapticFeedback.heavyImpact();
-                  await Future.delayed(const Duration(milliseconds: 80));
-                  HapticFeedback.lightImpact();
-                  PlatformManager.instance.analytics.recordingMuteToggled(
-                    isMuted: true,
-                    recordingType: isDeviceRecording ? 'device' : 'phone_mic',
-                  );
-                } else {
-                  HapticFeedback.mediumImpact();
-                  PlatformManager.instance.analytics.recordingMuteToggled(
-                    isMuted: false,
-                    recordingType: isDeviceRecording ? 'device' : 'phone_mic',
-                  );
-                }
-                if (mounted) {
-                  _toggleRecording(context, provider);
-                }
-              },
-              child: Container(
-                width: 28,
-                height: 28,
-                decoration: BoxDecoration(
-                  color: isPaused
-                      ? isDeviceRecording
-                          ? const Color(0xFFFE5D50)
-                          : const Color(0xFF7C3AED)
-                      : isDeviceRecording
-                          ? const Color(0xFF35343B)
-                          : const Color(0xFFFF9500),
-                  shape: BoxShape.circle,
-                ),
-                child: Center(
-                  child: FaIcon(
-                    isPaused
-                        ? isDeviceRecording
-                            ? FontAwesomeIcons.microphoneSlash
-                            : FontAwesomeIcons.play
-                        : isDeviceRecording
-                            ? FontAwesomeIcons.microphone
-                            : FontAwesomeIcons.pause,
-                    color: Colors.white,
-                    size: 12,
-                  ),
-                ),
-              ),
-            ),
         ],
       );
-
-      if (hasPhotos) {
-        return Padding(
-          padding: const EdgeInsets.only(left: 8, right: 6),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              statusRow,
-              const SizedBox(height: 12),
-              PhotosPreviewWidget(photos: provider.photos),
-            ],
-          ),
-        );
-      }
-
-      return Padding(padding: const EdgeInsets.only(left: 8, right: 6), child: statusRow);
     } else if (provider.havingRecordingDevice && SharedPreferencesUtil().batchModeEnabled) {
       // Device connected in offline mode but not yet in the recording state above.
       return _buildBatchRecordingUI(provider);
-    } else {
-      // For non-recording states, show the original header-based UI
-      return Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (header != null) header,
-          // Show content when there are segments/photos
-          if ((provider.segments.isNotEmpty || provider.photos.isNotEmpty) && provider.recordingDeviceServiceReady) ...[
-            const SizedBox(height: 24),
-            const LiteCaptureWidget(),
-          ],
-        ],
-      );
     }
+    return const SizedBox.shrink();
   }
 
   /// Offline/batch-mode capture card. Self-explanatory and informational only —
@@ -588,7 +300,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     } else if (elapsed != null) {
       elapsedLabel = '${elapsed ~/ 60}m ${(elapsed % 60).toString().padLeft(2, '0')}s';
     }
-    final dotColor = paused ? Colors.grey.shade600 : const Color(0xFFFE5D50);
+    final dotColor = paused ? Colors.grey.shade600 : OmiColors.danger;
     return Padding(
       padding: const EdgeInsets.only(left: 8, right: 6),
       child: Column(
@@ -612,9 +324,9 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                       storageFull
                           ? context.l10n.paused
                           : muted
-                              ? context.l10n.muted
+                              ? context.l10n.paused
                               : context.l10n.recording,
-                      style: const TextStyle(color: Color(0xFFC9CBCF), fontSize: 14, fontWeight: FontWeight.w500),
+                      style: const TextStyle(color: OmiColors.textSecondary, fontSize: 14, fontWeight: FontWeight.w500),
                     ),
                   ],
                 ),
@@ -624,7 +336,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                 Text(
                   elapsedLabel,
                   style: const TextStyle(
-                    color: Color(0xFFC9CBCF),
+                    color: OmiColors.textSecondary,
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
                     fontFeatures: [FontFeature.tabularFigures()],
@@ -657,8 +369,9 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
             Row(
               children: [
                 _buildOfflineControl(
-                  icon: muted ? FontAwesomeIcons.microphone : FontAwesomeIcons.microphoneSlash,
-                  label: muted ? context.l10n.unmute : context.l10n.mute,
+                  // Pause glyphs, as on the live card: mics belong to Ask Omi.
+                  icon: muted ? FontAwesomeIcons.play : FontAwesomeIcons.pause,
+                  label: muted ? context.l10n.resume : context.l10n.pause,
                   primary: false,
                   onTap: () async {
                     try {
@@ -704,7 +417,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     required bool primary,
     required VoidCallback onTap,
   }) {
-    final color = primary ? Colors.white : const Color(0xFFC9CBCF);
+    final color = primary ? Colors.white : OmiColors.textSecondary;
     return Expanded(
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
@@ -822,7 +535,7 @@ getPhoneMicRecordingButton(
   {
     if (isLoading) {
       text = context.l10n.initialisingRecorder;
-      icon = const SizedBox(height: 8, width: 8, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white));
+      icon = const OmiSpinner(size: OmiSpinnerSize.small);
     } else if (currentActualState == RecordingState.record) {
       text = context.l10n.pauseRecording;
       icon = Container(
@@ -838,11 +551,8 @@ getPhoneMicRecordingButton(
         margin: const EdgeInsets.only(right: 4),
         width: 24,
         height: 24,
-        decoration: const BoxDecoration(
-          color: Color(0xFF7C3AED), // Deep purple
-          shape: BoxShape.circle,
-        ),
-        child: const Center(child: Icon(Icons.play_arrow, color: Colors.white, size: 14)),
+        decoration: const BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
+        child: const Center(child: Icon(Icons.play_arrow, color: OmiColors.onAccent, size: 14)),
       );
     } else {
       text = context.l10n.continueRecording;
@@ -874,8 +584,16 @@ Widget getProcessingConversationsWidget(List<ServerConversation> conversations) 
   if (conversations.isEmpty) {
     return const SliverToBoxAdapter(child: SizedBox.shrink());
   }
-  // Show only the first (most recent) processing conversation
-  return SliverToBoxAdapter(child: ProcessingConversationWidget(conversation: conversations.first));
+  // Live events append new IDs; list position is not recency. Processing begins
+  // at capture end, while the optimistic Process Now row has only createdAt.
+  final newest = conversations.reduce((a, b) {
+    final aTime = a.finishedAt ?? a.createdAt;
+    final bTime = b.finishedAt ?? b.createdAt;
+    return bTime.isAfter(aTime) ? b : a;
+  });
+  return SliverToBoxAdapter(
+    child: ProcessingConversationWidget(key: ValueKey('processing_${newest.id}'), conversation: newest),
+  );
 }
 
 // PROCESSING CONVERSATION
@@ -993,7 +711,7 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
         child: Container(
           width: double.maxFinite,
-          decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(24.0)),
+          decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(24.0)),
           // Static skeleton - no animation to save CPU/battery
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -1009,7 +727,7 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
                       width: 24,
                       height: 24,
                       decoration: BoxDecoration(
-                        color: const Color(0xFF2A2A32),
+                        color: OmiColors.surface2,
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
@@ -1022,16 +740,15 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
                       ),
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       child: Text(
-                        context.l10n.processing,
-                        style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
+                        captureStateLabel(context.l10n, CaptureDisplayState.processing),
+                        style: OmiType.subhead.copyWith(fontWeight: FontWeight.w500),
                       ),
                     ),
                     const Spacer(),
-                    // Timestamp placeholder
-                    Container(
-                      width: 50,
-                      height: 14,
-                      decoration: BoxDecoration(color: const Color(0xFF2A2A32), borderRadius: BorderRadius.circular(4)),
+                    // The real start time, not a placeholder bar (hub audit #25).
+                    Text(
+                      OmiDateFormat.of(context).time(widget.conversation.startedAt ?? widget.conversation.createdAt),
+                      style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
                     ),
                   ],
                 ),
@@ -1040,7 +757,7 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
                 Container(
                   width: double.maxFinite,
                   height: 16,
-                  decoration: BoxDecoration(color: const Color(0xFF2A2A32), borderRadius: BorderRadius.circular(4)),
+                  decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: BorderRadius.circular(4)),
                 ),
                 if (_timedOut) ...[
                   const SizedBox(height: 12),
@@ -1059,16 +776,10 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
                         style: TextButton.styleFrom(
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          minimumSize: Size.zero,
+                          minimumSize: const Size(44, 44),
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
-                        child: _retrying
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                              )
-                            : Text(context.l10n.retry),
+                        child: _retrying ? const OmiSpinner(size: OmiSpinnerSize.small) : Text(context.l10n.tryAgain),
                       ),
                     ),
                   ),

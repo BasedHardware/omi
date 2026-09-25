@@ -84,26 +84,27 @@ def _validate_production_python_runtime(text: str, *, workflow: str) -> list[str
         "Preflight production desktop secret resource names",
         'gcloud secrets describe "$secret"',
         "--format='none'",
-        "SERVICE_ACCOUNT_JSON",
-        "GOOGLE_APPLICATION_CREDENTIALS=/secrets/firebase/service-account.json",
+        "--service-account=desktop-backend-runtime@based-hardware.iam.gserviceaccount.com",
         "USE_VERTEX_AI=true",
         "GOOGLE_CLOUD_PROJECT=${{ vars.GCP_PROJECT_ID }}",
         "GCP_LOCATION=us-central1",
-        "/secrets/firebase/service-account.json=SERVICE_ACCOUNT_JSON:latest",
         "POSTHOG_PROJECT_API_KEY=POSTHOG_PROJECT_API_KEY:latest",
         "GEMINI_API_KEY=DESKTOP_GEMINI_API_KEY:latest",
         "FIREBASE_API_KEY=DESKTOP_FIREBASE_API_KEY:latest",
         "REDIS_DB_PASSWORD=DESKTOP_REDIS_DB_PASSWORD:latest",
         "REDIS_DB_HOST=DESKTOP_REDIS_DB_HOST:latest",
         "REDIS_DB_PORT=DESKTOP_REDIS_DB_PORT:latest",
-        "--remove-secrets=PINECONE_API_KEY,PINECONE_HOST",
+        "--remove-secrets=PINECONE_API_KEY,PINECONE_HOST,/secrets/firebase/service-account.json",
+        "--remove-env-vars=GOOGLE_APPLICATION_CREDENTIALS,",
     ):
         if fragment not in text:
             errors.append(f"{workflow}: missing Python production runtime contract {fragment!r}")
     for forbidden in (
         "Rust -> Python",
         "Rust → Python",
-        "--remove-env-vars=GOOGLE_APPLICATION_CREDENTIALS",
+        # Keyless since WS-B (2026-09-23): the nik-164 JSON key must never be mounted again.
+        "SERVICE_ACCOUNT_JSON:latest",
+        "GOOGLE_APPLICATION_CREDENTIALS=/secrets/firebase/service-account.json",
         f"context: {retired_desktop_context}",
         f"file: {retired_desktop_context}/Dockerfile",
         "GEMINI_API_KEY=GEMINI_API_KEY:latest",
@@ -337,13 +338,13 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
             "FIREBASE_AUTH_PROJECT_ID: based-hardware",
             "DEVELOPMENT_DESKTOP_BACKEND_URL: https://desktop-backend-dt5lrfkkoa-uc.a.run.app",
             'revision_suffix="${image_tag}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"',
-            "FIREBASE_AUTH_CREDENTIALS_PATH=/secrets/firebase/service-account.json",
+            "--service-account=dev-backend-runtime@based-hardware-dev.iam.gserviceaccount.com",
+            "--remove-secrets=/secrets/firebase/service-account.json",
             "FIREBASE_AUTH_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}",
             "FIREBASE_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}",
             "GOOGLE_CLOUD_PROJECT=${{ vars.GCP_PROJECT_ID }}",
             "USE_VERTEX_AI=true",
             "GCP_LOCATION=us-central1",
-            "/secrets/firebase/service-account.json=SERVICE_ACCOUNT_JSON:latest",
             "FIREBASE_API_KEY=FIREBASE_API_KEY:latest",
             "FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT: ${{ vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT }}",
             '--signer-service-account "$FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT"',
@@ -392,11 +393,16 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
                 # required runtime project binding.
                 if not any(line.strip() == env_var for line in block.splitlines()):
                     errors.append(f"{workflow}: {step} missing isolated development runtime env {env_var!r}")
-        if desktop_block is not None and not any(
-            line.strip() == "FIREBASE_AUTH_CREDENTIALS_PATH=/secrets/firebase/service-account.json"
-            for line in desktop_block.splitlines()
-        ):
-            errors.append(f"{workflow}: desktop candidate must isolate Firebase auth credentials from dev ADC")
+        if desktop_block is not None:
+            # Development runs keyless on its own runtime identity (WS-B, 2026-09-23): the
+            # production nik-164 JSON key must never be mounted into the dev candidate again.
+            block_lines = [line.strip() for line in desktop_block.splitlines()]
+            if "--service-account=dev-backend-runtime@based-hardware-dev.iam.gserviceaccount.com" not in block_lines:
+                errors.append(f"{workflow}: desktop candidate must run as the keyless dev-backend-runtime identity")
+            if any("SERVICE_ACCOUNT_JSON:" in line for line in block_lines) or any(
+                line.startswith("FIREBASE_AUTH_CREDENTIALS_PATH=") for line in block_lines
+            ):
+                errors.append(f"{workflow}: desktop candidate must not mount a SERVICE_ACCOUNT_JSON key")
         if desktop_block is not None:
             for env_var in ("USE_VERTEX_AI=true", "GCP_LOCATION=us-central1"):
                 if not any(line.strip() == env_var for line in desktop_block.splitlines()):

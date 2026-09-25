@@ -3,13 +3,14 @@
 import pytest
 from langchain_core.messages import SystemMessage
 from langchain_openai import ChatOpenAI
+from utils.llm.model_config import LUNA_MODEL
 
 
 @pytest.fixture(scope='module')
 def explicit_cache_llm():
     options = {'mode': 'explicit', 'ttl': '30m'}
     cache_key = 'omi-transcript-structure-v1'
-    return ChatOpenAI(model='gpt-5.6-luna', api_key='test').bind(
+    return ChatOpenAI(model=LUNA_MODEL, api_key='test').bind(
         extra_body={'prompt_cache_options': options},
         prompt_cache_key=cache_key,
     )
@@ -47,7 +48,7 @@ def test_langchain_request_payload_preserves_explicit_cache_wire_fields(explicit
 
 
 def test_langchain_request_payload_preserves_flex_service_tier() -> None:
-    flex_llm = ChatOpenAI(model='gpt-5.6-luna', api_key='test').bind(service_tier='flex')
+    flex_llm = ChatOpenAI(model=LUNA_MODEL, api_key='test').bind(service_tier='flex')
 
     payload = flex_llm.bound._get_request_payload(
         [SystemMessage(content='Scheduled memory promotion.')],
@@ -62,7 +63,7 @@ def test_langchain_request_payload_keeps_explicit_options_without_breakpoint_for
     # prompt_cache_options, but no prompt_cache_breakpoint (and typically no
     # routing key), so the provider never writes a billable cache entry.
     options = {'mode': 'explicit', 'ttl': '30m'}
-    llm = ChatOpenAI(model='gpt-5.6-luna', api_key='test').bind(
+    llm = ChatOpenAI(model=LUNA_MODEL, api_key='test').bind(
         extra_body={'prompt_cache_options': options},
     )
     message = _message_without_breakpoint()
@@ -142,7 +143,7 @@ def test_bind_explicit_cache_after_structured_output_keeps_extra_body() -> None:
     class _Gate(BaseModel):
         is_relevant: bool = False
 
-    llm = ChatOpenAI(model='gpt-5.6-luna', api_key='test')
+    llm = ChatOpenAI(model=LUNA_MODEL, api_key='test')
     structured = llm.with_structured_output(_Gate)
     bound = bind_explicit_cache(structured, cache_key='omi-mentor-gate-v1-test')
     assert bound.kwargs['extra_body'] == {'prompt_cache_options': dict(EXPLICIT_CACHE_OPTIONS)}
