@@ -393,12 +393,12 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
                       decoration: const BoxDecoration(color: OmiColors.textPrimary, borderRadius: _stopGlyphRadius),
                     )
                   : isInitialising
-                  ? const OmiSpinner(size: OmiSpinnerSize.small)
-                  : Container(
-                      width: 20,
-                      height: 20,
-                      decoration: const BoxDecoration(color: OmiColors.textPrimary, shape: BoxShape.circle),
-                    ),
+                      ? const OmiSpinner(size: OmiSpinnerSize.small)
+                      : Container(
+                          width: 20,
+                          height: 20,
+                          decoration: const BoxDecoration(color: OmiColors.textPrimary, shape: BoxShape.circle),
+                        ),
             ),
           ),
         );
