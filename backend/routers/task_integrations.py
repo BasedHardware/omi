@@ -428,6 +428,12 @@ async def create_task_via_integration(
 # *****************************
 
 
+def _sanitize_task_integration_error(exc: Exception, action: str) -> str:
+    """Sanitize task integration provider error reflections while preserving server-side observability."""
+    logger.error("Task integration provider error during %s: %s: %s", action, type(exc).__name__, exc)
+    return f"Failed to fetch {action}"
+
+
 @router.get(
     "/v1/task-integrations/asana/workspaces", response_model=AsanaWorkspacesResponse, tags=['task-integrations']
 )
@@ -465,7 +471,8 @@ async def get_asana_workspaces(uid: str = Depends(auth.get_current_user_uid)):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching workspaces: {str(e)}")
+        detail = _sanitize_task_integration_error(e, 'Asana workspaces')
+        raise HTTPException(status_code=500, detail=detail) from e
 
 
 @router.get(
@@ -519,7 +526,8 @@ async def get_asana_projects(workspace_gid: str, uid: str = Depends(auth.get_cur
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching projects: {str(e)}")
+        detail = _sanitize_task_integration_error(e, 'Asana projects')
+        raise HTTPException(status_code=500, detail=detail) from e
 
 
 @router.get("/v1/task-integrations/clickup/teams", response_model=ClickUpTeamsResponse, tags=['task-integrations'])
@@ -557,7 +565,8 @@ async def get_clickup_teams(uid: str = Depends(auth.get_current_user_uid)):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching teams: {str(e)}")
+        detail = _sanitize_task_integration_error(e, 'ClickUp teams')
+        raise HTTPException(status_code=500, detail=detail) from e
 
 
 @router.get(
@@ -597,7 +606,8 @@ async def get_clickup_spaces(team_id: str, uid: str = Depends(auth.get_current_u
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching spaces: {str(e)}")
+        detail = _sanitize_task_integration_error(e, 'ClickUp spaces')
+        raise HTTPException(status_code=500, detail=detail) from e
 
 
 @router.get(
@@ -637,7 +647,8 @@ async def get_clickup_lists(space_id: str, uid: str = Depends(auth.get_current_u
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching lists: {str(e)}")
+        detail = _sanitize_task_integration_error(e, 'ClickUp lists')
+        raise HTTPException(status_code=500, detail=detail) from e
 
 
 # *****************************
