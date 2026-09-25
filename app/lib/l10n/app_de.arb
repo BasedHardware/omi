@@ -3555,5 +3555,6 @@
     "captureStarting": "Startet…",
     "capturePhoneStorageFull": "Telefonspeicher voll",
     "captureStorageAlmostFull": "Speicher fast voll",
-    "capturePendantDisconnectedDetail": "Dein Anhänger hat die Verbindung zu diesem Telefon verloren. Omi verbindet sich von selbst neu, sobald der Anhänger eingeschaltet und in der Nähe ist. Alles bisher Aufgenommene ist sicher."
+    "capturePendantDisconnectedDetail": "Dein Anhänger hat die Verbindung zu diesem Telefon verloren. Omi verbindet sich von selbst neu, sobald der Anhänger eingeschaltet und in der Nähe ist. Alles bisher Aufgenommene ist sicher.",
+    "participantsSummaryUncounted": "{name} und weitere"
 }

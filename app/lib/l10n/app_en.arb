@@ -13383,5 +13383,14 @@
     "capturePendantDisconnectedDetail": "Your pendant lost its connection to this phone. Omi reconnects on its own when the pendant is on and nearby. Everything recorded before this is safe.",
     "@capturePendantDisconnectedDetail": {
         "description": "Details sheet from the Home live capture card when the pendant disconnected in the middle of a capture."
+    },
+    "participantsSummaryUncounted": "{name} + others",
+    "@participantsSummaryUncounted": {
+        "description": "Conversation header people chip when other voices spoke but could not be counted reliably, e.g. 'David + others'",
+        "placeholders": {
+            "name": {
+                "type": "String"
+            }
+        }
     }
 }

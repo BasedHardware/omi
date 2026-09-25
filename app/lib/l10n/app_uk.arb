@@ -3555,5 +3555,6 @@
     "captureStarting": "Запуск…",
     "capturePhoneStorageFull": "Пам’ять телефона заповнена",
     "captureStorageAlmostFull": "Пам’ять майже заповнена",
-    "capturePendantDisconnectedDetail": "Кулон втратив зв’язок із цим телефоном. Omi перепідключиться сам, коли кулон буде ввімкнений і поруч. Усе, що записано до цього, збережено."
+    "capturePendantDisconnectedDetail": "Кулон втратив зв’язок із цим телефоном. Omi перепідключиться сам, коли кулон буде ввімкнений і поруч. Усе, що записано до цього, збережено.",
+    "participantsSummaryUncounted": "{name} та інші"
 }

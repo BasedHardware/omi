@@ -11275,4 +11275,9 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get capturePendantDisconnectedDetail =>
       'Kolyenin bu telefonla bağlantısı kesildi. Kolye açık ve yakındayken Omi kendiliğinden yeniden bağlanır. Bundan önce kaydedilen her şey güvende.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name ve diğerleri';
+  }
 }

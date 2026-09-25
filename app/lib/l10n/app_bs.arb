@@ -11121,5 +11121,6 @@
     "captureStarting": "Pokretanje…",
     "capturePhoneStorageFull": "Memorija telefona je puna",
     "captureStorageAlmostFull": "Memorija je skoro puna",
-    "capturePendantDisconnectedDetail": "Privjesak je izgubio vezu s ovim telefonom. Omi će se sam ponovo povezati kad je privjesak uključen i u blizini. Sve snimljeno do sada je sačuvano."
+    "capturePendantDisconnectedDetail": "Privjesak je izgubio vezu s ovim telefonom. Omi će se sam ponovo povezati kad je privjesak uključen i u blizini. Sve snimljeno do sada je sačuvano.",
+    "participantsSummaryUncounted": "{name} i drugi"
 }

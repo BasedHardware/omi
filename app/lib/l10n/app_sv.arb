@@ -3555,5 +3555,6 @@
     "captureStarting": "Startar…",
     "capturePhoneStorageFull": "Telefonens lagring är full",
     "captureStorageAlmostFull": "Lagringen är nästan full",
-    "capturePendantDisconnectedDetail": "Hängsmycket tappade anslutningen till den här telefonen. Omi ansluter igen av sig själv när hängsmycket är på och i närheten. Allt som spelats in innan är säkert."
+    "capturePendantDisconnectedDetail": "Hängsmycket tappade anslutningen till den här telefonen. Omi ansluter igen av sig själv när hängsmycket är på och i närheten. Allt som spelats in innan är säkert.",
+    "participantsSummaryUncounted": "{name} och andra"
 }

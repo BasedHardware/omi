@@ -11249,4 +11249,9 @@ class AppLocalizationsDa extends AppLocalizations {
   @override
   String get capturePendantDisconnectedDetail =>
       'Dit vedhæng mistede forbindelsen til denne telefon. Omi genopretter forbindelsen af sig selv, når vedhænget er tændt og i nærheden. Alt optaget før dette er i sikkerhed.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name og andre';
+  }
 }

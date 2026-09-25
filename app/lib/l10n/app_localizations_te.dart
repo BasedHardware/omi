@@ -11311,4 +11311,9 @@ class AppLocalizationsTe extends AppLocalizations {
   @override
   String get capturePendantDisconnectedDetail =>
       'మీ పెండెంట్ ఈ ఫోన్‌తో కనెక్షన్ కోల్పోయింది. పెండెంట్ ఆన్‌లో ఉండి దగ్గరగా ఉన్నప్పుడు Omi తనంతట తానే మళ్లీ కనెక్ట్ అవుతుంది. దీనికి ముందు రికార్డ్ అయినవన్నీ సురక్షితంగా ఉన్నాయి.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name మరియు ఇతరులు';
+  }
 }

@@ -11284,4 +11284,9 @@ class AppLocalizationsUk extends AppLocalizations {
   @override
   String get capturePendantDisconnectedDetail =>
       'Кулон втратив зв’язок із цим телефоном. Omi перепідключиться сам, коли кулон буде ввімкнений і поруч. Усе, що записано до цього, збережено.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name та інші';
+  }
 }

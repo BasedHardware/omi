@@ -3590,5 +3590,6 @@
     "captureStarting": "Başlatılıyor…",
     "capturePhoneStorageFull": "Telefon depolama alanı dolu",
     "captureStorageAlmostFull": "Depolama neredeyse dolu",
-    "capturePendantDisconnectedDetail": "Kolyenin bu telefonla bağlantısı kesildi. Kolye açık ve yakındayken Omi kendiliğinden yeniden bağlanır. Bundan önce kaydedilen her şey güvende."
+    "capturePendantDisconnectedDetail": "Kolyenin bu telefonla bağlantısı kesildi. Kolye açık ve yakındayken Omi kendiliğinden yeniden bağlanır. Bundan önce kaydedilen her şey güvende.",
+    "participantsSummaryUncounted": "{name} ve diğerleri"
 }

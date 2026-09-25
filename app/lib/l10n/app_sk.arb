@@ -3555,5 +3555,6 @@
     "captureStarting": "Spúšťa sa…",
     "capturePhoneStorageFull": "Úložisko telefónu je plné",
     "captureStorageAlmostFull": "Úložisko je takmer plné",
-    "capturePendantDisconnectedDetail": "Prívesok stratil spojenie s týmto telefónom. Omi sa znova pripojí sám, keď bude prívesok zapnutý a nablízku. Všetko nahraté predtým je v bezpečí."
+    "capturePendantDisconnectedDetail": "Prívesok stratil spojenie s týmto telefónom. Omi sa znova pripojí sám, keď bude prívesok zapnutý a nablízku. Všetko nahraté predtým je v bezpečí.",
+    "participantsSummaryUncounted": "{name} a ďalší"
 }

@@ -11195,4 +11195,9 @@ class AppLocalizationsAr extends AppLocalizations {
   @override
   String get capturePendantDisconnectedDetail =>
       'فقد القلادة اتصالها بهذا الهاتف. سيعيد Omi الاتصال تلقائيًا عندما تكون القلادة قيد التشغيل وقريبة. كل ما سُجّل قبل ذلك محفوظ.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name وآخرون';
+  }
 }

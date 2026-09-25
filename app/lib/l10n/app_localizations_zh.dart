@@ -11056,4 +11056,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get capturePendantDisconnectedDetail => '吊坠与这部手机的连接已断开。吊坠开机并在附近时，Omi 会自动重新连接。此前录下的内容都已保存。';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name等人';
+  }
 }

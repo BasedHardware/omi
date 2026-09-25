@@ -11260,4 +11260,9 @@ class AppLocalizationsFa extends AppLocalizations {
   @override
   String get capturePendantDisconnectedDetail =>
       'آویز شما اتصالش را با این تلفن از دست داد. وقتی آویز روشن و نزدیک باشد، Omi خودش دوباره وصل می‌شود. هر آنچه پیش از این ضبط شده محفوظ است.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name و دیگران';
+  }
 }

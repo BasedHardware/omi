@@ -11305,4 +11305,9 @@ class AppLocalizationsBg extends AppLocalizations {
   @override
   String get capturePendantDisconnectedDetail =>
       'Висулката загуби връзка с този телефон. Omi ще се свърже отново сам, когато висулката е включена и наблизо. Всичко записано дотук е запазено.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name и други';
+  }
 }

@@ -3555,5 +3555,6 @@
     "captureStarting": "Käivitamine…",
     "capturePhoneStorageFull": "Telefoni mälu on täis",
     "captureStorageAlmostFull": "Mälu on peaaegu täis",
-    "capturePendantDisconnectedDetail": "Ripats kaotas ühenduse selle telefoniga. Omi loob ühenduse ise uuesti, kui ripats on sisse lülitatud ja lähedal. Kõik varem salvestatu on alles."
+    "capturePendantDisconnectedDetail": "Ripats kaotas ühenduse selle telefoniga. Omi loob ühenduse ise uuesti, kui ripats on sisse lülitatud ja lähedal. Kõik varem salvestatu on alles.",
+    "participantsSummaryUncounted": "{name} ja teised"
 }

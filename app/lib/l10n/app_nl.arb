@@ -3555,5 +3555,6 @@
     "captureStarting": "Starten…",
     "capturePhoneStorageFull": "Telefoonopslag vol",
     "captureStorageAlmostFull": "Opslag bijna vol",
-    "capturePendantDisconnectedDetail": "Je hanger heeft de verbinding met deze telefoon verloren. Omi maakt vanzelf opnieuw verbinding zodra de hanger aan staat en in de buurt is. Alles wat eerder is opgenomen, is veilig."
+    "capturePendantDisconnectedDetail": "Je hanger heeft de verbinding met deze telefoon verloren. Omi maakt vanzelf opnieuw verbinding zodra de hanger aan staat en in de buurt is. Alles wat eerder is opgenomen, is veilig.",
+    "participantsSummaryUncounted": "{name} en anderen"
 }

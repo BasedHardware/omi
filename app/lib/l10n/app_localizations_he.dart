@@ -11174,4 +11174,9 @@ class AppLocalizationsHe extends AppLocalizations {
   @override
   String get capturePendantDisconnectedDetail =>
       'התליון איבד את החיבור לטלפון הזה. Omi יתחבר מחדש מעצמו כשהתליון דלוק וקרוב. כל מה שהוקלט עד עכשיו שמור.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name ואחרים';
+  }
 }

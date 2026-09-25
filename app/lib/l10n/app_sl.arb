@@ -11121,5 +11121,6 @@
     "captureStarting": "Zaganjanje…",
     "capturePhoneStorageFull": "Pomnilnik telefona je poln",
     "captureStorageAlmostFull": "Pomnilnik je skoraj poln",
-    "capturePendantDisconnectedDetail": "Obesek je izgubil povezavo s tem telefonom. Omi se bo sam znova povezal, ko bo obesek vklopljen in v bližini. Vse, kar je bilo posneto prej, je varno."
+    "capturePendantDisconnectedDetail": "Obesek je izgubil povezavo s tem telefonom. Omi se bo sam znova povezal, ko bo obesek vklopljen in v bližini. Vse, kar je bilo posneto prej, je varno.",
+    "participantsSummaryUncounted": "{name} in drugi"
 }

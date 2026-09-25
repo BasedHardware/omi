@@ -58,6 +58,7 @@ SCHEMA_GROUPS = {
             'TranscriptMatchSnippet',
             'CaptureGroupMember',
             'CaptureGroup',
+            'ConversationSpeakers',
             'Conversation',
             'ProjectedActionItem',
             'ProjectedSection',
