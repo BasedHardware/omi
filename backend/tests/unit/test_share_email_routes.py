@@ -390,6 +390,8 @@ def test_definitive_failure_releases_reservation_for_retry(monkeypatch, _stub_da
     first = _client().post(f'/v1/conversations/{CONV_ID}/share-email', json={'recipient_emails': ['sarah@acme.com']})
     second = _client().post(f'/v1/conversations/{CONV_ID}/share-email', json={'recipient_emails': ['sarah@acme.com']})
     assert first.status_code == 502
+    assert first.json()['detail'] == 'Failed to send share email. Please try again.'
+    assert 'provider' not in first.json()['detail']
     assert second.status_code == 200
     assert attempts == [['sarah@acme.com'], ['sarah@acme.com']]
 
@@ -403,6 +405,8 @@ def test_ambiguous_failure_keeps_reservation_and_publish(monkeypatch, _stub_data
     monkeypatch.setattr(conversations_router.share_email, 'send_summary_email', ambiguous_send)
     response = _client().post(f'/v1/conversations/{CONV_ID}/share-email', json={'recipient_emails': ['sarah@acme.com']})
     assert response.status_code == 504
+    assert response.json()['detail'] == 'Email delivery timed out. Please try again.'
+    assert 'status unknown' not in response.json()['detail']
     # Reservation stands: a later duplicate request dispatches nothing.
     monkeypatch.setattr(
         conversations_router.share_email,

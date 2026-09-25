@@ -1772,15 +1772,15 @@ def send_conversation_share_email(
             conversations_db.confirm_share_email_recipients(uid, conversation_id, to_dispatch)
         except Exception:
             logger.exception('share email: failed to record ambiguous dispatch')
-        logger.error(f"share email delivery ambiguous error: {type(e).__name__}")
-        raise HTTPException(status_code=504, detail="Email delivery timed out. Please check recipient status.")
+        logger.exception(f"share email delivery ambiguous error: {e}")
+        raise HTTPException(status_code=504, detail="Email delivery timed out. Please try again.")
     except ValueError as e:
         _release_reservation_and_quota()
-        logger.error(f"share email configuration error: {type(e).__name__}")
+        logger.exception(f"share email configuration error: {e}")
         raise HTTPException(status_code=503, detail="Email sharing is temporarily unavailable. Please try again.")
     except RuntimeError as e:
         _release_reservation_and_quota()
-        logger.error(f"share email delivery error: {type(e).__name__}")
+        logger.exception(f"share email delivery error: {e}")
         raise HTTPException(status_code=502, detail="Failed to send share email. Please try again.")
     except HTTPException:
         raise
