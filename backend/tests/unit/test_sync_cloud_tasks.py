@@ -16,11 +16,13 @@ from utils.observability import speaker_identification  # noqa: F401 - retain te
 import asyncio
 import hashlib
 import json
+import logging
 import os
 import sys
 import time
 import types
 import unittest
+import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import fakeredis
@@ -565,6 +567,105 @@ class TestLegacyJobMutations:
         assert late_retry is None
         assert redis_client.get(f'{sync_jobs.JOB_KEY_PREFIX}{job_id}') == terminal_json
         assert sync_jobs.get_sync_job(job_id)['status'] == 'partial_failure'
+
+
+# ---------------------------------------------------------------------------
+# Finalization diagnostics
+# ---------------------------------------------------------------------------
+
+
+class TestFinalizationDiagnostics:
+    def test_diagnostic_kwargs_are_bounded_and_never_stored(self, caplog):
+        """Logging-only kwargs collapse to closed tokens and never reach the job doc."""
+        redis_client = fakeredis.FakeRedis()
+        sync_jobs, _ = _load_sync_jobs(redis_client)
+        job_id = 'job-diag'
+        _seed_fenced_job(
+            redis_client,
+            sync_jobs,
+            job_id,
+            {
+                'job_id': job_id,
+                'status': 'processing',
+                'ledger_fence_mode': 'legacy',
+                'result': None,
+                'failed_segments': 0,
+            },
+        )
+
+        with caplog.at_level(logging.INFO):
+            finalized = sync_jobs.finalize_sync_job(
+                job_id,
+                {'failed_segments': 0, 'total_segments': 1, 'errors': [], 'outcome': 'success'},
+                attempt_ref='uid-leaked-abc123',
+                failure_phase='/tmp/private/audio.wav',
+                failure_class='user-uid-abc123 detail',
+            )
+
+        assert finalized is not None
+        record = next(r for r in caplog.records if 'event=sync_transcription_job_finalized' in r.getMessage())
+        message = record.getMessage()
+        assert 'job_ref=none' in message
+        assert 'attempt_ref=none' in message
+        assert 'failure_phase=unknown' in message
+        assert 'failure_class=OtherException' in message
+        for leaked in ('uid-leaked-abc123', '/tmp/private/audio.wav', 'user-uid-abc123'):
+            assert leaked not in message
+        stored = sync_jobs.get_sync_job(job_id)
+        for diagnostic in ('attempt_ref', 'failure_phase', 'failure_class'):
+            assert diagnostic not in stored['result']
+
+    def test_diagnostic_kwargs_survive_closed_tokens_and_non_str(self, caplog):
+        redis_client = fakeredis.FakeRedis()
+        sync_jobs, _ = _load_sync_jobs(redis_client)
+        job_id = str(uuid.uuid4())
+        attempt_ref = uuid.uuid4().hex
+        _seed_fenced_job(
+            redis_client,
+            sync_jobs,
+            job_id,
+            {
+                'job_id': job_id,
+                'status': 'processing',
+                'ledger_fence_mode': 'legacy',
+                'result': None,
+                'failed_segments': 1,
+            },
+        )
+
+        with caplog.at_level(logging.INFO):
+            sync_jobs.finalize_sync_job(
+                job_id,
+                {
+                    'failed_segments': 1,
+                    'total_segments': 2,
+                    'errors': ['stt_timeout'],
+                    'outcome': 'upstream_error',
+                },
+                attempt_ref=attempt_ref,
+                failure_phase='provider_call',
+                failure_class='TimeoutError',
+            )
+            sync_jobs._log_sync_job_finalized(
+                finalized={'lane': 'fresh'},
+                result={'outcome': 'success', 'provider': 'deepgram', 'model': 'nova-3'},
+                status='completed',
+                total=0,
+                failed=0,
+                job_id=job_id,
+                attempt_ref=42,
+                failure_phase=object(),
+                failure_class=object(),
+            )
+
+        records = [r.getMessage() for r in caplog.records if 'event=sync_transcription_job_finalized' in r.getMessage()]
+        assert f'job_ref={uuid.UUID(job_id).hex}' in records[0]
+        assert f'attempt_ref={attempt_ref}' in records[0]
+        assert 'failure_phase=provider_call' in records[0]
+        assert 'failure_class=TimeoutError' in records[0]
+        assert 'failure_phase=unknown' in records[1]
+        assert 'failure_class=OtherException' in records[1]
+        assert 'attempt_ref=none' in records[1]
 
 
 # ---------------------------------------------------------------------------

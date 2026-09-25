@@ -11256,4 +11256,21 @@ class AppLocalizationsTl extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'Kapag pinangalanan mo ang isang tao, nagtatago ang Omi ng maikling sample ng boses para makilala siya sa susunod';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Hindi available ang mga transcript, nagpapatuloy ang pag-record sa device at ipoproseso mamaya';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Hindi available ang transcript · naka-save sa device';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Mga transcript na naghihintay $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Mga transcript na naghihintay $count';
+  }
 }

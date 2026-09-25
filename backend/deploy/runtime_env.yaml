@@ -129,6 +129,12 @@ environments:
           CONVERSATION_OCR_CONTEXT_ENABLED:
             category: rollout
             value: 'true'
+          MEETING_NOTES_RICH_CONTEXT_ENABLED:
+            value: 'true'
+            category: rollout
+          MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
+            value: 'true'
+            category: rollout
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             category: rollout
             value: 'true'
@@ -255,6 +261,12 @@ environments:
           GOOGLE_CALENDAR_AUTO_LINK_ENABLED:
             value: 'true'
             category: rollout
+          CONVERSATION_RELEVANCE_JEV_ENABLED:
+            value: 'true'
+            category: rollout
+          MEMORY_OWNER_JEV_FLIP_ENABLED:
+            value: 'true'
+            category: rollout
         values_file: backend/charts/backend-listen/dev_omi_backend_listen_values.yaml
       parakeet:
         env:
@@ -299,6 +311,12 @@ environments:
           CONVERSATION_OCR_CONTEXT_ENABLED:
             category: rollout
             value: 'true'
+          MEETING_NOTES_RICH_CONTEXT_ENABLED:
+            value: 'true'
+            category: rollout
+          MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
+            value: 'true'
+            category: rollout
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             category: rollout
             value: 'true'
@@ -325,6 +343,12 @@ environments:
               name: dev-omi-backend-secrets
               key: OMI_LLM_GATEWAY_SERVICE_TOKEN
           MEMORY_BELIEF_MODEL_ENABLED:
+            value: 'true'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_ENABLED:
+            value: 'true'
+            category: rollout
+          MEMORY_OWNER_JEV_FLIP_ENABLED:
             value: 'true'
             category: rollout
           GITHUB_TOKEN:
@@ -591,6 +615,12 @@ environments:
             CONVERSATION_OCR_CONTEXT_ENABLED:
               category: rollout
               value: 'true'
+            MEETING_NOTES_RICH_CONTEXT_ENABLED:
+              value: 'true'
+              category: rollout
+            MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
+              value: 'true'
+              category: rollout
             BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
               category: rollout
               value: 'true'
@@ -728,6 +758,12 @@ environments:
             OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
               value: '1.0'
               category: rollout
+            CONVERSATION_RELEVANCE_JEV_ENABLED:
+              value: 'true'
+              category: rollout
+            MEMORY_OWNER_JEV_FLIP_ENABLED:
+              value: 'true'
+              category: rollout
         backend-sync:
           capabilities:
           - conversation.finalize.persisted
@@ -851,6 +887,12 @@ environments:
             CONVERSATION_OCR_CONTEXT_ENABLED:
               category: rollout
               value: 'true'
+            MEETING_NOTES_RICH_CONTEXT_ENABLED:
+              value: 'true'
+              category: rollout
+            MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
+              value: 'true'
+              category: rollout
             BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
               category: rollout
               value: 'true'
@@ -897,6 +939,12 @@ environments:
               category: rollout
             OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
               value: '1.0'
+              category: rollout
+            CONVERSATION_RELEVANCE_JEV_ENABLED:
+              value: 'true'
+              category: rollout
+            MEMORY_OWNER_JEV_FLIP_ENABLED:
+              value: 'true'
               category: rollout
           forbidden_env:
           - HOSTED_PUSHER_API_URL
@@ -1643,6 +1691,12 @@ environments:
           CONVERSATION_OCR_CONTEXT_ENABLED:
             category: rollout
             value: 'false'
+          MEETING_NOTES_RICH_CONTEXT_ENABLED:
+            value: 'false'
+            category: rollout
+          MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
+            value: 'false'
+            category: rollout
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             category: rollout
             value: 'false'
@@ -1841,6 +1895,12 @@ environments:
           CONVERSATION_OCR_CONTEXT_ENABLED:
             category: rollout
             value: 'false'
+          MEETING_NOTES_RICH_CONTEXT_ENABLED:
+            value: 'false'
+            category: rollout
+          MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
+            value: 'false'
+            category: rollout
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             category: rollout
             value: 'false'
@@ -2024,6 +2084,12 @@ environments:
             CONVERSATION_OCR_CONTEXT_ENABLED:
               category: rollout
               value: 'false'
+            MEETING_NOTES_RICH_CONTEXT_ENABLED:
+              value: 'false'
+              category: rollout
+            MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
+              value: 'false'
+              category: rollout
             BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
               category: rollout
               value: 'false'
@@ -2298,6 +2364,12 @@ environments:
             CONVERSATION_OCR_CONTEXT_ENABLED:
               category: rollout
               value: 'false'
+            MEETING_NOTES_RICH_CONTEXT_ENABLED:
+              value: 'false'
+              category: rollout
+            MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
+              value: 'false'
+              category: rollout
             BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
               category: rollout
               value: 'false'

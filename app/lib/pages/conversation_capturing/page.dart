@@ -551,7 +551,9 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
   /// The live-capture empty state names only what this session can actually
   /// produce, and swaps in a truthful state line when the transcript pipeline
   /// is degraded instead of promising "waiting" forever (#14473): an
-  /// out-of-credits plan can never produce a transcript while waiting, an
+  /// out-of-credits plan can never produce a transcript while waiting, a
+  /// terminal STT failure means the audio is only being saved (the shared
+  /// outage sentence — the app bar names the same moment the same way), an
   /// offline device is waiting on the network, and `interrupted` means the
   /// transcription socket dropped and is reconnecting.
   String _liveCaptureEmptyStateText(
@@ -562,6 +564,9 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
     required bool transcriptionInterrupted,
   }) {
     if (usage.isOutOfCredits) return context.l10n.transcriptionUnavailableRecordingSaved;
+    if (provider.terminalTranscriptionFailure != null) {
+      return context.l10n.transcriptionUnavailableRecordingContinues;
+    }
     if (!connectivity.isConnected) return context.l10n.recordingOfflineTranscriptWillCatchUp;
     if (transcriptionInterrupted) return context.l10n.transcriptionPausedReconnecting;
     if (!photoChannelActive) return context.l10n.listeningTranscriptWillAppear;
@@ -576,6 +581,11 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
     final minutes = totalSeconds ~/ 60;
     final seconds = totalSeconds % 60;
     final label = minutes > 0 ? '${minutes}m ${seconds}s' : '${seconds}s';
+
+    // Queued-recordings count ("pending X/Y"): only meaningful once there is a
+    // queue — a single unsynced recording is already named by the duration line.
+    final backlog = provider.sessionTranscriptionBacklogCounts;
+    final showBacklogCount = backlog.total >= 2 && backlog.pending >= 1;
 
     // The indicator names the worst outcome across the session's WALs so it
     // can say what happens next, instead of always claiming a healthy local
@@ -610,23 +620,37 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
         borderRadius: OmiRadius.mdAll,
         border: Border.all(color: OmiColors.border, width: 0.5),
       ),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
+      child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Container(
-            width: 7,
-            height: 7,
-            decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 7,
+                height: 7,
+                decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                text,
+                style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
+              ),
+              if (!failed && !retrying && uploading) ...[
+                const SizedBox(width: 8),
+                const OmiSpinner(size: OmiSpinnerSize.small, color: OmiColors.textTertiary),
+              ],
+            ],
           ),
-          const SizedBox(width: 8),
-          Text(
-            text,
-            style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
-          ),
-          if (!failed && !retrying && uploading) ...[
-            const SizedBox(width: 8),
-            const OmiSpinner(size: OmiSpinnerSize.small, color: OmiColors.textTertiary),
+          // How many queued recordings are still waiting for transcription out
+          // of the session's total, so a drain after an outage reads as progress.
+          if (showBacklogCount) ...[
+            const SizedBox(height: 4),
+            Text(
+              context.l10n.transcriptionsPendingFraction(backlog.pending, backlog.total),
+              style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
+            ),
           ],
         ],
       ),

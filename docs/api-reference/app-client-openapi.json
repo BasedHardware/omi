@@ -15524,6 +15524,32 @@
         "title": "ImportJobStatus",
         "type": "string"
       },
+      "Insight": {
+        "properties": {
+          "kind": {
+            "description": "Which background source the insight draws on",
+            "enum": [
+              "prior_meeting",
+              "goal",
+              "memory",
+              "person"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "text": {
+            "description": "One insight connecting background context to this conversation",
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "kind"
+        ],
+        "title": "Insight",
+        "type": "object"
+      },
       "IntegrationData": {
         "description": "Data for an integration connection",
         "properties": {
@@ -20856,6 +20882,78 @@
         "title": "PageContext",
         "type": "object"
       },
+      "Participant": {
+        "properties": {
+          "email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Participant's email address",
+            "title": "Email"
+          },
+          "is_ai_agent": {
+            "default": false,
+            "description": "True for AI notetakers and assistants, never people",
+            "title": "Is Ai Agent",
+            "type": "boolean"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Participant's display name",
+            "title": "Name"
+          },
+          "organization": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Participant's organization when known",
+            "title": "Organization"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Participant's role or relationship when known",
+            "title": "Role"
+          },
+          "source": {
+            "description": "Whether meeting metadata ('roster') or only the conversation evidences this participant",
+            "enum": [
+              "roster",
+              "transcript"
+            ],
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "source"
+        ],
+        "title": "Participant",
+        "type": "object"
+      },
       "PayPalPaymentDetailsResponse": {
         "properties": {
           "email": {
@@ -23675,6 +23773,16 @@
             "title": "Heading",
             "type": "string"
           },
+          "kind": {
+            "default": "main",
+            "description": "Whether the section is primary recap or the closing side-notes section",
+            "enum": [
+              "main",
+              "side_notes"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
           "source_segment_ids": {
             "description": "Transcript segment IDs that directly support this section",
             "items": {
@@ -24369,6 +24477,66 @@
         "title": "SharedEvent",
         "type": "object"
       },
+      "SharedParticipant": {
+        "description": "Public share projection of a meeting participant — never an email.",
+        "properties": {
+          "is_ai_agent": {
+            "default": false,
+            "title": "Is Ai Agent",
+            "type": "boolean"
+          },
+          "name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "organization": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Organization"
+          },
+          "role": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Role"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "enum": [
+                  "roster",
+                  "transcript"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          }
+        },
+        "title": "SharedParticipant",
+        "type": "object"
+      },
       "SharedPerson": {
         "description": "Speaker-label projection for a shared conversation.",
         "properties": {
@@ -24439,10 +24607,40 @@
             "title": "Events",
             "type": "array"
           },
+          "meeting_type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "interview",
+                  "intro",
+                  "sales",
+                  "customer",
+                  "one_on_one",
+                  "team_sync",
+                  "planning",
+                  "demo",
+                  "social",
+                  "other"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Meeting Type"
+          },
           "overview": {
             "default": "",
             "title": "Overview",
             "type": "string"
+          },
+          "participants": {
+            "items": {
+              "$ref": "#/components/schemas/SharedParticipant"
+            },
+            "title": "Participants",
+            "type": "array"
           },
           "title": {
             "default": "",
@@ -25611,11 +25809,51 @@
             "title": "Events",
             "type": "array"
           },
+          "insights": {
+            "description": "Insights connecting supplied background context to this conversation; empty without background",
+            "items": {
+              "$ref": "#/components/schemas/Insight"
+            },
+            "title": "Insights",
+            "type": "array"
+          },
+          "meeting_type": {
+            "anyOf": [
+              {
+                "enum": [
+                  "interview",
+                  "intro",
+                  "sales",
+                  "customer",
+                  "one_on_one",
+                  "team_sync",
+                  "planning",
+                  "demo",
+                  "social",
+                  "other"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The kind of meeting, when the capture is a meeting",
+            "title": "Meeting Type"
+          },
           "overview": {
             "default": "",
             "description": "A brief overview of the conversation, highlighting the key details from it",
             "title": "Overview",
             "type": "string"
+          },
+          "participants": {
+            "description": "People and AI agents evidenced by the meeting roster or the transcript; never the account owner",
+            "items": {
+              "$ref": "#/components/schemas/Participant"
+            },
+            "title": "Participants",
+            "type": "array"
           },
           "sections": {
             "description": "Detailed, free-form note sections in the model-chosen structure",

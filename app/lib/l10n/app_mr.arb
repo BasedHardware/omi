@@ -11096,5 +11096,9 @@
     "speakerTagPromptAnswerFailed": "सेव्ह करता आले नाही. कृपया पुन्हा प्रयत्न करा.",
     "voiceSettingsAskToTag": "मला आवाज टॅग करायला सांगा",
     "voiceSettingsAskToTagSubtitle": "अधूनमधून Omi विचारेल की तुमच्या अलीकडील संभाषणांमध्ये कोण बोलत होते",
-    "voiceSettingsSaveOthersSubtitle": "तुम्ही एखाद्याला नाव दिल्यावर, पुढच्या वेळी ओळखता यावे म्हणून Omi आवाजाचा एक छोटा नमुना ठेवतो"
+    "voiceSettingsSaveOthersSubtitle": "तुम्ही एखाद्याला नाव दिल्यावर, पुढच्या वेळी ओळखता यावे म्हणून Omi आवाजाचा एक छोटा नमुना ठेवतो",
+    "transcriptionUnavailableRecordingContinues": "ट्रान्सक्रिप्शन उपलब्ध नाही, रेकॉर्डिंग डिव्हाइसवर सुरू आहे आणि नंतर प्रोसेस होईल",
+    "transcriptionUnavailableSavingOnDevice": "ट्रान्सक्रिप्शन अनुपलब्ध · डिव्हाइसवर जतन केले जात आहे",
+    "transcriptionsPendingFraction": "प्रलंबित ट्रान्सक्रिप्शन {pending}/{total}",
+    "transcriptionsPendingCount": "प्रलंबित ट्रान्सक्रिप्शन {count}"
 }

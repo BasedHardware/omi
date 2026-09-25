@@ -3559,5 +3559,9 @@
     "speakerTagPromptAnswerFailed": "Tidak dapat menyimpan. Silakan coba lagi.",
     "voiceSettingsAskToTag": "Minta saya menandai suara",
     "voiceSettingsAskToTagSubtitle": "Sesekali, Omi akan bertanya siapa yang berbicara dalam percakapan terbaru Anda",
-    "voiceSettingsSaveOthersSubtitle": "Saat Anda memberi nama seseorang, Omi menyimpan sampel suara singkat agar bisa mengenalinya lain kali"
+    "voiceSettingsSaveOthersSubtitle": "Saat Anda memberi nama seseorang, Omi menyimpan sampel suara singkat agar bisa mengenalinya lain kali",
+    "transcriptionUnavailableRecordingContinues": "Transkripsi tidak tersedia, perekaman berlanjut di perangkat dan akan diproses nanti",
+    "transcriptionUnavailableSavingOnDevice": "Transkripsi tidak tersedia · disimpan di perangkat",
+    "transcriptionsPendingFraction": "Transkripsi tertunda {pending}/{total}",
+    "transcriptionsPendingCount": "Transkripsi tertunda {count}"
 }

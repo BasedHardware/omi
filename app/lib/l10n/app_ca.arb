@@ -3524,5 +3524,9 @@
     "speakerTagPromptAnswerFailed": "No s’ha pogut desar. Torna-ho a provar.",
     "voiceSettingsAskToTag": "Demana’m que etiqueti veus",
     "voiceSettingsAskToTagSubtitle": "De tant en tant, l’Omi et pregunta qui parlava a les teves converses recents",
-    "voiceSettingsSaveOthersSubtitle": "Quan anomenes algú, l’Omi guarda una mostra de veu breu per reconèixer-lo la propera vegada"
+    "voiceSettingsSaveOthersSubtitle": "Quan anomenes algú, l’Omi guarda una mostra de veu breu per reconèixer-lo la propera vegada",
+    "transcriptionUnavailableRecordingContinues": "Les transcripcions no estan disponibles, l'enregistrament continua al dispositiu i es processarà més tard",
+    "transcriptionUnavailableSavingOnDevice": "Transcripció no disponible · s'està desant al dispositiu",
+    "transcriptionsPendingFraction": "Transcripcions pendents {pending}/{total}",
+    "transcriptionsPendingCount": "Transcripcions pendents {count}"
 }

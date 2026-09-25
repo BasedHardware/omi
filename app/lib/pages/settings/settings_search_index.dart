@@ -104,17 +104,20 @@ final List<SettingsSearchEntry> settingsSearchEntries = [
   SettingsSearchEntry('account', (l) => l.account, SettingsDestination.profile, _drawer, aliases: (l) => [l.profile]),
   SettingsSearchEntry('name', (l) => l.name, SettingsDestination.profile, _account),
   SettingsSearchEntry('email', (l) => l.email, SettingsDestination.profile, _account),
-  SettingsSearchEntry('planAndUsage', (l) => l.planAndUsage, SettingsDestination.planAndUsage, _account),
-  SettingsSearchEntry('referralProgram', (l) => l.referralProgram, SettingsDestination.referral, _account),
   SettingsSearchEntry('userId', (l) => l.userId, SettingsDestination.profile, _account),
   SettingsSearchEntry('signOut', (l) => l.signOut, SettingsDestination.signOut, _account),
   SettingsSearchEntry('deleteAccountTitle', (l) => l.deleteAccountTitle, SettingsDestination.deleteAccount, _account),
+
+  // Plan, referrals (on the sheet)
+  SettingsSearchEntry('planAndUsage', (l) => l.planAndUsage, SettingsDestination.planAndUsage, _drawer),
+  SettingsSearchEntry('referralProgram', (l) => l.referralProgram, SettingsDestination.referral, _drawer),
 
   // Device group
   SettingsSearchEntry('deviceSettings', (l) => l.deviceSettings, SettingsDestination.device, _groups,
       visible: _whenDeviceConnected),
   SettingsSearchEntry('offlineSync', (l) => l.offlineSync, SettingsDestination.offlineSync, _groups),
   SettingsSearchEntry('phoneCalls', (l) => l.phoneCalls, SettingsDestination.phoneCalls, _groups),
+  SettingsSearchEntry('permissions', (l) => l.permissions, SettingsDestination.permissions, _groups),
   SettingsSearchEntry('device', (l) => l.device, SettingsDestination.deviceGroup, _drawer),
 
   // Recording & Transcription group
@@ -144,21 +147,22 @@ final List<SettingsSearchEntry> settingsSearchEntries = [
   // Integrations (opens the Integrations page directly)
   SettingsSearchEntry('integrations', (l) => l.integrations, SettingsDestination.integrations, _drawer),
 
-  // Privacy & Data group
+  // Data & Privacy group
   SettingsSearchEntry('dataProtection', (l) => l.dataProtection, SettingsDestination.dataPrivacy, _groups),
   SettingsSearchEntry('memories', (l) => l.memories, SettingsDestination.memories, _groups),
-  SettingsSearchEntry('permissions', (l) => l.permissions, SettingsDestination.permissions, _groups),
   SettingsSearchEntry('exportAllData', (l) => l.exportAllData, SettingsDestination.exportData, _groups),
   SettingsSearchEntry('importData', (l) => l.importData, SettingsDestination.importData, _groups),
   SettingsSearchEntry('dataAndPrivacy', (l) => l.dataAndPrivacy, SettingsDestination.privacyGroup, _drawer),
 
   // Help & About group
-  SettingsSearchEntry('feedbackBug', (l) => l.feedbackBug, SettingsDestination.feedback, _groups,
-      visible: _whenSupportLinks),
   SettingsSearchEntry('helpCenter', (l) => l.helpCenter, SettingsDestination.helpCenter, _groups,
       visible: _whenSupportLinks),
   SettingsSearchEntry('whatsNew', (l) => l.whatsNew, SettingsDestination.whatsNew, _groups),
   SettingsSearchEntry('helpAndAbout', (l) => l.helpAndAbout, SettingsDestination.helpGroup, _drawer),
+
+  // Feedback (on the sheet, where Intercom is supported)
+  SettingsSearchEntry('feedbackBug', (l) => l.feedbackBug, SettingsDestination.feedback, _drawer,
+      visible: _whenSupportLinks),
 
   // Developer Settings (opens the page directly)
   SettingsSearchEntry('developerSettings', (l) => l.developerSettings, SettingsDestination.developer, _drawer),
