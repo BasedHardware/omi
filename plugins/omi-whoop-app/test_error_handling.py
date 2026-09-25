@@ -241,6 +241,21 @@ class TestWhoopErrorSanitization(unittest.TestCase):
             self.assertNotIn("HTTPSConnectionPool", res_msr.error)
             self.assertEqual(res_msr.error, "Failed to get measurements. Please try again.")
 
+    def test_tool_handlers_http_error_code_surfaced(self):
+        class FakeHTTPResponse:
+            def __init__(self, status_code):
+                self.status_code = status_code
+
+            def json(self):
+                return {}
+
+        with patch.object(app.requests, "get", return_value=FakeHTTPResponse(404)):
+            req = FakeChatRequest({"uid": "user123"})
+            res = asyncio.run(app.tool_get_body_measurements(req))
+            self.assertIsNotNone(res.error)
+            self.assertIn("404", res.error)
+            self.assertEqual(res.error, "Failed to get measurements: HTTP 404")
+
 
 if __name__ == "__main__":
     unittest.main()

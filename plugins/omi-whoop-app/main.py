@@ -96,6 +96,15 @@ def _safe_float(val: Any, default: Optional[float] = None) -> Optional[float]:
         return default
 
 
+def _format_tool_error(action: str, result: Optional[dict]) -> str:
+    """Format safe tool error message, preserving HTTP status code if present."""
+    if isinstance(result, dict):
+        err = result.get("error")
+        if isinstance(err, str) and err.startswith("HTTP "):
+            return f"Failed to get {action}: {err}"
+    return f"Failed to get {action}. Please try again."
+
+
 def get_valid_access_token(uid: str) -> Optional[str]:
     """
     Get a valid access token, refreshing if necessary.
@@ -618,7 +627,7 @@ async def tool_get_recovery(request: Request):
         result = whoop_api_request(uid, "GET", "/recovery", params=params)
 
         if not result or "error" in result:
-            return ChatToolResponse(error="Failed to get recovery. Please try again.")
+            return ChatToolResponse(error=_format_tool_error("recovery", result))
 
         records = result.get("records", [])
 
@@ -665,7 +674,7 @@ async def tool_get_strain(request: Request):
         result = whoop_api_request(uid, "GET", "/cycle", params=params)
 
         if not result or "error" in result:
-            return ChatToolResponse(error="Failed to get strain. Please try again.")
+            return ChatToolResponse(error=_format_tool_error("strain", result))
 
         records = result.get("records", [])
 
@@ -711,7 +720,7 @@ async def tool_get_sleep(request: Request):
         result = whoop_api_request(uid, "GET", "/activity/sleep", params=params)
 
         if not result or "error" in result:
-            return ChatToolResponse(error="Failed to get sleep. Please try again.")
+            return ChatToolResponse(error=_format_tool_error("sleep", result))
 
         records = result.get("records", [])
 
@@ -770,7 +779,7 @@ async def tool_get_workouts(request: Request):
         result = whoop_api_request(uid, "GET", "/activity/workout", params=params)
 
         if not result or "error" in result:
-            return ChatToolResponse(error="Failed to get workouts. Please try again.")
+            return ChatToolResponse(error=_format_tool_error("workouts", result))
 
         workouts = result.get("records", [])
 
@@ -926,7 +935,7 @@ async def tool_get_body_measurements(request: Request):
         result = whoop_api_request(uid, "GET", "/user/measurement/body")
 
         if not result or "error" in result:
-            return ChatToolResponse(error="Failed to get measurements. Please try again.")
+            return ChatToolResponse(error=_format_tool_error("measurements", result))
 
         height_m = result.get("height_meter")
         weight_kg = result.get("weight_kilogram")
@@ -975,7 +984,7 @@ async def tool_get_profile(request: Request):
         result = whoop_api_request(uid, "GET", "/user/profile/basic")
 
         if not result or "error" in result:
-            return ChatToolResponse(error="Failed to get profile. Please check account connection.")
+            return ChatToolResponse(error=_format_tool_error("profile", result))
 
         first_name = result.get("first_name", "")
         last_name = result.get("last_name", "")
