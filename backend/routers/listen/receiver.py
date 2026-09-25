@@ -107,6 +107,10 @@ OPUS_MAX_FRAME_MS = 120
 # than one corrupt packet: 1 s of audio at the 20 ms cadence omi clients encode with.
 DECODE_FAILURE_STREAK_ALERT = 50
 
+# How much capture history keeps its conversation ownership for late provider
+# callbacks; older mapped segments fail closed as late_owner_dropped.
+CAPTURE_RANGE_RETENTION_SECONDS = 120.0
+
 
 def opus_decode_capacity(sample_rate: int) -> int:
     """Samples to hand `Decoder.decode` as its output-buffer size.
@@ -172,7 +176,10 @@ class ListenReceiver:
 
             self.capture_timeline = CaptureTimeline(sample_rate=int(host.request.sample_rate))
             host.state.capture_timeline = self.capture_timeline
-            host.state.conversation_sample_ranges = deque(maxlen=8)
+            # Conversation ownership of recent capture ranges, bounded by
+            # capture time (provider callbacks can trail their audio by tens
+            # of seconds) with a hard entry cap.
+            host.state.conversation_sample_ranges = deque(maxlen=512)
         # Capture start sample of the STT buffer's first byte; the buffer is
         # one contiguous run of accepted decoded audio.
         self._stt_buffer_start_sample: Optional[int] = None
@@ -193,6 +200,10 @@ class ListenReceiver:
         conversation_id = state.current_conversation_id
         if state.conversation_sample_ranges is not None:
             state.conversation_sample_ranges.append((start_sample, end_sample, conversation_id))
+            retention_samples = CAPTURE_RANGE_RETENTION_SECONDS * self.capture_timeline.sample_rate
+            ranges = state.conversation_sample_ranges
+            while len(ranges) > 1 and end_sample - ranges[0][1] > retention_samples:
+                ranges.popleft()
         if conversation_id and conversation_id in state.conversations_awaiting_capture_origin:
             state.conversations_awaiting_capture_origin.discard(conversation_id)
             state.conversation_capture_origins[conversation_id] = self.capture_timeline.wall(start_sample)

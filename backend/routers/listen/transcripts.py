@@ -355,7 +355,7 @@ class TranscriptProcessor:
             self.photo_buffer.clear()
             if not self.host.state.first_audio_byte_timestamp:
                 continue
-            if self.host.state.capture_timeline is not None:
+            if getattr(self.host.state, 'capture_timeline', None) is not None:
                 # Audio-timeline v2: segments already carry absolute projected
                 # wall times and their owning conversation from the capture
                 # span; offsets are computed against the pinned origin below.

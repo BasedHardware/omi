@@ -290,7 +290,7 @@ async def _websocket_util_trigger(
             try:
                 upload_chunk: Dict[str, Any] = {'data': chunk_data, 'timestamp': timestamp}
                 if batch.get('span'):
-                    upload_chunk['span'] = batch['span']
+                    upload_chunk['span'] = {**batch['span'], 'start': timestamp}
                 chunks_to_upload: List[Dict[str, Any]] = [upload_chunk]
                 await run_blocking(
                     storage_executor,
