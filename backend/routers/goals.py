@@ -80,10 +80,7 @@ def get_canonical_goals(
 
 def _sanitize_goal_conflict_error(exc: Exception) -> str:
     logger.warning(f"Goal mutation conflict: {type(exc).__name__}: {exc}")
-    detail = str(exc)
-    if any(marker in detail for marker in ("Traceback", "Exception", "Error:", "Firestore", "google.cloud", "\n")):
-        return "Goal conflict encountered. Please verify goal state and retry."
-    return detail or "Goal conflict encountered. Please verify goal state and retry."
+    return "Goal conflict encountered. Please verify goal state and retry."
 
 
 def _raise_goal_store_error(exc: Exception) -> None:

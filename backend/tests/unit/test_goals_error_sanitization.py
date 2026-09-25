@@ -95,22 +95,23 @@ class GoalsErrorSanitizationTests(unittest.TestCase):
         sanitize = self._sanitize_fn
         GoalConflictError = self._goals_db.GoalConflictError
 
-        # 1. Clean conflict messages pass through verbatim
+        # 1. Any GoalConflictError returns safe generic message
+        generic = "Goal conflict encountered. Please verify goal state and retry."
         self.assertEqual(
             sanitize(GoalConflictError("account generation mismatch")),
-            "account generation mismatch",
+            generic,
         )
         self.assertEqual(
             sanitize(GoalConflictError("idempotency key was reused with different content")),
-            "idempotency key was reused with different content",
+            generic,
         )
         self.assertEqual(
             sanitize(GoalConflictError("focus full")),
-            "focus full",
+            generic,
         )
         self.assertEqual(
             sanitize(GoalConflictError("ended goals cannot be focused")),
-            "ended goals cannot be focused",
+            generic,
         )
 
         # 2. Raw traceback filtered to generic message
@@ -149,11 +150,11 @@ class GoalsErrorSanitizationTests(unittest.TestCase):
         self.assertEqual(ctx.exception.status_code, 404)
         self.assertEqual(ctx.exception.detail, "Goal not found")
 
-        # 2. GoalConflictError with known cause raises 409 with exact cause
+        # 2. GoalConflictError raises 409 sanitized
         with self.assertRaises(HTTPException) as ctx:
             raise_store_error(goals_db.GoalConflictError("account generation mismatch"))
         self.assertEqual(ctx.exception.status_code, 409)
-        self.assertEqual(ctx.exception.detail, "account generation mismatch")
+        self.assertEqual(ctx.exception.detail, "Goal conflict encountered. Please verify goal state and retry.")
 
         # 3. GoalConflictError with sensitive traceback raises 409 sanitized
         sensitive_tb = "Traceback (most recent call last):\n  File 'app.py'\nKeyError: internal_key"
