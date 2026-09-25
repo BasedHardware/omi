@@ -47,4 +47,20 @@ void main() {
       'Offline, buffering · 3 min',
     );
   });
+
+  test('the transcription outage says recording continues; the compact variant stays short', () {
+    expect(
+      captureStateLabel(l10n, CaptureDisplayState.transcriptionUnavailable),
+      'Transcriptions are unavailable, recording continues on device and will process later',
+    );
+    expect(
+      captureStateLabel(l10n, CaptureDisplayState.transcriptionUnavailable, compact: true),
+      'Transcription unavailable · saving on device',
+    );
+    // Compact only affects the outage sentence; other states are identical either way.
+    expect(
+      captureStateLabel(l10n, CaptureDisplayState.paused, compact: true),
+      captureStateLabel(l10n, CaptureDisplayState.paused),
+    );
+  });
 }

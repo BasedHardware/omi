@@ -934,9 +934,6 @@ class AppLocalizationsDa extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'Tilføj til claude_desktop_config.json';
-
-  @override
   String get copyConfig => 'Kopier konfiguration';
 
   @override
@@ -2461,13 +2458,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get clearAllNodesAndConnections => 'Ryd alle noder og forbindelser';
 
   @override
-  String get addToClaudeDesktopConfig => 'Tilføj til claude_desktop_config.json';
-
-  @override
   String get connectAiAssistantsToData => 'Forbind AI-assistenter til dine data';
-
-  @override
-  String get useYourMcpApiKey => 'Brug din MCP API-nøgle';
 
   @override
   String get realTimeTranscript => 'Realtidstranskription';
@@ -9953,7 +9944,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get transcriptionNoAudio => 'Transskription modtager ikke lyd';
 
   @override
-  String get tapPlusToStartRecording => 'Tryk på + for at starte optagelsen';
+  String get tapPlusToStartRecording => 'Tryk på optageknappen for at starte optagelsen';
 
   @override
   String get chatBlockTask => 'Opgave';
@@ -10196,7 +10187,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'Samtaler, du optager, vises her. Tryk på + på Hjem for at optage din første.';
+      'Samtaler, du optager, vises her. Tryk på optageknappen på Hjem for at optage din første.';
 
   @override
   String get conversationMap => 'Samtalekort';
@@ -10674,7 +10665,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get deviceConnecting => 'Opretter forbindelse…';
 
   @override
-  String get recordOptionsTip => 'Tip: tryk og hold på optageknappen for at optage et telefonopkald.';
+  String get recordOptionsTip => 'Tip: tryk på pilen på optageknappen for at optage et telefonopkald.';
 
   @override
   String get firmwareUpdateFailedTitle => 'Opdateringen mislykkedes';
@@ -11144,4 +11135,88 @@ class AppLocalizationsDa extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'Når du navngiver nogen, gemmer Omi en kort stemmeprøve, så den kan genkende dem næste gang';
+
+  @override
+  String get leaveBlank => 'Lad stå tomt';
+
+  @override
+  String get mcpOAuthSetup =>
+      'På claude.ai skal du tilføje en brugerdefineret connector og indsætte server-URL\'en. Hvis Claude beder om et avanceret OAuth Client ID, skal du bruge værdien nedenfor og lade hemmeligheden stå tom — brug aldrig din MCP API-nøgle som OAuth-hemmelighed.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'Tilføj til ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'På Claude Desktop → Settings → Connectors skal du tilføje en brugerdefineret connector og indsætte server-URL\'en. Hvis Claude beder om et avanceret OAuth Client ID, skal du bruge værdien nedenfor og lade hemmeligheden stå tom — brug aldrig din MCP API-nøgle som OAuth-hemmelighed.';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Transskriptioner er utilgængelige, optagelsen fortsætter på enheden og behandles senere';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Transskription utilgængelig · gemmes på enheden';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Transskriptioner i kø $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Transskriptioner i kø $count';
+  }
+
+  @override
+  String get captureSourceCall => 'Opkald';
+
+  @override
+  String get captureSourcePhoneMic => 'Telefonmikrofon';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Genoptag';
+
+  @override
+  String get finish => 'Afslut';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Vedhæng på pause · fortsætter, når du afslutter';
+
+  @override
+  String get pendantIsListeningTitle => 'Dit vedhæng lytter';
+
+  @override
+  String get oneSourceAtATime => 'Omi optager fra én kilde ad gangen.';
+
+  @override
+  String get recordWithPhoneInstead => 'Optag med telefonen i stedet';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'Vedhænget holder pause, til du afslutter';
+
+  @override
+  String get pendantPausesDuringCall => 'Vedhænget holder pause under opkaldet';
+
+  @override
+  String get keepUsingPendant => 'Fortsæt med vedhænget';
+
+  @override
+  String get recordWith => 'Optag med';
+
+  @override
+  String get moreWaysToRecord => 'Flere måder at optage på';
+
+  @override
+  String get openCall => 'Åbn opkald';
+
+  @override
+  String get captureRecoveryBanner => 'Lyden fra vedhænget når ikke frem til appen — tryk for at reparere';
 }

@@ -45,6 +45,8 @@ SCHEMA_GROUPS = {
             'PluginResult',
             'Event',
             'Section',
+            'Participant',
+            'Insight',
             'Structured',
             'Geolocation',
             'ConversationPhoto',
@@ -74,7 +76,6 @@ SCHEMA_GROUPS = {
             'SyncCaptureManifestFile',
             'SyncCaptureManifestRequest',
             'SyncCaptureManifestResponse',
-            'StatusResponse',
         ),
     },
     'messages': {
@@ -256,6 +257,7 @@ SCHEMA_GROUPS = {
             'KnowledgeGraphResponse',
             'RebuildResponse',
             'ErrorResponse',
+            'StatusResponse',
         ),
     },
     'wrapped_task_integrations': {
