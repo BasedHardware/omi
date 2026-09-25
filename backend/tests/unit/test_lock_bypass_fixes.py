@@ -240,7 +240,6 @@ def _make_conversation(locked=False, conversation_id='conv-1'):
         },
         'transcript_segments': [{'text': 'hello', 'speaker_id': 0, 'is_user': False, 'start': 0.0, 'end': 1.0}],
         'apps_results': [],
-        'plugins_results': [],
         'suggested_summarization_apps': [],
         'audio_files': [
             {

@@ -470,7 +470,6 @@ def test_conversation_wire_dart_preserves_known_client_aliases():
     assert 'const ["app_id", "appId"]' in generated
     assert 'const ["google_place_id", "googlePlaceId"]' in generated
     assert "'apps_results': appsResults" in generated
-    assert "'plugins_results': pluginsResults" in generated
     assert 'appsResults: _required(_readFieldValue<List<GeneratedAppResult>>' in generated
     assert 'this.category = "other"' in generated
     assert 'source: _readFieldValue<String>' in generated

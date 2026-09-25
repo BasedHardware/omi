@@ -65,14 +65,14 @@ def count_memory_prompt_plugins_trigger() -> None:
         memories = conversations_db.get_conversations(uid, limit=1000)
         print('user', uid, 'conversations', len(memories))
         for memory in memories:
-            triggered = memory.get('plugins_results', [])
+            triggered = memory.get('apps_results', [])
             created_at = memory.get('created_at')
             if triggered:
                 print('memory', memory['id'], 'triggered', len(triggered), 'plugins')
             for trigger in triggered:
                 record_app_usage(
                     uid,
-                    trigger['plugin_id'],
+                    trigger['app_id'],
                     UsageHistoryType.memory_created_prompt,
                     conversation_id=memory['id'],
                     timestamp=created_at,

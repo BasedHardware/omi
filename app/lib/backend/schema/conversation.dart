@@ -61,7 +61,9 @@ SearchMomentSeek? searchMomentSeekFromSnippets({
   required String searchQuery,
 }) {
   if (searchQuery.trim().isEmpty || snippets.isEmpty) return null;
-  final snippet = snippets.firstWhereOrNull((candidate) => candidate.start != null);
+  final snippet = snippets.firstWhereOrNull(
+    (candidate) => candidate.start != null,
+  );
   if (snippet == null) return null;
   final start = snippet.start!;
   return SearchMomentSeek(start: start, end: snippet.end ?? start);
@@ -71,20 +73,35 @@ class CreateConversationResponse {
   final List<ServerMessage> messages;
   final ServerConversation? conversation;
 
-  CreateConversationResponse({required this.messages, required this.conversation});
+  CreateConversationResponse({
+    required this.messages,
+    required this.conversation,
+  });
 
   factory CreateConversationResponse.fromJson(Map<String, dynamic> json) {
     return CreateConversationResponse.fromGeneratedWireJson(json);
   }
 
-  factory CreateConversationResponse.fromGeneratedWireJson(Map<String, dynamic> json) {
+  factory CreateConversationResponse.fromGeneratedWireJson(
+    Map<String, dynamic> json,
+  ) {
     return CreateConversationResponse(
       messages: ((json['messages'] ?? []) as List<dynamic>)
-          .map((message) => ServerMessage.fromGeneratedWireJson(message as Map<String, dynamic>))
+          .map(
+            (message) => ServerMessage.fromGeneratedWireJson(
+              message as Map<String, dynamic>,
+            ),
+          )
           .toList(),
       conversation: json['conversation'] != null
-          ? ServerConversation.fromJson(json['conversation'] as Map<String, dynamic>)
-          : (json['memory'] != null ? ServerConversation.fromJson(json['memory'] as Map<String, dynamic>) : null),
+          ? ServerConversation.fromJson(
+              json['conversation'] as Map<String, dynamic>,
+            )
+          : (json['memory'] != null
+              ? ServerConversation.fromJson(
+                  json['memory'] as Map<String, dynamic>,
+                )
+              : null),
     );
   }
 }
@@ -135,7 +152,13 @@ enum ConversationVisibility {
   }
 }
 
-enum ConversationPostProcessingStatus { not_started, in_progress, completed, canceled, failed }
+enum ConversationPostProcessingStatus {
+  not_started,
+  in_progress,
+  completed,
+  canceled,
+  failed,
+}
 
 enum ConversationPostProcessingModel { fal_whisperx, custom_whisperx }
 
@@ -146,7 +169,11 @@ class ConversationPostProcessing {
   final ConversationPostProcessingModel? model;
   final String? failReason;
 
-  ConversationPostProcessing({required this.status, required this.model, this.failReason});
+  ConversationPostProcessing({
+    required this.status,
+    required this.model,
+    this.failReason,
+  });
 
   factory ConversationPostProcessing.fromJson(Map<String, dynamic> json) {
     return ConversationPostProcessing(
@@ -158,7 +185,10 @@ class ConversationPostProcessing {
     );
   }
 
-  toJson() => {'status': status.toString().split('.').last, 'model': model.toString().split('.').last};
+  toJson() => {
+        'status': status.toString().split('.').last,
+        'model': model.toString().split('.').last,
+      };
 }
 
 enum ServerProcessingConversationStatus {
@@ -172,7 +202,9 @@ enum ServerProcessingConversationStatus {
   const ServerProcessingConversationStatus(this.value);
 
   static ServerProcessingConversationStatus valuesFromString(String value) {
-    return ServerProcessingConversationStatus.values.firstWhereOrNull((e) => e.value == value) ??
+    return ServerProcessingConversationStatus.values.firstWhereOrNull(
+          (e) => e.value == value,
+        ) ??
         ServerProcessingConversationStatus.unknown;
   }
 }
@@ -201,7 +233,9 @@ class ConversationPhoto {
     return ConversationPhoto.fromGenerated(generated);
   }
 
-  factory ConversationPhoto.fromGenerated(wire.GeneratedConversationPhoto generated) {
+  factory ConversationPhoto.fromGenerated(
+    wire.GeneratedConversationPhoto generated,
+  ) {
     return ConversationPhoto(
       id: generated.id ?? '',
       base64: generated.base64,
@@ -253,7 +287,9 @@ class CalendarEventLink {
     return CalendarEventLink.fromGenerated(generated);
   }
 
-  factory CalendarEventLink.fromGenerated(wire.GeneratedCalendarEventLink generated) {
+  factory CalendarEventLink.fromGenerated(
+    wire.GeneratedCalendarEventLink generated,
+  ) {
     return CalendarEventLink(
       eventId: generated.eventId,
       title: generated.title,
@@ -302,10 +338,14 @@ class CalendarCaptureGap {
   });
 
   factory CalendarCaptureGap.fromJson(Map<String, dynamic> json) {
-    return CalendarCaptureGap.fromGenerated(wire.GeneratedCalendarCaptureGap.fromJson(json));
+    return CalendarCaptureGap.fromGenerated(
+      wire.GeneratedCalendarCaptureGap.fromJson(json),
+    );
   }
 
-  factory CalendarCaptureGap.fromGenerated(wire.GeneratedCalendarCaptureGap generated) {
+  factory CalendarCaptureGap.fromGenerated(
+    wire.GeneratedCalendarCaptureGap generated,
+  ) {
     return CalendarCaptureGap(
       eventId: generated.eventId,
       title: generated.title,
@@ -319,7 +359,9 @@ class CalendarCaptureGap {
 
 /// Buckets capture gaps by the local day of their start, matching the
 /// conversation list's per-day grouping so a gap renders under its date header.
-Map<DateTime, List<CalendarCaptureGap>> groupCaptureGapsByLocalDay(List<CalendarCaptureGap> gaps) {
+Map<DateTime, List<CalendarCaptureGap>> groupCaptureGapsByLocalDay(
+  List<CalendarCaptureGap> gaps,
+) {
   final byDay = <DateTime, List<CalendarCaptureGap>>{};
   for (final gap in gaps) {
     final local = gap.startTime.toLocal();
@@ -380,7 +422,9 @@ class AudioFile {
   Map<String, dynamic> toJson() => toGenerated().toJson();
 }
 
-TranscriptSegment _transcriptSegmentFromGenerated(wire.GeneratedTranscriptSegment generated) {
+TranscriptSegment _transcriptSegmentFromGenerated(
+  wire.GeneratedTranscriptSegment generated,
+) {
   return TranscriptSegment.fromGenerated(generated);
 }
 
@@ -391,9 +435,15 @@ class ConversationAudioInfo {
   final double capturedDuration; // seconds of actual audio
   final List<ConversationAudioSpan> spans;
 
-  ConversationAudioInfo({required this.duration, required this.capturedDuration, this.spans = const []});
+  ConversationAudioInfo({
+    required this.duration,
+    required this.capturedDuration,
+    this.spans = const [],
+  });
 
-  factory ConversationAudioInfo.fromGenerated(wire.GeneratedConversationAudio generated) {
+  factory ConversationAudioInfo.fromGenerated(
+    wire.GeneratedConversationAudio generated,
+  ) {
     return ConversationAudioInfo(
       duration: generated.duration,
       capturedDuration: generated.capturedDuration,
@@ -486,23 +536,16 @@ class ServerConversation {
     if (structured != null) {
       normalized['structured'] = structured.toGenerated().toJson();
     }
-    // Legacy caches (< toJson wire-format fix) wrote plugins_results entries as
-    // {'appId', 'content'}; the wire parser requires the plugin_id key.
-    final rawPluginResults = normalized['plugins_results'];
-    if (rawPluginResults is List) {
-      normalized['plugins_results'] = rawPluginResults.map((entry) {
-        if (entry is Map<String, dynamic> && !entry.containsKey('plugin_id')) {
-          return {...entry, 'plugin_id': entry['appId'] ?? entry['app_id']};
-        }
-        return entry;
-      }).toList();
-    }
     final generated = wire.GeneratedConversation.fromJson(normalized);
     final rawSnippets = json['match_snippets'];
     final snippets = rawSnippets is List
         ? rawSnippets
             .whereType<Map>()
-            .map((e) => TranscriptMatchSnippet.fromJson(Map<String, dynamic>.from(e)))
+            .map(
+              (e) => TranscriptMatchSnippet.fromJson(
+                Map<String, dynamic>.from(e),
+              ),
+            )
             .toList()
         : const <TranscriptMatchSnippet>[];
     return ServerConversation.fromGenerated(
@@ -529,9 +572,7 @@ class ServerConversation {
       startedAt: generated.startedAt,
       finishedAt: generated.finishedAt,
       transcriptSegments: generated.transcriptSegments.map(_transcriptSegmentFromGenerated).toList(),
-      appResults: generated.appsResults.isNotEmpty
-          ? generated.appsResults.map(AppResponse.fromGenerated).toList()
-          : generated.pluginsResults.map((result) => AppResponse(result.content, appId: result.pluginId)).toList(),
+      appResults: generated.appsResults.map(AppResponse.fromGenerated).toList(),
       suggestedSummarizationApps: generated.suggestedSummarizationApps,
       geolocation:
           geolocation ?? (generated.geolocation == null ? null : Geolocation.fromGenerated(generated.geolocation!)),
@@ -569,9 +610,6 @@ class ServerConversation {
       'finished_at': finishedAt?.toUtc().toIso8601String(),
       'transcript_segments': transcriptSegments.map((segment) => segment.toJson()).toList(),
       'apps_results': appResults.map((result) => result.toGenerated().toJson()).toList(),
-      'plugins_results': appResults.map((result) {
-        return wire.GeneratedPluginResult(pluginId: result.appId, content: result.content).toJson();
-      }).toList(),
       'suggested_summarization_apps': suggestedSummarizationApps,
       'geolocation': geolocation?.toJson(),
       'photos': photos.map((photo) => photo.toJson()).toList(),
@@ -601,9 +639,6 @@ class ServerConversation {
       structured: structured.toGenerated(),
       transcriptSegments: transcriptSegments.map((segment) => segment.toGenerated()).toList(),
       appsResults: appResults.map((result) => result.toGenerated()).toList(),
-      pluginsResults: appResults.map((result) {
-        return wire.GeneratedPluginResult(pluginId: result.appId, content: result.content);
-      }).toList(),
       suggestedSummarizationApps: suggestedSummarizationApps,
       geolocation: geolocation?.toGenerated(),
       photos: photos.map((photo) => photo.toGenerated()).toList(),
@@ -640,7 +675,9 @@ class ServerConversation {
   }
 
   int firstSegmentIndexForSpeaker(int speakerId) {
-    return transcriptSegments.indexWhere((element) => element.speakerId == speakerId);
+    return transcriptSegments.indexWhere(
+      (element) => element.speakerId == speakerId,
+    );
   }
 
   String getTag() {
@@ -669,7 +706,10 @@ class ServerConversation {
   }
 
   String getTranscript({int? maxCount, bool generate = false}) {
-    var transcript = TranscriptSegment.segmentsAsString(transcriptSegments, includeTimestamps: true);
+    var transcript = TranscriptSegment.segmentsAsString(
+      transcriptSegments,
+      includeTimestamps: true,
+    );
     if (maxCount != null && transcript.isNotEmpty) {
       transcript = transcript.substring(max(transcript.length - maxCount, 0));
     }
@@ -719,8 +759,9 @@ class ServerConversation {
   static const int substantialTranscriptMinWords = 5;
 
   /// True when any transcript segment is long enough to plausibly deserve a title.
-  bool get hasSubstantialTranscriptSegment =>
-      transcriptSegments.any((segment) => segment.wordCount >= substantialTranscriptMinWords);
+  bool get hasSubstantialTranscriptSegment => transcriptSegments.any(
+        (segment) => segment.wordCount >= substantialTranscriptMinWords,
+      );
 
   /// Completed processing, empty title, and a substantial transcript — a silent
   /// title-pass failure the user can recover with Reprocess. Discarded, locked,
@@ -772,10 +813,14 @@ class SyncLocalFilesResponse {
   bool get hasPartialFailure => failedSegments > 0;
 
   factory SyncLocalFilesResponse.fromJson(Map<String, dynamic> json) {
-    return SyncLocalFilesResponse.fromGenerated(wire.GeneratedSyncLocalFilesResultResponse.fromJson(json));
+    return SyncLocalFilesResponse.fromGenerated(
+      wire.GeneratedSyncLocalFilesResultResponse.fromJson(json),
+    );
   }
 
-  factory SyncLocalFilesResponse.fromGenerated(wire.GeneratedSyncLocalFilesResultResponse generated) {
+  factory SyncLocalFilesResponse.fromGenerated(
+    wire.GeneratedSyncLocalFilesResultResponse generated,
+  ) {
     return SyncLocalFilesResponse(
       newConversationIds: generated.newMemories ?? [],
       updatedConversationIds: generated.updatedMemories ?? [],
@@ -802,10 +847,14 @@ class SyncJobStartResponse {
   });
 
   factory SyncJobStartResponse.fromJson(Map<String, dynamic> json) {
-    return SyncJobStartResponse.fromGenerated(wire.GeneratedSyncJobStartResponse.fromJson(json));
+    return SyncJobStartResponse.fromGenerated(
+      wire.GeneratedSyncJobStartResponse.fromJson(json),
+    );
   }
 
-  factory SyncJobStartResponse.fromGenerated(wire.GeneratedSyncJobStartResponse generated) {
+  factory SyncJobStartResponse.fromGenerated(
+    wire.GeneratedSyncJobStartResponse generated,
+  ) {
     return SyncJobStartResponse(
       jobId: generated.jobId,
       status: generated.status,
@@ -864,7 +913,9 @@ class SyncJobStatusResponse {
     );
   }
 
-  factory SyncJobStatusResponse.fromGenerated(wire.GeneratedSyncJobStatusResponse generated) {
+  factory SyncJobStatusResponse.fromGenerated(
+    wire.GeneratedSyncJobStatusResponse generated,
+  ) {
     return SyncJobStatusResponse(
       jobId: generated.jobId,
       status: generated.status,
@@ -886,7 +937,12 @@ class SyncedConversationPointer {
   final DateTime key;
   final ServerConversation conversation;
 
-  SyncedConversationPointer({required this.type, required this.index, required this.key, required this.conversation});
+  SyncedConversationPointer({
+    required this.type,
+    required this.index,
+    required this.key,
+    required this.conversation,
+  });
 
   factory SyncedConversationPointer.fromJson(Map<String, dynamic> json) {
     return SyncedConversationPointer(

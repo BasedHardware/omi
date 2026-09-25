@@ -138,7 +138,6 @@ def redact_conversation_for_list(conv: Dict[str, Any]) -> Dict[str, Any]:
         conv['structured']['action_items'] = []
         conv['structured']['events'] = []
     conv['apps_results'] = []
-    conv['plugins_results'] = []
     conv['suggested_summarization_apps'] = []
     conv['transcript_segments'] = []
     # Search may attach transcript match_snippets before list redaction; never leak evidence for locked rows.
@@ -178,7 +177,6 @@ def redact_conversation_for_integration(conv: Dict[str, Any]) -> Dict[str, Any]:
         conv['structured']['action_items'] = []
         conv['structured']['events'] = []
     conv['apps_results'] = []
-    conv['plugins_results'] = []
     conv['suggested_summarization_apps'] = []
     conv['transcript_segments'] = []
     conv['match_snippets'] = []

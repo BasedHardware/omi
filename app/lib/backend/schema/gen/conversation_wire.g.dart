@@ -198,30 +198,6 @@ class GeneratedAppResult {
   }
 }
 
-class GeneratedPluginResult {
-  final String content;
-  final String? pluginId;
-
-  const GeneratedPluginResult({
-    required this.content,
-    required this.pluginId,
-  });
-
-  factory GeneratedPluginResult.fromJson(Map<String, dynamic> json) {
-    return GeneratedPluginResult(
-      content: _required(_readFieldValue<String>(_readField(json, const ["content"]), "content", _readString, requiredField: true, nullable: false), "content"),
-      pluginId: _readFieldValue<String>(_readField(json, const ["plugin_id"]), "plugin_id", _readString, requiredField: true, nullable: true),
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'content': content,
-      'plugin_id': pluginId,
-    };
-  }
-}
-
 class GeneratedEvent {
   final bool created;
   final String description;
@@ -846,7 +822,6 @@ class GeneratedConversation {
   final bool meetingTreatmentEligible;
   final String? meetingTreatmentReason;
   final List<GeneratedConversationPhoto> photos;
-  final List<GeneratedPluginResult> pluginsResults;
   final bool privateCloudSyncEnabled;
   final String? processingConversationId;
   final String? processingMemoryId;
@@ -894,7 +869,6 @@ class GeneratedConversation {
     this.meetingTreatmentEligible = false,
     this.meetingTreatmentReason,
     this.photos = const [],
-    this.pluginsResults = const [],
     this.privateCloudSyncEnabled = false,
     this.processingConversationId,
     this.processingMemoryId,
@@ -944,7 +918,6 @@ class GeneratedConversation {
       meetingTreatmentEligible: _required(_readFieldValue<bool>(_readField(json, const ["meeting_treatment_eligible"]), "meeting_treatment_eligible", _readBool, requiredField: false, nullable: false, defaultValue: false), "meeting_treatment_eligible"),
       meetingTreatmentReason: _readFieldValue<String>(_readField(json, const ["meeting_treatment_reason"]), "meeting_treatment_reason", _readString, requiredField: false, nullable: true),
       photos: _required(_readFieldValue<List<GeneratedConversationPhoto>>(_readField(json, const ["photos"]), "photos", (value) => _readObjectList(value, GeneratedConversationPhoto.fromJson), requiredField: false, nullable: false, defaultValue: const []), "photos"),
-      pluginsResults: _required(_readFieldValue<List<GeneratedPluginResult>>(_readField(json, const ["plugins_results"]), "plugins_results", (value) => _readObjectList(value, GeneratedPluginResult.fromJson), requiredField: false, nullable: false, defaultValue: const []), "plugins_results"),
       privateCloudSyncEnabled: _required(_readFieldValue<bool>(_readField(json, const ["private_cloud_sync_enabled"]), "private_cloud_sync_enabled", _readBool, requiredField: false, nullable: false, defaultValue: false), "private_cloud_sync_enabled"),
       processingConversationId: _readFieldValue<String>(_readField(json, const ["processing_conversation_id"]), "processing_conversation_id", _readString, requiredField: false, nullable: true),
       processingMemoryId: _readFieldValue<String>(_readField(json, const ["processing_memory_id"]), "processing_memory_id", _readString, requiredField: false, nullable: true),
@@ -995,7 +968,6 @@ class GeneratedConversation {
       'meeting_treatment_eligible': meetingTreatmentEligible,
       'meeting_treatment_reason': meetingTreatmentReason,
       'photos': photos.map((value) => value.toJson()).toList(),
-      'plugins_results': pluginsResults.map((value) => value.toJson()).toList(),
       'private_cloud_sync_enabled': privateCloudSyncEnabled,
       'processing_conversation_id': processingConversationId,
       'processing_memory_id': processingMemoryId,
@@ -1235,7 +1207,6 @@ class GeneratedConversationSearchItem {
   final bool meetingTreatmentEligible;
   final String? meetingTreatmentReason;
   final List<GeneratedConversationPhoto> photos;
-  final List<GeneratedPluginResult> pluginsResults;
   final bool privateCloudSyncEnabled;
   final String? processingConversationId;
   final String? processingMemoryId;
@@ -1284,7 +1255,6 @@ class GeneratedConversationSearchItem {
     this.meetingTreatmentEligible = false,
     this.meetingTreatmentReason,
     this.photos = const [],
-    this.pluginsResults = const [],
     this.privateCloudSyncEnabled = false,
     this.processingConversationId,
     this.processingMemoryId,
@@ -1335,7 +1305,6 @@ class GeneratedConversationSearchItem {
       meetingTreatmentEligible: _required(_readFieldValue<bool>(_readField(json, const ["meeting_treatment_eligible"]), "meeting_treatment_eligible", _readBool, requiredField: false, nullable: false, defaultValue: false), "meeting_treatment_eligible"),
       meetingTreatmentReason: _readFieldValue<String>(_readField(json, const ["meeting_treatment_reason"]), "meeting_treatment_reason", _readString, requiredField: false, nullable: true),
       photos: _required(_readFieldValue<List<GeneratedConversationPhoto>>(_readField(json, const ["photos"]), "photos", (value) => _readObjectList(value, GeneratedConversationPhoto.fromJson), requiredField: false, nullable: false, defaultValue: const []), "photos"),
-      pluginsResults: _required(_readFieldValue<List<GeneratedPluginResult>>(_readField(json, const ["plugins_results"]), "plugins_results", (value) => _readObjectList(value, GeneratedPluginResult.fromJson), requiredField: false, nullable: false, defaultValue: const []), "plugins_results"),
       privateCloudSyncEnabled: _required(_readFieldValue<bool>(_readField(json, const ["private_cloud_sync_enabled"]), "private_cloud_sync_enabled", _readBool, requiredField: false, nullable: false, defaultValue: false), "private_cloud_sync_enabled"),
       processingConversationId: _readFieldValue<String>(_readField(json, const ["processing_conversation_id"]), "processing_conversation_id", _readString, requiredField: false, nullable: true),
       processingMemoryId: _readFieldValue<String>(_readField(json, const ["processing_memory_id"]), "processing_memory_id", _readString, requiredField: false, nullable: true),
@@ -1387,7 +1356,6 @@ class GeneratedConversationSearchItem {
       'meeting_treatment_eligible': meetingTreatmentEligible,
       'meeting_treatment_reason': meetingTreatmentReason,
       'photos': photos.map((value) => value.toJson()).toList(),
-      'plugins_results': pluginsResults.map((value) => value.toJson()).toList(),
       'private_cloud_sync_enabled': privateCloudSyncEnabled,
       'processing_conversation_id': processingConversationId,
       'processing_memory_id': processingMemoryId,

@@ -15,26 +15,21 @@ from fakes.firestore import read_conversation, read_memories, seed_conversation,
 class TestLegacyFormatReading:
     """Current code can read old-format Firestore documents."""
 
-    def test_read_legacy_plugins_results(self, client, auth_headers, conversation_fixture):
+    def test_read_legacy_format(self, client, auth_headers, conversation_fixture):
         """
         Conversations with ``plugins_results`` (old format) are readable.
 
-        The Conversation model's __init__ auto-populates plugins_results
-        from apps_results for backward compatibility.
         """
 
-        legacy_conv = dict(conversation_fixture["legacy_plugins_results_format"])
+        legacy_conv = dict(conversation_fixture["legacy_format"])
         seed_conversation("123", legacy_conv)
 
         resp = client.get(f"/v1/conversations/{legacy_conv['id']}", headers=auth_headers)
         assert resp.status_code == 200, f"Failed to read legacy conversation: {resp.text}"
 
         body = resp.json()
-        # Should have both apps_results (empty list default) and plugins_results
-        assert "plugins_results" in body
+        # Should have apps_results
         assert "apps_results" in body
-        # Legacy data had plugins_results populated
-        assert isinstance(body["plugins_results"], list)
 
     def test_read_legacy_memory_format(self, client, auth_headers, memory_fixture):
         """Old-format memories (missing scoring, category mapping) are readable."""
@@ -57,7 +52,7 @@ class TestLegacyFormatReading:
         """
 
         new_conv = dict(conversation_fixture["current_format_conversation"])
-        legacy_conv = dict(conversation_fixture["legacy_plugins_results_format"])
+        legacy_conv = dict(conversation_fixture["legacy_format"])
 
         seed_conversation("123", new_conv)
         seed_conversation("123", legacy_conv)

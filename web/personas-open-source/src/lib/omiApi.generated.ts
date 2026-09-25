@@ -1165,7 +1165,6 @@ export interface Conversation {
   meeting_treatment_eligible?: boolean;
   meeting_treatment_reason?: string | null;
   photos?: Array<ConversationPhoto>;
-  plugins_results?: Array<PluginResult>;
   private_cloud_sync_enabled?: boolean;
   processing_conversation_id?: string | null;
   processing_memory_id?: string | null;
@@ -1349,7 +1348,6 @@ export interface ConversationSearchItem {
   meeting_treatment_eligible?: boolean;
   meeting_treatment_reason?: string | null;
   photos?: Array<ConversationPhoto>;
-  plugins_results?: Array<PluginResult>;
   private_cloud_sync_enabled?: boolean;
   processing_conversation_id?: string | null;
   processing_memory_id?: string | null;
@@ -3450,11 +3448,6 @@ export interface PlatformMinimumBuild {
   platform: string;
 }
 
-export interface PluginResult {
-  content: string;
-  plugin_id: string | null;
-}
-
 export interface PricingOption {
   description?: string | null;
   id: string;
@@ -3965,7 +3958,6 @@ export interface SharedConversationResponse {
   id: string;
   language?: string | null;
   people?: Array<SharedPerson>;
-  plugins_results?: Array<SharedPluginResult>;
   source?: ConversationSource | null;
   started_at: string | null;
   status?: ConversationStatus | null;
@@ -3993,11 +3985,6 @@ export interface SharedParticipant {
 export interface SharedPerson {
   id: string;
   name: string;
-}
-
-export interface SharedPluginResult {
-  content: string;
-  plugin_id: string | null;
 }
 
 export interface SharedStructured {
@@ -5553,7 +5540,6 @@ export interface OmiApiSchemas {
   "PlanLimits": PlanLimits;
   "PlanType": PlanType;
   "PlatformMinimumBuild": PlatformMinimumBuild;
-  "PluginResult": PluginResult;
   "PricingOption": PricingOption;
   "PrivateCloudSyncResponse": PrivateCloudSyncResponse;
   "ProactiveMaterializationDeferral": ProactiveMaterializationDeferral;
@@ -5636,7 +5622,6 @@ export interface OmiApiSchemas {
   "SharedEvent": SharedEvent;
   "SharedParticipant": SharedParticipant;
   "SharedPerson": SharedPerson;
-  "SharedPluginResult": SharedPluginResult;
   "SharedStructured": SharedStructured;
   "SharedTranscriptSegment": SharedTranscriptSegment;
   "ShortlistEligibility": ShortlistEligibility;

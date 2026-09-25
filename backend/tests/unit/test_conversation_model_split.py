@@ -21,12 +21,10 @@ class TestLocallyDefinedModelsImportable:
             CreateConversationResponse,
             CreateMemoryResponse,
             ExternalIntegrationCreateConversation,
-            PluginResult,
             UpdateConversation,
         )
 
         assert UpdateConversation().title is None
-        assert PluginResult(plugin_id="p1", content="c").content == "c"
         assert AppResult(app_id="a1", content="c").app_id == "a1"
 
     def test_request_response_models_importable(self):
@@ -390,25 +388,6 @@ class TestPhase3NarrowImports:
 
 class TestConversationInitSideEffects:
     """Conversation.__init__ backward-compat side effects."""
-
-    def test_apps_results_synced_to_plugins_results(self):
-        from models.conversation import AppResult, Conversation
-        from models.conversation_enums import ConversationSource
-        from models.structured import Structured
-
-        now = datetime.now(timezone.utc)
-        conv = Conversation(
-            id="side-effect-1",
-            created_at=now,
-            started_at=now,
-            finished_at=now,
-            source=ConversationSource.omi,
-            structured=Structured(title="Test"),
-            apps_results=[AppResult(app_id="app1", content="result1")],
-        )
-        assert len(conv.plugins_results) == 1
-        assert conv.plugins_results[0].plugin_id == "app1"
-        assert conv.plugins_results[0].content == "result1"
 
     def test_processing_conversation_id_synced_to_processing_memory_id(self):
         from models.conversation import Conversation
