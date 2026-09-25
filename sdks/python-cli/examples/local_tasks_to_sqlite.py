@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
-"""Convert Omi Desktop local tasks JSON exports into a relational SQLite database.
+"""Convert Omi Desktop local tasks JSON or search exports into a relational SQLite database.
 
 Usage:
-    # From a saved tasks JSON:
-    python local_tasks_to_sqlite.py tasks.json -o tasks.db
+    # From direct Desktop SQL export:
+    omi --json local sql "SELECT id, title, description, completed, created_at, updated_at, due_at, category FROM tasks" | python local_tasks_to_sqlite.py - -o tasks.db
 
-    # Piped directly from omi-cli local task search:
-    omi --json local task search "" --include-completed | python local_tasks_to_sqlite.py - -o tasks.db
+    # From semantic task search export (up to 10 top results):
+    omi --json local task search "meeting" --include-completed | python local_tasks_to_sqlite.py - -o tasks.db
+
+    # From a saved tasks JSON or search text export:
+    python local_tasks_to_sqlite.py tasks.json -o tasks.db
 
     # Re-running updates or merges new tasks without duplicating existing IDs:
     python local_tasks_to_sqlite.py day1.json day2.json -o tasks.db
@@ -17,7 +20,9 @@ Converts local task exports into indexed SQLite tables:
 
 Key features:
     - Pure Python 3.10+ standard library (zero external dependencies).
+    - Multi-format ingestion: parses structured JSON arrays, SQL rows, and CLI prose checklist search outputs.
     - Idempotent upsert: merges multiple runs or exports using primary key (id).
+    - Stable hash ID fallback for exports lacking explicit IDs to prevent collision across imports.
     - Streaming standard input (-) for seamless UNIX CLI piping.
     - Safe overwrite guard (--force required to overwrite existing DB).
 """
@@ -25,7 +30,9 @@ Key features:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import re
 import sqlite3
 import sys
 from pathlib import Path
@@ -50,44 +57,117 @@ CREATE INDEX IF NOT EXISTS idx_local_tasks_due_at ON local_tasks(due_at);
 CREATE INDEX IF NOT EXISTS idx_local_tasks_category ON local_tasks(category);
 """
 
+PROSE_TASK_RE = re.compile(r"^\s*(?:[-*]|\d+[\.\)])?\s*\[([ xX])\]\s*(.*?)(?:\s*\((.*?)\))?\s*$")
+
+
+def parse_prose_line(line: str, idx: int) -> Optional[Dict[str, Any]]:
+    """Parse a single prose task line (e.g. '1. [x] Task name (similarity: 0.9, id: abc)')."""
+    line = line.strip()
+    if not line:
+        return None
+    match = PROSE_TASK_RE.match(line)
+    if not match:
+        return None
+
+    comp_char, text, meta_str = match.groups()
+    completed = comp_char.lower() == "x"
+    description = text.strip()
+
+    meta_dict: Dict[str, str] = {}
+    if meta_str:
+        for part in meta_str.split(","):
+            if ":" in part:
+                k, v = part.split(":", 1)
+                meta_dict[k.strip().lower()] = v.strip()
+
+    task_id = meta_dict.get("id")
+    if not task_id:
+        h = hashlib.sha256((description or str(idx)).encode("utf-8")).hexdigest()[:12]
+        task_id = f"task_{h}"
+
+    category = meta_dict.get("source") or meta_dict.get("category") or "general"
+    item: Dict[str, Any] = {
+        "id": task_id,
+        "title": description,
+        "description": description,
+        "completed": completed,
+        "category": category,
+    }
+
+    similarity = meta_dict.get("similarity")
+    if similarity:
+        try:
+            item["similarity"] = float(similarity)
+        except ValueError:
+            pass
+
+    return item
+
 
 def parse_tasks_data(data: Any) -> List[Dict[str, Any]]:
-    """Parse raw JSON input into a list of task dictionaries."""
+    """Parse raw JSON input or CLI prose string into a list of task dictionaries."""
+    parsed = data
     if isinstance(data, str):
         try:
             parsed = json.loads(data)
-        except json.JSONDecodeError as exc:
-            raise ValueError(f"Invalid JSON data: {exc}") from exc
-    else:
-        parsed = data
+        except json.JSONDecodeError:
+            parsed = data
+
+    # Handle string input (raw text or JSON-encoded prose string from omi local task search)
+    if isinstance(parsed, str):
+        tasks: List[Dict[str, Any]] = []
+        for idx, line in enumerate(parsed.splitlines()):
+            t = parse_prose_line(line, idx)
+            if t:
+                tasks.append(t)
+        if not tasks:
+            raise ValueError("No valid task entries found in text input")
+        return tasks
 
     if isinstance(parsed, dict):
         if "tasks" in parsed and isinstance(parsed["tasks"], list):
             items = parsed["tasks"]
         elif "result" in parsed and isinstance(parsed["result"], list):
             items = parsed["result"]
-        elif "id" in parsed or "title" in parsed:
+        elif "rows" in parsed and isinstance(parsed["rows"], list):
+            items = parsed["rows"]
+        elif "data" in parsed and isinstance(parsed["data"], list):
+            items = parsed["data"]
+        elif "id" in parsed or "title" in parsed or "description" in parsed:
             items = [parsed]
         else:
-            raise ValueError("Expected a JSON array or object containing 'tasks'")
+            raise ValueError("Expected a JSON array or object containing 'tasks', 'result', 'rows', or 'data'")
     elif isinstance(parsed, list):
         items = parsed
     else:
         raise ValueError(f"Unexpected JSON root type: {type(parsed).__name__}")
 
-    tasks: List[Dict[str, Any]] = []
+    tasks = []
     for idx, item in enumerate(items):
-        if not isinstance(item, dict):
-            raise ValueError(f"Item at index {idx} is not a valid JSON object")
-        tasks.append(item)
+        if isinstance(item, str):
+            t = parse_prose_line(item, idx)
+            if t:
+                tasks.append(t)
+        elif isinstance(item, dict):
+            tasks.append(item)
+        else:
+            raise ValueError(f"Item at index {idx} is not a valid JSON object or task line")
     return tasks
 
 
-def normalize_task_record(item: Dict[str, Any], idx: int) -> Tuple[str, str, str, int, Optional[str], Optional[str], Optional[str], Optional[str], str]:
+def normalize_task_record(
+    item: Dict[str, Any], idx: int
+) -> Tuple[str, str, str, int, Optional[str], Optional[str], Optional[str], Optional[str], str]:
     """Normalize dictionary into a tuple suitable for SQLite insertion."""
-    task_id = str(item.get("id") or item.get("task_id") or f"task_{idx}").strip()
-    title = str(item.get("title") or item.get("description") or "Untitled Task").strip()
+    title = str(item.get("title") or item.get("description") or f"Untitled Task {idx}").strip()
     desc = str(item.get("description") or "").strip()
+
+    raw_id = item.get("id") or item.get("task_id")
+    if raw_id:
+        task_id = str(raw_id).strip()
+    else:
+        h = hashlib.sha256((title or str(idx)).encode("utf-8")).hexdigest()[:12]
+        task_id = f"task_{h}"
 
     # Handle completed boolean
     comp_val = item.get("completed")
@@ -103,7 +183,7 @@ def normalize_task_record(item: Dict[str, Any], idx: int) -> Tuple[str, str, str
     created_at = str(item.get("created_at") or "").strip() or None
     updated_at = str(item.get("updated_at") or "").strip() or None
     due_at = str(item.get("due_at") or item.get("due_date") or "").strip() or None
-    category = str(item.get("category") or "general").strip() or None
+    category = str(item.get("category") or item.get("source") or "general").strip() or None
     raw_json = json.dumps(item, ensure_ascii=False)
 
     return (task_id, title, desc, completed, created_at, updated_at, due_at, category, raw_json)
@@ -167,14 +247,14 @@ def load_input_sources(inputs: Sequence[str]) -> List[Dict[str, Any]]:
 def build_parser() -> argparse.ArgumentParser:
     """Construct CLI argument parser."""
     parser = argparse.ArgumentParser(
-        description="Convert Omi Desktop local tasks JSON exports to SQLite database.",
+        description="Convert Omi Desktop local tasks JSON or search exports to SQLite database.",
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     parser.add_argument(
         "inputs",
         nargs="*",
         default=["-"],
-        help="Input JSON file path(s), or '-' to read from standard input (default: -).",
+        help="Input JSON or search text file path(s), or '-' to read from standard input (default: -).",
     )
     parser.add_argument(
         "-o",

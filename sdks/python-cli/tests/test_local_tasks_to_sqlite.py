@@ -2,7 +2,7 @@
 """Tests for local tasks to SQLite database converter.
 
 Pins table schema, index creation, normalization, deduplication/upsert,
-stdin piping, and overwrite protection.
+stdin piping, search checklist prose parsing, and overwrite protection.
 """
 
 from __future__ import annotations
@@ -31,6 +31,7 @@ import_tasks_to_db = t2s.import_tasks_to_db
 main = t2s.main
 normalize_task_record = t2s.normalize_task_record
 parse_tasks_data = t2s.parse_tasks_data
+parse_prose_line = t2s.parse_prose_line
 
 
 class TestLocalTasksToSqlite(unittest.TestCase):
@@ -38,6 +39,37 @@ class TestLocalTasksToSqlite(unittest.TestCase):
         self.assertEqual(len(parse_tasks_data([{"id": "t1"}])), 1)
         self.assertEqual(len(parse_tasks_data({"tasks": [{"id": "t2"}]})), 1)
         self.assertEqual(len(parse_tasks_data({"result": [{"id": "t3"}]})), 1)
+        self.assertEqual(len(parse_tasks_data({"rows": [{"id": "t4"}]})), 1)
+        self.assertEqual(len(parse_tasks_data({"data": [{"id": "t5"}]})), 1)
+
+    def test_parse_prose_search_output(self):
+        raw_output = (
+            "1. [x] Review spec (similarity: 0.91, id: abc, source: action_items)\n"
+            "2. [ ] Write documentation (similarity: 0.85, id: def, source: work)\n"
+        )
+        parsed = parse_tasks_data(raw_output)
+        self.assertEqual(len(parsed), 2)
+        self.assertEqual(parsed[0]["id"], "abc")
+        self.assertEqual(parsed[0]["title"], "Review spec")
+        self.assertTrue(parsed[0]["completed"])
+        self.assertEqual(parsed[0]["category"], "action_items")
+        self.assertEqual(parsed[0]["similarity"], 0.91)
+
+        self.assertEqual(parsed[1]["id"], "def")
+        self.assertEqual(parsed[1]["title"], "Write documentation")
+        self.assertFalse(parsed[1]["completed"])
+        self.assertEqual(parsed[1]["category"], "work")
+
+    def test_parse_json_encoded_prose_string(self):
+        raw_output = (
+            "1. [x] Buy groceries (id: task_g1)\n"
+            "2. [ ] Book flight (id: task_f2)\n"
+        )
+        json_wrapped = json.dumps(raw_output)
+        parsed = parse_tasks_data(json_wrapped)
+        self.assertEqual(len(parsed), 2)
+        self.assertEqual(parsed[0]["id"], "task_g1")
+        self.assertEqual(parsed[1]["id"], "task_f2")
 
     def test_normalize_task_record(self):
         item = {
@@ -57,6 +89,18 @@ class TestLocalTasksToSqlite(unittest.TestCase):
         self.assertEqual(rec[4], "2026-09-24T10:00:00Z")
         self.assertEqual(rec[6], "2026-09-25T12:00:00Z")
         self.assertEqual(rec[7], "bugs")
+
+    def test_deterministic_id_fallback(self):
+        item1 = {"title": "Task Alpha"}
+        item2 = {"title": "Task Beta"}
+        rec1 = normalize_task_record(item1, 0)
+        rec2 = normalize_task_record(item2, 1)
+        self.assertTrue(rec1[0].startswith("task_"))
+        self.assertTrue(rec2[0].startswith("task_"))
+        self.assertNotEqual(rec1[0], rec2[0])
+        # Verify idempotency of hash derivation
+        rec1_again = normalize_task_record(item1, 5)
+        self.assertEqual(rec1[0], rec1_again[0])
 
     def test_import_tasks_to_db_and_query(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -101,6 +145,24 @@ class TestLocalTasksToSqlite(unittest.TestCase):
             code = main([str(in_file), "-o", str(out_db)])
             self.assertEqual(code, 0)
             self.assertTrue(out_db.exists())
+
+    def test_cli_end_to_end_prose_file(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            tmppath = Path(tmpdir)
+            in_file = tmppath / "search_results.txt"
+            out_db = tmppath / "prose.db"
+
+            in_file.write_text("1. [x] Clean workspace (id: cw-1, similarity: 0.99)\n", encoding="utf-8")
+            code = main([str(in_file), "-o", str(out_db)])
+            self.assertEqual(code, 0)
+            self.assertTrue(out_db.exists())
+
+            conn = sqlite3.connect(out_db)
+            cur = conn.cursor()
+            cur.execute("SELECT id, title, completed FROM local_tasks")
+            row = cur.fetchone()
+            self.assertEqual(row, ("cw-1", "Clean workspace", 1))
+            conn.close()
 
     def test_cli_overwrite_guard(self):
         with tempfile.TemporaryDirectory() as tmpdir:
