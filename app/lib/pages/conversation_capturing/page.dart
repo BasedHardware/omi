@@ -551,7 +551,9 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
   /// The live-capture empty state names only what this session can actually
   /// produce, and swaps in a truthful state line when the transcript pipeline
   /// is degraded instead of promising "waiting" forever (#14473): an
-  /// out-of-credits plan can never produce a transcript while waiting, an
+  /// out-of-credits plan can never produce a transcript while waiting, a
+  /// terminal STT failure means the audio is only being saved (the shared
+  /// outage sentence — the app bar names the same moment the same way), an
   /// offline device is waiting on the network, and `interrupted` means the
   /// transcription socket dropped and is reconnecting.
   String _liveCaptureEmptyStateText(
@@ -562,6 +564,9 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
     required bool transcriptionInterrupted,
   }) {
     if (usage.isOutOfCredits) return context.l10n.transcriptionUnavailableRecordingSaved;
+    if (provider.terminalTranscriptionFailure != null) {
+      return context.l10n.transcriptionUnavailableRecordingContinues;
+    }
     if (!connectivity.isConnected) return context.l10n.recordingOfflineTranscriptWillCatchUp;
     if (transcriptionInterrupted) return context.l10n.transcriptionPausedReconnecting;
     if (!photoChannelActive) return context.l10n.listeningTranscriptWillAppear;
