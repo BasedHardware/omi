@@ -11094,7 +11094,6 @@
     "addToClaudeCodeConfig": "Додај у ~/.claude.json",
     "claudeDesktopConnectorSetup": "На Claude Desktop → Settings → Connectors додајте прилагођени конектор и налепите URL сервера. Ако Claude тражи напредни OAuth Client ID, користите вредност испод и оставите тајну празном — никада не користите свој MCP API кључ као OAuth тајну.",
     "transcriptionUnavailableRecordingContinues": "Транскрипције нису доступне, снимање се наставља на уређају и биће обрађено касније",
-    "transcriptionUnavailableSavingOnDevice": "Транскрипција недоступна · чува се на уређају",
     "transcriptionsPendingFraction": "Транскрипције на чекању {pending}/{total}",
     "transcriptionsPendingCount": "Транскрипције на чекању {count}",
     "captureSourceCall": "Позив",
@@ -11112,5 +11111,11 @@
     "recordWith": "Снимај помоћу",
     "moreWaysToRecord": "Више начина снимања",
     "openCall": "Отвори позив",
-    "captureRecoveryBanner": "Звук привеска не стиже до апликације — додирните за поправку"
+    "captureRecoveryBanner": "Звук привеска не стиже до апликације — додирните за поправку",
+    "captureNotTranscribing": "Нема транскрипције",
+    "captureAudioSavedTranscribesLater": "Звук је сачуван, транскрипција касније",
+    "captureStillRecording": "Снимање се наставља",
+    "captureMicInUseElsewhere": "Микрофон користи друга апликација",
+    "captureMicInterruptedDetail": "Позив или друга апликација преузела је микрофон, па Omi тренутно не чује. Omi ће сам наставити кад микрофон буде слободан. Све снимљено до сада је безбедно.",
+    "captureCustomSttUnreachableDetail": "Ваша прилагођена услуга претварања говора у текст није доступна. Omi чува звук на овом телефону и послаће га кад се услуга врати. Ништа се не губи."
 }

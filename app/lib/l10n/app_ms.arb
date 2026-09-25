@@ -3528,7 +3528,6 @@
     "addToClaudeCodeConfig": "Tambah ke ~/.claude.json",
     "claudeDesktopConnectorSetup": "Di Claude Desktop → Settings → Connectors, tambahkan penyambung tersuai dan tampal URL pelayan. Jika Claude meminta OAuth Client ID lanjutan, gunakan nilai di bawah dan biarkan rahsia kosong — jangan sesekali gunakan kunci API MCP anda sebagai rahsia OAuth.",
     "transcriptionUnavailableRecordingContinues": "Transkripsi tidak tersedia, rakaman diteruskan pada peranti dan akan diproses kemudian",
-    "transcriptionUnavailableSavingOnDevice": "Transkripsi tidak tersedia · disimpan pada peranti",
     "transcriptionsPendingFraction": "Transkripsi tertunggak {pending}/{total}",
     "transcriptionsPendingCount": "Transkripsi tertunggak {count}",
     "captureSourceCall": "Panggilan",
@@ -3546,5 +3545,11 @@
     "recordWith": "Rakam dengan",
     "moreWaysToRecord": "Lebih banyak cara merakam",
     "openCall": "Buka panggilan",
-    "captureRecoveryBanner": "Audio loket tidak sampai ke aplikasi — ketik untuk membaiki"
+    "captureRecoveryBanner": "Audio loket tidak sampai ke aplikasi — ketik untuk membaiki",
+    "captureNotTranscribing": "Tiada transkripsi",
+    "captureAudioSavedTranscribesLater": "Audio disimpan, ditranskripsi kemudian",
+    "captureStillRecording": "Masih merakam",
+    "captureMicInUseElsewhere": "Mikrofon digunakan oleh apl lain",
+    "captureMicInterruptedDetail": "Panggilan atau apl lain sedang menggunakan mikrofon, jadi Omi tidak dapat mendengar sekarang. Omi akan bersambung sendiri apabila mikrofon bebas. Semua yang dirakam sebelum ini selamat.",
+    "captureCustomSttUnreachableDetail": "Perkhidmatan pertuturan-ke-teks tersuai anda tidak dapat dicapai. Omi menyimpan audio pada telefon ini dan menghantarnya apabila perkhidmatan kembali. Tiada apa yang hilang."
 }

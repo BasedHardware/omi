@@ -48,19 +48,36 @@ void main() {
     );
   });
 
-  test('the transcription outage says recording continues; the compact variant stays short', () {
+  test('the transcription outage says recording continues', () {
     expect(
       captureStateLabel(l10n, CaptureDisplayState.transcriptionUnavailable),
       'Transcriptions are unavailable, recording continues on device and will process later',
     );
-    expect(
-      captureStateLabel(l10n, CaptureDisplayState.transcriptionUnavailable, compact: true),
-      'Transcription unavailable · saving on device',
-    );
-    // Compact only affects the outage sentence; other states are identical either way.
-    expect(
-      captureStateLabel(l10n, CaptureDisplayState.paused, compact: true),
-      captureStateLabel(l10n, CaptureDisplayState.paused),
-    );
+  });
+
+  test('the Home card: a short status, the consequence, and an explanation for problems only', () {
+    final outage = captureCardCopy(l10n, CaptureDisplayState.transcriptionUnavailable);
+    expect(outage.status, 'Not transcribing');
+    expect(outage.detail, 'Audio saved, transcribes later');
+    expect(outage.explanation, l10n.transcriptionUnavailableRecordingContinues);
+    expect(outage.warning, isTrue);
+
+    final reconnecting = captureCardCopy(l10n, CaptureDisplayState.reconnecting);
+    expect(reconnecting.status, 'Reconnecting…');
+    expect(reconnecting.detail, 'Still recording');
+    expect(reconnecting.warning, isTrue);
+
+    expect(captureCardCopy(l10n, CaptureDisplayState.bufferingOffline).status, 'Offline');
+
+    // A pause the reader chose is not a problem; one the OS forced is explained.
+    final userPause = captureCardCopy(l10n, CaptureDisplayState.paused);
+    expect(userPause.status, 'Paused');
+    expect(userPause.warning, isFalse);
+    final micTaken = captureCardCopy(l10n, CaptureDisplayState.paused, micTaken: true);
+    expect(micTaken.status, 'Paused');
+    expect(micTaken.detail, 'Mic in use by another app');
+    expect(micTaken.warning, isTrue);
+
+    expect(captureCardCopy(l10n, CaptureDisplayState.listening).warning, isFalse);
   });
 }

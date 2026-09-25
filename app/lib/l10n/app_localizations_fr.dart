@@ -11268,9 +11268,6 @@ class AppLocalizationsFr extends AppLocalizations {
       'Les transcriptions sont indisponibles, l\'enregistrement continue sur l\'appareil et sera traité plus tard';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'Transcription indisponible · enregistrement sur l\'appareil';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'Transcriptions en attente $pending/$total';
   }
@@ -11329,4 +11326,24 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Le son du pendentif n\'arrive pas à l\'application — touchez pour réparer';
+
+  @override
+  String get captureNotTranscribing => 'Pas de transcription';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Audio enregistré, transcrit plus tard';
+
+  @override
+  String get captureStillRecording => 'Enregistrement en cours';
+
+  @override
+  String get captureMicInUseElsewhere => 'Micro utilisé par une autre app';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Un appel ou une autre app utilise le micro, Omi ne peut donc pas écouter pour le moment. Omi reprendra tout seul dès que le micro sera libre. Tout ce qui a été enregistré avant est en sécurité.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Votre service de reconnaissance vocale personnalisé est injoignable. Omi garde l\'audio sur ce téléphone et l\'enverra quand le service sera de retour. Rien n\'est perdu.';
 }

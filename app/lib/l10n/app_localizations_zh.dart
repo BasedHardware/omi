@@ -10968,9 +10968,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get transcriptionUnavailableRecordingContinues => '转录暂不可用，录音仍在设备上继续，稍后会进行处理';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => '转录不可用 · 正在设备上保存';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return '待处理转录 $pending/$total';
   }
@@ -11029,4 +11026,22 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => '吊坠音频未送达应用 — 轻点以修复';
+
+  @override
+  String get captureNotTranscribing => '未在转录';
+
+  @override
+  String get captureAudioSavedTranscribesLater => '音频已保存，稍后转录';
+
+  @override
+  String get captureStillRecording => '仍在录音';
+
+  @override
+  String get captureMicInUseElsewhere => '麦克风被其他应用占用';
+
+  @override
+  String get captureMicInterruptedDetail => '通话或其他应用占用了麦克风，因此 Omi 现在无法收音。麦克风空闲后 Omi 会自动继续。此前录下的内容都已保存。';
+
+  @override
+  String get captureCustomSttUnreachableDetail => '无法连接到你的自定义语音转文字服务。Omi 会把音频保存在这部手机上，服务恢复后再发送。不会丢失任何内容。';
 }

@@ -42,6 +42,11 @@ class _StubPhoneCallProvider extends ChangeNotifier implements PhoneCallProvider
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+class _SocketUpCaptureProvider extends CaptureProvider {
+  @override
+  bool get transcriptServiceReady => true;
+}
+
 void main() {
   setUpAll(() async {
     TestWidgetsFlutterBinding.ensureInitialized();
@@ -109,48 +114,56 @@ void main() {
       expect(captureProvider.recordingState, RecordingState.record);
       expect(captureProvider.terminalTranscriptionFailure?.status, 'stt_failed');
       final context = tester.element(find.byType(ConversationCaptureWidget));
-      // The compact card carries the short "saving on device" variant; the full
-      // recording-continues sentence belongs to the capturing page.
-      expect(find.text(AppLocalizations.of(context).transcriptionUnavailableSavingOnDevice), findsWidgets);
+      // The card carries the short status; the full recording-continues sentence belongs to the
+      // capturing page and the card's details sheet.
+      expect(find.text(AppLocalizations.of(context).captureNotTranscribing), findsWidgets);
       expect(find.text(AppLocalizations.of(context).transcriptionUnavailableRecordingContinues), findsNothing);
 
       captureProvider.onMessageEventReceived(MessageServiceStatusEvent(status: 'ready'));
       await tester.pump();
 
-      expect(find.text(AppLocalizations.of(context).transcriptionUnavailableSavingOnDevice), findsNothing);
+      expect(find.text(AppLocalizations.of(context).captureNotTranscribing), findsNothing);
       expect(find.text(AppLocalizations.of(context).listening), findsWidgets);
     });
 
     testWidgets('shows Paused for non-call audio interruption (#4706)', (tester) async {
-      final captureProvider = CaptureProvider();
+      // The transcription socket is up, so this is not a dropped connection: the OS or another app
+      // took the microphone (other-app audio / silent stall path, not an active phone call).
+      final captureProvider = _SocketUpCaptureProvider();
       addTearDown(captureProvider.dispose);
-      // recordingState=interrupted without micInterrupted → isCallActive is false
-      // (other-app audio / silent stall path, not an active phone call).
       captureProvider.updateRecordingState(RecordingState.interrupted);
       expect(captureProvider.isCallActive, isFalse);
 
       await pumpCaptureWidget(tester, captureProvider);
 
       final context = tester.element(find.byType(ConversationCaptureWidget));
-      final pausedText = AppLocalizations.of(context).paused;
-      final listeningText = AppLocalizations.of(context).listening;
+      final l10n = AppLocalizations.of(context);
 
-      expect(find.text(pausedText), findsWidgets);
-      expect(find.text(listeningText), findsNothing);
-      // Paused affordance: the warning (amber) status dot. The OS owns an audio interruption and
-      // resumes capture itself, so the card offers no Pause/Resume control for it.
-      expect(
-        find.byWidgetPredicate((w) {
-          if (w is! Container) return false;
-          final d = w.decoration;
-          return d is BoxDecoration &&
-              d.color == OmiColors.warning &&
-              d.shape == BoxShape.circle &&
-              w.constraints?.maxWidth == 8;
-        }),
-        findsOneWidget,
-      );
+      expect(find.text(l10n.paused), findsWidgets);
+      expect(find.text(l10n.listening), findsNothing);
+      // Not a pause the reader chose: a warning glyph and the cause, never a status dot. The OS owns
+      // an audio interruption and resumes capture itself, so the card offers no Pause/Resume for it.
+      expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget);
+      expect(find.textContaining(l10n.captureMicInUseElsewhere), findsOneWidget);
       expect(find.byType(OmiIconButton), findsNothing);
+    });
+
+    testWidgets('a dropped transcription socket reads Reconnecting, not Paused', (tester) async {
+      // The controller flips phone `record` to `interrupted` when the socket closes and reconnects
+      // while the microphone keeps recording.
+      final captureProvider = CaptureProvider();
+      addTearDown(captureProvider.dispose);
+      captureProvider.updateRecordingState(RecordingState.interrupted);
+      expect(captureProvider.isCallActive, isFalse);
+      expect(captureProvider.transcriptServiceReady, isFalse);
+
+      await pumpCaptureWidget(tester, captureProvider);
+
+      final l10n = AppLocalizations.of(tester.element(find.byType(ConversationCaptureWidget)));
+      expect(find.text(l10n.reconnecting), findsOneWidget);
+      expect(find.textContaining(l10n.captureStillRecording), findsOneWidget);
+      expect(find.text(l10n.paused), findsNothing);
+      expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget);
     });
 
     testWidgets('shows Listening during phone mic recording when transcription is down', (tester) async {

@@ -11187,9 +11187,6 @@ class AppLocalizationsSr extends AppLocalizations {
       'Транскрипције нису доступне, снимање се наставља на уређају и биће обрађено касније';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'Транскрипција недоступна · чува се на уређају';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'Транскрипције на чекању $pending/$total';
   }
@@ -11248,4 +11245,24 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Звук привеска не стиже до апликације — додирните за поправку';
+
+  @override
+  String get captureNotTranscribing => 'Нема транскрипције';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Звук је сачуван, транскрипција касније';
+
+  @override
+  String get captureStillRecording => 'Снимање се наставља';
+
+  @override
+  String get captureMicInUseElsewhere => 'Микрофон користи друга апликација';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Позив или друга апликација преузела је микрофон, па Omi тренутно не чује. Omi ће сам наставити кад микрофон буде слободан. Све снимљено до сада је безбедно.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Ваша прилагођена услуга претварања говора у текст није доступна. Omi чува звук на овом телефону и послаће га кад се услуга врати. Ништа се не губи.';
 }

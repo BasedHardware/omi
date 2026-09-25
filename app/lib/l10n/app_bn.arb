@@ -11094,7 +11094,6 @@
     "addToClaudeCodeConfig": "~/.claude.json এ যোগ করুন",
     "claudeDesktopConnectorSetup": "Claude Desktop → Settings → Connectors-এ একটি কাস্টম কানেক্টর যোগ করুন এবং সার্ভার URL পেস্ট করুন। Claude যদি অ্যাডভান্সড OAuth Client ID চায়, নিচের মানটি ব্যবহার করুন এবং সিক্রেট খালি রাখুন — OAuth সিক্রেট হিসেবে আপনার MCP API কী কখনোই ব্যবহার করবেন না।",
     "transcriptionUnavailableRecordingContinues": "ট্রান্সক্রিপশন অনুপলব্ধ, ডিভাইসে রেকর্ডিং চলছে এবং পরে প্রসেস করা হবে",
-    "transcriptionUnavailableSavingOnDevice": "ট্রান্সক্রিপশন অনুপলব্ধ · ডিভাইসে সংরক্ষণ হচ্ছে",
     "transcriptionsPendingFraction": "অপেক্ষমাণ ট্রান্সক্রিপশন {pending}/{total}",
     "transcriptionsPendingCount": "অপেক্ষমাণ ট্রান্সক্রিপশন {count}",
     "captureSourceCall": "কল",
@@ -11112,5 +11111,11 @@
     "recordWith": "রেকর্ডের মাধ্যম",
     "moreWaysToRecord": "রেকর্ড করার আরও উপায়",
     "openCall": "কল খুলুন",
-    "captureRecoveryBanner": "পেন্ডেন্টের অডিও অ্যাপে পৌঁছাচ্ছে না — মেরামত করতে ট্যাপ করুন"
+    "captureRecoveryBanner": "পেন্ডেন্টের অডিও অ্যাপে পৌঁছাচ্ছে না — মেরামত করতে ট্যাপ করুন",
+    "captureNotTranscribing": "ট্রান্সক্রিপশন হচ্ছে না",
+    "captureAudioSavedTranscribesLater": "অডিও সংরক্ষিত, পরে ট্রান্সক্রাইব হবে",
+    "captureStillRecording": "এখনও রেকর্ড হচ্ছে",
+    "captureMicInUseElsewhere": "মাইক অন্য অ্যাপ ব্যবহার করছে",
+    "captureMicInterruptedDetail": "একটি কল বা অন্য অ্যাপ মাইক্রোফোন নিয়েছে, তাই Omi এখন শুনতে পাচ্ছে না। মাইক্রোফোন খালি হলে Omi নিজে থেকেই আবার শুরু করবে। এর আগে যা রেকর্ড হয়েছে তা নিরাপদ।",
+    "captureCustomSttUnreachableDetail": "আপনার কাস্টম স্পিচ-টু-টেক্সট পরিষেবায় পৌঁছানো যাচ্ছে না। Omi অডিও এই ফোনে রাখছে এবং পরিষেবা ফিরে এলে পাঠাবে। কিছুই হারাবে না।"
 }

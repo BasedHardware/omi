@@ -11235,9 +11235,6 @@ class AppLocalizationsIt extends AppLocalizations {
       'Trascrizioni non disponibili, la registrazione continua sul dispositivo e verrà elaborata più tardi';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'Trascrizione non disponibile · salvataggio sul dispositivo';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'Trascrizioni in attesa $pending/$total';
   }
@@ -11296,4 +11293,24 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'L\'audio del ciondolo non arriva all\'app — tocca per riparare';
+
+  @override
+  String get captureNotTranscribing => 'Nessuna trascrizione';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Audio salvato, trascritto più tardi';
+
+  @override
+  String get captureStillRecording => 'Registrazione in corso';
+
+  @override
+  String get captureMicInUseElsewhere => 'Microfono in uso da un\'altra app';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Una chiamata o un\'altra app sta usando il microfono, quindi Omi ora non può ascoltare. Omi riprenderà da solo quando il microfono sarà libero. Tutto ciò che è stato registrato prima è al sicuro.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Il tuo servizio personalizzato di trascrizione vocale non è raggiungibile. Omi conserva l\'audio su questo telefono e lo invierà quando il servizio tornerà. Non si perde nulla.';
 }

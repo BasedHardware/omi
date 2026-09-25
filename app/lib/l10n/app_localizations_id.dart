@@ -11182,9 +11182,6 @@ class AppLocalizationsId extends AppLocalizations {
       'Transkripsi tidak tersedia, perekaman berlanjut di perangkat dan akan diproses nanti';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'Transkripsi tidak tersedia · disimpan di perangkat';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'Transkripsi tertunda $pending/$total';
   }
@@ -11243,4 +11240,24 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Audio pendant tidak sampai ke aplikasi — ketuk untuk memperbaiki';
+
+  @override
+  String get captureNotTranscribing => 'Tidak mentranskripsi';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Audio disimpan, ditranskripsi nanti';
+
+  @override
+  String get captureStillRecording => 'Masih merekam';
+
+  @override
+  String get captureMicInUseElsewhere => 'Mikrofon dipakai aplikasi lain';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Panggilan atau aplikasi lain sedang memakai mikrofon, jadi Omi tidak bisa mendengar sekarang. Omi akan lanjut sendiri saat mikrofon sudah bebas. Semua yang direkam sebelumnya aman.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Layanan ucapan-ke-teks kustom Anda tidak dapat dijangkau. Omi menyimpan audio di ponsel ini dan mengirimnya saat layanan kembali. Tidak ada yang hilang.';
 }

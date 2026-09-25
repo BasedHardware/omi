@@ -3528,7 +3528,6 @@
     "addToClaudeCodeConfig": "Добавяне към ~/.claude.json",
     "claudeDesktopConnectorSetup": "В Claude Desktop → Settings → Connectors добавете персонализиран конектор и поставете URL адреса на сървъра. Ако Claude поиска разширен OAuth Client ID, използвайте стойността по-долу и оставете тайната празна — никога не използвайте вашия MCP API ключ като OAuth тайна.",
     "transcriptionUnavailableRecordingContinues": "Транскрипциите са недостъпни, записването продължава на устройството и ще бъде обработено по-късно",
-    "transcriptionUnavailableSavingOnDevice": "Транскрипцията е недостъпна · записва се на устройството",
     "transcriptionsPendingFraction": "Чакащи транскрипции {pending}/{total}",
     "transcriptionsPendingCount": "Чакащи транскрипции {count}",
     "captureSourceCall": "Обаждане",
@@ -3546,5 +3545,11 @@
     "recordWith": "Запис с",
     "moreWaysToRecord": "Още начини за запис",
     "openCall": "Отвори обаждането",
-    "captureRecoveryBanner": "Звукът от висулката не достига до приложението — докоснете, за да поправите"
+    "captureRecoveryBanner": "Звукът от висулката не достига до приложението — докоснете, за да поправите",
+    "captureNotTranscribing": "Без транскрипция",
+    "captureAudioSavedTranscribesLater": "Аудиото е запазено, транскрипция по-късно",
+    "captureStillRecording": "Записът продължава",
+    "captureMicInUseElsewhere": "Микрофонът се използва от друго приложение",
+    "captureMicInterruptedDetail": "Обаждане или друго приложение зае микрофона, затова Omi не може да чува в момента. Omi ще продължи сам, когато микрофонът се освободи. Всичко записано дотук е запазено.",
+    "captureCustomSttUnreachableDetail": "Вашата собствена услуга за преобразуване на реч в текст е недостъпна. Omi пази аудиото на този телефон и ще го изпрати, когато услугата се върне. Нищо не се губи."
 }

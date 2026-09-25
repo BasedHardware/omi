@@ -11158,9 +11158,6 @@ class AppLocalizationsDa extends AppLocalizations {
       'Transskriptioner er utilgængelige, optagelsen fortsætter på enheden og behandles senere';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'Transskription utilgængelig · gemmes på enheden';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'Transskriptioner i kø $pending/$total';
   }
@@ -11219,4 +11216,24 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Lyden fra vedhænget når ikke frem til appen — tryk for at reparere';
+
+  @override
+  String get captureNotTranscribing => 'Transskriberer ikke';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Lyd gemt, transskriberes senere';
+
+  @override
+  String get captureStillRecording => 'Optager stadig';
+
+  @override
+  String get captureMicInUseElsewhere => 'Mikrofonen bruges af en anden app';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Et opkald eller en anden app har overtaget mikrofonen, så Omi kan ikke høre lige nu. Omi fortsætter af sig selv, når mikrofonen er ledig. Alt optaget før dette er i sikkerhed.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Din egen tale-til-tekst-tjeneste kan ikke nås. Omi gemmer lyden på denne telefon og sender den, når tjenesten er tilbage. Intet går tabt.';
 }

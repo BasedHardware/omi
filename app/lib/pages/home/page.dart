@@ -809,6 +809,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                                   }
                                 },
                               ),
+                              if (home.selectedIndex == 0) const HomeChatBarBackdrop(),
                               if (home.selectedIndex == 0)
                                 Positioned(
                                   left: 16,

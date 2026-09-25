@@ -11169,9 +11169,6 @@ class AppLocalizationsCs extends AppLocalizations {
       'Přepisy nejsou k dispozici, nahrávání pokračuje v zařízení a později se zpracuje';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'Přepis není k dispozici · ukládá se v zařízení';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'Čekající přepisy $pending/$total';
   }
@@ -11230,4 +11227,24 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Zvuk přívěsku se do aplikace nedostává — opravte klepnutím';
+
+  @override
+  String get captureNotTranscribing => 'Nepřepisuje se';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Zvuk uložen, přepíše se později';
+
+  @override
+  String get captureStillRecording => 'Stále se nahrává';
+
+  @override
+  String get captureMicInUseElsewhere => 'Mikrofon používá jiná aplikace';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Hovor nebo jiná aplikace převzala mikrofon, takže Omi teď neslyší. Omi bude pokračovat sám, jakmile se mikrofon uvolní. Vše nahrané předtím je v bezpečí.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Vaše vlastní služba převodu řeči na text není dostupná. Omi uchovává zvuk v tomto telefonu a odešle ho, až bude služba opět k dispozici. Nic se neztratí.';
 }

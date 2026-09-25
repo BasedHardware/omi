@@ -11209,9 +11209,6 @@ class AppLocalizationsRu extends AppLocalizations {
       'Транскрипция недоступна, запись продолжается на устройстве и будет обработана позже';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'Транскрипция недоступна · сохраняется на устройстве';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'Транскрипций в ожидании $pending/$total';
   }
@@ -11270,4 +11267,24 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Звук кулона не доходит до приложения — нажмите, чтобы исправить';
+
+  @override
+  String get captureNotTranscribing => 'Нет расшифровки';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Аудио сохранено, расшифруется позже';
+
+  @override
+  String get captureStillRecording => 'Запись продолжается';
+
+  @override
+  String get captureMicInUseElsewhere => 'Микрофон занят другим приложением';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Звонок или другое приложение заняли микрофон, поэтому Omi сейчас не слышит. Omi продолжит сам, когда микрофон освободится. Всё, что записано до этого, сохранено.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Ваш собственный сервис распознавания речи недоступен. Omi хранит аудио на этом телефоне и отправит его, когда сервис заработает. Ничего не потеряется.';
 }

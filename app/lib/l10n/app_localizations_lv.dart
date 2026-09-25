@@ -11199,9 +11199,6 @@ class AppLocalizationsLv extends AppLocalizations {
       'Transkripcijas nav pieejamas, ierakstīšana turpinās ierīcē un tiks apstrādāta vēlāk';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'Transkripcija nav pieejama · tiek saglabāta ierīcē';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'Gaidošas transkripcijas $pending/$total';
   }
@@ -11260,4 +11257,24 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Kulona audio nesasniedz lietotni — pieskarieties, lai salabotu';
+
+  @override
+  String get captureNotTranscribing => 'Netiek transkribēts';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Audio saglabāts, tiks transkribēts vēlāk';
+
+  @override
+  String get captureStillRecording => 'Ierakstīšana turpinās';
+
+  @override
+  String get captureMicInUseElsewhere => 'Mikrofonu izmanto cita lietotne';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Zvans vai cita lietotne aizņēma mikrofonu, tāpēc Omi pašlaik nedzird. Omi turpinās pats, kad mikrofons būs brīvs. Viss, kas ierakstīts līdz šim, ir drošībā.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Jūsu pielāgotais runas pārveides tekstā pakalpojums nav sasniedzams. Omi glabā audio šajā tālrunī un nosūtīs to, kad pakalpojums atjaunosies. Nekas netiek zaudēts.';
 }

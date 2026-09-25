@@ -3528,7 +3528,6 @@
     "addToClaudeCodeConfig": "Lisää ~/.claude.json-tiedostoon",
     "claudeDesktopConnectorSetup": "Lisää Claude Desktop → Settings → Connectors-palvelussa mukautettu liitin ja liitä palvelimen URL-osoite. Jos Claude pyytää edistynyttä OAuth Client ID:tä, käytä alla olevaa arvoa ja jätä salaisuus tyhjäksi — älä koskaan käytä MCP API -avaintasi OAuth-salaisuuksena.",
     "transcriptionUnavailableRecordingContinues": "Transkriptiot eivät ole käytettävissä, tallennus jatkuu laitteella ja käsitellään myöhemmin",
-    "transcriptionUnavailableSavingOnDevice": "Transkriptio ei käytettävissä · tallennetaan laitteelle",
     "transcriptionsPendingFraction": "Jonossa olevat transkriptiot {pending}/{total}",
     "transcriptionsPendingCount": "Jonossa olevat transkriptiot {count}",
     "captureSourceCall": "Puhelu",
@@ -3546,5 +3545,11 @@
     "recordWith": "Tallennustapa",
     "moreWaysToRecord": "Lisää tallennustapoja",
     "openCall": "Avaa puhelu",
-    "captureRecoveryBanner": "Riipuksen ääni ei tule perille sovellukseen — korjaa napauttamalla"
+    "captureRecoveryBanner": "Riipuksen ääni ei tule perille sovellukseen — korjaa napauttamalla",
+    "captureNotTranscribing": "Ei litterointia",
+    "captureAudioSavedTranscribesLater": "Ääni tallennettu, litteroidaan myöhemmin",
+    "captureStillRecording": "Tallennus jatkuu",
+    "captureMicInUseElsewhere": "Toinen sovellus käyttää mikrofonia",
+    "captureMicInterruptedDetail": "Puhelu tai toinen sovellus otti mikrofonin, joten Omi ei kuule juuri nyt. Omi jatkaa itsestään, kun mikrofoni vapautuu. Kaikki tätä ennen tallennettu on tallessa.",
+    "captureCustomSttUnreachableDetail": "Omaa puheentunnistuspalveluasi ei tavoiteta. Omi säilyttää äänen tässä puhelimessa ja lähettää sen, kun palvelu palaa. Mitään ei menetetä."
 }

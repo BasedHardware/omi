@@ -90,15 +90,15 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         child: GestureDetector(
           onTap: () => routeToPage(context, const ActiveCallPage()),
           child: _cardShell(
+            padding: _liveCardPadding,
             LiveCaptureCard(
               source: LiveCaptureCard.callSource,
-              stateLabel: switch (phoneCallState) {
+              // Connecting and ringing say so, with no time: they are not listening yet.
+              status: switch (phoneCallState) {
                 PhoneCallState.connecting => l10n.callStateConnecting,
                 PhoneCallState.ringing => l10n.callStateRinging,
                 _ => captureStateLabel(l10n, CaptureDisplayState.listening),
               },
-              // Amber until audio flows: connecting and ringing are not listening yet.
-              paused: phoneCallState != PhoneCallState.active,
               elapsed: phoneCallState == PhoneCallState.active ? call.callDuration : null,
               lastLine: call.transcriptSegments.lastOrNull?.text,
             ),
@@ -151,17 +151,21 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
           child: Semantics(
             button: !batch,
             hint: batch ? null : context.l10n.liveTranscript,
-            child: _cardShell(_buildUnifiedRecordingUI(provider)),
+            child: _cardShell(_buildUnifiedRecordingUI(provider), padding: batch ? null : _liveCardPadding),
           ),
         );
       },
     );
   }
 
-  Widget _cardShell(Widget child) => Container(
+  /// The live card's glyph and 44pt Pause target carry their own air, so its edges are tighter
+  /// than the Transcribe Later card's; the status line keeps the width it needs on a 320pt phone.
+  static const _liveCardPadding = EdgeInsets.fromLTRB(14, 12, 8, 14);
+
+  Widget _cardShell(Widget child, {EdgeInsets? padding}) => Container(
         margin: const EdgeInsets.fromLTRB(16, 12, 16, 12),
         width: double.maxFinite,
-        padding: const EdgeInsets.fromLTRB(18, 14, 12, 16),
+        padding: padding ?? const EdgeInsets.fromLTRB(18, 14, 12, 16),
         decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(24)),
         child: child,
       );
@@ -205,46 +209,50 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
             provider.recordingState == RecordingState.interrupted ||
             provider.isPhoneMicPaused);
 
-    // Determine pause state based on recording type.
-    // Any audio-session interruption (call, other-app audio, system alert) is
-    // treated as paused so the UI does not claim "Listening" while mute (#4706).
-    bool isAudioInterrupted = provider.recordingState == RecordingState.interrupted;
+    // A pause the reader chose (the control reads Resume only then).
+    final isAudioInterrupted = provider.recordingState == RecordingState.interrupted;
     bool isPaused = false;
     if (isDeviceRecording) {
       isPaused = provider.isPaused && provider.recordingState == RecordingState.pause;
     } else if (isPhoneRecording) {
-      isPaused = provider.isPhoneMicPaused || provider.isPaused || isAudioInterrupted;
+      isPaused = provider.isPhoneMicPaused || provider.isPaused;
     }
+    // The controller marks phone capture `interrupted` for three causes. With the transcription
+    // socket closed (and the OS not holding the mic) it is the socket dropping while the phone keeps
+    // recording and reconnects: Reconnecting. Otherwise the OS or another app took the microphone
+    // (a call, other-app audio, a silent mic): Paused, but not by the reader, so it is explained
+    // rather than offered a Resume (#4706).
+    final socketDropped =
+        isPhoneRecording && isAudioInterrupted && !provider.isCallActive && !provider.transcriptServiceReady;
+    final micTaken = isAudioInterrupted && !socketDropped;
     final hasTerminalTranscriptionFailure = provider.terminalTranscriptionFailure != null;
     final bufferingFor = provider.customSttBufferingDuration;
 
     // Determine if this is an OmiGlass-type device (captures photos)
     bool hasPhotos = provider.photos.isNotEmpty;
-    // Show "Listening" for all active recording states — WAL ensures audio is
-    // saved locally regardless of transcription connection status.
-    // Custom STT endpoint unreachable means audio is still buffering locally
-    // (see customSttBufferingDuration / PurePollingSocket).
-    String statusText = captureStateLabel(
-      context.l10n,
-      liveCaptureDisplayState(
-        audioInterrupted: isAudioInterrupted,
-        paused: isPaused,
-        // One word for a pause, whatever the source: the control is Pause/Resume.
-        transcriptionUnavailable: hasTerminalTranscriptionFailure,
-        bufferingFor: bufferingFor,
-        capturingPhotos: hasPhotos,
-      ),
+    // WAL saves audio locally whatever the transcription connection does, so a degraded
+    // transcription names the consequence ("Audio saved, transcribes later"), not a stop.
+    final displayState = liveCaptureDisplayState(
+      audioInterrupted: micTaken,
+      paused: isPaused && !isAudioInterrupted,
+      transcriptionUnavailable: hasTerminalTranscriptionFailure,
       bufferingFor: bufferingFor,
-      compact: true,
+      reconnecting: socketDropped,
+      capturingPhotos: hasPhotos,
     );
+    final copy = captureCardCopy(context.l10n, displayState, micTaken: micTaken);
 
     // When recording is active: the one capture status and control surface.
     if (isDeviceRecording || isPhoneRecording) {
       final startedAt = provider.liveCaptureStartedAt;
       final card = LiveCaptureCard(
         source: isDeviceRecording ? liveSource : 'phone',
-        stateLabel: statusText,
-        paused: isPaused || hasTerminalTranscriptionFailure || bufferingFor != null,
+        status: copy.status,
+        detail: copy.detail,
+        explanation: copy.explanation,
+        // Resume only when the status says Paused and the reader paused it; a degraded transcription
+        // is still live, so its control is Pause.
+        paused: isPaused && !isAudioInterrupted,
         elapsed: startedAt == null ? null : DateTime.now().difference(startedAt),
         lastLine: provider.segments.lastOrNull?.text,
         note:

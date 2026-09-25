@@ -11175,9 +11175,6 @@ class AppLocalizationsFi extends AppLocalizations {
       'Transkriptiot eivät ole käytettävissä, tallennus jatkuu laitteella ja käsitellään myöhemmin';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'Transkriptio ei käytettävissä · tallennetaan laitteelle';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'Jonossa olevat transkriptiot $pending/$total';
   }
@@ -11236,4 +11233,24 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Riipuksen ääni ei tule perille sovellukseen — korjaa napauttamalla';
+
+  @override
+  String get captureNotTranscribing => 'Ei litterointia';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Ääni tallennettu, litteroidaan myöhemmin';
+
+  @override
+  String get captureStillRecording => 'Tallennus jatkuu';
+
+  @override
+  String get captureMicInUseElsewhere => 'Toinen sovellus käyttää mikrofonia';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Puhelu tai toinen sovellus otti mikrofonin, joten Omi ei kuule juuri nyt. Omi jatkaa itsestään, kun mikrofoni vapautuu. Kaikki tätä ennen tallennettu on tallessa.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Omaa puheentunnistuspalveluasi ei tavoiteta. Omi säilyttää äänen tässä puhelimessa ja lähettää sen, kun palvelu palaa. Mitään ei menetetä.';
 }

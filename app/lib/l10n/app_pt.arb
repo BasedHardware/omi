@@ -3563,7 +3563,6 @@
     "addToClaudeCodeConfig": "Adicionar ao ~/.claude.json",
     "claudeDesktopConnectorSetup": "No Claude Desktop → Settings → Connectors, adicione um conector personalizado e cole o URL do servidor. Se o Claude pedir um Client ID OAuth avançado, use o valor abaixo e deixe o segredo em branco — nunca use a sua chave de API MCP como segredo OAuth.",
     "transcriptionUnavailableRecordingContinues": "As transcrições estão indisponíveis, a gravação continua no dispositivo e será processada mais tarde",
-    "transcriptionUnavailableSavingOnDevice": "Transcrição indisponível · salvando no dispositivo",
     "transcriptionsPendingFraction": "Transcrições pendentes {pending}/{total}",
     "transcriptionsPendingCount": "Transcrições pendentes {count}",
     "captureSourceCall": "Chamada",
@@ -3581,5 +3580,11 @@
     "recordWith": "Gravar com",
     "moreWaysToRecord": "Mais formas de gravar",
     "openCall": "Abrir chamada",
-    "captureRecoveryBanner": "O áudio do pingente não chega à aplicação — toque para reparar"
+    "captureRecoveryBanner": "O áudio do pingente não chega à aplicação — toque para reparar",
+    "captureNotTranscribing": "Sem transcrição",
+    "captureAudioSavedTranscribesLater": "Áudio salvo, transcrição depois",
+    "captureStillRecording": "Ainda gravando",
+    "captureMicInUseElsewhere": "Microfone em uso por outro app",
+    "captureMicInterruptedDetail": "Uma chamada ou outro app pegou o microfone, então o Omi não consegue ouvir agora. O Omi retoma sozinho quando o microfone ficar livre. Tudo o que foi gravado antes está seguro.",
+    "captureCustomSttUnreachableDetail": "Não foi possível acessar seu serviço personalizado de fala para texto. O Omi guarda o áudio neste telefone e o envia quando o serviço voltar. Nada é perdido."
 }

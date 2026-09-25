@@ -11264,9 +11264,6 @@ class AppLocalizationsDe extends AppLocalizations {
       'Transkriptionen sind nicht verfügbar, die Aufnahme läuft auf dem Gerät weiter und wird später verarbeitet';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'Transkription nicht verfügbar · wird auf dem Gerät gespeichert';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'Offene Transkriptionen $pending/$total';
   }
@@ -11325,4 +11322,24 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Der Ton des Pendants erreicht die App nicht — zum Reparieren tippen';
+
+  @override
+  String get captureNotTranscribing => 'Keine Transkription';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Audio gespeichert, wird später transkribiert';
+
+  @override
+  String get captureStillRecording => 'Nimmt weiter auf';
+
+  @override
+  String get captureMicInUseElsewhere => 'Mikrofon von anderer App belegt';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Ein Anruf oder eine andere App nutzt das Mikrofon, daher kann Omi gerade nicht zuhören. Omi macht von selbst weiter, sobald das Mikrofon frei ist. Alles bisher Aufgenommene ist sicher.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Dein eigener Sprache-zu-Text-Dienst ist nicht erreichbar. Omi behält das Audio auf diesem Telefon und sendet es, sobald der Dienst wieder da ist. Nichts geht verloren.';
 }

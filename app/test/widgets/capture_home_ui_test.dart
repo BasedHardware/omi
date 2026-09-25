@@ -24,8 +24,9 @@ import 'package:omi/utils/enums.dart';
 enum _Live { idle, idleDeviceConnected, pendant, pendantPaused, phone, phoneAfterPendant }
 
 class _Capture extends ChangeNotifier implements CaptureProvider {
-  _Capture(this.live);
+  _Capture(this.live, {this.failure = false});
   final _Live live;
+  final bool failure;
   int pauses = 0;
   int resumes = 0;
   int phoneStarts = 0;
@@ -82,7 +83,8 @@ class _Capture extends ChangeNotifier implements CaptureProvider {
   @override
   Duration? get customSttBufferingDuration => null;
   @override
-  MessageServiceStatusEvent? get terminalTranscriptionFailure => null;
+  MessageServiceStatusEvent? get terminalTranscriptionFailure =>
+      failure ? MessageServiceStatusEvent(status: 'stt_failed') : null;
   @override
   bool get recordingDeviceServiceReady => true;
   @override
@@ -146,10 +148,13 @@ void main() {
   }
 
   group('live card', () {
-    testWidgets('names the source, the state and the time, with Pause', (tester) async {
+    testWidgets('names the source as a glyph, the state and the time, with Pause', (tester) async {
       final capture = _Capture(_Live.pendant);
       await pump(tester, const ConversationCaptureWidget(showsCall: true), capture: capture);
-      expect(find.text(en.captureSourcePendant), findsOneWidget);
+      // The source is a glyph with a spoken name, not a text label (David, 2026-09-26).
+      expect(find.text(en.captureSourcePendant), findsNothing);
+      // The card is one button, so the spoken name merges into its label.
+      expect(find.bySemanticsLabel(RegExp('^${en.captureSourcePendant}\n')), findsOneWidget);
       expect(find.text(en.listening), findsOneWidget);
       expect(find.text('12:04'), findsOneWidget);
       expect(find.bySemanticsLabel(en.pause), findsOneWidget);
@@ -171,14 +176,14 @@ void main() {
 
     testWidgets('the phone taking over from the pendant says the pendant waits', (tester) async {
       await pump(tester, const ConversationCaptureWidget(showsCall: true), capture: _Capture(_Live.phoneAfterPendant));
-      expect(find.text(en.phone), findsOneWidget);
+      expect(find.bySemanticsLabel(RegExp('^${en.phone}\n')), findsOneWidget);
       expect(find.text(en.pendantPausedResumesWhenYouFinish), findsOneWidget);
     });
 
     testWidgets('an Omi call shows on Home as the live card, and not on the Conversations tab', (tester) async {
       final call = _Call(PhoneCallState.active);
       await pump(tester, const ConversationCaptureWidget(showsCall: true), capture: _Capture(_Live.idle), call: call);
-      expect(find.text(en.captureSourceCall), findsOneWidget);
+      expect(find.bySemanticsLabel(RegExp('^${en.captureSourceCall}\n')), findsOneWidget);
       expect(find.text('3:10'), findsOneWidget);
       expect(find.byType(OmiIconButton), findsNothing, reason: 'the call page owns the call controls');
 
@@ -195,12 +200,41 @@ void main() {
       expect(find.byIcon(Icons.record_voice_over), findsNothing, reason: 'the old header is gone');
     });
 
-    testWidgets('a call that is still ringing is amber and has no time yet', (tester) async {
+    testWidgets('a call that is still ringing says so and has no time yet', (tester) async {
       await pump(tester, const ConversationCaptureWidget(showsCall: true),
           capture: _Capture(_Live.idle), call: _Call(PhoneCallState.ringing));
       final card = tester.widget<LiveCaptureCard>(find.byType(LiveCaptureCard));
-      expect(card.paused, isTrue);
+      expect(card.status, en.callStateRinging);
       expect(card.elapsed, isNull);
+      expect(card.explanation, isNull, reason: 'ringing is not a problem');
+    });
+
+    testWidgets('a transcription outage is still live: Pause, a warning, and a sheet that explains', (tester) async {
+      final capture = _Capture(_Live.pendant, failure: true);
+      await pump(tester, const ConversationCaptureWidget(showsCall: true), capture: capture);
+      expect(find.text(en.captureNotTranscribing), findsOneWidget);
+      expect(find.text('12:04  ·  ${en.captureAudioSavedTranscribesLater}'), findsOneWidget);
+      expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget);
+      // The control matches the state: capture is live, so it pauses (it never reads Resume here).
+      expect(find.bySemanticsLabel(en.resume), findsNothing);
+      await tester.tap(find.bySemanticsLabel(en.pause));
+      await tester.pump();
+      expect(capture.pauses, 1);
+      expect(capture.resumes, 0);
+
+      await tester.tap(find.text(en.captureNotTranscribing));
+      await tester.pumpAndSettle();
+      expect(find.text(en.transcriptionUnavailableRecordingContinues), findsOneWidget);
+      await tester.tap(find.text(en.gotIt));
+      await tester.pumpAndSettle();
+      expect(find.text(en.transcriptionUnavailableRecordingContinues), findsNothing);
+    });
+
+    testWidgets('a healthy card has no warning and no details sheet', (tester) async {
+      await pump(tester, const ConversationCaptureWidget(showsCall: true), capture: _Capture(_Live.pendant));
+      expect(find.byIcon(Icons.warning_amber_rounded), findsNothing);
+      final card = tester.widget<LiveCaptureCard>(find.byType(LiveCaptureCard));
+      expect(card.explanation, isNull);
     });
 
     testWidgets('the card is one button that opens the live transcript', (tester) async {
