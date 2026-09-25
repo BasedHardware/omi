@@ -50,8 +50,15 @@ void main() {
       }
       await AnalyticsManager.flushPending(force: true);
       await AnalyticsManager.flushPending(force: true);
+      final platformName = PlatformService.isIOS ? 'ios' : (PlatformService.isAndroid ? 'android' : 'unknown');
       final globals = <String, Object>{
-        'app_platform': PlatformService.isIOS ? 'ios' : (PlatformService.isAndroid ? 'android' : 'unknown'),
+        // `platform` and `trigger` are the churn-instrumentation fields added with
+        // the mobile analytics baseline: every event carries the platform it ran
+        // on and a trigger classification. All five events here are interaction
+        // driven, so the default `user` trigger applies.
+        'platform': platformName,
+        'trigger': 'user',
+        'app_platform': platformName,
         'app_version': '1.0.543',
         'app_build': '992',
       };
