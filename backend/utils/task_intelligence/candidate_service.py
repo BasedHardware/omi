@@ -139,8 +139,8 @@ def drain_candidate_integrations(uid: str, *, account_generation: int, limit: in
     )
 
     def process_one(item: dict) -> ProcessOutcome:
-        candidate_id = item.get('candidate_id')
-        task_id = item.get('task_id')
+        candidate_id: str | None = item.get('candidate_id')  # type: ignore
+        task_id: str | None = item.get('task_id')  # type: ignore
         if not isinstance(candidate_id, str) or not isinstance(task_id, str):
             if isinstance(candidate_id, str):
                 integration_outbox_db.dead_letter_malformed_candidate_integration(

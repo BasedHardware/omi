@@ -1,7 +1,9 @@
 """Derived, rebuildable workstream retrieval index maintenance."""
 
 from collections.abc import Callable
-from typing import Optional
+from typing import Optional, TYPE_CHECKING
+if TYPE_CHECKING:
+    from google.cloud.firestore_v1.client import Client as FirestoreClient
 
 import database.workstreams as workstreams_db
 from database.vector_db import (
@@ -18,7 +20,7 @@ def refresh_workstream_association_index(
     uid: str,
     workstream_id: str,
     *,
-    firestore_client=None,
+    firestore_client: Optional['FirestoreClient'] = None,
     hydrate: Callable[..., Optional[Workstream]] = workstreams_db.get_workstream,
     upsert_index: Callable[..., bool] = upsert_workstream_association_vector,
     delete_index: Callable[..., bool] = delete_workstream_association_vector,
@@ -54,7 +56,7 @@ def refresh_workstream_association_index(
 def rebuild_workstream_association_index(
     uid: str,
     *,
-    firestore_client=None,
+    firestore_client: Optional['FirestoreClient'] = None,
     list_source: Callable[..., list[Workstream]] = workstreams_db.list_open_workstreams,
     reset_index: Callable[..., bool] = reset_workstream_association_vectors,
     upsert_index: Callable[..., bool] = upsert_workstream_association_vector,
