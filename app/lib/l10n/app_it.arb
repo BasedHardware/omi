@@ -3546,5 +3546,6 @@
     "recordWith": "Registra con",
     "moreWaysToRecord": "Altri modi per registrare",
     "openCall": "Apri chiamata",
-    "captureRecoveryBanner": "L'audio del ciondolo non arriva all'app — tocca per riparare"
+    "captureRecoveryBanner": "L'audio del ciondolo non arriva all'app — tocca per riparare",
+    "showOnLockScreen": "Mostra sulla schermata di blocco"
 }

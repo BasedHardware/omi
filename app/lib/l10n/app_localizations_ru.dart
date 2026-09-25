@@ -11270,4 +11270,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Звук кулона не доходит до приложения — нажмите, чтобы исправить';
+
+  @override
+  String get showOnLockScreen => 'Показывать на экране блокировки';
 }

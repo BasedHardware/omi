@@ -11285,4 +11285,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Sunetul pandantivului nu ajunge în aplicație — atinge pentru a repara';
+
+  @override
+  String get showOnLockScreen => 'Afișează pe ecranul de blocare';
 }

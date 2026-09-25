@@ -3642,5 +3642,6 @@
     "recordWith": "Rögzítés ezzel",
     "moreWaysToRecord": "További rögzítési módok",
     "openCall": "Hívás megnyitása",
-    "captureRecoveryBanner": "A medál hangja nem érkezik meg az alkalmazásba — a javításhoz koppintson"
+    "captureRecoveryBanner": "A medál hangja nem érkezik meg az alkalmazásba — a javításhoz koppintson",
+    "showOnLockScreen": "Megjelenítés a zárolási képernyőn"
 }

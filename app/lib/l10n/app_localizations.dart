@@ -20468,6 +20468,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Pendant audio is not reaching the app — tap to repair'**
   String get captureRecoveryBanner;
+
+  /// Setting for recording Live Activities on the lock screen and Dynamic Island
+  ///
+  /// In en, this message translates to:
+  /// **'Show on Lock Screen'**
+  String get showOnLockScreen;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

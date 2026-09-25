@@ -11144,4 +11144,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'השמע מהתליון לא מגיע לאפליקציה — הקישו לתיקון';
+
+  @override
+  String get showOnLockScreen => 'הצגה במסך הנעילה';
 }

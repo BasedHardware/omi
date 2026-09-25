@@ -11248,4 +11248,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'O áudio do pingente não chega à aplicação — toque para reparar';
+
+  @override
+  String get showOnLockScreen => 'Mostrar na tela de bloqueio';
 }

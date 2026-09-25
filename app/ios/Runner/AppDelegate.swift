@@ -90,6 +90,8 @@ final class QuickActionsIconPatcher: NSObject {
   private let appleRemindersService = AppleRemindersService()
   private let appleHealthService = AppleHealthService()
   private var phoneMicController: PhoneMicController?
+  // Any keeps the Runner's existing iOS 15 deployment support intact.
+  private var liveActivityManager: Any?
   private var notificationTitleOnKill: String?
   private var notificationBodyOnKill: String?
 
@@ -120,6 +122,9 @@ final class QuickActionsIconPatcher: NSObject {
       return super.application(application, didFinishLaunchingWithOptions: launchOptions)
     }
     GeneratedPluginRegistrant.register(with: self)
+    if #available(iOS 16.1, *) {
+        liveActivityManager = LiveActivityManager(messenger: controller.binaryMessenger)
+    }
     // Read-only admission evidence for the separately signed capture lane.
     // Missing flags stay nil so Dart fails closed before app-owned networking.
     FlutterMethodChannel(name: "omi/physical_qualification", binaryMessenger: controller.binaryMessenger)

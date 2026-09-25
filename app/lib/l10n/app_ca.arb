@@ -3546,5 +3546,6 @@
     "recordWith": "Grava amb",
     "moreWaysToRecord": "Més maneres de gravar",
     "openCall": "Obre la trucada",
-    "captureRecoveryBanner": "L'àudio del penjoll no arriba a l'aplicació — toca'l per reparar"
+    "captureRecoveryBanner": "L'àudio del penjoll no arriba a l'aplicació — toca'l per reparar",
+    "showOnLockScreen": "Mostra a la pantalla de bloqueig"
 }

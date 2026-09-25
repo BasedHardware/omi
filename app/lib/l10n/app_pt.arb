@@ -3581,5 +3581,6 @@
     "recordWith": "Gravar com",
     "moreWaysToRecord": "Mais formas de gravar",
     "openCall": "Abrir chamada",
-    "captureRecoveryBanner": "O áudio do pingente não chega à aplicação — toque para reparar"
+    "captureRecoveryBanner": "O áudio do pingente não chega à aplicação — toque para reparar",
+    "showOnLockScreen": "Mostrar na tela de bloqueio"
 }

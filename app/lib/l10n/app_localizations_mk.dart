@@ -11294,4 +11294,7 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'Аудиото од привезокот не стигнува до апликацијата — допрете за поправка';
+
+  @override
+  String get showOnLockScreen => 'Прикажи на заклучениот екран';
 }

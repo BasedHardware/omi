@@ -11213,4 +11213,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'पेंडेंट का ऑडियो ऐप तक नहीं पहुंच रहा है — ठीक करने के लिए टैप करें';
+
+  @override
+  String get showOnLockScreen => 'लॉक स्क्रीन पर दिखाएँ';
 }

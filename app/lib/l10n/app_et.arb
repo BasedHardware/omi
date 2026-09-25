@@ -3546,5 +3546,6 @@
     "recordWith": "Salvestusviis",
     "moreWaysToRecord": "Rohkem salvestusviise",
     "openCall": "Ava kõne",
-    "captureRecoveryBanner": "Ripatsi heli ei jõua rakendusse — parandamiseks puudutage"
+    "captureRecoveryBanner": "Ripatsi heli ei jõua rakendusse — parandamiseks puudutage",
+    "showOnLockScreen": "Kuva lukustuskuval"
 }

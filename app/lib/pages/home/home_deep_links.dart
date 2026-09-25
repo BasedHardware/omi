@@ -16,6 +16,9 @@ import 'package:omi/pages/settings/device_settings.dart';
 import 'package:omi/pages/settings/wrapped_2025_page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/message_provider.dart';
+import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/home_provider.dart';
+import 'package:omi/pages/conversation_capturing/page.dart';
 import 'package:omi/ui/feedback/omi_feedback.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
@@ -68,6 +71,11 @@ Future<void> openHomeDeepLink(
 }) async {
   final id = link.id;
   switch (link.alias) {
+    case 'capture':
+      final capture = context.read<CaptureProvider>();
+      context.read<HomeProvider>().setIndex(1);
+      if (capture.activeRecordingId == null || capture.activeRecordingId != link.query['recording']) return;
+      unawaited(routeToPage(context, const ConversationCapturingPage()));
     case 'apps':
       if (id == null) return;
       final app = await context.read<AppProvider>().getAppFromId(id);
