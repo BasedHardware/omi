@@ -396,7 +396,7 @@ def memory_item_to_memorydb(item: MemoryItem) -> MemoryDB:
         is_dismissed=is_dismissed,
         user_review=user_review,
         visibility=item.visibility,
-        evidence=cast(List[Evidence], evidence_payload),
+        evidence=evidence_payload,
         memory_tier=item.tier,
         primary_capture_device=item.primary_capture_device,
         capture_device_ids=item.capture_device_ids or [],
@@ -420,7 +420,7 @@ def memory_item_to_memorydb(item: MemoryItem) -> MemoryDB:
         arguments=_bounded_memory_arguments(item.arguments),
         intent_backed=item.intent_backed,
         write_reason=item.write_reason,
-        **cast(Dict[str, Any], public_belief_overlay(item, now=datetime.now(timezone.utc))),
+        **public_belief_overlay(item, now=datetime.now(timezone.utc)),
     )
 
 

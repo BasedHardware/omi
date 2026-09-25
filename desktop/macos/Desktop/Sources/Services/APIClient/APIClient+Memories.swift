@@ -349,10 +349,10 @@ struct ServerMemory: Decodable, Identifiable {
     let wire = try? OmiAPI.MemoryDB(from: decoder)
 
     // id / memory_id alias resolution: wire.id is the backend authority
-    // (required String); memory_id is gone from the wire contract, so it is
-    // read from the container only, for legacy persisted rows.
+    // (required String). We no longer check wire.memoryId since it was removed from the API,
+    // but we can still decode memory_id from the raw JSON if present for backwards compat.
     let idValue = try wire?.id ?? container.decodeIfPresent(String.self, forKey: .id)
-    let memoryIdValue = container.decodeIfPresent(String.self, forKey: .memoryId)
+    let memoryIdValue = try container.decodeIfPresent(String.self, forKey: .memoryId)
     switch (idValue, memoryIdValue) {
     case (.some(let id), .some(let memoryId)) where id != memoryId:
       self.id = id
