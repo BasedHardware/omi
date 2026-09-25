@@ -219,6 +219,13 @@ async def _websocket_util_trigger(
     private_cloud_queue: deque[PrivateCloudChunk] = deque(maxlen=PRIVATE_CLOUD_QUEUE_MAX_SIZE)
     audio_bytes_event = asyncio.Event()  # Signals when items are added for instant wake
     audio_budget = ByteBudget(BUFFERED_AUDIO_MAX_BYTES)
+    # (start_wall, end_wall, sha256) of v2 runs whose GCS upload SUCCEEDED, for
+    # reconciling replays that reach past the live buffer. Entries are appended
+    # by the upload task after `upload_audio_chunks_batch` returns, so a chunk
+    # evicted by the bounded queue or a batch dropped after exhausting its
+    # retries never lends its digest to a later replay: that range stays
+    # unverifiable (a counted conflict) instead of trusted.
+    v2_flushed_runs: Deque[Tuple[float, float, str]] = deque(maxlen=V2_FLUSHED_RUN_LEDGER_SIZE)
 
     async def process_private_cloud_queue() -> None:
         """Background task that batches private cloud sync uploads by conversation_id.
@@ -309,6 +316,14 @@ async def _websocket_util_trigger(
                     conv_id,
                     cast(str, cached_protection_level),
                 )
+                if batch.get('span') is not None and batch.get('end') is not None:
+                    # The digest ledger records only runs whose object exists.
+                    # Batches are contiguous by construction (discontinuities
+                    # close them in `_add_to_batch`), so one entry covers the
+                    # whole uploaded run; a batch that never gets here —
+                    # evicted before upload, or dropped after exhausting its
+                    # retries — leaves no entry and stays unverifiable.
+                    v2_flushed_runs.append((timestamp, batch['end'], hashlib.sha256(chunk_data).hexdigest()))
                 del chunks_to_upload
                 try:
                     audio_files = await run_blocking(
@@ -522,9 +537,6 @@ async def _websocket_util_trigger(
         # the last accepted run and its conversation. None until first audio
         # or after a conversation switch (which flushes the run).
         audio_timeline_last_end: Optional[float] = None
-        # (start_wall, end_wall, sha256) of the last flushed v2 chunks, for
-        # reconciling replays that reach past the live buffer.
-        v2_flushed_runs: Deque[Tuple[float, float, str]] = deque(maxlen=V2_FLUSHED_RUN_LEDGER_SIZE)
 
         def _queue_private_cloud_chunk() -> None:
             if not (private_cloud_sync_enabled and current_conversation_id and len(private_cloud_sync_buffer) > 0):
@@ -542,16 +554,13 @@ async def _websocket_util_trigger(
             if audio_timeline_v2:
                 # v2 runs carry their authoritative PCM sample count so
                 # coverage never has to be inferred from encoded blob size.
+                # The flushed-run digest is recorded by the upload task only
+                # after this chunk's batch lands in GCS (see _upload_batch).
                 span = {
                     'samples': len(private_cloud_sync_buffer) // 2,
                     'sample_rate': sample_rate,
                 }
                 chunk_payload['span'] = span
-                start_wall = cast(float, chunk_payload['timestamp'])
-                run_seconds = len(private_cloud_sync_buffer) / (sample_rate * 2)
-                v2_flushed_runs.append(
-                    (start_wall, start_wall + run_seconds, hashlib.sha256(chunk_payload['data']).hexdigest())
-                )
             append_bounded(
                 private_cloud_queue,
                 chunk_payload,
@@ -572,8 +581,9 @@ async def _websocket_util_trigger(
             The overlap region [run_start, run_start + overlap_bytes) is
             verified against the live buffer (byte compare) and, for the part
             predating it, against the flushed-run digest ledger. Any region
-            that can be neither compared nor digest-matched is a conflict:
-            the already-stored bytes stay and the frame is dropped.
+            that can be neither compared nor digest-matched is a conflict: the
+            already-stored bytes stay, the unverified overlap is dropped, and
+            only the frame's new tail past the accepted end is kept.
             """
             tol = AUDIO_TIMELINE_CONTINUITY_TOLERANCE
             bps = sample_rate * 2
@@ -806,15 +816,16 @@ async def _websocket_util_trigger(
                                 # retained copy of that range — the live buffer
                                 # by bytes, anything older by flushed-run
                                 # digest. Differing or unverifiable bytes for
-                                # an accepted range fail closed and are never
-                                # overwritten.
+                                # an accepted range are never re-stored; the
+                                # frame's genuinely new tail past the accepted
+                                # end still continues the run from there.
                                 if _v2_overlap_conflict(run_start, overlap_bytes, audio_data):
                                     OMI_AUDIO_TIMELINE_REPLAY_CONFLICTS_TOTAL.inc()
                                     logger.warning(
                                         f'Conflicting v2 audio for an accepted range '
-                                        f'start={run_start:.3f}s overlap={overlap_bytes}B; dropping frame {uid}'
+                                        f'start={run_start:.3f}s overlap={overlap_bytes}B; '
+                                        f'dropping the unverified overlap, keeping the new tail {uid}'
                                     )
-                                    continue
                                 audio_data = audio_data[overlap_bytes:]
                                 run_start = audio_timeline_last_end
                                 run_end = run_start + len(audio_data) / (sample_rate * 2)
