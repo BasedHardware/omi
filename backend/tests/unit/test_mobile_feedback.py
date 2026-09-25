@@ -239,3 +239,103 @@ def test_recording_quality_explicit_recording_target_does_not_fallback_to_conver
     with pytest.raises(Exception) as error:
         mobile_feedback.submit_mobile_feedback(payload, None, None, None, 'uid-1')
     assert getattr(error.value, 'status_code', None) == 404
+
+
+def test_mobile_feedback_request_rejects_blank_target_id():
+    with pytest.raises(ValueError):
+        MobileFeedbackRequest(
+            feedback_id='f-blank-target',
+            kind=MobileFeedbackKind.summary_helpfulness,
+            target_id='   ',
+            value=1,
+        )
+
+
+def test_mobile_feedback_request_rejects_blank_feedback_id():
+    with pytest.raises(ValueError):
+        MobileFeedbackRequest(
+            feedback_id='   ',
+            kind=MobileFeedbackKind.summary_helpfulness,
+            target_id='conversation-1',
+            value=1,
+        )
+
+
+def test_mobile_feedback_route_rejects_blank_target_id():
+    mock_payload = type('MockPayload', (), {'target_id': '   ', 'feedback_id': 'f-1'})()
+    with pytest.raises(mobile_feedback.HTTPException) as exc_info:
+        mobile_feedback.submit_mobile_feedback(mock_payload, None, None, None, 'uid-1')
+    assert exc_info.value.status_code == 422
+    assert exc_info.value.detail == 'target_id cannot be blank'
+
+
+def test_mobile_feedback_route_rejects_blank_feedback_id():
+    mock_payload = type('MockPayload', (), {'target_id': 'conversation-1', 'feedback_id': '   '})()
+    with pytest.raises(mobile_feedback.HTTPException) as exc_info:
+        mobile_feedback.submit_mobile_feedback(mock_payload, None, None, None, 'uid-1')
+    assert exc_info.value.status_code == 422
+    assert exc_info.value.detail == 'feedback_id cannot be blank'
+
+
+def test_mobile_feedback_summary_storage_failure_returns_503(monkeypatch):
+    payload = MobileFeedbackRequest(
+        feedback_id='f-storage-fail',
+        kind=MobileFeedbackKind.summary_helpfulness,
+        target_id='conversation-1',
+        value=1,
+    )
+
+    def broken_get_conversation(uid, cid):
+        raise RuntimeError('Firestore timeout')
+
+    monkeypatch.setattr(mobile_feedback.conversations_db, 'get_conversation', broken_get_conversation)
+    with pytest.raises(mobile_feedback.HTTPException) as exc_info:
+        mobile_feedback.submit_mobile_feedback(payload, None, None, None, 'uid-1')
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.detail == 'Conversation storage is temporarily unavailable'
+
+
+def test_mobile_feedback_recording_conversation_storage_failure_returns_503(monkeypatch):
+    payload = MobileFeedbackRequest(
+        feedback_id='f-rec-storage-fail',
+        kind=MobileFeedbackKind.recording_quality,
+        target_id='conversation-1',
+        value=1,
+    )
+    monkeypatch.setattr(mobile_feedback.recording_sessions_db, 'get_recording_session', lambda uid, sid: None)
+
+    def broken_get_conversation(uid, cid):
+        raise RuntimeError('Firestore timeout')
+
+    monkeypatch.setattr(mobile_feedback.conversations_db, 'get_conversation', broken_get_conversation)
+    with pytest.raises(mobile_feedback.HTTPException) as exc_info:
+        mobile_feedback.submit_mobile_feedback(payload, None, None, None, 'uid-1')
+    assert exc_info.value.status_code == 503
+    assert exc_info.value.detail == 'Conversation storage is temporarily unavailable'
+
+
+def test_mobile_feedback_decouples_telemetry_failure(monkeypatch):
+    payload = MobileFeedbackRequest(
+        feedback_id='f-telemetry-fail',
+        kind=MobileFeedbackKind.summary_helpfulness,
+        target_id='conversation-1',
+        value=1,
+    )
+    monkeypatch.setattr(mobile_feedback.conversations_db, 'get_conversation', lambda uid, cid: {'id': cid})
+    monkeypatch.setattr(
+        mobile_feedback.feedback_db,
+        'record_feedback_event_idempotent',
+        lambda *args, **kwargs: ('event-decoupled-1', True),
+    )
+
+    def broken_emit(**kwargs):
+        raise ConnectionError('PostHog unavailable')
+
+    monkeypatch.setattr(mobile_feedback, 'emit_product_event', broken_emit)
+
+    receipt = mobile_feedback.submit_mobile_feedback(payload, None, None, None, 'uid-1')
+    assert receipt.created is True
+    assert receipt.feedback_id == 'f-telemetry-fail'
+    assert receipt.event_id == 'event-decoupled-1'
+
+

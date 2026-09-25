@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any, Optional
+
+logger = logging.getLogger(__name__)
 
 from fastapi import APIRouter, Depends, Header, HTTPException
 
@@ -65,11 +68,19 @@ def submit_mobile_feedback(
     before the write. The idempotency key is scoped to the authenticated UID,
     so a retry is safe while a reused key with a different payload is rejected.
     """
+    if not payload.target_id or not payload.target_id.strip():
+        raise HTTPException(status_code=422, detail='target_id cannot be blank')
+    if not payload.feedback_id or not payload.feedback_id.strip():
+        raise HTTPException(status_code=422, detail='feedback_id cannot be blank')
+
     related_conversation_id: str | None = None
     resolved_target_kind = FeedbackTargetKind.conversation
     provenance: dict[str, Any] = {}
     if payload.kind is MobileFeedbackKind.summary_helpfulness or payload.target_kind == 'conversation':
-        conversation = conversations_db.get_conversation(uid, payload.target_id)
+        try:
+            conversation = conversations_db.get_conversation(uid, payload.target_id)
+        except Exception as exc:
+            raise HTTPException(status_code=503, detail='Conversation storage is temporarily unavailable') from exc
         if not conversation:
             raise HTTPException(status_code=404, detail='Conversation not found')
         related_conversation_id = payload.target_id
@@ -82,7 +93,10 @@ def submit_mobile_feedback(
             raise HTTPException(status_code=503, detail='Recording ownership is temporarily unavailable') from exc
         if binding:
             related_conversation_id = binding['conversation_id']
-            conversation = conversations_db.get_conversation(uid, related_conversation_id)
+            try:
+                conversation = conversations_db.get_conversation(uid, related_conversation_id)
+            except Exception as exc:
+                raise HTTPException(status_code=503, detail='Conversation storage is temporarily unavailable') from exc
             if conversation:
                 provenance = _provenance_from_conversation(conversation)
             resolved_target_kind = FeedbackTargetKind.recording
@@ -91,7 +105,10 @@ def submit_mobile_feedback(
             # the detail page. Preserve their authenticated ownership path
             # while new callers can make this coordinate explicit with
             # target_kind=conversation.
-            conversation = conversations_db.get_conversation(uid, payload.target_id)
+            try:
+                conversation = conversations_db.get_conversation(uid, payload.target_id)
+            except Exception as exc:
+                raise HTTPException(status_code=503, detail='Conversation storage is temporarily unavailable') from exc
             if not conversation:
                 raise HTTPException(status_code=404, detail='Recording not found')
             related_conversation_id = payload.target_id
@@ -143,27 +160,34 @@ def submit_mobile_feedback(
         raise HTTPException(status_code=503, detail='Feedback could not be durably stored; retry safely') from exc
 
     if created:
-        emit_product_event(
-            uid=uid,
-            event='Product Feedback Submitted',
-            properties={
-                'feedback_id': payload.feedback_id,
-                'event_id': event_id,
-                'kind': payload.kind.value,
-                'value': payload.value,
-                'reason': payload.reason.value if payload.reason else None,
-                'platform': platform,
-                'app_version': app_version,
-                'app_build': app_build,
-                'client_app_namespace': payload.client_app_namespace,
-                'client_app_profile': payload.client_app_profile,
-                'backend_release': merged_provenance.get('backend_release'),
-                'model_name': merged_provenance.get('model_name'),
-                'model_version': merged_provenance.get('model_version'),
-                'prompt_name': merged_provenance.get('prompt_name'),
-                'prompt_commit': merged_provenance.get('prompt_commit'),
-                'trace_id': merged_provenance.get('trace_id'),
-                'correlation_id': payload.correlation_id,
-            },
-        )
+        try:
+            emit_product_event(
+                uid=uid,
+                event='Product Feedback Submitted',
+                properties={
+                    'feedback_id': payload.feedback_id,
+                    'event_id': event_id,
+                    'kind': payload.kind.value,
+                    'value': payload.value,
+                    'reason': payload.reason.value if payload.reason else None,
+                    'platform': platform,
+                    'app_version': app_version,
+                    'app_build': app_build,
+                    'client_app_namespace': payload.client_app_namespace,
+                    'client_app_profile': payload.client_app_profile,
+                    'backend_release': merged_provenance.get('backend_release'),
+                    'model_name': merged_provenance.get('model_name'),
+                    'model_version': merged_provenance.get('model_version'),
+                    'prompt_name': merged_provenance.get('prompt_name'),
+                    'prompt_commit': merged_provenance.get('prompt_commit'),
+                    'trace_id': merged_provenance.get('trace_id'),
+                    'correlation_id': payload.correlation_id,
+                },
+            )
+        except Exception:
+            logger.warning(
+                'Failed to emit product feedback telemetry event for feedback_id=%s',
+                payload.feedback_id,
+                exc_info=True,
+            )
     return MobileFeedbackReceipt(feedback_id=payload.feedback_id, event_id=event_id, created=created)
