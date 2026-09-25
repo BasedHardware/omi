@@ -1056,7 +1056,7 @@ def test_firestore_readiness_contract_rejects_backend_deployment_credentials(wor
     auth = next(
         step
         for step in workflow['jobs']['firestore_readiness']['steps']
-        if step.get('uses') == 'google-github-actions/auth@v3'
+        if step.get('uses') == 'google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093'
     )
     auth['with']['credentials_json'] = '${{ secrets.GCP_CREDENTIALS }}'
 
