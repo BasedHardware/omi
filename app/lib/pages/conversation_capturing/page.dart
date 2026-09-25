@@ -99,14 +99,9 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
   Future<void> _stopConversation(CaptureProvider provider) async {
     if (provider.segments.isNotEmpty || provider.photos.isNotEmpty) {
       // Helper function to stop recording and process conversation
-      Future<void> stopRecordingAndProcess() async {
-        // Stop any active recording (phone mic)
-        if (provider.recordingState == RecordingState.record) {
-          await provider.stopStreamRecording();
-        }
-        // Then process the conversation
-        provider.forceProcessingCurrentConversation();
-      }
+      // Stops a phone recording (live or paused) and processes the conversation; a pendant
+      // the phone paused resumes after the processing request.
+      Future<void> stopRecordingAndProcess() => provider.finishCapture();
 
       if (!showSummarizeConfirmation) {
         await stopRecordingAndProcess();

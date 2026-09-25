@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/providers/capture_provider.dart';
+import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/capture/capture_session_owner.dart';
@@ -126,5 +127,7 @@ CaptureProvider composeProductionCaptureProvider({
     ),
     localSegmentStore: localSegmentStore ?? LocalSegmentStore.appSupport(),
     externalActions: externalActions,
+    // An Omi phone call pauses a streaming pendant and gives it back when it ends.
+    omiCallState: PhoneCallProvider.callStateListenable,
   );
 }

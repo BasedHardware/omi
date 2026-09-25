@@ -263,12 +263,10 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
     final captureProvider = context.read<CaptureProvider>();
     if (captureProvider.recordingState == RecordingState.initialising) return;
     OmiHaptics.medium();
-    if (captureProvider.recordingState == RecordingState.record) {
-      // Batch reports RecordingState.record too, but has no in-progress conversation
-      // to force-process — stopStreamRecording finalizes the local .bin on its own.
-      final wasBatch = captureProvider.isPhoneMicBatchRecording;
-      await captureProvider.stopStreamRecording();
-      if (!wasBatch) captureProvider.forceProcessingCurrentConversation();
+    if (captureProvider.recordingState == RecordingState.record || captureProvider.isPhoneMicPaused) {
+      // The phone recording is this button's own: finish it (processed, except Transcribe Later,
+      // whose local file is finalized on stop), then any pendant it paused resumes.
+      await captureProvider.finishCapture();
       PlatformManager.instance.analytics.phoneMicRecordingStopped();
       if (context.mounted) _maybeShowOptionsTip(context);
       return;
