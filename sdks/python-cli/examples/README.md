@@ -14,15 +14,25 @@
   (Portuguese agent guide).
 * [`shell_examples.sh`](shell_examples.sh) — runnable shell snippets covering
   the most common verbs.
+* [`conversations_ics.md`](conversations_ics.md) — put conversation history on a
+  calendar: JSON export to an iCalendar (.ics) file.
+* [`action_items_ics.md`](action_items_ics.md) — put open action items with due
+  dates on a calendar: JSON export to an iCalendar (.ics) file.
 * [`conversations_markdown.md`](conversations_markdown.md) — export conversations to structured Markdown notes for Obsidian & Notion.
+* [`conversations_html.md`](conversations_html.md) — build a self-contained HTML
+  report of conversations: one section per day, printable, no scripts.
 * [`conversations_markdown.pt.md`](conversations_markdown.pt.md) — exportar conversas do Omi para Markdown (Portuguese recipe).
 * [`conversations_csv.md`](conversations_csv.md) — convert a conversation-list
   JSON export to CSV for spreadsheets.
+* [`conversations_digest.md`](conversations_digest.md) — summarise conversation-list
+  exports into a digest: per-day totals, categories and longest sessions.
 * [`conversations_xlsx.md`](conversations_xlsx.md) — convert a conversation-list
   JSON export to an Excel workbook with datetime cells, duration and filters.
 * [`conversations_sqlite.md`](conversations_sqlite.md) — import conversation-list
   JSON exports into a SQLite database for SQL queries and multi-page merges.
 * [`memories_markdown.md`](memories_markdown.md) — export memories, facts, and learnings to structured Markdown notes for Obsidian & Notion.
+* [`conversations_atom.md`](conversations_atom.md) — publish conversation-list
+  exports as an Atom 1.0 feed for any feed reader.
 * [`action_items_sqlite.md`](action_items_sqlite.md) — convert an action-item JSON export to SQLite for structured SQL queries.
 * [`action_items_markdown.md`](action_items_markdown.md) — export action items and tasks to Obsidian/Notion Markdown checklists.
 * [`memories_markdown.pt.md`](memories_markdown.pt.md) — exportar memórias e conhecimento do Omi para Markdown (Portuguese recipe).
@@ -163,3 +173,4 @@
 * [`quickstart.dsb.md`](quickstart.dsb.md) — pšedne kšace z omi-cli (Lower Sorbian Quickstart).
 * [`quickstart.an.md`](quickstart.an.md) — os primers pasos con omi-cli (Aragonese Quickstart).
 * [`quickstart.rn.md`](quickstart.rn.md) — intambwe ya mbere na omi-cli (Kirundi Quickstart).
+* [`quickstart.bn.md`](quickstart.bn.md) — omi-cli দিয়ে শুরু করা (Bengali Quickstart).

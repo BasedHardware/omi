@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""Patch flutter_foreground_task 10.0.0 so startForeground succeeds in time.
+"""Patch flutter_foreground_task 10.0.0 to promote on a cold service start.
 
-Android 14+ delivers ForegroundServiceDidNotStartInTimeException unless
-Service.startForeground() returns. The plugin catches a rejected location
-promotion and stops, and its API_STOP branch returns without ever calling
-startForeground after restart() has already called startForegroundService().
+The plugin reads preferences and builds its configurable notification before
+its first startForeground(). On a background cold start, that path can consume
+the Android deadline or reject the location type. Promote with a static
+shortService notification in onCreate, before either preferences or Flutter
+work; then let the normal path change to location if it is permitted.
 
-The patch is idempotent. It is applied to the pub-cache plugin from Gradle
-before that module compiles.
+The patch also keeps the round-1 stop-path guard. It is idempotent and upgrades
+the already-patched pub-cache plugin from round 1 before that module compiles.
 """
 
 from __future__ import annotations
@@ -16,6 +17,90 @@ import sys
 from pathlib import Path
 
 MARKER = "OMI_FGS_START_CONTRACT"
+EARLY_MARKER = "OMI_FGS_EARLY_PROMOTION"
+RESTART_MARKER = "OMI_FGS_RESTART_PROMOTION"
+
+CREATE_OLD = """    override fun onCreate() {
+        super.onCreate()
+        registerBroadcastReceiver()
+    }
+"""
+
+CREATE_NEW = """    override fun onCreate() {
+        super.onCreate()
+        // OMI_FGS_EARLY_PROMOTION: no preferences, task, or Dart engine needed.
+        promoteColdStart()
+        registerBroadcastReceiver()
+    }
+"""
+
+START_COMMAND_OLD = """    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        isTimeout = false
+"""
+
+START_COMMAND_NEW = """    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // OMI_FGS_RESTART_PROMOTION: startForegroundService can target an
+        // existing instance, so onCreate will not run for this deadline.
+        promoteColdStart()
+        isTimeout = false
+"""
+
+TASK_REMOVED_OLD = """    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+"""
+
+TASK_REMOVED_NEW = """    override fun onTaskRemoved(rootIntent: Intent?) {
+        // A new start may be pending when stopWithTask removes the task.
+        promoteColdStart()
+        super.onTaskRemoved(rootIntent)
+"""
+
+STOP_SERVICE_OLD = """    private fun stopForegroundService() {
+        RestartReceiver.cancelRestartAlarm(this)
+"""
+
+STOP_SERVICE_NEW = """    private fun stopForegroundService() {
+        // A visibility callback can stop this existing instance before its
+        // queued start command runs. Promote before removing foreground state.
+        promoteColdStart()
+        RestartReceiver.cancelRestartAlarm(this)
+"""
+
+UPDATE_OLD = """                ForegroundServiceAction.API_UPDATE -> {
+                    updateNotification()
+"""
+
+UPDATE_NEW = """                ForegroundServiceAction.API_UPDATE -> {
+                    // onStartCommand first used shortService even for updates.
+                    // Restore the long-running location type before continuing.
+                    startForegroundService()
+                    updateNotification()
+"""
+
+EARLY_HELPER = """    // The fallback channel and icon are native constants. On Android 14+ the
+    // shortService type has no while-in-use location prerequisite. The normal
+    // promotion below replaces it with location when that type is allowed;
+    // otherwise the service stops before the shortService timeout.
+    private fun promoteColdStart() {
+        try {
+            val notification = fallbackContractNotification()
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                startForeground(
+                    1000,
+                    notification,
+                    android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_SHORT_SERVICE
+                )
+            } else {
+                startForeground(1000, notification)
+            }
+            Log.i(TAG, "OMI_FGS_EARLY_PROMOTION: startForeground succeeded in onCreate")
+        } catch (e: Exception) {
+            Log.e(TAG, "OMI_FGS_EARLY_PROMOTION: startForeground failed", e)
+            throw IllegalStateException("cold-start foreground promotion failed", e)
+        }
+    }
+
+"""
 
 STOP_OLD = """        if (action == ForegroundServiceAction.API_STOP) {
             stopForegroundService()
@@ -135,25 +220,69 @@ HELPERS = """
 
 
 def apply_patch(source: str) -> str:
-    if MARKER in source:
+    if RESTART_MARKER in source:
+        if source.count("private fun promoteColdStart()") != 1 or UPDATE_NEW not in source:
+            raise SystemExit("round-3 foreground-service patch is incomplete")
         return source
-    if STOP_OLD not in source:
-        raise SystemExit("flutter_foreground_task API_STOP block not found; plugin source drifted")
-    if START_OLD not in source:
-        raise SystemExit("flutter_foreground_task startForeground block not found; plugin source drifted")
-    if source.count(START_OLD) != 1 or source.count(STOP_OLD) != 1:
-        raise SystemExit("foreground service anchors are not unique")
-    patched = source.replace(STOP_OLD, STOP_NEW, 1).replace(START_OLD, START_NEW, 1)
+    if EARLY_MARKER not in source and source.count(CREATE_OLD) != 1:
+        raise SystemExit("flutter_foreground_task onCreate block missing or not unique")
+    patched = source
+    if MARKER not in source:
+        if source.count(START_OLD) != 1 or source.count(STOP_OLD) != 1:
+            raise SystemExit("flutter_foreground_task start/stop anchors missing or not unique")
+        patched = source.replace(STOP_OLD, STOP_NEW, 1).replace(START_OLD, START_NEW, 1)
+        annotated = (
+            '    @SuppressLint("WrongConstant", "SuspiciousIndentation")\n'
+            "    private fun startForegroundService() {\n"
+        )
+        plain = "    private fun startForegroundService() {\n"
+        if annotated in patched:
+            patched = patched.replace(annotated, HELPERS + annotated, 1)
+        elif plain in patched:
+            patched = patched.replace(plain, HELPERS + plain, 1)
+        else:
+            raise SystemExit("startForegroundService() not found after patch")
+    elif patched.count("private fun fallbackContractNotification()") != 1:
+        raise SystemExit("round-1 foreground-service patch is incomplete")
+
+    if EARLY_MARKER not in patched:
+        patched = patched.replace(CREATE_OLD, CREATE_NEW, 1)
     annotated = (
         '    @SuppressLint("WrongConstant", "SuspiciousIndentation")\n'
         "    private fun startForegroundService() {\n"
     )
     plain = "    private fun startForegroundService() {\n"
-    if annotated in patched:
-        return patched.replace(annotated, HELPERS + annotated, 1)
-    if plain in patched:
-        return patched.replace(plain, HELPERS + plain, 1)
-    raise SystemExit("startForegroundService() not found after patch")
+    if EARLY_MARKER not in source:
+        if annotated in patched:
+            patched = patched.replace(annotated, EARLY_HELPER + annotated, 1)
+        elif plain in patched:
+            patched = patched.replace(plain, EARLY_HELPER + plain, 1)
+        else:
+            raise SystemExit("startForegroundService() not found after early promotion")
+    else:
+        old_catch = """            Log.e(TAG, "OMI_FGS_EARLY_PROMOTION: startForeground failed in onCreate", e)
+        }
+"""
+        new_catch = """            Log.e(TAG, "OMI_FGS_EARLY_PROMOTION: startForeground failed", e)
+            throw IllegalStateException("cold-start foreground promotion failed", e)
+        }
+"""
+        if patched.count(old_catch) != 1:
+            raise SystemExit("round-2 cold-start promotion catch missing or not unique")
+        patched = patched.replace(old_catch, new_catch, 1)
+
+    for old, new in (
+        (START_COMMAND_OLD, START_COMMAND_NEW),
+        (TASK_REMOVED_OLD, TASK_REMOVED_NEW),
+        (STOP_SERVICE_OLD, STOP_SERVICE_NEW),
+    ):
+        if patched.count(old) != 1:
+            raise SystemExit("flutter_foreground_task lifecycle anchor missing or not unique")
+        patched = patched.replace(old, new, 1)
+    if patched.count(UPDATE_OLD) != 1:
+        raise SystemExit("flutter_foreground_task update anchor missing or not unique")
+    patched = patched.replace(UPDATE_OLD, UPDATE_NEW, 1)
+    return patched
 
 
 def main(argv: list[str]) -> int:

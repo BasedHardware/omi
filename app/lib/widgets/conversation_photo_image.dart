@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/ui/ui.dart';
 
 typedef ConversationPhotoStorageFetcher = Future<Uint8List?> Function(String conversationId, String photoId);
 
@@ -109,7 +110,7 @@ class _ConversationPhotoImageState extends State<ConversationPhotoImage> {
       future: _bytesFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting || snapshot.connectionState == ConnectionState.active) {
-          return const Center(child: CircularProgressIndicator());
+          return const Center(child: OmiSpinner());
         }
         final bytes = snapshot.data;
         if (bytes == null || bytes.isEmpty) {

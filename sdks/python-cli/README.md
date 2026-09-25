@@ -71,7 +71,7 @@ Tables without predefined columns include fields from every row, in first-seen o
 > Looking for localized guides? See the [nnapulitano (Neapolitan Quickstart)](examples/quickstart.nap.md), the [vosa vakaViti (Fijian Quickstart)](examples/quickstart.fj.md), the [papiamentu (Papiamento Quickstart)](examples/quickstart.pap.md), the [mirandés (Mirandese Quickstart)](examples/quickstart.mwl.md), the [hornjoserbšćina (Upper Sorbian Quickstart)](examples/quickstart.hsb.md), the [rumantsch (Romansh Quickstart)](examples/quickstart.rm.md), the [armãneashti (Aromanian Quickstart)](examples/quickstart.rup.md), or the [estremeñu (Extremaduran Quickstart)](examples/quickstart.ext.md).
 
 
-> Looking for localized guides? See the [🇮🇳 मैथिली त्वरित मार्गदर्शिका (Maithili Quickstart)](examples/quickstart.mai.md), the [🇮🇳 অসমীয়া ক্ষিপ্ৰ আৰম্ভণি নিৰ্দেশিকা (Assamese Quickstart)](examples/quickstart.as.md), or the [🇨🇦 ᐃᓄᒃᑎᑐᑦ (Inuktitut Quickstart)](examples/quickstart.iu.md).
+> Looking for localized guides? See the [🇮🇳 मैथिली त्वरित मार्गदर्शिका (Maithili Quickstart)](examples/quickstart.mai.md), the [🇮🇳 অসমীয়া ক্ষিপ্ৰ আৰম্ভণি নিৰ্দেশিকা (Assamese Quickstart)](examples/quickstart.as.md), the [🇧🇩 omi-cli দিয়ে শুরু করা (Bengali Quickstart)](examples/quickstart.bn.md), or the [🇨🇦 ᐃᓄᒃᑎᑐᑦ (Inuktitut Quickstart)](examples/quickstart.iu.md).
 
 > 🇩🇰 På dansk: [hurtigstartguide til omi-cli](examples/quickstart.da.md).
 
@@ -299,6 +299,9 @@ Both transcript JSON and `local call --args-json` require finite numbers:
 `NaN`, `Infinity`, `-Infinity`, and values outside Python's finite floating-point
 range are rejected before opening an API client. In `--json` mode, these input
 errors are reported as JSON on stderr.
+
+Goal numeric options and progress values must also be finite. NaN, infinities,
+and overflowing exponents are rejected before an API request.
 
 `action-item get` searches successive API pages until it finds the ID or
 reaches the end of the results. It can retrieve items beyond the first 1,000;

@@ -14,7 +14,7 @@ Read the guide for the area you are changing. `CLAUDE.md` points here.
 | Firmware | `omi/firmware/AGENTS.md` |
 | CI / deployment workflows | `.github/AGENTS.md` |
 | Public documentation | `docs/AGENTS.md` |
-| Product behavior / UI | `PRODUCT.md`, `product/invariants/` |
+| Product behavior / UI | `PRODUCT.md`, `product/invariants/`; macOS UI: `desktop/macos/docs/ux-contract.md` |
 | Shared client behavior | `contracts/parity/README.md` |
 | Released-client compatibility | `contracts/client-compat/` |
 | Fallbacks / fail-open paths | `.github/agent-docs/fallback-telemetry.md` |
