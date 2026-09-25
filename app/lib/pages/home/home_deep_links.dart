@@ -12,6 +12,7 @@ import 'package:omi/pages/conversation_detail/page.dart';
 import 'package:omi/pages/memories/page.dart';
 import 'package:omi/pages/settings/daily_summary_detail_page.dart';
 import 'package:omi/pages/settings/data_privacy_page.dart';
+import 'package:omi/pages/settings/device_settings.dart';
 import 'package:omi/pages/settings/wrapped_2025_page.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/message_provider.dart';
@@ -85,6 +86,7 @@ Future<void> openHomeDeepLink(
       // The sheet is pushed synchronously, so a page pushed next lands on top of it.
       unawaited(openSettings());
       if (id == 'data-privacy') unawaited(routeToPage(context, const DataPrivacyPage()));
+      if (id == 'device') unawaited(routeToPage(context, const DeviceSettings()));
     case 'memories':
     case 'facts':
       unawaited(routeToPage(context, const MemoriesPage()));

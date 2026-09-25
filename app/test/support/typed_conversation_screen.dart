@@ -93,7 +93,9 @@ Future<Widget> buildTypedConversationScreen(ConversationProvider provider) async
         ChangeNotifierProvider<CaptureProvider>.value(value: capture),
         ChangeNotifierProvider<SpeakerTagPromptsProvider>.value(value: speakerTagPrompts),
       ],
-      child: const Scaffold(body: ConversationsPage(requestInitialLoad: false)),
+      child: const Scaffold(
+        body: ConversationsPage(requestInitialLoad: false),
+      ),
     ),
   );
 }
