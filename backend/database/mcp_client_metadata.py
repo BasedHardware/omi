@@ -113,7 +113,7 @@ class _BoundedPool:
 _dns_pool = _BoundedPool(_CIMD_DNS_WORKERS, _CIMD_DNS_QUEUE)
 
 
-def _parse_metadata_url(client_id: str) -> Optional[Tuple[str, str]]:
+def parse_metadata_url(client_id: str) -> Optional[Tuple[str, str]]:
     """Return ``(ascii_host, request_target)`` for a safe HTTPS metadata URL.
 
     Query strings are rejected outright: they cannot change which client a
@@ -564,7 +564,7 @@ def get_url_client(client_id: str) -> Optional[Dict[str, Any]]:
     any network access unless the URL itself passed the SSRF checks above.
     May raise ``McpCimdUnavailable`` when the bounded fetch path is saturated.
     """
-    parsed = _parse_metadata_url(client_id)
+    parsed = parse_metadata_url(client_id)
     if parsed is None:
         return None
     hostname, target = parsed

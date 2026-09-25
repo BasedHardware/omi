@@ -101,13 +101,13 @@ def _client_lookup_executor(client_id: Any):
 
 def _url_form_rate_limit_key(client_id: Any) -> str:
     """Bucket URL-form client_ids by the normalized CIMD host the metadata
-    document would be fetched from: ``_parse_metadata_url`` lowercases and
+    document would be fetched from: ``parse_metadata_url`` lowercases and
     IDNA-encodes it, so one host shares a bucket across paths and case. The
     connection peer is the load balancer and forwarding headers are untrusted
     by design, so neither can key this limiter. A malformed URL-form id maps
     to one shared ``invalid`` bucket so garbage ids cannot mint unbounded
     distinct limiter keys."""
-    parsed = mcp_client_metadata._parse_metadata_url(client_id) if isinstance(client_id, str) else None
+    parsed = mcp_client_metadata.parse_metadata_url(client_id) if isinstance(client_id, str) else None
     host = parsed[0] if parsed is not None else "invalid"
     return f"host:{host}"
 
