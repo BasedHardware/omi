@@ -1,10 +1,35 @@
-# Omi CLI Examples
+# Ejemplos de Uso con OMI-CLI
 
-This directory contains example scripts for working with Omi data.
+Este directorio contiene ejemplos prácticos para diferentes lenguajes y casos de uso.
 
-| Script | Purpose |
-|--------|---------|
-| `memories_to_arangodb.py` | Export memories to ArangoDB AQL statements |
-| `memories_arangodb.md` | Usage documentation for ArangoDB integration |
+## Guías Rápidas de Inicio
 
-See individual files for usage instructions.
+| Idioma  | Tema                     | Archivo                          |
+|---------|--------------------------|----------------------------------|
+| English | Agent Quickstart           | `agent_quickstart.md`            |
+| **Guaraní** | **Guía de Agentes**       | **`agent_quickstart.gn.md`**    |
+| English | Hardware Integration       | `hardware_integration.md`        |
+
+## Ejemplos Avanzados
+
+- [Python: Automatización de Hardware](python/hardware_automation.py)
+- [JavaScript: Interfaz de Usuario](javascript/ui_integration.js)
+
+---
+
+### Contribuir
+
+1. Clone el repositorio:
+   ```bash
+   git clone https://github.com/BasedHardware/omi.git
+   ```
+
+2. Navegue al directorio de ejemplos:
+   ```bash
+   cd sdks/python-cli/examples
+   ```
+
+3. Ejecute ejemplos locales:
+   ```bash
+   python3 -m pip install -e ..
+   ```
