@@ -1433,6 +1433,14 @@ async def sync_local_files_v2(
         _cleanup_files(paths)
 
 
+def _sync_finalization_retrying() -> HTTPException:
+    return HTTPException(
+        status_code=503,
+        detail='Sync recovery finalization is retrying; local audio remains available.',
+        headers={'Retry-After': '10'},
+    )
+
+
 @router.get("/v2/sync-local-files/{job_id}", response_model=SyncJobStatusResponse, response_model_exclude_none=True)
 def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_uid)):
     """Poll for the status of an async sync job."""
@@ -1520,11 +1528,7 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
             release_sync_content_claim_after_job_retired(uid, job['content_id'], job_id)
         except Exception as error:
             logger.error('event=sync_terminal_cleanup outcome=retrying exception_type=%s', type(error).__name__)
-            raise HTTPException(
-                status_code=503,
-                detail='Sync recovery finalization is retrying; local audio remains available.',
-                headers={'Retry-After': '10'},
-            )
+            raise _sync_finalization_retrying()
         # Retaining an epoch counter after the durable claim is recoverable is
         # safe; never keep a client WAL pending solely for that optimization.
         delete_sync_job_run_lock_epoch(job_id)
@@ -1534,18 +1538,33 @@ def get_sync_job_status(job_id: str, uid: str = Depends(auth.get_current_user_ui
             dead_letter = sync_dead_letters.get_dead_letter(job_id)
         except Exception as error:
             logger.error('event=sync_dead_letter_check outcome=read_failed exception_type=%s', type(error).__name__)
-            dead_letter = None
+            raise _sync_finalization_retrying()
+        if dead_letter is None:
+            # Every current terminal publisher writes the pending record before
+            # Redis turns terminal, so a missing record means the job failed
+            # before the ledger shipped and nothing else will ever write it.
+            # Record it here (pending only: no confirmed-cohort event, and no
+            # reader replays pending rows) instead of 503-looping forever.
+            try:
+                dead_letter = sync_dead_letters.record_dead_letter_pending(
+                    job_id=job_id,
+                    uid=uid,
+                    conversation_id=job.get('conversation_id'),
+                    failure_code=sync_dead_letters.dead_letter_failure_code(job.get('reason_code')),
+                )
+            except Exception as error:
+                logger.error(
+                    'event=sync_dead_letter_check outcome=legacy_record_failed exception_type=%s',
+                    type(error).__name__,
+                )
+                raise _sync_finalization_retrying()
+            logger.warning('event=sync_dead_letter_check outcome=legacy_recorded')
         if (
-            dead_letter is None
-            or dead_letter.get('job_id') != job_id
+            dead_letter.get('job_id') != job_id
             or dead_letter.get('uid') != uid
             or dead_letter.get('status') not in ('pending', 'dead_letter')
         ):
-            raise HTTPException(
-                status_code=503,
-                detail='Sync recovery finalization is retrying; local audio remains available.',
-                headers={'Retry-After': '10'},
-            )
+            raise _sync_finalization_retrying()
         try:
             release_backfill_slot(uid, job_id)
         except Exception as error:
