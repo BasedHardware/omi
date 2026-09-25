@@ -29,6 +29,8 @@ const EdgeInsets _pillTargetMargin = EdgeInsets.symmetric(vertical: (kMinTapTarg
 /// Battery at or below this shows a low-battery glyph and a warning colour, not just a dot.
 const int kLowBatteryPercent = 20;
 
+const _stopGlyphRadius = BorderRadius.all(Radius.circular(4)); // omi-ux-allow: radius-literal -- a glyph
+
 class BatteryInfoWidget extends StatefulWidget {
   const BatteryInfoWidget({super.key});
 
@@ -352,9 +354,9 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
                   ? Container(
                       width: 18,
                       height: 18,
-                      decoration: BoxDecoration(
+                      decoration: const BoxDecoration(
                         color: OmiColors.textPrimary,
-                        borderRadius: BorderRadius.circular(4),
+                        borderRadius: _stopGlyphRadius,
                       ),
                     )
                   : isInitialising
