@@ -634,12 +634,10 @@ def create_checkout_session_endpoint(request: CreateCheckoutRequest, uid: str = 
         )
     except stripe.error.InvalidRequestError as e:
         logger.warning(f"Stripe rejected checkout session creation: {sanitize(str(e))}")
-        detail = (
-            str(e.user_message)
-            if hasattr(e, "user_message") and e.user_message
-            else "Invalid payment request. Please check your payment details."
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid payment request. Please check your payment details.",
         )
-        raise HTTPException(status_code=400, detail=detail)
     if not session:
         raise HTTPException(status_code=500, detail="Could not create checkout session.")
     return {"url": session.url, "session_id": session.id}
@@ -817,12 +815,10 @@ def upgrade_subscription_endpoint(request: UpgradeSubscriptionRequest, uid: str 
         raise
     except stripe.error.InvalidRequestError as e:
         logger.error(f"Stripe rejected subscription change: {sanitize(str(e))}")
-        detail = (
-            str(e.user_message)
-            if hasattr(e, "user_message") and e.user_message
-            else "Failed to process subscription change. Please check your payment details."
+        raise HTTPException(
+            status_code=400,
+            detail="Failed to process subscription change. Please check your payment details.",
         )
-        raise HTTPException(status_code=400, detail=detail)
     except Exception as e:
         logger.error(f"Error processing subscription change: {sanitize(str(e))}")
         raise HTTPException(status_code=500, detail="Failed to process subscription change. Please try again.")
@@ -894,7 +890,7 @@ def cancel_subscription_endpoint(
 
     except stripe.error.StripeError as e:
         logger.error(f"Stripe error canceling subscription: {e}")
-        raise HTTPException(status_code=500, detail=f"Could not cancel subscription: {str(e)}")
+        raise HTTPException(status_code=500, detail="Could not cancel subscription. Please try again.")
     except Exception as e:
         logger.error(f"Error canceling subscription: {e}")
         raise HTTPException(status_code=500, detail="Could not cancel subscription. Please try again.")
