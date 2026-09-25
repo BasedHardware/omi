@@ -110,21 +110,9 @@ class _TranscriptWidgetsState extends State<TranscriptWidgets> with AutomaticKee
           builder: (context, provider, child) {
             if (provider.loadingReprocessTranscription &&
                 provider.reprocessConversationId == provider.conversation.id) {
-              return Center(
-                child: Padding(
-                  padding: const EdgeInsets.only(top: 18.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
-                      const SizedBox(width: 16),
-                      Text(
-                        context.l10n.retranscribingConversation,
-                        style: const TextStyle(color: Colors.white, fontSize: 16),
-                      ),
-                    ],
-                  ),
-                ),
+              return Padding(
+                padding: const EdgeInsets.only(top: 18.0),
+                child: OmiLoadingState(label: context.l10n.retranscribingConversation),
               );
             }
 

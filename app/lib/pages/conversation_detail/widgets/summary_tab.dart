@@ -52,21 +52,9 @@ class _SummaryTabState extends State<SummaryTab> with AutomaticKeepAliveClientMi
     if (transcriptionProvider.loadingReprocessTranscription &&
         conversationId != null &&
         transcriptionProvider.reprocessConversationId == conversationId) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.only(top: 18.0),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
-              const SizedBox(width: 16),
-              Text(
-                context.l10n.retranscribingConversation,
-                style: const TextStyle(color: Colors.white, fontSize: 16),
-              ),
-            ],
-          ),
-        ),
+      return Padding(
+        padding: const EdgeInsets.only(top: 18.0),
+        child: OmiLoadingState(label: context.l10n.retranscribingConversation),
       );
     }
     return GestureDetector(
