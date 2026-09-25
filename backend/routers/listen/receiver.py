@@ -321,6 +321,12 @@ class ListenReceiver:
         and send-map state is unsynchronized, so an off-loop caller defers
         here instead of mutating it concurrently; ``call_soon_threadsafe``
         preserves cross-thread FIFO order.
+
+        The deferred action runs on the hop's own copy of the segment list (a
+        provider may reuse its buffer after the callback returns) and is
+        wrapped so a failure is observable — counted in the rejected counter
+        with a bounded log — instead of dying as a bare asyncio callback error
+        that silently loses the batch. A closed loop still drops quietly.
         """
         loop = self._listen_loop
         if loop is None:
@@ -333,8 +339,23 @@ class ListenReceiver:
         if current is loop:
             action(segments)
             return
+        hop_segments = list(segments)
+
+        def deferred() -> None:
+            try:
+                action(hop_segments)
+            except Exception as error:
+                OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(
+                    mode='v2' if self.capture_timeline_v2 else 'legacy', outcome='rejected'
+                ).inc()
+                logger.warning(
+                    'Listen STT callback failed on the listen loop type=%s segments=%d',
+                    type(error).__name__,
+                    len(hop_segments),
+                )
+
         try:
-            loop.call_soon_threadsafe(action, segments)
+            loop.call_soon_threadsafe(deferred)
         except RuntimeError:
             logger.warning('Listen STT callback arrived after loop shutdown; dropped %d segments', len(segments))
 

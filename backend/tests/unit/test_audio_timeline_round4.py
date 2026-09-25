@@ -13,6 +13,7 @@ Locks the wiring the round-3 re-review flagged:
 """
 
 import asyncio
+import logging
 import threading
 from collections import deque
 from types import SimpleNamespace
@@ -123,3 +124,69 @@ async def test_single_conversation_gap_inside_horizon_fails_open(monkeypatch):
     # A boundary inside the retained window never fails open.
     state.conversation_sample_ranges = deque([(RATE * 10, RATE * 20, 'conv-a'), (RATE * 25, RATE * 30, 'conv-b')])
     assert receiver._owner_for_sample(RATE * 22) is None
+
+
+# ---------------------------------------------------------------------------
+# N5: the loop hop copies the segment list and counts deferred failures
+# ---------------------------------------------------------------------------
+class _CaptureLoop:
+    """Stand-in for the listen loop: records deferred callbacks for manual run."""
+
+    def __init__(self):
+        self.callbacks = []
+
+    def call_soon_threadsafe(self, callback, *args):
+        self.callbacks.append((callback, args))
+
+
+class _ClosedLoop:
+    def call_soon_threadsafe(self, callback, *args):
+        raise RuntimeError('Event loop is closed')
+
+
+def test_deferred_callback_runs_on_its_own_segment_list(monkeypatch):
+    receiver = _receiver(monkeypatch, v2=True)
+    loop = _CaptureLoop()
+    receiver._listen_loop = loop
+    seen = []
+    segments = [{'id': 's1'}, {'id': 's2'}]
+
+    receiver._run_on_listen_loop(seen.extend, segments)
+    segments.clear()  # a provider may reuse its buffer once the callback returns
+    assert seen == [], 'nothing runs until the listen loop does'
+    callback, args = loop.callbacks[0]
+    callback(*args)
+    assert seen == [{'id': 's1'}, {'id': 's2'}], 'the hop must carry its own copy of the list'
+
+
+@pytest.mark.parametrize('v2,mode', [(True, 'v2'), (False, 'legacy')])
+def test_deferred_callback_exception_counts_rejected(monkeypatch, caplog, v2, mode):
+    receiver = _receiver(monkeypatch, v2=v2)
+    loop = _CaptureLoop()
+    receiver._listen_loop = loop
+
+    def boom(segments):
+        raise ValueError('provider callback exploded')
+
+    rejected = OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode=mode, outcome='rejected')
+    before = rejected._value.get()
+    with caplog.at_level(logging.WARNING, logger='routers.listen.receiver'):
+        receiver._run_on_listen_loop(boom, [{'id': 's1'}])
+        callback, args = loop.callbacks[0]
+        callback(*args)  # must not raise out of the deferred action
+    assert rejected._value.get() == before + 1
+    assert any('Listen STT callback failed' in record.message for record in caplog.records)
+    # The bounded log never carries segment content or identity.
+    assert 's1' not in caplog.text
+
+
+def test_closed_loop_still_drops_quietly(monkeypatch, caplog):
+    receiver = _receiver(monkeypatch, v2=True)
+    receiver._listen_loop = _ClosedLoop()
+    ran = []
+
+    with caplog.at_level(logging.WARNING, logger='routers.listen.receiver'):
+        receiver._run_on_listen_loop(ran.append, [{'id': 's1'}])  # must not raise
+
+    assert ran == []
+    assert any('loop shutdown' in record.message for record in caplog.records)
