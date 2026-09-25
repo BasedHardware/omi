@@ -12,7 +12,7 @@ PI_MONO_PACKAGED_NODE_MODULES="$PACKAGED_RUNTIME_DIR/pi-mono-extension-node_modu
 CACHE_STAMP="$PACKAGED_RUNTIME_DIR/cache.stamp"
 CACHE_LOCK="$DESKTOP_DIR/.harness/agent-runtime-prepare.lock.d"
 NODE_ARCHIVE_CACHE_DIR="${OMI_AGENT_RUNTIME_ARCHIVE_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/Library/Caches}/OmiDesktop/node-archives}"
-NODE_RUNTIME_CACHE_DIR="${OMI_AGENT_RUNTIME_NODE_CACHE_DIR:-${XDG_CACHE_HOME:-$HOME/Library/Caches}/OmiDesktop/node-runtime}"
+NODE_RUNTIME_CACHE_DIR=""
 NODE_RUNTIME_LOCK=""
 NODE_RUNTIME_TEMP=""
 LOCAL_NODE_SOURCE=""
@@ -21,6 +21,8 @@ STAGE_NODE_STATUS=0
 # shellcheck source-path=SCRIPTDIR
 # shellcheck source=agent-runtime-cache.sh
 source "$SCRIPT_DIR/agent-runtime-cache.sh"
+
+NODE_RUNTIME_CACHE_DIR="$(arc_node_runtime_cache_dir "$DESKTOP_DIR")"
 
 NODE_VERSION="${OMI_AGENT_NODE_VERSION:-v22.19.0}"
 NODE_MIN_VERSION="v22.19.0"
@@ -53,11 +55,14 @@ Local runs reuse a content-addressed, worktree-local preparation when all
 inputs and validated outputs are unchanged. Set OMI_AGENT_RUNTIME_FORCE_REBUILD=1
 to bypass it. CI and --skip-npm always prepare without reading or writing a stamp.
 
-The universal (or local) Node binary is built once per content key into
-${XDG_CACHE_HOME:-~/Library/Caches}/OmiDesktop/node-runtime (override with
-OMI_AGENT_RUNTIME_NODE_CACHE_DIR). Staging copies that file with cp -c, which
-clones on the same APFS volume and copies across volumes. The staged path is
-always a regular file. CI skips the shared Node cache. OMI_AGENT_RUNTIME_FORCE_REBUILD=1
+The universal (or local) Node binary is built once per content key. The cache
+is ${XDG_CACHE_HOME:-~/Library/Caches}/OmiDesktop/node-runtime when that
+directory is on the same APFS volume as this worktree, so staging can clone.
+Otherwise it is <volume>/.omi-cache/OmiDesktop/node-runtime on the worktree's
+own volume. OMI_AGENT_RUNTIME_NODE_CACHE_DIR overrides either choice. Staging
+clones only when the shared helper says the destination can take an APFS clone;
+it never treats a cross-volume cp -c as a clone. The staged path is always a
+regular file. CI skips the shared Node cache. OMI_AGENT_RUNTIME_FORCE_REBUILD=1
 bypasses it and then publishes a fresh cache entry.
 USAGE
 }

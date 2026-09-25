@@ -119,6 +119,49 @@ def test_token_only_identity_signs_urls_through_iam():
     assert credentials.refreshes == 1
 
 
+class _StorageScopedCredentials(google_auth_credentials.Scoped, _TokenOnlyCredentials):
+    """Cloud Run metadata credentials as the storage client holds them: devstorage scopes only.
+
+    The metadata server mints tokens for exactly the requested scopes, and IAM
+    signBlob rejects a devstorage-only token (ACCESS_TOKEN_SCOPE_INSUFFICIENT).
+    """
+
+    def __init__(self, scopes=None):
+        super().__init__()
+        self._scopes = scopes or ["https://www.googleapis.com/auth/devstorage.full_control"]
+        self.scoped_copies = []
+
+    @property
+    def requires_scopes(self):
+        return False
+
+    def with_scopes(self, scopes, default_scopes=None):
+        copy = _StorageScopedCredentials(scopes=list(scopes))
+        self.scoped_copies.append(copy)
+        return copy
+
+    def refresh(self, request):
+        super().refresh(request)
+        self.token = "token-for:" + ",".join(self._scopes)
+
+
+def test_token_only_identity_signs_with_a_cloud_platform_scoped_token():
+    credentials = _StorageScopedCredentials()
+
+    kwargs = local_storage.iam_signing_kwargs(SimpleNamespace(_credentials=credentials))
+
+    assert kwargs == {
+        "service_account_email": "backend-runtime@based-hardware.iam.gserviceaccount.com",
+        "access_token": "token-for:https://www.googleapis.com/auth/cloud-platform",
+    }
+    # The storage client's own (devstorage-scoped) credentials are never used to sign.
+    assert credentials.refreshes == 0
+    # The scoped copy is built once and reused, so each URL does not mint a new token.
+    local_storage.iam_signing_kwargs(SimpleNamespace(_credentials=credentials))
+    assert len(credentials.scoped_copies) == 1
+    assert credentials.scoped_copies[0].refreshes == 1
+
+
 def test_key_backed_identity_and_fakes_sign_locally():
     assert local_storage.iam_signing_kwargs(SimpleNamespace(_credentials=_SigningCredentials())) == {}
     assert local_storage.iam_signing_kwargs(MagicMock()) == {}

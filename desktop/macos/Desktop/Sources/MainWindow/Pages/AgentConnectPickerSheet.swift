@@ -68,15 +68,7 @@ struct ConnectDestinationSheet: View {
               .foregroundColor(Ink.secondary)
           }
           Spacer()
-          Button(action: onDismiss) {
-            Image(systemName: "xmark")
-              .scaledFont(size: OmiType.body, weight: .semibold)
-              .foregroundColor(Ink.secondary)
-              .frame(width: 28, height: 28)
-              .background(Circle().fill(Ink.rowFill))
-          }
-          .buttonStyle(.plain)
-          .accessibilityLabel("Close")
+          DismissButton(action: onDismiss)
         }
         .padding(OmiSpacing.xxl)
 

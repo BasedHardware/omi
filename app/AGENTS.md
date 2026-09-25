@@ -1,6 +1,7 @@
 # App (Flutter) — Operational Playbook
 
 Inherits [`../AGENTS.md`](../AGENTS.md); adds app-specific operational guidance.
+UI rules: [docs/ux-contract.md](docs/ux-contract.md).
 
 ## Build Bootstrap
 

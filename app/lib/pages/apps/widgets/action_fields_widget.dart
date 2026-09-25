@@ -5,7 +5,9 @@ import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import 'package:omi/pages/apps/providers/add_app_provider.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/app_localizations_helper.dart';
+import 'package:omi/utils/l10n_extensions.dart';
 
 class ActionFieldsWidget extends StatelessWidget {
   const ActionFieldsWidget({super.key});
@@ -30,12 +32,14 @@ class ActionFieldsWidget extends StatelessWidget {
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('Scopes', style: TextStyle(color: Colors.grey.shade300, fontSize: 16)),
-                      GestureDetector(
-                        onTap: () {
+                      Text(context.l10n.scopes, style: OmiType.callout.copyWith(color: OmiColors.textSecondary)),
+                      OmiIconButton(
+                        icon:
+                            const FaIcon(FontAwesomeIcons.solidCircleQuestion, color: OmiColors.textTertiary, size: 18),
+                        label: context.l10n.docs,
+                        onPressed: () {
                           launchUrl(Uri.parse('https://docs.omi.me/doc/developer/apps/Integrations'));
                         },
-                        child: FaIcon(FontAwesomeIcons.solidCircleQuestion, color: Colors.grey.shade500, size: 18),
                       ),
                     ],
                   ),
@@ -58,9 +62,9 @@ class ActionFieldsWidget extends StatelessWidget {
                                 Container(
                                   width: 40,
                                   height: 40,
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF2A2A2E),
-                                    borderRadius: BorderRadius.circular(10),
+                                  decoration: const BoxDecoration(
+                                    color: OmiColors.surface2,
+                                    borderRadius: OmiRadius.mdAll,
                                   ),
                                   child: Center(
                                     child: FaIcon(
@@ -74,10 +78,10 @@ class ActionFieldsWidget extends StatelessWidget {
                                 Expanded(
                                   child: Text(
                                     actionType.getLocalizedTitle(context),
-                                    style: const TextStyle(color: Colors.white, fontSize: 16),
+                                    style: OmiType.callout,
                                   ),
                                 ),
-                                Switch(
+                                OmiSwitch(
                                   value: isSelected,
                                   onChanged: (value) {
                                     if (value) {
@@ -86,7 +90,6 @@ class ActionFieldsWidget extends StatelessWidget {
                                       provider.removeActionByType(actionType.id);
                                     }
                                   },
-                                  activeThumbColor: const Color(0xFF6366F1),
                                 ),
                               ],
                             ),

@@ -14,12 +14,17 @@ endpoint in routers/mcp.py already guards against: `get_memories`
 `max(0, ...)` clamps). `get_conversations` was the one sibling in the file
 that forwarded the raw, unclamped client-supplied values.
 
+The REST list now reads through the shared card-page core: the default/cursor
+path calls `get_mcp_conversation_cards_page` (keyset, no offset) while a
+non-zero offset keeps the legacy `get_mcp_conversation_cards` raw-offset call.
+
 Follows the sanctioned test seam (see tests/unit/test_workstream_router_contract.py):
 import the router module normally and monkeypatch its db reference, then call
 the handler function directly.
 """
 
 import os
+from types import SimpleNamespace
 
 os.environ.setdefault('ENCRYPTION_SECRET', 'test_secret_for_ci_only_0123456789')
 os.environ.setdefault('OPENAI_API_KEY', 'sk-fake')
@@ -30,15 +35,29 @@ import routers.mcp as mcp_router
 UID = 'user-1'
 
 
-def _make_fake_get_conversations(captured):
+def _response():
+    return SimpleNamespace(headers={})
+
+
+def _fake_page(captured):
+    def _fake(uid, limit, *, after=None, **kwargs):
+        captured['uid'] = uid
+        captured['limit'] = limit
+        captured['after'] = after
+        # Mimics real google-cloud-firestore: Query.limit() forwards the raw
+        # argument to the RPC, and a negative value raises there.
+        if limit < 1:
+            raise ValueError("Firestore .limit() requires a non-negative argument")
+        return ([], None)
+
+    return _fake
+
+
+def _fake_legacy_page(captured):
     def _fake(uid, limit, offset, **kwargs):
         captured['uid'] = uid
         captured['limit'] = limit
         captured['offset'] = offset
-        # Mimics real google-cloud-firestore: Query.limit()/.offset() forward the raw
-        # argument to the RPC, and a negative value raises there. Same simulated
-        # failure used in tests/unit/test_mcp_sse_pagination_bounds.py and documented
-        # throughout database/memories.py and routers/developer.py.
         if limit < 1 or offset < 0:
             raise ValueError("Firestore .limit()/.offset() requires non-negative arguments")
         return []
@@ -53,22 +72,31 @@ def test_negative_offset_and_limit_are_clamped_before_reaching_firestore(monkeyp
     .offset(-1) would -- an unhandled 500 for the caller.
     """
     captured = {}
-    monkeypatch.setattr(mcp_router.conversations_db, "get_conversations", _make_fake_get_conversations(captured))
+    monkeypatch.setattr(
+        mcp_router.mcp_conversation_handlers.mcp_conversation_pages,
+        "get_mcp_conversation_cards_page",
+        _fake_page(captured),
+    )
 
-    result = mcp_router.get_conversations(limit=-1, offset=-1, uid=UID)
+    result = mcp_router.get_conversations(_response(), limit=-1, offset=-1, uid=UID)
 
     assert result == []
     assert captured['limit'] == 1
-    assert captured['offset'] == 0
+    # offset clamped to 0 routes to the keyset path, which takes no offset at all.
+    assert captured['after'] is None
 
 
 def test_oversized_limit_and_offset_are_capped(monkeypatch):
     """An unbounded limit/offset must be capped so a client cannot force a full-collection
     scan (limit) or a Firestore-billed skip-scan of unbounded size (offset)."""
     captured = {}
-    monkeypatch.setattr(mcp_router.conversations_db, "get_conversations", _make_fake_get_conversations(captured))
+    monkeypatch.setattr(
+        mcp_router.mcp_conversation_handlers.mcp_conversation_pages,
+        "get_mcp_conversation_cards",
+        _fake_legacy_page(captured),
+    )
 
-    mcp_router.get_conversations(limit=10_000_000, offset=10_000_000, uid=UID)
+    mcp_router.get_conversations(_response(), limit=10_000_000, offset=10_000_000, uid=UID)
 
     assert captured['limit'] == 1000
     assert captured['offset'] == 100000
@@ -78,9 +106,13 @@ def test_normal_pagination_passes_through_unchanged(monkeypatch):
     """Sibling/normal-path control: in-range limit/offset must reach the query
     unmodified, both before and after the clamp fix."""
     captured = {}
-    monkeypatch.setattr(mcp_router.conversations_db, "get_conversations", _make_fake_get_conversations(captured))
+    monkeypatch.setattr(
+        mcp_router.mcp_conversation_handlers.mcp_conversation_pages,
+        "get_mcp_conversation_cards",
+        _fake_legacy_page(captured),
+    )
 
-    mcp_router.get_conversations(limit=25, offset=10, uid=UID)
+    mcp_router.get_conversations(_response(), limit=25, offset=10, uid=UID)
 
     assert captured['limit'] == 25
     assert captured['offset'] == 10

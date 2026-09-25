@@ -293,7 +293,10 @@ class ShortcutSettings: ObservableObject {
     keyCode: 31, keyDisplay: "O", modifiers: [.control, .option])
   static let defaultAskOmiShortcut = askOmiCommandOShortcut
 
+  /// The same chords onboarding offers, in the same order, plus two more. A chord picked during
+  /// onboarding must never show up in Settings as "Custom".
   static let askOmiPresets: [KeyboardShortcut] = [
+    askOmiControlCommandOShortcut,
     askOmiCommandOShortcut,
     askOmiCommandReturnShortcut,
     askOmiCommandShiftReturnShortcut,

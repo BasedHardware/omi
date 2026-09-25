@@ -1,11 +1,12 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:intl_country_data/intl_country_data.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/pages/phone_calls/phone_setup_verify_page.dart';
 import 'package:omi/providers/phone_call_provider.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/phone_number_input.dart';
 
 class PhoneSetupNumberPage extends StatefulWidget {
@@ -47,16 +48,15 @@ class _PhoneSetupNumberPageState extends State<PhoneSetupNumberPage> {
   String get _fullNumber => _parsed.e164;
 
   void _showCountryPicker() {
-    showModalBottomSheet(
+    showOmiSheet<void>(
       context: context,
-      backgroundColor: const Color(0xFF1A1A1A),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      isScrollControlled: true,
-      builder: (_) => _CountryPickerSheet(
+      title: context.l10n.phoneSelectCountryTitle,
+      padding: EdgeInsets.zero,
+      builder: (sheetContext) => _CountryPickerSheet(
         selected: _selectedCountry,
         onSelect: (country) {
           setState(() => _selectedCountry = country);
-          Navigator.pop(context);
+          Navigator.pop(sheetContext);
           _phoneFocus.requestFocus();
         },
       ),
@@ -81,17 +81,16 @@ class _PhoneSetupNumberPageState extends State<PhoneSetupNumberPage> {
         await provider.loadVerifiedNumbers();
         if (!mounted) return;
         Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => const _AlreadyVerifiedRedirect()),
+          omiPageRoute(builder: (_) => const _AlreadyVerifiedRedirect()),
           (route) => route.isFirst,
         );
         return;
       }
 
       setState(() => _isLoading = false);
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => PhoneSetupVerifyPage(phoneNumber: _fullNumber, validationCode: provider.validationCode),
-        ),
+      routeToPage(
+        context,
+        PhoneSetupVerifyPage(phoneNumber: _fullNumber, validationCode: provider.validationCode),
       );
     } else {
       setState(() {
@@ -104,69 +103,64 @@ class _PhoneSetupNumberPageState extends State<PhoneSetupNumberPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-      ),
+      appBar: AppBar(leading: const OmiBackButton()),
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
+          padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xl),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               const SizedBox(height: 60),
-              Text(
-                context.l10n.enterYourNumber,
-                style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white),
-                textAlign: TextAlign.center,
+              Semantics(
+                header: true,
+                child: Text(context.l10n.enterYourNumber, style: OmiType.title1, textAlign: TextAlign.center),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: OmiSpacing.xs),
               Text(
                 context.l10n.phoneNumberCallerIdHint,
-                style: TextStyle(fontSize: 15, color: Colors.grey[500]),
+                style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 40),
               Container(
-                decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(16)),
+                decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
                 child: Row(
                   children: [
-                    GestureDetector(
-                      onTap: _showCountryPicker,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Text(_selectedCountry.flag, style: const TextStyle(fontSize: 22)),
-                            const SizedBox(width: 6),
-                            Text(
-                              '+${_selectedCountry.telephoneCode}',
-                              style: const TextStyle(color: Colors.white, fontSize: 16),
-                            ),
-                            const SizedBox(width: 4),
-                            Icon(Icons.arrow_drop_down, color: Colors.grey[500], size: 20),
-                          ],
+                    Semantics(
+                      button: true,
+                      label: context.l10n.phoneSelectCountryTitle,
+                      value: '${_selectedCountry.name} +${_selectedCountry.telephoneCode}',
+                      excludeSemantics: true,
+                      child: InkWell(
+                        onTap: _showCountryPicker,
+                        borderRadius: const BorderRadius.horizontal(left: Radius.circular(OmiRadius.lg)),
+                        child: Padding(
+                          padding: const EdgeInsets.all(OmiSpacing.md),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(_selectedCountry.flag, style: OmiType.title3),
+                              const SizedBox(width: 6),
+                              Text('+${_selectedCountry.telephoneCode}', style: OmiType.callout),
+                              const SizedBox(width: OmiSpacing.xxs),
+                              const Icon(Icons.arrow_drop_down, color: OmiColors.textTertiary, size: 20),
+                            ],
+                          ),
                         ),
                       ),
                     ),
-                    Container(width: 1, height: 28, color: Colors.grey[800]),
+                    Container(width: 1, height: 28, color: OmiColors.border),
                     Expanded(
                       child: TextField(
                         controller: _phoneController,
                         focusNode: _phoneFocus,
                         keyboardType: TextInputType.phone,
-                        style: const TextStyle(color: Colors.white, fontSize: 16),
+                        style: OmiType.callout,
                         decoration: InputDecoration(
                           border: InputBorder.none,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
                           hintText: context.l10n.phoneNumberHint,
-                          hintStyle: TextStyle(color: Colors.grey[600]),
+                          hintStyle: OmiType.callout.copyWith(color: OmiColors.textTertiary),
                         ),
                         inputFormatters: phoneFieldInputFormatters,
                         onChanged: (_) => setState(() => _errorMessage = null),
@@ -176,44 +170,27 @@ class _PhoneSetupNumberPageState extends State<PhoneSetupNumberPage> {
                 ),
               ),
               if (_errorMessage != null) ...[
-                const SizedBox(height: 12),
-                Text(
-                  _errorMessage!,
-                  style: TextStyle(fontSize: 13, color: Colors.red[400]),
-                  textAlign: TextAlign.center,
+                const SizedBox(height: OmiSpacing.sm),
+                Semantics(
+                  liveRegion: true,
+                  child: Text(
+                    _errorMessage!,
+                    style: OmiType.footnote.copyWith(color: OmiColors.danger),
+                    textAlign: TextAlign.center,
+                  ),
                 ),
               ],
               const Spacer(),
-              GestureDetector(
-                onTap: (_isValid && !_isLoading)
+              OmiButton(
+                label: context.l10n.phoneContinue,
+                expand: true,
+                isLoading: _isLoading,
+                onPressed: (_isValid && !_isLoading)
                     ? () {
-                        HapticFeedback.mediumImpact();
+                        OmiHaptics.medium();
                         _onContinue();
                       }
                     : null,
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  width: double.infinity,
-                  height: 56,
-                  decoration: BoxDecoration(
-                    color: (_isValid && !_isLoading) ? Colors.deepPurple : Colors.grey[800],
-                    borderRadius: BorderRadius.circular(28),
-                  ),
-                  alignment: Alignment.center,
-                  child: _isLoading
-                      ? const SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2.5,
-                            valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                          ),
-                        )
-                      : Text(
-                          context.l10n.phoneContinue,
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white),
-                        ),
-                ),
               ),
               const SizedBox(height: 32),
             ],
@@ -258,67 +235,57 @@ class _CountryPickerSheetState extends State<_CountryPickerSheet> {
 
   @override
   Widget build(BuildContext context) {
-    return DraggableScrollableSheet(
-      initialChildSize: 0.7,
-      minChildSize: 0.4,
-      maxChildSize: 0.9,
-      expand: false,
-      builder: (_, scrollController) => Column(
+    // The sheet clamps this to the space left above the keyboard.
+    return SizedBox(
+      height: MediaQuery.sizeOf(context).height * 0.7,
+      child: Column(
         children: [
-          const SizedBox(height: 12),
-          Container(
-            width: 36,
-            height: 4,
-            decoration: BoxDecoration(color: Colors.grey[700], borderRadius: BorderRadius.circular(2)),
-          ),
-          const SizedBox(height: 16),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            child: TextField(
+            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
+            child: OmiSearchField(
+              placeholder: context.l10n.searchCountries,
               controller: _searchController,
               onChanged: _filter,
-              style: const TextStyle(color: Colors.white, fontSize: 15),
-              decoration: InputDecoration(
-                filled: true,
-                fillColor: const Color(0xFF1F1F25),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-                prefixIcon: Icon(Icons.search, color: Colors.grey[600], size: 20),
-                hintText: context.l10n.searchCountries,
-                hintStyle: TextStyle(color: Colors.grey[600], fontSize: 15),
-                contentPadding: const EdgeInsets.symmetric(vertical: 12),
-              ),
             ),
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: OmiSpacing.xs),
           Expanded(
             child: ListView.builder(
-              controller: scrollController,
               itemCount: _filtered.length,
               itemBuilder: (_, i) {
                 var c = _filtered[i];
                 var isSelected = c.codeAlpha2 == widget.selected.codeAlpha2;
-                return GestureDetector(
-                  onTap: () => widget.onSelect(c),
-                  child: Container(
-                    color: Colors.transparent,
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                    child: Row(
-                      children: [
-                        Text(c.flag, style: const TextStyle(fontSize: 22)),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            c.name,
-                            style: TextStyle(
-                              fontSize: 15,
-                              color: isSelected ? Colors.white : Colors.grey[300],
-                              fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                return Semantics(
+                  selected: isSelected,
+                  button: true,
+                  child: InkWell(
+                    onTap: () => widget.onSelect(c),
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: 14),
+                      child: Row(
+                        children: [
+                          ExcludeSemantics(child: Text(c.flag, style: OmiType.title3)),
+                          const SizedBox(width: OmiSpacing.sm),
+                          Expanded(
+                            child: Text(
+                              c.name,
+                              style: OmiType.subhead.copyWith(
+                                color: isSelected ? OmiColors.textPrimary : OmiColors.textSecondary,
+                                fontWeight: isSelected ? FontWeight.w600 : FontWeight.normal,
+                              ),
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            overflow: TextOverflow.ellipsis,
                           ),
-                        ),
-                        Text('+${c.telephoneCode}', style: TextStyle(fontSize: 14, color: Colors.grey[500])),
-                      ],
+                          Text(
+                            '+${c.telephoneCode}',
+                            style: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
+                          ),
+                          if (isSelected) ...[
+                            const SizedBox(width: OmiSpacing.xs),
+                            const Icon(Icons.check, color: OmiColors.textPrimary, size: 20),
+                          ],
+                        ],
+                      ),
                     ),
                   ),
                 );
@@ -339,6 +306,6 @@ class _AlreadyVerifiedRedirect extends StatelessWidget {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       Navigator.of(context).pop();
     });
-    return const Scaffold(backgroundColor: Colors.black);
+    return const Scaffold();
   }
 }
