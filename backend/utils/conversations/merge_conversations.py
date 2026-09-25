@@ -31,6 +31,7 @@ from utils.memory.retraction_scope import (
 from utils.conversations.datetime_utils import coerce_utc_datetime
 from utils.conversations.projection_payload import omit_null_processing_state
 from utils.conversations import lifecycle as lifecycle_service
+from utils.conversations.processing_trigger import ProcessingTrigger
 from utils.cloud_tasks import is_audio_merge_dispatch_enabled
 from utils.other.storage import (
     compute_audio_files_fingerprint,
@@ -358,8 +359,7 @@ def perform_merge_async(
                         uid,
                         new_conversation.language or "en",
                         new_conversation,
-                        force_process=True,
-                        is_reprocess=False,  # Not a reprocess - this is a new conversation
+                        trigger=ProcessingTrigger.MERGE,
                     )
             except Exception as e:
                 logger.error(f"Error processing merged conversation: {e}")

@@ -339,6 +339,22 @@ def send_notification(
     _send_to_user(user_id, tag, notification=notification, data=data, tokens=tokens)
 
 
+def send_notification_result(
+    user_id: str, title: str, body: str, data: Optional[Dict[str, Any]] = None, tokens: Optional[List[str]] = None
+) -> int:
+    """send_notification with the successful-send count returned.
+
+    The self-heal wedge nudge must distinguish a delivered push from an
+    undeliverable one (no tokens, or every send rejected), which
+    ``send_notification``'s ``None`` return cannot express.
+    """
+    logger.info(f'send_notification to user {user_id}')
+    body = to_plain_text(body)
+    tag = _generate_notification_tag(user_id, title, body, data)
+    notification = messaging.Notification(title=title, body=body)
+    return _send_to_user(user_id, tag, notification=notification, data=data, tokens=tokens)
+
+
 async def send_notification_async(
     user_id: str, title: str, body: str, data: Optional[Dict[str, Any]] = None, tokens: Optional[List[str]] = None
 ) -> None:

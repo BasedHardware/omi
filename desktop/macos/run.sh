@@ -212,17 +212,8 @@ substep() {
     printf "[%6.1fs]   ├─ %s\n" "$total_elapsed" "$1"
 }
 
-macos_copy_tree() {
-    local src="$1"
-    local dest="$2"
-    if [ "$(uname -s)" = "Darwin" ] && command -v ditto >/dev/null 2>&1; then
-        ditto --norsrc "$src" "$dest"
-    elif [ "$(uname -s)" = "Darwin" ]; then
-        cp -R -X "$src" "$dest"
-    else
-        cp -R "$src" "$dest"
-    fi
-}
+# shellcheck source=scripts/macos-copy-tree.sh
+source "$SCRIPT_DIR/scripts/macos-copy-tree.sh"
 
 # Per-worktree isolation: derive unique ports + bundle name so parallel worktrees don't
 # collide. Sets OMI_INSTANCE / RUST_PORT / PYTHON_PORT / AUTOMATION_PORT / OMI_APP_NAME /
@@ -1776,9 +1767,6 @@ build_launch_env_args() {
     fi
     if [ -n "${OMI_FORCE_BUCKET_WORKSTREAMS:-}" ]; then
         LAUNCH_ENV_ARGS+=(--env "OMI_FORCE_BUCKET_WORKSTREAMS=$OMI_FORCE_BUCKET_WORKSTREAMS")
-    fi
-    if [ -n "${OMI_FORCE_MEETING_NOTE_SCREENSHOTS:-}" ]; then
-        LAUNCH_ENV_ARGS+=(--env "OMI_FORCE_MEETING_NOTE_SCREENSHOTS=$OMI_FORCE_MEETING_NOTE_SCREENSHOTS")
     fi
     # Forward automation token overrides when the caller already pinned them
     # (e.g. desktop-core-harness.sh). Default token discovery prefers Darwin

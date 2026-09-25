@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import re
+import urllib.parse
 from datetime import datetime, timezone
 from email.utils import parsedate_to_datetime
 from typing import Any, Iterator, Mapping, Optional
@@ -34,7 +35,7 @@ from tenacity import (
 
 from omi_cli import __version__
 from omi_cli.config import Profile
-from omi_cli.errors import CliError, RateLimitError, ServerError, TransportError, from_status
+from omi_cli.errors import CliError, RateLimitError, ServerError, TransportError, UsageError, from_status
 
 USER_AGENT = f"omi-cli/{__version__} (+https://github.com/BasedHardware/omi)"
 DEFAULT_TIMEOUT = httpx.Timeout(30.0, connect=10.0)
@@ -403,6 +404,19 @@ def _format_rate_limit_detail(retry_after: Optional[float], detail: Optional[str
     if detail:
         parts.append(detail)
     return " ".join(parts) if parts else "Slow down and retry shortly."
+
+
+def path_segment(value: str) -> str:
+    """Percent-encode a user-supplied ID for use as a single URL path segment.
+
+    IDs come straight from argv (often from an agent), and are interpolated into
+    request paths. Unencoded, ``/`` and ``..`` let an ID escape its resource
+    collection — httpx resolves dot-segments, so ``omi goal delete a/../../conversations/X``
+    would DELETE a conversation — while ``?`` and ``#`` silently truncate the path.
+    """
+    if value in {"", ".", ".."}:
+        raise UsageError(message=f"Invalid ID: {value!r}", detail="IDs cannot be empty, '.' or '..'.")
+    return urllib.parse.quote(value, safe="")
 
 
 def chunked(seq: list[Any], size: int) -> Iterator[list[Any]]:

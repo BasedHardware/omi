@@ -76,22 +76,7 @@ struct ContextReminderCard: View {
     .padding(.horizontal, OmiSpacing.lg)
     .padding(.vertical, OmiSpacing.md + 2)
     .frame(maxWidth: .infinity, alignment: .leading)
-    .overlay(alignment: .topTrailing) {
-      Button {
-        FloatingControlBarManager.shared.dismissCurrentNotification()
-      } label: {
-        Image(systemName: "xmark")
-          .font(.system(size: 10, weight: .bold))
-          .foregroundColor(.white.opacity(0.62))
-          .frame(width: 18, height: 18)
-          .background(Color.white.opacity(0.08))
-          .clipShape(Circle())
-      }
-      .buttonStyle(.plain)
-      .padding(.horizontal, OmiSpacing.md)
-      .padding(.vertical, OmiSpacing.md)
-      .accessibilityLabel("Dismiss")
-    }
+    .notchDismissOverlay(accessibilityLabel: "Dismiss reminder")
     .accessibilityElement(children: .contain)
     .accessibilityIdentifier("context-reminder-card")
     .onChange(of: reminderID) { _, _ in

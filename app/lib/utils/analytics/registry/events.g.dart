@@ -1333,3 +1333,147 @@ final class ProductValueEvent extends RegisteredEvent {
   @override
   Map<String, Object> get properties => {"kind": kind.wireName, "surface": surface.wireName, if (objectId != null) "object_id": objectId!.value};
 }
+
+enum ConversationActionAction {
+  askOmi("ask_omi"),
+  star("star"),
+  unstar("unstar"),
+  share("share"),
+  rename("rename"),
+  moveFolder("move_folder"),
+  recordingsOpen("recordings_open"),
+  separate("separate"),
+  delete("delete"),
+  copyTranscript("copy_transcript"),
+  copySummary("copy_summary"),
+  shareAudio("share_audio"),
+  linkEvent("link_event"),
+  reprocess("reprocess"),
+  search("search"),
+  visibility("visibility"),
+  open("open"),
+  select("select"),
+  copyConversationId("copy_conversation_id"),
+  testPrompt("test_prompt");
+  const ConversationActionAction(this.wireName);
+  final String wireName;
+}
+
+enum ConversationActionSurface {
+  topBar("top_bar"),
+  overflow("overflow"),
+  detailBody("detail_body"),
+  rowLongPress("row_long_press"),
+  rowSwipe("row_swipe");
+  const ConversationActionSurface(this.wireName);
+  final String wireName;
+}
+
+final class ConversationAction extends RegisteredEvent {
+  const ConversationAction({required this.action, required this.surface});
+  final ConversationActionAction action;
+  final ConversationActionSurface surface;
+  @override
+  String get wireName => "Conversation Action";
+  @override
+  Map<String, Object> get properties => {"action": action.wireName, "surface": surface.wireName};
+}
+
+final class SpeakerTagPromptsViewed extends RegisteredEvent {
+  const SpeakerTagPromptsViewed({required this.promptCount, required this.firstTime});
+  final int promptCount;
+  final bool firstTime;
+  @override
+  String get wireName => "Speaker Tag Prompts Viewed";
+  @override
+  Map<String, Object> get properties => {"prompt_count": promptCount, "first_time": firstTime};
+}
+
+enum SpeakerTagPromptClipPlayedKind {
+  ownerCheck("owner_check"),
+  confirmPerson("confirm_person"),
+  identify("identify"),
+  unknown("unknown");
+  const SpeakerTagPromptClipPlayedKind(this.wireName);
+  final String wireName;
+}
+
+final class SpeakerTagPromptClipPlayed extends RegisteredEvent {
+  const SpeakerTagPromptClipPlayed({required this.kind, required this.loaded});
+  final SpeakerTagPromptClipPlayedKind kind;
+  final bool loaded;
+  @override
+  String get wireName => "Speaker Tag Prompt Clip Played";
+  @override
+  Map<String, Object> get properties => {"kind": kind.wireName, "loaded": loaded};
+}
+
+enum SpeakerTagPromptAnswerSubmittedKind {
+  ownerCheck("owner_check"),
+  confirmPerson("confirm_person"),
+  identify("identify"),
+  unknown("unknown");
+  const SpeakerTagPromptAnswerSubmittedKind(this.wireName);
+  final String wireName;
+}
+
+enum SpeakerTagPromptAnswerSubmittedAnswer {
+  me("me"),
+  notMe("not_me"),
+  person("person"),
+  newPerson("new_person"),
+  someoneElse("someone_else"),
+  skip("skip"),
+  unknown("unknown");
+  const SpeakerTagPromptAnswerSubmittedAnswer(this.wireName);
+  final String wireName;
+}
+
+final class SpeakerTagPromptAnswerSubmitted extends RegisteredEvent {
+  const SpeakerTagPromptAnswerSubmitted({required this.kind, required this.answer, required this.clipPlayed, required this.firstTime, required this.succeeded});
+  final SpeakerTagPromptAnswerSubmittedKind kind;
+  final SpeakerTagPromptAnswerSubmittedAnswer answer;
+  final bool clipPlayed;
+  final bool firstTime;
+  final bool succeeded;
+  @override
+  String get wireName => "Speaker Tag Prompt Answer Submitted";
+  @override
+  Map<String, Object> get properties => {"kind": kind.wireName, "answer": answer.wireName, "clip_played": clipPlayed, "first_time": firstTime, "succeeded": succeeded};
+}
+
+final class SpeakerTagPromptsClosed extends RegisteredEvent {
+  const SpeakerTagPromptsClosed({required this.answeredCount, required this.promptCount});
+  final int answeredCount;
+  final int promptCount;
+  @override
+  String get wireName => "Speaker Tag Prompts Closed";
+  @override
+  Map<String, Object> get properties => {"answered_count": answeredCount, "prompt_count": promptCount};
+}
+
+enum VoiceProfileSettingToggledSetting {
+  tagPrompts("tag_prompts"),
+  saveOtherVoices("save_other_voices");
+  const VoiceProfileSettingToggledSetting(this.wireName);
+  final String wireName;
+}
+
+enum VoiceProfileSettingToggledSource {
+  settings("settings"),
+  firstPrompt("first_prompt");
+  const VoiceProfileSettingToggledSource(this.wireName);
+  final String wireName;
+}
+
+final class VoiceProfileSettingToggled extends RegisteredEvent {
+  const VoiceProfileSettingToggled({required this.setting, required this.enabled, required this.source, required this.succeeded});
+  final VoiceProfileSettingToggledSetting setting;
+  final bool enabled;
+  final VoiceProfileSettingToggledSource source;
+  final bool succeeded;
+  @override
+  String get wireName => "Voice Profile Setting Toggled";
+  @override
+  Map<String, Object> get properties => {"setting": setting.wireName, "enabled": enabled, "source": source.wireName, "succeeded": succeeded};
+}

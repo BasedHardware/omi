@@ -189,11 +189,24 @@ jobs:
             echo "PUSHER_QUALIFICATION_RUN_ID=$QUALIFICATION_RUN_ID"
           } >> "$GITHUB_ENV"
 
+      # Prod: GitHub WIF as omi-ci-deployer-prod@ (credential-hygiene WS-C, plan v2 Phase E).
+      # Development keeps its JSON lane.
+      - name: Google Auth (prod WIF)
+        id: auth-wif
+        if: github.event.inputs.environment == 'prod'
+        uses: google-github-actions/auth@v3
+        with:
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
+          service_account: omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com
+
       - name: Google Auth
         id: auth
-        uses: 'google-github-actions/auth@v3'
+        if: github.event.inputs.environment != 'prod'
+        uses: google-github-actions/auth@v3
         with:
-          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+          # Development: GitHub WIF as the dev deployer, no JSON key (credential hygiene WS-D).
+          workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
+          service_account: omi-ci-deployer-dev@based-hardware-dev.iam.gserviceaccount.com
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v3
@@ -521,7 +534,8 @@ jobs:
             --expected-workflow-id "$PUSHER_QUALIFICATION_WORKFLOW_ID" \
             --expected-run-id "$PUSHER_QUALIFICATION_RUN_ID" \
             --expected-canary-workflow-id "$EXPECTED_CANARY_WORKFLOW_ID" \
-            --expected-canary-run-id "$GITHUB_RUN_ID"
+            --expected-canary-run-id "$GITHUB_RUN_ID" \
+            --expected-canary-source-sha "$CHECKED_OUT_SHA"
 
       - name: Upload protected production Pusher canary evidence
         if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod'
@@ -695,7 +709,8 @@ jobs:
             --expected-workflow-id "$PUSHER_QUALIFICATION_WORKFLOW_ID" \
             --expected-run-id "$PUSHER_QUALIFICATION_RUN_ID" \
             --expected-canary-workflow-id "$EXPECTED_CANARY_WORKFLOW_ID" \
-            --expected-canary-run-id "$GITHUB_RUN_ID"
+            --expected-canary-run-id "$GITHUB_RUN_ID" \
+            --expected-canary-source-sha "$CHECKED_OUT_SHA"
 
       - name: Upload exact live production Pusher deployment receipt
         if: env.SERVICE == 'pusher' && github.event.inputs.environment == 'prod'

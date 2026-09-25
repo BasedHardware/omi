@@ -156,7 +156,7 @@ void main() {
     await pumpRow(tester, makeWal(WalStatus.outsideRecoveryWindow));
 
     expect(find.text("Too old to sync — Omi can't accept it"), findsOneWidget);
-    expect(find.text('Retry'), findsNothing);
+    expect(find.text('Try Again'), findsNothing);
     expect(find.text('Waiting to sync'), findsNothing);
   });
 
@@ -164,7 +164,7 @@ void main() {
     await pumpRow(tester, makeWal(WalStatus.miss)..retryCount = walMaxAutoRetries);
 
     expect(find.text('Failed — tap Retry'), findsOneWidget);
-    expect(find.text('Retry'), findsOneWidget);
+    expect(find.text('Try Again'), findsOneWidget);
     expect(find.text('Delete'), findsNothing, reason: 'a deliberate retry can still succeed here');
   });
 
@@ -172,7 +172,7 @@ void main() {
     await pumpRow(tester, makeWal(WalStatus.unsupportedAudio));
 
     expect(find.text("Audio couldn't be read — can't be synced"), findsOneWidget);
-    expect(find.text('Retry'), findsNothing);
+    expect(find.text('Try Again'), findsNothing);
     expect(find.text('Failed — tap Retry'), findsNothing);
     expect(find.text('Delete'), findsOneWidget);
   });
@@ -181,7 +181,7 @@ void main() {
     for (final status in [WalStatus.corrupted, WalStatus.outsideRecoveryWindow, WalStatus.unsupportedAudio]) {
       await pumpRow(tester, makeWal(status));
       expect(find.text('Delete'), findsOneWidget, reason: '$status has no other resolution');
-      expect(find.text('Retry'), findsNothing, reason: '$status cannot be retried into success');
+      expect(find.text('Try Again'), findsNothing, reason: '$status cannot be retried into success');
     }
   });
 }
