@@ -6,6 +6,7 @@ import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/phone_call.dart';
@@ -20,7 +21,7 @@ import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/enums.dart';
 
-enum _Live { idle, pendant, pendantPaused, phone, phoneAfterPendant }
+enum _Live { idle, idleDeviceConnected, pendant, pendantPaused, phone, phoneAfterPendant }
 
 class _Capture extends ChangeNotifier implements CaptureProvider {
   _Capture(this.live);
@@ -31,19 +32,21 @@ class _Capture extends ChangeNotifier implements CaptureProvider {
 
   @override
   String? get liveCaptureSource => switch (live) {
-        _Live.idle => null,
+        _Live.idle || _Live.idleDeviceConnected => null,
         _Live.pendant || _Live.pendantPaused => 'omi',
         _ => 'phone',
       };
   @override
   RecordingState get recordingState => switch (live) {
-        _Live.idle => RecordingState.stop,
+        _Live.idle || _Live.idleDeviceConnected => RecordingState.stop,
         _Live.pendant => RecordingState.deviceRecord,
         _Live.pendantPaused => RecordingState.pause,
         _ => RecordingState.record,
       };
   @override
   bool get havingRecordingDevice => live != _Live.idle && live != _Live.phone;
+  @override
+  BtDevice? get recordingDevice => null;
   @override
   bool get isPaused => live == _Live.pendantPaused;
   @override
@@ -55,8 +58,9 @@ class _Capture extends ChangeNotifier implements CaptureProvider {
   @override
   bool get isPhoneMicBatchRecording => false;
   @override
-  DateTime? get liveCaptureStartedAt =>
-      live == _Live.idle ? null : DateTime.now().subtract(const Duration(minutes: 12, seconds: 4));
+  DateTime? get liveCaptureStartedAt => live == _Live.idle || live == _Live.idleDeviceConnected
+      ? null
+      : DateTime.now().subtract(const Duration(minutes: 12, seconds: 4));
   @override
   List<TranscriptSegment> get segments => live == _Live.idle
       ? []
@@ -182,9 +186,36 @@ void main() {
       expect(find.byType(LiveCaptureCard), findsNothing);
     });
 
-    testWidgets('hidden when nothing is live', (tester) async {
+    testWidgets('hidden when nothing is live, including a connected pendant that is not capturing', (tester) async {
       await pump(tester, const ConversationCaptureWidget(showsCall: true), capture: _Capture(_Live.idle));
       expect(find.byType(LiveCaptureCard), findsNothing);
+      await pump(tester, const ConversationCaptureWidget(showsCall: true),
+          capture: _Capture(_Live.idleDeviceConnected));
+      expect(find.byType(LiveCaptureCard), findsNothing);
+      expect(find.byIcon(Icons.record_voice_over), findsNothing, reason: 'the old header is gone');
+    });
+
+    testWidgets('a call that is still ringing is amber and has no time yet', (tester) async {
+      await pump(tester, const ConversationCaptureWidget(showsCall: true),
+          capture: _Capture(_Live.idle), call: _Call(PhoneCallState.ringing));
+      final card = tester.widget<LiveCaptureCard>(find.byType(LiveCaptureCard));
+      expect(card.paused, isTrue);
+      expect(card.elapsed, isNull);
+    });
+
+    testWidgets('the card is one button that opens the live transcript', (tester) async {
+      await pump(tester, const ConversationCaptureWidget(showsCall: true), capture: _Capture(_Live.pendant));
+      expect(find.bySemanticsLabel(RegExp(en.captureSourcePendant)), findsWidgets);
+      final semantics = tester.getSemantics(find.byType(LiveCaptureCard));
+      expect(semantics, isNotNull);
+    });
+
+    testWidgets('photo-capture devices have no Pause', (tester) async {
+      expect(
+          LiveCaptureCard.canPause(BtDevice(id: 'g', name: 'Glass', type: DeviceType.openglass, rssi: -40),
+              source: 'openglass'),
+          isFalse);
+      expect(LiveCaptureCard.canPause(null, source: 'phone'), isTrue);
     });
   });
 
@@ -211,6 +242,26 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text(en.pendantIsListeningTitle), findsNothing);
       expect(capture.phoneStarts, 0);
+    });
+
+    testWidgets('during an Omi call the button never starts a recording', (tester) async {
+      final capture = _Capture(_Live.idle);
+      await pump(tester, const HomeRecordButton(), capture: capture, call: _Call(PhoneCallState.active));
+      await tester.tap(find.bySemanticsLabel(en.startRecording));
+      expect(capture.phoneStarts, 0, reason: 'the tap opens the call page instead');
+      await tester.pumpWidget(const SizedBox()); // the call page itself is not under test here
+    });
+
+    testWidgets('the badge is fully tappable and does not cover the circle\'s centre', (tester) async {
+      await pump(tester, const HomeRecordButton(), capture: _Capture(_Live.idle));
+      final badge = tester.getRect(find
+          .ancestor(of: find.byIcon(Icons.keyboard_arrow_down_rounded), matching: find.byType(GestureDetector))
+          .first);
+      final button = tester.getRect(find.byType(HomeRecordButton));
+      expect(badge.width, greaterThanOrEqualTo(30));
+      expect(button.inflate(0.1).contains(badge.topLeft) && button.inflate(0.1).contains(badge.bottomRight), isTrue,
+          reason: 'a Stack only hit-tests inside its own box');
+      expect(badge.contains(button.center), isFalse);
     });
 
     testWidgets('while the phone records, the button is its stop', (tester) async {

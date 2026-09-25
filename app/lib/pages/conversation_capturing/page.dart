@@ -27,6 +27,7 @@ import 'package:omi/widgets/media_viewer_page.dart';
 import 'package:omi/widgets/transcript.dart';
 import 'package:omi/services/sockets/listen_client_state.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/pages/conversations/widgets/live_capture_card.dart';
 import 'package:omi/widgets/capture_sources.dart';
 import 'package:omi/widgets/photos_grid.dart';
 
@@ -189,7 +190,8 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
                       mainAxisSize: MainAxisSize.min,
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        if (provider.liveCaptureSource != null) ...[
+                        if (provider.liveCaptureSource != null &&
+                            LiveCaptureCard.canPause(provider.recordingDevice, source: provider.liveCaptureSource)) ...[
                           OmiIconButton.filled(
                             key: const Key('capture_pause_button'),
                             icon: Icon(effectivelyMuted ? Icons.play_arrow_rounded : Icons.pause_rounded, size: 26),

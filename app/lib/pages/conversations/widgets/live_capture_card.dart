@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/capture_sources.dart';
@@ -36,6 +37,14 @@ class LiveCaptureCard extends StatelessWidget {
 
   static const String callSource = 'call';
 
+  /// Pausing means nothing to a photo-capture device (OmiGlass, Ray-Ban Meta): it keeps taking
+  /// photos. The live card and the live page use this one rule.
+  static bool canPause(BtDevice? device, {required String? source}) {
+    if (source == null || source == 'phone') return true;
+    final type = device?.type;
+    return type != DeviceType.openglass && type != DeviceType.raybanMeta;
+  }
+
   static String formatElapsed(Duration d) {
     final h = d.inHours, m = d.inMinutes % 60, s = (d.inSeconds % 60).toString().padLeft(2, '0');
     return h > 0 ? '$h:${m.toString().padLeft(2, '0')}:$s' : '$m:$s';
@@ -55,7 +64,10 @@ class LiveCaptureCard extends StatelessWidget {
     final statusRow = Row(children: [
       Expanded(
         child: Row(children: [
-          Icon(isCall ? Icons.call_rounded : CaptureSources.icon(source), size: 18, color: OmiColors.textPrimary),
+          ExcludeSemantics(
+            child:
+                Icon(isCall ? Icons.call_rounded : CaptureSources.icon(source), size: 18, color: OmiColors.textPrimary),
+          ),
           const SizedBox(width: OmiSpacing.xs),
           Text(label, maxLines: 1, style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600)),
           separator,
@@ -66,7 +78,8 @@ class LiveCaptureCard extends StatelessWidget {
           ),
           const SizedBox(width: OmiSpacing.xs),
           // The state gives way first on a narrow screen or in a long language.
-          Flexible(child: Text(stateLabel, maxLines: 1, overflow: TextOverflow.ellipsis, style: secondary)),
+          // Long states (offline buffering, in a long language) take a second line, not an ellipsis.
+          Flexible(child: Text(stateLabel, maxLines: 2, overflow: TextOverflow.ellipsis, style: secondary)),
           if (elapsed != null) ...[
             separator,
             Text(formatElapsed(elapsed!),

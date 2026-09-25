@@ -17,6 +17,9 @@ import 'package:omi/utils/device.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/pages/phone_calls/active_call_page.dart';
+import 'package:omi/providers/phone_call_provider.dart';
+import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/widgets/capture_sources.dart';
 import 'package:omi/widgets/header_circle_button.dart';
@@ -255,6 +258,11 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
     OmiFeedback.info(context, context.l10n.recordOptionsTip);
   }
 
+  static bool _callInProgress(BuildContext context) {
+    final state = context.read<PhoneCallProvider>().callState;
+    return state == PhoneCallState.connecting || state == PhoneCallState.ringing || state == PhoneCallState.active;
+  }
+
   /// The pendant is recording (or paused) in realtime mode: explain, and let the user choose.
   static bool _pendantHasCapture(CaptureProvider capture) {
     final source = capture.liveCaptureSource;
@@ -283,6 +291,11 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
   Future<void> _startRecording(BuildContext context) async {
     final captureProvider = context.read<CaptureProvider>();
     if (captureProvider.recordingState == RecordingState.initialising) return;
+    // An Omi call owns the capture while it runs: the button opens the call, never a recording.
+    if (_callInProgress(context)) {
+      routeToPage(context, const ActiveCallPage());
+      return;
+    }
     if (_pendantHasCapture(captureProvider) && !captureProvider.isPhoneMicPaused) {
       _showPendantListening(context);
       return;
@@ -377,15 +390,17 @@ class _HomeRecordButtonState extends State<HomeRecordButton> {
             circle,
             if (canShowOptions)
               Positioned(
-                right: -6,
-                bottom: -6,
+                right: 0,
+                bottom: 0,
                 child: Semantics(
                   button: true,
                   label: l10n.moreWaysToRecord,
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onTap: () => _showRecordOptions(context),
-                    // A 30pt hit area around the 22pt badge; it overlaps the circle's corner.
+                    // A 30pt hit area around the 22pt badge, inside the button's 62pt box (a Stack
+                    // does not hit-test outside its bounds, and 44pt would cover the circle's
+                    // centre). Screen readers also get the options as the circle's long-press action.
                     child: Padding(
                       padding: const EdgeInsets.all(4),
                       child: Container(

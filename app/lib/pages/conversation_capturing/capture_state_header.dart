@@ -66,14 +66,17 @@ class ConversationStateAppBar extends StatelessWidget implements PreferredSizeWi
             const SizedBox(width: OmiSpacing.xs),
             Flexible(
               child: Text(
-                sourceLabel == null
+                // A sentence status keeps all its room; a source adds to a one-word state only.
+                sourceLabel == null || sentenceStatus
                     ? captureStateLabel(context.l10n, state, bufferingFor: bufferingFor)
                     : context.l10n.captureStatusWithSource(
                         captureStateLabel(context.l10n, state, bufferingFor: bufferingFor), sourceLabel!),
                 style: sentenceStatus
                     ? OmiType.footnote.copyWith(fontWeight: FontWeight.w600, height: 1.25)
-                    : OmiType.headline,
-                maxLines: sentenceStatus ? 3 : 1,
+                    : sourceLabel == null
+                        ? OmiType.headline
+                        : OmiType.headline.copyWith(height: 1.15),
+                maxLines: sentenceStatus ? 3 : (sourceLabel == null ? 1 : 2),
                 overflow: TextOverflow.ellipsis,
                 textAlign: TextAlign.center,
               ),
