@@ -1,5 +1,22 @@
 require_relative '../node_modules/react-native-macos/scripts/react_native_pods'
 
+require 'json'
+require 'open3'
+
+# GPT Live uses react-native-webrtc on phone only, and its podspec claims osx
+# support its sources lack (UIKit imports). react-native-macos autolinking
+# consumes the ios config slot, where the dependency's `macos: null` platform
+# exclusion in react-native.config.js never lands, so drop the dependency from
+# the config before autolinking.
+def phone_only_filtered_config
+  default = ['node', '-e', "process.argv=['', '', 'config'];require('@react-native-community/cli').run()"]
+  json, status = Open3.capture2(*default)
+  raise 'react-native config failed' unless status.success?
+  config = JSON.parse(json)
+  config.fetch('dependencies').delete('react-native-webrtc')
+  JSON.generate(config)
+end
+
 prepare_react_native_project!
 
 # React Native's glog 0.3.5 configure script executes xcrun's compiler path
@@ -12,7 +29,7 @@ end
 
 target 'RnRuntime-macOS' do
   platform :macos, '14.0'
-  use_native_modules!
+  use_native_modules!(['ruby', '-e', 'print ARGV[0]', phone_only_filtered_config])
 
   # Flags change depending on the env values.
   flags = get_default_flags()
