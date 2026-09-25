@@ -72,18 +72,13 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
     setState(() => _mutePending = true);
     try {
       HapticFeedback.mediumImpact();
+      final phone = !provider.havingRecordingDevice;
       if (provider.isPaused) {
-        if (provider.havingRecordingDevice) {
-          await provider.resumeDeviceRecording();
-        } else {
-          await provider.streamRecording();
-          PlatformManager.instance.analytics.phoneMicRecordingStarted();
-        }
-      } else if (provider.havingRecordingDevice) {
-        await provider.pauseDeviceRecording();
+        await provider.resumeCapture();
+        if (phone) PlatformManager.instance.analytics.phoneMicRecordingStarted();
       } else {
-        await provider.stopStreamRecording();
-        PlatformManager.instance.analytics.phoneMicRecordingStopped();
+        await provider.pauseCapture();
+        if (phone) PlatformManager.instance.analytics.phoneMicRecordingStopped();
       }
     } catch (_) {
       if (mounted) OmiFeedback.error(context, context.l10n.somethingWentWrong);
@@ -104,14 +99,9 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
   Future<void> _stopConversation(CaptureProvider provider) async {
     if (provider.segments.isNotEmpty || provider.photos.isNotEmpty) {
       // Helper function to stop recording and process conversation
-      Future<void> stopRecordingAndProcess() async {
-        // Stop any active recording (phone mic)
-        if (provider.recordingState == RecordingState.record) {
-          await provider.stopStreamRecording();
-        }
-        // Then process the conversation
-        provider.forceProcessingCurrentConversation();
-      }
+      // Stops a phone recording (live or paused) and processes the conversation; a pendant
+      // the phone paused resumes after the processing request.
+      Future<void> stopRecordingAndProcess() => provider.finishCapture();
 
       if (!showSummarizeConfirmation) {
         await stopRecordingAndProcess();

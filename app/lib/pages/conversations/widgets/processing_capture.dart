@@ -163,14 +163,14 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         setState(() {
           _isPhoneMicPaused = true;
         });
-        await provider.stopStreamRecording();
+        await provider.pauseCapture();
         PlatformManager.instance.analytics.phoneMicRecordingStopped();
       } else if (_isPhoneMicPaused) {
         // Resume recording
         setState(() {
           _isPhoneMicPaused = false;
         });
-        await provider.streamRecording();
+        await provider.resumeCapture();
         PlatformManager.instance.analytics.phoneMicRecordingStarted();
         _maybeShowOfflineFallbackSnackbar(provider);
       } else if (recordingState == RecordingState.initialising) {
