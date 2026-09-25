@@ -495,6 +495,19 @@ verdicts are measured but deliberately produce nothing in v1 because the task
 extractor and capture policy have no question-routing destination. This path
 has no realtime wake-word state or notification surface.
 
+With `MEETING_NOTES_RICH_CONTEXT_ENABLED`, notes, memory, and app prompts share
+a normalized meeting roster in the CONVERSATION METADATA prefix: participant
+names and organizations come from the resolved calendar or screen-derived
+meeting context, and `spk` cluster binding follows the stricter roster guard.
+A desktop meeting capture treats the remote audio channel as mixed — when more
+than one remote participant could share it, that cluster stays `spk ?` rather
+than attributing several people's words to one name. Background context (prior
+meetings, people facts, goals, memories, and — under
+`MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED` — screen text) is gathered
+best-effort and appended only to the notes volatile suffix as BACKGROUND
+CONTEXT; it never enters the shared prefix, the memory extractor, or app
+prompts, and no single source failure can block the note.
+
 ### 2.1 Durable finalization ownership
 
 `conversation_finalization_jobs/{job_id}` is the finalization ledger. It is
