@@ -274,7 +274,7 @@ async def omni_relay(websocket: WebSocket):
     uid: str
     if authz:
         try:
-            uid = await run_critical_ws(_verify_ws_auth, cast(str, authz))
+            uid = await run_critical_ws(_verify_ws_auth, authz)
         except WebSocketException as e:
             logger.warning(f"omni relay auth rejected: code={e.code} reason={e.reason}")
             await websocket.close(code=e.code, reason=e.reason or "unauthorized")
