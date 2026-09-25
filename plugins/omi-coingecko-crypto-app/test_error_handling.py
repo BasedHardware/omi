@@ -119,9 +119,7 @@ def load_coingecko_module():
         "models": models_mod,
     }
 
-    spec = importlib.util.spec_from_file_location(
-        "coingecko_main_test", Path(__file__).with_name("main.py")
-    )
+    spec = importlib.util.spec_from_file_location("coingecko_main_test", Path(__file__).with_name("main.py"))
     module = importlib.util.module_from_spec(spec)
     with patch.dict(sys.modules, stubs):
         spec.loader.exec_module(module)
@@ -169,6 +167,34 @@ class CoinGeckoErrorHandlingTests(unittest.IsolatedAsyncioTestCase):
     async def test_get_crypto_market_overview_sanitizes_unexpected_exception(self):
         req = app.GetCryptoMarketOverviewRequest(vs_currency="usd")
         with patch.object(app, "_fetch_coingecko", side_effect=RuntimeError(self.sensitive_leak)):
+            resp = await app.get_crypto_market_overview(req)
+            self.assertEqual(resp.error, "Failed to retrieve market overview due to an internal error.")
+            self.assertNotIn(self.sensitive_leak, str(resp.error))
+
+    async def test_get_crypto_price_sanitizes_arbitrary_value_error(self):
+        req = app.GetCryptoPriceRequest(coin_ids="bitcoin")
+        with patch.object(app, "_fetch_coingecko", side_effect=ValueError(self.sensitive_leak)):
+            resp = await app.get_crypto_price(req)
+            self.assertEqual(resp.error, "Failed to fetch cryptocurrency prices due to an internal error.")
+            self.assertNotIn(self.sensitive_leak, str(resp.error))
+
+    async def test_search_crypto_coins_sanitizes_arbitrary_value_error(self):
+        req = app.SearchCryptoCoinsRequest(query="eth")
+        with patch.object(app, "_fetch_coingecko", side_effect=ValueError(self.sensitive_leak)):
+            resp = await app.search_crypto_coins(req)
+            self.assertEqual(resp.error, "Failed to search cryptocurrency coins due to an internal error.")
+            self.assertNotIn(self.sensitive_leak, str(resp.error))
+
+    async def test_get_trending_crypto_sanitizes_arbitrary_value_error(self):
+        req = app.GetTrendingCryptoRequest(limit=5)
+        with patch.object(app, "_fetch_coingecko", side_effect=ValueError(self.sensitive_leak)):
+            resp = await app.get_trending_crypto(req)
+            self.assertEqual(resp.error, "Failed to retrieve trending cryptocurrencies due to an internal error.")
+            self.assertNotIn(self.sensitive_leak, str(resp.error))
+
+    async def test_get_crypto_market_overview_sanitizes_arbitrary_value_error(self):
+        req = app.GetCryptoMarketOverviewRequest(vs_currency="usd")
+        with patch.object(app, "_fetch_coingecko", side_effect=ValueError(self.sensitive_leak)):
             resp = await app.get_crypto_market_overview(req)
             self.assertEqual(resp.error, "Failed to retrieve market overview due to an internal error.")
             self.assertNotIn(self.sensitive_leak, str(resp.error))
