@@ -9,10 +9,11 @@ for every affected user, in bounded passes, so the user-facing promise
 ("captures stay on this Mac") becomes true for pre-existing data too.
 
 Ordering matters and is deliberate: a user's Pinecone vectors are deleted
-FIRST, and the Firestore documents are deleted only if that succeeded. If
-vector deletion fails, the documents survive as the durable to-do list and
-the next hourly pass retries the same user. Deleting in the other order
-would orphan the vectors forever.
+FIRST — from both the production index and its development twin, since the
+jobs share the Firestore project — and the Firestore documents are deleted
+only if that succeeded. If vector deletion fails, the documents survive as
+the durable to-do list and the next hourly pass retries the same user.
+Deleting in the other order would orphan the vectors forever.
 
 Runs from the notifications-job cron lane (``utils.other.jobs.start_job``).
 """

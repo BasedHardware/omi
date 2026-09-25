@@ -67,6 +67,10 @@ actor OCREmbeddingService {
   private let flushSleeper: FlushSleeper
   private let losslessSyncEnabled: @Sendable () async -> Bool
   private let now: @Sendable () -> Date
+  /// Whether captured OCR text is queued for embedding at all. Production
+  /// embeds nothing since the cloud-egress retirement; only the test
+  /// initializer (injected embedder) enables queueing.
+  private let embedsCapturedOCR: Bool
 
   private init() {
     self.batchEmbedder = { _, _ in [] }
@@ -80,6 +84,7 @@ actor OCREmbeddingService {
       await MainActor.run { ScreenActivityLosslessSyncFeature.isEnabled }
     }
     self.now = Date.init
+    self.embedsCapturedOCR = false
   }
 
   /// Test-only initializer that injects the flush path's embedder, writer, and
@@ -99,6 +104,7 @@ actor OCREmbeddingService {
       }
     self.losslessSyncEnabled = losslessSyncEnabledForTesting
     self.now = nowForTesting
+    self.embedsCapturedOCR = true
   }
 
   /// Number of screenshots queued for the next batch flush (test introspection).
@@ -148,6 +154,15 @@ actor OCREmbeddingService {
     ownerSnapshot suppliedOwnerSnapshot: RewindCaptureOwnerSnapshot? = nil
   ) async {
     guard ocrText.count >= minTextLength else { return }
+    guard embedsCapturedOCR else {
+      // Removed with the screen-activity cloud egress retirement: queueing
+      // captured OCR for the hosted Gemini embedder. The production embedder
+      // returns zero embeddings, so a queued batch would be deferred and
+      // requeued on every flush — unbounded growth for no output. On-device
+      // retrieval is served by LocalEmbeddingIndexer instead; see
+      // https://github.com/BasedHardware/omi/issues/11018
+      return
+    }
     guard let ownerSnapshot = suppliedOwnerSnapshot ?? RewindCaptureOwnerSnapshot.capture(),
       ownerSnapshot.isCurrent()
     else { return }

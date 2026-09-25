@@ -172,11 +172,14 @@ describe("omi tool manifest", () => {
     const semanticSearch = tools.find((tool) => tool.name === "semantic_search");
 
     expect(tools[0]?.name).toBe("get_work_context");
-    expect(workContext?.description).toContain("Call get_work_context before semantic_search or execute_sql");
+    expect(workContext?.description).toContain("Call get_work_context before execute_sql");
     expect(executeSql?.description).toContain("call get_work_context first");
     expect(executeSql?.description).toContain("context_visits(handlesJson)");
     expect(executeSql?.description).toContain("Raw ocrText columns are refused");
-    expect(semanticSearch?.description).toContain("after get_work_context cannot identify");
+    // semantic_search left the agent-facing surface with the screen-activity
+    // cloud egress removal (#11018); screen-history retrieval stays on-device.
+    expect(semanticSearch).toBeUndefined();
+    expect(toolNamesForAdapter("pi-mono")).not.toContain("semantic_search");
   });
 
   it("keeps spawn_background_agent internal to coordinator RPC only", () => {

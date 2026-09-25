@@ -1006,11 +1006,13 @@ def test_issue_token_pair_preserves_an_explicitly_empty_scope_set():
     )
     pair = mcp_oauth.issue_token_pair(grant, scopes=[])
     assert pair['scope'] == ''
-    # The token is valid but carries no scopes — it must not be silently expanded
-    # to the grant's full scope set.
+    # No silent expansion: the issued token carries no scopes at all. A stored
+    # scope-less token then fails validation closed (main's malformed-doc
+    # invariant: ``('token', 'scopes', [])`` rejects), so a retired-only client
+    # is pushed back through authorize, where legacy scope strings are filtered
+    # rather than rejected. It must never quietly widen to the grant's scopes.
     validated = mcp_oauth.validate_access_token(pair['access_token'], mcp_oauth.MCP_RESOURCE_URL)
-    assert validated is not None
-    assert validated['scopes'] == []
+    assert validated is None
 
 
 def test_refresh_token_rotates_and_old_refresh_reuse_revokes_grant():
