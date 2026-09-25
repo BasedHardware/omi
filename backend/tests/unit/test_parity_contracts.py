@@ -245,3 +245,27 @@ def test_backend_duration_helper_matches_the_shared_vectors():
         assert (
             int(measured) == case['expected_seconds']
         ), f"{case['name']}: helper says {measured}, fixture says {case['expected_seconds']}"
+
+
+def test_capture_group_collapse_fixture_is_well_formed():
+    """Every case names known groups, and its expectation is an order-preserving
+    subset of its rows that keeps every ungrouped row and one row per group."""
+    fixture = _fixture('capture_group_collapse.json')
+    groups = fixture['groups']
+    for group in groups.values():
+        assert group['primary_id'] in group['members']
+    for case in fixture['cases']:
+        ids = [row['id'] for row in case['rows']]
+        assert len(ids) == len(set(ids)), case['name']
+        expected = case['expected_ids']
+        assert [i for i in ids if i in expected] == expected, case['name']
+        by_group = {}
+        for row in case['rows']:
+            if 'group' in row:
+                assert row['group'] in groups, case['name']
+                assert row['id'] in groups[row['group']]['members'], case['name']
+                by_group.setdefault(row['group'], []).append(row['id'])
+            else:
+                assert row['id'] in expected, case['name']
+        for members in by_group.values():
+            assert len([m for m in members if m in expected]) == 1, case['name']

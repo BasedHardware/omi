@@ -1,243 +1,153 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 enum AudioDownloadState { preparing, downloading, processing, success, error }
 
-class AudioDownloadProgressSheet extends StatefulWidget {
-  final AudioDownloadState state;
-  final double progress;
-  final String? errorMessage;
-  final VoidCallback? onRetry;
-  final VoidCallback? onCancel;
+/// A presented audio-download progress sheet.
+///
+/// The sheet owns its lifecycle: [close] pops it with the sheet's **own** context and does nothing
+/// once it is gone, so a late close can never pop the page underneath. Back, the scrim and the
+/// Cancel button all mean cancel: [cancel] runs `onCancel` once and closes the sheet.
+class AudioDownloadSheetHandle {
+  AudioDownloadSheetHandle._(this._onCancel);
 
-  const AudioDownloadProgressSheet({
-    super.key,
-    required this.state,
-    this.progress = 0.0,
-    this.errorMessage,
-    this.onRetry,
-    this.onCancel,
-  });
+  final VoidCallback? _onCancel;
+  final ValueNotifier<AudioDownloadState> state = ValueNotifier(AudioDownloadState.preparing);
+  final ValueNotifier<double> progress = ValueNotifier(0);
+  BuildContext? _sheetContext;
+  bool _open = true;
+  bool _cancelled = false;
 
-  @override
-  State<AudioDownloadProgressSheet> createState() => _AudioDownloadProgressSheetState();
+  /// Whether the sheet is still on screen.
+  bool get isOpen => _open;
 
-  static Future<void> show({
-    required BuildContext context,
-    required AudioDownloadState state,
-    double progress = 0.0,
-    String? errorMessage,
-    VoidCallback? onRetry,
-    VoidCallback? onCancel,
-  }) {
-    return showModalBottomSheet(
+  /// Whether the reader cancelled.
+  bool get cancelled => _cancelled;
+
+  /// Presents the sheet over [context].
+  static AudioDownloadSheetHandle show(BuildContext context, {VoidCallback? onCancel}) {
+    final handle = AudioDownloadSheetHandle._(onCancel);
+    showOmiSheet<void>(
       context: context,
-      isDismissible: state == AudioDownloadState.error,
-      enableDrag: state == AudioDownloadState.error,
-      backgroundColor: Colors.transparent,
-      barrierColor: Colors.black.withValues(alpha: 0.5),
-      builder: (ctx) => AudioDownloadProgressSheet(
-        state: state,
-        progress: progress,
-        errorMessage: errorMessage,
-        onRetry: onRetry,
-        onCancel: onCancel,
-      ),
-    );
+      showCloseButton: false,
+      isDismissible: false,
+      enableDrag: false,
+      builder: (sheetContext) {
+        handle._sheetContext = sheetContext;
+        return PopScope(
+          canPop: false,
+          onPopInvokedWithResult: (didPop, _) {
+            if (!didPop) handle.cancel();
+          },
+          child: AnimatedBuilder(
+            animation: Listenable.merge([handle.state, handle.progress]),
+            builder: (context, _) => AudioDownloadProgressSheet(
+              state: handle.state.value,
+              progress: handle.progress.value,
+              onCancel: handle.cancel,
+            ),
+          ),
+        );
+      },
+    ).whenComplete(() {
+      handle._open = false;
+      handle._sheetContext = null;
+    });
+    return handle;
+  }
+
+  /// Cancels the download (once) and closes the sheet.
+  void cancel() {
+    if (_cancelled) return;
+    _cancelled = true;
+    _onCancel?.call();
+    close();
+  }
+
+  /// Closes the sheet if it is still open. Safe to call any number of times.
+  void close() {
+    final sheetContext = _sheetContext;
+    if (!_open || sheetContext == null || !sheetContext.mounted) return;
+    _open = false;
+    Navigator.of(sheetContext).pop();
   }
 }
 
-class _AudioDownloadProgressSheetState extends State<AudioDownloadProgressSheet> with SingleTickerProviderStateMixin {
-  late AnimationController _animationController;
-  late Animation<double> _scaleAnimation;
+/// The content of the audio-download sheet: a progress ring, the stage, and Cancel while work runs.
+class AudioDownloadProgressSheet extends StatelessWidget {
+  final AudioDownloadState state;
+  final double progress;
+  final VoidCallback? onCancel;
 
-  @override
-  void initState() {
-    super.initState();
-    _animationController = AnimationController(duration: const Duration(milliseconds: 400), vsync: this);
-    _scaleAnimation = CurvedAnimation(parent: _animationController, curve: Curves.easeOutCubic);
-    _animationController.forward();
+  const AudioDownloadProgressSheet({super.key, required this.state, this.progress = 0.0, this.onCancel});
 
-    HapticFeedback.lightImpact();
+  String _title(BuildContext context) {
+    return switch (state) {
+      AudioDownloadState.preparing => context.l10n.preparingAudio,
+      AudioDownloadState.downloading => context.l10n.downloadingAudioProgress,
+      AudioDownloadState.processing => context.l10n.processingAudio,
+      AudioDownloadState.success => context.l10n.audioReady,
+      AudioDownloadState.error => context.l10n.audioShareFailed,
+    };
   }
 
-  @override
-  void didUpdateWidget(AudioDownloadProgressSheet oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.state != widget.state) {
-      HapticFeedback.selectionClick();
-    }
-  }
-
-  @override
-  void dispose() {
-    _animationController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return ScaleTransition(
-      scale: _scaleAnimation,
-      child: Container(
-        margin: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1C1C1E),
-          borderRadius: BorderRadius.circular(20),
-          boxShadow: [
-            BoxShadow(color: Colors.black.withValues(alpha: 0.4), blurRadius: 30, offset: const Offset(0, 10)),
-          ],
-        ),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              _buildProgressIndicator(),
-              const SizedBox(height: 24),
-              _buildTitle(),
-              if (widget.state == AudioDownloadState.error) _buildErrorActions(),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildProgressIndicator() {
-    if (widget.state == AudioDownloadState.success) {
-      return TweenAnimationBuilder<double>(
-        tween: Tween(begin: 0.0, end: 1.0),
-        duration: const Duration(milliseconds: 400),
-        builder: (context, value, child) {
-          return Transform.scale(
-            scale: value,
-            child: Container(
-              width: 64,
-              height: 64,
-              decoration: BoxDecoration(color: Colors.green.withValues(alpha: 0.15), shape: BoxShape.circle),
-              child: const Icon(Icons.check, size: 36, color: Colors.green),
-            ),
-          );
-        },
-      );
-    }
-
-    if (widget.state == AudioDownloadState.error) {
+  Widget _buildIndicator() {
+    if (state == AudioDownloadState.success) {
       return Container(
         width: 64,
         height: 64,
-        decoration: BoxDecoration(color: Colors.red.withValues(alpha: 0.15), shape: BoxShape.circle),
-        child: const Icon(Icons.error_outline, size: 36, color: Colors.red),
+        decoration: const BoxDecoration(color: OmiColors.successSurface, shape: BoxShape.circle),
+        child: const Icon(Icons.check, size: 36, color: OmiColors.success),
       );
     }
-
-    return SizedBox(
-      width: 64,
-      height: 64,
+    if (state == AudioDownloadState.error) {
+      return Container(
+        width: 64,
+        height: 64,
+        decoration: const BoxDecoration(color: OmiColors.dangerSurface, shape: BoxShape.circle),
+        child: const Icon(Icons.error_outline, size: 36, color: OmiColors.danger),
+      );
+    }
+    final determinate = state == AudioDownloadState.downloading;
+    // A determinate ring shows the download's real progress; OmiSpinner is indeterminate only.
+    final value = determinate ? progress : null;
+    final ring = CircularProgressIndicator(value: value); // omi-ux-allow: raw-spinner -- determinate
+    return SizedBox.square(
+      dimension: 64,
       child: Stack(
         alignment: Alignment.center,
         children: [
-          SizedBox(
-            width: 64,
-            height: 64,
-            child: CircularProgressIndicator(
-              value: widget.state == AudioDownloadState.downloading ? widget.progress : null,
-              strokeWidth: 3,
-              valueColor: const AlwaysStoppedAnimation<Color>(Colors.white),
-              backgroundColor: const Color(0xFF3A3A3C),
-            ),
-          ),
-          if (widget.state == AudioDownloadState.downloading && widget.progress > 0)
-            Text(
-              '${(widget.progress * 100).toInt()}%',
-              style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white),
-            ),
+          SizedBox.square(dimension: 64, child: ring),
+          if (determinate && progress > 0)
+            Text('${(progress * 100).toInt()}%', style: OmiType.footnote.copyWith(fontWeight: FontWeight.w600)),
         ],
       ),
     );
   }
 
-  Widget _buildTitle() {
-    String title;
-
-    switch (widget.state) {
-      case AudioDownloadState.preparing:
-        title = context.l10n.preparingAudio;
-        break;
-      case AudioDownloadState.downloading:
-        title = context.l10n.downloadingAudioProgress;
-        break;
-      case AudioDownloadState.processing:
-        title = context.l10n.processingAudio;
-        break;
-      case AudioDownloadState.success:
-        title = context.l10n.audioReady;
-        break;
-      case AudioDownloadState.error:
-        title = context.l10n.audioShareFailed;
-        break;
-    }
-
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 250),
-      child: Text(
-        title,
-        key: ValueKey(title),
-        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600, color: Colors.white, letterSpacing: 0.3),
-        textAlign: TextAlign.center,
-      ),
-    );
-  }
-
-  Widget _buildErrorActions() {
-    return Column(
-      children: [
-        const SizedBox(height: 12),
-        Text(
-          widget.errorMessage ?? context.l10n.audioDownloadFailed,
-          style: TextStyle(fontSize: 14, color: Colors.grey[400]),
-          textAlign: TextAlign.center,
-        ),
-        const SizedBox(height: 20),
-        Row(
-          children: [
-            Expanded(
-              child: OutlinedButton(
-                onPressed: () => Navigator.of(context).pop(),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.grey[300],
-                  side: const BorderSide(color: Color(0xFF3A3A3C)),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                child: Text(context.l10n.close),
-              ),
-            ),
-            if (widget.onRetry != null) ...[
-              const SizedBox(width: 12),
-              Expanded(
-                child: ElevatedButton(
-                  onPressed: () {
-                    Navigator.of(context).pop();
-                    widget.onRetry?.call();
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.white,
-                    foregroundColor: const Color(0xFF1C1C1E),
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    elevation: 0,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  child: Text(context.l10n.retry),
-                ),
-              ),
-            ],
+  @override
+  Widget build(BuildContext context) {
+    final working = state != AudioDownloadState.success && state != AudioDownloadState.error;
+    final title = _title(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(OmiSpacing.xs, OmiSpacing.md, OmiSpacing.xs, OmiSpacing.lg),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _buildIndicator(),
+          const SizedBox(height: OmiSpacing.xl),
+          Semantics(
+            liveRegion: true,
+            child: Text(title, style: OmiType.headline, textAlign: TextAlign.center),
+          ),
+          if (working && onCancel != null) ...[
+            const SizedBox(height: OmiSpacing.lg),
+            OmiButton.secondary(label: context.l10n.cancel, expand: true, onPressed: onCancel),
           ],
-        ),
-      ],
+        ],
+      ),
     );
   }
 }

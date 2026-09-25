@@ -62,6 +62,85 @@ final class SBOnboardingBackNavigationTests: XCTestCase {
     XCTAssertEqual(model.step, .promise)
   }
 
+  func testBackNeverLandsOnAPermissionStepThatWasSkipped() {
+    let appState = AppState()
+    let model = SBOnboardingModel(appState: appState, chatProvider: ChatProvider(), onComplete: nil)
+    appState.hasAccessibilityPermission = false
+    appState.hasAutomationPermission = true
+    appState.hasNotificationPermission = false
+    model.step = .accessibility
+
+    model.advance(userAnswer: nil, to: .automation)
+    XCTAssertEqual(model.step, .notifications, "a granted Automation step is skipped")
+
+    model.goBack()
+    XCTAssertEqual(model.step, .accessibility, "Back returns to the step shown, not the skipped one")
+    XCTAssertEqual(
+      UserDefaults.standard.integer(forKey: SBOnboardingModel.resumeStepKey),
+      SBOnboardingModel.Step.accessibility.rawValue)
+  }
+
+  func testProgressCountsOnlyShownStepsAndMovesOneDotPerAnswer() {
+    let appState = AppState()
+    let model = SBOnboardingModel(appState: appState, chatProvider: ChatProvider(), onComplete: nil)
+    appState.hasAccessibilityPermission = false
+    appState.hasAutomationPermission = true
+    appState.hasNotificationPermission = true
+    let allSteps = SBOnboardingModel.Step.allCases
+
+    let start = model.progress
+    XCTAssertEqual(start.current, 0)
+    XCTAssertEqual(start.total, allSteps.filter { !model.wouldSkip($0) }.count)
+    XCTAssertLessThanOrEqual(start.total, allSteps.count - 2, "granted permissions draw no dot")
+
+    model.step = .accessibility
+    model.shownStepHistory = model.predictedShownSteps(before: .accessibility)
+    let before = model.progress
+
+    model.advance(userAnswer: nil, to: .automation)
+    XCTAssertEqual(model.step, .shortcutOpen)
+    XCTAssertEqual(model.progress.current, before.current + 1, "two skipped steps still move one dot")
+    XCTAssertEqual(model.progress.total, before.total, "the dot count does not jump when steps are skipped")
+
+    model.goBack()
+    XCTAssertEqual(model.step, .accessibility)
+    XCTAssertEqual(model.progress, before)
+  }
+
+  func testResumedRunSeedsHistoryWithoutSkippedSteps() {
+    let completedKey = SBOnboardingModel.shortcutsCompletedKey
+    let previousCompleted = UserDefaults.standard.bool(forKey: completedKey)
+    defer { UserDefaults.standard.set(previousCompleted, forKey: completedKey) }
+    UserDefaults.standard.set(false, forKey: completedKey)
+    UserDefaults.standard.set(SBOnboardingModel.Step.shortcutOpen.rawValue, forKey: resumeStepKey)
+    let appState = AppState()
+    appState.hasAccessibilityPermission = false
+    appState.hasAutomationPermission = true
+    appState.hasNotificationPermission = true
+    let model = SBOnboardingModel(appState: appState, chatProvider: ChatProvider(), onComplete: nil)
+
+    model.begin()
+
+    XCTAssertEqual(model.step, .shortcutOpen)
+    XCTAssertFalse(model.shownStepHistory.contains(.automation))
+    XCTAssertFalse(model.shownStepHistory.contains(.notifications))
+    XCTAssertEqual(model.progress.current, model.shownStepHistory.count)
+    model.goBack()
+    XCTAssertEqual(model.step, .accessibility)
+  }
+
+  func testScreenDemoAlwaysOffersSkipUntilOmiHasAnswered() {
+    let model = SBOnboardingModel(
+      appState: AppState(), chatProvider: ChatProvider(), onComplete: nil)
+    model.step = .screenDemo
+    model.threeDoorsOpened = false
+    model.screenDemoDone = false
+    XCTAssertEqual(model.screenDemoFooter, .skip, "Skip is offered before the doors are opened")
+
+    model.screenDemoDone = true
+    XCTAssertEqual(model.screenDemoFooter, .continue)
+  }
+
   func testVoiceDemoArmsPTTOnlyAfterBridgeWarmupWhileStillOnDemoStage() async {
     let model = SBOnboardingModel(
       appState: AppState(), chatProvider: ChatProvider(), onComplete: nil)

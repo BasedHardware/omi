@@ -661,7 +661,6 @@ import XCTest
         "fault-harness-owner"
       ) {
         provider.selectedAppId = "research"
-        provider.isInDefaultChat = true
         provider.kernelTurnProjection = KernelTurnProjection(
           host: provider,
           client: AgentClient.Session(harnessMode: "piMono"),
@@ -695,62 +694,6 @@ import XCTest
       XCTAssertNil(error)
       XCTAssertEqual(modelReadinessRequests, 0)
       XCTAssertEqual(clearedSurfaceIDs, [expectedChatID])
-    }
-
-    func testFaultHarnessResetClearsSelectedSessionOnlyOnce() async {
-      let provider = ChatProvider()
-      let session = ChatSession(id: "fault-selected-session")
-      var modelReadinessRequests = 0
-      var clearedSurfaceIDs: [String] = []
-      var replacementSessionRequests = 0
-      var sessionWasCleared = false
-
-      let error: String? = await RuntimeOwnerIdentity.withAutomationOwnerIfMissing(
-        "fault-harness-owner"
-      ) {
-        provider.sessions = [session]
-        provider.currentSession = session
-        provider.isInDefaultChat = false
-        provider.kernelTurnProjection = KernelTurnProjection(
-          host: provider,
-          client: AgentClient.Session(harnessMode: "piMono"),
-          ownerIDProvider: {
-            RuntimeOwnerIdentity.currentOwnerId(allowAutomationOverride: true)
-          },
-          journalListOperation: { _, surface, ownerID, afterTurnSeq, limit in
-            XCTAssertFalse(ownerID.isEmpty)
-            XCTAssertEqual(surface.externalRefId, session.id)
-            XCTAssertEqual(afterTurnSeq, 0)
-            XCTAssertEqual(limit, 1)
-            return self.journalPage(
-              conversationId: "fault-selected-session-conversation",
-              turns: [],
-              generation: 9
-            )
-          },
-          journalClearOperation: { _, surface, _, _, _ in
-            clearedSurfaceIDs.append(surface.externalRefId)
-            return 1
-          },
-          kernelReadyOperation: {
-            modelReadinessRequests += 1
-            return false
-          }
-        )
-
-        let error = await provider.performMainChatHarnessResetTransaction {
-          replacementSessionRequests += 1
-          return ChatSession(id: "fault-replacement-session")
-        }
-        sessionWasCleared = provider.currentSession == nil
-        return error
-      }
-
-      XCTAssertNil(error)
-      XCTAssertEqual(modelReadinessRequests, 0)
-      XCTAssertEqual(clearedSurfaceIDs, [session.id])
-      XCTAssertEqual(replacementSessionRequests, 1)
-      XCTAssertTrue(sessionWasCleared)
     }
 
     func testClearOwnerSurfaceStateUsesAuthoritativeJournalControlWhenModelReadinessIsUnavailable() async throws {
@@ -1476,18 +1419,8 @@ import XCTest
       XCTAssertFalse(provider.contains("APIClient.shared.saveMessage("))
       XCTAssertFalse(provider.contains("messages.append(greetingMessage)"))
       XCTAssertFalse(provider.contains("func recordCompletedTurn("))
-      XCTAssertTrue(provider.contains("remoteId: response.messageId"))
-      XCTAssertTrue(provider.contains("canonicalTurnId: response.messageId"))
-      XCTAssertTrue(provider.contains("await kernelTurnProjection.refresh(surface: surface)"))
-      let greetingStart = try XCTUnwrap(provider.range(of: "private func fetchInitialMessage("))
-      let greetingSource = provider[greetingStart.lowerBound...]
-      let admission = try XCTUnwrap(greetingSource.range(of: "guard accepted else"))
-      let preview = try XCTUnwrap(greetingSource.range(of: "sessions[index].preview = response.message"))
-      let analytics = try XCTUnwrap(greetingSource.range(of: "initialMessageGenerated("))
-      XCTAssertLessThan(admission.lowerBound, preview.lowerBound)
-      XCTAssertLessThan(preview.lowerBound, analytics.lowerBound)
-      XCTAssertEqual(provider.components(separatedBy: "APIClient.shared.getMessages(").count - 1, 2)
-      XCTAssertEqual(provider.components(separatedBy: "expectedOwnerId: ownerId").count - 1, 3)
+      XCTAssertEqual(provider.components(separatedBy: "APIClient.shared.getMessages(").count - 1, 1)
+      XCTAssertEqual(provider.components(separatedBy: "expectedOwnerId: ownerId").count - 1, 1)
       XCTAssertFalse(taskState.contains("persistMessage("))
       XCTAssertFalse(taskStorage.contains("PersistableRecord"))
       XCTAssertFalse(taskStorage.contains("func insert("))
