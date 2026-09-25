@@ -62,9 +62,9 @@ def submit_csat_rating(
     platform = (payload.platform or '').strip().lower()
     if platform not in csat.PLATFORMS:
         raise HTTPException(status_code=400, detail=f'platform must be one of {sorted(csat.PLATFORMS)}')
-    if not isinstance(payload.score, int) or not (1 <= payload.score <= 5):
+    if not (1 <= payload.score <= 5):
         raise HTTPException(status_code=400, detail='score must be between 1 and 5')
-    if not isinstance(payload.revision, int) or payload.revision < 0 or payload.revision > 1_000_000_000:
+    if payload.revision < 0 or payload.revision > 1_000_000_000:
         raise HTTPException(status_code=400, detail='revision must be >= 0')
 
     app_version = payload.app_version.strip()[: csat.MAX_APP_VERSION_LENGTH]
