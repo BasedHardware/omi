@@ -28,6 +28,10 @@ overlay:
           value: 'true'
         CONVERSATION_OCR_CONTEXT_ENABLED:
           value: 'true'
+        MEETING_NOTES_RICH_CONTEXT_ENABLED:
+          value: 'true'
+        MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
+          value: 'true'
         BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
           value: 'true'
         HOSTED_PARAKEET_API_URL:
@@ -65,6 +69,12 @@ overlay:
         GOOGLE_CALENDAR_AUTO_LINK_ENABLED:
           value: 'true'
           category: rollout
+        CONVERSATION_RELEVANCE_JEV_ENABLED:
+          value: 'true'
+          category: rollout
+        MEMORY_OWNER_JEV_FLIP_ENABLED:
+          value: 'true'
+          category: rollout
     pusher:
       env:
         FREE_TIER_LOCAL_PROCESSING:
@@ -98,6 +108,10 @@ overlay:
           value: 'true'
         CONVERSATION_OCR_CONTEXT_ENABLED:
           value: 'true'
+        MEETING_NOTES_RICH_CONTEXT_ENABLED:
+          value: 'true'
+        MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
+          value: 'true'
         BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
           value: 'true'
         MEMORY_BELIEF_MODEL_ENABLED:
@@ -105,6 +119,12 @@ overlay:
           category: rollout
         MEMORY_BELIEF_AUTOMATION_PAUSED:
           value: 'false'
+          category: rollout
+        CONVERSATION_RELEVANCE_JEV_ENABLED:
+          value: 'true'
+          category: rollout
+        MEMORY_OWNER_JEV_FLIP_ENABLED:
+          value: 'true'
           category: rollout
         GITHUB_TOKEN:
           secret:
@@ -309,6 +329,10 @@ overlay:
             value: 'true'
           CONVERSATION_OCR_CONTEXT_ENABLED:
             value: 'true'
+          MEETING_NOTES_RICH_CONTEXT_ENABLED:
+            value: 'true'
+          MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
+            value: 'true'
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             value: 'true'
           BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:
@@ -359,6 +383,12 @@ overlay:
           OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
             value: '1.0'
             category: rollout
+          CONVERSATION_RELEVANCE_JEV_ENABLED:
+            value: 'true'
+            category: rollout
+          MEMORY_OWNER_JEV_FLIP_ENABLED:
+            value: 'true'
+            category: rollout
       backend-sync:
         forbidden_env:
         - HOSTED_PUSHER_API_URL
@@ -391,6 +421,10 @@ overlay:
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
             value: 'true'
           CONVERSATION_OCR_CONTEXT_ENABLED:
+            value: 'true'
+          MEETING_NOTES_RICH_CONTEXT_ENABLED:
+            value: 'true'
+          MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
             value: 'true'
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             value: 'true'
@@ -428,6 +462,12 @@ overlay:
             category: rollout
           OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
             value: '1.0'
+            category: rollout
+          CONVERSATION_RELEVANCE_JEV_ENABLED:
+            value: 'true'
+            category: rollout
+          MEMORY_OWNER_JEV_FLIP_ENABLED:
+            value: 'true'
             category: rollout
       backend-sync-backfill:
         forbidden_env:
