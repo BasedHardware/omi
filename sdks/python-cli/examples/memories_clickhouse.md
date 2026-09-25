@@ -47,6 +47,8 @@ omi --json memory list --limit 200 | python memories_to_clickhouse.py --format j
   curl -sS "http://localhost:8123/?query=INSERT+INTO+omi_memories+FORMAT+JSONEachRow" --data-binary @-
 ```
 
+> **Note on Pagination:** Mode 1 streams a single batch (up to `--limit 200`). For datasets larger than 200 memories, see the pagination and offset note under **Mode 2** below to avoid partial loads.
+
 ### 2. Export Standalone SQL Script
 
 Generate a standalone SQL script containing table definitions and batch insert statements:
