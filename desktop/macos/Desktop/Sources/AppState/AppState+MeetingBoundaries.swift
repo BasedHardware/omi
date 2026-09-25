@@ -14,6 +14,8 @@ extension AppState {
   }
 
   /// Keeps the probe's evidence policy aligned with settings changes during a recording.
+  /// Replacing the detector drops its call identities and any pending call change; the new
+  /// detector adopts whatever call is on as the current one.
   func ensureMeetingDetector(for mode: AssistantSettings.AudioRecordingMode) {
     if meetingDetector != nil, meetingDetectorMode != mode {
       meetingDetector?.stop()
@@ -45,31 +47,39 @@ extension AppState {
         }
       },
       onCallChanged: { [weak self] in
+        // A new call is a meeting start for context purposes too.
+        Self.noteMeetingContext(active: true)
         Task { @MainActor in await self?.handleMeetingObservation(active: true) }
       },
       onChange: { [weak self] active in
+        Self.noteMeetingContext(active: active)
         Task { @MainActor in
-          if active, SystemCalendarMeetingContextFeature.isEnabled {
-            // Permission and calendar I/O live outside the detector/audio path. This early sync
-            // normally stores the invite before the eventual conversation finalization begins.
-            Task(priority: .utility) {
-              await SystemCalendarMeetingContextService.shared.prepareAroundNow()
-            }
-          }
           await self?.handleMeetingObservation(active: active)
           await self?.reconcileCapture()
-        }
-        if let event = TaskLocalContextEvent.normalized(
-          kind: .meeting,
-          rawReference: active ? "meeting-active" : "meeting-ended"
-        ) {
-          Task { await ContextSubjectBindingService.shared.resolveAndObserve(event) }
         }
       }
     )
     meetingDetector = detector
     meetingDetectorMode = mode
     detector.start()
+  }
+
+  /// Context side work for a meeting starting or ending: the early calendar-invite sync and the
+  /// context-subject event.
+  private static func noteMeetingContext(active: Bool) {
+    if active, SystemCalendarMeetingContextFeature.isEnabled {
+      // Permission and calendar I/O live outside the detector/audio path. This early sync
+      // normally stores the invite before the eventual conversation finalization begins.
+      Task(priority: .utility) {
+        await SystemCalendarMeetingContextService.shared.prepareAroundNow()
+      }
+    }
+    if let event = TaskLocalContextEvent.normalized(
+      kind: .meeting,
+      rawReference: active ? "meeting-active" : "meeting-ended"
+    ) {
+      Task { await ContextSubjectBindingService.shared.resolveAndObserve(event) }
+    }
   }
 
   /// Serializes detector edges with session rotation. A second edge that lands
@@ -97,7 +107,7 @@ extension AppState {
     else { return }
 
     // Starting a meeting already opens a fresh conversation for whichever call is on.
-    if active { meetingDetector?.hasPendingCallChange = false }
+    if active { meetingDetector?.clearPendingCallChange() }
     meetingBoundaryInProgress = true
     log("Transcription: meeting boundary — role=\(transition.nextRole.rawValue)\(callChanged ? " (call changed)" : "")")
     let result = await finishConversation(
@@ -110,7 +120,7 @@ extension AppState {
       // session-creation task replays `pendingMeetingState` when it installs the
       // new session id, so nothing is lost.
       pendingMeetingState = active
-      if callChanged { meetingDetector?.hasPendingCallChange = true }
+      if callChanged { meetingDetector?.restorePendingCallChange() }
       meetingBoundaryInProgress = false
       return
     }

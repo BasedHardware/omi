@@ -27,9 +27,10 @@ final class MeetingDetector {
   /// True after at least one async probe has reported. Until then, `isMeetingActive == false`
   /// means "unknown", not "no meeting".
   private(set) var hasObservedState: Bool = false
-  /// Set when a different call replaced the one in progress without an off edge; the owner
-  /// clears it once it has rotated the conversation. Reset whenever the meeting ends.
-  var hasPendingCallChange = false
+  /// Set when a different call replaced the one in progress without an off edge. The owner
+  /// clears it when it starts rotating and restores it if the rotation could not run. Reset
+  /// whenever the meeting ends.
+  private(set) var hasPendingCallChange = false
 
   private let pollInterval: TimeInterval
   private let offGracePeriod: TimeInterval
@@ -177,6 +178,7 @@ final class MeetingDetector {
       }
     } else if isMeetingActive {
       // Meeting undetected while active: arm or honor the off grace period.
+      callTracker.noteMicrophoneGap(at: now())
       if let deadline = pendingOffDeadline {
         if now() >= deadline {
           pendingOffDeadline = nil
@@ -206,6 +208,9 @@ final class MeetingDetector {
     onChange(active)
   }
 
+  func clearPendingCallChange() { hasPendingCallChange = false }
+  func restorePendingCallChange() { hasPendingCallChange = true }
+
   #if DEBUG
     var currentProbeTaskForTesting: Task<Void, Never>? {
       probeTask
@@ -224,15 +229,24 @@ final class MeetingDetector {
 /// Leaving one Google Meet and joining another within the off grace period (the next Meet's
 /// green room takes the microphone within seconds) never produces an off edge, so both calls
 /// used to land in one conversation. Identities (`ConferencingApps.currentCallIdentities()`)
-/// separate them: a call counts as new when an identity not seen earlier in this meeting stays
-/// visible for `confirmationPeriod`. Identities seen before are never new again within the
-/// meeting, so switching tabs away from a Meet and back, or an old Meet window left on screen,
-/// does not rotate. No identities at all (no Screen Recording permission, a web call that is
-/// not Meet) degrades to the old behaviour: one conversation until the off edge.
+/// separate them. A call counts as new when an identity not seen earlier in this meeting stays
+/// visible for `confirmationPeriod` **and replaces** the call in progress: that call's
+/// identities are gone, or the microphone dropped shortly before the new identity appeared
+/// (leaving A with its tab still open). A new identity merely appearing alongside the current
+/// call (the next meeting's green room opened early, a huddle started mid-Meet) does not rotate.
+/// Identities seen before never count again within the meeting, so switching tabs away from a
+/// Meet and back does not rotate. No identities at all (no Screen Recording permission, a web
+/// call that is not Meet) degrades to the old behaviour: one conversation until the off edge.
 struct MeetingCallIdentityTracker {
   let confirmationPeriod: TimeInterval
+  /// A microphone gap this long before a new identity first appears still counts as the
+  /// previous call ending.
+  let gapLeadWindow: TimeInterval = 30
   private var seen: Set<String> = []
+  /// Identities of the call in progress.
+  private var current: Set<String> = []
   private var candidate: (id: String, since: Date)?
+  private var lastGapAt: Date?
 
   init(confirmationPeriod: TimeInterval) {
     self.confirmationPeriod = confirmationPeriod
@@ -240,7 +254,14 @@ struct MeetingCallIdentityTracker {
 
   mutating func reset() {
     seen = []
+    current = []
     candidate = nil
+    lastGapAt = nil
+  }
+
+  /// The detector saw no call on a probe while the meeting stayed active (inside the off grace).
+  mutating func noteMicrophoneGap(at now: Date) {
+    lastGapAt = now
   }
 
   /// Record one probe's identities; true when a new call has just been confirmed.
@@ -248,9 +269,11 @@ struct MeetingCallIdentityTracker {
     guard !seen.isEmpty else {
       // The meeting's first identities name the call in progress, not a new one.
       seen = identities
+      current = identities
       return false
     }
-    guard let next = identities.subtracting(seen).min() else {
+    let unseen = identities.subtracting(seen)
+    guard let next = unseen.min() else {
       candidate = nil
       return false
     }
@@ -258,8 +281,14 @@ struct MeetingCallIdentityTracker {
       candidate = (next, now)
     }
     guard let since = candidate?.since, now.timeIntervalSince(since) >= confirmationPeriod else { return false }
+    let currentGone = current.isDisjoint(with: identities)
+    let gapAroundAppearance = lastGapAt.map { $0 >= since.addingTimeInterval(-gapLeadWindow) } ?? false
+    // Keep the candidate: the current call may still end (its window closes, its mic drops).
+    guard currentGone || gapAroundAppearance else { return false }
     seen.formUnion(identities)
+    current = unseen
     candidate = nil
+    lastGapAt = nil
     return true
   }
 }

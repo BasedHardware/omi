@@ -31,11 +31,32 @@ final class MeetingCallIdentityTrackerTests: XCTestCase {
     XCTAssertFalse(tracker.observe(["meet:ddd-eeee-fff"], at: at(16)), "confirmed once, not every probe")
   }
 
-  func testNewCallCountsEvenWhileTheOldWindowStaysOnScreen() {
+  /// Left A with its tab still open: A's title stays, but the mic dropped as B appeared.
+  func testNewCallCountsWhileTheOldWindowStaysOnScreenIfTheMicDropped() {
     var tracker = MeetingCallIdentityTracker(confirmationPeriod: 8)
     _ = tracker.observe(["meet:aaa-bbbb-ccc"], at: at(0))
-    _ = tracker.observe(["meet:aaa-bbbb-ccc", "meet:ddd-eeee-fff"], at: at(4))
-    XCTAssertTrue(tracker.observe(["meet:aaa-bbbb-ccc", "meet:ddd-eeee-fff"], at: at(12)))
+    tracker.noteMicrophoneGap(at: at(100))
+    _ = tracker.observe(["meet:aaa-bbbb-ccc", "meet:ddd-eeee-fff"], at: at(104))
+    XCTAssertTrue(tracker.observe(["meet:aaa-bbbb-ccc", "meet:ddd-eeee-fff"], at: at(112)))
+  }
+
+  /// The next meeting's green room opened early while A continues: not a replacement.
+  func testNewCallAlongsideTheCurrentOneDoesNotRotateUntilTheCurrentOneEnds() {
+    var tracker = MeetingCallIdentityTracker(confirmationPeriod: 8)
+    _ = tracker.observe(["meet:aaa-bbbb-ccc"], at: at(0))
+    tracker.noteMicrophoneGap(at: at(10))  // a brief mute long before B appears
+    _ = tracker.observe(["meet:aaa-bbbb-ccc", "meet:ddd-eeee-fff"], at: at(100))
+    XCTAssertFalse(tracker.observe(["meet:aaa-bbbb-ccc", "meet:ddd-eeee-fff"], at: at(112)))
+    XCTAssertFalse(tracker.observe(["meet:aaa-bbbb-ccc", "meet:ddd-eeee-fff"], at: at(400)))
+    // A's window closes: B now replaces it.
+    XCTAssertTrue(tracker.observe(["meet:ddd-eeee-fff"], at: at(404)))
+  }
+
+  func testAHuddleStartedDuringAMeetDoesNotRotate() {
+    var tracker = MeetingCallIdentityTracker(confirmationPeriod: 8)
+    _ = tracker.observe(["meet:aaa-bbbb-ccc"], at: at(0))
+    _ = tracker.observe(["meet:aaa-bbbb-ccc", "app:com.tinyspeck.slackmacgap"], at: at(60))
+    XCTAssertFalse(tracker.observe(["meet:aaa-bbbb-ccc", "app:com.tinyspeck.slackmacgap"], at: at(120)))
   }
 
   func testBrieflyVisibleNewIdentityDoesNotCount() {
@@ -152,5 +173,54 @@ final class MeetingCallIdentityPolicyTests: XCTestCase {
     XCTAssertEqual(
       MeetingConversationBoundaryPolicy.transition(previousRole: .ambient, meetingActive: true, callChanged: true),
       .init(nextRole: .meeting, finalizationReason: .meetingStarted))
+  }
+}
+
+/// The pending call change is consumed by the real boundary entry point, and survives a
+/// rotation that could not run.
+@MainActor
+final class MeetingCallChangeBoundaryTests: XCTestCase {
+  private func detectorWithPendingCallChange() -> MeetingDetector {
+    let detector = MeetingDetector(onChange: { _ in })
+    detector.restorePendingCallChange()
+    return detector
+  }
+
+  func testBusyRotationKeepsTheCallChangeForReplay() async {
+    let state = AppState()
+    state.isTranscribing = true
+    state.currentSessionId = 1
+    state.currentConversationRole = .meeting
+    state.meetingDetector = detectorWithPendingCallChange()
+    state.conversationRotationInFlight = true  // another rotation holds the serializer
+    defer {
+      state.conversationRotationInFlight = false
+      state.meetingDetector = nil
+      state.isTranscribing = false
+    }
+
+    await state.handleMeetingObservation(active: true)
+
+    XCTAssertEqual(state.meetingDetector?.hasPendingCallChange, true)
+    XCTAssertEqual(state.pendingMeetingState, true, "replayed when the in-flight rotation installs its session")
+    XCTAssertEqual(state.currentConversationRole, .meeting)
+    XCTAssertFalse(state.meetingBoundaryInProgress)
+  }
+
+  func testEdgeDeferredUntilASessionExistsKeepsTheCallChange() async {
+    let state = AppState()
+    state.isTranscribing = true
+    state.currentSessionId = nil
+    state.currentConversationRole = .meeting
+    state.meetingDetector = detectorWithPendingCallChange()
+    defer {
+      state.meetingDetector = nil
+      state.isTranscribing = false
+    }
+
+    await state.handleMeetingObservation(active: true)
+
+    XCTAssertEqual(state.meetingDetector?.hasPendingCallChange, true)
+    XCTAssertEqual(state.pendingMeetingState, true)
   }
 }
