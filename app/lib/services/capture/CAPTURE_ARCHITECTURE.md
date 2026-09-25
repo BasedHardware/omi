@@ -120,7 +120,15 @@ They are the legacy side-effect bodies extracted to private controller methods
 Moved to pure reducer + ports: phase/ownership decisions, suspension stack,
 policy writes, socket open/close ordering, BLE stream ordering, native mic
 start/stop ordering, WAL finalize/roll, recording-id minting, snapshot
-persistence.
+persistence. C1 compatibility exceptions remain: `updateRecordingDevice`
+publishes its legacy synchronous device identity and retires a stale
+`CaptureSessionOwner` generation before its queued `DeviceUpdated` executes,
+so an already-awaited codec/open cannot publish an obsolete socket; `onClosed`
+marks readiness and arms the reconnect timer at callback time so a pending
+event cannot miss a virtual/OS timer deadline; `onConnected` mirrors the
+interrupted status synchronously for existing read-model consumers. None of
+these paths opens a capture source; their remaining bookkeeping belongs in
+the coordinator admission fence during the next seam extraction.
 
 Still staged bodies (`RunStage`) in `CaptureController._runCaptureStage`:
 device session start/stop/update, pendant suspend/resume tails, phone session
@@ -242,17 +250,24 @@ fresh launch (the launch-marker path recovers it deliberately). Only
   pendant records, the no-op gate cannot truly deny the native writer, so the
   deny degrades to a shared-policy `PolicyWrite(true)` (native drops packets
   while muted) instead of claiming per-source physical denial.
-- A repeated explicit phone start while the phone already owns is a no-op —
-  the original recording id and socket are preserved; reconnection uses its
-  own events (`SocketClosed`/`SocketConnected`/keepalive). `PhoneBatchStartRequested`
-  mints its source-unique recording id before the start stage.
+- A repeated explicit `PhoneStartRequested` stops the previous phone session
+  before minting a fresh recording id; only pause/resume and recovery preserve
+  the existing id. Reconnection uses its own events
+  (`SocketClosed`/`SocketConnected`/keepalive). A repeated direct
+  `PhoneBatchStartRequested` remains a no-op, and a first direct batch start
+  mints a source-unique recording id before the start stage. The C1 test-only
+  `KeepAliveTick(testingProbe: true)` joins concurrent requests and permits
+  the injected `RecordingState.systemAudioRecord` or `deviceRecord` lane to
+  exercise the legacy reconnect stage without claiming a nonexistent mic.
 - `DeviceStopRequested` while another source owns capture only updates pendant
   identity (`cleanDevice` clears `_recordingDevice`); it never touches the
   owner's socket, WAL, recording state, or the suspension stack.
-- `DevicePauseRequested`/`DeviceResumeRequested` (and the pause/resume
-  fallbacks) never reach across an owner: while the phone or a call owns
-  capture they only record `wasPaused` on the suspended pendant — applied by
-  the suspending owner on resume — or no-op entirely.
+- Legacy `DevicePauseRequested`/`DeviceResumeRequested` target the active
+  phone when it owns capture (sharing the phone pause/resume transition),
+  otherwise target the pendant. A call-suspended pendant only changes its
+  `wasPaused` intent; no device control opens BLE beneath a phone or call.
+  With no owner, the old device-pause API still writes the durable mute
+  policy without opening hardware.
 - Snapshot persist is the last I/O step of a safe transition (before publish).
 
 ## Read model

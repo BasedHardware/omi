@@ -121,6 +121,8 @@ class CaptureController extends ChangeNotifier
   static const Duration _rejectedTokenRefreshInterval = Duration(seconds: 30);
   DateTime? _lastRejectedTokenRefreshAt;
   DateTime? _keepAliveLastExecutedAt;
+  int _keepAliveEpoch = 0;
+  int? _keepAliveReconnectEpoch;
   Timer? _inProgressConversationRefreshTimer;
   int _inProgressConversationRefreshAttempts = 0;
   bool _isRefreshingInProgressConversation = false;
@@ -267,7 +269,9 @@ class CaptureController extends ChangeNotifier
     lifetime.listen(_connectivity.changes, onConnectionStateChanged);
     final ble = _bleListeners ?? const BleBridgeCaptureListeners();
     ble.addBatchRecordingFinalizedListener(_onOfflineRecordingFinalized);
-    _recoverPhoneRestoreMarker();
+    unawaited(_recoverPhoneRestoreMarker().catchError((Object e) {
+      Logger.debug('[CaptureProvider] phone restore recovery failed: $e');
+    }));
     final omiCall = _omiCallState;
     if (omiCall != null) {
       omiCall.addListener(_onOmiCallStateChanged);
@@ -539,6 +543,7 @@ class CaptureController extends ChangeNotifier
   /// Consumed in _initiateWebsocket() to trigger onNetworkSocketReconnected()
   /// on the device connection (e.g. Limitless re-sends enable-data-stream).
   bool _socketReconnectPending = false;
+  bool _socketCloseQueued = false;
 
   /// How many transcription socket attempts are running, per configuration.
   /// The keep-alive timer's callback is async, so a tick could start the same
@@ -619,11 +624,15 @@ class CaptureController extends ChangeNotifier
 
   static const _captureSnapshotKey = 'captureCoordinatorSnapshot';
 
-  late final CaptureCoordinator _capture = CaptureCoordinator(
-    ports: _buildCapturePorts(),
-    readEnvironment: _readCaptureEnvironment,
-    onCommit: (_) => notifyListeners(),
-  );
+  CaptureCoordinator? _captureInstance;
+  bool _captureControllerDisposed = false;
+  CaptureCoordinator get _capture => _captureInstance ??= CaptureCoordinator(
+        ports: _buildCapturePorts(),
+        readEnvironment: _readCaptureEnvironment,
+        onCommit: (_) {
+          if (!_captureControllerDisposed) notifyListeners();
+        },
+      );
 
   SuspendedCapture? get _pendantSuspension => _capture.stagedReadModel.pendantSuspension;
 
@@ -653,14 +662,12 @@ class CaptureController extends ChangeNotifier
     await _preferences.saveBool(_phoneRestorePendingKey, false);
   }
 
-  void _recoverPhoneRestoreMarker() {
+  Future<void> _recoverPhoneRestoreMarker() async {
     final pending = _preferences.getBool(_phoneRestorePendingKey);
+    if (!pending) return;
     final mutedBefore = _preferences.getBool(_phoneRestoreMutedKey);
-    unawaited(_capture.dispatch(LaunchRecovery(markerPending: pending, mutedBefore: mutedBefore)).then((outcome) {
-      if (outcome.failed && !outcome.absorbed) {
-        Logger.debug('[CaptureProvider] phone restore recovery failed: ${outcome.error}');
-      }
-    }));
+    final outcome = await _capture.dispatch(LaunchRecovery(markerPending: pending, mutedBefore: mutedBefore));
+    outcome.throwIfFailed();
   }
 
   /// Completes when the last Process Now request has an answer.
@@ -761,6 +768,7 @@ class CaptureController extends ChangeNotifier
   }
 
   void _updateRecordingDeviceBody(BtDevice? device) {
+    if (_captureControllerDisposed) return;
     // Preserve a capability-normalized OpenGlass identity across recording-device
     // updates (Home / speech-profile restarts pass the raw advertising-time Omi
     // object; a downgrade would flip the button-actions gate mid-recording).
@@ -776,6 +784,7 @@ class CaptureController extends ChangeNotifier
   }
 
   void updateRecordingDevice(BtDevice? device) {
+    _updateRecordingDeviceBody(device);
     unawaited(_dispatchLogged(DeviceUpdated(device)));
   }
 
@@ -2120,7 +2129,8 @@ class CaptureController extends ChangeNotifier
 
   @override
   void dispose() {
-    _capture.dispose();
+    _captureControllerDisposed = true;
+    _captureInstance?.dispose();
     _rollCaptureSession('disposed');
     unawaited(_setCaptureForegroundRequired(false));
     _phoneBatchGeolocationPreference.invalidateSession();
@@ -2603,10 +2613,15 @@ class CaptureController extends ChangeNotifier
 
   @override
   void onClosed([int? closeCode]) {
+    _keepAliveEpoch++;
+    _socketCloseQueued = true;
+    _transcriptServiceReady = false;
+    _startKeepAliveServices();
     unawaited(_dispatchLogged(SocketClosed(closeCode: closeCode)));
   }
 
   Future<void> _socketClosedBody(int? closeCode) async {
+    _socketCloseQueued = false;
     _transcriptionServiceStatuses = [];
     _transcriptServiceReady = false;
     final wedgeSocket = _wedgeSession?.socket;
@@ -2642,7 +2657,6 @@ class CaptureController extends ChangeNotifier
     }
 
     notifyListeners();
-    _startKeepAliveServices();
   }
 
   bool get _shouldReconnectTranscriptionSocket {
@@ -2654,7 +2668,8 @@ class CaptureController extends ChangeNotifier
   }
 
   @visibleForTesting
-  bool get keepAliveScheduledForTesting => _keepAliveTimer?.isActive ?? false;
+  bool get keepAliveScheduledForTesting =>
+      (_keepAliveTimer?.isActive ?? false) || (_socketCloseQueued && _shouldReconnectTranscriptionSocket);
 
   @visibleForTesting
   void debugArmVoiceCommandTimeout(String deviceId) {
@@ -2679,6 +2694,7 @@ class CaptureController extends ChangeNotifier
         _keepAliveTimer = null;
         return;
       }
+      if (_keepAliveReconnectEpoch == _keepAliveEpoch) return;
       // rate 1/15s
       if (_keepAliveLastExecutedAt != null &&
           _now().subtract(const Duration(seconds: 15)).isBefore(_keepAliveLastExecutedAt!)) {
@@ -2702,7 +2718,13 @@ class CaptureController extends ChangeNotifier
         return;
       }
 
-      await _capture.dispatch(const KeepAliveTick());
+      final reconnectEpoch = _keepAliveEpoch;
+      _keepAliveReconnectEpoch = reconnectEpoch;
+      try {
+        await _capture.dispatch(const KeepAliveTick());
+      } finally {
+        if (_keepAliveReconnectEpoch == reconnectEpoch) _keepAliveReconnectEpoch = null;
+      }
     });
   }
 
@@ -2755,7 +2777,8 @@ class CaptureController extends ChangeNotifier
 
   @visibleForTesting
   Future<void> reconnectActiveCaptureForTesting() async {
-    await _capture.dispatch(const KeepAliveTick());
+    final outcome = await _capture.dispatch(const KeepAliveTick(testingProbe: true));
+    outcome.throwIfFailed();
   }
 
   @override
@@ -2776,6 +2799,12 @@ class CaptureController extends ChangeNotifier
 
   @override
   void onConnected() {
+    if (recordingState == RecordingState.interrupted &&
+        !_micInterrupted &&
+        !_phoneMicPaused &&
+        _activeSource is! PhoneMicSource) {
+      updateRecordingState(RecordingState.record);
+    }
     unawaited(_dispatchLogged(const SocketConnected()));
   }
 
@@ -3459,13 +3488,14 @@ class CaptureController extends ChangeNotifier
         batchModeSuspendedForOnboarding: _preferences.batchModeSuspendedForOnboarding,
         deviceSupportsTranscribeLater: deviceSupportsTranscribeLater,
         networkConnected: _connectivity.isConnected,
-        signedIn: _auth.isSignedIn(),
+        signedIn: _auth.isSignedIn,
         phoneMicSupportsBatch: _phoneMicSupportsBatch,
         transcriptReady: _transcriptServiceReady,
         socketConnected: _socket?.state == SocketServiceState.connected,
         deviceServiceReady: recordingDeviceServiceReady,
         callActive: _omiCallActive,
         deviceRecording: recordingState == RecordingState.deviceRecord,
+        systemAudioRecording: recordingState == RecordingState.systemAudioRecord,
         micCapturing: recordingState == RecordingState.record ||
             recordingState == RecordingState.interrupted ||
             recordingState == RecordingState.systemAudioRecord,
@@ -3510,43 +3540,47 @@ class CaptureController extends ChangeNotifier
         runStage: _runCaptureStage,
       );
 
-  Future<Object?> _runCaptureStage(CaptureStage stage) => switch (stage) {
-        UpdateRecordingDeviceStage() => Future.sync(() => _updateRecordingDeviceBody(stage.device)),
-        StartDeviceSessionStage() =>
-          _startDeviceSessionBody(deviceRequested: stage.deviceRequested, promptLocation: stage.promptLocation),
-        StopDeviceSessionStage() => _stopDeviceSessionBody(cleanDevice: stage.cleanDevice),
-        PauseDeviceTailStage() => _pauseDeviceTailBody(),
-        ResumeDeviceTailStage() => _resumeDeviceTailBody(),
-        SuspendPendantStage() => _suspendPendantBody(reason: stage.reason, wasPaused: stage.wasPaused),
-        ConvertCallSuspensionStage() => _convertCallSuspensionBody(),
-        ResumeSuspendedPendantStage() => _resumeSuspendedPendantBody(wasPaused: stage.wasPaused),
-        StartPhoneSessionStage() => _startPhoneSessionBody(mode: stage.mode),
-        WritePhoneRestoreMarkerStage() => _writePhoneRestoreMarker(stage.mutedBefore),
-        ClearPhoneRestoreMarkerStage() => _clearPhoneRestoreMarker(),
-        StopPhoneLiveStage() => _stopPhoneLiveBody(reason: stage.reason),
-        StopPhoneBatchStage() => _stopPhoneBatchBody(reason: stage.reason),
-        StopPhonePolicyRestoreStage() => _stopPhonePolicyRestoreBody(
-            mutedBefore: stage.mutedBefore, pendantResumeFollows: stage.pendantResumeFollows, userStop: stage.userStop),
-        FlushPhoneFramesStage() => Future.sync(_flushPhoneFrames),
-        RecordingMarkStage() => Future.sync(() => updateRecordingState(stage.state)),
-        DeviceStopTelemetryStage() => _deviceStopTelemetryBody(cleanDevice: stage.cleanDevice),
-        ProcessConversationStage() => _processConversationBody(),
-        SocketClosedStage() => _socketClosedBody(stage.closeCode),
-        SocketConnectedStage() => _socketConnectedBody(),
-        SocketErrorStage() => _socketErrorBody(stage.error),
-        ReconnectDeviceStage() => _reconnectDeviceCaptureBody(),
-        ReconnectPhoneStage() => _reconnectPhoneCaptureBody(),
-        MicInterruptionStage() => _micInterruptionBody(stage.began),
-        RestartLiveMicStage() => _micStalledBody(),
-        RestartBatchMicStage() => _batchStalledBody(),
-        ProbeStallStage() => _probeStallBody(),
-        BatchModeStage() => _setBatchModeBody(enabled: stage.enabled, rolledPhoneMode: stage.rolledPhoneMode),
-        TranscriptionSettingsStage() => _transcriptionSettingsChangedBody(),
-        RecordProfileStage() => _resetState(),
-        OnboardingBatchStage() =>
-          stage.suspended ? _suspendBatchForOnboardingBody() : _restoreBatchAfterOnboardingBody(),
-        StartPhoneBatchStage() => _startPhoneMicBatchBody(auto: stage.auto),
-      };
+  Future<Object?> _runCaptureStage(CaptureStage stage) => _captureControllerDisposed
+      ? Future<Object?>.value(null)
+      : switch (stage) {
+          UpdateRecordingDeviceStage() => Future.sync(() => _updateRecordingDeviceBody(stage.device)),
+          StartDeviceSessionStage() =>
+            _startDeviceSessionBody(deviceRequested: stage.deviceRequested, promptLocation: stage.promptLocation),
+          StopDeviceSessionStage() => _stopDeviceSessionBody(cleanDevice: stage.cleanDevice),
+          PauseDeviceTailStage() => _pauseDeviceTailBody(),
+          ResumeDeviceTailStage() => _resumeDeviceTailBody(),
+          SuspendPendantStage() => _suspendPendantBody(reason: stage.reason, wasPaused: stage.wasPaused),
+          ConvertCallSuspensionStage() => _convertCallSuspensionBody(),
+          ResumeSuspendedPendantStage() => _resumeSuspendedPendantBody(wasPaused: stage.wasPaused),
+          StartPhoneSessionStage() => _startPhoneSessionBody(mode: stage.mode),
+          WritePhoneRestoreMarkerStage() => _writePhoneRestoreMarker(stage.mutedBefore),
+          ClearPhoneRestoreMarkerStage() => _clearPhoneRestoreMarker(),
+          StopPhoneLiveStage() => _stopPhoneLiveBody(reason: stage.reason),
+          StopPhoneBatchStage() => _stopPhoneBatchBody(reason: stage.reason),
+          StopPhonePolicyRestoreStage() => _stopPhonePolicyRestoreBody(
+              mutedBefore: stage.mutedBefore,
+              pendantResumeFollows: stage.pendantResumeFollows,
+              userStop: stage.userStop),
+          FlushPhoneFramesStage() => Future.sync(_flushPhoneFrames),
+          RecordingMarkStage() => Future.sync(() => updateRecordingState(stage.state)),
+          DeviceStopTelemetryStage() => _deviceStopTelemetryBody(cleanDevice: stage.cleanDevice),
+          ProcessConversationStage() => _processConversationBody(),
+          SocketClosedStage() => _socketClosedBody(stage.closeCode),
+          SocketConnectedStage() => _socketConnectedBody(),
+          SocketErrorStage() => _socketErrorBody(stage.error),
+          ReconnectDeviceStage() => _reconnectDeviceCaptureBody(),
+          ReconnectPhoneStage() => _reconnectPhoneCaptureBody(),
+          MicInterruptionStage() => _micInterruptionBody(stage.began),
+          RestartLiveMicStage() => _micStalledBody(),
+          RestartBatchMicStage() => _batchStalledBody(),
+          ProbeStallStage() => _probeStallBody(),
+          BatchModeStage() => _setBatchModeBody(enabled: stage.enabled, rolledPhoneMode: stage.rolledPhoneMode),
+          TranscriptionSettingsStage() => _transcriptionSettingsChangedBody(),
+          RecordProfileStage() => _resetState(),
+          OnboardingBatchStage() =>
+            stage.suspended ? _suspendBatchForOnboardingBody() : _restoreBatchAfterOnboardingBody(),
+          StartPhoneBatchStage() => _startPhoneMicBatchBody(auto: stage.auto),
+        };
 
   Future<void> _processConversationBody() async {
     await forceProcessingCurrentConversation();
