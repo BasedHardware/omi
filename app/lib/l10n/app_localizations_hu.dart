@@ -11273,4 +11273,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get openCall => 'Hívás megnyitása';
+
+  @override
+  String get captureRecoveryBanner => 'A medál hangja nem érkezik meg az alkalmazásba — a javításhoz koppintson';
 }

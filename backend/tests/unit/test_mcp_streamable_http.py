@@ -1325,16 +1325,33 @@ class TestOutputSchemaTimestampFormats:
 
 
 class TestClientCapabilities2026:
-    """Explicit 2026-07-28 declarations must carry the clientCapabilities
-    ``_meta`` object — both official SDKs stamp it on every modern call."""
+    """Explicit 2026-07-28 requests must carry the clientCapabilities
+    ``_meta`` object — both official SDKs stamp it on every modern call.
+    Notifications are exempt: the spec requirement is on requests."""
 
     @pytest.mark.parametrize("path", ["/v1/mcp", "/v1/mcp/sse"])
     def test_2026_header_without_capabilities_rejected(self, client, authed, path):
         response = _post(client, path, _msg("tools/list"), **{"mcp-protocol-version": PROTOCOL_VERSION_2026})
         assert response.status_code == 400
-        error = response.json()["error"]
+        body = response.json()
+        error = body["error"]
         assert error["code"] == -32602
         assert META_CLIENT_CAPABILITIES in error["message"]
+        assert body["id"] == 1
+
+    @pytest.mark.parametrize("path", ["/v1/mcp", "/v1/mcp/sse"])
+    @pytest.mark.parametrize("method", ["notifications/initialized", "notifications/cancelled"])
+    def test_2026_notification_without_capabilities_accepted(self, client, authed, path, method):
+        # Prod regression: a 2026 Go client sends notifications with no id and
+        # no clientCapabilities _meta. Those must be 202, not -32602 / HTTP 400.
+        response = _post(
+            client,
+            path,
+            {"jsonrpc": "2.0", "method": method},
+            **{"mcp-protocol-version": PROTOCOL_VERSION_2026},
+        )
+        assert response.status_code == 202
+        assert response.content == b""
 
     @pytest.mark.parametrize("path", ["/v1/mcp", "/v1/mcp/sse"])
     def test_2026_meta_without_capabilities_rejected(self, client, authed, path):
@@ -1370,6 +1387,21 @@ class TestClientCapabilities2026:
         response = _post(client, "/v1/mcp", message, **{"mcp-protocol-version": PROTOCOL_VERSION_2026})
         assert response.status_code == 200
         assert response.json()["result"]["resultType"] == "complete"
+
+    @pytest.mark.parametrize("path", ["/v1/mcp", "/v1/mcp/sse"])
+    @pytest.mark.parametrize("header", [PROTOCOL_VERSION_2026, "2099-01-01"])
+    def test_initialize_ignores_protocol_version_header(self, client, authed, path, header):
+        # Prod regression 2026-09-25: a client sent ``MCP-Protocol-Version: 2026-07-28``
+        # on a handshake ``initialize`` and every retry got HTTP 400.
+        message = _msg("initialize")
+        message["params"] = {
+            "protocolVersion": "2025-11-25",
+            "capabilities": {},
+            "clientInfo": {"name": "probe", "version": "1"},
+        }
+        response = _post(client, path, message, **{"mcp-protocol-version": header})
+        assert response.status_code == 200
+        assert response.json()["result"]["protocolVersion"] == "2025-11-25"
 
     @pytest.mark.parametrize("version", ["2025-11-25", "2025-03-26"])
     def test_handshake_requests_need_no_capabilities(self, client, authed, version):

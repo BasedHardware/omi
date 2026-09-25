@@ -11026,4 +11026,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get openCall => '打开通话';
+
+  @override
+  String get captureRecoveryBanner => '吊坠音频未送达应用 — 轻点以修复';
 }

@@ -3580,5 +3580,6 @@
     "keepUsingPendant": "Continuar com o pendente",
     "recordWith": "Gravar com",
     "moreWaysToRecord": "Mais formas de gravar",
-    "openCall": "Abrir chamada"
+    "openCall": "Abrir chamada",
+    "captureRecoveryBanner": "O áudio do pingente não chega à aplicação — toque para reparar"
 }

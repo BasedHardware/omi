@@ -11231,4 +11231,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get openCall => 'কল খুলুন';
+
+  @override
+  String get captureRecoveryBanner => 'পেন্ডেন্টের অডিও অ্যাপে পৌঁছাচ্ছে না — মেরামত করতে ট্যাপ করুন';
 }

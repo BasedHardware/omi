@@ -3545,5 +3545,6 @@
     "keepUsingPendant": "Turpināt ar kulonu",
     "recordWith": "Ierakstīt ar",
     "moreWaysToRecord": "Citi ierakstīšanas veidi",
-    "openCall": "Atvērt zvanu"
+    "openCall": "Atvērt zvanu",
+    "captureRecoveryBanner": "Kulona audio nesasniedz lietotni — pieskarieties, lai salabotu"
 }

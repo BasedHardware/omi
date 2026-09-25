@@ -11322,4 +11322,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get openCall => 'Anruf öffnen';
+
+  @override
+  String get captureRecoveryBanner => 'Der Ton des Pendants erreicht die App nicht — zum Reparieren tippen';
 }

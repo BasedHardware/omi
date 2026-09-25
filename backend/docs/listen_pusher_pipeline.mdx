@@ -585,6 +585,14 @@ or raw exception text. `blocked_byok` is an explicit recovery state: durable
 offline BYOK is not supported without a separately reviewed credential broker;
 the worker must never silently use Omi keys.
 
+A stale `in_progress` row with content can also be finalized by the opt-in
+self-heal sweep as a `SERVER_RECOVERY` admission on the same conversation id —
+never a new conversation — through this same durable job ledger. The recovery
+run reuses normal persistence but is fenced by a pre-persist structured guard:
+output carrying only the deterministic minimum raises before the
+completed-status transaction, leaving the row's content and lifecycle state
+for the existing dead-letter review workflow.
+
 Eligible meeting receipts also carry the stable Chat intent ID and, after the
 desktop kernel acknowledges its journal write, the materialization time. With
 `MEETING_RECEIPT_RECONCILER_ENABLED=true`, the existing five-minute

@@ -3545,5 +3545,6 @@
     "keepUsingPendant": "Tiếp tục dùng mặt dây chuyền",
     "recordWith": "Ghi âm bằng",
     "moreWaysToRecord": "Thêm cách ghi âm",
-    "openCall": "Mở cuộc gọi"
+    "openCall": "Mở cuộc gọi",
+    "captureRecoveryBanner": "Âm thanh từ mặt dây chuyền không đến được ứng dụng — chạm để sửa chữa"
 }

@@ -11291,4 +11291,7 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get openCall => 'Отвори го повикот';
+
+  @override
+  String get captureRecoveryBanner => 'Аудиото од привезокот не стигнува до апликацијата — допрете за поправка';
 }

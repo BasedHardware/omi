@@ -11249,4 +11249,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get openCall => 'Atidaryti skambutį';
+
+  @override
+  String get captureRecoveryBanner => 'Pakabuko garsas nepasiekia programėlės — palieskite, kad ištaisytumėte';
 }

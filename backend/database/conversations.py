@@ -877,6 +877,24 @@ def get_conversation(uid, conversation_id, *, read_site: FirestoreReadSite = Fir
     return conversation_data
 
 
+def get_conversation_raw_snapshot(
+    uid: str, conversation_id: str, *, firestore_client: Any = None
+) -> Optional[Dict[str, Any]]:
+    """Return the stored conversation document with no read-path decoding.
+
+    Self-heal recovery verification compares the byte length of the stored
+    (compressed/encrypted) transcript field against the length recorded at
+    admission. The decoded ``get_conversation`` path would decompress it and
+    make every correct recovery look like content drift, so this read is the
+    raw ``to_dict()`` snapshot only.
+    """
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    snapshot = client.collection('users').document(uid).collection('conversations').document(conversation_id).get()
+    if not getattr(snapshot, 'exists', False):
+        return None
+    return snapshot.to_dict()
+
+
 def get_public_shared_conversation_bounded(
     uid: str,
     conversation_id: str,

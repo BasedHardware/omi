@@ -11219,4 +11219,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get openCall => 'Open call';
+
+  @override
+  String get captureRecoveryBanner => 'Pendant audio is not reaching the app — tap to repair';
 }

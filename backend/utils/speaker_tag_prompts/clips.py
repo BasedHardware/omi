@@ -2,8 +2,8 @@
 
 Audio exists only for conversations recorded with private cloud sync on; the
 chunks live beside the conversation and are listed by ``audio_files``. Times
-are seconds from ``conversation.started_at``, the same frame as transcript
-segments.
+are seconds from ``conversation.started_at`` (``created_at`` when absent), the
+same frame as transcript segments.
 
 For audio-timeline v2 conversations the clip window must be *covered*: the
 union of validated ``chunk_spans`` must contain it (1 ms tolerance). A known
@@ -11,6 +11,7 @@ uncovered window returns None — never a clip of the wrong audio. Legacy
 conversations keep the timestamp-based best-effort behavior.
 """
 
+from datetime import datetime, timezone
 import io
 import wave
 from typing import Any, List, Mapping, Optional
@@ -24,10 +25,20 @@ MAX_CLIP_REQUEST_SECONDS = 12.0
 
 
 def _started_at_seconds(conversation: Mapping[str, Any]) -> Optional[float]:
-    started_at = conversation.get('started_at')
-    if started_at is None:
-        return None
-    return started_at.timestamp() if hasattr(started_at, 'timestamp') else float(started_at)
+    raw: Any = conversation.get('started_at') or conversation.get('created_at')
+    if isinstance(raw, str) and raw.strip():
+        try:
+            raw = datetime.fromisoformat(raw.strip().replace('Z', '+00:00'))
+        except ValueError:
+            pass
+    if isinstance(raw, datetime):
+        return (raw if raw.tzinfo else raw.replace(tzinfo=timezone.utc)).timestamp()
+    ts_fn: Any = getattr(raw, 'timestamp', None)
+    return (
+        float(ts_fn())
+        if ts_fn is not None
+        else (float(raw) if isinstance(raw, (int, float)) and not isinstance(raw, bool) else None)
+    )
 
 
 def _chunk_timestamps(conversation: Mapping[str, Any]) -> List[float]:
@@ -93,12 +104,7 @@ def conversation_clip_pcm(
     abs_start = started_at + start
     abs_end = started_at + end
 
-    first = 0
-    for index, timestamp in enumerate(timestamps):
-        if timestamp <= abs_start:
-            first = index
-        else:
-            break
+    first = max((i for i, ts in enumerate(timestamps) if ts <= abs_start), default=0)
     relevant = [timestamp for timestamp in timestamps[first:] if timestamp <= abs_end]
     if not relevant:
         return None
