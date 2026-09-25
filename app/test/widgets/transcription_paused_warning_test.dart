@@ -8,7 +8,6 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/l10n/app_localizations.dart';
-import 'package:omi/ui/ui.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -132,9 +131,11 @@ void main() {
       expect(find.text(AppLocalizations.of(context).listening), findsWidgets);
     });
 
-    testWidgets('shows Paused for non-call audio interruption (#4706)', (tester) async {
-      // The transcription socket is up, so this is not a dropped connection: the OS or another app
-      // took the microphone (other-app audio / silent stall path, not an active phone call).
+    testWidgets('a mic stall (interrupted, OS not holding the mic) reads Reconnecting, not Paused', (tester) async {
+      // The controller marks phone capture `interrupted` without the OS holding the mic for a
+      // silent-mic stall (the socket still up): capture is restarting the microphone on its own,
+      // so it reads Reconnecting and keeps Pause. Only an OS interruption (`isCallActive`) is
+      // Paused with no control (#4706), covered in capture_home_ui_test.
       final captureProvider = _SocketUpCaptureProvider();
       addTearDown(captureProvider.dispose);
       captureProvider.updateRecordingState(RecordingState.interrupted);
@@ -142,16 +143,13 @@ void main() {
 
       await pumpCaptureWidget(tester, captureProvider);
 
-      final context = tester.element(find.byType(ConversationCaptureWidget));
-      final l10n = AppLocalizations.of(context);
-
-      expect(find.text(l10n.paused), findsWidgets);
+      final l10n = AppLocalizations.of(tester.element(find.byType(ConversationCaptureWidget)));
+      expect(find.text(l10n.reconnecting), findsOneWidget);
       expect(find.text(l10n.listening), findsNothing);
-      // Not a pause the reader chose: a warning glyph and the cause, never a status dot. The OS owns
-      // an audio interruption and resumes capture itself, so the card offers no Pause/Resume for it.
-      expect(find.byIcon(Icons.warning_amber_rounded), findsOneWidget);
-      expect(find.textContaining(l10n.captureMicInUseElsewhere), findsOneWidget);
-      expect(find.byType(OmiIconButton), findsNothing);
+      // It claims neither "still recording" (the mic is restarting) nor "mic in use".
+      expect(find.textContaining(l10n.captureStillRecording), findsNothing);
+      expect(find.textContaining(l10n.captureMicInUseElsewhere), findsNothing);
+      expect(find.bySemanticsLabel(l10n.pause), findsOneWidget);
     });
 
     testWidgets('a dropped transcription socket reads Reconnecting, not Paused', (tester) async {

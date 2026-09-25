@@ -25,10 +25,24 @@ import 'package:omi/utils/enums.dart';
 enum _Live { idle, idleDeviceConnected, pendant, pendantPaused, phone, phoneAfterPendant }
 
 class _Capture extends ChangeNotifier implements CaptureProvider {
-  _Capture(this.live, {this.failure = false, this.batch = false});
+  _Capture(this.live,
+      {this.failure = false,
+      this.batch = false,
+      this.interrupted = false,
+      this.callActive = false,
+      this.readerPaused = false});
   final _Live live;
   final bool failure;
   final bool batch;
+
+  /// Phone capture marked `interrupted` by the controller.
+  final bool interrupted;
+
+  /// The OS holds the microphone (`isCallActive`).
+  final bool callActive;
+
+  /// The reader paused the phone recording.
+  final bool readerPaused;
   int pauses = 0;
   int resumes = 0;
   int phoneStarts = 0;
@@ -40,24 +54,28 @@ class _Capture extends ChangeNotifier implements CaptureProvider {
         _ => 'phone',
       };
   @override
-  RecordingState get recordingState => switch (live) {
-        _Live.idle || _Live.idleDeviceConnected => RecordingState.stop,
-        _Live.pendant => RecordingState.deviceRecord,
-        _Live.pendantPaused => RecordingState.pause,
-        _ => RecordingState.record,
-      };
+  RecordingState get recordingState => interrupted
+      ? RecordingState.interrupted
+      : readerPaused
+          ? RecordingState.pause
+          : switch (live) {
+              _Live.idle || _Live.idleDeviceConnected => RecordingState.stop,
+              _Live.pendant => RecordingState.deviceRecord,
+              _Live.pendantPaused => RecordingState.pause,
+              _ => RecordingState.record,
+            };
   @override
   bool get havingRecordingDevice => live != _Live.idle && live != _Live.phone;
   @override
   BtDevice? get recordingDevice => null;
   @override
-  bool get isPaused => live == _Live.pendantPaused;
+  bool get isPaused => live == _Live.pendantPaused || readerPaused;
   @override
-  bool get isPhoneMicPaused => false;
+  bool get isPhoneMicPaused => readerPaused;
   @override
   bool get pendantPausedForPhone => live == _Live.phoneAfterPendant;
   @override
-  bool get isCallActive => false;
+  bool get isCallActive => callActive;
   @override
   bool get isPhoneMicBatchRecording => batch;
   @override
@@ -281,6 +299,26 @@ void main() {
     });
   });
 
+  group('phone interruptions', () {
+    testWidgets('the OS holding the mic: Paused, the cause, a sheet, and no control', (tester) async {
+      await pump(tester, const ConversationCaptureWidget(showsCall: true),
+          capture: _Capture(_Live.phone, interrupted: true, callActive: true));
+      expect(find.text(en.paused), findsOneWidget);
+      expect(find.textContaining(en.captureMicInUseElsewhere), findsOneWidget);
+      expect(find.byType(OmiIconButton), findsNothing, reason: 'the OS resumes capture itself');
+    });
+
+    testWidgets('an interruption on a recording the reader paused keeps Resume', (tester) async {
+      final capture = _Capture(_Live.phone, interrupted: true, callActive: true, readerPaused: true);
+      await pump(tester, const ConversationCaptureWidget(showsCall: true), capture: capture);
+      expect(find.text(en.paused), findsOneWidget);
+      expect(find.textContaining(en.captureMicInUseElsewhere), findsNothing);
+      await tester.tap(find.bySemanticsLabel(en.resume));
+      await tester.pump();
+      expect(capture.resumes, 1);
+    });
+  });
+
   group('pendant disconnect', () {
     testWidgets('a pendant that drops mid-capture shows Disconnected, not nothing', (tester) async {
       final device = _Device();
@@ -294,6 +332,10 @@ void main() {
           capture: _Capture(_Live.idleDeviceConnected), device: device);
       expect(find.text(en.disconnected), findsOneWidget);
       expect(find.textContaining(en.reconnecting), findsOneWidget);
+      // Nothing records while the pendant is gone, so the time stops at the drop.
+      final elapsed = tester.widget<LiveCaptureCard>(find.byType(LiveCaptureCard)).elapsed;
+      await tester.pump(const Duration(seconds: 3));
+      expect(tester.widget<LiveCaptureCard>(find.byType(LiveCaptureCard)).elapsed, elapsed);
       await tester.tap(find.text(en.disconnected));
       await tester.pumpAndSettle();
       expect(find.text(en.capturePendantDisconnectedDetail), findsOneWidget);

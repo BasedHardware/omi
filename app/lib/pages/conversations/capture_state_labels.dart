@@ -75,13 +75,39 @@ class CaptureCardCopy {
   bool get warning => explanation != null;
 }
 
+/// Why phone capture reads `RecordingState.interrupted`. The controller sets it for an OS audio
+/// interruption (a call, Siri, another app: `isCallActive`), for a silent-mic stall and its
+/// restart, and when the transcription socket closes. Only the first is the microphone being
+/// taken; the others are capture recovering on its own. A pause the reader chose wins over all of
+/// them, so Resume stays offered if an interruption lands on a paused recording.
+enum CaptureInterruption { none, micTaken, recovering }
+
+CaptureInterruption captureInterruption({
+  required bool interrupted,
+  required bool readerPaused,
+  required bool osHoldsMic,
+}) {
+  if (!interrupted || readerPaused) return CaptureInterruption.none;
+  return osHoldsMic ? CaptureInterruption.micTaken : CaptureInterruption.recovering;
+}
+
 /// The Home card's copy for [state]. [micTaken] marks a pause the OS or another app caused (not
-/// the reader), which is a problem with an explanation rather than a plain Paused.
-CaptureCardCopy captureCardCopy(AppLocalizations l10n, CaptureDisplayState state, {bool micTaken = false}) {
+/// the reader), which is a problem with an explanation rather than a plain Paused. For
+/// [CaptureDisplayState.reconnecting], [socketDown] says the transcription connection is what is
+/// being restored while the microphone keeps recording; otherwise the microphone itself is
+/// restarting (a stall), so the card claims neither.
+CaptureCardCopy captureCardCopy(
+  AppLocalizations l10n,
+  CaptureDisplayState state, {
+  bool micTaken = false,
+  bool socketDown = true,
+}) {
   switch (state) {
     case CaptureDisplayState.paused when micTaken:
       return CaptureCardCopy(l10n.paused,
           detail: l10n.captureMicInUseElsewhere, explanation: l10n.captureMicInterruptedDetail);
+    case CaptureDisplayState.reconnecting when !socketDown:
+      return CaptureCardCopy(l10n.reconnecting);
     case CaptureDisplayState.reconnecting:
       return CaptureCardCopy(l10n.reconnecting,
           detail: l10n.captureStillRecording, explanation: l10n.transcriptionPausedReconnecting);

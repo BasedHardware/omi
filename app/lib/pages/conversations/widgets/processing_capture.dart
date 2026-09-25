@@ -50,6 +50,9 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
   String? _droppedSource;
   DateTime? _droppedStartedAt;
 
+  /// When the drop was first seen: the card's time stops there, since nothing records meanwhile.
+  DateTime? _droppedAt;
+
   @override
   void initState() {
     super.initState();
@@ -61,7 +64,6 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
       if (provider.offlineRecordingStartedAt != null ||
           provider.customSttBufferingDuration != null ||
           provider.liveCaptureStartedAt != null ||
-          _droppedSource != null ||
           (widget.showsCall && context.read<PhoneCallProvider>().callState == PhoneCallState.active)) {
         setState(() {}); // the elapsed time on the card
       }
@@ -195,14 +197,18 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     if (source != null && source != 'phone' && !SharedPreferencesUtil().batchModeEnabled) {
       _droppedSource = source;
       _droppedStartedAt = provider.liveCaptureStartedAt ?? _droppedStartedAt;
+      _droppedAt = null;
       return false;
     }
     if (source != null || connected || !paired) {
       _droppedSource = null;
       _droppedStartedAt = null;
+      _droppedAt = null;
       return false;
     }
-    return _droppedSource != null;
+    if (_droppedSource == null) return false;
+    _droppedAt ??= DateTime.now();
+    return true;
   }
 
   Widget _buildPendantDroppedUI(CaptureProvider provider, {required bool reconnecting}) {
@@ -213,21 +219,26 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
       status: l10n.disconnected,
       detail: reconnecting ? l10n.reconnecting : null,
       explanation: l10n.capturePendantDisconnectedDetail,
-      elapsed: startedAt == null ? null : DateTime.now().difference(startedAt),
+      elapsed: startedAt == null ? null : (_droppedAt ?? DateTime.now()).difference(startedAt),
       lastLine: provider.segments.lastOrNull?.text,
     );
   }
 
   Future<void> _togglePause(CaptureProvider provider) async {
     final phone = provider.liveCaptureSource == 'phone';
-    if (provider.isPaused) {
+    try {
       OmiHaptics.medium();
-      await provider.resumeCapture();
-      if (phone) PlatformManager.instance.analytics.phoneMicRecordingStarted();
-    } else {
-      OmiHaptics.medium();
-      await provider.pauseCapture();
-      if (phone) PlatformManager.instance.analytics.phoneMicRecordingStopped();
+      if (provider.isPaused) {
+        await provider.resumeCapture();
+        if (phone) PlatformManager.instance.analytics.phoneMicRecordingStarted();
+      } else {
+        await provider.pauseCapture();
+        if (phone) PlatformManager.instance.analytics.phoneMicRecordingStopped();
+      }
+    } catch (_) {
+      // Same as the live page's control: say so rather than leave an unhandled future.
+      if (mounted) OmiFeedback.error(context, context.l10n.somethingWentWrong);
+      return;
     }
     PlatformManager.instance.analytics.recordingMuteToggled(
       isMuted: provider.isPaused,
@@ -265,14 +276,14 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     } else if (isPhoneRecording) {
       isPaused = provider.isPhoneMicPaused || provider.isPaused;
     }
-    // The controller marks phone capture `interrupted` for three causes. With the transcription
-    // socket closed (and the OS not holding the mic) it is the socket dropping while the phone keeps
-    // recording and reconnects: Reconnecting. Otherwise the OS or another app took the microphone
-    // (a call, other-app audio, a silent mic): Paused, but not by the reader, so it is explained
-    // rather than offered a Resume (#4706).
-    final socketDropped =
-        isPhoneRecording && isAudioInterrupted && !provider.isCallActive && !provider.transcriptServiceReady;
-    final micTaken = isAudioInterrupted && !socketDropped;
+    // `interrupted` is the OS holding the mic (explained, no control) or capture recovering on its
+    // own (Reconnecting, Pause still works); a reader pause keeps Resume either way.
+    final interruption = captureInterruption(
+      interrupted: isPhoneRecording && isAudioInterrupted,
+      readerPaused: isPaused,
+      osHoldsMic: provider.isCallActive,
+    );
+    final micTaken = interruption == CaptureInterruption.micTaken;
     final hasTerminalTranscriptionFailure = provider.terminalTranscriptionFailure != null;
     final bufferingFor = provider.customSttBufferingDuration;
 
@@ -282,10 +293,10 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     // transcription names the consequence ("Audio saved, transcribes later"), not a stop.
     final displayState = liveCaptureDisplayState(
       audioInterrupted: micTaken,
-      paused: isPaused && !isAudioInterrupted,
+      paused: isPaused,
       transcriptionUnavailable: hasTerminalTranscriptionFailure,
       bufferingFor: bufferingFor,
-      reconnecting: socketDropped,
+      reconnecting: interruption == CaptureInterruption.recovering,
       capturingPhotos: hasPhotos,
     );
     // Initialising: the microphone is opening and no audio flows yet, so it is not Listening.
@@ -294,7 +305,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         displayState == CaptureDisplayState.listening;
     final copy = starting
         ? CaptureCardCopy(context.l10n.captureStarting)
-        : captureCardCopy(context.l10n, displayState, micTaken: micTaken);
+        : captureCardCopy(context.l10n, displayState, micTaken: micTaken, socketDown: !provider.transcriptServiceReady);
 
     // When recording is active: the one capture status and control surface.
     if (isDeviceRecording || isPhoneRecording) {
@@ -306,13 +317,13 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         explanation: copy.explanation,
         // Resume only when the status says Paused and the reader paused it; a degraded transcription
         // is still live, so its control is Pause.
-        paused: isPaused && !isAudioInterrupted,
+        paused: isPaused,
         elapsed: startedAt == null ? null : DateTime.now().difference(startedAt),
         lastLine: provider.segments.lastOrNull?.text,
         note:
             isPhoneRecording && provider.pendantPausedForPhone ? context.l10n.pendantPausedResumesWhenYouFinish : null,
         // Photo-capture devices (OmiGlass) keep capturing photos; there is nothing to pause.
-        onPauseToggle: !LiveCaptureCard.canPause(provider.recordingDevice, source: liveSource) || isAudioInterrupted
+        onPauseToggle: !LiveCaptureCard.canPause(provider.recordingDevice, source: liveSource) || micTaken
             ? null
             : () => _togglePause(provider),
       );

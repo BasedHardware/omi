@@ -79,5 +79,18 @@ void main() {
     expect(micTaken.warning, isTrue);
 
     expect(captureCardCopy(l10n, CaptureDisplayState.listening).warning, isFalse);
+
+    // Reconnecting with the socket up is the microphone restarting: no "Still recording" claim.
+    final stall = captureCardCopy(l10n, CaptureDisplayState.reconnecting, socketDown: false);
+    expect(stall.detail, isNull);
+    expect(stall.warning, isFalse);
+  });
+
+  test('interrupted: the OS holding the mic, capture recovering, or a reader pause that wins', () {
+    expect(captureInterruption(interrupted: true, readerPaused: false, osHoldsMic: true), CaptureInterruption.micTaken);
+    expect(
+        captureInterruption(interrupted: true, readerPaused: false, osHoldsMic: false), CaptureInterruption.recovering);
+    expect(captureInterruption(interrupted: true, readerPaused: true, osHoldsMic: true), CaptureInterruption.none);
+    expect(captureInterruption(interrupted: false, readerPaused: false, osHoldsMic: true), CaptureInterruption.none);
   });
 }
