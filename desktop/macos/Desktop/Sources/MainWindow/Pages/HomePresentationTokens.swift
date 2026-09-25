@@ -78,13 +78,17 @@ enum HomeAskBarPalette {
 }
 
 enum HomeStatusState: Equatable {
+  /// Capturing right now.
   case active
+  /// Switched on but not capturing yet: Only Meetings waiting for a call. Its own state so that
+  /// green (`active`) only ever means "recording now".
+  case armed
   case inactive
   case blocked
 
   var indicator: Color {
     switch self {
-    case .active:
+    case .active, .armed:
       return HomePalette.green
     case .inactive:
       return HomePalette.faint
@@ -97,6 +101,8 @@ enum HomeStatusState: Equatable {
     switch self {
     case .active:
       return "On"
+    case .armed:
+      return "Waiting"
     case .inactive:
       return "Off"
     case .blocked:
@@ -108,6 +114,9 @@ enum HomeStatusState: Equatable {
     if case .active = self { return true }
     return false
   }
+
+  /// Switched on: capturing now or armed to. The states that wear no off-slash.
+  var isOn: Bool { self == .active || self == .armed }
 
   var isBlocked: Bool {
     if case .blocked = self { return true }

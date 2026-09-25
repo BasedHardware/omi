@@ -1,0 +1,211 @@
+---
+title: "Adding a Speaker to CV1 & DevKit 1"
+icon: "volume-2"
+description: "An experimental, community-written guide to adding an I2S amplifier and micro-speaker to Omi CV1 and DevKit 1. Not validated on hardware, and not supported by Omi firmware."
+---
+
+# Adding a Speaker to CV1 & DevKit 1
+
+<Warning>
+  **Experimental and unverified.** This page is a community-written design sketch, not a
+  supported Omi feature. Nobody has built and validated this mod on CV1 or DevKit 1
+  hardware, and no Omi firmware in this repository drives an I2S output on those two
+  boards. Treat the wiring and firmware sections below as a starting point you must
+  verify yourself, and see [What you would have to build](#what-you-would-have-to-build)
+  for the specific gaps.
+</Warning>
+
+This page covers adding a small I2S amplifier and dynamic micro-speaker to Omi hardware
+that does not ship with a usable speaker, so that a phone or host application can play
+audio through the device.
+
+## Before you start: which board do you have?
+
+Omi's audio hardware differs per model, and this determines whether the mod is worth
+attempting at all.
+
+| Model | SoC | Speaker hardware | Is this mod relevant? |
+| :--- | :--- | :--- | :--- |
+| **CV1** (Omi Consumer Version 1) | Nordic **nRF5340-CLAA**, dual-core Cortex-M33 | No speaker is documented. The published component list includes a **vibration motor** for haptic feedback. | Yes, this is the main target. |
+| **DevKit 1** | Seeed **Xiao nRF52840** | Documented as having **no** speaker. | Yes, this is the other target. |
+| **DevKit 2** | Seeed **Xiao nRF52840 Sense** | **Ships with a built-in speaker** for audio feedback and notifications (an Adafruit 5769 Audio BFF plus an 8 Ω / 1 W speaker), and its firmware already streams PCM to it over I2S. | **No.** You already have this. See [How DevKit 2 does it](#how-devkit-2-does-it-verified). |
+
+Only CV1 uses the nRF5340. DevKit 1 and DevKit 2 are both Xiao nRF52840 boards, and the
+devkit firmware targets the upstream `xiao_ble_sense` board rather than an Omi board file.
+
+<Note>
+  These are source-level facts from this repository, not marketing copy: the SoC split is
+  documented in `docs/doc/hardware/OmiConsumer.mdx` and `docs/doc/hardware/DevKit2.mdx`,
+  the CV1 main SoC is listed as `nRF5340-CLAA` in
+  `docs/doc/hardware/consumer/electronics.mdx`, and the DevKit 2 audio hardware is listed in
+  `omi/hardware/triangle v2 w memory/README.md`.
+</Note>
+
+## Why an amplifier is required
+
+A passive buzzer or transducer is driven at its resonant frequency and cannot reproduce
+intelligible speech, so it is useless for voice feedback. A dynamic micro-speaker can, but
+an nRF GPIO pin cannot drive a speaker coil: GPIOs are low-current digital signals, and
+their drive strength is bounded by the datasheet. The usual solution is an I2S input
+Class-D amplifier, which accepts digital audio and delivers the current the coil needs.
+The amplifier's audio inputs are high-impedance, so they do not fight the GPIO's limits.
+
+## Suggested parts
+
+These are reasonable, widely available choices. They are **not** a validated combination
+for Omi hardware, and no part here has been tested with an Omi board.
+
+| Component | Part Number / Module | Notes |
+| :--- | :--- | :--- |
+| **I2S Class-D amplifier** | **MAX98357A** (breakout board) | Compact mono amplifier with a direct I2S digital input. |
+| **Dynamic micro-speaker** | **1511 speaker box** (15 mm × 11 mm × 3.5 mm) | 8 Ω, roughly 0.8 W–1.0 W, with an integrated acoustic cavity. |
+| **Alternative speaker** | **10 mm–12 mm round micro-speaker** | 8 Ω / 16 Ω; easier to fit inside a circular pendant enclosure. |
+
+## Wiring
+
+Because no I2S pin mapping is published for CV1 or DevKit 1, you must choose and verify
+the pins yourself. This repository contains no documented table mapping those boards'
+pads or test points to I2S signals, and their published pinouts do not cover audio. Do
+not assume a pad is exposed: on CV1 the documented pogo pins are charging contacts, and
+on DevKit 2 the audio pads are solder joints between the XIAO and the audio board rather
+than documented test points.
+
+The connection itself is conventional:
+
+```
+                      +-----------------------+
+                      |   Omi board           |
+                      |  (SoC + your pins)    |
+                      +-----------------------+
+                        |        |        |
+                    I2S_BCLK  I2S_LRCLK  I2S_DOUT
+                        |        |        |
+                        v        v        v
+                      +-----------------------+
+ supply rail -------->| VIN      BCLK     DIN |
+                      |                       |
+                      |       MAX98357A       |
+ GND ---------------->| GND      LRC     GAIN |
+                      +-----------------------+
+                               +     -
+                               |     |
+                               v     v
+                      +-----------------------+
+                      |   micro-speaker       |
+                      |      (8Ω / 1W)        |
+                      +-----------------------+
+```
+
+Connections:
+
+1. **VIN** — connect to a supply the amplifier accepts. Use the board's regulated rail,
+   and confirm the MAX98357A breakout's input range matches it.
+2. **GND** — common ground with the board.
+3. **BCLK** — I2S bit clock, from a GPIO you have assigned as `I2S_SCK`.
+4. **LRC** — I2S word select / left-right clock, from a GPIO assigned as `I2S_LRCK`.
+5. **DIN** — I2S data out from the SoC, from a GPIO assigned as `I2S_SDOUT`.
+6. **GAIN** — the MAX98357A has several gain settings. Tie it appropriately for your
+   speaker and volume; the breakout's default is usually a reasonable starting point.
+
+## What you would have to build
+
+<Warning>
+  This is the part most guides skip. On CV1 and DevKit 1, wiring an amplifier **will not
+  produce sound on its own**, because the firmware side does not exist in this repository.
+</Warning>
+
+Concretely, the gaps are:
+
+- **No I2S output path in firmware.** CV1's board devicetree has no `i2s0` node, and
+  `omi/firmware/boards/omi/omi-pinctrl.dtsi` defines UART, I2C, PDM, QSPI, SPI and PWM pin
+  groups but no I2S group. A dormant `speaker.c` exists under the CV1 sources, but it is
+  not in the CV1 build's source list and the speaker feature is disabled in
+  `omi/firmware/omi/omi.conf` via `CONFIG_OMI_ENABLE_SPEAKER=n`.
+- **DevKit 1 has no audio output either.** Its standard overlay enables nothing and states
+  that no modules are used.
+- **The firmware does not synthesise speech.** Omi's device firmware consumes PCM; it does
+  not do text-to-speech. TTS exists in the mobile app, which calls the backend's
+  `/v2/tts/synthesize` endpoint and plays the returned audio through the phone. A host-side
+  script in the firmware tree does the same for DevKit 2, generating audio with a cloud TTS
+  provider and streaming it to the device over BLE.
+- **You would need an audio source.** Since the device will not generate speech itself,
+  sound has to come from the phone or a host computer. You would be bridging a new path
+  (BLE or otherwise) from that source into an `i2s_write` call.
+
+So the work is: pick and verify pins, add an `i2s0` node and a pinctrl group for your board
+in a custom overlay, enable the I2S driver and the speaker feature, and write or port a
+playback path. All of that is currently out-of-tree.
+
+### Firmware symbols that actually exist
+
+If you write that overlay, these are the real symbols in this repository, not invented
+ones:
+
+| Symbol | Status | Notes |
+| :--- | :--- | :--- |
+| `CONFIG_I2S`, `CONFIG_I2S_NRFX` | Exists (Zephyr) | The I2S driver. Used by the DevKit 2 build. |
+| `CONFIG_AUDIO` | Exists (Zephyr) | Audio subsystem. In Omi it is used for **microphone capture**, not playback. |
+| `CONFIG_OMI_ENABLE_SPEAKER` | Exists (Omi) | Omi's own speaker switch, defined in the firmware `Kconfig`. This is the option to enable, not `CONFIG_SPEAKER`. |
+| `CONFIG_AUDIO_CODEC_NONE` | **Does not exist** | Not present anywhere in the firmware tree. Ignore it if you encounter it in older drafts of this page. |
+| `CONFIG_SPEAKER` | **Does not exist** | Omi uses `CONFIG_OMI_ENABLE_SPEAKER`. |
+
+Board targets, for reference:
+
+| Board | Build target | Where it lives |
+| :--- | :--- | :--- |
+| CV1 | `omi/nrf5340/cpuapp` | `omi/firmware/boards/omi/` (Omi's own nRF5340 board files) |
+| DevKit 1 / DevKit 2 | `xiao_ble_sense` | `omi/firmware/devkit/` (upstream Xiao board) |
+
+Nordic's `nrf5340dk_nrf5340_cpuapp` DK target is **not** used by Omi firmware and is not a
+build target in this repository. If you are flashing a devkit, you are building for
+`xiao_ble_sense`, not for a DK board.
+
+## How DevKit 2 does it (verified)
+
+If your goal is simply "hear audio from the device", DevKit 2 is the supported path and
+you do not need this mod. Its firmware contains a working I2S transmit path:
+
+- The DevKit 2 overlay enables `i2s0` and assigns the I2S pins: **BCLK/SCK = P0.29**
+  (board pad A3), **LRCLK = P0.28** (A2), **SDOUT = P0.03** (A1). The speaker driver also
+  uses **P0.04** as a speaker-control GPIO.
+- The speaker driver obtains `I2S_0`, configures it for transmit, and sends buffered PCM
+  with `i2s_write`.
+- PCM arrives over BLE: a write to the device's audio characteristic is routed to the
+  speaker path.
+- The firmware also plays a boot chime through the same path.
+
+These pin assignments live in
+`omi/firmware/devkit/overlay/xiao_ble_sense_devkitv2-adafruit.overlay` and
+`omi/firmware/devkit/src/speaker.c`. They are source assignments on that specific board,
+**not** a general Omi pinout, and not a set of exposed test pads.
+
+To play arbitrary text through DevKit 2, the firmware tree includes a host-side script that
+generates speech with a cloud TTS provider and streams it to the device over BLE:
+`omi/firmware/scripts/devkit/play_sound_on_friend.py`. It needs a TTS API key and a BLE
+client, and it targets DevKit 2's audio characteristic.
+
+## Acoustic design tips
+
+These are general speaker-in-a-small-enclosure considerations and apply regardless of the
+board you are modifying.
+
+1. **Acoustic porting.** Give the enclosure a grille or an opening, roughly 1.5–2 mm,
+   aligned with the front of the speaker diaphragm. Without a port, the enclosure walls
+   dominate the low end and the speaker sounds thin.
+2. **Gasket sealing.** Use closed-cell foam or a silicone gasket around the speaker
+   perimeter. Sealing the front and back cavities prevents cancellation and gives a
+   noticeably cleaner, louder result.
+3. **Headroom.** Keep the amplifier's gain low enough that normal speech does not clip.
+   Clipped speech is more fatiguing than slightly quiet speech.
+4. **Keep the mic clear.** Omi captures audio with PDM microphones. Do not route speaker
+   output into the microphone cavity in a way that causes the device to hear itself.
+
+## If you build this
+
+<Note>
+  Omi accepts pull requests, and a validated version of this page would be a genuine
+  contribution. If you work through the gaps above, please open a PR with the details that
+  were missing here: which board you used, the exact pin or pad mapping, the devicetree
+  overlay and Kconfig lines you actually flashed, and whether you got audio out. That would
+  let this page be rewritten from tested instructions instead of a design sketch.
+</Note>

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 /// Starters stay editable in the composer; choosing one never sends a message.
@@ -24,11 +25,9 @@ class ChatStarters extends StatelessWidget {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Icon(Icons.auto_awesome_outlined, size: 28, color: Colors.white70),
+              const Icon(Icons.auto_awesome_outlined, size: 28, color: OmiColors.textSecondary),
               const SizedBox(height: 16),
-              Text(context.l10n.askOmi,
-                  textAlign: TextAlign.center,
-                  style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600)),
+              Text(context.l10n.askOmi, textAlign: TextAlign.center, style: OmiType.title3),
               const SizedBox(height: 24),
               for (final kind in prompts)
                 Padding(
@@ -40,14 +39,14 @@ class ChatStarters extends StatelessWidget {
                         backgroundColor: Colors.white.withValues(alpha: 0.04),
                         minimumSize: const Size.fromHeight(56),
                         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                        side: const BorderSide(color: Colors.white24),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                        side: const BorderSide(color: OmiColors.border),
+                        shape: const RoundedRectangleBorder(borderRadius: OmiRadius.lgAll),
                       ),
                       onPressed: () => onSelected(context.l10n.chatStarterPrompt(kind)),
                       child: Row(children: [
                         Expanded(child: Text(context.l10n.chatStarterPrompt(kind))),
                         const SizedBox(width: 12),
-                        const Icon(Icons.north_west, size: 18, color: Colors.white54),
+                        const Icon(Icons.north_west, size: 18, color: OmiColors.textTertiary),
                       ]),
                     )),
             ],

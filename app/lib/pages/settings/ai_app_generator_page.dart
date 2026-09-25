@@ -1,6 +1,6 @@
-import 'package:omi/utils/platform/platform_manager.dart';
+import 'dart:typed_data';
+
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
@@ -10,8 +10,11 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/pages/settings/ai_app_generator_provider.dart';
 import 'package:omi/providers/app_provider.dart';
+import 'package:omi/utils/app_localizations_helper.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:omi/ui/ui.dart';
 
 class AiAppGeneratorPage extends StatelessWidget {
   const AiAppGeneratorPage({super.key});
@@ -57,12 +60,15 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
     return Consumer<AiAppGeneratorProvider>(
       builder: (context, provider, _) {
         // Show generated app view if we have generated content
-        if (provider.hasGeneratedApp) {
-          return _buildGeneratedAppView(provider);
-        }
-
-        // Show main input view
-        return _buildInputView(provider);
+        // One way back, the same on screen and from the system: the generated app steps back to the
+        // prompt (it has not been created yet, so leaving would lose it); the prompt leaves the page.
+        return PopScope(
+          canPop: !provider.hasGeneratedApp,
+          onPopInvokedWithResult: (didPop, _) {
+            if (!didPop) provider.clear();
+          },
+          child: provider.hasGeneratedApp ? _buildGeneratedAppView(provider) : _buildInputView(provider),
+        );
       },
     );
   }
@@ -73,88 +79,59 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
       child: Scaffold(
-        backgroundColor: const Color(0xFF0D0D0D),
+        backgroundColor: OmiColors.surface0,
+        // Pushed page: one leading back.
+        appBar: AppBar(
+          leading: OmiBackButton(
+            onPressed: () {
+              provider.clear();
+              Navigator.pop(context);
+            },
+          ),
+        ),
         body: SafeArea(
+          top: false,
           child: Column(
             children: [
-              // Header with close button
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    GestureDetector(
-                      onTap: () {
-                        provider.clear();
-                        Navigator.pop(context);
-                      },
-                      child: Container(
-                        width: 36,
-                        height: 36,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF1C1C1E),
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                        child: const Center(child: FaIcon(FontAwesomeIcons.xmark, color: Colors.white, size: 16)),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              // Center content
               Expanded(
                 child: isGenerating
                     ? _buildGenerationProgressView(provider)
                     : Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          // "Try something like..." text
                           Text(
                             context.l10n.trySomethingLike,
-                            style: TextStyle(color: Colors.grey.shade500, fontSize: 15),
+                            style: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
                           ),
-                          const SizedBox(height: 20),
+                          const SizedBox(height: OmiSpacing.lg),
 
-                          // Suggestion cards (with shimmer when loading)
+                          // Suggestion cards (shimmer while they load)
                           SizedBox(
                             height: 160,
-                            child: provider.isLoadingPrompts
-                                ? ListView.builder(
-                                    scrollDirection: Axis.horizontal,
-                                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                                    itemCount: 3,
-                                    itemBuilder: (context, index) {
-                                      return _buildShimmerCard();
-                                    },
-                                  )
-                                : ListView.builder(
-                                    scrollDirection: Axis.horizontal,
-                                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                                    itemCount: provider.samplePrompts.length,
-                                    itemBuilder: (context, index) {
-                                      return _buildSuggestionCard(provider.samplePrompts[index], provider);
-                                    },
-                                  ),
+                            child: ListView.builder(
+                              scrollDirection: Axis.horizontal,
+                              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.lg),
+                              itemCount: provider.isLoadingPrompts ? 3 : provider.samplePrompts.length,
+                              itemBuilder: (context, index) => provider.isLoadingPrompts
+                                  ? const _SuggestionCardShimmer()
+                                  : _buildSuggestionCard(provider.samplePrompts[index]),
+                            ),
                           ),
 
-                          // Error message
                           if (provider.errorMessage != null) ...[
-                            const SizedBox(height: 24),
+                            const SizedBox(height: OmiSpacing.xl),
                             Padding(
-                              padding: const EdgeInsets.symmetric(horizontal: 32),
+                              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xxl),
                               child: Text(
                                 provider.errorMessage!,
                                 textAlign: TextAlign.center,
-                                style: const TextStyle(color: Color(0xFFDC2626), fontSize: 14),
+                                style: OmiType.footnote.copyWith(color: OmiColors.danger),
                               ),
                             ),
                           ],
                         ],
                       ),
               ),
-
-              // Bottom input bar
               _buildBottomInputBar(provider),
             ],
           ),
@@ -171,287 +148,113 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
       (context.l10n.generatingIconStep, GenerationStep.generatingIcon),
       (context.l10n.finalTouches, GenerationStep.finalTouches),
     ];
+    final progress = (provider.currentStepIndex + 1) / provider.totalSteps;
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xl),
       child: Column(
         children: [
-          const SizedBox(height: 20),
+          const SizedBox(height: OmiSpacing.lg),
 
           // App preview card (building up)
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1C1C1E),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: const Color(0xFF2A2A2E), width: 1),
-            ),
+          _Card(
+            padding: const EdgeInsets.all(OmiSpacing.xl),
             child: Column(
               children: [
-                // Icon with progress
                 Stack(
                   alignment: Alignment.center,
+                  clipBehavior: Clip.none,
                   children: [
-                    Container(
-                      width: 100,
-                      height: 100,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF2A2A2E),
-                        borderRadius: BorderRadius.circular(24),
-                        image: provider.generatedIconBytes != null
-                            ? DecorationImage(image: MemoryImage(provider.generatedIconBytes!), fit: BoxFit.cover)
-                            : null,
-                      ),
-                      child: provider.generatedIconBytes == null
-                          ? Center(
-                              child: provider.currentStep.index >= GenerationStep.generatingIcon.index
-                                  ? const SizedBox(
-                                      width: 28,
-                                      height: 28,
-                                      child: CircularProgressIndicator(
-                                        strokeWidth: 2.5,
-                                        valueColor: AlwaysStoppedAnimation(Color(0xFF6366F1)),
-                                      ),
-                                    )
-                                  : FaIcon(FontAwesomeIcons.wandMagicSparkles, color: Colors.grey.shade600, size: 28),
-                            )
-                          : null,
+                    _AppIconTile(
+                      iconBytes: provider.generatedIconBytes,
+                      placeholder: provider.currentStep.index >= GenerationStep.generatingIcon.index
+                          ? const OmiSpinner()
+                          : const FaIcon(FontAwesomeIcons.wandMagicSparkles, color: OmiColors.textTertiary, size: 28),
                     ),
-                    // Progress indicator overlay
                     if (provider.generatedIconBytes == null)
                       Positioned(
                         bottom: -8,
                         child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: OmiSpacing.xxs),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF1C1C1E),
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: const Color(0xFF2A2A2E)),
+                            color: OmiColors.surface1,
+                            borderRadius: OmiRadius.mdAll,
+                            border: Border.all(color: OmiColors.border),
                           ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              SizedBox(
-                                width: 12,
-                                height: 12,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  value: (provider.currentStepIndex + 1) / provider.totalSteps,
-                                  backgroundColor: Colors.grey.shade800,
-                                  valueColor: const AlwaysStoppedAnimation(Color(0xFF6366F1)),
-                                ),
-                              ),
-                              const SizedBox(width: 6),
-                              Text(
-                                '${((provider.currentStepIndex + 1) / provider.totalSteps * 100).round()}%',
-                                style: const TextStyle(
-                                  color: Colors.white70,
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ],
+                          child: Text(
+                            '${(progress * 100).round()}%',
+                            style:
+                                OmiType.caption.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w600),
                           ),
                         ),
                       ),
                   ],
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: OmiSpacing.xl),
 
-                // App name (shimmer if not ready)
+                // App name (shimmer until it is ready)
                 provider.generatedName != null
                     ? Text(
                         provider.generatedName!,
-                        style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w600),
+                        style: OmiType.title3,
                         textAlign: TextAlign.center,
                       )
-                    : ShimmerWithTimeout(
-                        baseColor: const Color(0xFF2A2A2E),
-                        highlightColor: const Color(0xFF3A3A3E),
-                        child: Container(
-                          height: 24,
-                          width: 160,
-                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(6)),
-                        ),
-                      ),
-                const SizedBox(height: 12),
+                    : const _ShimmerBlock(width: 160, height: 24),
+                const SizedBox(height: OmiSpacing.sm),
 
-                // Category badge (shimmer if not ready)
+                // Category badge (shimmer until it is ready)
                 provider.generatedCategory != null
-                    ? Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF6366F1).withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          provider.getCategoryDisplayName(),
-                          style: const TextStyle(color: Color(0xFF8B5CF6), fontSize: 12, fontWeight: FontWeight.w500),
-                        ),
-                      )
-                    : ShimmerWithTimeout(
-                        baseColor: const Color(0xFF2A2A2E),
-                        highlightColor: const Color(0xFF3A3A3E),
-                        child: Container(
-                          height: 28,
-                          width: 100,
-                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
-                        ),
-                      ),
+                    ? _Badge(label: _categoryName(provider))
+                    : const _ShimmerBlock(width: 100, height: 28, radius: OmiRadius.mdAll),
               ],
             ),
           ),
 
-          const SizedBox(height: 24),
+          const SizedBox(height: OmiSpacing.xl),
 
           // Progress stepper
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(
-              color: const Color(0xFF1C1C1E),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: const Color(0xFF2A2A2E), width: 1),
-            ),
+          _Card(
             child: Column(
-              children: steps.asMap().entries.map((entry) {
-                final index = entry.key;
-                final stepName = entry.value.$1;
-                final step = entry.value.$2;
-                final isActive = provider.currentStep == step;
-                final isCompleted = provider.currentStep.index > step.index;
-                final isLast = index == steps.length - 1;
-
-                return Column(
-                  children: [
-                    Row(
-                      children: [
-                        // Step indicator
-                        Container(
-                          width: 32,
-                          height: 32,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: isCompleted
-                                ? const Color(0xFF6366F1)
-                                : isActive
-                                    ? const Color(0xFF6366F1).withValues(alpha: 0.2)
-                                    : const Color(0xFF2A2A2E),
-                            border: isActive ? Border.all(color: const Color(0xFF6366F1), width: 2) : null,
-                          ),
-                          child: Center(
-                            child: isCompleted
-                                ? const FaIcon(FontAwesomeIcons.check, color: Colors.white, size: 12)
-                                : isActive
-                                    ? const SizedBox(
-                                        width: 14,
-                                        height: 14,
-                                        child: CircularProgressIndicator(
-                                          strokeWidth: 2,
-                                          valueColor: AlwaysStoppedAnimation(Color(0xFF6366F1)),
-                                        ),
-                                      )
-                                    : Container(
-                                        width: 8,
-                                        height: 8,
-                                        decoration: BoxDecoration(shape: BoxShape.circle, color: Colors.grey.shade600),
-                                      ),
-                          ),
-                        ),
-                        const SizedBox(width: 14),
-
-                        // Step text
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                stepName,
-                                style: TextStyle(
-                                  color: isActive || isCompleted ? Colors.white : Colors.grey.shade600,
-                                  fontSize: 15,
-                                  fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
-                                ),
-                              ),
-                              if (isActive) ...[
-                                const SizedBox(height: 2),
-                                ShimmerWithTimeout(
-                                  baseColor: Colors.grey.shade600,
-                                  highlightColor: Colors.grey.shade400,
-                                  child: Text(
-                                    context.l10n.processing,
-                                    style: TextStyle(color: Colors.grey.shade500, fontSize: 12),
-                                  ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-
-                    // Connector line
-                    if (!isLast)
-                      Padding(
-                        padding: const EdgeInsets.only(left: 15),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 2,
-                              height: 24,
-                              decoration: BoxDecoration(
-                                color: isCompleted ? const Color(0xFF6366F1) : const Color(0xFF2A2A2E),
-                                borderRadius: BorderRadius.circular(1),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                  ],
-                );
-              }).toList(),
+              children: [
+                for (final (index, (stepName, step)) in steps.indexed)
+                  _buildStepRow(
+                    name: stepName,
+                    isActive: provider.currentStep == step,
+                    isCompleted: provider.currentStep.index > step.index,
+                    isLast: index == steps.length - 1,
+                  ),
+              ],
             ),
           ),
 
-          const SizedBox(height: 24),
+          const SizedBox(height: OmiSpacing.xl),
 
-          // Capabilities preview (show after designing step)
+          // Capabilities preview (after the designing step)
           if (provider.generatedCapabilities != null && provider.generatedCapabilities!.isNotEmpty)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                color: const Color(0xFF1C1C1E),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: const Color(0xFF2A2A2E), width: 1),
-              ),
+            _Card(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     context.l10n.features,
-                    style: TextStyle(
-                      color: Colors.grey.shade500,
-                      fontSize: 12,
+                    style: OmiType.footnote.copyWith(
+                      color: OmiColors.textTertiary,
                       fontWeight: FontWeight.w600,
                       letterSpacing: 0.5,
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: OmiSpacing.sm),
                   Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: provider.getCapabilityDisplayNames().map((cap) {
-                      return Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF2A2A2E),
-                          borderRadius: BorderRadius.circular(20),
+                    spacing: OmiSpacing.xs,
+                    runSpacing: OmiSpacing.xs,
+                    children: [
+                      for (final capability in _capabilityNames(provider))
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: OmiSpacing.xs),
+                          decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.pillAll),
+                          child: Text(capability, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
                         ),
-                        child: Text(cap, style: const TextStyle(color: Colors.white70, fontSize: 13)),
-                      );
-                    }).toList(),
+                    ],
                   ),
                 ],
               ),
@@ -461,88 +264,105 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
     );
   }
 
-  Widget _buildSuggestionCard(String title, AiAppGeneratorProvider provider) {
+  Widget _buildStepRow({
+    required String name,
+    required bool isActive,
+    required bool isCompleted,
+    required bool isLast,
+  }) {
+    return Column(
+      children: [
+        Row(
+          children: [
+            Container(
+              width: 32,
+              height: 32,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: isCompleted ? OmiColors.accent : OmiColors.surface2,
+                border: isActive ? Border.all(color: OmiColors.accent, width: 2) : null,
+              ),
+              child: Center(
+                child: isCompleted
+                    ? const FaIcon(FontAwesomeIcons.check, color: OmiColors.onAccent, size: 12)
+                    : isActive
+                        ? const OmiSpinner(size: OmiSpinnerSize.small)
+                        : Container(
+                            width: 8,
+                            height: 8,
+                            decoration: const BoxDecoration(shape: BoxShape.circle, color: OmiColors.textTertiary),
+                          ),
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name,
+                    style: OmiType.subhead.copyWith(
+                      color: isActive || isCompleted ? OmiColors.textPrimary : OmiColors.textTertiary,
+                      fontWeight: isActive ? FontWeight.w600 : FontWeight.w400,
+                    ),
+                  ),
+                  if (isActive) ...[
+                    const SizedBox(height: 2),
+                    ShimmerWithTimeout(
+                      baseColor: OmiColors.textTertiary,
+                      highlightColor: OmiColors.textSecondary,
+                      child: Text(context.l10n.processing, style: OmiType.footnote),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+        if (!isLast)
+          Padding(
+            padding: const EdgeInsets.only(left: 15),
+            child: Row(
+              children: [
+                Container(
+                  width: 2,
+                  height: OmiSpacing.xl,
+                  color: isCompleted ? OmiColors.accent : OmiColors.surface2,
+                ),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildSuggestionCard(String title) {
     return Container(
       width: 260,
-      margin: const EdgeInsets.only(right: 12),
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(16)),
+      margin: const EdgeInsets.only(right: OmiSpacing.sm),
+      padding: const EdgeInsets.all(OmiSpacing.lg),
+      decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
           Text(
             title,
-            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500, height: 1.4),
+            style: OmiType.callout.copyWith(fontWeight: FontWeight.w500, height: 1.4),
             maxLines: 3,
             overflow: TextOverflow.ellipsis,
           ),
           const Spacer(),
-          GestureDetector(
-            onTap: () {
-              HapticFeedback.lightImpact();
+          OmiButton.secondary(
+            label: context.l10n.tryIt,
+            size: OmiButtonSize.compact,
+            onPressed: () {
+              OmiHaptics.light();
               _promptController.text = title;
               _promptFocusNode.requestFocus();
               setState(() {});
             },
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-              decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(20)),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    context.l10n.tryIt,
-                    style: TextStyle(color: Colors.grey.shade400, fontSize: 14, fontWeight: FontWeight.w500),
-                  ),
-                  const SizedBox(width: 4),
-                  FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade400, size: 12),
-                ],
-              ),
-            ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildShimmerCard() {
-    return ShimmerWithTimeout(
-      baseColor: const Color(0xFF1C1C1E),
-      highlightColor: const Color(0xFF2A2A2E),
-      child: Container(
-        width: 260,
-        margin: const EdgeInsets.only(right: 12),
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(16)),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              height: 16,
-              width: 200,
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4)),
-            ),
-            const SizedBox(height: 10),
-            Container(
-              height: 16,
-              width: 160,
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4)),
-            ),
-            const SizedBox(height: 10),
-            Container(
-              height: 16,
-              width: 120,
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(4)),
-            ),
-            const Spacer(),
-            Container(
-              height: 36,
-              width: 80,
-              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -551,26 +371,30 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
     final hasText = _promptController.text.trim().isNotEmpty;
     final isGenerating = provider.isGenerating;
 
-    return Container(
-      padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.sm, OmiSpacing.md, OmiSpacing.md),
       child: Container(
-        padding: EdgeInsets.only(left: 20, right: (hasText || isGenerating) ? 12 : 20, top: 6, bottom: 6),
-        decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(28)),
+        padding: EdgeInsets.only(
+          left: OmiSpacing.lg,
+          right: (hasText || isGenerating) ? OmiSpacing.xxs : OmiSpacing.lg,
+          top: 6,
+          bottom: 6,
+        ),
+        decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.pillAll),
         child: Row(
           children: [
-            // Text input
             Expanded(
               child: isGenerating
                   ? Padding(
                       padding: const EdgeInsets.symmetric(vertical: 14),
                       child: ShimmerWithTimeout(
-                        baseColor: Colors.grey.shade600,
-                        highlightColor: Colors.grey.shade400,
+                        baseColor: OmiColors.textTertiary,
+                        highlightColor: OmiColors.textSecondary,
                         child: Text(
                           provider.state == GenerationState.generatingApp
                               ? context.l10n.creatingYourApp
                               : context.l10n.generatingIcon,
-                          style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                          style: OmiType.callout.copyWith(fontWeight: FontWeight.w500),
                         ),
                       ),
                     )
@@ -580,43 +404,26 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
                       maxLines: 3,
                       minLines: 1,
                       textInputAction: TextInputAction.newline,
-                      style: const TextStyle(color: Colors.white, fontSize: 16, height: 1.6),
+                      style: OmiType.callout.copyWith(height: 1.6),
                       decoration: InputDecoration(
                         hintText: context.l10n.whatShouldWeMake,
-                        hintStyle: TextStyle(color: Colors.grey.shade600, fontSize: 16),
+                        hintStyle: OmiType.callout.copyWith(color: OmiColors.textTertiary),
                         border: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(vertical: 8),
+                        contentPadding: const EdgeInsets.symmetric(vertical: OmiSpacing.xs),
                       ),
                       onChanged: (_) => setState(() {}),
                     ),
             ),
-
-            // Send button or loading indicator
             if (hasText || isGenerating) ...[
-              const SizedBox(width: 12),
+              const SizedBox(width: OmiSpacing.xs),
               isGenerating
-                  ? const SizedBox(
-                      width: 44,
-                      height: 44,
-                      child: Padding(
-                        padding: EdgeInsets.all(10),
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2.5,
-                          valueColor: AlwaysStoppedAnimation(Color(0xFF6366F1)),
-                        ),
-                      ),
-                    )
-                  : GestureDetector(
-                      onTap: () => _generateApp(provider),
-                      child: Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF6366F1),
-                          borderRadius: BorderRadius.circular(22),
-                        ),
-                        child: const Center(child: FaIcon(FontAwesomeIcons.arrowUp, color: Colors.white, size: 18)),
-                      ),
+                  ? const SizedBox.square(dimension: kOmiMinTapTarget, child: Center(child: OmiSpinner()))
+                  : OmiIconButton.filled(
+                      icon: const FaIcon(FontAwesomeIcons.arrowUp, size: 18),
+                      label: context.l10n.send,
+                      color: OmiColors.onAccent,
+                      fillColor: OmiColors.accent,
+                      onPressed: () => _generateApp(provider),
                     ),
             ],
           ],
@@ -627,77 +434,38 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
 
   Widget _buildGeneratedAppView(AiAppGeneratorProvider provider) {
     return Scaffold(
-      backgroundColor: const Color(0xFF0D0D0D),
+      backgroundColor: OmiColors.surface0,
+      appBar: AppBar(
+        // Back steps to the prompt (the page's PopScope clears the generated app).
+        leading: const OmiBackButton(),
+        actions: [
+          Container(
+            margin: const EdgeInsetsDirectional.only(end: OmiSpacing.md),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
+            child: Text(
+              context.l10n.beta,
+              style: OmiType.caption.copyWith(fontWeight: FontWeight.w700, color: OmiColors.textSecondary),
+            ),
+          ),
+        ],
+      ),
       body: SafeArea(
+        top: false,
         child: Column(
           children: [
-            // Header
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: Row(
-                children: [
-                  GestureDetector(
-                    onTap: () => provider.clear(),
-                    child: Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1C1C1E),
-                        borderRadius: BorderRadius.circular(18),
-                      ),
-                      child: const Center(child: FaIcon(FontAwesomeIcons.arrowLeft, color: Colors.white, size: 16)),
-                    ),
-                  ),
-                  const Spacer(),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      gradient: const LinearGradient(colors: [Color(0xFFFF6B35), Color(0xFFFF8C42)]),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: const Text(
-                      'BETA',
-                      style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.w700),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  GestureDetector(
-                    onTap: () {
-                      provider.clear();
-                      Navigator.pop(context);
-                    },
-                    child: Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1C1C1E),
-                        borderRadius: BorderRadius.circular(18),
-                      ),
-                      child: const Center(child: FaIcon(FontAwesomeIcons.xmark, color: Colors.white, size: 16)),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // Content
             Expanded(
               child: SingleChildScrollView(
-                padding: const EdgeInsets.all(20),
+                padding: const EdgeInsets.all(OmiSpacing.lg),
                 child: Column(
                   children: [
-                    // App preview card
                     _buildAppPreviewCard(provider),
-                    const SizedBox(height: 20),
-
-                    // App settings
+                    const SizedBox(height: OmiSpacing.lg),
                     _buildAppSettings(provider),
                   ],
                 ),
               ),
             ),
-
-            // Bottom action
             _buildCreateButton(provider),
           ],
         ),
@@ -706,216 +474,99 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
   }
 
   Widget _buildAppPreviewCard(AiAppGeneratorProvider provider) {
+    final l10n = context.l10n;
     final capabilities = provider.generatedCapabilities ?? [];
     final hasChat = capabilities.contains('chat');
     final hasMemories = capabilities.contains('memories');
 
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
+    return _Card(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Top row: Icon + Info
-          SizedBox(
-            height: 100,
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                // Icon with refresh button
-                Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    Container(
-                      width: 100,
-                      height: 100,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF2A2A2E),
-                        borderRadius: BorderRadius.circular(24),
-                        image: provider.generatedIconBytes != null
-                            ? DecorationImage(image: MemoryImage(provider.generatedIconBytes!), fit: BoxFit.cover)
-                            : null,
-                      ),
-                      child: provider.generatedIconBytes == null
-                          ? const Center(child: FaIcon(FontAwesomeIcons.cube, color: Colors.grey, size: 32))
-                          : null,
-                    ),
-                    Positioned(
-                      right: -6,
-                      bottom: -6,
-                      child: GestureDetector(
-                        onTap: provider.isLoading ? null : () => provider.regenerateIcon(),
-                        child: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF6366F1),
-                            borderRadius: BorderRadius.circular(12),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withValues(alpha: 0.3),
-                                blurRadius: 8,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: const FaIcon(FontAwesomeIcons.arrowsRotate, color: Colors.white, size: 14),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(width: 16),
-
-                // App info
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      // Name & Category
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            provider.generatedName ?? context.l10n.appName,
-                            style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w700),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            provider.getCategoryDisplayName(),
-                            style: TextStyle(color: Colors.grey.shade400, fontSize: 14, fontWeight: FontWeight.w500),
-                          ),
-                        ],
-                      ),
-
-                      // Badges row
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [
-                          // Public/Private badge
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF6366F1).withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                FaIcon(
-                                  provider.makePublic ? FontAwesomeIcons.globe : FontAwesomeIcons.lock,
-                                  color: const Color(0xFF8B5CF6),
-                                  size: 12,
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  provider.makePublic ? context.l10n.publicLabel : context.l10n.privateLabel,
-                                  style: const TextStyle(
-                                    color: Color(0xFF8B5CF6),
-                                    fontSize: 12,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-
-                          // Price badge
-                          if (provider.isPaid)
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF22C55E).withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const FaIcon(FontAwesomeIcons.dollarSign, color: Color(0xFF22C55E), size: 12),
-                                  Text(
-                                    '\$${provider.price.toStringAsFixed(0)} / Month',
-                                    style: const TextStyle(
-                                      color: Color(0xFF22C55E),
-                                      fontSize: 12,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            )
-                          else
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF22C55E).withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(16),
-                              ),
-                              child: Text(
-                                context.l10n.free,
-                                style: const TextStyle(
-                                  color: Color(0xFF22C55E),
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 24),
-
-          // Description section
-          Column(
+          // Icon + name, category and badges
+          Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Description',
-                style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
+              Stack(
+                clipBehavior: Clip.none,
+                children: [
+                  _AppIconTile(
+                    iconBytes: provider.generatedIconBytes,
+                    placeholder: const FaIcon(FontAwesomeIcons.cube, color: OmiColors.textTertiary, size: 32),
+                  ),
+                  Positioned(
+                    right: -14,
+                    bottom: -14,
+                    child: OmiIconButton.filled(
+                      icon: const FaIcon(FontAwesomeIcons.arrowsRotate, size: 14),
+                      label: l10n.aiGenRegenerateIcon,
+                      color: OmiColors.onAccent,
+                      fillColor: OmiColors.accent,
+                      diameter: 32,
+                      onPressed: provider.isLoading ? null : () => provider.regenerateIcon(),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 10),
-              GestureDetector(
-                onTap: () {
-                  setState(() {
-                    _isDescriptionExpanded = !_isDescriptionExpanded;
-                  });
-                },
-                child: Text(
-                  provider.generatedDescription ?? '',
-                  style: TextStyle(color: Colors.grey.shade400, fontSize: 14, height: 1.6),
-                  maxLines: _isDescriptionExpanded ? null : 3,
-                  overflow: _isDescriptionExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
+              const SizedBox(width: OmiSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(provider.generatedName ?? l10n.appName, style: OmiType.title3),
+                    const SizedBox(height: OmiSpacing.xxs),
+                    Text(
+                      _categoryName(provider),
+                      style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
+                    ),
+                    const SizedBox(height: OmiSpacing.sm),
+                    Wrap(
+                      spacing: OmiSpacing.xs,
+                      runSpacing: OmiSpacing.xs,
+                      children: [
+                        _Badge(
+                          icon: provider.makePublic ? FontAwesomeIcons.globe : FontAwesomeIcons.lock,
+                          label: provider.makePublic ? l10n.publicLabel : l10n.privateLabel,
+                        ),
+                        _Badge(
+                          icon: provider.isPaid ? FontAwesomeIcons.dollarSign : null,
+                          label: provider.isPaid ? '${provider.price.toStringAsFixed(0)} ${l10n.perMonth}' : l10n.free,
+                          color: OmiColors.success,
+                        ),
+                      ],
+                    ),
+                  ],
                 ),
               ),
             ],
           ),
 
-          const SizedBox(height: 24),
+          const SizedBox(height: OmiSpacing.xl),
 
-          // Features section
-          if (hasMemories || hasChat) ...[
-            const Text(
-              'Features',
-              style: TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
-            ),
-            const SizedBox(height: 12),
-
-            // Memories feature
-            if (hasMemories)
-              _buildFeatureRow(
-                icon: FontAwesomeIcons.fileLines,
-                description: context.l10n.tailoredConversationSummaries,
+          // Description (tap to expand)
+          Text(l10n.description, style: OmiType.callout.copyWith(fontWeight: FontWeight.w700)),
+          const SizedBox(height: 10),
+          Semantics(
+            button: true,
+            expanded: _isDescriptionExpanded,
+            child: GestureDetector(
+              onTap: () => setState(() => _isDescriptionExpanded = !_isDescriptionExpanded),
+              child: Text(
+                provider.generatedDescription ?? '',
+                style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.6),
+                maxLines: _isDescriptionExpanded ? null : 3,
+                overflow: _isDescriptionExpanded ? TextOverflow.visible : TextOverflow.ellipsis,
               ),
+            ),
+          ),
 
-            // Chat feature
-            if (hasChat)
-              _buildFeatureRow(icon: FontAwesomeIcons.comments, description: context.l10n.customChatbotPersonality),
+          if (hasMemories || hasChat) ...[
+            const SizedBox(height: OmiSpacing.xl),
+            Text(l10n.features, style: OmiType.callout.copyWith(fontWeight: FontWeight.w700)),
+            const SizedBox(height: OmiSpacing.sm),
+            if (hasMemories)
+              _buildFeatureRow(icon: FontAwesomeIcons.fileLines, description: l10n.tailoredConversationSummaries),
+            if (hasChat) _buildFeatureRow(icon: FontAwesomeIcons.comments, description: l10n.customChatbotPersonality),
           ],
         ],
       ),
@@ -924,90 +575,70 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
 
   Widget _buildFeatureRow({required FaIconData icon, required String description}) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.symmetric(vertical: OmiSpacing.xs),
       child: Row(
         children: [
           Container(
             width: 40,
             height: 40,
-            decoration: const BoxDecoration(color: Color(0xFF2A2A2E), shape: BoxShape.circle),
-            child: Center(child: FaIcon(icon, color: Colors.white, size: 16)),
+            decoration: const BoxDecoration(color: OmiColors.surface2, shape: BoxShape.circle),
+            child: Center(child: FaIcon(icon, color: OmiColors.textPrimary, size: 16)),
           ),
           const SizedBox(width: 14),
-          Expanded(
-            child: Text(
-              description,
-              style: const TextStyle(color: Colors.white, fontSize: 15, fontWeight: FontWeight.w600),
-            ),
-          ),
+          Expanded(child: Text(description, style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600))),
         ],
       ),
     );
   }
 
   Widget _buildAppSettings(AiAppGeneratorProvider provider) {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
+    final l10n = context.l10n;
+    return _Card(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Public toggle
           _buildSettingRow(
             icon: FontAwesomeIcons.globe,
-            title: context.l10n.makePublic,
-            subtitle: provider.makePublic ? context.l10n.anyoneCanDiscover : context.l10n.onlyYouCanUse,
+            title: l10n.makePublic,
+            subtitle: provider.makePublic ? l10n.anyoneCanDiscover : l10n.onlyYouCanUse,
             value: provider.makePublic,
             onChanged: (v) => provider.setMakePublic(v),
-            activeColor: const Color(0xFF6366F1),
           ),
-
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 16),
-            child: Divider(color: Colors.grey.shade800, height: 1),
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: OmiSpacing.md),
+            child: Divider(color: OmiColors.border, height: 1),
           ),
-
-          // Paid toggle
           _buildSettingRow(
             icon: FontAwesomeIcons.dollarSign,
-            title: context.l10n.paidApp,
-            subtitle: provider.isPaid ? context.l10n.usersPayToUse : context.l10n.freeForEveryone,
+            title: l10n.paidApp,
+            subtitle: provider.isPaid ? l10n.usersPayToUse : l10n.freeForEveryone,
             value: provider.isPaid,
             onChanged: (v) => provider.setIsPaid(v),
-            activeColor: const Color(0xFF22C55E),
           ),
-
-          // Price input
           if (provider.isPaid) ...[
-            const SizedBox(height: 16),
+            const SizedBox(height: OmiSpacing.md),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-              decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(14)),
+              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: 14),
+              decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
               child: Row(
                 children: [
-                  const Text(
-                    '\$',
-                    style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(width: 8),
+                  const Text('\$', style: OmiType.title3),
+                  const SizedBox(width: OmiSpacing.xs),
                   Expanded(
                     child: TextField(
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                      style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
+                      style: OmiType.title3,
                       decoration: InputDecoration(
-                        hintText: context.l10n.pricePlaceholder,
-                        hintStyle: TextStyle(color: Colors.grey.shade600, fontSize: 20),
+                        hintText: l10n.pricePlaceholder,
+                        hintStyle: OmiType.title3.copyWith(color: OmiColors.textTertiary, fontWeight: FontWeight.w400),
                         border: InputBorder.none,
                         isDense: true,
                         contentPadding: EdgeInsets.zero,
                       ),
-                      onChanged: (value) {
-                        final price = double.tryParse(value) ?? 0.0;
-                        provider.setPrice(price);
-                      },
+                      onChanged: (value) => provider.setPrice(double.tryParse(value) ?? 0.0),
                     ),
                   ),
-                  Text(context.l10n.perMonthLabel, style: TextStyle(color: Colors.grey.shade500, fontSize: 14)),
+                  Text(l10n.perMonthLabel, style: OmiType.subhead.copyWith(color: OmiColors.textTertiary)),
                 ],
               ),
             ),
@@ -1023,82 +654,58 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
     required String subtitle,
     required bool value,
     required ValueChanged<bool> onChanged,
-    required Color activeColor,
   }) {
-    return Row(
-      children: [
-        Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(10)),
-          child: Center(child: FaIcon(icon, color: Colors.grey.shade400, size: 16)),
-        ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
-              ),
-              const SizedBox(height: 2),
-              Text(subtitle, style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
-            ],
+    return MergeSemantics(
+      child: Row(
+        children: [
+          Container(
+            width: 40,
+            height: 40,
+            decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
+            child: Center(child: FaIcon(icon, color: OmiColors.textSecondary, size: 16)),
           ),
-        ),
-        Switch(value: value, onChanged: onChanged, activeThumbColor: activeColor),
-      ],
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: OmiType.callout.copyWith(fontWeight: FontWeight.w500)),
+                const SizedBox(height: 2),
+                Text(subtitle, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
+              ],
+            ),
+          ),
+          OmiSwitch(value: value, onChanged: onChanged),
+        ],
+      ),
     );
   }
 
   Widget _buildCreateButton(AiAppGeneratorProvider provider) {
     final isDisabled = provider.isLoading || provider.generatedIconBytes == null;
-
-    return Container(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
-      child: GestureDetector(
-        onTap: isDisabled ? null : () => _submitApp(provider),
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.symmetric(vertical: 16),
-          decoration: BoxDecoration(
-            color: isDisabled ? const Color(0xFF2A2A2E) : const Color(0xFF6366F1),
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: provider.state == GenerationState.submitting
-              ? Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation(Colors.white),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Text(
-                      context.l10n.creating,
-                      style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600),
-                    ),
-                  ],
-                )
-              : Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const FaIcon(FontAwesomeIcons.circleCheck, color: Colors.white, size: 18),
-                    const SizedBox(width: 10),
-                    Text(
-                      context.l10n.createApp,
-                      style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600),
-                    ),
-                  ],
-                ),
-        ),
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(OmiSpacing.lg, OmiSpacing.sm, OmiSpacing.lg, OmiSpacing.lg),
+      child: OmiButton(
+        label: provider.state == GenerationState.submitting ? context.l10n.creating : context.l10n.createApp,
+        expand: true,
+        isLoading: provider.state == GenerationState.submitting,
+        onPressed: isDisabled ? null : () => _submitApp(provider),
       ),
     );
+  }
+
+  String _categoryName(AiAppGeneratorProvider provider) {
+    final id = provider.generatedCategory ?? 'other';
+    return Category(id: id, title: provider.getCategoryDisplayName()).getLocalizedTitle(context);
+  }
+
+  List<String> _capabilityNames(AiAppGeneratorProvider provider) {
+    final ids = provider.generatedCapabilities ?? const <String>[];
+    final fallback = provider.getCapabilityDisplayNames();
+    return [
+      for (final (index, id) in ids.indexed)
+        AppCapability(id: id, title: index < fallback.length ? fallback[index] : id).getLocalizedTitle(context),
+    ];
   }
 
   Future<void> _generateApp(AiAppGeneratorProvider provider) async {
@@ -1110,6 +717,11 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
 
   Future<void> _submitApp(AiAppGeneratorProvider provider) async {
     final appId = await provider.submitGeneratedApp();
+    // The error text lives on the prompt view; the reader is on the generated view here.
+    if (appId == null && mounted && provider.errorMessage != null) {
+      OmiFeedback.error(context, provider.errorMessage!);
+      return;
+    }
     if (appId != null && mounted) {
       // Get the app and navigate to detail page (same as normal app creation flow)
       App? app = await context.read<AppProvider>().getAppFromId(appId);
@@ -1118,5 +730,138 @@ class _AiAppGeneratorPageState extends State<_AiAppGeneratorPageView> {
         routeToPage(context, AppDetailPage(app: app));
       }
     }
+  }
+}
+
+/// A rounded [OmiColors.surface1] section of the generator page.
+class _Card extends StatelessWidget {
+  const _Card({required this.child, this.padding = const EdgeInsets.all(OmiSpacing.lg)});
+
+  final Widget child;
+  final EdgeInsetsGeometry padding;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: padding,
+      decoration: BoxDecoration(
+        color: OmiColors.surface1,
+        borderRadius: OmiRadius.xlAll,
+        border: Border.all(color: OmiColors.border.withValues(alpha: 0.5)),
+      ),
+      child: child,
+    );
+  }
+}
+
+/// The generated app's 100pt icon, or [placeholder] until the icon exists.
+class _AppIconTile extends StatelessWidget {
+  const _AppIconTile({required this.iconBytes, required this.placeholder});
+
+  final Uint8List? iconBytes;
+  final Widget placeholder;
+
+  @override
+  Widget build(BuildContext context) {
+    final bytes = iconBytes;
+    return Container(
+      width: 100,
+      height: 100,
+      decoration: BoxDecoration(
+        color: OmiColors.surface2,
+        borderRadius: OmiRadius.xlAll,
+        image: bytes != null ? DecorationImage(image: MemoryImage(bytes), fit: BoxFit.cover) : null,
+      ),
+      child: bytes == null ? Center(child: placeholder) : null,
+    );
+  }
+}
+
+/// A small pill: category, visibility or price.
+class _Badge extends StatelessWidget {
+  const _Badge({required this.label, this.icon, this.color = OmiColors.textSecondary});
+
+  final String label;
+  final FaIconData? icon;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    final icon = this.icon;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: 6),
+      decoration: BoxDecoration(color: color.withValues(alpha: 0.15), borderRadius: OmiRadius.pillAll),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          if (icon != null) ...[FaIcon(icon, color: color, size: 12), const SizedBox(width: 6)],
+          Text(label, style: OmiType.footnote.copyWith(color: color, fontWeight: FontWeight.w600)),
+        ],
+      ),
+    );
+  }
+}
+
+/// A shimmering placeholder block for text that is still being generated.
+class _ShimmerBlock extends StatelessWidget {
+  const _ShimmerBlock({required this.width, required this.height, this.radius = OmiRadius.smAll});
+
+  final double width;
+  final double height;
+  final BorderRadius radius;
+
+  @override
+  Widget build(BuildContext context) {
+    return ShimmerWithTimeout(
+      baseColor: OmiColors.surface2,
+      highlightColor: OmiColors.surface3,
+      child: Container(
+        width: width,
+        height: height,
+        decoration: BoxDecoration(color: OmiColors.textPrimary, borderRadius: radius),
+      ),
+    );
+  }
+}
+
+/// A suggestion card while the sample prompts load.
+class _SuggestionCardShimmer extends StatelessWidget {
+  const _SuggestionCardShimmer();
+
+  @override
+  Widget build(BuildContext context) {
+    Widget line(double width) => Container(
+          height: 16,
+          width: width,
+          decoration:
+              BoxDecoration(color: OmiColors.textPrimary, borderRadius: BorderRadius.circular(OmiRadius.sm / 2)),
+        );
+    return ShimmerWithTimeout(
+      baseColor: OmiColors.surface1,
+      highlightColor: OmiColors.surface2,
+      child: Container(
+        width: 260,
+        margin: const EdgeInsets.only(right: OmiSpacing.sm),
+        padding: const EdgeInsets.all(OmiSpacing.lg),
+        decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            line(200),
+            const SizedBox(height: 10),
+            line(160),
+            const SizedBox(height: 10),
+            line(120),
+            const Spacer(),
+            Container(
+              height: 36,
+              width: 80,
+              decoration: const BoxDecoration(color: OmiColors.textPrimary, borderRadius: OmiRadius.pillAll),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

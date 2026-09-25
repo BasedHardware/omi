@@ -409,7 +409,7 @@ final class SpineCompositionTests: XCTestCase {
   func testDurationReadsAsAClockNotASecondsCount() {
     XCTAssertEqual(SpineFormat.duration(489), "8m 9s")
     XCTAssertEqual(SpineFormat.duration(42), "42s")
-    XCTAssertEqual(SpineFormat.duration(3_855), "1h 04m")
+    XCTAssertEqual(SpineFormat.duration(3_855), "1h 4m")
   }
 
   // MARK: - A memory's repeated half

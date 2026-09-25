@@ -9,6 +9,7 @@ import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/gen/action_items_folders_wire.g.dart' as action_items_wire;
 import 'package:omi/backend/schema/gen/apps_wire.g.dart' as apps_wire;
 import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
+import 'package:omi/backend/schema/gen/misc_wire.g.dart' as misc_wire;
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/debug_log_manager.dart';
@@ -537,6 +538,27 @@ Future<bool> setConversationStarred(String conversationId, bool starred) async {
   if (response == null) return false;
   Logger.debug('setConversationStarred: ${response.body}');
   return response.statusCode == 200;
+}
+
+enum CaptureGroupSeparationResult { separated, unchanged, failed }
+
+/// Separates [conversationId] from the capture group (one event recorded by
+/// several devices) it belongs to. Sticky on the server: the recording is never
+/// regrouped with the members it left. `unchanged` means it was not grouped.
+Future<CaptureGroupSeparationResult> separateConversationFromCaptureGroup(String conversationId) async {
+  final response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/conversations/$conversationId/capture-group/separate',
+    headers: {},
+    method: 'POST',
+    body: '',
+  );
+  if (response == null || response.statusCode != 200) return CaptureGroupSeparationResult.failed;
+  try {
+    final status = misc_wire.GeneratedStatusResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>).status;
+    return status == 'unchanged' ? CaptureGroupSeparationResult.unchanged : CaptureGroupSeparationResult.separated;
+  } catch (_) {
+    return CaptureGroupSeparationResult.separated;
+  }
 }
 
 Future<bool> setConversationActionItemState(String conversationId, List<int> actionItemsIdx, List<bool> values) async {

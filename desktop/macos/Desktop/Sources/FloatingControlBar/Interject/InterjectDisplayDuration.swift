@@ -2,9 +2,10 @@ import Foundation
 
 /// Reading-time display duration for a proactive card.
 ///
-/// Flag-off callers must use ``legacyTimeout`` so the 6s path stays literal.
+/// Flag-off callers use ``flagOffTimeout``: the floating bar's informational-card time
+/// (`FloatingBarNoticePolicy`), paused while hovered like the Interject path.
 enum InterjectDisplayDuration {
-  static let legacyTimeout: TimeInterval = 6
+  static let flagOffTimeout: TimeInterval = OmiFeedbackTiming.informational
   static let secondsPerWord: TimeInterval = 0.250
   static let minimumTimeout: TimeInterval = 4
   static let maximumTimeout: TimeInterval = 14
@@ -56,13 +57,13 @@ enum InterjectDisplayDuration {
     return min(maximumTimeout, max(minimumTimeout, raw))
   }
 
-  /// Flag-off path is exactly 6 seconds, ignoring copy and category.
+  /// Flag-off path is the informational-card time, ignoring copy and category.
   static func timeout(
     title: String,
     message: String,
     kind: ProactiveNotificationKind,
     enabled: Bool
   ) -> TimeInterval {
-    enabled ? timeout(title: title, message: message, kind: kind) : legacyTimeout
+    enabled ? timeout(title: title, message: message, kind: kind) : flagOffTimeout
   }
 }
