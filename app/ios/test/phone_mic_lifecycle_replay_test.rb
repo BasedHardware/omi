@@ -3,6 +3,7 @@
 require 'minitest/autorun'
 require 'open3'
 require 'tmpdir'
+require 'json'
 
 # Replays the canonical phone-mic-native-events/v1 vectors through the
 # PRODUCTION PhoneMicController + PhoneMicEventEmitter (SCA-491 / C5). Only OS
@@ -36,6 +37,58 @@ class PhoneMicLifecycleReplayTest < Minitest::Test
       stdout, stderr, status = Open3.capture3(binary)
       assert status.success?, "native lifecycle replay failed:\n#{stdout}\n#{stderr}"
       assert_includes stdout, 'all 8 canonical vectors passed'
+      # The optional hardware trace is prevalidated by the offline checker.
+      # Always exercise the replay adapter with a synthetic foreground
+      # sequence, including a stimulus whose unnecessary rebuild must fail.
+      trace = File.join(directory, 'foreground-trace.json')
+      File.write(trace, JSON.generate({
+        schema: 'phone-mic-device-probe/v1', scope: 'native-stream-only', audio_retained: false, session_id: 1,
+        events: [
+          {kind: 'start_requested'}, {kind: 'state', state: 'starting'}, {kind: 'state', state: 'running'},
+          {kind: 'sample'}, {kind: 'os_signal', signal: 'appBecameActive'}, {kind: 'sample'},
+          {kind: 'stop_requested'}, {kind: 'state', state: 'idle'}, {kind: 'observation_completed'}
+        ]
+      }))
+      stdout, stderr, status = Open3.capture3(binary, '--device-trace', trace)
+      assert status.success?, "foreground trace replay failed:\n#{stdout}\n#{stderr}"
+      assert_includes stdout, 'lifecycle policy replay passed'
+      # Independent interruption oracle: interrupted -> running with a new
+      # engine, stale epoch dropped, both shouldResume values supported.
+      [false, true].each do |resume|
+        doc = JSON.parse(File.read(trace))
+        doc['events'].insert(5,
+          {kind: 'os_signal', signal: 'interruptionBegan'}, {kind: 'state', state: 'interrupted'},
+          {kind: 'sample'}, {kind: 'os_signal', signal: 'interruptionEnded', should_resume: resume},
+          {kind: 'state', state: 'running'})
+        interruption = File.join(directory, "interruption-#{resume}.json")
+        File.write(interruption, JSON.generate(doc))
+        stdout, stderr, status = Open3.capture3(binary, '--device-trace', interruption)
+        assert status.success?, "interruption trace replay failed:\n#{stdout}\n#{stderr}"
+      end
+      denial = File.join(directory, 'denied-trace.json')
+      File.write(denial, JSON.generate({
+        schema: 'phone-mic-device-probe/v1', scope: 'native-stream-only', audio_retained: false, session_id: 1,
+        events: [{kind: 'start_requested'}, {kind: 'state', state: 'starting'},
+          {kind: 'state', state: 'idle'}, {kind: 'capture_error', code: 'permission_denied'},
+          {kind: 'start_failed', code: 'permission_denied'}, {kind: 'stop_requested'},
+          {kind: 'observation_completed'}]
+      }))
+      stdout, stderr, status = Open3.capture3(binary, '--device-trace', denial)
+      assert status.success?, "denied trace replay failed:\n#{stdout}\n#{stderr}"
+      # The granted foreground fixture is the recovery process after iOS
+      # terminates an app on a Settings permission change.
+      stdout, stderr, status = Open3.capture3(binary, '--device-trace', trace)
+      assert status.success?, "granted recovery replay failed:\n#{stdout}\n#{stderr}"
+      if ENV['OMI_PHONE_MIC_PERMISSION_BEFORE']
+        stdout, stderr, status = Open3.capture3(binary, '--device-trace', ENV.fetch('OMI_PHONE_MIC_PERMISSION_BEFORE'))
+        assert status.success?, "physical denied trace policy replay failed:\n#{stdout}\n#{stderr}"
+      end
+      if ENV['OMI_PHONE_MIC_DEVICE_TRACE']
+        stdout, stderr, status = Open3.capture3(binary, '--device-trace', ENV.fetch('OMI_PHONE_MIC_DEVICE_TRACE'))
+        assert status.success?, "physical trace policy replay failed:\n#{stdout}\n#{stderr}"
+        assert_includes stdout, 'lifecycle policy replay passed'
+      end
+
     end
   end
 

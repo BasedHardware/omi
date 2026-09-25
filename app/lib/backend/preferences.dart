@@ -210,10 +210,7 @@ class SharedPreferencesUtil {
   }
 
   static Future<void> _applyNativeCapturePolicy(CapturePolicy policy) async {
-    await _invokeCapturePolicyBridge('setMuted', <String, Object>{
-      'muted': policy.muted,
-      'revision': policy.revision,
-    });
+    await _invokeCapturePolicyBridge('setMuted', <String, Object>{'muted': policy.muted, 'revision': policy.revision});
   }
 
   static Future<Object?> _invokeCapturePolicyBridge(String method, Map<String, Object> arguments) async {
@@ -252,10 +249,9 @@ class SharedPreferencesUtil {
     // Observe errors immediately even if an older durable write holds the queue.
     // Defer reporting until this intent has also attempted its durable deny.
     final nativeMute = muted
-        ? _applyNativeCapturePolicy(requested).then<(Object, StackTrace)?>(
-            (_) => null,
-            onError: (Object error, StackTrace stack) => (error, stack),
-          )
+        ? _applyNativeCapturePolicy(
+            requested,
+          ).then<(Object, StackTrace)?>((_) => null, onError: (Object error, StackTrace stack) => (error, stack))
         : Future<(Object, StackTrace)?>.value();
 
     final operation = _capturePolicyQueue.then((_) async {
@@ -527,6 +523,10 @@ class SharedPreferencesUtil {
 
   set deviceOnboardingCompleted(bool value) => saveBool('deviceOnboardingCompleted', value);
 
+  bool get omiButtonActionsEnabled => getBool('omiButtonActionsEnabled', defaultValue: true);
+
+  set omiButtonActionsEnabled(bool value) => saveBool('omiButtonActionsEnabled', value);
+
   bool get backgroundModeEnabled => getBool('backgroundModeEnabled');
 
   set backgroundModeEnabled(bool value) => saveBool('backgroundModeEnabled', value);
@@ -640,10 +640,6 @@ class SharedPreferencesUtil {
 
   set webhookAudioBytesDelay(String value) => saveString('webhookAudioBytesDelay', value);
 
-  set devModeJoanFollowUpEnabled(bool value) => saveBool('devModeJoanFollowUpEnabled', value);
-
-  bool get devModeJoanFollowUpEnabled => getBool('devModeJoanFollowUpEnabled');
-
   set transcriptionDiagnosticEnabled(bool value) => saveBool('transcriptionDiagnosticEnabled', value);
 
   bool get transcriptionDiagnosticEnabled => getBool('transcriptionDiagnosticEnabled');
@@ -748,10 +744,6 @@ class SharedPreferencesUtil {
   set daySummaryToggled(bool value) => saveBool('daySummaryToggled', value);
 
   bool get daySummaryToggled => getBool('daySummaryToggled');
-
-  bool get showSummarizeConfirmation => getBool('showSummarizeConfirmation', defaultValue: true);
-
-  set showSummarizeConfirmation(bool value) => saveBool('showSummarizeConfirmation', value);
 
   bool get showSubmitAppConfirmation => getBool('showSubmitAppConfirmation', defaultValue: true);
 
@@ -1008,9 +1000,10 @@ class SharedPreferencesUtil {
     final ownerUid = uid;
     if (ownerUid.isEmpty) return [];
     _scopeLegacyUserData(ownerUid);
-    return _decodeCachedList(_userScopedKey('pendingMemories', ownerUid), (json) => Memory.fromJson(json))
-        .where((memory) => memory.uid == ownerUid)
-        .toList();
+    return _decodeCachedList(
+      _userScopedKey('pendingMemories', ownerUid),
+      (json) => Memory.fromJson(json),
+    ).where((memory) => memory.uid == ownerUid).toList();
   }
 
   set pendingMemories(List<Memory> value) {

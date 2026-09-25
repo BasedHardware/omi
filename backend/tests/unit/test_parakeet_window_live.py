@@ -6,11 +6,18 @@ from types import SimpleNamespace
 from unittest.mock import AsyncMock
 
 import httpx
+import numpy as np
 import pytest
 
 from utils.stt import parakeet_window as window, provider_resilience, streaming as st, vad_gate
 from utils.stt.live_metrics import WINDOW_FORCED_CUTS, WINDOW_POSTS
-from utils.stt.live_session import LiveChainSession, LiveLegSocket
+from utils.stt.live_session import (
+    WINDOW_VAD_CONTINUE_THRESHOLD,
+    WINDOW_VAD_HANGOVER_MS,
+    WINDOW_VAD_SPEECH_THRESHOLD,
+    LiveChainSession,
+    LiveLegSocket,
+)
 from routers.listen.receiver import ListenReceiver
 
 _REAL_SLEEP = asyncio.sleep
@@ -22,6 +29,10 @@ def runtime(monkeypatch):
     monkeypatch.setenv('PARAKEET_WINDOW_ALLOCATION_PERCENT', '100')
     monkeypatch.setenv('PARAKEET_WINDOW_MAX_SESSIONS', '1')
     monkeypatch.setenv('HOSTED_PARAKEET_API_URL', 'http://tdt.invalid')
+    # The scheduling tests below are written in 6 s steps (one 6 s send = one POST).
+    # Pin that unit here so they test mechanics, not the shipped default, which
+    # test_default_pace_waits_for_fifteen_seconds_of_speech pins on its own.
+    monkeypatch.setenv('PARAKEET_WINDOW_PACE_SECONDS', '6')
     monkeypatch.setenv('SONIOX_API_KEY', 'test')
     monkeypatch.setenv('MODULATE_API_KEY', 'test')
     monkeypatch.setenv('HOSTED_SPEAKER_EMBEDDING_API_URL', 'http://embedding.invalid')
@@ -36,9 +47,17 @@ def runtime(monkeypatch):
     monkeypatch.setattr(st, '_deepgram_is_available', lambda: True)
     monkeypatch.setattr(st, 'stt_service_models', ['parakeet-window', 'soniox'])
     # Keep the production VAD state machine/remapper; supply a deterministic
-    # speech detector (positive PCM=speech) instead of downloading a model.
+    # speech detector (nonzero PCM=speech) instead of downloading a model.
+    # Ingest AGC scales the 0x01 marker, so a byte-literal test would drop speech.
     monkeypatch.setattr(vad_gate, '_get_ort_session', lambda: None)
-    monkeypatch.setattr(vad_gate.VADStreamingGate, '_run_vad', lambda self, data: b'\x01' in data)
+
+    def _vad_nonzero(_self, data: bytes) -> bool:
+        if len(data) < 2:
+            return False
+        aligned = data[: len(data) - (len(data) % 2)]
+        return bool(np.any(np.frombuffer(aligned, dtype=np.int16)))
+
+    monkeypatch.setattr(vad_gate.VADStreamingGate, '_run_vad', _vad_nonzero)
 
     @asynccontextmanager
     async def semaphore():
@@ -148,6 +167,25 @@ async def test_pure_noise_close_posts_nothing(monkeypatch):
         assert socket.send(bytes(32000))
     await socket.drain_and_close()
     assert not client.requests
+    assert window.admission.active == 0
+
+
+@pytest.mark.asyncio
+async def test_windowed_gate_keeps_the_billed_threshold_with_a_short_tail(monkeypatch):
+    """The windowed leg differs from the billed Deepgram gate in its tail, not its
+    threshold. Quiet far-field speech is admitted by the level-corrected copy the gate
+    scores, not by a lower threshold, so the start value tracks VAD_GATE_SPEECH_THRESHOLD
+    and there is no hysteresis gap for borderline audio to slip through."""
+    client = Client()
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    socket = await LiveChainSession(receiver()).connect(16000)
+    gate = socket.gate
+    assert gate is not None
+    assert gate.mode == 'active'
+    assert gate._hangover_ms == WINDOW_VAD_HANGOVER_MS == 300
+    assert gate._speech_threshold == WINDOW_VAD_SPEECH_THRESHOLD == vad_gate.VAD_GATE_SPEECH_THRESHOLD
+    assert gate._continue_threshold == WINDOW_VAD_CONTINUE_THRESHOLD == gate._speech_threshold
+    await socket.drain_and_close()
     assert window.admission.active == 0
 
 
@@ -361,7 +399,7 @@ async def test_growing_windows_hold_then_emit_on_drain(monkeypatch):
     assert sock.send(second)
     await sock.drain_and_close()  # one POST of the whole remaining context, not one per pace step
     assert len(client.requests) == 2
-    assert client.requests[0][1]['files']['file'][1].endswith(first)
+    assert client.requests[0][1]['files']['file'][1].endswith(_agc(first))
     assert len(client.requests[1][1]['files']['file'][1]) > len(client.requests[0][1]['files']['file'][1])
     assert [s['text'] for s in posted] == ['One.', 'Two.', 'Three.']
     for earlier, later in zip(posted, posted[1:]):
@@ -430,7 +468,7 @@ async def test_hangover_only_tail_after_full_window_is_not_posted(monkeypatch):
     assert len(client.requests) == 1
     await sock.drain_and_close()
     for _url, kwargs in client.requests:
-        assert b'\x01\x00' in kwargs['files']['file'][1]
+        assert _agc(b'\x01\x00' * 8)[:2] in _posted_pcm(kwargs)
     assert window.admission.active == 0
 
 
@@ -720,6 +758,267 @@ def _wav_duration(kwargs: dict, sample_rate: int = 16000) -> float:
     return max(0.0, (len(wav) - 44) / (2 * sample_rate))
 
 
+def _posted_pcm(kwargs: dict) -> bytes:
+    return kwargs['files']['file'][1][44:]
+
+
+def _agc(pcm: bytes, peak: float | None = None) -> bytes:
+    return window.bounded_agc_pcm16(pcm, peak=peak)[0]
+
+
+def test_bounded_agc_caps_gain_skips_silence_and_does_not_attenuate():
+    silence = bytes(1600)
+    out, gain = window.bounded_agc_pcm16(silence)
+    assert out == silence
+    assert gain == 1.0
+
+    loud = (np.int16(30000) * np.ones(200, dtype=np.int16)).tobytes()
+    out, gain = window.bounded_agc_pcm16(loud)
+    assert out == loud
+    assert gain == 1.0
+
+    quiet = (np.int16(1000) * np.ones(200, dtype=np.int16)).tobytes()
+    out, gain = window.bounded_agc_pcm16(quiet)
+    assert gain == window.WINDOW_AGC_MAX_GAIN == 4.0
+    assert int(np.frombuffer(out, dtype=np.int16)[0]) == 4000
+
+    # Session envelope from loud speech must not lift a later quiet window
+    # by more than target/peak — here peak is already above target, so 1×.
+    held, held_gain = window.bounded_agc_pcm16(quiet, peak=30000)
+    assert held == quiet
+    assert held_gain == 1.0
+
+    # Cap binds for a very quiet peak: nearby targets all hit 4×.
+    _, low = window.bounded_agc_pcm16(quiet, target=0.7)
+    _, high = window.bounded_agc_pcm16(quiet, target=0.9)
+    assert low == high == 4.0
+
+
+def test_posted_agc_deadband_spares_already_levelled_sessions_but_not_admission():
+    """Gain rescues quiet audio; on a session that is already loud it only costs accuracy.
+
+    The deadband is on the POSTED (decode) stage alone. Admission keeps gaining the copy
+    Silero scores unconditionally — that copy is what admits quiet far-field, and Silero
+    is not the thing the distortion hurts.
+    """
+    pcm = (np.int16(6000) * np.ones(320, dtype=np.int16)).tobytes()
+
+    # Measured peaks from the qualification clips.
+    assert window.window_needs_gain(8598.0)  # far-field, 0.26 of full scale
+    assert not window.window_needs_gain(17712.0)  # dense speech loud passage, 0.54
+    assert not window.window_needs_gain(22405.0)  # clean, 0.68
+
+    # Quiet passages *inside* that loud dense-speech clip. Judged on the session
+    # envelope (0.54) these are denied gain and go missing entirely; judged on
+    # their own peak they are rescued. This is the whole reason the rule is
+    # per-window rather than per-session.
+    assert window.window_needs_gain(12121.0)  # 0.370
+    assert window.window_needs_gain(12921.0)  # 0.394
+    assert not window.window_needs_gain(13828.0)  # 0.422, captured without gain
+
+    # The boundary belongs to the gained side; one count above it does not.
+    edge = window.WINDOW_AGC_DEADBAND_PEAK * 32767.0
+    assert window.window_needs_gain(edge)
+    assert not window.window_needs_gain(edge + 1.0)
+
+    # Equivalently: never apply less than 2x. Anything the deadband admits is
+    # boosted by at least that much, so the rule cannot silently become a no-op.
+    assert window.bounded_agc_pcm16(pcm, peak=edge)[1] >= 2.0
+
+    # A growing window spanning a level change: loud prefix, quiet tail. Judged on
+    # the whole window's peak (0.431) this reads "not quiet" and the tail is lost —
+    # measured on dev, that swung earnings WER between 0.155 and 0.262 depending
+    # only on where the anchor fell. Judged on the tail it is rescued, and the
+    # boost is capped so the loud prefix cannot clip.
+    rate = 16000
+    tail_bytes = int(window.WINDOW_AGC_TAIL_SECONDS * rate) * 2
+    loud = (np.int16(14120) * np.ones(rate * 30, dtype=np.int16)).tobytes()  # 0.431
+    quiet = (np.int16(12121) * np.ones(rate * 10, dtype=np.int16)).tobytes()  # 0.370
+    g = window.posted_window_gain(loud + quiet, tail_bytes)
+    assert g > 1.0, 'a quiet tail behind a loud prefix must still be boosted'
+    assert 14120 * g <= 32767, 'the boost must not clip the louder prefix'
+
+    # An all-loud window is still left alone — this is what keeps substitutions down.
+    assert window.posted_window_gain(loud, tail_bytes) == 1.0
+
+    # Admission is NOT deadbanded: a loud envelope still gains the scored copy.
+    ingest = window.SessionPcmGain()
+    ingest.peak = 17712.0
+    assert ingest.apply(pcm) != pcm
+    assert ingest.last_gain > 1.0
+
+
+def test_farfield_like_peak_gain_moves_smoothly_with_target():
+    # Clip peak from the public far-field file. Not a WER-fitted constant: it
+    # only shows that 0.7 / 0.8 / 0.9 all boost and all stay under the 4× cap.
+    peak = 8598
+    pcm = (np.int16(peak) * np.ones(32, dtype=np.int16)).tobytes()
+    g07 = window.bounded_agc_pcm16(pcm, target=0.7)[1]
+    g08 = window.bounded_agc_pcm16(pcm, target=0.8)[1]
+    g09 = window.bounded_agc_pcm16(pcm, target=0.9)[1]
+    assert 1.0 < g07 < g08 < g09 < window.WINDOW_AGC_MAX_GAIN
+    assert g09 / g07 < 1.4
+
+
+@pytest.mark.asyncio
+async def test_posted_pcm_is_agc_scaled_buffer_is_not(monkeypatch):
+    client = Client()
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: _REAL_SLEEP(0))
+    sock = window.connect_window(lambda _: None, 16000)
+    quiet = (np.int16(1000) * np.ones(16000 * 6, dtype=np.int16)).tobytes()
+    sock.mark_speech()
+    sock.send(quiet)
+    await _wait_requests(client, 1)
+    posted = _posted_pcm(client.requests[0][1])
+    assert posted == _agc(quiet)
+    assert posted != quiet
+    assert sock._agc_last_gain == 4.0
+    assert sock._agc_peak == 1000.0
+    if sock._buf:
+        assert int(np.frombuffer(bytes(sock._buf), dtype=np.int16).max()) == 1000
+    sock.finish()
+    await asyncio.gather(sock._pump_task, return_exceptions=True)
+
+
+def test_session_pcm_gain_silence_and_ceiling():
+    gain = window.SessionPcmGain()
+    silence = bytes(1600)
+    assert gain.apply(silence) == silence
+    assert gain.last_gain == 1.0
+    assert gain.peak == 0.0
+
+    faint100 = (np.int16(100) * np.ones(200, dtype=np.int16)).tobytes()
+    out100 = gain.apply(faint100)
+    assert gain.last_gain == window.WINDOW_AGC_MAX_GAIN == 4.0
+    assert int(np.frombuffer(out100, dtype=np.int16)[0]) == 400
+    assert gain.peak == 100.0
+
+    gain30 = window.SessionPcmGain()
+    faint30 = (np.int16(30) * np.ones(200, dtype=np.int16)).tobytes()
+    out30 = gain30.apply(faint30)
+    assert gain30.last_gain == 4.0
+    assert int(np.frombuffer(out30, dtype=np.int16)[0]) == 120
+
+
+def test_session_pcm_gain_fast_attack_then_holds_running_max():
+    gain = window.SessionPcmGain()
+    quiet = (np.int16(1000) * np.ones(32, dtype=np.int16)).tobytes()
+    loud = (np.int16(30000) * np.ones(32, dtype=np.int16)).tobytes()
+    assert gain.apply(quiet) == _agc(quiet)
+    assert gain.last_gain == 4.0
+    assert gain.apply(loud) == loud
+    assert gain.last_gain == 1.0
+    held = gain.apply(quiet)
+    assert held == quiet
+    assert gain.last_gain == 1.0
+
+
+@pytest.mark.asyncio
+async def test_ingest_agc_does_not_compound_posted_agc(monkeypatch):
+    client = Client()
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: _REAL_SLEEP(0))
+    monkeypatch.setattr(window, 'WINDOW_INGEST_AGC', True)
+    sock = await LiveChainSession(receiver()).connect(16000)
+    quiet = (np.int16(1000) * np.ones(16000 * 6, dtype=np.int16)).tobytes()
+    once = _agc(quiet)
+    twice, _ = window.bounded_agc_pcm16(once)
+    assert sock.send(quiet)
+    await _wait_requests(client, 1)
+    posted = _posted_pcm(client.requests[0][1])
+    assert posted == once
+    assert posted != quiet
+    assert posted != twice
+    assert sock.raw._agc_last_gain == 4.0
+    assert sock.raw._agc_peak == 1000.0
+    if sock.raw._buf:
+        # Buffer stays original; posted AGC is the only 4× the model sees.
+        assert int(np.frombuffer(bytes(sock.raw._buf), dtype=np.int16).max()) == 1000
+    await sock.drain_and_close()
+
+
+@pytest.mark.asyncio
+async def test_ingest_agc_at_ceiling_on_silence_is_not_posted(monkeypatch):
+    client = Client()
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    monkeypatch.setattr(window, 'WINDOW_INGEST_AGC', True)
+    seen: list[float] = []
+
+    def _reject_and_record(_self, data: bytes) -> bool:
+        seen.append(window.pcm16_peak(data))
+        return False
+
+    monkeypatch.setattr(vad_gate.VADStreamingGate, '_run_vad', _reject_and_record)
+    sock = await LiveChainSession(receiver()).connect(16000)
+    # Digital silence stays identity; faint floors hit the 4× ceiling into VAD.
+    assert sock.send(bytes(32000))
+    faint100 = (np.int16(100) * np.ones(16000, dtype=np.int16)).tobytes()
+    faint30 = (np.int16(30) * np.ones(16000, dtype=np.int16)).tobytes()
+    assert sock.send(faint100)
+    assert sock.send(faint30)
+    await sock.drain_and_close()
+    assert not client.requests
+    assert seen[0] == 0.0
+    assert seen[1] == 400.0
+    assert seen[2] == 120.0
+
+
+@pytest.mark.asyncio
+async def test_posted_agc_still_runs_when_ingest_is_disabled(monkeypatch):
+    client = Client()
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: _REAL_SLEEP(0))
+    monkeypatch.setattr(window, 'WINDOW_INGEST_AGC', False)
+    sock = await LiveChainSession(receiver()).connect(16000)
+    quiet = (np.int16(1000) * np.ones(16000 * 6, dtype=np.int16)).tobytes()
+    assert sock.send(quiet)
+    await _wait_requests(client, 1)
+    posted = _posted_pcm(client.requests[0][1])
+    assert posted == _agc(quiet)
+    if sock.raw._buf:
+        assert int(np.frombuffer(bytes(sock.raw._buf), dtype=np.int16).max()) == 1000
+    await sock.drain_and_close()
+
+
+@pytest.mark.asyncio
+async def test_posted_window_is_uniform_when_ingest_gain_moves(monkeypatch):
+    """Quiet then loud chunks must not store a ramp; POST is one scale."""
+    client = Client()
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: _REAL_SLEEP(0))
+    monkeypatch.setattr(window, 'WINDOW_INGEST_AGC', True)
+    sock = await LiveChainSession(receiver()).connect(16000)
+    quiet = (np.int16(1000) * np.ones(16000 * 3, dtype=np.int16)).tobytes()
+    loud = (np.int16(8000) * np.ones(16000 * 3, dtype=np.int16)).tobytes()
+    ingest = window.SessionPcmGain()
+    first_gain_chunk = ingest.apply(quiet[:640])
+    assert window.pcm16_peak(first_gain_chunk) == 4000.0
+    assert sock.send(quiet)
+    assert sock.send(loud)
+    await _wait_requests(client, 1)
+    posted = np.frombuffer(_posted_pcm(client.requests[0][1]), dtype=np.int16)
+    half = 16000 * 3
+    assert posted.size >= 2 * half
+    first_half, second_half = posted[:half], posted[half : 2 * half]
+    # Uniform scale preserves the original 8:1 ratio. A stored ingest ramp
+    # would be 4000 then ~26214 (ratio ~6.55) because the quiet half was
+    # already 4× when the envelope was still at the cap.
+    orig_ratio = 8000 / 1000
+    posted_ratio = float(second_half[0]) / float(first_half[0])
+    assert abs(posted_ratio - orig_ratio) < 0.02
+    assert len(set(int(x) for x in first_half[::1600])) == 1
+    assert len(set(int(x) for x in second_half[::1600])) == 1
+    expected, gain = window.bounded_agc_pcm16(quiet + loud, peak=8000.0)
+    assert bytes(posted[: 2 * half]) == expected
+    assert gain == pytest.approx(window.WINDOW_AGC_TARGET_PEAK * 32767.0 / 8000.0)
+    if sock.raw._buf:
+        buf = np.frombuffer(bytes(sock.raw._buf), dtype=np.int16)
+        assert int(buf.max()) == 8000
+        assert int(buf[0]) == 1000
+    await sock.drain_and_close()
+
+
 def test_decide_window_hold_empty_trailing_complete_and_forced_cut():
     from utils.stt.window_anchor import RawSegment, decide_window, is_trailing_complete
 
@@ -774,14 +1073,16 @@ def test_default_buffer_cap_fits_documented_memory():
 
 
 def test_pace_and_max_context_env_clamps(monkeypatch):
-    from utils.stt.window_anchor import read_max_context_seconds, read_pace_seconds
+    from utils.stt.window_anchor import DEFAULT_PACE_SECONDS, read_max_context_seconds, read_pace_seconds
 
     monkeypatch.setenv('PARAKEET_WINDOW_PACE_SECONDS', '0')
     assert read_pace_seconds() == 1.0
     monkeypatch.setenv('PARAKEET_WINDOW_PACE_SECONDS', '99')
     assert read_pace_seconds() == 15.0
     monkeypatch.setenv('PARAKEET_WINDOW_PACE_SECONDS', 'nope')
-    assert read_pace_seconds() == 6.0
+    # Pace decides window size, and window size is what drives accuracy on this leg,
+    # so pin the fallback to the declared default rather than a literal.
+    assert read_pace_seconds() == DEFAULT_PACE_SECONDS == 15.0
     monkeypatch.setenv('PARAKEET_WINDOW_MAX_CONTEXT_SECONDS', '1')
     assert read_max_context_seconds() == 6.0
     monkeypatch.setenv('PARAKEET_WINDOW_MAX_CONTEXT_SECONDS', '100')
@@ -895,8 +1196,8 @@ async def test_silence_flush_reanchors_at_next_speech_onset(monkeypatch):
     sock.send(second)
     await sock.drain_and_close()
     assert len(client.requests) == 2
-    assert client.requests[0][1]['files']['file'][1].endswith(first + bytes(16000 * 2 * 2))
-    assert b'\x02\x00' in client.requests[1][1]['files']['file'][1]
+    assert client.requests[0][1]['files']['file'][1].endswith(_agc(first + bytes(16000 * 2 * 2)))
+    assert _agc(second)[:2] in _posted_pcm(client.requests[1][1])
     assert [s['text'] for s in posted] == ['First.', 'Second.']
     assert posted[1]['start'] >= posted[0]['end']
 
@@ -1098,6 +1399,30 @@ async def test_live_posts_are_paced_and_single_flight(monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_default_pace_waits_for_fifteen_seconds_of_speech(monkeypatch):
+    # Window size drives accuracy on this leg, so continuous speech must not be posted
+    # in small slices: at the default pace, 6 s does not post and 15 s does.
+    from utils.stt.window_anchor import DEFAULT_PACE_SECONDS
+
+    monkeypatch.delenv('PARAKEET_WINDOW_PACE_SECONDS')
+    monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: _REAL_SLEEP(0))
+    client = Client(data={'segments': [{'text': 'Go on', 'start': 0.0, 'end': 5.0}]})
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    sock = window.connect_window(lambda _: None, 16000)
+    assert sock._pace_seconds == DEFAULT_PACE_SECONDS == 15.0
+    sock.mark_speech()
+    sock.send(b'\x01\x00' * 16000 * 6)
+    for _ in range(50):
+        await _REAL_SLEEP(0)
+    assert client.requests == []
+    sock.mark_speech()
+    sock.send(b'\x01\x00' * 16000 * 9)
+    await _wait_requests(client, 1)
+    sock.finish()
+    await asyncio.gather(sock._pump_task, return_exceptions=True)
+
+
+@pytest.mark.asyncio
 async def test_nonspeech_audio_is_never_posted(monkeypatch):
     client = Client()
     monkeypatch.setattr(window, 'get_stt_client', lambda: client)
@@ -1140,17 +1465,21 @@ async def test_cap_cut_next_post_starts_at_emitted_sentence_end(monkeypatch):
     sock.send(second)
     await _wait_requests(client, 2)
     anchor = 2 * 16000 * 2
-    body1 = client.requests[0][1]['files']['file'][1][44:]
-    body2 = client.requests[1][1]['files']['file'][1][44:]
-    assert body1 == first
-    assert body2.startswith(first[anchor:])
+    body1 = _posted_pcm(client.requests[0][1])
+    body2 = _posted_pcm(client.requests[1][1])
+    assert body1 == _agc(first)
+    assert body2.startswith(_agc(first[anchor:], peak=2))
     assert [s['text'] for s in posted][0] == 'One.'
     sock.finish()
     await asyncio.gather(sock._pump_task, return_exceptions=True)
 
 
 @pytest.mark.asyncio
-async def test_empty_at_cap_slides_pace_and_later_post_recovers(monkeypatch):
+@pytest.mark.parametrize('pace', ['6', '15'])
+async def test_empty_at_cap_slides_six_seconds_and_later_post_recovers(monkeypatch, pace):
+    # The slide is fixed, not the pace: at a 15 s pace, sliding by pace would
+    # discard 15 s of speech the model returned nothing for.
+    monkeypatch.setenv('PARAKEET_WINDOW_PACE_SECONDS', pace)
     posted = []
     monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: _REAL_SLEEP(0))
     empty, later = b'\x01\x00' * 16000 * 24, b'\x02\x00' * 16000 * 6
@@ -1165,11 +1494,11 @@ async def test_empty_at_cap_slides_pace_and_later_post_recovers(monkeypatch):
     sock.send(later)
     await sock.drain_and_close()
     slide = 6 * 16000 * 2
-    body1 = client.requests[0][1]['files']['file'][1][44:]
-    body2 = client.requests[1][1]['files']['file'][1][44:]
-    assert body1 == empty
-    assert body2.startswith(empty[slide:])
-    assert b'\x02\x00' in body2
+    body1 = _posted_pcm(client.requests[0][1])
+    body2 = _posted_pcm(client.requests[1][1])
+    assert body1 == _agc(empty)
+    assert body2.startswith(_agc(empty[slide:], peak=2))
+    assert _agc(later)[:2] in body2
     assert [s['text'] for s in posted] == ['Recovered.']
     assert WINDOW_FORCED_CUTS._value.get() >= before + 1
 
@@ -1194,9 +1523,9 @@ async def test_catchup_burst_does_not_shed_and_posts_max_context_jobs(monkeypatc
     assert st._parakeet_circuit.state == 'closed'
     assert client.requests
     assert all(_wav_duration(kw) <= 24.0 + 1e-6 for _, kw in client.requests)
-    last_body = client.requests[-1][1]['files']['file'][1][44:]
-    assert (head + tail).endswith(last_body)
-    assert b'\x02\x00' in last_body
+    last_body = _posted_pcm(client.requests[-1][1])
+    assert _agc(head + tail).endswith(last_body)
+    assert _agc(tail[:2], peak=2) in last_body
 
 
 @pytest.mark.asyncio
@@ -1232,5 +1561,90 @@ async def test_idle_remainder_posts_without_close(monkeypatch):
         sock._wake.set()
         await _REAL_SLEEP(0)
     assert len(client.requests) == n_posts
+    sock.finish()
+    await asyncio.gather(sock._pump_task, return_exceptions=True)
+
+
+def _head_socket(monkeypatch, payloads):
+    monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: _REAL_SLEEP(0))
+    client = SeqClient(payloads)
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    sock = window.connect_window(lambda _: None, 16000)
+    return sock, client
+
+
+def _job(sock, seconds: float) -> window._WindowJob:
+    pcm = b'\x01\x00' * int(16000 * seconds)
+    return window._WindowJob(pcm, 0.0, seconds, 0, len(pcm), False, False)
+
+
+@pytest.mark.asyncio
+async def test_skipped_leading_speech_is_reposted_and_prepended(monkeypatch):
+    later = window.RawSegment('Later sentence.', 15.1, 23.8)
+    sock, client = _head_socket(monkeypatch, [{'segments': [{'text': 'Skipped head.', 'start': 1.5, 'end': 14.8}]}])
+    job = _job(sock, 24.0)
+    sock._speech_spans.append((0, len(job.pcm)))
+    before = window.WINDOW_HEAD_RECOVERIES.labels(outcome='recovered')._value.get()
+    out = await sock._recover_skipped_head(job, [later])
+    assert [s.text for s in out] == ['Skipped head.', 'Later sentence.']
+    body = _posted_pcm(client.requests[0][1])
+    assert len(body) == sock._to_bytes(15.1)
+    assert window.WINDOW_HEAD_RECOVERIES.labels(outcome='recovered')._value.get() == before + 1
+    sock.finish()
+    await asyncio.gather(sock._pump_task, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_normal_lead_in_is_not_reposted(monkeypatch):
+    sock, client = _head_socket(monkeypatch, [{'text': 'unused'}])
+    job = _job(sock, 24.0)
+    sock._speech_spans.append((0, len(job.pcm)))
+    first = window.RawSegment('Starts on time.', 1.2, 9.0)
+    assert await sock._recover_skipped_head(job, [first]) == [first]
+    assert client.requests == []
+    sock.finish()
+    await asyncio.gather(sock._pump_task, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_late_first_segment_after_nonspeech_is_not_reposted(monkeypatch):
+    sock, client = _head_socket(monkeypatch, [{'text': 'unused'}])
+    job = _job(sock, 24.0)
+    # The VAD saw only 1 s of speech before the first segment: that gap is a pause.
+    sock._speech_spans.append((sock._to_bytes(9.0), sock._to_bytes(10.0)))
+    sock._speech_spans.append((sock._to_bytes(12.0), len(job.pcm)))
+    first = window.RawSegment('After a pause.', 12.1, 20.0)
+    assert await sock._recover_skipped_head(job, [first]) == [first]
+    assert client.requests == []
+    sock.finish()
+    await asyncio.gather(sock._pump_task, return_exceptions=True)
+
+
+def test_decoder_loops_collapse_and_ordinary_repetition_survives():
+    from utils.stt.window_anchor import collapse_decoder_loops
+
+    loop = 'roles have increased in a little bit of a little bit of a little bit of a little bit of a ability to retain'
+    assert collapse_decoder_loops(loop) == ('roles have increased in a little bit of a ability to retain', 1)
+    for speech in (
+        'no no no I said',
+        'the the market',
+        'yeah yeah yeah yeah',
+        "I think I think that's right",
+        'we did forty million of incremental billings',
+    ):
+        assert collapse_decoder_loops(speech) == (speech, 0)
+
+
+@pytest.mark.asyncio
+async def test_window_segments_have_decoder_loops_collapsed(monkeypatch):
+    monkeypatch.setattr(window.asyncio, 'sleep', lambda _delay: _REAL_SLEEP(0))
+    looped = 'It went up a bit more a bit more a bit more a bit more than planned.'
+    client = SeqClient([{'segments': [{'text': looped, 'start': 0.2, 'end': 5.0}]}])
+    monkeypatch.setattr(window, 'get_stt_client', lambda: client)
+    sock = window.connect_window(lambda _: None, 16000)
+    before = window.WINDOW_DECODER_LOOPS._value.get()
+    out = await sock._post_and_parse(b'\x01\x00' * 16000 * 6, 6.0)
+    assert [s.text for s in out] == ['It went up a bit more than planned.']
+    assert window.WINDOW_DECODER_LOOPS._value.get() == before + 1
     sock.finish()
     await asyncio.gather(sock._pump_task, return_exceptions=True)

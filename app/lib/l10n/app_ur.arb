@@ -14,7 +14,7 @@
     "@transcriptTab": {
         "description": "Tab label for transcript view"
     },
-    "actionItemsTab": "کردہ کام",
+    "actionItemsTab": "کام",
     "@actionItemsTab": {
         "description": "Tab label for action items"
     },
@@ -22,7 +22,7 @@
     "@deleteConversationTitle": {
         "description": "Title for delete confirmation dialog"
     },
-    "deleteConversationMessage": "یہ منسلکہ یادیں، ٹاسک، اور آڈیو فائلیں بھی حذف کر دے گا۔ یہ عمل واپس نہیں کیا جا سکتا۔",
+    "deleteConversationMessage": "یہ منسلکہ یادیں، ٹاسک، اور آڈیو فائلیں بھی حذف کر دے گا۔",
     "@deleteConversationMessage": {
         "description": "Message for delete confirmation dialog"
     },
@@ -128,11 +128,11 @@
     "@remaining": {
         "description": "Label showing time remaining for SD card transfer"
     },
-    "loading": "لوڈ ہو رہا ہے...",
+    "loading": "لوڈ ہو رہا ہے…",
     "@loading": {
         "description": "Loading indicator text"
     },
-    "loadingDuration": "مدت لوڈ ہو رہی ہے...",
+    "loadingDuration": "مدت لوڈ ہو رہی ہے…",
     "@loadingDuration": {
         "description": "Loading duration indicator"
     },
@@ -162,7 +162,7 @@
     "@createPersonHint": {
         "description": "Hint text for creating a person"
     },
-    "speechProfile": "تقریری پروفائل",
+    "speechProfile": "وائس پروفائل",
     "@speechProfile": {
         "description": "Speech profile setting"
     },
@@ -188,7 +188,7 @@
     "@selectLanguage": {
         "description": "Title for language selection"
     },
-    "deleting": "حذف ہو رہا ہے...",
+    "deleting": "حذف ہو رہا ہے…",
     "@deleting": {
         "description": "Deleting in progress indicator"
     },
@@ -224,7 +224,7 @@
     "@disconnected": {
         "description": "Status text when device is disconnected"
     },
-    "searching": "تلاش ہو رہی ہے...",
+    "searching": "تلاش ہو رہی ہے",
     "@searching": {
         "description": "Loading text displayed while search is in progress"
     },
@@ -304,7 +304,7 @@
     "@starConversationHint": {
         "description": "Hint explaining how to star conversations"
     },
-    "searchConversations": "بات چیتوں کو تلاش کریں...",
+    "searchConversations": "بات چیتوں کو تلاش کریں",
     "@searchConversations": {
         "description": "Placeholder text for conversation search field"
     },
@@ -350,7 +350,7 @@
     "@noMessagesYet": {
         "description": "Empty chat state message"
     },
-    "deletingMessages": "اپنے پیغامات کو Omi کی یادوں سے حذف کیا جا رہا ہے...",
+    "deletingMessages": "اپنے پیغامات کو Omi کی یادوں سے حذف کیا جا رہا ہے…",
     "@deletingMessages": {
         "description": "Loading text when clearing chat"
     },
@@ -414,7 +414,7 @@
     "@buildAndShareApp": {
         "description": "Create app button subtitle"
     },
-    "searchApps": "ایپلیکیشنز تلاش کریں...",
+    "searchApps": "ایپلیکیشنز تلاش کریں",
     "@searchApps": {
         "description": "Placeholder text for search input"
     },
@@ -557,6 +557,7 @@
     "offlineSync": "آفلائن ہم وقت",
     "autoSync": "خودکار مطابقت",
     "autoSyncDescription": "جب آپ کا آلہ منسلک ہو تو آف لائن ریکارڈنگز کو خودکار طور پر سنک کریں",
+    "omiButtonActions": "Omi بٹن کے اعمال",
     "@offlineSync": {
         "description": "Page title for offline sync"
     },
@@ -608,7 +609,7 @@
     "@privacyIntro": {
         "description": "Data privacy page introduction"
     },
-    "learnMore": "مزید جانیں...",
+    "learnMore": "مزید جانیں…",
     "@learnMore": {
         "description": "Learn more link"
     },
@@ -832,7 +833,7 @@
     "@developerSettingsTitle": {
         "description": "Developer settings page title"
     },
-    "saving": "محفوظ ہو رہا ہے...",
+    "saving": "محفوظ ہو رہا ہے…",
     "@saving": {
         "description": "Text shown while saving settings"
     },
@@ -936,7 +937,7 @@
     "@providing": {
         "description": "Providing stat title"
     },
-    "providingSubtitle": "کردہ کام، اور خود بخود حاصل نوٹس۔",
+    "providingSubtitle": "کام اور نوٹس، خود بخود محفوظ کیے گئے۔",
     "@providingSubtitle": {
         "description": "Providing stat subtitle"
     },
@@ -1006,19 +1007,19 @@
     "@shareStatsMessage": {
         "description": "Share stats base message"
     },
-    "sharePeriodToday": "آج، omi نے:",
+    "sharePeriodToday": "آج، Omi نے:",
     "@sharePeriodToday": {
         "description": "Share stats period: Today"
     },
-    "sharePeriodMonth": "اس ماہ، omi نے:",
+    "sharePeriodMonth": "اس ماہ، Omi نے:",
     "@sharePeriodMonth": {
         "description": "Share stats period: Month"
     },
-    "sharePeriodYear": "اس سال، omi نے:",
+    "sharePeriodYear": "اس سال، Omi نے:",
     "@sharePeriodYear": {
         "description": "Share stats period: Year"
     },
-    "sharePeriodAllTime": "ابھی تک، omi نے:",
+    "sharePeriodAllTime": "ابھی تک، Omi نے:",
     "@sharePeriodAllTime": {
         "description": "Share stats period: All Time"
     },
@@ -1071,7 +1072,7 @@
     "selectLogFile": "لاگ فائل منتخب کریں",
     "shareLogs": "لاگز شیئر کریں",
     "debugLogCleared": "ڈیبگ لاگ صاف ہو گیا",
-    "exportStarted": "برآمد شروع ہو گیا۔ یہ کچھ سیکنڈ لگ سکتے ہیں...",
+    "exportStarted": "برآمد شروع ہو گیا۔ یہ کچھ سیکنڈ لگ سکتے ہیں…",
     "exportAllData": "تمام ڈیٹا برآمد کریں",
     "exportDataDesc": "بات چیتوں کو JSON فائل میں برآمد کریں",
     "exportedConversations": "Omi سے برآمد شدہ بات چیتیں",
@@ -1113,7 +1114,6 @@
     "daySummary": "روزانہ خلاصہ",
     "summaryGenerated": "خلاصہ تیار کیا گیا",
     "claudeDesktop": "Claude ڈیسک ٹاپ",
-    "addToClaudeConfig": "claude_desktop_config.json میں شامل کریں",
     "copyConfig": "ترتیب کاپی کریں",
     "configCopied": "ترتیب کلپ بورڈ پر کاپی ہو گئی",
     "listeningMins": "سن رہا ہے (منٹ)",
@@ -1555,7 +1555,7 @@
     "saveChanges": "تبدیلیوں کو محفوظ کریں",
     "resetToDefault": "ڈیفالٹ میں ری سیٹ کریں",
     "viewTemplate": "ٹیمپلیٹ دیکھیں",
-    "trySomethingLike": "کچھ اس طرح کریں...",
+    "trySomethingLike": "کچھ اس طرح کریں…",
     "tryIt": "کوشش کریں",
     "creatingPlan": "منصوبہ بنایا جا رہا ہے",
     "developingLogic": "منطق تیار کی جا رہی ہے",
@@ -1564,8 +1564,8 @@
     "finalTouches": "حتمی نکات",
     "processing": "پروسیسنگ",
     "features": "خصوصیات",
-    "creatingYourApp": "آپ کی ایپ بن رہی ہے...",
-    "generatingIcon": "آئیکن تیار ہو رہا ہے...",
+    "creatingYourApp": "آپ کی ایپ بن رہی ہے…",
+    "generatingIcon": "آئیکن تیار ہو رہا ہے…",
     "whatShouldWeMake": "ہمیں کیا بنانا چاہیے؟",
     "appName": "ایپ کا نام",
     "description": "تفصیل",
@@ -1582,7 +1582,7 @@
     "usersPayToUse": "صارفین آپ کی ایپ استعمال کرنے کے لیے ادا کریں",
     "freeForEveryone": "سب کے لیے مفت",
     "perMonthLabel": "/ ماہ",
-    "creating": "بنایا جا رہا ہے...",
+    "creating": "بنایا جا رہا ہے…",
     "@creating": {
         "description": "Loading state text when app generation is in progress"
     },
@@ -1593,7 +1593,7 @@
     "@connect": {
         "description": "Title for device connection page"
     },
-    "searchingForDevices": "آلے تلاش کیے جا رہے ہیں...",
+    "searchingForDevices": "آلے تلاش کیے جا رہے ہیں",
     "@searchingForDevices": {
         "description": "Status text while scanning for Bluetooth devices"
     },
@@ -1646,7 +1646,7 @@
     "@backgroundActivity": {
         "description": "Title for background activity permission"
     },
-    "backgroundActivityDesc": "Omi کو بہتر استحکام کے لیے پس منظر میں چلنے دیں",
+    "backgroundActivityDesc": "تاکہ اسکرین بند ہونے یا ایپ بدلنے پر بھی Omi ریکارڈ کرتا رہے۔",
     "@backgroundActivityDesc": {
         "description": "Description for background activity permission"
     },
@@ -1654,7 +1654,7 @@
     "@locationAccess": {
         "description": "Title for location access permission"
     },
-    "locationAccessDesc": "مکمل تجربے کے لیے پس منظر مقام فعال کریں",
+    "locationAccessDesc": "تاکہ Omi نوٹ کر سکے کہ آپ کی گفتگو کہاں ہوئی۔",
     "@locationAccessDesc": {
         "description": "Description for location access permission"
     },
@@ -1662,7 +1662,7 @@
     "@notifications": {
         "description": "AppBar title for notifications settings page"
     },
-    "notificationsDesc": "باخبر رہنے کے لیے اطلاعات فعال کریں",
+    "notificationsDesc": "تاکہ Omi آپ کو گفتگو کے خلاصے، کام کی یاد دہانیاں اور آپ کی ایپس کے جوابات بھیج سکے۔",
     "@notificationsDesc": {
         "description": "Description for notifications permission"
     },
@@ -1673,7 +1673,7 @@
     "@locationServiceDisabled": {
         "description": "Title for dialog when location services are off"
     },
-    "locationServiceDisabledDesc": "مقام کی خدمت غیر فعال ہے۔ براہ کرم Settings > Privacy & Security > Location Services میں جائیں اور اسے فعال کریں",
+    "locationServiceDisabledDesc": "اس ڈیوائس پر لوکیشن سروسز بند ہیں۔ انہیں سیٹنگز میں آن کریں۔",
     "@locationServiceDisabledDesc": {
         "description": "Instructions to enable location services"
     },
@@ -1903,7 +1903,7 @@
     "@personalGrowthJourney": {
         "description": "Subtitle describing Omi on auth screen"
     },
-    "actionItemsTitle": "کام کریں",
+    "actionItemsTitle": "کام",
     "@actionItemsTitle": {
         "description": "Title for the Action Items page"
     },
@@ -1959,7 +1959,7 @@
     "@deleteSelectedItemsTitle": {
         "description": "Title for bulk delete dialog"
     },
-    "deleteSelectedItemsMessage": "Are you sure you want to delete {count} selected action item{s}?",
+    "deleteSelectedItemsMessage": "کیا آپ یقینی ہیں کہ آپ {count} منتخب کام{s} حذف کرنا چاہتے ہیں؟",
     "@deleteSelectedItemsMessage": {
         "description": "Confirmation message for bulk delete",
         "placeholders": {
@@ -1981,7 +1981,7 @@
             }
         }
     },
-    "itemsDeletedResult": "{count} action item{s} deleted",
+    "itemsDeletedResult": "{count} کام{s} حذف ہو گئے",
     "@itemsDeletedResult": {
         "description": "Snackbar message after bulk delete",
         "placeholders": {
@@ -2009,7 +2009,7 @@
     "@welcomeActionItemsTitle": {
         "description": "Heading for empty state welcome"
     },
-    "welcomeActionItemsDescription": "آپ کا AI خودکار طور پر آپ کی بات چیت سے کام اور کام نکالے گا۔ وہ بنائے جانے پر یہاں ظاہر ہوں گے۔",
+    "welcomeActionItemsDescription": "آپ کا AI خودکار طور پر آپ کی بات چیت سے کام نکالے گا۔ وہ بنائے جانے پر یہاں ظاہر ہوں گے۔",
     "@welcomeActionItemsDescription": {
         "description": "Description for empty state welcome"
     },
@@ -2038,7 +2038,7 @@
     "@deleteSelected": {
         "description": "Tooltip for delete selected"
     },
-    "searchMemories": "یادوں میں تلاش کریں...",
+    "searchMemories": "یادوں میں تلاش کریں",
     "@searchMemories": {
         "description": "Search input hint text"
     },
@@ -2155,7 +2155,7 @@
     "@editMemory": {
         "description": "Dialog title when editing a memory"
     },
-    "memoryContentHint": "مجھے آئس کریم کھانا پسند ہے...",
+    "memoryContentHint": "مجھے صبح کی میٹنگز پسند ہیں۔",
     "@memoryContentHint": {
         "description": "Input hint"
     },
@@ -2295,7 +2295,7 @@
     "@pleaseSelectReason": {
         "description": "Validation message prompting user to select a reason for their feedback"
     },
-    "tellUsMoreWhatWentWrong": "ہمیں مزید بتائیں کہ کیا غلط ہوا...",
+    "tellUsMoreWhatWentWrong": "ہمیں مزید بتائیں کہ کیا غلط ہوا…",
     "@tellUsMoreWhatWentWrong": {
         "description": "Hint text for feedback textarea asking user to provide more details"
     },
@@ -2376,7 +2376,7 @@
     "@exportButton": {
         "description": "Export button text"
     },
-    "actionItemsCopiedToClipboard": "کارروائی کی چیزیں کلپ بورڈ پر کاپی ہو گئیں",
+    "actionItemsCopiedToClipboard": "کام کلپ بورڈ پر کاپی ہو گئے",
     "@actionItemsCopiedToClipboard": {
         "description": "Success message when action items are copied"
     },
@@ -2592,7 +2592,7 @@
     "@debugLogCleared": {
         "description": "Confirmation message after clearing debug logs"
     },
-    "exportStartedMessage": "برائے شروع ہو گیا۔ یہ کچھ سیکنڈ لگ سکتے ہیں...",
+    "exportStartedMessage": "برائے شروع ہو گیا۔ یہ کچھ سیکنڈ لگ سکتے ہیں…",
     "@exportStartedMessage": {
         "description": "Snackbar message when export starts"
     },
@@ -2635,10 +2635,6 @@
     "@claudeDesktop": {
         "description": "Claude Desktop integration section"
     },
-    "addToClaudeDesktopConfig": "claude_desktop_config.json میں شامل کریں",
-    "@addToClaudeDesktopConfig": {
-        "description": "Description for Claude Desktop config"
-    },
     "@configCopiedToClipboard": {
         "description": "Confirmation when config is copied"
     },
@@ -2672,10 +2668,6 @@
     },
     "@clientSecret": {
         "description": "OAuth client secret label"
-    },
-    "useYourMcpApiKey": "اپنی MCP API کلید استعمال کریں",
-    "@useYourMcpApiKey": {
-        "description": "Hint for client secret value"
     },
     "@webhooks": {
         "description": "Webhooks section header"
@@ -2744,7 +2736,7 @@
     "@trackPersonalGoalsOnHomepage": {
         "description": "Description for goal tracker"
     },
-    "actionItemDescriptionCannotBeEmpty": "کارروائی کی چیز کی تفصیل خالی نہیں ہو سکتی",
+    "actionItemDescriptionCannotBeEmpty": "کام کی تفصیل خالی نہیں ہو سکتی",
     "@actionItemDescriptionCannotBeEmpty": {
         "description": "Error message when action item description is empty"
     },
@@ -2861,7 +2853,7 @@
     "@resetToDefault": {
         "description": "Reset keyboard shortcut to default value"
     },
-    "pressKeys": "کلیدیں دبائیں...",
+    "pressKeys": "کلیدیں دبائیں…",
     "@pressKeys": {
         "description": "Placeholder text when recording keyboard shortcut"
     },
@@ -2881,7 +2873,7 @@
     "@search": {
         "description": "Search button and label"
     },
-    "searchPlaceholder": "تلاش کریں...",
+    "searchPlaceholder": "تلاش کریں",
     "@searchPlaceholder": {
         "description": "Search input placeholder text"
     },
@@ -2951,10 +2943,6 @@
     "@reviewAndManageConversations": {
         "description": "Subtitle explaining what users can do on conversations page"
     },
-    "startCapturingConversations": "اپنے Omi ڈیوائس کے ساتھ بات چیتوں کو پکڑنا شروع کریں تاکہ انہیں یہاں دیکھ سکیں۔",
-    "@startCapturingConversations": {
-        "description": "Message explaining how to get started with conversations"
-    },
     "useMobileAppToCapture": "آڈیو پکڑنے کے لیے اپنی موبائل ایپ استعمال کریں",
     "@useMobileAppToCapture": {
         "description": "Tip about using mobile app for audio capture"
@@ -2987,7 +2975,7 @@
     "@searchResults": {
         "description": "Badge label for search results section"
     },
-    "actionItems": "کارروائی کی چیزیں",
+    "actionItems": "کام",
     "@actionItems": {
         "description": "Section header for action items"
     },
@@ -3007,7 +2995,7 @@
     "@tasksLater": {
         "description": "Category label for tasks due later"
     },
-    "loadingTasks": "کام لوڈ ہو رہے ہیں...",
+    "loadingTasks": "کام لوڈ ہو رہے ہیں…",
     "@loadingTasks": {
         "description": "Message shown while tasks are being loaded"
     },
@@ -3087,30 +3075,30 @@
     "@timeAM": {
         "description": "AM time indicator"
     },
-    "actionItemUpdatedSuccessfully": "کارروائی کی چیز کامیابی سے اپ ڈیٹ ہو گئی",
+    "actionItemUpdatedSuccessfully": "کام کامیابی سے اپ ڈیٹ ہو گیا",
     "@actionItemUpdatedSuccessfully": {
         "description": "Success message when action item is updated"
     },
-    "actionItemCreatedSuccessfully": "کارروائی کی چیز کامیابی سے بنائی گئی",
+    "actionItemCreatedSuccessfully": "کام کامیابی سے بنایا گیا",
     "@actionItemCreatedSuccessfully": {
         "description": "Success message when action item is created"
     },
-    "actionItemDeletedSuccessfully": "کارروائی کی چیز کامیابی سے حذف ہو گئی",
+    "actionItemDeletedSuccessfully": "کام کامیابی سے حذف ہو گیا",
     "@actionItemDeletedSuccessfully": {
         "description": "Success message when action item is deleted"
     },
-    "deleteActionItem": "کارروائی کی چیز حذف کریں",
+    "deleteActionItem": "کام حذف کریں",
     "@deleteActionItem": {
         "description": "Dialog title for delete confirmation"
     },
-    "deleteActionItemConfirmation": "کیا آپ اس کارروائی کی چیز کو حذف کرنا چاہتے ہیں؟ یہ کارروائی واپس نہیں کی جا سکتی۔",
+    "deleteActionItemConfirmation": "کیا آپ اس کام کو حذف کرنا چاہتے ہیں؟ یہ کارروائی واپس نہیں کی جا سکتی۔",
     "@deleteActionItemConfirmation": {
         "description": "Confirmation message for deleting action item"
     },
     "@description": {
         "description": "Label for description field"
     },
-    "enterActionItemDescription": "کارروائی کی چیز کی تفصیل درج کریں...",
+    "enterActionItemDescription": "کام کی تفصیل درج کریں",
     "@enterActionItemDescription": {
         "description": "Placeholder text for action item description field"
     },
@@ -3122,11 +3110,11 @@
     "@setDueDateAndTime": {
         "description": "Placeholder for due date picker button"
     },
-    "reloadingApps": "ایپس دوبارہ لوڈ ہو رہی ہیں...",
+    "reloadingApps": "ایپس دوبارہ لوڈ ہو رہی ہیں…",
     "@reloadingApps": {
         "description": "Loading message shown when reloading apps list"
     },
-    "loadingApps": "ایپس لوڈ ہو رہی ہیں...",
+    "loadingApps": "ایپس لوڈ ہو رہی ہیں…",
     "@loadingApps": {
         "description": "Loading message shown when apps are being loaded"
     },
@@ -3174,11 +3162,11 @@
     "@buildSubmitCustomOmiApp": {
         "description": "Subtitle describing the purpose of the create app page"
     },
-    "submittingYourApp": "اپنی ایپ جمع کی جا رہی ہے...",
+    "submittingYourApp": "اپنی ایپ جمع کی جا رہی ہے…",
     "@submittingYourApp": {
         "description": "Loading message shown while app is being submitted"
     },
-    "preparingFormForYou": "آپ کے لیے فارم تیار کیا جا رہا ہے...",
+    "preparingFormForYou": "آپ کے لیے فارم تیار کیا جا رہا ہے…",
     "@preparingFormForYou": {
         "description": "Loading message shown while form is being prepared"
     },
@@ -3206,7 +3194,7 @@
     "@chatPrompt": {
         "description": "Label for chat prompt text field"
     },
-    "chatPromptPlaceholder": "آپ ایک بہترین ایپ ہیں، آپ کا کام صارف کی سوالات کا جواب دینا اور انہیں خوش محسوس کرانا ہے...",
+    "chatPromptPlaceholder": "آپ ایک بہترین ایپ ہیں، آپ کا کام صارف کی سوالات کا جواب دینا اور انہیں خوش محسوس کرانا ہے…",
     "@chatPromptPlaceholder": {
         "description": "Placeholder text for chat prompt field"
     },
@@ -3214,7 +3202,7 @@
     "@conversationPrompt": {
         "description": "Section title for conversation prompt"
     },
-    "conversationPromptPlaceholder": "آپ ایک بہترین ایپ ہیں، آپ کو بات چیت کا ٹرانسکرپٹ اور خلاصہ دیا جائے گا...",
+    "conversationPromptPlaceholder": "آپ ایک بہترین ایپ ہیں، آپ کو بات چیت کا ٹرانسکرپٹ اور خلاصہ دیا جائے گا…",
     "@conversationPromptPlaceholder": {
         "description": "Placeholder text for conversation prompt field"
     },
@@ -3419,7 +3407,7 @@
     "@pricingPaid": {
         "description": "Paid pricing option"
     },
-    "loadingCapabilities": "صلاحیتیں لوڈ ہو رہی ہیں...",
+    "loadingCapabilities": "صلاحیتیں لوڈ ہو رہی ہیں…",
     "@loadingCapabilities": {
         "description": "Loading state message while fetching app capabilities"
     },
@@ -3609,13 +3597,9 @@
     "@failedToTranscribeAudio": {
         "description": "Error message when audio transcription fails"
     },
-    "transcribing": "ٹرانسکرائب کیا جا رہا ہے...",
+    "transcribing": "ٹرانسکرائب کیا جا رہا ہے…",
     "@transcribing": {
         "description": "Loading message while transcribing audio"
-    },
-    "transcriptionFailed": "ٹرانسکریشن ناکام",
-    "@transcriptionFailed": {
-        "description": "Error message when transcription fails"
     },
     "discardedConversation": "مسترد شدہ بات چیت",
     "@discardedConversation": {
@@ -3629,7 +3613,7 @@
     "@from": {
         "description": "Preposition for time range in conversation"
     },
-    "copied": "کاپی ہو گیا!",
+    "copied": "کاپی ہو گیا",
     "@copied": {
         "description": "Button label after copying link"
     },
@@ -3682,7 +3666,7 @@
     "@failedToGenerateShareLink": {
         "description": "Error when share link generation fails"
     },
-    "reloadingConversations": "بات چیتیں دوبارہ لوڈ ہو رہی ہیں...",
+    "reloadingConversations": "بات چیتیں دوبارہ لوڈ ہو رہی ہیں…",
     "@reloadingConversations": {
         "description": "Loading message when refreshing conversations"
     },
@@ -3766,7 +3750,7 @@
     "@wearableAiCompanion": {
         "description": "Widget subtitle for device promotion"
     },
-    "loadingMemories": "یادیں لوڈ ہو رہی ہیں...",
+    "loadingMemories": "یادیں لوڈ ہو رہی ہیں…",
     "@loadingMemories": {
         "description": "Loading overlay message when reloading memories"
     },
@@ -3785,7 +3769,7 @@
     "@manual": {
         "description": "Filter option for manual memories"
     },
-    "loadingYourMemories": "آپ کی یادیں لوڈ ہو رہی ہیں...",
+    "loadingYourMemories": "آپ کی یادیں لوڈ ہو رہی ہیں…",
     "@loadingYourMemories": {
         "description": "Loading state message"
     },
@@ -3945,7 +3929,7 @@
     "pleaseSelectYourPrimaryLanguage": "براہ کرم اپنی بنیادی زبان منتخب کریں",
     "chooseYourLanguage": "اپنی زبان منتخب کریں",
     "selectPreferredLanguageForBestExperience": "بہترین Omi تجربے کے لیے اپنی پسندیدہ زبان منتخب کریں",
-    "searchLanguages": "زبانوں میں تلاش کریں...",
+    "searchLanguages": "زبانوں میں تلاش کریں",
     "selectALanguage": "کوئی زبان منتخب کریں",
     "tryDifferentSearchTerm": "کوئی مختلف تلاش کی اصطلاح آزمائیں",
     "pleaseEnterYourName": "براہ کرم اپنا نام درج کریں",
@@ -3969,9 +3953,9 @@
     "accessibility": "رسائی",
     "detectBrowserBasedMeetings": "براؤزر پر مبنی میٹنگز کا پتہ لگائیں",
     "accessibilityDescription": "Omi کو جب آپ اپنے براؤزر میں Zoom، Meet، یا Teams میٹنگز میں شامل ہوں تب ان کا پتہ لگانے کے لیے رسائی کی اجازت کی ضرورت ہے۔",
-    "pleaseWait": "براہ کرم انتظار کریں...",
+    "pleaseWait": "براہ کرم انتظار کریں…",
     "joinTheCommunity": "کمیونٹی میں شامل ہوں!",
-    "loadingProfile": "پروفائل لوڈ ہو رہا ہے...",
+    "loadingProfile": "پروفائل لوڈ ہو رہا ہے…",
     "profileSettings": "پروفائل کی ترتیبات",
     "noEmailSet": "کوئی ای میل سیٹ نہیں",
     "userIdCopiedToClipboard": "صارف ID کلپ بورڈ میں کاپی ہو گیا",
@@ -4019,7 +4003,7 @@
     "pilotFeaturesDescription": "یہ خصوصیات ٹیسٹ ہیں اور کوئی معاونت کی ضمانت نہیں ہے۔",
     "suggestFollowUpQuestion": "فالو اپ سوال تجویز کریں",
     "saveSettings": "ترتیبات محفوظ کریں",
-    "syncingDeveloperSettings": "ڈیولپر کی ترتیبات کو ہم آہنگ کیا جا رہا ہے...",
+    "syncingDeveloperSettings": "ڈیولپر کی ترتیبات کو ہم آہنگ کیا جا رہا ہے…",
     "summary": "خلاصہ",
     "auto": "خودکار",
     "noSummaryForApp": "اس ایپ کے لیے کوئی خلاصہ دستیاب نہیں۔ بہتر نتائج کے لیے کوئی اور ایپ آزمائیں۔",
@@ -4049,18 +4033,18 @@
     "letOmiChooseAutomatically": "Omi کو بہترین ایپ خودکار طور پر منتخب کرنے دیں",
     "deleteConversationConfirmation": "کیا آپ واقعی یہ بات چیت حذف کرنا چاہتے ہیں؟ یہ کارنامہ واپس نہیں ہو سکتا۔",
     "conversationDeleted": "بات چیت حذف ہو گئی",
-    "generatingLink": "لنک بنایا جا رہا ہے...",
+    "generatingLink": "لنک بنایا جا رہا ہے…",
     "editConversation": "بات چیت میں ترمیم کریں",
     "conversationLinkCopiedToClipboard": "بات چیت کا لنک کلپ بورڈ میں کاپی ہو گیا",
     "conversationTranscriptCopiedToClipboard": "بات چیت کی نقل کلپ بورڈ میں کاپی ہو گئی",
     "editConversationDialogTitle": "بات چیت میں ترمیم کریں",
     "changeTheConversationTitle": "بات چیت کے عنوان کو تبدیل کریں",
     "conversationTitle": "بات چیت کا عنوان",
-    "enterConversationTitle": "بات چیت کا عنوان درج کریں...",
+    "enterConversationTitle": "بات چیت کا عنوان درج کریں…",
     "conversationTitleUpdatedSuccessfully": "بات چیت کا عنوان کامیابی سے اپ ڈیٹ ہو گیا",
     "failedToUpdateConversationTitle": "بات چیت کے عنوان کو اپ ڈیٹ کرنا ناکام",
     "errorUpdatingConversationTitle": "بات چیت کے عنوان کو اپ ڈیٹ کرتے ہوئے خرابی",
-    "settingUp": "ترتیب دی جا رہی ہے...",
+    "settingUp": "ترتیب دی جا رہی ہے…",
     "@settingUp": {
         "description": "Status message when initializing recording"
     },
@@ -4072,11 +4056,7 @@
     "@preparingSystemAudioCapture": {
         "description": "Status when preparing audio capture"
     },
-    "clickTheButtonToCaptureAudio": "براہ راست نقول، AI کی بصیرت، اور خودکار بچت کے لیے آڈیو کیپچر کرنے کے لیے بٹن پر کلک کریں۔",
-    "@clickTheButtonToCaptureAudio": {
-        "description": "Instructions for starting recording"
-    },
-    "reconnecting": "دوبارہ جڑ رہے ہیں...",
+    "reconnecting": "دوبارہ جڑ رہے ہیں…",
     "@reconnecting": {
         "description": "Status when reconnecting to audio"
     },
@@ -4092,7 +4072,7 @@
     "@startRecording": {
         "description": "Button text to start recording"
     },
-    "resumingInCountdown": "{countdown}s میں دوبارہ شروع ہو رہا ہے...",
+    "resumingInCountdown": "{countdown}s میں دوبارہ شروع ہو رہا ہے…",
     "@resumingInCountdown": {
         "description": "Status when auto-resuming with countdown",
         "placeholders": {
@@ -4105,7 +4085,7 @@
     "@tapPlayToResume": {
         "description": "Instruction when paused"
     },
-    "listeningForAudio": "آڈیو سن رہا ہے...",
+    "listeningForAudio": "آڈیو سن رہا ہے…",
     "@listeningForAudio": {
         "description": "Status when listening for audio"
     },
@@ -4143,15 +4123,11 @@
             }
         }
     },
-    "startRecordingToSeeTranscript": "براہ راست نقل دیکھنے کے لیے ریکارڈنگ شروع کریں",
-    "@startRecordingToSeeTranscript": {
-        "description": "Empty state message for transcript"
-    },
     "paused": "موقوف",
     "@paused": {
         "description": "Recording status: paused"
     },
-    "initializing": "شروع کیا جا رہا ہے...",
+    "initializing": "شروع کیا جا رہا ہے…",
     "@initializing": {
         "description": "Recording status: initializing"
     },
@@ -4176,10 +4152,6 @@
     "@settingUpSystemAudioCapture": {
         "description": "Status when setting up audio capture"
     },
-    "capturingAudioAndGeneratingTranscript": "آڈیو کیپچر اور نقل بنائی جا رہی ہے",
-    "@capturingAudioAndGeneratingTranscript": {
-        "description": "Status when actively recording"
-    },
     "clickToBeginRecordingSystemAudio": "سسٹم آڈیو ریکارڈ کرنا شروع کرنے کے لیے کلک کریں",
     "@clickToBeginRecordingSystemAudio": {
         "description": "Instruction to start system audio recording"
@@ -4197,7 +4169,7 @@
             }
         }
     },
-    "translatedByOmi": "omi نے ترجمہ کیا ہوا",
+    "translatedByOmi": "Omi نے ترجمہ کیا ہوا",
     "@translatedByOmi": {
         "description": "Credit line for translations"
     },
@@ -4235,7 +4207,7 @@
     "@selectAudioInput": {
         "description": "Dropdown header for audio device selection"
     },
-    "loadingDevices": "ڈیوائسز لوڈ ہو رہے ہیں...",
+    "loadingDevices": "ڈیوائسز لوڈ ہو رہے ہیں…",
     "@loadingDevices": {
         "description": "Status when loading audio devices"
     },
@@ -4305,7 +4277,7 @@
     "@signOutQuestion": {
         "description": "Dialog title asking user to confirm sign out"
     },
-    "signOutConfirmation": "کیا آپ واقعی سائن آؤٹ کرنا چاہتے ہیں؟",
+    "signOutConfirmation": "اپنی گفتگو دیکھنے کے لیے آپ کو دوبارہ سائن ان کرنا ہوگا۔ جوڑی گئی ڈیوائس اور ایپ کی ترجیحات اسی فون پر رہیں گی۔",
     "@signOutConfirmation": {
         "description": "Confirmation message in sign out dialog"
     },
@@ -4370,7 +4342,7 @@
     "setConversationEndDescription": "سیٹ کریں کہ بات چیت کب خود ختم ہو",
     "importDataDescription": "دوسری جگہوں سے ڈیٹا درآمد کریں",
     "exportConversationsDescription": "JSON میں بات چیت برآمد کریں",
-    "exportingConversations": "بات چیت برآمد کی جا رہی ہے...",
+    "exportingConversations": "بات چیت برآمد کی جا رہی ہے…",
     "clearNodesDescription": "تمام نوڈس اور تعلقات صاف کریں",
     "deleteKnowledgeGraphQuestion": "علم کا گراف حذف کریں؟",
     "deleteKnowledgeGraphWarning": "یہ تمام حاصل شدہ علم کے گراف کو حذف کرے گا۔ آپ کی اصل یادیں محفوظ رہیں گی۔",
@@ -4458,7 +4430,7 @@
             }
         }
     },
-    "newVersionAvailable": "نیا ورژن دستیاب ہے 🎉",
+    "newVersionAvailable": "نیا ورژن دستیاب ہے",
     "@newVersionAvailable": {
         "description": "Dialog title when a new app version is available"
     },
@@ -4522,7 +4494,7 @@
     "@cancelSubscriptionButton": {
         "description": "Button text to cancel subscription"
     },
-    "cancelling": "منسوخ کیا جا رہا ہے...",
+    "cancelling": "منسوخ کیا جا رہا ہے…",
     "@cancelling": {
         "description": "Loading text while cancelling"
     },
@@ -4681,7 +4653,7 @@
             }
         }
     },
-    "addingToService": "{serviceName} میں شامل کیا جا رہا ہے...",
+    "addingToService": "{serviceName} میں شامل کیا جا رہا ہے…",
     "@addingToService": {
         "description": "Loading message when adding task to a service",
         "placeholders": {
@@ -4742,7 +4714,7 @@
     "@omiApiKeys": {
         "description": "Dialog title for API keys info"
     },
-    "apiKeysDescription": "API کلیدیں تصدیق کے لیے استعمال ہوتی ہیں جب آپ کی ایپ OMI سرور سے بات کرے۔ یہ آپ کی ایپ کو یادوں بنانے اور دوسری OMI خدمات تک محفوظ طریقے سے رسائی حاصل کرنے دیتی ہے۔",
+    "apiKeysDescription": "API کلیدیں تصدیق کے لیے استعمال ہوتی ہیں جب آپ کی ایپ Omi سرور سے بات کرے۔ یہ آپ کی ایپ کو یادوں بنانے اور دوسری Omi خدمات تک محفوظ طریقے سے رسائی حاصل کرنے دیتی ہے۔",
     "@apiKeysDescription": {
         "description": "Description of what API keys are used for"
     },
@@ -5421,7 +5393,7 @@
     "@knowledgeGraphDeletedSuccessfully": {
         "description": "Developer settings - knowledgeGraphDeletedSuccessfully"
     },
-    "exportStartedMayTakeFewSeconds": "برآمدگی شروع ہو گئی۔ اس میں کچھ سیکنڈ لگ سکتے ہیں...",
+    "exportStartedMayTakeFewSeconds": "برآمدگی شروع ہو گئی۔ اس میں کچھ سیکنڈ لگ سکتے ہیں…",
     "@exportStartedMayTakeFewSeconds": {
         "description": "Developer settings - exportStartedMayTakeFewSeconds"
     },
@@ -5429,7 +5401,7 @@
     "@knowledgeGraphDeleteDescription": {
         "description": "Developer settings - knowledgeGraphDeleteDescription"
     },
-    "configureDailySummaryDigest": "اپنے روزانہ کام کی چیزوں کا خلاصہ ترتیب دیں",
+    "configureDailySummaryDigest": "اپنے روزانہ کاموں کا خلاصہ ترتیب دیں",
     "@configureDailySummaryDigest": {
         "description": "Subtitle for Daily Summary menu item in profile settings"
     },
@@ -5755,7 +5727,7 @@
     "@checkingForUpdates": {
         "description": "Title shown while checking for updates"
     },
-    "checkingFirmwareVersion": "فرم وئیئر ورژن چیک کیا جا رہا ہے...",
+    "checkingFirmwareVersion": "فرم وئیئر ورژن چیک کیا جا رہا ہے…",
     "@checkingFirmwareVersion": {
         "description": "Status text while checking firmware version"
     },
@@ -5990,7 +5962,7 @@
     "@showLess": {
         "description": "Text shown to collapse expanded content, with up arrow"
     },
-    "loadingYourRecording": "آپ کی ریکارڈنگ لوڈ ہو رہی ہے...",
+    "loadingYourRecording": "آپ کی ریکارڈنگ لوڈ ہو رہی ہے…",
     "@loadingYourRecording": {
         "description": "Loading message shown while audio waveform is being processed"
     },
@@ -5998,7 +5970,7 @@
     "@photoDiscardedMessage": {
         "description": "Message shown when a photo was discarded as not significant"
     },
-    "analyzing": "تجزیہ کیا جا رہا ہے...",
+    "analyzing": "تجزیہ کیا جا رہا ہے…",
     "@analyzing": {
         "description": "Loading text shown while analyzing a photo"
     },
@@ -6006,7 +5978,7 @@
     "@searchCountries": {
         "description": "Placeholder text for country search field"
     },
-    "checkingAppleWatch": "Apple Watch چیک کیا جا رہا ہے...",
+    "checkingAppleWatch": "Apple Watch چیک کیا جا رہا ہے…",
     "@checkingAppleWatch": {
         "description": "Loading text while checking Apple Watch status"
     },
@@ -6094,7 +6066,7 @@
     "@dontAskAgain": {
         "description": "Checkbox label to not show confirmation dialog again"
     },
-    "waitingForTranscriptOrPhotos": "ٹرانسکرپٹ یا تصاویر کا انتظار کیا جا رہا ہے...",
+    "waitingForTranscriptOrPhotos": "ٹرانسکرپٹ یا تصاویر کا انتظار کیا جا رہا ہے…",
     "@waitingForTranscriptOrPhotos": {
         "description": "Placeholder text shown while waiting for content"
     },
@@ -6256,7 +6228,7 @@
     "@wrappedYouTalkedAbout": {
         "description": "Badge for top categories in Wrapped"
     },
-    "wrappedActionItems": "کام کی چیزیں",
+    "wrappedActionItems": "کام",
     "@wrappedActionItems": {
         "description": "Badge for action items in Wrapped"
     },
@@ -6381,11 +6353,11 @@
     "@wrappedGenerateMyWrapped": {
         "description": "Button text to start generating the 2025 wrapped"
     },
-    "wrappedProcessingDefault": "پروسیس کیا جا رہا ہے...",
+    "wrappedProcessingDefault": "پروسیس کیا جا رہا ہے…",
     "@wrappedProcessingDefault": {
         "description": "Default processing status text"
     },
-    "wrappedCreatingYourStory": "آپ کی\n2025 کی کہانی بنائی جا رہی ہے...",
+    "wrappedCreatingYourStory": "آپ کی\n2025 کی کہانی بنائی جا رہی ہے…",
     "@wrappedCreatingYourStory": {
         "description": "Text shown while generating the wrapped, includes newline"
     },
@@ -6425,7 +6397,7 @@
     "@wrappedFailedToStartGeneration": {
         "description": "Error message when generation fails to start"
     },
-    "wrappedStarting": "شروع ہو رہا ہے...",
+    "wrappedStarting": "شروع ہو رہا ہے…",
     "@wrappedStarting": {
         "description": "Initial processing step text"
     },
@@ -6697,15 +6669,15 @@
     "@somethingWentWrongTryAgain": {
         "description": "Generic error message shown in snackbar when an error occurs"
     },
-    "uploadingVoiceProfile": "آپ کا وائس پروفائل اپ لوڈ کیا جا رہا ہے....",
+    "uploadingVoiceProfile": "آپ کا وائس پروفائل اپ لوڈ کیا جا رہا ہے….",
     "@uploadingVoiceProfile": {
         "description": "Loading message shown while uploading voice profile"
     },
-    "memorizingYourVoice": "آپ کی آواز یاد کی جا رہی ہے...",
+    "memorizingYourVoice": "آپ کی آواز یاد کی جا رہی ہے…",
     "@memorizingYourVoice": {
         "description": "Loading message shown while processing voice profile"
     },
-    "personalizingExperience": "آپ کے تجربے کو ذاتی بنایا جا رہا ہے...",
+    "personalizingExperience": "آپ کے تجربے کو ذاتی بنایا جا رہا ہے…",
     "@personalizingExperience": {
         "description": "Loading message shown while personalizing user experience"
     },
@@ -6876,7 +6848,7 @@
     "@clearChatQuestion": {
         "description": "Dialog title asking to clear chat"
     },
-    "syncingMessages": "سرور کے ساتھ پیغامات کو ہم آہنگ کیا جا رہا ہے...",
+    "syncingMessages": "سرور کے ساتھ پیغامات کو ہم آہنگ کیا جا رہا ہے…",
     "@syncingMessages": {
         "description": "Loading text when syncing messages"
     },
@@ -7112,11 +7084,11 @@
             }
         }
     },
-    "summarizingConversation": "بات چیت کو خلاصہ کیا جا رہا ہے...\nاس میں چند سیکنڈ لگ سکتے ہیں",
+    "summarizingConversation": "بات چیت کو خلاصہ کیا جا رہا ہے…\nاس میں چند سیکنڈ لگ سکتے ہیں",
     "@summarizingConversation": {
         "description": "Loading text while summarizing a conversation"
     },
-    "resummarizingConversation": "بات چیت کو دوبارہ خلاصہ کیا جا رہا ہے...\nاس میں چند سیکنڈ لگ سکتے ہیں",
+    "resummarizingConversation": "بات چیت کو دوبارہ خلاصہ کیا جا رہا ہے…\nاس میں چند سیکنڈ لگ سکتے ہیں",
     "@resummarizingConversation": {
         "description": "Loading text while re-summarizing a conversation"
     },
@@ -7295,7 +7267,7 @@
     "@doNotCloseApp": {
         "description": "Warning during download"
     },
-    "downloading": "ڈاؤن لوڈ کیا جا رہا ہے...",
+    "downloading": "ڈاؤن لوڈ کیا جا رہا ہے…",
     "@downloading": {
         "description": "Status during download"
     },
@@ -7414,7 +7386,7 @@
             }
         }
     },
-    "preparingModel": "{model} تیار کیا جا رہا ہے...",
+    "preparingModel": "{model} تیار کیا جا رہا ہے…",
     "@preparingModel": {
         "description": "Status when preparing model",
         "placeholders": {
@@ -7462,7 +7434,7 @@
     "@useTemplateFrom": {
         "description": "Label for template selector"
     },
-    "selectProviderTemplate": "ایک فراہم کنندہ ٹیمپلیٹ منتخب کریں...",
+    "selectProviderTemplate": "ایک فراہم کنندہ ٹیمپلیٹ منتخب کریں…",
     "@selectProviderTemplate": {
         "description": "Placeholder for template dropdown"
     },
@@ -7736,7 +7708,7 @@
     "@signUpSuccess": {
         "description": "Success message after signing up"
     },
-    "loadingKnowledgeGraph": "Knowledge Graph لوڈ کیا جا رہا ہے...",
+    "loadingKnowledgeGraph": "Knowledge Graph لوڈ کیا جا رہا ہے…",
     "@loadingKnowledgeGraph": {
         "description": "Loading text for knowledge graph"
     },
@@ -7744,7 +7716,7 @@
     "@noKnowledgeGraphYet": {
         "description": "Title when knowledge graph is empty"
     },
-    "buildingKnowledgeGraphFromMemories": "یادوں سے آپ کا knowledge graph بنایا جا رہا ہے...",
+    "buildingKnowledgeGraphFromMemories": "یادوں سے آپ کا knowledge graph بنایا جا رہا ہے…",
     "@buildingKnowledgeGraphFromMemories": {
         "description": "Message while building knowledge graph"
     },
@@ -7764,7 +7736,7 @@
     "@getButton": {
         "description": "Button text to get/install an app"
     },
-    "openingApp": "{appName} کھولا جا رہا ہے...",
+    "openingApp": "{appName} کھولا جا رہا ہے…",
     "@openingApp": {
         "description": "Snackbar message when opening an app",
         "placeholders": {
@@ -7814,7 +7786,7 @@
     "@moneyEarned": {
         "description": "Label for money earned from app"
     },
-    "writeYourReply": "اپنا جواب لکھیں...",
+    "writeYourReply": "اپنا جواب لکھیں…",
     "@writeYourReply": {
         "description": "Hint text for reply input field"
     },
@@ -7953,7 +7925,7 @@
     "@selectContactsToShareSummary": {
         "description": "Subtitle for share to contacts sheet"
     },
-    "searchContactsHint": "رابطے تلاش کریں...",
+    "searchContactsHint": "رابطے تلاش کریں",
     "@searchContactsHint": {
         "description": "Hint text for contacts search field"
     },
@@ -8092,7 +8064,7 @@
             }
         }
     },
-    "transferring": "منتقل کیا جا رہا ہے...",
+    "transferring": "منتقل کیا جا رہا ہے…",
     "@transferring": {
         "description": "Status text shown during file transfer"
     },
@@ -8124,7 +8096,7 @@
     "@recordingInfo": {
         "description": "Menu item to view recording information"
     },
-    "transferInProgress": "ٹرانسفر جاری ہے...",
+    "transferInProgress": "ٹرانسفر جاری ہے…",
     "@transferInProgress": {
         "description": "Menu item text when transfer is ongoing"
     },
@@ -8282,7 +8254,7 @@
     "@errorUpdatingAppStatus": {
         "description": "Error message when updating app status fails"
     },
-    "calculatingETA": "شمار ہو رہا ہے...",
+    "calculatingETA": "شمار ہو رہا ہے…",
     "@calculatingETA": {
         "description": "Migration ETA calculation in progress message"
     },
@@ -8299,19 +8271,19 @@
     "@aboutAMinuteRemaining": {
         "description": "Migration time remaining is about a minute"
     },
-    "almostDone": "تقریباً ختم ہو گیا...",
+    "almostDone": "تقریباً ختم ہو گیا…",
     "@almostDone": {
         "description": "Migration is almost complete"
     },
-    "omiSays": "omi کہتا ہے",
+    "omiSays": "Omi کہتا ہے",
     "@omiSays": {
         "description": "Notification title for omi app messages"
     },
-    "analyzingYourData": "آپ کے ڈیٹا کا تجزیہ جاری ہے...",
+    "analyzingYourData": "آپ کے ڈیٹا کا تجزیہ جاری ہے…",
     "@analyzingYourData": {
         "description": "Migration start message when analyzing data"
     },
-    "migratingToProtection": "{level} حفاظت میں منتقل کیا جا رہا ہے...",
+    "migratingToProtection": "{level} حفاظت میں منتقل کیا جا رہا ہے…",
     "@migratingToProtection": {
         "description": "Notification body when migration starts",
         "placeholders": {
@@ -8320,11 +8292,11 @@
             }
         }
     },
-    "noDataToMigrateFinalizing": "منتقل کرنے کے لیے کوئی ڈیٹا نہیں۔ حتمی کیا جا رہا ہے...",
+    "noDataToMigrateFinalizing": "منتقل کرنے کے لیے کوئی ڈیٹا نہیں۔ حتمی کیا جا رہا ہے…",
     "@noDataToMigrateFinalizing": {
         "description": "Migration message when no data needs to be migrated"
     },
-    "migratingItemsProgress": "{itemType} منتقل کیا جا رہا ہے... {percentage}%",
+    "migratingItemsProgress": "{itemType} منتقل کیا جا رہا ہے… {percentage}%",
     "@migratingItemsProgress": {
         "description": "Migration progress message with item type and percentage",
         "placeholders": {
@@ -8336,7 +8308,7 @@
             }
         }
     },
-    "allObjectsMigratedFinalizing": "تمام اشیاء منتقل کر دی گئی ہیں۔ حتمی کیا جا رہا ہے...",
+    "allObjectsMigratedFinalizing": "تمام اشیاء منتقل کر دی گئی ہیں۔ حتمی کیا جا رہا ہے…",
     "@allObjectsMigratedFinalizing": {
         "description": "Migration message when all objects have been migrated"
     },
@@ -8385,7 +8357,7 @@
     "@templateName": {
         "description": "Label for template name field"
     },
-    "templateNameHint": "مثال کے طور پر، میٹنگ ایکشن آئٹمز نکالنے والا",
+    "templateNameHint": "مثال کے طور پر، میٹنگ کام نکالنے والا",
     "@templateNameHint": {
         "description": "Hint text for template name field"
     },
@@ -8393,7 +8365,7 @@
     "@nameMustBeAtLeast3Characters": {
         "description": "Validation error when name is too short"
     },
-    "conversationPromptHint": "مثال کے طور پر، فراہم کردہ بات چیت سے ایکشن آئٹمز، فیصلے، اور اہم نکات نکالیں۔",
+    "conversationPromptHint": "مثال کے طور پر، فراہم کردہ بات چیت سے کام، فیصلے، اور اہم نکات نکالیں۔",
     "@conversationPromptHint": {
         "description": "Hint text for conversation prompt field"
     },
@@ -8413,15 +8385,15 @@
     "@onlyYouCanUseTemplate": {
         "description": "Description when template is private"
     },
-    "generatingDescription": "تفصیل تیار کی جا رہی ہے...",
+    "generatingDescription": "تفصیل تیار کی جا رہی ہے…",
     "@generatingDescription": {
         "description": "Status message during app creation"
     },
-    "creatingAppIcon": "ایپ کا آئکن بنایا جا رہا ہے...",
+    "creatingAppIcon": "ایپ کا آئکن بنایا جا رہا ہے…",
     "@creatingAppIcon": {
         "description": "Status message during app creation"
     },
-    "installingApp": "ایپ انسٹال کی جا رہی ہے...",
+    "installingApp": "ایپ انسٹال کی جا رہی ہے…",
     "@installingApp": {
         "description": "Status message during app creation"
     },
@@ -8600,7 +8572,7 @@
     "@aiGenPleaseEnterDescription": {
         "description": "Validation error when app description is empty in AI app generator"
     },
-    "aiGenCreatingAppIcon": "ایپ کا آئکن بنایا جا رہا ہے...",
+    "aiGenCreatingAppIcon": "ایپ کا آئکن بنایا جا رہا ہے…",
     "@aiGenCreatingAppIcon": {
         "description": "Status message shown while generating app icon"
     },
@@ -8679,7 +8651,7 @@
     "@couldNotLaunchUpgradePage": {
         "description": "Error when upgrade page cannot be launched"
     },
-    "transcriptionJsonPlaceholder": "اپنی JSON ترتیب یہاں پیسٹ کریں...",
+    "transcriptionJsonPlaceholder": "اپنی JSON ترتیب یہاں پیسٹ کریں…",
     "@transcriptionJsonPlaceholder": {
         "description": "JSON configuration placeholder hint text in transcription settings"
     },
@@ -8789,7 +8761,7 @@
     "@onboardingYoureAllSet": {
         "description": "Onboarding step description for completion"
     },
-    "searchTranscriptOrSummary": "ٹرانسکرپٹ یا خلاصہ تلاش کریں...",
+    "searchTranscriptOrSummary": "ٹرانسکرپٹ یا خلاصہ تلاش کریں",
     "@searchTranscriptOrSummary": {
         "description": "Placeholder text for search field in conversation detail page"
     },
@@ -9127,11 +9099,11 @@
     "@msgUploadFileFailed": {
         "description": "Error when file upload fails"
     },
-    "msgReadingMemories": "آپ کی یادوں کو پڑھا جا رہا ہے...",
+    "msgReadingMemories": "آپ کی یادوں کو پڑھا جا رہا ہے…",
     "@msgReadingMemories": {
         "description": "Loading text while reading memories"
     },
-    "msgLearningMemories": "آپ کی یادوں سے سیکھا جا رہا ہے...",
+    "msgLearningMemories": "آپ کی یادوں سے سیکھا جا رہا ہے…",
     "@msgLearningMemories": {
         "description": "Loading text while learning from memories"
     },
@@ -9201,7 +9173,7 @@
             }
         }
     },
-    "conversationNewIndicator": "نیا 🚀",
+    "conversationNewIndicator": "نیا",
     "@conversationNewIndicator": {
         "description": "Indicator shown when a conversation is newly created"
     },
@@ -9214,7 +9186,7 @@
             }
         }
     },
-    "mergingStatus": "ملایا جا رہا ہے...",
+    "mergingStatus": "ملایا جا رہا ہے…",
     "@mergingStatus": {
         "description": "Status indicator shown when conversations are being merged"
     },
@@ -9387,11 +9359,11 @@
     },
     "newFolder": "نیا فولڈر",
     "color": "رنگ",
-    "waitingForDevice": "ڈیوائس کی انتظار ہو رہی ہے...",
+    "waitingForDevice": "ڈیوائس کی انتظار ہو رہی ہے…",
     "@waitingForDevice": {
         "description": "Status message while waiting for device connection"
     },
-    "saySomething": "کچھ کہیں...",
+    "saySomething": "کچھ کہیں…",
     "@saySomething": {
         "description": "Prompt for user to start speaking"
     },
@@ -9443,15 +9415,15 @@
     "downloadAudio": "آڈیو ڈاؤن لوڈ کریں",
     "audioDownloadSuccess": "آڈیو کامیابی سے ڈاؤن لوڈ ہو گیا",
     "audioDownloadFailed": "آڈیو ڈاؤن لوڈ میں ناکام",
-    "downloadingAudio": "آڈیو ڈاؤن لوڈ کیا جا رہا ہے...",
+    "downloadingAudio": "آڈیو ڈاؤن لوڈ کیا جا رہا ہے…",
     "shareAudio": "آڈیو شیئر کریں",
     "preparingAudio": "آڈیو تیار کیا جا رہا ہے",
-    "gettingAudioFiles": "آڈیو فائلیں حاصل کی جا رہی ہیں...",
+    "gettingAudioFiles": "آڈیو فائلیں حاصل کی جا رہی ہیں…",
     "downloadingAudioProgress": "آڈیو ڈاؤن لوڈ کیا جا رہا ہے",
     "processingAudio": "آڈیو پروسیس کیا جا رہا ہے",
-    "combiningAudioFiles": "آڈیو فائلیں ملائی جا رہی ہیں...",
+    "combiningAudioFiles": "آڈیو فائلیں ملائی جا رہی ہیں…",
     "audioReady": "آڈیو تیار ہے",
-    "openingShareSheet": "شیئر شیٹ کھولی جا رہی ہے...",
+    "openingShareSheet": "شیئر شیٹ کھولی جا رہی ہے…",
     "audioShareFailed": "شیئر ناکام",
     "dailyRecaps": "روزانہ خلاصے",
     "removeFilter": "فلٹر ہٹائیں",
@@ -9528,7 +9500,7 @@
         }
     },
     "mcpConnectionFailed": "MCP سرور سے منسلک ہونا ناکام",
-    "authorizingMcpServer": "اختیار دیا جا رہا ہے...",
+    "authorizingMcpServer": "اختیار دیا جا رہا ہے…",
     "whereDidYouHearAboutOmi": "آپ نے ہم سے کہاں سنا؟",
     "tiktok": "TikTok",
     "youtube": "YouTube",
@@ -9631,7 +9603,7 @@
         "description": "Pairing description for Neo One device"
     },
     "downloadingFromDevice": "ڈیوائس سے ڈاؤن لوڈ ہو رہا ہے",
-    "reconnectingToInternet": "انٹرنیٹ سے دوبارہ منسلک ہو رہے ہیں...",
+    "reconnectingToInternet": "انٹرنیٹ سے دوبارہ منسلک ہو رہے ہیں…",
     "uploadingToCloud": "{current} میں سے {total} اپ لوڈ ہو رہے ہیں",
     "@uploadingToCloud": {
         "placeholders": {
@@ -9643,8 +9615,8 @@
             }
         }
     },
-    "processingOnServer": "سرور پر پروسیس ہو رہا ہے...",
-    "processingOnServerProgress": "پروسیس ہو رہا ہے... {current}/{total} حصے",
+    "processingOnServer": "سرور پر پروسیس ہو رہا ہے…",
+    "processingOnServerProgress": "پروسیس ہو رہا ہے… {current}/{total} حصے",
     "@processingOnServerProgress": {
         "placeholders": {
             "current": {
@@ -9789,7 +9761,7 @@
     "answerTheCallFrom": "سے آنے والی کال کا جواب دیں",
     "onTheCallEnterThisCode": "کال پر یہ کوڈ درج کریں",
     "followTheVoiceInstructions": "آواز کی ہدایات پر عمل کریں",
-    "statusCalling": "کال ہو رہی ہے...",
+    "statusCalling": "کال ہو رہی ہے…",
     "statusCallInProgress": "کال جاری ہے",
     "statusVerifiedLabel": "تصدیق شدہ",
     "statusCallMissed": "کال مسڑ ہو گئی",
@@ -9804,11 +9776,11 @@
     "phoneNoContactsFound": "کوئی رابطہ نہیں ملا",
     "phoneEnterNumber": "نمبر درج کریں",
     "failedToStartCall": "کال شروع کرنا ناکام",
-    "callStateConnecting": "منسلک ہو رہے ہیں...",
-    "callStateRinging": "بجائی جا رہی ہے...",
+    "callStateConnecting": "منسلک ہو رہے ہیں…",
+    "callStateRinging": "بجائی جا رہی ہے…",
     "callStateEnded": "کال ختم ہو گئی",
     "callStateFailed": "کال ناکام",
-    "transcriptPlaceholder": "نسخہ یہاں ظاہر ہوگا...",
+    "transcriptPlaceholder": "نسخہ یہاں ظاہر ہوگا…",
     "phoneUnmute": "آواز کھولیں",
     "phoneMute": "خاموش کریں",
     "phoneSpeaker": "اسپیکر",
@@ -9887,7 +9859,7 @@
     "@phoneCallsUpsellFeature1": {
         "description": "Phone calls upsell feature 1"
     },
-    "phoneCallsUpsellFeature2": "خودکار کال خلاصے اور ایکشن آئٹمز",
+    "phoneCallsUpsellFeature2": "خودکار کال خلاصے اور کام",
     "@phoneCallsUpsellFeature2": {
         "description": "Phone calls upsell feature 2"
     },
@@ -10032,7 +10004,7 @@
         }
     },
     "transcriptionPaused": "ریکارڈ ہو رہا ہے، دوبارہ منسلک ہو رہے ہیں",
-    "transcriptionPausedReconnecting": "ابھی ریکارڈ ہو رہا ہے — نقل سے دوبارہ منسلک ہو رہے ہیں...",
+    "transcriptionPausedReconnecting": "ابھی ریکارڈ ہو رہا ہے — نقل سے دوبارہ منسلک ہو رہے ہیں…",
     "fairUseBannerStatus": "منصفانہ استعمال: {status}",
     "@fairUseBannerStatus": {
         "placeholders": {
@@ -10213,7 +10185,7 @@
     "@tellUsMore": {
         "description": "Label for optional details text field"
     },
-    "cancelReasonDetailHint": "ہم کسی بھی رائے کی تعریف کرتے ہیں...",
+    "cancelReasonDetailHint": "ہم کسی بھی رائے کی تعریف کرتے ہیں…",
     "@cancelReasonDetailHint": {
         "description": "Hint for cancel reason detail text field"
     },
@@ -10321,10 +10293,10 @@
     "disconnectHistory": "ڈسکنیکٹ کی تاریخ",
     "noDisconnectsRecorded": "کوئی ڈسکنیکٹ ریکارڈ نہیں ہوا",
     "diagnostics": "تشخیص",
-    "waitingForData": "ڈیٹا کے انتظار میں...",
+    "waitingForData": "ڈیٹا کے انتظار میں…",
     "liveRssiOverTime": "وقت کے ساتھ RSSI کی زندگی",
     "noRssiDataYet": "ابھی کوئی RSSI ڈیٹا نہیں",
-    "collectingData": "ڈیٹا جمع ہو رہا ہے...",
+    "collectingData": "ڈیٹا جمع ہو رہا ہے…",
     "cleanDisconnect": "صاف ڈسکنیکٹ",
     "connectionTimeout": "منسلکی ختم ہو گئی",
     "remoteDeviceTerminated": "دور ڈیوائس ختم ہو گیا",
@@ -10376,7 +10348,7 @@
     "@stableFirmware": {
         "description": "Title for the stable firmware rollback page"
     },
-    "fetchingStableFirmware": "تازہ ترین مستحکم فرم ویئر حاصل ہو رہا ہے...",
+    "fetchingStableFirmware": "تازہ ترین مستحکم فرم ویئر حاصل ہو رہا ہے…",
     "@fetchingStableFirmware": {
         "description": "Loading text while fetching stable firmware version"
     },
@@ -10404,11 +10376,11 @@
     "enableLocationTitle": "مقام فعال کریں",
     "enableLocationDescription": "قریبی بلیو ٹوتھ ڈیوائسز تلاش کرنے کے لیے مقام کی اجازت ضروری ہے۔",
     "voiceRecordingFound": "ریکارڈنگ ملی",
-    "transcriptionConnecting": "نقل منسلک ہو رہی ہے...",
+    "transcriptionConnecting": "نقل منسلک ہو رہی ہے…",
     "@transcriptionConnecting": {
         "description": "Status when transcription WebSocket is connecting"
     },
-    "transcriptionReconnecting": "نقل دوبارہ منسلک ہو رہی ہے...",
+    "transcriptionReconnecting": "نقل دوبارہ منسلک ہو رہی ہے…",
     "@transcriptionReconnecting": {
         "description": "Status when transcription WebSocket is reconnecting"
     },
@@ -10463,10 +10435,6 @@
     "planUpdate": "پلان اپ ڈیٹ",
     "@planUpdate": {
         "description": "Header for plan deprecation notice"
-    },
-    "planDeprecationMessage": "آپ کا Unlimited پلان ختم کیا جا رہا ہے۔ Operator پلان پر سوئچ کریں — وہی شاندار فیچرز $49/ماہ پر۔ آپ کا موجودہ پلان اس دوران کام کرتا رہے گا۔",
-    "@planDeprecationMessage": {
-        "description": "Deprecation notice for legacy Unlimited subscribers"
     },
     "upgradeYourPlan": "اپنا پلان اپ گریڈ کریں",
     "@upgradeYourPlan": {
@@ -10534,7 +10502,7 @@
     "connectTaskAppToExport": "ایکسپورٹ کے لیے ترتیبات میں ٹاسک ایپ جوڑیں",
     "deselectAllTasksMenu": "تمام کا انتخاب ختم کریں",
     "hideCompletedTasks": "مکمل شدہ چھپائیں",
-    "searchActionItems": "ایکشن آئٹمز تلاش کریں",
+    "searchActionItems": "کام تلاش کریں",
     "selectActionItems": "متعدد منتخب کریں",
     "selectAllTasksMenu": "سب منتخب کریں",
     "showCompletedTasks": "مکمل شدہ دکھائیں",
@@ -10624,11 +10592,11 @@
     "deviceOnboardingTranscriptionTitle": "اپنے Omi سے بولیں",
     "deviceOnboardingTranscriptionSubtitle": "چند الفاظ کہیں اور انہیں فوری طور پر نمودار ہوتے دیکھیں",
     "deviceOnboardingGoodJob": "شاباش!",
-    "deviceOnboardingStartSpeaking": "بولنا شروع کریں...",
+    "deviceOnboardingStartSpeaking": "بولنا شروع کریں…",
     "deviceOnboardingAskQuestionTitle": "Omi سے سوال پوچھیں",
     "deviceOnboardingAskQuestionSubtitle": "بٹن ایک بار دبائیں، اپنا سوال بولیں، اور مکمل ہونے پر دوبارہ دبائیں",
-    "deviceOnboardingProcessingQuestion": "آپ کے سوال پر کارروائی ہو رہی ہے...",
-    "deviceOnboardingListening": "سن رہا ہوں...",
+    "deviceOnboardingProcessingQuestion": "آپ کے سوال پر کارروائی ہو رہی ہے…",
+    "deviceOnboardingListening": "سن رہا ہوں…",
     "deviceOnboardingTurnOffTitle": "بند کریں",
     "deviceOnboardingTurnOnTitle": "آن کریں",
     "deviceOnboardingTurnOffSubtitle": "بٹن کو 3 سیکنڈ تک دبائے رکھیں",
@@ -10637,7 +10605,7 @@
     "deviceOnboardingStatusConnected": "منسلک",
     "deviceOnboardingStatusConnectedDone": "منسلک ہو گیا!",
     "deviceOnboardingStatusDisconnected": "منقطع",
-    "deviceOnboardingStatusTurningOff": "بند ہو رہا ہے...",
+    "deviceOnboardingStatusTurningOff": "بند ہو رہا ہے…",
     "deviceOnboardingDoubleTapTitle": "ڈبل ٹیپ حسبِ ضرورت ترتیب دیں",
     "deviceOnboardingEndConversation": "گفتگو ختم کریں",
     "deviceOnboardingEndConversationDesc": "موجودہ گفتگو محفوظ کر کے ختم کریں",
@@ -10730,7 +10698,7 @@
     "onDeviceModelSize": "ماڈل کا سائز",
     "onDeviceTranscription": "ڈیوائس پر ٹرانسکرپشن",
     "onDeviceTranscriptionDesc": "ٹرانسکرپشن آپ کی ڈیوائس پر مقامی طور پر ہوتی ہے",
-    "searchSettings": "ترتیبات تلاش کریں…",
+    "searchSettings": "ترتیبات تلاش کریں",
     "speechToTextProvider": "آواز سے متن کا فراہم کنندہ",
     "speechToTextProviderDesc": "ٹرانسکرپشن کے لیے استعمال ہونے والی سروس منتخب کریں",
     "sttFilterAuto": "خودکار",
@@ -10822,7 +10790,7 @@
     "@memoryHistory": {
         "description": "Filter option for retained memory history"
     },
-    "tapPlusToStartRecording": "ریکارڈنگ شروع کرنے کے لیے + پر ٹیپ کریں",
+    "tapPlusToStartRecording": "ریکارڈنگ شروع کرنے کے لیے ریکارڈ بٹن پر ٹیپ کریں",
     "processingTakingLonger": "ابھی کام جاری ہے — اس میں معمول سے زیادہ وقت لگ رہا ہے۔",
     "speechProfileEnrollmentPrompt": "تاکہ Omi آپ کی آواز پہچان سکے — کسی بھی موضوع پر تقریباً 5 سیکنڈ بات کریں۔",
     "home": "ہوم",
@@ -10833,9 +10801,316 @@
     "moreOptions": "مزید اختیارات",
     "filterByDate": "تاریخ کے مطابق فلٹر کریں",
     "memoryGraph": "یادداشت کا گراف",
-    "voiceIntroduction": "{part, select, title{Let Omi get to know you} intro{Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.} hint{Say the whole sentence and finish it in your own words.} name{My name is ___, and I spend most of my time ___.} work{Right now, I am working on ___.} enjoy{Outside of that, I really enjoy ___.} food{My favorite food is ___.} remember{Something I would like help remembering is ___.} day{A good day for me includes ___.} another{Try another prompt} start{Start speaking} skipPrompt{Skip this prompt} captured{Voice sample captured} silence{Take your time. Speak toward your phone microphone.} audio{Audio detected} review{Here is what I heard} reviewHint{Edit or uncheck anything below. Personal details become memories; your goal is saved separately.} saveVoice{Save voice profile} savingVoice{Saving your voice profile…} savedVoice{Voice profile saved} voiceLater{Set up my voice later} keep{Save selected answers} without{Continue without saving answers} savedMemories{Your memories are saved} short{We need a little more audio. Add one more sentence; your earlier answers are safe.} addSample{Add another sentence} uploadError{Your voice profile could not be saved. Retry with the same recording, or set it up later.} memoryError{Some answers could not be saved. Saved items are safe; retry to save the rest.} transcriptionError{We could not transcribe that answer. Retry, keep speaking, or skip this prompt.} noMemories{You can tell Omi more about yourself whenever you like.} voiceOnlyHint{You can skip any personal prompt and talk about something else.} goalPrompt{Right now my number one goal is to ___.} savedGoal{Your goal is saved} goalError{Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.} goalLong{Shorten your goal to 500 characters or fewer, then try again.} voiceUnavailable{Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.} saveFinish{Save and finish} retryRemaining{Retry remaining} saveHint{Saves your voice profile and checked answers.} savedAll{Your introduction is saved.} continueSaved{Continue with what is saved} reviewAnswers{Review answers} originalGoal{Use original wording} savingAnswers{Saving your answers…} other{}}",
+    "voiceIntroduction": "{part, select, title{Let Omi get to know you} intro{Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.} hint{Say the whole sentence and finish it in your own words.} name{My name is ___, and I spend most of my time ___.} work{Right now, I am working on ___.} enjoy{Outside of that, I really enjoy ___.} food{My favorite food is ___.} remember{Something I would like help remembering is ___.} day{A good day for me includes ___.} another{Try another prompt} start{Start speaking} skipPrompt{Skip Question} captured{Voice sample captured} silence{Take your time. Speak toward your phone microphone.} audio{Audio detected} review{Here is what I heard} reviewHint{Edit or uncheck anything below. Personal details become memories; your goal is saved separately.} saveVoice{Save voice profile} savingVoice{Saving your voice profile…} savedVoice{Voice profile saved} voiceLater{Set up my voice later} keep{Save selected answers} without{Continue without saving answers} savedMemories{Your memories are saved} short{We need a little more audio. Add one more sentence; your earlier answers are safe.} addSample{Add another sentence} uploadError{Your voice profile could not be saved. Retry with the same recording, or set it up later.} memoryError{Some answers could not be saved. Saved items are safe; retry to save the rest.} transcriptionError{We could not transcribe that answer. Try again, keep speaking, or skip this question.} noMemories{You can tell Omi more about yourself whenever you like.} voiceOnlyHint{You can skip any personal prompt and talk about something else.} goalPrompt{Right now my number one goal is to ___.} savedGoal{Your goal is saved} goalError{Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.} goalLong{Shorten your goal to 500 characters or fewer, then try again.} voiceUnavailable{Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.} saveFinish{Save and finish} retryRemaining{Retry remaining} saveHint{Saves your voice profile and checked answers.} savedAll{Your introduction is saved.} continueSaved{Continue with what is saved} reviewAnswers{Review answers} originalGoal{Use original wording} savingAnswers{Saving your answers…} other{}}",
     "voiceRecognitionStatus": "{status, select, ready{آواز شناخت کے لیے تیار ہے} saved_sample_awaiting_embedding{نمونہ محفوظ ہے؛ آواز کی پروسیسنگ ابھی درکار ہے} not_learned{آواز سیکھی نہیں گئی} other{آواز کی حالت نامعلوم ہے}}",
     "tagSpeakerIncludingLaterSpeech": "اس اسپیکر کی بعد کی گفتگو بھی ٹیگ کریں",
     "updateSummaryWithNewNames": "نئے ناموں کے ساتھ خلاصہ اپ ڈیٹ کریں",
-    "syncStatusUnsupportedAudio": "آڈیو پڑھی نہیں جا سکی — سنک نہیں ہو سکتی"
+    "syncStatusUnsupportedAudio": "آڈیو پڑھی نہیں جا سکی — سنک نہیں ہو سکتی",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess",
+    "chatStarterPrompt": "{kind, select, capabilities{تم میرے لیے کیا کر سکتے ہو؟} goal{مجھے ایک مقصد طے کرنے میں مدد کرو} activity{میری حالیہ سرگرمیوں کا خلاصہ دو} improve{میں کیسے بہتر ہو سکتا ہوں؟} other{}}",
+    "nextWeek": "اگلے ہفتے",
+    "clearSearch": "تلاش صاف کریں",
+    "audioUploadFailedKeptLocal": "اپ لوڈ ناکام ہو گیا — {duration} کا آڈیو آپ کے فون پر محفوظ ہے۔",
+    "audioUploadFailedTapRetry": "اپ لوڈ ناکام ہو گیا — {duration} کا آڈیو آپ کے فون پر محفوظ ہے۔ دوبارہ کوشش کرنے کے لیے تھپتھپائیں۔",
+    "audioUploadRetrying": "اپ لوڈ دوبارہ کیا جا رہا ہے… {duration} کا آڈیو آپ کے فون پر محفوظ ہے",
+    "capturing": "کیپچر ہو رہا ہے",
+    "capturingPhotos": "تصاویر کیپچر ہو رہی ہیں",
+    "listeningTranscriptWillAppear": "سن رہے ہیں… ٹرانسکرپٹ یہاں ظاہر ہوگا۔",
+    "recordingOfflineTranscriptWillCatchUp": "آف لائن ریکارڈنگ — آپ کے دوبارہ آن لائن آنے پر ٹرانسکرپٹ اپ ڈیٹ ہو جائے گا۔",
+    "transcriptionUnavailableRecordingSaved": "ٹرانسکرپشن دستیاب نہیں — ریکارڈنگ جاری ہے اور آپ کا آڈیو محفوظ ہو رہا ہے۔",
+    "uploadingAudioForTranscription": "ٹرانسکرپشن کے لیے {duration} کا آڈیو اپ لوڈ ہو رہا ہے…",
+    "filterBySpeaker": "بولنے والے کے لحاظ سے فلٹر کریں",
+    "notNow": "ابھی نہیں",
+    "discard": "رد کریں",
+    "keepEditing": "ترمیم جاری رکھیں",
+    "discardChangesTitle": "تبدیلیاں رد کریں؟",
+    "discardChangesMessage": "آپ کی غیر محفوظ شدہ تبدیلیاں ضائع ہو جائیں گی۔",
+    "pause": "روکیں",
+    "deleteConversationsTitle": "{count, plural, =1{1 گفتگو حذف کریں؟} other{{count} گفتگوئیں حذف کریں؟}}",
+    "deleteConversationsMessage": "اس سے ان کی یادیں، ٹاسک اور آڈیو فائلیں بھی حذف ہو جائیں گی۔",
+    "conversationsDeletedCount": "{count, plural, =1{1 گفتگو حذف ہو گئی} other{{count} گفتگوئیں حذف ہو گئیں}}",
+    "conversationsMovedCount": "{count, plural, =1{1 گفتگو منتقل ہو گئی} other{{count} گفتگوئیں منتقل ہو گئیں}}",
+    "failedToMoveConversations": "گفتگوئیں منتقل نہیں ہو سکیں",
+    "discardedConversationTitle": "مسترد · {duration}",
+    "noConversationsHeroMessage": "آپ کی ریکارڈ کی گئی گفتگوئیں یہاں دکھائی دیتی ہیں۔ پہلی ریکارڈ کرنے کے لیے ہوم پر ریکارڈ بٹن دبائیں۔",
+    "conversationMap": "گفتگو کا نقشہ",
+    "conversationCount": "{count, plural, =1{1 گفتگو} other{{count} گفتگوئیں}}",
+    "taskCount": "{count, plural, =1{1 ٹاسک} other{{count} ٹاسک}}",
+    "skipBack10Seconds": "10 سیکنڈ پیچھے",
+    "skipForward10Seconds": "10 سیکنڈ آگے",
+    "failedToShareRecap": "خلاصہ شیئر نہیں ہو سکا",
+    "captureOfflineBuffering": "آف لائن، بفر ہو رہا ہے",
+    "captureOfflineBufferingFor": "آف لائن، بفر ہو رہا ہے · {minutes} منٹ",
+    "memoryDetailsTitle": "یاد",
+    "editMemoryTitle": "یاد میں ترمیم کریں",
+    "newMemoryTitle": "نئی یاد",
+    "memoryReadOnlyHint": "یہ یاد تاریخ کے طور پر رکھی گئی ہے اور اس میں ترمیم نہیں ہو سکتی۔",
+    "openConversation": "گفتگو کھولیں",
+    "memoryGraphTitle": "یادوں کا گراف",
+    "memoryReviewTitle": "آج میں نے کیا سیکھا",
+    "memoryReviewRight": "درست",
+    "memoryReviewWrong": "غلط",
+    "memoryReviewFix": "درست کریں",
+    "memoryReviewConfirmed": "تصدیق ہو گئی۔ میں اس کے مطابق عمل کروں گا۔",
+    "memoryReviewDropped": "ہٹا دیا گیا۔ میں ایسے حقائق سے گریز کروں گا۔",
+    "memoryReviewUpdated": "اپ ڈیٹ ہو گیا۔",
+    "memoryReviewSaveFailed": "محفوظ نہیں ہو سکا، دوبارہ کوشش کریں",
+    "indentTask": "انڈینٹ کریں",
+    "outdentTask": "آؤٹ ڈینٹ کریں",
+    "goalDeleted": "ہدف حذف کر دیا گیا",
+    "sharedTasksAcceptFailed": "یہ کام قبول نہیں ہو سکے۔ شاید آپ یہ شیئر پہلے ہی قبول کر چکے ہیں۔",
+    "pausePlayback": "روکیں",
+    "deleteSample": "نمونہ حذف کریں",
+    "deletePersonTitle": "شخص حذف کریں؟",
+    "deletePersonLabel": "شخص حذف کریں",
+    "noPeopleYet": "ابھی کوئی شخص نہیں",
+    "deleteTasksTitle": "{count, plural, =1{1 کام حذف کریں؟} other{{count} کام حذف کریں؟}}",
+    "tasksCountLabel": "{count, plural, =1{1 کام} other{{count} کام}}",
+    "sharedTasksAdded": "{count, plural, =1{آپ کی فہرست میں 1 کام شامل کیا گیا} other{آپ کی فہرست میں {count} کام شامل کیے گئے}}",
+    "sharedTasksAddButton": "{count, plural, =1{1 کام شامل کریں} other{{count} کام شامل کریں}}",
+    "sharedTasksTitle": "{name} نے {count, plural, =1{1 کام شیئر کیا} other{{count} کام شیئر کیے}}",
+    "exportedToPlatform": "{platform} میں ایکسپورٹ کیا گیا",
+    "taskDueDate": "آخری تاریخ {date}",
+    "linkEvent": "ایونٹ لنک کریں",
+    "noCalendarEventsNearby": "اس وقت کے آس پاس کیلنڈر کا کوئی ایونٹ نہیں ملا۔",
+    "suggestedEvent": "تجویز کردہ",
+    "openInGoogleCalendar": "Google Calendar میں کھولیں",
+    "shareWithAttendees": "شرکاء کے ساتھ شیئر کریں",
+    "unlinkCalendarEvent": "کیلنڈر ایونٹ کا لنک ہٹائیں",
+    "meetingNotesSubject": "نوٹس: {title}",
+    "previousResult": "پچھلا نتیجہ",
+    "nextResult": "اگلا نتیجہ",
+    "playFromHere": "یہاں سے چلائیں",
+    "shareConversationQuestion": "گفتگو شیئر کریں؟",
+    "conversationTasksEmptyMessage": "اس گفتگو کے کام یہاں ظاہر ہوں گے۔",
+    "noPendingTasks": "کوئی زیر التواء کام نہیں",
+    "nCompleted": "{count} مکمل",
+    "identifySpeaker": "بولنے والے کی شناخت کریں",
+    "couldNotLoadCheckout": "چیک آؤٹ صفحہ لوڈ نہیں ہو سکا۔ اپنا کنکشن چیک کریں اور دوبارہ کوشش کریں۔",
+    "phoneFreeCallLimitReached": "ماہانہ مفت کال کی حد پوری ہو گئی۔ یہ اگلے مہینے ری سیٹ ہو گی۔",
+    "couldNotLoadImportHistory": "امپورٹ کی تاریخ لوڈ نہیں ہو سکی",
+    "phoneCallButton": "کال کریں",
+    "searchContacts": "رابطے تلاش کریں",
+    "phoneContactsAccessTitle": "رابطوں تک رسائی کی اجازت دیں",
+    "phoneSelectCountryTitle": "ملک منتخب کریں",
+    "phoneNoVerifiedNumbersTitle": "کوئی تصدیق شدہ نمبر نہیں",
+    "phoneNoVerifiedNumbersMessage": "Omi کے ذریعے کال کرنے کے لیے اپنا نمبر تصدیق کریں۔",
+    "phoneDeleteNumberFailed": "یہ نمبر حذف نہیں ہو سکا",
+    "forgetDeviceConfirmTitle": "ڈیوائس بھول جائیں؟",
+    "forgetDeviceConfirmMessage": "Omi اس ڈیوائس سے جڑنا بند کر دے گا۔ اسے دوبارہ استعمال کرنے کے لیے آپ کو اسے دوبارہ پیئر کرنا ہوگا۔",
+    "deviceForgottenMessage": "ڈیوائس بھلا دی گئی",
+    "unpairDeviceConfirmTitle": "ڈیوائس کو ان پیئر کریں؟",
+    "rollBack": "واپس لائیں",
+    "dataRateKbps": "{rate} kbps",
+    "diagnosticsExportTitle": "Omi ڈیوائس کی تشخیص",
+    "diagnosticsFailBadge": "ناکام",
+    "diagnosticsReconnectedIn": "{duration} میں دوبارہ منسلک",
+    "timeCompactDays": "{count}د",
+    "durationAgo": "{duration} پہلے",
+    "sttLanguageFollowsPrimary": "آپ کی بنیادی زبان کی پیروی کرتا ہے",
+    "creatorPayouts": "تخلیق کاروں کی ادائیگیاں",
+    "sttLanguageOverride": "تبدیل کریں",
+    "sttUsePrimaryLanguage": "بنیادی زبان استعمال کریں",
+    "sttPrimaryLanguageUnsupported": "یہ فراہم کنندہ {language} کو سپورٹ نہیں کرتا، اس لیے {fallback} استعمال کرتا ہے۔",
+    "deviceRamBelowMinimum": "شناخت شدہ RAM: {ram} GB۔ تجویز کردہ کم از کم: 4 GB۔",
+    "olderIphoneModelDetected": "شناخت شدہ ماڈل: {model} (iPhone XS سے پرانا)۔ ڈیوائس پر شناخت سست ہو سکتی ہے۔",
+    "copyLogs": "لاگز کاپی کریں",
+    "openProviderDocs": "دستاویزات کھولیں",
+    "getApiKey": "API کلید حاصل کریں",
+    "showApiKey": "API کلید دکھائیں",
+    "hideApiKey": "API کلید چھپائیں",
+    "removeVocabularyWord": "{word} ہٹائیں",
+    "vocabularyWordCount": "{count, plural, =1{1 لفظ} other{{count} الفاظ}}",
+    "phoneFreeCallsRemaining": "اس مہینے {remaining} مفت کالز باقی ہیں ({limit} میں سے)",
+    "phoneFreeCallsRemainingWithMax": "اس مہینے {remaining} مفت کالز باقی ہیں ({limit} میں سے) · ہر ایک {minutes} منٹ تک",
+    "appCreators": "ایپ تخلیق کار",
+    "homeScreen": "ہوم اسکرین",
+    "phoneCalls": "فون کالز",
+    "vadGate": "VAD Gate",
+    "vadGateDescription": "اسپیچ ٹو ٹیکسٹ کے اخراجات کم کرنے کے لیے سرور پر آواز کا فلٹر",
+    "flashCustomFirmware": "حسب ضرورت فرم ویئر فلیش کریں",
+    "flashCustomFirmwareDescription": "حسب ضرورت فرم ویئر بلڈز فلیش کریں",
+    "selectFirmwareZip": "فرم ویئر ZIP فائل منتخب کریں",
+    "customFirmwareWarning": "حسب ضرورت فرم ویئر آپ کی ڈیوائس کو ناکارہ بنا سکتا ہے۔ یقینی بنائیں کہ یہ Omi کا درست فرم ویئر بلڈ ہے، اور اپ ڈیٹ کے دوران کنکشن منقطع نہ کریں۔",
+    "firmwareFlashed": "فرم ویئر فلیش ہو گیا",
+    "deviceWillRestart": "آپ کی ڈیوائس دوبارہ شروع ہوگی۔",
+    "exportFailedTryAgain": "ایکسپورٹ ناکام ہو گیا۔ براہ کرم دوبارہ کوشش کریں۔",
+    "firmwareFlashTarget": "ڈیوائس: {deviceName}",
+    "keepSubscription": "سبسکرپشن برقرار رکھیں",
+    "couldNotLoadPage": "یہ صفحہ لوڈ نہیں ہو سکا۔ اپنا کنکشن چیک کریں اور دوبارہ کوشش کریں۔",
+    "leaveFlowStepOf": "مرحلہ {current} از {total}",
+    "sharedTasksLinkExpired": "یہ شیئر کیے گئے کام نہیں ملے، یا لنک کی میعاد ختم ہو گئی ہے۔",
+    "sharedTasksUnknownSender": "کوئی",
+    "allow": "اجازت دیں",
+    "permissionAllowed": "اجازت ہے",
+    "permissionBlockedHint": "سیٹنگز میں بند ہے۔ اسے استعمال کرنے کے لیے وہاں اجازت دیں۔",
+    "useDifferentAccount": "دوسرا اکاؤنٹ استعمال کریں",
+    "onboardingStepOf": "مرحلہ {current} از {total}",
+    "onboardingCompleteMessage": "Omi کو 2 دن بیک گراؤنڈ میں چلنے دیں، پھر یہ آپ کو مفید رائے دینا شروع کرے گا۔",
+    "cantFindDeviceHint": "اپنی ڈیوائس نہیں مل رہی؟ یقینی بنائیں کہ وہ آن ہے اور فون کے قریب ہے، پھر دوبارہ اسکین کریں۔",
+    "scanAgain": "دوبارہ اسکین کریں",
+    "howToPair": "جوڑنے کا طریقہ",
+    "contactSupportAction": "سپورٹ سے رابطہ کریں",
+    "deviceOfflineWakeHint": "{deviceName} آف لائن ہے۔ جگانے کے لیے اس کا بٹن دبائیں، پھر دوبارہ کوشش کریں۔",
+    "batteryLevelSemantics": "بیٹری {level}%",
+    "updateOmiGlassFirmware": "OmiGlass فرم ویئر اپ ڈیٹ کریں",
+    "deviceConnecting": "منسلک ہو رہا ہے…",
+    "recordOptionsTip": "مشورہ: فون کال ریکارڈ کرنے کے لیے ریکارڈ بٹن پر تیر کو ٹیپ کریں۔",
+    "firmwareUpdateFailedTitle": "اپ ڈیٹ ناکام",
+    "firmwareUpdateFailedMessage": "اپ ڈیٹ مکمل نہیں ہوئی۔ آپ کی ڈیوائس ابھی بھی موجودہ فرم ویئر پر ہے اور استعمال کے لیے محفوظ ہے۔ اسے چارج اور فون کے قریب رکھیں، پھر دوبارہ کوشش کریں۔",
+    "firmwareDownloadFailedMessage": "اپ ڈیٹ ڈاؤن لوڈ نہیں ہو سکی اور آپ کی ڈیوائس تبدیل نہیں ہوئی۔ انٹرنیٹ کنکشن چیک کریں، پھر دوبارہ کوشش کریں۔",
+    "firmwareBatteryTooLow": "بیٹری {level}% ہے۔ اپ ڈیٹ سے پہلے ڈیوائس کو کم از کم 15% تک چارج کریں۔",
+    "startUpdate": "اپ ڈیٹ شروع کریں",
+    "otaNotSupported": "یہ فرم ویئر Wi-Fi کے ذریعے اپ ڈیٹ نہیں ہو سکتا۔",
+    "otaConnectFailed": "{deviceName} سے منسلک نہیں ہو سکا۔ اسے آن اور قریب رکھیں، پھر دوبارہ کوشش کریں۔",
+    "otaUpdateUnavailable": "یہ اپ ڈیٹ ابھی دستیاب نہیں ہے۔ بعد میں دوبارہ کوشش کریں۔",
+    "otaStarting": "اپ ڈیٹ شروع ہو رہی ہے…",
+    "otaStartFailed": "اپ ڈیٹ شروع نہیں ہو سکی۔ Wi-Fi کا نام اور پاس ورڈ چیک کریں، پھر دوبارہ کوشش کریں۔",
+    "otaRebooting": "{deviceName} نئے فرم ویئر کے ساتھ دوبارہ شروع ہو رہا ہے۔",
+    "otaUpdateCancelled": "اپ ڈیٹ منسوخ ہو گئی",
+    "cancelUpdate": "اپ ڈیٹ منسوخ کریں",
+    "otaKeepNearby": "اپ ڈیٹ کے دوران ڈیوائس کو آن اور قریب رکھیں، اور ایپ بند نہ کریں۔",
+    "otaWifiConnecting": "Wi-Fi سے منسلک ہو رہا ہے…",
+    "otaWifiConnected": "Wi-Fi سے منسلک",
+    "otaWifiFailed": "Wi-Fi میں شامل نہیں ہو سکا۔ نیٹ ورک کا نام اور پاس ورڈ چیک کریں۔",
+    "otaDownloadFailed": "فرم ویئر ڈاؤن لوڈ ناکام رہا۔ Wi-Fi کنکشن چیک کریں اور دوبارہ کوشش کریں۔",
+    "otaInstallFailed": "انسٹال ناکام رہا۔ آپ کی ڈیوائس ابھی بھی موجودہ فرم ویئر پر ہے۔",
+    "otaUpdatedMessage": "{deviceName} اپ ڈیٹ ہو گیا ہے اور خود ہی دوبارہ شروع ہو جائے گا۔",
+    "showPassword": "پاس ورڈ دکھائیں",
+    "hidePassword": "پاس ورڈ چھپائیں",
+    "appNotFoundOrRemoved": "یہ ایپ اب دستیاب نہیں ہے",
+    "startupFailedTitle": "Omi شروع نہ ہو سکا",
+    "startupFailedMessage": "Omi شروع ہوتے وقت کچھ غلط ہو گیا۔ اپنا کنکشن چیک کریں، پھر دوبارہ کوشش کریں۔",
+    "startupFailedConfigMessage": "Omi کے اس بلڈ میں کنفیگریشن کا مسئلہ ہے۔ یہ آپ کے ڈیوائس کا مسئلہ نہیں ہے۔ سپورٹ سے رابطہ کریں اور نیچے دی گئی تفصیلات شامل کریں۔",
+    "discardRecordingTitle": "ریکارڈنگ رد کریں؟",
+    "discardRecordingMessage": "آپ کا وائس سیمپل ابھی محفوظ نہیں ہوا۔ اگر آپ ابھی چلے گئے، تو یہ رد کر دیا جائے گا۔",
+    "keepRecording": "ریکارڈنگ جاری رکھیں",
+    "view": "دیکھیں",
+    "appDataAccessTitle": "{appName} کو رسائی دیں؟",
+    "appDataAccessMessage": "{appName} آپ کی گفتگو، یادیں اور ریکارڈنگز اپنے ڈویلپر کے سرور پر وصول کرے گا۔ وہاں اس ڈیٹا کے استعمال کی ذمہ داری Omi پر نہیں ہے۔",
+    "appDisabledNamed": "{appName} غیر فعال کر دی گئی",
+    "appRatingCount": "{count, plural, =1{1 ریٹنگ} other{{count} ریٹنگز}}",
+    "previewImageLabel": "اسکرین شاٹ {index} از {total}",
+    "chatWithApp": "{appName} سے چیٹ کریں",
+    "appSettingsLabel": "{appName} کی ترتیبات",
+    "appOptions": "ایپ کے اختیارات",
+    "cancelSubscriptionKeepAccessMessage": "موجودہ بلنگ مدت کے اختتام تک آپ کی رسائی برقرار رہے گی۔",
+    "chatSendMessage": "پیغام بھیجیں",
+    "chatAddAttachment": "اٹیچمنٹ شامل کریں",
+    "removeAttachment": "اٹیچمنٹ ہٹائیں",
+    "chatRemoveSelectedText": "اقتباس شدہ متن ہٹائیں",
+    "chatOfflineHint": "آپ آف لائن ہیں۔ پیغامات بھیجنے کے لیے دوبارہ جڑیں۔",
+    "chatReplyFailed": "Omi جواب نہیں دے سکا۔ اپنا کنکشن چیک کریں اور دوبارہ کوشش کریں۔",
+    "disableAppNamed": "{appName} غیر فعال کریں",
+    "whatWentWrong": "کیا غلط ہوا؟",
+    "selectAReason": "ایک وجہ منتخب کریں",
+    "submit": "جمع کرائیں",
+    "feedbackReasonTooVerbose": "بہت طویل",
+    "feedbackReasonIncorrect": "غلط یا من گھڑت",
+    "feedbackReasonNotHelpful": "مددگار نہیں یا غیر متعلق",
+    "feedbackReasonIgnoredInstructions": "ہدایات پر عمل نہیں کیا",
+    "additionalFeedbackOptional": "اضافی رائے (اختیاری)",
+    "helpful": "مددگار",
+    "daySummaryForDate": "دن کا خلاصہ · {date}",
+    "chatStarterYesterday": "میں نے کل کیا کیا؟",
+    "chatStarterDoDifferently": "آج میں کیا مختلف کر سکتا ہوں؟",
+    "chatStarterTeachMe": "کیا تم مجھے کچھ نیا سکھا سکتے ہو؟",
+    "thinking": "سوچ رہا ہے",
+    "couldNotLoadWhatsNew": "نیا کیا ہے لوڈ نہیں ہو سکا",
+    "githubRepositoryUrl": "GitHub ریپوزیٹری URL",
+    "githubRepositoryUrlHint": "آپ کی ایپ کے سورس کوڈ ریپوزیٹری کا لنک",
+    "triggerEvents": "ٹرگر ایونٹس",
+    "noAppsInCategoryYet": "اس زمرے میں ابھی کوئی ایپ نہیں",
+    "scopes": "دائرہ کار",
+    "aiAppGeneratorBannerTitle": "ایک ٹیپ میں AI سے ایپ بنائیں",
+    "refreshManifest": "مینی فیسٹ ریفریش کریں",
+    "versionLabel": "ورژن {version}",
+    "appUsersCount": "{count}+ صارفین",
+    "discovery": "دریافت",
+    "chatBlockShowMore": "مزید دکھائیں",
+    "chatBlockShowLess": "کم دکھائیں",
+    "triggerEvent": "ٹرگر ایونٹ",
+    "webhookUrl": "ویب ہک URL",
+    "appHomeUrl": "ایپ ہوم URL",
+    "authUrl": "تصدیقی URL",
+    "setupCompletedUrl": "سیٹ اپ مکمل URL",
+    "chatToolsManifestUrl": "چیٹ ٹولز مینی فیسٹ URL",
+    "invalidWebhookUrlError": "براہ کرم درست ویب ہک URL درج کریں",
+    "githubRepositoryUrlRequired": "GitHub ریپوزٹری URL درکار ہے",
+    "removeScreenshot": "اسکرین شاٹ ہٹائیں",
+    "addScreenshot": "اسکرین شاٹ شامل کریں",
+    "aiGenRegenerateIcon": "آئیکن دوبارہ بنائیں",
+    "categoryAppCount": "{count, plural, =1{1 ایپ} other{{count} ایپس}}",
+    "generateDescription": "تفصیل تیار کریں",
+    "selectImageFileTitle": "ایک تصویری فائل منتخب کریں",
+    "selectThumbnailImageTitle": "ایک تھمب نیل تصویر منتخب کریں",
+    "appIdNotFoundError": "ایپ ID نہیں ملی",
+    "manifestRefreshedSuccess": "مینی فیسٹ کامیابی سے ریفریش ہو گیا",
+    "manifestRefreshFailed": "مینی فیسٹ ریفریش کرنے میں ناکام",
+    "captureRecordingsSheetTitle": "اس گفتگو کی ریکارڈنگز",
+    "captureRecordingSeparate": "الگ کریں…",
+    "captureRecordingSeparateTitle": "اس ریکارڈنگ کو الگ کریں؟",
+    "captureRecordingSeparateMessage": "{recording} ایک الگ گفتگو کے طور پر دکھائی دے گی اور اس ایونٹ کے ساتھ دوبارہ گروپ نہیں ہوگی۔",
+    "captureRecordingSeparateConfirm": "الگ کریں",
+    "captureRecordingSeparateFailed": "الگ نہیں ہو سکا۔ دوبارہ کوشش کریں۔",
+    "captureRecordingOpenFailed": "یہ ریکارڈنگ نہیں کھل سکی۔",
+    "captureRecordingViewing": "آپ یہ ریکارڈنگ دیکھ رہے ہیں",
+    "captureRecordedBy": "{devices} نے ریکارڈ کیا",
+    "captureSourceDesktop": "ڈیسک ٹاپ",
+    "renameConversation": "نام تبدیل کریں",
+    "captureRecordingsCount": "{count, plural, =1{1 ریکارڈنگ} other{{count} ریکارڈنگز}}",
+    "captureSourcePendant": "پینڈنٹ",
+    "conversationDeveloperTools": "گفتگو میں ڈویلپر ٹولز",
+    "conversationDeveloperToolsDescription": "گفتگو کے مینو میں گفتگو آئی ڈی کاپی کریں اور پرامپٹ ٹیسٹ کریں دکھائیں",
+    "participantsSummary": "{name} + {count, plural, =1{1 دیگر} few{{count} دیگر} many{{count} دیگر} other{{count} دیگر}}",
+    "recordingAndTranscription": "ریکارڈنگ اور ٹرانسکرپشن",
+    "notificationsAndDisplay": "اطلاعات اور ڈسپلے",
+    "helpAndAbout": "مدد اور تعارف",
+    "speakerTagPromptTitle": "Omi کو آوازیں پہچاننے میں مدد کریں",
+    "speakerTagPromptSubtitle": "پچھلے دو دنوں کی آوازوں کا فوری جائزہ",
+    "speakerTagPromptIsThisYou": "کیا یہ آپ ہیں؟",
+    "speakerTagPromptIsThisPerson": "کیا یہ {name} ہیں؟",
+    "speakerTagPromptWhoIsThis": "یہ کون ہے؟",
+    "speakerTagPromptThatsMe": "یہ میں ہوں",
+    "speakerTagPromptNotMe": "میں نہیں",
+    "speakerTagPromptSomeoneNew": "کوئی نیا شخص",
+    "speakerTagPromptDontKnow": "کوئی جسے میں نہیں جانتا",
+    "speakerTagPromptNotSure": "یقین نہیں",
+    "speakerTagPromptPlayClip": "کلپ چلائیں",
+    "speakerTagPromptProgress": "{current}/{total}",
+    "speakerTagPromptSaveVoicesTitle": "جن لوگوں کا نام آپ دیں ان کی آوازیں یاد رکھیں",
+    "speakerTagPromptSaveVoicesBody": "Omi اگلی بار پہچاننے کے لیے آواز کا ایک مختصر نمونہ رکھتا ہے۔ آپ اسے کسی بھی وقت ترتیبات میں تبدیل کر سکتے ہیں۔",
+    "speakerTagPromptThanks": "شکریہ! Omi آوازیں پہچاننے میں مزید بہتر ہو جائے گا۔",
+    "speakerTagPromptNameHint": "ان کا نام",
+    "speakerTagPromptClipUnavailable": "یہ کلپ نہیں چل سکی",
+    "speakerTagPromptAnswerFailed": "محفوظ نہیں ہو سکا۔ براہ کرم دوبارہ کوشش کریں۔",
+    "voiceSettingsAskToTag": "مجھ سے آوازیں ٹیگ کرنے کو کہیں",
+    "voiceSettingsAskToTagSubtitle": "کبھی کبھار Omi پوچھے گا کہ آپ کی حالیہ گفتگو میں کون بول رہا تھا",
+    "voiceSettingsSaveOthersSubtitle": "جب آپ کسی کا نام دیتے ہیں تو Omi اگلی بار پہچاننے کے لیے آواز کا ایک مختصر نمونہ رکھتا ہے",
+    "leaveBlank": "خالی چھوڑیں",
+    "mcpOAuthSetup": "claude.ai پر ایک کسٹم کنیکٹر شامل کریں اور سرور URL پیسٹ کریں۔ اگر Claude ایک ایڈوانسڈ OAuth Client ID مانگے تو نیچے دی گئی قدر استعمال کریں اور سیکریٹ خالی چھوڑیں — اپنی MCP API کلید کو کبھی بھی OAuth سیکریٹ کے طور پر استعمال نہ کریں۔",
+    "claudeCode": "Claude Code",
+    "addToClaudeCodeConfig": "~/.claude.json میں شامل کریں",
+    "claudeDesktopConnectorSetup": "Claude Desktop → Settings → Connectors پر ایک کسٹم کنیکٹر شامل کریں اور سرور URL پیسٹ کریں۔ اگر Claude ایک ایڈوانسڈ OAuth Client ID مانگے تو نیچے دی گئی قدر استعمال کریں اور سیکریٹ خالی چھوڑیں — اپنی MCP API کلید کو کبھی بھی OAuth سیکریٹ کے طور پر استعمال نہ کریں۔",
+    "transcriptionUnavailableRecordingContinues": "ٹرانسکرپشن دستیاب نہیں، ریکارڈنگ ڈیوائس پر جاری ہے اور بعد میں پروسیس ہوگی",
+    "transcriptionUnavailableSavingOnDevice": "ٹرانسکرپشن دستیاب نہیں · ڈیوائس پر محفوظ ہو رہی ہے",
+    "transcriptionsPendingFraction": "زیرِ التوا ٹرانسکرپشن {pending}/{total}",
+    "transcriptionsPendingCount": "زیرِ التوا ٹرانسکرپشن {count}",
+    "captureSourceCall": "کال",
+    "captureSourcePhoneMic": "فون مائیک",
+    "captureStatusWithSource": "{status} · {source}",
+    "resume": "دوبارہ شروع کریں",
+    "finish": "ختم کریں",
+    "pendantPausedResumesWhenYouFinish": "پینڈنٹ موقوف · آپ کے ختم کرنے پر دوبارہ شروع ہوگا",
+    "pendantIsListeningTitle": "آپ کا پینڈنٹ سن رہا ہے",
+    "oneSourceAtATime": "Omi ایک وقت میں ایک ہی ذریعے سے ریکارڈ کرتا ہے۔",
+    "recordWithPhoneInstead": "اس کے بجائے فون سے ریکارڈ کریں",
+    "pendantPausesUntilYouFinish": "آپ کے ختم کرنے تک پینڈنٹ موقوف رہے گا",
+    "pendantPausesDuringCall": "کال کے دوران پینڈنٹ موقوف رہے گا",
+    "keepUsingPendant": "پینڈنٹ ہی استعمال کریں",
+    "recordWith": "ریکارڈ کرنے کا ذریعہ",
+    "moreWaysToRecord": "ریکارڈ کرنے کے مزید طریقے",
+    "openCall": "کال کھولیں",
+    "captureRecoveryBanner": "پینڈنٹ کی آواز ایپ تک نہیں پہنچ رہی — درست کرنے کے لیے ٹیپ کریں"
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 /// Retryable placeholder shown when GET /v3/memories failed rather than
@@ -11,21 +12,18 @@ class MemoriesLoadError extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: Column(
-        key: const Key('memories_load_error'),
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.error_outline, size: 48, color: Colors.grey.shade600),
-          const SizedBox(height: 16),
-          Text(
-            context.l10n.couldNotLoadMemories,
-            style: TextStyle(color: Colors.grey.shade400, fontSize: 18),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 8),
-          TextButton(key: const Key('memories_load_retry'), onPressed: onRetry, child: Text(context.l10n.retry)),
-        ],
+    // OmiErrorState's shape, with the stable keys the journeys drive.
+    return KeyedSubtree(
+      key: const Key('memories_load_error'),
+      child: OmiEmptyState(
+        icon: Icons.error_outline,
+        title: context.l10n.couldNotLoadMemories,
+        action: OmiButton.secondary(
+          key: const Key('memories_load_retry'),
+          label: context.l10n.tryAgain,
+          size: OmiButtonSize.compact,
+          onPressed: onRetry,
+        ),
       ),
     );
   }

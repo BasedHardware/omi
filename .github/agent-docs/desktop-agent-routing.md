@@ -13,7 +13,7 @@ macOS runtime, `desktop/macos/agent/src/runtime/`:
 | `agent-routing.ts` | Composes the three into one decision |
 | `agent-fallback.ts` | Retries a failed run on the next agent in the chain |
 
-Windows mirrors the utterance half in `src/main/codingAgent/agentMention.ts`
+Windows mirrors the utterance half in `desktop/windows/src/main/codingAgent/agentMention.ts`
 (`agentsForTask` in `taskRunner.ts`); it already had the fallback loop macOS was
 missing.
 
@@ -24,7 +24,7 @@ fails those suites rather than passing quietly.
 
 1. **Selection reads the capability matrix, never a model.** `DesktopIntentRouter`
    documents that it has no language heuristics; keep string matching at the
-   surface and capability facts in `adapters/interface.ts`. An agent that declares
+   surface and capability facts in `desktop/macos/agent/src/adapters/interface.ts`. An agent that declares
    `supportsTools: false` is ineligible for a tool task as a fact, and the user is
    told why rather than silently given a different agent.
 2. **An explicitly requested adapter is never substituted.** A caller that passes
@@ -52,11 +52,11 @@ fails those suites rather than passing quietly.
 External adapters are activated by command env vars, one per agent:
 `OMI_CODEX_ADAPTER_COMMAND`, `OMI_HERMES_ADAPTER_COMMAND`,
 `OMI_OPENCLAW_ADAPTER_COMMAND`. `adapterIsActivated` in
-`runtime/adapter-selection.ts` reads them, and `ensureRegisteredAdapter` is the
+`desktop/macos/agent/src/runtime/adapter-selection.ts` reads them, and `ensureRegisteredAdapter` is the
 boot-time gate that decides what "connected" means.
 
 Each external adapter receives its own credentials only —
-`ADAPTER_SPECIFIC_ENV_ALLOWLIST` in `adapters/acp.ts` is keyed by adapter id,
+`ADAPTER_SPECIFIC_ENV_ALLOWLIST` in `desktop/macos/agent/src/adapters/acp.ts` is keyed by adapter id,
 because these commands run under `shell: true` and one agent's API key must never
 reach another. Adding a key to the shared allowlist instead would hand it to every
 external agent.
@@ -67,7 +67,7 @@ external agent.
 cd desktop/macos/agent && npm run smoke:agent-routing
 ```
 
-`scripts/smoke-agent-routing.mjs` takes its inventory from
+`desktop/macos/agent/scripts/smoke-agent-routing.mjs` takes its inventory from
 `ensureRegisteredAdapter`, the same gate `index.ts` uses at boot, so "connected"
 means connected on that host. It then asserts the routing behaviours through the
 real kernel and the real `spawn_background_agent` control tool, and exits non-zero
@@ -88,7 +88,7 @@ push-to-talk, capture, transcription — is not covered by this script.**
 `agent-routing-kernel`, `agent-routing-continuation`, `agent-fallback`,
 `agent-install`, `parity-agent-routing`, `adapter-selection`, `runtime-adapter`.
 
-Windows: `src/main/codingAgent/parityAgentRouting.test.ts` and `taskRunner.test.ts`.
+Windows: `desktop/windows/src/main/codingAgent/parityAgentRouting.test.ts` and `taskRunner.test.ts`.
 
 Both platforms run the same vectors from `contracts/parity/agent_routing.json`
 through their own production code; see `contracts/parity/README.md`.

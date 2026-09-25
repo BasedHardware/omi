@@ -57,6 +57,8 @@ SUMMARY_PIPELINE_FLAGS = (
     'CONVERSATION_NOTES_V2_ENABLED',
     'CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED',
     'CONVERSATION_OCR_CONTEXT_ENABLED',
+    'MEETING_NOTES_RICH_CONTEXT_ENABLED',
+    'MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED',
     # Same co-host rule: an omitted or disagreeing value on one
     # process_conversation host would silently keep that host ungated (code
     # default OFF) while the others deny identified-basic first-open.
@@ -176,19 +178,17 @@ def validate_conversation_finalization_capabilities(env: str, env_config: Config
         for capability in sorted(expected - declared):
             errors.append(ValidationError(scope, f'missing required runtime capability {capability!r}'))
 
-        # Use the production parser and its compatibility meaning. In
-        # particular, legacy MEMORY_MODE=read still permits mutation today;
-        # duplicating token policy here would let admission drift from runtime.
+        # Use the production parser; duplicating token policy here would let
+        # admission drift from runtime.
         literal_env = _literal_env(service_config)
         resolved_mode = rollout_mode_env_value(literal_env)
         if resolved_mode not in {MemoryRolloutMode.write.value, MemoryRolloutMode.read.value}:
             raw_enabled = literal_env.get('MEMORY_ENABLED')
-            raw_mode = literal_env.get('MEMORY_MODE')
             errors.append(
                 ValidationError(
                     scope,
                     'capability memory.canonical.mutate requires the runtime memory fence to permit writes; '
-                    f'MEMORY_ENABLED={raw_enabled!r} MEMORY_MODE={raw_mode!r} resolves to {resolved_mode!r}',
+                    f'MEMORY_ENABLED={raw_enabled!r} resolves to {resolved_mode!r}',
                 )
             )
 
@@ -294,11 +294,83 @@ def validate_free_tier_deploy_contract(env: str, env_config: ConfigDict) -> list
     return errors
 
 
+SPEAKER_EMBEDDING_ENV = 'HOSTED_SPEAKER_EMBEDDING_API_URL'
+SPEAKER_EMBEDDING_HOSTS: tuple[tuple[str, str], ...] = (
+    ('gke', 'backend-listen'),
+    ('gke', 'pusher'),
+    ('cloud_run', 'backend'),
+    ('cloud_run', 'backend-sync'),
+    ('cloud_run', 'backend-sync-backfill'),
+    ('cloud_run', 'backend-integration'),
+)
+_CLUSTER_LOCAL_DNS = '.svc.cluster.local'
+
+
+def validate_speaker_embedding_hosts(env: str, env_config: ConfigDict) -> list[ValidationError]:
+    """Require the reachable diarizer ILB on every speaker-ID host.
+
+    Live capture (GKE listen/pusher) and offline sync (Cloud Run) share
+    ``utils.stt.speaker_embedding``. Omitting the URL on one host disables
+    voice matching there while the others keep working. Cloud Run cannot use
+    in-cluster DNS; the value must match GKE listen's ILB hostname.
+    """
+    errors: list[ValidationError] = []
+    seen_values: dict[str, str] = {}
+    listen_value: str | None = None
+    for platform, service_name in SPEAKER_EMBEDDING_HOSTS:
+        service_config = _service_config(env_config, platform, service_name)
+        if service_config is None:
+            continue
+        scope = f'{env}/{platform}/{service_name}'
+        literal_env = _literal_env(service_config)
+        value = (literal_env.get(SPEAKER_EMBEDDING_ENV) or '').strip()
+        has_parakeet = bool((literal_env.get('HOSTED_PARAKEET_API_URL') or '').strip())
+        # Tiny fixture manifests that only name a host for an unrelated contract
+        # must not be forced to declare speaker embedding. The real STT hosts
+        # already carry HOSTED_PARAKEET_API_URL; that is the co-host signal.
+        if not value and not has_parakeet:
+            continue
+        if not value:
+            errors.append(
+                ValidationError(
+                    scope,
+                    f'{SPEAKER_EMBEDDING_ENV} must be a non-empty literal on every speaker-ID host',
+                )
+            )
+            continue
+        if platform == 'cloud_run' and _CLUSTER_LOCAL_DNS in value:
+            errors.append(
+                ValidationError(
+                    scope,
+                    f'{SPEAKER_EMBEDDING_ENV} must be the reachable ILB hostname, not cluster-local DNS',
+                )
+            )
+        seen_values[scope] = value
+        if platform == 'gke' and service_name == 'backend-listen':
+            listen_value = value
+
+    if listen_value:
+        for scope, value in seen_values.items():
+            if '/gke/backend-listen' in scope:
+                continue
+            if value != listen_value:
+                errors.append(
+                    ValidationError(
+                        scope,
+                        f'{SPEAKER_EMBEDDING_ENV} must match gke/backend-listen ({listen_value!r})',
+                    )
+                )
+    return errors
+
+
 __all__ = [
     'CANONICAL_MEMORY_MUTATION_CAPABILITY',
     'CONVERSATION_FINALIZATION_CAPABILITY',
     'SUMMARY_PIPELINE_FLAGS',
+    'SPEAKER_EMBEDDING_ENV',
+    'SPEAKER_EMBEDDING_HOSTS',
     'FREE_TIER_DEPLOY_HOSTS',
     'validate_free_tier_deploy_contract',
     'validate_conversation_finalization_capabilities',
+    'validate_speaker_embedding_hosts',
 ]

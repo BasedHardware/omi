@@ -120,12 +120,20 @@ environment_shared:
           category: rollout
         CONVERSATION_OCR_CONTEXT_ENABLED:
           category: rollout
+        MEETING_NOTES_RICH_CONTEXT_ENABLED:
+          value: 'false'
+          category: rollout
+        MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
+          value: 'false'
+          category: rollout
         BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
           category: rollout
         WAKE_WORD_ADJUDICATION_ENABLED:
           value: 'true'
           category: rollout
         HOSTED_PARAKEET_API_URL:
+          category: service_discovery
+        HOSTED_SPEAKER_EMBEDDING_API_URL:
           category: service_discovery
         LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
           value: '900'
@@ -250,8 +258,16 @@ environment_shared:
           category: rollout
         CONVERSATION_OCR_CONTEXT_ENABLED:
           category: rollout
+        MEETING_NOTES_RICH_CONTEXT_ENABLED:
+          value: 'false'
+          category: rollout
+        MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
+          value: 'false'
+          category: rollout
         BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
           category: rollout
+        HOSTED_SPEAKER_EMBEDDING_API_URL:
+          category: service_discovery
     config_map:
       name: '{env}-omi-backend-config'
       entries:
@@ -389,6 +405,12 @@ environment_shared:
             category: rollout
           CONVERSATION_OCR_CONTEXT_ENABLED:
             category: rollout
+          MEETING_NOTES_RICH_CONTEXT_ENABLED:
+            value: 'false'
+            category: rollout
+          MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
+            value: 'false'
+            category: rollout
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             category: rollout
           BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:
@@ -432,6 +454,8 @@ environment_shared:
             value: '{env}'
             category: runtime_identity
           HOSTED_PARAKEET_API_URL:
+            category: service_discovery
+          HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
           LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
             value: '900'
@@ -532,6 +556,8 @@ environment_shared:
             category: runtime_identity
           HOSTED_PARAKEET_API_URL:
             category: service_discovery
+          HOSTED_SPEAKER_EMBEDDING_API_URL:
+            category: service_discovery
           LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
             value: '900'
             category: reliability
@@ -579,6 +605,12 @@ environment_shared:
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
             category: rollout
           CONVERSATION_OCR_CONTEXT_ENABLED:
+            category: rollout
+          MEETING_NOTES_RICH_CONTEXT_ENABLED:
+            value: 'false'
+            category: rollout
+          MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
+            value: 'false'
             category: rollout
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             category: rollout
@@ -646,6 +678,8 @@ environment_shared:
             category: runtime_identity
           HOSTED_PARAKEET_API_URL:
             category: service_discovery
+          HOSTED_SPEAKER_EMBEDDING_API_URL:
+            category: service_discovery
           LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
             value: '900'
             category: reliability
@@ -706,6 +740,9 @@ environment_shared:
           ENCRYPTION_SECRET:
             secret: ENCRYPTION_SECRET
             version: latest
+          POSTHOG_EVENTS_API_KEY:
+            secret: POSTHOG_EVENTS_API_KEY
+            version: latest
           OMI_LLM_GATEWAY_SERVICE_TOKEN:
             secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
             version: latest
@@ -744,6 +781,8 @@ environment_shared:
             value: parakeet,modulate-velma-2
             category: stt_policy
           HOSTED_PARAKEET_API_URL:
+            category: service_discovery
+          HOSTED_SPEAKER_EMBEDDING_API_URL:
             category: service_discovery
           LISTEN_FINALIZATION_ORPHAN_STALE_SECONDS:
             value: '900'
@@ -792,9 +831,6 @@ environment_shared:
           OPENAI_API_KEY:
             secret: OPENAI_API_KEY
             version: latest
-          SERVICE_ACCOUNT_JSON:
-            secret: SERVICE_ACCOUNT_JSON
-            version: latest
           ENCRYPTION_SECRET:
             secret: ENCRYPTION_SECRET
             version: latest
@@ -809,9 +845,6 @@ environment_shared:
           OMI_BACKGROUND_FLEX_CAPABLE:
             value: 'true'
             category: memory_rollout
-          DAILY_SUMMARY_SELECTION_MODE:
-            value: indexed
-            category: rollout
           PINECONE_INDEX_NAME:
             category: integrations
           OMI_ENV_STAGE:
@@ -830,9 +863,6 @@ environment_shared:
             version: latest
           OPENAI_API_KEY:
             secret: OPENAI_API_KEY
-            version: latest
-          SERVICE_ACCOUNT_JSON:
-            secret: SERVICE_ACCOUNT_JSON
             version: latest
           POSTHOG_PROJECT_API_KEY:
             secret: POSTHOG_PROJECT_API_KEY
@@ -907,9 +937,6 @@ environment_shared:
             category: memory_rollout
       frame-request-retention-job:
         secrets:
-          SERVICE_ACCOUNT_JSON:
-            secret: SERVICE_ACCOUNT_JSON
-            version: latest
           POSTHOG_PROJECT_API_KEY:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
@@ -940,9 +967,6 @@ environment_shared:
             version: latest
           OPENAI_API_KEY:
             secret: OPENAI_API_KEY
-            version: latest
-          SERVICE_ACCOUNT_JSON:
-            secret: SERVICE_ACCOUNT_JSON
             version: latest
           POSTHOG_PROJECT_API_KEY:
             secret: POSTHOG_PROJECT_API_KEY
@@ -982,6 +1006,9 @@ environment_shared:
             category: memory_rollout
           MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED:
             category: memory_rollout
+          MEMORY_DAILY_MEMORY_SWEEP_STAGGER_SECONDS:
+            value: '0'
+            category: memory_rollout
         forbidden_env:
         - HOSTED_PUSHER_API_URL
       knowledge-ledger-drain-job:
@@ -991,9 +1018,6 @@ environment_shared:
         secrets:
           ENCRYPTION_SECRET:
             secret: ENCRYPTION_SECRET
-            version: latest
-          SERVICE_ACCOUNT_JSON:
-            secret: SERVICE_ACCOUNT_JSON
             version: latest
           POSTHOG_PROJECT_API_KEY:
             secret: POSTHOG_PROJECT_API_KEY
@@ -1017,9 +1041,6 @@ environment_shared:
         secrets:
           ENCRYPTION_SECRET:
             secret: ENCRYPTION_SECRET
-            version: latest
-          SERVICE_ACCOUNT_JSON:
-            secret: SERVICE_ACCOUNT_JSON
             version: latest
           POSTHOG_PROJECT_API_KEY:
             secret: POSTHOG_PROJECT_API_KEY

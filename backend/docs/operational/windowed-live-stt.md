@@ -130,10 +130,50 @@ opens the Parakeet serve-error circuit so new sessions on this pod skip TDT
 for the cooldown — load shedding, not a reconnect stampede. Local *admission*
 overflow (the process session cap) still does not poison provider health.
 
-The windowed TDT leg owns forced-active VAD with a short silence tail. Initial
-noise never reaches TDT. VAD initialization failure skips TDT; inference
-failure on that leg closes it before raw audio can escape. Non-window legs on
-the managed chain behave like today's `GatedSTTSocket`: they honour
+The windowed TDT leg owns forced-active VAD with a short silence tail. It keeps
+the billed path's 0.65 start probability with no hysteresis gap, and differs
+only in the tail: hangover is 300 ms rather than 4 s, because a growing window
+re-posts its own prefix and does not need seconds of trailing silence to avoid
+clipping a word. Quiet far-field is admitted by the level-corrected copy the
+gate scores (below), not by a lower threshold — that copy lifts far-field
+admission from 73.7 s to 91.7 s of a 120 s clip on its own, where a 0.5 / 0.35
+hysteresis added only 5.6 s more and cost words on dense speech. Initial noise
+never reaches TDT. VAD initialization failure skips TDT; inference failure on
+that leg closes it before raw audio can escape.
+
+The windowed leg splits bounded peak AGC into two jobs with the same knobs:
+target 0.8 of full scale (the RNNT path's `AGC_TARGET_PEAK`), hard 4× (12 dB)
+cap, session running-max of *incoming* PCM, fast attack, no release, never
+attenuates, digital silence (peak 0) unchanged. **Admission** gains a copy
+ahead of Silero so quiet far-field can start speech; per-chunk gain is safe
+there because Silero scores frames independently. **Decoding** keeps the
+stored buffer at original level and applies one uniform scale to each posted
+window, taken from **that window's own peak** — but only below a **deadband**
+of 0.4 of full scale (`WINDOW_AGC_DEADBAND_PEAK`, equivalently "never apply
+less than 2×"). Audio already peaking above that is not quiet, and gaining it
+costs accuracy rather than buying anything: gaining loud passages moved
+substitutions from 27 to 37, and reverting the VAD threshold did not move them
+back.
+
+The deadband is judged per window, **not** on the session envelope. A clip
+whose loudest moment is 0.54 still contains passages at 0.37; judging those by
+the session peak denied them gain and dropped them entirely — two such
+passages, 37 reference words — while every passage at 0.42 and above survived
+ungained. Each POST stays internally uniform, which is the property #15566
+established; different gains *between* windows were never the problem.
+Admission is deliberately **not** deadbanded, so quiet far-field is still
+admitted by its gained copy. Ingest cannot write gained
+bytes into the buffer, so the 4× cap cannot compound to 16×. Overlapping
+later POSTs of the same prefix may use a lower gain if the envelope grew;
+each POST stays internally flat. Gain is not frozen after the first POST:
+locking the early (higher) factor would clip later louder speech, and
+freezing per-prefix would rebuild an intra-window ramp. Speaker embeddings
+slice original-level PCM from the stored buffer. Direct
+`WindowedParakeetSocket.send` (no ingest) still peak-normalises the POST.
+The cap exists so a faint noise floor cannot be lifted by orders of
+magnitude the way RNNT's `peak < 1` skip can.
+
+Non-window legs on the managed chain behave like today's `GatedSTTSocket`: they honour
 `vad_gate_override` / `VAD_GATE_MODE`, and a VAD inference error fails open to
 raw send. Flag-on with allocation 0 therefore changes chain order and breakers
 only, not audio gating. A VAD `finalize()` after the 300 ms hangover is a soft

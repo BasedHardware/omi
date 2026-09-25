@@ -312,6 +312,7 @@ class TestDeepgramRetryBehavioral:
         sys.modules['utils.stt.speaker_embedding'].SPEAKER_MATCH_THRESHOLD = 0.45
         sys.modules['utils.stt.speaker_embedding'].compare_embeddings = MagicMock(return_value=1.0)
         sys.modules['utils.stt.speaker_embedding'].extract_embedding_from_bytes = MagicMock()
+        sys.modules['utils.stt.speaker_embedding'].speaker_embedding_configured = lambda: True
 
         # Force re-import so it picks up stubs
         sys.modules.pop('utils.stt.pre_recorded', None)
@@ -734,11 +735,13 @@ _STUB_MODULES = [
     'models.transcript_segment',
     'database._client',
     'database.redis_db',
+    'database.auth',
     'database.fair_use',
     'database.users',
     'database.user_usage',
     'database.conversations',
     'database.sync_ledger',
+    'database.sync_dead_letters',
     'firebase_admin',
     'firebase_admin.messaging',
     'opuslib',
@@ -809,6 +812,7 @@ class TestProcessSegmentReal:
 
         sys.modules['database.redis_db'].r = MagicMock()
         sys.modules['database._client'].db = MagicMock()
+        sys.modules['database.auth'].get_user_name = MagicMock(return_value='User')
         _mock_conv_db = sys.modules['database.conversations']
         _mock_conv_db.get_closest_conversation_to_timestamps = MagicMock()
         _mock_conv_db.update_conversation_segments = MagicMock()
@@ -852,8 +856,12 @@ class TestProcessSegmentReal:
         sys.modules['utils.cloud_tasks'].is_cloud_tasks_dispatch_enabled = MagicMock(return_value=False)
         sys.modules['utils.cloud_tasks'].is_audio_merge_dispatch_enabled = MagicMock(return_value=False)
         sys.modules['utils.cloud_tasks'].enqueue_audio_merge_job = MagicMock()
+        sys.modules['utils.cloud_tasks'].verify_audio_merge_cloud_tasks_oidc = MagicMock()
         sys.modules['utils.cloud_tasks'].verify_cloud_tasks_oidc = MagicMock()
         sys.modules['database.sync_ledger'].add_processed_sync_segment_id = MagicMock(return_value=True)
+        sys.modules['database.sync_dead_letters'].record_dead_letter_pending = MagicMock()
+        sys.modules['database.sync_dead_letters'].confirm_dead_letter = MagicMock()
+        sys.modules['database.sync_dead_letters'].dead_letter_failure_code = MagicMock(return_value='unknown')
         sys.modules['database.sync_ledger'].bind_sync_content_run_token = MagicMock()
         sys.modules['database.sync_ledger'].checkpoint_sync_content_partial_result = MagicMock()
         sys.modules['database.sync_ledger'].get_processed_sync_segment_ids = MagicMock(return_value=set())
@@ -878,6 +886,7 @@ class TestProcessSegmentReal:
         sys.modules['utils.speaker_identification'].detect_speaker_from_text = MagicMock(return_value=None)
         sys.modules['utils.stt.speaker_embedding'].extract_embedding_from_bytes = MagicMock()
         sys.modules['utils.stt.speaker_embedding'].compare_embeddings = MagicMock(return_value=1.0)
+        sys.modules['utils.stt.speaker_embedding'].speaker_embedding_configured = lambda: True
         sys.modules['utils.stt.speaker_embedding'].SPEAKER_MATCH_THRESHOLD = 0.45
         sys.modules['utils.fair_use'].FAIR_USE_ENABLED = False
         sys.modules['utils.fair_use'].FAIR_USE_RESTRICT_DAILY_DG_MS = 0

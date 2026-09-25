@@ -29,7 +29,7 @@ from database.action_items_cache import (
     read_cached_list,
     write_cached_list,
 )
-from utils.action_items_list_guard import enforce_hot_client_list_ceiling
+from utils.action_items_list_guard import enforce_hot_client_list_ceiling, enforce_stale_client_list_refusal
 from utils.metrics import record_action_items_list_cache
 from utils.users import get_user_display_name
 from utils.share_links import build_share_url
@@ -246,8 +246,11 @@ def sync_batch_update(request: SyncBatchRequest, uid: str = Depends(auth.get_cur
 
     # Pre-fetch items to skip locked ones
     locked_ids = set()
+    existing_items = {}
     for item in request.items:
         existing = action_items_db.get_action_item(uid, item.id)
+        if existing:
+            existing_items[item.id] = existing
         if existing and existing.get('is_locked', False):
             locked_ids.add(item.id)
 
@@ -284,6 +287,24 @@ def sync_batch_update(request: SyncBatchRequest, uid: str = Depends(auth.get_cur
         upsert_action_item_vectors_batch(
             uid,
             [{'action_item_id': u['id'], 'description': u['data']['description']} for u in desc_updates],
+        )
+
+    # This route completes tasks and moves due dates too, so it owes the same reminder
+    # reconciliation as the single-item paths (#5085): otherwise the phone still fires a
+    # reminder for a task the user ticked off during an Apple Reminders sync.
+    for update in updates:
+        if update['id'] not in updated_ids:
+            continue
+        data = update['data']
+        if 'completed' not in data and 'due_at' not in data:
+            continue
+        stored = existing_items.get(update['id'], {})
+        sync_action_item_reminder(
+            user_id=uid,
+            action_item_id=update['id'],
+            description=data.get('description', stored.get('description', '')),
+            completed=bool(data['completed']) if 'completed' in data else bool(stored.get('completed')),
+            due_at=data['due_at'] if 'due_at' in data else stored.get('due_at'),
         )
 
     return _batch_mutation_response(result, locked_ids=locked_ids)
@@ -515,10 +536,10 @@ def get_action_items(
     ):
         raise HTTPException(status_code=400, detail="due_start_date must be earlier than or equal to due_end_date")
 
-    # Second ceiling for the known hot-loop client class. Raises 429 before any
-    # Firestore work, so a refused poll costs zero document reads. The 12/min
-    # action_items:list bucket has already been charged in the auth dependency;
-    # these two limits compose (both must admit), they do not replace each other.
+    # Stale-build refusal (env-gated, default off) then the extra hot-loop
+    # ceiling. Both run before any Firestore work. The 12/min action_items:list
+    # bucket has already been charged in the auth dependency.
+    enforce_stale_client_list_refusal(request)
     enforce_hot_client_list_ceiling(uid, request)
 
     cached_response = _serve_action_items_list_from_cache(
@@ -1046,12 +1067,18 @@ def accept_shared_action_items(request: AcceptSharedTasksRequest, uid: str = Dep
     sender_uid = share_data['uid']
     task_ids = share_data['task_ids']
 
-    # Pre-validate: check which items are eligible (exist and not locked)
+    # Pre-validate: check which items exist and which are locked
     eligible_ids = []
+    existing_items_count = 0
     for task_id in task_ids:
         item = action_items_db.get_action_item(sender_uid, task_id)
-        if item and not item.get('is_locked', False):
-            eligible_ids.append(task_id)
+        if item:
+            existing_items_count += 1
+            if not item.get('is_locked', False):
+                eligible_ids.append(task_id)
+
+    if existing_items_count == 0:
+        raise HTTPException(status_code=404, detail="Shared tasks were deleted or not found")
 
     if not eligible_ids:
         raise HTTPException(status_code=402, detail="All shared tasks are locked. A paid plan is required.")
@@ -1065,31 +1092,39 @@ def accept_shared_action_items(request: AcceptSharedTasksRequest, uid: str = Dep
 
     # Copy each eligible task to recipient's list
     created_ids = []
-    for task_id in eligible_ids:
-        original = action_items_db.get_action_item(sender_uid, task_id)
-        if not original or original.get('is_locked', False):
-            continue
+    try:
+        for task_id in eligible_ids:
+            original = action_items_db.get_action_item(sender_uid, task_id)
+            if not original or original.get('is_locked', False):
+                continue
 
-        new_item = {
-            'description': original.get('description', ''),
-            'completed': False,
-            'due_at': original.get('due_at'),
-            'shared_from': {
-                'token': request.token,
-                'sender_uid': sender_uid,
-                'sender_name': share_data['display_name'],
-                'original_task_id': task_id,
-            },
-        }
-        new_id = action_items_db.create_action_item(uid, new_item)
-        created_ids.append(new_id)
-        upsert_action_item_vector(uid, new_id, new_item['description'])
-        if isinstance(new_item['due_at'], datetime):
-            _schedule_action_item_reminder(uid, new_id, new_item['description'], new_item['due_at'])
+            new_item = {
+                'description': original.get('description', ''),
+                'completed': False,
+                'due_at': original.get('due_at'),
+                'shared_from': {
+                    'token': request.token,
+                    'sender_uid': sender_uid,
+                    'sender_name': share_data['display_name'],
+                    'original_task_id': task_id,
+                },
+            }
+            new_id = action_items_db.create_action_item(uid, new_item)
+            created_ids.append(new_id)
+            upsert_action_item_vector(uid, new_id, new_item['description'])
+            if isinstance(new_item['due_at'], datetime):
+                _schedule_action_item_reminder(uid, new_id, new_item['description'], new_item['due_at'])
+    except Exception:
+        # If an unhandled error occurred before creating any tasks, undo token acceptance so client can retry
+        if not created_ids:
+            redis_db.undo_accept_task_share(request.token, uid)
+        raise
 
     # If race condition caused all items to become locked after pre-check, rollback token
     if not created_ids:
         redis_db.undo_accept_task_share(request.token, uid)
         raise HTTPException(status_code=402, detail="Shared tasks are no longer available.")
+
+    _wake_task_changes(uid, created_ids, datetime.now(timezone.utc))
 
     return {"created": created_ids, "count": len(created_ids)}

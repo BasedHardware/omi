@@ -899,12 +899,6 @@ def _workflow_variable_map(env_config: ConfigDict, expected_services: ConfigDict
         ),
         '${{ vars.MEMORY_ENABLED }}': _manifest_env_value(expected_services, 'MEMORY_ENABLED'),
         '${{vars.MEMORY_ENABLED}}': _manifest_env_value(expected_services, 'MEMORY_ENABLED'),
-        '${{ vars.MEMORY_MODE }}': _manifest_env_value(expected_services, 'MEMORY_MODE')
-        or _manifest_env_value(expected_services, 'MEMORY_ENABLED'),
-        '${{vars.MEMORY_MODE}}': _manifest_env_value(expected_services, 'MEMORY_MODE')
-        or _manifest_env_value(expected_services, 'MEMORY_ENABLED'),
-        '${{ vars.MEMORY_V3_GET_ENABLED }}': _manifest_env_value(expected_services, 'MEMORY_V3_GET_ENABLED'),
-        '${{vars.MEMORY_V3_GET_ENABLED}}': _manifest_env_value(expected_services, 'MEMORY_V3_GET_ENABLED'),
         '${{ vars.MEMORY_CANONICAL_MAINTENANCE_ENABLED }}': _manifest_env_value(
             expected_services, 'MEMORY_CANONICAL_MAINTENANCE_ENABLED'
         ),

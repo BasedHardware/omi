@@ -52,8 +52,8 @@ def test_foundation_does_not_silently_cross_capture_cutover_gate() -> None:
     }
     assert isinstance(defaults["defer_memory_extraction"], ast.Constant)
     assert defaults["defer_memory_extraction"].value is False
-    assert isinstance(defaults["bypass_jit_first_open"], ast.Constant)
-    assert defaults["bypass_jit_first_open"].value is False
+    # JIT bypass is part of the trigger's mode, never a caller flag.
+    assert "bypass_jit_first_open" not in {argument.arg for argument in process.args.args + process.args.kwonlyargs}
 
     finalizer = _function(
         _module_tree(BACKEND_DIR / "utils/conversations/finalizer.py"),
@@ -423,11 +423,7 @@ def _invoke_tool(conversation_tools_module, tool, arguments: dict, *, config: di
         conversation_tools_module.agent_config_context.reset(token)
 
 
-def test_feature_gate_requires_uid_scoped_request_opt_in(
-    conversation_tools_module, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setenv(_jit_module().JIT_CONVERSATION_RETRIEVAL_ENV, "true")
-
+def test_feature_gate_requires_uid_scoped_request_opt_in(conversation_tools_module) -> None:
     assert conversation_tools_module.is_jit_conversation_retrieval_enabled({}) is False
     assert conversation_tools_module.is_jit_conversation_retrieval_enabled({"user_id": "jit-user-001"}) is False
     assert (
@@ -459,18 +455,9 @@ def test_feature_gate_requires_uid_scoped_request_opt_in(
     )
 
 
-def test_feature_gate_never_activates_from_process_environment_alone(
-    conversation_tools_module, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setenv(_jit_module().JIT_CONVERSATION_RETRIEVAL_ENV, "true")
-
-    assert conversation_tools_module.is_jit_conversation_retrieval_enabled({"user_id": "jit-user-001"}) is False
-
-
-def test_gate_off_preserves_legacy_get_tool_path(conversation_tools_module, monkeypatch: pytest.MonkeyPatch) -> None:
+def test_gate_off_preserves_legacy_get_tool_path(conversation_tools_module) -> None:
     """Without an explicit opt-in, the released formatter and deserializer remain authoritative."""
 
-    monkeypatch.delenv(_jit_module().JIT_CONVERSATION_RETRIEVAL_ENV, raising=False)
     raw = _conversation_fixture()
     conversation_tools_module.conversations_db.get_conversations = MagicMock(return_value=[raw])
     legacy_conversation = types.SimpleNamespace(transcript_segments=[], model_dump=lambda: {"id": raw["id"]})
@@ -845,33 +832,35 @@ def _call_keywords(tree: ast.AST, function_name: str, callee: str) -> dict[str, 
     raise AssertionError(f"call to {callee!r} not found in {function_name!r}")
 
 
-def _constant_bool(node: ast.AST | None) -> bool | None:
-    if isinstance(node, ast.Constant) and isinstance(node.value, bool):
-        return node.value
-    return None
+def _attribute_name(node: ast.AST | None) -> str | None:
+    return node.attr if isinstance(node, ast.Attribute) else None
 
 
-def test_force_process_still_defers_first_open_when_rollout_admits() -> None:
+def test_running_now_still_defers_first_open_when_rollout_admits() -> None:
+    """Only triggers whose mode bypasses JIT may run derived work eagerly."""
+    from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger
+
     process_source = (BACKEND_DIR / "utils/conversations/process_conversation.py").read_text(encoding="utf-8")
     assert "if not bypass_jit_first_open and not is_reprocess and not discarded:" in process_source
     assert "if not force_process and not is_reprocess and not discarded:" not in process_source
 
     conversations = _module_tree(BACKEND_DIR / "routers/conversations.py")
     create_kwargs = _call_keywords(conversations, "process_in_progress_conversation", "process_conversation")
-    assert _constant_bool(create_kwargs.get("force_process")) is True
-    assert "bypass_jit_first_open" not in create_kwargs
+    assert _attribute_name(create_kwargs.get("trigger")) == "CLIENT_FINALIZE"
 
     reprocess_kwargs = _call_keywords(conversations, "reprocess_conversation", "process_conversation")
-    assert _constant_bool(reprocess_kwargs.get("force_process")) is True
-    assert _constant_bool(reprocess_kwargs.get("bypass_jit_first_open")) is True
+    assert _attribute_name(reprocess_kwargs.get("trigger")) == "USER_REPROCESS"
 
     finalize_kwargs = _call_keywords(conversations, "finalize_conversation", "request_finalization")
-    assert _constant_bool(finalize_kwargs.get("force_process")) is True
-    assert "bypass_jit_first_open" not in finalize_kwargs
+    assert _attribute_name(finalize_kwargs.get("trigger")) == "CLIENT_FINALIZE"
 
-    worker = _module_tree(BACKEND_DIR / "routers/conversation_finalization.py")
-    worker_kwargs = _call_keywords(worker, "run_listen_finalization_job", "finalize_persisted_conversation")
-    assert "bypass_jit_first_open" not in worker_kwargs
+    client_finalize = PROCESSING_MODES[ProcessingTrigger.CLIENT_FINALIZE]
+    assert client_finalize.run_now and not client_finalize.bypass_jit_first_open
+    assert PROCESSING_MODES[ProcessingTrigger.USER_REPROCESS].bypass_jit_first_open
+
+    # Mode lives in one table: no call site may pass a mode flag directly.
+    for kwargs in (create_kwargs, reprocess_kwargs, finalize_kwargs):
+        assert not {"force_process", "is_reprocess", "bypass_jit_first_open"} & set(kwargs)
 
     finalizer_source = (BACKEND_DIR / "utils/conversations/finalizer.py").read_text(encoding="utf-8")
     assert "bypass_jit_first_open" not in finalizer_source
