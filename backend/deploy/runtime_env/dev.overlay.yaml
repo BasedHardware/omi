@@ -8,6 +8,8 @@ overlay:
   gke:
     backend-listen:
       env:
+        OMI_CUSTOMER_DATA_PROJECT:
+          value: based-hardware
         FREE_TIER_LOCAL_PROCESSING:
           value: 'true'
         FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -25,6 +27,10 @@ overlay:
         CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
           value: 'true'
         CONVERSATION_OCR_CONTEXT_ENABLED:
+          value: 'true'
+        MEETING_NOTES_RICH_CONTEXT_ENABLED:
+          value: 'true'
+        MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
           value: 'true'
         BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
           value: 'true'
@@ -63,6 +69,12 @@ overlay:
         GOOGLE_CALENDAR_AUTO_LINK_ENABLED:
           value: 'true'
           category: rollout
+        CONVERSATION_RELEVANCE_JEV_ENABLED:
+          value: 'true'
+          category: rollout
+        MEMORY_OWNER_JEV_FLIP_ENABLED:
+          value: 'true'
+          category: rollout
     pusher:
       env:
         FREE_TIER_LOCAL_PROCESSING:
@@ -96,6 +108,10 @@ overlay:
           value: 'true'
         CONVERSATION_OCR_CONTEXT_ENABLED:
           value: 'true'
+        MEETING_NOTES_RICH_CONTEXT_ENABLED:
+          value: 'true'
+        MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
+          value: 'true'
         BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
           value: 'true'
         MEMORY_BELIEF_MODEL_ENABLED:
@@ -103,6 +119,12 @@ overlay:
           category: rollout
         MEMORY_BELIEF_AUTOMATION_PAUSED:
           value: 'false'
+          category: rollout
+        CONVERSATION_RELEVANCE_JEV_ENABLED:
+          value: 'true'
+          category: rollout
+        MEMORY_OWNER_JEV_FLIP_ENABLED:
+          value: 'true'
           category: rollout
         GITHUB_TOKEN:
           secret:
@@ -202,10 +224,8 @@ overlay:
           secret:
             name: dev-omi-backend-secrets
             key: TYPESENSE_API_KEY
-        SERVICE_ACCOUNT_JSON:
-          secret:
-            name: dev-omi-backend-secrets
-            key: SERVICE_ACCOUNT_JSON
+        OMI_CUSTOMER_DATA_PROJECT:
+          value: based-hardware
         METRICS_SECRET:
           secret:
             name: dev-omi-backend-secrets
@@ -281,13 +301,23 @@ overlay:
     services:
       backend:
         secrets:
-          SERVICE_ACCOUNT_JSON:
-            secret: SERVICE_ACCOUNT_JSON
-            version: latest
           POSTHOG_PROJECT_API_KEY:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
+          SCREEN_FRAME_SIGNING_SECRET:
+            secret: SCREEN_FRAME_SIGNING_SECRET
+            version: latest
         env:
+          SCREEN_FRAME_EGRESS_ENABLED:
+            value: 'true'
+            category: rollout
+          BUCKET_SCREEN_FRAMES:
+            value: based-hardware-dev-screen-frames
+            category: storage_retention
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
+          FIREBASE_SIGNER_SERVICE_ACCOUNT:
+            value: dev-auth-token-signer@based-hardware.iam.gserviceaccount.com
           FREE_TIER_LOCAL_PROCESSING:
             value: 'true'
           FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -298,6 +328,10 @@ overlay:
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
             value: 'true'
           CONVERSATION_OCR_CONTEXT_ENABLED:
+            value: 'true'
+          MEETING_NOTES_RICH_CONTEXT_ENABLED:
+            value: 'true'
+          MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
             value: 'true'
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             value: 'true'
@@ -349,6 +383,12 @@ overlay:
           OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
             value: '1.0'
             category: rollout
+          CONVERSATION_RELEVANCE_JEV_ENABLED:
+            value: 'true'
+            category: rollout
+          MEMORY_OWNER_JEV_FLIP_ENABLED:
+            value: 'true'
+            category: rollout
       backend-sync:
         forbidden_env:
         - HOSTED_PUSHER_API_URL
@@ -357,13 +397,12 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         secrets:
-          SERVICE_ACCOUNT_JSON:
-            secret: SERVICE_ACCOUNT_JSON
-            version: latest
           POSTHOG_PROJECT_API_KEY:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
           FREE_TIER_LOCAL_PROCESSING:
             value: 'true'
           FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -382,6 +421,10 @@ overlay:
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
             value: 'true'
           CONVERSATION_OCR_CONTEXT_ENABLED:
+            value: 'true'
+          MEETING_NOTES_RICH_CONTEXT_ENABLED:
+            value: 'true'
+          MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
             value: 'true'
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             value: 'true'
@@ -420,6 +463,12 @@ overlay:
           OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
             value: '1.0'
             category: rollout
+          CONVERSATION_RELEVANCE_JEV_ENABLED:
+            value: 'true'
+            category: rollout
+          MEMORY_OWNER_JEV_FLIP_ENABLED:
+            value: 'true'
+            category: rollout
       backend-sync-backfill:
         forbidden_env:
         - HOSTED_PUSHER_API_URL
@@ -428,13 +477,12 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         secrets:
-          SERVICE_ACCOUNT_JSON:
-            secret: SERVICE_ACCOUNT_JSON
-            version: latest
           POSTHOG_PROJECT_API_KEY:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
         env:
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
           FREE_TIER_LOCAL_PROCESSING:
             value: 'true'
           FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -495,13 +543,15 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         secrets:
-          SERVICE_ACCOUNT_JSON:
-            secret: SERVICE_ACCOUNT_JSON
-            version: latest
           POSTHOG_PROJECT_API_KEY:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
+          POSTHOG_EVENTS_API_KEY:
+            secret: POSTHOG_EVENTS_API_KEY
+            version: latest
         env:
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
           FREE_TIER_LOCAL_PROCESSING:
             value: 'true'
           FREE_TIER_LOCAL_PROCESSING_COHORT:
@@ -554,7 +604,11 @@ overlay:
             category: rollout
     jobs:
       notifications-job:
+        flags:
+          --service-account: dev-backend-runtime@based-hardware-dev.iam.gserviceaccount.com
         env:
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
           PINECONE_INDEX_NAME:
             value: memories-backend-dev
           GOOGLE_CLOUD_PROJECT:
@@ -563,9 +617,12 @@ overlay:
         - HOSTED_PUSHER_API_URL
       memory-maintenance-job:
         flags:
+          --service-account: dev-backend-runtime@based-hardware-dev.iam.gserviceaccount.com
           --cpu: '2'
           --memory: 2Gi
         env:
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
           PINECONE_INDEX_NAME:
             value: memories-backend-dev
           MEMORY_BELIEF_MODEL_ENABLED:
@@ -577,11 +634,19 @@ overlay:
           MEMORY_CANONICAL_GRAPH_BACKFILL_PAGE_SIZE:
             value: '25'
       frame-request-retention-job:
+        flags:
+          --service-account: dev-backend-runtime@based-hardware-dev.iam.gserviceaccount.com
         env:
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
       daily-memory-sweep-job:
+        flags:
+          --service-account: dev-backend-runtime@based-hardware-dev.iam.gserviceaccount.com
         env:
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
           MEMORY_BELIEF_MODEL_ENABLED:
@@ -593,7 +658,7 @@ overlay:
           MEMORY_DAILY_MEMORY_SWEEP_MODEL_ENABLED:
             value: 'true'
           MEMORY_DAILY_MEMORY_SWEEP_MODEL_NAME:
-            value: gpt-5.6-luna
+            value: gpt-6-luna
           MEMORY_DAILY_MEMORY_SWEEP_MAX_MODEL_COST_USD:
             value: '0.80'
           MEMORY_DAILY_MEMORY_SWEEP_COHORT_ENABLED:
@@ -603,13 +668,21 @@ overlay:
           MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED:
             value: 'true'
       knowledge-ledger-drain-job:
+        flags:
+          --service-account: dev-backend-runtime@based-hardware-dev.iam.gserviceaccount.com
         env:
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
           KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST:
             value: 9OqYLlKJv4hmeYpIhwJcHBR975i2
       day3-reengagement-email-job:
+        flags:
+          --service-account: dev-backend-runtime@based-hardware-dev.iam.gserviceaccount.com
         env:
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
           BASE_API_URL:
             value: https://api.omiapi.com
     workflow_files:

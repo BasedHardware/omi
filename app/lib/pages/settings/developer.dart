@@ -1,40 +1,33 @@
 import 'dart:io';
 
-import 'package:omi/utils/platform/platform_manager.dart';
-import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:path_provider/path_provider.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:url_launcher/url_launcher.dart';
 
-import 'package:omi/backend/schema/bt_device/bt_device.dart';
-import 'package:omi/pages/home/firmware_mixin.dart';
-import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/env/env.dart';
-import 'package:omi/models/stt_provider.dart';
-import 'package:omi/pages/settings/conversation_display_settings.dart';
-import 'package:omi/pages/settings/conversation_timeout_dialog.dart';
-import 'package:omi/pages/settings/data_privacy_page.dart';
-import 'package:omi/pages/settings/import_history_page.dart';
-import 'package:omi/pages/payments/payments_page.dart';
-import 'package:omi/pages/settings/transcription_settings_page.dart';
-import 'package:omi/pages/settings/widgets/create_mcp_api_key_dialog.dart';
+import 'package:omi/pages/settings/developer_firmware_flash_page.dart';
+import 'package:omi/pages/settings/developer_mcp_section.dart';
+import 'package:omi/pages/settings/settings_destinations.dart';
+import 'package:omi/pages/settings/settings_search_index.dart';
 import 'package:omi/pages/settings/widgets/developer_api_keys_section.dart';
-import 'package:omi/pages/settings/widgets/mcp_api_key_list_item.dart';
-import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/developer_mode_provider.dart';
+import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/mcp_provider.dart';
-import 'package:omi/utils/alerts/app_snackbar.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/firmware_update_build_policy.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/other/temp.dart';
 
+/// Developer Settings: developer tools only (D4) — creator payouts, debug logs, API keys, MCP,
+/// webhooks, experiments and custom firmware. Everyday settings live in top-level Settings.
+///
+/// Every switch applies when flipped. The webhook URL fields are the one editor on the page: they
+/// wait for Save, and leaving with unsaved edits asks first (chat-apps-settings #2, nav #24).
 class DeveloperSettingsPage extends StatelessWidget {
   const DeveloperSettingsPage({super.key});
 
@@ -57,10 +50,10 @@ class _DeveloperSettingsPageView extends StatefulWidget {
 class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
   @override
   void initState() {
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      context.read<McpProvider>().fetchKeys();
-    });
     super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) context.read<McpProvider>().fetchKeys();
+    });
   }
 
   // iPad requires a non-zero sharePositionOrigin (popover anchor) for the share sheet.
@@ -73,111 +66,107 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
     return const Rect.fromLTWH(0, 0, 100, 100);
   }
 
-  Widget _buildSectionContainer({required List<Widget> children}) {
-    return Container(
-      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(12)),
-      child: Column(children: children),
+  /// Asks before throwing away unsaved webhook edits. Resolves whether the page may close.
+  Future<bool> _confirmDiscard(DeveloperModeProvider provider) async {
+    final l10n = context.l10n;
+    final discard = await showOmiConfirm(
+      context,
+      title: l10n.discardChangesTitle,
+      message: l10n.discardChangesMessage,
+      confirmLabel: l10n.discard,
+      cancelLabel: l10n.keepEditing,
+      destructive: true,
     );
+    if (discard) provider.discardWebhookChanges();
+    return discard;
   }
 
-  Widget _buildNavItem({required FaIconData icon, required String title, required VoidCallback onTap}) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(14)),
-        child: Row(
+  Future<void> _shareLogs() async {
+    final l10n = context.l10n;
+    final files = await DebugLogManager.listLogFiles();
+    if (!mounted) return;
+    if (files.isEmpty) {
+      OmiFeedback.info(context, l10n.noLogFilesFound);
+      return;
+    }
+    File? selected = files.length == 1 ? files.first : null;
+    selected ??= await showOmiSheet<File>(
+      context: context,
+      title: l10n.selectLogFile,
+      builder: (sheetContext) => SingleChildScrollView(
+        child: OmiSettingsGroup(
           children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(10)),
-              child: Center(child: FaIcon(icon, color: Colors.grey.shade400, size: 16)),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Text(
-                title,
-                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
-              ),
-            ),
-            FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 14),
+            for (final f in files)
+              OmiSettingsRow(title: f.uri.pathSegments.last, onTap: () => Navigator.of(sheetContext).pop(f)),
           ],
         ),
       ),
     );
+    if (selected == null || !mounted) return;
+    final result = await SharePlus.instance.share(
+      ShareParams(files: [XFile(selected.path)], text: l10n.omiDebugLog, sharePositionOrigin: _shareOrigin()),
+    );
+    if (result.status == ShareResultStatus.success) Logger.debug('Log shared');
   }
 
-  Widget _buildSectionHeader(String title, {String? subtitle, Widget? trailing}) {
-    return Padding(
-      padding: const EdgeInsets.only(left: 4, right: 4, bottom: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
-              ),
-              if (trailing != null) trailing,
-            ],
-          ),
-          if (subtitle != null) ...[
-            const SizedBox(height: 6),
-            Text(subtitle, style: TextStyle(color: Colors.grey.shade400, fontSize: 14)),
-          ],
-        ],
-      ),
+  Future<void> _pickFirmware(DeviceProvider provider) async {
+    final result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['zip'],
+      dialogTitle: context.l10n.selectFirmwareZip,
+    );
+    if (result == null || result.files.isEmpty) return;
+    final file = result.files.first;
+    if (file.path == null || !mounted) return;
+    await routeToPage(
+      context,
+      DeveloperFirmwareFlashPage(zipFilePath: file.path!, fileName: file.name, device: provider.pairedDevice!),
     );
   }
 
-  Widget _buildSttChip() {
-    final useCustom = SharedPreferencesUtil().useCustomStt;
-    final config = SharedPreferencesUtil().customSttConfig;
-    final label = useCustom ? SttProviderConfig.get(config.provider).displayName : 'Omi';
-
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(color: Colors.grey.shade800, borderRadius: BorderRadius.circular(8)),
-      child: Text(
-        label,
-        style: const TextStyle(color: Colors.grey, fontSize: 11, fontWeight: FontWeight.w500),
-      ),
-    );
-  }
-
-  Widget _buildExperimentalItem({
-    required String title,
-    required String description,
-    required FaIconData icon,
-    required bool value,
-    required ValueChanged<bool>? onChanged,
-  }) {
-    return Row(
+  Widget _buildDebugLogs() {
+    final l10n = context.l10n;
+    final enabled = SharedPreferencesUtil().devLogsToFileEnabled;
+    return OmiSettingsGroup(
+      header: l10n.debugAndDiagnostics,
       children: [
-        Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(10)),
-          child: Center(child: FaIcon(icon, color: Colors.grey.shade400, size: 16)),
+        OmiSettingsRow.toggle(
+          leading: const FaIcon(FontAwesomeIcons.bug),
+          title: l10n.debugLogs,
+          subtitle: enabled ? l10n.autoDeletesAfterThreeDays : l10n.helpsDiagnoseIssues,
+          value: enabled,
+          onChanged: (v) async {
+            await DebugLogManager.setEnabled(v);
+            if (mounted) setState(() {});
+          },
         ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
-              ),
-              const SizedBox(height: 2),
-              Text(description, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
-            ],
+        if (enabled)
+          Padding(
+            padding: const EdgeInsets.all(OmiSpacing.md),
+            child: Row(
+              children: [
+                Expanded(
+                  child: OmiButton.secondary(
+                    label: l10n.shareLogs,
+                    leading: const FaIcon(FontAwesomeIcons.fileArrowUp),
+                    size: OmiButtonSize.compact,
+                    onPressed: _shareLogs,
+                  ),
+                ),
+                const SizedBox(width: OmiSpacing.sm),
+                OmiButton.destructive(
+                  label: l10n.clear,
+                  leading: const FaIcon(FontAwesomeIcons.trash),
+                  size: OmiButtonSize.compact,
+                  onPressed: () async {
+                    final message = l10n.debugLogCleared;
+                    await DebugLogManager.clear();
+                    if (mounted) OmiFeedback.confirm(context, message);
+                  },
+                ),
+              ],
+            ),
           ),
-        ),
-        Switch(value: value, onChanged: onChanged, activeThumbColor: const Color(0xFF22C55E)),
       ],
     );
   }
@@ -192,1595 +181,241 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
     Widget? extraField,
   }) {
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Row(
-          children: [
-            Container(
-              width: 40,
-              height: 40,
-              decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(10)),
-              child: Center(child: FaIcon(icon, color: Colors.grey.shade400, size: 16)),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(description, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
-                ],
-              ),
-            ),
-            Switch(value: isEnabled, onChanged: onToggle, activeThumbColor: const Color(0xFF22C55E)),
-          ],
+        OmiSettingsRow.toggle(
+          leading: FaIcon(icon),
+          title: title,
+          subtitle: description,
+          value: isEnabled,
+          onChanged: onToggle,
         ),
-        if (isEnabled) ...[
-          const SizedBox(height: 12),
-          _buildTextField(controller: controller, label: context.l10n.endpointUrl),
-          if (extraField != null) ...[const SizedBox(height: 8), extraField],
-        ],
+        if (isEnabled)
+          Padding(
+            padding: const EdgeInsets.fromLTRB(OmiSpacing.md, 0, OmiSpacing.md, OmiSpacing.md),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                _DeveloperTextField(controller: controller, label: context.l10n.endpointUrl),
+                if (extraField != null) ...[const SizedBox(height: OmiSpacing.xs), extraField],
+              ],
+            ),
+          ),
       ],
     );
   }
 
-  Widget _buildTextField({
-    required TextEditingController controller,
-    required String label,
-    String? hint,
-    TextInputType? keyboardType,
-  }) {
-    return Container(
-      decoration: BoxDecoration(color: const Color(0xFF2C2C2E), borderRadius: BorderRadius.circular(10)),
-      child: TextField(
-        controller: controller,
-        keyboardType: keyboardType,
-        style: const TextStyle(color: Colors.white, fontSize: 15),
-        decoration: InputDecoration(
-          labelText: label,
-          hintText: hint,
-          labelStyle: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-          hintStyle: TextStyle(color: Colors.grey.shade600, fontSize: 14),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-          border: InputBorder.none,
-          enabledBorder: InputBorder.none,
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(10),
-            borderSide: const BorderSide(color: Colors.white24, width: 1),
+  Widget _buildWebhooks(DeveloperModeProvider provider) {
+    final l10n = context.l10n;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        OmiSectionHeader(
+          l10n.webhooks,
+          trailing: const DeveloperDocsButton(
+            url: 'https://docs.omi.me/doc/developer/apps/Introduction',
+            analyticsLabel: 'Webhooks',
           ),
         ),
-      ),
+        OmiSettingsGroup(
+          children: [
+            _buildWebhookItem(
+              title: l10n.conversationEvents,
+              description: l10n.newConversationCreated,
+              icon: FontAwesomeIcons.message,
+              isEnabled: provider.conversationEventsToggled,
+              onToggle: provider.onConversationEventsToggled,
+              controller: provider.webhookOnConversationCreated,
+            ),
+            _buildWebhookItem(
+              title: l10n.realTimeTranscript,
+              description: l10n.transcriptReceived,
+              icon: FontAwesomeIcons.closedCaptioning,
+              isEnabled: provider.transcriptsToggled,
+              onToggle: provider.onTranscriptsToggled,
+              controller: provider.webhookOnTranscriptReceived,
+            ),
+            _buildWebhookItem(
+              title: l10n.audioBytes,
+              description: l10n.audioDataReceived,
+              icon: FontAwesomeIcons.waveSquare,
+              isEnabled: provider.audioBytesToggled,
+              onToggle: provider.onAudioBytesToggled,
+              controller: provider.webhookAudioBytes,
+              extraField: _DeveloperTextField(
+                controller: provider.webhookAudioBytesDelay,
+                label: l10n.intervalSeconds,
+                keyboardType: TextInputType.number,
+              ),
+            ),
+            _buildWebhookItem(
+              title: l10n.daySummary,
+              description: l10n.summaryGenerated,
+              icon: FontAwesomeIcons.calendarDay,
+              isEnabled: provider.daySummaryToggled,
+              onToggle: provider.onDaySummaryToggled,
+              controller: provider.webhookDaySummary,
+            ),
+          ],
+        ),
+      ],
     );
   }
 
-  Widget _buildMcpConfigRow(String label, String value) {
-    return GestureDetector(
-      onTap: () {
-        Clipboard.setData(ClipboardData(text: value));
-        AppSnackbar.showSnackbar(context.l10n.labelCopied(label));
-      },
-      child: Row(
+  Widget _buildExperimental(DeveloperModeProvider provider) {
+    final l10n = context.l10n;
+    return OmiSettingsGroup(
+      header: l10n.experimental,
+      children: [
+        OmiSettingsRow.toggle(
+          leading: const FaIcon(FontAwesomeIcons.code),
+          title: l10n.conversationDeveloperTools,
+          subtitle: l10n.conversationDeveloperToolsDescription,
+          value: SharedPreferencesUtil().devModeEnabled,
+          onChanged: (v) => setState(() => SharedPreferencesUtil().devModeEnabled = v),
+        ),
+        OmiSettingsRow.toggle(
+          leading: const FaIcon(FontAwesomeIcons.stethoscope),
+          title: l10n.transcriptionDiagnostics,
+          subtitle: l10n.detailedDiagnosticMessages,
+          value: provider.transcriptionDiagnosticEnabled,
+          onChanged: provider.onTranscriptionDiagnosticChanged,
+        ),
+        OmiSettingsRow.toggle(
+          leading: const FaIcon(FontAwesomeIcons.userPlus),
+          title: l10n.autoCreateSpeakers,
+          subtitle: l10n.autoCreateWhenNameDetected,
+          value: provider.autoCreateSpeakersEnabled,
+          onChanged: provider.onAutoCreateSpeakersChanged,
+        ),
+        OmiSettingsRow.toggle(
+          leading: const FaIcon(FontAwesomeIcons.microphoneSlash),
+          title: l10n.vadGate,
+          subtitle: l10n.vadGateDescription,
+          value: provider.vadGateEnabled,
+          onChanged: provider.onVadGateChanged,
+        ),
+      ],
+    );
+  }
+
+  Widget _buildFirmware() {
+    final deviceProvider = context.watch<DeviceProvider>();
+    if (!FirmwareUpdateBuildPolicy.current.allowsOmiFirmwareUpdate ||
+        !deviceProvider.isConnected ||
+        deviceProvider.pairedDevice == null) {
+      return const SizedBox.shrink();
+    }
+    final l10n = context.l10n;
+    return Padding(
+      padding: const EdgeInsets.only(top: OmiSpacing.xxl),
+      child: OmiSettingsGroup(
+        header: l10n.firmware,
+        headerSubtitle: l10n.flashCustomFirmwareDescription,
         children: [
-          Expanded(
-            flex: 2,
-            child: Text(label, style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
-          ),
-          Expanded(
-            flex: 3,
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              decoration: BoxDecoration(color: const Color(0xFF0D0D0D), borderRadius: BorderRadius.circular(6)),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: Text(
-                      value,
-                      style: const TextStyle(color: Colors.white, fontFamily: 'Ubuntu Mono', fontSize: 13),
-                    ),
-                  ),
-                  FaIcon(FontAwesomeIcons.copy, color: Colors.grey.shade600, size: 11),
-                ],
-              ),
-            ),
+          OmiSettingsRow(
+            leading: const FaIcon(FontAwesomeIcons.microchip),
+            title: l10n.flashCustomFirmware,
+            onTap: () => _pickFirmware(deviceProvider),
           ),
         ],
       ),
     );
   }
 
-  Widget _buildApiKeysList(BuildContext context) {
-    return Consumer<McpProvider>(
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    return Consumer<DeveloperModeProvider>(
       builder: (context, provider, child) {
-        if (provider.isLoading && provider.keys.isEmpty) {
-          return Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(12)),
-            child: const Center(child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white)),
-          );
-        }
-        if (provider.error != null) {
-          return Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(12)),
-            child: Center(
-              child: Text('Error: ${provider.error}', style: TextStyle(color: Colors.red.shade300)),
+        final dirty = provider.hasUnsavedWebhookChanges;
+        return PopScope(
+          canPop: !dirty,
+          onPopInvokedWithResult: (didPop, _) async {
+            if (didPop) return;
+            if (await _confirmDiscard(provider) && context.mounted) Navigator.of(context).pop();
+          },
+          child: GestureDetector(
+            onTap: () => FocusScope.of(context).unfocus(),
+            child: Scaffold(
+              appBar: AppBar(
+                leading: const OmiBackButton(),
+                title: Text(l10n.developerSettings),
+                actions: [
+                  if (dirty || provider.savingSettingsLoading)
+                    Padding(
+                      padding: const EdgeInsets.only(right: OmiSpacing.xs),
+                      child: Center(
+                        child: OmiButton.tertiary(
+                          label: l10n.save,
+                          size: OmiButtonSize.compact,
+                          isLoading: provider.savingSettingsLoading,
+                          onPressed: provider.saveSettings,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+              body: ListView(
+                padding: const EdgeInsets.fromLTRB(OmiSpacing.lg, OmiSpacing.xs, OmiSpacing.lg, OmiSpacing.xxl),
+                children: [
+                  OmiSettingsGroup(
+                    header: l10n.appCreators,
+                    children: [
+                      OmiSettingsRow(
+                        leading: const FaIcon(FontAwesomeIcons.solidCreditCard),
+                        title: l10n.creatorPayouts,
+                        onTap: () => openSettingsDestination(context, SettingsDestination.creatorPayouts),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: OmiSpacing.xxl),
+                  _buildDebugLogs(),
+                  const SizedBox(height: OmiSpacing.xxl),
+                  const DeveloperApiKeysSection(),
+                  const SizedBox(height: OmiSpacing.xxl),
+                  const DeveloperMcpSection(),
+                  const SizedBox(height: OmiSpacing.xxl),
+                  _buildWebhooks(provider),
+                  const SizedBox(height: OmiSpacing.xxl),
+                  _buildExperimental(provider),
+                  _buildFirmware(),
+                ],
+              ),
             ),
-          );
-        }
-        if (provider.keys.isEmpty) {
-          return Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(12)),
-            child: Column(
-              children: [
-                FaIcon(FontAwesomeIcons.key, color: Colors.grey.shade600, size: 28),
-                const SizedBox(height: 12),
-                Text(context.l10n.noApiKeysYet, style: TextStyle(color: Colors.grey.shade400, fontSize: 15)),
-                const SizedBox(height: 4),
-                Text(context.l10n.createKeyToGetStarted, style: TextStyle(color: Colors.grey.shade600, fontSize: 13)),
-              ],
-            ),
-          );
-        }
-        return _buildSectionContainer(
-          children: provider.keys.asMap().entries.map((entry) {
-            final index = entry.key;
-            final key = entry.value;
-            return Column(
-              children: [
-                McpApiKeyListItem(apiKey: key),
-                if (index < provider.keys.length - 1) const Divider(height: 1, color: Color(0xFF3C3C43)),
-              ],
-            );
-          }).toList(),
+          ),
         );
       },
     );
   }
+}
 
-  Widget _buildDocsButton(String url, String label) {
-    return Material(
-      color: Colors.white,
-      borderRadius: BorderRadius.circular(20),
-      child: InkWell(
-        onTap: () {
-          launchUrl(Uri.parse(url));
-          PlatformManager.instance.analytics.pageOpened('$label Docs');
-        },
-        borderRadius: BorderRadius.circular(20),
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-          child: Text(
-            context.l10n.docs,
-            style: const TextStyle(color: Colors.black, fontWeight: FontWeight.w600, fontSize: 12),
-          ),
-        ),
-      ),
-    );
-  }
+class _DeveloperTextField extends StatelessWidget {
+  const _DeveloperTextField({required this.controller, required this.label, this.keyboardType});
 
-  Widget _buildCreateKeyButton(VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.1), borderRadius: BorderRadius.circular(20)),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const FaIcon(FontAwesomeIcons.plus, color: Colors.white, size: 10),
-            const SizedBox(width: 6),
-            Text(
-              context.l10n.createKey,
-              style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _buildManualFirmwareFlash(DeviceProvider provider) {
-    return _buildSectionContainer(
-      children: [
-        GestureDetector(
-          onTap: () async {
-            final result = await FilePicker.platform.pickFiles(
-              type: FileType.custom,
-              allowedExtensions: ['zip'],
-              dialogTitle: 'Select firmware ZIP file',
-            );
-            if (result == null || result.files.isEmpty) return;
-            final file = result.files.first;
-            if (file.path == null) return;
-
-            if (!mounted) return;
-            Navigator.of(context).push(
-              MaterialPageRoute(
-                builder: (context) => _ManualFirmwareFlashPage(
-                  zipFilePath: file.path!,
-                  fileName: file.name,
-                  device: provider.pairedDevice!,
-                ),
-              ),
-            );
-          },
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
-            child: Row(
-              children: [
-                const SizedBox(
-                  width: 24,
-                  height: 24,
-                  child: Center(child: FaIcon(FontAwesomeIcons.microchip, color: Colors.white, size: 16)),
-                ),
-                const SizedBox(width: 14),
-                const Expanded(
-                  child: Text('Flash Custom Firmware', style: TextStyle(color: Colors.white, fontSize: 16)),
-                ),
-                Icon(Icons.chevron_right, color: Colors.grey.shade600, size: 20),
-              ],
-            ),
-          ),
-        ),
-      ],
-    );
-  }
+  final TextEditingController controller;
+  final String label;
+  final TextInputType? keyboardType;
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: () => FocusScope.of(context).unfocus(),
-      child: Consumer<DeveloperModeProvider>(
-        builder: (context, provider, child) {
-          return Scaffold(
-            backgroundColor: const Color(0xFF0D0D0D),
-            appBar: AppBar(
-              backgroundColor: const Color(0xFF0D0D0D),
-              elevation: 0,
-              leading: IconButton(
-                icon: const FaIcon(FontAwesomeIcons.chevronLeft, size: 18),
-                onPressed: () => Navigator.of(context).pop(),
-              ),
-              title: Text(
-                context.l10n.developerSettings,
-                style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 18),
-              ),
-              centerTitle: true,
-              actions: [
-                TextButton(
-                  onPressed: provider.savingSettingsLoading ? null : provider.saveSettings,
-                  child: Text(
-                    provider.savingSettingsLoading ? context.l10n.saving : context.l10n.save,
-                    style: TextStyle(
-                      color: provider.savingSettingsLoading ? Colors.grey : Colors.white,
-                      fontWeight: FontWeight.w500,
-                      fontSize: 16,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            body: SingleChildScrollView(
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Payment Methods
-                  _buildNavItem(
-                    icon: FontAwesomeIcons.solidCreditCard,
-                    title: context.l10n.paymentMethods,
-                    onTap: () =>
-                        Navigator.of(context).push(MaterialPageRoute(builder: (context) => const PaymentsPage())),
-                  ),
-                  const SizedBox(height: 12),
-
-                  // Conversation Display
-                  _buildNavItem(
-                    icon: FontAwesomeIcons.list,
-                    title: context.l10n.conversationDisplay,
-                    onTap: () => Navigator.of(
-                      context,
-                    ).push(MaterialPageRoute(builder: (context) => const ConversationDisplaySettings())),
-                  ),
-                  const SizedBox(height: 12),
-
-                  // Data Privacy
-                  _buildNavItem(
-                    icon: FontAwesomeIcons.shield,
-                    title: context.l10n.dataPrivacy,
-                    onTap: () =>
-                        Navigator.of(context).push(MaterialPageRoute(builder: (context) => const DataPrivacyPage())),
-                  ),
-                  const SizedBox(height: 12),
-
-                  // Transcription Section
-                  GestureDetector(
-                    onTap: () async {
-                      await Navigator.of(
-                        context,
-                      ).push(MaterialPageRoute(builder: (context) => const TranscriptionSettingsPage()));
-                      if (mounted) {
-                        setState(() {});
-                      }
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1C1C1E),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF2A2A2E),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Center(
-                              child: FaIcon(FontAwesomeIcons.microphone, color: Colors.grey.shade400, size: 16),
-                            ),
-                          ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  context.l10n.transcription,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  context.l10n.configureSttProvider,
-                                  style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
-                                ),
-                              ],
-                            ),
-                          ),
-                          _buildSttChip(),
-                          const SizedBox(width: 8),
-                          FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 14),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-
-                  // Conversation Timeout Section
-                  GestureDetector(
-                    onTap: () {
-                      ConversationTimeoutDialog.show(context);
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1C1C1E),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF2A2A2E),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Center(child: FaIcon(FontAwesomeIcons.clock, color: Colors.grey.shade400, size: 16)),
-                          ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  context.l10n.conversationTimeout,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  context.l10n.setWhenConversationsAutoEnd,
-                                  style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
-                                ),
-                              ],
-                            ),
-                          ),
-                          FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 14),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-
-                  // Import Data Section
-                  GestureDetector(
-                    onTap: () {
-                      Navigator.of(context).push(MaterialPageRoute(builder: (context) => const ImportHistoryPage()));
-                    },
-                    child: Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1C1C1E),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF2A2A2E),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Center(
-                              child: FaIcon(FontAwesomeIcons.fileImport, color: Colors.grey.shade400, size: 16),
-                            ),
-                          ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  context.l10n.importData,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  context.l10n.importDataFromOtherSources,
-                                  style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
-                                ),
-                              ],
-                            ),
-                          ),
-                          FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 14),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 32),
-
-                  // Debug Logs Section
-                  _buildSectionHeader(context.l10n.debugAndDiagnostics),
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(14)),
-                    child: Column(
-                      children: [
-                        // Debug Logs toggle
-                        Row(
-                          children: [
-                            Container(
-                              width: 40,
-                              height: 40,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF2A2A2E),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Center(child: FaIcon(FontAwesomeIcons.bug, color: Colors.grey.shade400, size: 16)),
-                            ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    context.l10n.debugLogs,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    SharedPreferencesUtil().devLogsToFileEnabled
-                                        ? context.l10n.autoDeletesAfterThreeDays
-                                        : context.l10n.helpsDiagnoseIssues,
-                                    style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            Switch(
-                              value: SharedPreferencesUtil().devLogsToFileEnabled,
-                              onChanged: (v) async {
-                                await DebugLogManager.setEnabled(v);
-                                setState(() {});
-                              },
-                              activeThumbColor: const Color(0xFF22C55E),
-                            ),
-                          ],
-                        ),
-
-                        // Action buttons when enabled
-                        if (SharedPreferencesUtil().devLogsToFileEnabled) ...[
-                          const SizedBox(height: 16),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: GestureDetector(
-                                  onTap: () async {
-                                    final files = await DebugLogManager.listLogFiles();
-                                    if (files.isEmpty) {
-                                      if (context.mounted) {
-                                        AppSnackbar.showSnackbarError(context.l10n.noLogFilesFound);
-                                      }
-                                      return;
-                                    }
-                                    if (files.length == 1) {
-                                      final result = await Share.shareXFiles(
-                                        [XFile(files.first.path)],
-                                        text: 'Omi debug log',
-                                        sharePositionOrigin: _shareOrigin(),
-                                      );
-                                      if (result.status == ShareResultStatus.success) {
-                                        Logger.debug('Log shared');
-                                      }
-                                      return;
-                                    }
-
-                                    if (!context.mounted) return;
-                                    final selected = await showModalBottomSheet<File>(
-                                      context: context,
-                                      backgroundColor: const Color(0xFF1C1C1E),
-                                      shape: const RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
-                                      ),
-                                      builder: (ctx) {
-                                        return SafeArea(
-                                          child: Column(
-                                            mainAxisSize: MainAxisSize.min,
-                                            children: [
-                                              Container(
-                                                margin: const EdgeInsets.only(top: 8),
-                                                height: 4,
-                                                width: 36,
-                                                decoration: BoxDecoration(
-                                                  color: const Color(0xFF3C3C43),
-                                                  borderRadius: BorderRadius.circular(2),
-                                                ),
-                                              ),
-                                              Padding(
-                                                padding: const EdgeInsets.all(16),
-                                                child: Text(
-                                                  context.l10n.selectLogFile,
-                                                  style: const TextStyle(
-                                                    color: Colors.white,
-                                                    fontSize: 18,
-                                                    fontWeight: FontWeight.w600,
-                                                  ),
-                                                ),
-                                              ),
-                                              Flexible(
-                                                child: ListView.separated(
-                                                  shrinkWrap: true,
-                                                  itemCount: files.length,
-                                                  separatorBuilder: (_, __) =>
-                                                      const Divider(height: 1, color: Color(0xFF3C3C43)),
-                                                  itemBuilder: (ctx, i) {
-                                                    final f = files[i];
-                                                    final name = f.uri.pathSegments.last;
-                                                    return ListTile(
-                                                      title: Text(name, style: const TextStyle(color: Colors.white)),
-                                                      trailing: const FaIcon(
-                                                        FontAwesomeIcons.chevronRight,
-                                                        color: Color(0xFF3C3C43),
-                                                        size: 14,
-                                                      ),
-                                                      onTap: () => Navigator.of(ctx).pop(f),
-                                                    );
-                                                  },
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        );
-                                      },
-                                    );
-
-                                    if (selected != null) {
-                                      final result = await Share.shareXFiles(
-                                        [XFile(selected.path)],
-                                        text: 'Omi debug log',
-                                        sharePositionOrigin: _shareOrigin(),
-                                      );
-                                      if (result.status == ShareResultStatus.success) {
-                                        Logger.debug('Log shared');
-                                      }
-                                    }
-                                  },
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(vertical: 12),
-                                    decoration: BoxDecoration(
-                                      color: const Color(0xFF2A2A2E),
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    child: Row(
-                                      mainAxisAlignment: MainAxisAlignment.center,
-                                      children: [
-                                        FaIcon(FontAwesomeIcons.fileArrowUp, color: Colors.grey.shade300, size: 16),
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          context.l10n.shareLogs,
-                                          style: TextStyle(
-                                            color: Colors.grey.shade300,
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              GestureDetector(
-                                onTap: () async {
-                                  final message = context.l10n.debugLogCleared;
-                                  await DebugLogManager.clear();
-                                  if (!context.mounted) return;
-                                  AppSnackbar.showSnackbar(message);
-                                },
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                                  decoration: BoxDecoration(
-                                    color: Colors.red.withValues(alpha: 0.15),
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      const FaIcon(FontAwesomeIcons.trash, color: Colors.redAccent, size: 14),
-                                      const SizedBox(width: 6),
-                                      Text(
-                                        context.l10n.clear,
-                                        style: const TextStyle(
-                                          color: Colors.redAccent,
-                                          fontSize: 14,
-                                          fontWeight: FontWeight.w500,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  GestureDetector(
-                    onTap: provider.loadingExportMemories
-                        ? null
-                        : () async {
-                            if (provider.loadingExportMemories) return;
-                            // Capture l10n before async gaps
-                            final exportTitle = context.l10n.exportAllData;
-                            setState(() => provider.loadingExportMemories = true);
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(context.l10n.exportStartedMayTakeFewSeconds),
-                                duration: const Duration(seconds: 3),
-                              ),
-                            );
-                            final directory = await getApplicationDocumentsDirectory();
-                            final filePath = '${directory.path}/omi-export.json';
-                            final exportedPath = await exportUserDataToFile(filePath);
-                            if (exportedPath == null) {
-                              // Always reset the flag so the button is re-enabled even if widget is unmounted
-                              provider.loadingExportMemories = false;
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(
-                                  context,
-                                ).showSnackBar(const SnackBar(content: Text('Export failed. Please try again.')));
-                                setState(() {});
-                              }
-                              return;
-                            }
-
-                            final result = await Share.shareXFiles(
-                              [XFile(exportedPath)],
-                              subject: exportTitle,
-                              text: exportTitle,
-                              sharePositionOrigin: _shareOrigin(),
-                            );
-                            if (result.status == ShareResultStatus.success) {
-                              Logger.debug('Export shared');
-                            }
-                            PlatformManager.instance.analytics.exportMemories();
-                            // Always reset the flag so the button is re-enabled even if widget is unmounted
-                            provider.loadingExportMemories = false;
-                            if (mounted) setState(() {});
-                          },
-                    child: Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF1C1C1E),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Row(
-                        children: [
-                          Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF2A2A2E),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Center(
-                              child: FaIcon(FontAwesomeIcons.fileExport, color: Colors.grey.shade400, size: 16),
-                            ),
-                          ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  context.l10n.exportAllData,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  context.l10n.exportConversationsToJson,
-                                  style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
-                                ),
-                              ],
-                            ),
-                          ),
-                          if (provider.loadingExportMemories)
-                            const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                            )
-                          else
-                            FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade400, size: 16),
-                        ],
-                      ),
-                    ),
-                  ),
-
-                  const SizedBox(height: 32),
-
-                  // Developer API Keys Section
-                  const DeveloperApiKeysSection(),
-
-                  const SizedBox(height: 32),
-
-                  // MCP Section
-                  Padding(
-                    padding: const EdgeInsets.only(left: 4, right: 4, bottom: 12),
-                    child: Row(
-                      children: [
-                        Text(
-                          context.l10n.mcp,
-                          style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
-                        ),
-                        const Spacer(),
-                        _buildDocsButton('https://docs.omi.me/doc/developer/MCP', 'MCP'),
-                        const SizedBox(width: 8),
-                        _buildCreateKeyButton(
-                          () => showDialog(context: context, builder: (context) => const CreateMcpApiKeyDialog()),
-                        ),
-                      ],
-                    ),
-                  ),
-                  _buildApiKeysList(context),
-
-                  const SizedBox(height: 24),
-
-                  // Claude Desktop Integration
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(14)),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              width: 40,
-                              height: 40,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF2A2A2E),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Center(
-                                child: FaIcon(FontAwesomeIcons.desktop, color: Colors.grey.shade400, size: 16),
-                              ),
-                            ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    context.l10n.claudeDesktop,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    context.l10n.addToClaudeDesktopConfig,
-                                    style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 16),
-                        // Code block with JSON syntax highlighting
-                        Container(
-                          width: double.infinity,
-                          padding: const EdgeInsets.all(14),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF0D0D0D),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: const Color(0xFF2A2A2E), width: 1),
-                          ),
-                          child: RichText(
-                            text: TextSpan(
-                              style: const TextStyle(fontFamily: 'Ubuntu Mono', fontSize: 11, height: 1.6),
-                              children: [
-                                const TextSpan(
-                                  text: '{\n',
-                                  style: TextStyle(color: Colors.white),
-                                ),
-                                const TextSpan(
-                                  text: '  ',
-                                  style: TextStyle(color: Colors.white),
-                                ),
-                                TextSpan(
-                                  text: '"mcpServers"',
-                                  style: TextStyle(color: Colors.cyan.shade300),
-                                ),
-                                const TextSpan(
-                                  text: ': {\n',
-                                  style: TextStyle(color: Colors.white),
-                                ),
-                                const TextSpan(
-                                  text: '    ',
-                                  style: TextStyle(color: Colors.white),
-                                ),
-                                TextSpan(
-                                  text: '"omi"',
-                                  style: TextStyle(color: Colors.cyan.shade300),
-                                ),
-                                const TextSpan(
-                                  text: ': {\n',
-                                  style: TextStyle(color: Colors.white),
-                                ),
-                                const TextSpan(
-                                  text: '      ',
-                                  style: TextStyle(color: Colors.white),
-                                ),
-                                TextSpan(
-                                  text: '"command"',
-                                  style: TextStyle(color: Colors.cyan.shade300),
-                                ),
-                                const TextSpan(
-                                  text: ': ',
-                                  style: TextStyle(color: Colors.white),
-                                ),
-                                TextSpan(
-                                  text: '"docker"',
-                                  style: TextStyle(color: Colors.orange.shade300),
-                                ),
-                                const TextSpan(
-                                  text: ',\n',
-                                  style: TextStyle(color: Colors.white),
-                                ),
-                                const TextSpan(
-                                  text: '      ',
-                                  style: TextStyle(color: Colors.white),
-                                ),
-                                TextSpan(
-                                  text: '"args"',
-                                  style: TextStyle(color: Colors.cyan.shade300),
-                                ),
-                                const TextSpan(
-                                  text: ': [\n',
-                                  style: TextStyle(color: Colors.white),
-                                ),
-                                const TextSpan(
-                                  text: '        ',
-                                  style: TextStyle(color: Colors.white),
-                                ),
-                                TextSpan(
-                                  text: '"run"',
-                                  style: TextStyle(color: Colors.orange.shade300),
-                                ),
-                                const TextSpan(
-                                  text: ', ',
-                                  style: TextStyle(color: Colors.white),
-                                ),
-                                TextSpan(
-                                  text: '"--rm"',
-                                  style: TextStyle(color: Colors.orange.shade300),
-                                ),
-                                const TextSpan(
-                                  text: ', ',
-                                  style: TextStyle(color: Colors.white),
-                                ),
-                                TextSpan(
-                                  text: '"-i"',
-                                  style: TextStyle(color: Colors.orange.shade300),
-                                ),
-                                const TextSpan(
-                                  text: ', ',
-                                  style: TextStyle(color: Colors.white),
-                                ),
-                                TextSpan(
-                                  text: '"-e"',
-                                  style: TextStyle(color: Colors.orange.shade300),
-                                ),
-                                const TextSpan(
-                                  text: ',\n',
-                                  style: TextStyle(color: Colors.white),
-                                ),
-                                const TextSpan(
-                                  text: '        ',
-                                  style: TextStyle(color: Colors.white),
-                                ),
-                                TextSpan(
-                                  text: '"OMI_API_KEY=<your_key>"',
-                                  style: TextStyle(color: Colors.orange.shade300),
-                                ),
-                                const TextSpan(
-                                  text: ',\n',
-                                  style: TextStyle(color: Colors.white),
-                                ),
-                                const TextSpan(
-                                  text: '        ',
-                                  style: TextStyle(color: Colors.white),
-                                ),
-                                TextSpan(
-                                  text: '"omiai/mcp-server:latest"',
-                                  style: TextStyle(color: Colors.orange.shade300),
-                                ),
-                                const TextSpan(
-                                  text: '\n      ]\n    }\n  }\n}',
-                                  style: TextStyle(color: Colors.white),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 12),
-                        GestureDetector(
-                          onTap: () {
-                            const config = '''{
-  "mcpServers": {
-    "omi": {
-      "command": "docker",
-      "args": ["run", "--rm", "-i", "-e", "OMI_API_KEY=your_api_key_here", "omiai/mcp-server:latest"]
-    }
-  }
-}''';
-                            Clipboard.setData(const ClipboardData(text: config));
-                            AppSnackbar.showSnackbar(context.l10n.configCopiedToClipboard);
-                          },
-                          child: Container(
-                            width: double.infinity,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            decoration: BoxDecoration(
-                              color: const Color(0xFF2A2A2E),
-                              borderRadius: BorderRadius.circular(10),
-                            ),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                FaIcon(FontAwesomeIcons.copy, color: Colors.grey.shade300, size: 14),
-                                const SizedBox(width: 8),
-                                Text(
-                                  context.l10n.copyConfig,
-                                  style: TextStyle(
-                                    color: Colors.grey.shade300,
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w500,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 24),
-
-                  // MCP Server Section
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(14)),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              width: 40,
-                              height: 40,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFF2A2A2E),
-                                borderRadius: BorderRadius.circular(10),
-                              ),
-                              child: Center(
-                                child: FaIcon(FontAwesomeIcons.server, color: Colors.grey.shade400, size: 16),
-                              ),
-                            ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    context.l10n.mcpServer,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 16,
-                                      fontWeight: FontWeight.w500,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    context.l10n.connectAiAssistantsToYourData,
-                                    style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 20),
-
-                        // Server URL
-                        Text(
-                          context.l10n.serverUrl,
-                          style: TextStyle(color: Colors.grey.shade400, fontSize: 12, fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 8),
-                        Builder(
-                          builder: (context) {
-                            final mcpUrl = '${Env.apiBaseUrl}v1/mcp/sse';
-                            return GestureDetector(
-                              onTap: () {
-                                Clipboard.setData(ClipboardData(text: mcpUrl));
-                                AppSnackbar.showSnackbar(context.l10n.urlCopied);
-                              },
-                              child: Container(
-                                width: double.infinity,
-                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                                decoration: BoxDecoration(
-                                  color: const Color(0xFF0D0D0D),
-                                  borderRadius: BorderRadius.circular(10),
-                                  border: Border.all(color: const Color(0xFF2A2A2E), width: 1),
-                                ),
-                                child: Row(
-                                  children: [
-                                    Expanded(
-                                      child: Text(
-                                        mcpUrl,
-                                        style: const TextStyle(
-                                          color: Colors.white,
-                                          fontFamily: 'Ubuntu Mono',
-                                          fontSize: 13,
-                                        ),
-                                      ),
-                                    ),
-                                    const SizedBox(width: 8),
-                                    FaIcon(FontAwesomeIcons.copy, color: Colors.grey.shade500, size: 14),
-                                  ],
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-
-                        const SizedBox(height: 20),
-                        Divider(color: Colors.grey.shade800, height: 1),
-                        const SizedBox(height: 20),
-
-                        // API Key Auth Section
-                        Text(
-                          context.l10n.apiKeyAuth,
-                          style: TextStyle(color: Colors.grey.shade400, fontSize: 12, fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 12),
-                        Row(
-                          children: [
-                            Expanded(
-                              flex: 2,
-                              child: Text(
-                                context.l10n.header,
-                                style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
-                              ),
-                            ),
-                            Expanded(
-                              flex: 3,
-                              child: Text(
-                                'Authorization: Bearer <key>',
-                                style: TextStyle(color: Colors.grey.shade600, fontSize: 12, fontFamily: 'Ubuntu Mono'),
-                              ),
-                            ),
-                          ],
-                        ),
-
-                        const SizedBox(height: 20),
-                        Divider(color: Colors.grey.shade800, height: 1),
-                        const SizedBox(height: 20),
-
-                        // OAuth Section
-                        Text(
-                          context.l10n.oAuth,
-                          style: TextStyle(color: Colors.grey.shade400, fontSize: 12, fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 12),
-
-                        // Client ID
-                        _buildMcpConfigRow(context.l10n.clientId, 'omi'),
-                        const SizedBox(height: 8),
-
-                        // Client Secret hint
-                        Row(
-                          children: [
-                            Expanded(
-                              flex: 2,
-                              child: Text(
-                                context.l10n.clientSecret,
-                                style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
-                              ),
-                            ),
-                            Expanded(
-                              flex: 3,
-                              child: Text(
-                                context.l10n.useYourMcpApiKey,
-                                style: TextStyle(
-                                  color: Colors.grey.shade600,
-                                  fontSize: 13,
-                                  fontStyle: FontStyle.italic,
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 32),
-
-                  // Webhooks Section
-                  Padding(
-                    padding: const EdgeInsets.only(left: 4, right: 4, bottom: 12),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          context.l10n.webhooks,
-                          style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
-                        ),
-                        _buildDocsButton('https://docs.omi.me/doc/developer/apps/Introduction', 'Webhooks'),
-                      ],
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(14)),
-                    child: Column(
-                      children: [
-                        // Conversation Events
-                        _buildWebhookItem(
-                          title: context.l10n.conversationEvents,
-                          description: context.l10n.newConversationCreated,
-                          icon: FontAwesomeIcons.message,
-                          isEnabled: provider.conversationEventsToggled,
-                          onToggle: provider.onConversationEventsToggled,
-                          controller: provider.webhookOnConversationCreated,
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          child: Divider(color: Colors.grey.shade800, height: 1),
-                        ),
-                        // Real-time Transcript
-                        _buildWebhookItem(
-                          title: context.l10n.realTimeTranscript,
-                          description: context.l10n.transcriptReceived,
-                          icon: FontAwesomeIcons.closedCaptioning,
-                          isEnabled: provider.transcriptsToggled,
-                          onToggle: provider.onTranscriptsToggled,
-                          controller: provider.webhookOnTranscriptReceived,
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          child: Divider(color: Colors.grey.shade800, height: 1),
-                        ),
-                        // Realtime Audio Bytes
-                        _buildWebhookItem(
-                          title: context.l10n.audioBytes,
-                          description: context.l10n.audioDataReceived,
-                          icon: FontAwesomeIcons.waveSquare,
-                          isEnabled: provider.audioBytesToggled,
-                          onToggle: provider.onAudioBytesToggled,
-                          controller: provider.webhookAudioBytes,
-                          extraField: _buildTextField(
-                            controller: provider.webhookAudioBytesDelay,
-                            label: context.l10n.intervalSeconds,
-                            keyboardType: TextInputType.number,
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          child: Divider(color: Colors.grey.shade800, height: 1),
-                        ),
-                        // Day Summary
-                        _buildWebhookItem(
-                          title: context.l10n.daySummary,
-                          description: context.l10n.summaryGenerated,
-                          icon: FontAwesomeIcons.calendarDay,
-                          isEnabled: provider.daySummaryToggled,
-                          onToggle: provider.onDaySummaryToggled,
-                          controller: provider.webhookDaySummary,
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  const SizedBox(height: 32),
-
-                  // Experimental Section
-                  Padding(
-                    padding: const EdgeInsets.only(left: 4, right: 4, bottom: 12),
-                    child: Text(
-                      context.l10n.experimental,
-                      style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(14)),
-                    child: Column(
-                      children: [
-                        // Transcription Diagnostics
-                        _buildExperimentalItem(
-                          title: context.l10n.transcriptionDiagnostics,
-                          description: context.l10n.detailedDiagnosticMessages,
-                          icon: FontAwesomeIcons.stethoscope,
-                          value: provider.transcriptionDiagnosticEnabled,
-                          onChanged: provider.onTranscriptionDiagnosticChanged,
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          child: Divider(color: Colors.grey.shade800, height: 1),
-                        ),
-                        // Auto-create Speakers
-                        _buildExperimentalItem(
-                          title: context.l10n.autoCreateSpeakers,
-                          description: context.l10n.autoCreateWhenNameDetected,
-                          icon: FontAwesomeIcons.userPlus,
-                          value: provider.autoCreateSpeakersEnabled,
-                          onChanged: provider.onAutoCreateSpeakersChanged,
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          child: Divider(color: Colors.grey.shade800, height: 1),
-                        ),
-                        // VAD Gate
-                        _buildExperimentalItem(
-                          title: 'VAD Gate',
-                          description: 'Server-side voice gating to reduce STT costs',
-                          icon: FontAwesomeIcons.microphoneSlash,
-                          value: provider.vadGateEnabled,
-                          onChanged: provider.onVadGateChanged,
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // Home Screen Section
-                  const SizedBox(height: 32),
-                  const Padding(
-                    padding: EdgeInsets.only(left: 4, right: 4, bottom: 12),
-                    child: Text(
-                      'Home Screen',
-                      style: TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
-                    ),
-                  ),
-                  Container(
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(14)),
-                    child: Column(
-                      children: [
-                        _buildExperimentalItem(
-                          title: context.l10n.goalTracker,
-                          description: context.l10n.trackYourGoalsOnHomepage,
-                          icon: FontAwesomeIcons.bullseye,
-                          value: provider.showGoalTrackerEnabled,
-                          onChanged: provider.onShowGoalTrackerChanged,
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          child: Divider(color: Colors.grey.shade800, height: 1),
-                        ),
-                        _buildExperimentalItem(
-                          title: context.l10n.dailyScore,
-                          description: context.l10n.showDailyScoreOnHomepage,
-                          icon: FontAwesomeIcons.chartLine,
-                          value: provider.showDailyScoreEnabled,
-                          onChanged: provider.onShowDailyScoreChanged,
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          child: Divider(color: Colors.grey.shade800, height: 1),
-                        ),
-                        _buildExperimentalItem(
-                          title: context.l10n.tasks,
-                          description: context.l10n.showTasksOnHomepage,
-                          icon: FontAwesomeIcons.listCheck,
-                          value: provider.showTasksEnabled,
-                          onChanged: provider.onShowTasksChanged,
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 16),
-                          child: Divider(color: Colors.grey.shade800, height: 1),
-                        ),
-                        _buildExperimentalItem(
-                          title: context.l10n.showPhoneCallButtonTitle,
-                          description: context.l10n.showPhoneCallButtonDesc,
-                          icon: FontAwesomeIcons.phone,
-                          value: provider.showPhoneCallButton,
-                          onChanged: provider.onShowPhoneCallButtonChanged,
-                        ),
-                      ],
-                    ),
-                  ),
-
-                  // Manual Firmware Flash (only when device connected)
-                  Builder(
-                    builder: (context) {
-                      final deviceProvider = context.watch<DeviceProvider>();
-                      if (FirmwareUpdateBuildPolicy.current.allowsOmiFirmwareUpdate &&
-                          deviceProvider.isConnected &&
-                          deviceProvider.pairedDevice != null) {
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const SizedBox(height: 24),
-                            _buildSectionHeader('Firmware', subtitle: 'Flash custom firmware builds'),
-                            const SizedBox(height: 8),
-                            _buildManualFirmwareFlash(deviceProvider),
-                          ],
-                        );
-                      }
-                      return const SizedBox.shrink();
-                    },
-                  ),
-
-                  const SizedBox(height: 48),
-                ],
-              ),
-            ),
-          );
-        },
-      ),
-    );
-  }
-}
-
-// ============================================================
-// Manual Firmware Flash Page
-// ============================================================
-
-class _ManualFirmwareFlashPage extends StatefulWidget {
-  final String zipFilePath;
-  final String fileName;
-  final BtDevice device;
-
-  const _ManualFirmwareFlashPage({required this.zipFilePath, required this.fileName, required this.device});
-
-  @override
-  State<_ManualFirmwareFlashPage> createState() => _ManualFirmwareFlashPageState();
-}
-
-class _ManualFirmwareFlashPageState extends State<_ManualFirmwareFlashPage> with FirmwareMixin {
-  bool _confirmed = false;
-  String? _error;
-
-  @override
-  void initState() {
-    super.initState();
-  }
-
-  @override
-  void dispose() {
-    killMcuUpdateManager();
-    super.dispose();
-  }
-
-  Future<void> _startFlash() async {
-    setState(() {
-      _confirmed = true;
-      _error = null;
-    });
-    try {
-      // Manual flash always uses MCU DFU — modern firmware ZIPs contain
-      // manifest.json which NordicDfu (legacy) cannot parse.
-      await startMCUDfu(widget.device, zipFilePath: widget.zipFilePath);
-    } catch (e) {
-      if (mounted) {
-        setState(() => _error = e.toString());
-      }
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.black,
-        title: Text(context.l10n.flashFirmware, style: const TextStyle(color: Colors.white)),
-        iconTheme: const IconThemeData(color: Colors.white),
-        elevation: 0,
-      ),
-      body: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // File info
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(12)),
-              child: Row(
-                children: [
-                  const FaIcon(FontAwesomeIcons.file, color: Colors.deepPurple, size: 20),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          widget.fileName,
-                          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Target: ${widget.device.name}',
-                          style: TextStyle(color: Colors.grey.shade400, fontSize: 13),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 24),
-
-            // Warning
-            if (!_confirmed) ...[
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.orange.shade900.withValues(alpha: 0.3),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.orange.shade700.withValues(alpha: 0.5)),
-                ),
-                child: Row(
-                  children: [
-                    Icon(Icons.warning_amber_rounded, color: Colors.orange.shade300, size: 24),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'Flashing custom firmware can brick your device. Make sure this is a valid Omi firmware build. Do not disconnect during the update.',
-                        style: TextStyle(color: Colors.orange.shade300, fontSize: 13),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const Spacer(),
-              SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: ElevatedButton(
-                  onPressed: _startFlash,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.deepPurple,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  child: Text(
-                    context.l10n.flashFirmware,
-                    style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
-                  ),
-                ),
-              ),
-            ],
-
-            // Progress
-            if (_confirmed && !isInstalled) ...[
-              const SizedBox(height: 16),
-              Text(
-                isInstalling ? 'Installing...' : 'Preparing...',
-                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 16),
-              LinearProgressIndicator(
-                value: installProgress / 100,
-                backgroundColor: const Color(0xFF2A2A2E),
-                valueColor: const AlwaysStoppedAnimation<Color>(Colors.deepPurple),
-                minHeight: 8,
-                borderRadius: BorderRadius.circular(4),
-              ),
-              const SizedBox(height: 8),
-              Text('${installProgress}%', style: TextStyle(color: Colors.grey.shade400, fontSize: 14)),
-            ],
-
-            // Success
-            if (isInstalled) ...[
-              const SizedBox(height: 32),
-              const Center(
-                child: Column(
-                  children: [
-                    Icon(Icons.check_circle, color: Colors.green, size: 64),
-                    SizedBox(height: 16),
-                    Text(
-                      'Firmware flashed successfully!',
-                      style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-                    ),
-                    SizedBox(height: 8),
-                    Text('Your device will restart.', style: TextStyle(color: Colors.grey, fontSize: 14)),
-                  ],
-                ),
-              ),
-            ],
-
-            // Error
-            if (_error != null) ...[
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.red.shade900.withValues(alpha: 0.3),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(_error!, style: TextStyle(color: Colors.red.shade300, fontSize: 13)),
-              ),
-            ],
-          ],
+    const border = OutlineInputBorder(borderRadius: OmiRadius.mdAll, borderSide: BorderSide.none);
+    return TextField(
+      controller: controller,
+      keyboardType: keyboardType ?? TextInputType.url,
+      autocorrect: false,
+      style: OmiType.subhead,
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
+        filled: true,
+        fillColor: OmiColors.surface2,
+        contentPadding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.sm),
+        border: border,
+        enabledBorder: border,
+        focusedBorder: const OutlineInputBorder(
+          borderRadius: OmiRadius.mdAll,
+          borderSide: BorderSide(color: OmiColors.textTertiary),
         ),
       ),
     );

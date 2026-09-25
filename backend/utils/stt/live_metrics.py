@@ -16,5 +16,14 @@ WINDOW_FORCED_CUTS = Counter(
     'omi_stt_window_forced_cuts_total',
     'Window POSTs that hit max context without a sentence boundary',
 )
+WINDOW_HEAD_RECOVERIES = Counter(
+    'omi_stt_window_head_recoveries_total',
+    'Window POSTs whose skipped leading speech was re-posted on its own',
+    ['outcome'],
+)
+WINDOW_DECODER_LOOPS = Counter(
+    'omi_stt_window_decoder_loops_total',
+    'Repeated-phrase decoder loops collapsed out of windowed TDT segments',
+)
 CHAIN_EXHAUSTED = Counter('omi_stt_chain_exhausted_total', 'Configured live chains that could not serve')
 LEG_ATTEMPTS = Counter('omi_stt_leg_attempts_total', 'Configured-chain connection results', ['to_mode', 'outcome'])

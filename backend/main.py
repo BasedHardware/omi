@@ -37,6 +37,7 @@ from routers import (
     auto_model,
     notifications,
     speech_profile,
+    speaker_tag_prompts,
     agents,
     users,
     trends,
@@ -186,6 +187,8 @@ app.add_middleware(
     allow_methods=['*'],
     allow_headers=['*'],
     expose_headers=[
+        'X-Next-Cursor',
+        'X-Scan-Truncated',
         'X-Omi-Memory-As-Of',
         'X-Omi-Memory-Belief-Enabled',
         'X-Omi-Memory-Canonical-Lifecycle-Exposed',
@@ -222,6 +225,7 @@ app.include_router(memories.router)
 app.include_router(memory_use.router)
 app.include_router(chat.router)
 app.include_router(speech_profile.router)
+app.include_router(speaker_tag_prompts.router)
 app.include_router(notifications.router)
 app.include_router(integration.router)
 app.include_router(agents.router)
