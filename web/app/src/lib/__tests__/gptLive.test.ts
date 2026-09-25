@@ -196,19 +196,52 @@ describe('GptLiveClient', () => {
   });
 
   it('closes the session and persists the latest partial transcript on stop', () => {
+    vi.useFakeTimers();
+    try {
+      const handlers = callbacks();
+      const client = new GptLiveClient({ ...handlers });
+      client.connect('token');
+      const socket = FakeWebSocket.instances[0]!;
+      socket.emit({
+        type: 'session.input_transcript.delta',
+        delta: 'Remember this unfinished turn',
+      });
+
+      client.stop();
+
+      // The tail is not flushed at the instant of stop: the socket stays
+      // readable through the grace window so frames still in flight land in
+      // the same buffer, and the flush happens exactly once at its end.
+      expect(handlers.onExchange).not.toHaveBeenCalled();
+      socket.emit({ type: 'session.input_transcript.delta', delta: ' too' });
+      vi.advanceTimersByTime(400);
+
+      expect(handlers.onExchange).toHaveBeenCalledTimes(1);
+      expect(handlers.onExchange).toHaveBeenCalledWith(
+        'Remember this unfinished turn too',
+        '',
+      );
+      // No second partial exchange after the grace window.
+      vi.advanceTimersByTime(1000);
+      expect(handlers.onExchange).toHaveBeenCalledTimes(1);
+      expect(socket.sent.some((frame) => frame.includes('"session.close"'))).toBe(true);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('concatenates GPT-Live transcript deltas verbatim, even mid-word', () => {
     const handlers = callbacks();
     const client = new GptLiveClient({ ...handlers });
     client.connect('token');
     const socket = FakeWebSocket.instances[0]!;
-    socket.emit({
-      type: 'session.input_transcript.delta',
-      delta: 'Remember this unfinished turn',
-    });
 
+    socket.emit({ type: 'session.input_transcript.delta', delta: 'Hel' });
+    socket.emit({ type: 'session.input_transcript.delta', delta: 'lo' });
+    socket.emit({ type: 'session.input_transcript.delta', delta: ' Omi' });
+
+    expect(handlers.onInputTranscript).toHaveBeenLastCalledWith('Hello Omi');
     client.stop();
-
-    expect(handlers.onExchange).toHaveBeenCalledWith('Remember this unfinished turn', '');
-    expect(socket.sent.some((frame) => frame.includes('"session.close"'))).toBe(true);
   });
 
   it('interrupts playback and clears assistant text on an interrupt event', () => {

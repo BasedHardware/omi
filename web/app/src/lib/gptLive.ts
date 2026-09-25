@@ -1,6 +1,6 @@
 import { createAudioCapture, type AudioCapture } from '@/lib/audioCapture';
 import type { RealtimeUsageReport } from '@/lib/api';
-import { PcmPlayer, appendChunk, pcmToBase64 } from '@/lib/geminiLive';
+import { PcmPlayer, pcmToBase64 } from '@/lib/geminiLive';
 
 export const GPT_LIVE_MODEL = 'gpt-live-1';
 export const GPT_LIVE_VOICE = 'marin';
@@ -125,6 +125,8 @@ export class GptLiveClient {
   /** Pending hard-close after `stop()`, so a closing `session.closed` usage frame
    *  can land first. */
   private closeTimer: number | null = null;
+  /** The terminal tail flush ran; `stop()` must never emit a second exchange. */
+  private exchangeFlushed = false;
   /** Sends `session.start`; deferred until `auth_response` on the managed relay. */
   private sendStartFrame: (() => void) | null = null;
 
@@ -186,7 +188,6 @@ export class GptLiveClient {
 
   stop(): void {
     this.stopped = true;
-    this.flushExchange();
     this.clearConnectionTimeout();
     this.capture?.stop();
     this.capture = null;
@@ -195,9 +196,10 @@ export class GptLiveClient {
     const socket = this.socket;
     if (socket?.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify({ type: 'session.close' }));
-      // Give the relay a brief window to deliver the session-scoped usage on
-      // `session.closed` before we hard-close; a received `session.closed`
-      // finalizes immediately (see handleMessage).
+      // The buffers are deliberately NOT flushed here: transcript frames can
+      // still be in flight and `handleMessage` keeps accumulating them. Keep one
+      // buffer until the close frame or the grace timeout and flush exactly once
+      // (in `hardClose`, or earlier on `session.closed`, which routes through it).
       if (this.closeTimer === null) {
         this.closeTimer = window.setTimeout(() => this.hardClose(), STOP_USAGE_GRACE_MS);
       }
@@ -206,8 +208,9 @@ export class GptLiveClient {
     }
   }
 
-  /** Close the socket now (no grace wait) and drop the pending close timer. */
+  /** Close the socket now (no grace wait), flushing any tail exchange exactly once. */
   private hardClose(): void {
+    this.flushExchangeOnce();
     if (this.closeTimer !== null) {
       window.clearTimeout(this.closeTimer);
       this.closeTimer = null;
@@ -215,6 +218,17 @@ export class GptLiveClient {
     const socket = this.socket;
     this.socket = null;
     socket?.close();
+  }
+
+  /**
+   * Terminal flush of whatever is still buffered at the end of the session.
+   * Live per-turn boundaries flush through `flushExchange` directly; this guard
+   * exists so the stop path can never emit a second partial exchange.
+   */
+  private flushExchangeOnce(): void {
+    if (this.exchangeFlushed) return;
+    this.exchangeFlushed = true;
+    this.flushExchange();
   }
 
   private clearConnectionTimeout(): void {
@@ -286,14 +300,16 @@ export class GptLiveClient {
       }
       case 'session.input_transcript.delta': {
         if (message.delta) {
-          this.humanText = appendChunk(this.humanText, message.delta);
+          // GPT-Live deltas can split mid-word; concatenate verbatim (no
+          // whitespace insertion) so "Hel" + "lo" stays "Hello".
+          this.humanText = this.humanText + message.delta;
           this.options.onInputTranscript(this.humanText);
         }
         return;
       }
       case 'session.output_transcript.delta': {
         if (message.delta) {
-          this.aiText = appendChunk(this.aiText, message.delta);
+          this.aiText = this.aiText + message.delta;
           this.options.onOutputTranscript(this.aiText);
         }
         return;
