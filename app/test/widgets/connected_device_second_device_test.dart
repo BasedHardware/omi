@@ -116,6 +116,7 @@ void main() {
 
     await tester.pumpWidget(_app(provider));
     await tester.pump();
+    await tester.scrollUntilVisible(find.byKey(const Key('second_device_section')), 300);
 
     expect(find.text('Second device'), findsOneWidget);
     expect(find.byKey(const Key('pair_second_device_button')), findsOneWidget);
@@ -134,6 +135,7 @@ void main() {
 
     await tester.pumpWidget(_app(provider));
     await tester.pump();
+    await tester.scrollUntilVisible(find.byKey(const Key('second_device_section')), 300);
 
     expect(find.text('Second device'), findsOneWidget);
     expect(find.text('OmiGlass'), findsOneWidget);
@@ -152,6 +154,7 @@ void main() {
 
     await tester.pumpWidget(_app(provider));
     await tester.pump();
+    await tester.scrollUntilVisible(find.byKey(const Key('second_device_section')), 300);
 
     expect(find.text('Second device'), findsOneWidget);
     expect(find.text('OmiGlass'), findsOneWidget);

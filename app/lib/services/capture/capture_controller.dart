@@ -400,6 +400,26 @@ class CaptureController extends ChangeNotifier
   BtDevice? _recordingDevice;
   BtDevice? _sessionRecordingDevice;
 
+  /// Camera device paired next to the recording device (OmiGlass alongside an
+  /// Omi pendant). Its photos go into the same `/v4/listen` session as the
+  /// pendant audio, producing one multi-modal conversation. Null when the
+  /// recording device is the only device (an OmiGlass on its own still streams
+  /// its own photos through [photoDevice]).
+  BtDevice? _companionPhotoDevice;
+
+  /// Device whose camera stream is currently open, so teardown stops the right
+  /// camera even after roles change.
+  String? _photoStreamDeviceId;
+
+  /// Bumped when photo streaming stops or moves so in-flight chunk callbacks
+  /// cannot send to a superseded `/v4/listen` session.
+  int _photoStreamGeneration = 0;
+
+  BtDevice? get companionPhotoDevice => _companionPhotoDevice;
+
+  /// The device whose camera is streamed during the active device session.
+  BtDevice? get photoDevice => _companionPhotoDevice ?? _recordingDevice;
+
   @visibleForTesting
   String? get photoStreamDeviceIdForTesting => _photoStreamDeviceId;
 
@@ -2038,7 +2058,7 @@ class CaptureController extends ChangeNotifier
     final device = photoDevice;
     if (device == null || _recordingDevice == null) return;
     if (_blePhotoStream != null && _photoStreamDeviceId == device.id) return;
-    var connection = await ServiceManager.instance().device.ensureConnection(device.id);
+    final connection = await _ensureDeviceConnection(device.id);
     if (connection == null || !await connection.hasPhotoStreamingCharacteristic()) return;
 
     await _blePhotoStream?.cancel();
@@ -2087,7 +2107,7 @@ class CaptureController extends ChangeNotifier
     final deviceId = _photoStreamDeviceId;
     _photoStreamDeviceId = null;
     if (deviceId == null) return;
-    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+    final connection = await _ensureDeviceConnection(deviceId);
     if (connection != null && await connection.hasPhotoStreamingCharacteristic()) {
       await connection.performCameraStopPhotoController();
     }
