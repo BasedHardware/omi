@@ -55,7 +55,9 @@ def jit_admission_cohort_authorizer(uid: str, _cohort_name: str = "") -> DailySw
 def _init_firebase() -> None:
     service_account_json = os.getenv("SERVICE_ACCOUNT_JSON")
     if service_account_json:
-        firebase_admin.initialize_app(firebase_admin.credentials.Certificate(json.loads(service_account_json)))
+        firebase_admin.initialize_app(
+            firebase_admin.credentials.Certificate(json.loads(service_account_json)), options=firebase_admin_options()
+        )
     else:
         firebase_admin.initialize_app(options=firebase_admin_options())
 

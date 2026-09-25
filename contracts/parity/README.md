@@ -23,6 +23,7 @@ cross-platform decision instead of a single-platform drive-by.
 | `section_labels.json`              | Relative day labels (Today / Yesterday / Tomorrow) as calendar-day relationships, including DST transition days              |
 | `jit_runtime_contract_matrix.json` | Additive JIT ledger/evidence compatibility across legacy, v1, and future-version payloads                                    |
 | `conversation_duration.json`       | The one duration a conversation reports: transcript span when segments exist, wall window only for transcript-free records   |
+| `capture_group_collapse.json`      | One list row per recorded event: which loaded member represents a capture group, and that a lone loaded member is never hidden |
 
 The [conversation summary contract](conversation-summary.md) and `conversation_summary.json`
 define one primary body across backend, Flutter, macOS, and web, including edited overviews,
@@ -35,7 +36,7 @@ section projections, and unattributed app results.
 | Backend/API and standalone MCP | `backend/tests/unit/test_parity_contracts.py`, `backend/testing/contracts/test_jit_runtime_contract_matrix.py`                                                                           | Backend unit suite and Desktop Backend Contracts CI       |
 | Flutter app                    | `app/test/parity/parity_contracts_test.dart`                                                                                                                                             | `app/test.sh`, CI Flutter tests                           |
 | Windows desktop                | `desktop/windows/src/renderer/src/lib/parityContracts.test.ts`, `desktop/windows/src/shared/knowledgeLedger.test.ts`                                                                     | `npm test` in `desktop/windows`, CI Desktop Windows tests |
-| macOS desktop                  | JIT matrix: `desktop/macos/Desktop/Tests/ServerMemoryV17DecodingTests.swift`. Duration: `desktop/macos/Desktop/Tests/ConversationDurationTests.swift`. Task/day adapter remains pending. | Desktop Swift CI                                          |
+| macOS desktop                  | JIT matrix: `desktop/macos/Desktop/Tests/ServerMemoryV17DecodingTests.swift`. Duration: `desktop/macos/Desktop/Tests/ConversationDurationTests.swift`. Task/day adapter and the capture-group collapse adapter (`CaptureGroupPresentationTests.swift` pins the same cases inline) remain pending. | Desktop Swift CI                                          |
 | Web app                        | `web/app/src/lib/__tests__/knowledgeLedger.test.ts`                                                                                                                                      | `web/app/test.sh`, CI Web App checks                      |
 
 The JIT runtime matrix is additionally consumed by the shipped mobile, macOS,

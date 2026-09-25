@@ -32,7 +32,7 @@ export default function TranscriptionSegment({
   return (
     <li className="my-5 flex gap-2">
       {isUser ? (
-        <div className="grid h-7 min-w-7 place-items-center rounded-full bg-zinc-800">
+        <div className="sn-avatar sn-avatar-owner">
           <UserStar className="text-xs" />
         </div>
       ) : (
