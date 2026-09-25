@@ -109,6 +109,13 @@ class TranscriptSegment(BaseModel):
         else:
             self.speaker_id = 0
 
+    def assign_resolved_speaker(self, speaker_id: int, scope: str) -> None:
+        """Adopt a conversation-wide speaker id; it is real diarization, not the SPEAKER_00 default."""
+        self.speaker_id = speaker_id
+        self.speaker = f'SPEAKER_{speaker_id}'
+        self.speaker_id_scope = scope
+        self._speaker_id_synthesized = False
+
     def get_timestamp_string(self) -> str:
         start_duration = timedelta(seconds=int(self.start))
         end_duration = timedelta(seconds=int(self.end))

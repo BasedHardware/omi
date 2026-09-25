@@ -818,6 +818,34 @@ class GeneratedCaptureGroup {
   }
 }
 
+class GeneratedConversationSpeakers {
+  final List<int> participantSpeakerIds;
+  final String status;
+  final int version;
+
+  const GeneratedConversationSpeakers({
+    this.participantSpeakerIds = const [],
+    required this.status,
+    this.version = 1,
+  });
+
+  factory GeneratedConversationSpeakers.fromJson(Map<String, dynamic> json) {
+    return GeneratedConversationSpeakers(
+      participantSpeakerIds: _required(_readFieldValue<List<int>>(_readField(json, const ["participant_speaker_ids"]), "participant_speaker_ids", _readIntList, requiredField: false, nullable: false, defaultValue: const []), "participant_speaker_ids"),
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: true, nullable: false), "status"),
+      version: _required(_readFieldValue<int>(_readField(json, const ["version"]), "version", _readInt, requiredField: false, nullable: false, defaultValue: 1), "version"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'participant_speaker_ids': participantSpeakerIds,
+      'status': status,
+      'version': version,
+    };
+  }
+}
+
 class GeneratedConversation {
   final String? appId;
   final List<GeneratedAppResult> appsResults;
@@ -853,6 +881,7 @@ class GeneratedConversation {
   final String? processingState;
   final bool screenshotSharingEnabled;
   final String? source;
+  final GeneratedConversationSpeakers? speakerResolution;
   final bool starred;
   final DateTime? startedAt;
   final String? status;
@@ -901,6 +930,7 @@ class GeneratedConversation {
     this.processingState,
     this.screenshotSharingEnabled = true,
     this.source = "omi",
+    this.speakerResolution,
     this.starred = false,
     required this.startedAt,
     this.status = "completed",
@@ -951,6 +981,7 @@ class GeneratedConversation {
       processingState: _readFieldValue<String>(_readField(json, const ["processing_state"]), "processing_state", _readString, requiredField: false, nullable: true),
       screenshotSharingEnabled: _required(_readFieldValue<bool>(_readField(json, const ["screenshot_sharing_enabled"]), "screenshot_sharing_enabled", _readBool, requiredField: false, nullable: false, defaultValue: true), "screenshot_sharing_enabled"),
       source: _readFieldValue<String>(_readField(json, const ["source"]), "source", _readString, requiredField: false, nullable: true, defaultValue: "omi"),
+      speakerResolution: _readFieldValue<GeneratedConversationSpeakers>(_readField(json, const ["speaker_resolution"]), "speaker_resolution", (value) => _readObject(value, GeneratedConversationSpeakers.fromJson), requiredField: false, nullable: true),
       starred: _required(_readFieldValue<bool>(_readField(json, const ["starred"]), "starred", _readBool, requiredField: false, nullable: false, defaultValue: false), "starred"),
       startedAt: _readFieldValue<DateTime>(_readField(json, const ["started_at"]), "started_at", _readDateTime, requiredField: true, nullable: true),
       status: _readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: false, nullable: true, defaultValue: "completed"),
@@ -1002,6 +1033,7 @@ class GeneratedConversation {
       'processing_state': processingState,
       'screenshot_sharing_enabled': screenshotSharingEnabled,
       'source': source,
+      'speaker_resolution': speakerResolution?.toJson(),
       'starred': starred,
       'started_at': startedAt?.toUtc().toIso8601String(),
       'status': status,
@@ -1242,6 +1274,7 @@ class GeneratedConversationSearchItem {
   final String? processingState;
   final bool screenshotSharingEnabled;
   final String? source;
+  final GeneratedConversationSpeakers? speakerResolution;
   final bool starred;
   final DateTime? startedAt;
   final String? status;
@@ -1291,6 +1324,7 @@ class GeneratedConversationSearchItem {
     this.processingState,
     this.screenshotSharingEnabled = true,
     this.source = "omi",
+    this.speakerResolution,
     this.starred = false,
     required this.startedAt,
     this.status = "completed",
@@ -1342,6 +1376,7 @@ class GeneratedConversationSearchItem {
       processingState: _readFieldValue<String>(_readField(json, const ["processing_state"]), "processing_state", _readString, requiredField: false, nullable: true),
       screenshotSharingEnabled: _required(_readFieldValue<bool>(_readField(json, const ["screenshot_sharing_enabled"]), "screenshot_sharing_enabled", _readBool, requiredField: false, nullable: false, defaultValue: true), "screenshot_sharing_enabled"),
       source: _readFieldValue<String>(_readField(json, const ["source"]), "source", _readString, requiredField: false, nullable: true, defaultValue: "omi"),
+      speakerResolution: _readFieldValue<GeneratedConversationSpeakers>(_readField(json, const ["speaker_resolution"]), "speaker_resolution", (value) => _readObject(value, GeneratedConversationSpeakers.fromJson), requiredField: false, nullable: true),
       starred: _required(_readFieldValue<bool>(_readField(json, const ["starred"]), "starred", _readBool, requiredField: false, nullable: false, defaultValue: false), "starred"),
       startedAt: _readFieldValue<DateTime>(_readField(json, const ["started_at"]), "started_at", _readDateTime, requiredField: true, nullable: true),
       status: _readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: false, nullable: true, defaultValue: "completed"),
@@ -1394,6 +1429,7 @@ class GeneratedConversationSearchItem {
       'processing_state': processingState,
       'screenshot_sharing_enabled': screenshotSharingEnabled,
       'source': source,
+      'speaker_resolution': speakerResolution?.toJson(),
       'starred': starred,
       'started_at': startedAt?.toUtc().toIso8601String(),
       'status': status,

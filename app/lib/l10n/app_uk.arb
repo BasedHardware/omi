@@ -3528,7 +3528,6 @@
     "addToClaudeCodeConfig": "Додати до ~/.claude.json",
     "claudeDesktopConnectorSetup": "На Claude Desktop → Settings → Connectors додайте користувацький конектор і вставте URL сервера. Якщо Claude попросить розширений OAuth Client ID, використайте значення нижче і залиште секрет порожнім — ніколи не використовуйте свій MCP API ключ як секрет OAuth.",
     "transcriptionUnavailableRecordingContinues": "Транскрипція недоступна, запис триває на пристрої та буде оброблений пізніше",
-    "transcriptionUnavailableSavingOnDevice": "Транскрипція недоступна · зберігається на пристрої",
     "transcriptionsPendingFraction": "Транскрипцій у черзі {pending}/{total}",
     "transcriptionsPendingCount": "Транскрипцій у черзі {count}",
     "captureSourceCall": "Дзвінок",
@@ -3546,5 +3545,16 @@
     "recordWith": "Записати через",
     "moreWaysToRecord": "Інші способи запису",
     "openCall": "Відкрити дзвінок",
-    "captureRecoveryBanner": "Звук кулона не надходить до застосунку — натисніть, щоб виправити"
+    "captureRecoveryBanner": "Звук кулона не надходить до застосунку — натисніть, щоб виправити",
+    "captureNotTranscribing": "Немає транскрипції",
+    "captureAudioSavedTranscribesLater": "Аудіо збережено, транскрипція пізніше",
+    "captureStillRecording": "Запис триває",
+    "captureMicInUseElsewhere": "Мікрофон зайнятий іншою програмою",
+    "captureMicInterruptedDetail": "Дзвінок або інша програма зайняли мікрофон, тому Omi зараз не чує. Omi продовжить сам, коли мікрофон звільниться. Усе, що записано до цього, збережено.",
+    "captureCustomSttUnreachableDetail": "Ваш власний сервіс розпізнавання мовлення недоступний. Omi зберігає аудіо на цьому телефоні й надішле його, коли сервіс запрацює. Нічого не втратиться.",
+    "captureStarting": "Запуск…",
+    "capturePhoneStorageFull": "Пам’ять телефона заповнена",
+    "captureStorageAlmostFull": "Пам’ять майже заповнена",
+    "capturePendantDisconnectedDetail": "Кулон втратив зв’язок із цим телефоном. Omi перепідключиться сам, коли кулон буде ввімкнений і поруч. Усе, що записано до цього, збережено.",
+    "participantsSummaryUncounted": "{name} та інші"
 }

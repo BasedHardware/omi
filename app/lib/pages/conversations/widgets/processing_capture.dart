@@ -17,6 +17,7 @@ import 'package:omi/pages/conversations/capture_state_labels.dart';
 import 'package:omi/pages/processing_conversations/page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/providers/device_provider.dart';
 import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -40,6 +41,17 @@ class ConversationCaptureWidget extends StatefulWidget {
 class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
   Timer? _offlineTicker;
   int _offlineTick = 0;
+
+  /// The pendant capture this card last showed, kept so a pendant that drops mid-capture shows as
+  /// Disconnected instead of the card vanishing. The controller forgets the device on disconnect
+  /// (`liveCaptureSource` goes null, just as when nothing ever recorded), so "was capturing" is
+  /// remembered here: set while a realtime pendant capture is live, cleared when the pendant
+  /// reconnects, is unpaired, or another source (the phone) takes over.
+  String? _droppedSource;
+  DateTime? _droppedStartedAt;
+
+  /// When the drop was first seen: the card's time stops there, since nothing records meanwhile.
+  DateTime? _droppedAt;
 
   @override
   void initState() {
@@ -90,15 +102,15 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         child: GestureDetector(
           onTap: () => routeToPage(context, const ActiveCallPage()),
           child: _cardShell(
+            padding: _liveCardPadding,
             LiveCaptureCard(
               source: LiveCaptureCard.callSource,
-              stateLabel: switch (phoneCallState) {
+              // Connecting and ringing say so, with no time: they are not listening yet.
+              status: switch (phoneCallState) {
                 PhoneCallState.connecting => l10n.callStateConnecting,
                 PhoneCallState.ringing => l10n.callStateRinging,
                 _ => captureStateLabel(l10n, CaptureDisplayState.listening),
               },
-              // Amber until audio flows: connecting and ringing are not listening yet.
-              paused: phoneCallState != PhoneCallState.active,
               elapsed: phoneCallState == PhoneCallState.active ? call.callDuration : null,
               lastLine: call.transcriptSegments.lastOrNull?.text,
             ),
@@ -113,6 +125,14 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         // that is not capturing, or a stopped phone). Transcribe Later keeps its own card.
         final batch = provider.isPhoneMicBatchRecording ||
             (SharedPreferencesUtil().batchModeEnabled && provider.havingRecordingDevice);
+        final (pendantConnected, pendantPaired, pendantConnecting) = context.select<DeviceProvider, (bool, bool, bool)>(
+          (d) => (d.connectedDevice != null, d.pairedDevice?.id.isNotEmpty ?? false, d.isConnecting),
+        );
+        final pendantDropped = _trackPendantDrop(provider, connected: pendantConnected, paired: pendantPaired);
+        if (pendantDropped) {
+          return _cardShell(_buildPendantDroppedUI(provider, reconnecting: pendantConnecting),
+              padding: _liveCardPadding);
+        }
         final phoneLive = provider.recordingState == RecordingState.record ||
             provider.recordingState == RecordingState.initialising ||
             provider.recordingState == RecordingState.interrupted ||
@@ -151,31 +171,74 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
           child: Semantics(
             button: !batch,
             hint: batch ? null : context.l10n.liveTranscript,
-            child: _cardShell(_buildUnifiedRecordingUI(provider)),
+            child: _cardShell(_buildUnifiedRecordingUI(provider), padding: _liveCardPadding),
           ),
         );
       },
     );
   }
 
-  Widget _cardShell(Widget child) => Container(
+  /// The live card's glyph and 44pt Pause target carry their own air, so its edges are tighter
+  /// than the Transcribe Later card's; the status line keeps the width it needs on a 320pt phone.
+  static const _liveCardPadding = EdgeInsets.fromLTRB(14, 12, 8, 14);
+
+  Widget _cardShell(Widget child, {EdgeInsets? padding}) => Container(
         margin: const EdgeInsets.fromLTRB(16, 12, 16, 12),
         width: double.maxFinite,
-        padding: const EdgeInsets.fromLTRB(18, 14, 12, 16),
+        padding: padding ?? const EdgeInsets.fromLTRB(18, 14, 12, 16),
         decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(24)),
         child: child,
       );
 
+  /// Updates the remembered pendant capture and says whether it dropped: no source is live, the
+  /// pendant it came from is still paired but not connected. See [_droppedSource].
+  bool _trackPendantDrop(CaptureProvider provider, {required bool connected, required bool paired}) {
+    final source = provider.liveCaptureSource;
+    if (source != null && source != 'phone' && !SharedPreferencesUtil().batchModeEnabled) {
+      _droppedSource = source;
+      _droppedStartedAt = provider.liveCaptureStartedAt ?? _droppedStartedAt;
+      _droppedAt = null;
+      return false;
+    }
+    if (source != null || connected || !paired) {
+      _droppedSource = null;
+      _droppedStartedAt = null;
+      _droppedAt = null;
+      return false;
+    }
+    if (_droppedSource == null) return false;
+    _droppedAt ??= DateTime.now();
+    return true;
+  }
+
+  Widget _buildPendantDroppedUI(CaptureProvider provider, {required bool reconnecting}) {
+    final l10n = context.l10n;
+    final startedAt = _droppedStartedAt;
+    return LiveCaptureCard(
+      source: _droppedSource!,
+      status: l10n.disconnected,
+      detail: reconnecting ? l10n.reconnecting : null,
+      explanation: l10n.capturePendantDisconnectedDetail,
+      elapsed: startedAt == null ? null : (_droppedAt ?? DateTime.now()).difference(startedAt),
+      lastLine: provider.segments.lastOrNull?.text,
+    );
+  }
+
   Future<void> _togglePause(CaptureProvider provider) async {
     final phone = provider.liveCaptureSource == 'phone';
-    if (provider.isPaused) {
+    try {
       OmiHaptics.medium();
-      await provider.resumeCapture();
-      if (phone) PlatformManager.instance.analytics.phoneMicRecordingStarted();
-    } else {
-      OmiHaptics.medium();
-      await provider.pauseCapture();
-      if (phone) PlatformManager.instance.analytics.phoneMicRecordingStopped();
+      if (provider.isPaused) {
+        await provider.resumeCapture();
+        if (phone) PlatformManager.instance.analytics.phoneMicRecordingStarted();
+      } else {
+        await provider.pauseCapture();
+        if (phone) PlatformManager.instance.analytics.phoneMicRecordingStopped();
+      }
+    } catch (_) {
+      // Same as the live page's control: say so rather than leave an unhandled future.
+      if (mounted) OmiFeedback.error(context, context.l10n.somethingWentWrong);
+      return;
     }
     PlatformManager.instance.analytics.recordingMuteToggled(
       isMuted: provider.isPaused,
@@ -205,52 +268,62 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
             provider.recordingState == RecordingState.interrupted ||
             provider.isPhoneMicPaused);
 
-    // Determine pause state based on recording type.
-    // Any audio-session interruption (call, other-app audio, system alert) is
-    // treated as paused so the UI does not claim "Listening" while mute (#4706).
-    bool isAudioInterrupted = provider.recordingState == RecordingState.interrupted;
+    // A pause the reader chose (the control reads Resume only then).
+    final isAudioInterrupted = provider.recordingState == RecordingState.interrupted;
     bool isPaused = false;
     if (isDeviceRecording) {
       isPaused = provider.isPaused && provider.recordingState == RecordingState.pause;
     } else if (isPhoneRecording) {
-      isPaused = provider.isPhoneMicPaused || provider.isPaused || isAudioInterrupted;
+      isPaused = provider.isPhoneMicPaused || provider.isPaused;
     }
+    // `interrupted` is the OS holding the mic (explained, no control) or capture recovering on its
+    // own (Reconnecting, Pause still works); a reader pause keeps Resume either way.
+    final interruption = captureInterruption(
+      interrupted: isPhoneRecording && isAudioInterrupted,
+      readerPaused: isPaused,
+      osHoldsMic: provider.isCallActive,
+    );
+    final micTaken = interruption == CaptureInterruption.micTaken;
     final hasTerminalTranscriptionFailure = provider.terminalTranscriptionFailure != null;
     final bufferingFor = provider.customSttBufferingDuration;
 
     // Determine if this is an OmiGlass-type device (captures photos)
     bool hasPhotos = provider.photos.isNotEmpty;
-    // Show "Listening" for all active recording states — WAL ensures audio is
-    // saved locally regardless of transcription connection status.
-    // Custom STT endpoint unreachable means audio is still buffering locally
-    // (see customSttBufferingDuration / PurePollingSocket).
-    String statusText = captureStateLabel(
-      context.l10n,
-      liveCaptureDisplayState(
-        audioInterrupted: isAudioInterrupted,
-        paused: isPaused,
-        // One word for a pause, whatever the source: the control is Pause/Resume.
-        transcriptionUnavailable: hasTerminalTranscriptionFailure,
-        bufferingFor: bufferingFor,
-        capturingPhotos: hasPhotos,
-      ),
+    // WAL saves audio locally whatever the transcription connection does, so a degraded
+    // transcription names the consequence ("Audio saved, transcribes later"), not a stop.
+    final displayState = liveCaptureDisplayState(
+      audioInterrupted: micTaken,
+      paused: isPaused,
+      transcriptionUnavailable: hasTerminalTranscriptionFailure,
       bufferingFor: bufferingFor,
-      compact: true,
+      reconnecting: interruption == CaptureInterruption.recovering,
+      capturingPhotos: hasPhotos,
     );
+    // Initialising: the microphone is opening and no audio flows yet, so it is not Listening.
+    final starting = isPhoneRecording &&
+        provider.recordingState == RecordingState.initialising &&
+        displayState == CaptureDisplayState.listening;
+    final copy = starting
+        ? CaptureCardCopy(context.l10n.captureStarting)
+        : captureCardCopy(context.l10n, displayState, micTaken: micTaken, socketDown: !provider.transcriptServiceReady);
 
     // When recording is active: the one capture status and control surface.
     if (isDeviceRecording || isPhoneRecording) {
       final startedAt = provider.liveCaptureStartedAt;
       final card = LiveCaptureCard(
         source: isDeviceRecording ? liveSource : 'phone',
-        stateLabel: statusText,
-        paused: isPaused || hasTerminalTranscriptionFailure || bufferingFor != null,
+        status: copy.status,
+        detail: copy.detail,
+        explanation: copy.explanation,
+        // Resume only when the status says Paused and the reader paused it; a degraded transcription
+        // is still live, so its control is Pause.
+        paused: isPaused,
         elapsed: startedAt == null ? null : DateTime.now().difference(startedAt),
         lastLine: provider.segments.lastOrNull?.text,
         note:
             isPhoneRecording && provider.pendantPausedForPhone ? context.l10n.pendantPausedResumesWhenYouFinish : null,
         // Photo-capture devices (OmiGlass) keep capturing photos; there is nothing to pause.
-        onPauseToggle: !LiveCaptureCard.canPause(provider.recordingDevice, source: liveSource) || isAudioInterrupted
+        onPauseToggle: !LiveCaptureCard.canPause(provider.recordingDevice, source: liveSource) || micTaken
             ? null
             : () => _togglePause(provider),
       );
@@ -280,168 +353,141 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     return const SizedBox.shrink();
   }
 
-  /// Offline/batch-mode capture card. Self-explanatory and informational only —
-  /// there is no live transcript and no pause control (the native writer keeps
-  /// saving regardless of the Dart stream). Shows a live "captured so far" timer
-  /// for the current session. Tapping opens [_showOfflineModeInfoSheet].
+  /// Transcribe Later (batch) card, in the live card's layout: the source glyph, a short status and
+  /// the time with its consequence, then the controls. There is no live transcript. Storage running
+  /// out is a problem (warning glyph, details sheet); a pendant that records on its own (Limitless)
+  /// shows the minutes it holds and has no controls, since it records without the phone.
   Widget _buildBatchRecordingUI(CaptureProvider provider) {
-    final isPendant = provider.recordingDevice?.type == DeviceType.limitless;
+    final l10n = context.l10n;
+    final isLimitless = provider.recordingDevice?.type == DeviceType.limitless;
     final prefs = SharedPreferencesUtil();
-    final muted = !isPendant && provider.offlineMuted;
+    final muted = !isLimitless && provider.offlineMuted;
     // Native low-storage flag: capture is paused, so the card must not look healthy.
     // Read directly in build — CaptureController reloads prefs + notifies when it flips.
-    final storageFull = !isPendant && prefs.getBool('batchStorageFull');
-    final paused = muted || storageFull;
-    final elapsed = provider.offlineRecordingElapsedSeconds;
-    String? elapsedLabel;
-    if (isPendant) {
+    final storageFull = !isLimitless && prefs.getBool('batchStorageFull');
+    final source = provider.isPhoneMicBatchRecording
+        ? 'phone'
+        : (provider.liveCaptureSource ?? (isLimitless ? 'limitless' : 'omi'));
+    final elapsedSeconds = provider.offlineRecordingElapsedSeconds;
+
+    final CaptureCardCopy copy;
+    String? note;
+    if (isLimitless) {
       final minutesStored = (prefs.pendantPagesStored * 1.4 / 60).round();
-      if (minutesStored > 0) elapsedLabel = context.l10n.pendantMinutesStored(minutesStored);
-    } else if (elapsed != null) {
-      elapsedLabel = '${elapsed ~/ 60}m ${(elapsed % 60).toString().padLeft(2, '0')}s';
+      final almostFull = prefs.pendantStorageAlmostFull;
+      final detail = [
+        if (minutesStored > 0) l10n.pendantMinutesStored(minutesStored),
+        if (almostFull) l10n.captureStorageAlmostFull,
+      ].join('  ·  ');
+      copy = CaptureCardCopy(l10n.recording,
+          detail: detail.isEmpty ? null : detail, explanation: almostFull ? l10n.pendantStorageAlmostFull : null);
+      note = prefs.pendantDraining ? l10n.pendantSyncingRecordings : l10n.pendantRecordingNote;
+    } else if (storageFull) {
+      copy = CaptureCardCopy(l10n.paused,
+          detail: l10n.capturePhoneStorageFull, explanation: l10n.transcribeLaterStorageFull);
+    } else if (muted) {
+      copy = CaptureCardCopy(l10n.paused);
+    } else {
+      copy = CaptureCardCopy(l10n.recording, detail: l10n.captureAudioSavedTranscribesLater);
     }
-    final dotColor = paused ? Colors.grey.shade600 : OmiColors.danger;
-    return Padding(
-      padding: const EdgeInsets.only(left: 8, right: 6),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(color: const Color(0xFF35343B), borderRadius: BorderRadius.circular(20)),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      width: 6,
-                      height: 6,
-                      decoration: BoxDecoration(color: dotColor, shape: BoxShape.circle),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      storageFull
-                          ? context.l10n.paused
-                          : muted
-                              ? context.l10n.paused
-                              : context.l10n.recording,
-                      style: const TextStyle(color: OmiColors.textSecondary, fontSize: 14, fontWeight: FontWeight.w500),
-                    ),
-                  ],
-                ),
-              ),
-              const Spacer(),
-              if (elapsedLabel != null)
-                Text(
-                  elapsedLabel,
-                  style: const TextStyle(
-                    color: OmiColors.textSecondary,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w500,
-                    fontFeatures: [FontFeature.tabularFigures()],
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          Text(
-            isPendant
-                ? (prefs.pendantDraining ? context.l10n.pendantSyncingRecordings : context.l10n.pendantRecordingNote)
-                : storageFull
-                    ? context.l10n.transcribeLaterStorageFull
-                    : (muted ? context.l10n.transcribeLaterPaused : context.l10n.transcribeLaterNote),
-            style: TextStyle(color: Colors.grey.shade400, fontSize: 13, height: 1.35),
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-          ),
-          if (isPendant && prefs.pendantStorageAlmostFull) ...[
-            const SizedBox(height: 8),
-            Text(
-              context.l10n.pendantStorageAlmostFull,
-              style: TextStyle(color: Colors.orange.shade300, fontSize: 12, height: 1.3),
-            ),
-          ],
-          // Mute / New recording drive the native writer prefs, which the pendant
-          // drain path doesn't use — the pendant records on its own.
-          if (!isPendant) ...[
-            const SizedBox(height: 14),
-            Row(
-              children: [
-                _buildOfflineControl(
-                  // Pause glyphs, as on the live card: mics belong to Ask Omi.
-                  icon: muted ? FontAwesomeIcons.play : FontAwesomeIcons.pause,
-                  label: muted ? context.l10n.resume : context.l10n.pause,
-                  primary: false,
-                  onTap: () async {
-                    try {
-                      await provider.toggleOfflineMute();
-                    } catch (_) {
-                      if (mounted) AppSnackbar.showSnackbar(context.l10n.somethingWentWrong);
-                    }
-                  },
-                ),
-                const SizedBox(width: 10),
-                _buildOfflineControl(
-                  icon: FontAwesomeIcons.circlePlus,
-                  label: context.l10n.newRecording,
-                  primary: true,
-                  onTap: () => provider.startNewOfflineRecording(),
-                ),
-              ],
-            ),
-            // Phone-mic batch is user-driven (not ambient like BLE), so it needs an
-            // explicit Stop that ends the session. BLE batch has no Stop by design.
-            if (provider.isPhoneMicBatchRecording) ...[
-              const SizedBox(height: 10),
-              Row(
-                children: [
-                  _buildOfflineControl(
-                    icon: FontAwesomeIcons.stop,
-                    label: context.l10n.stop,
-                    primary: false,
-                    onTap: () => provider.stopStreamRecording(),
-                  ),
-                ],
-              ),
-            ],
-          ],
+
+    final actions = <_OfflineAction>[
+      // Pause glyphs, as on the live card: mics belong to Ask Omi. Storage-full is already paused.
+      if (!isLimitless && !storageFull)
+        (
+          icon: muted ? Icons.play_arrow_rounded : Icons.pause_rounded,
+          label: muted ? l10n.resume : l10n.pause,
+          onTap: () async {
+            try {
+              await provider.toggleOfflineMute();
+            } catch (_) {
+              if (mounted) AppSnackbar.showSnackbar(context.l10n.somethingWentWrong);
+            }
+          },
+        ),
+      // Mute / New recording drive the native writer prefs, which the Limitless drain path doesn't
+      // use — that pendant records on its own.
+      if (!isLimitless)
+        (icon: Icons.add_circle_outline_rounded, label: l10n.newRecording, onTap: provider.startNewOfflineRecording),
+      // Phone-mic batch is user-driven (not ambient like BLE), so it needs an explicit Stop that ends
+      // the session. BLE batch has no Stop by design.
+      if (provider.isPhoneMicBatchRecording)
+        (icon: Icons.stop_rounded, label: l10n.stop, onTap: () => provider.stopStreamRecording()),
+    ];
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        LiveCaptureCard(
+          source: source,
+          status: copy.status,
+          detail: copy.detail,
+          explanation: copy.explanation,
+          elapsed: isLimitless || elapsedSeconds == null ? null : Duration(seconds: elapsedSeconds),
+          note: note,
+        ),
+        if (actions.isNotEmpty) ...[
+          const SizedBox(height: OmiSpacing.sm),
+          Padding(padding: const EdgeInsets.only(right: OmiSpacing.xxs), child: _OfflineControls(actions: actions)),
         ],
-      ),
+      ],
     );
   }
+}
 
-  Widget _buildOfflineControl({
-    required FaIconData icon,
-    required String label,
-    required bool primary,
-    required VoidCallback onTap,
-  }) {
-    final color = primary ? Colors.white : OmiColors.textSecondary;
-    return Expanded(
-      child: GestureDetector(
-        behavior: HitTestBehavior.opaque,
-        onTap: onTap,
-        child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10),
-          decoration: BoxDecoration(
-            color: primary ? const Color(0xFF35343B) : const Color(0xFF2A2A2E),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              FaIcon(icon, size: 16, color: color),
-              const SizedBox(width: 6),
-              Text(
-                label,
-                style: TextStyle(color: color, fontSize: 13, fontWeight: FontWeight.w600),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
+typedef _OfflineAction = ({IconData icon, String label, VoidCallback onTap});
+
+/// The Transcribe Later controls: the first two side by side when both labels fit whole at the
+/// current width and text size, otherwise one per row; Stop always takes its own row. Each is an
+/// [OmiButton] (a 44pt+ target).
+class _OfflineControls extends StatelessWidget {
+  const _OfflineControls({required this.actions});
+
+  final List<_OfflineAction> actions;
+
+  static const _gap = OmiSpacing.xs;
+
+  OmiButton _button(_OfflineAction a) =>
+      OmiButton.secondary(label: a.label, icon: a.icon, onPressed: a.onTap, size: OmiButtonSize.compact, expand: true);
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(builder: (context, constraints) {
+      final scaler = MediaQuery.textScalerOf(context);
+      final direction = Directionality.of(context);
+      // The ambient text style supplies the platform font the button label resolves to.
+      final labelStyle =
+          DefaultTextStyle.of(context).style.merge(OmiType.subhead.copyWith(fontWeight: FontWeight.w600));
+      // What a compact OmiButton needs to show its label whole: padding, glyph, gap and text.
+      double needed(String label) {
+        final painter = TextPainter(
+          text: TextSpan(text: label, style: labelStyle),
+          textDirection: direction,
+          textScaler: scaler,
+          maxLines: 1,
+        )..layout();
+        final width = painter.width;
+        painter.dispose();
+        return width + 2 * OmiSpacing.md + 16 + OmiSpacing.xs + 2;
+      }
+
+      final paired = actions.length >= 2 &&
+          actions.take(2).map((a) => needed(a.label)).reduce((a, b) => a > b ? a : b) * 2 + _gap <=
+              constraints.maxWidth;
+      final rows = <Widget>[
+        if (paired)
+          Row(children: [
+            Expanded(child: _button(actions[0])),
+            const SizedBox(width: _gap),
+            Expanded(child: _button(actions[1])),
+          ]),
+        for (final a in actions.skip(paired ? 2 : 0)) _button(a),
+      ];
+      return Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+        for (var i = 0; i < rows.length; i++) ...[if (i > 0) const SizedBox(height: _gap), rows[i]],
+      ]);
+    });
   }
 }
 

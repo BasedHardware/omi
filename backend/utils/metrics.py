@@ -1008,3 +1008,17 @@ def stop_metrics_sidecar_server() -> None:
     server.server_close()
     if thread is not None:
         thread.join(timeout=5)
+
+
+OMI_CONVERSATION_SPEAKER_RESOLUTION_TOTAL = Counter(
+    'omi_conversation_speaker_resolution_total',
+    'Conversation-wide speaker resolution runs by outcome',
+    ['outcome'],
+)
+
+OMI_CONVERSATION_SPEAKER_RESOLUTION_VOICES = Histogram(
+    'omi_conversation_speaker_resolution_voices',
+    'Speaker ids before and after conversation-wide resolution',
+    ['stage'],
+    buckets=(1, 2, 3, 4, 6, 8, 12, 16, 25, 50, 100, 250, 1000, 2500),
+)

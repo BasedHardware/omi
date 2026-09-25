@@ -3528,7 +3528,6 @@
     "addToClaudeCodeConfig": "Aggiungi a ~/.claude.json",
     "claudeDesktopConnectorSetup": "Su Claude Desktop → Settings → Connectors, aggiungi un connettore personalizzato e incolla l'URL del server. Se Claude richiede un Client ID OAuth avanzato, usa il valore qui sotto e lascia il segreto vuoto — non usare mai la tua chiave API MCP come segreto OAuth.",
     "transcriptionUnavailableRecordingContinues": "Trascrizioni non disponibili, la registrazione continua sul dispositivo e verrà elaborata più tardi",
-    "transcriptionUnavailableSavingOnDevice": "Trascrizione non disponibile · salvataggio sul dispositivo",
     "transcriptionsPendingFraction": "Trascrizioni in attesa {pending}/{total}",
     "transcriptionsPendingCount": "Trascrizioni in attesa {count}",
     "captureSourceCall": "Chiamata",
@@ -3546,5 +3545,16 @@
     "recordWith": "Registra con",
     "moreWaysToRecord": "Altri modi per registrare",
     "openCall": "Apri chiamata",
-    "captureRecoveryBanner": "L'audio del ciondolo non arriva all'app — tocca per riparare"
+    "captureRecoveryBanner": "L'audio del ciondolo non arriva all'app — tocca per riparare",
+    "captureNotTranscribing": "Nessuna trascrizione",
+    "captureAudioSavedTranscribesLater": "Audio salvato, trascritto più tardi",
+    "captureStillRecording": "Registrazione in corso",
+    "captureMicInUseElsewhere": "Microfono in uso da un'altra app",
+    "captureMicInterruptedDetail": "Una chiamata o un'altra app sta usando il microfono, quindi Omi ora non può ascoltare. Omi riprenderà da solo quando il microfono sarà libero. Tutto ciò che è stato registrato prima è al sicuro.",
+    "captureCustomSttUnreachableDetail": "Il tuo servizio personalizzato di trascrizione vocale non è raggiungibile. Omi conserva l'audio su questo telefono e lo invierà quando il servizio tornerà. Non si perde nulla.",
+    "captureStarting": "Avvio…",
+    "capturePhoneStorageFull": "Memoria del telefono piena",
+    "captureStorageAlmostFull": "Memoria quasi piena",
+    "capturePendantDisconnectedDetail": "Il ciondolo ha perso la connessione con questo telefono. Omi si riconnetterà da solo quando il ciondolo sarà acceso e vicino. Tutto ciò che è stato registrato prima è al sicuro.",
+    "participantsSummaryUncounted": "{name} e altri"
 }

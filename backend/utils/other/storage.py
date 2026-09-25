@@ -942,6 +942,59 @@ def _align_pcm16_frames(pcm_data: bytes, source: str) -> bytes:
     return pcm_data[:-remainder]
 
 
+def _download_and_decode_chunk_blob(bucket: Any, path: str, uid: str, sample_rate: int) -> bytes | None:
+    """Download one stored chunk blob (single or batch) and decode/decrypt it by extension to PCM16."""
+    ext = _get_extension_for_path(path)
+    encrypted = ext in ('opus.enc', 'enc', 'batch.enc')
+    is_opus = ext in ('opus.enc', 'opus')
+
+    try:
+        chunk_data = bucket.blob(path).download_as_bytes()
+    except NotFound:
+        return None
+
+    try:
+        if encrypted:
+            raw_data = encryption.decrypt_audio_file(chunk_data, uid)
+        else:
+            raw_data = chunk_data
+
+        if is_opus:
+            pcm_data = decode_opus_to_pcm(raw_data, sample_rate=sample_rate)
+            del raw_data
+        else:
+            pcm_data = raw_data
+
+        return _align_pcm16_frames(pcm_data, path)
+    except Exception as e:
+        logger.warning(f"Failed to decode/decrypt {path}: {e}")
+        return None
+
+
+def iter_audio_chunk_pcm(
+    uid: str,
+    conversation_id: str,
+    wanted: Callable[[float, Optional[float]], bool],
+    sample_rate: int = 16000,
+) -> Any:
+    """Yield ``(start_timestamp, pcm16)`` for each stored chunk blob, oldest first.
+
+    One listing serves the whole pass, and each blob is decoded on its own so a
+    caller can place audio by the blob's own start: merging several chunks drifts
+    wherever stored chunks overlap. ``wanted(start, next_start)`` skips a blob
+    before it is downloaded; ``next_start`` is None for the last blob.
+    """
+    bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
+    chunks = list_audio_chunks(uid, conversation_id)
+    for index, chunk in enumerate(chunks):
+        next_start = chunks[index + 1]['timestamp'] if index + 1 < len(chunks) else None
+        if not wanted(chunk['timestamp'], next_start):
+            continue
+        pcm = _download_and_decode_chunk_blob(bucket, chunk['path'], uid, sample_rate)
+        if pcm:
+            yield chunk['timestamp'], pcm
+
+
 def download_audio_chunks_and_merge(
     uid: str,
     conversation_id: str,
@@ -1002,32 +1055,7 @@ def download_audio_chunks_and_merge(
             single_chunk_timestamps.append(chunk['timestamp'])
 
     def _download_and_decode_blob(path: str) -> bytes | None:
-        """Download a blob and decode/decrypt based on extension."""
-        ext = _get_extension_for_path(path)
-        encrypted = ext in ('opus.enc', 'enc', 'batch.enc')
-        is_opus = ext in ('opus.enc', 'opus')
-
-        try:
-            chunk_data = bucket.blob(path).download_as_bytes()
-        except NotFound:
-            return None
-
-        try:
-            if encrypted:
-                raw_data = encryption.decrypt_audio_file(chunk_data, uid)
-            else:
-                raw_data = chunk_data
-
-            if is_opus:
-                pcm_data = decode_opus_to_pcm(raw_data, sample_rate=sample_rate)
-                del raw_data
-            else:
-                pcm_data = raw_data
-
-            return _align_pcm16_frames(pcm_data, path)
-        except Exception as e:
-            logger.warning(f"Failed to decode/decrypt {path}: {e}")
-            return None
+        return _download_and_decode_chunk_blob(bucket, path, uid, sample_rate)
 
     def download_single_chunk(timestamp: float) -> tuple[float, bytes | None]:
         """Download a single-chunk blob by trying extensions in priority order."""
@@ -1318,6 +1346,35 @@ def _pcm_to_wav(pcm_data: bytes, sample_rate: int = 16000, channels: int = 1) ->
         wav_file.setframerate(sample_rate)
         wav_file.writeframes(pcm_data)
     return wav_buffer.getvalue()
+
+
+# ----------------------------------------------------------------------------
+# Speaker-embedding cache: per-segment voice embeddings derived from a
+# conversation's stored audio, encrypted with the owner's key. It lives under
+# audio/{uid}/{conversation_id}/ so conversation deletion and account deletion
+# already purge it with the audio it was derived from.
+# ----------------------------------------------------------------------------
+
+SPEAKER_EMBEDDING_CACHE_NAME = 'speaker-embeddings.v1.enc'
+
+
+def _speaker_embedding_cache_blob(uid: str, conversation_id: str):
+    bucket = _get_storage_client().bucket(private_cloud_sync_bucket)
+    return bucket.blob(f'audio/{uid}/{conversation_id}/{SPEAKER_EMBEDDING_CACHE_NAME}')
+
+
+def download_speaker_embedding_cache(uid: str, conversation_id: str) -> Optional[bytes]:
+    try:
+        encrypted = _speaker_embedding_cache_blob(uid, conversation_id).download_as_bytes()
+    except BlobNotFound:
+        return None
+    return encryption.decrypt_audio_file(encrypted, uid)
+
+
+def upload_speaker_embedding_cache(uid: str, conversation_id: str, data: bytes) -> None:
+    blob = _speaker_embedding_cache_blob(uid, conversation_id)
+    with owner_storage_write_gate(uid, getattr(blob, 'bucket', None)):
+        blob.upload_from_string(encryption.encrypt_audio_chunk(data, uid), content_type='application/octet-stream')
 
 
 # ----------------------------------------------------------------------------

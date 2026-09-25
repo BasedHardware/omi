@@ -3528,7 +3528,6 @@
     "addToClaudeCodeConfig": "أضف إلى ~/.claude.json",
     "claudeDesktopConnectorSetup": "في Claude Desktop → Settings → Connectors، أضف موصلًا مخصصًا والصق عنوان الخادم. إذا طلب Claude معرّف عميل OAuth متقدمًا، فاستخدم القيمة أدناه واترك السر فارغًا — لا تستخدم أبدًا مفتاح MCP API الخاص بك كسر OAuth.",
     "transcriptionUnavailableRecordingContinues": "النسخ غير متوفر حاليًا، يستمر التسجيل على الجهاز وستتم المعالجة لاحقًا",
-    "transcriptionUnavailableSavingOnDevice": "النسخ غير متوفر · يتم الحفظ على الجهاز",
     "transcriptionsPendingFraction": "نسخ معلّق {pending}/{total}",
     "transcriptionsPendingCount": "نسخ معلّق {count}",
     "captureSourceCall": "مكالمة",
@@ -3546,5 +3545,16 @@
     "recordWith": "التسجيل باستخدام",
     "moreWaysToRecord": "طرق أخرى للتسجيل",
     "openCall": "فتح المكالمة",
-    "captureRecoveryBanner": "صوت القلادة لا يصل إلى التطبيق — انقر للإصلاح"
+    "captureRecoveryBanner": "صوت القلادة لا يصل إلى التطبيق — انقر للإصلاح",
+    "captureNotTranscribing": "لا يتم النسخ",
+    "captureAudioSavedTranscribesLater": "تم حفظ الصوت، وسيُنسخ لاحقًا",
+    "captureStillRecording": "لا يزال التسجيل جاريًا",
+    "captureMicInUseElsewhere": "الميكروفون قيد الاستخدام في تطبيق آخر",
+    "captureMicInterruptedDetail": "أخذت مكالمة أو تطبيق آخر الميكروفون، لذلك لا يستطيع Omi السماع الآن. سيستأنف Omi تلقائيًا عندما يصبح الميكروفون متاحًا. كل ما سُجّل قبل ذلك محفوظ.",
+    "captureCustomSttUnreachableDetail": "تعذّر الوصول إلى خدمة تحويل الكلام إلى نص المخصصة. يحتفظ Omi بالصوت على هذا الهاتف ويرسله عند عودة الخدمة. لن يضيع شيء.",
+    "captureStarting": "جارٍ البدء…",
+    "capturePhoneStorageFull": "مساحة الهاتف ممتلئة",
+    "captureStorageAlmostFull": "المساحة ممتلئة تقريبًا",
+    "capturePendantDisconnectedDetail": "فقد القلادة اتصالها بهذا الهاتف. سيعيد Omi الاتصال تلقائيًا عندما تكون القلادة قيد التشغيل وقريبة. كل ما سُجّل قبل ذلك محفوظ.",
+    "participantsSummaryUncounted": "{name} وآخرون"
 }

@@ -3528,7 +3528,6 @@
     "addToClaudeCodeConfig": "Lisa faili ~/.claude.json",
     "claudeDesktopConnectorSetup": "Lehel Claude Desktop → Settings → Connectors lisa kohandatud konnektor ja kleebi serveri URL. Kui Claude küsib täiustatud OAuth Client ID-d, kasuta allolevat väärtust ja jäta saladus tühjaks — ära kunagi kasuta oma MCP API võtit OAuth saladusena.",
     "transcriptionUnavailableRecordingContinues": "Transkriptsioonid pole saadaval, salvestamine jätkub seadmel ja töödeldakse hiljem",
-    "transcriptionUnavailableSavingOnDevice": "Transkriptsioon pole saadaval · salvestatakse seadmesse",
     "transcriptionsPendingFraction": "Ootel transkriptsioonid {pending}/{total}",
     "transcriptionsPendingCount": "Ootel transkriptsioonid {count}",
     "captureSourceCall": "Kõne",
@@ -3546,5 +3545,16 @@
     "recordWith": "Salvestusviis",
     "moreWaysToRecord": "Rohkem salvestusviise",
     "openCall": "Ava kõne",
-    "captureRecoveryBanner": "Ripatsi heli ei jõua rakendusse — parandamiseks puudutage"
+    "captureRecoveryBanner": "Ripatsi heli ei jõua rakendusse — parandamiseks puudutage",
+    "captureNotTranscribing": "Transkriptsioon puudub",
+    "captureAudioSavedTranscribesLater": "Heli salvestatud, transkribeeritakse hiljem",
+    "captureStillRecording": "Salvestamine jätkub",
+    "captureMicInUseElsewhere": "Mikrofoni kasutab teine rakendus",
+    "captureMicInterruptedDetail": "Kõne või mõni teine rakendus võttis mikrofoni, seega Omi praegu ei kuule. Omi jätkab ise, kui mikrofon vabaneb. Kõik varem salvestatu on alles.",
+    "captureCustomSttUnreachableDetail": "Sinu kohandatud kõnetuvastusteenus pole kättesaadav. Omi hoiab heli selles telefonis ja saadab selle, kui teenus taastub. Midagi ei lähe kaduma.",
+    "captureStarting": "Käivitamine…",
+    "capturePhoneStorageFull": "Telefoni mälu on täis",
+    "captureStorageAlmostFull": "Mälu on peaaegu täis",
+    "capturePendantDisconnectedDetail": "Ripats kaotas ühenduse selle telefoniga. Omi loob ühenduse ise uuesti, kui ripats on sisse lülitatud ja lähedal. Kõik varem salvestatu on alles.",
+    "participantsSummaryUncounted": "{name} ja teised"
 }

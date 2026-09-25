@@ -11206,10 +11206,6 @@ class AppLocalizationsNl extends AppLocalizations {
       'Transcripties zijn niet beschikbaar, de opname gaat door op het apparaat en wordt later verwerkt';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice =>
-      'Transcriptie niet beschikbaar · wordt op het apparaat opgeslagen';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'Transcripties in behandeling $pending/$total';
   }
@@ -11268,4 +11264,42 @@ class AppLocalizationsNl extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'De audio van de hanger komt niet aan in de app — tik om te repareren';
+
+  @override
+  String get captureNotTranscribing => 'Geen transcriptie';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'Audio opgeslagen, later getranscribeerd';
+
+  @override
+  String get captureStillRecording => 'Neemt nog op';
+
+  @override
+  String get captureMicInUseElsewhere => 'Microfoon in gebruik door andere app';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'Een gesprek of andere app gebruikt de microfoon, dus Omi kan nu niet luisteren. Omi gaat vanzelf verder zodra de microfoon vrij is. Alles wat eerder is opgenomen, is veilig.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'Je eigen spraak-naar-tekstdienst is niet bereikbaar. Omi bewaart de audio op deze telefoon en verstuurt die zodra de dienst terug is. Er gaat niets verloren.';
+
+  @override
+  String get captureStarting => 'Starten…';
+
+  @override
+  String get capturePhoneStorageFull => 'Telefoonopslag vol';
+
+  @override
+  String get captureStorageAlmostFull => 'Opslag bijna vol';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'Je hanger heeft de verbinding met deze telefoon verloren. Omi maakt vanzelf opnieuw verbinding zodra de hanger aan staat en in de buurt is. Alles wat eerder is opgenomen, is veilig.';
+
+  @override
+  String participantsSummaryUncounted(String name) {
+    return '$name en anderen';
+  }
 }
