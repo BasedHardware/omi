@@ -643,6 +643,10 @@ def header_violation_error(
     Body-level ``_meta`` version problems are NOT checked here — they stay
     per-message errors on a 200 response.
     """
+    # ``initialize`` negotiates from ``params.protocolVersion``; a stale or
+    # future MCP-Protocol-Version header on the handshake must not block it.
+    if isinstance(body, dict) and body.get("method") == "initialize":
+        header_version = None
     if header_version is not None and not is_supported_version(header_version):
         return _protocol_error_response(None, unsupported_version_error(header_version))
     if mcp_method or mcp_name:
@@ -694,6 +698,8 @@ def _client_capabilities_error(message: Dict[str, Any], header_version: Optional
     capabilities OBJECT is a malformed request: ``-32602`` on HTTP 400.
     Older revisions and undeclared messages are untouched.
     """
+    if message.get("method") == "initialize":
+        return None
     declared = declared_protocol_version(message) or header_version
     if declared != PROTOCOL_VERSION_2026:
         return None
