@@ -190,7 +190,6 @@ void main() {
   });
 
   contractTest('C1 real provider joins keepalive reconnect and disposes all newly scheduled timers', () async {
-    pendingContract('C1');
     final dir = await Directory.systemTemp.createTemp('c1-replay-');
     final world = await CaptureReplayWorld.boot(tempDir: dir);
     try {

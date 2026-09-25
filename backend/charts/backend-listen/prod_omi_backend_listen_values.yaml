@@ -29,8 +29,12 @@ serviceAccount:
   create: true
   # Automatically mount a ServiceAccount's API credentials?
   automount: true
-  # Annotations to add to the service account
-  annotations: {}
+  # Annotations to add to the service account.
+  # Keyless runtime identity (Workload Identity) that replaces the nik-164
+  # SERVICE_ACCOUNT_JSON key once the key env is removed; while the key env is
+  # present the JSON still wins. Shared by the listen canary deployments.
+  annotations:
+    iam.gke.io/gcp-service-account: backend-listen-runtime@based-hardware.iam.gserviceaccount.com
   # The name of the service account to use.
   # If not set and create is true, a name is generated using the fullname template
   name: ""
@@ -89,6 +93,12 @@ envFrom:
 env:
   - name: REFERRAL_PUBLIC_BASE_URL
     value: "https://omi.me"
+  - name: FREE_TIER_LOCAL_PROCESSING
+    value: "false"
+  - name: FREE_TIER_EMERGENCY_STOP
+    value: "false"
+  - name: FREE_TIER_LOCAL_PROCESSING_COHORT
+    value: ""
   - name: ACCOUNT_DELETION_DISPATCH_MODE
     value: "cloud_tasks"
   - name: ACCOUNT_DELETION_TASKS_QUEUE
@@ -147,6 +157,10 @@ env:
   - name: CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED
     value: "false"
   - name: CONVERSATION_OCR_CONTEXT_ENABLED
+    value: "false"
+  - name: MEETING_NOTES_RICH_CONTEXT_ENABLED
+    value: "false"
+  - name: MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED
     value: "false"
   - name: BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED
     value: "false"
@@ -248,6 +262,8 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: SERVICE_ACCOUNT_JSON
+  - name: OMI_CUSTOMER_DATA_PROJECT
+    value: "based-hardware"
   - name: HOSTED_PUSHER_API_URL
     value: "http://pusher.omi.me"
   - name: BUCKET_PLUGINS_LOGOS
@@ -333,13 +349,30 @@ env:
     value: "http://parakeet.omi.me"
   - name: STT_PRERECORDED_MODEL
     value: "parakeet,modulate-velma-2"
-  - name: DEEPGRAM_API_KEY
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: DEEPGRAM_API_KEY
   - name: DEEPGRAM_SELF_HOSTED_ENABLED
     value: "false"
+  - name: STT_CONNECT_ORDER_FROM_CONFIG
+    value: "false"
+  - name: PARAKEET_WINDOW_ALLOCATION_PERCENT
+    value: "0"
+  - name: PARAKEET_WINDOW_MAX_SESSIONS
+    value: "1"
+  - name: PARAKEET_WINDOW_POST_TIMEOUT_SECONDS
+    value: "8"
+  - name: PARAKEET_WINDOW_DIARIZATION
+    value: "false"
+  - name: PARAKEET_WINDOW_PACE_SECONDS
+    value: "6"
+  - name: PARAKEET_WINDOW_MAX_CONTEXT_SECONDS
+    value: "24"
+  - name: STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS
+    value: "1800"
+  - name: STT_CIRCUIT_HALF_OPEN_PROBES
+    value: "1"
+  - name: SONIOX_CIRCUIT_FAILURE_THRESHOLD
+    value: "3"
+  - name: SONIOX_CIRCUIT_COOLDOWN_SECONDS
+    value: "30"
   - name: STT_SERVICE_MODELS
     value: "modulate-velma-2,soniox,dg-nova-3,parakeet"
   - name: HOSTED_TRANSLATION_API_URL
@@ -399,7 +432,7 @@ env:
   - name: FAIR_USE_CLASSIFIER_COOLDOWN_SECONDS
     value: "43200"
   - name: FAIR_USE_CLASSIFIER_MODEL
-    value: "gpt-5.6-luna"
+    value: "gpt-6-luna"
   - name: FAIR_USE_CLASSIFIER_LOOKBACK_DAYS
     value: "7"
   - name: FAIR_USE_CHECK_INTERVAL_SECONDS

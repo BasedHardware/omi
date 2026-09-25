@@ -16,6 +16,7 @@ import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/services/services.dart';
+import 'package:omi/ui/omi_tokens.dart';
 import 'package:omi/utils/enums.dart';
 
 class _StubDeviceProvider extends ChangeNotifier implements DeviceProvider {
@@ -109,12 +110,15 @@ void main() {
       expect(captureProvider.recordingState, RecordingState.record);
       expect(captureProvider.terminalTranscriptionFailure?.status, 'stt_failed');
       final context = tester.element(find.byType(ConversationCaptureWidget));
-      expect(find.text(AppLocalizations.of(context).transcriptionUnavailable), findsWidgets);
+      // The compact card carries the short "saving on device" variant; the full
+      // recording-continues sentence belongs to the capturing page.
+      expect(find.text(AppLocalizations.of(context).transcriptionUnavailableSavingOnDevice), findsWidgets);
+      expect(find.text(AppLocalizations.of(context).transcriptionUnavailableRecordingContinues), findsNothing);
 
       captureProvider.onMessageEventReceived(MessageServiceStatusEvent(status: 'ready'));
       await tester.pump();
 
-      expect(find.text(AppLocalizations.of(context).transcriptionUnavailable), findsNothing);
+      expect(find.text(AppLocalizations.of(context).transcriptionUnavailableSavingOnDevice), findsNothing);
       expect(find.text(AppLocalizations.of(context).listening), findsWidgets);
     });
 
@@ -134,13 +138,13 @@ void main() {
 
       expect(find.text(pausedText), findsWidgets);
       expect(find.text(listeningText), findsNothing);
-      // Phone-mic paused affordance: orange status dot + play (resume) control.
+      // Phone-mic paused affordance: warning (orange) status dot + play (resume) control.
       expect(
         find.byWidgetPredicate((w) {
           if (w is! Container) return false;
           final d = w.decoration;
           return d is BoxDecoration &&
-              d.color == const Color(0xFFFF9500) &&
+              d.color == OmiColors.warning &&
               d.shape == BoxShape.circle &&
               w.constraints?.maxWidth == 6;
         }),
@@ -219,15 +223,8 @@ void main() {
       // Initially should show Listening
       expect(find.text(listeningText), findsWidgets);
 
-      // Simulate device pause: set isPaused and change to pause state
-      captureProvider.updateRecordingState(RecordingState.pause);
-      // isPaused is set via pauseDeviceRecording which needs BLE — set it directly
-      // by triggering the internal pause flow
-      try {
-        await captureProvider.pauseDeviceRecording();
-      } catch (_) {
-        // BLE operations fail in test — but isPaused flag is set before the throw
-      }
+      // Exercise the production mute path, including its durable preference write.
+      await tester.runAsync(() => captureProvider.pauseDeviceRecording());
       await tester.pump();
 
       // Muted/Paused should override Listening for device recording

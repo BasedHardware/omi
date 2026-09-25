@@ -97,7 +97,11 @@ struct CaptureAttemptOutcomeState {
 
   /// Pure disposition mapping, testable without AppState.
   ///
-  /// Order: a marked error path is an error regardless of what followed.
+  /// Order: a marked error path is an error regardless of what followed, and so
+  /// is a finalization reason that itself names a forced termination — a paywall
+  /// admission stop or a failed meeting-boundary rotation on an idle Meetings
+  /// wait must classify `error`, not `idle_waiting_meeting`, or a
+  /// stop/re-arm loop stays invisible to the error funnel.
   /// A Meetings-mode attempt that never delivered an audio frame terminated
   /// while waiting for a meeting — `idle_waiting_meeting`, never `error`.
   /// Otherwise normal terminal reasons with observed audio are `completed`,
@@ -108,17 +112,21 @@ struct CaptureAttemptOutcomeState {
     firstAudioFrame: Bool,
     errorTerminal: Bool
   ) -> TerminalReason {
-    if errorTerminal {
+    if errorTerminal || finalizationReason.isForcedTermination {
       return .error
     }
     if mode == AssistantSettings.AudioRecordingMode.onlyMeetings.rawValue, !firstAudioFrame {
       return .idleWaitingMeeting
     }
     switch finalizationReason {
-    case .userStop, .finishAndContinue, .meetingStarted, .meetingEnded, .maxDurationRotation:
+    case .userStop, .finishAndContinue, .meetingStarted, .meetingEnded, .maxDurationRotation,
+      .recordingDisabled, .systemSleep, .appTerminated, .settingsChange:
       return firstAudioFrame ? .completed : .cancelled
     case .crashRecovery, .retry:
       return .pending
+    case .paywall, .microphoneUnavailable, .deviceUnavailable, .silentMicExhausted,
+      .rotationFailed, .sttFallback:
+      return .error  // unreachable — isForcedTermination short-circuits above
     }
   }
 

@@ -109,7 +109,7 @@ void main() {
       ),
     );
 
-    expect(find.text('Conversations · Location'), findsOneWidget);
+    expect(find.text('Conversation Map'), findsOneWidget);
     expect(find.text('No conversations yet'), findsOneWidget);
   });
 

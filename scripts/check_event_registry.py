@@ -15,6 +15,14 @@ BRIDGE = 'app/lib/utils/analytics/registry/typed_events.dart'
 RAW = re.compile(r'\b(?:AnalyticsManager\s*\(\s*\)|Posthog\s*\(\s*\)|analytics|posthog)\s*\.\s*(?:track|trackEvent|capture)\s*\(')
 MANAGER_CALL = re.compile(r'\bAnalyticsManager\s*\(\s*\)\s*\.\s*track\s*\(')
 IDENT = re.compile(r'^[a-z][A-Za-z0-9]*$')
+ENUM_VALUE = re.compile(r'^[a-z][a-z0-9_]*$')
+PROVENANCE_WIRES = frozenset({'git_sha', 'build_number', 'app_platform', 'app_version', 'app_build'})
+DART_RESERVED = frozenset({
+    'assert', 'break', 'case', 'catch', 'class', 'const', 'continue', 'default', 'do', 'else',
+    'enum', 'extends', 'false', 'final', 'finally', 'for', 'if', 'in', 'is', 'new', 'null',
+    'rethrow', 'return', 'super', 'switch', 'this', 'throw', 'true', 'try', 'var', 'void',
+    'while', 'with', 'bool', 'int', 'double', 'dynamic', 'typedef', 'abstract', 'covariant',
+})
 
 
 def git(ref, path):
@@ -42,14 +50,22 @@ def validate(doc, root=ROOT, prior=None):
             errors.append(f'{label}: invalid id/name')
         if event['status'] not in ('active', 'deprecated') or (event['replaced_by'] is not None and event['replaced_by'] not in ids):
             errors.append(f'{label}: invalid lifecycle/replacement')
-        # F1 owns the intent vocabulary and correlated payload encoding; C7 reserves the fields.
-        if event['phase'] != 'point' or event['intent'] is not None or event['correlation'] is not None:
-            errors.append(f'{label}: attempt/outcome requires the F1 contract before emission')
+        if event['phase'] == 'point':
+            if event['intent'] is not None or event['correlation'] is not None:
+                errors.append(f'{label}: point events cannot imply a correlated attempt')
+        elif event['phase'] in ('attempt', 'progress', 'outcome'):
+            if event['intent'] != 'product_journey' or event['correlation'] != {
+                'type': 'random_attempt_id', 'field': 'correlation_id'
+            }:
+                errors.append(f'{label}: correlated events require the product_journey random-attempt contract')
+            if not {'journey', 'surface'} <= event['properties'].keys():
+                errors.append(f'{label}: correlated events require journey and surface')
+            if event['phase'] == 'outcome' and not {'outcome', 'failure', 'durationMs'} <= event['properties'].keys():
+                errors.append(f'{label}: terminal events require outcome, failure and duration')
+        else:
+            errors.append(f'{label}: unknown event phase')
         for key, spec in event['properties'].items():
-            if (not IDENT.fullmatch(key) or set(spec) != {'type', 'wire_name'} or
-                spec['type'] != 'bool' or not isinstance(spec['wire_name'], str) or not spec['wire_name'] or
-                spec['wire_name'] in {'git_sha', 'build_number', 'app_platform', 'app_version', 'app_build'}):
-                errors.append(f'{label}.{key}: only boolean examples admitted; extend closed enum/count types with privacy tests, never free String/Map')
+            errors.extend(property_errors(label, key, spec))
         if len({p.get('wire_name') for p in event['properties'].values()}) != len(event['properties']):
             errors.append(f'{label}: property wire names must be unique')
         if not event['consumers']:
@@ -83,6 +99,14 @@ def validate(doc, root=ROOT, prior=None):
                         raise ValueError('query manufactures presence on empty input')
             except (OSError, KeyError, ValueError, sqlite3.Error) as exc:
                 errors.append(f'{label}: unusable consumer {consumer}: {exc}')
+    correlated = [e for e in events if e['phase'] != 'point']
+    if correlated:
+        phases = {e['phase'] for e in correlated}
+        if not {'attempt', 'outcome'} <= phases:
+            errors.append('product_journey requires both attempt and outcome events')
+        journeys = [e['properties'].get('journey') for e in correlated]
+        if any(j != journeys[0] for j in journeys):
+            errors.append('product_journey vocabulary must match at every phase')
     return errors
 
 
@@ -90,16 +114,90 @@ def dart_string(value):
     return json.dumps(value).replace("$", "\\$")
 
 
+def snake_to_camel(value):
+    parts = value.split('_')
+    return parts[0] + ''.join(part.capitalize() for part in parts[1:])
+
+
+def enum_class_name(event_id, key):
+    return event_id[0].upper() + event_id[1:] + key[0].upper() + key[1:]
+
+
+def property_errors(label, key, spec):
+    prefix = f'{label}.{key}'
+    if not IDENT.fullmatch(key) or not isinstance(spec, dict):
+        return [f'{prefix}: only boolean, int, and closed enum admitted; never free String/Map/double']
+    wire = spec.get('wire_name')
+    kind = spec.get('type')
+    if not isinstance(wire, str) or not wire or wire in PROVENANCE_WIRES:
+        return [f'{prefix}: only boolean, int, and closed enum admitted; provenance keys stay SDK-owned']
+    if kind in ('bool', 'int'):
+        return [] if set(spec) == {'type', 'wire_name'} else [f'{prefix}: {kind} admits only type and wire_name']
+    if kind == 'record_reference':
+        return [] if spec == {'type': 'record_reference', 'wire_name': 'object_id'} else [f'{prefix}: record references only admit a validated object_id']
+    if kind != 'enum':
+        return [f'{prefix}: only boolean, int, and closed enum admitted; never free String/Map/double']
+    if set(spec) != {'type', 'wire_name', 'values'}:
+        return [f'{prefix}: enum admits type, wire_name, and values']
+    values = spec.get('values')
+    if not isinstance(values, list) or len(values) < 2:
+        return [f'{prefix}: enum needs at least two closed values']
+    if any(not isinstance(value, str) or not ENUM_VALUE.fullmatch(value) for value in values):
+        return [f'{prefix}: enum values must be snake_case identifiers']
+    if len(set(values)) != len(values):
+        return [f'{prefix}: enum values must be unique']
+    idents = [snake_to_camel(value) for value in values]
+    if len(set(idents)) != len(idents) or any(ident in DART_RESERVED or not IDENT.fullmatch(ident) for ident in idents):
+        return [f'{prefix}: enum values must map to distinct Dart identifiers']
+    return []
+
+
+def dart_field_type(event_id, key, spec):
+    if spec['type'] == 'enum':
+        return enum_class_name(event_id, key)
+    if spec['type'] == 'record_reference':
+        return 'RecordReference?'
+    return spec['type']
+
+
+def property_expression(key, spec):
+    if spec['type'] == 'enum':
+        return f'{key}.wireName'
+    if spec['type'] == 'record_reference':
+        return f'{key}!.value'
+    return key
+
+
+def render_enum(event_id, key, spec):
+    name = enum_class_name(event_id, key)
+    members = ',\n'.join(f'  {snake_to_camel(value)}({dart_string(value)})' for value in spec['values']) + ';'
+    return ['', f'enum {name} {{', members, f'  const {name}(this.wireName);', '  final String wireName;', '}']
+
+
 def render(doc):
-    dart = ["// GENERATED by scripts/check_event_registry.py --write; do not edit.", "sealed class RegisteredEvent {", "  const RegisteredEvent();", "  String get wireName;", "  Map<String, Object> get properties;", "}"]
+    dart = ["// GENERATED by scripts/check_event_registry.py --write; do not edit.", "import 'event_context.dart';", "sealed class RegisteredEvent {", "  const RegisteredEvent();", "  String get wireName;", "  Map<String, Object> get properties;", "}"]
     plan = ['# Mobile tracking plan (generated)', '', 'Source: events.json. Presence is not task success. Existing SDK provenance/identity is unchanged.', '', '| API | Wire name | Properties | Status | Consumers |', '| --- | --- | --- | --- | --- |']
     for e in doc['events']:
         cls = e['id'][0].upper() + e['id'][1:]
         fields = e['properties']
-        args = ', '.join('required this.'+key for key in fields)
+        for key, spec in fields.items():
+            if spec['type'] == 'enum':
+                dart += render_enum(e['id'], key, spec)
+        correlated = e['correlation'] is not None
+        args = ', '.join((['required this.correlationId'] if correlated else []) + [
+            ('' if spec['type'] == 'record_reference' else 'required ') + 'this.' + key
+            for key, spec in fields.items()
+        ])
         dart += ['', f'final class {cls} extends RegisteredEvent {{', f"  const {cls}({('{' + args + '}') if args else ''});"]
-        dart += [f'  final bool {key};' for key in fields]
-        dart += ['  @override', f'  String get wireName => {dart_string(e["wire_name"])};', '  @override', '  Map<String, Object> get properties => {' + ', '.join(dart_string(fields[k]['wire_name'])+': '+k for k in fields) + '};', '}']
+        if correlated:
+            dart += ['  final EventCorrelation correlationId;']
+        dart += [f'  final {dart_field_type(e["id"], key, spec)} {key};' for key, spec in fields.items()]
+        entries = (['"correlation_id": correlationId.value'] if correlated else []) + [
+            (f'if ({key} != null) ' if spec['type'] == 'record_reference' else '') +
+            dart_string(spec['wire_name']) + ': ' + property_expression(key, spec)
+            for key, spec in fields.items()
+        ]
+        dart += ['  @override', f'  String get wireName => {dart_string(e["wire_name"])};', '  @override', '  Map<String, Object> get properties => {' + ', '.join(entries) + '};', '}']
         plan.append(f"| {e['id']} | {e['wire_name']} | {', '.join(p['wire_name'] for p in fields.values()) or 'none'} | {e['status']} | {', '.join(e['consumers'])} |")
     return '\n'.join(dart)+'\n', '\n'.join(plan)+'\n'
 

@@ -58,7 +58,7 @@ def test_flag_off_legacy_composition_validates_all_summary_evidence(monkeypatch)
     monkeypatch.setattr(process_module.notification_db, 'get_user_time_zone', lambda *_args: 'UTC')
     monkeypatch.setattr(process_module.users_db, 'get_user_language_preference', lambda *_args: None)
     monkeypatch.setattr(process_module, '_proposes_task_candidates', lambda *_args: False)
-    monkeypatch.setattr(process_module, '_detect_duplicate_capture', lambda *_args: None)
+    monkeypatch.setattr(process_module, 'link_duplicate_captures', lambda *_args: None)
     monkeypatch.setattr(process_module, 'track_usage', lambda *_args, **_kwargs: nullcontext())
     monkeypatch.setattr(process_module, 'should_discard_conversation', lambda *_args, **_kwargs: False)
     monkeypatch.setattr(
@@ -119,7 +119,9 @@ def test_flag_off_reprocess_composition_validates_source_evidence(monkeypatch):
     monkeypatch.setattr(process_module, '_fetch_dedup_candidates', lambda *_args, **_kwargs: [])
     monkeypatch.setattr(process_module, '_primary_user_name', lambda *_args: None)
 
-    result, discarded = process_module._get_structured('uid-legacy', 'en', conversation, force_process=True)
+    result, discarded = process_module._get_structured(
+        'uid-legacy', 'en', conversation, trigger=process_module.ProcessingTrigger.USER_REPROCESS
+    )
 
     assert discarded is False
     assert captured_kwargs['transcript_segment_ids'] == ['s1', 's2']

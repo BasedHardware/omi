@@ -15,6 +15,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/pages/conversation_capturing/page.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
+import 'package:omi/pages/conversations/capture_state_labels.dart';
 import 'package:omi/pages/conversations/widgets/capture.dart';
 import 'package:omi/pages/processing_conversations/page.dart';
 import 'package:omi/providers/capture_provider.dart';
@@ -26,6 +27,7 @@ import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/processing_timeout.dart';
 import 'package:omi/backend/schema/phone_call.dart';
 import 'package:omi/providers/phone_call_provider.dart';
+import 'package:omi/ui/ui.dart';
 
 class ConversationCaptureWidget extends StatefulWidget {
   const ConversationCaptureWidget({super.key});
@@ -114,7 +116,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
           child: Container(
             margin: const EdgeInsets.fromLTRB(16, 12, 16, 12),
             width: double.maxFinite,
-            decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(24)),
+            decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(24)),
             child: Padding(
               padding: EdgeInsets.fromLTRB(
                 10,
@@ -270,11 +272,14 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     var stateText = "";
 
     // Always check pause state first with highest priority (both desktop and phone)
+    // Labels come from the shared state table (capture_state_labels.dart) so the list card and the
+    // capturing page never name the same moment differently.
+    final l10n = context.l10n;
     if (captureProvider.recordingState == RecordingState.interrupted && captureProvider.isCallActive) {
-      stateText = context.l10n.paused;
+      stateText = captureStateLabel(l10n, CaptureDisplayState.paused);
       statusIndicator = const PausedStatusIndicator();
     } else if (captureProvider.isPaused || _isPhoneMicPaused) {
-      stateText = context.l10n.paused;
+      stateText = captureStateLabel(l10n, CaptureDisplayState.paused);
       statusIndicator = const PausedStatusIndicator();
     } else if (!isHavingRecordingDevice && !isUsingPhoneMic) {
       stateText = "";
@@ -283,13 +288,13 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
       if (captureProvider.terminalTranscriptionFailure != null) {
         // Audio remains in the WAL while reconnecting, but the server has
         // explicitly said live STT is unavailable. Do not claim "Listening".
-        stateText = context.l10n.transcriptionUnavailable;
+        stateText = captureStateLabel(l10n, CaptureDisplayState.transcriptionUnavailable, compact: true);
         statusIndicator = const PausedStatusIndicator();
       } else if (bufferingFor != null) {
         // Custom STT endpoint unreachable. Audio keeps recording
         // and buffering locally (see PurePollingSocket) — say so instead of
         // silently claiming "Listening" while nothing is being transcribed.
-        stateText = _customSttBufferingText(bufferingFor);
+        stateText = captureStateLabel(l10n, CaptureDisplayState.bufferingOffline, bufferingFor: bufferingFor);
         statusIndicator = const PausedStatusIndicator();
       } else {
         // Show "Listening" for all active recording states — WAL ensures audio is
@@ -298,14 +303,13 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
           var lastEvent = captureProvider.transcriptionServiceStatuses.lastOrNull;
           if (lastEvent is MessageServiceStatusEvent) {
             bool transcriptionDiagnosticEnabled = SharedPreferencesUtil().transcriptionDiagnosticEnabled;
-            stateText = transcriptionDiagnosticEnabled
-                ? (lastEvent.statusText ?? context.l10n.listening)
-                : context.l10n.listening;
+            final listening = captureStateLabel(l10n, CaptureDisplayState.listening);
+            stateText = transcriptionDiagnosticEnabled ? (lastEvent.statusText ?? listening) : listening;
           } else {
-            stateText = context.l10n.listening;
+            stateText = captureStateLabel(l10n, CaptureDisplayState.listening);
           }
         } else {
-          stateText = context.l10n.listening;
+          stateText = captureStateLabel(l10n, CaptureDisplayState.listening);
         }
         statusIndicator = const RecordingStatusIndicator();
       }
@@ -337,13 +341,6 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         ],
       ),
     );
-  }
-
-  // Short status text for how long the custom STT endpoint has
-  // been unreachable while audio keeps recording and buffering locally.
-  String _customSttBufferingText(Duration bufferingFor) {
-    if (bufferingFor.inMinutes < 1) return 'Offline, buffering';
-    return 'Offline, buffering ${bufferingFor.inMinutes}m';
   }
 
   Widget _buildUnifiedRecordingUI(CaptureProvider provider, Widget? header) {
@@ -383,19 +380,21 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     bool hasPhotos = provider.photos.isNotEmpty;
     // Show "Listening" for all active recording states — WAL ensures audio is
     // saved locally regardless of transcription connection status.
-    String statusText = isAudioInterrupted
-        ? context.l10n.paused
-        : isPaused
-            ? (isDeviceRecording ? context.l10n.muted : context.l10n.paused)
-            : hasTerminalTranscriptionFailure
-                ? context.l10n.transcriptionUnavailable
-                // Custom STT endpoint unreachable, audio still buffering
-                // locally (see customSttBufferingDuration / PurePollingSocket).
-                : bufferingFor != null
-                    ? _customSttBufferingText(bufferingFor)
-                    : hasPhotos
-                        ? 'Capturing'
-                        : context.l10n.listening;
+    // Custom STT endpoint unreachable means audio is still buffering locally
+    // (see customSttBufferingDuration / PurePollingSocket).
+    String statusText = captureStateLabel(
+      context.l10n,
+      liveCaptureDisplayState(
+        audioInterrupted: isAudioInterrupted,
+        paused: isPaused,
+        deviceMuted: isDeviceRecording,
+        transcriptionUnavailable: hasTerminalTranscriptionFailure,
+        bufferingFor: bufferingFor,
+        capturingPhotos: hasPhotos,
+      ),
+      bufferingFor: bufferingFor,
+      compact: true,
+    );
 
     // When recording is active, show the unified UI design
     if (isDeviceRecording || isPhoneRecording) {
@@ -410,14 +409,14 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
               children: [
                 Text(
                   statusText,
-                  style: const TextStyle(color: Color(0xFFC9CBCF), fontSize: 14, fontWeight: FontWeight.w500),
+                  style: const TextStyle(color: OmiColors.textSecondary, fontSize: 14, fontWeight: FontWeight.w500),
                 ),
                 const SizedBox(width: 6),
                 Container(
                   width: 6,
                   height: 6,
                   decoration: BoxDecoration(
-                    color: isPaused ? const Color(0xFFFF9500) : const Color(0xFFFE5D50),
+                    color: isPaused ? OmiColors.warning : OmiColors.danger,
                     shape: BoxShape.circle,
                   ),
                 ),
@@ -452,16 +451,23 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               decoration: BoxDecoration(color: const Color(0xFF35343B), borderRadius: BorderRadius.circular(20)),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  const FaIcon(FontAwesomeIcons.camera, size: 12, color: Color(0xFFC9CBCF)),
-                  const SizedBox(width: 6),
-                  Text(
-                    '${provider.photos.length}',
-                    style: const TextStyle(color: Color(0xFFC9CBCF), fontSize: 13, fontWeight: FontWeight.w500),
+              // The count says what it counts to a screen reader (hub audit #20).
+              child: Semantics(
+                label: context.l10n.conversationPhotosCount(provider.photos.length),
+                child: ExcludeSemantics(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const FaIcon(FontAwesomeIcons.camera, size: 12, color: OmiColors.textSecondary),
+                      const SizedBox(width: 6),
+                      Text(
+                        '${provider.photos.length}',
+                        style:
+                            const TextStyle(color: OmiColors.textSecondary, fontSize: 13, fontWeight: FontWeight.w500),
+                      ),
+                    ],
                   ),
-                ],
+                ),
               ),
             ),
           ],
@@ -471,7 +477,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(8, 0, 8, 0),
                 child: Text(
-                  '... ${provider.segments.last.text} ...',
+                  '… ${provider.segments.last.text} …',
                   style: TextStyle(color: Colors.grey.shade400, fontSize: 13),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
@@ -509,11 +515,11 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                 decoration: BoxDecoration(
                   color: isPaused
                       ? isDeviceRecording
-                          ? const Color(0xFFFE5D50)
-                          : const Color(0xFF7C3AED)
+                          ? OmiColors.danger
+                          : OmiColors.accent
                       : isDeviceRecording
                           ? const Color(0xFF35343B)
-                          : const Color(0xFFFF9500),
+                          : OmiColors.warning,
                   shape: BoxShape.circle,
                 ),
                 child: Center(
@@ -525,7 +531,8 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                         : isDeviceRecording
                             ? FontAwesomeIcons.microphone
                             : FontAwesomeIcons.pause,
-                    color: Colors.white,
+                    // Resume sits on the white accent (INV-UI-1), so its glyph is black.
+                    color: isPaused && !isDeviceRecording ? OmiColors.onAccent : Colors.white,
                     size: 12,
                   ),
                 ),
@@ -588,7 +595,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     } else if (elapsed != null) {
       elapsedLabel = '${elapsed ~/ 60}m ${(elapsed % 60).toString().padLeft(2, '0')}s';
     }
-    final dotColor = paused ? Colors.grey.shade600 : const Color(0xFFFE5D50);
+    final dotColor = paused ? Colors.grey.shade600 : OmiColors.danger;
     return Padding(
       padding: const EdgeInsets.only(left: 8, right: 6),
       child: Column(
@@ -614,7 +621,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                           : muted
                               ? context.l10n.muted
                               : context.l10n.recording,
-                      style: const TextStyle(color: Color(0xFFC9CBCF), fontSize: 14, fontWeight: FontWeight.w500),
+                      style: const TextStyle(color: OmiColors.textSecondary, fontSize: 14, fontWeight: FontWeight.w500),
                     ),
                   ],
                 ),
@@ -624,7 +631,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                 Text(
                   elapsedLabel,
                   style: const TextStyle(
-                    color: Color(0xFFC9CBCF),
+                    color: OmiColors.textSecondary,
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
                     fontFeatures: [FontFeature.tabularFigures()],
@@ -660,7 +667,13 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
                   icon: muted ? FontAwesomeIcons.microphone : FontAwesomeIcons.microphoneSlash,
                   label: muted ? context.l10n.unmute : context.l10n.mute,
                   primary: false,
-                  onTap: () => provider.toggleOfflineMute(),
+                  onTap: () async {
+                    try {
+                      await provider.toggleOfflineMute();
+                    } catch (_) {
+                      if (mounted) AppSnackbar.showSnackbar(context.l10n.somethingWentWrong);
+                    }
+                  },
                 ),
                 const SizedBox(width: 10),
                 _buildOfflineControl(
@@ -698,7 +711,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
     required bool primary,
     required VoidCallback onTap,
   }) {
-    final color = primary ? Colors.white : const Color(0xFFC9CBCF);
+    final color = primary ? Colors.white : OmiColors.textSecondary;
     return Expanded(
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
@@ -816,7 +829,7 @@ getPhoneMicRecordingButton(
   {
     if (isLoading) {
       text = context.l10n.initialisingRecorder;
-      icon = const SizedBox(height: 8, width: 8, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white));
+      icon = const OmiSpinner(size: OmiSpinnerSize.small);
     } else if (currentActualState == RecordingState.record) {
       text = context.l10n.pauseRecording;
       icon = Container(
@@ -832,11 +845,8 @@ getPhoneMicRecordingButton(
         margin: const EdgeInsets.only(right: 4),
         width: 24,
         height: 24,
-        decoration: const BoxDecoration(
-          color: Color(0xFF7C3AED), // Deep purple
-          shape: BoxShape.circle,
-        ),
-        child: const Center(child: Icon(Icons.play_arrow, color: Colors.white, size: 14)),
+        decoration: const BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
+        child: const Center(child: Icon(Icons.play_arrow, color: OmiColors.onAccent, size: 14)),
       );
     } else {
       text = context.l10n.continueRecording;
@@ -868,8 +878,16 @@ Widget getProcessingConversationsWidget(List<ServerConversation> conversations) 
   if (conversations.isEmpty) {
     return const SliverToBoxAdapter(child: SizedBox.shrink());
   }
-  // Show only the first (most recent) processing conversation
-  return SliverToBoxAdapter(child: ProcessingConversationWidget(conversation: conversations.first));
+  // Live events append new IDs; list position is not recency. Processing begins
+  // at capture end, while the optimistic Process Now row has only createdAt.
+  final newest = conversations.reduce((a, b) {
+    final aTime = a.finishedAt ?? a.createdAt;
+    final bTime = b.finishedAt ?? b.createdAt;
+    return bTime.isAfter(aTime) ? b : a;
+  });
+  return SliverToBoxAdapter(
+    child: ProcessingConversationWidget(key: ValueKey('processing_${newest.id}'), conversation: newest),
+  );
 }
 
 // PROCESSING CONVERSATION
@@ -987,7 +1005,7 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
         child: Container(
           width: double.maxFinite,
-          decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(24.0)),
+          decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: BorderRadius.circular(24.0)),
           // Static skeleton - no animation to save CPU/battery
           child: Padding(
             padding: const EdgeInsets.all(16),
@@ -1003,7 +1021,7 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
                       width: 24,
                       height: 24,
                       decoration: BoxDecoration(
-                        color: const Color(0xFF2A2A32),
+                        color: OmiColors.surface2,
                         borderRadius: BorderRadius.circular(12),
                       ),
                     ),
@@ -1016,16 +1034,15 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
                       ),
                       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                       child: Text(
-                        context.l10n.processing,
-                        style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
+                        captureStateLabel(context.l10n, CaptureDisplayState.processing),
+                        style: OmiType.subhead.copyWith(fontWeight: FontWeight.w500),
                       ),
                     ),
                     const Spacer(),
-                    // Timestamp placeholder
-                    Container(
-                      width: 50,
-                      height: 14,
-                      decoration: BoxDecoration(color: const Color(0xFF2A2A32), borderRadius: BorderRadius.circular(4)),
+                    // The real start time, not a placeholder bar (hub audit #25).
+                    Text(
+                      OmiDateFormat.of(context).time(widget.conversation.startedAt ?? widget.conversation.createdAt),
+                      style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
                     ),
                   ],
                 ),
@@ -1034,7 +1051,7 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
                 Container(
                   width: double.maxFinite,
                   height: 16,
-                  decoration: BoxDecoration(color: const Color(0xFF2A2A32), borderRadius: BorderRadius.circular(4)),
+                  decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: BorderRadius.circular(4)),
                 ),
                 if (_timedOut) ...[
                   const SizedBox(height: 12),
@@ -1053,16 +1070,10 @@ class _ProcessingConversationWidgetState extends State<ProcessingConversationWid
                         style: TextButton.styleFrom(
                           foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                          minimumSize: Size.zero,
+                          minimumSize: const Size(44, 44),
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
-                        child: _retrying
-                            ? const SizedBox(
-                                width: 16,
-                                height: 16,
-                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                              )
-                            : Text(context.l10n.retry),
+                        child: _retrying ? const OmiSpinner(size: OmiSpinnerSize.small) : Text(context.l10n.tryAgain),
                       ),
                     ),
                   ),

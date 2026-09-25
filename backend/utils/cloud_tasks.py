@@ -89,6 +89,10 @@ def _oidc_audience() -> str:
     return os.getenv('SYNC_TASKS_OIDC_AUDIENCE') or _handler_url()
 
 
+def _audio_merge_handler_url() -> str:
+    return os.getenv('AUDIO_MERGE_HANDLER_URL', '')
+
+
 def _account_deletion_oidc_audience() -> str:
     return os.getenv('ACCOUNT_DELETION_TASKS_OIDC_AUDIENCE') or os.getenv('ACCOUNT_DELETION_HANDLER_URL', '')
 
@@ -303,8 +307,12 @@ def enqueue_audio_merge_job(payload: Dict[str, Any]) -> None:
 
     Task name am-{conversation_id}-{audio_file_id} dedupes concurrent enqueues
     from /urls polling; the handler's artifact-exists check covers the rest.
-    Tokens are minted with the same audience as sync tasks so a single
-    verify_cloud_tasks_oidc dependency covers both handlers.
+
+    The OIDC audience is the merge handler URL, not the sync-jobs audience.
+    backend-sync-backfill clones backend-sync's env and overlays
+    SYNC_TASKS_HANDLER_URL / SYNC_TASKS_OIDC_AUDIENCE onto the backfill
+    worker; AUDIO_MERGE_HANDLER_URL still names backend-sync. Minting the
+    sync-jobs audience for a merge task makes backend-sync reject it 403.
 
     schema_version 2 = conversation-level artifact build: the name embeds the
     audio_files fingerprint so a rebuild after late chunks gets a fresh name
@@ -315,11 +323,13 @@ def enqueue_audio_merge_job(payload: Dict[str, Any]) -> None:
         task_id = f"amc-{payload['conversation_id']}-{payload['fingerprint']}"
     else:
         task_id = f"am-{payload['conversation_id']}-{payload['audio_file_id']}"
+    handler_url = _audio_merge_handler_url()
     _enqueue_named_task(
         os.getenv('AUDIO_MERGE_TASKS_QUEUE', ''),
-        os.getenv('AUDIO_MERGE_HANDLER_URL', ''),
+        handler_url,
         task_id,
         payload,
+        audience=handler_url,
     )
 
 
@@ -405,8 +415,18 @@ def _verify_cloud_tasks_oidc(request: Request, *, audience: str, invoker_sa: str
 
 
 def verify_cloud_tasks_oidc(request: Request) -> int:
-    """FastAPI dependency for sync and merge task routes."""
+    """FastAPI dependency for sync-job task routes."""
     return _verify_cloud_tasks_oidc(request, audience=_oidc_audience(), invoker_sa=_invoker_sa())
+
+
+def verify_audio_merge_cloud_tasks_oidc(request: Request) -> int:
+    """FastAPI dependency for audio-merge task routes.
+
+    Audience is the merge handler URL so an enqueuer whose SYNC_TASKS_*
+    audience names a different service (backend-sync-backfill) can still
+    mint a token the merge worker will accept.
+    """
+    return _verify_cloud_tasks_oidc(request, audience=_audio_merge_handler_url(), invoker_sa=_invoker_sa())
 
 
 def verify_account_deletion_cloud_tasks_oidc(request: Request) -> AccountDeletionTaskAuthentication:

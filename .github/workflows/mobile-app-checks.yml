@@ -674,3 +674,67 @@ jobs:
       - name: Run Flutter tests under Pacific/Pago_Pago
         if: always()
         run: TZ=Pacific/Pago_Pago bash app/test.sh
+
+  # This is the only mobile status that a release-admission caller should
+  # consume.  Lane D must query this exact check name on the exact source SHA,
+  # then write the normalized evidence expected by
+  # verify_mobile_release_admission.py:
+  #
+  #   {"check_name":"Mobile Release Eligibility",
+  #    "workflow_name":"Mobile App Checks",
+  #    "workflow_path":".github/workflows/mobile-app-checks.yml",
+  #    "event":"push", "status":"completed", "conclusion":"success",
+  #    "head_branch":"main", "head_sha":"<source_sha>",
+  #    "repository":"BasedHardware/omi"}
+  #
+  # Conditional jobs are deliberately allowed to be skipped: a skipped job is
+  # an inapplicable area, not a failure. Changes itself must succeed, and any
+  # applicable job that fails or is cancelled makes this aggregate fail.
+  mobile-release-eligibility:
+    name: Mobile Release Eligibility
+    runs-on: ubuntu-latest
+    needs:
+      - changes
+      - generated-files
+      - analyze-and-test
+      - journeys-hermetic
+      - android-compile-smoke
+      - android-unit-tests
+      - ios-compile-check
+      - dart-tests-kiritimati
+    if: ${{ always() }}
+    timeout-minutes: 10
+    steps:
+      - name: Aggregate conditional mobile checks
+        env:
+          CHANGES_RESULT: ${{ needs.changes.result }}
+          GENERATED_FILES_RESULT: ${{ needs.generated-files.result }}
+          ANALYZE_AND_TEST_RESULT: ${{ needs.analyze-and-test.result }}
+          JOURNEYS_RESULT: ${{ needs.journeys-hermetic.result }}
+          ANDROID_COMPILE_RESULT: ${{ needs.android-compile-smoke.result }}
+          ANDROID_UNIT_RESULT: ${{ needs.android-unit-tests.result }}
+          IOS_COMPILE_RESULT: ${{ needs.ios-compile-check.result }}
+          DART_TIMEZONE_RESULT: ${{ needs.dart-tests-kiritimati.result }}
+        run: |
+          set -euo pipefail
+          if [[ "$CHANGES_RESULT" != "success" ]]; then
+            echo "Detect Changes did not complete successfully: $CHANGES_RESULT" >&2
+            exit 1
+          fi
+          for result in \
+            "$GENERATED_FILES_RESULT" \
+            "$ANALYZE_AND_TEST_RESULT" \
+            "$JOURNEYS_RESULT" \
+            "$ANDROID_COMPILE_RESULT" \
+            "$ANDROID_UNIT_RESULT" \
+            "$IOS_COMPILE_RESULT" \
+            "$DART_TIMEZONE_RESULT"; do
+            case "$result" in
+              success|skipped) ;;
+              *)
+                echo "A mobile check failed, was cancelled, or is otherwise ineligible: $result" >&2
+                exit 1
+                ;;
+            esac
+          done
+          echo "Mobile Release Eligibility: success"

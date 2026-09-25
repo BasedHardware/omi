@@ -15,19 +15,17 @@ Read this before changing an `AGENTS.md`, adding a rule, or adding a check.
   a rule in it.
 
 `.github/scripts/check_agents_md_lean.py` holds every `AGENTS.md` to a size ratchet.
-The budget only ever shrinks: when a file gets smaller, lower it. Never raise a budget to
-admit detail that has a component-guide home — that is the accretion the ratchet exists
-to stop.
+After substantial reductions, lower the budget with modest headroom for new routes
+and repository-specific facts. Routine edits need not reset it to the exact file size.
+Do not raise a budget to admit detail that has a component-guide home.
 
 ## How to write a rule
 
-- **Write it mechanically.** A rule is only reliable if a weak agent can apply it without
-  judgment. "Use good names" is a wish; "files ending `.g.dart` are generated, never edit
-  them" is a rule.
-- **Back it with a check.** Enforced rules don't drift; requested behavior does. Prefer a
-  script with a clear failure message over another paragraph of prose.
-- **Prefer replacing a line over adding one.** If a new rule overlaps an existing one,
-  rewrite that one. Two rules covering the same ground will eventually disagree.
+- **Prefer omission.** Keep repository-specific facts that agents cannot readily
+  discover. Omit generic behavior, repeated procedures, and instructions already
+  expressed by tools or the owning guide.
+- **Give each fact one owner.** Link to it from the relevant route; replace or
+  remove overlapping guidance instead of adding another rule.
 - **Every referenced path must exist.** `check_agent_doc_references.py` enforces this, so
   a rename that orphans a pointer fails in CI rather than silently misleading an agent
   months later.
@@ -50,6 +48,5 @@ to stop.
   `docs/doc/developer/`.
 - Product direction or locked invariants update `PRODUCT.md` and
   `product/invariants/`, including the invariant's guard test.
-- **When a defect ships because guidance was misread or missing, tighten the guidance in
-  the fix PR.** Make the rule mechanical enough that the same misreading cannot recur, or
-  add the check that catches it.
+- After a failure, improve the responsible implementation, test, tool diagnostic,
+  or documentation. Add a standing instruction only for a recurring information gap.

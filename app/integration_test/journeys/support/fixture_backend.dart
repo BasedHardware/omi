@@ -39,6 +39,7 @@ class JourneyFixtureBackend {
   /// Seeded, owned records served by the fixture.
   final List<Map<String, dynamic>> conversations = [];
   final List<Map<String, dynamic>> memories = [];
+  final List<Map<String, dynamic>> actionItems = [];
 
   /// Request journal: method + path -> count. Journeys assert on it (e.g.
   /// "the send request actually reached the server") — the structural
@@ -169,6 +170,29 @@ class JourneyFixtureBackend {
         req.response.statusCode = 200;
         req.response.headers.contentType = ContentType.json;
         req.response.write(jsonEncode(conversations));
+        await req.response.close();
+        return;
+
+      case 'POST /v1/action-items':
+        final body = jsonDecode(await utf8.decoder.bind(req).join()) as Map<String, dynamic>;
+        final now = DateTime.now().toUtc().toIso8601String();
+        final item = <String, dynamic>{
+          ...body,
+          'id': 'srv-task-${actionItems.length + 1}',
+          'created_at': now,
+          'updated_at': now,
+        };
+        actionItems.add(item);
+        req.response.statusCode = 200;
+        req.response.headers.contentType = ContentType.json;
+        req.response.write(jsonEncode(item));
+        await req.response.close();
+        return;
+
+      case 'GET /v1/action-items':
+        req.response.statusCode = 200;
+        req.response.headers.contentType = ContentType.json;
+        req.response.write(jsonEncode({'action_items': actionItems, 'has_more': false}));
         await req.response.close();
         return;
 
