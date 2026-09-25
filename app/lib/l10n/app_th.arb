@@ -296,7 +296,6 @@
     "daySummary": "สรุปรายวัน",
     "summaryGenerated": "สร้างสรุปแล้ว",
     "claudeDesktop": "Claude Desktop",
-    "addToClaudeConfig": "เพิ่มไปยัง claude_desktop_config.json",
     "copyConfig": "คัดลอกการกำหนดค่า",
     "configCopied": "คัดลอกการกำหนดค่าไปยังคลิปบอร์ดแล้ว",
     "listeningMins": "การฟัง (นาที)",
@@ -1728,7 +1727,6 @@
     "knowledgeGraphDeletedSuccess": "ลบกราฟความรู้สำเร็จแล้ว",
     "failedToDeleteGraph": "ไม่สามารถลบกราฟได้: {error}",
     "clearAllNodesAndConnections": "ล้างโหนดและการเชื่อมต่อทั้งหมด",
-    "addToClaudeDesktopConfig": "เพิ่มไปยัง claude_desktop_config.json",
     "connectAiAssistantsToData": "เชื่อมต่อผู้ช่วย AI กับข้อมูลของคุณ",
     "autoCreateWhenNameDetected": "สร้างอัตโนมัติเมื่อตรวจพบชื่อ",
     "trackPersonalGoalsOnHomepage": "ติดตามเป้าหมายส่วนตัวบนหน้าแรก",
@@ -3525,5 +3523,8 @@
     "voiceSettingsAskToTagSubtitle": "บางครั้ง Omi จะถามว่าใครพูดอยู่ในบทสนทนาล่าสุดของคุณ",
     "voiceSettingsSaveOthersSubtitle": "เมื่อคุณตั้งชื่อให้ใครสักคน Omi จะเก็บตัวอย่างเสียงสั้นๆ ไว้เพื่อจดจำเขาได้ในครั้งถัดไป",
     "leaveBlank": "เว้นว่างไว้",
-    "mcpOAuthSetup": "บน claude.ai ให้เพิ่มคอนเนคเตอร์แบบกำหนดเองและวาง URL ของเซิร์ฟเวอร์ หาก Claude ขอ OAuth Client ID ขั้นสูง ให้ใช้ค่าด้านล่างและเว้นความลับไว้ — อย่าใช้คีย์ MCP API ของคุณเป็นความลับ OAuth เด็ดขาด"
+    "mcpOAuthSetup": "บน claude.ai ให้เพิ่มคอนเนคเตอร์แบบกำหนดเองและวาง URL ของเซิร์ฟเวอร์ หาก Claude ขอ OAuth Client ID ขั้นสูง ให้ใช้ค่าด้านล่างและเว้นความลับไว้ — อย่าใช้คีย์ MCP API ของคุณเป็นความลับ OAuth เด็ดขาด",
+    "claudeCode": "Claude Code",
+    "addToClaudeCodeConfig": "เพิ่มไปยัง ~/.claude.json",
+    "claudeDesktopConnectorSetup": "บน Claude Desktop → Settings → Connectors ให้เพิ่มคอนเนคเตอร์แบบกำหนดเองและวาง URL ของเซิร์ฟเวอร์ หาก Claude ขอ OAuth Client ID ขั้นสูง ให้ใช้ค่าด้านล่างและเว้นความลับไว้ — อย่าใช้คีย์ MCP API ของคุณเป็นความลับ OAuth เด็ดขาด"
 }

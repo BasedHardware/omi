@@ -935,9 +935,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'Lisa claude_desktop_config.json-i';
-
-  @override
   String get copyConfig => 'Kopeeri konfiguratsioon';
 
   @override
@@ -2475,9 +2472,6 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get clearAllNodesAndConnections => 'Kustuta kõik sõlmed ja ühendused';
-
-  @override
-  String get addToClaudeDesktopConfig => 'Lisa faili claude_desktop_config.json';
 
   @override
   String get connectAiAssistantsToData => 'Ühenda AI-assistendid oma andmetega';
@@ -11159,4 +11153,14 @@ class AppLocalizationsEt extends AppLocalizations {
   @override
   String get mcpOAuthSetup =>
       'Lehel claude.ai lisa kohandatud konnektor ja kleebi serveri URL. Kui Claude küsib täiustatud OAuth Client ID-d, kasuta allolevat väärtust ja jäta saladus tühjaks — ära kunagi kasuta oma MCP API võtit OAuth saladusena.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'Lisa faili ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'Lehel Claude Desktop → Settings → Connectors lisa kohandatud konnektor ja kleebi serveri URL. Kui Claude küsib täiustatud OAuth Client ID-d, kasuta allolevat väärtust ja jäta saladus tühjaks — ära kunagi kasuta oma MCP API võtit OAuth saladusena.';
 }

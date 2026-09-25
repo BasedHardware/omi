@@ -296,7 +296,6 @@
     "daySummary": "Denní souhrn",
     "summaryGenerated": "Souhrn vygenerován",
     "claudeDesktop": "Claude Desktop",
-    "addToClaudeConfig": "Přidat do claude_desktop_config.json",
     "copyConfig": "Kopírovat konfiguraci",
     "configCopied": "Konfigurace zkopírována do schránky",
     "listeningMins": "Naslouchání (min)",
@@ -1728,7 +1727,6 @@
     "knowledgeGraphDeletedSuccess": "Graf znalostí byl úspěšně smazán",
     "failedToDeleteGraph": "Nepodařilo se smazat graf: {error}",
     "clearAllNodesAndConnections": "Vymazat všechny uzly a spojení",
-    "addToClaudeDesktopConfig": "Přidat do claude_desktop_config.json",
     "connectAiAssistantsToData": "Připojte AI asistenty k vašim datům",
     "autoCreateWhenNameDetected": "Automaticky vytvořit při detekci jména",
     "trackPersonalGoalsOnHomepage": "Sledujte své osobní cíle na domovské stránce",
@@ -3525,5 +3523,8 @@
     "voiceSettingsAskToTagSubtitle": "Omi se občas zeptá, kdo mluvil ve vašich nedávných konverzacích",
     "voiceSettingsSaveOthersSubtitle": "Když někoho pojmenujete, Omi si uchová krátkou ukázku hlasu, aby ho příště poznal",
     "leaveBlank": "Nechte prázdné",
-    "mcpOAuthSetup": "Na claude.ai přidejte vlastní konektor a vložte URL serveru. Pokud Claude požádá o pokročilé OAuth Client ID, použijte hodnotu níže a nechte tajný klíč prázdný — nikdy nepoužívejte svůj MCP API klíč jako OAuth secret."
+    "mcpOAuthSetup": "Na claude.ai přidejte vlastní konektor a vložte URL serveru. Pokud Claude požádá o pokročilé OAuth Client ID, použijte hodnotu níže a nechte tajný klíč prázdný — nikdy nepoužívejte svůj MCP API klíč jako OAuth secret.",
+    "claudeCode": "Claude Code",
+    "addToClaudeCodeConfig": "Přidat do ~/.claude.json",
+    "claudeDesktopConnectorSetup": "Na Claude Desktop → Settings → Connectors přidejte vlastní konektor a vložte URL serveru. Pokud Claude požádá o pokročilé OAuth Client ID, použijte hodnotu níže a nechte tajný klíč prázdný — nikdy nepoužívejte svůj MCP API klíč jako OAuth secret."
 }

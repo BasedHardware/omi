@@ -296,7 +296,6 @@
     "daySummary": "Ringkasan Hari",
     "summaryGenerated": "Ringkasan dijana",
     "claudeDesktop": "Claude Desktop",
-    "addToClaudeConfig": "Tambah ke claude_desktop_config.json",
     "copyConfig": "Salin Konfigurasi",
     "configCopied": "Konfigurasi disalin ke papan keratan",
     "listeningMins": "Mendengar (minit)",
@@ -1728,7 +1727,6 @@
     "knowledgeGraphDeletedSuccess": "Graf pengetahuan berjaya dipadam",
     "failedToDeleteGraph": "Gagal memadam graf: {error}",
     "clearAllNodesAndConnections": "Kosongkan semua nod dan sambungan",
-    "addToClaudeDesktopConfig": "Tambah ke claude_desktop_config.json",
     "connectAiAssistantsToData": "Sambungkan pembantu AI ke data anda",
     "autoCreateWhenNameDetected": "Cipta automatik apabila nama dikesan",
     "trackPersonalGoalsOnHomepage": "Jejaki matlamat peribadi anda di laman utama",
@@ -3525,5 +3523,8 @@
     "voiceSettingsAskToTagSubtitle": "Sekali-sekala, Omi akan bertanya siapa yang bercakap dalam perbualan terkini anda",
     "voiceSettingsSaveOthersSubtitle": "Apabila anda menamakan seseorang, Omi menyimpan sampel suara pendek supaya dapat mengenalinya lain kali",
     "leaveBlank": "Biarkan kosong",
-    "mcpOAuthSetup": "Di claude.ai, tambahkan penyambung tersuai dan tampal URL pelayan. Jika Claude meminta OAuth Client ID lanjutan, gunakan nilai di bawah dan biarkan rahsia kosong — jangan sesekali gunakan kunci API MCP anda sebagai rahsia OAuth."
+    "mcpOAuthSetup": "Di claude.ai, tambahkan penyambung tersuai dan tampal URL pelayan. Jika Claude meminta OAuth Client ID lanjutan, gunakan nilai di bawah dan biarkan rahsia kosong — jangan sesekali gunakan kunci API MCP anda sebagai rahsia OAuth.",
+    "claudeCode": "Claude Code",
+    "addToClaudeCodeConfig": "Tambah ke ~/.claude.json",
+    "claudeDesktopConnectorSetup": "Di Claude Desktop → Settings → Connectors, tambahkan penyambung tersuai dan tampal URL pelayan. Jika Claude meminta OAuth Client ID lanjutan, gunakan nilai di bawah dan biarkan rahsia kosong — jangan sesekali gunakan kunci API MCP anda sebagai rahsia OAuth."
 }

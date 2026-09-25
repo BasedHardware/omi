@@ -296,7 +296,6 @@
     "daySummary": "Dagsammendrag",
     "summaryGenerated": "Sammendrag generert",
     "claudeDesktop": "Claude Desktop",
-    "addToClaudeConfig": "Legg til i claude_desktop_config.json",
     "copyConfig": "Kopier konfigurasjon",
     "configCopied": "Konfigurasjon kopiert til utklippstavlen",
     "listeningMins": "Lytting (min)",
@@ -1728,7 +1727,6 @@
     "knowledgeGraphDeletedSuccess": "Kunnskapsgraf slettet",
     "failedToDeleteGraph": "Kunne ikke slette graf: {error}",
     "clearAllNodesAndConnections": "Tøm alle noder og tilkoblinger",
-    "addToClaudeDesktopConfig": "Legg til i claude_desktop_config.json",
     "connectAiAssistantsToData": "Koble AI-assistenter til dataene dine",
     "autoCreateWhenNameDetected": "Opprett automatisk når navn oppdages",
     "trackPersonalGoalsOnHomepage": "Spor dine personlige mål på startsiden",
@@ -3525,5 +3523,8 @@
     "voiceSettingsAskToTagSubtitle": "Av og til spør Omi hvem som snakket i de siste samtalene dine",
     "voiceSettingsSaveOthersSubtitle": "Når du navngir noen, lagrer Omi en kort stemmeprøve for å kjenne dem igjen neste gang",
     "leaveBlank": "La stå tomt",
-    "mcpOAuthSetup": "På claude.ai legger du til en egendefinert connector og limer inn server-URL-en. Hvis Claude ber om en avansert OAuth Client ID, bruker du verdien nedenfor og lar hemmeligheten stå tom — bruk aldri MCP API-nøkkelen din som OAuth-hemmelighet."
+    "mcpOAuthSetup": "På claude.ai legger du til en egendefinert connector og limer inn server-URL-en. Hvis Claude ber om en avansert OAuth Client ID, bruker du verdien nedenfor og lar hemmeligheten stå tom — bruk aldri MCP API-nøkkelen din som OAuth-hemmelighet.",
+    "claudeCode": "Claude Code",
+    "addToClaudeCodeConfig": "Legg til i ~/.claude.json",
+    "claudeDesktopConnectorSetup": "På Claude Desktop → Settings → Connectors legger du til en egendefinert connector og limer inn server-URL-en. Hvis Claude ber om en avansert OAuth Client ID, bruker du verdien nedenfor og lar hemmeligheten stå tom — bruk aldri MCP API-nøkkelen din som OAuth-hemmelighet."
 }

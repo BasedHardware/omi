@@ -1114,7 +1114,6 @@
     "daySummary": "Резиме на ден",
     "summaryGenerated": "Резиме генерирано",
     "claudeDesktop": "Claude Desktop",
-    "addToClaudeConfig": "Додај во claude_desktop_config.json",
     "copyConfig": "Копирај конфигурација",
     "configCopied": "Конфигурација копирана во меморија",
     "listeningMins": "Слушање (мин)",
@@ -2635,10 +2634,6 @@
     },
     "@claudeDesktop": {
         "description": "Claude Desktop integration section"
-    },
-    "addToClaudeDesktopConfig": "Додај во claude_desktop_config.json",
-    "@addToClaudeDesktopConfig": {
-        "description": "Description for Claude Desktop config"
     },
     "@configCopiedToClipboard": {
         "description": "Confirmation when config is copied"
@@ -11094,5 +11089,8 @@
     "voiceSettingsAskToTagSubtitle": "Од време на време, Omi прашува кој зборувал во вашите неодамнешни разговори",
     "voiceSettingsSaveOthersSubtitle": "Кога ќе именувате некого, Omi чува краток примерок од гласот за да го препознае следниот пат",
     "leaveBlank": "Оставете празно",
-    "mcpOAuthSetup": "На claude.ai додадете прилагоден конектор и залепете ја URL-адресата на серверот. Ако Claude побара напреден OAuth Client ID, користете ја вредноста подолу и оставете ја тајната празна — никогаш не користете го вашиот MCP API клуч како OAuth тајна."
+    "mcpOAuthSetup": "На claude.ai додадете прилагоден конектор и залепете ја URL-адресата на серверот. Ако Claude побара напреден OAuth Client ID, користете ја вредноста подолу и оставете ја тајната празна — никогаш не користете го вашиот MCP API клуч како OAuth тајна.",
+    "claudeCode": "Claude Code",
+    "addToClaudeCodeConfig": "Додај во ~/.claude.json",
+    "claudeDesktopConnectorSetup": "На Claude Desktop → Settings → Connectors додадете прилагоден конектор и залепете ја URL-адресата на серверот. Ако Claude побара напреден OAuth Client ID, користете ја вредноста подолу и оставете ја тајната празна — никогаш не користете го вашиот MCP API клуч како OAuth тајна."
 }

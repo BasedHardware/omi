@@ -938,9 +938,6 @@ class AppLocalizationsRo extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'Adaugă la claude_desktop_config.json';
-
-  @override
   String get copyConfig => 'Copiază configurația';
 
   @override
@@ -2486,9 +2483,6 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get clearAllNodesAndConnections => 'Șterge toate nodurile și conexiunile';
-
-  @override
-  String get addToClaudeDesktopConfig => 'Adaugă la claude_desktop_config.json';
 
   @override
   String get connectAiAssistantsToData => 'Conectează asistenții AI la datele tale';
@@ -11214,4 +11208,14 @@ class AppLocalizationsRo extends AppLocalizations {
   @override
   String get mcpOAuthSetup =>
       'Pe claude.ai, adăugați un conector personalizat și lipiți URL-ul serverului. Dacă Claude solicită un Client ID OAuth avansat, utilizați valoarea de mai jos și lăsați secretul gol — nu folosiți niciodată cheia API MCP drept secret OAuth.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'Adaugă la ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'Pe Claude Desktop → Settings → Connectors, adăugați un conector personalizat și lipiți URL-ul serverului. Dacă Claude solicită un Client ID OAuth avansat, utilizați valoarea de mai jos și lăsați secretul gol — nu folosiți niciodată cheia API MCP drept secret OAuth.';
 }

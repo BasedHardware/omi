@@ -35,7 +35,8 @@ class DeveloperDocsButton extends StatelessWidget {
   }
 }
 
-/// Developer Settings → MCP: the keys, the Claude hosted-HTTP snippet and the server URL/auth details.
+/// Developer Settings → MCP: the keys, the Claude Code hosted-HTTP snippet, the Claude Desktop
+/// connector flow and the server URL/auth details.
 class DeveloperMcpSection extends StatelessWidget {
   const DeveloperMcpSection({super.key});
 
@@ -67,9 +68,9 @@ class DeveloperMcpSection extends StatelessWidget {
         OmiSettingsGroup(
           children: [
             OmiSettingsRow(
-              leading: const FaIcon(FontAwesomeIcons.desktop),
-              title: l10n.claudeDesktop,
-              subtitle: l10n.addToClaudeDesktopConfig,
+              leading: const FaIcon(FontAwesomeIcons.terminal),
+              title: l10n.claudeCode,
+              subtitle: l10n.addToClaudeCodeConfig,
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(OmiSpacing.md, 0, OmiSpacing.md, OmiSpacing.md),
@@ -77,7 +78,7 @@ class DeveloperMcpSection extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   const SizedBox(height: OmiSpacing.md),
-                  _CodeBlock(child: _claudeConfigSpan(mcpUrl)),
+                  _CodeBlock(child: _claudeCodeConfigSpan(mcpUrl)),
                   const SizedBox(height: OmiSpacing.sm),
                   OmiButton.secondary(
                     label: l10n.copyConfig,
@@ -87,6 +88,20 @@ class DeveloperMcpSection extends StatelessWidget {
                   ),
                 ],
               ),
+            ),
+          ],
+        ),
+        const SizedBox(height: OmiSpacing.xl),
+        OmiSettingsGroup(
+          children: [
+            OmiSettingsRow(
+              leading: const FaIcon(FontAwesomeIcons.desktop),
+              title: l10n.claudeDesktop,
+              subtitle: l10n.claudeDesktopConnectorSetup,
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(OmiSpacing.md, 0, OmiSpacing.md, OmiSpacing.md),
+              child: _CopyableValue(value: mcpUrl, what: l10n.serverUrl),
             ),
           ],
         ),
@@ -133,7 +148,7 @@ class DeveloperMcpSection extends StatelessWidget {
     );
   }
 
-  static TextSpan _claudeConfigSpan(String mcpUrl) {
+  static TextSpan _claudeCodeConfigSpan(String mcpUrl) {
     return TextSpan(
       children: [
         for (final (kind, text) in hostedMcpConfigTokens(mcpUrl))

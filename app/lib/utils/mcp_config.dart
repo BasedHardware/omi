@@ -16,7 +16,7 @@ enum McpJsonToken { plain, key, string }
 /// normalized away so the endpoint is always joined exactly once.
 String hostedMcpUrl(String apiBaseUrl) => '${apiBaseUrl.replaceAll(RegExp(r'/+$'), '')}$kMcpEndpointPath';
 
-/// Ordered JSON segments of the Claude Desktop / Claude Code `mcpServers`
+/// Ordered JSON segments of the Claude Code `~/.claude.json` `mcpServers`
 /// entry. The copyable text and the highlighted code block are both built
 /// from this single source so they can never drift apart.
 List<(McpJsonToken, String)> hostedMcpConfigTokens(String mcpUrl) => [
@@ -42,5 +42,5 @@ List<(McpJsonToken, String)> hostedMcpConfigTokens(String mcpUrl) => [
       (McpJsonToken.plain, '\n      }\n    }\n  }\n}'),
     ];
 
-/// The exact Claude Desktop / Claude Code config JSON copied to the clipboard.
+/// The exact Claude Code `~/.claude.json` config JSON copied to the clipboard.
 String hostedMcpConfigJson(String mcpUrl) => hostedMcpConfigTokens(mcpUrl).map((token) => token.$2).join();

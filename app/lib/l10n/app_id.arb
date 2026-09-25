@@ -296,7 +296,6 @@
     "daySummary": "Ringkasan Hari",
     "summaryGenerated": "Ringkasan dibuat",
     "claudeDesktop": "Claude Desktop",
-    "addToClaudeConfig": "Tambahkan ke claude_desktop_config.json",
     "copyConfig": "Salin Konfigurasi",
     "configCopied": "Konfigurasi disalin ke clipboard",
     "listeningMins": "Mendengarkan (menit)",
@@ -1728,7 +1727,6 @@
     "knowledgeGraphDeletedSuccess": "Graf pengetahuan berhasil dihapus",
     "failedToDeleteGraph": "Gagal menghapus graf: {error}",
     "clearAllNodesAndConnections": "Hapus semua node dan koneksi",
-    "addToClaudeDesktopConfig": "Tambahkan ke claude_desktop_config.json",
     "connectAiAssistantsToData": "Hubungkan asisten AI ke data Anda",
     "autoCreateWhenNameDetected": "Buat otomatis saat nama terdeteksi",
     "trackPersonalGoalsOnHomepage": "Lacak tujuan pribadi Anda di beranda",
@@ -3560,5 +3558,8 @@
     "voiceSettingsAskToTagSubtitle": "Sesekali, Omi akan bertanya siapa yang berbicara dalam percakapan terbaru Anda",
     "voiceSettingsSaveOthersSubtitle": "Saat Anda memberi nama seseorang, Omi menyimpan sampel suara singkat agar bisa mengenalinya lain kali",
     "leaveBlank": "Biarkan kosong",
-    "mcpOAuthSetup": "Di claude.ai, tambahkan konektor kustom dan tempel URL server. Jika Claude meminta OAuth Client ID tingkat lanjut, gunakan nilai di bawah ini dan biarkan secret kosong — jangan pernah menggunakan kunci API MCP Anda sebagai secret OAuth."
+    "mcpOAuthSetup": "Di claude.ai, tambahkan konektor kustom dan tempel URL server. Jika Claude meminta OAuth Client ID tingkat lanjut, gunakan nilai di bawah ini dan biarkan secret kosong — jangan pernah menggunakan kunci API MCP Anda sebagai secret OAuth.",
+    "claudeCode": "Claude Code",
+    "addToClaudeCodeConfig": "Tambahkan ke ~/.claude.json",
+    "claudeDesktopConnectorSetup": "Di Claude Desktop → Settings → Connectors, tambahkan konektor kustom dan tempel URL server. Jika Claude meminta OAuth Client ID tingkat lanjut, gunakan nilai di bawah ini dan biarkan secret kosong — jangan pernah menggunakan kunci API MCP Anda sebagai secret OAuth."
 }

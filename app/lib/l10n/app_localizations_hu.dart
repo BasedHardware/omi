@@ -939,9 +939,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'Hozzáadás claude_desktop_config.json-hoz';
-
-  @override
   String get copyConfig => 'Konfiguráció másolása';
 
   @override
@@ -2489,9 +2486,6 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get clearAllNodesAndConnections => 'Összes csomópont és kapcsolat törlése';
-
-  @override
-  String get addToClaudeDesktopConfig => 'Hozzáadás a claude_desktop_config.json fájlhoz';
 
   @override
   String get connectAiAssistantsToData => 'Csatlakoztassa AI asszisztenseit az adataihoz';
@@ -11205,4 +11199,14 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String get mcpOAuthSetup =>
       'A claude.ai oldalon adjon hozzá egy egyéni összekötőt, és illessze be a szerver URL-címét. Ha a Claude speciális OAuth Client ID-t kér, használja az alábbi értéket, és hagyja üresen a titkot — soha ne használja az MCP API-kulcsot OAuth-titokként.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'Hozzáadás a ~/.claude.json fájlhoz';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'A Claude Desktop → Settings → Connectors oldalon adjon hozzá egy egyéni összekötőt, és illessze be a szerver URL-címét. Ha a Claude speciális OAuth Client ID-t kér, használja az alábbi értéket, és hagyja üresen a titkot — soha ne használja az MCP API-kulcsot OAuth-titokként.';
 }

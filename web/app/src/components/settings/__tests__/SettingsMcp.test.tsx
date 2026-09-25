@@ -57,7 +57,7 @@ describe('Settings > Developer > MCP', () => {
     expect(screen.queryByText(/\/v1\/mcp\/sse/)).toBeNull();
   });
 
-  it('renders the hosted Streamable HTTP config, not the docker bridge', async () => {
+  it('renders the hosted Streamable HTTP config as Claude Code ~/.claude.json, not the docker bridge', async () => {
     const { container } = render(<SettingsPage />);
     await screen.findAllByText('https://api.omi.me/v1/mcp');
     const expected = hostedMcpConfigJson(hostedMcpUrl('https://api.omi.me/'));
@@ -65,6 +65,21 @@ describe('Settings > Developer > MCP', () => {
     expect(container.querySelector('pre')?.textContent).toBe(expected);
     expect(expected).toContain('"type": "http"');
     expect(expected).not.toContain('docker');
+    // The JSON snippet is labeled for Claude Code only — Claude Desktop uses
+    // the Connectors flow, not a JSON file.
+    expect(screen.getByText('Claude Code')).toBeTruthy();
+    expect(screen.getByText('Add to ~/.claude.json')).toBeTruthy();
+    expect(screen.queryByText('Add to claude_desktop_config.json')).toBeNull();
+    expect(screen.queryByText(/claude_desktop_config/)).toBeNull();
+  });
+
+  it('shows the Claude Desktop Connectors OAuth flow separately', async () => {
+    render(<SettingsPage />);
+    await screen.findAllByText('https://api.omi.me/v1/mcp');
+    expect(screen.getByText('Claude Desktop')).toBeTruthy();
+    expect(
+      screen.getAllByText(/Settings → Connectors → Add custom connector/).length,
+    ).toBeGreaterThan(0);
   });
 
   it('explains the claude.ai OAuth connector flow with the prod client id', async () => {

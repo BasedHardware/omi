@@ -935,9 +935,6 @@ class AppLocalizationsMs extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'Tambah ke claude_desktop_config.json';
-
-  @override
   String get copyConfig => 'Salin Konfigurasi';
 
   @override
@@ -2483,9 +2480,6 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get clearAllNodesAndConnections => 'Kosongkan semua nod dan sambungan';
-
-  @override
-  String get addToClaudeDesktopConfig => 'Tambah ke claude_desktop_config.json';
 
   @override
   String get connectAiAssistantsToData => 'Sambungkan pembantu AI ke data anda';
@@ -11191,4 +11185,14 @@ class AppLocalizationsMs extends AppLocalizations {
   @override
   String get mcpOAuthSetup =>
       'Di claude.ai, tambahkan penyambung tersuai dan tampal URL pelayan. Jika Claude meminta OAuth Client ID lanjutan, gunakan nilai di bawah dan biarkan rahsia kosong — jangan sesekali gunakan kunci API MCP anda sebagai rahsia OAuth.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'Tambah ke ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'Di Claude Desktop → Settings → Connectors, tambahkan penyambung tersuai dan tampal URL pelayan. Jika Claude meminta OAuth Client ID lanjutan, gunakan nilai di bawah dan biarkan rahsia kosong — jangan sesekali gunakan kunci API MCP anda sebagai rahsia OAuth.';
 }

@@ -296,7 +296,6 @@
     "daySummary": "Päeva kokkuvõte",
     "summaryGenerated": "Kokkuvõte loodud",
     "claudeDesktop": "Claude Desktop",
-    "addToClaudeConfig": "Lisa claude_desktop_config.json-i",
     "copyConfig": "Kopeeri konfiguratsioon",
     "configCopied": "Konfiguratsioon kopeeritud lõikelauale",
     "listeningMins": "Kuulamine (min)",
@@ -1728,7 +1727,6 @@
     "knowledgeGraphDeletedSuccess": "Teadmiste graaf edukalt kustutatud",
     "failedToDeleteGraph": "Graafi kustutamine ebaõnnestus: {error}",
     "clearAllNodesAndConnections": "Kustuta kõik sõlmed ja ühendused",
-    "addToClaudeDesktopConfig": "Lisa faili claude_desktop_config.json",
     "connectAiAssistantsToData": "Ühenda AI-assistendid oma andmetega",
     "autoCreateWhenNameDetected": "Loo automaatselt nime tuvastamisel",
     "trackPersonalGoalsOnHomepage": "Jälgi oma isiklikke eesmärke avalehel",
@@ -3525,5 +3523,8 @@
     "voiceSettingsAskToTagSubtitle": "Aeg-ajalt küsib Omi, kes sinu hiljutistes vestlustes rääkis",
     "voiceSettingsSaveOthersSubtitle": "Kui annad kellelegi nime, hoiab Omi alles lühikese häälenäidise, et teda järgmine kord ära tunda",
     "leaveBlank": "Jäta tühjaks",
-    "mcpOAuthSetup": "Lehel claude.ai lisa kohandatud konnektor ja kleebi serveri URL. Kui Claude küsib täiustatud OAuth Client ID-d, kasuta allolevat väärtust ja jäta saladus tühjaks — ära kunagi kasuta oma MCP API võtit OAuth saladusena."
+    "mcpOAuthSetup": "Lehel claude.ai lisa kohandatud konnektor ja kleebi serveri URL. Kui Claude küsib täiustatud OAuth Client ID-d, kasuta allolevat väärtust ja jäta saladus tühjaks — ära kunagi kasuta oma MCP API võtit OAuth saladusena.",
+    "claudeCode": "Claude Code",
+    "addToClaudeCodeConfig": "Lisa faili ~/.claude.json",
+    "claudeDesktopConnectorSetup": "Lehel Claude Desktop → Settings → Connectors lisa kohandatud konnektor ja kleebi serveri URL. Kui Claude küsib täiustatud OAuth Client ID-d, kasuta allolevat väärtust ja jäta saladus tühjaks — ära kunagi kasuta oma MCP API võtit OAuth saladusena."
 }

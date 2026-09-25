@@ -296,7 +296,6 @@
     "daySummary": "Päivän yhteenveto",
     "summaryGenerated": "Yhteenveto luotu",
     "claudeDesktop": "Claude Desktop",
-    "addToClaudeConfig": "Lisää claude_desktop_config.json-tiedostoon",
     "copyConfig": "Kopioi kokoonpano",
     "configCopied": "Kokoonpano kopioitu leikepöydälle",
     "listeningMins": "Kuunteleminen (min)",
@@ -1728,7 +1727,6 @@
     "knowledgeGraphDeletedSuccess": "Tietograafi poistettu onnistuneesti",
     "failedToDeleteGraph": "Graafin poistaminen epäonnistui: {error}",
     "clearAllNodesAndConnections": "Tyhjennä kaikki solmut ja yhteydet",
-    "addToClaudeDesktopConfig": "Lisää claude_desktop_config.json-tiedostoon",
     "connectAiAssistantsToData": "Yhdistä AI-avustajat tietoihisi",
     "autoCreateWhenNameDetected": "Luo automaattisesti kun nimi havaitaan",
     "trackPersonalGoalsOnHomepage": "Seuraa henkilökohtaisia tavoitteitasi etusivulla",
@@ -3525,5 +3523,8 @@
     "voiceSettingsAskToTagSubtitle": "Silloin tällöin Omi kysyy, kuka puhui viimeaikaisissa keskusteluissasi",
     "voiceSettingsSaveOthersSubtitle": "Kun nimeät jonkun, Omi tallentaa lyhyen ääninäytteen tunnistaakseen hänet ensi kerralla",
     "leaveBlank": "Jätä tyhjäksi",
-    "mcpOAuthSetup": "Lisää claude.ai-palvelussa mukautettu liitin ja liitä palvelimen URL-osoite. Jos Claude pyytää edistynyttä OAuth Client ID:tä, käytä alla olevaa arvoa ja jätä salaisuus tyhjäksi — älä koskaan käytä MCP API -avaintasi OAuth-salaisuuksena."
+    "mcpOAuthSetup": "Lisää claude.ai-palvelussa mukautettu liitin ja liitä palvelimen URL-osoite. Jos Claude pyytää edistynyttä OAuth Client ID:tä, käytä alla olevaa arvoa ja jätä salaisuus tyhjäksi — älä koskaan käytä MCP API -avaintasi OAuth-salaisuuksena.",
+    "claudeCode": "Claude Code",
+    "addToClaudeCodeConfig": "Lisää ~/.claude.json-tiedostoon",
+    "claudeDesktopConnectorSetup": "Lisää Claude Desktop → Settings → Connectors-palvelussa mukautettu liitin ja liitä palvelimen URL-osoite. Jos Claude pyytää edistynyttä OAuth Client ID:tä, käytä alla olevaa arvoa ja jätä salaisuus tyhjäksi — älä koskaan käytä MCP API -avaintasi OAuth-salaisuuksena."
 }

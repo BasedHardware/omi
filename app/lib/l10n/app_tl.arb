@@ -1114,7 +1114,6 @@
     "daySummary": "Day Summary",
     "summaryGenerated": "Summary ay nabuo",
     "claudeDesktop": "Claude Desktop",
-    "addToClaudeConfig": "Idagdag sa claude_desktop_config.json",
     "copyConfig": "Kopyahin ang Config",
     "configCopied": "Config ay kinopya sa clipboard",
     "listeningMins": "Nakikinig (mins)",
@@ -2635,10 +2634,6 @@
     },
     "@claudeDesktop": {
         "description": "Claude Desktop integration section"
-    },
-    "addToClaudeDesktopConfig": "Idagdag sa claude_desktop_config.json",
-    "@addToClaudeDesktopConfig": {
-        "description": "Description for Claude Desktop config"
     },
     "@configCopiedToClipboard": {
         "description": "Confirmation when config is copied"
@@ -11094,5 +11089,8 @@
     "voiceSettingsAskToTagSubtitle": "Paminsan-minsan, itatanong ng Omi kung sino ang nagsasalita sa mga kamakailan mong pag-uusap",
     "voiceSettingsSaveOthersSubtitle": "Kapag pinangalanan mo ang isang tao, nagtatago ang Omi ng maikling sample ng boses para makilala siya sa susunod",
     "leaveBlank": "Iwanang blangko",
-    "mcpOAuthSetup": "Sa claude.ai, magdagdag ng custom connector at i-paste ang URL ng server. Kung hihingi ang Claude ng advanced na OAuth Client ID, gamitin ang halaga sa ibaba at iwanang blangko ang secret — huwag kailanman gamitin ang iyong MCP API key bilang OAuth secret."
+    "mcpOAuthSetup": "Sa claude.ai, magdagdag ng custom connector at i-paste ang URL ng server. Kung hihingi ang Claude ng advanced na OAuth Client ID, gamitin ang halaga sa ibaba at iwanang blangko ang secret — huwag kailanman gamitin ang iyong MCP API key bilang OAuth secret.",
+    "claudeCode": "Claude Code",
+    "addToClaudeCodeConfig": "Idagdag sa ~/.claude.json",
+    "claudeDesktopConnectorSetup": "Sa Claude Desktop → Settings → Connectors, magdagdag ng custom connector at i-paste ang URL ng server. Kung hihingi ang Claude ng advanced na OAuth Client ID, gamitin ang halaga sa ibaba at iwanang blangko ang secret — huwag kailanman gamitin ang iyong MCP API key bilang OAuth secret."
 }

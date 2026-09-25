@@ -298,7 +298,6 @@
     "daySummary": "Tageszusammenfassung",
     "summaryGenerated": "Zusammenfassung generiert",
     "claudeDesktop": "Claude Desktop",
-    "addToClaudeConfig": "Zu claude_desktop_config.json hinzufügen",
     "copyConfig": "Konfiguration kopieren",
     "configCopied": "Konfiguration in die Zwischenablage kopiert",
     "listeningMins": "Zuhören (Min)",
@@ -1728,7 +1727,6 @@
     "knowledgeGraphDeletedSuccess": "Wissensgraph erfolgreich gelöscht",
     "failedToDeleteGraph": "Graph konnte nicht gelöscht werden: {error}",
     "clearAllNodesAndConnections": "Alle Knoten und Verbindungen löschen",
-    "addToClaudeDesktopConfig": "Zu claude_desktop_config.json hinzufügen",
     "connectAiAssistantsToData": "KI-Assistenten mit Ihren Daten verbinden",
     "autoCreateWhenNameDetected": "Automatisch erstellen, wenn Name erkannt wird",
     "trackPersonalGoalsOnHomepage": "Verfolgen Sie Ihre persönlichen Ziele auf der Startseite",
@@ -3525,5 +3523,8 @@
     "voiceSettingsAskToTagSubtitle": "Ab und zu fragt Omi, wer in deinen letzten Gesprächen gesprochen hat",
     "voiceSettingsSaveOthersSubtitle": "Wenn du jemanden benennst, speichert Omi eine kurze Stimmprobe, um die Person beim nächsten Mal zu erkennen",
     "leaveBlank": "Leer lassen",
-    "mcpOAuthSetup": "Fügen Sie auf claude.ai einen benutzerdefinierten Konnektor hinzu und fügen Sie die Server-URL ein. Wenn Claude nach einer erweiterten OAuth-Client-ID fragt, verwenden Sie den untenstehenden Wert und lassen Sie das Secret leer — verwenden Sie niemals Ihren MCP-API-Schlüssel als OAuth-Secret."
+    "mcpOAuthSetup": "Fügen Sie auf claude.ai einen benutzerdefinierten Konnektor hinzu und fügen Sie die Server-URL ein. Wenn Claude nach einer erweiterten OAuth-Client-ID fragt, verwenden Sie den untenstehenden Wert und lassen Sie das Secret leer — verwenden Sie niemals Ihren MCP-API-Schlüssel als OAuth-Secret.",
+    "claudeCode": "Claude Code",
+    "addToClaudeCodeConfig": "Zu ~/.claude.json hinzufügen",
+    "claudeDesktopConnectorSetup": "Fügen Sie auf Claude Desktop → Settings → Connectors einen benutzerdefinierten Konnektor hinzu und fügen Sie die Server-URL ein. Wenn Claude nach einer erweiterten OAuth-Client-ID fragt, verwenden Sie den untenstehenden Wert und lassen Sie das Secret leer — verwenden Sie niemals Ihren MCP-API-Schlüssel als OAuth-Secret."
 }

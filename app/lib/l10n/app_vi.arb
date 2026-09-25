@@ -296,7 +296,6 @@
     "daySummary": "Tóm tắt ngày",
     "summaryGenerated": "Đã tạo tóm tắt",
     "claudeDesktop": "Claude Desktop",
-    "addToClaudeConfig": "Thêm vào claude_desktop_config.json",
     "copyConfig": "Sao chép cấu hình",
     "configCopied": "Đã sao chép cấu hình vào clipboard",
     "listeningMins": "Lắng nghe (phút)",
@@ -1728,7 +1727,6 @@
     "knowledgeGraphDeletedSuccess": "Đã xóa đồ thị tri thức thành công",
     "failedToDeleteGraph": "Không thể xóa đồ thị: {error}",
     "clearAllNodesAndConnections": "Xóa tất cả các nút và kết nối",
-    "addToClaudeDesktopConfig": "Thêm vào claude_desktop_config.json",
     "connectAiAssistantsToData": "Kết nối trợ lý AI với dữ liệu của bạn",
     "autoCreateWhenNameDetected": "Tự động tạo khi phát hiện tên",
     "trackPersonalGoalsOnHomepage": "Theo dõi mục tiêu cá nhân trên trang chủ",
@@ -3525,5 +3523,8 @@
     "voiceSettingsAskToTagSubtitle": "Thỉnh thoảng, Omi sẽ hỏi ai đã nói trong các cuộc trò chuyện gần đây của bạn",
     "voiceSettingsSaveOthersSubtitle": "Khi bạn đặt tên cho ai đó, Omi lưu một mẫu giọng ngắn để nhận ra họ vào lần sau",
     "leaveBlank": "Để trống",
-    "mcpOAuthSetup": "Trên claude.ai, thêm trình kết nối tùy chỉnh và dán URL máy chủ. Nếu Claude yêu cầu OAuth Client ID nâng cao, hãy dùng giá trị bên dưới và để trống phần bí mật — không bao giờ dùng khóa API MCP của bạn làm bí mật OAuth."
+    "mcpOAuthSetup": "Trên claude.ai, thêm trình kết nối tùy chỉnh và dán URL máy chủ. Nếu Claude yêu cầu OAuth Client ID nâng cao, hãy dùng giá trị bên dưới và để trống phần bí mật — không bao giờ dùng khóa API MCP của bạn làm bí mật OAuth.",
+    "claudeCode": "Claude Code",
+    "addToClaudeCodeConfig": "Thêm vào ~/.claude.json",
+    "claudeDesktopConnectorSetup": "Trên Claude Desktop → Settings → Connectors, thêm trình kết nối tùy chỉnh và dán URL máy chủ. Nếu Claude yêu cầu OAuth Client ID nâng cao, hãy dùng giá trị bên dưới và để trống phần bí mật — không bao giờ dùng khóa API MCP của bạn làm bí mật OAuth."
 }

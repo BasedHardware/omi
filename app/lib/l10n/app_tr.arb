@@ -296,7 +296,6 @@
     "daySummary": "Günlük Özet",
     "summaryGenerated": "Özet oluşturuldu",
     "claudeDesktop": "Claude Masaüstü",
-    "addToClaudeConfig": "claude_desktop_config.json'a ekle",
     "copyConfig": "Yapılandırmayı Kopyala",
     "configCopied": "Yapılandırma panoya kopyalandı",
     "listeningMins": "Dinleme (dk)",
@@ -1728,7 +1727,6 @@
     "knowledgeGraphDeletedSuccess": "Bilgi grafiği başarıyla silindi",
     "failedToDeleteGraph": "Grafik silinemedi: {error}",
     "clearAllNodesAndConnections": "Tüm düğümleri ve bağlantıları temizle",
-    "addToClaudeDesktopConfig": "claude_desktop_config.json dosyasına ekle",
     "connectAiAssistantsToData": "AI asistanlarını verilerinize bağlayın",
     "autoCreateWhenNameDetected": "İsim algılandığında otomatik oluştur",
     "trackPersonalGoalsOnHomepage": "Ana sayfada kişisel hedeflerinizi takip edin",
@@ -3560,5 +3558,8 @@
     "voiceSettingsAskToTagSubtitle": "Omi arada bir, son konuşmalarında kimin konuştuğunu sorar",
     "voiceSettingsSaveOthersSubtitle": "Birine ad verdiğinde Omi, onu bir dahaki sefere tanıyabilmek için kısa bir ses örneği saklar",
     "leaveBlank": "Boş bırakın",
-    "mcpOAuthSetup": "claude.ai'de özel bir bağlayıcı ekleyin ve sunucu URL'sini yapıştırın. Claude gelişmiş bir OAuth Client ID isterse aşağıdaki değeri kullanın ve gizli anahtarı boş bırakın — MCP API anahtarınızı asla OAuth gizli anahtarı olarak kullanmayın."
+    "mcpOAuthSetup": "claude.ai'de özel bir bağlayıcı ekleyin ve sunucu URL'sini yapıştırın. Claude gelişmiş bir OAuth Client ID isterse aşağıdaki değeri kullanın ve gizli anahtarı boş bırakın — MCP API anahtarınızı asla OAuth gizli anahtarı olarak kullanmayın.",
+    "claudeCode": "Claude Code",
+    "addToClaudeCodeConfig": "~/.claude.json dosyasına ekle",
+    "claudeDesktopConnectorSetup": "Claude Desktop → Settings → Connectors'de özel bir bağlayıcı ekleyin ve sunucu URL'sini yapıştırın. Claude gelişmiş bir OAuth Client ID isterse aşağıdaki değeri kullanın ve gizli anahtarı boş bırakın — MCP API anahtarınızı asla OAuth gizli anahtarı olarak kullanmayın."
 }

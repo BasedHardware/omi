@@ -14,9 +14,10 @@ export function hostedMcpUrl(apiBase: string): string {
 }
 
 /**
- * The Claude Desktop / Claude Code `mcpServers` config JSON for the hosted
+ * The Claude Code `~/.claude.json` `mcpServers` config JSON for the hosted
  * Streamable HTTP endpoint — `type: "http"` plus a Bearer header, no local
- * transport. The same string is rendered and copied.
+ * transport. The same string is rendered and copied. (Claude Desktop adds
+ * remote servers via Settings → Connectors, not a JSON file.)
  */
 export function hostedMcpConfigJson(mcpUrl: string): string {
   return `{

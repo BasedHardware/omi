@@ -936,9 +936,6 @@ class AppLocalizationsTe extends AppLocalizations {
   String get claudeDesktop => 'Claude డెస్క్‌టాప్';
 
   @override
-  String get addToClaudeConfig => 'claude_desktop_config.json కు జోడించండి';
-
-  @override
   String get copyConfig => 'కాన్ఫిగ్ కాపీ చేయండి';
 
   @override
@@ -2490,9 +2487,6 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get clearAllNodesAndConnections => 'సమస్త నోడ్‌లు మరియు కనెక్షన్‌లను క్లియర్ చేయండి';
-
-  @override
-  String get addToClaudeDesktopConfig => 'claude_desktop_config.json కు జోడించండి';
 
   @override
   String get connectAiAssistantsToData => 'AI సహాయకులను మీ డేటాకు కనెక్ట్ చేయండి';
@@ -11210,4 +11204,14 @@ class AppLocalizationsTe extends AppLocalizations {
   @override
   String get mcpOAuthSetup =>
       'claude.ai లో కస్టమ్ కనెక్టర్‌ను జోడించి, సర్వర్ URL ను పేస్ట్ చేయండి. Claude అడ్వాన్స్డ్ OAuth Client ID అడిగితే, కింది విలువను ఉపయోగించి, సీక్రెట్‌ను ఖాళీగా ఉంచండి — మీ MCP API కీని OAuth సీక్రెట్‌గా ఎప్పుడూ ఉపయోగించకండి.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => '~/.claude.json కు జోడించండి';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'Claude Desktop → Settings → Connectors లో కస్టమ్ కనెక్టర్‌ను జోడించి, సర్వర్ URL ను పేస్ట్ చేయండి. Claude అడ్వాన్స్డ్ OAuth Client ID అడిగితే, కింది విలువను ఉపయోగించి, సీక్రెట్‌ను ఖాళీగా ఉంచండి — మీ MCP API కీని OAuth సీక్రెట్‌గా ఎప్పుడూ ఉపయోగించకండి.';
 }

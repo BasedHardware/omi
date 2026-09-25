@@ -935,9 +935,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'Pievienot claude_desktop_config.json';
-
-  @override
   String get copyConfig => 'Kopēt konfigurāciju';
 
   @override
@@ -2479,9 +2476,6 @@ class AppLocalizationsLv extends AppLocalizations {
 
   @override
   String get clearAllNodesAndConnections => 'Notīrīt visus mezglus un savienojumus';
-
-  @override
-  String get addToClaudeDesktopConfig => 'Pievienot claude_desktop_config.json';
 
   @override
   String get connectAiAssistantsToData => 'Savienojiet AI asistentus ar saviem datiem';
@@ -11189,4 +11183,14 @@ class AppLocalizationsLv extends AppLocalizations {
   @override
   String get mcpOAuthSetup =>
       'Vietnē claude.ai pievienojiet pielāgotu savienotāju un ielīmējiet servera URL. Ja Claude pieprasa uzlabotu OAuth Client ID, izmantojiet tālāk norādīto vērtību un atstājiet noslēpumu tukšu — nekad neizmantojiet savu MCP API atslēgu kā OAuth noslēpumu.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'Pievienot ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'Vietnē Claude Desktop → Settings → Connectors pievienojiet pielāgotu savienotāju un ielīmējiet servera URL. Ja Claude pieprasa uzlabotu OAuth Client ID, izmantojiet tālāk norādīto vērtību un atstājiet noslēpumu tukšu — nekad neizmantojiet savu MCP API atslēgu kā OAuth noslēpumu.';
 }

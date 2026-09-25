@@ -296,7 +296,6 @@
     "daySummary": "Denný súhrn",
     "summaryGenerated": "Zhrnutie bolo vygenerované",
     "claudeDesktop": "Claude Desktop",
-    "addToClaudeConfig": "Pridať do claude_desktop_config.json",
     "copyConfig": "Skopírovať konfiguráciu",
     "configCopied": "Konfigurácia bola skopírovaná do schránky",
     "listeningMins": "Počúvanie (min)",
@@ -1728,7 +1727,6 @@
     "knowledgeGraphDeletedSuccess": "Graf znalostí bol úspešne odstránený",
     "failedToDeleteGraph": "Nepodarilo sa odstrániť graf: {error}",
     "clearAllNodesAndConnections": "Vymazať všetky uzly a spojenia",
-    "addToClaudeDesktopConfig": "Pridať do claude_desktop_config.json",
     "connectAiAssistantsToData": "Pripojte AI asistentov k vašim údajom",
     "autoCreateWhenNameDetected": "Automaticky vytvoriť pri zistení mena",
     "trackPersonalGoalsOnHomepage": "Sledujte svoje osobné ciele na domovskej stránke",
@@ -3525,5 +3523,8 @@
     "voiceSettingsAskToTagSubtitle": "Omi sa občas opýta, kto hovoril vo vašich nedávnych konverzáciách",
     "voiceSettingsSaveOthersSubtitle": "Keď niekoho pomenujete, Omi si uchová krátku ukážku hlasu, aby ho nabudúce spoznal",
     "leaveBlank": "Nechajte prázdne",
-    "mcpOAuthSetup": "Na claude.ai pridajte vlastný konektor a vložte URL servera. Ak Claude požiada o pokročilé OAuth Client ID, použite hodnotu nižšie a nechajte tajný kľúč prázdny — nikdy nepoužívajte svoj MCP API kľúč ako OAuth secret."
+    "mcpOAuthSetup": "Na claude.ai pridajte vlastný konektor a vložte URL servera. Ak Claude požiada o pokročilé OAuth Client ID, použite hodnotu nižšie a nechajte tajný kľúč prázdny — nikdy nepoužívajte svoj MCP API kľúč ako OAuth secret.",
+    "claudeCode": "Claude Code",
+    "addToClaudeCodeConfig": "Pridať do ~/.claude.json",
+    "claudeDesktopConnectorSetup": "Na Claude Desktop → Settings → Connectors pridajte vlastný konektor a vložte URL servera. Ak Claude požiada o pokročilé OAuth Client ID, použite hodnotu nižšie a nechajte tajný kľúč prázdny — nikdy nepoužívajte svoj MCP API kľúč ako OAuth secret."
 }

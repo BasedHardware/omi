@@ -931,9 +931,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'เพิ่มไปยัง claude_desktop_config.json';
-
-  @override
   String get copyConfig => 'คัดลอกการกำหนดค่า';
 
   @override
@@ -2458,9 +2455,6 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get clearAllNodesAndConnections => 'ล้างโหนดและการเชื่อมต่อทั้งหมด';
-
-  @override
-  String get addToClaudeDesktopConfig => 'เพิ่มไปยัง claude_desktop_config.json';
 
   @override
   String get connectAiAssistantsToData => 'เชื่อมต่อผู้ช่วย AI กับข้อมูลของคุณ';
@@ -11097,4 +11091,14 @@ class AppLocalizationsTh extends AppLocalizations {
   @override
   String get mcpOAuthSetup =>
       'บน claude.ai ให้เพิ่มคอนเนคเตอร์แบบกำหนดเองและวาง URL ของเซิร์ฟเวอร์ หาก Claude ขอ OAuth Client ID ขั้นสูง ให้ใช้ค่าด้านล่างและเว้นความลับไว้ — อย่าใช้คีย์ MCP API ของคุณเป็นความลับ OAuth เด็ดขาด';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'เพิ่มไปยัง ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'บน Claude Desktop → Settings → Connectors ให้เพิ่มคอนเนคเตอร์แบบกำหนดเองและวาง URL ของเซิร์ฟเวอร์ หาก Claude ขอ OAuth Client ID ขั้นสูง ให้ใช้ค่าด้านล่างและเว้นความลับไว้ — อย่าใช้คีย์ MCP API ของคุณเป็นความลับ OAuth เด็ดขาด';
 }

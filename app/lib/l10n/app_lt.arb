@@ -137,8 +137,6 @@
     "addOrChangePaymentMethod": "Pridėkite arba pakeiskite mokėjimo būdą",
     "addOrChangeYourPaymentMethod": "Pridėti arba pakeisti mokėjimo būdą",
     "addPerson": "Pridėti asmenį",
-    "addToClaudeConfig": "Pridėti į claude_desktop_config.json",
-    "addToClaudeDesktopConfig": "Pridėti prie claude_desktop_config.json",
     "addVocabularyDescription": "Pridėkite žodžius, kuriuos Omi turėtų atpažinti transkripcijos metu.",
     "addWords": "Pridėti žodžių",
     "addWordsDesc": "Vardai, terminai ar neįprasti žodžiai",
@@ -3525,5 +3523,8 @@
     "voiceSettingsAskToTagSubtitle": "Kartais Omi paklaus, kas kalbėjo jūsų naujausiuose pokalbiuose",
     "voiceSettingsSaveOthersSubtitle": "Kai ką nors pavadinate, Omi išsaugo trumpą balso pavyzdį, kad kitą kartą jį atpažintų",
     "leaveBlank": "Palikite tuščią",
-    "mcpOAuthSetup": "claude.ai svetainėje pridėkite pasirinktinę jungtį ir įklijuokite serverio URL. Jei Claude paprašys išplėstinio OAuth Client ID, naudokite toliau pateiktą reikšmę ir palikite slaptažodį tuščią — niekada nenaudokite savo MCP API rakto kaip OAuth paslapties."
+    "mcpOAuthSetup": "claude.ai svetainėje pridėkite pasirinktinę jungtį ir įklijuokite serverio URL. Jei Claude paprašys išplėstinio OAuth Client ID, naudokite toliau pateiktą reikšmę ir palikite slaptažodį tuščią — niekada nenaudokite savo MCP API rakto kaip OAuth paslapties.",
+    "claudeCode": "Claude Code",
+    "addToClaudeCodeConfig": "Pridėti prie ~/.claude.json",
+    "claudeDesktopConnectorSetup": "Claude Desktop → Settings → Connectors svetainėje pridėkite pasirinktinę jungtį ir įklijuokite serverio URL. Jei Claude paprašys išplėstinio OAuth Client ID, naudokite toliau pateiktą reikšmę ir palikite slaptažodį tuščią — niekada nenaudokite savo MCP API rakto kaip OAuth paslapties."
 }

@@ -937,9 +937,6 @@ class AppLocalizationsSk extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'Pridať do claude_desktop_config.json';
-
-  @override
   String get copyConfig => 'Skopírovať konfiguráciu';
 
   @override
@@ -2480,9 +2477,6 @@ class AppLocalizationsSk extends AppLocalizations {
 
   @override
   String get clearAllNodesAndConnections => 'Vymazať všetky uzly a spojenia';
-
-  @override
-  String get addToClaudeDesktopConfig => 'Pridať do claude_desktop_config.json';
 
   @override
   String get connectAiAssistantsToData => 'Pripojte AI asistentov k vašim údajom';
@@ -11153,4 +11147,14 @@ class AppLocalizationsSk extends AppLocalizations {
   @override
   String get mcpOAuthSetup =>
       'Na claude.ai pridajte vlastný konektor a vložte URL servera. Ak Claude požiada o pokročilé OAuth Client ID, použite hodnotu nižšie a nechajte tajný kľúč prázdny — nikdy nepoužívajte svoj MCP API kľúč ako OAuth secret.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'Pridať do ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'Na Claude Desktop → Settings → Connectors pridajte vlastný konektor a vložte URL servera. Ak Claude požiada o pokročilé OAuth Client ID, použite hodnotu nižšie a nechajte tajný kľúč prázdny — nikdy nepoužívajte svoj MCP API kľúč ako OAuth secret.';
 }

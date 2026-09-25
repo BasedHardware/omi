@@ -23,7 +23,7 @@ void main() {
   group('hostedMcpConfigJson', () {
     const url = 'https://api.omi.me/v1/mcp';
 
-    test('is valid hosted Streamable HTTP config for Claude Desktop and Claude Code', () {
+    test('is valid hosted Streamable HTTP config for Claude Code', () {
       final decoded = jsonDecode(hostedMcpConfigJson(url)) as Map<String, dynamic>;
       final omi = (decoded['mcpServers'] as Map<String, dynamic>)['omi'] as Map<String, dynamic>;
       expect(omi['type'], 'http');

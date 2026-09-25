@@ -936,9 +936,6 @@ class AppLocalizationsTr extends AppLocalizations {
   String get claudeDesktop => 'Claude Masaüstü';
 
   @override
-  String get addToClaudeConfig => 'claude_desktop_config.json\'a ekle';
-
-  @override
   String get copyConfig => 'Yapılandırmayı Kopyala';
 
   @override
@@ -2481,9 +2478,6 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get clearAllNodesAndConnections => 'Tüm düğümleri ve bağlantıları temizle';
-
-  @override
-  String get addToClaudeDesktopConfig => 'claude_desktop_config.json dosyasına ekle';
 
   @override
   String get connectAiAssistantsToData => 'AI asistanlarını verilerinize bağlayın';
@@ -11174,4 +11168,14 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get mcpOAuthSetup =>
       'claude.ai\'de özel bir bağlayıcı ekleyin ve sunucu URL\'sini yapıştırın. Claude gelişmiş bir OAuth Client ID isterse aşağıdaki değeri kullanın ve gizli anahtarı boş bırakın — MCP API anahtarınızı asla OAuth gizli anahtarı olarak kullanmayın.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => '~/.claude.json dosyasına ekle';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'Claude Desktop → Settings → Connectors\'de özel bir bağlayıcı ekleyin ve sunucu URL\'sini yapıştırın. Claude gelişmiş bir OAuth Client ID isterse aşağıdaki değeri kullanın ve gizli anahtarı boş bırakın — MCP API anahtarınızı asla OAuth gizli anahtarı olarak kullanmayın.';
 }

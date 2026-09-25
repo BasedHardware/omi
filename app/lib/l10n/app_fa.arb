@@ -1114,7 +1114,6 @@
     "daySummary": "خلاصه روز",
     "summaryGenerated": "خلاصه تولید شد",
     "claudeDesktop": "Claude Desktop",
-    "addToClaudeConfig": "افزودن به claude_desktop_config.json",
     "copyConfig": "کپی پیکربندی",
     "configCopied": "پیکربندی به تخته گذاشته شد",
     "listeningMins": "گوش دادن (دقیقه)",
@@ -2635,10 +2634,6 @@
     },
     "@claudeDesktop": {
         "description": "Claude Desktop integration section"
-    },
-    "addToClaudeDesktopConfig": "افزودن به claude_desktop_config.json",
-    "@addToClaudeDesktopConfig": {
-        "description": "Description for Claude Desktop config"
     },
     "@configCopiedToClipboard": {
         "description": "Confirmation when config is copied"
@@ -11094,5 +11089,8 @@
     "voiceSettingsAskToTagSubtitle": "گاهی Omi می‌پرسد چه کسی در گفتگوهای اخیر شما صحبت می‌کرد",
     "voiceSettingsSaveOthersSubtitle": "وقتی کسی را نام‌گذاری می‌کنید، Omi یک نمونه کوتاه از صدا نگه می‌دارد تا دفعه بعد او را بشناسد",
     "leaveBlank": "خالی بگذارید",
-    "mcpOAuthSetup": "در claude.ai یک کانکتور سفارشی اضافه کنید و URL سرور را جای‌گذاری کنید. اگر Claude یک Client ID پیشرفته OAuth خواست، از مقدار زیر استفاده کنید و secret را خالی بگذارید — هرگز کلید MCP API خود را به‌عنوان secret OAuth استفاده نکنید."
+    "mcpOAuthSetup": "در claude.ai یک کانکتور سفارشی اضافه کنید و URL سرور را جای‌گذاری کنید. اگر Claude یک Client ID پیشرفته OAuth خواست، از مقدار زیر استفاده کنید و secret را خالی بگذارید — هرگز کلید MCP API خود را به‌عنوان secret OAuth استفاده نکنید.",
+    "claudeCode": "Claude Code",
+    "addToClaudeCodeConfig": "افزودن به ~/.claude.json",
+    "claudeDesktopConnectorSetup": "در Claude Desktop → Settings → Connectors یک کانکتور سفارشی اضافه کنید و URL سرور را جای‌گذاری کنید. اگر Claude یک Client ID پیشرفته OAuth خواست، از مقدار زیر استفاده کنید و secret را خالی بگذارید — هرگز کلید MCP API خود را به‌عنوان secret OAuth استفاده نکنید."
 }

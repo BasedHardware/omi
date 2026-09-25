@@ -296,7 +296,6 @@
     "daySummary": "Resum del dia",
     "summaryGenerated": "Resum generat",
     "claudeDesktop": "Claude Desktop",
-    "addToClaudeConfig": "Afegir a claude_desktop_config.json",
     "copyConfig": "Copiar configuració",
     "configCopied": "Configuració copiada al porta-retalls",
     "listeningMins": "Escoltant (min)",
@@ -1728,7 +1727,6 @@
     "knowledgeGraphDeletedSuccess": "Graf de coneixement eliminat correctament",
     "failedToDeleteGraph": "Error en eliminar el graf: {error}",
     "clearAllNodesAndConnections": "Esborra tots els nodes i connexions",
-    "addToClaudeDesktopConfig": "Afegeix a claude_desktop_config.json",
     "connectAiAssistantsToData": "Connecta assistents d'IA a les teves dades",
     "autoCreateWhenNameDetected": "Crea automàticament quan es detecti un nom",
     "trackPersonalGoalsOnHomepage": "Segueix els teus objectius personals a la pàgina d'inici",
@@ -3525,5 +3523,8 @@
     "voiceSettingsAskToTagSubtitle": "De tant en tant, l’Omi et pregunta qui parlava a les teves converses recents",
     "voiceSettingsSaveOthersSubtitle": "Quan anomenes algú, l’Omi guarda una mostra de veu breu per reconèixer-lo la propera vegada",
     "leaveBlank": "Deixa-ho en blanc",
-    "mcpOAuthSetup": "A claude.ai, afegeix un connector personalitzat i enganxa l'URL del servidor. Si Claude demana un Client ID d'OAuth avançat, utilitza el valor següent i deixa el secret en blanc — mai utilitzis la teva clau d'API MCP com a secret d'OAuth."
+    "mcpOAuthSetup": "A claude.ai, afegeix un connector personalitzat i enganxa l'URL del servidor. Si Claude demana un Client ID d'OAuth avançat, utilitza el valor següent i deixa el secret en blanc — mai utilitzis la teva clau d'API MCP com a secret d'OAuth.",
+    "claudeCode": "Claude Code",
+    "addToClaudeCodeConfig": "Afegeix a ~/.claude.json",
+    "claudeDesktopConnectorSetup": "A Claude Desktop → Settings → Connectors, afegeix un connector personalitzat i enganxa l'URL del servidor. Si Claude demana un Client ID d'OAuth avançat, utilitza el valor següent i deixa el secret en blanc — mai utilitzis la teva clau d'API MCP com a secret d'OAuth."
 }

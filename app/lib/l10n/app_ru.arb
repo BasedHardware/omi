@@ -296,7 +296,6 @@
     "daySummary": "Сводка дня",
     "summaryGenerated": "Сводка создана",
     "claudeDesktop": "Claude Desktop",
-    "addToClaudeConfig": "Добавить в claude_desktop_config.json",
     "copyConfig": "Копировать конфигурацию",
     "configCopied": "Конфигурация скопирована в буфер обмена",
     "listeningMins": "Прослушивание (мин)",
@@ -1728,7 +1727,6 @@
     "knowledgeGraphDeletedSuccess": "Граф знаний успешно удалён",
     "failedToDeleteGraph": "Не удалось удалить граф: {error}",
     "clearAllNodesAndConnections": "Очистить все узлы и соединения",
-    "addToClaudeDesktopConfig": "Добавить в claude_desktop_config.json",
     "connectAiAssistantsToData": "Подключите AI-помощников к вашим данным",
     "autoCreateWhenNameDetected": "Автоматически создавать при обнаружении имени",
     "trackPersonalGoalsOnHomepage": "Отслеживайте личные цели на главной странице",
@@ -3560,5 +3558,8 @@
     "voiceSettingsAskToTagSubtitle": "Время от времени Omi спрашивает, кто говорил в ваших недавних разговорах",
     "voiceSettingsSaveOthersSubtitle": "Когда вы называете человека, Omi сохраняет короткий образец голоса, чтобы узнать его в следующий раз",
     "leaveBlank": "Оставьте пустым",
-    "mcpOAuthSetup": "На claude.ai добавьте пользовательский коннектор и вставьте URL сервера. Если Claude запросит расширенный OAuth Client ID, используйте значение ниже и оставьте секрет пустым — никогда не используйте свой MCP API-ключ как секрет OAuth."
+    "mcpOAuthSetup": "На claude.ai добавьте пользовательский коннектор и вставьте URL сервера. Если Claude запросит расширенный OAuth Client ID, используйте значение ниже и оставьте секрет пустым — никогда не используйте свой MCP API-ключ как секрет OAuth.",
+    "claudeCode": "Claude Code",
+    "addToClaudeCodeConfig": "Добавить в ~/.claude.json",
+    "claudeDesktopConnectorSetup": "На Claude Desktop → Settings → Connectors добавьте пользовательский коннектор и вставьте URL сервера. Если Claude запросит расширенный OAuth Client ID, используйте значение ниже и оставьте секрет пустым — никогда не используйте свой MCP API-ключ как секрет OAuth."
 }

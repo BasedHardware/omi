@@ -923,9 +923,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'claude_desktop_config.jsonに追加';
-
-  @override
   String get copyConfig => '設定をコピー';
 
   @override
@@ -2434,9 +2431,6 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get clearAllNodesAndConnections => 'すべてのノードと接続をクリア';
-
-  @override
-  String get addToClaudeDesktopConfig => 'claude_desktop_config.jsonに追加';
 
   @override
   String get connectAiAssistantsToData => 'AIアシスタントをデータに接続';
@@ -10978,4 +10972,14 @@ class AppLocalizationsJa extends AppLocalizations {
   @override
   String get mcpOAuthSetup =>
       'claude.aiでカスタムコネクタを追加し、サーバーURLを貼り付けてください。Claudeが高度なOAuth Client IDを求めてきた場合は、以下の値を使用し、シークレットは空欄のままにしてください。MCP APIキーをOAuthシークレットとして使用しないでください。';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => '~/.claude.jsonに追加';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'Claude Desktop → Settings → Connectorsでカスタムコネクタを追加し、サーバーURLを貼り付けてください。Claudeが高度なOAuth Client IDを求めてきた場合は、以下の値を使用し、シークレットは空欄のままにしてください。MCP APIキーをOAuthシークレットとして使用しないでください。';
 }

@@ -1965,12 +1965,6 @@ abstract class AppLocalizations {
   /// **'Claude Desktop'**
   String get claudeDesktop;
 
-  /// No description provided for @addToClaudeConfig.
-  ///
-  /// In en, this message translates to:
-  /// **'Add to claude_desktop_config.json'**
-  String get addToClaudeConfig;
-
   /// Button text to copy configuration
   ///
   /// In en, this message translates to:
@@ -4796,12 +4790,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Clear all nodes and connections'**
   String get clearAllNodesAndConnections;
-
-  /// Description for Claude Desktop config
-  ///
-  /// In en, this message translates to:
-  /// **'Add to claude_desktop_config.json'**
-  String get addToClaudeDesktopConfig;
 
   /// Description for MCP Server feature
   ///
@@ -20342,6 +20330,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'On claude.ai, add a custom connector and paste the server URL. If Claude asks for an advanced OAuth Client ID, use the value below and leave the secret blank — never use your MCP API key as an OAuth secret.'**
   String get mcpOAuthSetup;
+
+  /// Claude Code (CLI) integration section
+  ///
+  /// In en, this message translates to:
+  /// **'Claude Code'**
+  String get claudeCode;
+
+  /// Subtitle under the Claude Code section: add the snippet to ~/.claude.json
+  ///
+  /// In en, this message translates to:
+  /// **'Add to ~/.claude.json'**
+  String get addToClaudeCodeConfig;
+
+  /// Claude Desktop connector setup instructions for the hosted MCP server
+  ///
+  /// In en, this message translates to:
+  /// **'On Claude Desktop → Settings → Connectors, add a custom connector and paste the server URL. If Claude asks for an advanced OAuth Client ID, use the value below and leave the secret blank — never use your MCP API key as an OAuth secret.'**
+  String get claudeDesktopConnectorSetup;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

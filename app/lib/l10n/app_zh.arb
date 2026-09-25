@@ -298,7 +298,6 @@
     "daySummary": "每日摘要",
     "summaryGenerated": "摘要已生成",
     "claudeDesktop": "Claude 桌面版",
-    "addToClaudeConfig": "添加到 claude_desktop_config.json",
     "copyConfig": "复制配置",
     "configCopied": "配置已复制",
     "listeningMins": "聆听（分钟）",
@@ -1732,7 +1731,6 @@
     "knowledgeGraphDeletedSuccess": "知识图谱删除成功",
     "failedToDeleteGraph": "删除图谱失败：{error}",
     "clearAllNodesAndConnections": "清除所有节点和连接",
-    "addToClaudeDesktopConfig": "添加到 claude_desktop_config.json",
     "connectAiAssistantsToData": "将 AI 助手连接到您的数据",
     "autoCreateWhenNameDetected": "检测到名称时自动创建",
     "trackPersonalGoalsOnHomepage": "在主页上跟踪您的个人目标",
@@ -3525,5 +3523,8 @@
     "voiceSettingsAskToTagSubtitle": "Omi 偶尔会问你最近的对话中是谁在说话",
     "voiceSettingsSaveOthersSubtitle": "当你为某人命名时，Omi 会保留一小段声音样本，以便下次认出对方",
     "leaveBlank": "留空",
-    "mcpOAuthSetup": "在 claude.ai 上添加自定义连接器并粘贴服务器 URL。如果 Claude 要求提供高级 OAuth Client ID，请使用下方的值并将密钥留空——切勿将您的 MCP API 密钥用作 OAuth 密钥。"
+    "mcpOAuthSetup": "在 claude.ai 上添加自定义连接器并粘贴服务器 URL。如果 Claude 要求提供高级 OAuth Client ID，请使用下方的值并将密钥留空——切勿将您的 MCP API 密钥用作 OAuth 密钥。",
+    "claudeCode": "Claude Code",
+    "addToClaudeCodeConfig": "添加到 ~/.claude.json",
+    "claudeDesktopConnectorSetup": "在 Claude Desktop → Settings → Connectors 上添加自定义连接器并粘贴服务器 URL。如果 Claude 要求提供高级 OAuth Client ID，请使用下方的值并将密钥留空——切勿将您的 MCP API 密钥用作 OAuth 密钥。"
 }

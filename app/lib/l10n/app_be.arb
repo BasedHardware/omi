@@ -1114,7 +1114,6 @@
     "daySummary": "Рэзюмэ дня",
     "summaryGenerated": "Рэзюмэ генераванае",
     "claudeDesktop": "Claude Desktop",
-    "addToClaudeConfig": "Дадаць у claude_desktop_config.json",
     "copyConfig": "Скапіяваць канфіг",
     "configCopied": "Канфіг скапіяваны ў буфер абмену",
     "listeningMins": "Слуханне (хвіліны)",
@@ -2635,10 +2634,6 @@
     },
     "@claudeDesktop": {
         "description": "Claude Desktop integration section"
-    },
-    "addToClaudeDesktopConfig": "Дадайце да claude_desktop_config.json",
-    "@addToClaudeDesktopConfig": {
-        "description": "Description for Claude Desktop config"
     },
     "@configCopiedToClipboard": {
         "description": "Confirmation when config is copied"
@@ -11094,5 +11089,8 @@
     "voiceSettingsAskToTagSubtitle": "Час ад часу Omi пытаецца, хто гаварыў у вашых нядаўніх размовах",
     "voiceSettingsSaveOthersSubtitle": "Калі вы называеце кагосьці, Omi захоўвае кароткі ўзор голасу, каб пазнаць яго наступным разам",
     "leaveBlank": "Пакіньце пустым",
-    "mcpOAuthSetup": "На claude.ai дадайце карыстальніцкі каннектар і ўстаўце URL сервера. Калі Claude запытае пашыраны OAuth Client ID, выкарыстайце значэнне ніжэй і пакіньце сакрэт пустым — ніколі не выкарыстоўвайце свой ключ MCP API як сакрэт OAuth."
+    "mcpOAuthSetup": "На claude.ai дадайце карыстальніцкі каннектар і ўстаўце URL сервера. Калі Claude запытае пашыраны OAuth Client ID, выкарыстайце значэнне ніжэй і пакіньце сакрэт пустым — ніколі не выкарыстоўвайце свой ключ MCP API як сакрэт OAuth.",
+    "claudeCode": "Claude Code",
+    "addToClaudeCodeConfig": "Дадайце да ~/.claude.json",
+    "claudeDesktopConnectorSetup": "На Claude Desktop → Settings → Connectors дадайце карыстальніцкі каннектар і ўстаўце URL сервера. Калі Claude запытае пашыраны OAuth Client ID, выкарыстайце значэнне ніжэй і пакіньце сакрэт пустым — ніколі не выкарыстоўвайце свой ключ MCP API як сакрэт OAuth."
 }

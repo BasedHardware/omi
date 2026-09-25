@@ -298,7 +298,6 @@
     "daySummary": "Resumo do dia",
     "summaryGenerated": "Resumo gerado",
     "claudeDesktop": "Claude Desktop",
-    "addToClaudeConfig": "Adicionar ao claude_desktop_config.json",
     "copyConfig": "Copiar configuração",
     "configCopied": "Configuração copiada para a área de transferência",
     "listeningMins": "Ouvindo (Mins)",
@@ -1728,7 +1727,6 @@
     "knowledgeGraphDeletedSuccess": "Grafo de conhecimento excluído com sucesso",
     "failedToDeleteGraph": "Falha ao excluir o grafo: {error}",
     "clearAllNodesAndConnections": "Limpar todos os nós e conexões",
-    "addToClaudeDesktopConfig": "Adicionar ao claude_desktop_config.json",
     "connectAiAssistantsToData": "Conecte assistentes de IA aos seus dados",
     "autoCreateWhenNameDetected": "Criar automaticamente quando nome for detectado",
     "trackPersonalGoalsOnHomepage": "Acompanhe suas metas pessoais na página inicial",
@@ -3560,5 +3558,8 @@
     "voiceSettingsAskToTagSubtitle": "De vez em quando, o Omi pergunta quem estava falando nas suas conversas recentes",
     "voiceSettingsSaveOthersSubtitle": "Quando você nomeia alguém, o Omi guarda uma pequena amostra de voz para reconhecer a pessoa da próxima vez",
     "leaveBlank": "Deixar em branco",
-    "mcpOAuthSetup": "No claude.ai, adicione um conector personalizado e cole o URL do servidor. Se o Claude pedir um Client ID OAuth avançado, use o valor abaixo e deixe o segredo em branco — nunca use a sua chave de API MCP como segredo OAuth."
+    "mcpOAuthSetup": "No claude.ai, adicione um conector personalizado e cole o URL do servidor. Se o Claude pedir um Client ID OAuth avançado, use o valor abaixo e deixe o segredo em branco — nunca use a sua chave de API MCP como segredo OAuth.",
+    "claudeCode": "Claude Code",
+    "addToClaudeCodeConfig": "Adicionar ao ~/.claude.json",
+    "claudeDesktopConnectorSetup": "No Claude Desktop → Settings → Connectors, adicione um conector personalizado e cole o URL do servidor. Se o Claude pedir um Client ID OAuth avançado, use o valor abaixo e deixe o segredo em branco — nunca use a sua chave de API MCP como segredo OAuth."
 }

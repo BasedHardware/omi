@@ -296,7 +296,6 @@
     "daySummary": "Περίληψη ημέρας",
     "summaryGenerated": "Δημιουργήθηκε περίληψη",
     "claudeDesktop": "Claude Desktop",
-    "addToClaudeConfig": "Προσθήκη στο claude_desktop_config.json",
     "copyConfig": "Αντιγραφή Διαμόρφωσης",
     "configCopied": "Η διαμόρφωση αντιγράφηκε στο πρόχειρο",
     "listeningMins": "Ακρόαση (λεπτά)",
@@ -1728,7 +1727,6 @@
     "knowledgeGraphDeletedSuccess": "Το γράφημα γνώσης διαγράφηκε επιτυχώς",
     "failedToDeleteGraph": "Αποτυχία διαγραφής γραφήματος: {error}",
     "clearAllNodesAndConnections": "Εκκαθάριση όλων των κόμβων και συνδέσεων",
-    "addToClaudeDesktopConfig": "Προσθήκη στο claude_desktop_config.json",
     "connectAiAssistantsToData": "Συνδέστε βοηθούς AI με τα δεδομένα σας",
     "autoCreateWhenNameDetected": "Αυτόματη δημιουργία όταν ανιχνευθεί όνομα",
     "trackPersonalGoalsOnHomepage": "Παρακολουθήστε τους προσωπικούς σας στόχους στην αρχική σελίδα",
@@ -3525,5 +3523,8 @@
     "voiceSettingsAskToTagSubtitle": "Κάθε τόσο, το Omi ρωτά ποιος μιλούσε στις πρόσφατες συνομιλίες σας",
     "voiceSettingsSaveOthersSubtitle": "Όταν ονομάζετε κάποιον, το Omi κρατά ένα σύντομο δείγμα φωνής για να τον αναγνωρίσει την επόμενη φορά",
     "leaveBlank": "Αφήστε το κενό",
-    "mcpOAuthSetup": "Στο claude.ai, προσθέστε έναν προσαρμοσμένο σύνδεσμο και επικολλήστε το URL του διακομιστή. Αν το Claude ζητήσει ένα σύνθετο OAuth Client ID, χρησιμοποιήστε την τιμή παρακάτω και αφήστε το μυστικό κενό — μην χρησιμοποιείτε ποτέ το κλειδί MCP API σας ως μυστικό OAuth."
+    "mcpOAuthSetup": "Στο claude.ai, προσθέστε έναν προσαρμοσμένο σύνδεσμο και επικολλήστε το URL του διακομιστή. Αν το Claude ζητήσει ένα σύνθετο OAuth Client ID, χρησιμοποιήστε την τιμή παρακάτω και αφήστε το μυστικό κενό — μην χρησιμοποιείτε ποτέ το κλειδί MCP API σας ως μυστικό OAuth.",
+    "claudeCode": "Claude Code",
+    "addToClaudeCodeConfig": "Προσθήκη στο ~/.claude.json",
+    "claudeDesktopConnectorSetup": "Στο Claude Desktop → Settings → Connectors, προσθέστε έναν προσαρμοσμένο σύνδεσμο και επικολλήστε το URL του διακομιστή. Αν το Claude ζητήσει ένα σύνθετο OAuth Client ID, χρησιμοποιήστε την τιμή παρακάτω και αφήστε το μυστικό κενό — μην χρησιμοποιείτε ποτέ το κλειδί MCP API σας ως μυστικό OAuth."
 }

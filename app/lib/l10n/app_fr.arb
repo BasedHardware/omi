@@ -296,7 +296,6 @@
     "daySummary": "Résumé du jour",
     "summaryGenerated": "Résumé généré",
     "claudeDesktop": "Claude Desktop",
-    "addToClaudeConfig": "Ajouter à claude_desktop_config.json",
     "copyConfig": "Copier la configuration",
     "configCopied": "Configuration copiée dans le presse-papiers",
     "listeningMins": "Écoute (min)",
@@ -1728,7 +1727,6 @@
     "knowledgeGraphDeletedSuccess": "Graphe de connaissances supprimé avec succès",
     "failedToDeleteGraph": "Échec de la suppression du graphe : {error}",
     "clearAllNodesAndConnections": "Effacer tous les nœuds et connexions",
-    "addToClaudeDesktopConfig": "Ajouter à claude_desktop_config.json",
     "connectAiAssistantsToData": "Connectez des assistants IA à vos données",
     "autoCreateWhenNameDetected": "Créer automatiquement quand un nom est détecté",
     "trackPersonalGoalsOnHomepage": "Suivez vos objectifs personnels sur la page d'accueil",
@@ -3560,5 +3558,8 @@
     "voiceSettingsAskToTagSubtitle": "De temps en temps, Omi vous demande qui parlait dans vos conversations récentes",
     "voiceSettingsSaveOthersSubtitle": "Lorsque vous nommez une personne, Omi conserve un court échantillon de sa voix pour la reconnaître la prochaine fois",
     "leaveBlank": "Laisser vide",
-    "mcpOAuthSetup": "Sur claude.ai, ajoutez un connecteur personnalisé et collez l'URL du serveur. Si Claude demande un Client ID OAuth avancé, utilisez la valeur ci-dessous et laissez le secret vide — n'utilisez jamais votre clé API MCP comme secret OAuth."
+    "mcpOAuthSetup": "Sur claude.ai, ajoutez un connecteur personnalisé et collez l'URL du serveur. Si Claude demande un Client ID OAuth avancé, utilisez la valeur ci-dessous et laissez le secret vide — n'utilisez jamais votre clé API MCP comme secret OAuth.",
+    "claudeCode": "Claude Code",
+    "addToClaudeCodeConfig": "Ajouter à ~/.claude.json",
+    "claudeDesktopConnectorSetup": "Sur Claude Desktop → Settings → Connectors, ajoutez un connecteur personnalisé et collez l'URL du serveur. Si Claude demande un Client ID OAuth avancé, utilisez la valeur ci-dessous et laissez le secret vide — n'utilisez jamais votre clé API MCP comme secret OAuth."
 }

@@ -936,9 +936,6 @@ class AppLocalizationsRu extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'Добавить в claude_desktop_config.json';
-
-  @override
   String get copyConfig => 'Копировать конфигурацию';
 
   @override
@@ -2481,9 +2478,6 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get clearAllNodesAndConnections => 'Очистить все узлы и соединения';
-
-  @override
-  String get addToClaudeDesktopConfig => 'Добавить в claude_desktop_config.json';
 
   @override
   String get connectAiAssistantsToData => 'Подключите AI-помощников к вашим данным';
@@ -11199,4 +11193,14 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get mcpOAuthSetup =>
       'На claude.ai добавьте пользовательский коннектор и вставьте URL сервера. Если Claude запросит расширенный OAuth Client ID, используйте значение ниже и оставьте секрет пустым — никогда не используйте свой MCP API-ключ как секрет OAuth.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'Добавить в ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'На Claude Desktop → Settings → Connectors добавьте пользовательский коннектор и вставьте URL сервера. Если Claude запросит расширенный OAuth Client ID, используйте значение ниже и оставьте секрет пустым — никогда не используйте свой MCP API-ключ как секрет OAuth.';
 }

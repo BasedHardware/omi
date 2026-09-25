@@ -921,9 +921,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get claudeDesktop => 'Claude 桌面版';
 
   @override
-  String get addToClaudeConfig => '添加到 claude_desktop_config.json';
-
-  @override
   String get copyConfig => '复制配置';
 
   @override
@@ -2429,9 +2426,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get clearAllNodesAndConnections => '清除所有节点和连接';
-
-  @override
-  String get addToClaudeDesktopConfig => '添加到 claude_desktop_config.json';
 
   @override
   String get connectAiAssistantsToData => '将 AI 助手连接到您的数据';
@@ -10959,4 +10953,14 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get mcpOAuthSetup =>
       '在 claude.ai 上添加自定义连接器并粘贴服务器 URL。如果 Claude 要求提供高级 OAuth Client ID，请使用下方的值并将密钥留空——切勿将您的 MCP API 密钥用作 OAuth 密钥。';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => '添加到 ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      '在 Claude Desktop → Settings → Connectors 上添加自定义连接器并粘贴服务器 URL。如果 Claude 要求提供高级 OAuth Client ID，请使用下方的值并将密钥留空——切勿将您的 MCP API 密钥用作 OAuth 密钥。';
 }

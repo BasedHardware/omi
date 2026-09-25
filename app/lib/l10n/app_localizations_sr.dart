@@ -933,9 +933,6 @@ class AppLocalizationsSr extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'Додај на claude_desktop_config.json';
-
-  @override
   String get copyConfig => 'Копирај конфигурацију';
 
   @override
@@ -2480,9 +2477,6 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get clearAllNodesAndConnections => 'Очисти све чворове и везе';
-
-  @override
-  String get addToClaudeDesktopConfig => 'Додај у claude_desktop_config.json';
 
   @override
   String get connectAiAssistantsToData => 'Повежи AI асистенте са својим подацима';
@@ -11177,4 +11171,14 @@ class AppLocalizationsSr extends AppLocalizations {
   @override
   String get mcpOAuthSetup =>
       'На claude.ai додајте прилагођени конектор и налепите URL сервера. Ако Claude тражи напредни OAuth Client ID, користите вредност испод и оставите тајну празном — никада не користите свој MCP API кључ као OAuth тајну.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'Додај у ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'На Claude Desktop → Settings → Connectors додајте прилагођени конектор и налепите URL сервера. Ако Claude тражи напредни OAuth Client ID, користите вредност испод и оставите тајну празном — никада не користите свој MCP API кључ као OAuth тајну.';
 }
