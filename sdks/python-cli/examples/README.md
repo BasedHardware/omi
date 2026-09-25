@@ -30,6 +30,8 @@
   JSON export to CSV for spreadsheets.
 * [`conversations_digest.md`](conversations_digest.md) — summarise conversation-list
   exports into a digest: per-day totals, categories and longest sessions.
+* [`conversations_digest.es.md`](conversations_digest.es.md) — resumir exportaciones
+  de conversaciones en un resumen: totales por día, categorías y sesiones más largas.
 * [`conversations_xlsx.md`](conversations_xlsx.md) — convert a conversation-list
   JSON export to an Excel workbook with datetime cells, duration and filters.
 * [`conversations_sqlite.md`](conversations_sqlite.md) — import conversation-list
