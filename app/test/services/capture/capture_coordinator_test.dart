@@ -1099,9 +1099,10 @@ void main() {
   test('public controller getters publish owner only after a held native start completes', () async {
     await withReviewWorld((world) async {
       final hold = world.hostApi.holdNextStart = Completer<void>();
+      final entered = world.hostApi.nextStartEntered = Completer<void>();
       final start = world.controller.streamRecording();
       try {
-        await pumpEventQueue();
+        await entered.future.timeout(const Duration(seconds: 15));
         expect(world.hostApi.startCalls, 1);
         expect(world.controller.liveCaptureSource, isNull);
         expect(world.controller.isPhoneMicPaused, isFalse);
@@ -1123,9 +1124,10 @@ void main() {
       world.injectAudioFrames(1, sessionId: world.hostApi.lastStartSessionId!);
       await world.settle();
       final hold = world.hostApi.holdNextStart = Completer<void>();
+      final entered = world.hostApi.nextStartEntered = Completer<void>();
       final stall = world.elapse(const Duration(seconds: 4));
       try {
-        await pumpEventQueue();
+        await entered.future.timeout(const Duration(seconds: 15));
         expect(world.hostApi.startCalls, 2);
         final pause = world.controller.pauseCapture();
         hold.complete();
