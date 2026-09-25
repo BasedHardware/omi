@@ -5,9 +5,11 @@ This app provides Whoop fitness tracker integration through OAuth2 authenticatio
 and chat tools for accessing strain, recovery, sleep, and workout data.
 """
 import os
+import html
+import re
 import sys
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict, Any, Tuple
 from urllib.parse import urlencode
 
@@ -71,6 +73,27 @@ app = FastAPI(
 # Helper Functions
 # ============================================
 
+def _clean_date_param(date_val: Any) -> Optional[str]:
+    """Safely extract YYYY-MM-DD from string or ISO date representations."""
+    if not date_val or not isinstance(date_val, str):
+        return None
+    date_str = date_val.strip()
+    match = re.match(r"^(\d{4}-\d{2}-\d{2})", date_str)
+    if match:
+        return match.group(1)
+    return None
+
+
+def _safe_float(val: Any, default: Optional[float] = None) -> Optional[float]:
+    """Safely convert value to float, returning default if invalid or None."""
+    if val is None:
+        return default
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        return default
+
+
 def get_valid_access_token(uid: str) -> Optional[str]:
     """
     Get a valid access token, refreshing if necessary.
@@ -95,7 +118,7 @@ def get_valid_access_token(uid: str) -> Optional[str]:
                 if new_token:
                     access_token = new_token["access_token"]
                     new_refresh = new_token.get("refresh_token", refresh_token)
-                    new_expires_at = (datetime.utcnow() + timedelta(seconds=new_token.get("expires_in", 3600))).isoformat() + "Z"
+                    new_expires_at = (datetime.now(timezone.utc) + timedelta(seconds=new_token.get("expires_in", 3600))).strftime("%Y-%m-%dT%H:%M:%SZ")
                     update_whoop_tokens(uid, access_token, new_refresh, new_expires_at)
                 else:
                     return None
@@ -606,10 +629,11 @@ async def tool_get_recovery(request: Request):
 
         # Build date filter
         params = {"limit": 1}
-        if date_str:
+        clean_date = _clean_date_param(body.get("date"))
+        if clean_date:
             # Filter for specific date
-            params["start"] = f"{date_str}T00:00:00.000Z"
-            params["end"] = f"{date_str}T23:59:59.999Z"
+            params["start"] = f"{clean_date}T00:00:00.000Z"
+            params["end"] = f"{clean_date}T23:59:59.999Z"
 
         result = whoop_api_request(uid, "GET", "/recovery", params=params)
 
@@ -659,9 +683,10 @@ async def tool_get_strain(request: Request):
 
         # Build date filter
         params = {"limit": 1}
-        if date_str:
-            params["start"] = f"{date_str}T00:00:00.000Z"
-            params["end"] = f"{date_str}T23:59:59.999Z"
+        clean_date = _clean_date_param(body.get("date"))
+        if clean_date:
+            params["start"] = f"{clean_date}T00:00:00.000Z"
+            params["end"] = f"{clean_date}T23:59:59.999Z"
 
         result = whoop_api_request(uid, "GET", "/cycle", params=params)
 
@@ -708,9 +733,10 @@ async def tool_get_sleep(request: Request):
 
         # Build date filter
         params = {"limit": 1}
-        if date_str:
-            params["start"] = f"{date_str}T00:00:00.000Z"
-            params["end"] = f"{date_str}T23:59:59.999Z"
+        clean_date = _clean_date_param(body.get("date"))
+        if clean_date:
+            params["start"] = f"{clean_date}T00:00:00.000Z"
+            params["end"] = f"{clean_date}T23:59:59.999Z"
 
         result = whoop_api_request(uid, "GET", "/activity/sleep", params=params)
 
@@ -766,7 +792,7 @@ async def tool_get_workouts(request: Request):
             return ChatToolResponse(error="Please connect your Whoop first in the app settings.")
 
         # Calculate date range
-        end_date = datetime.utcnow()
+        end_date = datetime.now(timezone.utc)
         start_date = end_date - timedelta(days=days)
 
         params = {
@@ -817,7 +843,7 @@ async def tool_get_weekly_summary(request: Request):
             return ChatToolResponse(error="Please connect your Whoop first in the app settings.")
 
         # Get last 7 days of data
-        end_date = datetime.utcnow()
+        end_date = datetime.now(timezone.utc)
         start_date = end_date - timedelta(days=7)
 
         params = {
@@ -835,24 +861,37 @@ async def tool_get_weekly_summary(request: Request):
         # Calculate averages
         recovery_scores = []
         for r in recovery_records or []:
-            score = r.get("score", {}).get("recovery_score")
-            if score is not None:
-                recovery_scores.append(score)
+            if not isinstance(r, dict):
+                continue
+            score = r.get("score")
+            if isinstance(score, dict):
+                val = _safe_float(score.get("recovery_score"))
+                if val is not None:
+                    recovery_scores.append(val)
 
         strain_scores = []
         for c in cycle_records or []:
-            strain = c.get("score", {}).get("strain")
-            if strain is not None:
-                strain_scores.append(strain)
+            if not isinstance(c, dict):
+                continue
+            score = c.get("score")
+            if isinstance(score, dict):
+                val = _safe_float(score.get("strain"))
+                if val is not None:
+                    strain_scores.append(val)
 
         sleep_hours = []
         for s in sleep_records or []:
-            summary = s.get("score", {}).get("stage_summary", {})
-            total = summary.get("total_in_bed_time_milli", 0)
-            awake = summary.get("total_awake_time_milli", 0)
-            sleep_ms = total - awake
-            if sleep_ms > 0:
-                sleep_hours.append(sleep_ms / (1000 * 60 * 60))
+            if not isinstance(s, dict):
+                continue
+            score = s.get("score")
+            if isinstance(score, dict):
+                summary = score.get("stage_summary")
+                if isinstance(summary, dict):
+                    total = _safe_float(summary.get("total_in_bed_time_milli"), 0.0) or 0.0
+                    awake = _safe_float(summary.get("total_awake_time_milli"), 0.0) or 0.0
+                    sleep_ms = total - awake
+                    if sleep_ms > 0:
+                        sleep_hours.append(sleep_ms / (1000 * 60 * 60))
 
         result_parts = ["**Weekly Summary (Last 7 Days)**", ""]
 
@@ -916,7 +955,7 @@ async def tool_get_body_measurements(request: Request):
         if not access_token:
             return ChatToolResponse(error="Please connect your Whoop first in the app settings.")
 
-        result = whoop_api_request(uid, "GET", "/body_measurement")
+        result = whoop_api_request(uid, "GET", "/user/measurement/body")
 
         if not result or "error" in result:
             return ChatToolResponse(error=f"Failed to get measurements: {result.get('error', 'Unknown error')}")
@@ -1130,7 +1169,7 @@ async def whoop_callback(
                 <div class="container">
                     <div class="error-box">
                         <h2>Authorization Failed</h2>
-                        <p>{error}</p>
+                        <p>{html.escape(error or "", quote=True)}</p>
                     </div>
                 </div>
             </body>

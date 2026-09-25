@@ -24,6 +24,8 @@ os.environ.setdefault('MEMORY_MODE', 'read')
 # so client construction remains hermetic when those tests invoke it.
 os.environ.setdefault('OPENAI_API_KEY', 'fake-key-for-hermetic-tests')
 os.environ.setdefault('PERPLEXITY_API_KEY', 'fake-key-for-hermetic-tests')
+# The gateway readiness check requires the managed systemone provider key.
+os.environ.setdefault('OPENROUTER_API_KEY', 'fake-key-for-hermetic-tests')
 
 # Some unit tests exercise token counting. Stub tiktoken before any test
 # triggers an encoding lookup, avoiding a download in hermetic CI.
@@ -33,6 +35,15 @@ if 'tiktoken' not in sys.modules:
     sys.modules['tiktoken'] = _tiktoken_stub
 
 from testing.hermetic_network import block_outbound_network
+
+
+@pytest.fixture
+def luna_model() -> str:
+    """Canonical Luna model id. Backend tests use this instead of a versioned literal."""
+    from utils.llm.model_config import LUNA_MODEL
+
+    return LUNA_MODEL
+
 
 _network_guard = None
 _test_file_durations = defaultdict(float)

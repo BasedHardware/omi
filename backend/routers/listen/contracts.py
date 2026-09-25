@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Optional
 
+from routers.listen.realtime_demand import RealtimeDemandTracker
 from utils.client_device import ClientDeviceContext
 from models.geolocation import Geolocation
 
@@ -81,11 +82,14 @@ class ListenSessionState:
     fair_use_plan: Optional[Any] = None
     dg_usage_ms_pending: int = 0
     last_audio_received_time: Optional[float] = None
+    last_audio_resume_time: Optional[float] = None
     last_activity_time: Optional[float] = None
     # Client-provided close provenance. This is set before a normal WebSocket
     # close so finalization can distinguish an internal rotation from a
     # terminal meeting end without trusting socket timing.
     finalization_reason: Optional[str] = None
+    # Who could watch this session live; see routers/listen/realtime_demand.py.
+    realtime_demand: RealtimeDemandTracker = field(default_factory=RealtimeDemandTracker)
 
 
 @dataclass(frozen=True)

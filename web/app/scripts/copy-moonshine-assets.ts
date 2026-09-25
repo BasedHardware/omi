@@ -271,6 +271,10 @@ const handler = createRequestHandler({
 // Prevent clickjacking: disallow embedding any page (incl. /login) in a frame.
 const fetch = async (request) => {
   const response = await handler(request);
+  // Streamed chat replies can pause for 25s during a tool call, longer than Bun's 10s idle default.
+  if (response.headers.get('content-type')?.includes('text/event-stream')) {
+    server.timeout(request, 60);
+  }
   const headers = new Headers(response.headers);
   headers.set('X-Frame-Options', 'DENY');
   headers.set('Content-Security-Policy', "frame-ancestors 'none'");

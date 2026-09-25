@@ -14,6 +14,7 @@ import redis as redis_pkg
 
 from database.redis_db import check_rate_limit, try_acquire_listen_lock
 from database import users as users_db
+from database.firestore_tier_context import bind_request_owner
 from database.account_deletion_policy import account_deletion_blocks_access
 from database.users import record_client_device, record_user_platform
 from utils.account_cutover.access import (
@@ -80,6 +81,7 @@ def _account_deletion_status(uid: str) -> str | None:
 
 
 def enforce_account_deletion_http_access(uid: str) -> None:
+    bind_request_owner(uid)
     status = _account_deletion_status(uid)
     if account_deletion_blocks_access(status):
         raise HTTPException(
@@ -93,6 +95,7 @@ def enforce_account_deletion_http_access(uid: str) -> None:
 
 
 def enforce_account_deletion_ws_access(uid: str) -> None:
+    bind_request_owner(uid)
     try:
         status = _account_deletion_status(uid)
     except HTTPException as error:
@@ -157,10 +160,13 @@ def verify_token(token: str) -> str:
         # main.py's firebase_admin.initialize_app branches). This keeps the
         # bypass inert the moment real credentials are present, without
         # requiring test paths to change what they already do.
+        # A keyless deployment has no credential variable at all; its
+        # customer-data project pin marks it as real just the same.
         no_real_credential = not (
             os.getenv('SERVICE_ACCOUNT_JSON')
             or os.getenv('GOOGLE_APPLICATION_CREDENTIALS')
             or os.getenv('FIREBASE_AUTH_CREDENTIALS_PATH')
+            or os.getenv('OMI_CUSTOMER_DATA_PROJECT')
         )
         if os.getenv('LOCAL_DEVELOPMENT') == 'true' and no_real_credential:
             return '123'

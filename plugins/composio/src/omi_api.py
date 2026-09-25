@@ -8,6 +8,7 @@ import logging
 from dotenv import load_dotenv
 
 from .db import get_pending_memories, update_memory_status, get_all_memories
+from .tools_auth import require_composio_tools_auth
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -17,6 +18,7 @@ load_dotenv()
 APP_ID = os.getenv("OMI_APP_ID")
 API_KEY = os.getenv("OMI_API_KEY")
 API_BASE_URL = "https://api.omi.me/v2/integrations"
+ALLOWED_TEXT_SOURCES = frozenset({"email", "social_post", "other"})
 
 if not APP_ID or not API_KEY:
     logger.error("OMI credentials not found in environment variables")
@@ -39,6 +41,24 @@ class MemoryBatch(BaseModel):
     memories: List[str]
 
 
+def _normalize_text_source(source: Optional[str], source_spec: Optional[str]):
+    """Keep integration payloads within the backend enum without losing provenance."""
+    if isinstance(source, str) and source in ALLOWED_TEXT_SOURCES:
+        return source, source_spec
+
+    if source is None or source == "":
+        return "other", source_spec
+
+    original_source = str(source)
+    if source_spec:
+        spec_parts = source_spec.split(":")
+        if original_source not in spec_parts:
+            source_spec = f"{source_spec}:{original_source}"
+    else:
+        source_spec = original_source
+    return "other", source_spec
+
+
 # Helper function to create a fact in OMI
 def create_fact(user_id: str, text: str, source: str = "other", source_spec: Optional[str] = None) -> bool:
     """
@@ -58,16 +78,19 @@ def create_fact(user_id: str, text: str, source: str = "other", source_spec: Opt
         logger.error(error_msg)
         raise ValueError(error_msg)
 
-    url = f"{API_BASE_URL}/{APP_ID}/user/facts?uid={user_id}"
+    # Facts and memories share the integration API contract; the backend route
+    # is named /user/memories (the /user/facts path does not exist).
+    url = f"{API_BASE_URL}/{APP_ID}/user/memories?uid={user_id}"
     headers = {"Authorization": f"Bearer {API_KEY}", "Content-Type": "application/json"}
 
+    normalized_source, normalized_source_spec = _normalize_text_source(source, source_spec)
     payload = {
         "text": text,
-        "text_source": source,
+        "text_source": normalized_source,
     }
 
-    if source_spec:
-        payload["text_source_spec"] = source_spec
+    if normalized_source_spec:
+        payload["text_source_spec"] = normalized_source_spec
 
     try:
         logger.info(f"Sending fact to OMI API - URL: {url}")
@@ -115,7 +138,11 @@ async def store_fact(uid: str, text: str, source_type: str = "notion", source_id
 
 
 @router.post("/facts", status_code=status.HTTP_200_OK)
-async def create_memory(memory: MemoryCreate, uid: str):
+async def create_memory(
+    memory: MemoryCreate,
+    uid: str,
+    _: None = Depends(require_composio_tools_auth),
+):
     """Create a single memory/fact in OMI"""
     success = create_fact(user_id=uid, text=memory.text, source=memory.text_source, source_spec=memory.text_source_spec)
 
@@ -126,7 +153,10 @@ async def create_memory(memory: MemoryCreate, uid: str):
 
 
 @router.post("/facts/batch", status_code=status.HTTP_200_OK)
-async def create_memories_batch(data: MemoryBatch):
+async def create_memories_batch(
+    data: MemoryBatch,
+    _: None = Depends(require_composio_tools_auth),
+):
     """Create multiple memories/facts in OMI"""
     results = []
 

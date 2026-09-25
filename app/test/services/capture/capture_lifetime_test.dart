@@ -218,8 +218,11 @@ void main() {
     bag.own(() => gate.future);
     final controller = StreamController<int>.broadcast(sync: true);
     final events = <String>[];
-    final sub =
-        bag.listen(controller.stream, (_) => events.add('original'), onError: (Object _) => events.add('error'));
+    final sub = bag.listen(
+      controller.stream,
+      (_) => events.add('original'),
+      onError: (Object _) => events.add('error'),
+    );
     sub.onData((_) => events.add('replacement'));
     controller.add(0);
     controller.addError(StateError('before-close'));

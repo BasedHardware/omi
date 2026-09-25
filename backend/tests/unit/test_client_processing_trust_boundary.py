@@ -126,6 +126,7 @@ _SCAN_FILES: tuple[str, ...] = (
     'models/client_processing.py',
     'models/conversation.py',
     'routers/developer.py',
+    'utils/conversations/meeting_context.py',
     'utils/conversations/process_conversation.py',
     'utils/conversations/projection_payload.py',
     # Named intelligence plumbing.
@@ -523,7 +524,7 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
         DumpSite('utils/conversations/process_conversation.py', '_store_deferred_conversation', 'dict'),
         DumpSite('utils/conversations/process_conversation.py', '_terminal_persist_payload', 'dict'),
         DumpSite('utils/conversations/process_conversation.py', '_normal_persist_payload', 'dict'),
-        DumpSite('utils/conversations/process_conversation.py', '_store_meeting_context', 'model_dump'),
+        DumpSite('utils/conversations/meeting_context.py', 'store_meeting_context', 'model_dump'),
         DumpSite('utils/conversations/process_conversation.py', '_emit_derived_effects', 'dict'),
         DumpSite('utils/conversations/process_conversation.py', '_emit_derived_effects', 'model_dump'),
         DumpSite('utils/conversations/process_conversation.py', 'process_user_emotion', 'dict'),
@@ -540,8 +541,6 @@ PINNED_CONVERSATION_DUMPS: FrozenSet[DumpSite] = frozenset(
         DumpSite('routers/conversations.py', 'set_action_item_status', 'model_dump'),
         DumpSite('routers/conversations.py', 'update_action_item_description', 'model_dump'),
         DumpSite('routers/conversations.py', 'delete_action_item', 'model_dump'),
-        DumpSite('routers/conversations.py', 'set_assignee_conversation_segment', 'model_dump'),
-        DumpSite('routers/conversations.py', 'assign_segments_bulk', 'model_dump'),
         DumpSite('routers/conversations.py', 'get_conversation_suggested_apps', 'model_dump'),
         DumpSite('database/conversations.py', 'store_model_segments_result', 'model_dump'),
         DumpSite('database/conversations.py', '_store', 'model_dump'),
@@ -637,6 +636,18 @@ PINNED_CONVERSATION_FIELDS: FrozenSet[str] = frozenset(
         'meeting_treatment_reason',
         'meeting_duration_s',
         'meeting_dedup_speech_s',
+        # Server-authored sync intake metadata (FC-split-mutation-authority).
+        # `sync_content_revision` fences stale processors against newer
+        # transcripts; `sync_relevance` is the deterministic keep/review
+        # decision. Neither carries client-authored text, so the integration
+        # redactor must NOT strip them (same §1.7 precedent as
+        # processing_state) — they are pinned here as non-projection-family.
+        'sync_relevance',
+        'sync_content_revision',
+        # Server-authored cross-surface event membership (#3244): member ids,
+        # sources, and windows only, written solely by database.capture_groups.
+        # No client-authored text, so not projection-family.
+        'capture_group',
     }
 )
 

@@ -134,6 +134,27 @@ def test_search_populates_the_shared_cache_on_a_cold_read(env):
     assert 'description' in cached[0]
 
 
+def test_search_enriches_only_query_matches(env, monkeypatch):
+    enrichment_ids = {}
+
+    def installs(ids):
+        enrichment_ids['installs'] = list(ids)
+        return {'a1': 3}
+
+    def reviews(ids):
+        enrichment_ids['reviews'] = list(ids)
+        return {}
+
+    monkeypatch.setattr(apps_mod, 'get_apps_installs_count', installs)
+    monkeypatch.setattr(apps_mod, 'get_apps_reviews', reviews)
+
+    response = env.client.get('/v2/apps/search', params={'q': 'todoist', 'limit': 100})
+
+    assert response.status_code == 200
+    assert [a['id'] for a in response.json()['data']] == ['a1']
+    assert enrichment_ids == {'installs': ['a1'], 'reviews': ['a1']}
+
+
 def test_warm_cache_serves_search_without_streaming_the_collection(env):
     assert env.client.get('/v2/apps/search', params={'q': 'grok', 'limit': 100}).status_code == 200
     env.firestore.collection_obj.streams = 0

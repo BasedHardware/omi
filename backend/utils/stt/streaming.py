@@ -31,6 +31,7 @@ from config.stt_provider_policy import (
     provider_is_enabled,
     supports_live_multilingual_mode,
 )
+from utils.stt.live_rollout import configured_chain_enabled, window_allocation, window_language_supported
 from utils.async_tasks import create_named_task
 from utils.byok import get_byok_key
 from utils.executors import sync_executor, run_blocking
@@ -44,6 +45,7 @@ from utils.stt.provider_resilience import (
     ProviderCircuitBreaker,
     close_rejected_socket,
     fallback_socket_is_serving,
+    soniox_circuit_from_env,
 )
 from utils.stt.speaker_embedding import (
     async_extract_embedding_from_bytes,
@@ -51,6 +53,12 @@ from utils.stt.speaker_embedding import (
 )
 from utils.stt.speaker_clustering import select_speaker_cluster
 from utils.observability.fallback import record_fallback
+from utils.stt.stream_close import (
+    ACCOUNT_REJECTION_REASONS,
+    PROVIDER_AUTH_REJECTED,
+    PROVIDER_BUDGET_EXHAUSTED,
+    record_stt_stream_close,
+)
 from utils.other.backoff import calculate_backoff_with_jitter
 import logging
 
@@ -81,6 +89,48 @@ class ParakeetConnectionError(RuntimeError):
         super().__init__(detail or reason)
 
 
+class DeepgramConnectionRejection(RuntimeError):
+    """Deepgram refused the WebSocket upgrade with a typed HTTP answer.
+
+    ``status_code`` carries the refusal status (401 invalid key, 402
+    billing/quota, 403 forbidden). The SDK's ``websockets`` transport raises
+    ``websockets.exceptions.InvalidStatus`` for these; this wrapper keeps the
+    answer typed instead of letting it collapse into a generic 'could not open
+    socket' string or a ``start() returned False`` retry (2026-09-18 prod: a
+    hosted key answered HTTP 402 for 12+h and every session logged the refusal
+    three times under four signatures, none naming 402).
+    """
+
+    def __init__(self, detail: str, status_code: Optional[int] = None) -> None:
+        self.status_code = status_code
+        super().__init__(detail)
+
+
+# Account-state answers: no retry of the same connect can change them. 429 is
+# deliberately absent — a rate limit can clear between attempts.
+_TERMINAL_REJECTION_STATUSES: Final[frozenset] = frozenset({401, 402, 403})
+
+
+def deepgram_rejection_status(error: BaseException) -> Optional[int]:
+    """Return the HTTP status of a terminal Deepgram WebSocket-upgrade refusal.
+
+    The Deepgram SDK (4.8.1) raises ``websockets.exceptions.InvalidStatus``
+    (or the legacy ``InvalidStatusCode``) from ``start`` when the endpoint
+    refuses the upgrade. Only account-state rejections are terminal:
+    401/402/403 answer deterministically for every attempt, so retrying the
+    same connect cannot succeed and only delays failover. Timeouts and
+    transient statuses (429, 5xx) stay unclassified — those same-call retries
+    have historically recovered.
+    """
+
+    status = getattr(getattr(error, 'response', None), 'status_code', None)
+    if not isinstance(status, int):
+        status = getattr(error, 'status_code', None)
+    if isinstance(status, int) and status in _TERMINAL_REJECTION_STATUSES:
+        return status
+    return None
+
+
 _parakeet_circuit = ProviderCircuitBreaker(
     failure_threshold=int(os.getenv('PARAKEET_CIRCUIT_FAILURE_THRESHOLD', '3')),
     cooldown_seconds=float(os.getenv('PARAKEET_CIRCUIT_COOLDOWN_SECONDS', '30')),
@@ -98,10 +148,7 @@ _modulate_circuit = ProviderCircuitBreaker(
     serve_error_cooldown_seconds=float(os.getenv('MODULATE_SERVE_ERROR_CIRCUIT_COOLDOWN_SECONDS', '180')),
     serve_error_successes_to_close=int(os.getenv('MODULATE_SERVE_ERROR_SUCCESSES_TO_CLOSE', '3')),
 )
-_soniox_circuit = ProviderCircuitBreaker(
-    failure_threshold=int(os.getenv('MODULATE_CIRCUIT_FAILURE_THRESHOLD', '3')),
-    cooldown_seconds=float(os.getenv('MODULATE_CIRCUIT_COOLDOWN_SECONDS', '30')),
-)
+_soniox_circuit = soniox_circuit_from_env()
 
 
 def _circuit_for_primary(primary_service: STTService) -> ProviderCircuitBreaker:
@@ -134,19 +181,24 @@ def open_provider_selection_circuit(provider: str | None, *, reason: str) -> boo
     except ValueError:
         return False
     circuit = _circuit_for_primary(service)
-    logger.warning('Opening %s selection circuit after serve-time death reason=%s', provider, reason)
-    circuit.record_serve_failure()
+    if configured_chain_enabled() and reason in ACCOUNT_REJECTION_REASONS:
+        circuit.record_account_failure(float(os.getenv('STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS', '1800')))
+    else:
+        circuit.record_serve_failure()
+    # Logged AFTER the record so bench_seconds is the window just armed — an
+    # outage keeps dying here from every rescue, and this is what makes the
+    # escalation ladder visible in logs instead of a flat repeating record.
+    logger.warning(
+        'Opening %s selection circuit after serve-time death reason=%s bench_seconds=%s',
+        provider,
+        reason,
+        circuit.serve_error_bench_seconds,
+    )
     return True
 
 
 def _primary_streaming_service() -> Optional[STTService]:
-    """Return the STT service leading ``STT_SERVICE_MODELS`` for streaming.
-
-    Walks the same policy-owned preference list ``get_stt_service_for_language``
-    selects from, so a provider migration (e.g. Deepgram -> Modulate) that
-    reorders that list is honored here automatically instead of leaving a
-    call site naming a provider that stopped being primary.
-    """
+    """First configured provider; see ARCHITECTURE.md (incident history)."""
     for model in (m.strip() for m in stt_service_models):
         provider = provider_for_model_token(model)
         if provider is None:
@@ -163,19 +215,9 @@ def _primary_streaming_service() -> Optional[STTService]:
 
 
 def is_stt_available() -> bool:
-    """Best-effort, process-local signal for a client pre-flight check.
-
-    Reuses the existing per-process circuit breaker (a latency optimization,
-    not a fleet-wide coordinator - see provider_resilience.py) for whichever
-    provider is currently configured as the streaming primary, rather than a
-    provider hardcoded at the call site: false only while that provider's
-    breaker is open and its cooldown hasn't elapsed yet after repeated recent
-    failures. Uses ``cooldown_elapsed()`` rather than raw ``state`` because
-    the open->half_open transition otherwise only happens inside
-    ``allow_request()`` — without this, a quiet process with no concurrent
-    listen traffic would stay reporting "unavailable" forever after the
-    provider actually recovered.
-    """
+    """Read-only preflight; see ARCHITECTURE.md (incident history)."""
+    if configured_chain_enabled():
+        return True  # the chain owns admission, including its bounded last-resort probe
     primary = _primary_streaming_service()
     if primary is None:
         return True
@@ -267,8 +309,10 @@ async def _connect_serving_fallback(
         raise RuntimeError(f'{service.value} rejected the stream: {detail}')
     # A serving leg is positive evidence about the provider: let its own
     # circuit close (e.g. an account-rejection half-open probe that succeeds
-    # right after the bill was paid).
-    _circuit_for_primary(service).record_success()
+    # right after the bill was paid). ``serving=True`` because this helper
+    # only reaches here after proving the socket actually serves — evidence
+    # strong enough to close even a serve-death bench.
+    _circuit_for_primary(service).record_success(serving=True)
     return socket
 
 
@@ -279,24 +323,26 @@ async def connect_stt_socket_with_fallback(
     connect_modulate: Optional[Callable[[], Awaitable[Optional[STTSocket]]]] = None,
     connect_deepgram: Optional[Callable[[], Awaitable[Optional[STTSocket]]]] = None,
     connect_parakeet: Optional[Callable[[], Awaitable[Optional[STTSocket]]]] = None,
+    connect_soniox: Optional[Callable[[], Awaitable[Optional[STTSocket]]]] = None,
+    failed: Optional[set[str]] = None,
+    use_config: Optional[bool] = None,
 ) -> Tuple[STTSocket, STTService]:
-    """Connect the selected primary before audio starts, walking the configured fallbacks.
+    """Connect a serving provider; see ARCHITECTURE.md (incident history)."""
+    if configured_chain_enabled() if use_config is None else use_config:
+        from utils.stt.live_chain import connect_configured_chain
 
-    ``STT_SERVICE_MODELS`` states an ordered preference, so a primary that
-    cannot open a socket must advance to the next configured provider instead
-    of failing the session — a Deepgram account rejecting every connect with
-    HTTP 402 otherwise takes the whole deployment's live transcription down
-    (#11695). The chain must not stop at Modulate either: with Deepgram at HTTP
-    402 and Modulate answering 500/over quota, an English session died while a
-    healthy Parakeet deployment sat idle behind them in the same list (#11752).
-    Modulate is a primary as well as a fallback: a deployment listing
-    ``modulate-velma-2,dg-nova-3,parakeet`` lost 100% of its sessions for ~50
-    minutes because a Modulate primary bypassed this helper entirely (#11752).
-
-    The circuit is deliberately process-local and never owns capacity. The
-    Parakeet service rejects excess streams at its GPU boundary; this helper
-    only avoids repeated connection latency while a provider is unhealthy.
-    """
+        return await connect_configured_chain(
+            primary_service=primary_service,
+            connect_primary=connect_primary,
+            callbacks={
+                STTService.modulate: connect_modulate,
+                STTService.deepgram: connect_deepgram,
+                STTService.parakeet: connect_parakeet,
+                STTService.soniox: connect_soniox,
+            },
+            failed=failed if failed is not None else set(),
+            models=stt_service_models,
+        )
     circuit = _circuit_for_primary(primary_service)
 
     reason = 'circuit_open'
@@ -305,6 +351,27 @@ async def connect_stt_socket_with_fallback(
             socket = await connect_primary()
             if socket is None:
                 reason = 'config_incomplete'
+                circuit.record_failure()
+            elif primary_service is STTService.modulate and circuit.state == 'half_open':
+                # This probe was admitted under a serve-error bench. The
+                # breaker must re-close on real serving evidence — a
+                # transcript segment or the stream's done frame — never on
+                # the 0.3s liveness grace alone, which a doomed stream passes
+                # before the provider fault kills it mid-session. Attached
+                # BEFORE the grace so a transcript arriving inside the grace
+                # still lands (the evidence must never fire into a noop).
+                attach = getattr(socket, 'set_health_callbacks', None)
+                if callable(attach):
+                    on_serving, _on_released = circuit.replacement_callbacks(serving=True)
+                    attach(on_serving, _on_released)
+                if await _primary_is_serving(primary_service, socket):
+                    circuit.record_success()
+                    return socket, primary_service
+                # The grace observed the probe dying: the same rejected-stream
+                # handling as the healthy path below.
+                detail = getattr(socket, 'death_reason', None) or 'stream rejected'
+                close_rejected_socket(socket)
+                reason = _fallback_failure_reason(RuntimeError(detail))
                 circuit.record_failure()
             elif await _primary_is_serving(primary_service, socket):
                 circuit.record_success()
@@ -316,6 +383,14 @@ async def connect_stt_socket_with_fallback(
                 close_rejected_socket(socket)
                 reason = _fallback_failure_reason(RuntimeError(detail))
                 circuit.record_failure()
+        except DeepgramConnectionRejection:
+            # A typed, non-retryable account refusal (HTTP 401/402/403) keeps
+            # its class for the fallback legs and the circuit: mapping it to
+            # the generic 'provider_5xx' made the true cause unrecoverable
+            # from stt_selection telemetry (the 2026-09-18 HTTP 402 incident
+            # was only diagnosable from the raw SDK error lines).
+            reason = 'auth'
+            circuit.record_failure()
         except ParakeetConnectionError as error:
             reason = error.reason
             if reason in EXPECTED_REJECTIONS:
@@ -340,12 +415,7 @@ async def connect_stt_socket_with_fallback(
             reason = 'provider_5xx'
             circuit.record_failure()
 
-    # A provider is never offered its own failure as a fallback, so the chain
-    # excludes the primary: a Modulate primary walks Deepgram then Parakeet
-    # (#11752). The relative order of the fallback legs is fixed here and is not
-    # parsed out of STT_SERVICE_MODELS; it matches the declared deployment
-    # config, and callers already gate each leg on whether the deployment can
-    # serve it. Reading the true order off the policy list is a separate change.
+    # Legacy order is retained while the configured chain is dark.
     ordered: List[Tuple[STTService, Optional[Callable[[], Awaitable[Optional[STTSocket]]]]]] = [
         (STTService.modulate, connect_modulate),
         (STTService.deepgram, connect_deepgram),
@@ -355,13 +425,15 @@ async def connect_stt_socket_with_fallback(
         (service, connect)
         for service, connect in ordered
         if connect is not None and service != primary_service
-        # A fallback leg whose own circuit is still open (serve death or
-        # account rejection) is skipped, not dialed: re-offering a provider
-        # the circuit already condemned is what kept re-dialing a spent
-        # Deepgram key (#11695 recurrence 2026-09). Read-only check: a leg
-        # dial must not claim the half-open probe slot that belongs to the
-        # primary path.
-        and _circuit_for_primary(service).cooldown_elapsed()
+        # A fallback leg whose credential is rejecting at account level
+        # (HTTP 402 — deterministic until the bill is paid) is skipped, not
+        # dialed: re-offering a provider the account bench condemned is what
+        # kept re-dialing a spent Deepgram key (#11695 recurrence 2026-09).
+        # Serve-death and connect benches stay ignorable here — the legacy
+        # lane's fixed-order contract dials through them. Read-only check: a
+        # leg dial must not claim the half-open probe slot that belongs to
+        # the primary path.
+        and _circuit_for_primary(service).account_cooldown_elapsed()
     ]
 
     from_mode = primary_service.value
@@ -597,13 +669,7 @@ def deepgram_fallback_model(language: Optional[str]) -> Optional[str]:
 
 
 def parakeet_is_configured_fallback(language: Optional[str]) -> bool:
-    """Return whether Parakeet may take over a session whose earlier providers failed.
-
-    Same contract as ``modulate_is_configured_fallback``, one provider further
-    down the ordered ``STT_SERVICE_MODELS`` preference: the deployment must list
-    Parakeet, the policy must serve it, its endpoint must be configured, and it
-    must support the session's resolved provider language.
-    """
+    """RNNT fallback eligibility; see ARCHITECTURE.md (incident history)."""
     return (
         STTService.parakeet.value in (model.strip() for model in stt_service_models)
         and provider_is_enabled(PARAKEET_PROVIDER, STTServingSurface.STREAMING)
@@ -658,18 +724,9 @@ def get_stt_service_for_language(
     surface: STTServingSurface = STTServingSurface.STREAMING,
     preferred_service: Optional[str] = None,
     exclude: frozenset[str] = frozenset(),
+    window_uid: Optional[str] = None,
 ) -> Tuple[Optional[STTService], Optional[str], Optional[str]]:
-    """Select a serving STT provider allowed for the requested product surface.
-
-    ``exclude`` holds provider tokens that already died for this session, so a
-    mid-session failover asks for the next provider down the chain rather than
-    reselecting the one that just failed.
-
-    A ``dg-*`` configuration serves from whichever Deepgram deployment the
-    runtime is configured for — self-hosted when its endpoint is set, otherwise
-    the hosted API. Without credentials it falls through to the policy-owned
-    alternatives rather than failing the session.
-    """
+    """Select a surface-compatible provider; see ARCHITECTURE.md (incident history)."""
     # Missing language metadata historically meant English. Preserve that
     # behavior without opening a retired-provider fallback for unknown values.
     base_lang = normalized_stt_language(language) or 'en'
@@ -699,6 +756,15 @@ def get_stt_service_for_language(
                 if language in deepgram_nova3_languages:
                     return (STTService.deepgram, language, dg_model), parakeet_fallback_reason
                 continue
+            if model == 'parakeet-window' and surface == STTServingSurface.STREAMING:
+                if not window_allocation(window_uid):
+                    parakeet_fallback_reason = 'allocation_rejected'
+                elif not window_language_supported(language, requested_language):
+                    parakeet_fallback_reason = 'capability_mismatch'
+                elif os.getenv('HOSTED_PARAKEET_API_URL'):
+                    return (STTService.parakeet, requested_language, model), parakeet_fallback_reason
+                else:
+                    parakeet_fallback_reason = 'config_incomplete'
             if model == 'parakeet':
                 if provider_is_enabled(PARAKEET_PROVIDER, surface) and os.getenv('HOSTED_PARAKEET_API_URL'):
                     if parakeet_supports_language(surface, requested_language):
@@ -746,12 +812,17 @@ def get_stt_service_for_language(
                 outcome='degraded',
             )
 
-    selected, parakeet_fallback_reason = select(stt_service_models)
+    models = stt_service_models
+    if configured_chain_enabled() and window_uid is None:
+        models = [model for model in models if model.strip() != 'parakeet-window']
+    selected, parakeet_fallback_reason = select(models)
     if selected is not None:
         record_selected_fallback(selected, used_default=False, parakeet_fallback_reason=parakeet_fallback_reason)
         return selected
 
-    selected, parakeet_fallback_reason = select(default_models_for_surface(surface))
+    selected, parakeet_fallback_reason = select(
+        () if window_uid is not None and configured_chain_enabled() else default_models_for_surface(surface)
+    )
     if selected is not None:
         record_selected_fallback(selected, used_default=True, parakeet_fallback_reason=parakeet_fallback_reason)
         return selected
@@ -786,8 +857,18 @@ def _deepgram_options(endpoint: str) -> DeepgramClientOptions:
     """Build options per client, pinned to an endpoint, never the SDK default.
 
     DeepgramClient.__init__ writes its key into what it is handed, so a shared
-    object strands the managed client on whichever BYOK key came last."""
-    options = DeepgramClientOptions(options={"termination_exception_connect": "true"})
+    object strands the managed client on whichever BYOK key came last.
+
+    The option value MUST be the boolean ``True``: the SDK checks it two ways
+    on the same connect (deepgram-sdk 4.8.1) — the shared websocket base class
+    tests truthiness (``options.get(..., False)``) and raises, but the
+    ``ListenWebSocketClient.start`` wrapper that actually serves sessions
+    re-tests with an identity comparison (``... is True``) and silently
+    swallows the exception back into ``start() is False`` when handed the
+    string ``"true"``. That swallow is what made a deterministic HTTP 402
+    account refusal look like a retryable 'start returned False' (three
+    identical attempts per session, ~4.2k log errors per 30m, 2026-09-18)."""
+    options = DeepgramClientOptions(options={"termination_exception_connect": True})
     options.url = endpoint
     return options
 
@@ -978,6 +1059,17 @@ async def connect_to_deepgram_with_backoff(
             # balance): retrying the same request cannot converge and only
             # multiplies the error volume. Surface it to the fallback chain.
             raise
+        except DeepgramConnectionRejection as error:
+            # A typed provider answer that no same-call retry can change
+            # (HTTP 401/402/403 auth or billing refusal): retrying inside
+            # this call only multiplies the log volume and delays failover
+            # by the full backoff ladder. Surface the terminal rejection
+            # immediately so the caller's provider chain moves on (2026-09-18
+            # prod: the account's hosted key answered HTTP 402 for 12+h and
+            # this loop tripled every rejection into both SDK error lines
+            # plus a start()-returned-False line per session).
+            logger.error('Deepgram connect rejected terminally after %d attempt(s): %s', attempt + 1, error)
+            raise
         except Exception as error:
             logger.error(f'An error occurred: {error}')
             if attempt == retries - 1:  # Last attempt
@@ -1085,6 +1177,17 @@ def connect_to_deepgram(
             return None
         return dg_connection
     except websockets.exceptions.WebSocketException as e:
+        status = deepgram_rejection_status(e)
+        if status is not None:
+            # The endpoint answered the upgrade with a deterministic
+            # account-state refusal (401 invalid key, 402 billing, 403
+            # forbidden). Keep it typed so the retry loop can stop wasting
+            # its budget and the fallback chain can name the reason.
+            if status == 402:
+                record_stt_stream_close(provider=STTService.deepgram.value, reason=PROVIDER_BUDGET_EXHAUSTED)
+            elif configured_chain_enabled():
+                record_stt_stream_close(provider=STTService.deepgram.value, reason=PROVIDER_AUTH_REJECTED)
+            raise DeepgramConnectionRejection(f'Could not open socket: HTTP {status} {e}', status_code=status) from e
         raise Exception(f'Could not open socket: WebSocketException {e}')
     except Exception as e:
         raise Exception(f'Could not open socket: {e}')
@@ -1108,32 +1211,37 @@ def _build_wav_header(sample_rate: int, bits_per_sample: int = 16, channels: int
 MODULATE_DEATH_SERVE_ERROR: Final = 'modulate_serve_error'
 
 # Velma's in-stream error frames are free text, so the fault boundary is
-# matched on normalized text. Server-fault shapes say the provider could not
-# serve the stream it accepted (5xx wording, or an explicit account-state
-# refusal); everything else — invalid audio we sent, rate limits — is either
-# our fault or this session's, and must not bench the provider fleet-wide.
+# matched on normalized text. Budget/quota is never transient and is the
+# same class as Soniox monthly-budget / Deepgram HTTP 402. 5xx wording is a
+# provider serve fault. Everything else — invalid audio we sent, rate limits
+# — is either our fault or this session's, and must not bench the provider.
+_MODULATE_BUDGET_MARKERS: Final = (
+    'monthly usage limit',
+    'usage limit reached',
+    'quota exceeded',
+)
 _MODULATE_SERVER_FAULT_MARKERS: Final = (
     'internal server error',
     'internal error',
     'unable to complete the request',
     'server error',
-    'monthly usage limit',  # account-state refusal: no stream can be served
-    'usage limit reached',
-    'quota exceeded',
 )
 
 
 def modulate_death_reason(err: Any) -> Optional[str]:
     """Bound a Velma in-stream error frame to a typed death reason.
 
-    Returns ``MODULATE_DEATH_SERVE_ERROR`` when the text says the provider
-    failed to serve the stream it accepted, else ``None`` (untyped — the raw
-    text stays on the death latch for logs). New provider wordings degrade to
-    untyped rather than growing a new bounded token per message.
+    Returns ``PROVIDER_BUDGET_EXHAUSTED`` for quota/monthly-cap text,
+    ``MODULATE_DEATH_SERVE_ERROR`` when the text says the provider failed to
+    serve the stream it accepted, else ``None`` (untyped — the raw text stays
+    on the death latch for logs). New provider wordings degrade to untyped
+    rather than growing a new bounded token per message.
     """
     normalized = str(err or '').strip().lower().rstrip('.')
     if not normalized:
         return None
+    if any(marker in normalized for marker in _MODULATE_BUDGET_MARKERS):
+        return PROVIDER_BUDGET_EXHAUSTED
     if any(marker in normalized for marker in _MODULATE_SERVER_FAULT_MARKERS):
         return MODULATE_DEATH_SERVE_ERROR
     return None
@@ -1170,11 +1278,36 @@ class SafeModulateSocket(STTSocket):
         # single odd-length frame ends the session even after valid audio. Nothing upstream
         # guarantees even-length buffers, so carry a trailing odd byte to the next frame.
         self._pending_odd_byte: bytes = b''
+        # Set by the selection layer for a probe admitted under a serve-error
+        # bench: fired once this socket has real serving evidence (a transcript
+        # segment or the provider's done frame) so the breaker may close.
+        self._health_success: Callable[[], None] = lambda: None
+        self._serving_observed = False
         self._recv_task: asyncio.Task[None] = asyncio.ensure_future(self._recv_loop(), loop=loop)
         self._send_task: asyncio.Task[None] = asyncio.ensure_future(self._send_loop(), loop=loop)
 
     def set_wav_header(self, header: bytes) -> None:
         self._wav_header = header
+
+    def set_health_callbacks(self, on_success: Callable[[], None], on_close: Callable[[], None]) -> None:
+        """Attach the selection circuit's health callbacks (probe evidence seam).
+
+        Only ``on_success`` is used today: the breaker closes on real serving
+        evidence, not on socket teardown, so ``on_close`` is accepted and
+        ignored to keep the shared signature. The callback fires at most once,
+        at the first transcript segment or the provider's done frame.
+        """
+
+        self._health_success = on_success
+
+    def _observe_served(self) -> None:
+        if self._serving_observed:
+            return
+        self._serving_observed = True
+        try:
+            self._health_success()
+        except Exception:
+            pass
 
     @property
     def is_connection_dead(self) -> bool:
@@ -1331,6 +1464,7 @@ class SafeModulateSocket(STTSocket):
                 if msg_type == 'error':
                     err = msg.get('error', msg.get('message', 'unknown error'))
                     typed = modulate_death_reason(err)
+                    record_stt_stream_close(provider=STTService.modulate.value, reason=typed)
                     if typed is not None:
                         # The provider accepted the stream and then failed to
                         # serve it: a provider fault, and the outage signal an
@@ -1348,6 +1482,7 @@ class SafeModulateSocket(STTSocket):
                     self._mark_dead(f'modulate error: {err}', typed_reason=typed)
                     break
                 elif msg_type == 'done':
+                    self._observe_served()
                     logger.info('Modulate streaming done: duration_ms=%s', msg.get('duration_ms'))
                     if self._prev_partial_text:
                         self._flush_partial()
@@ -1421,6 +1556,7 @@ class SafeModulateSocket(STTSocket):
         if not text:
             return
 
+        self._observe_served()
         self._prev_partial_text = ''
         self._prev_partial_word_count = 0
 
@@ -1690,6 +1826,9 @@ class ParakeetStreamingSocket(STTSocket):
             logger.error(f"Parakeet transcribe failed: {e}")
             return []
 
+        return await self._normalize_chunk(loaded, pcm, start, dur)
+
+    async def _normalize_chunk(self, loaded: object, pcm: bytes, start: float, dur: float) -> List[Dict[str, Any]]:
         if not isinstance(loaded, dict):
             return []
         data: Dict[str, Any] = cast(Dict[str, Any], loaded)

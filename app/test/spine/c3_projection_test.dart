@@ -6,7 +6,6 @@ import '../support/spine/contract.dart';
 
 void main() {
   contractTest('C3 malformed row cannot blank valid neighbors or escape through telemetry', () {
-    pendingContract('C3');
     final events = <ApiFallbackEvent>[];
     final result =
         decodeApiRows<int>('[{"n":1},{"private":"sensitive"},{"n":3}]', (row) => row['n'] as int, fallback: events.add);
@@ -25,7 +24,6 @@ void main() {
   });
   for (final body in ['bad-json', '{}', '[{}]', '[null,42,"private"]']) {
     contractTest('C3 $body is decode failure, never empty success or fallback', () {
-      pendingContract('C3');
       final events = <ApiFallbackEvent>[];
       final result = decodeApiRows<int>(body, (row) => row['n'] as int, fallback: events.add);
       expect((result as ApiFailure<List<int>>).problem.kind, ApiProblemKind.decode);
@@ -33,7 +31,6 @@ void main() {
     });
   }
   contractTest('C3 only valid empty success renders empty; stale data carries a visible error', () {
-    pendingContract('C3');
     final events = <ApiFallbackEvent>[];
     bool empty(List<int> rows) => rows.isEmpty;
     final success = decodeApiRows<int>('[]', (row) => row['n'] as int, fallback: events.add);
@@ -77,7 +74,6 @@ void main() {
     expect(events.single.outcome, ApiFallbackOutcome.degraded);
   });
   contractTest('C3 terminal authorization and entitlement failures never render stale protected data', () {
-    pendingContract('C3');
     for (final kind in [
       ApiProblemKind.authTerminal,
       ApiProblemKind.forbidden,
@@ -101,7 +97,6 @@ void main() {
     }
   });
   contractTest('C3 fallback emitter uses shared closed fields and one event', () {
-    pendingContract('C3');
     final emitted = <(String, Map<String, String>)>[];
     recordFallback(
         const ApiFallbackEvent(reason: ApiFallbackReason.partialDecode, outcome: ApiFallbackOutcome.degraded),

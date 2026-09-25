@@ -122,13 +122,18 @@ def shopify_api_request(
         elif response.status_code >= 400:
             error_data = response.json() if response.content else {}
             error_msg = error_data.get("errors", f"API error: {response.status_code}")
-            if isinstance(error_msg, dict):
+            if isinstance(error_msg, list):
+                error_msg = ", ".join(str(e) for e in error_msg)
+            elif isinstance(error_msg, dict):
+                error_msg = str(error_msg)
+            elif not isinstance(error_msg, str):
                 error_msg = str(error_msg)
             return {"error": error_msg}
         
         return response.json() if response.content else {"success": True}
     except requests.RequestException as e:
-        return {"error": f"Request failed: {str(e)}"}
+        print(f"❌ Shopify API request failed: {e}", flush=True)
+        return {"error": "Shopify API request failed"}
 
 
 def shopify_fetch_all_pages(
@@ -192,24 +197,82 @@ def get_user_shop(uid: str) -> Optional[str]:
     return tokens.get("shop_domain")
 
 
+def _signing_secret() -> Optional[str]:
+    """The app secret used for Shopify HMAC and OAuth state signing.
+
+    Returns None when the secret is absent or still the checked-in placeholder,
+    so every signature check fails closed rather than validating against a
+    value that is public in this repository.
+    """
+    secret = SHOPIFY_CLIENT_SECRET
+    if not secret or secret == "YOUR_CLIENT_SECRET_HERE":
+        return None
+    return secret
+
+
 def verify_shopify_hmac(query_string: str, hmac_value: str) -> bool:
-    """Verify the HMAC signature from Shopify."""
-    # Parse query string and remove hmac parameter
-    params = urllib.parse.parse_qs(query_string)
+    """Verify the HMAC signature Shopify puts on OAuth redirects.
+
+    Shopify signs the *decoded* `key=value` pairs, sorted by key and joined
+    with `&` — not a re-percent-encoded query string. Blank values are part of
+    the signed message, and repeated keys are joined with commas.
+    """
+    secret = _signing_secret()
+    if not secret or not hmac_value:
+        return False
+
+    params = urllib.parse.parse_qs(query_string, keep_blank_values=True)
     params.pop('hmac', None)
-    
-    # Sort and encode parameters
-    sorted_params = sorted(params.items())
-    encoded = urllib.parse.urlencode([(k, v[0]) for k, v in sorted_params])
-    
-    # Calculate HMAC
+    params.pop('signature', None)
+
+    message = "&".join(
+        f"{key}={','.join(values)}" for key, values in sorted(params.items())
+    )
+
     digest = hmac.new(
-        SHOPIFY_CLIENT_SECRET.encode('utf-8'),
-        encoded.encode('utf-8'),
+        secret.encode('utf-8'),
+        message.encode('utf-8'),
         hashlib.sha256
     ).hexdigest()
-    
+
     return hmac.compare_digest(digest, hmac_value)
+
+
+def _oauth_state_for(uid: str) -> str:
+    """Build a tamper-evident OAuth `state` binding the flow to this uid."""
+    secret = _signing_secret()
+    if not secret:
+        raise HTTPException(
+            status_code=500,
+            detail="SHOPIFY_CLIENT_SECRET is not configured",
+        )
+    signature = hmac.new(
+        secret.encode('utf-8'),
+        uid.encode('utf-8'),
+        hashlib.sha256
+    ).hexdigest()
+    return f"{uid}:{signature}"
+
+
+def _oauth_state_uid(state: str) -> Optional[str]:
+    """Return the uid carried by a `state` this server signed, else None."""
+    secret = _signing_secret()
+    if not secret or not state or ":" not in state:
+        return None
+
+    uid, _, signature = state.rpartition(":")
+    if not uid:
+        return None
+
+    expected = hmac.new(
+        secret.encode('utf-8'),
+        uid.encode('utf-8'),
+        hashlib.sha256
+    ).hexdigest()
+
+    if not hmac.compare_digest(expected, signature):
+        return None
+    return uid
 
 
 def format_currency(amount: str, currency: str = "USD") -> str:
@@ -291,7 +354,8 @@ async def shopify_auth(uid: str, shop: Optional[str] = None):
         "client_id": SHOPIFY_CLIENT_ID,
         "scope": scopes,
         "redirect_uri": SHOPIFY_REDIRECT_URI,
-        "state": uid,  # Use uid as state to identify user on callback
+        # Signed so only flows this server started can bind a uid on callback.
+        "state": _oauth_state_for(uid),
     }
     
     auth_url = f"https://{shop}/admin/oauth/authorize?{urllib.parse.urlencode(params)}"
@@ -309,7 +373,9 @@ async def shopify_callback(
     code: Optional[str] = None,
     state: Optional[str] = None,
     shop: Optional[str] = None,
-    hmac: Optional[str] = None,
+    # Aliased: a parameter literally named `hmac` would shadow the `hmac`
+    # module for the whole function body.
+    hmac_value: Optional[str] = Query(None, alias="hmac"),
     error: Optional[str] = None,
     error_description: Optional[str] = None
 ):
@@ -327,9 +393,25 @@ async def shopify_callback(
             "authenticated": False,
             "error": "Invalid callback parameters"
         })
-    
-    uid = state
-    
+
+    # Reject anything Shopify did not sign, before the code is exchanged.
+    if not verify_shopify_hmac(str(request.url.query), hmac_value or ""):
+        return templates.TemplateResponse("setup.html", {
+            "request": request,
+            "authenticated": False,
+            "error": "Invalid callback signature"
+        })
+
+    # Only bind a uid whose state this server signed at initiation, otherwise
+    # a valid foreign grant can be rebound onto someone else's account.
+    uid = _oauth_state_uid(state)
+    if not uid:
+        return templates.TemplateResponse("setup.html", {
+            "request": request,
+            "authenticated": False,
+            "error": "Invalid callback state"
+        })
+
     # Exchange code for access token
     token_url = f"https://{shop}/admin/oauth/access_token"
     
@@ -374,7 +456,7 @@ async def shopify_callback(
         store_default_store(uid, shop, shop_data.get("name", shop))
     
     # Redirect to home with uid
-    return RedirectResponse(url=f"/?uid={uid}")
+    return RedirectResponse(url=f"/?uid={urllib.parse.quote(uid, safe='')}")
 
 
 @app.get("/setup/shopify", tags=["setup"])
@@ -388,7 +470,7 @@ async def check_setup(uid: str):
 async def disconnect_shopify(uid: str):
     """Disconnect Shopify account."""
     delete_shopify_tokens(uid)
-    return RedirectResponse(url=f"/?uid={uid}")
+    return RedirectResponse(url=f"/?uid={urllib.parse.quote(uid, safe='')}")
 
 
 # ============================================
@@ -437,6 +519,17 @@ def _coerce_int(
     except (ValueError, TypeError, OverflowError):
         return default
     return max(minimum, min(parsed, maximum))
+
+
+def _safe_float(value: Any, default: float = 0.0) -> float:
+    """Coerce an untyped input (e.g. from JSON) to float, safely defaulting on None or invalid types."""
+    if value is None or isinstance(value, bool):
+        return default
+    try:
+        return float(value)
+    except (ValueError, TypeError, OverflowError):
+        return default
+
 
 
 @app.post("/tools/get_analytics", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -558,21 +651,23 @@ async def tool_get_analytics(request: Request):
         total_orders = len(orders)
         
         # Shopify subtotal_price is already after line-item discounts.
-        post_discount_subtotal = sum(float(o.get("subtotal_price", 0)) for o in orders)
+        post_discount_subtotal = sum(_safe_float(o.get("subtotal_price")) for o in orders)
         
         # Total discounts applied
-        total_discounts = sum(float(o.get("total_discounts", 0)) for o in orders)
+        total_discounts = sum(_safe_float(o.get("total_discounts")) for o in orders)
         
         # Calculate refunds
         total_refunds = 0
         refunded_orders = 0
         for order in orders:
-            refunds = order.get("refunds", [])
-            if refunds:
+            refunds = order.get("refunds") or []
+            if refunds and isinstance(refunds, list):
                 refunded_orders += 1
                 for refund in refunds:
-                    for transaction in refund.get("transactions", []):
-                        total_refunds += float(transaction.get("amount", 0))
+                    if isinstance(refund, dict):
+                        for transaction in refund.get("transactions") or []:
+                            if isinstance(transaction, dict):
+                                total_refunds += _safe_float(transaction.get("amount"))
         
         # Present a true pre-discount gross so the Discounts row reconciles:
         # gross_sales - total_discounts - total_refunds == net_sales
@@ -580,12 +675,12 @@ async def tool_get_analytics(request: Request):
         net_sales = post_discount_subtotal - total_refunds
         
         # Total collected (what was actually charged - includes tax & shipping)
-        total_collected = sum(float(o.get("total_price", 0)) for o in orders)
+        total_collected = sum(_safe_float(o.get("total_price")) for o in orders)
         
         # Taxes and shipping
-        total_tax = sum(float(o.get("total_tax", 0)) for o in orders)
+        total_tax = sum(_safe_float(o.get("total_tax")) for o in orders)
         total_shipping = sum(
-            float(o.get("total_shipping_price_set", {}).get("shop_money", {}).get("amount", 0))
+            _safe_float(((o.get("total_shipping_price_set") or {}).get("shop_money") or {}).get("amount"))
             for o in orders
         )
         
@@ -665,8 +760,8 @@ async def tool_get_analytics(request: Request):
                         cost = inv_item.get("cost")
                         # Find matching variant
                         for var_id, iid in inventory_item_ids:
-                            if iid == inv_id and cost:
-                                variant_costs[var_id] = float(cost)
+                            if iid == inv_id and cost is not None:
+                                variant_costs[var_id] = _safe_float(cost)
         
         # Calculate total COGS
         items_with_cost = 0
@@ -751,7 +846,8 @@ async def tool_get_analytics(request: Request):
         return ChatToolResponse(result=result)
     
     except Exception as e:
-        return ChatToolResponse(error=f"Failed to get analytics: {str(e)}")
+        print(f"❌ Error getting analytics: {e}", flush=True)
+        return ChatToolResponse(error="Failed to get analytics due to an internal error.")
 
 
 @app.post("/tools/get_orders", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -825,7 +921,8 @@ async def tool_get_orders(request: Request):
         return ChatToolResponse(result="\n".join(lines))
     
     except Exception as e:
-        return ChatToolResponse(error=f"Failed to get orders: {str(e)}")
+        print(f"❌ Error getting orders: {e}", flush=True)
+        return ChatToolResponse(error="Failed to get orders due to an internal error.")
 
 
 @app.post("/tools/get_order_details", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -934,7 +1031,7 @@ async def tool_get_order_details(request: Request):
 🛒 **Items:**{items_text}
 
 💰 **Subtotal:** {format_currency(order.get('subtotal_price', '0'), currency)}
-📦 **Shipping:** {format_currency(order.get('total_shipping_price_set', {}).get('shop_money', {}).get('amount', '0'), currency)}
+📦 **Shipping:** {format_currency(((order.get('total_shipping_price_set') or {}).get('shop_money') or {}).get('amount', '0'), currency)}
 💵 **Tax:** {format_currency(order.get('total_tax', '0'), currency)}
 **Total:** {format_currency(order.get('total_price', '0'), currency)}{shipping_text}"""
         
@@ -944,7 +1041,8 @@ async def tool_get_order_details(request: Request):
         return ChatToolResponse(result=result_text)
     
     except Exception as e:
-        return ChatToolResponse(error=f"Failed to get order details: {str(e)}")
+        print(f"❌ Error getting order details: {e}", flush=True)
+        return ChatToolResponse(error="Failed to get order details due to an internal error.")
 
 
 def match_products_by_title(all_products, title):
@@ -1058,12 +1156,15 @@ async def tool_create_order(request: Request):
         if not isinstance(line_items, list):
             line_items = []
         shipping_address = body.get("shipping_address")
+        if not isinstance(shipping_address, dict):
+            shipping_address = None
         note = body.get("note") or ""
         tags = body.get("tags") or ""
         raw_send_receipt = body.get("send_receipt")
         send_receipt = True if raw_send_receipt is None else bool(raw_send_receipt)
         financial_status = body.get("financial_status") or "pending"
-        discount_code = body.get("discount_code") or ""  # Coupon/discount code
+        raw_discount_code = body.get("discount_code")
+        discount_code = str(raw_discount_code).strip() if raw_discount_code is not None else ""
         free_shipping = bool(body.get("free_shipping")) if body.get("free_shipping") is not None else False  # Skip shipping charges
         
         # Check if discount code implies free shipping
@@ -1114,7 +1215,7 @@ async def tool_create_order(request: Request):
             print(f"❌ Exception getting tokens: {e}")
             import traceback
             traceback.print_exc()
-            return ChatToolResponse(error=f"Auth error: {str(e)}")
+            return ChatToolResponse(error="Failed to authenticate with Shopify. Please reconnect your store.")
         
         if not tokens:
             print(f"❌ No Shopify tokens found")
@@ -1425,28 +1526,32 @@ async def tool_create_order(request: Request):
                 shipping_zones_result = shopify_api_request(uid, "GET", "/shipping_zones.json")
                 
                 shipping_applied = False
-                if "error" not in shipping_zones_result:
-                    zones = shipping_zones_result.get("shipping_zones", [])
+                if isinstance(shipping_zones_result, dict) and "error" not in shipping_zones_result:
+                    zones = shipping_zones_result.get("shipping_zones") or []
                     print(f"📦 Found {len(zones)} shipping zones")
                     
                     # Find applicable shipping rate for the destination country
-                    dest_country = shipping_address.get("country", "US")
-                    dest_province = shipping_address.get("province", "")
+                    dest_country = shipping_address.get("country", "US") if isinstance(shipping_address, dict) else "US"
+                    dest_province = shipping_address.get("province", "") if isinstance(shipping_address, dict) else ""
                     
                     for zone in zones:
+                        if not isinstance(zone, dict):
+                            continue
                         # Check if this zone applies to the destination
-                        zone_countries = zone.get("countries", [])
+                        zone_countries = zone.get("countries") or []
                         zone_applies = False
                         
                         for country in zone_countries:
+                            if not isinstance(country, dict):
+                                continue
                             if country.get("code") == dest_country:
                                 # Check if it's a country-wide zone or has province restrictions
-                                provinces = country.get("provinces", [])
+                                provinces = country.get("provinces") or []
                                 if not provinces:  # Applies to whole country
                                     zone_applies = True
                                 else:
                                     for prov in provinces:
-                                        if prov.get("code") == dest_province:
+                                        if isinstance(prov, dict) and prov.get("code") == dest_province:
                                             zone_applies = True
                                             break
                                 break
@@ -1510,19 +1615,25 @@ async def tool_create_order(request: Request):
                 )
                 
                 applied_discount = None
-                if "error" not in discount_result:
-                    price_rules = discount_result.get("price_rules", [])
+                if isinstance(discount_result, dict) and "error" not in discount_result:
+                    price_rules = discount_result.get("price_rules") or []
                     for rule in price_rules:
+                        if not isinstance(rule, dict) or not rule.get("id"):
+                            continue
                         # Get discount codes for this rule
                         codes_result = shopify_api_request(
                             uid, "GET", f"/price_rules/{rule['id']}/discount_codes.json"
                         )
-                        if "error" not in codes_result:
-                            for dc in codes_result.get("discount_codes", []):
-                                if dc.get("code", "").upper() == discount_code.upper():
+                        if isinstance(codes_result, dict) and "error" not in codes_result:
+                            codes = codes_result.get("discount_codes") or []
+                            for dc in codes:
+                                if not isinstance(dc, dict):
+                                    continue
+                                dc_code = dc.get("code")
+                                if isinstance(dc_code, str) and dc_code.strip().upper() == discount_code.upper():
                                     # Found the discount code
                                     value_type = rule.get("value_type", "percentage")
-                                    value = abs(float(rule.get("value", "0")))
+                                    value = abs(_safe_float(rule.get("value"), 0.0))
                                     applied_discount = {
                                         "description": discount_code,
                                         "value_type": value_type,
@@ -1573,12 +1684,15 @@ async def tool_create_order(request: Request):
                 if "error" not in complete_result:
                     print(f"✅ Draft order completed successfully")
                     break
-                elif "not finished calculating" in complete_result.get("error", "").lower():
-                    print(f"⏳ Order still calculating, waiting...")
-                    time.sleep(2)
                 else:
-                    # Different error, don't retry
-                    break
+                    err_val = complete_result.get("error")
+                    err_str = str(err_val).lower() if err_val is not None else ""
+                    if "not finished calculating" in err_str:
+                        print(f"⏳ Order still calculating, waiting...")
+                        time.sleep(2)
+                    else:
+                        # Different error, don't retry
+                        break
             
             print(f"📋 Complete result: {complete_result}")
             
@@ -1660,12 +1774,12 @@ async def tool_create_order(request: Request):
         # Show discount if applied
         discount_codes = order.get("discount_codes", [])
         total_discounts = order.get("total_discounts", "0")
-        if discount_codes or float(total_discounts) > 0:
+        if discount_codes or _safe_float(total_discounts) > 0:
             response_text += f"\n🏷️ **Discount Applied:**\n"
             for dc in discount_codes:
                 response_text += f"   • Code: {dc.get('code', 'N/A')} (-{format_currency(dc.get('amount', '0'), order.get('currency', 'USD'))})\n"
-            if float(total_discounts) > 0:
-                response_text += f"   💸 Total Savings: {format_currency(total_discounts, order.get('currency', 'USD'))}\n"
+            if _safe_float(total_discounts) > 0:
+                response_text += f"   💸 Total Savings: {format_currency(str(total_discounts), order.get('currency', 'USD'))}\n"
         
         # Add product matching info
         if product_matches:
@@ -1684,7 +1798,8 @@ async def tool_create_order(request: Request):
         return ChatToolResponse(result=response_text)
     
     except Exception as e:
-        return ChatToolResponse(error=f"Failed to create order: {str(e)}")
+        print(f"❌ Error creating order: {e}", flush=True)
+        return ChatToolResponse(error="Failed to create order due to an internal error.")
 
 
 @app.post("/tools/get_customers", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -1743,7 +1858,8 @@ async def tool_get_customers(request: Request):
         return ChatToolResponse(result="\n".join(lines))
     
     except Exception as e:
-        return ChatToolResponse(error=f"Failed to get customers: {str(e)}")
+        print(f"❌ Error getting customers: {e}", flush=True)
+        return ChatToolResponse(error="Failed to get customers due to an internal error.")
 
 
 @app.post("/tools/create_customer", tags=["chat_tools"], response_model=ChatToolResponse)
@@ -1838,7 +1954,8 @@ async def tool_create_customer(request: Request):
         return ChatToolResponse(result=response_text)
     
     except Exception as e:
-        return ChatToolResponse(error=f"Failed to create customer: {str(e)}")
+        print(f"❌ Error creating customer: {e}", flush=True)
+        return ChatToolResponse(error="Failed to create customer due to an internal error.")
 
 
 # ============================================

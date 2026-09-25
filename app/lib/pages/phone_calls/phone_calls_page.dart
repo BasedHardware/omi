@@ -14,7 +14,9 @@ import 'package:omi/pages/phone_calls/phone_setup_intro_page.dart';
 import 'package:omi/pages/settings/phone_call_settings_page.dart';
 import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/other/temp.dart';
 
 class PhoneCallsPage extends StatefulWidget {
   const PhoneCallsPage({super.key});
@@ -107,12 +109,12 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
     // Block if already on a call
     if (provider.callState != PhoneCallState.idle && provider.callState != PhoneCallState.ended) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.callAlreadyInProgress)));
+      OmiFeedback.info(context, context.l10n.callAlreadyInProgress);
       return;
     }
 
     if (provider.verifiedNumbers.isEmpty) {
-      Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PhoneSetupIntroPage()));
+      routeToPage(context, const PhoneSetupIntroPage());
       return;
     }
 
@@ -125,15 +127,19 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
       }
     }
 
-    var messenger = ScaffoldMessenger.of(context);
-
     var success = await provider.startCall(phoneNumber);
     if (!mounted) return;
 
     if (success) {
-      Navigator.of(context).push(MaterialPageRoute(builder: (_) => const ActiveCallPage()));
+      routeToPage(context, const ActiveCallPage());
     } else {
-      messenger.showSnackBar(SnackBar(content: Text(provider.error ?? context.l10n.failedToStartCall)));
+      final dialed = phoneNumber;
+      OmiFeedback.error(
+        context,
+        provider.error ?? context.l10n.failedToStartCall,
+        actionLabel: context.l10n.tryAgain,
+        onAction: () => _makeCall(dialed, contactName: contactName),
+      );
     }
   }
 
@@ -142,10 +148,7 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
     return Consumer<PhoneCallProvider>(
       builder: (context, provider, _) {
         if (!provider.numbersLoaded) {
-          return const Scaffold(
-            backgroundColor: Colors.black,
-            body: Center(child: CircularProgressIndicator(color: Colors.white)),
-          );
+          return Scaffold(appBar: AppBar(leading: const OmiBackButton()), body: const OmiLoadingState());
         }
         if (provider.verifiedNumbers.isEmpty) {
           return const PhoneSetupIntroPage();
@@ -157,32 +160,23 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
 
   Widget _buildMainPage(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
       appBar: AppBar(
-        backgroundColor: Colors.black,
-        elevation: 0,
-        title: Text(
-          context.l10n.phonePageTitle,
-          style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w600),
-        ),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
+        leading: const OmiBackButton(),
+        title: Text(context.l10n.phonePageTitle),
         actions: [
-          IconButton(
-            icon: const Icon(Icons.settings_outlined, color: Colors.white),
-            onPressed: () =>
-                Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PhoneCallSettingsPage())),
+          OmiIconButton(
+            icon: const Icon(Icons.settings_outlined),
+            label: context.l10n.settings,
+            onPressed: () => routeToPage(context, const PhoneCallSettingsPage()),
           ),
         ],
         bottom: TabBar(
           controller: _tabController,
-          indicatorColor: Colors.white,
+          indicatorColor: OmiColors.accent,
           indicatorWeight: 3,
-          labelColor: Colors.white,
+          labelColor: OmiColors.textPrimary,
           labelStyle: const TextStyle(fontWeight: FontWeight.w600),
-          unselectedLabelColor: Colors.grey[600],
+          unselectedLabelColor: OmiColors.textTertiary,
           tabs: [
             Tab(text: context.l10n.phoneContactsTab),
             Tab(text: context.l10n.phoneKeypadTab),
@@ -202,79 +196,46 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
 
   Widget _buildContactsTab() {
     if (_permissionDenied) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(Icons.contacts_outlined, size: 48, color: Colors.grey[700]),
-              const SizedBox(height: 16),
-              Text(
-                context.l10n.grantContactsAccess,
-                textAlign: TextAlign.center,
-                style: TextStyle(fontSize: 16, color: Colors.grey[400]),
-              ),
-              const SizedBox(height: 24),
-              GestureDetector(
-                onTap: () async {
-                  var status = await Permission.contacts.status;
-                  if (status.isPermanentlyDenied || status.isDenied) {
-                    await openAppSettings();
-                  } else {
-                    await FlutterContacts.permissions.request(PermissionType.read);
-                  }
-                  _loadContacts();
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 32, vertical: 14),
-                  decoration: BoxDecoration(color: Colors.deepPurple, borderRadius: BorderRadius.circular(28)),
-                  child: Text(
-                    context.l10n.phoneAllow,
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white),
-                  ),
-                ),
-              ),
-            ],
-          ),
+      return OmiEmptyState(
+        icon: Icons.contacts_outlined,
+        title: context.l10n.phoneContactsAccessTitle,
+        message: context.l10n.grantContactsAccess,
+        action: OmiButton(
+          label: context.l10n.phoneAllow,
+          size: OmiButtonSize.compact,
+          onPressed: () async {
+            var status = await Permission.contacts.status;
+            if (status.isPermanentlyDenied || status.isDenied) {
+              await openAppSettings();
+            } else {
+              await FlutterContacts.permissions.request(PermissionType.read);
+            }
+            _loadContacts();
+          },
         ),
       );
     }
 
     if (_loadingContacts) {
-      return const Center(child: CircularProgressIndicator(color: Colors.white));
+      return const OmiLoadingState();
     }
 
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.all(12),
-          child: TextField(
+          padding: const EdgeInsets.all(OmiSpacing.sm),
+          child: OmiSearchField(
+            placeholder: context.l10n.searchContacts,
             controller: _searchController,
             onChanged: _filterContacts,
-            style: const TextStyle(color: Colors.white),
-            decoration: InputDecoration(
-              hintText: context.l10n.phoneSearchHint,
-              hintStyle: TextStyle(color: Colors.grey[600]),
-              prefixIcon: Icon(Icons.search, color: Colors.grey[600]),
-              filled: true,
-              fillColor: const Color(0xFF1F1F25),
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
-              contentPadding: const EdgeInsets.symmetric(vertical: 12),
-            ),
           ),
         ),
         Expanded(
           child: _filteredContacts.isEmpty
-              ? Center(
-                  child: Text(
-                    context.l10n.phoneNoContactsFound,
-                    style: TextStyle(color: Colors.grey[600], fontSize: 14),
-                  ),
-                )
+              ? OmiEmptyState(icon: Icons.person_search_outlined, title: context.l10n.phoneNoContactsFound)
               : ListView.separated(
                   itemCount: _filteredContacts.length,
-                  separatorBuilder: (_, __) => Divider(color: Colors.grey[900], height: 1, indent: 72),
+                  separatorBuilder: (_, __) => const Divider(color: OmiColors.border, height: 1, indent: 72),
                   itemBuilder: (context, index) {
                     var contact = _filteredContacts[index];
                     var phone = contact.phones.first;
@@ -316,10 +277,14 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
-                        fontSize: hasDigits ? (_dialpadController.text.length > 12 ? 24 : 32) : 20,
+                        fontSize: hasDigits
+                            ? (_dialpadController.text.length > 12
+                                ? OmiType.title2.fontSize
+                                : OmiType.largeTitle.fontSize)
+                            : OmiType.title3.fontSize,
                         fontWeight: FontWeight.w300,
                         letterSpacing: hasDigits ? 2 : 0,
-                        color: hasDigits ? Colors.white : Colors.grey[600],
+                        color: hasDigits ? OmiColors.textPrimary : OmiColors.textTertiary,
                       ),
                     ),
                   ),
@@ -327,23 +292,31 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
                 SizedBox(
                   width: 48,
                   child: hasDigits
-                      ? GestureDetector(
-                          onTap: () {
-                            HapticFeedback.lightImpact();
-                            setState(() {
-                              _dialpadController.text = _dialpadController.text.substring(
-                                0,
-                                _dialpadController.text.length - 1,
-                              );
-                            });
-                          },
-                          onLongPress: () {
-                            HapticFeedback.mediumImpact();
-                            setState(() {
-                              _dialpadController.text = '';
-                            });
-                          },
-                          child: Icon(Icons.backspace_outlined, color: Colors.grey[500], size: 22),
+                      ? Semantics(
+                          button: true,
+                          label: context.l10n.delete,
+                          excludeSemantics: true,
+                          child: GestureDetector(
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () {
+                              HapticFeedback.lightImpact();
+                              setState(() {
+                                _dialpadController.text = _dialpadController.text.substring(
+                                  0,
+                                  _dialpadController.text.length - 1,
+                                );
+                              });
+                            },
+                            onLongPress: () {
+                              HapticFeedback.mediumImpact();
+                              setState(() {
+                                _dialpadController.text = '';
+                              });
+                            },
+                            child: const Center(
+                              child: Icon(Icons.backspace_outlined, color: OmiColors.textSecondary, size: 22),
+                            ),
+                          ),
                         )
                       : null,
                 ),
@@ -356,22 +329,29 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
         _buildDialpad(),
         const SizedBox(height: 20),
         // Call button
-        GestureDetector(
-          onTap: hasDigits
-              ? () {
-                  HapticFeedback.mediumImpact();
-                  _makeCall(_dialpadController.text);
-                }
-              : null,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
-            width: 68,
-            height: 68,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: hasDigits ? Colors.green : const Color(0xFF1F1F25),
+        // Green is state here (ready to dial), not decoration.
+        Semantics(
+          button: true,
+          enabled: hasDigits,
+          label: context.l10n.phoneCallButton,
+          excludeSemantics: true,
+          child: GestureDetector(
+            onTap: hasDigits
+                ? () {
+                    HapticFeedback.mediumImpact();
+                    _makeCall(_dialpadController.text);
+                  }
+                : null,
+            child: AnimatedContainer(
+              duration: OmiMotion.of(context).quick,
+              width: 68,
+              height: 68,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: hasDigits ? OmiColors.success : OmiColors.surface1,
+              ),
+              child: Icon(Icons.phone, color: hasDigits ? OmiColors.textPrimary : OmiColors.textDisabled, size: 32),
             ),
-            child: Icon(Icons.phone, color: hasDigits ? Colors.white : Colors.grey[600], size: 32),
           ),
         ),
         const Spacer(flex: 1),
@@ -466,7 +446,7 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
 
     final selected = await showMenu<String>(
       context: context,
-      color: const Color(0xFF2A2A2E),
+      color: OmiColors.surface2,
       position: RelativeRect.fromLTRB(
         globalPosition.dx,
         globalPosition.dy,
@@ -476,7 +456,7 @@ class _PhoneCallsPageState extends State<PhoneCallsPage> with SingleTickerProvid
       items: [
         PopupMenuItem<String>(
           value: 'paste',
-          child: Text(context.l10n.paste, style: const TextStyle(color: Colors.white)),
+          child: Text(context.l10n.paste, style: OmiType.body),
         ),
       ],
     );
@@ -517,33 +497,37 @@ class _ContactRow extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onCall,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-        child: Row(
-          children: [
-            CircleAvatar(
-              radius: 20,
-              backgroundColor: Colors.grey[800],
-              child: Text(initial, style: const TextStyle(color: Colors.white, fontSize: 16)),
-            ),
-            const SizedBox(width: 16),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(name, style: const TextStyle(fontSize: 16, color: Colors.white)),
-                  const SizedBox(height: 2),
-                  Text(phone, style: TextStyle(fontSize: 13, color: Colors.grey[500])),
-                ],
+    return Semantics(
+      button: true,
+      hint: context.l10n.phoneCallButton,
+      child: InkWell(
+        onTap: onCall,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.sm),
+          child: Row(
+            children: [
+              ExcludeSemantics(
+                child: CircleAvatar(
+                  radius: 20,
+                  backgroundColor: OmiColors.surface3,
+                  child: Text(initial, style: OmiType.callout),
+                ),
               ),
-            ),
-            GestureDetector(
-              onTap: onCall,
-              child: Icon(Icons.phone, color: Colors.grey[400], size: 22),
-            ),
-          ],
+              const SizedBox(width: OmiSpacing.md),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(name, style: OmiType.callout),
+                    const SizedBox(height: 2),
+                    Text(phone, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
+                  ],
+                ),
+              ),
+              // The whole row dials; the glyph only says so.
+              const ExcludeSemantics(child: Icon(Icons.phone, color: OmiColors.textSecondary, size: 22)),
+            ],
+          ),
         ),
       ),
     );
@@ -563,23 +547,24 @@ class _FreeQuotaBanner extends StatelessWidget {
         if (limit == null || limit <= 0) return const SizedBox.shrink();
         final remaining = quota.remaining ?? (limit - quota.monthlyUsed);
         final maxMinutes = (quota.maxDurationSeconds ?? 0) ~/ 60;
-        final durationSuffix = maxMinutes > 0 ? ' · up to $maxMinutes min each' : '';
+        final l10n = context.l10n;
+        final String text;
+        if (remaining <= 0) {
+          text = l10n.phoneFreeCallLimitReached;
+        } else if (maxMinutes > 0) {
+          text = l10n.phoneFreeCallsRemainingWithMax(remaining, limit, maxMinutes);
+        } else {
+          text = l10n.phoneFreeCallsRemaining(remaining, limit);
+        }
         return Container(
           width: double.infinity,
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-          color: const Color(0xFF1F1F25),
+          padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: 10),
+          color: OmiColors.surface1,
           child: Row(
             children: [
-              Icon(Icons.info_outline, size: 16, color: Colors.grey[500]),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  remaining > 0
-                      ? '$remaining of $limit free calls remaining this month$durationSuffix'
-                      : 'Monthly free call limit reached — resets next month',
-                  style: TextStyle(color: Colors.grey[300], fontSize: 12),
-                ),
-              ),
+              const ExcludeSemantics(child: Icon(Icons.info_outline, size: 16, color: OmiColors.textTertiary)),
+              const SizedBox(width: OmiSpacing.xs),
+              Expanded(child: Text(text, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary))),
             ],
           ),
         );
@@ -598,37 +583,38 @@ class _DialpadKey extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return InkWell(
-      onTap: onTap,
-      onLongPress: onLongPress,
-      borderRadius: BorderRadius.circular(36),
-      splashColor: Colors.white.withValues(alpha: 0.08),
-      highlightColor: Colors.white.withValues(alpha: 0.05),
-      child: Container(
-        width: 72,
-        height: 72,
-        decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF1F1F25)),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Text(
-              digit,
-              style: const TextStyle(fontSize: 30, fontWeight: FontWeight.w300, color: Colors.white),
-            ),
-            if (subtext.isNotEmpty)
-              Padding(
-                padding: const EdgeInsets.only(top: 1),
-                child: Text(
-                  subtext,
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w500,
-                    color: Colors.grey[600],
-                    letterSpacing: 1.5,
+    return Semantics(
+      button: true,
+      label: digit,
+      excludeSemantics: true,
+      child: InkWell(
+        onTap: onTap,
+        onLongPress: onLongPress,
+        customBorder: const CircleBorder(),
+        splashColor: OmiColors.textPrimary.withValues(alpha: 0.08),
+        highlightColor: OmiColors.textPrimary.withValues(alpha: 0.05),
+        child: Container(
+          width: 72,
+          height: 72,
+          decoration: const BoxDecoration(shape: BoxShape.circle, color: OmiColors.surface1),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(digit, style: OmiType.title1.copyWith(fontWeight: FontWeight.w300)),
+              if (subtext.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 1),
+                  child: Text(
+                    subtext,
+                    style: OmiType.caption.copyWith(
+                      fontWeight: FontWeight.w500,
+                      color: OmiColors.textTertiary,
+                      letterSpacing: 1.5,
+                    ),
                   ),
                 ),
-              ),
-          ],
+            ],
+          ),
         ),
       ),
     );

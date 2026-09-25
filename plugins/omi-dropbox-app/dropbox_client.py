@@ -200,7 +200,14 @@ class DropboxClient:
                 matches = data.get("matches", [])
                 results = []
                 for match in matches:
-                    metadata = match.get("metadata", {}).get("metadata", {})
+                    if not isinstance(match, dict):
+                        continue
+                    meta_wrapper = match.get("metadata")
+                    metadata = meta_wrapper.get("metadata") if isinstance(meta_wrapper, dict) else None
+                    if not isinstance(metadata, dict):
+                        metadata = meta_wrapper if isinstance(meta_wrapper, dict) else None
+                    if not isinstance(metadata, dict) or not (metadata.get("name") or metadata.get("path_display")):
+                        continue
                     results.append({
                         "name": metadata.get("name", "Unknown"),
                         "path": metadata.get("path_display", ""),
@@ -240,6 +247,8 @@ class DropboxClient:
                 entries = data.get("entries", [])
                 results = []
                 for entry in entries:
+                    if not isinstance(entry, dict):
+                        continue
                     results.append({
                         "name": entry.get("name", "Unknown"),
                         "path": entry.get("path_display", ""),

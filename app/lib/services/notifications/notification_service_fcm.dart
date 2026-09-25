@@ -1,3 +1,4 @@
+import 'package:omi/env/physical_qualification.dart';
 import 'dart:async';
 import 'dart:io';
 import 'dart:math';
@@ -20,6 +21,7 @@ import 'package:omi/services/notifications/merge_notification_handler.dart';
 import 'package:omi/services/notifications/notification_interface.dart';
 import 'package:omi/services/voice_playback/omi_voice_playback_service.dart';
 import 'package:omi/utils/analytics/intercom.dart';
+import 'package:omi/utils/analytics/product_telemetry.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/notification_channel_strings.dart';
 
@@ -47,6 +49,7 @@ class _FCMNotificationService implements NotificationInterface {
       ledColor: Colors.white,
     );
     await _initializeAwesomeNotifications();
+    if (PhysicalQualification.enabled) return;
     // Calling it here because the APNS token can sometimes arrive early or it might take some time (like a few seconds)
     // Reference: https://github.com/firebase/flutterfire/issues/12244#issuecomment-1969286794
     await _firebaseMessaging.getAPNSToken();
@@ -148,6 +151,7 @@ class _FCMNotificationService implements NotificationInterface {
 
   @override
   void saveNotificationToken() async {
+    if (PhysicalQualification.enabled) return;
     try {
       if (Platform.isIOS) {
         String? apnsToken;
@@ -200,6 +204,7 @@ class _FCMNotificationService implements NotificationInterface {
 
   @override
   Future<void> listenForMessages() async {
+    if (PhysicalQualification.enabled) return;
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       final data = message.data;
       final noti = message.notification;
@@ -275,12 +280,13 @@ class _FCMNotificationService implements NotificationInterface {
       }
     });
 
-    void handleNotificationTap(RemoteMessage? message) {
+    Future<void> handleNotificationTap(RemoteMessage? message) async {
       if (message == null) return;
       final navigateTo = NotificationUtil.navigateToFromFcmData(message.data);
-      if (navigateTo != null) {
-        NotificationUtil.handleNavigateTo(navigateTo);
-      }
+      if (navigateTo == null) return;
+
+      final objectId = _notificationObjectId(message.data);
+      await NotificationUtil.handleNavigateTo(navigateTo, objectId: objectId);
     }
 
     // Background: app is backgrounded and the user taps a push notification (#5126).
@@ -288,6 +294,19 @@ class _FCMNotificationService implements NotificationInterface {
 
     // Terminated: app was killed and opened via notification tap (#5126).
     FirebaseMessaging.instance.getInitialMessage().then(handleNotificationTap);
+  }
+
+  RecordReference? _notificationObjectId(Map<String, dynamic> data) {
+    for (final key in const ['conversation_id', 'summary_id', 'message_id']) {
+      final value = data[key];
+      if (value is! String || value.isEmpty) continue;
+      try {
+        return RecordReference.fromId(value);
+      } catch (_) {
+        return null;
+      }
+    }
+    return null;
   }
 
   final _serverMessageStreamController = StreamController<ServerMessage>.broadcast();

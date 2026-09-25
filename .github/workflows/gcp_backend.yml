@@ -161,11 +161,24 @@ jobs:
           # separate recovery path and does not consume a release proof.
           ref: main
 
-      - name: Google Auth
-        id: auth
+      # Prod: GitHub WIF as omi-ci-deployer-prod@ (credential-hygiene WS-C,
+      # plan v2 Phase E). Development keeps its JSON lane.
+      - name: Google Auth (prod WIF)
+        id: auth-wif
+        if: github.event.inputs.environment == 'prod'
         uses: 'google-github-actions/auth@v3'
         with:
-          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+          workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
+          service_account: omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com
+
+      - name: Google Auth
+        id: auth
+        if: github.event.inputs.environment != 'prod'
+        uses: 'google-github-actions/auth@v3'
+        with:
+          # Development: GitHub WIF as the dev deployer, no JSON key (credential hygiene WS-D).
+          workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
+          service_account: omi-ci-deployer-dev@based-hardware-dev.iam.gserviceaccount.com
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v3
@@ -397,21 +410,24 @@ jobs:
         uses: ./.github/actions/deploy-backend-stack
         with:
           deploy_profile: manual
+          # Read only for a development dispatch, so a production run never carries it.
+          dev_free_tier_local_processing_cohort: ${{ github.event.inputs.environment == 'development' && vars.DEV_FREE_TIER_LOCAL_PROCESSING_COHORT || '' }}
           admitted_sha: ${{ needs.firestore_readiness.outputs.admitted_sha }}
           environment: ${{ github.event.inputs.environment }}
           deploy_targets: ${{ github.event.inputs.deploy_targets }}
           deploy_gateway: ${{ github.event.inputs.deploy_gateway }}
           release_version: ${{ github.event.inputs.release_version }}
-          gcp_credentials: ${{ secrets.GCP_CREDENTIALS }}
+          # Prod: GitHub WIF as omi-ci-deployer-prod@ (no Owner, no key; WS-C).
+          # Development: GitHub WIF as omi-ci-deployer-dev@ (WS-D). No JSON key.
+          workload_identity_provider: ${{ github.event.inputs.environment == 'prod' && 'projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github' || 'projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github' }}
+          workload_identity_service_account: ${{ github.event.inputs.environment == 'prod' && 'omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com' || 'omi-ci-deployer-dev@based-hardware-dev.iam.gserviceaccount.com' }}
           project_id: ${{ vars.GCP_PROJECT_ID }}
           runtime_gcp_project_id: ${{ vars.RUNTIME_GCP_PROJECT_ID }}
-          # Unset by default, which keeps the existing signing behaviour.
-          firebase_probe_signer_service_account: ${{ vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT }}
           # The known-audio gate runs only for development, where the Firebase
-          # auth project (based-hardware) is not this lane's deploy project.
-          # This environment secret is the production Firebase signer key; the
-          # token minter refuses it if its project does not match.
-          firebase_probe_signer_credentials: ${{ github.event.inputs.environment == 'development' && secrets.GCP_SERVICE_ACCOUNT || '' }}
+          # auth project (based-hardware) is not this lane's deploy project. The
+          # probe token is signed through IAM signJwt as the no-role signer named
+          # by this development variable; no signer key is passed.
+          firebase_probe_signer_service_account: ${{ vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT }}
           runtime_env: ${{ vars.ENV }}
           region: ${{ env.REGION }}
           service: ${{ env.SERVICE }}

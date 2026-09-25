@@ -9,7 +9,7 @@ evidence:
   video: true
 covers:
   - app/lib/pages/settings/settings_drawer.dart
-  - app/lib/widgets/dialog.dart
+  - app/lib/pages/settings/sign_out.dart
   - app/lib/services/auth_service.dart
 preconditions:
   - App must be authenticated and on home screen (signed_in state)
