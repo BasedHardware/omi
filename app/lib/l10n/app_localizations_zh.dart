@@ -10971,4 +10971,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return '待处理转录 $count';
   }
+
+  @override
+  String get captureRecoveryBanner => '吊坠音频未送达应用 — 轻点以修复';
 }

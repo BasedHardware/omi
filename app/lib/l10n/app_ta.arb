@@ -11100,5 +11100,6 @@
     "transcriptionUnavailableRecordingContinues": "நகலெடுப்புகள் கிடைக்கவில்லை, பதிவு சாதனத்தில் தொடர்கிறது, பின்னர் செயலாக்கப்படும்",
     "transcriptionUnavailableSavingOnDevice": "நகலெடுப்பு இல்லை · சாதனத்தில் சேமிக்கப்படுகிறது",
     "transcriptionsPendingFraction": "நிலுவையில் உள்ள நகலெடுப்புகள் {pending}/{total}",
-    "transcriptionsPendingCount": "நிலுவையில் உள்ள நகலெடுப்புகள் {count}"
+    "transcriptionsPendingCount": "நிலுவையில் உள்ள நகலெடுப்புகள் {count}",
+    "captureRecoveryBanner": "பென்டன்ட் ஆடியோ செயலியை அடையவில்லை — சரிசெய்ய தட்டவும்"
 }

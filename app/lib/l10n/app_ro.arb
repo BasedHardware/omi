@@ -3528,5 +3528,6 @@
     "transcriptionUnavailableRecordingContinues": "Transcrierile nu sunt disponibile, înregistrarea continuă pe dispozitiv și va fi procesată mai târziu",
     "transcriptionUnavailableSavingOnDevice": "Transcriere indisponibilă · se salvează pe dispozitiv",
     "transcriptionsPendingFraction": "Transcrieri în așteptare {pending}/{total}",
-    "transcriptionsPendingCount": "Transcrieri în așteptare {count}"
+    "transcriptionsPendingCount": "Transcrieri în așteptare {count}",
+    "captureRecoveryBanner": "Sunetul pandantivului nu ajunge în aplicație — atinge pentru a repara"
 }

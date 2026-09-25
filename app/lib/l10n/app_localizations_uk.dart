@@ -11196,4 +11196,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Транскрипцій у черзі $count';
   }
+
+  @override
+  String get captureRecoveryBanner => 'Звук кулона не надходить до застосунку — натисніть, щоб виправити';
 }

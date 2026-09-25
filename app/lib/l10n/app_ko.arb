@@ -3528,5 +3528,6 @@
     "transcriptionUnavailableRecordingContinues": "전사를 이용할 수 없습니다. 기기에서 녹음이 계속되며 나중에 처리됩니다",
     "transcriptionUnavailableSavingOnDevice": "전사 불가 · 기기에 저장 중",
     "transcriptionsPendingFraction": "대기 중인 전사 {pending}/{total}",
-    "transcriptionsPendingCount": "대기 중인 전사 {count}"
+    "transcriptionsPendingCount": "대기 중인 전사 {count}",
+    "captureRecoveryBanner": "펜던트 오디오가 앱에 도달하지 않습니다 — 탭하여 복구"
 }

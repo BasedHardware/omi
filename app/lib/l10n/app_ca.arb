@@ -3528,5 +3528,6 @@
     "transcriptionUnavailableRecordingContinues": "Les transcripcions no estan disponibles, l'enregistrament continua al dispositiu i es processarà més tard",
     "transcriptionUnavailableSavingOnDevice": "Transcripció no disponible · s'està desant al dispositiu",
     "transcriptionsPendingFraction": "Transcripcions pendents {pending}/{total}",
-    "transcriptionsPendingCount": "Transcripcions pendents {count}"
+    "transcriptionsPendingCount": "Transcripcions pendents {count}",
+    "captureRecoveryBanner": "L'àudio del penjoll no arriba a l'aplicació — toca'l per reparar"
 }

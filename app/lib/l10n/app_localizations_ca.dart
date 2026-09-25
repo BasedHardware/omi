@@ -11239,4 +11239,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Transcripcions pendents $count';
   }
+
+  @override
+  String get captureRecoveryBanner => 'L\'àudio del penjoll no arriba a l\'aplicació — toca\'l per reparar';
 }

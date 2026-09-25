@@ -3528,5 +3528,6 @@
     "transcriptionUnavailableRecordingContinues": "Transkripcie sú nedostupné, nahrávanie pokračuje v zariadení a neskôr sa spracuje",
     "transcriptionUnavailableSavingOnDevice": "Transkripcia nedostupná · ukladá sa v zariadení",
     "transcriptionsPendingFraction": "Čakajúce transkripcie {pending}/{total}",
-    "transcriptionsPendingCount": "Čakajúce transkripcie {count}"
+    "transcriptionsPendingCount": "Čakajúce transkripcie {count}",
+    "captureRecoveryBanner": "Zvuk prívesku sa do aplikácie nedostáva — opravte klepnutím"
 }

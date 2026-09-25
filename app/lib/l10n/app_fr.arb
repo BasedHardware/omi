@@ -3563,5 +3563,6 @@
     "transcriptionUnavailableRecordingContinues": "Les transcriptions sont indisponibles, l'enregistrement continue sur l'appareil et sera traité plus tard",
     "transcriptionUnavailableSavingOnDevice": "Transcription indisponible · enregistrement sur l'appareil",
     "transcriptionsPendingFraction": "Transcriptions en attente {pending}/{total}",
-    "transcriptionsPendingCount": "Transcriptions en attente {count}"
+    "transcriptionsPendingCount": "Transcriptions en attente {count}",
+    "captureRecoveryBanner": "Le son du pendentif n'arrive pas à l'application — touchez pour réparer"
 }

@@ -11236,4 +11236,7 @@ class AppLocalizationsMk extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Чекаат транскрипции $count';
   }
+
+  @override
+  String get captureRecoveryBanner => 'Аудиото од привезокот не стигнува до апликацијата — допрете за поправка';
 }

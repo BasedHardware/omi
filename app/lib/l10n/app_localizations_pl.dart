@@ -11209,4 +11209,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Transkrypcje w kolejce $count';
   }
+
+  @override
+  String get captureRecoveryBanner => 'Dźwięk z zawieszki nie dociera do aplikacji — dotknij, aby naprawić';
 }

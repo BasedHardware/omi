@@ -3528,5 +3528,6 @@
     "transcriptionUnavailableRecordingContinues": "Transkripsjoner er utilgjengelige, opptaket fortsetter på enheten og behandles senere",
     "transcriptionUnavailableSavingOnDevice": "Transkripsjon utilgjengelig · lagres på enheten",
     "transcriptionsPendingFraction": "Transkripsjoner i kø {pending}/{total}",
-    "transcriptionsPendingCount": "Transkripsjoner i kø {count}"
+    "transcriptionsPendingCount": "Transkripsjoner i kø {count}",
+    "captureRecoveryBanner": "Lyden fra anhenget når ikke frem til appen — trykk for å reparere"
 }

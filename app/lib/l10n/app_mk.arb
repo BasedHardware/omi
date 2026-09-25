@@ -11100,5 +11100,6 @@
     "transcriptionUnavailableRecordingContinues": "Транскрипциите се недостапни, снимањето продолжува на уредот и ќе биде обработено подоцна",
     "transcriptionUnavailableSavingOnDevice": "Транскрипцијата е недостапна · се зачувува на уредот",
     "transcriptionsPendingFraction": "Чекаат транскрипции {pending}/{total}",
-    "transcriptionsPendingCount": "Чекаат транскрипции {count}"
+    "transcriptionsPendingCount": "Чекаат транскрипции {count}",
+    "captureRecoveryBanner": "Аудиото од привезокот не стигнува до апликацијата — допрете за поправка"
 }

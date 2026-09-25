@@ -3563,5 +3563,6 @@
     "transcriptionUnavailableRecordingContinues": "As transcrições estão indisponíveis, a gravação continua no dispositivo e será processada mais tarde",
     "transcriptionUnavailableSavingOnDevice": "Transcrição indisponível · salvando no dispositivo",
     "transcriptionsPendingFraction": "Transcrições pendentes {pending}/{total}",
-    "transcriptionsPendingCount": "Transcrições pendentes {count}"
+    "transcriptionsPendingCount": "Transcrições pendentes {count}",
+    "captureRecoveryBanner": "O áudio do pingente não chega à aplicação — toque para reparar"
 }

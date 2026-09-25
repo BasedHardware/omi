@@ -11204,4 +11204,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Transkripsi tertunggak $count';
   }
+
+  @override
+  String get captureRecoveryBanner => 'Audio loket tidak sampai ke aplikasi — ketik untuk membaiki';
 }

@@ -11217,4 +11217,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Чакащи транскрипции $count';
   }
+
+  @override
+  String get captureRecoveryBanner => 'Звукът от висулката не достига до приложението — докоснете, за да поправите';
 }

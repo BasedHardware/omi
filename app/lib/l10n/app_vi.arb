@@ -3528,5 +3528,6 @@
     "transcriptionUnavailableRecordingContinues": "Bản chép âm không khả dụng, quá trình ghi âm tiếp tục trên thiết bị và sẽ được xử lý sau",
     "transcriptionUnavailableSavingOnDevice": "Bản chép âm không khả dụng · đang lưu trên thiết bị",
     "transcriptionsPendingFraction": "Bản chép âm đang chờ {pending}/{total}",
-    "transcriptionsPendingCount": "Bản chép âm đang chờ {count}"
+    "transcriptionsPendingCount": "Bản chép âm đang chờ {count}",
+    "captureRecoveryBanner": "Âm thanh từ mặt dây chuyền không đến được ứng dụng — chạm để sửa chữa"
 }

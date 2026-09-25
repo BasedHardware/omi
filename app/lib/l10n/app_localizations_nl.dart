@@ -11210,4 +11210,7 @@ class AppLocalizationsNl extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Transcripties in behandeling $count';
   }
+
+  @override
+  String get captureRecoveryBanner => 'De audio van de hanger komt niet aan in de app — tik om te repareren';
 }

@@ -11202,4 +11202,7 @@ class AppLocalizationsLv extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Gaidošas transkripcijas $count';
   }
+
+  @override
+  String get captureRecoveryBanner => 'Kulona audio nesasniedz lietotni — pieskarieties, lai salabotu';
 }

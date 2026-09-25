@@ -11271,4 +11271,7 @@ class AppLocalizationsFr extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Transcriptions en attente $count';
   }
+
+  @override
+  String get captureRecoveryBanner => 'Le son du pendentif n\'arrive pas à l\'application — touchez pour réparer';
 }

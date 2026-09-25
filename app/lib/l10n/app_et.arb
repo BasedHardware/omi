@@ -3528,5 +3528,6 @@
     "transcriptionUnavailableRecordingContinues": "Transkriptsioonid pole saadaval, salvestamine jätkub seadmel ja töödeldakse hiljem",
     "transcriptionUnavailableSavingOnDevice": "Transkriptsioon pole saadaval · salvestatakse seadmesse",
     "transcriptionsPendingFraction": "Ootel transkriptsioonid {pending}/{total}",
-    "transcriptionsPendingCount": "Ootel transkriptsioonid {count}"
+    "transcriptionsPendingCount": "Ootel transkriptsioonid {count}",
+    "captureRecoveryBanner": "Ripatsi heli ei jõua rakendusse — parandamiseks puudutage"
 }

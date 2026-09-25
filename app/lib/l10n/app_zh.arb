@@ -3528,5 +3528,6 @@
     "transcriptionUnavailableRecordingContinues": "转录暂不可用，录音仍在设备上继续，稍后会进行处理",
     "transcriptionUnavailableSavingOnDevice": "转录不可用 · 正在设备上保存",
     "transcriptionsPendingFraction": "待处理转录 {pending}/{total}",
-    "transcriptionsPendingCount": "待处理转录 {count}"
+    "transcriptionsPendingCount": "待处理转录 {count}",
+    "captureRecoveryBanner": "吊坠音频未送达应用 — 轻点以修复"
 }

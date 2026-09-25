@@ -11252,4 +11252,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Αναμενόμενες απομαγνητοφωνήσεις $count';
   }
+
+  @override
+  String get captureRecoveryBanner => 'Ο ήχος του μενταγιόν δεν φτάνει στην εφαρμογή — πατήστε για επισκευή';
 }

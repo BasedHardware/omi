@@ -11178,4 +11178,7 @@ class AppLocalizationsFi extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Jonossa olevat transkriptiot $count';
   }
+
+  @override
+  String get captureRecoveryBanner => 'Riipuksen ääni ei tule perille sovellukseen — korjaa napauttamalla';
 }

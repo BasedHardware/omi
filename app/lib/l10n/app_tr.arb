@@ -3563,5 +3563,6 @@
     "transcriptionUnavailableRecordingContinues": "Transkriptler kullanılamıyor, kayıt cihazda devam ediyor ve daha sonra işlenecek",
     "transcriptionUnavailableSavingOnDevice": "Transkript kullanılamıyor · cihaza kaydediliyor",
     "transcriptionsPendingFraction": "Bekleyen transkriptler {pending}/{total}",
-    "transcriptionsPendingCount": "Bekleyen transkriptler {count}"
+    "transcriptionsPendingCount": "Bekleyen transkriptler {count}",
+    "captureRecoveryBanner": "Kolye sesi uygulamaya ulaşmıyor — onarmak için dokunun"
 }

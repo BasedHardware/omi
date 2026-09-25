@@ -3563,5 +3563,6 @@
     "transcriptionUnavailableRecordingContinues": "Transkripsi tidak tersedia, perekaman berlanjut di perangkat dan akan diproses nanti",
     "transcriptionUnavailableSavingOnDevice": "Transkripsi tidak tersedia · disimpan di perangkat",
     "transcriptionsPendingFraction": "Transkripsi tertunda {pending}/{total}",
-    "transcriptionsPendingCount": "Transkripsi tertunda {count}"
+    "transcriptionsPendingCount": "Transkripsi tertunda {count}",
+    "captureRecoveryBanner": "Audio pendant tidak sampai ke aplikasi — ketuk untuk memperbaiki"
 }

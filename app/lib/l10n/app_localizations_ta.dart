@@ -11251,4 +11251,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'நிலுவையில் உள்ள நகலெடுப்புகள் $count';
   }
+
+  @override
+  String get captureRecoveryBanner => 'பென்டன்ட் ஆடியோ செயலியை அடையவில்லை — சரிசெய்ய தட்டவும்';
 }

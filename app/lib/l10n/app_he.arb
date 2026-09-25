@@ -11100,5 +11100,6 @@
     "transcriptionUnavailableRecordingContinues": "התמלילים אינם זמינים, ההקלטה ממשיכה במכשיר ותעובד מאוחר יותר",
     "transcriptionUnavailableSavingOnDevice": "תמליל לא זמין · נשמר במכשיר",
     "transcriptionsPendingFraction": "תמלילים ממתינים {pending}/{total}",
-    "transcriptionsPendingCount": "תמלילים ממתינים {count}"
+    "transcriptionsPendingCount": "תמלילים ממתינים {count}",
+    "captureRecoveryBanner": "השמע מהתליון לא מגיע לאפליקציה — הקישו לתיקון"
 }

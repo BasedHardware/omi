@@ -11223,4 +11223,7 @@ class AppLocalizationsTe extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'పెండింగ్‌లో ఉన్న ట్రాన్స్‌క్రిప్షన్‌లు $count';
   }
+
+  @override
+  String get captureRecoveryBanner => 'పెండెంట్ ఆడియో యాప్‌కు చేరడం లేదు — రిపేర్ చేయడానికి ట్యాప్ చేయండి';
 }

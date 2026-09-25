@@ -3528,5 +3528,6 @@
     "transcriptionUnavailableRecordingContinues": "Transkriptioner är inte tillgängliga, inspelningen fortsätter på enheten och bearbetas senare",
     "transcriptionUnavailableSavingOnDevice": "Transkription inte tillgänglig · sparas på enheten",
     "transcriptionsPendingFraction": "Transkriptioner i kö {pending}/{total}",
-    "transcriptionsPendingCount": "Transkriptioner i kö {count}"
+    "transcriptionsPendingCount": "Transkriptioner i kö {count}",
+    "captureRecoveryBanner": "Ljudet från hänget når inte appen — tryck för att reparera"
 }

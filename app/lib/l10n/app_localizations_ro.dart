@@ -11227,4 +11227,7 @@ class AppLocalizationsRo extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Transcrieri în așteptare $count';
   }
+
+  @override
+  String get captureRecoveryBanner => 'Sunetul pandantivului nu ajunge în aplicație — atinge pentru a repara';
 }

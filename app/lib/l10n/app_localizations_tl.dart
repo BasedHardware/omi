@@ -11273,4 +11273,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Mga transcript na naghihintay $count';
   }
+
+  @override
+  String get captureRecoveryBanner => 'Hindi nakakarating sa app ang audio ng pendant — i-tap para ayusin';
 }

@@ -11100,5 +11100,6 @@
     "transcriptionUnavailableRecordingContinues": "Транскрипције нису доступне, снимање се наставља на уређају и биће обрађено касније",
     "transcriptionUnavailableSavingOnDevice": "Транскрипција недоступна · чува се на уређају",
     "transcriptionsPendingFraction": "Транскрипције на чекању {pending}/{total}",
-    "transcriptionsPendingCount": "Транскрипције на чекању {count}"
+    "transcriptionsPendingCount": "Транскрипције на чекању {count}",
+    "captureRecoveryBanner": "Звук привеска не стиже до апликације — додирните за поправку"
 }

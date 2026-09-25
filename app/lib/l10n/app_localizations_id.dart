@@ -11185,4 +11185,7 @@ class AppLocalizationsId extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Transkripsi tertunda $count';
   }
+
+  @override
+  String get captureRecoveryBanner => 'Audio pendant tidak sampai ke aplikasi — ketuk untuk memperbaiki';
 }

@@ -3528,5 +3528,6 @@
     "transcriptionUnavailableRecordingContinues": "Transkripcijos neprieinamos, įrašymas tęsiamas įrenginyje ir bus apdorotas vėliau",
     "transcriptionUnavailableSavingOnDevice": "Transkripcija neprieinama · saugoma įrenginyje",
     "transcriptionsPendingFraction": "Laukiančios transkripcijos {pending}/{total}",
-    "transcriptionsPendingCount": "Laukiančios transkripcijos {count}"
+    "transcriptionsPendingCount": "Laukiančios transkripcijos {count}",
+    "captureRecoveryBanner": "Pakabuko garsas nepasiekia programėlės — palieskite, kad ištaisytumėte"
 }

@@ -11100,5 +11100,6 @@
     "transcriptionUnavailableRecordingContinues": "ٹرانسکرپشن دستیاب نہیں، ریکارڈنگ ڈیوائس پر جاری ہے اور بعد میں پروسیس ہوگی",
     "transcriptionUnavailableSavingOnDevice": "ٹرانسکرپشن دستیاب نہیں · ڈیوائس پر محفوظ ہو رہی ہے",
     "transcriptionsPendingFraction": "زیرِ التوا ٹرانسکرپشن {pending}/{total}",
-    "transcriptionsPendingCount": "زیرِ التوا ٹرانسکرپشن {count}"
+    "transcriptionsPendingCount": "زیرِ التوا ٹرانسکرپشن {count}",
+    "captureRecoveryBanner": "پینڈنٹ کی آواز ایپ تک نہیں پہنچ رہی — درست کرنے کے لیے ٹیپ کریں"
 }

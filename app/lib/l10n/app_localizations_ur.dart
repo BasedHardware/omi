@@ -11185,4 +11185,7 @@ class AppLocalizationsUr extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'زیرِ التوا ٹرانسکرپشن $count';
   }
+
+  @override
+  String get captureRecoveryBanner => 'پینڈنٹ کی آواز ایپ تک نہیں پہنچ رہی — درست کرنے کے لیے ٹیپ کریں';
 }

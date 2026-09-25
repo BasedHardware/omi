@@ -3528,5 +3528,6 @@
     "transcriptionUnavailableRecordingContinues": "Transkripcijas nav pieejamas, ierakstīšana turpinās ierīcē un tiks apstrādāta vēlāk",
     "transcriptionUnavailableSavingOnDevice": "Transkripcija nav pieejama · tiek saglabāta ierīcē",
     "transcriptionsPendingFraction": "Gaidošas transkripcijas {pending}/{total}",
-    "transcriptionsPendingCount": "Gaidošas transkripcijas {count}"
+    "transcriptionsPendingCount": "Gaidošas transkripcijas {count}",
+    "captureRecoveryBanner": "Kulona audio nesasniedz lietotni — pieskarieties, lai salabotu"
 }

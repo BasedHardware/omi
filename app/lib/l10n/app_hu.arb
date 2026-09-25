@@ -3624,5 +3624,6 @@
     "transcriptionUnavailableRecordingContinues": "Átiratok nem érhetők el, a felvétel folytatódik az eszközön, és később feldolgozásra kerül",
     "transcriptionUnavailableSavingOnDevice": "Átirat nem érhető el · mentés az eszközön",
     "transcriptionsPendingFraction": "Függő átiratok {pending}/{total}",
-    "transcriptionsPendingCount": "Függő átiratok {count}"
+    "transcriptionsPendingCount": "Függő átiratok {count}",
+    "captureRecoveryBanner": "A medál hangja nem érkezik meg az alkalmazásba — a javításhoz koppintson"
 }

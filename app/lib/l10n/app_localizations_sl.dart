@@ -11207,4 +11207,7 @@ class AppLocalizationsSl extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Transkripcije v čakanju $count';
   }
+
+  @override
+  String get captureRecoveryBanner => 'Zvuk obeska ne prihaja v aplikacijo — tapnite za popravilo';
 }

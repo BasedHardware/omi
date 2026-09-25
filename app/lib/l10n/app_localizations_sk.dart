@@ -11166,4 +11166,7 @@ class AppLocalizationsSk extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Čakajúce transkripcie $count';
   }
+
+  @override
+  String get captureRecoveryBanner => 'Zvuk prívesku sa do aplikácie nedostáva — opravte klepnutím';
 }

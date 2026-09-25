@@ -3563,5 +3563,6 @@
     "transcriptionUnavailableRecordingContinues": "Transkrypcje są niedostępne, nagrywanie jest kontynuowane na urządzeniu i zostanie przetworzone później",
     "transcriptionUnavailableSavingOnDevice": "Transkrypcja niedostępna · zapisywanie na urządzeniu",
     "transcriptionsPendingFraction": "Transkrypcje w kolejce {pending}/{total}",
-    "transcriptionsPendingCount": "Transkrypcje w kolejce {count}"
+    "transcriptionsPendingCount": "Transkrypcje w kolejce {count}",
+    "captureRecoveryBanner": "Dźwięk z zawieszki nie dociera do aplikacji — dotknij, aby naprawić"
 }

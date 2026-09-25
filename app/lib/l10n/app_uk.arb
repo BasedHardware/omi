@@ -3528,5 +3528,6 @@
     "transcriptionUnavailableRecordingContinues": "Транскрипція недоступна, запис триває на пристрої та буде оброблений пізніше",
     "transcriptionUnavailableSavingOnDevice": "Транскрипція недоступна · зберігається на пристрої",
     "transcriptionsPendingFraction": "Транскрипцій у черзі {pending}/{total}",
-    "transcriptionsPendingCount": "Транскрипцій у черзі {count}"
+    "transcriptionsPendingCount": "Транскрипцій у черзі {count}",
+    "captureRecoveryBanner": "Звук кулона не надходить до застосунку — натисніть, щоб виправити"
 }

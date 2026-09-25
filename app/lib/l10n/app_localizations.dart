@@ -20360,6 +20360,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Transcriptions pending {count}'**
   String transcriptionsPendingCount(int count);
+
+  /// Persistent repair banner shown when a connected pendant's audio is not reaching the app; tapping opens device repair settings
+  ///
+  /// In en, this message translates to:
+  /// **'Pendant audio is not reaching the app — tap to repair'**
+  String get captureRecoveryBanner;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

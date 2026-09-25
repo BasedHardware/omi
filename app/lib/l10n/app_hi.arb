@@ -3528,5 +3528,6 @@
     "transcriptionUnavailableRecordingContinues": "ट्रांसक्रिप्शन उपलब्ध नहीं हैं, रिकॉर्डिंग डिवाइस पर जारी है और बाद में प्रोसेस होगी",
     "transcriptionUnavailableSavingOnDevice": "ट्रांसक्रिप्शन अनुपलब्ध · डिवाइस पर सहेजा जा रहा है",
     "transcriptionsPendingFraction": "लंबित ट्रांसक्रिप्शन {pending}/{total}",
-    "transcriptionsPendingCount": "लंबित ट्रांसक्रिप्शन {count}"
+    "transcriptionsPendingCount": "लंबित ट्रांसक्रिप्शन {count}",
+    "captureRecoveryBanner": "पेंडेंट का ऑडियो ऐप तक नहीं पहुंच रहा है — ठीक करने के लिए टैप करें"
 }

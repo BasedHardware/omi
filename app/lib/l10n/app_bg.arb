@@ -3528,5 +3528,6 @@
     "transcriptionUnavailableRecordingContinues": "Транскрипциите са недостъпни, записването продължава на устройството и ще бъде обработено по-късно",
     "transcriptionUnavailableSavingOnDevice": "Транскрипцията е недостъпна · записва се на устройството",
     "transcriptionsPendingFraction": "Чакащи транскрипции {pending}/{total}",
-    "transcriptionsPendingCount": "Чакащи транскрипции {count}"
+    "transcriptionsPendingCount": "Чакащи транскрипции {count}",
+    "captureRecoveryBanner": "Звукът от висулката не достига до приложението — докоснете, за да поправите"
 }

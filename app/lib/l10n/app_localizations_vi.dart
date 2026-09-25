@@ -11170,4 +11170,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Bản chép âm đang chờ $count';
   }
+
+  @override
+  String get captureRecoveryBanner => 'Âm thanh từ mặt dây chuyền không đến được ứng dụng — chạm để sửa chữa';
 }

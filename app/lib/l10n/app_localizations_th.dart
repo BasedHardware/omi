@@ -11110,4 +11110,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'การถอดเสียงที่รออยู่ $count';
   }
+
+  @override
+  String get captureRecoveryBanner => 'เสียงจากจี้ไม่ถึงแอป — แตะเพื่อซ่อมแซม';
 }

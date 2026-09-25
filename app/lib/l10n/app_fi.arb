@@ -3528,5 +3528,6 @@
     "transcriptionUnavailableRecordingContinues": "Transkriptiot eivät ole käytettävissä, tallennus jatkuu laitteella ja käsitellään myöhemmin",
     "transcriptionUnavailableSavingOnDevice": "Transkriptio ei käytettävissä · tallennetaan laitteelle",
     "transcriptionsPendingFraction": "Jonossa olevat transkriptiot {pending}/{total}",
-    "transcriptionsPendingCount": "Jonossa olevat transkriptiot {count}"
+    "transcriptionsPendingCount": "Jonossa olevat transkriptiot {count}",
+    "captureRecoveryBanner": "Riipuksen ääni ei tule perille sovellukseen — korjaa napauttamalla"
 }

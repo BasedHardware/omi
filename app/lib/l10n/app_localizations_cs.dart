@@ -11172,4 +11172,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Čekající přepisy $count';
   }
+
+  @override
+  String get captureRecoveryBanner => 'Zvuk přívěsku se do aplikace nedostává — opravte klepnutím';
 }

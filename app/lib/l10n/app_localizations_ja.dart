@@ -10990,4 +10990,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return '文字起こし待ち $count';
   }
+
+  @override
+  String get captureRecoveryBanner => 'ペンダントの音声がアプリに届いていません — タップして修復';
 }

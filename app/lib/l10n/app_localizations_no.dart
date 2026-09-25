@@ -11174,4 +11174,7 @@ class AppLocalizationsNo extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Transkripsjoner i kø $count';
   }
+
+  @override
+  String get captureRecoveryBanner => 'Lyden fra anhenget når ikke frem til appen — trykk for å reparere';
 }

@@ -3528,5 +3528,6 @@
     "transcriptionUnavailableRecordingContinues": "Transcripties zijn niet beschikbaar, de opname gaat door op het apparaat en wordt later verwerkt",
     "transcriptionUnavailableSavingOnDevice": "Transcriptie niet beschikbaar · wordt op het apparaat opgeslagen",
     "transcriptionsPendingFraction": "Transcripties in behandeling {pending}/{total}",
-    "transcriptionsPendingCount": "Transcripties in behandeling {count}"
+    "transcriptionsPendingCount": "Transcripties in behandeling {count}",
+    "captureRecoveryBanner": "De audio van de hanger komt niet aan in de app — tik om te repareren"
 }

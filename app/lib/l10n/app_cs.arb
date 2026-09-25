@@ -3528,5 +3528,6 @@
     "transcriptionUnavailableRecordingContinues": "Přepisy nejsou k dispozici, nahrávání pokračuje v zařízení a později se zpracuje",
     "transcriptionUnavailableSavingOnDevice": "Přepis není k dispozici · ukládá se v zařízení",
     "transcriptionsPendingFraction": "Čekající přepisy {pending}/{total}",
-    "transcriptionsPendingCount": "Čekající přepisy {count}"
+    "transcriptionsPendingCount": "Čekající přepisy {count}",
+    "captureRecoveryBanner": "Zvuk přívěsku se do aplikace nedostává — opravte klepnutím"
 }

@@ -11184,4 +11184,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'प्रलंबित ट्रान्सक्रिप्शन $count';
   }
+
+  @override
+  String get captureRecoveryBanner => 'पेंडंटचे ऑडिओ ॲपपर्यंत पोहोचत नाही — दुरुस्त करण्यासाठी टॅप करा';
 }

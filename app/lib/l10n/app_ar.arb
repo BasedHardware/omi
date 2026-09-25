@@ -3528,5 +3528,6 @@
     "transcriptionUnavailableRecordingContinues": "النسخ غير متوفر حاليًا، يستمر التسجيل على الجهاز وستتم المعالجة لاحقًا",
     "transcriptionUnavailableSavingOnDevice": "النسخ غير متوفر · يتم الحفظ على الجهاز",
     "transcriptionsPendingFraction": "نسخ معلّق {pending}/{total}",
-    "transcriptionsPendingCount": "نسخ معلّق {count}"
+    "transcriptionsPendingCount": "نسخ معلّق {count}",
+    "captureRecoveryBanner": "صوت القلادة لا يصل إلى التطبيق — انقر للإصلاح"
 }

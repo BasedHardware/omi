@@ -11100,5 +11100,6 @@
     "transcriptionUnavailableRecordingContinues": "Транскрыпцыя недаступная, запіс працягваецца на прыладзе і будзе апрацаваны пазней",
     "transcriptionUnavailableSavingOnDevice": "Транскрыпцыя недаступная · захоўваецца на прыладзе",
     "transcriptionsPendingFraction": "Транскрыпцый у чаканні {pending}/{total}",
-    "transcriptionsPendingCount": "Транскрыпцый у чаканні {count}"
+    "transcriptionsPendingCount": "Транскрыпцый у чаканні {count}",
+    "captureRecoveryBanner": "Гук кулона не даходзіць да праграмы — націсніце, каб выправіць"
 }

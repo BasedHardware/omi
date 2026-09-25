@@ -11172,4 +11172,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'رونویسی‌های در انتظار $count';
   }
+
+  @override
+  String get captureRecoveryBanner => 'صدای آویز به برنامه نمی‌رسد — برای تعمیر ضربه بزنید';
 }

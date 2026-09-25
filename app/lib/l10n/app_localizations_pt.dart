@@ -11190,4 +11190,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Transcrições pendentes $count';
   }
+
+  @override
+  String get captureRecoveryBanner => 'O áudio do pingente não chega à aplicação — toque para reparar';
 }

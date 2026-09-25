@@ -11238,4 +11238,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Trascrizioni in attesa $count';
   }
+
+  @override
+  String get captureRecoveryBanner => 'L\'audio del ciondolo non arriva all\'app — tocca per riparare';
 }

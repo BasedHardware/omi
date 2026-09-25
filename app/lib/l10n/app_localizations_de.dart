@@ -11267,4 +11267,7 @@ class AppLocalizationsDe extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Offene Transkriptionen $count';
   }
+
+  @override
+  String get captureRecoveryBanner => 'Der Ton des Pendants erreicht die App nicht — zum Reparieren tippen';
 }

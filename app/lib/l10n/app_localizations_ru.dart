@@ -11212,4 +11212,7 @@ class AppLocalizationsRu extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Транскрипций в ожидании $count';
   }
+
+  @override
+  String get captureRecoveryBanner => 'Звук кулона не доходит до приложения — нажмите, чтобы исправить';
 }

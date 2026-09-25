@@ -10994,4 +10994,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return '대기 중인 전사 $count';
   }
+
+  @override
+  String get captureRecoveryBanner => '펜던트 오디오가 앱에 도달하지 않습니다 — 탭하여 복구';
 }

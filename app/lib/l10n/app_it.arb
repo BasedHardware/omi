@@ -3528,5 +3528,6 @@
     "transcriptionUnavailableRecordingContinues": "Trascrizioni non disponibili, la registrazione continua sul dispositivo e verrà elaborata più tardi",
     "transcriptionUnavailableSavingOnDevice": "Trascrizione non disponibile · salvataggio sul dispositivo",
     "transcriptionsPendingFraction": "Trascrizioni in attesa {pending}/{total}",
-    "transcriptionsPendingCount": "Trascrizioni in attesa {count}"
+    "transcriptionsPendingCount": "Trascrizioni in attesa {count}",
+    "captureRecoveryBanner": "L'audio del ciondolo non arriva all'app — tocca per riparare"
 }

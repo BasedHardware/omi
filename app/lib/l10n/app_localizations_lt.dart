@@ -11194,4 +11194,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Laukiančios transkripcijos $count';
   }
+
+  @override
+  String get captureRecoveryBanner => 'Pakabuko garsas nepasiekia programėlės — palieskite, kad ištaisytumėte';
 }

@@ -11172,4 +11172,7 @@ class AppLocalizationsEt extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Ootel transkriptsioonid $count';
   }
+
+  @override
+  String get captureRecoveryBanner => 'Ripatsi heli ei jõua rakendusse — parandamiseks puudutage';
 }

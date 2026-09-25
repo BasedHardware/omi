@@ -11218,4 +11218,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Függő átiratok $count';
   }
+
+  @override
+  String get captureRecoveryBanner => 'A medál hangja nem érkezik meg az alkalmazásba — a javításhoz koppintson';
 }

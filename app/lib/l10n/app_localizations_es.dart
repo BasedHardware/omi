@@ -11206,4 +11206,7 @@ class AppLocalizationsEs extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Transcripciones pendientes $count';
   }
+
+  @override
+  String get captureRecoveryBanner => 'El audio del colgante no llega a la app — toca para reparar';
 }

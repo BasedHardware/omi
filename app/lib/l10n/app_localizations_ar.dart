@@ -11107,4 +11107,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'نسخ معلّق $count';
   }
+
+  @override
+  String get captureRecoveryBanner => 'صوت القلادة لا يصل إلى التطبيق — انقر للإصلاح';
 }

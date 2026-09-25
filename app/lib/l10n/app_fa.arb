@@ -11100,5 +11100,6 @@
     "transcriptionUnavailableRecordingContinues": "رونویسی‌ها در دسترس نیستند، ضبط در دستگاه ادامه دارد و بعداً پردازش می‌شود",
     "transcriptionUnavailableSavingOnDevice": "رونویسی در دسترس نیست · در حال ذخیره روی دستگاه",
     "transcriptionsPendingFraction": "رونویسی‌های در انتظار {pending}/{total}",
-    "transcriptionsPendingCount": "رونویسی‌های در انتظار {count}"
+    "transcriptionsPendingCount": "رونویسی‌های در انتظار {count}",
+    "captureRecoveryBanner": "صدای آویز به برنامه نمی‌رسد — برای تعمیر ضربه بزنید"
 }

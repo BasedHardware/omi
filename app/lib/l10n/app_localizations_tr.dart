@@ -11187,4 +11187,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Bekleyen transkriptler $count';
   }
+
+  @override
+  String get captureRecoveryBanner => 'Kolye sesi uygulamaya ulaşmıyor — onarmak için dokunun';
 }

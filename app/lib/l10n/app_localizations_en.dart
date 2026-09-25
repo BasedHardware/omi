@@ -11164,4 +11164,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Transcriptions pending $count';
   }
+
+  @override
+  String get captureRecoveryBanner => 'Pendant audio is not reaching the app — tap to repair';
 }

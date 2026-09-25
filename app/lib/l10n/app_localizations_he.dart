@@ -11085,4 +11085,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'תמלילים ממתינים $count';
   }
+
+  @override
+  String get captureRecoveryBanner => 'השמע מהתליון לא מגיע לאפליקציה — הקישו לתיקון';
 }

@@ -3528,5 +3528,6 @@
     "transcriptionUnavailableRecordingContinues": "การถอดเสียงไม่พร้อมใช้งาน การบันทึกยังดำเนินต่อในอุปกรณ์และจะประมวลผลในภายหลัง",
     "transcriptionUnavailableSavingOnDevice": "การถอดเสียงไม่พร้อมใช้งาน · กำลังบันทึกในอุปกรณ์",
     "transcriptionsPendingFraction": "การถอดเสียงที่รออยู่ {pending}/{total}",
-    "transcriptionsPendingCount": "การถอดเสียงที่รออยู่ {count}"
+    "transcriptionsPendingCount": "การถอดเสียงที่รออยู่ {count}",
+    "captureRecoveryBanner": "เสียงจากจี้ไม่ถึงแอป — แตะเพื่อซ่อมแซม"
 }
