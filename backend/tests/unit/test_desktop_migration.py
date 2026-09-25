@@ -522,6 +522,60 @@ class TestAssistantSettingsWireCompat:
 class TestDesktopMessagesWireCompat:
     """Verify message field names match cross-platform expectations."""
 
+    def test_add_message_injects_plugin_id_mirror(self):
+        """add_message persists plugin_id mirroring app_id even though Message dropped the field.
+
+        The messages collection is still queried by `plugin_id` (get_messages,
+        get_app_messages, get_chat_history, get_messages_reconcile_page,
+        batch_delete_messages) and cross-platform writers keep storing it, so a
+        Message.model_dump() written without the mirror would be invisible to
+        every app-scoped query.
+        """
+        from models.chat import Message
+
+        ai_message = Message(
+            id='msg-1',
+            text='hello',
+            created_at=datetime.now(timezone.utc),
+            sender='ai',
+            app_id='my-app',
+            type='text',
+        )
+        dump = ai_message.model_dump()
+        assert 'plugin_id' not in dump  # the model no longer carries the field
+
+        messages_col = MagicMock()
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value = messages_col
+            chat_db.add_message('test-uid', dump)
+
+        stored = messages_col.add.call_args[0][0]
+        assert stored['plugin_id'] == 'my-app', 'stored rows must keep the plugin_id query mirror'
+        assert stored['app_id'] == 'my-app'
+        assert 'memories' not in stored
+
+    def test_add_message_keeps_null_plugin_id_for_main_chat(self):
+        """Main-chat rows (app_id None) store an explicit null plugin_id, matching pre-model-drop dumps."""
+        from models.chat import Message
+
+        ai_message = Message(
+            id='msg-2',
+            text='hello',
+            created_at=datetime.now(timezone.utc),
+            sender='ai',
+            app_id=None,
+            type='text',
+        )
+        dump = ai_message.model_dump()
+        messages_col = MagicMock()
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value = messages_col
+            chat_db.add_message('test-uid', dump)
+
+        stored = messages_col.add.call_args[0][0]
+        assert 'plugin_id' in stored
+        assert stored['plugin_id'] is None
+
     def test_save_message_writes_expected_fields(self):
         """save_message writes plugin_id, chat_session_id, type='text', from_external_integration=False."""
         mock_doc_ref = MagicMock()

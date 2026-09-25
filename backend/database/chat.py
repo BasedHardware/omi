@@ -125,6 +125,12 @@ def decrypt_message_payload(message_data: Dict[str, Any], uid: str) -> Dict[str,
 @prepare_for_write(data_arg_name='message_data', prepare_func=_prepare_data_for_write)
 def add_message(uid: str, message_data: Dict[str, Any]) -> Dict[str, Any]:
     del message_data['memories']
+    # `Message` no longer models plugin_id, but this collection is still queried
+    # by plugin_id (get_messages, get_app_messages, get_chat_history,
+    # get_messages_reconcile_page, batch_delete_messages) and cross-platform
+    # writers keep storing it. Mirror app_id the way save_message does until
+    # every reader migrates to app_id.
+    message_data.setdefault('plugin_id', message_data.get('app_id'))
     user_ref = db.collection('users').document(uid)
     user_ref.collection('messages').add(message_data)
     return message_data
