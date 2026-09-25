@@ -10987,9 +10987,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get transcriptionUnavailableRecordingContinues => '文字起こしは利用できません。録音は端末上で続き、後で処理されます';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => '文字起こし不可 · 端末に保存中';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return '文字起こし待ち $pending/$total';
   }
@@ -11048,6 +11045,39 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'ペンダントの音声がアプリに届いていません — タップして修復';
+
+  @override
+  String get captureNotTranscribing => '文字起こし停止中';
+
+  @override
+  String get captureAudioSavedTranscribesLater => '音声は保存済み、後で文字起こし';
+
+  @override
+  String get captureStillRecording => '録音は継続中';
+
+  @override
+  String get captureMicInUseElsewhere => '別のアプリがマイクを使用中';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      '通話または別のアプリがマイクを使用しているため、Omiは今は聞き取れません。マイクが空くとOmiは自動で再開します。それまでに録音した内容は保存されています。';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'カスタムの音声認識サービスに接続できません。Omiは音声をこのスマートフォンに保持し、サービスが復旧したら送信します。何も失われません。';
+
+  @override
+  String get captureStarting => '開始中…';
+
+  @override
+  String get capturePhoneStorageFull => '端末の空き容量なし';
+
+  @override
+  String get captureStorageAlmostFull => '空き容量わずか';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'ペンダントとこのスマートフォンの接続が切れました。ペンダントの電源が入っていて近くにあれば、Omiは自動で再接続します。それまでに録音した内容は保存されています。';
 
   @override
   String participantsSummaryUncounted(String name) {

@@ -90,6 +90,31 @@ enum ConferencingApps {
     return title.range(of: browserCallTitlePattern, options: .regularExpression) != nil
   }
 
+  /// The meeting code a joined Google Meet tab is titled with ("Meet - amc-iajq-asx" gives
+  /// "amc-iajq-asx"), or nil for any other title. Two Meets back to back differ only here.
+  static func meetingCode(fromTitle title: String) -> String? {
+    guard let range = title.range(of: browserCallTitlePattern, options: .regularExpression) else { return nil }
+    return String(title[range].suffix(12)).lowercased()
+  }
+
+  /// Which calls are on right now, so `MeetingDetector` can tell one call from the next while
+  /// the microphone never goes quiet long enough for an off edge. `meet:<code>` for each
+  /// on-screen Google Meet window (needs Screen Recording permission, as titles do) and
+  /// `app:<bundle id>` for each native call app holding the microphone (macOS 14.4+). Browsers
+  /// get no app identity: one browser hosts every web call, so only the Meet code separates them.
+  static func currentCallIdentities() -> Set<String> {
+    var identities = Set<String>()
+    if #available(macOS 14.4, *) {
+      for bundleID in bundleIDsRunningInput() where isNativeCallApp(bundleID: bundleID) {
+        identities.insert("app:\(bundleID)")
+      }
+    }
+    for title in onScreenBrowserWindowTitles() {
+      if let code = meetingCode(fromTitle: title) { identities.insert("meet:\(code)") }
+    }
+    return identities
+  }
+
   /// Bundle IDs (lowercased) of native conferencing apps, used for mic-in-use ("in a call")
   /// detection. A native call app that is *running but idle* (open, not in a call) is NOT using
   /// the microphone, so it won't be treated as a meeting.
@@ -199,22 +224,25 @@ enum ConferencingApps {
   /// Recording permission; without it this returns false (native-app calls are still detected).
   /// This is the fallback that catches a *muted* browser call (where mic input has dropped).
   static func browserCallWindowPresent() -> Bool {
+    onScreenBrowserWindowTitles().contains(where: isBrowserCallTitle)
+  }
+
+  /// Titles of normal-layer on-screen browser windows (each shows its active tab's title).
+  /// Empty without Screen Recording permission.
+  private static func onScreenBrowserWindowTitles() -> [String] {
     guard
       let windows = CGWindowListCopyWindowInfo(
         [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]]
     else {
-      return false
+      return []
     }
-    for window in windows {
-      let layer = window[kCGWindowLayer as String] as? Int ?? -1
-      guard layer == 0 else { continue }
-      guard let owner = window[kCGWindowOwnerName as String] as? String,
-        browserApps.contains(owner),
-        let title = window[kCGWindowName as String] as? String
-      else { continue }
-      if isBrowserCallTitle(title) { return true }
+    return windows.compactMap { window in
+      guard window[kCGWindowLayer as String] as? Int ?? -1 == 0,
+        let owner = window[kCGWindowOwnerName as String] as? String,
+        browserApps.contains(owner)
+      else { return nil }
+      return window[kCGWindowName as String] as? String
     }
-    return false
   }
 
   // MARK: - Active outgoing screen share detection

@@ -3528,7 +3528,6 @@
     "addToClaudeCodeConfig": "~/.claude.json में जोड़ें",
     "claudeDesktopConnectorSetup": "Claude Desktop → Settings → Connectors पर एक कस्टम कनेक्टर जोड़ें और सर्वर URL पेस्ट करें। यदि Claude एक एडवांस्ड OAuth Client ID मांगता है, तो नीचे दिया गया मान उपयोग करें और सीक्रेट खाली छोड़ें — अपनी MCP API कुंजी को कभी भी OAuth सीक्रेट के रूप में उपयोग न करें।",
     "transcriptionUnavailableRecordingContinues": "ट्रांसक्रिप्शन उपलब्ध नहीं हैं, रिकॉर्डिंग डिवाइस पर जारी है और बाद में प्रोसेस होगी",
-    "transcriptionUnavailableSavingOnDevice": "ट्रांसक्रिप्शन अनुपलब्ध · डिवाइस पर सहेजा जा रहा है",
     "transcriptionsPendingFraction": "लंबित ट्रांसक्रिप्शन {pending}/{total}",
     "transcriptionsPendingCount": "लंबित ट्रांसक्रिप्शन {count}",
     "captureSourceCall": "कॉल",
@@ -3547,5 +3546,15 @@
     "moreWaysToRecord": "रिकॉर्ड करने के और तरीके",
     "openCall": "कॉल खोलें",
     "captureRecoveryBanner": "पेंडेंट का ऑडियो ऐप तक नहीं पहुंच रहा है — ठीक करने के लिए टैप करें",
+    "captureNotTranscribing": "ट्रांसक्राइब नहीं हो रहा",
+    "captureAudioSavedTranscribesLater": "ऑडियो सहेजा गया, बाद में ट्रांसक्राइब होगा",
+    "captureStillRecording": "अभी भी रिकॉर्ड हो रहा है",
+    "captureMicInUseElsewhere": "माइक किसी और ऐप में इस्तेमाल हो रहा है",
+    "captureMicInterruptedDetail": "किसी कॉल या दूसरे ऐप ने माइक्रोफ़ोन ले लिया है, इसलिए Omi अभी सुन नहीं पा रहा। माइक्रोफ़ोन खाली होते ही Omi अपने आप फिर शुरू हो जाएगा। इससे पहले रिकॉर्ड की गई हर चीज़ सुरक्षित है।",
+    "captureCustomSttUnreachableDetail": "आपकी कस्टम स्पीच-टू-टेक्स्ट सेवा तक नहीं पहुँचा जा सकता। Omi ऑडियो को इसी फ़ोन पर रखता है और सेवा वापस आने पर भेज देगा। कुछ भी नहीं खोएगा।",
+    "captureStarting": "शुरू हो रहा है…",
+    "capturePhoneStorageFull": "फ़ोन स्टोरेज भर गया",
+    "captureStorageAlmostFull": "स्टोरेज लगभग भर गया",
+    "capturePendantDisconnectedDetail": "आपके पेंडेंट का इस फ़ोन से कनेक्शन टूट गया। पेंडेंट चालू और पास होने पर Omi अपने आप फिर से कनेक्ट हो जाएगा। इससे पहले रिकॉर्ड की गई हर चीज़ सुरक्षित है।",
     "participantsSummaryUncounted": "{name} और अन्य"
 }

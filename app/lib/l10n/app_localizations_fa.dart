@@ -11169,9 +11169,6 @@ class AppLocalizationsFa extends AppLocalizations {
       'رونویسی‌ها در دسترس نیستند، ضبط در دستگاه ادامه دارد و بعداً پردازش می‌شود';
 
   @override
-  String get transcriptionUnavailableSavingOnDevice => 'رونویسی در دسترس نیست · در حال ذخیره روی دستگاه';
-
-  @override
   String transcriptionsPendingFraction(int pending, int total) {
     return 'رونویسی‌های در انتظار $pending/$total';
   }
@@ -11230,6 +11227,39 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get captureRecoveryBanner => 'صدای آویز به برنامه نمی‌رسد — برای تعمیر ضربه بزنید';
+
+  @override
+  String get captureNotTranscribing => 'رونویسی انجام نمی‌شود';
+
+  @override
+  String get captureAudioSavedTranscribesLater => 'صدا ذخیره شد، بعداً رونویسی می‌شود';
+
+  @override
+  String get captureStillRecording => 'ضبط ادامه دارد';
+
+  @override
+  String get captureMicInUseElsewhere => 'میکروفون در اختیار برنامه دیگری است';
+
+  @override
+  String get captureMicInterruptedDetail =>
+      'یک تماس یا برنامه دیگر میکروفون را گرفته است، بنابراین Omi اکنون نمی‌شنود. وقتی میکروفون آزاد شود، Omi خودش ادامه می‌دهد. هر آنچه پیش از این ضبط شده محفوظ است.';
+
+  @override
+  String get captureCustomSttUnreachableDetail =>
+      'به سرویس سفارشی تبدیل گفتار به متن شما دسترسی نیست. Omi صدا را روی همین تلفن نگه می‌دارد و وقتی سرویس برگشت آن را ارسال می‌کند. چیزی از دست نمی‌رود.';
+
+  @override
+  String get captureStarting => 'در حال شروع…';
+
+  @override
+  String get capturePhoneStorageFull => 'حافظه تلفن پر است';
+
+  @override
+  String get captureStorageAlmostFull => 'حافظه تقریباً پر است';
+
+  @override
+  String get capturePendantDisconnectedDetail =>
+      'آویز شما اتصالش را با این تلفن از دست داد. وقتی آویز روشن و نزدیک باشد، Omi خودش دوباره وصل می‌شود. هر آنچه پیش از این ضبط شده محفوظ است.';
 
   @override
   String participantsSummaryUncounted(String name) {

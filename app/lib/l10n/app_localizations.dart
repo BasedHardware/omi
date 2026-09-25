@@ -20355,12 +20355,6 @@ abstract class AppLocalizations {
   /// **'Transcriptions are unavailable, recording continues on device and will process later'**
   String get transcriptionUnavailableRecordingContinues;
 
-  /// Compact transcription-outage status for the in-progress capture card.
-  ///
-  /// In en, this message translates to:
-  /// **'Transcription unavailable · saving on device'**
-  String get transcriptionUnavailableSavingOnDevice;
-
   /// Queued recordings still waiting for transcription (pending) out of the session total, on the live-capture WAL indicator.
   ///
   /// In en, this message translates to:
@@ -20468,6 +20462,66 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Pendant audio is not reaching the app — tap to repair'**
   String get captureRecoveryBanner;
+
+  /// Home live capture card, line 1: live transcription is not running (server said it cannot); audio keeps recording. Must stay short (one line on a small phone).
+  ///
+  /// In en, this message translates to:
+  /// **'Not transcribing'**
+  String get captureNotTranscribing;
+
+  /// Home live capture card, line 2 after the timer (e.g. "0:14 · Audio saved, transcribes later"): recording continues on the phone and will be transcribed later.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio saved, transcribes later'**
+  String get captureAudioSavedTranscribesLater;
+
+  /// Home live capture card, line 2 after the timer while the transcription connection is being restored: recording has not stopped.
+  ///
+  /// In en, this message translates to:
+  /// **'Still recording'**
+  String get captureStillRecording;
+
+  /// Home live capture card, line 2 after the timer when the OS or another app (a call, another audio app) took the microphone and capture is paused.
+  ///
+  /// In en, this message translates to:
+  /// **'Mic in use by another app'**
+  String get captureMicInUseElsewhere;
+
+  /// Details sheet opened from the Home live capture card when a call or another app took the microphone. Explains the pause and that it resumes by itself.
+  ///
+  /// In en, this message translates to:
+  /// **'A call or another app took the microphone, so Omi can\'t hear right now. Omi resumes on its own when the microphone is free. Everything recorded before this is safe.'**
+  String get captureMicInterruptedDetail;
+
+  /// Details sheet opened from the Home live capture card when the user's custom speech-to-text endpoint cannot be reached; audio is buffered on the phone.
+  ///
+  /// In en, this message translates to:
+  /// **'Your custom speech-to-text service can\'t be reached. Omi keeps your audio on this phone and sends it when the service is back. Nothing is lost.'**
+  String get captureCustomSttUnreachableDetail;
+
+  /// Home live capture card, line 1: the phone microphone recording is starting and audio is not flowing yet.
+  ///
+  /// In en, this message translates to:
+  /// **'Starting…'**
+  String get captureStarting;
+
+  /// Transcribe Later card, line 2 after the timer: recording paused because the phone is out of storage.
+  ///
+  /// In en, this message translates to:
+  /// **'Phone storage full'**
+  String get capturePhoneStorageFull;
+
+  /// Transcribe Later card for a pendant, line 2: the pendant's own storage is almost full.
+  ///
+  /// In en, this message translates to:
+  /// **'Storage almost full'**
+  String get captureStorageAlmostFull;
+
+  /// Details sheet from the Home live capture card when the pendant disconnected in the middle of a capture.
+  ///
+  /// In en, this message translates to:
+  /// **'Your pendant lost its connection to this phone. Omi reconnects on its own when the pendant is on and nearby. Everything recorded before this is safe.'**
+  String get capturePendantDisconnectedDetail;
 
   /// Conversation header people chip when other voices spoke but could not be counted reliably, e.g. 'David + others'
   ///

@@ -11094,7 +11094,6 @@
     "addToClaudeCodeConfig": "Dodaj u ~/.claude.json",
     "claudeDesktopConnectorSetup": "Na Claude Desktop → Settings → Connectors dodajte prilagođeni konektor i zalijepite URL servera. Ako Claude zatraži napredni OAuth Client ID, koristite vrijednost ispod i ostavite tajnu praznom — nikada nemojte koristiti svoj MCP API ključ kao OAuth tajnu.",
     "transcriptionUnavailableRecordingContinues": "Transkripcije nisu dostupne, snimanje se nastavlja na uređaju i biće obrađeno kasnije",
-    "transcriptionUnavailableSavingOnDevice": "Transkripcija nedostupna · čuva se na uređaju",
     "transcriptionsPendingFraction": "Transkripcije na čekanju {pending}/{total}",
     "transcriptionsPendingCount": "Transkripcije na čekanju {count}",
     "captureSourceCall": "Poziv",
@@ -11113,5 +11112,15 @@
     "moreWaysToRecord": "Više načina snimanja",
     "openCall": "Otvori poziv",
     "captureRecoveryBanner": "Zvuk privjeska ne stiže do aplikacije — dodirnite za popravak",
+    "captureNotTranscribing": "Nema transkripcije",
+    "captureAudioSavedTranscribesLater": "Zvuk je sačuvan, transkripcija kasnije",
+    "captureStillRecording": "Snimanje se nastavlja",
+    "captureMicInUseElsewhere": "Mikrofon koristi druga aplikacija",
+    "captureMicInterruptedDetail": "Poziv ili druga aplikacija preuzela je mikrofon, pa Omi trenutno ne čuje. Omi će sam nastaviti kad mikrofon bude slobodan. Sve snimljeno do sada je sačuvano.",
+    "captureCustomSttUnreachableDetail": "Vaša prilagođena usluga pretvaranja govora u tekst nije dostupna. Omi čuva zvuk na ovom telefonu i poslat će ga kad se usluga vrati. Ništa se ne gubi.",
+    "captureStarting": "Pokretanje…",
+    "capturePhoneStorageFull": "Memorija telefona je puna",
+    "captureStorageAlmostFull": "Memorija je skoro puna",
+    "capturePendantDisconnectedDetail": "Privjesak je izgubio vezu s ovim telefonom. Omi će se sam ponovo povezati kad je privjesak uključen i u blizini. Sve snimljeno do sada je sačuvano.",
     "participantsSummaryUncounted": "{name} i drugi"
 }
