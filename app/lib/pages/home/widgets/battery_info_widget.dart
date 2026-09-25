@@ -113,11 +113,7 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                     const SizedBox(width: 4.0),
                     Text(
                       '$batteryLevel%',
-                      style: OmiType.caption.copyWith(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: low ? OmiColors.danger : OmiColors.textPrimary,
-                      ),
+                      style: _headerPercentStyle(low ? OmiColors.danger : OmiColors.textPrimary),
                     ),
                   ],
                   // Second connected device (OmiGlass next to an Omi): its
@@ -139,11 +135,7 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                       const SizedBox(width: 4.0),
                       Text(
                         '$companionBatteryLevel%',
-                        style: OmiType.caption.copyWith(
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold,
-                          color: OmiColors.textPrimary,
-                        ),
+                        style: _headerPercentStyle(OmiColors.textPrimary),
                       ),
                     ],
                   ],
@@ -223,6 +215,13 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
     );
   }
 }
+
+
+TextStyle _headerPercentStyle(Color color) => OmiType.caption.copyWith(
+      fontSize: 12,
+      fontWeight: FontWeight.bold,
+      color: color,
+    );
 
 /// A 36pt header pill inside a 44pt target, announced as one button (device details / connect).
 class _DevicePill extends StatelessWidget {
