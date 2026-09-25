@@ -391,3 +391,55 @@ async def test_matching_replay_reaching_past_live_buffer_continues_run(env):
     assert first['data'] == pcm, 'the replayed prefix must be trimmed, not duplicated'
     assert second['data'] == tail
     assert second['timestamp'] == pytest.approx(3060.0)  # continues at the accepted end
+
+
+async def test_failed_upload_retries_on_a_later_process_tick(env, monkeypatch):
+    """A ready-lane upload failure retries one process interval later.
+
+    The batch closed by a discontinuity uploads from the ordered ready lane;
+    re-inserting a failed attempt at the front of that lane retried it inside
+    the same loop turn, burning the whole budget on one fast permanent error
+    and blocking this socket's uploader for back-to-back slow timeouts. The
+    connection is held open so the retry is paced by the process interval, not
+    by the shutdown drain (which legitimately retries immediately).
+    """
+    interval = 0.25
+    monkeypatch.setattr(pusher, 'PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL', interval)
+    attempts: list[float] = []
+
+    def flaky_upload(chunks, uid, cid, level=None):
+        attempts.append(time.monotonic())
+        if len(attempts) == 1:
+            raise RuntimeError('transient gcs error')
+        env.extend((cid, chunk) for chunk in chunks)
+        return [f'chunks/{uid}/{cid}/{chunk["timestamp"]:.3f}.batch.bin' for chunk in chunks]
+
+    monkeypatch.setattr(pusher, 'upload_audio_chunks_batch', flaky_upload)
+
+    release = asyncio.Event()
+    run_a = b'\x17\x00' * (RATE * 5)  # three partial runs; the gaps close each
+    run_b = b'\x18\x00' * (RATE * 5)  # previous batch into the ready lane
+    run_c = b'\x19\x00' * (RATE * 5)
+    ws = HeldOpenWebSocket(
+        [
+            _conversation('c1'),
+            _audio(9000.0, run_a),
+            _audio(9100.0, run_b),
+            _audio(9200.0, run_c),
+        ],
+        release,
+    )
+    task = asyncio.create_task(_run(ws))
+    try:
+        deadline = time.monotonic() + 10.0
+        while len(attempts) < 2 and time.monotonic() < deadline:
+            await asyncio.sleep(0.005)
+    finally:
+        release.set()
+        await task
+
+    assert (
+        attempts[1] - attempts[0] >= interval - 0.05
+    ), 'the ready-lane retry must be paced by a later process tick, not retried in the same loop turn'
+    assert len(env) == 3, 'every closed run still uploads'
+    assert [chunk['data'] for _cid, chunk in env] == [run_a, run_b, run_c]

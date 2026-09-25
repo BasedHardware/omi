@@ -373,10 +373,14 @@ async def _websocket_util_trigger(
                 if retries < PRIVATE_CLOUD_SYNC_MAX_RETRIES:
                     batch['retries'] = retries + 1
                     batch['data'] = bytearray(chunk_data)
-                    batch['queued_at'] = 0.0 if not websocket_active else time.monotonic()
-                    # Retry in the ordered ready lane: re-entering pending could
-                    # concatenate this run with a newer noncontiguous one.
-                    ready_batches.insert(0, batch)
+                    # Retry in the ordered ready lane on a later process tick,
+                    # keeping the batch's queue time: an in-turn immediate
+                    # retry burns the whole budget on one fast permanent error
+                    # (or blocks this uploader for four back-to-back slow
+                    # timeouts). The ready lane skips the retry gate during
+                    # shutdown so the drain stays bounded.
+                    batch['retry_at'] = time.monotonic() + PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL
+                    ready_batches.append(batch)
                     logger.error(f"Private cloud batch upload failed (retry {retries + 1}): {e} {uid} {conv_id}")
                 else:
                     audio_budget.release(len(chunk_data))
@@ -407,8 +411,15 @@ async def _websocket_util_trigger(
             now = time.monotonic()
             batch_size_threshold = sample_rate * 2 * PRIVATE_CLOUD_CHUNK_DURATION
 
-            # Discontinuity-closed batches upload first, in order.
+            # Discontinuity-closed batches upload first, in order. A failed
+            # upload's retry waits one process interval before it is due
+            # (`retry_at`); the gate is skipped during shutdown so the drain
+            # never stalls on it.
             while ready_batches:
+                head = ready_batches[0]
+                retry_at = head.get('retry_at')
+                if retry_at is not None and websocket_active and now < retry_at:
+                    break
                 await _upload_batch(ready_batches.pop(0))
 
             # Determine which conversations to flush
