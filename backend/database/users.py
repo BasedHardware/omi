@@ -230,7 +230,7 @@ def get_user_store_recording_permission(uid: str):
 
 def set_user_store_recording_permission(uid: str, value: bool):
     user_ref = db.collection('users').document(uid)
-    user_ref.update({'store_recording_permission': value})
+    user_ref.set({'store_recording_permission': bool(value)}, merge=True)
 
 
 def get_meeting_note_screenshots_enabled(uid: str) -> bool:
@@ -238,26 +238,26 @@ def get_meeting_note_screenshots_enabled(uid: str) -> bool:
     §6). Default true — off means the feature does nothing and existing
     frames stay hidden (contract §9), it does not delete anything."""
     user_ref = db.collection('users').document(uid)
-    user_data = user_ref.get().to_dict() or {}
-    return user_data.get('meeting_note_screenshots_enabled', True)
+    val = (user_ref.get().to_dict() or {}).get('meeting_note_screenshots_enabled')
+    return True if val is None else bool(val)
 
 
 def set_meeting_note_screenshots_enabled(uid: str, value: bool):
     user_ref = db.collection('users').document(uid)
-    user_ref.update({'meeting_note_screenshots_enabled': value})
+    user_ref.set({'meeting_note_screenshots_enabled': bool(value)}, merge=True)
 
 
 def get_user_private_cloud_sync_enabled(uid: str) -> bool:
     """Check if user has private cloud sync enabled."""
     user_ref = db.collection('users').document(uid)
-    user_data = user_ref.get().to_dict() or {}
-    return user_data.get('private_cloud_sync_enabled', True)
+    val = (user_ref.get().to_dict() or {}).get('private_cloud_sync_enabled')
+    return True if val is None else bool(val)
 
 
 def set_user_private_cloud_sync_enabled(uid: str, value: bool):
     """Enable or disable private cloud sync for a user."""
     user_ref = db.collection('users').document(uid)
-    user_ref.update({'private_cloud_sync_enabled': value})
+    user_ref.set({'private_cloud_sync_enabled': bool(value)}, merge=True)
 
 
 def set_user_cancellation_feedback(uid: str, reason: str, reason_details: Optional[str] = None):
@@ -1167,7 +1167,7 @@ def get_user_speaker_embedding(uid: str) -> Optional[list]:
     user_doc = user_ref.get()
     if not user_doc.exists:
         return None
-    return user_doc.to_dict().get('speaker_embedding')
+    return (user_doc.to_dict() or {}).get('speaker_embedding')
 
 
 def set_person_speaker_embedding(uid: str, person_id: str, embedding: list, *, expected_updated_at) -> bool:
@@ -2249,10 +2249,10 @@ def get_notification_settings(uid: str) -> dict:
     doc = user_ref.get()
     if not doc.exists:
         return {'enabled': True, 'frequency': 0}
-    data = doc.to_dict()
+    data = doc.to_dict() or {}
     return {
-        'enabled': data.get('notifications_enabled', True),
-        'frequency': data.get('notification_frequency', 0),
+        'enabled': True if data.get('notifications_enabled') is None else bool(data.get('notifications_enabled')),
+        'frequency': 0 if data.get('notification_frequency') is None else int(data.get('notification_frequency')),
     }
 
 
@@ -2264,7 +2264,7 @@ def update_notification_settings(uid: str, enabled: bool = None, frequency: int 
     if frequency is not None:
         updates['notification_frequency'] = frequency
     if updates:
-        user_ref.update(updates)
+        user_ref.set(updates, merge=True)
     return get_notification_settings(uid)
 
 
@@ -2274,7 +2274,7 @@ def _get_raw_assistant_settings(uid: str) -> dict:
     doc = user_ref.get()
     if not doc.exists:
         return {}
-    return doc.to_dict().get('assistant_settings') or {}
+    return (doc.to_dict() or {}).get('assistant_settings') or {}
 
 
 def get_assistant_settings(uid: str) -> dict:
@@ -2287,7 +2287,7 @@ def get_assistant_settings(uid: str) -> dict:
     doc = user_ref.get()
     if not doc.exists:
         return {}
-    data = doc.to_dict()
+    data = doc.to_dict() or {}
     result = (data.get('assistant_settings') or {}).copy()
     if data.get('update_channel') is not None:
         result['update_channel'] = data['update_channel']
@@ -2332,7 +2332,7 @@ def _get_ai_user_profile_from_firestore(uid: str) -> Optional[dict]:
     doc = user_ref.get(['ai_user_profile'])
     if not doc.exists:
         return None
-    return doc.to_dict().get('ai_user_profile')
+    return (doc.to_dict() or {}).get('ai_user_profile')
 
 
 def get_ai_user_profile(uid: str) -> Optional[dict]:
