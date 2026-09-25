@@ -11,6 +11,7 @@ from routers import auth
 from testing.import_isolation import load_module_fresh, stub_modules
 from utils.referrals import (
     REFERRAL_COOKIE_NAME,
+    REFERRAL_SIGNUP_URL,
     ReferralCodeError,
     create_referral_code,
     is_new_referral_account,
@@ -303,7 +304,7 @@ def test_capture_referral_redirects_to_signup_with_cookie(monkeypatch):
         response = referrals.capture_referral(code)
 
     assert response.status_code == 302
-    assert response.headers["location"].startswith("https://omi.me/signup?")
+    assert response.headers["location"].startswith(f"{REFERRAL_SIGNUP_URL}?")
     assert "environment=" in response.headers["location"]
     set_cookie = response.headers.get("set-cookie", "")
     assert REFERRAL_COOKIE_NAME in set_cookie
