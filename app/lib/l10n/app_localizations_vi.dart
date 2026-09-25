@@ -948,9 +948,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'Thêm vào claude_desktop_config.json';
-
-  @override
   String get copyConfig => 'Sao chép cấu hình';
 
   @override
@@ -2491,13 +2488,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get clearAllNodesAndConnections => 'Xóa tất cả các nút và kết nối';
 
   @override
-  String get addToClaudeDesktopConfig => 'Thêm vào claude_desktop_config.json';
-
-  @override
   String get connectAiAssistantsToData => 'Kết nối trợ lý AI với dữ liệu của bạn';
-
-  @override
-  String get useYourMcpApiKey => 'Sử dụng khóa API MCP của bạn';
 
   @override
   String get realTimeTranscript => 'Bản ghi âm Thời gian thực';
@@ -9973,7 +9964,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get transcriptionNoAudio => 'Bản ghi âm không nhận được âm thanh';
 
   @override
-  String get tapPlusToStartRecording => 'Nhấn + để bắt đầu ghi âm';
+  String get tapPlusToStartRecording => 'Nhấn nút ghi âm để bắt đầu ghi âm';
 
   @override
   String get chatBlockTask => 'Nhiệm vụ';
@@ -10216,7 +10207,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'Các cuộc trò chuyện bạn ghi âm sẽ hiển thị ở đây. Nhấn + trên Trang chủ để ghi cuộc đầu tiên.';
+      'Các cuộc trò chuyện bạn ghi âm sẽ hiển thị ở đây. Nhấn nút ghi âm trên Trang chủ để ghi cuộc đầu tiên.';
 
   @override
   String get conversationMap => 'Bản đồ cuộc trò chuyện';
@@ -10693,7 +10684,7 @@ class AppLocalizationsVi extends AppLocalizations {
   String get deviceConnecting => 'Đang kết nối…';
 
   @override
-  String get recordOptionsTip => 'Mẹo: nhấn giữ nút ghi âm để ghi âm cuộc gọi điện thoại.';
+  String get recordOptionsTip => 'Mẹo: nhấn vào mũi tên trên nút ghi âm để ghi âm cuộc gọi điện thoại.';
 
   @override
   String get firmwareUpdateFailedTitle => 'Cập nhật thất bại';
@@ -11167,6 +11158,23 @@ class AppLocalizationsVi extends AppLocalizations {
       'Khi bạn đặt tên cho ai đó, Omi lưu một mẫu giọng ngắn để nhận ra họ vào lần sau';
 
   @override
+  String get leaveBlank => 'Để trống';
+
+  @override
+  String get mcpOAuthSetup =>
+      'Trên claude.ai, thêm trình kết nối tùy chỉnh và dán URL máy chủ. Nếu Claude yêu cầu OAuth Client ID nâng cao, hãy dùng giá trị bên dưới và để trống phần bí mật — không bao giờ dùng khóa API MCP của bạn làm bí mật OAuth.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'Thêm vào ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'Trên Claude Desktop → Settings → Connectors, thêm trình kết nối tùy chỉnh và dán URL máy chủ. Nếu Claude yêu cầu OAuth Client ID nâng cao, hãy dùng giá trị bên dưới và để trống phần bí mật — không bao giờ dùng khóa API MCP của bạn làm bí mật OAuth.';
+
+  @override
   String get transcriptionUnavailableRecordingContinues =>
       'Bản chép âm không khả dụng, quá trình ghi âm tiếp tục trên thiết bị và sẽ được xử lý sau';
 
@@ -11182,4 +11190,54 @@ class AppLocalizationsVi extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Bản chép âm đang chờ $count';
   }
+
+  @override
+  String get captureSourceCall => 'Cuộc gọi';
+
+  @override
+  String get captureSourcePhoneMic => 'Micro điện thoại';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Tiếp tục';
+
+  @override
+  String get finish => 'Kết thúc';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Mặt dây chuyền tạm dừng · tiếp tục khi bạn xong';
+
+  @override
+  String get pendantIsListeningTitle => 'Mặt dây chuyền của bạn đang lắng nghe';
+
+  @override
+  String get oneSourceAtATime => 'Omi chỉ ghi âm từ một nguồn mỗi lúc.';
+
+  @override
+  String get recordWithPhoneInstead => 'Chuyển sang ghi âm bằng điện thoại';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'Mặt dây chuyền tạm dừng đến khi bạn xong';
+
+  @override
+  String get pendantPausesDuringCall => 'Mặt dây chuyền tạm dừng trong cuộc gọi';
+
+  @override
+  String get keepUsingPendant => 'Tiếp tục dùng mặt dây chuyền';
+
+  @override
+  String get recordWith => 'Ghi âm bằng';
+
+  @override
+  String get moreWaysToRecord => 'Thêm cách ghi âm';
+
+  @override
+  String get openCall => 'Mở cuộc gọi';
+
+  @override
+  String get captureRecoveryBanner => 'Âm thanh từ mặt dây chuyền không đến được ứng dụng — chạm để sửa chữa';
 }

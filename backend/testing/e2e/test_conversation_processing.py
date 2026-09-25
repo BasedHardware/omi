@@ -13,7 +13,7 @@ def _patch_process_conversation_boundaries(monkeypatch):
 
     # Universal canonical intake is deployment-fenced; this hermetic lifecycle
     # test explicitly opts its local process into the enabled read/write mode.
-    monkeypatch.setenv("MEMORY_MODE", "read")
+    monkeypatch.setenv("MEMORY_ENABLED", "on")
 
     def run_selected_postprocess(_executor, fn, *args, **kwargs):
         if fn.__name__ in {"_extract_memories", "_save_action_items"}:

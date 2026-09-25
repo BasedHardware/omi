@@ -1125,6 +1125,9 @@ environments:
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
               version: latest
+            POSTHOG_EVENTS_API_KEY:
+              secret: POSTHOG_EVENTS_API_KEY
+              version: latest
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
@@ -1281,9 +1284,6 @@ environments:
             OMI_BACKGROUND_FLEX_CAPABLE:
               value: 'true'
               category: memory_rollout
-            DAILY_SUMMARY_SELECTION_MODE:
-              value: indexed
-              category: rollout
             PINECONE_INDEX_NAME:
               category: integrations
               value: memories-backend-dev
@@ -2608,6 +2608,9 @@ environments:
             ENCRYPTION_SECRET:
               secret: ENCRYPTION_SECRET
               version: latest
+            POSTHOG_EVENTS_API_KEY:
+              secret: POSTHOG_EVENTS_API_KEY
+              version: latest
             OMI_LLM_GATEWAY_SERVICE_TOKEN:
               secret: OMI_LLM_GATEWAY_SERVICE_TOKEN
               version: latest
@@ -2752,9 +2755,6 @@ environments:
             OMI_BACKGROUND_FLEX_CAPABLE:
               value: 'true'
               category: memory_rollout
-            DAILY_SUMMARY_SELECTION_MODE:
-              value: indexed
-              category: rollout
             PINECONE_INDEX_NAME:
               category: integrations
               value: memories-backend
@@ -3014,7 +3014,7 @@ environments:
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
             DAY3_REENGAGEMENT_EMAIL_ENABLED:
-              value: 'false'
+              value: 'true'
               category: lifecycle_email
             DAY3_REENGAGEMENT_EMAIL_KILL_SWITCH:
               value: 'false'

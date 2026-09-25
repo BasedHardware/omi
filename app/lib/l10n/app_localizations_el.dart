@@ -953,9 +953,6 @@ class AppLocalizationsEl extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'Προσθήκη στο claude_desktop_config.json';
-
-  @override
   String get copyConfig => 'Αντιγραφή Διαμόρφωσης';
 
   @override
@@ -2510,13 +2507,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get clearAllNodesAndConnections => 'Εκκαθάριση όλων των κόμβων και συνδέσεων';
 
   @override
-  String get addToClaudeDesktopConfig => 'Προσθήκη στο claude_desktop_config.json';
-
-  @override
   String get connectAiAssistantsToData => 'Συνδέστε βοηθούς AI με τα δεδομένα σας';
-
-  @override
-  String get useYourMcpApiKey => 'Χρησιμοποιήστε το κλειδί MCP API σας';
 
   @override
   String get realTimeTranscript => 'Μεταγραφή σε πραγματικό χρόνο';
@@ -10052,7 +10043,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get transcriptionNoAudio => 'Η μεταγραφή δεν λαμβάνει ήχο';
 
   @override
-  String get tapPlusToStartRecording => 'Πατήστε + για να ξεκινήσετε την εγγραφή';
+  String get tapPlusToStartRecording => 'Πατήστε το κουμπί εγγραφής για να ξεκινήσετε την εγγραφή';
 
   @override
   String get chatBlockTask => 'Εργασία';
@@ -10295,7 +10286,7 @@ class AppLocalizationsEl extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'Οι συνομιλίες που ηχογραφείτε εμφανίζονται εδώ. Πατήστε + στην Αρχική για να ηχογραφήσετε την πρώτη.';
+      'Οι συνομιλίες που ηχογραφείτε εμφανίζονται εδώ. Πατήστε το κουμπί εγγραφής στην Αρχική για να ηχογραφήσετε την πρώτη.';
 
   @override
   String get conversationMap => 'Χάρτης συνομιλιών';
@@ -10774,7 +10765,7 @@ class AppLocalizationsEl extends AppLocalizations {
   String get deviceConnecting => 'Σύνδεση…';
 
   @override
-  String get recordOptionsTip => 'Συμβουλή: πατήστε παρατεταμένα το κουμπί εγγραφής για να καταγράψετε μια κλήση.';
+  String get recordOptionsTip => 'Συμβουλή: πατήστε το βέλος στο κουμπί εγγραφής για να καταγράψετε μια κλήση.';
 
   @override
   String get firmwareUpdateFailedTitle => 'Η ενημέρωση απέτυχε';
@@ -11250,6 +11241,23 @@ class AppLocalizationsEl extends AppLocalizations {
       'Όταν ονομάζετε κάποιον, το Omi κρατά ένα σύντομο δείγμα φωνής για να τον αναγνωρίσει την επόμενη φορά';
 
   @override
+  String get leaveBlank => 'Αφήστε το κενό';
+
+  @override
+  String get mcpOAuthSetup =>
+      'Στο claude.ai, προσθέστε έναν προσαρμοσμένο σύνδεσμο και επικολλήστε το URL του διακομιστή. Αν το Claude ζητήσει ένα σύνθετο OAuth Client ID, χρησιμοποιήστε την τιμή παρακάτω και αφήστε το μυστικό κενό — μην χρησιμοποιείτε ποτέ το κλειδί MCP API σας ως μυστικό OAuth.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'Προσθήκη στο ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'Στο Claude Desktop → Settings → Connectors, προσθέστε έναν προσαρμοσμένο σύνδεσμο και επικολλήστε το URL του διακομιστή. Αν το Claude ζητήσει ένα σύνθετο OAuth Client ID, χρησιμοποιήστε την τιμή παρακάτω και αφήστε το μυστικό κενό — μην χρησιμοποιείτε ποτέ το κλειδί MCP API σας ως μυστικό OAuth.';
+
+  @override
   String get transcriptionUnavailableRecordingContinues =>
       'Οι απομαγνητοφωνήσεις δεν είναι διαθέσιμες, η ηχογράφηση συνεχίζεται στη συσκευή και θα επεξεργαστεί αργότερα';
 
@@ -11266,4 +11274,54 @@ class AppLocalizationsEl extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Αναμενόμενες απομαγνητοφωνήσεις $count';
   }
+
+  @override
+  String get captureSourceCall => 'Κλήση';
+
+  @override
+  String get captureSourcePhoneMic => 'Μικρόφωνο τηλεφώνου';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Συνέχεια';
+
+  @override
+  String get finish => 'Ολοκλήρωση';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Μενταγιόν σε παύση · συνεχίζει όταν τελειώσετε';
+
+  @override
+  String get pendantIsListeningTitle => 'Το μενταγιόν σας ακούει';
+
+  @override
+  String get oneSourceAtATime => 'Το Omi ηχογραφεί από μία μόνο πηγή κάθε φορά.';
+
+  @override
+  String get recordWithPhoneInstead => 'Εγγραφή με το τηλέφωνο αντ\' αυτού';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'Το μενταγιόν σε παύση μέχρι να τελειώσετε';
+
+  @override
+  String get pendantPausesDuringCall => 'Το μενταγιόν σε παύση κατά την κλήση';
+
+  @override
+  String get keepUsingPendant => 'Συνέχεια με το μενταγιόν';
+
+  @override
+  String get recordWith => 'Εγγραφή με';
+
+  @override
+  String get moreWaysToRecord => 'Περισσότεροι τρόποι εγγραφής';
+
+  @override
+  String get openCall => 'Άνοιγμα κλήσης';
+
+  @override
+  String get captureRecoveryBanner => 'Ο ήχος του μενταγιόν δεν φτάνει στην εφαρμογή — πατήστε για επισκευή';
 }

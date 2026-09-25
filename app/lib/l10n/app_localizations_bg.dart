@@ -951,9 +951,6 @@ class AppLocalizationsBg extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'Добавете към claude_desktop_config.json';
-
-  @override
   String get copyConfig => 'Копирай конфигурация';
 
   @override
@@ -2496,13 +2493,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get clearAllNodesAndConnections => 'Изчистване на всички възли и връзки';
 
   @override
-  String get addToClaudeDesktopConfig => 'Добавяне към claude_desktop_config.json';
-
-  @override
   String get connectAiAssistantsToData => 'Свържете AI асистенти с вашите данни';
-
-  @override
-  String get useYourMcpApiKey => 'Използвайте вашия MCP API ключ';
 
   @override
   String get realTimeTranscript => 'Транскрипция в реално време';
@@ -10019,7 +10010,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get transcriptionNoAudio => 'Транскрипцията не получава аудио';
 
   @override
-  String get tapPlusToStartRecording => 'Докоснете +, за да започнете запис';
+  String get tapPlusToStartRecording => 'Докоснете бутона за запис, за да започнете запис';
 
   @override
   String get chatBlockTask => 'Задача';
@@ -10262,7 +10253,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'Разговорите, които записвате, се появяват тук. Докоснете + на началния екран, за да запишете първия.';
+      'Разговорите, които записвате, се появяват тук. Докоснете бутона за запис на началния екран, за да запишете първия.';
 
   @override
   String get conversationMap => 'Карта на разговорите';
@@ -10741,7 +10732,7 @@ class AppLocalizationsBg extends AppLocalizations {
   String get deviceConnecting => 'Свързване…';
 
   @override
-  String get recordOptionsTip => 'Съвет: натиснете и задръжте бутона за запис, за да запишете телефонно обаждане.';
+  String get recordOptionsTip => 'Съвет: докоснете стрелката на бутона за запис, за да запишете телефонно обаждане.';
 
   @override
   String get firmwareUpdateFailedTitle => 'Неуспешна актуализация';
@@ -11216,6 +11207,23 @@ class AppLocalizationsBg extends AppLocalizations {
       'Когато назовете някого, Omi пази кратък гласов образец, за да го разпознае следващия път';
 
   @override
+  String get leaveBlank => 'Оставете празно';
+
+  @override
+  String get mcpOAuthSetup =>
+      'В claude.ai добавете персонализиран конектор и поставете URL адреса на сървъра. Ако Claude поиска разширен OAuth Client ID, използвайте стойността по-долу и оставете тайната празна — никога не използвайте вашия MCP API ключ като OAuth тайна.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'Добавяне към ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'В Claude Desktop → Settings → Connectors добавете персонализиран конектор и поставете URL адреса на сървъра. Ако Claude поиска разширен OAuth Client ID, използвайте стойността по-долу и оставете тайната празна — никога не използвайте вашия MCP API ключ като OAuth тайна.';
+
+  @override
   String get transcriptionUnavailableRecordingContinues =>
       'Транскрипциите са недостъпни, записването продължава на устройството и ще бъде обработено по-късно';
 
@@ -11231,4 +11239,54 @@ class AppLocalizationsBg extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Чакащи транскрипции $count';
   }
+
+  @override
+  String get captureSourceCall => 'Обаждане';
+
+  @override
+  String get captureSourcePhoneMic => 'Микрофон на телефона';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Продължи';
+
+  @override
+  String get finish => 'Приключи';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Висулката е на пауза · продължава, когато приключите';
+
+  @override
+  String get pendantIsListeningTitle => 'Висулката ви слуша';
+
+  @override
+  String get oneSourceAtATime => 'Omi записва само от един източник наведнъж.';
+
+  @override
+  String get recordWithPhoneInstead => 'Запис с телефона вместо това';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'Висулката е на пауза, докато приключите';
+
+  @override
+  String get pendantPausesDuringCall => 'Висулката е на пауза по време на обаждането';
+
+  @override
+  String get keepUsingPendant => 'Продължи с висулката';
+
+  @override
+  String get recordWith => 'Запис с';
+
+  @override
+  String get moreWaysToRecord => 'Още начини за запис';
+
+  @override
+  String get openCall => 'Отвори обаждането';
+
+  @override
+  String get captureRecoveryBanner => 'Звукът от висулката не достига до приложението — докоснете, за да поправите';
 }

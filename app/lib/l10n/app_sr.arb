@@ -1130,7 +1130,6 @@
     "daySummary": "Дневни садржај",
     "summaryGenerated": "Садржај генерисан",
     "claudeDesktop": "Claude Desktop",
-    "addToClaudeConfig": "Додај на claude_desktop_config.json",
     "copyConfig": "Копирај конфигурацију",
     "configCopied": "Конфигурација скопирана у привремену меморију",
     "listeningMins": "Слушање (минути)",
@@ -2652,10 +2651,6 @@
     "@claudeDesktop": {
         "description": "Claude Desktop integration section"
     },
-    "addToClaudeDesktopConfig": "Додај у claude_desktop_config.json",
-    "@addToClaudeDesktopConfig": {
-        "description": "Description for Claude Desktop config"
-    },
     "@configCopiedToClipboard": {
         "description": "Confirmation when config is copied"
     },
@@ -2689,10 +2684,6 @@
     },
     "@clientSecret": {
         "description": "OAuth client secret label"
-    },
-    "useYourMcpApiKey": "Користи свој MCP API кључ",
-    "@useYourMcpApiKey": {
-        "description": "Hint for client secret value"
     },
     "@webhooks": {
         "description": "Webhooks section header"
@@ -10815,7 +10806,7 @@
     "@memoryHistory": {
         "description": "Filter option for retained memory history"
     },
-    "tapPlusToStartRecording": "Додирните + да започнете снимање",
+    "tapPlusToStartRecording": "Додирните дугме за снимање да започнете снимање",
     "processingTakingLonger": "Još traje — ovo traje duže nego inače.",
     "speechProfileEnrollmentPrompt": "Да би Omi знао који је глас ваш — причајте о било чему око 5 секунди.",
     "home": "Почетна",
@@ -10858,7 +10849,7 @@
     "conversationsMovedCount": "{count, plural, =1{1 разговор премештен} other{Премештено разговора: {count}}}",
     "failedToMoveConversations": "Премештање разговора није успело",
     "discardedConversationTitle": "Одбачено · {duration}",
-    "noConversationsHeroMessage": "Разговори које снимите појављују се овде. Додирните + на почетној да снимите први.",
+    "noConversationsHeroMessage": "Разговори које снимите појављују се овде. Додирните дугме за снимање на почетној да снимите први.",
     "conversationMap": "Мапа разговора",
     "conversationCount": "{count, plural, =1{1 разговор} other{Разговора: {count}}}",
     "taskCount": "{count, plural, =1{1 задатак} other{Задатака: {count}}}",
@@ -10981,7 +10972,7 @@
     "batteryLevelSemantics": "Батерија {level}%",
     "updateOmiGlassFirmware": "Ажурирај фирмвер за OmiGlass",
     "deviceConnecting": "Повезивање…",
-    "recordOptionsTip": "Савет: притисните и задржите дугме за снимање да бисте снимили телефонски позив.",
+    "recordOptionsTip": "Савет: додирните стрелицу на дугмету за снимање да бисте снимили телефонски позив.",
     "firmwareUpdateFailedTitle": "Ажурирање није успело",
     "firmwareUpdateFailedMessage": "Ажурирање није завршено. Уређај је и даље на тренутном фирмверу и безбедан је за употребу. Држите га напуњеним и близу телефона, па покушајте поново.",
     "firmwareDownloadFailedMessage": "Ажурирање није могло да се преузме и уређај није промењен. Проверите интернет везу, па покушајте поново.",
@@ -11113,8 +11104,29 @@
     "voiceSettingsAskToTag": "Тражи од мене да означим гласове",
     "voiceSettingsAskToTagSubtitle": "Повремено Omi пита ко је говорио у вашим недавним разговорима",
     "voiceSettingsSaveOthersSubtitle": "Када некога именујете, Omi чува кратак узорак гласа да би га следећи пут препознао",
+    "leaveBlank": "Оставите празно",
+    "mcpOAuthSetup": "На claude.ai додајте прилагођени конектор и налепите URL сервера. Ако Claude тражи напредни OAuth Client ID, користите вредност испод и оставите тајну празном — никада не користите свој MCP API кључ као OAuth тајну.",
+    "claudeCode": "Claude Code",
+    "addToClaudeCodeConfig": "Додај у ~/.claude.json",
+    "claudeDesktopConnectorSetup": "На Claude Desktop → Settings → Connectors додајте прилагођени конектор и налепите URL сервера. Ако Claude тражи напредни OAuth Client ID, користите вредност испод и оставите тајну празном — никада не користите свој MCP API кључ као OAuth тајну.",
     "transcriptionUnavailableRecordingContinues": "Транскрипције нису доступне, снимање се наставља на уређају и биће обрађено касније",
     "transcriptionUnavailableSavingOnDevice": "Транскрипција недоступна · чува се на уређају",
     "transcriptionsPendingFraction": "Транскрипције на чекању {pending}/{total}",
-    "transcriptionsPendingCount": "Транскрипције на чекању {count}"
+    "transcriptionsPendingCount": "Транскрипције на чекању {count}",
+    "captureSourceCall": "Позив",
+    "captureSourcePhoneMic": "Микрофон телефона",
+    "captureStatusWithSource": "{status} · {source}",
+    "resume": "Настави",
+    "finish": "Заврши",
+    "pendantPausedResumesWhenYouFinish": "Привезак паузиран · наставља када завршите",
+    "pendantIsListeningTitle": "Ваш привезак слуша",
+    "oneSourceAtATime": "Omi снима само из једног извора истовремено.",
+    "recordWithPhoneInstead": "Уместо тога снимај телефоном",
+    "pendantPausesUntilYouFinish": "Привезак је паузиран док не завршите",
+    "pendantPausesDuringCall": "Привезак је паузиран током позива",
+    "keepUsingPendant": "Настави са привеском",
+    "recordWith": "Снимај помоћу",
+    "moreWaysToRecord": "Више начина снимања",
+    "openCall": "Отвори позив",
+    "captureRecoveryBanner": "Звук привеска не стиже до апликације — додирните за поправку"
 }

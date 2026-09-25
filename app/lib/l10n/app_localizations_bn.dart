@@ -947,9 +947,6 @@ class AppLocalizationsBn extends AppLocalizations {
   String get claudeDesktop => 'Claude ডেস্কটপ';
 
   @override
-  String get addToClaudeConfig => 'claude_desktop_config.json এ যোগ করুন';
-
-  @override
   String get copyConfig => 'কনফিগ কপি করুন';
 
   @override
@@ -2495,13 +2492,7 @@ class AppLocalizationsBn extends AppLocalizations {
   String get clearAllNodesAndConnections => 'সমস্ত নোড এবং সংযোগ পরিষ্কার করুন';
 
   @override
-  String get addToClaudeDesktopConfig => 'claude_desktop_config.json এ যোগ করুন';
-
-  @override
   String get connectAiAssistantsToData => 'AI সহায়কদের আপনার ডেটার সাথে সংযুক্ত করুন';
-
-  @override
-  String get useYourMcpApiKey => 'আপনার MCP API চাবি ব্যবহার করুন';
 
   @override
   String get realTimeTranscript => 'রিয়েল-টাইম ট্রান্সক্রিপ্ট';
@@ -9983,7 +9974,7 @@ class AppLocalizationsBn extends AppLocalizations {
   String get transcriptionNoAudio => 'ট্রান্সক্রিপশন অডিও গ্রহণ করছে না';
 
   @override
-  String get tapPlusToStartRecording => 'রেকর্ডিং শুরু করতে + চাপুন';
+  String get tapPlusToStartRecording => 'রেকর্ডিং শুরু করতে রেকর্ড বোতাম চাপুন';
 
   @override
   String get chatBlockTask => 'কাজ';
@@ -10226,7 +10217,7 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'আপনার রেকর্ড করা কথোপকথন এখানে দেখা যাবে। প্রথমটি রেকর্ড করতে হোমে + চাপুন।';
+      'আপনার রেকর্ড করা কথোপকথন এখানে দেখা যাবে। প্রথমটি রেকর্ড করতে হোমে রেকর্ড বোতাম চাপুন।';
 
   @override
   String get conversationMap => 'কথোপকথনের মানচিত্র';
@@ -10703,7 +10694,7 @@ class AppLocalizationsBn extends AppLocalizations {
   String get deviceConnecting => 'সংযোগ হচ্ছে…';
 
   @override
-  String get recordOptionsTip => 'টিপ: ফোন কল রেকর্ড করতে রেকর্ড বোতাম চেপে ধরে রাখুন।';
+  String get recordOptionsTip => 'টিপ: ফোন কল রেকর্ড করতে রেকর্ড বোতামের তীর চিহ্নে চাপুন।';
 
   @override
   String get firmwareUpdateFailedTitle => 'আপডেট ব্যর্থ হয়েছে';
@@ -11174,6 +11165,23 @@ class AppLocalizationsBn extends AppLocalizations {
   String get voiceSettingsSaveOthersSubtitle => 'আপনি কারও নাম দিলে, পরের বার চিনতে Omi একটি ছোট কণ্ঠস্বরের নমুনা রাখে';
 
   @override
+  String get leaveBlank => 'খালি রাখুন';
+
+  @override
+  String get mcpOAuthSetup =>
+      'claude.ai-এ একটি কাস্টম কানেক্টর যোগ করুন এবং সার্ভার URL পেস্ট করুন। Claude যদি অ্যাডভান্সড OAuth Client ID চায়, নিচের মানটি ব্যবহার করুন এবং সিক্রেট খালি রাখুন — OAuth সিক্রেট হিসেবে আপনার MCP API কী কখনোই ব্যবহার করবেন না।';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => '~/.claude.json এ যোগ করুন';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'Claude Desktop → Settings → Connectors-এ একটি কাস্টম কানেক্টর যোগ করুন এবং সার্ভার URL পেস্ট করুন। Claude যদি অ্যাডভান্সড OAuth Client ID চায়, নিচের মানটি ব্যবহার করুন এবং সিক্রেট খালি রাখুন — OAuth সিক্রেট হিসেবে আপনার MCP API কী কখনোই ব্যবহার করবেন না।';
+
+  @override
   String get transcriptionUnavailableRecordingContinues =>
       'ট্রান্সক্রিপশন অনুপলব্ধ, ডিভাইসে রেকর্ডিং চলছে এবং পরে প্রসেস করা হবে';
 
@@ -11189,4 +11197,54 @@ class AppLocalizationsBn extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'অপেক্ষমাণ ট্রান্সক্রিপশন $count';
   }
+
+  @override
+  String get captureSourceCall => 'কল';
+
+  @override
+  String get captureSourcePhoneMic => 'ফোনের মাইক';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'আবার শুরু করুন';
+
+  @override
+  String get finish => 'শেষ করুন';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'পেন্ডেন্ট বিরতিতে · আপনি শেষ করলে আবার চালু হবে';
+
+  @override
+  String get pendantIsListeningTitle => 'আপনার পেন্ডেন্ট শুনছে';
+
+  @override
+  String get oneSourceAtATime => 'Omi একবারে একটি উৎস থেকেই রেকর্ড করে।';
+
+  @override
+  String get recordWithPhoneInstead => 'বরং ফোন দিয়ে রেকর্ড করুন';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'আপনি শেষ না করা পর্যন্ত পেন্ডেন্ট বিরতিতে থাকবে';
+
+  @override
+  String get pendantPausesDuringCall => 'কলের সময় পেন্ডেন্ট বিরতিতে থাকবে';
+
+  @override
+  String get keepUsingPendant => 'পেন্ডেন্ট ব্যবহার চালিয়ে যান';
+
+  @override
+  String get recordWith => 'রেকর্ডের মাধ্যম';
+
+  @override
+  String get moreWaysToRecord => 'রেকর্ড করার আরও উপায়';
+
+  @override
+  String get openCall => 'কল খুলুন';
+
+  @override
+  String get captureRecoveryBanner => 'পেন্ডেন্টের অডিও অ্যাপে পৌঁছাচ্ছে না — মেরামত করতে ট্যাপ করুন';
 }

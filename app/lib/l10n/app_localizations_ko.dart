@@ -934,9 +934,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'claude_desktop_config.json에 추가';
-
-  @override
   String get copyConfig => '구성 복사';
 
   @override
@@ -2448,13 +2445,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get clearAllNodesAndConnections => '모든 노드와 연결 지우기';
 
   @override
-  String get addToClaudeDesktopConfig => 'claude_desktop_config.json에 추가';
-
-  @override
   String get connectAiAssistantsToData => 'AI 어시스턴트를 데이터에 연결';
-
-  @override
-  String get useYourMcpApiKey => 'MCP API 키 사용';
 
   @override
   String get realTimeTranscript => '실시간 대화 내용';
@@ -9811,7 +9802,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get transcriptionNoAudio => '전사가 오디오를 받지 못하고 있습니다';
 
   @override
-  String get tapPlusToStartRecording => '+를 눌러 녹음 시작';
+  String get tapPlusToStartRecording => '녹음 버튼을 눌러 녹음 시작';
 
   @override
   String get chatBlockTask => '작업';
@@ -10051,7 +10042,7 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get noConversationsHeroMessage => '녹음한 대화가 여기에 표시됩니다. 홈에서 +를 눌러 첫 대화를 녹음하세요.';
+  String get noConversationsHeroMessage => '녹음한 대화가 여기에 표시됩니다. 홈에서 녹음 버튼을 눌러 첫 대화를 녹음하세요.';
 
   @override
   String get conversationMap => '대화 지도';
@@ -10525,7 +10516,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get deviceConnecting => '연결 중…';
 
   @override
-  String get recordOptionsTip => '팁: 녹음 버튼을 길게 누르면 전화 통화를 녹음할 수 있습니다.';
+  String get recordOptionsTip => '팁: 녹음 버튼의 화살표를 누르면 전화 통화를 녹음할 수 있습니다.';
 
   @override
   String get firmwareUpdateFailedTitle => '업데이트 실패';
@@ -10992,6 +10983,23 @@ class AppLocalizationsKo extends AppLocalizations {
   String get voiceSettingsSaveOthersSubtitle => '누군가에게 이름을 붙이면, 다음에 알아볼 수 있도록 Omi가 짧은 음성 샘플을 보관해요';
 
   @override
+  String get leaveBlank => '비워 두세요';
+
+  @override
+  String get mcpOAuthSetup =>
+      'claude.ai에서 사용자 지정 커넥터를 추가하고 서버 URL을 붙여넣으세요. Claude가 고급 OAuth Client ID를 요청하면 아래 값을 사용하고 시크릿은 비워 두세요. MCP API 키를 OAuth 시크릿으로 절대 사용하지 마세요.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => '~/.claude.json에 추가';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'Claude Desktop → Settings → Connectors에서 사용자 지정 커넥터를 추가하고 서버 URL을 붙여넣으세요. Claude가 고급 OAuth Client ID를 요청하면 아래 값을 사용하고 시크릿은 비워 두세요. MCP API 키를 OAuth 시크릿으로 절대 사용하지 마세요.';
+
+  @override
   String get transcriptionUnavailableRecordingContinues => '전사를 이용할 수 없습니다. 기기에서 녹음이 계속되며 나중에 처리됩니다';
 
   @override
@@ -11006,4 +11014,54 @@ class AppLocalizationsKo extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return '대기 중인 전사 $count';
   }
+
+  @override
+  String get captureSourceCall => '통화';
+
+  @override
+  String get captureSourcePhoneMic => '휴대폰 마이크';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => '재개';
+
+  @override
+  String get finish => '종료';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => '펜던트 일시중지됨 · 종료하면 다시 시작';
+
+  @override
+  String get pendantIsListeningTitle => '펜던트가 듣고 있습니다';
+
+  @override
+  String get oneSourceAtATime => 'Omi는 한 번에 하나의 소스에서만 녹음합니다.';
+
+  @override
+  String get recordWithPhoneInstead => '대신 휴대폰으로 녹음';
+
+  @override
+  String get pendantPausesUntilYouFinish => '종료할 때까지 펜던트가 일시중지됩니다';
+
+  @override
+  String get pendantPausesDuringCall => '통화 중에는 펜던트가 일시중지됩니다';
+
+  @override
+  String get keepUsingPendant => '펜던트 계속 사용';
+
+  @override
+  String get recordWith => '녹음 방법';
+
+  @override
+  String get moreWaysToRecord => '다른 녹음 방법';
+
+  @override
+  String get openCall => '통화 열기';
+
+  @override
+  String get captureRecoveryBanner => '펜던트 오디오가 앱에 도달하지 않습니다 — 탭하여 복구';
 }

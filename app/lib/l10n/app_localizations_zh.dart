@@ -933,9 +933,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get claudeDesktop => 'Claude 桌面版';
 
   @override
-  String get addToClaudeConfig => '添加到 claude_desktop_config.json';
-
-  @override
   String get copyConfig => '复制配置';
 
   @override
@@ -2443,13 +2440,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get clearAllNodesAndConnections => '清除所有节点和连接';
 
   @override
-  String get addToClaudeDesktopConfig => '添加到 claude_desktop_config.json';
-
-  @override
   String get connectAiAssistantsToData => '将 AI 助手连接到您的数据';
-
-  @override
-  String get useYourMcpApiKey => '使用您的 MCP API 密钥';
 
   @override
   String get realTimeTranscript => '实时转录';
@@ -9790,7 +9781,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get transcriptionNoAudio => '转录未接收到音频';
 
   @override
-  String get tapPlusToStartRecording => '点击 + 开始录音';
+  String get tapPlusToStartRecording => '点击录音按钮开始录音';
 
   @override
   String get chatBlockTask => '任务';
@@ -10030,7 +10021,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get noConversationsHeroMessage => '你录制的对话会显示在这里。在首页点按 + 录制第一个对话。';
+  String get noConversationsHeroMessage => '你录制的对话会显示在这里。在首页点按录音按钮录制第一个对话。';
 
   @override
   String get conversationMap => '对话地图';
@@ -10503,7 +10494,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get deviceConnecting => '正在连接…';
 
   @override
-  String get recordOptionsTip => '提示：长按录音按钮即可录制电话通话。';
+  String get recordOptionsTip => '提示：点按录音按钮上的箭头即可录制电话通话。';
 
   @override
   String get firmwareUpdateFailedTitle => '更新失败';
@@ -10969,6 +10960,23 @@ class AppLocalizationsZh extends AppLocalizations {
   String get voiceSettingsSaveOthersSubtitle => '当你为某人命名时，Omi 会保留一小段声音样本，以便下次认出对方';
 
   @override
+  String get leaveBlank => '留空';
+
+  @override
+  String get mcpOAuthSetup =>
+      '在 claude.ai 上添加自定义连接器并粘贴服务器 URL。如果 Claude 要求提供高级 OAuth Client ID，请使用下方的值并将密钥留空——切勿将您的 MCP API 密钥用作 OAuth 密钥。';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => '添加到 ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      '在 Claude Desktop → Settings → Connectors 上添加自定义连接器并粘贴服务器 URL。如果 Claude 要求提供高级 OAuth Client ID，请使用下方的值并将密钥留空——切勿将您的 MCP API 密钥用作 OAuth 密钥。';
+
+  @override
   String get transcriptionUnavailableRecordingContinues => '转录暂不可用，录音仍在设备上继续，稍后会进行处理';
 
   @override
@@ -10983,4 +10991,54 @@ class AppLocalizationsZh extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return '待处理转录 $count';
   }
+
+  @override
+  String get captureSourceCall => '通话';
+
+  @override
+  String get captureSourcePhoneMic => '手机麦克风';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => '继续';
+
+  @override
+  String get finish => '结束';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => '吊坠已暂停 · 结束后恢复';
+
+  @override
+  String get pendantIsListeningTitle => '你的吊坠正在聆听';
+
+  @override
+  String get oneSourceAtATime => 'Omi 一次只能从一个来源录音。';
+
+  @override
+  String get recordWithPhoneInstead => '改用手机录音';
+
+  @override
+  String get pendantPausesUntilYouFinish => '录音结束前吊坠将暂停';
+
+  @override
+  String get pendantPausesDuringCall => '通话期间吊坠将暂停';
+
+  @override
+  String get keepUsingPendant => '继续使用吊坠';
+
+  @override
+  String get recordWith => '录音方式';
+
+  @override
+  String get moreWaysToRecord => '更多录音方式';
+
+  @override
+  String get openCall => '打开通话';
+
+  @override
+  String get captureRecoveryBanner => '吊坠音频未送达应用 — 轻点以修复';
 }

@@ -943,9 +943,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'เพิ่มไปยัง claude_desktop_config.json';
-
-  @override
   String get copyConfig => 'คัดลอกการกำหนดค่า';
 
   @override
@@ -2472,13 +2469,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get clearAllNodesAndConnections => 'ล้างโหนดและการเชื่อมต่อทั้งหมด';
 
   @override
-  String get addToClaudeDesktopConfig => 'เพิ่มไปยัง claude_desktop_config.json';
-
-  @override
   String get connectAiAssistantsToData => 'เชื่อมต่อผู้ช่วย AI กับข้อมูลของคุณ';
-
-  @override
-  String get useYourMcpApiKey => 'ใช้คีย์ MCP API ของคุณ';
 
   @override
   String get realTimeTranscript => 'การถอดความเรียลไทม์';
@@ -9918,7 +9909,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get transcriptionNoAudio => 'การถอดเสียงไม่ได้รับเสียง';
 
   @override
-  String get tapPlusToStartRecording => 'แตะ + เพื่อเริ่มบันทึก';
+  String get tapPlusToStartRecording => 'แตะปุ่มบันทึกเพื่อเริ่มบันทึก';
 
   @override
   String get chatBlockTask => 'งาน';
@@ -10160,7 +10151,8 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
-  String get noConversationsHeroMessage => 'การสนทนาที่คุณบันทึกจะแสดงที่นี่ แตะ + ที่หน้าหลักเพื่อบันทึกรายการแรก';
+  String get noConversationsHeroMessage =>
+      'การสนทนาที่คุณบันทึกจะแสดงที่นี่ แตะปุ่มบันทึกที่หน้าหลักเพื่อบันทึกรายการแรก';
 
   @override
   String get conversationMap => 'แผนที่การสนทนา';
@@ -10635,7 +10627,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get deviceConnecting => 'กำลังเชื่อมต่อ…';
 
   @override
-  String get recordOptionsTip => 'เคล็ดลับ: กดปุ่มบันทึกค้างไว้เพื่อบันทึกการโทร';
+  String get recordOptionsTip => 'เคล็ดลับ: แตะลูกศรบนปุ่มบันทึกเพื่อบันทึกการโทร';
 
   @override
   String get firmwareUpdateFailedTitle => 'อัปเดตไม่สำเร็จ';
@@ -11107,6 +11099,23 @@ class AppLocalizationsTh extends AppLocalizations {
       'เมื่อคุณตั้งชื่อให้ใครสักคน Omi จะเก็บตัวอย่างเสียงสั้นๆ ไว้เพื่อจดจำเขาได้ในครั้งถัดไป';
 
   @override
+  String get leaveBlank => 'เว้นว่างไว้';
+
+  @override
+  String get mcpOAuthSetup =>
+      'บน claude.ai ให้เพิ่มคอนเนคเตอร์แบบกำหนดเองและวาง URL ของเซิร์ฟเวอร์ หาก Claude ขอ OAuth Client ID ขั้นสูง ให้ใช้ค่าด้านล่างและเว้นความลับไว้ — อย่าใช้คีย์ MCP API ของคุณเป็นความลับ OAuth เด็ดขาด';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'เพิ่มไปยัง ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'บน Claude Desktop → Settings → Connectors ให้เพิ่มคอนเนคเตอร์แบบกำหนดเองและวาง URL ของเซิร์ฟเวอร์ หาก Claude ขอ OAuth Client ID ขั้นสูง ให้ใช้ค่าด้านล่างและเว้นความลับไว้ — อย่าใช้คีย์ MCP API ของคุณเป็นความลับ OAuth เด็ดขาด';
+
+  @override
   String get transcriptionUnavailableRecordingContinues =>
       'การถอดเสียงไม่พร้อมใช้งาน การบันทึกยังดำเนินต่อในอุปกรณ์และจะประมวลผลในภายหลัง';
 
@@ -11122,4 +11131,54 @@ class AppLocalizationsTh extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'การถอดเสียงที่รออยู่ $count';
   }
+
+  @override
+  String get captureSourceCall => 'การโทร';
+
+  @override
+  String get captureSourcePhoneMic => 'ไมค์โทรศัพท์';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'บันทึกต่อ';
+
+  @override
+  String get finish => 'เสร็จสิ้น';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'จี้หยุดชั่วคราว · จะทำงานต่อเมื่อคุณเสร็จ';
+
+  @override
+  String get pendantIsListeningTitle => 'จี้ของคุณกำลังฟังอยู่';
+
+  @override
+  String get oneSourceAtATime => 'Omi บันทึกได้ครั้งละหนึ่งแหล่งเท่านั้น';
+
+  @override
+  String get recordWithPhoneInstead => 'บันทึกด้วยโทรศัพท์แทน';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'จี้จะหยุดชั่วคราวจนกว่าคุณจะเสร็จ';
+
+  @override
+  String get pendantPausesDuringCall => 'จี้จะหยุดชั่วคราวระหว่างการโทร';
+
+  @override
+  String get keepUsingPendant => 'ใช้จี้ต่อ';
+
+  @override
+  String get recordWith => 'บันทึกด้วย';
+
+  @override
+  String get moreWaysToRecord => 'วิธีบันทึกเพิ่มเติม';
+
+  @override
+  String get openCall => 'เปิดการโทร';
+
+  @override
+  String get captureRecoveryBanner => 'เสียงจากจี้ไม่ถึงแอป — แตะเพื่อซ่อมแซม';
 }

@@ -951,9 +951,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'Idagdag sa claude_desktop_config.json';
-
-  @override
   String get copyConfig => 'Kopyahin ang Config';
 
   @override
@@ -2511,13 +2508,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get clearAllNodesAndConnections => 'Burahin ang lahat ng nodes at connections';
 
   @override
-  String get addToClaudeDesktopConfig => 'Idagdag sa claude_desktop_config.json';
-
-  @override
   String get connectAiAssistantsToData => 'Ikonekta ang mga AI assistant sa iyong data';
-
-  @override
-  String get useYourMcpApiKey => 'Gamitin ang iyong MCP API key';
 
   @override
   String get realTimeTranscript => 'Real-time Transcript';
@@ -10071,7 +10062,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get transcriptionNoAudio => 'Hindi tumatanggap ng audio ang transkripsyon';
 
   @override
-  String get tapPlusToStartRecording => 'I-tap ang + para magsimulang mag-record';
+  String get tapPlusToStartRecording => 'I-tap ang record button para magsimulang mag-record';
 
   @override
   String get chatBlockTask => 'Gawain';
@@ -10314,7 +10305,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'Lalabas dito ang mga usapang nire-record mo. I-tap ang + sa Home para i-record ang una.';
+      'Lalabas dito ang mga usapang nire-record mo. I-tap ang record button sa Home para i-record ang una.';
 
   @override
   String get conversationMap => 'Mapa ng mga Usapan';
@@ -10792,7 +10783,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get deviceConnecting => 'Kumokonekta…';
 
   @override
-  String get recordOptionsTip => 'Tip: pindutin nang matagal ang record button para mag-record ng tawag.';
+  String get recordOptionsTip => 'Tip: i-tap ang arrow sa record button para mag-record ng tawag.';
 
   @override
   String get firmwareUpdateFailedTitle => 'Nabigo ang Update';
@@ -11271,6 +11262,23 @@ class AppLocalizationsTl extends AppLocalizations {
       'Kapag pinangalanan mo ang isang tao, nagtatago ang Omi ng maikling sample ng boses para makilala siya sa susunod';
 
   @override
+  String get leaveBlank => 'Iwanang blangko';
+
+  @override
+  String get mcpOAuthSetup =>
+      'Sa claude.ai, magdagdag ng custom connector at i-paste ang URL ng server. Kung hihingi ang Claude ng advanced na OAuth Client ID, gamitin ang halaga sa ibaba at iwanang blangko ang secret — huwag kailanman gamitin ang iyong MCP API key bilang OAuth secret.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'Idagdag sa ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'Sa Claude Desktop → Settings → Connectors, magdagdag ng custom connector at i-paste ang URL ng server. Kung hihingi ang Claude ng advanced na OAuth Client ID, gamitin ang halaga sa ibaba at iwanang blangko ang secret — huwag kailanman gamitin ang iyong MCP API key bilang OAuth secret.';
+
+  @override
   String get transcriptionUnavailableRecordingContinues =>
       'Hindi available ang mga transcript, nagpapatuloy ang pag-record sa device at ipoproseso mamaya';
 
@@ -11286,4 +11294,54 @@ class AppLocalizationsTl extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Mga transcript na naghihintay $count';
   }
+
+  @override
+  String get captureSourceCall => 'Tawag';
+
+  @override
+  String get captureSourcePhoneMic => 'Mic ng telepono';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Ituloy';
+
+  @override
+  String get finish => 'Tapusin';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Naka-pause ang pendant · magpapatuloy pagkatapos mo';
+
+  @override
+  String get pendantIsListeningTitle => 'Nakikinig ang iyong pendant';
+
+  @override
+  String get oneSourceAtATime => 'Isang source lang ang nire-record ng Omi sa bawat pagkakataon.';
+
+  @override
+  String get recordWithPhoneInstead => 'Sa telepono na lang mag-record';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'Naka-pause ang pendant hanggang matapos ka';
+
+  @override
+  String get pendantPausesDuringCall => 'Naka-pause ang pendant habang may tawag';
+
+  @override
+  String get keepUsingPendant => 'Ituloy ang paggamit ng pendant';
+
+  @override
+  String get recordWith => 'Mag-record gamit ang';
+
+  @override
+  String get moreWaysToRecord => 'Iba pang paraan ng pag-record';
+
+  @override
+  String get openCall => 'Buksan ang tawag';
+
+  @override
+  String get captureRecoveryBanner => 'Hindi nakakarating sa app ang audio ng pendant — i-tap para ayusin';
 }

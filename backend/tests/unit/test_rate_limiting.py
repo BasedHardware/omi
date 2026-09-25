@@ -836,8 +836,8 @@ class TestRouterWiring(unittest.TestCase):
         self.assertEqual(len(matches), 4, f"goals.py expected 4 rate limits, got {len(matches)}")
 
     def test_mcp_sse_router_has_rate_limit(self):
-        matches = self._grep_file("routers/mcp_sse.py", r"check_rate_limit_inline.*mcp:")
-        self.assertGreaterEqual(len(matches), 1, "mcp_sse.py missing rate limit wiring")
+        matches = self._grep_file("utils/mcp_server/transport.py", r"check_rate_limit_inline.*mcp:")
+        self.assertGreaterEqual(len(matches), 1, "mcp transport missing rate limit wiring")
 
     def test_mcp_router_has_rate_limit(self):
         source = open("dependencies.py", encoding='utf-8').read()

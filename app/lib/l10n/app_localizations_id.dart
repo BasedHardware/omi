@@ -948,9 +948,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'Tambahkan ke claude_desktop_config.json';
-
-  @override
   String get copyConfig => 'Salin Konfigurasi';
 
   @override
@@ -2494,13 +2491,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get clearAllNodesAndConnections => 'Hapus semua node dan koneksi';
 
   @override
-  String get addToClaudeDesktopConfig => 'Tambahkan ke claude_desktop_config.json';
-
-  @override
   String get connectAiAssistantsToData => 'Hubungkan asisten AI ke data Anda';
-
-  @override
-  String get useYourMcpApiKey => 'Gunakan kunci API MCP Anda';
 
   @override
   String get realTimeTranscript => 'Transkrip Real-time';
@@ -9990,7 +9981,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get transcriptionNoAudio => 'Transkripsi tidak menerima audio';
 
   @override
-  String get tapPlusToStartRecording => 'Ketuk + untuk mulai merekam';
+  String get tapPlusToStartRecording => 'Ketuk tombol rekam untuk mulai merekam';
 
   @override
   String get chatBlockTask => 'Tugas';
@@ -10233,7 +10224,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'Percakapan yang Anda rekam muncul di sini. Ketuk + di Beranda untuk merekam yang pertama.';
+      'Percakapan yang Anda rekam muncul di sini. Ketuk tombol rekam di Beranda untuk merekam yang pertama.';
 
   @override
   String get conversationMap => 'Peta Percakapan';
@@ -10710,7 +10701,7 @@ class AppLocalizationsId extends AppLocalizations {
   String get deviceConnecting => 'Menghubungkan…';
 
   @override
-  String get recordOptionsTip => 'Tips: tekan lama tombol rekam untuk merekam panggilan telepon.';
+  String get recordOptionsTip => 'Tips: ketuk panah pada tombol rekam untuk merekam panggilan telepon.';
 
   @override
   String get firmwareUpdateFailedTitle => 'Pembaruan Gagal';
@@ -11183,6 +11174,23 @@ class AppLocalizationsId extends AppLocalizations {
       'Saat Anda memberi nama seseorang, Omi menyimpan sampel suara singkat agar bisa mengenalinya lain kali';
 
   @override
+  String get leaveBlank => 'Biarkan kosong';
+
+  @override
+  String get mcpOAuthSetup =>
+      'Di claude.ai, tambahkan konektor kustom dan tempel URL server. Jika Claude meminta OAuth Client ID tingkat lanjut, gunakan nilai di bawah ini dan biarkan secret kosong — jangan pernah menggunakan kunci API MCP Anda sebagai secret OAuth.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'Tambahkan ke ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'Di Claude Desktop → Settings → Connectors, tambahkan konektor kustom dan tempel URL server. Jika Claude meminta OAuth Client ID tingkat lanjut, gunakan nilai di bawah ini dan biarkan secret kosong — jangan pernah menggunakan kunci API MCP Anda sebagai secret OAuth.';
+
+  @override
   String get transcriptionUnavailableRecordingContinues =>
       'Transkripsi tidak tersedia, perekaman berlanjut di perangkat dan akan diproses nanti';
 
@@ -11198,4 +11206,54 @@ class AppLocalizationsId extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Transkripsi tertunda $count';
   }
+
+  @override
+  String get captureSourceCall => 'Panggilan';
+
+  @override
+  String get captureSourcePhoneMic => 'Mikrofon ponsel';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Lanjutkan';
+
+  @override
+  String get finish => 'Selesai';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Liontin dijeda · lanjut saat Anda selesai';
+
+  @override
+  String get pendantIsListeningTitle => 'Liontin Anda sedang mendengarkan';
+
+  @override
+  String get oneSourceAtATime => 'Omi merekam dari satu sumber dalam satu waktu.';
+
+  @override
+  String get recordWithPhoneInstead => 'Rekam dengan ponsel saja';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'Liontin dijeda sampai Anda selesai';
+
+  @override
+  String get pendantPausesDuringCall => 'Liontin dijeda selama panggilan';
+
+  @override
+  String get keepUsingPendant => 'Tetap pakai liontin';
+
+  @override
+  String get recordWith => 'Rekam dengan';
+
+  @override
+  String get moreWaysToRecord => 'Cara lain untuk merekam';
+
+  @override
+  String get openCall => 'Buka panggilan';
+
+  @override
+  String get captureRecoveryBanner => 'Audio pendant tidak sampai ke aplikasi — ketuk untuk memperbaiki';
 }
