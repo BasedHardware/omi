@@ -21,7 +21,8 @@ enum UpdateInstallActivity {
     lock.unlock()
   }
 
-  /// Record whether a meeting-role conversation is being captured right now.
+  /// Record whether a meeting-role conversation is being captured right now (audio reaching STT,
+  /// not an Only-Meetings session armed with the microphone paused).
   static func setMeetingCaptureActive(_ active: Bool) {
     lock.lock()
     meetingCaptureActive = active

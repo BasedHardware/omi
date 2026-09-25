@@ -33,7 +33,7 @@ final class UpdateInstallActivityTests: XCTestCase {
     XCTAssertEqual(UpdateInstallActivity.lastActivityAt(now: now), Date(timeIntervalSince1970: 100))
   }
 
-  func testAppStatePublishesMeetingCaptureOnlyWhileTranscribing() {
+  func testAppStatePublishesMeetingCaptureOnlyWhileLiveCapturing() {
     let state = AppState()
     let now = Date(timeIntervalSince1970: 1_000)
     state.currentConversationRole = .meeting
@@ -46,6 +46,12 @@ final class UpdateInstallActivityTests: XCTestCase {
     XCTAssertNil(UpdateInstallActivity.lastActivityAt(now: now))
 
     state.currentConversationRole = .meeting
+    state.isAwaitingMeeting = true
+    XCTAssertNil(UpdateInstallActivity.lastActivityAt(now: now), "a paused Only-Meetings mic captures nothing")
+
+    state.isAwaitingMeeting = false
+    XCTAssertEqual(UpdateInstallActivity.lastActivityAt(now: now), now)
+
     state.isTranscribing = false
     XCTAssertNil(UpdateInstallActivity.lastActivityAt(now: now))
   }

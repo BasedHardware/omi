@@ -85,6 +85,21 @@ final class DeferredUpdateInstallTests: XCTestCase {
     )
   }
 
+  func testCapCountsFromTheFirstDeferralWhenAnUpdateIsReoffered() {
+    var installed = false
+    let now = Date()
+    let reoffered = DeferredUpdateInstall(
+      version: "0.12.388",
+      silenceWindow: 120,
+      maximumDeferral: 3_600,
+      deferredSince: now.addingTimeInterval(-3_600),
+      lastActivityProvider: { now },
+      install: { installed = true }
+    )
+    reoffered.start(now: now)
+    XCTAssertTrue(installed, "a re-offered update must not restart the deferral cap")
+  }
+
   func testStartInstallsOnceTheDeferralCapHasElapsed() {
     var installed = false
     let deferred = DeferredUpdateInstall(

@@ -349,6 +349,10 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
   /// Back-reference to the view model (set after init)
   weak var viewModel: UpdaterViewModel?
   private var deferredInstall: DeferredUpdateInstall?
+  /// When the current run of deferrals began. A superseding version replaces
+  /// `deferredInstall` (the release train ships hourly), so the cap is measured from the
+  /// first deferral since the last install, not per version, or it would never elapse.
+  private var deferralStart: Date?
   private let checkAttemptTracker = UpdateCheckAttemptTracker()
 
   // NOTE: All delegate methods use logSync() to write synchronously to disk.
@@ -690,6 +694,8 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
         )
         // Replace any prior quiet-moment wait so only one deferred install owns the flags.
         discardDeferredInstall()
+        let since = deferralStart ?? Date()
+        deferralStart = since
         Task { @MainActor in
           self.viewModel?.availableVersion = version
           self.viewModel?.updateAvailable = true
@@ -700,9 +706,11 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
           version: version,
           silenceWindow: UpdaterDelegate.activeCallSilenceWindow,
           maximumDeferral: UpdaterDelegate.maximumActiveCaptureDeferral,
+          deferredSince: since,
           lastActivityProvider: { UpdateInstallActivity.lastActivityAt() },
           install: { [weak self] in
             self?.deferredInstall = nil
+            self?.deferralStart = nil
             Task { @MainActor in
               self?.viewModel?.updateDeferredForActiveRecording = false
               self?.viewModel?.updateRestartImminent = true
@@ -717,6 +725,7 @@ final class UpdaterDelegate: NSObject, SPUUpdaterDelegate {
 
     logSync("Sparkle: Triggering immediate installation for v\(version)")
     discardDeferredInstall()
+    deferralStart = nil
     Task { @MainActor in
       self.viewModel?.availableVersion = version
       self.viewModel?.updateAvailable = true
@@ -758,12 +767,14 @@ final class DeferredUpdateInstall {
     version: String,
     silenceWindow: TimeInterval,
     maximumDeferral: TimeInterval? = nil,
+    deferredSince: Date? = nil,
     lastActivityProvider: @escaping () -> Date?,
     install: @escaping () -> Void
   ) {
     self.version = version
     self.silenceWindow = silenceWindow
     self.maximumDeferral = maximumDeferral
+    self.deferredSince = deferredSince
     self.lastActivityProvider = lastActivityProvider
     self.install = install
   }

@@ -511,7 +511,7 @@ class AppState: ObservableObject {
   }
   /// A relaunch mid-meeting splits the call into two conversations; the updater defers on this.
   func publishMeetingCaptureActivity() {
-    UpdateInstallActivity.setMeetingCaptureActive(isTranscribing && currentConversationRole == .meeting)
+    UpdateInstallActivity.setMeetingCaptureActive(isLiveCapturing && currentConversationRole == .meeting)
   }
   var meetingDetectorMode: AssistantSettings.AudioRecordingMode?
   var meetingBoundaryInProgress = false
@@ -545,7 +545,9 @@ class AppState: ObservableObject {
   /// user gets an alert, then it starts over.
   var silentMicHealedDeviceID: AudioDeviceID?
   var meetingEndFinalizationInProgress = false
-  @Published var isAwaitingMeeting = false
+  @Published var isAwaitingMeeting = false {
+    didSet { publishMeetingCaptureActivity() }
+  }
 
   /// Audio is actually reaching STT — not merely that a transcription session is armed.
   ///

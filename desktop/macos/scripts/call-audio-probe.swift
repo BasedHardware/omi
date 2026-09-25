@@ -79,6 +79,7 @@ final class Probe {
   private var states: [AudioObjectID: ProcessState] = [:]
   private var identities: [AudioObjectID: (pid: pid_t, bundle: String)] = [:]
   private var watched = Set<AudioObjectID>()
+  private var listeners: [AudioObjectID: AudioObjectPropertyListenerBlock] = [:]
   private var titles: [String: String] = [:]
   private let queue = DispatchQueue.main
 
@@ -101,12 +102,21 @@ final class Probe {
       }
       states[gone] = nil
       identities[gone] = nil
+      // Unregister, or CoreAudio keeps every process object that ever touched audio alive.
+      if let block = listeners.removeValue(forKey: gone) {
+        for selector in [kAudioProcessPropertyIsRunningInput, kAudioProcessPropertyIsRunningOutput] {
+          var addr = address(selector)
+          AudioObjectRemovePropertyListenerBlock(gone, &addr, queue, block)
+        }
+      }
     }
     for object in current.subtracting(watched) {
       identities[object] = (pid(of: object), bundleID(of: object))
+      let block: AudioObjectPropertyListenerBlock = { [weak self] _, _ in self?.sample(object) }
+      listeners[object] = block
       for selector in [kAudioProcessPropertyIsRunningInput, kAudioProcessPropertyIsRunningOutput] {
         var addr = address(selector)
-        AudioObjectAddPropertyListenerBlock(object, &addr, queue) { [weak self] _, _ in self?.sample(object) }
+        AudioObjectAddPropertyListenerBlock(object, &addr, queue, block)
       }
       sample(object)
     }
@@ -168,8 +178,13 @@ FileHandle.standardInput.readabilityHandler = { handle in
     DispatchQueue.main.async { emit(["event": "note", "text": String(line)]) }
   }
 }
-signal(SIGINT) { _ in
+// Ctrl-C is delivered through a dispatch source on the main queue, so the stop marker is
+// written from ordinary code rather than from an async-signal-unsafe handler.
+signal(SIGINT, SIG_IGN)
+let interrupt = DispatchSource.makeSignalSource(signal: SIGINT, queue: .main)
+interrupt.setEventHandler {
   emit(["event": "probe_stopped"])
   exit(0)
 }
+interrupt.resume()
 RunLoop.main.run()
