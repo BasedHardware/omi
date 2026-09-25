@@ -78,29 +78,12 @@ def get_canonical_goals(
     return [normalize_goal_response(goal) for goal in goals]
 
 
-_KNOWN_GOAL_CONFLICT_DETAILS = {
-    "account generation mismatch",
-    "first-open account authority unavailable",
-    "first-open account authority malformed",
-    "first-open account/source generation mismatch",
-    "idempotency key was reused with different content",
-    "idempotent goal mutation receipt is incomplete",
-    "use explicit focus management after creating a goal",
-    "ended goals cannot be focused",
-    "focus set is full; replacement_goal_id is required",
-    "replacement_goal_id must name a focused goal",
-    "focus_rank is already occupied",
-    "too many relationships to detach atomically",
-    "progress event idempotency key was reused with different content",
-}
-
-
 def _sanitize_goal_conflict_error(exc: Exception) -> str:
     logger.warning(f"Goal mutation conflict: {type(exc).__name__}: {exc}")
     detail = str(exc)
-    if detail in _KNOWN_GOAL_CONFLICT_DETAILS:
-        return detail
-    return "Goal conflict encountered. Please verify goal state and retry."
+    if any(marker in detail for marker in ("Traceback", "Exception", "Error:", "Firestore", "google.cloud", "\n")):
+        return "Goal conflict encountered. Please verify goal state and retry."
+    return detail or "Goal conflict encountered. Please verify goal state and retry."
 
 
 def _raise_goal_store_error(exc: Exception) -> None:

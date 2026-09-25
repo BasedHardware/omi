@@ -95,7 +95,7 @@ class GoalsErrorSanitizationTests(unittest.TestCase):
         sanitize = self._sanitize_fn
         GoalConflictError = self._goals_db.GoalConflictError
 
-        # 1. Known conflict message in allowlist passes through verbatim
+        # 1. Clean conflict messages pass through verbatim
         self.assertEqual(
             sanitize(GoalConflictError("account generation mismatch")),
             "account generation mismatch",
@@ -103,6 +103,10 @@ class GoalsErrorSanitizationTests(unittest.TestCase):
         self.assertEqual(
             sanitize(GoalConflictError("idempotency key was reused with different content")),
             "idempotency key was reused with different content",
+        )
+        self.assertEqual(
+            sanitize(GoalConflictError("focus full")),
+            "focus full",
         )
         self.assertEqual(
             sanitize(GoalConflictError("ended goals cannot be focused")),
@@ -116,14 +120,20 @@ class GoalsErrorSanitizationTests(unittest.TestCase):
             "Goal conflict encountered. Please verify goal state and retry.",
         )
 
-        # 3. Unrecognized internal database error string filtered to generic message
-        unrecognized = "internal transaction aborted: write lock timeout at doc/users/123/goals"
+        # 3. Internal database error string with markers filtered to generic message
+        unrecognized = "google.cloud.exceptions.Conflict: Firestore write lock timeout at doc/users/123/goals"
         self.assertEqual(
             sanitize(GoalConflictError(unrecognized)),
             "Goal conflict encountered. Please verify goal state and retry.",
         )
 
-        # 4. Empty exception message filtered to generic message
+        # 4. Multiline error text filtered to generic message
+        self.assertEqual(
+            sanitize(GoalConflictError("line 1\nline 2 error details")),
+            "Goal conflict encountered. Please verify goal state and retry.",
+        )
+
+        # 5. Empty exception message filtered to generic message
         self.assertEqual(
             sanitize(GoalConflictError("")),
             "Goal conflict encountered. Please verify goal state and retry.",
