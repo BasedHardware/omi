@@ -332,9 +332,8 @@ def recovery_admission_refusal(
     finished_at = conversation.get('finished_at')
     if not isinstance(finished_at, datetime):
         return 'no_finished_at'
-    if finished_at.tzinfo is None and recovery_cutoff.tzinfo is not None:
-        finished_at = finished_at.replace(tzinfo=timezone.utc)
-    if finished_at > recovery_cutoff:
+    cut = recovery_cutoff if recovery_cutoff.tzinfo else recovery_cutoff.replace(tzinfo=timezone.utc)
+    if (finished_at if finished_at.tzinfo else finished_at.replace(tzinfo=timezone.utc)) > cut:
         return 'not_stale'
     if not (conversation.get('audio_files') or conversations_db.raw_conversation_has_content(uid, dict(conversation))):
         return 'no_content'
