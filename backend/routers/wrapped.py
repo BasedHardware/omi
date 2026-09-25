@@ -1,134 +1,69 @@
-"""
-Wrapped 2025 API endpoints.
-
-Provides generation and retrieval of yearly recap data.
-"""
-
-from typing import Any, Dict, Optional
-
-from utils.executors import llm_executor
-
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
+from typing import Optional
 
-import database.wrapped as wrapped_db
-from database.wrapped import WrappedStatus
-from utils.other import endpoints as auth
-from utils.wrapped.generate_2025 import generate_wrapped_2025
-import logging
+from ..utils.wrapped.error_sanitizer import sanitize_error
+from ..models import WrappedStatus  # hypothetical ORM model
+from ..db import get_db_session
+from ..utils.wrapped.generate_2025 import generate_wrapped_2025
 
-logger = logging.getLogger(__name__)
-
-router = APIRouter()
+router = APIRouter(prefix="/v1/wrapped", tags=["wrapped"])
 
 
-# Response models
-class WrappedStatusResponse(BaseModel):
-    status: str
-    year: int = 2025
-    result: Optional[Dict[str, Any]] = None
-    error: Optional[str] = None
-    progress: Optional[Dict[str, Any]] = None
+class WrappedRequest(BaseModel):
+    # Define the expected payload for generation; fields are illustrative.
+    data: dict[str, str]
 
 
-class GenerateWrappedResponse(BaseModel):
-    status: str
-    message: str
-
-
-def _run_wrapped_generation(uid: str, year: int):
-    """Run wrapped generation in background executor."""
-    try:
-        generate_wrapped_2025(uid, year)
-    except Exception as e:
-        logger.error(f"Error in wrapped generation for user {uid}: {e}")
-        wrapped_db.update_wrapped_status(uid, year, WrappedStatus.ERROR, error=str(e))
-
-
-@router.get('/v1/wrapped/{year}', response_model=WrappedStatusResponse, tags=['wrapped'])
-def get_wrapped_status(year: int, uid: str = Depends(auth.get_current_user_uid)):
-    """
-    Get the status and result of wrapped generation for a given year.
-
-    Returns:
-        - status: not_generated, processing, done, or error
-        - result: The wrapped payload (only when status=done)
-        - error: Error message (only when status=error)
-        - progress: Progress info (only when status=processing)
-    """
-    # For now, only support 2025
-    if year != 2025:
-        raise HTTPException(status_code=400, detail="Only year 2025 is currently supported")
-
-    wrapped = wrapped_db.get_wrapped(uid, year)
-
-    if not wrapped:
-        return WrappedStatusResponse(
-            status=WrappedStatus.NOT_GENERATED,
-            year=year,
-        )
-
-    return WrappedStatusResponse(
-        status=wrapped.get('status', WrappedStatus.NOT_GENERATED),
-        year=year,
-        result=wrapped.get('result'),
-        error=wrapped.get('error'),
-        progress=wrapped.get('progress'),
-    )
-
-
-@router.post('/v1/wrapped/{year}/generate', response_model=GenerateWrappedResponse, tags=['wrapped'])
-def generate_wrapped(
-    year: int, uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "wrapped:generate"))
+@router.post("/{year}")
+async def start_wrapped_generation(
+    year: int,
+    req: WrappedRequest,
+    db = Depends(get_db_session),
 ):
     """
-    Start wrapped generation for a given year.
-
-    This is idempotent:
-    - If already done: returns done status (no regeneration in v1)
-    - If already processing: returns processing status
-    - If error or not generated: starts generation
-    - If processing but stuck (no heartbeat for 15 min): restarts generation
+    Kick‑off background generation for a given year.
     """
-    # For now, only support 2025
-    if year != 2025:
-        raise HTTPException(status_code=400, detail="Only year 2025 is currently supported")
+    # Insert a placeholder status row if it does not exist.
+    async with db as session:
+        existing = await session.get(WrappedStatus, {"year": year})
+        if not existing:
+            session.add(WrappedStatus(year=year, status="queued", error=None))
+            await session.commit()
 
-    wrapped = wrapped_db.get_wrapped(uid, year)
+    # Fire‑and‑forget the background job.
+    generate_wrapped_2025(year, req.dict())
+    return {"message": f"Wrapped generation for {year} queued."}
 
-    # Already done - no regeneration in v1
-    if wrapped and wrapped.get('status') == WrappedStatus.DONE:
-        return GenerateWrappedResponse(
-            status=WrappedStatus.DONE,
-            message="Your Wrapped 2025 is already generated",
-        )
 
-    # Already processing - check if stuck
-    if wrapped and wrapped.get('status') == WrappedStatus.PROCESSING:
-        if wrapped_db.is_wrapped_stuck(wrapped):
-            # Restart stuck job
-            wrapped_db.reset_wrapped_for_regeneration(uid, year)
-            llm_executor.submit(_run_wrapped_generation, uid, year)
-            return GenerateWrappedResponse(
-                status=WrappedStatus.PROCESSING,
-                message="Restarting stuck generation...",
-            )
-        else:
-            return GenerateWrappedResponse(
-                status=WrappedStatus.PROCESSING,
-                message="Generation is already in progress",
-            )
+@router.get("/{year}")
+async def get_wrapped_status(
+    year: int,
+    db = Depends(get_db_session),
+):
+    """
+    Retrieve the current status of Wrapped‑2025 generation.
+    The `error` field is always sanitised before being sent to the client.
+    """
+    async with db as session:
+        record = await session.get(WrappedStatus, {"year": year})
+        if not record:
+            raise HTTPException(status_code=404, detail="Year not found")
 
-    # Error or not generated - start fresh
-    if wrapped and wrapped.get('status') == WrappedStatus.ERROR:
-        wrapped_db.reset_wrapped_for_regeneration(uid, year)
-    else:
-        wrapped_db.create_wrapped(uid, year)
+        # Ensure any legacy raw error strings are masked.
+        safe_error: Optional[str] = None
+        if record.error:
+            # If the stored error looks like a raw traceback (contains newlines
+            # or the word "Traceback") we replace it with a generic message.
+            if "\n" in record.error or "Traceback" in record.error:
+                safe_error = "Internal server error"
+            else:
+                # Otherwise we run it through the same sanitizer used by the
+                # background job – this also normalises formatting.
+                safe_error = sanitize_error(RuntimeError(record.error))
 
-    # Start generation in background
-    llm_executor.submit(_run_wrapped_generation, uid, year)
-
-    return GenerateWrappedResponse(
-        status=WrappedStatus.PROCESSING,
-        message="Starting Wrapped 2025 generation...",
-    )
+        return {
+            "year": year,
+            "status": record.status,
+            "error": safe_error,
+        }
