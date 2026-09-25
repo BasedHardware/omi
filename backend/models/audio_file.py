@@ -14,3 +14,10 @@ class AudioFile(BaseModel):
         default=None, description="When this audio file started (absolute timestamp)"
     )
     duration: float = Field(description="Duration in seconds")
+    # Audio-timeline v2: authoritative contiguous coverage as [start, end]
+    # wall-epoch second pairs, populated from blob metadata at upload time.
+    # Absent on legacy files; a v1-only chunk list is at best a candidate,
+    # never proof of full coverage.
+    chunk_spans: Optional[List[List[float]]] = Field(
+        default=None, description="Validated contiguous coverage spans (v2 only)"
+    )

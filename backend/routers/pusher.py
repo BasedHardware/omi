@@ -16,12 +16,14 @@ from utils.pusher_protocol import (
     MAX_SAMPLE_RATE,
     MIN_SAMPLE_RATE,
     PRIVATE_CLOUD_QUEUE_MAX_SIZE,
+    AUDIO_TIMELINE_PROTOCOL,
     AudioBytesQueueItem,
     ByteBudget,
     PrivateCloudChunk,
     SpeakerSampleRequest,
     TranscriptQueueItem,
     append_bounded,
+    audio_timeline_ack_frame,
     bound_private_pending,
     extend_bounded,
     frame_header,
@@ -81,6 +83,11 @@ PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL = 1.0
 PRIVATE_CLOUD_CHUNK_DURATION = 60.0
 PRIVATE_CLOUD_BATCH_MAX_AGE = 60.0  # seconds — flush batch if oldest chunk exceeds this age
 PRIVATE_CLOUD_SYNC_MAX_RETRIES = 3
+# Audio-timeline v2 continuity: 1 ms filename-rounding tolerance. A positive
+# discontinuity beyond it flushes the partial chunk and pending batch; an
+# overlap is trimmed (or an exact replay ignored); conflicting bytes for the
+# same range fail closed and are never overwritten.
+AUDIO_TIMELINE_CONTINUITY_TOLERANCE = 0.001
 
 # Queue size limits
 SPEAKER_SAMPLE_QUEUE_WARN_SIZE = 100
@@ -124,6 +131,7 @@ async def _websocket_util_trigger(
     uid: str,
     sample_rate: int = 8000,
     client_kind: str = 'unknown',
+    audio_timeline: Optional[int] = None,
 ) -> None:
     logger.info(f'_websocket_util_trigger {uid}')
     resolved_client_kind = bounded_client_kind(client_kind)
@@ -138,6 +146,22 @@ async def _websocket_util_trigger(
     if not MIN_SAMPLE_RATE <= sample_rate <= MAX_SAMPLE_RATE:
         await websocket.close(code=1008, reason='Invalid sample rate')
         return
+
+    # Audio-timeline v2 opt-in: only acknowledged connections get v2
+    # continuity handling. The acknowledgment is sent before any other frame
+    # so the listen side consumes it in its connect path; an old listen that
+    # never sent the query parameter sees nothing change.
+    audio_timeline_v2 = False
+    if audio_timeline is not None:
+        if isinstance(audio_timeline, bool) or audio_timeline != AUDIO_TIMELINE_PROTOCOL:
+            await websocket.close(code=1008, reason='Unsupported audio timeline version')
+            return
+        audio_timeline_v2 = True
+        try:
+            await websocket.send_bytes(audio_timeline_ack_frame())
+        except Exception as e:
+            logger.error(f'Failed to send audio timeline ack: {e} {uid}')
+            return
 
     # Defense-in-depth: during drain the LB should already have removed us from
     # the NEG, but reject straggler NEW connections.  We accept the handshake
@@ -201,6 +225,11 @@ async def _websocket_util_trigger(
         # Pending batches keyed by conversation_id
         pending: Dict[str, Dict[str, Any]] = {}
 
+        # Batches closed early by a v2 discontinuity (or a failed upload
+        # retrying): uploaded before any pending batch for the same
+        # conversation, so noncontiguous PCM is never concatenated.
+        ready_batches: List[Dict[str, Any]] = []
+
         # Conversations deleted underneath us (e.g. discarded as empty at rollover).
         # Their chunks can never be referenced, played or cleaned up again, so we
         # stop uploading rather than leaving more orphans in the bucket (#11742).
@@ -211,30 +240,58 @@ async def _websocket_util_trigger(
             if conv_id in deleted_conversations:
                 audio_budget.release(len(chunk_info['data']))
                 return
-            if conv_id not in pending:
+            span = chunk_info.get('span') if isinstance(chunk_info, dict) else None
+            chunk_end: Optional[float] = None
+            if span:
+                # v2 chunks know their exact end; legacy chunks end where the
+                # next chunk's start lands (the old contiguous assumption).
+                chunk_end = chunk_info['timestamp'] + span['samples'] / span['sample_rate']
+            batch = pending.get(conv_id)
+            if batch is not None and chunk_end is not None and batch.get('end') is not None:
+                # Never batch noncontiguous PCM: a gap (or overlap) between
+                # the batch's current end and this chunk's start closes the
+                # pending batch for upload before the new run accumulates.
+                if abs(chunk_info['timestamp'] - cast(float, batch['end'])) > AUDIO_TIMELINE_CONTINUITY_TOLERANCE:
+                    if pending.pop(conv_id, None) is not None:
+                        ready_batches.append(batch)
+                    batch = None
+            if batch is None:
                 bound_private_pending(pending, audio_budget)
-                pending[conv_id] = {
+                batch = {
                     'data': bytearray(),
                     'conversation_id': conv_id,
                     'timestamp': chunk_info['timestamp'],  # oldest chunk timestamp
                     'queued_at': time.monotonic(),
                     'retries': 0,
                 }
-            batch = pending[conv_id]
+                pending[conv_id] = batch
             batch['data'].extend(chunk_info['data'])
+            if chunk_end is not None:
+                batch['end'] = chunk_end
+                batch['span'] = {
+                    'samples': len(batch['data']) // 2,
+                    'sample_rate': span['sample_rate'],
+                }
 
         async def _flush_batch(conv_id: str):
+            """Upload a conversation's pending batched chunk."""
+            await _upload_batch(pending.pop(conv_id, None))
+
+        async def _upload_batch(batch: Optional[Dict[str, Any]]):
             """Upload a batched chunk and update audio files."""
             nonlocal application_failed
-            batch = pending.pop(conv_id, None)
             if not batch or len(batch['data']) == 0:
                 return
+            conv_id = batch['conversation_id']
             chunk_data = bytes(batch['data'])
             del batch['data']  # free bytearray immediately — chunk_data holds the bytes copy
             timestamp = batch['timestamp']
             retries = batch.get('retries', 0)
             try:
-                chunks_to_upload: List[Dict[str, Any]] = [{'data': chunk_data, 'timestamp': timestamp}]
+                upload_chunk: Dict[str, Any] = {'data': chunk_data, 'timestamp': timestamp}
+                if batch.get('span'):
+                    upload_chunk['span'] = batch['span']
+                chunks_to_upload: List[Dict[str, Any]] = [upload_chunk]
                 await run_blocking(
                     storage_executor,
                     cast(Any, upload_audio_chunks_batch),
@@ -293,7 +350,9 @@ async def _websocket_util_trigger(
                     batch['retries'] = retries + 1
                     batch['data'] = bytearray(chunk_data)
                     batch['queued_at'] = 0.0 if not websocket_active else time.monotonic()
-                    pending[conv_id] = batch
+                    # Retry in the ordered ready lane: re-entering pending could
+                    # concatenate this run with a newer noncontiguous one.
+                    ready_batches.insert(0, batch)
                     logger.error(f"Private cloud batch upload failed (retry {retries + 1}): {e} {uid} {conv_id}")
                 else:
                     audio_budget.release(len(chunk_data))
@@ -304,7 +363,7 @@ async def _websocket_util_trigger(
                     )
             del chunk_data
 
-        while websocket_active or len(private_cloud_queue) > 0 or len(pending) > 0:
+        while websocket_active or len(private_cloud_queue) > 0 or len(pending) > 0 or ready_batches:
             await wait_for_event(shutdown_event, PRIVATE_CLOUD_SYNC_PROCESS_INTERVAL)
 
             # Drain queue into pending batches
@@ -319,6 +378,10 @@ async def _websocket_util_trigger(
 
             now = time.monotonic()
             batch_size_threshold = sample_rate * 2 * PRIVATE_CLOUD_CHUNK_DURATION
+
+            # Discontinuity-closed batches upload first, in order.
+            while ready_batches:
+                await _upload_batch(ready_batches.pop(0))
 
             # Determine which conversations to flush
             conv_ids_to_flush: List[str] = []
@@ -442,6 +505,44 @@ async def _websocket_util_trigger(
         private_cloud_sync_buffer = bytearray()
         private_cloud_chunk_start_time: Optional[float] = None
         current_conversation_id: Optional[str] = None
+        # Audio-timeline v2 continuity for this socket: the projected end of
+        # the last accepted run and its conversation. None until first audio
+        # or after a conversation switch (which flushes the run).
+        audio_timeline_last_end: Optional[float] = None
+
+        def _queue_private_cloud_chunk() -> None:
+            if not (private_cloud_sync_enabled and current_conversation_id and len(private_cloud_sync_buffer) > 0):
+                return
+            if len(private_cloud_queue) >= PRIVATE_CLOUD_QUEUE_MAX_SIZE:
+                logger.warning(
+                    f"private_cloud_queue full ({len(private_cloud_queue)}/{PRIVATE_CLOUD_QUEUE_MAX_SIZE}), "
+                    f"dropping oldest chunk to prevent OOM {uid}"
+                )
+            chunk_payload: Dict[str, Any] = {
+                'data': bytes(private_cloud_sync_buffer),
+                'conversation_id': current_conversation_id,
+                'timestamp': private_cloud_chunk_start_time or time.time(),
+            }
+            if audio_timeline_v2:
+                # v2 runs carry their authoritative PCM sample count so
+                # coverage never has to be inferred from encoded blob size.
+                chunk_payload['span'] = {
+                    'samples': len(private_cloud_sync_buffer) // 2,
+                    'sample_rate': sample_rate,
+                }
+            append_bounded(
+                private_cloud_queue,
+                chunk_payload,
+                'private_cloud',
+                byte_budget=audio_budget,
+                size_of=lambda chunk: len(chunk['data']),
+            )
+
+        def _reset_private_cloud_buffer() -> None:
+            nonlocal private_cloud_sync_buffer
+            nonlocal private_cloud_chunk_start_time
+            private_cloud_sync_buffer = bytearray()
+            private_cloud_chunk_start_time = None
 
         try:
             while websocket_active:
@@ -464,34 +565,17 @@ async def _websocket_util_trigger(
                 if header_type == 103:
                     new_conversation_id = bytes(data[4:]).decode("utf-8")
                     # Flush private cloud buffer for the old conversation before switching
-                    if (
-                        private_cloud_sync_enabled
-                        and current_conversation_id
-                        and current_conversation_id != new_conversation_id
-                        and len(private_cloud_sync_buffer) > 0
-                    ):
-                        if len(private_cloud_queue) >= PRIVATE_CLOUD_QUEUE_MAX_SIZE:
-                            logger.warning(
-                                f"private_cloud_queue full ({len(private_cloud_queue)}/{PRIVATE_CLOUD_QUEUE_MAX_SIZE}), "
-                                f"dropping oldest chunk to prevent OOM {uid}"
+                    if current_conversation_id and current_conversation_id != new_conversation_id:
+                        if len(private_cloud_sync_buffer) > 0:
+                            logger.info(
+                                f"Flushed private cloud buffer on conversation switch: "
+                                f"{len(private_cloud_sync_buffer)} bytes {uid}"
                             )
-                        append_bounded(
-                            private_cloud_queue,
-                            {
-                                'data': bytes(private_cloud_sync_buffer),
-                                'conversation_id': current_conversation_id,
-                                'timestamp': private_cloud_chunk_start_time or time.time(),
-                            },
-                            'private_cloud',
-                            byte_budget=audio_budget,
-                            size_of=lambda chunk: len(chunk['data']),
-                        )
-                        logger.info(
-                            f"Flushed private cloud buffer on conversation switch: {len(private_cloud_sync_buffer)} bytes {uid}"
-                        )
-                        private_cloud_sync_buffer = bytearray()
-                        private_cloud_chunk_start_time = None
+                        _queue_private_cloud_chunk()
                     current_conversation_id = new_conversation_id
+                    # A conversation boundary ends the current v2 run: the
+                    # next audio starts a fresh continuity window.
+                    audio_timeline_last_end = None
                     logger.info(f"Pusher received conversation_id: {current_conversation_id} {uid}")
                     continue
 
@@ -610,6 +694,62 @@ async def _websocket_util_trigger(
                     buffer_start_timestamp = struct.unpack("d", data[4:12])[0]
                     audio_data = data[12:]
 
+                    if audio_timeline_v2:
+                        # v2: the timestamp is the projected start of this
+                        # run's first sample. Compare against the last accepted
+                        # run's end with 1 ms tolerance: a positive
+                        # discontinuity flushes the partial chunk (and the
+                        # pending batch downstream) instead of concatenating
+                        # across a gap; an overlap is reconciled exactly.
+                        run_seconds = len(audio_data) / (sample_rate * 2)
+                        run_start = buffer_start_timestamp
+                        run_end = run_start + run_seconds
+                        if audio_timeline_last_end is not None:
+                            delta = run_start - audio_timeline_last_end
+                            if delta > AUDIO_TIMELINE_CONTINUITY_TOLERANCE:
+                                _queue_private_cloud_chunk()
+                                _reset_private_cloud_buffer()
+                            elif delta < -AUDIO_TIMELINE_CONTINUITY_TOLERANCE:
+                                if run_end <= audio_timeline_last_end + AUDIO_TIMELINE_CONTINUITY_TOLERANCE:
+                                    # Exact replay of an already accepted
+                                    # range: never re-store or re-emit it.
+                                    logger.info(
+                                        f'Ignored duplicate v2 audio replay '
+                                        f'start={run_start:.3f}s {len(audio_data)}B {uid}'
+                                    )
+                                    continue
+                                overlap_bytes = int((audio_timeline_last_end - run_start) * sample_rate * 2)
+                                overlap_bytes -= overlap_bytes % 2
+                                if overlap_bytes >= len(audio_data):
+                                    continue
+                                # Verify the overlapping prefix against the
+                                # retained buffer: differing bytes for the same
+                                # range fail closed and are never overwritten.
+                                buffer_start_offset = int(
+                                    (run_start - (private_cloud_chunk_start_time or run_start)) * sample_rate * 2
+                                )
+                                comparable = max(
+                                    0, min(overlap_bytes, len(private_cloud_sync_buffer) - buffer_start_offset)
+                                )
+                                if (
+                                    comparable > 0
+                                    and buffer_start_offset >= 0
+                                    and private_cloud_sync_buffer[
+                                        buffer_start_offset : buffer_start_offset + comparable
+                                    ]
+                                    != audio_data[:comparable]
+                                ):
+                                    logger.warning(
+                                        f'Conflicting v2 audio for an accepted range '
+                                        f'start={run_start:.3f}s; dropping frame {uid}'
+                                    )
+                                    continue
+                                audio_data = audio_data[overlap_bytes:]
+                                run_start = audio_timeline_last_end
+                                run_end = run_start + len(audio_data) / (sample_rate * 2)
+                        audio_timeline_last_end = run_end
+                        buffer_start_timestamp = run_start
+
                     # Only accumulate audio buffers if there's a consumer (app trigger or webhook)
                     # Without this guard, buffers grow ~16KB/s indefinitely for users with no audio apps
                     if has_audio_apps_enabled:
@@ -631,24 +771,8 @@ async def _websocket_util_trigger(
                         )
                         # Queue chunk every PRIVATE_CLOUD_CHUNK_DURATION seconds
                         if len(private_cloud_sync_buffer) >= sample_rate * 2 * PRIVATE_CLOUD_CHUNK_DURATION:
-                            if len(private_cloud_queue) >= PRIVATE_CLOUD_QUEUE_MAX_SIZE:
-                                logger.warning(
-                                    f"private_cloud_queue full ({len(private_cloud_queue)}/{PRIVATE_CLOUD_QUEUE_MAX_SIZE}), "
-                                    f"dropping oldest chunk to prevent OOM {uid}"
-                                )
-                            append_bounded(
-                                private_cloud_queue,
-                                {
-                                    'data': bytes(private_cloud_sync_buffer),
-                                    'conversation_id': current_conversation_id,
-                                    'timestamp': cast(float, private_cloud_chunk_start_time),
-                                },
-                                'private_cloud',
-                                byte_budget=audio_budget,
-                                size_of=lambda chunk: len(chunk['data']),
-                            )
-                            private_cloud_sync_buffer = bytearray()
-                            private_cloud_chunk_start_time = None
+                            _queue_private_cloud_chunk()
+                            _reset_private_cloud_buffer()
 
                     # Queue audio bytes triggers for batched processing
                     if (
@@ -703,24 +827,9 @@ async def _websocket_util_trigger(
             application_failed = True
         finally:
             # Flush any remaining private cloud sync buffer before shutdown
-            if private_cloud_sync_enabled and current_conversation_id and len(private_cloud_sync_buffer) > 0:
-                if len(private_cloud_queue) >= PRIVATE_CLOUD_QUEUE_MAX_SIZE:
-                    logger.warning(
-                        f"private_cloud_queue full ({len(private_cloud_queue)}/{PRIVATE_CLOUD_QUEUE_MAX_SIZE}), "
-                        f"dropping oldest chunk to prevent OOM {uid}"
-                    )
-                append_bounded(
-                    private_cloud_queue,
-                    {
-                        'data': bytes(private_cloud_sync_buffer),
-                        'conversation_id': current_conversation_id,
-                        'timestamp': private_cloud_chunk_start_time or time.time(),
-                    },
-                    'private_cloud',
-                    byte_budget=audio_budget,
-                    size_of=lambda chunk: len(chunk['data']),
-                )
+            if len(private_cloud_sync_buffer) > 0:
                 logger.info(f"Flushed final private cloud buffer: {len(private_cloud_sync_buffer)} bytes {uid}")
+            _queue_private_cloud_chunk()
             websocket_active = False
             audio_bytes_event.set()
 
@@ -795,5 +904,6 @@ async def websocket_endpoint_trigger(
     uid: str,
     sample_rate: int = 8000,
     client_kind: str = 'unknown',
+    audio_timeline: Optional[int] = None,
 ) -> None:
-    await _websocket_util_trigger(websocket, uid, sample_rate, client_kind)
+    await _websocket_util_trigger(websocket, uid, sample_rate, client_kind, audio_timeline)

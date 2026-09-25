@@ -745,6 +745,45 @@ def upload_audio_chunk(
     return path
 
 
+def _chunk_span(chunk: Dict[str, Any]) -> Optional[Dict[str, Any]]:
+    """Validated v2 span metadata ('start', 'samples', 'sample_rate') or None."""
+    span = chunk.get('span') if isinstance(chunk, dict) else None
+    if not isinstance(span, dict):
+        return None
+    try:
+        start = float(span['start'])
+        samples = int(span['samples'])
+        rate = int(span['sample_rate'])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if samples <= 0 or rate <= 0:
+        return None
+    return {'start': start, 'samples': samples, 'sample_rate': rate}
+
+
+def _span_blob_metadata(span: Dict[str, Any]) -> Dict[str, str]:
+    return {
+        'v2_start': repr(span['start']),
+        'v2_samples': str(span['samples']),
+        'v2_sample_rate': str(span['sample_rate']),
+    }
+
+
+def _parse_span_blob_metadata(metadata: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Rehydrate v2 span metadata from blob metadata, or None when absent/malformed."""
+    if not metadata:
+        return None
+    try:
+        start = float(metadata['v2_start'])
+        samples = int(metadata['v2_samples'])
+        rate = int(metadata['v2_sample_rate'])
+    except (KeyError, TypeError, ValueError):
+        return None
+    if samples <= 0 or rate <= 0:
+        return None
+    return {'start': start, 'samples': samples, 'sample_rate': rate}
+
+
 def upload_audio_chunks_batch(
     chunks: List[Dict[str, Any]],
     uid: str,
@@ -758,6 +797,10 @@ def upload_audio_chunks_batch(
 
     Args:
         chunks: List of dicts with 'data' (bytes) and 'timestamp' (float).
+            A v2 chunk may also carry 'span' ({'start', 'samples',
+            'sample_rate'}): the authoritative start plus PCM sample count,
+            persisted as blob metadata so coverage never has to be inferred
+            from encoded blob size.
         uid: User ID.
         conversation_id: Conversation ID.
         data_protection_level: Optional cached protection level. When provided,
@@ -765,6 +808,11 @@ def upload_audio_chunks_batch(
 
     Returns:
         List of GCS paths for the uploaded batch.
+
+    Raises:
+        ValueError: a v2 upload collides with an existing blob of differing
+            size. The 3-decimal filename key must never overwrite differing
+            bytes; an identical retry is an idempotent no-op.
     """
     if not chunks:
         return []
@@ -784,11 +832,36 @@ def upload_audio_chunks_batch(
     last_ts = f'{sorted_chunks[-1]["timestamp"]:.3f}'
     batch_name = f'{first_ts}-{last_ts}' if len(sorted_chunks) > 1 else first_ts
 
+    span = _chunk_span(sorted_chunks[0])
+    if span is not None and len(sorted_chunks) > 1:
+        # A batch of v2 chunks is one contiguous run; the aggregate span is
+        # the first chunk's start plus the summed sample count.
+        total_samples = sum(int(c.get('span', {}).get('samples', 0)) for c in sorted_chunks)
+        if total_samples > 0:
+            span = {**span, 'samples': total_samples}
+
+    if protection_level == 'enhanced':
+        path = f'chunks/{uid}/{conversation_id}/{batch_name}.batch.enc'
+    else:
+        path = f'chunks/{uid}/{conversation_id}/{batch_name}.batch.bin'
+
     with owner_storage_write_gate(uid, bucket):
+        blob = bucket.blob(path)
+        expected_size = sum(len(chunk['data']) for chunk in sorted_chunks)
+        if span is not None:
+            existing = None
+            try:
+                existing = blob.exists() and blob.size
+            except Exception:
+                existing = None
+            if isinstance(existing, int) and existing > 0:
+                if existing == expected_size:
+                    # Identical retry: never overwrite or double-write.
+                    return [path]
+                raise ValueError(f'v2 audio blob collision at {path}: existing {existing}B != upload {expected_size}B')
+            blob.metadata = _span_blob_metadata(span)
         if protection_level == 'enhanced':
             # Encrypt each chunk individually (length-prefixed), stream to GCS
-            path = f'chunks/{uid}/{conversation_id}/{batch_name}.batch.enc'
-            blob = bucket.blob(path)
             with blob.open('wb', content_type='application/octet-stream') as f:
                 for chunk in sorted_chunks:
                     encrypted_chunk = encryption.encrypt_audio_chunk(chunk['data'], uid)
@@ -796,8 +869,6 @@ def upload_audio_chunks_batch(
                     del encrypted_chunk
         else:
             # Standard — stream raw PCM data to GCS
-            path = f'chunks/{uid}/{conversation_id}/{batch_name}.batch.bin'
-            blob = bucket.blob(path)
             with blob.open('wb', content_type='application/octet-stream') as f:
                 for chunk in sorted_chunks:
                     f.write(chunk['data'])
@@ -883,14 +954,16 @@ def list_audio_chunks(uid: str, conversation_id: str) -> List[Dict[str, Any]]:
                 else:
                     timestamp = float(timestamp_str)
 
-                chunks.append(
-                    {
-                        'timestamp': timestamp,
-                        'path': blob.name,
-                        'size': blob.size,
-                        'is_batch': is_batch,
-                    }
-                )
+                chunk_entry = {
+                    'timestamp': timestamp,
+                    'path': blob.name,
+                    'size': blob.size,
+                    'is_batch': is_batch,
+                }
+                span = _parse_span_blob_metadata(getattr(blob, 'metadata', None))
+                if span is not None:
+                    chunk_entry['span'] = span
+                chunks.append(chunk_entry)
             except ValueError:
                 continue
 
@@ -1127,7 +1200,29 @@ def download_audio_chunks_and_merge(
     # Merge chunks
     merged_data = bytearray()
 
-    if fill_gaps and timestamps and chunk_results:
+    spans_by_timestamp = {chunk['timestamp']: chunk['span'] for chunk in actual_chunks if chunk.get('span') is not None}
+    if spans_by_timestamp and set(chunk_results) <= set(spans_by_timestamp):
+        # Audio-timeline v2: every chunk carries authoritative span metadata.
+        # Trim overlaps exactly and insert silence only for real positive
+        # gaps — never trust encoded blob size as coverage.
+        cursor: Optional[float] = None
+        for timestamp in sorted(chunk_results):
+            pcm_data = chunk_results[timestamp]
+            start = spans_by_timestamp[timestamp]['start']
+            if cursor is not None:
+                if start + 0.001 <= cursor:
+                    trim_bytes = int((cursor - start) * sample_rate * 2)
+                    trim_bytes -= trim_bytes % 2
+                    if trim_bytes >= len(pcm_data):
+                        continue
+                    pcm_data = pcm_data[trim_bytes:]
+                    start = cursor
+                elif fill_gaps and start > cursor + 0.001:
+                    gap_samples = int((start - cursor) * sample_rate)
+                    merged_data.extend(bytes(gap_samples * 2))
+            merged_data.extend(pcm_data)
+            cursor = start + len(pcm_data) / (sample_rate * 2)
+    elif fill_gaps and timestamps and chunk_results:
         # Sort timestamps to ensure proper ordering
         sorted_timestamps = sorted(timestamps)
         first_timestamp = sorted_timestamps[0]
@@ -1420,15 +1515,19 @@ def compute_audio_files_fingerprint(audio_files: List[Dict[str, Any]]) -> str:
     last chunk timestamp per part, order-insensitive). Stamped on the doc at
     build time; a mismatch with the current audio_files means the artifact is
     stale. Also embedded in the Cloud Tasks task name so rebuilds after late
-    chunks aren't swallowed by named-task dedup."""
-    parts = sorted(
-        [
-            [af['id'], len(af['chunk_timestamps']), round(sorted(af['chunk_timestamps'])[-1], 3)]
-            for af in audio_files
-            if af.get('id') and af.get('chunk_timestamps')
-        ],
-        key=lambda p: p[0],
-    )
+    chunks aren't swallowed by named-task dedup. For v2 files the validated
+    chunk_spans layout is part of the fingerprint, so a span change (not just
+    last-timestamp/count) invalidates a stamped artifact."""
+    parts = []
+    for af in audio_files:
+        if not (af.get('id') and af.get('chunk_timestamps')):
+            continue
+        entry = [af['id'], len(af['chunk_timestamps']), round(sorted(af['chunk_timestamps'])[-1], 3)]
+        spans = af.get('chunk_spans')
+        if spans:
+            entry.append([[round(float(s), 3), round(float(e), 3)] for s, e in spans])
+        parts.append(entry)
+    parts.sort(key=lambda p: p[0])
     return hashlib.sha1(json.dumps(parts).encode()).hexdigest()[:12]
 
 

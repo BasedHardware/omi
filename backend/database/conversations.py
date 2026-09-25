@@ -1251,14 +1251,46 @@ def create_audio_files_from_chunks(
     current_group = []
     gap_threshold = 90  # seconds — must exceed max chunk duration (60s) to avoid false splits
 
+    def _chunk_span_seconds(chunk: dict) -> Optional[Tuple[float, float]]:
+        """v2 chunk coverage from authoritative span metadata, else None."""
+        span = chunk.get('span')
+        if not isinstance(span, dict):
+            return None
+        try:
+            start = float(span['start'])
+            samples = float(span['samples'])
+            rate = float(span['sample_rate'])
+        except (KeyError, TypeError, ValueError):
+            return None
+        if samples <= 0 or rate <= 0:
+            return None
+        return (start, start + samples / rate)
+
+    # v2 grouping splits at actual uncovered ends (and any overlap), not just
+    # start-to-start differences; a single spanless chunk keeps the whole
+    # listing legacy so no false coverage is claimed.
+    all_spans = [_chunk_span_seconds(chunk) for chunk in chunks]
+    v2_listing = all(span is not None for span in all_spans)
+
     for i, chunk in enumerate(chunks):
         if not current_group:
             current_group.append(chunk)
         else:
-            # Check if there's a gap between chunks exceeding the threshold
-            prev_chunk = current_group[-1]
-            time_gap = chunk['timestamp'] - prev_chunk['timestamp']
-            if time_gap > gap_threshold:
+            split = False
+            if v2_listing:
+                prev_end = all_spans[i - 1][1] if all_spans[i - 1] is not None else None
+                this_start = all_spans[i][0] if all_spans[i] is not None else None
+                split = (
+                    prev_end is not None
+                    and this_start is not None
+                    and abs(this_start - prev_end) > 0.001  # gap or overlap
+                )
+            if not split:
+                # Check if there's a gap between chunks exceeding the threshold
+                prev_chunk = current_group[-1]
+                time_gap = chunk['timestamp'] - prev_chunk['timestamp']
+                split = time_gap > gap_threshold
+            if split:
                 # Gap detected, finalize current group
                 audio_file = _finalize_audio_file_group(uid, conversation_id, current_group, audio_files)
                 if audio_file:
@@ -1299,6 +1331,40 @@ def _finalize_audio_file_group(
 
     # Extract timestamps
     timestamps = [chunk['timestamp'] for chunk in chunk_group]
+
+    # v2 groups carry validated contiguous coverage spans from blob metadata;
+    # duration is the authoritative span extent, never an encoded-size guess.
+    spans: List[Tuple[float, float]] = []
+    for chunk in chunk_group:
+        span = chunk.get('span')
+        if not isinstance(span, dict):
+            spans = []
+            break
+        try:
+            start = float(span['start'])
+            samples = float(span['samples'])
+            rate = float(span['sample_rate'])
+        except (KeyError, TypeError, ValueError):
+            spans = []
+            break
+        if samples <= 0 or rate <= 0:
+            spans = []
+            break
+        spans.append((start, start + samples / rate))
+
+    if spans:
+        started_at = datetime.fromtimestamp(spans[0][0], tz=timezone.utc)
+        duration = spans[-1][1] - spans[0][0]
+        return AudioFile(
+            id=file_id,
+            uid=uid,
+            conversation_id=conversation_id,
+            chunk_timestamps=timestamps,
+            provider='gcp',
+            started_at=started_at,
+            duration=duration,
+            chunk_spans=[[round(start, 3), round(end, 3)] for start, end in spans],
+        )
 
     # Calculate started_at and duration from timestamps and blob sizes
     started_at = datetime.fromtimestamp(chunk_group[0]['timestamp'], tz=timezone.utc)
