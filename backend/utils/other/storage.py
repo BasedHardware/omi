@@ -27,6 +27,11 @@ from database.redis_db import cache_signed_url, get_cached_signed_url, delete_ca
 from database.legal_holds import external_write_fence
 from utils import encryption
 from utils.cloud_tasks import enqueue_audio_merge_job, is_audio_merge_dispatch_enabled
+from utils.audio_timeline import (
+    _parse_span_blob_metadata,
+    _span_blob_metadata,
+    _chunk_span,
+)
 from utils.observability.fallback import record_fallback
 from utils.other.deferred_delete import DeferredDeleter
 from utils.other.local_storage import create_storage_client, iam_signing_kwargs, local_public_url
@@ -743,45 +748,6 @@ def upload_audio_chunk(
 
     del upload_data
     return path
-
-
-def _chunk_span(chunk: Dict[str, Any]) -> Optional[Dict[str, Any]]:
-    """Validated v2 span metadata ('start', 'samples', 'sample_rate') or None."""
-    span = chunk.get('span') if isinstance(chunk, dict) else None
-    if not isinstance(span, dict):
-        return None
-    try:
-        start = float(span['start'])
-        samples = int(span['samples'])
-        rate = int(span['sample_rate'])
-    except (KeyError, TypeError, ValueError):
-        return None
-    if samples <= 0 or rate <= 0:
-        return None
-    return {'start': start, 'samples': samples, 'sample_rate': rate}
-
-
-def _span_blob_metadata(span: Dict[str, Any]) -> Dict[str, str]:
-    return {
-        'v2_start': repr(span['start']),
-        'v2_samples': str(span['samples']),
-        'v2_sample_rate': str(span['sample_rate']),
-    }
-
-
-def _parse_span_blob_metadata(metadata: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
-    """Rehydrate v2 span metadata from blob metadata, or None when absent/malformed."""
-    if not metadata:
-        return None
-    try:
-        start = float(metadata['v2_start'])
-        samples = int(metadata['v2_samples'])
-        rate = int(metadata['v2_sample_rate'])
-    except (KeyError, TypeError, ValueError):
-        return None
-    if samples <= 0 or rate <= 0:
-        return None
-    return {'start': start, 'samples': samples, 'sample_rate': rate}
 
 
 def upload_audio_chunks_batch(

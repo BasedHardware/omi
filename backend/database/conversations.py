@@ -18,6 +18,7 @@ from models.conversation_enums import ConversationStatus, PostProcessingModel, P
 from models.conversation_photo import ConversationPhoto
 from models.transcript_segment import TranscriptSegment
 from utils import encryption
+from utils.audio_timeline import group_chunks_by_coverage
 from utils.conversations.transcript_hash import (
     canonicalize_transcript_segments_for_storage,
     transcript_sha256_for_binding,
@@ -1246,62 +1247,11 @@ def create_audio_files_from_chunks(
     if not chunks:
         return []
 
-    # Group chunks based on gap rule (90s threshold accommodates both 5s and 60s chunk durations)
+    # Group chunks based on gap rule (90s threshold accommodates both 5s and 60s
+    # chunk durations). v2 listings split at actual uncovered ends or overlaps.
     audio_files = []
-    current_group = []
-    gap_threshold = 90  # seconds — must exceed max chunk duration (60s) to avoid false splits
-
-    def _chunk_span_seconds(chunk: dict) -> Optional[Tuple[float, float]]:
-        """v2 chunk coverage from authoritative span metadata, else None."""
-        span = chunk.get('span')
-        if not isinstance(span, dict):
-            return None
-        try:
-            start = float(span['start'])
-            samples = float(span['samples'])
-            rate = float(span['sample_rate'])
-        except (KeyError, TypeError, ValueError):
-            return None
-        if samples <= 0 or rate <= 0:
-            return None
-        return (start, start + samples / rate)
-
-    # v2 grouping splits at actual uncovered ends (and any overlap), not just
-    # start-to-start differences; a single spanless chunk keeps the whole
-    # listing legacy so no false coverage is claimed.
-    all_spans = [_chunk_span_seconds(chunk) for chunk in chunks]
-    v2_listing = all(span is not None for span in all_spans)
-
-    for i, chunk in enumerate(chunks):
-        if not current_group:
-            current_group.append(chunk)
-        else:
-            split = False
-            if v2_listing:
-                prev_end = all_spans[i - 1][1] if all_spans[i - 1] is not None else None
-                this_start = all_spans[i][0] if all_spans[i] is not None else None
-                split = (
-                    prev_end is not None
-                    and this_start is not None
-                    and abs(this_start - prev_end) > 0.001  # gap or overlap
-                )
-            if not split:
-                # Check if there's a gap between chunks exceeding the threshold
-                prev_chunk = current_group[-1]
-                time_gap = chunk['timestamp'] - prev_chunk['timestamp']
-                split = time_gap > gap_threshold
-            if split:
-                # Gap detected, finalize current group
-                audio_file = _finalize_audio_file_group(uid, conversation_id, current_group, audio_files)
-                if audio_file:
-                    audio_files.append(audio_file)
-                current_group = [chunk]
-            else:
-                current_group.append(chunk)
-
-    # Finalize last group
-    if current_group:
-        audio_file = _finalize_audio_file_group(uid, conversation_id, current_group, audio_files)
+    for chunk_group in group_chunks_by_coverage(chunks, gap_threshold=90):
+        audio_file = _finalize_audio_file_group(uid, conversation_id, chunk_group, audio_files)
         if audio_file:
             audio_files.append(audio_file)
 
