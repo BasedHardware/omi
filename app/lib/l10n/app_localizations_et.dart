@@ -2489,12 +2489,6 @@ class AppLocalizationsEt extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Üksikasjalikud diagnostikasõnumid';
 
   @override
-  String get autoCreateSpeakers => 'Loo kõnelejad automaatselt';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Loo automaatselt nime tuvastamisel';
-
-  @override
   String get followUpQuestions => 'Järgmised küsimused';
 
   @override

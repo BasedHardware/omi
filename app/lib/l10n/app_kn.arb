@@ -2712,14 +2712,6 @@
     "@detailedDiagnosticMessages": {
         "description": "Description for transcription diagnostics"
     },
-    "autoCreateSpeakers": "ವಕ್ತೃ ಸ್ವಯಂ ರಚನೆ",
-    "@autoCreateSpeakers": {
-        "description": "Experimental feature name"
-    },
-    "autoCreateWhenNameDetected": "ಹೆಸರು ಕಂಡುಬಂದಾಗ ಸ್ವಯಂ ರಚಿಸಿ",
-    "@autoCreateWhenNameDetected": {
-        "description": "Description for auto-create speakers"
-    },
     "followUpQuestions": "ಫಾಲೋ-ಅಪ್ ಪ್ರಶ್ನೆಗಳು",
     "@followUpQuestions": {
         "description": "Experimental feature name"

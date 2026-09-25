@@ -2712,14 +2712,6 @@
     "@detailedDiagnosticMessages": {
         "description": "Description for transcription diagnostics"
     },
-    "autoCreateSpeakers": "خود کار طور پر بولنے والے بنائیں",
-    "@autoCreateSpeakers": {
-        "description": "Experimental feature name"
-    },
-    "autoCreateWhenNameDetected": "جب نام پایا جائے تو خود کار طور پر بنائیں",
-    "@autoCreateWhenNameDetected": {
-        "description": "Description for auto-create speakers"
-    },
     "followUpQuestions": "فالو اپ سوالات",
     "@followUpQuestions": {
         "description": "Experimental feature name"

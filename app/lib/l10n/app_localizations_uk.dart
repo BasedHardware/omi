@@ -2492,12 +2492,6 @@ class AppLocalizationsUk extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Детальні діагностичні повідомлення';
 
   @override
-  String get autoCreateSpeakers => 'Автоматично створювати спікерів';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Автоматично створювати при виявленні імені';
-
-  @override
   String get followUpQuestions => 'Додаткові питання';
 
   @override

@@ -6,10 +6,9 @@ server-controlled layers. `MobileExperiments.all` is the bounded registry. These
 experiments must never switch memory/task authority, account migration, privacy,
 authorization or billing behavior (INV-MEM-5 and INV-CUTOVER-1).
 
-`mobile-summary-feedback-layout-v1` is the first presentation seam: the existing
-summary feedback controls are the default; the compact variant uses the same
-actions. Its specification is a **draft**, initially targeting `mobile-dev`.
-Neither shipping this registry nor generating a plan launches a trial.
+No experiment is currently registered: `MobileExperiments.all` is empty until the
+next reviewed definition lands with its operational spec. Neither shipping the
+registry nor generating a plan launches a trial.
 
 ## Runtime contract
 
@@ -115,14 +114,13 @@ builds/test identities through the normal analytics eligibility rules. Do not
 interpret assignment-only, fallback or QA users as control. Declare conversion
 window, primary metric, guardrails, minimum sample and stop rules before launch.
 
-The summary-feedback sample measures successful feedback submissions and uses
-`summary_feedback` failure as its guardrail. Both outcomes occur after the
-selected controls are exposed, and the journey retains that exposure context.
-The guardrail is the share of exposed users with a submission failure within
-24 hours, not a failure rate among attempted submissions. Conversation loading
-precedes this exposure, so `conversation_load` failures cannot serve as a
-guardrail in this funnel. Monitor page-load health separately in the journey
-scorecard; this experiment does not establish an effect on conversation utility.
+A presentation experiment measures successful outcomes on the selected surface
+and uses the same journey's failure outcome as its guardrail. Both outcomes must
+occur after the selected controls are exposed, and the journey retains that
+exposure context. The guardrail is the share of exposed users with a failure
+within the conversion window, not a failure rate among attempts. Upstream
+journey failures that precede exposure cannot serve as guardrails; monitor
+page-load health separately in the journey scorecard.
 
 ## Prepare an inactive draft
 
@@ -130,7 +128,7 @@ From repository root:
 
 ```sh
 python3 app/scripts/experiments/provision.py \
-  app/docs/experiments/summary-feedback-layout.json --project-id 123
+  app/docs/experiments/<experiment>.json --project-id 123
 python3 -m unittest discover -s app/scripts/experiments -p 'test_*.py'
 ```
 
@@ -149,7 +147,7 @@ To create the reviewed inactive draft, an operator may explicitly run:
 ```sh
 # Supply POSTHOG_PERSONAL_API_KEY through the operator's secret environment.
 python3 app/scripts/experiments/provision.py \
-  app/docs/experiments/summary-feedback-layout.json --project-id 123 \
+  app/docs/experiments/<experiment>.json --project-id 123 \
   --host https://us.posthog.com --apply
 ```
 

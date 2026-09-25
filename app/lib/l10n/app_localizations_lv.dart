@@ -2493,12 +2493,6 @@ class AppLocalizationsLv extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Detalizēti diagnostikas ziņojumi';
 
   @override
-  String get autoCreateSpeakers => 'Automātiski izveidot runātājus';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Automātiski izveidot, kad konstatēts vārds';
-
-  @override
   String get followUpQuestions => 'Turpinājuma jautājumi';
 
   @override

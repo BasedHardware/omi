@@ -2475,12 +2475,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get detailedDiagnosticMessages => 'הודעות אבחון מפורטות';
 
   @override
-  String get autoCreateSpeakers => 'אנשי דיבור שנוצרו אוטומטית';
-
-  @override
-  String get autoCreateWhenNameDetected => 'צור אוטומטית כאשר שם מזוהה';
-
-  @override
   String get followUpQuestions => 'שאלות המשך';
 
   @override

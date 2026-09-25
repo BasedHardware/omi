@@ -2448,12 +2448,6 @@ class AppLocalizationsKo extends AppLocalizations {
   String get detailedDiagnosticMessages => '자세한 진단 메시지';
 
   @override
-  String get autoCreateSpeakers => '발화자 자동 생성';
-
-  @override
-  String get autoCreateWhenNameDetected => '이름 감지 시 자동 생성';
-
-  @override
   String get followUpQuestions => '후속 질문';
 
   @override
