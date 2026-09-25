@@ -3227,7 +3227,7 @@
     "@memoryHistory": {
         "description": "Filter option for retained memory history"
     },
-    "tapPlusToStartRecording": "Натисніть +, щоб почати запис",
+    "tapPlusToStartRecording": "Натисніть кнопку запису, щоб почати запис",
     "processingTakingLonger": "Ще обробляється — це триває довше, ніж зазвичай.",
     "speechProfileEnrollmentPrompt": "Щоб Omi знав, який голос ваш, говоріть про будь-що приблизно 5 секунд.",
     "home": "Головна",
@@ -3270,7 +3270,7 @@
     "conversationsMovedCount": "{count, plural, =1{1 розмову переміщено} other{Переміщено розмов: {count}}}",
     "failedToMoveConversations": "Не вдалося перемістити розмови",
     "discardedConversationTitle": "Відхилено · {duration}",
-    "noConversationsHeroMessage": "Тут з'являються записані розмови. Торкніться + на головній, щоб записати першу.",
+    "noConversationsHeroMessage": "Тут з'являються записані розмови. Торкніться кнопки запису на головній, щоб записати першу.",
     "conversationMap": "Мапа розмов",
     "conversationCount": "{count, plural, =1{1 розмова} other{Розмов: {count}}}",
     "taskCount": "{count, plural, =1{1 завдання} other{Завдань: {count}}}",
@@ -3393,7 +3393,7 @@
     "batteryLevelSemantics": "Акумулятор {level}%",
     "updateOmiGlassFirmware": "Оновити прошивку OmiGlass",
     "deviceConnecting": "Підключення…",
-    "recordOptionsTip": "Порада: натисніть і утримуйте кнопку запису, щоб записати телефонний дзвінок.",
+    "recordOptionsTip": "Порада: торкніться стрілки на кнопці запису, щоб записати телефонний дзвінок.",
     "firmwareUpdateFailedTitle": "Не вдалося оновити",
     "firmwareUpdateFailedMessage": "Оновлення не завершилося. Пристрій і далі має поточну прошивку, ним можна безпечно користуватися. Зарядіть його, тримайте поруч із телефоном і спробуйте знову.",
     "firmwareDownloadFailedMessage": "Не вдалося завантажити оновлення, пристрій не змінено. Перевірте підключення до інтернету і спробуйте знову.",
@@ -3528,5 +3528,20 @@
     "transcriptionUnavailableRecordingContinues": "Транскрипція недоступна, запис триває на пристрої та буде оброблений пізніше",
     "transcriptionUnavailableSavingOnDevice": "Транскрипція недоступна · зберігається на пристрої",
     "transcriptionsPendingFraction": "Транскрипцій у черзі {pending}/{total}",
-    "transcriptionsPendingCount": "Транскрипцій у черзі {count}"
+    "transcriptionsPendingCount": "Транскрипцій у черзі {count}",
+    "captureSourceCall": "Дзвінок",
+    "captureSourcePhoneMic": "Мікрофон телефона",
+    "captureStatusWithSource": "{status} · {source}",
+    "resume": "Продовжити",
+    "finish": "Завершити",
+    "pendantPausedResumesWhenYouFinish": "Кулон на паузі · продовжить після завершення",
+    "pendantIsListeningTitle": "Ваш кулон слухає",
+    "oneSourceAtATime": "Omi записує лише з одного джерела за раз.",
+    "recordWithPhoneInstead": "Записати телефоном замість кулона",
+    "pendantPausesUntilYouFinish": "Кулон на паузі до завершення запису",
+    "pendantPausesDuringCall": "Кулон на паузі під час дзвінка",
+    "keepUsingPendant": "Продовжити з кулоном",
+    "recordWith": "Записати через",
+    "moreWaysToRecord": "Інші способи запису",
+    "openCall": "Відкрити дзвінок"
 }

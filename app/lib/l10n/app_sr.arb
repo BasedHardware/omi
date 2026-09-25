@@ -10799,7 +10799,7 @@
     "@memoryHistory": {
         "description": "Filter option for retained memory history"
     },
-    "tapPlusToStartRecording": "Додирните + да започнете снимање",
+    "tapPlusToStartRecording": "Додирните дугме за снимање да започнете снимање",
     "processingTakingLonger": "Još traje — ovo traje duže nego inače.",
     "speechProfileEnrollmentPrompt": "Да би Omi знао који је глас ваш — причајте о било чему око 5 секунди.",
     "home": "Почетна",
@@ -10842,7 +10842,7 @@
     "conversationsMovedCount": "{count, plural, =1{1 разговор премештен} other{Премештено разговора: {count}}}",
     "failedToMoveConversations": "Премештање разговора није успело",
     "discardedConversationTitle": "Одбачено · {duration}",
-    "noConversationsHeroMessage": "Разговори које снимите појављују се овде. Додирните + на почетној да снимите први.",
+    "noConversationsHeroMessage": "Разговори које снимите појављују се овде. Додирните дугме за снимање на почетној да снимите први.",
     "conversationMap": "Мапа разговора",
     "conversationCount": "{count, plural, =1{1 разговор} other{Разговора: {count}}}",
     "taskCount": "{count, plural, =1{1 задатак} other{Задатака: {count}}}",
@@ -10965,7 +10965,7 @@
     "batteryLevelSemantics": "Батерија {level}%",
     "updateOmiGlassFirmware": "Ажурирај фирмвер за OmiGlass",
     "deviceConnecting": "Повезивање…",
-    "recordOptionsTip": "Савет: притисните и задржите дугме за снимање да бисте снимили телефонски позив.",
+    "recordOptionsTip": "Савет: додирните стрелицу на дугмету за снимање да бисте снимили телефонски позив.",
     "firmwareUpdateFailedTitle": "Ажурирање није успело",
     "firmwareUpdateFailedMessage": "Ажурирање није завршено. Уређај је и даље на тренутном фирмверу и безбедан је за употребу. Држите га напуњеним и близу телефона, па покушајте поново.",
     "firmwareDownloadFailedMessage": "Ажурирање није могло да се преузме и уређај није промењен. Проверите интернет везу, па покушајте поново.",
@@ -11100,5 +11100,20 @@
     "transcriptionUnavailableRecordingContinues": "Транскрипције нису доступне, снимање се наставља на уређају и биће обрађено касније",
     "transcriptionUnavailableSavingOnDevice": "Транскрипција недоступна · чува се на уређају",
     "transcriptionsPendingFraction": "Транскрипције на чекању {pending}/{total}",
-    "transcriptionsPendingCount": "Транскрипције на чекању {count}"
+    "transcriptionsPendingCount": "Транскрипције на чекању {count}",
+    "captureSourceCall": "Позив",
+    "captureSourcePhoneMic": "Микрофон телефона",
+    "captureStatusWithSource": "{status} · {source}",
+    "resume": "Настави",
+    "finish": "Заврши",
+    "pendantPausedResumesWhenYouFinish": "Привезак паузиран · наставља када завршите",
+    "pendantIsListeningTitle": "Ваш привезак слуша",
+    "oneSourceAtATime": "Omi снима само из једног извора истовремено.",
+    "recordWithPhoneInstead": "Уместо тога снимај телефоном",
+    "pendantPausesUntilYouFinish": "Привезак је паузиран док не завршите",
+    "pendantPausesDuringCall": "Привезак је паузиран током позива",
+    "keepUsingPendant": "Настави са привеском",
+    "recordWith": "Снимај помоћу",
+    "moreWaysToRecord": "Више начина снимања",
+    "openCall": "Отвори позив"
 }

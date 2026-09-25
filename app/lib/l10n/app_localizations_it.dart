@@ -10024,7 +10024,7 @@ class AppLocalizationsIt extends AppLocalizations {
   String get transcriptionNoAudio => 'La trascrizione non riceve audio';
 
   @override
-  String get tapPlusToStartRecording => 'Tocca + per iniziare a registrare';
+  String get tapPlusToStartRecording => 'Tocca il pulsante di registrazione per iniziare a registrare';
 
   @override
   String get chatBlockTask => 'Attività';
@@ -10267,7 +10267,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'Le conversazioni che registri compaiono qui. Tocca + nella Home per registrare la prima.';
+      'Le conversazioni che registri compaiono qui. Tocca il pulsante di registrazione nella Home per registrare la prima.';
 
   @override
   String get conversationMap => 'Mappa delle conversazioni';
@@ -10746,7 +10746,7 @@ class AppLocalizationsIt extends AppLocalizations {
 
   @override
   String get recordOptionsTip =>
-      'Suggerimento: tieni premuto il pulsante di registrazione per registrare una telefonata.';
+      'Suggerimento: tocca la freccia sul pulsante di registrazione per registrare una telefonata.';
 
   @override
   String get firmwareUpdateFailedTitle => 'Aggiornamento non riuscito';
@@ -11238,4 +11238,51 @@ class AppLocalizationsIt extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Trascrizioni in attesa $count';
   }
+
+  @override
+  String get captureSourceCall => 'Chiamata';
+
+  @override
+  String get captureSourcePhoneMic => 'Microfono del telefono';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Riprendi';
+
+  @override
+  String get finish => 'Termina';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Ciondolo in pausa · riprende quando finisci';
+
+  @override
+  String get pendantIsListeningTitle => 'Il tuo ciondolo sta ascoltando';
+
+  @override
+  String get oneSourceAtATime => 'Omi registra da una sola fonte alla volta.';
+
+  @override
+  String get recordWithPhoneInstead => 'Registra invece con il telefono';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'Il ciondolo resta in pausa finché non finisci';
+
+  @override
+  String get pendantPausesDuringCall => 'Il ciondolo resta in pausa durante la chiamata';
+
+  @override
+  String get keepUsingPendant => 'Continua con il ciondolo';
+
+  @override
+  String get recordWith => 'Registra con';
+
+  @override
+  String get moreWaysToRecord => 'Altri modi per registrare';
+
+  @override
+  String get openCall => 'Apri chiamata';
 }

@@ -9906,7 +9906,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get transcriptionNoAudio => 'การถอดเสียงไม่ได้รับเสียง';
 
   @override
-  String get tapPlusToStartRecording => 'แตะ + เพื่อเริ่มบันทึก';
+  String get tapPlusToStartRecording => 'แตะปุ่มบันทึกเพื่อเริ่มบันทึก';
 
   @override
   String get chatBlockTask => 'งาน';
@@ -10148,7 +10148,8 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
-  String get noConversationsHeroMessage => 'การสนทนาที่คุณบันทึกจะแสดงที่นี่ แตะ + ที่หน้าหลักเพื่อบันทึกรายการแรก';
+  String get noConversationsHeroMessage =>
+      'การสนทนาที่คุณบันทึกจะแสดงที่นี่ แตะปุ่มบันทึกที่หน้าหลักเพื่อบันทึกรายการแรก';
 
   @override
   String get conversationMap => 'แผนที่การสนทนา';
@@ -10623,7 +10624,7 @@ class AppLocalizationsTh extends AppLocalizations {
   String get deviceConnecting => 'กำลังเชื่อมต่อ…';
 
   @override
-  String get recordOptionsTip => 'เคล็ดลับ: กดปุ่มบันทึกค้างไว้เพื่อบันทึกการโทร';
+  String get recordOptionsTip => 'เคล็ดลับ: แตะลูกศรบนปุ่มบันทึกเพื่อบันทึกการโทร';
 
   @override
   String get firmwareUpdateFailedTitle => 'อัปเดตไม่สำเร็จ';
@@ -11110,4 +11111,51 @@ class AppLocalizationsTh extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'การถอดเสียงที่รออยู่ $count';
   }
+
+  @override
+  String get captureSourceCall => 'การโทร';
+
+  @override
+  String get captureSourcePhoneMic => 'ไมค์โทรศัพท์';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'บันทึกต่อ';
+
+  @override
+  String get finish => 'เสร็จสิ้น';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'จี้หยุดชั่วคราว · จะทำงานต่อเมื่อคุณเสร็จ';
+
+  @override
+  String get pendantIsListeningTitle => 'จี้ของคุณกำลังฟังอยู่';
+
+  @override
+  String get oneSourceAtATime => 'Omi บันทึกได้ครั้งละหนึ่งแหล่งเท่านั้น';
+
+  @override
+  String get recordWithPhoneInstead => 'บันทึกด้วยโทรศัพท์แทน';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'จี้จะหยุดชั่วคราวจนกว่าคุณจะเสร็จ';
+
+  @override
+  String get pendantPausesDuringCall => 'จี้จะหยุดชั่วคราวระหว่างการโทร';
+
+  @override
+  String get keepUsingPendant => 'ใช้จี้ต่อ';
+
+  @override
+  String get recordWith => 'บันทึกด้วย';
+
+  @override
+  String get moreWaysToRecord => 'วิธีบันทึกเพิ่มเติม';
+
+  @override
+  String get openCall => 'เปิดการโทร';
 }

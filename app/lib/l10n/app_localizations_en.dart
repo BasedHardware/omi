@@ -9956,7 +9956,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get transcriptionNoAudio => 'Transcription not receiving audio';
 
   @override
-  String get tapPlusToStartRecording => 'Tap + to start recording';
+  String get tapPlusToStartRecording => 'Tap the record button to start recording';
 
   @override
   String get chatBlockTask => 'Task';
@@ -10199,7 +10199,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'Conversations you record show up here. Tap + on Home to record your first one.';
+      'Conversations you record show up here. Tap the record button on Home to record your first one.';
 
   @override
   String get conversationMap => 'Conversation Map';
@@ -10676,7 +10676,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deviceConnecting => 'Connecting…';
 
   @override
-  String get recordOptionsTip => 'Tip: press and hold the record button to record a phone call.';
+  String get recordOptionsTip => 'Tip: tap the arrow on the record button to record a phone call.';
 
   @override
   String get firmwareUpdateFailedTitle => 'Update Failed';
@@ -11164,4 +11164,51 @@ class AppLocalizationsEn extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Transcriptions pending $count';
   }
+
+  @override
+  String get captureSourceCall => 'Call';
+
+  @override
+  String get captureSourcePhoneMic => 'Phone mic';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Resume';
+
+  @override
+  String get finish => 'Finish';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Pendant paused · resumes when you finish';
+
+  @override
+  String get pendantIsListeningTitle => 'Your pendant is listening';
+
+  @override
+  String get oneSourceAtATime => 'Omi records from one source at a time.';
+
+  @override
+  String get recordWithPhoneInstead => 'Record with phone instead';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'Pendant pauses until you finish';
+
+  @override
+  String get pendantPausesDuringCall => 'Pendant pauses during the call';
+
+  @override
+  String get keepUsingPendant => 'Keep using pendant';
+
+  @override
+  String get recordWith => 'Record with';
+
+  @override
+  String get moreWaysToRecord => 'More ways to record';
+
+  @override
+  String get openCall => 'Open call';
 }

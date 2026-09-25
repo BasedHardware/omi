@@ -3227,7 +3227,7 @@
     "@memoryHistory": {
         "description": "Filter option for retained memory history"
     },
-    "tapPlusToStartRecording": "Tippe auf +, um die Aufnahme zu starten",
+    "tapPlusToStartRecording": "Tippe auf die Aufnahmetaste, um die Aufnahme zu starten",
     "processingTakingLonger": "Arbeitet noch — das dauert länger als üblich.",
     "speechProfileEnrollmentPrompt": "Damit Omi weiß, welche Stimme deine ist — sprich etwa 5 Sekunden über irgendetwas.",
     "home": "Start",
@@ -3270,7 +3270,7 @@
     "conversationsMovedCount": "{count, plural, =1{1 Unterhaltung verschoben} other{{count} Unterhaltungen verschoben}}",
     "failedToMoveConversations": "Unterhaltungen konnten nicht verschoben werden",
     "discardedConversationTitle": "Verworfen · {duration}",
-    "noConversationsHeroMessage": "Aufgenommene Unterhaltungen erscheinen hier. Tippe auf der Startseite auf +, um deine erste aufzunehmen.",
+    "noConversationsHeroMessage": "Aufgenommene Unterhaltungen erscheinen hier. Tippe auf der Startseite auf die Aufnahmetaste, um deine erste aufzunehmen.",
     "conversationMap": "Unterhaltungskarte",
     "conversationCount": "{count, plural, =1{1 Unterhaltung} other{{count} Unterhaltungen}}",
     "taskCount": "{count, plural, =1{1 Aufgabe} other{{count} Aufgaben}}",
@@ -3393,7 +3393,7 @@
     "batteryLevelSemantics": "Akku {level} %",
     "updateOmiGlassFirmware": "OmiGlass-Firmware aktualisieren",
     "deviceConnecting": "Verbindung wird hergestellt…",
-    "recordOptionsTip": "Tipp: Halte die Aufnahmetaste gedrückt, um ein Telefonat aufzunehmen.",
+    "recordOptionsTip": "Tipp: Tippe auf den Pfeil an der Aufnahmetaste, um ein Telefonat aufzunehmen.",
     "firmwareUpdateFailedTitle": "Update fehlgeschlagen",
     "firmwareUpdateFailedMessage": "Das Update wurde nicht abgeschlossen. Dein Gerät läuft weiter mit der aktuellen Firmware und kann sicher genutzt werden. Lade es auf, halte es in der Nähe deines Telefons und versuche es erneut.",
     "firmwareDownloadFailedMessage": "Das Update konnte nicht geladen werden, dein Gerät wurde nicht verändert. Prüfe deine Internetverbindung und versuche es erneut.",
@@ -3528,5 +3528,20 @@
     "transcriptionUnavailableRecordingContinues": "Transkriptionen sind nicht verfügbar, die Aufnahme läuft auf dem Gerät weiter und wird später verarbeitet",
     "transcriptionUnavailableSavingOnDevice": "Transkription nicht verfügbar · wird auf dem Gerät gespeichert",
     "transcriptionsPendingFraction": "Offene Transkriptionen {pending}/{total}",
-    "transcriptionsPendingCount": "Offene Transkriptionen {count}"
+    "transcriptionsPendingCount": "Offene Transkriptionen {count}",
+    "captureSourceCall": "Anruf",
+    "captureSourcePhoneMic": "Telefonmikrofon",
+    "captureStatusWithSource": "{status} · {source}",
+    "resume": "Fortsetzen",
+    "finish": "Beenden",
+    "pendantPausedResumesWhenYouFinish": "Anhänger pausiert · läuft weiter, wenn du fertig bist",
+    "pendantIsListeningTitle": "Dein Anhänger hört zu",
+    "oneSourceAtATime": "Omi nimmt immer nur aus einer Quelle auf.",
+    "recordWithPhoneInstead": "Stattdessen mit Telefon aufnehmen",
+    "pendantPausesUntilYouFinish": "Anhänger pausiert, bis du fertig bist",
+    "pendantPausesDuringCall": "Anhänger pausiert während des Anrufs",
+    "keepUsingPendant": "Anhänger weiter nutzen",
+    "recordWith": "Aufnehmen mit",
+    "moreWaysToRecord": "Weitere Aufnahmeoptionen",
+    "openCall": "Anruf öffnen"
 }

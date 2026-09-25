@@ -3227,7 +3227,7 @@
     "@memoryHistory": {
         "description": "Filter option for retained memory history"
     },
-    "tapPlusToStartRecording": "रिकॉर्डिंग शुरू करने के लिए + टैप करें",
+    "tapPlusToStartRecording": "रिकॉर्डिंग शुरू करने के लिए रिकॉर्ड बटन टैप करें",
     "processingTakingLonger": "अभी भी काम हो रहा है — इसमें सामान्य से ज़्यादा समय लग रहा है।",
     "speechProfileEnrollmentPrompt": "ताकि Omi आपकी आवाज़ पहचान सके — किसी भी विषय पर लगभग 5 सेकंड बोलें।",
     "home": "होम",
@@ -3270,7 +3270,7 @@
     "conversationsMovedCount": "{count, plural, =1{1 बातचीत ले जाई गई} other{{count} बातचीत ले जाई गईं}}",
     "failedToMoveConversations": "बातचीत को ले जाया नहीं जा सका",
     "discardedConversationTitle": "खारिज · {duration}",
-    "noConversationsHeroMessage": "आपकी रिकॉर्ड की गई बातचीत यहाँ दिखती हैं। पहली रिकॉर्ड करने के लिए होम पर + टैप करें।",
+    "noConversationsHeroMessage": "आपकी रिकॉर्ड की गई बातचीत यहाँ दिखती हैं। पहली रिकॉर्ड करने के लिए होम पर रिकॉर्ड बटन टैप करें।",
     "conversationMap": "बातचीत मानचित्र",
     "conversationCount": "{count, plural, =1{1 बातचीत} other{{count} बातचीत}}",
     "taskCount": "{count, plural, =1{1 कार्य} other{{count} कार्य}}",
@@ -3393,7 +3393,7 @@
     "batteryLevelSemantics": "बैटरी {level}%",
     "updateOmiGlassFirmware": "OmiGlass फ़र्मवेयर अपडेट करें",
     "deviceConnecting": "कनेक्ट हो रहा है…",
-    "recordOptionsTip": "सुझाव: फ़ोन कॉल रिकॉर्ड करने के लिए रिकॉर्ड बटन दबाकर रखें।",
+    "recordOptionsTip": "सुझाव: फ़ोन कॉल रिकॉर्ड करने के लिए रिकॉर्ड बटन पर तीर टैप करें।",
     "firmwareUpdateFailedTitle": "अपडेट विफल रहा",
     "firmwareUpdateFailedMessage": "अपडेट पूरा नहीं हुआ। आपका डिवाइस अभी भी मौजूदा फ़र्मवेयर पर है और इस्तेमाल के लिए सुरक्षित है। उसे चार्ज और फ़ोन के पास रखें, फिर दोबारा कोशिश करें।",
     "firmwareDownloadFailedMessage": "अपडेट डाउनलोड नहीं हो सका और आपके डिवाइस में कोई बदलाव नहीं हुआ। इंटरनेट कनेक्शन जाँचें, फिर दोबारा कोशिश करें।",
@@ -3528,5 +3528,20 @@
     "transcriptionUnavailableRecordingContinues": "ट्रांसक्रिप्शन उपलब्ध नहीं हैं, रिकॉर्डिंग डिवाइस पर जारी है और बाद में प्रोसेस होगी",
     "transcriptionUnavailableSavingOnDevice": "ट्रांसक्रिप्शन अनुपलब्ध · डिवाइस पर सहेजा जा रहा है",
     "transcriptionsPendingFraction": "लंबित ट्रांसक्रिप्शन {pending}/{total}",
-    "transcriptionsPendingCount": "लंबित ट्रांसक्रिप्शन {count}"
+    "transcriptionsPendingCount": "लंबित ट्रांसक्रिप्शन {count}",
+    "captureSourceCall": "कॉल",
+    "captureSourcePhoneMic": "फ़ोन माइक",
+    "captureStatusWithSource": "{status} · {source}",
+    "resume": "फिर शुरू करें",
+    "finish": "समाप्त करें",
+    "pendantPausedResumesWhenYouFinish": "पेंडेंट रुका है · आपके खत्म करने पर फिर शुरू होगा",
+    "pendantIsListeningTitle": "आपका पेंडेंट सुन रहा है",
+    "oneSourceAtATime": "Omi एक समय में एक ही स्रोत से रिकॉर्ड करता है।",
+    "recordWithPhoneInstead": "इसके बजाय फ़ोन से रिकॉर्ड करें",
+    "pendantPausesUntilYouFinish": "आपके खत्म करने तक पेंडेंट रुका रहेगा",
+    "pendantPausesDuringCall": "कॉल के दौरान पेंडेंट रुका रहेगा",
+    "keepUsingPendant": "पेंडेंट ही इस्तेमाल करें",
+    "recordWith": "रिकॉर्ड करने का तरीका",
+    "moreWaysToRecord": "रिकॉर्ड करने के और तरीके",
+    "openCall": "कॉल खोलें"
 }

@@ -3262,7 +3262,7 @@
     "@memoryHistory": {
         "description": "Filter option for retained memory history"
     },
-    "tapPlusToStartRecording": "Dotknij +, aby rozpocząć nagrywanie",
+    "tapPlusToStartRecording": "Dotknij przycisku nagrywania, aby rozpocząć nagrywanie",
     "processingTakingLonger": "Nadal działa — trwa to dłużej niż zwykle.",
     "speechProfileEnrollmentPrompt": "Aby Omi wiedziało, który głos jest Twój — mów o czymkolwiek przez około 5 sekund.",
     "home": "Główna",
@@ -3305,7 +3305,7 @@
     "conversationsMovedCount": "{count, plural, =1{Przeniesiono 1 rozmowę} other{Przeniesione rozmowy: {count}}}",
     "failedToMoveConversations": "Nie udało się przenieść rozmów",
     "discardedConversationTitle": "Odrzucona · {duration}",
-    "noConversationsHeroMessage": "Nagrane rozmowy pojawiają się tutaj. Stuknij + na ekranie głównym, aby nagrać pierwszą.",
+    "noConversationsHeroMessage": "Nagrane rozmowy pojawiają się tutaj. Stuknij przycisk nagrywania na ekranie głównym, aby nagrać pierwszą.",
     "conversationMap": "Mapa rozmów",
     "conversationCount": "{count, plural, =1{1 rozmowa} other{Rozmowy: {count}}}",
     "taskCount": "{count, plural, =1{1 zadanie} other{Zadania: {count}}}",
@@ -3428,7 +3428,7 @@
     "batteryLevelSemantics": "Bateria {level}%",
     "updateOmiGlassFirmware": "Zaktualizuj oprogramowanie OmiGlass",
     "deviceConnecting": "Łączenie…",
-    "recordOptionsTip": "Wskazówka: przytrzymaj przycisk nagrywania, aby nagrać rozmowę telefoniczną.",
+    "recordOptionsTip": "Wskazówka: stuknij strzałkę na przycisku nagrywania, aby nagrać rozmowę telefoniczną.",
     "firmwareUpdateFailedTitle": "Aktualizacja nie powiodła się",
     "firmwareUpdateFailedMessage": "Aktualizacja nie została ukończona. Urządzenie nadal ma obecne oprogramowanie i można go bezpiecznie używać. Naładuj je, trzymaj blisko telefonu i spróbuj ponownie.",
     "firmwareDownloadFailedMessage": "Nie udało się pobrać aktualizacji, urządzenie nie zostało zmienione. Sprawdź połączenie z internetem i spróbuj ponownie.",
@@ -3563,5 +3563,20 @@
     "transcriptionUnavailableRecordingContinues": "Transkrypcje są niedostępne, nagrywanie jest kontynuowane na urządzeniu i zostanie przetworzone później",
     "transcriptionUnavailableSavingOnDevice": "Transkrypcja niedostępna · zapisywanie na urządzeniu",
     "transcriptionsPendingFraction": "Transkrypcje w kolejce {pending}/{total}",
-    "transcriptionsPendingCount": "Transkrypcje w kolejce {count}"
+    "transcriptionsPendingCount": "Transkrypcje w kolejce {count}",
+    "captureSourceCall": "Połączenie",
+    "captureSourcePhoneMic": "Mikrofon telefonu",
+    "captureStatusWithSource": "{status} · {source}",
+    "resume": "Wznów",
+    "finish": "Zakończ",
+    "pendantPausedResumesWhenYouFinish": "Wisiorek wstrzymany · wznowi po zakończeniu",
+    "pendantIsListeningTitle": "Twój wisiorek słucha",
+    "oneSourceAtATime": "Omi nagrywa jednocześnie tylko z jednego źródła.",
+    "recordWithPhoneInstead": "Nagraj zamiast tego telefonem",
+    "pendantPausesUntilYouFinish": "Wisiorek jest wstrzymany do zakończenia",
+    "pendantPausesDuringCall": "Wisiorek jest wstrzymany podczas połączenia",
+    "keepUsingPendant": "Używaj dalej wisiorka",
+    "recordWith": "Nagraj za pomocą",
+    "moreWaysToRecord": "Więcej sposobów nagrywania",
+    "openCall": "Otwórz połączenie"
 }

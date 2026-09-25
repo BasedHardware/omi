@@ -10799,7 +10799,7 @@
     "@memoryHistory": {
         "description": "Filter option for retained memory history"
     },
-    "tapPlusToStartRecording": "Допрете + за да започнете со снимање",
+    "tapPlusToStartRecording": "Допрете го копчето за снимање за да започнете со снимање",
     "processingTakingLonger": "Сè уште се обработува — ова трае подолго од вообичаеното.",
     "speechProfileEnrollmentPrompt": "За Omi да знае кој глас е вашиот — зборувајте за што било околу 5 секунди.",
     "home": "Почетна",
@@ -10842,7 +10842,7 @@
     "conversationsMovedCount": "{count, plural, =1{Преместен е 1 разговор} other{Преместени се {count} разговори}}",
     "failedToMoveConversations": "Разговорите не можеа да се преместат",
     "discardedConversationTitle": "Отфрлено · {duration}",
-    "noConversationsHeroMessage": "Разговорите што ги снимате се појавуваат тука. Допрете + на почетната за да го снимите првиот.",
+    "noConversationsHeroMessage": "Разговорите што ги снимате се појавуваат тука. Допрете го копчето за снимање на почетната за да го снимите првиот.",
     "conversationMap": "Мапа на разговори",
     "conversationCount": "{count, plural, =1{1 разговор} other{{count} разговори}}",
     "taskCount": "{count, plural, =1{1 задача} other{{count} задачи}}",
@@ -10965,7 +10965,7 @@
     "batteryLevelSemantics": "Батерија {level}%",
     "updateOmiGlassFirmware": "Ажурирај го фирмверот на OmiGlass",
     "deviceConnecting": "Се поврзува…",
-    "recordOptionsTip": "Совет: притиснете и задржете го копчето за снимање за да снимите телефонски повик.",
+    "recordOptionsTip": "Совет: допрете ја стрелката на копчето за снимање за да снимите телефонски повик.",
     "firmwareUpdateFailedTitle": "Ажурирањето не успеа",
     "firmwareUpdateFailedMessage": "Ажурирањето не заврши. Уредот сè уште е на тековниот фирмвер и е безбеден за користење. Држете го наполнет и блиску до телефонот, па обидете се повторно.",
     "firmwareDownloadFailedMessage": "Ажурирањето не можеше да се преземе и уредот не е променет. Проверете ја интернет-врската, па обидете се повторно.",
@@ -11100,5 +11100,20 @@
     "transcriptionUnavailableRecordingContinues": "Транскрипциите се недостапни, снимањето продолжува на уредот и ќе биде обработено подоцна",
     "transcriptionUnavailableSavingOnDevice": "Транскрипцијата е недостапна · се зачувува на уредот",
     "transcriptionsPendingFraction": "Чекаат транскрипции {pending}/{total}",
-    "transcriptionsPendingCount": "Чекаат транскрипции {count}"
+    "transcriptionsPendingCount": "Чекаат транскрипции {count}",
+    "captureSourceCall": "Повик",
+    "captureSourcePhoneMic": "Микрофон на телефонот",
+    "captureStatusWithSource": "{status} · {source}",
+    "resume": "Продолжи",
+    "finish": "Заврши",
+    "pendantPausedResumesWhenYouFinish": "Приврзокот е паузиран · продолжува кога ќе завршите",
+    "pendantIsListeningTitle": "Вашиот приврзок слуша",
+    "oneSourceAtATime": "Omi снима само од еден извор истовремено.",
+    "recordWithPhoneInstead": "Наместо тоа, снимај со телефонот",
+    "pendantPausesUntilYouFinish": "Приврзокот е паузиран додека не завршите",
+    "pendantPausesDuringCall": "Приврзокот е паузиран за време на повикот",
+    "keepUsingPendant": "Продолжи со приврзокот",
+    "recordWith": "Снимај со",
+    "moreWaysToRecord": "Повеќе начини за снимање",
+    "openCall": "Отвори го повикот"
 }

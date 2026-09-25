@@ -9997,7 +9997,7 @@ class AppLocalizationsPl extends AppLocalizations {
   String get transcriptionNoAudio => 'Transkrypcja nie odbiera dźwięku';
 
   @override
-  String get tapPlusToStartRecording => 'Dotknij +, aby rozpocząć nagrywanie';
+  String get tapPlusToStartRecording => 'Dotknij przycisku nagrywania, aby rozpocząć nagrywanie';
 
   @override
   String get chatBlockTask => 'Zadanie';
@@ -10240,7 +10240,7 @@ class AppLocalizationsPl extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'Nagrane rozmowy pojawiają się tutaj. Stuknij + na ekranie głównym, aby nagrać pierwszą.';
+      'Nagrane rozmowy pojawiają się tutaj. Stuknij przycisk nagrywania na ekranie głównym, aby nagrać pierwszą.';
 
   @override
   String get conversationMap => 'Mapa rozmów';
@@ -10719,7 +10719,8 @@ class AppLocalizationsPl extends AppLocalizations {
   String get deviceConnecting => 'Łączenie…';
 
   @override
-  String get recordOptionsTip => 'Wskazówka: przytrzymaj przycisk nagrywania, aby nagrać rozmowę telefoniczną.';
+  String get recordOptionsTip =>
+      'Wskazówka: stuknij strzałkę na przycisku nagrywania, aby nagrać rozmowę telefoniczną.';
 
   @override
   String get firmwareUpdateFailedTitle => 'Aktualizacja nie powiodła się';
@@ -11209,4 +11210,51 @@ class AppLocalizationsPl extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Transkrypcje w kolejce $count';
   }
+
+  @override
+  String get captureSourceCall => 'Połączenie';
+
+  @override
+  String get captureSourcePhoneMic => 'Mikrofon telefonu';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Wznów';
+
+  @override
+  String get finish => 'Zakończ';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Wisiorek wstrzymany · wznowi po zakończeniu';
+
+  @override
+  String get pendantIsListeningTitle => 'Twój wisiorek słucha';
+
+  @override
+  String get oneSourceAtATime => 'Omi nagrywa jednocześnie tylko z jednego źródła.';
+
+  @override
+  String get recordWithPhoneInstead => 'Nagraj zamiast tego telefonem';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'Wisiorek jest wstrzymany do zakończenia';
+
+  @override
+  String get pendantPausesDuringCall => 'Wisiorek jest wstrzymany podczas połączenia';
+
+  @override
+  String get keepUsingPendant => 'Używaj dalej wisiorka';
+
+  @override
+  String get recordWith => 'Nagraj za pomocą';
+
+  @override
+  String get moreWaysToRecord => 'Więcej sposobów nagrywania';
+
+  @override
+  String get openCall => 'Otwórz połączenie';
 }

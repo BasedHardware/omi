@@ -9978,7 +9978,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get transcriptionNoAudio => 'A transcrição não está recebendo áudio';
 
   @override
-  String get tapPlusToStartRecording => 'Toque em + para começar a gravar';
+  String get tapPlusToStartRecording => 'Toque no botão de gravar para começar a gravar';
 
   @override
   String get chatBlockTask => 'Tarefa';
@@ -10221,7 +10221,7 @@ class AppLocalizationsPt extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'As conversas que você grava aparecem aqui. Toque em + no Início para gravar a primeira.';
+      'As conversas que você grava aparecem aqui. Toque no botão de gravar no Início para gravar a primeira.';
 
   @override
   String get conversationMap => 'Mapa de conversas';
@@ -10700,7 +10700,7 @@ class AppLocalizationsPt extends AppLocalizations {
   String get deviceConnecting => 'Conectando…';
 
   @override
-  String get recordOptionsTip => 'Dica: toque e segure o botão de gravar para gravar uma ligação.';
+  String get recordOptionsTip => 'Dica: toque na seta do botão de gravar para gravar uma ligação.';
 
   @override
   String get firmwareUpdateFailedTitle => 'Falha na atualização';
@@ -11190,4 +11190,51 @@ class AppLocalizationsPt extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Transcrições pendentes $count';
   }
+
+  @override
+  String get captureSourceCall => 'Chamada';
+
+  @override
+  String get captureSourcePhoneMic => 'Microfone do telefone';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Retomar';
+
+  @override
+  String get finish => 'Finalizar';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Pendente pausado · retoma quando você terminar';
+
+  @override
+  String get pendantIsListeningTitle => 'Seu pendente está ouvindo';
+
+  @override
+  String get oneSourceAtATime => 'O Omi grava de uma fonte por vez.';
+
+  @override
+  String get recordWithPhoneInstead => 'Gravar com o telefone em vez disso';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'O pendente pausa até você terminar';
+
+  @override
+  String get pendantPausesDuringCall => 'O pendente pausa durante a chamada';
+
+  @override
+  String get keepUsingPendant => 'Continuar com o pendente';
+
+  @override
+  String get recordWith => 'Gravar com';
+
+  @override
+  String get moreWaysToRecord => 'Mais formas de gravar';
+
+  @override
+  String get openCall => 'Abrir chamada';
 }

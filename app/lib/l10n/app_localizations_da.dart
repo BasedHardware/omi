@@ -9953,7 +9953,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get transcriptionNoAudio => 'Transskription modtager ikke lyd';
 
   @override
-  String get tapPlusToStartRecording => 'Tryk på + for at starte optagelsen';
+  String get tapPlusToStartRecording => 'Tryk på optageknappen for at starte optagelsen';
 
   @override
   String get chatBlockTask => 'Opgave';
@@ -10196,7 +10196,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'Samtaler, du optager, vises her. Tryk på + på Hjem for at optage din første.';
+      'Samtaler, du optager, vises her. Tryk på optageknappen på Hjem for at optage din første.';
 
   @override
   String get conversationMap => 'Samtalekort';
@@ -10674,7 +10674,7 @@ class AppLocalizationsDa extends AppLocalizations {
   String get deviceConnecting => 'Opretter forbindelse…';
 
   @override
-  String get recordOptionsTip => 'Tip: tryk og hold på optageknappen for at optage et telefonopkald.';
+  String get recordOptionsTip => 'Tip: tryk på pilen på optageknappen for at optage et telefonopkald.';
 
   @override
   String get firmwareUpdateFailedTitle => 'Opdateringen mislykkedes';
@@ -11161,4 +11161,51 @@ class AppLocalizationsDa extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Transskriptioner i kø $count';
   }
+
+  @override
+  String get captureSourceCall => 'Opkald';
+
+  @override
+  String get captureSourcePhoneMic => 'Telefonmikrofon';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Genoptag';
+
+  @override
+  String get finish => 'Afslut';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Vedhæng på pause · fortsætter, når du afslutter';
+
+  @override
+  String get pendantIsListeningTitle => 'Dit vedhæng lytter';
+
+  @override
+  String get oneSourceAtATime => 'Omi optager fra én kilde ad gangen.';
+
+  @override
+  String get recordWithPhoneInstead => 'Optag med telefonen i stedet';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'Vedhænget holder pause, til du afslutter';
+
+  @override
+  String get pendantPausesDuringCall => 'Vedhænget holder pause under opkaldet';
+
+  @override
+  String get keepUsingPendant => 'Fortsæt med vedhænget';
+
+  @override
+  String get recordWith => 'Optag med';
+
+  @override
+  String get moreWaysToRecord => 'Flere måder at optage på';
+
+  @override
+  String get openCall => 'Åbn opkald';
 }

@@ -9967,7 +9967,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get transcriptionNoAudio => 'Transkripce nepřijímá zvuk';
 
   @override
-  String get tapPlusToStartRecording => 'Klepnutím na + začnete nahrávat';
+  String get tapPlusToStartRecording => 'Klepnutím na tlačítko nahrávání začnete nahrávat';
 
   @override
   String get chatBlockTask => 'Úkol';
@@ -10209,7 +10209,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'Nahrané konverzace se zobrazí tady. První nahrajete klepnutím na + na domovské obrazovce.';
+      'Nahrané konverzace se zobrazí tady. První nahrajete klepnutím na tlačítko nahrávání na domovské obrazovce.';
 
   @override
   String get conversationMap => 'Mapa konverzací';
@@ -10685,7 +10685,7 @@ class AppLocalizationsCs extends AppLocalizations {
   String get deviceConnecting => 'Připojování…';
 
   @override
-  String get recordOptionsTip => 'Tip: podržením tlačítka nahrávání nahrajete telefonní hovor.';
+  String get recordOptionsTip => 'Tip: klepnutím na šipku na tlačítku nahrávání nahrajete telefonní hovor.';
 
   @override
   String get firmwareUpdateFailedTitle => 'Aktualizace se nezdařila';
@@ -11172,4 +11172,51 @@ class AppLocalizationsCs extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Čekající přepisy $count';
   }
+
+  @override
+  String get captureSourceCall => 'Hovor';
+
+  @override
+  String get captureSourcePhoneMic => 'Mikrofon telefonu';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Pokračovat';
+
+  @override
+  String get finish => 'Dokončit';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Přívěsek pozastaven · po dokončení pokračuje';
+
+  @override
+  String get pendantIsListeningTitle => 'Váš přívěsek poslouchá';
+
+  @override
+  String get oneSourceAtATime => 'Omi nahrává vždy jen z jednoho zdroje.';
+
+  @override
+  String get recordWithPhoneInstead => 'Nahrávat raději telefonem';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'Přívěsek se pozastaví, dokud neskončíte';
+
+  @override
+  String get pendantPausesDuringCall => 'Přívěsek se během hovoru pozastaví';
+
+  @override
+  String get keepUsingPendant => 'Dál používat přívěsek';
+
+  @override
+  String get recordWith => 'Nahrát pomocí';
+
+  @override
+  String get moreWaysToRecord => 'Další způsoby nahrávání';
+
+  @override
+  String get openCall => 'Otevřít hovor';
 }

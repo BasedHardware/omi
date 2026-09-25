@@ -9799,7 +9799,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get transcriptionNoAudio => '전사가 오디오를 받지 못하고 있습니다';
 
   @override
-  String get tapPlusToStartRecording => '+를 눌러 녹음 시작';
+  String get tapPlusToStartRecording => '녹음 버튼을 눌러 녹음 시작';
 
   @override
   String get chatBlockTask => '작업';
@@ -10039,7 +10039,7 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
-  String get noConversationsHeroMessage => '녹음한 대화가 여기에 표시됩니다. 홈에서 +를 눌러 첫 대화를 녹음하세요.';
+  String get noConversationsHeroMessage => '녹음한 대화가 여기에 표시됩니다. 홈에서 녹음 버튼을 눌러 첫 대화를 녹음하세요.';
 
   @override
   String get conversationMap => '대화 지도';
@@ -10513,7 +10513,7 @@ class AppLocalizationsKo extends AppLocalizations {
   String get deviceConnecting => '연결 중…';
 
   @override
-  String get recordOptionsTip => '팁: 녹음 버튼을 길게 누르면 전화 통화를 녹음할 수 있습니다.';
+  String get recordOptionsTip => '팁: 녹음 버튼의 화살표를 누르면 전화 통화를 녹음할 수 있습니다.';
 
   @override
   String get firmwareUpdateFailedTitle => '업데이트 실패';
@@ -10994,4 +10994,51 @@ class AppLocalizationsKo extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return '대기 중인 전사 $count';
   }
+
+  @override
+  String get captureSourceCall => '통화';
+
+  @override
+  String get captureSourcePhoneMic => '휴대폰 마이크';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => '재개';
+
+  @override
+  String get finish => '종료';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => '펜던트 일시중지됨 · 종료하면 다시 시작';
+
+  @override
+  String get pendantIsListeningTitle => '펜던트가 듣고 있습니다';
+
+  @override
+  String get oneSourceAtATime => 'Omi는 한 번에 하나의 소스에서만 녹음합니다.';
+
+  @override
+  String get recordWithPhoneInstead => '대신 휴대폰으로 녹음';
+
+  @override
+  String get pendantPausesUntilYouFinish => '종료할 때까지 펜던트가 일시중지됩니다';
+
+  @override
+  String get pendantPausesDuringCall => '통화 중에는 펜던트가 일시중지됩니다';
+
+  @override
+  String get keepUsingPendant => '펜던트 계속 사용';
+
+  @override
+  String get recordWith => '녹음 방법';
+
+  @override
+  String get moreWaysToRecord => '다른 녹음 방법';
+
+  @override
+  String get openCall => '통화 열기';
 }

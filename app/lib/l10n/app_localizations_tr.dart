@@ -9979,7 +9979,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get transcriptionNoAudio => 'Transkripsiyon ses almıyor';
 
   @override
-  String get tapPlusToStartRecording => 'Kaydı başlatmak için + simgesine dokunun';
+  String get tapPlusToStartRecording => 'Kaydı başlatmak için kayıt düğmesine dokunun';
 
   @override
   String get chatBlockTask => 'Görev';
@@ -10222,7 +10222,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'Kaydettiğin konuşmalar burada görünür. İlkini kaydetmek için Ana Sayfa\'da + simgesine dokun.';
+      'Kaydettiğin konuşmalar burada görünür. İlkini kaydetmek için Ana Sayfa\'da kayıt düğmesine dokun.';
 
   @override
   String get conversationMap => 'Konuşma Haritası';
@@ -10699,7 +10699,7 @@ class AppLocalizationsTr extends AppLocalizations {
   String get deviceConnecting => 'Bağlanıyor…';
 
   @override
-  String get recordOptionsTip => 'İpucu: telefon görüşmesi kaydetmek için kayıt düğmesini basılı tutun.';
+  String get recordOptionsTip => 'İpucu: telefon görüşmesi kaydetmek için kayıt düğmesindeki oka dokunun.';
 
   @override
   String get firmwareUpdateFailedTitle => 'Güncelleme Başarısız';
@@ -11187,4 +11187,51 @@ class AppLocalizationsTr extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Bekleyen transkriptler $count';
   }
+
+  @override
+  String get captureSourceCall => 'Arama';
+
+  @override
+  String get captureSourcePhoneMic => 'Telefon mikrofonu';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Sürdür';
+
+  @override
+  String get finish => 'Bitir';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Kolye duraklatıldı · bitirdiğinde devam eder';
+
+  @override
+  String get pendantIsListeningTitle => 'Kolyen dinliyor';
+
+  @override
+  String get oneSourceAtATime => 'Omi aynı anda yalnızca bir kaynaktan kayıt yapar.';
+
+  @override
+  String get recordWithPhoneInstead => 'Bunun yerine telefonla kaydet';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'Sen bitirene kadar kolye duraklar';
+
+  @override
+  String get pendantPausesDuringCall => 'Arama sırasında kolye duraklar';
+
+  @override
+  String get keepUsingPendant => 'Kolyeyi kullanmaya devam et';
+
+  @override
+  String get recordWith => 'Kayıt yöntemi';
+
+  @override
+  String get moreWaysToRecord => 'Diğer kayıt yöntemleri';
+
+  @override
+  String get openCall => 'Aramayı aç';
 }
