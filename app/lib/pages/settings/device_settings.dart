@@ -186,9 +186,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
       builder: (_) => RenameDeviceWidget(initialName: currentName, onRename: provider.renameConnectedDevice),
     );
     if (renamed == true && mounted) {
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(context.l10n.deviceRenamed(provider.pairedDevice?.name ?? ''))));
+      OmiFeedback.confirm(context, context.l10n.deviceRenamed(provider.pairedDevice?.name ?? ''));
     }
   }
 
