@@ -72,18 +72,13 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
     setState(() => _mutePending = true);
     try {
       HapticFeedback.mediumImpact();
+      final phone = !provider.havingRecordingDevice;
       if (provider.isPaused) {
-        if (provider.havingRecordingDevice) {
-          await provider.resumeDeviceRecording();
-        } else {
-          await provider.streamRecording();
-          PlatformManager.instance.analytics.phoneMicRecordingStarted();
-        }
-      } else if (provider.havingRecordingDevice) {
-        await provider.pauseDeviceRecording();
+        await provider.resumeCapture();
+        if (phone) PlatformManager.instance.analytics.phoneMicRecordingStarted();
       } else {
-        await provider.stopStreamRecording();
-        PlatformManager.instance.analytics.phoneMicRecordingStopped();
+        await provider.pauseCapture();
+        if (phone) PlatformManager.instance.analytics.phoneMicRecordingStopped();
       }
     } catch (_) {
       if (mounted) OmiFeedback.error(context, context.l10n.somethingWentWrong);
