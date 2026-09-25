@@ -9,6 +9,7 @@ import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/gen/action_items_folders_wire.g.dart' as action_items_wire;
 import 'package:omi/backend/schema/gen/apps_wire.g.dart' as apps_wire;
 import 'package:omi/backend/schema/gen/conversation_wire.g.dart' as wire;
+import 'package:omi/backend/schema/gen/misc_wire.g.dart' as misc_wire;
 import 'package:omi/backend/schema/schema.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/utils/debug_log_manager.dart';
@@ -553,7 +554,7 @@ Future<CaptureGroupSeparationResult> separateConversationFromCaptureGroup(String
   );
   if (response == null || response.statusCode != 200) return CaptureGroupSeparationResult.failed;
   try {
-    final status = wire.GeneratedStatusResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>).status;
+    final status = misc_wire.GeneratedStatusResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>).status;
     return status == 'unchanged' ? CaptureGroupSeparationResult.unchanged : CaptureGroupSeparationResult.separated;
   } catch (_) {
     return CaptureGroupSeparationResult.separated;
