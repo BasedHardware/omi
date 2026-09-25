@@ -7,6 +7,7 @@ covers:
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Services/MeetingNoteTakingNotice.swift
   - desktop/macos/Desktop/Sources/AppState/AppState+FinishedRecordingLifecycle.swift
   - desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift
+  - desktop/macos/Desktop/Sources/AppState/AppState+CaptureDeviceManagement.swift
   - desktop/macos/Desktop/Sources/Audio/PreferredMicrophoneReconnect.swift
   - desktop/macos/Desktop/Sources/AppState/SharedCaptureSilentMicRecoveryPolicy.swift
   - desktop/macos/Desktop/Sources/AppState/AppState+ListenEvents.swift
@@ -33,6 +34,8 @@ covers:
   - desktop/macos/Desktop/Sources/ResourceMonitor.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/TranscriptionModels.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/TranscriptionStorage.swift
+  - desktop/macos/Desktop/Sources/Rewind/Services/LocalEmbeddingIndexer.swift
+  - desktop/macos/Desktop/Sources/LocalInference/TranscriptChunker.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/ProactiveStorage.swift
   - desktop/macos/Desktop/Sources/LiveNotes/NoteStorage.swift
   - desktop/macos/Desktop/Sources/FileIndexing/KnowledgeGraphStorage.swift

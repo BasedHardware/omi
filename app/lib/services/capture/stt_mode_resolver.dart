@@ -87,10 +87,7 @@ class SttModeResolver {
     return config.copyWith(identity: freemiumOnDeviceId, sendRawAudioToOmi: false);
   }
 
-  Future<SttModeDecision> decide({
-    required CustomSttConfig persistedCustomStt,
-    required BleAudioCodec codec,
-  }) async {
+  Future<SttModeDecision> decide({required CustomSttConfig persistedCustomStt, required BleAudioCodec codec}) async {
     FreemiumReadiness readiness = FreemiumReadiness.ready;
     final flag = flagReader();
     final allowance = allowanceReader();
@@ -154,11 +151,7 @@ class SttModeResolver {
       );
     }
 
-    if (TranscriptSocketServiceFactory.shouldBlockUnsupportedCodecFallback(
-      codec,
-      null,
-      allowanceOnDevice: true,
-    )) {
+    if (TranscriptSocketServiceFactory.shouldBlockUnsupportedCodecFallback(codec, null, allowanceOnDevice: true)) {
       return const SttModeDecision(
         path: SttResolvedPath.blocked,
         reason: 'unsupported_codec_on_device',

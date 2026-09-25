@@ -14,7 +14,7 @@
     "@transcriptTab": {
         "description": "Tab label for transcript view"
     },
-    "actionItemsTab": "פריטים לביצוע",
+    "actionItemsTab": "משימות",
     "@actionItemsTab": {
         "description": "Tab label for action items"
     },
@@ -22,7 +22,7 @@
     "@deleteConversationTitle": {
         "description": "Title for delete confirmation dialog"
     },
-    "deleteConversationMessage": "פעולה זו תמחק גם זיכרונות משויכים, משימות וקבצי אודיו. לא ניתן לבטל פעולה זו.",
+    "deleteConversationMessage": "פעולה זו תמחק גם זיכרונות משויכים, משימות וקבצי אודיו.",
     "@deleteConversationMessage": {
         "description": "Message for delete confirmation dialog"
     },
@@ -128,11 +128,11 @@
     "@remaining": {
         "description": "Label showing time remaining for SD card transfer"
     },
-    "loading": "טוען...",
+    "loading": "טוען…",
     "@loading": {
         "description": "Loading indicator text"
     },
-    "loadingDuration": "טוען משך זמן...",
+    "loadingDuration": "טוען משך זמן…",
     "@loadingDuration": {
         "description": "Loading duration indicator"
     },
@@ -162,7 +162,7 @@
     "@createPersonHint": {
         "description": "Hint text for creating a person"
     },
-    "speechProfile": "פרופיל דיבור",
+    "speechProfile": "פרופיל קולי",
     "@speechProfile": {
         "description": "Speech profile setting"
     },
@@ -188,7 +188,7 @@
     "@selectLanguage": {
         "description": "Title for language selection"
     },
-    "deleting": "מוחק...",
+    "deleting": "מוחק…",
     "@deleting": {
         "description": "Deleting in progress indicator"
     },
@@ -224,7 +224,7 @@
     "@disconnected": {
         "description": "Status text when device is disconnected"
     },
-    "searching": "חיפוש...",
+    "searching": "חיפוש",
     "@searching": {
         "description": "Loading text displayed while search is in progress"
     },
@@ -304,7 +304,7 @@
     "@starConversationHint": {
         "description": "Hint explaining how to star conversations"
     },
-    "searchConversations": "חפש שיחות...",
+    "searchConversations": "חפש שיחות",
     "@searchConversations": {
         "description": "Placeholder text for conversation search field"
     },
@@ -350,7 +350,7 @@
     "@noMessagesYet": {
         "description": "Empty chat state message"
     },
-    "deletingMessages": "מוחק את ההודעות שלך מהזיכרון של Omi...",
+    "deletingMessages": "מוחק את ההודעות שלך מהזיכרון של Omi…",
     "@deletingMessages": {
         "description": "Loading text when clearing chat"
     },
@@ -414,7 +414,7 @@
     "@buildAndShareApp": {
         "description": "Create app button subtitle"
     },
-    "searchApps": "חפש אפליקציות...",
+    "searchApps": "חפש אפליקציות",
     "@searchApps": {
         "description": "Placeholder text for search input"
     },
@@ -557,6 +557,7 @@
     "offlineSync": "סינכרון במצב לא מחובר",
     "autoSync": "סנכרון אוטומטי",
     "autoSyncDescription": "סנכרן אוטומטית הקלטות לא מקוונות כשהמכשיר שלך מתחבר",
+    "omiButtonActions": "פעולות כפתור Omi",
     "@offlineSync": {
         "description": "Page title for offline sync"
     },
@@ -608,7 +609,7 @@
     "@privacyIntro": {
         "description": "Data privacy page introduction"
     },
-    "learnMore": "למד עוד...",
+    "learnMore": "למד עוד…",
     "@learnMore": {
         "description": "Learn more link"
     },
@@ -832,7 +833,7 @@
     "@developerSettingsTitle": {
         "description": "Developer settings page title"
     },
-    "saving": "שומר...",
+    "saving": "שומר…",
     "@saving": {
         "description": "Text shown while saving settings"
     },
@@ -936,7 +937,7 @@
     "@providing": {
         "description": "Providing stat title"
     },
-    "providingSubtitle": "פריטים לביצוע, ותגובות שנלכדו באופן אוטומטי.",
+    "providingSubtitle": "משימות והערות, נלכדות אוטומטית.",
     "@providingSubtitle": {
         "description": "Providing stat subtitle"
     },
@@ -1006,19 +1007,19 @@
     "@shareStatsMessage": {
         "description": "Share stats base message"
     },
-    "sharePeriodToday": "היום, omi עשה:",
+    "sharePeriodToday": "היום, Omi עשה:",
     "@sharePeriodToday": {
         "description": "Share stats period: Today"
     },
-    "sharePeriodMonth": "חודש זה, omi עשה:",
+    "sharePeriodMonth": "חודש זה, Omi עשה:",
     "@sharePeriodMonth": {
         "description": "Share stats period: Month"
     },
-    "sharePeriodYear": "השנה, omi עשה:",
+    "sharePeriodYear": "השנה, Omi עשה:",
     "@sharePeriodYear": {
         "description": "Share stats period: Year"
     },
-    "sharePeriodAllTime": "עד כה, omi עשה:",
+    "sharePeriodAllTime": "עד כה, Omi עשה:",
     "@sharePeriodAllTime": {
         "description": "Share stats period: All Time"
     },
@@ -1071,7 +1072,7 @@
     "selectLogFile": "בחר קובץ יומן",
     "shareLogs": "שתף יומנים",
     "debugLogCleared": "יומן ניפוי באגים נוקה",
-    "exportStarted": "ייצוא התחיל. זה אולי ייקח כמה שניות...",
+    "exportStarted": "ייצוא התחיל. זה אולי ייקח כמה שניות…",
     "exportAllData": "ייצא את כל הנתונים",
     "exportDataDesc": "ייצא שיחות לקובץ JSON",
     "exportedConversations": "שיחות מיוצאות מ-Omi",
@@ -1358,7 +1359,7 @@
         }
     },
     "account": "חשבון",
-    "actionItemsSyncedTo": "פריטי הפעולה שלך יסתנכרנו לחשבון {appName} שלך",
+    "actionItemsSyncedTo": "המשימות שלך יסונכרנו לחשבון {appName} שלך",
     "@actionItemsSyncedTo": {
         "placeholders": {
             "appName": {
@@ -1472,7 +1473,7 @@
     "importConfiguration": "ייבא תצורה",
     "exportConfiguration": "ייצא תצורה",
     "bringYourOwn": "הביא שלך",
-    "payYourSttProvider": "השתמש בomi בחופשיות. אתה משלם ישירות לספק STT שלך.",
+    "payYourSttProvider": "השתמש בOmi בחופשיות. אתה משלם ישירות לספק STT שלך.",
     "freeMinutesMonth": "300 דקות חינם לחודש כלולות. בלתי מוגבל עם ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "דרוש Host",
@@ -1555,7 +1556,7 @@
     "saveChanges": "שמור שינויים",
     "resetToDefault": "אפס לברירת המחדל",
     "viewTemplate": "הצג תבנית",
-    "trySomethingLike": "נסה משהו כמו...",
+    "trySomethingLike": "נסה משהו כמו…",
     "tryIt": "נסה זאת",
     "creatingPlan": "יצירת תכנית",
     "developingLogic": "פיתוח לוגיקה",
@@ -1564,8 +1565,8 @@
     "finalTouches": "המגעות הסופיות",
     "processing": "מעבד",
     "features": "תכונות",
-    "creatingYourApp": "יצירת האפליקציה שלך...",
-    "generatingIcon": "יצירת אייקון...",
+    "creatingYourApp": "יצירת האפליקציה שלך…",
+    "generatingIcon": "יצירת אייקון…",
     "whatShouldWeMake": "מה אנחנו אמורים ליצור?",
     "appName": "שם האפליקציה",
     "description": "תיאור",
@@ -1582,7 +1583,7 @@
     "usersPayToUse": "משתמשים משלמים כדי להשתמש באפליקציה שלך",
     "freeForEveryone": "חינם לכולם",
     "perMonthLabel": "/ חודש",
-    "creating": "יוצר...",
+    "creating": "יוצר…",
     "@creating": {
         "description": "Loading state text when app generation is in progress"
     },
@@ -1593,7 +1594,7 @@
     "@connect": {
         "description": "Title for device connection page"
     },
-    "searchingForDevices": "חיפוש מכשירים...",
+    "searchingForDevices": "חיפוש מכשירים",
     "@searchingForDevices": {
         "description": "Status text while scanning for Bluetooth devices"
     },
@@ -1646,7 +1647,7 @@
     "@backgroundActivity": {
         "description": "Title for background activity permission"
     },
-    "backgroundActivityDesc": "תן ל-Omi להפעיל ברקע לטובת יציבות טובה יותר",
+    "backgroundActivityDesc": "כדי ש-Omi ימשיך להקליט כשהמסך כבוי או כשעוברים לאפליקציה אחרת.",
     "@backgroundActivityDesc": {
         "description": "Description for background activity permission"
     },
@@ -1654,7 +1655,7 @@
     "@locationAccess": {
         "description": "Title for location access permission"
     },
-    "locationAccessDesc": "הפעל מיקום רקע עבור החוויה המלאה",
+    "locationAccessDesc": "כדי ש-Omi יוכל לציין איפה התקיימו השיחות שלך.",
     "@locationAccessDesc": {
         "description": "Description for location access permission"
     },
@@ -1662,7 +1663,7 @@
     "@notifications": {
         "description": "AppBar title for notifications settings page"
     },
-    "notificationsDesc": "הפעל הודעות כדי להישאר מעודכן",
+    "notificationsDesc": "כדי ש-Omi יוכל לשלוח לך סיכומי שיחות, תזכורות למשימות ותשובות מהאפליקציות שלך.",
     "@notificationsDesc": {
         "description": "Description for notifications permission"
     },
@@ -1673,7 +1674,7 @@
     "@locationServiceDisabled": {
         "description": "Title for dialog when location services are off"
     },
-    "locationServiceDisabledDesc": "שירות מיקום מושבת. בבקשה עבור להגדרות > פרטיות וביטחון > שירותי מיקום והפעל אותו",
+    "locationServiceDisabledDesc": "שירותי המיקום כבויים במכשיר הזה. יש להפעיל אותם בהגדרות.",
     "@locationServiceDisabledDesc": {
         "description": "Instructions to enable location services"
     },
@@ -1903,7 +1904,7 @@
     "@personalGrowthJourney": {
         "description": "Subtitle describing Omi on auth screen"
     },
-    "actionItemsTitle": "עסקים לעשות",
+    "actionItemsTitle": "משימות",
     "@actionItemsTitle": {
         "description": "Title for the Action Items page"
     },
@@ -1923,7 +1924,7 @@
     "@tabOld": {
         "description": "Label for Old tab"
     },
-    "emptyTodoMessage": "🎉 הכל תופס!\nאין פריטי פעולה ממתינים",
+    "emptyTodoMessage": "🎉 הכל מעודכן!\nאין משימות ממתינות",
     "@emptyTodoMessage": {
         "description": "Message when To Do list is empty"
     },
@@ -1939,19 +1940,19 @@
     "@noItems": {
         "description": "Generic no items message"
     },
-    "actionItemMarkedIncomplete": "פריט פעולה סומן כלא שלם",
+    "actionItemMarkedIncomplete": "המשימה סומנה כלא הושלמה",
     "@actionItemMarkedIncomplete": {
         "description": "Snackbar message when item marked incomplete"
     },
-    "actionItemCompleted": "פריט פעולה הושלם",
+    "actionItemCompleted": "המשימה הושלמה",
     "@actionItemCompleted": {
         "description": "Snackbar message when item completed"
     },
-    "deleteActionItemTitle": "מחק פריט פעולה",
+    "deleteActionItemTitle": "מחק משימה",
     "@deleteActionItemTitle": {
         "description": "Dialog title for delete confirmation"
     },
-    "deleteActionItemMessage": "האם אתה בטוח שברצונך למחוק פריט פעולה זה?",
+    "deleteActionItemMessage": "האם אתה בטוח שברצונך למחוק משימה זו?",
     "@deleteActionItemMessage": {
         "description": "Dialog message for delete confirmation"
     },
@@ -1959,7 +1960,7 @@
     "@deleteSelectedItemsTitle": {
         "description": "Title for bulk delete dialog"
     },
-    "deleteSelectedItemsMessage": "Are you sure you want to delete {count} selected action item{s}?",
+    "deleteSelectedItemsMessage": "האם אתה בטוח שברצונך למחוק {count} משימות{s} שנבחרו?",
     "@deleteSelectedItemsMessage": {
         "description": "Confirmation message for bulk delete",
         "placeholders": {
@@ -1972,7 +1973,7 @@
             }
         }
     },
-    "actionItemDeletedResult": "פריט פעולה \"{description}\" מחוק",
+    "actionItemDeletedResult": "המשימה \"{description}\" נמחקה",
     "@actionItemDeletedResult": {
         "description": "Snackbar message after deleting single item",
         "placeholders": {
@@ -1981,7 +1982,7 @@
             }
         }
     },
-    "itemsDeletedResult": "{count} action item{s} deleted",
+    "itemsDeletedResult": "{count} משימות{s} נמחקו",
     "@itemsDeletedResult": {
         "description": "Snackbar message after bulk delete",
         "placeholders": {
@@ -1993,7 +1994,7 @@
             }
         }
     },
-    "failedToDeleteItem": "מחיקת פריט פעולה נכשלה",
+    "failedToDeleteItem": "מחיקת המשימה נכשלה",
     "@failedToDeleteItem": {
         "description": "Error message when deletion fails"
     },
@@ -2005,11 +2006,11 @@
     "@failedToDeleteSomeItems": {
         "description": "Error message when partial deletion failure"
     },
-    "welcomeActionItemsTitle": "מוכן לפריטי פעולה",
+    "welcomeActionItemsTitle": "מוכן למשימות",
     "@welcomeActionItemsTitle": {
         "description": "Heading for empty state welcome"
     },
-    "welcomeActionItemsDescription": "הבינה המלאכותית שלך תחלץ באופן אוטומטי משימות ועסקים לעשות מהשיחות שלך. הם יופיעו כאן כשייווצרו.",
+    "welcomeActionItemsDescription": "הבינה המלאכותית שלך תחלץ באופן אוטומטי משימות מהשיחות שלך. הן יופיעו כאן כשייווצרו.",
     "@welcomeActionItemsDescription": {
         "description": "Description for empty state welcome"
     },
@@ -2038,11 +2039,11 @@
     "@deleteSelected": {
         "description": "Tooltip for delete selected"
     },
-    "searchMemories": "חפש זכרונות...",
+    "searchMemories": "חפש זכרונות",
     "@searchMemories": {
         "description": "Search input hint text"
     },
-    "memoryDeleted": "זכרון מחוק.",
+    "memoryDeleted": "זכרון מחוק",
     "@memoryDeleted": {
         "description": "Notification when memory deleted"
     },
@@ -2098,7 +2099,7 @@
     "@createMemoryTooltip": {
         "description": "Tooltip for create memory FAB"
     },
-    "createActionItemTooltip": "צור פריט פעולה חדש",
+    "createActionItemTooltip": "צור משימה חדשה",
     "@createActionItemTooltip": {
         "description": "Tooltip for create action item FAB"
     },
@@ -2155,7 +2156,7 @@
     "@editMemory": {
         "description": "Dialog title when editing a memory"
     },
-    "memoryContentHint": "אני אוהב לאכול גלידה...",
+    "memoryContentHint": "אני מעדיף פגישות בבוקר.",
     "@memoryContentHint": {
         "description": "Input hint"
     },
@@ -2171,11 +2172,11 @@
     "@retry": {
         "description": "Button label to retry an action"
     },
-    "createActionItem": "צור פריט פעולה",
+    "createActionItem": "צור משימה",
     "@createActionItem": {
         "description": "Dialog title for creating action item"
     },
-    "editActionItem": "עריכת פריט פעולה",
+    "editActionItem": "עריכת משימה",
     "@editActionItem": {
         "description": "Dialog title for editing action item"
     },
@@ -2183,23 +2184,23 @@
     "@actionItemDescriptionHint": {
         "description": "Input hint"
     },
-    "actionItemDescriptionEmpty": "תיאור פריט הפעולה לא יכול להיות ריק.",
+    "actionItemDescriptionEmpty": "תיאור המשימה לא יכול להיות ריק.",
     "@actionItemDescriptionEmpty": {
         "description": "Error message"
     },
-    "actionItemUpdated": "פריט פעולה עודכן",
+    "actionItemUpdated": "המשימה עודכנה",
     "@actionItemUpdated": {
         "description": "Snackbar"
     },
-    "failedToUpdateActionItem": "עדכון פריט פעולה נכשל",
+    "failedToUpdateActionItem": "עדכון המשימה נכשל",
     "@failedToUpdateActionItem": {
         "description": "Error message when updating action item fails"
     },
-    "actionItemCreated": "פריט פעולה נוצר",
+    "actionItemCreated": "המשימה נוצרה",
     "@actionItemCreated": {
         "description": "Snackbar"
     },
-    "failedToCreateActionItem": "יצירת פריט פעולה נכשלה",
+    "failedToCreateActionItem": "יצירת המשימה נכשלה",
     "@failedToCreateActionItem": {
         "description": "Error message when creating action item fails"
     },
@@ -2247,19 +2248,19 @@
     "@markComplete": {
         "description": "Menu item to mark action item as complete"
     },
-    "actionItemDeleted": "פריט פעולה מחוק",
+    "actionItemDeleted": "המשימה נמחקה",
     "@actionItemDeleted": {
         "description": "Message shown when action item is deleted"
     },
-    "failedToDeleteActionItem": "מחיקת פריט פעולה נכשלה",
+    "failedToDeleteActionItem": "מחיקת המשימה נכשלה",
     "@failedToDeleteActionItem": {
         "description": "Error message when deleting action item fails"
     },
-    "deleteActionItemConfirmTitle": "מחק פריט פעולה",
+    "deleteActionItemConfirmTitle": "מחק משימה",
     "@deleteActionItemConfirmTitle": {
         "description": "Dialog title"
     },
-    "deleteActionItemConfirmMessage": "האם אתה בטוח שברצונך למחוק פריט פעולה זה?",
+    "deleteActionItemConfirmMessage": "האם אתה בטוח שברצונך למחוק משימה זו?",
     "@deleteActionItemConfirmMessage": {
         "description": "Dialog message"
     },
@@ -2295,7 +2296,7 @@
     "@pleaseSelectReason": {
         "description": "Validation message prompting user to select a reason for their feedback"
     },
-    "tellUsMoreWhatWentWrong": "ספר לנו עוד מה השתבש...",
+    "tellUsMoreWhatWentWrong": "ספר לנו עוד מה השתבש…",
     "@tellUsMoreWhatWentWrong": {
         "description": "Hint text for feedback textarea asking user to provide more details"
     },
@@ -2376,7 +2377,7 @@
     "@exportButton": {
         "description": "Export button text"
     },
-    "actionItemsCopiedToClipboard": "פריטי פעולה הועתקו ללוח",
+    "actionItemsCopiedToClipboard": "המשימות הועתקו ללוח",
     "@actionItemsCopiedToClipboard": {
         "description": "Success message when action items are copied"
     },
@@ -2592,7 +2593,7 @@
     "@debugLogCleared": {
         "description": "Confirmation message after clearing debug logs"
     },
-    "exportStartedMessage": "הייצוא התחיל. זה עשוי לקחת כמה שניות...",
+    "exportStartedMessage": "הייצוא התחיל. זה עשוי לקחת כמה שניות…",
     "@exportStartedMessage": {
         "description": "Snackbar message when export starts"
     },
@@ -2744,7 +2745,7 @@
     "@trackPersonalGoalsOnHomepage": {
         "description": "Description for goal tracker"
     },
-    "actionItemDescriptionCannotBeEmpty": "תיאור פריט פעולה לא יכול להיות ריק",
+    "actionItemDescriptionCannotBeEmpty": "תיאור המשימה לא יכול להיות ריק",
     "@actionItemDescriptionCannotBeEmpty": {
         "description": "Error message when action item description is empty"
     },
@@ -2861,7 +2862,7 @@
     "@resetToDefault": {
         "description": "Reset keyboard shortcut to default value"
     },
-    "pressKeys": "לחץ על מקשים...",
+    "pressKeys": "לחץ על מקשים…",
     "@pressKeys": {
         "description": "Placeholder text when recording keyboard shortcut"
     },
@@ -2881,7 +2882,7 @@
     "@search": {
         "description": "Search button and label"
     },
-    "searchPlaceholder": "חיפוש...",
+    "searchPlaceholder": "חיפוש",
     "@searchPlaceholder": {
         "description": "Search input placeholder text"
     },
@@ -2951,10 +2952,6 @@
     "@reviewAndManageConversations": {
         "description": "Subtitle explaining what users can do on conversations page"
     },
-    "startCapturingConversations": "התחל ללכוד שיחות עם מכשיר Omi שלך כדי לראות אותן כאן.",
-    "@startCapturingConversations": {
-        "description": "Message explaining how to get started with conversations"
-    },
     "useMobileAppToCapture": "השתמש באפליקציה הנייד שלך ללכידת שמע",
     "@useMobileAppToCapture": {
         "description": "Tip about using mobile app for audio capture"
@@ -2987,7 +2984,7 @@
     "@searchResults": {
         "description": "Badge label for search results section"
     },
-    "actionItems": "פריטי פעולה",
+    "actionItems": "משימות",
     "@actionItems": {
         "description": "Section header for action items"
     },
@@ -3007,7 +3004,7 @@
     "@tasksLater": {
         "description": "Category label for tasks due later"
     },
-    "loadingTasks": "טוען משימות...",
+    "loadingTasks": "טוען משימות…",
     "@loadingTasks": {
         "description": "Message shown while tasks are being loaded"
     },
@@ -3087,30 +3084,30 @@
     "@timeAM": {
         "description": "AM time indicator"
     },
-    "actionItemUpdatedSuccessfully": "פריט הפעולה עודכן בהצלחה",
+    "actionItemUpdatedSuccessfully": "המשימה עודכנה בהצלחה",
     "@actionItemUpdatedSuccessfully": {
         "description": "Success message when action item is updated"
     },
-    "actionItemCreatedSuccessfully": "פריט הפעולה נוצר בהצלחה",
+    "actionItemCreatedSuccessfully": "המשימה נוצרה בהצלחה",
     "@actionItemCreatedSuccessfully": {
         "description": "Success message when action item is created"
     },
-    "actionItemDeletedSuccessfully": "פריט הפעולה נמחק בהצלחה",
+    "actionItemDeletedSuccessfully": "המשימה נמחקה בהצלחה",
     "@actionItemDeletedSuccessfully": {
         "description": "Success message when action item is deleted"
     },
-    "deleteActionItem": "מחק פריט פעולה",
+    "deleteActionItem": "מחק משימה",
     "@deleteActionItem": {
         "description": "Dialog title for delete confirmation"
     },
-    "deleteActionItemConfirmation": "האם אתה בטוח שברצונך למחוק פריט פעולה זה? לא ניתן לבטל פעולה זו.",
+    "deleteActionItemConfirmation": "האם אתה בטוח שברצונך למחוק משימה זו? לא ניתן לבטל פעולה זו.",
     "@deleteActionItemConfirmation": {
         "description": "Confirmation message for deleting action item"
     },
     "@description": {
         "description": "Label for description field"
     },
-    "enterActionItemDescription": "הזן תיאור פריט פעולה...",
+    "enterActionItemDescription": "הזן תיאור משימה",
     "@enterActionItemDescription": {
         "description": "Placeholder text for action item description field"
     },
@@ -3122,11 +3119,11 @@
     "@setDueDateAndTime": {
         "description": "Placeholder for due date picker button"
     },
-    "reloadingApps": "טוען אפליקציות מחדש...",
+    "reloadingApps": "טוען אפליקציות מחדש…",
     "@reloadingApps": {
         "description": "Loading message shown when reloading apps list"
     },
-    "loadingApps": "טוען אפליקציות...",
+    "loadingApps": "טוען אפליקציות…",
     "@loadingApps": {
         "description": "Loading message shown when apps are being loaded"
     },
@@ -3174,11 +3171,11 @@
     "@buildSubmitCustomOmiApp": {
         "description": "Subtitle describing the purpose of the create app page"
     },
-    "submittingYourApp": "הגשת האפליקציה שלך...",
+    "submittingYourApp": "הגשת האפליקציה שלך…",
     "@submittingYourApp": {
         "description": "Loading message shown while app is being submitted"
     },
-    "preparingFormForYou": "הכנת הטופס עבורך...",
+    "preparingFormForYou": "הכנת הטופס עבורך…",
     "@preparingFormForYou": {
         "description": "Loading message shown while form is being prepared"
     },
@@ -3206,7 +3203,7 @@
     "@chatPrompt": {
         "description": "Label for chat prompt text field"
     },
-    "chatPromptPlaceholder": "אתה אפליקציה נהדרת, העבודה שלך היא להגיב לשאילתות המשתמש ולהרגיש אותם בטוב...",
+    "chatPromptPlaceholder": "אתה אפליקציה נהדרת, העבודה שלך היא להגיב לשאילתות המשתמש ולהרגיש אותם בטוב…",
     "@chatPromptPlaceholder": {
         "description": "Placeholder text for chat prompt field"
     },
@@ -3214,7 +3211,7 @@
     "@conversationPrompt": {
         "description": "Section title for conversation prompt"
     },
-    "conversationPromptPlaceholder": "אתה אפליקציה נהדרת, תינתן לך תמלול וסיכום של שיחה...",
+    "conversationPromptPlaceholder": "אתה אפליקציה נהדרת, תינתן לך תמלול וסיכום של שיחה…",
     "@conversationPromptPlaceholder": {
         "description": "Placeholder text for conversation prompt field"
     },
@@ -3419,7 +3416,7 @@
     "@pricingPaid": {
         "description": "Paid pricing option"
     },
-    "loadingCapabilities": "טוען יכולות...",
+    "loadingCapabilities": "טוען יכולות…",
     "@loadingCapabilities": {
         "description": "Loading state message while fetching app capabilities"
     },
@@ -3609,13 +3606,9 @@
     "@failedToTranscribeAudio": {
         "description": "Error message when audio transcription fails"
     },
-    "transcribing": "מתמללל...",
+    "transcribing": "מתמללל…",
     "@transcribing": {
         "description": "Loading message while transcribing audio"
-    },
-    "transcriptionFailed": "התמלול נכשל",
-    "@transcriptionFailed": {
-        "description": "Error message when transcription fails"
     },
     "discardedConversation": "שיחה מושלכת",
     "@discardedConversation": {
@@ -3629,7 +3622,7 @@
     "@from": {
         "description": "Preposition for time range in conversation"
     },
-    "copied": "הועתק!",
+    "copied": "הועתק",
     "@copied": {
         "description": "Button label after copying link"
     },
@@ -3682,7 +3675,7 @@
     "@failedToGenerateShareLink": {
         "description": "Error when share link generation fails"
     },
-    "reloadingConversations": "טוען שיחות מחדש...",
+    "reloadingConversations": "טוען שיחות מחדש…",
     "@reloadingConversations": {
         "description": "Loading message when refreshing conversations"
     },
@@ -3766,7 +3759,7 @@
     "@wearableAiCompanion": {
         "description": "Widget subtitle for device promotion"
     },
-    "loadingMemories": "טוען זיכרונות...",
+    "loadingMemories": "טוען זיכרונות…",
     "@loadingMemories": {
         "description": "Loading overlay message when reloading memories"
     },
@@ -3785,7 +3778,7 @@
     "@manual": {
         "description": "Filter option for manual memories"
     },
-    "loadingYourMemories": "טוען את הזיכרונות שלך...",
+    "loadingYourMemories": "טוען את הזיכרונות שלך…",
     "@loadingYourMemories": {
         "description": "Loading state message"
     },
@@ -3945,7 +3938,7 @@
     "pleaseSelectYourPrimaryLanguage": "אנא בחר בשפה הראשונה שלך",
     "chooseYourLanguage": "בחר את שפתך",
     "selectPreferredLanguageForBestExperience": "בחר את השפה המועדפת עליך לחוויית Omi הטובה ביותר",
-    "searchLanguages": "חפש שפות...",
+    "searchLanguages": "חפש שפות",
     "selectALanguage": "בחר שפה",
     "tryDifferentSearchTerm": "נסה מונח חיפוש אחר",
     "pleaseEnterYourName": "אנא הזן את שמך",
@@ -3969,9 +3962,9 @@
     "accessibility": "נגישות",
     "detectBrowserBasedMeetings": "זהה פגישות מבוססות דפדפן",
     "accessibilityDescription": "Omi זקוקה להרשאת נגישות כדי לזהות כאשר אתה משתתף בפגישות Zoom, Meet או Teams בדפדפן שלך.",
-    "pleaseWait": "אנא המתן...",
+    "pleaseWait": "אנא המתן…",
     "joinTheCommunity": "הצטרף לקהילה!",
-    "loadingProfile": "טוען פרופיל...",
+    "loadingProfile": "טוען פרופיל…",
     "profileSettings": "הגדרות פרופיל",
     "noEmailSet": "לא הוגדר דוא\"ל",
     "userIdCopiedToClipboard": "מזהה משתמש הועתק ללוח העריכה",
@@ -4019,7 +4012,7 @@
     "pilotFeaturesDescription": "התכונות הללו הן בדיקות וללא התחייבות לתמיכה.",
     "suggestFollowUpQuestion": "הצע שאלת המשך",
     "saveSettings": "שמור הגדרות",
-    "syncingDeveloperSettings": "סנכרון הגדרות מפתח...",
+    "syncingDeveloperSettings": "סנכרון הגדרות מפתח…",
     "summary": "סיכום",
     "auto": "אוטומטי",
     "noSummaryForApp": "אין סיכום זמין עבור אפליקציה זו. נסה אפליקציה אחרת לקבלת תוצאות טובות יותר.",
@@ -4049,18 +4042,18 @@
     "letOmiChooseAutomatically": "תן לOmi לבחור את האפליקציה הטובה ביותר באופן אוטומטי",
     "deleteConversationConfirmation": "האם אתה בטוח שברצונך למחוק שיחה זו? אין דרך לבטל פעולה זו.",
     "conversationDeleted": "השיחה נמחקה",
-    "generatingLink": "הוצר קישור...",
+    "generatingLink": "הוצר קישור…",
     "editConversation": "ערוך שיחה",
     "conversationLinkCopiedToClipboard": "קישור השיחה הועתק ללוח העריכה",
     "conversationTranscriptCopiedToClipboard": "עתודת השיחה הועתקה ללוח העריכה",
     "editConversationDialogTitle": "ערוך שיחה",
     "changeTheConversationTitle": "שנה את כותרת השיחה",
     "conversationTitle": "כותרת השיחה",
-    "enterConversationTitle": "הזן כותרת שיחה...",
+    "enterConversationTitle": "הזן כותרת שיחה…",
     "conversationTitleUpdatedSuccessfully": "כותרת השיחה עודכנה בהצלחה",
     "failedToUpdateConversationTitle": "עדכון כותרת השיחה נכשל",
     "errorUpdatingConversationTitle": "שגיאה בעדכון כותרת השיחה",
-    "settingUp": "מתקדם...",
+    "settingUp": "מתקדם…",
     "@settingUp": {
         "description": "Status message when initializing recording"
     },
@@ -4072,11 +4065,7 @@
     "@preparingSystemAudioCapture": {
         "description": "Status when preparing audio capture"
     },
-    "clickTheButtonToCaptureAudio": "לחץ על הכפתור כדי ללכוד אודיו עבור עתודות חיות, תובנות AI וחיסכון אוטומטי.",
-    "@clickTheButtonToCaptureAudio": {
-        "description": "Instructions for starting recording"
-    },
-    "reconnecting": "חיבור חדש...",
+    "reconnecting": "חיבור חדש…",
     "@reconnecting": {
         "description": "Status when reconnecting to audio"
     },
@@ -4092,7 +4081,7 @@
     "@startRecording": {
         "description": "Button text to start recording"
     },
-    "resumingInCountdown": "ממשך ב{countdown}s...",
+    "resumingInCountdown": "ממשך ב{countdown}s…",
     "@resumingInCountdown": {
         "description": "Status when auto-resuming with countdown",
         "placeholders": {
@@ -4105,7 +4094,7 @@
     "@tapPlayToResume": {
         "description": "Instruction when paused"
     },
-    "listeningForAudio": "מקשיב לאודיו...",
+    "listeningForAudio": "מקשיב לאודיו…",
     "@listeningForAudio": {
         "description": "Status when listening for audio"
     },
@@ -4143,15 +4132,11 @@
             }
         }
     },
-    "startRecordingToSeeTranscript": "התחל הקלטה כדי לראות עתודה חיה",
-    "@startRecordingToSeeTranscript": {
-        "description": "Empty state message for transcript"
-    },
     "paused": "מושהה",
     "@paused": {
         "description": "Recording status: paused"
     },
-    "initializing": "אתחול...",
+    "initializing": "אתחול…",
     "@initializing": {
         "description": "Recording status: initializing"
     },
@@ -4176,10 +4161,6 @@
     "@settingUpSystemAudioCapture": {
         "description": "Status when setting up audio capture"
     },
-    "capturingAudioAndGeneratingTranscript": "לכידת אודיו והוצרת עתודה",
-    "@capturingAudioAndGeneratingTranscript": {
-        "description": "Status when actively recording"
-    },
     "clickToBeginRecordingSystemAudio": "לחץ כדי להתחיל הקלטת אודיו מערכת",
     "@clickToBeginRecordingSystemAudio": {
         "description": "Instruction to start system audio recording"
@@ -4197,7 +4178,7 @@
             }
         }
     },
-    "translatedByOmi": "תורגם על ידי omi",
+    "translatedByOmi": "תורגם על ידי Omi",
     "@translatedByOmi": {
         "description": "Credit line for translations"
     },
@@ -4235,7 +4216,7 @@
     "@selectAudioInput": {
         "description": "Dropdown header for audio device selection"
     },
-    "loadingDevices": "טוען התקנים...",
+    "loadingDevices": "טוען התקנים…",
     "@loadingDevices": {
         "description": "Status when loading audio devices"
     },
@@ -4305,7 +4286,7 @@
     "@signOutQuestion": {
         "description": "Dialog title asking user to confirm sign out"
     },
-    "signOutConfirmation": "האם אתה בטוח שברצונך להתנתק?",
+    "signOutConfirmation": "תצטרך להתחבר שוב כדי לראות את השיחות שלך. המכשיר המשויך והעדפות האפליקציה נשארים בטלפון הזה.",
     "@signOutConfirmation": {
         "description": "Confirmation message in sign out dialog"
     },
@@ -4370,7 +4351,7 @@
     "setConversationEndDescription": "הגדר מתי שיחות מסתיימות באופן אוטומטי",
     "importDataDescription": "ייבא נתונים ממקורות אחרים",
     "exportConversationsDescription": "ייצא שיחות ל-JSON",
-    "exportingConversations": "ייצוא שיחות...",
+    "exportingConversations": "ייצוא שיחות…",
     "clearNodesDescription": "נקה את כל הצמתים וההתחברויות",
     "deleteKnowledgeGraphQuestion": "מחק גרף ידע?",
     "deleteKnowledgeGraphWarning": "זה ימחק את כל נתוני גרף הידע שהוכלו. הזיכרונות המקוריים שלך נשמרים בבטחון.",
@@ -4458,7 +4439,7 @@
             }
         }
     },
-    "newVersionAvailable": "גרסה חדשה זמינה 🎉",
+    "newVersionAvailable": "גרסה חדשה זמינה",
     "@newVersionAvailable": {
         "description": "Dialog title when a new app version is available"
     },
@@ -4522,7 +4503,7 @@
     "@cancelSubscriptionButton": {
         "description": "Button text to cancel subscription"
     },
-    "cancelling": "ביטול...",
+    "cancelling": "ביטול…",
     "@cancelling": {
         "description": "Loading text while cancelling"
     },
@@ -4681,7 +4662,7 @@
             }
         }
     },
-    "addingToService": "הוספה ל{serviceName}...",
+    "addingToService": "הוספה ל{serviceName}…",
     "@addingToService": {
         "description": "Loading message when adding task to a service",
         "placeholders": {
@@ -4742,7 +4723,7 @@
     "@omiApiKeys": {
         "description": "Dialog title for API keys info"
     },
-    "apiKeysDescription": "מפתחות API משמשים לאימות כאשר האפליקציה שלך תקשרת עם שרת OMI. הם מאפשרים לאפליקציה שלך ליצור זיכרונות ולגשת לשירותי OMI אחרים בצורה מאובטחת.",
+    "apiKeysDescription": "מפתחות API משמשים לאימות כאשר האפליקציה שלך תקשרת עם שרת Omi. הם מאפשרים לאפליקציה שלך ליצור זיכרונות ולגשת לשירותי Omi אחרים בצורה מאובטחת.",
     "@apiKeysDescription": {
         "description": "Description of what API keys are used for"
     },
@@ -5421,7 +5402,7 @@
     "@knowledgeGraphDeletedSuccessfully": {
         "description": "Developer settings - knowledgeGraphDeletedSuccessfully"
     },
-    "exportStartedMayTakeFewSeconds": "ייצוא החל. זה עשוי לקחת כמה שניות...",
+    "exportStartedMayTakeFewSeconds": "ייצוא החל. זה עשוי לקחת כמה שניות…",
     "@exportStartedMayTakeFewSeconds": {
         "description": "Developer settings - exportStartedMayTakeFewSeconds"
     },
@@ -5429,7 +5410,7 @@
     "@knowledgeGraphDeleteDescription": {
         "description": "Developer settings - knowledgeGraphDeleteDescription"
     },
-    "configureDailySummaryDigest": "הגדר את עיכול פריטי הפעולה היומיים שלך",
+    "configureDailySummaryDigest": "הגדר את תקציר המשימות היומי שלך",
     "@configureDailySummaryDigest": {
         "description": "Subtitle for Daily Summary menu item in profile settings"
     },
@@ -5755,7 +5736,7 @@
     "@checkingForUpdates": {
         "description": "Title shown while checking for updates"
     },
-    "checkingFirmwareVersion": "בדוק גרסת firmware...",
+    "checkingFirmwareVersion": "בדוק גרסת firmware…",
     "@checkingFirmwareVersion": {
         "description": "Status text while checking firmware version"
     },
@@ -5990,7 +5971,7 @@
     "@showLess": {
         "description": "Text shown to collapse expanded content, with up arrow"
     },
-    "loadingYourRecording": "טוען את ההקלטה שלך...",
+    "loadingYourRecording": "טוען את ההקלטה שלך…",
     "@loadingYourRecording": {
         "description": "Loading message shown while audio waveform is being processed"
     },
@@ -5998,7 +5979,7 @@
     "@photoDiscardedMessage": {
         "description": "Message shown when a photo was discarded as not significant"
     },
-    "analyzing": "בנתוח...",
+    "analyzing": "בנתוח…",
     "@analyzing": {
         "description": "Loading text shown while analyzing a photo"
     },
@@ -6006,7 +5987,7 @@
     "@searchCountries": {
         "description": "Placeholder text for country search field"
     },
-    "checkingAppleWatch": "בדוק Apple Watch...",
+    "checkingAppleWatch": "בדוק Apple Watch…",
     "@checkingAppleWatch": {
         "description": "Loading text while checking Apple Watch status"
     },
@@ -6094,7 +6075,7 @@
     "@dontAskAgain": {
         "description": "Checkbox label to not show confirmation dialog again"
     },
-    "waitingForTranscriptOrPhotos": "ממתין לתמלול או תמונות...",
+    "waitingForTranscriptOrPhotos": "ממתין לתמלול או תמונות…",
     "@waitingForTranscriptOrPhotos": {
         "description": "Placeholder text shown while waiting for content"
     },
@@ -6160,7 +6141,7 @@
     "@noSummary": {
         "description": "Message when no summary is available"
     },
-    "updateOmiFirmware": "עדכן firmware של omi",
+    "updateOmiFirmware": "עדכן firmware של Omi",
     "@updateOmiFirmware": {
         "description": "Button text to update Omi device firmware"
     },
@@ -6256,7 +6237,7 @@
     "@wrappedYouTalkedAbout": {
         "description": "Badge for top categories in Wrapped"
     },
-    "wrappedActionItems": "פריטי פעולה",
+    "wrappedActionItems": "משימות",
     "@wrappedActionItems": {
         "description": "Badge for action items in Wrapped"
     },
@@ -6381,11 +6362,11 @@
     "@wrappedGenerateMyWrapped": {
         "description": "Button text to start generating the 2025 wrapped"
     },
-    "wrappedProcessingDefault": "בעיבוד...",
+    "wrappedProcessingDefault": "בעיבוד…",
     "@wrappedProcessingDefault": {
         "description": "Default processing status text"
     },
-    "wrappedCreatingYourStory": "יצירת הסיפור שלך\n2025...",
+    "wrappedCreatingYourStory": "יצירת הסיפור שלך\n2025…",
     "@wrappedCreatingYourStory": {
         "description": "Text shown while generating the wrapped, includes newline"
     },
@@ -6425,7 +6406,7 @@
     "@wrappedFailedToStartGeneration": {
         "description": "Error message when generation fails to start"
     },
-    "wrappedStarting": "התחלה...",
+    "wrappedStarting": "התחלה…",
     "@wrappedStarting": {
         "description": "Initial processing step text"
     },
@@ -6697,15 +6678,15 @@
     "@somethingWentWrongTryAgain": {
         "description": "Generic error message shown in snackbar when an error occurs"
     },
-    "uploadingVoiceProfile": "העלאת פרופיל הקול שלך...",
+    "uploadingVoiceProfile": "העלאת פרופיל הקול שלך…",
     "@uploadingVoiceProfile": {
         "description": "Loading message shown while uploading voice profile"
     },
-    "memorizingYourVoice": "שינון הקול שלך...",
+    "memorizingYourVoice": "שינון הקול שלך…",
     "@memorizingYourVoice": {
         "description": "Loading message shown while processing voice profile"
     },
-    "personalizingExperience": "התאמה אישית של החוויה שלך...",
+    "personalizingExperience": "התאמה אישית של החוויה שלך…",
     "@personalizingExperience": {
         "description": "Loading message shown while personalizing user experience"
     },
@@ -6876,7 +6857,7 @@
     "@clearChatQuestion": {
         "description": "Dialog title asking to clear chat"
     },
-    "syncingMessages": "סנכרון הודעות עם השרת...",
+    "syncingMessages": "סנכרון הודעות עם השרת…",
     "@syncingMessages": {
         "description": "Loading text when syncing messages"
     },
@@ -7112,11 +7093,11 @@
             }
         }
     },
-    "summarizingConversation": "סיכום השיחה...\nזה אולי יקח כמה שניות",
+    "summarizingConversation": "סיכום השיחה…\nזה אולי יקח כמה שניות",
     "@summarizingConversation": {
         "description": "Loading text while summarizing a conversation"
     },
-    "resummarizingConversation": "סיכום מחדש של השיחה...\nזה אולי יקח כמה שניות",
+    "resummarizingConversation": "סיכום מחדש של השיחה…\nזה אולי יקח כמה שניות",
     "@resummarizingConversation": {
         "description": "Loading text while re-summarizing a conversation"
     },
@@ -7295,7 +7276,7 @@
     "@doNotCloseApp": {
         "description": "Warning during download"
     },
-    "downloading": "הורדה...",
+    "downloading": "הורדה…",
     "@downloading": {
         "description": "Status during download"
     },
@@ -7414,7 +7395,7 @@
             }
         }
     },
-    "preparingModel": "הכנת {model}...",
+    "preparingModel": "הכנת {model}…",
     "@preparingModel": {
         "description": "Status when preparing model",
         "placeholders": {
@@ -7462,7 +7443,7 @@
     "@useTemplateFrom": {
         "description": "Label for template selector"
     },
-    "selectProviderTemplate": "בחר תבנית ספק...",
+    "selectProviderTemplate": "בחר תבנית ספק…",
     "@selectProviderTemplate": {
         "description": "Placeholder for template dropdown"
     },
@@ -7736,7 +7717,7 @@
     "@signUpSuccess": {
         "description": "Success message after signing up"
     },
-    "loadingKnowledgeGraph": "טעינת גרף ידע...",
+    "loadingKnowledgeGraph": "טעינת גרף ידע…",
     "@loadingKnowledgeGraph": {
         "description": "Loading text for knowledge graph"
     },
@@ -7744,7 +7725,7 @@
     "@noKnowledgeGraphYet": {
         "description": "Title when knowledge graph is empty"
     },
-    "buildingKnowledgeGraphFromMemories": "בנייה של גרף הידע שלך מזיכרונות...",
+    "buildingKnowledgeGraphFromMemories": "בנייה של גרף הידע שלך מזיכרונות…",
     "@buildingKnowledgeGraphFromMemories": {
         "description": "Message while building knowledge graph"
     },
@@ -7764,7 +7745,7 @@
     "@getButton": {
         "description": "Button text to get/install an app"
     },
-    "openingApp": "פתיחה של {appName}...",
+    "openingApp": "פתיחה של {appName}…",
     "@openingApp": {
         "description": "Snackbar message when opening an app",
         "placeholders": {
@@ -7814,7 +7795,7 @@
     "@moneyEarned": {
         "description": "Label for money earned from app"
     },
-    "writeYourReply": "כתוב את התשובה שלך...",
+    "writeYourReply": "כתוב את התשובה שלך…",
     "@writeYourReply": {
         "description": "Hint text for reply input field"
     },
@@ -7953,7 +7934,7 @@
     "@selectContactsToShareSummary": {
         "description": "Subtitle for share to contacts sheet"
     },
-    "searchContactsHint": "חפש אנשי קשר...",
+    "searchContactsHint": "חפש אנשי קשר",
     "@searchContactsHint": {
         "description": "Hint text for contacts search field"
     },
@@ -8092,7 +8073,7 @@
             }
         }
     },
-    "transferring": "העברה...",
+    "transferring": "העברה…",
     "@transferring": {
         "description": "Status text shown during file transfer"
     },
@@ -8124,7 +8105,7 @@
     "@recordingInfo": {
         "description": "Menu item to view recording information"
     },
-    "transferInProgress": "העברה בעיצומה...",
+    "transferInProgress": "העברה בעיצומה…",
     "@transferInProgress": {
         "description": "Menu item text when transfer is ongoing"
     },
@@ -8282,7 +8263,7 @@
     "@errorUpdatingAppStatus": {
         "description": "Error message when updating app status fails"
     },
-    "calculatingETA": "חישוב...",
+    "calculatingETA": "חישוב…",
     "@calculatingETA": {
         "description": "Migration ETA calculation in progress message"
     },
@@ -8299,7 +8280,7 @@
     "@aboutAMinuteRemaining": {
         "description": "Migration time remaining is about a minute"
     },
-    "almostDone": "כמעט סיימנו...",
+    "almostDone": "כמעט סיימנו…",
     "@almostDone": {
         "description": "Migration is almost complete"
     },
@@ -8307,11 +8288,11 @@
     "@omiSays": {
         "description": "Notification title for omi app messages"
     },
-    "analyzingYourData": "ניתוח הנתונים שלך...",
+    "analyzingYourData": "ניתוח הנתונים שלך…",
     "@analyzingYourData": {
         "description": "Migration start message when analyzing data"
     },
-    "migratingToProtection": "הגירה להגנת {level}...",
+    "migratingToProtection": "הגירה להגנת {level}…",
     "@migratingToProtection": {
         "description": "Notification body when migration starts",
         "placeholders": {
@@ -8320,11 +8301,11 @@
             }
         }
     },
-    "noDataToMigrateFinalizing": "אין נתונים להגרה. סיום...",
+    "noDataToMigrateFinalizing": "אין נתונים להגרה. סיום…",
     "@noDataToMigrateFinalizing": {
         "description": "Migration message when no data needs to be migrated"
     },
-    "migratingItemsProgress": "הגרת {itemType}... {percentage}%",
+    "migratingItemsProgress": "הגרת {itemType}… {percentage}%",
     "@migratingItemsProgress": {
         "description": "Migration progress message with item type and percentage",
         "placeholders": {
@@ -8336,7 +8317,7 @@
             }
         }
     },
-    "allObjectsMigratedFinalizing": "כל החפצים הוגרו. סיום...",
+    "allObjectsMigratedFinalizing": "כל החפצים הוגרו. סיום…",
     "@allObjectsMigratedFinalizing": {
         "description": "Migration message when all objects have been migrated"
     },
@@ -8385,7 +8366,7 @@
     "@templateName": {
         "description": "Label for template name field"
     },
-    "templateNameHint": "למשל, מחלץ פריטי פעולה של פגישה",
+    "templateNameHint": "למשל, מחלץ משימות מפגישות",
     "@templateNameHint": {
         "description": "Hint text for template name field"
     },
@@ -8393,7 +8374,7 @@
     "@nameMustBeAtLeast3Characters": {
         "description": "Validation error when name is too short"
     },
-    "conversationPromptHint": "למשל, חלץ פריטי פעולה, החלטות שהתקבלו וטקה-וויים חיוניים מהשיחה שסופקה.",
+    "conversationPromptHint": "למשל, חלץ משימות, החלטות שהתקבלו ותובנות עיקריות מהשיחה שסופקה.",
     "@conversationPromptHint": {
         "description": "Hint text for conversation prompt field"
     },
@@ -8413,15 +8394,15 @@
     "@onlyYouCanUseTemplate": {
         "description": "Description when template is private"
     },
-    "generatingDescription": "ייצור תיאור...",
+    "generatingDescription": "ייצור תיאור…",
     "@generatingDescription": {
         "description": "Status message during app creation"
     },
-    "creatingAppIcon": "יצירת סמל אפליקציה...",
+    "creatingAppIcon": "יצירת סמל אפליקציה…",
     "@creatingAppIcon": {
         "description": "Status message during app creation"
     },
-    "installingApp": "התקנת אפליקציה...",
+    "installingApp": "התקנת אפליקציה…",
     "@installingApp": {
         "description": "Status message during app creation"
     },
@@ -8600,7 +8581,7 @@
     "@aiGenPleaseEnterDescription": {
         "description": "Validation error when app description is empty in AI app generator"
     },
-    "aiGenCreatingAppIcon": "יצירת סמל אפליקציה...",
+    "aiGenCreatingAppIcon": "יצירת סמל אפליקציה…",
     "@aiGenCreatingAppIcon": {
         "description": "Status message shown while generating app icon"
     },
@@ -8679,7 +8660,7 @@
     "@couldNotLaunchUpgradePage": {
         "description": "Error when upgrade page cannot be launched"
     },
-    "transcriptionJsonPlaceholder": "הדבק את תצורת ה-JSON שלך כאן...",
+    "transcriptionJsonPlaceholder": "הדבק את תצורת ה-JSON שלך כאן…",
     "@transcriptionJsonPlaceholder": {
         "description": "JSON configuration placeholder hint text in transcription settings"
     },
@@ -8789,7 +8770,7 @@
     "@onboardingYoureAllSet": {
         "description": "Onboarding step description for completion"
     },
-    "searchTranscriptOrSummary": "חפש תמלול או סיכום...",
+    "searchTranscriptOrSummary": "חפש תמלול או סיכום",
     "@searchTranscriptOrSummary": {
         "description": "Placeholder text for search field in conversation detail page"
     },
@@ -9127,11 +9108,11 @@
     "@msgUploadFileFailed": {
         "description": "Error when file upload fails"
     },
-    "msgReadingMemories": "קריאה של הזיכרונות שלך...",
+    "msgReadingMemories": "קריאה של הזיכרונות שלך…",
     "@msgReadingMemories": {
         "description": "Loading text while reading memories"
     },
-    "msgLearningMemories": "למידה מהזיכרונות שלך...",
+    "msgLearningMemories": "למידה מהזיכרונות שלך…",
     "@msgLearningMemories": {
         "description": "Loading text while learning from memories"
     },
@@ -9201,7 +9182,7 @@
             }
         }
     },
-    "conversationNewIndicator": "חדש 🚀",
+    "conversationNewIndicator": "חדש",
     "@conversationNewIndicator": {
         "description": "Indicator shown when a conversation is newly created"
     },
@@ -9214,7 +9195,7 @@
             }
         }
     },
-    "mergingStatus": "מיזוג...",
+    "mergingStatus": "מיזוג…",
     "@mergingStatus": {
         "description": "Status indicator shown when conversations are being merged"
     },
@@ -9387,11 +9368,11 @@
     },
     "newFolder": "תיקייה חדשה",
     "color": "צבע",
-    "waitingForDevice": "מחכה להתקן...",
+    "waitingForDevice": "מחכה להתקן…",
     "@waitingForDevice": {
         "description": "Status message while waiting for device connection"
     },
-    "saySomething": "אמור משהו...",
+    "saySomething": "אמור משהו…",
     "@saySomething": {
         "description": "Prompt for user to start speaking"
     },
@@ -9443,15 +9424,15 @@
     "downloadAudio": "הורד אודיו",
     "audioDownloadSuccess": "אודיו הורד בהצלחה",
     "audioDownloadFailed": "כישלון בהורדת אודיו",
-    "downloadingAudio": "הורדת אודיו...",
+    "downloadingAudio": "הורדת אודיו…",
     "shareAudio": "שתף אודיו",
     "preparingAudio": "הכנת אודיו",
-    "gettingAudioFiles": "קבלת קבצי אודיו...",
+    "gettingAudioFiles": "קבלת קבצי אודיו…",
     "downloadingAudioProgress": "הורדת אודיו",
     "processingAudio": "עיבוד אודיו",
-    "combiningAudioFiles": "שילוב קבצי אודיו...",
+    "combiningAudioFiles": "שילוב קבצי אודיו…",
     "audioReady": "אודיו מוכן",
-    "openingShareSheet": "פתיחת גיליון שתיפוי...",
+    "openingShareSheet": "פתיחת גיליון שתיפוי…",
     "audioShareFailed": "שתיפוי נכשל",
     "dailyRecaps": "סיכומים יומיים",
     "removeFilter": "הסר מסנן",
@@ -9528,7 +9509,7 @@
         }
     },
     "mcpConnectionFailed": "חיבור לשרת MCP נכשל",
-    "authorizingMcpServer": "מאשר...",
+    "authorizingMcpServer": "מאשר…",
     "whereDidYouHearAboutOmi": "איך גילית את Omi?",
     "tiktok": "TikTok",
     "youtube": "YouTube",
@@ -9631,7 +9612,7 @@
         "description": "Pairing description for Neo One device"
     },
     "downloadingFromDevice": "הורד מהתקן",
-    "reconnectingToInternet": "התחברות מחדש לאינטרנט...",
+    "reconnectingToInternet": "התחברות מחדש לאינטרנט…",
     "uploadingToCloud": "מעלה {current} מתוך {total}",
     "@uploadingToCloud": {
         "placeholders": {
@@ -9643,8 +9624,8 @@
             }
         }
     },
-    "processingOnServer": "מעבד בשרת...",
-    "processingOnServerProgress": "מעבד... {current}/{total} קטעים",
+    "processingOnServer": "מעבד בשרת…",
+    "processingOnServerProgress": "מעבד… {current}/{total} קטעים",
     "@processingOnServerProgress": {
         "placeholders": {
             "current": {
@@ -9789,7 +9770,7 @@
     "answerTheCallFrom": "ענה על השיחה מ-",
     "onTheCallEnterThisCode": "בשיחה, הזן את הקוד הזה",
     "followTheVoiceInstructions": "עקוב אחר הוראות הקול",
-    "statusCalling": "קורא...",
+    "statusCalling": "קורא…",
     "statusCallInProgress": "שיחה בעיצומה",
     "statusVerifiedLabel": "אומת",
     "statusCallMissed": "שיחה החמיצה",
@@ -9804,11 +9785,11 @@
     "phoneNoContactsFound": "לא נמצאו אנשי קשר",
     "phoneEnterNumber": "הזן מספר",
     "failedToStartCall": "התחלת שיחה נכשלה",
-    "callStateConnecting": "התחברות...",
-    "callStateRinging": "צלצול...",
+    "callStateConnecting": "התחברות…",
+    "callStateRinging": "צלצול…",
     "callStateEnded": "השיחה הסתיימה",
     "callStateFailed": "השיחה נכשלה",
-    "transcriptPlaceholder": "תמלול יופיע כאן...",
+    "transcriptPlaceholder": "תמלול יופיע כאן…",
     "phoneUnmute": "הפעל קול",
     "phoneMute": "השתק קול",
     "phoneSpeaker": "רמקול",
@@ -9887,7 +9868,7 @@
     "@phoneCallsUpsellFeature1": {
         "description": "Phone calls upsell feature 1"
     },
-    "phoneCallsUpsellFeature2": "סיכומי שיחות וקבצי פעולה אוטומטיים",
+    "phoneCallsUpsellFeature2": "סיכומי שיחות ומשימות אוטומטיים",
     "@phoneCallsUpsellFeature2": {
         "description": "Phone calls upsell feature 2"
     },
@@ -10032,7 +10013,7 @@
         }
     },
     "transcriptionPaused": "הקלטה, התחברות מחדש",
-    "transcriptionPausedReconnecting": "עדיין מקליט — התחברות מחדש לתמלול...",
+    "transcriptionPausedReconnecting": "עדיין מקליט — התחברות מחדש לתמלול…",
     "fairUseBannerStatus": "שימוש הוגן: {status}",
     "@fairUseBannerStatus": {
         "placeholders": {
@@ -10213,7 +10194,7 @@
     "@tellUsMore": {
         "description": "Label for optional details text field"
     },
-    "cancelReasonDetailHint": "אנחנו מעריכים כל משוב...",
+    "cancelReasonDetailHint": "אנחנו מעריכים כל משוב…",
     "@cancelReasonDetailHint": {
         "description": "Hint for cancel reason detail text field"
     },
@@ -10321,10 +10302,10 @@
     "disconnectHistory": "היסטוריית ניתוקים",
     "noDisconnectsRecorded": "אין ניתוקים רשומים",
     "diagnostics": "אבחון",
-    "waitingForData": "בהמתנה לנתונים...",
+    "waitingForData": "בהמתנה לנתונים…",
     "liveRssiOverTime": "RSSI חי על פני זמן",
     "noRssiDataYet": "אין נתוני RSSI עדיין",
-    "collectingData": "אוסף נתונים...",
+    "collectingData": "אוסף נתונים…",
     "cleanDisconnect": "ניתוק נקי",
     "connectionTimeout": "פג זמן ההחיבור",
     "remoteDeviceTerminated": "ההתקן המרוחק הופסק",
@@ -10376,7 +10357,7 @@
     "@stableFirmware": {
         "description": "Title for the stable firmware rollback page"
     },
-    "fetchingStableFirmware": "מביא את ה-firmware היציב העדכני ביותר...",
+    "fetchingStableFirmware": "מביא את ה-firmware היציב העדכני ביותר…",
     "@fetchingStableFirmware": {
         "description": "Loading text while fetching stable firmware version"
     },
@@ -10404,11 +10385,11 @@
     "enableLocationTitle": "הפעל מיקום",
     "enableLocationDescription": "הרשאת מיקום נדרשת כדי למצוא התקני Bluetooth בקרבת מקום.",
     "voiceRecordingFound": "הקלטה נמצאה",
-    "transcriptionConnecting": "חיבור תמלול...",
+    "transcriptionConnecting": "חיבור תמלול…",
     "@transcriptionConnecting": {
         "description": "Status when transcription WebSocket is connecting"
     },
-    "transcriptionReconnecting": "התחברות מחדש לתמלול...",
+    "transcriptionReconnecting": "התחברות מחדש לתמלול…",
     "@transcriptionReconnecting": {
         "description": "Status when transcription WebSocket is reconnecting"
     },
@@ -10463,10 +10444,6 @@
     "planUpdate": "עדכון תוכנית",
     "@planUpdate": {
         "description": "Header for plan deprecation notice"
-    },
-    "planDeprecationMessage": "תוכנית ה-Unlimited שלך מופסקת. עברו לתוכנית Operator — אותן תכונות מעולות ב-$49/חודש. התוכנית הנוכחית שלך תמשיך לפעול בינתיים.",
-    "@planDeprecationMessage": {
-        "description": "Deprecation notice for legacy Unlimited subscribers"
     },
     "upgradeYourPlan": "שדרג את התוכנית שלך",
     "@upgradeYourPlan": {
@@ -10534,7 +10511,7 @@
     "connectTaskAppToExport": "חבר אפליקציית משימות בהגדרות כדי לייצא",
     "deselectAllTasksMenu": "בטל בחירת הכל",
     "hideCompletedTasks": "הסתר הושלמו",
-    "searchActionItems": "חפש פריטי פעולה",
+    "searchActionItems": "חפש משימות",
     "selectActionItems": "בחירה מרובה",
     "selectAllTasksMenu": "בחר הכל",
     "showCompletedTasks": "הצג הושלמו",
@@ -10624,11 +10601,11 @@
     "deviceOnboardingTranscriptionTitle": "דברו אל ה-Omi שלכם",
     "deviceOnboardingTranscriptionSubtitle": "אמרו כמה מילים וצפו בהן מופיעות בזמן אמת",
     "deviceOnboardingGoodJob": "כל הכבוד!",
-    "deviceOnboardingStartSpeaking": "התחילו לדבר...",
+    "deviceOnboardingStartSpeaking": "התחילו לדבר…",
     "deviceOnboardingAskQuestionTitle": "שאלו את Omi שאלה",
     "deviceOnboardingAskQuestionSubtitle": "לחצו על הכפתור פעם אחת, אמרו את השאלה, ואז לחצו שוב כשתסיימו",
-    "deviceOnboardingProcessingQuestion": "מעבד את השאלה שלכם...",
-    "deviceOnboardingListening": "מאזין...",
+    "deviceOnboardingProcessingQuestion": "מעבד את השאלה שלכם…",
+    "deviceOnboardingListening": "מאזין…",
     "deviceOnboardingTurnOffTitle": "כיבוי",
     "deviceOnboardingTurnOnTitle": "הפעלה",
     "deviceOnboardingTurnOffSubtitle": "החזיקו את הכפתור למשך 3 שניות",
@@ -10637,7 +10614,7 @@
     "deviceOnboardingStatusConnected": "מחובר",
     "deviceOnboardingStatusConnectedDone": "מחובר!",
     "deviceOnboardingStatusDisconnected": "מנותק",
-    "deviceOnboardingStatusTurningOff": "מכבה...",
+    "deviceOnboardingStatusTurningOff": "מכבה…",
     "deviceOnboardingDoubleTapTitle": "התאמת הקשה כפולה",
     "deviceOnboardingEndConversation": "סיום שיחה",
     "deviceOnboardingEndConversationDesc": "שמירה וסיום של השיחה הנוכחית",
@@ -10730,7 +10707,7 @@
     "onDeviceModelSize": "גודל המודל",
     "onDeviceTranscription": "תמלול על המכשיר",
     "onDeviceTranscriptionDesc": "התמלול מעובד מקומית על המכשיר שלך",
-    "searchSettings": "חיפוש בהגדרות…",
+    "searchSettings": "חיפוש בהגדרות",
     "speechToTextProvider": "ספק המרת דיבור לטקסט",
     "speechToTextProviderDesc": "בחר את השירות שישמש לתמלול",
     "sttFilterAuto": "אוטומטי",
@@ -10833,5 +10810,291 @@
     "moreOptions": "אפשרויות נוספות",
     "filterByDate": "סינון לפי תאריך",
     "memoryGraph": "גרף זיכרונות",
-    "voiceIntroduction": "{part, select, title{Let Omi get to know you} intro{Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.} hint{Say the whole sentence and finish it in your own words.} name{My name is ___, and I spend most of my time ___.} work{Right now, I am working on ___.} enjoy{Outside of that, I really enjoy ___.} food{My favorite food is ___.} remember{Something I would like help remembering is ___.} day{A good day for me includes ___.} another{Try another prompt} start{Start speaking} skipPrompt{Skip this prompt} captured{Voice sample captured} silence{Take your time. Speak toward your phone microphone.} audio{Audio detected} review{Here is what I heard} reviewHint{Edit or uncheck anything below. Personal details become memories; your goal is saved separately.} saveVoice{Save voice profile} savingVoice{Saving your voice profile…} savedVoice{Voice profile saved} voiceLater{Set up my voice later} keep{Save selected answers} without{Continue without saving answers} savedMemories{Your memories are saved} short{We need a little more audio. Add one more sentence; your earlier answers are safe.} addSample{Add another sentence} uploadError{Your voice profile could not be saved. Retry with the same recording, or set it up later.} memoryError{Some answers could not be saved. Saved items are safe; retry to save the rest.} transcriptionError{We could not transcribe that answer. Retry, keep speaking, or skip this prompt.} noMemories{You can tell Omi more about yourself whenever you like.} voiceOnlyHint{You can skip any personal prompt and talk about something else.} goalPrompt{Right now my number one goal is to ___.} savedGoal{Your goal is saved} goalError{Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.} goalLong{Shorten your goal to 500 characters or fewer, then try again.} voiceUnavailable{Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.} saveFinish{Save and finish} retryRemaining{Retry remaining} saveHint{Saves your voice profile and checked answers.} savedAll{Your introduction is saved.} continueSaved{Continue with what is saved} reviewAnswers{Review answers} originalGoal{Use original wording} savingAnswers{Saving your answers…} other{}}"
+    "voiceIntroduction": "{part, select, title{Let Omi get to know you} intro{Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.} hint{Say the whole sentence and finish it in your own words.} name{My name is ___, and I spend most of my time ___.} work{Right now, I am working on ___.} enjoy{Outside of that, I really enjoy ___.} food{My favorite food is ___.} remember{Something I would like help remembering is ___.} day{A good day for me includes ___.} another{Try another prompt} start{Start speaking} skipPrompt{Skip Question} captured{Voice sample captured} silence{Take your time. Speak toward your phone microphone.} audio{Audio detected} review{Here is what I heard} reviewHint{Edit or uncheck anything below. Personal details become memories; your goal is saved separately.} saveVoice{Save voice profile} savingVoice{Saving your voice profile…} savedVoice{Voice profile saved} voiceLater{Set up my voice later} keep{Save selected answers} without{Continue without saving answers} savedMemories{Your memories are saved} short{We need a little more audio. Add one more sentence; your earlier answers are safe.} addSample{Add another sentence} uploadError{Your voice profile could not be saved. Retry with the same recording, or set it up later.} memoryError{Some answers could not be saved. Saved items are safe; retry to save the rest.} transcriptionError{We could not transcribe that answer. Try again, keep speaking, or skip this question.} noMemories{You can tell Omi more about yourself whenever you like.} voiceOnlyHint{You can skip any personal prompt and talk about something else.} goalPrompt{Right now my number one goal is to ___.} savedGoal{Your goal is saved} goalError{Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.} goalLong{Shorten your goal to 500 characters or fewer, then try again.} voiceUnavailable{Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.} saveFinish{Save and finish} retryRemaining{Retry remaining} saveHint{Saves your voice profile and checked answers.} savedAll{Your introduction is saved.} continueSaved{Continue with what is saved} reviewAnswers{Review answers} originalGoal{Use original wording} savingAnswers{Saving your answers…} other{}}",
+    "voiceRecognitionStatus": "{status, select, ready{הקול מוכן לזיהוי} saved_sample_awaiting_embedding{הדגימה נשמרה; עדיין נדרש עיבוד קול} not_learned{הקול לא נלמד} other{מצב הקול אינו ידוע}}",
+    "tagSpeakerIncludingLaterSpeech": "תייג גם דיבור מאוחר יותר של הדובר הזה",
+    "updateSummaryWithNewNames": "עדכן את הסיכום עם השמות החדשים",
+    "syncStatusUnsupportedAudio": "לא ניתן לקרוא את האודיו — אי אפשר לסנכרן",
+    "conversationTitleDidntGenerate": "Title didn't generate",
+    "conversationReprocess": "Reprocess",
+    "chatStarterPrompt": "{kind, select, capabilities{מה אפשר לעשות בשבילי?} goal{עזור לי להגדיר מטרה} activity{סכם את הפעילות האחרונה שלי} improve{איך אוכל להשתפר?} other{}}",
+    "nextWeek": "בשבוע הבא",
+    "clearSearch": "ניקוי החיפוש",
+    "audioUploadFailedKeptLocal": "ההעלאה נכשלה — {duration} של אודיו נשמרו בטלפון שלך.",
+    "audioUploadFailedTapRetry": "ההעלאה נכשלה — {duration} של אודיו נשמרו בטלפון שלך. יש להקיש כדי לנסות שוב.",
+    "audioUploadRetrying": "מנסה להעלות שוב… {duration} של אודיו נשמרו בטלפון שלך",
+    "capturing": "מתבצעת הקלטה",
+    "capturingPhotos": "מצלם תמונות",
+    "listeningTranscriptWillAppear": "מאזין… התמלול יופיע כאן.",
+    "recordingOfflineTranscriptWillCatchUp": "מקליט במצב לא מקוון — התמלול יושלם כשתחזור לרשת.",
+    "transcriptionUnavailableRecordingSaved": "התמלול אינו זמין — ההקלטה ממשיכה והאודיו שלך נשמר.",
+    "uploadingAudioForTranscription": "מעלה {duration} של אודיו לתמלול…",
+    "filterBySpeaker": "סינון לפי דובר",
+    "notNow": "לא עכשיו",
+    "discard": "מחיקה",
+    "keepEditing": "המשך עריכה",
+    "discardChangesTitle": "לבטל את השינויים?",
+    "discardChangesMessage": "השינויים שלא נשמרו יאבדו.",
+    "pause": "השהיה",
+    "deleteConversationsTitle": "{count, plural, =1{למחוק שיחה אחת?} other{למחוק {count} שיחות?}}",
+    "deleteConversationsMessage": "פעולה זו תמחק גם את הזיכרונות, המשימות וקבצי האודיו שלהן.",
+    "conversationsDeletedCount": "{count, plural, =1{שיחה אחת נמחקה} other{{count} שיחות נמחקו}}",
+    "conversationsMovedCount": "{count, plural, =1{שיחה אחת הועברה} other{{count} שיחות הועברו}}",
+    "failedToMoveConversations": "לא ניתן היה להעביר את השיחות",
+    "discardedConversationTitle": "נמחקה מהרשימה · {duration}",
+    "noConversationsHeroMessage": "שיחות שתקליטו יופיעו כאן. הקישו על + במסך הבית כדי להקליט את הראשונה.",
+    "conversationMap": "מפת שיחות",
+    "conversationCount": "{count, plural, =1{שיחה אחת} other{{count} שיחות}}",
+    "taskCount": "{count, plural, =1{משימה אחת} other{{count} משימות}}",
+    "skipBack10Seconds": "10 שניות אחורה",
+    "skipForward10Seconds": "10 שניות קדימה",
+    "failedToShareRecap": "לא ניתן היה לשתף את הסיכום",
+    "captureOfflineBuffering": "לא מקוון, שומר בזיכרון זמני",
+    "captureOfflineBufferingFor": "לא מקוון, שומר בזיכרון זמני · {minutes} דק׳",
+    "memoryDetailsTitle": "זיכרון",
+    "editMemoryTitle": "עריכת זיכרון",
+    "newMemoryTitle": "זיכרון חדש",
+    "memoryReadOnlyHint": "הזיכרון הזה נשמר כהיסטוריה ואי אפשר לערוך אותו.",
+    "openConversation": "פתיחת השיחה",
+    "memoryGraphTitle": "גרף זיכרונות",
+    "memoryReviewTitle": "דברים שלמדתי היום",
+    "memoryReviewRight": "נכון",
+    "memoryReviewWrong": "שגוי",
+    "memoryReviewFix": "תיקון",
+    "memoryReviewConfirmed": "אושר. אפעל לפי זה.",
+    "memoryReviewDropped": "נמחק. אמנע מעובדות כאלה.",
+    "memoryReviewUpdated": "עודכן.",
+    "memoryReviewSaveFailed": "השמירה נכשלה, נסו שוב",
+    "indentTask": "הזחה פנימה",
+    "outdentTask": "הזחה החוצה",
+    "goalDeleted": "היעד נמחק",
+    "sharedTasksAcceptFailed": "לא ניתן לקבל את המשימות האלה. ייתכן שכבר קיבלת את השיתוף הזה.",
+    "pausePlayback": "השהיה",
+    "deleteSample": "מחיקת הדגימה",
+    "deletePersonTitle": "למחוק את האדם?",
+    "deletePersonLabel": "מחיקת האדם",
+    "noPeopleYet": "עדיין אין אנשים",
+    "deleteTasksTitle": "{count, plural, =1{למחוק משימה אחת?} other{למחוק {count} משימות?}}",
+    "tasksCountLabel": "{count, plural, =1{משימה אחת} other{{count} משימות}}",
+    "sharedTasksAdded": "{count, plural, =1{משימה אחת נוספה לרשימה שלך} other{{count} משימות נוספו לרשימה שלך}}",
+    "sharedTasksAddButton": "{count, plural, =1{הוספת משימה אחת} other{הוספת {count} משימות}}",
+    "sharedTasksTitle": "{name} שיתף/ה {count, plural, =1{משימה אחת} other{{count} משימות}}",
+    "exportedToPlatform": "יוצא אל {platform}",
+    "taskDueDate": "תאריך יעד: {date}",
+    "linkEvent": "קישור אירוע",
+    "noCalendarEventsNearby": "לא נמצאו אירועי יומן בסביבות השעה הזו.",
+    "suggestedEvent": "מוצע",
+    "openInGoogleCalendar": "פתיחה ביומן Google",
+    "shareWithAttendees": "שיתוף עם המשתתפים",
+    "unlinkCalendarEvent": "ביטול קישור לאירוע היומן",
+    "meetingNotesSubject": "הערות: {title}",
+    "previousResult": "התוצאה הקודמת",
+    "nextResult": "התוצאה הבאה",
+    "playFromHere": "הפעלה מכאן",
+    "shareConversationQuestion": "לשתף את השיחה?",
+    "conversationTasksEmptyMessage": "המשימות מהשיחה הזו יופיעו כאן.",
+    "noPendingTasks": "אין משימות ממתינות",
+    "nCompleted": "{count} הושלמו",
+    "identifySpeaker": "זיהוי דובר",
+    "couldNotLoadCheckout": "לא ניתן היה לטעון את דף התשלום. בדקו את החיבור ונסו שוב.",
+    "phoneFreeCallLimitReached": "הגעת למגבלת השיחות החינמיות החודשית. היא תתאפס בחודש הבא.",
+    "couldNotLoadImportHistory": "לא ניתן לטעון את היסטוריית הייבוא",
+    "phoneCallButton": "התקשר",
+    "searchContacts": "חיפוש אנשי קשר",
+    "phoneContactsAccessTitle": "אפשר גישה לאנשי קשר",
+    "phoneSelectCountryTitle": "בחירת מדינה",
+    "phoneNoVerifiedNumbersTitle": "אין מספרים מאומתים",
+    "phoneNoVerifiedNumbersMessage": "אמת את המספר שלך כדי להתקשר דרך Omi.",
+    "phoneDeleteNumberFailed": "לא ניתן למחוק את המספר",
+    "forgetDeviceConfirmTitle": "לשכוח את המכשיר?",
+    "forgetDeviceConfirmMessage": "Omi יפסיק להתחבר למכשיר הזה. כדי להשתמש בו שוב, יהיה עליך לצמד אותו מחדש.",
+    "deviceForgottenMessage": "המכשיר נשכח",
+    "unpairDeviceConfirmTitle": "לבטל את צימוד המכשיר?",
+    "rollBack": "שחזור לגרסה קודמת",
+    "dataRateKbps": "{rate} קילוביט/ש׳",
+    "diagnosticsExportTitle": "אבחון התקן Omi",
+    "diagnosticsFailBadge": "נכשל",
+    "diagnosticsReconnectedIn": "חובר מחדש תוך {duration}",
+    "timeCompactDays": "{count}d",
+    "durationAgo": "לפני {duration}",
+    "sttLanguageFollowsPrimary": "עוקב אחר השפה הראשית שלך",
+    "creatorPayouts": "תשלומים ליוצרים",
+    "sttLanguageOverride": "עקיפה",
+    "sttUsePrimaryLanguage": "שימוש בשפה הראשית",
+    "sttPrimaryLanguageUnsupported": "ספק זה אינו תומך ב-{language}, ולכן משתמש ב-{fallback}.",
+    "deviceRamBelowMinimum": "זיכרון RAM שזוהה: {ram} GB. מינימום מומלץ: 4 GB.",
+    "olderIphoneModelDetected": "דגם שזוהה: {model} (ישן מ-iPhone XS). הזיהוי במכשיר עשוי להיות איטי יותר.",
+    "copyLogs": "העתקת יומנים",
+    "openProviderDocs": "פתיחת התיעוד",
+    "getApiKey": "קבלת מפתח API",
+    "showApiKey": "הצגת מפתח API",
+    "hideApiKey": "הסתרת מפתח API",
+    "removeVocabularyWord": "הסרת {word}",
+    "vocabularyWordCount": "{count, plural, =1{מילה אחת} other{{count} מילים}}",
+    "phoneFreeCallsRemaining": "נותרו {remaining} מתוך {limit} שיחות חינם החודש",
+    "phoneFreeCallsRemainingWithMax": "נותרו {remaining} מתוך {limit} שיחות חינם החודש · עד {minutes} דקות כל אחת",
+    "appCreators": "יוצרי אפליקציות",
+    "homeScreen": "מסך הבית",
+    "phoneCalls": "שיחות טלפון",
+    "vadGate": "שער VAD",
+    "vadGateDescription": "סינון קול בצד השרת להפחתת עלויות תמלול",
+    "flashCustomFirmware": "צריבת קושחה מותאמת",
+    "flashCustomFirmwareDescription": "צריבת גרסאות קושחה מותאמות",
+    "selectFirmwareZip": "בחר קובץ ZIP של קושחה",
+    "customFirmwareWarning": "צריבת קושחה מותאמת עלולה להשבית את המכשיר. ודא שזו גרסת קושחה תקינה של Omi ואל תנתק במהלך העדכון.",
+    "firmwareFlashed": "הקושחה נצרבה",
+    "deviceWillRestart": "המכשיר יופעל מחדש.",
+    "exportFailedTryAgain": "הייצוא נכשל. נסה שוב.",
+    "firmwareFlashTarget": "מכשיר: {deviceName}",
+    "keepSubscription": "השארת המינוי",
+    "couldNotLoadPage": "לא ניתן לטעון את הדף. בדקו את החיבור ונסו שוב.",
+    "leaveFlowStepOf": "שלב {current} מתוך {total}",
+    "sharedTasksLinkExpired": "המשימות המשותפות האלה לא נמצאו או שתוקף הקישור פג.",
+    "sharedTasksUnknownSender": "מישהו",
+    "allow": "אפשר",
+    "permissionAllowed": "מאושר",
+    "permissionBlockedHint": "כבוי בהגדרות. יש לאפשר זאת שם כדי להשתמש בזה.",
+    "useDifferentAccount": "שימוש בחשבון אחר",
+    "onboardingStepOf": "שלב {current} מתוך {total}",
+    "onboardingCompleteMessage": "השאירו את Omi פועל ברקע יומיים והוא יתחיל לתת לכם משוב מועיל.",
+    "cantFindDeviceHint": "לא מוצאים את המכשיר? ודאו שהוא דלוק וקרוב לטלפון, ואז חפשו שוב.",
+    "scanAgain": "חיפוש מחדש",
+    "howToPair": "איך לבצע צימוד",
+    "contactSupportAction": "פנייה לתמיכה",
+    "deviceOfflineWakeHint": "{deviceName} לא מחובר. לחצו על הכפתור שלו כדי להעיר אותו ונסו שוב.",
+    "batteryLevelSemantics": "סוללה {level}%",
+    "updateOmiGlassFirmware": "עדכון קושחת OmiGlass",
+    "deviceConnecting": "מתחבר…",
+    "recordOptionsTip": "טיפ: לחיצה ארוכה על כפתור ההקלטה מקליטה שיחת טלפון.",
+    "firmwareUpdateFailedTitle": "העדכון נכשל",
+    "firmwareUpdateFailedMessage": "העדכון לא הסתיים. המכשיר עדיין עם הקושחה הנוכחית ובטוח לשימוש. השאירו אותו טעון וקרוב לטלפון ונסו שוב.",
+    "firmwareDownloadFailedMessage": "לא ניתן היה להוריד את העדכון והמכשיר לא השתנה. בדקו את החיבור לאינטרנט ונסו שוב.",
+    "firmwareBatteryTooLow": "הסוללה על {level}%. יש לטעון את המכשיר ל-15% לפחות לפני העדכון.",
+    "startUpdate": "התחלת העדכון",
+    "otaNotSupported": "לא ניתן לעדכן את הקושחה הזו דרך Wi-Fi.",
+    "otaConnectFailed": "לא ניתן להתחבר אל {deviceName}. השאירו אותו דלוק וקרוב ונסו שוב.",
+    "otaUpdateUnavailable": "העדכון הזה לא זמין כרגע. נסו שוב מאוחר יותר.",
+    "otaStarting": "מתחיל בעדכון…",
+    "otaStartFailed": "לא ניתן להתחיל את העדכון. בדקו את שם רשת ה-Wi-Fi והסיסמה ונסו שוב.",
+    "otaRebooting": "{deviceName} מופעל מחדש עם הקושחה החדשה.",
+    "otaUpdateCancelled": "העדכון בוטל",
+    "cancelUpdate": "ביטול העדכון",
+    "otaKeepNearby": "במהלך העדכון השאירו את המכשיר דלוק וקרוב, ואל תסגרו את האפליקציה.",
+    "otaWifiConnecting": "מתחבר ל-Wi-Fi…",
+    "otaWifiConnected": "מחובר ל-Wi-Fi",
+    "otaWifiFailed": "לא ניתן להצטרף ל-Wi-Fi. בדקו את שם הרשת והסיסמה.",
+    "otaDownloadFailed": "הורדת הקושחה נכשלה. בדקו את חיבור ה-Wi-Fi ונסו שוב.",
+    "otaInstallFailed": "ההתקנה נכשלה. המכשיר עדיין עם הקושחה הנוכחית.",
+    "otaUpdatedMessage": "{deviceName} עודכן ויופעל מחדש מעצמו.",
+    "showPassword": "הצגת הסיסמה",
+    "hidePassword": "הסתרת הסיסמה",
+    "appNotFoundOrRemoved": "האפליקציה הזו כבר לא זמינה",
+    "startupFailedTitle": "לא ניתן היה להפעיל את Omi",
+    "startupFailedMessage": "משהו השתבש בזמן הפעלת Omi. בדוק את החיבור שלך ונסה שוב.",
+    "startupFailedConfigMessage": "לגרסת ה-Omi הזו יש בעיית תצורה. זו לא בעיה במכשיר שלך. פנה לתמיכה וצרף את הפרטים שלמטה.",
+    "discardRecordingTitle": "לבטל את ההקלטה?",
+    "discardRecordingMessage": "דגימת הקול שלך עדיין לא נשמרה. אם תצא עכשיו, היא תימחק.",
+    "keepRecording": "המשך הקלטה",
+    "view": "הצג",
+    "appDataAccessTitle": "לאפשר גישה ל-{appName}?",
+    "appDataAccessMessage": "{appName} יקבל את השיחות, הזיכרונות וההקלטות שלך בשרת של המפתח שלו. Omi אינה אחראית לאופן השימוש בנתונים האלה שם.",
+    "appDisabledNamed": "{appName} הושבתה",
+    "appRatingCount": "{count, plural, =1{דירוג אחד} other{{count} דירוגים}}",
+    "previewImageLabel": "צילום מסך {index} מתוך {total}",
+    "chatWithApp": "צ'אט עם {appName}",
+    "appSettingsLabel": "הגדרות {appName}",
+    "appOptions": "אפשרויות האפליקציה",
+    "cancelSubscriptionKeepAccessMessage": "הגישה תישאר עד סוף תקופת החיוב הנוכחית.",
+    "chatSendMessage": "שליחת הודעה",
+    "chatAddAttachment": "הוספת קובץ מצורף",
+    "removeAttachment": "הסרת הקובץ המצורף",
+    "chatRemoveSelectedText": "הסרת הטקסט המצוטט",
+    "chatOfflineHint": "אין חיבור. התחבר מחדש כדי לשלוח הודעות.",
+    "chatReplyFailed": "Omi לא הצליחה להשיב. בדוק את החיבור ונסה שוב.",
+    "disableAppNamed": "השבתת {appName}",
+    "whatWentWrong": "מה השתבש?",
+    "selectAReason": "בחר סיבה",
+    "submit": "שליחה",
+    "feedbackReasonTooVerbose": "ארוך מדי",
+    "feedbackReasonIncorrect": "שגוי או מומצא",
+    "feedbackReasonNotHelpful": "לא מועיל או לא רלוונטי",
+    "feedbackReasonIgnoredInstructions": "לא עקב אחר ההוראות",
+    "additionalFeedbackOptional": "משוב נוסף (אופציונלי)",
+    "helpful": "מועיל",
+    "daySummaryForDate": "סיכום יום · {date}",
+    "chatStarterYesterday": "מה עשיתי אתמול?",
+    "chatStarterDoDifferently": "מה אני יכול לעשות אחרת היום?",
+    "chatStarterTeachMe": "תוכל ללמד אותי משהו חדש?",
+    "thinking": "חושב",
+    "couldNotLoadWhatsNew": "לא ניתן לטעון את החידושים",
+    "githubRepositoryUrl": "כתובת מאגר GitHub",
+    "githubRepositoryUrlHint": "קישור למאגר קוד המקור של האפליקציה",
+    "triggerEvents": "אירועי הפעלה",
+    "noAppsInCategoryYet": "אין עדיין אפליקציות בקטגוריה הזו",
+    "scopes": "הרשאות",
+    "aiAppGeneratorBannerTitle": "בנו אפליקציה עם AI בהקשה אחת",
+    "refreshManifest": "רענון המניפסט",
+    "versionLabel": "גרסה {version}",
+    "appUsersCount": "{count}+ משתמשים",
+    "discovery": "תגלית",
+    "chatBlockShowMore": "הצג עוד",
+    "chatBlockShowLess": "הצג פחות",
+    "triggerEvent": "אירוע מפעיל",
+    "webhookUrl": "כתובת ה-Webhook",
+    "appHomeUrl": "כתובת דף הבית של האפליקציה",
+    "authUrl": "כתובת האימות",
+    "setupCompletedUrl": "כתובת השלמת ההגדרה",
+    "chatToolsManifestUrl": "כתובת מניפסט כלי הצ׳אט",
+    "invalidWebhookUrlError": "יש להזין כתובת Webhook תקינה",
+    "githubRepositoryUrlRequired": "נדרשת כתובת מאגר GitHub",
+    "removeScreenshot": "הסרת צילום המסך",
+    "addScreenshot": "הוספת צילום מסך",
+    "aiGenRegenerateIcon": "יצירת הסמל מחדש",
+    "categoryAppCount": "{count, plural, =1{אפליקציה אחת} other{{count} אפליקציות}}",
+    "generateDescription": "צור תיאור",
+    "selectImageFileTitle": "בחר קובץ תמונה",
+    "selectThumbnailImageTitle": "בחר תמונה ממוזערת",
+    "appIdNotFoundError": "מזהה האפליקציה לא נמצא",
+    "manifestRefreshedSuccess": "המניפסט רוענן בהצלחה",
+    "manifestRefreshFailed": "רענון המניפסט נכשל",
+    "captureRecordingsSheetTitle": "הקלטות של השיחה הזו",
+    "captureRecordingSeparate": "הפרד…",
+    "captureRecordingSeparateTitle": "להפריד את ההקלטה הזו?",
+    "captureRecordingSeparateMessage": "{recording} יוצג כשיחה נפרדת ולא יקובץ שוב עם האירוע הזה.",
+    "captureRecordingSeparateConfirm": "הפרד",
+    "captureRecordingSeparateFailed": "ההפרדה נכשלה. נסה שוב.",
+    "captureRecordingOpenFailed": "לא ניתן לפתוח את ההקלטה הזו.",
+    "captureRecordingViewing": "אתה צופה בהקלטה הזו",
+    "captureRecordedBy": "הוקלט על ידי {devices}",
+    "captureSourceDesktop": "מחשב",
+    "renameConversation": "שנה שם",
+    "captureRecordingsCount": "{count, plural, =1{הקלטה אחת} other{{count} הקלטות}}",
+    "captureSourcePendant": "תליון",
+    "conversationDeveloperTools": "כלי מפתחים בשיחות",
+    "conversationDeveloperToolsDescription": "הצגת „העתקת מזהה שיחה“ ו„בדיקת הנחיה“ בתפריט השיחה",
+    "participantsSummary": "{name} + {count, plural, =1{1 נוסף} few{{count} נוספים} many{{count} נוספים} other{{count} נוספים}}",
+    "recordingAndTranscription": "הקלטה ותמלול",
+    "notificationsAndDisplay": "התראות ותצוגה",
+    "helpAndAbout": "עזרה ואודות",
+    "speakerTagPromptTitle": "עזרו ל-Omi לזהות קולות",
+    "speakerTagPromptSubtitle": "בדיקה מהירה של קולות מהיומיים האחרונים",
+    "speakerTagPromptIsThisYou": "זה אתה?",
+    "speakerTagPromptIsThisPerson": "זה {name}?",
+    "speakerTagPromptWhoIsThis": "מי זה?",
+    "speakerTagPromptThatsMe": "זה אני",
+    "speakerTagPromptNotMe": "לא אני",
+    "speakerTagPromptSomeoneNew": "מישהו חדש",
+    "speakerTagPromptDontKnow": "מישהו שאני לא מכיר",
+    "speakerTagPromptNotSure": "לא בטוח",
+    "speakerTagPromptPlayClip": "הפעלת הקטע",
+    "speakerTagPromptProgress": "{current} מתוך {total}",
+    "speakerTagPromptSaveVoicesTitle": "לזכור את הקולות של אנשים שתתנו להם שם",
+    "speakerTagPromptSaveVoicesBody": "Omi שומר דגימת קול קצרה כדי לזהות אותם בפעם הבאה. אפשר לשנות זאת בכל עת בהגדרות.",
+    "speakerTagPromptThanks": "תודה! Omi ישתפר בזיהוי קולות.",
+    "speakerTagPromptNameHint": "השם שלו/שלה",
+    "speakerTagPromptClipUnavailable": "לא ניתן להפעיל את הקטע",
+    "speakerTagPromptAnswerFailed": "לא ניתן לשמור. נסו שוב.",
+    "voiceSettingsAskToTag": "בקשו ממני לתייג קולות",
+    "voiceSettingsAskToTagSubtitle": "מדי פעם Omi ישאל מי דיבר בשיחות האחרונות שלכם",
+    "voiceSettingsSaveOthersSubtitle": "כשאתם נותנים שם למישהו, Omi שומר דגימת קול קצרה כדי לזהות אותו בפעם הבאה"
 }

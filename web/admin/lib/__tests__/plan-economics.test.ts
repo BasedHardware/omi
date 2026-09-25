@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { NextRequest, NextResponse } from "next/server";
+import { BigQueryDate } from "@google-cloud/bigquery";
 import {
   buildPlanEconomics,
   type EconomicsSnapshot,
@@ -284,5 +285,24 @@ describe("plan economics route", () => {
       fetchPlanEconomics(new Date("2026-09-18T12:31:00Z"))
     ).rejects.toThrow("query failed");
     expect(query).toHaveBeenCalledTimes(2);
+  });
+  it("binds @today as a valued DATE parameter, not a valueless typed string", async () => {
+    // Regression: @google-cloud/bigquery 9.x serializes a bare string with
+    // declared `types` as a queryParameter with a type but NO parameterValue
+    // (NULL on the wire). The query then matches zero rows and every panel
+    // renders "Cost feed unavailable" while the feed is actually healthy.
+    query.mockResolvedValue([[{ snapshot: JSON.stringify(fixture()) }]]);
+    const { fetchPlanEconomics } = await import(
+      "@/lib/services/plan-economics"
+    );
+    await fetchPlanEconomics(new Date("2026-09-18T12:00:00Z"));
+    const call = query.mock.calls[0][0] as { params: { today: unknown } };
+    const bound = call.params.today as {
+      value?: string;
+      constructor: Function;
+    };
+    expect(bound).toBeInstanceOf(BigQueryDate);
+    expect(bound.value).toBe("2026-09-18");
+    expect(call).not.toHaveProperty("types");
   });
 });

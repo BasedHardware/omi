@@ -468,6 +468,7 @@ actor RewindDatabase {
     expectedUserId: String,
     expectedGeneration: Int
   ) async throws {
+    try Task.checkCancellation()
     guard dbQueue == nil else { return }
 
     // Resolve the directory once. `retargetEffectiveOwner` may run while
@@ -555,6 +556,7 @@ actor RewindDatabase {
         }
 
         if isCorrupted && FileManager.default.fileExists(atPath: dbPath) {
+          try Task.checkCancellation()
           log("RewindDatabase: Database is corrupted (error: \(retryError)), attempting recovery...")
           try await handleCorruptedDatabase(at: dbPath, in: omiDir, triggerError: retryError)
           // Retry with recovered or fresh database
@@ -2651,6 +2653,8 @@ actor RewindDatabase {
     Self.registerClientProcessingProjectionMigration(on: &migrator)
     Self.registerConversationSummarySectionsMigration(on: &migrator)
     Self.registerConversationLocalSummaryMigration(on: &migrator)
+    Self.registerConversationCaptureGroupMigration(on: &migrator)
+    LocalEmbeddingStore.registerMigration(on: &migrator)
     try migrator.migrate(queue)
     try ContextBucketSchema.removeMigratedLegacyDefaults(
       afterMigrating: queue,
@@ -2720,6 +2724,13 @@ actor RewindDatabase {
   static func registerConversationLocalSummaryMigration(on migrator: inout DatabaseMigrator) {
     migrator.registerMigration("addConversationLocalSummary") { db in
       try Self.addTranscriptionSessionColumnIfMissing(db, name: "localSummaryJson", type: .text)
+    }
+  }
+
+  /// Cross-surface event membership, so a cached list collapses the same way before the server answers.
+  static func registerConversationCaptureGroupMigration(on migrator: inout DatabaseMigrator) {
+    migrator.registerMigration("addConversationCaptureGroup") { db in
+      try Self.addTranscriptionSessionColumnIfMissing(db, name: "captureGroupJson", type: .text)
     }
   }
 

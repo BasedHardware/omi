@@ -86,10 +86,13 @@ _install_query_stream_retry_compat()
 
 
 def _install_document_read_probe() -> None:
-    """Count every Firestore document read by collection pattern and hit/miss.
+    """Count every Firestore read on the SDK classes, for every client in-process.
 
-    Same lazy-import discipline as the query retry shim above: the probe wraps
-    SDK classes that do not exist under the unit-test import stubs.
+    The patch is on the classes, not on one instance, so a later ``firestore.Client()``
+    or ``AsyncClient()`` in this process is covered. A process that never imports
+    this module does not install it. Same lazy-import discipline as the query retry
+    shim above: the probe wraps SDK classes that do not exist under the unit-test
+    import stubs.
     """
     try:
         from database.firestore_document_probe import install_document_read_probe
@@ -135,6 +138,14 @@ def _firestore_database_id() -> str | None:
     raise RuntimeError("FIRESTORE_DATABASE_ID is restricted to the isolated JIT QA database")
 
 
+def _client_kwargs(credentials: Any, project: str) -> dict[str, Any]:
+    """Client kwargs for a pinned project; ``None`` credentials mean the runtime identity (ADC)."""
+    if credentials is None:
+        prepare_google_credentials()
+        return {"project": project}
+    return {"credentials": credentials, "project": project}
+
+
 def _build_firestore_client() -> Any:
     # Production safety: only override project/database when pointed at a local
     # Firestore emulator. Without FIRESTORE_EMULATOR_HOST set (i.e. real Firestore),
@@ -157,7 +168,7 @@ def _build_firestore_client() -> Any:
         database = _firestore_database_id()
         if database and project_id != "based-hardware-dev":
             raise RuntimeError("jit-qa cannot use a mounted customer-data service account")
-        customer_kwargs: dict[str, Any] = {"credentials": credentials, "project": project_id}
+        customer_kwargs: dict[str, Any] = _client_kwargs(credentials, project_id)
         if database:
             customer_kwargs["database"] = database
         return firestore.Client(**customer_kwargs)
@@ -194,7 +205,7 @@ def _build_customer_firestore_client() -> Any:
         database = _firestore_database_id()
         if database and project_id != "based-hardware-dev":
             raise RuntimeError("jit-qa cannot use a mounted customer-entitlement service account")
-        kwargs: dict[str, Any] = {"credentials": credentials, "project": project_id}
+        kwargs: dict[str, Any] = _client_kwargs(credentials, project_id)
         if database:
             kwargs["database"] = database
         return firestore.Client(**kwargs)
@@ -260,7 +271,7 @@ def _build_data_plane_firestore_client() -> Any:
             )
         if database and sa_project != "based-hardware-dev":
             raise RuntimeError("jit-qa cannot use a mounted customer-entitlement service account")
-        kwargs: dict[str, Any] = {"credentials": credentials, "project": data_plane_project}
+        kwargs: dict[str, Any] = _client_kwargs(credentials, data_plane_project)
         if database:
             kwargs["database"] = database
         return firestore.Client(**kwargs)

@@ -8,14 +8,28 @@ overlay:
   gke:
     backend-listen:
       env:
+        OMI_CUSTOMER_DATA_PROJECT:
+          value: based-hardware
+        FREE_TIER_LOCAL_PROCESSING:
+          value: 'false'
+        FREE_TIER_LOCAL_PROCESSING_COHORT:
+          value: ''
+        FREE_TIER_EMERGENCY_STOP:
+          value: 'false'
         CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
           value: 'false'
         CONVERSATION_OCR_CONTEXT_ENABLED:
+          value: 'false'
+        MEETING_NOTES_RICH_CONTEXT_ENABLED:
+          value: 'false'
+        MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
           value: 'false'
         BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
           value: 'false'
         HOSTED_PARAKEET_API_URL:
           value: http://parakeet.omi.me
+        HOSTED_SPEAKER_EMBEDDING_API_URL:
+          value: http://diarizer.omi.me:80
         OMI_FIRESTORE_DATA_PLANE_PROJECT:
           value: based-hardware
         HOSTED_TRANSLATION_API_URL:
@@ -79,12 +93,26 @@ overlay:
             key: MCP_OAUTH_CLIENTS_JSON
     pusher:
       env:
+        OMI_CUSTOMER_DATA_PROJECT:
+          value: based-hardware
+        FREE_TIER_LOCAL_PROCESSING:
+          value: 'false'
+        FREE_TIER_LOCAL_PROCESSING_COHORT:
+          value: ''
+        FREE_TIER_EMERGENCY_STOP:
+          value: 'false'
         CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
           value: 'false'
         CONVERSATION_OCR_CONTEXT_ENABLED:
           value: 'false'
+        MEETING_NOTES_RICH_CONTEXT_ENABLED:
+          value: 'false'
+        MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
+          value: 'false'
         BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
           value: 'false'
+        HOSTED_SPEAKER_EMBEDDING_API_URL:
+          value: http://diarizer.omi.me:80
     config_map:
       entries:
         ACCOUNT_DELETION_HANDLER_URL:
@@ -140,6 +168,12 @@ overlay:
       name: prod-omi-backend-config
   desktop_backend:
     env:
+      FREE_TIER_LOCAL_PROCESSING:
+        value: 'false'
+      FREE_TIER_LOCAL_PROCESSING_COHORT:
+        value: ''
+      FREE_TIER_EMERGENCY_STOP:
+        value: 'false'
       MEMORY_BELIEF_MODEL_ENABLED:
         value: 'false'
       BASIC_PLAN_GATE_PROACTIVITY_ENABLED:
@@ -170,16 +204,33 @@ overlay:
             secret: MCP_OAUTH_CLIENTS_JSON
             version: latest
         env:
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
+          FREE_TIER_LOCAL_PROCESSING:
+            value: 'false'
+          FREE_TIER_LOCAL_PROCESSING_COHORT:
+            value: ''
+          FREE_TIER_EMERGENCY_STOP:
+            value: 'false'
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
             value: 'false'
           CONVERSATION_OCR_CONTEXT_ENABLED:
+            value: 'false'
+          MEETING_NOTES_RICH_CONTEXT_ENABLED:
+            value: 'false'
+          MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
             value: 'false'
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             value: 'false'
           BASIC_PLAN_GATE_PROXY_EMBED_ENABLED:
             value: 'false'
+          ACTION_ITEMS_LIST_STALE_CLIENT_REFUSE:
+            value: '1'
+            category: rollout
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omi.me
+          HOSTED_SPEAKER_EMBEDDING_API_URL:
+            value: http://diarizer.omi.me:80
           MEMORY_BELIEF_MODEL_ENABLED:
             value: 'false'
           MEMORY_BELIEF_AUTOMATION_PAUSED:
@@ -252,8 +303,18 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
+          FREE_TIER_LOCAL_PROCESSING:
+            value: 'false'
+          FREE_TIER_LOCAL_PROCESSING_COHORT:
+            value: ''
+          FREE_TIER_EMERGENCY_STOP:
+            value: 'false'
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omi.me
+          HOSTED_SPEAKER_EMBEDDING_API_URL:
+            value: http://diarizer.omi.me:80
           MEMORY_BELIEF_MODEL_ENABLED:
             value: 'false'
           MEMORY_BELIEF_AUTOMATION_PAUSED:
@@ -261,6 +322,10 @@ overlay:
           CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED:
             value: 'false'
           CONVERSATION_OCR_CONTEXT_ENABLED:
+            value: 'false'
+          MEETING_NOTES_RICH_CONTEXT_ENABLED:
+            value: 'false'
+          MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
             value: 'false'
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             value: 'false'
@@ -315,10 +380,20 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
+          FREE_TIER_LOCAL_PROCESSING:
+            value: 'false'
+          FREE_TIER_LOCAL_PROCESSING_COHORT:
+            value: ''
+          FREE_TIER_EMERGENCY_STOP:
+            value: 'false'
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             value: 'false'
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omi.me
+          HOSTED_SPEAKER_EMBEDDING_API_URL:
+            value: http://diarizer.omi.me:80
           MEMORY_BELIEF_MODEL_ENABLED:
             value: 'false'
           MEMORY_BELIEF_AUTOMATION_PAUSED:
@@ -374,8 +449,18 @@ overlay:
         - BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
         - BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
         env:
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
+          FREE_TIER_LOCAL_PROCESSING:
+            value: 'false'
+          FREE_TIER_LOCAL_PROCESSING_COHORT:
+            value: ''
+          FREE_TIER_EMERGENCY_STOP:
+            value: 'false'
           HOSTED_PARAKEET_API_URL:
             value: http://parakeet.omi.me
+          HOSTED_SPEAKER_EMBEDDING_API_URL:
+            value: http://diarizer.omi.me:80
           MEMORY_BELIEF_MODEL_ENABLED:
             value: 'false'
           MEMORY_BELIEF_AUTOMATION_PAUSED:
@@ -408,11 +493,23 @@ overlay:
             category: rollout
     jobs:
       notifications-job:
+        secrets:
+          SERVICE_ACCOUNT_JSON:
+            secret: SERVICE_ACCOUNT_JSON
+            version: latest
         env:
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
           PINECONE_INDEX_NAME:
             value: memories-backend
       memory-maintenance-job:
+        secrets:
+          SERVICE_ACCOUNT_JSON:
+            secret: SERVICE_ACCOUNT_JSON
+            version: latest
         env:
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
           PINECONE_INDEX_NAME:
             value: memories-backend
           MEMORY_BELIEF_MODEL_ENABLED:
@@ -423,11 +520,23 @@ overlay:
             value: 'true'
             category: rollout
       frame-request-retention-job:
+        secrets:
+          SERVICE_ACCOUNT_JSON:
+            secret: SERVICE_ACCOUNT_JSON
+            version: latest
         env:
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
       daily-memory-sweep-job:
+        secrets:
+          SERVICE_ACCOUNT_JSON:
+            secret: SERVICE_ACCOUNT_JSON
+            version: latest
         env:
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
           MEMORY_BELIEF_MODEL_ENABLED:
@@ -449,13 +558,25 @@ overlay:
           MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED:
             value: 'false'
       knowledge-ledger-drain-job:
+        secrets:
+          SERVICE_ACCOUNT_JSON:
+            secret: SERVICE_ACCOUNT_JSON
+            version: latest
         env:
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
           GOOGLE_CLOUD_PROJECT:
             value: based-hardware
           KNOWLEDGE_LEDGER_DRAIN_UID_ALLOWLIST:
             value: ''
       day3-reengagement-email-job:
+        secrets:
+          SERVICE_ACCOUNT_JSON:
+            secret: SERVICE_ACCOUNT_JSON
+            version: latest
         env:
+          OMI_CUSTOMER_DATA_PROJECT:
+            value: based-hardware
           BASE_API_URL:
             value: https://api.omi.me
     workflow_files:

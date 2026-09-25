@@ -22,7 +22,67 @@ import 'package:omi/pages/conversation_detail/conversation_summary_selection.dar
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 
+typedef SpeakerAssignmentCall = Future<bool> Function(String, List<String>,
+    {bool? isUser, String? personId, int? speakerId});
+typedef ConversationReprocessCall = Future<ServerConversation?> Function(String, {String? appId});
+
 class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixin {
+  ConversationDetailProvider({SpeakerAssignmentCall? assignSpeaker, ConversationReprocessCall? reprocess})
+      : _assignSpeaker = assignSpeaker ?? assignBulkConversationTranscriptSegments,
+        _reprocess = reprocess ?? reProcessConversationServer;
+  final SpeakerAssignmentCall _assignSpeaker;
+  final ConversationReprocessCall _reprocess;
+  String? _speakerSummaryConversationId;
+  int _speakerEditGeneration = 0;
+  bool _savingSpeaker = false;
+
+  bool get offerSpeakerSummaryRefresh =>
+      _speakerSummaryConversationId != null && _speakerSummaryConversationId == conversationOrNull?.id;
+
+  Future<bool> assignSpeaker(List<String> segmentIds, String personId,
+      {int? speakerId, String? expectedConversationId}) async {
+    final target = conversation;
+    if (_savingSpeaker ||
+        loadingReprocessConversation ||
+        segmentIds.isEmpty ||
+        (expectedConversationId != null && target.id != expectedConversationId)) return false;
+    final selected = target.transcriptSegments
+        .where((s) => speakerId == null ? segmentIds.contains(s.id) : s.speakerId == speakerId)
+        .toList();
+    if (selected.isEmpty) return false;
+    final self = personId == 'user';
+    final person = self ? null : personId;
+    final changed = selected.any((s) => s.isUser != self || s.personId != person);
+    _savingSpeaker = true;
+    try {
+      final bool saved;
+      try {
+        saved =
+            await _assignSpeaker(target.id, List.of(segmentIds), isUser: self, personId: person, speakerId: speakerId);
+      } catch (_) {
+        return false;
+      }
+      if (!saved) return false;
+      for (final segment in selected) {
+        segment.isUser = self;
+        segment.personId = person;
+      }
+      if (!_isDisposed) {
+        if (changed) {
+          _speakerEditGeneration++;
+          if (target.status == ConversationStatus.completed && target.structured.overview.trim().isNotEmpty) {
+            _speakerSummaryConversationId = target.id;
+          }
+        }
+        conversationProvider?.updateConversation(target);
+        notifyListeners();
+      }
+      return true;
+    } finally {
+      _savingSpeaker = false;
+    }
+  }
+
   AppProvider? appProvider;
   ConversationProvider? conversationProvider;
 
@@ -293,6 +353,42 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     notifyListeners();
   }
 
+  /// Saves an edited title. Resolves null when nothing changed (blank or identical text keeps the
+  /// current title), true when the server accepted it, false when it did not (the old title is
+  /// restored).
+  Future<bool?> saveTitle(String text) async {
+    final target = conversationOrNull;
+    if (target == null) return null;
+    final title = text.trim();
+    final previous = target.structured.title;
+    if (title.isEmpty || title == previous.trim()) {
+      if (titleController != null && titleController!.text != previous) titleController!.text = previous;
+      return null;
+    }
+    target.structured.title = title;
+    notifyListeners();
+    final saved = await updateConversationTitle(target.id, title);
+    if (!saved && !_isDisposed) {
+      target.structured.title = previous;
+      if (_cachedConversationId == target.id && titleController != null) titleController!.text = previous;
+      notifyListeners();
+    }
+    return saved;
+  }
+
+  /// Folds an edit made in the shared task editor back into this conversation's task list.
+  void applyTaskEdit(ActionItem item, {String? description, bool? completed, bool deleted = false}) {
+    final items = conversationOrNull?.structured.actionItems;
+    if (items == null || !items.contains(item)) return;
+    if (deleted) {
+      item.deleted = true;
+    } else {
+      if (description != null && description.trim().isNotEmpty) item.description = description;
+      if (completed != null) item.completed = completed;
+    }
+    notifyListeners();
+  }
+
   List<ActionItem> deletedActionItems = [];
 
   void deleteActionItem(int i) {
@@ -328,13 +424,8 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
     showUnassignedFloatingButton = true;
 
     titleController!.text = conversation.structured.title;
-    titleFocusNode!.addListener(() {
-      print('titleFocusNode focus changed');
-      if (!titleFocusNode!.hasFocus) {
-        conversation.structured.title = titleController!.text;
-        updateConversationTitle(conversation.id, titleController!.text);
-      }
-    });
+    // The title saves when editing ends (Done or leaving the field); the title field calls
+    // [saveTitle] and reports the outcome.
 
     canDisplaySeconds = TranscriptSegment.canDisplaySeconds(conversation.transcriptSegments);
 
@@ -352,11 +443,14 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
   }
 
   Future<bool> reprocessConversation({String? appId}) async {
+    if (loadingReprocessConversation || _savingSpeaker) return false;
+    final target = conversation;
+    final generation = _speakerEditGeneration;
     Logger.debug('_reProcessConversation with appId: $appId');
     updateReprocessConversationLoadingState(true);
     updateReprocessConversationId(conversation.id);
     try {
-      var updatedConversation = await reProcessConversationServer(conversation.id, appId: appId);
+      var updatedConversation = await _reprocess(target.id, appId: appId);
       if (_isDisposed) return false;
       PlatformManager.instance.analytics.reProcessConversation(conversation);
       updateReprocessConversationLoadingState(false);
@@ -368,11 +462,14 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       }
 
       // else
-      conversationProvider!.updateConversation(updatedConversation);
+      conversationProvider?.updateConversation(updatedConversation);
       SharedPreferencesUtil().modifiedConversationDetails = updatedConversation;
 
       // Update the cached conversation to ensure we have the latest data
-      _cachedConversation = updatedConversation;
+      if (conversationOrNull?.id == target.id) _cachedConversation = updatedConversation;
+      if (generation == _speakerEditGeneration && _speakerSummaryConversationId == target.id) {
+        _speakerSummaryConversationId = null;
+      }
 
       // Check if the selected app summary is in the apps list.
       final summarySelection = getSummarySelection();
@@ -404,15 +501,6 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
       notifyListeners();
       return false;
     }
-  }
-
-  void unassignConversationTranscriptSegment(String conversationId, String segmentId) {
-    final segmentIdx = conversation.transcriptSegments.indexWhere((s) => s.id == segmentId);
-    if (segmentIdx == -1) return;
-    conversation.transcriptSegments[segmentIdx].isUser = false;
-    conversation.transcriptSegments[segmentIdx].personId = null;
-    assignBulkConversationTranscriptSegments(conversationId, [segmentId]);
-    notifyListeners();
   }
 
   /// Returns the explicit source and body used by every summary surface.
@@ -652,6 +740,7 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
         starred: _cachedConversation!.starred,
         folderId: _cachedConversation!.folderId,
         visibility: _cachedConversation!.visibility,
+        captureGroup: _cachedConversation!.captureGroup,
       );
       _cachedConversation = updatedConversation;
       conversationProvider?.updateConversation(updatedConversation);
@@ -707,11 +796,12 @@ class ConversationDetailProvider extends ChangeNotifier with MessageNotifierMixi
 
   String? get preferredSummarizationAppId => _preferredSummarizationAppId;
 
-  void setPreferredSummarizationApp(String appId) {
+  Future<bool> setPreferredSummarizationApp(String appId) async {
+    if (!await setPreferredSummarizationAppServer(appId)) return false;
     _preferredSummarizationAppId = appId;
-    setPreferredSummarizationAppServer(appId);
     SharedPreferencesUtil().preferredSummarizationAppId = appId;
     notifyListeners();
+    return true;
   }
 
   void loadPreferredSummarizationApp() {

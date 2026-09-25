@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import 'package:collection/collection.dart';
+import 'package:flutter/foundation.dart';
 
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
@@ -15,6 +16,142 @@ import 'package:omi/env/env.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/models/user_usage.dart';
 import 'package:omi/utils/logger.dart';
+import 'package:omi/utils/platform/platform_manager.dart';
+import 'package:uuid/uuid.dart';
+
+enum MobileFeedbackKind { summaryHelpfulness, recordingQuality }
+
+/// The server-owned object used to verify the feedback target. Recording
+/// quality can be attached to a conversation when the client only has the
+/// conversation projection; the server must then verify that conversation
+/// directly rather than guessing a recording-session identity.
+enum MobileFeedbackTargetKind { conversation, recording }
+
+enum MobileFeedbackReason {
+  summaryInaccurate,
+  summaryIncomplete,
+  summaryIrrelevant,
+  summaryWrongContext,
+  summaryOther,
+  recordingMissingAudio,
+  recordingPoorTranscription,
+  recordingWrongSpeaker,
+  recordingDelayedOrStuck,
+  recordingFragmentedOrDuplicated,
+  recordingOther,
+}
+
+String _mobileFeedbackKindValue(MobileFeedbackKind kind) => switch (kind) {
+      MobileFeedbackKind.summaryHelpfulness => 'summary_helpfulness',
+      MobileFeedbackKind.recordingQuality => 'recording_quality',
+    };
+
+String _mobileFeedbackTargetKindValue(MobileFeedbackTargetKind kind) => switch (kind) {
+      MobileFeedbackTargetKind.conversation => 'conversation',
+      MobileFeedbackTargetKind.recording => 'recording',
+    };
+
+String _mobileFeedbackReasonValue(MobileFeedbackReason reason) => switch (reason) {
+      MobileFeedbackReason.summaryInaccurate => 'summary_inaccurate',
+      MobileFeedbackReason.summaryIncomplete => 'summary_incomplete',
+      MobileFeedbackReason.summaryIrrelevant => 'summary_irrelevant',
+      MobileFeedbackReason.summaryWrongContext => 'summary_wrong_context',
+      MobileFeedbackReason.summaryOther => 'summary_other',
+      MobileFeedbackReason.recordingMissingAudio => 'recording_missing_audio',
+      MobileFeedbackReason.recordingPoorTranscription => 'recording_poor_transcription',
+      MobileFeedbackReason.recordingWrongSpeaker => 'recording_wrong_speaker',
+      MobileFeedbackReason.recordingDelayedOrStuck => 'recording_delayed_or_stuck',
+      MobileFeedbackReason.recordingFragmentedOrDuplicated => 'recording_fragmented_or_duplicated',
+      MobileFeedbackReason.recordingOther => 'recording_other',
+    };
+
+/// Persist explicit, content-free mobile feedback through the idempotent
+/// feedback ledger. The caller can reuse [feedbackId] when retrying a 503.
+class MobileFeedbackReceipt {
+  const MobileFeedbackReceipt({required this.feedbackId, required this.eventId, required this.created});
+
+  final String feedbackId;
+  final String eventId;
+  final bool created;
+
+  /// Parses the server's durable-write receipt. A 201 alone is insufficient:
+  /// callers may only complete the product journey after the ledger confirms
+  /// persistence and returns its bounded event coordinate.
+  static MobileFeedbackReceipt? fromJson(
+    Map<String, dynamic> payload, {
+    required String expectedFeedbackId,
+  }) {
+    try {
+      // The generated model applies OpenAPI defaults for these fields. Keep
+      // the receipt gate strict: both markers must be present on the wire so
+      // a bare 201-shaped body cannot masquerade as a durable ledger write.
+      if (!payload.containsKey('persisted') || !payload.containsKey('schema_version')) {
+        return null;
+      }
+      final generated = wire.GeneratedMobileFeedbackReceipt.fromJson(payload);
+      return fromGenerated(generated, expectedFeedbackId: expectedFeedbackId);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  static MobileFeedbackReceipt? fromGenerated(
+    wire.GeneratedMobileFeedbackReceipt payload, {
+    required String expectedFeedbackId,
+  }) {
+    if (payload.schemaVersion != 'mobile_feedback_receipt.v1' ||
+        payload.persisted != true ||
+        payload.feedbackId != expectedFeedbackId ||
+        payload.eventId.isEmpty ||
+        payload.eventId.length > 128) {
+      return null;
+    }
+    return MobileFeedbackReceipt(feedbackId: expectedFeedbackId, eventId: payload.eventId, created: payload.created);
+  }
+}
+
+Future<MobileFeedbackReceipt?> submitMobileFeedback({
+  required MobileFeedbackKind kind,
+  required String targetId,
+  required int value,
+  MobileFeedbackReason? reason,
+  String? correlationId,
+  String? feedbackId,
+  required MobileFeedbackTargetKind targetKind,
+}) async {
+  if (targetId.isEmpty || (value != -1 && value != 1)) return null;
+  final id = feedbackId ?? correlationId ?? const Uuid().v4();
+  String appNamespace;
+  try {
+    appNamespace = PlatformManager.instance.appNamespace;
+  } catch (_) {
+    appNamespace = 'unknown';
+  }
+  final response = await makeApiCall(
+    url: '${Env.apiBaseUrl}v1/mobile/feedback',
+    headers: {},
+    method: 'POST',
+    body: jsonEncode({
+      'schema_version': 'mobile_feedback.v1',
+      'feedback_id': id,
+      'kind': _mobileFeedbackKindValue(kind),
+      'target_kind': _mobileFeedbackTargetKindValue(targetKind),
+      'target_id': targetId,
+      'value': value,
+      'client_app_namespace': appNamespace,
+      'client_app_profile': Env.profile.name,
+      if (reason != null) 'reason': _mobileFeedbackReasonValue(reason),
+      if (correlationId != null) 'correlation_id': correlationId,
+    }),
+  );
+  if (response?.statusCode != 201 || response == null) return null;
+  try {
+    final payload = wire.GeneratedMobileFeedbackReceipt.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
+    return MobileFeedbackReceipt.fromGenerated(payload, expectedFeedbackId: id);
+  } catch (_) {
+    return null;
+  }
+}
 
 Future<bool> updateUserGeolocation({required Geolocation geolocation}) async {
   var response = await makeApiCall(
@@ -209,14 +346,14 @@ Future<Person?> createPerson(String name) async {
   return null;
 }
 
-Future<List<Person>> getAllPeople({bool includeSpeechSamples = true}) async {
+Future<List<Person>?> getAllPeople({bool includeSpeechSamples = true}) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/users/people?include_speech_samples=$includeSpeechSamples',
     headers: {},
     method: 'GET',
     body: '',
   );
-  if (response == null) return [];
+  if (response == null) return null;
   if (response.statusCode == 200) {
     List<dynamic> peopleJson = jsonDecode(response.body);
     List<Person> people = peopleJson.mapIndexed((idx, json) {
@@ -229,12 +366,16 @@ Future<List<Person>> getAllPeople({bool includeSpeechSamples = true}) async {
     people.sort((a, b) => a.name.compareTo(b.name));
     return people;
   }
-  return [];
+  return null;
 }
+
+@visibleForTesting
+String personNamePath(String personId, String newName) =>
+    'v1/users/people/$personId/name?value=${Uri.encodeQueryComponent(newName)}';
 
 Future<bool> updatePersonName(String personId, String newName) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/users/people/$personId/name?value=$newName',
+    url: '${Env.apiBaseUrl}${personNamePath(personId, newName)}',
     headers: {},
     method: 'PATCH',
     body: '',
@@ -270,9 +411,18 @@ Future<bool> deletePersonSpeechSample(String personId, int sampleIndex) async {
 
 /*Analytics*/
 
+@visibleForTesting
+String conversationSummaryRatingPath(String conversationId, int value, {String? reason}) {
+  var path = 'v1/users/analytics/memory_summary?memory_id=$conversationId&value=$value';
+  if (reason != null && reason.isNotEmpty) {
+    path += '&reason=${Uri.encodeQueryComponent(reason)}';
+  }
+  return path;
+}
+
 Future<bool> setConversationSummaryRating(String conversationId, int value, {String? reason}) async {
   var response = await makeApiCall(
-    url: '${Env.apiBaseUrl}v1/users/analytics/memory_summary?memory_id=$conversationId&value=$value&reason=$reason',
+    url: '${Env.apiBaseUrl}${conversationSummaryRatingPath(conversationId, value, reason: reason)}',
     headers: {},
     method: 'POST',
     body: '',
@@ -284,16 +434,22 @@ Future<bool> setConversationSummaryRating(String conversationId, int value, {Str
   return data.status == 'ok';
 }
 
-Future<bool> setMessageResponseRating(String messageId, int value, {String? reason}) async {
-  // Build URL with required params
-  String url = '${Env.apiBaseUrl}v1/users/analytics/chat_message?message_id=$messageId&value=$value';
-
-  // Add reason param if provided (for thumbs down feedback)
+@visibleForTesting
+String chatMessageRatingPath(String messageId, int value, {String? reason}) {
+  var path = 'v1/users/analytics/chat_message?message_id=$messageId&value=$value';
   if (reason != null && reason.isNotEmpty) {
-    url += '&reason=$reason';
+    path += '&reason=${Uri.encodeQueryComponent(reason)}';
   }
+  return path;
+}
 
-  var response = await makeApiCall(url: url, headers: {}, method: 'POST', body: '');
+Future<bool> setMessageResponseRating(String messageId, int value, {String? reason}) async {
+  var response = await makeApiCall(
+    url: '${Env.apiBaseUrl}${chatMessageRatingPath(messageId, value, reason: reason)}',
+    headers: {},
+    method: 'POST',
+    body: '',
+  );
   if (response == null) return false;
   Logger.debug('setMessageResponseRating response: ${response.body}');
   if (response.statusCode != 200) return false;
@@ -409,19 +565,21 @@ Future<UserUsageResponse?> getUserUsage({required String period}) async {
   return null;
 }
 
-Future<Map<String, dynamic>> getTrainingDataOptIn() async {
+/// Returns `null` on a failed fetch, so a transient error is not read as a user
+/// who never opted in.
+Future<Map<String, dynamic>?> getTrainingDataOptIn() async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/users/training-data-opt-in',
     headers: {},
     method: 'GET',
     body: '',
   );
-  if (response == null) return {'opted_in': false, 'status': null};
+  if (response == null) return null;
   Logger.debug('getTrainingDataOptIn response: ${response.body}');
   if (response.statusCode == 200) {
     return wire.GeneratedTrainingDataOptInResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>).toJson();
   }
-  return {'opted_in': false, 'status': null};
+  return null;
 }
 
 Future<bool> setTrainingDataOptIn() async {
@@ -549,21 +707,23 @@ Future<bool> setDailySummarySettings({bool? enabled, int? hour}) async {
 
 // Daily Summaries API
 
-Future<List<DailySummary>> getDailySummaries({int limit = 30, int offset = 0}) async {
+/// `ok` is false when the recaps could not be read (no response / non-200 /
+/// unparsable body). Callers must not treat that as the user having no recaps.
+Future<({List<DailySummary> items, bool ok})> getDailySummaries({int limit = 30, int offset = 0}) async {
   var response = await makeApiCall(
     url: '${Env.apiBaseUrl}v1/users/daily-summaries?limit=$limit&offset=$offset',
     headers: {},
     method: 'GET',
     body: '',
   );
-  if (response == null || response.statusCode != 200) return [];
+  if (response == null || response.statusCode != 200) return (items: const <DailySummary>[], ok: false);
 
   try {
     final data = wire.GeneratedDailySummariesResponse.fromJson(jsonDecode(response.body) as Map<String, dynamic>);
-    return data.summaries?.map(DailySummary.fromGenerated).toList() ?? [];
+    return (items: data.summaries?.map(DailySummary.fromGenerated).toList() ?? <DailySummary>[], ok: true);
   } catch (e) {
     Logger.debug('Error parsing daily summaries: $e');
-    return [];
+    return (items: const <DailySummary>[], ok: false);
   }
 }
 

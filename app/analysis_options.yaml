@@ -10,6 +10,9 @@
 include: package:flutter_lints/flutter.yaml
 
 analyzer:
+  exclude:
+    # Visual audit suites for older app revisions: they compile against that revision, not this one.
+    - integration_test/visual_audit/compat/**
   errors:
     use_build_context_synchronously: error
 

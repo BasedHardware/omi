@@ -18,6 +18,7 @@ from fastapi.testclient import TestClient
 from database import conversation_finalization_jobs as jobs_db
 from database.firestore_transaction_retry import FirestoreContentionExhausted
 from models.conversation_enums import ConversationStatus
+from utils.conversations.processing_trigger import ProcessingTrigger
 from routers.conversation_finalization import _parse_task_payload
 import routers.conversation_finalization as finalization_router
 import routers.pusher as pusher_router
@@ -66,8 +67,9 @@ def prod_backend_sync_runtime_env(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
-def _isolate_keyframe_outbox(monkeypatch):
-    """Keyframe lifecycle behavior is covered by its focused service tests."""
+def _isolate_optional_capture_metadata(monkeypatch):
+    """Keyframe and overlap behavior have focused service/transaction tests."""
+    monkeypatch.setattr(persisted_finalizer.conversations_db, "get_conversations_finished_after", lambda *a, **kw: [])
 
     async def disabled(*_args, **_kwargs):
         return SimpleNamespace(enabled=False, account_generation=None)
@@ -238,7 +240,7 @@ def test_durable_finalization_acceptance_counts_only_a_new_outbox_job(monkeypatc
 
     assert result['route'] == 'pusher'
     accepted.assert_called_once_with('capture_finalization')
-    client_accepted.assert_called_once_with('conversation_finalization', 'mobile_android')
+    client_accepted.assert_called_once_with('conversation_finalization', 'mobile_android', 'unknown')
 
 
 def test_durable_finalization_redelivery_does_not_count_as_new_traffic(monkeypatch):
@@ -712,7 +714,7 @@ async def test_worker_forwards_rest_force_processing_mode_from_the_durable_job(m
         finalization_job_id='job-1',
         dispatch_generation=1,
         lease_epoch=1,
-        force_process=True,
+        trigger=ProcessingTrigger.CLIENT_FINALIZE,
         final_attempt=False,
     )
 

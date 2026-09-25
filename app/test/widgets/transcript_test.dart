@@ -6,10 +6,12 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
-import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/widgets/transcript.dart';
+import 'package:omi/backend/schema/person.dart';
+import 'package:omi/providers/people_provider.dart';
+import 'package:provider/provider.dart';
 
 void main() {
   setUpAll(() async {
@@ -41,6 +43,41 @@ void main() {
       translations: [],
     );
   }
+
+  testWidgets('mounted transcript follows people refresh, rename, and account clear', (tester) async {
+    await setupSharedPreferences();
+    var loaded = <Person>[];
+    final people = PeopleProvider(loadPeople: () async => loaded, renamePerson: (_, __) async => true);
+    final segment = segmentFor('reactive', 2)..personId = 'later';
+    await tester.pumpWidget(ChangeNotifierProvider.value(
+        value: people,
+        child: MaterialApp(
+          localizationsDelegates: const [
+            AppLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate
+          ],
+          supportedLocales: AppLocalizations.supportedLocales,
+          home: Scaffold(body: TranscriptWidget(segments: [segment])),
+        )));
+    await tester.pumpAndSettle();
+    // SPEAKER_02 is the conversation's only anonymous speaker, so it reads "Speaker 1" (dense numbering).
+    expect(find.text('Speaker 1'), findsOneWidget);
+    loaded = [Person(id: 'later', name: 'Alex', createdAt: DateTime(2026), updatedAt: DateTime(2026))];
+    await people.setPeople();
+    await tester.pumpAndSettle();
+    expect(find.text('Alex'), findsOneWidget);
+    await people.updatePersonProvider(people.people.single, 'Sam');
+    await tester.pumpAndSettle();
+    expect(find.text('Sam'), findsOneWidget);
+    expect(find.text('Alex'), findsNothing);
+    people.clearUserData();
+    await tester.pumpAndSettle();
+    expect(find.text('Sam'), findsNothing);
+    // SPEAKER_02 is the conversation's only anonymous speaker, so it reads "Speaker 1" (dense numbering).
+    expect(find.text('Speaker 1'), findsOneWidget);
+  });
 
   group('Speaker label display', () {
     testWidgets('shows person name when personId is set and in cache', (tester) async {
@@ -109,12 +146,6 @@ void main() {
 
     testWidgets('Tag button is removed from UI', (tester) async {
       final segment = segmentFor('seg3', 1);
-      final suggestion = SpeakerLabelSuggestionEvent(
-        speakerId: 1,
-        personId: 'person-456',
-        personName: 'Bob',
-        segmentId: 'seg3',
-      );
 
       await tester.pumpWidget(
         MaterialApp(
@@ -126,7 +157,7 @@ void main() {
           ],
           supportedLocales: AppLocalizations.supportedLocales,
           home: Scaffold(
-            body: TranscriptWidget(segments: [segment], isConversationDetail: true, suggestions: {'seg3': suggestion}),
+            body: TranscriptWidget(segments: [segment], isConversationDetail: true),
           ),
         ),
       );

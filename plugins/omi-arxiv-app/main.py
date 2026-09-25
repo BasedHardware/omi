@@ -105,7 +105,11 @@ def _safe_category(category: Any) -> str:
     value = _clean_text(category).lower()
     if not value:
         return ""
-    if re.fullmatch(r"[a-z\-]+(\.[a-z]{2})?", value):
+    # Archive names are hyphenated (cond-mat, gr-qc, math-ph) and
+    # subcategories are not limited to two letters: the official arXiv
+    # taxonomy includes physics.acc-ph, physics.optics, cond-mat.mes-hall,
+    # cond-mat.soft, astro-ph.GA, ... so accept any [a-z-] subject class.
+    if re.fullmatch(r"[a-z\-]+(\.[a-z\-]+)?", value):
         return value[:32]
     return ""
 
@@ -122,10 +126,10 @@ def _safe_paper_id(value: Any) -> Optional[str]:
     candidate = candidate.removeprefix("https://arxiv.org/abs/")
     candidate = candidate.removeprefix("http://arxiv.org/abs/")
     candidate = candidate.removeprefix("arXiv:")
-    versioned_new_id = re.match(r"^\d{4}\.\d{4,5}v\d+$", candidate)
-    versioned_legacy_id = re.match(r"^[a-z\-]+(\.[A-Z]{2})?/\d{7}v\d+$", candidate)
-    candidate = candidate.split("v", 1)[0] if versioned_new_id or versioned_legacy_id else candidate
-    if re.fullmatch(r"\d{4}\.\d{4,5}", candidate) or re.fullmatch(r"[a-z\-]+(\.[A-Z]{2})?/\d{7}", candidate):
+    # A version suffix selects that revision; removing it silently asks for latest.
+    if re.fullmatch(r"\d{4}\.\d{4,5}(?:v[1-9]\d*)?", candidate) or re.fullmatch(
+        r"[a-z\-]+(\.[A-Z]{2})?/\d{7}(?:v[1-9]\d*)?", candidate
+    ):
         return candidate
     return None
 

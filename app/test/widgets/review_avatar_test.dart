@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/pages/apps/app_detail/widgets/review_avatar.dart';
+import 'package:omi/ui/omi_tokens.dart';
 
 Widget _wrap(Widget child) => MaterialApp(
       home: Scaffold(body: Center(child: child)),
@@ -43,7 +44,7 @@ void main() {
       await tester.pumpWidget(
         _wrap(const ReviewAvatar(seed: 'uid_1', username: 'jane', backgroundColor: Color(0xFFFDCB6E))),
       );
-      expect(tester.widget<Text>(find.text('J')).style!.color, const Color(0xFF1F1F25));
+      expect(tester.widget<Text>(find.text('J')).style!.color, OmiColors.surface1);
     });
 
     testWidgets('uses white initials on a dark background for contrast', (tester) async {

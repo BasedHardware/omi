@@ -11,6 +11,8 @@ struct ConversationRowView: View {
 
   // View mode
   var isCompactView: Bool = true
+  /// True when the row is not inside a day group, so its time needs its date.
+  var showsFullTimestamp: Bool = false
 
   // Multi-select support
   var isMultiSelectMode: Bool = false
@@ -21,12 +23,8 @@ struct ConversationRowView: View {
   @State private var isStarring = false
   @State private var isHovering = false
 
-  // Context menu action states
-  @State private var showEditDialog = false
-  @State private var showDeleteConfirmation = false
-  @State private var editedTitle: String = ""
-  @State private var isDeleting = false
-  @State private var isUpdatingTitle = false
+  /// The page that owns this list presents rename and delete, so their dim covers the page.
+  @EnvironmentObject private var prompts: ConversationRowPrompts
   @State private var isCopyingLink = false
   @State private var isReprocessing = false
 
@@ -40,43 +38,10 @@ struct ConversationRowView: View {
     Date().timeIntervalSince(conversation.createdAt) < 60
   }
 
-  private static let timeFormatter: DateFormatter = {
-    let f = DateFormatter()
-    f.dateFormat = "h:mm a"
-    return f
-  }()
-  private static let yesterdayFormatter: DateFormatter = {
-    let f = DateFormatter()
-    f.dateFormat = "'Yesterday,' h:mm a"
-    return f
-  }()
-  private static let sameYearFormatter: DateFormatter = {
-    let f = DateFormatter()
-    f.dateFormat = "MMM d, h:mm a"
-    return f
-  }()
-  private static let otherYearFormatter: DateFormatter = {
-    let f = DateFormatter()
-    f.dateFormat = "MMM d, yyyy, h:mm a"
-    return f
-  }()
-
-  /// Format timestamp (e.g., "10:43 AM" for today, "Jan 29, 10:43 AM" for other days)
+  /// Rows under a day header ("Today", "Sep 21") show only the time; rows with no header to lean
+  /// on (search results) show the full timestamp.
   private var formattedTimestamp: String {
-    let calendar = Calendar.current
-    let formatter: DateFormatter
-
-    if calendar.isDateInToday(displayDate) {
-      formatter = Self.timeFormatter
-    } else if calendar.isDateInYesterday(displayDate) {
-      formatter = Self.yesterdayFormatter
-    } else if calendar.isDate(displayDate, equalTo: Date(), toGranularity: .year) {
-      formatter = Self.sameYearFormatter
-    } else {
-      formatter = Self.otherYearFormatter
-    }
-
-    return formatter.string(from: displayDate)
+    showsFullTimestamp ? OmiDateFormat.timestamp(displayDate) : OmiDateFormat.time(displayDate)
   }
 
   /// Folder name for inline display
@@ -104,7 +69,10 @@ struct ConversationRowView: View {
   }
 
   private var isSettlingDerived: Bool {
-    conversation.status == .completed && appState.processingWatcher.isSettlingDerived(conversation.id)
+    ConversationProcessingProgress.showsSettlingDerived(
+      displayState: conversation.displayState,
+      isSettling: appState.processingWatcher.isSettlingDerived(conversation.id)
+    )
   }
 
   private func processingPhase(now: Date) -> ConversationProcessingPhase {
@@ -173,6 +141,13 @@ struct ConversationRowView: View {
         .scaledFont(size: OmiType.caption)
         .foregroundColor(Ink.secondary)
 
+      if captureSources.count > 1 {
+        Text("·")
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(Ink.secondary)
+        captureSourcesBadge
+      }
+
       if isSettlingDerived {
         Text("·")
           .scaledFont(size: OmiType.caption)
@@ -191,23 +166,26 @@ struct ConversationRowView: View {
     conversation.canReprocess || (isLivePipelineRow && processingPhase(now: now) == .stalled)
   }
 
-  /// Label for the conversation source
-  private var sourceLabel: String {
-    switch conversation.source {
-    case .desktop: return "Desktop"
-    case .omi: return "omi"
-    case .phone: return "Phone"
-    case .appleWatch: return "Watch"
-    case .workflow: return "Workflow"
-    case .screenpipe: return "Screenpipe"
-    case .friend, .friendCom: return "Friend"
-    case .openglass: return "OpenGlass"
-    case .frame: return "Frame"
-    case .bee: return "Bee"
-    case .limitless: return "Limitless"
-    case .plaud: return "Plaud"
-    default: return "Unknown"
+  /// Distinct surfaces that recorded this event, in the order the server lists members.
+  private var captureSources: [ConversationSource] {
+    var seen: [ConversationSource] = []
+    for member in conversation.captureGroup?.members ?? [] where !seen.contains(member.source) {
+      seen.append(member.source)
     }
+    return seen
+  }
+
+  private var captureSourcesBadge: some View {
+    HStack(spacing: OmiSpacing.hairline) {
+      ForEach(captureSources, id: \.rawValue) { source in
+        Image(systemName: source.captureSymbol)
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(Ink.secondary)
+      }
+    }
+    .help("Recorded by " + captureSources.map(\.captureLabel).joined(separator: " and "))
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel("Recorded by " + captureSources.map(\.captureLabel).joined(separator: " and "))
   }
 
   private func toggleStar() async {
@@ -222,11 +200,20 @@ struct ConversationRowView: View {
 
   // MARK: - Context Menu Actions
 
-  private func copyTranscript() {
-    let pasteboard = NSPasteboard.general
-    pasteboard.clearContents()
-    pasteboard.setString(conversation.transcript, forType: .string)
-    log("Copied transcript to clipboard")
+  /// Copies the same transcript the detail's copy button produces. A list row often carries no
+  /// segments (the list response omits them), so fetch the detail first rather than copy nothing,
+  /// and honor the same lock the detail enforces.
+  private func copyTranscript() async {
+    var source = conversation
+    if source.transcriptPresenceState == .omittedFromResponse {
+      source = await appState.loadConversationDetail(source)
+    }
+    guard source.transcriptPresenceState != .lockedOrRedacted else {
+      OmiToastCenter.shared.confirm("This transcript is locked")
+      return
+    }
+    let text = SpeakerLabelFormatter(people: appState.people).transcript(source.transcriptSegments)
+    OmiToastCenter.shared.copy(text, confirming: "Transcript copied")
   }
 
   private func copyLink() async {
@@ -247,19 +234,8 @@ struct ConversationRowView: View {
       onFailure: { log("Failed to get share link: \($0)") }
     )
     if feedback == .copied {
-      log("Copied conversation share link to clipboard (visibility set to shared)")
+      OmiToastCenter.shared.confirm("Share link copied — anyone with the link can view")
     }
-  }
-
-  private func deleteConversation() async {
-    guard !isDeleting else { return }
-    isDeleting = true
-
-    if await appState.deleteConversation(conversation.id) {
-      log("Deleted conversation \(conversation.id)")
-    }
-
-    isDeleting = false
   }
 
   /// Re-runs LLM processing for this conversation. Used when a conversation
@@ -296,97 +272,85 @@ struct ConversationRowView: View {
     isReprocessing = false
   }
 
-  private func updateTitle() async {
-    guard !isUpdatingTitle, !editedTitle.isEmpty else { return }
-    isUpdatingTitle = true
-
-    await appState.updateConversationTitle(conversation.id, title: editedTitle)
-    log("Updated conversation title to: \(editedTitle)")
-
-    isUpdatingTitle = false
-  }
-
   // MARK: - Row Actions
 
-  private var inlineActionMenu: some View {
-    Menu {
-      if offersReprocess(now: Date()) {
-        Button {
-          Task { await reprocessConversation() }
-        } label: {
-          Label(
-            isReprocessing ? "Reprocessing…" : "Reprocess title & summary",
-            systemImage: isReprocessing ? "arrow.triangle.2.circlepath" : "wand.and.stars")
-        }
-        .disabled(isReprocessing)
-      }
-
+  /// One list of row actions, used by both the hover "…" menu and the right-click menu, so the two
+  /// can never again disagree on order, casing or wording.
+  @ViewBuilder
+  private var actionMenuItems: some View {
+    if offersReprocess(now: Date()) {
       Button {
-        editedTitle = conversation.title
-        showEditDialog = true
-      } label: {
-        Label("Edit title…", systemImage: "pencil")
-      }
-
-      Button(action: copyTranscript) {
-        Label("Copy transcript", systemImage: "doc.on.doc")
-      }
-
-      Button {
-        Task { await copyLink() }
+        Task { await reprocessConversation() }
       } label: {
         Label(
-          isCopyingLink ? "Generating link…" : "Copy share link",
-          systemImage: isCopyingLink ? "arrow.triangle.2.circlepath" : "link")
+          isReprocessing ? "Reprocessing…" : "Reprocess Title & Summary",
+          systemImage: isReprocessing ? "arrow.triangle.2.circlepath" : "wand.and.stars")
       }
-      .disabled(isCopyingLink)
+      .disabled(isReprocessing)
+    }
 
-      if !folders.isEmpty {
-        Menu {
-          if conversation.folderId != nil {
-            Button {
-              Task { await onMoveToFolder(conversation.id, nil) }
-            } label: {
-              Label("Remove from Folder", systemImage: "folder.badge.minus")
-            }
-            Divider()
+    Button {
+      prompts.requestRename(conversation)
+    } label: {
+      Label("Edit Title…", systemImage: "pencil")
+    }
+
+    Button {
+      Task { await copyTranscript() }
+    } label: {
+      Label("Copy Transcript", systemImage: "doc.on.doc")
+    }
+
+    Button {
+      Task { await copyLink() }
+    } label: {
+      Label(
+        isCopyingLink ? "Generating Link…" : "Copy Share Link",
+        systemImage: isCopyingLink ? "arrow.triangle.2.circlepath" : "link")
+    }
+    .disabled(isCopyingLink)
+
+    if !folders.isEmpty {
+      Menu {
+        if conversation.folderId != nil {
+          Button {
+            Task { await onMoveToFolder(conversation.id, nil) }
+          } label: {
+            Label("Remove from Folder", systemImage: "folder.badge.minus")
           }
-          ForEach(folders) { folder in
-            Button {
-              Task { await onMoveToFolder(conversation.id, folder.id) }
-            } label: {
-              HStack {
-                Text(folder.name)
-                if conversation.folderId == folder.id {
-                  Image(systemName: "checkmark")
-                }
+          Divider()
+        }
+        ForEach(folders) { folder in
+          Button {
+            Task { await onMoveToFolder(conversation.id, folder.id) }
+          } label: {
+            HStack {
+              Text(folder.name)
+              if conversation.folderId == folder.id {
+                Image(systemName: "checkmark")
               }
             }
-            .disabled(conversation.folderId == folder.id)
           }
-        } label: {
-          Label("Move to folder", systemImage: "folder")
+          .disabled(conversation.folderId == folder.id)
         }
-      }
-
-      Divider()
-
-      Button(role: .destructive) {
-        showDeleteConfirmation = true
       } label: {
-        Label("Delete conversation…", systemImage: "trash")
+        Label("Move to Folder", systemImage: "folder")
       }
-    } label: {
-      Image(systemName: "ellipsis")
-        .scaledFont(size: OmiType.caption, weight: .semibold)
-        .foregroundColor(Ink.secondary)
-        .frame(width: 26, height: 26)
-        .background(Circle().fill(Ink.rowFill))
     }
-    .menuStyle(.borderlessButton)
-    .menuIndicator(.hidden)
-    .fixedSize()
-    .help("Conversation actions")
+
+    Divider()
+
+    Button(role: .destructive) {
+      prompts.requestDelete(conversation)
+    } label: {
+      Label("Delete Conversation…", systemImage: "trash")
+    }
+  }
+
+  private var inlineActionMenu: some View {
+    OmiIconMenu(systemName: "ellipsis", help: "Conversation Actions", size: .compact) {
+      actionMenuItems
+    }
     .accessibilityLabel("Actions for \(conversation.displayTitle)")
     .accessibilityIdentifier("conversation-row-actions-\(conversation.id)")
   }
@@ -427,6 +391,7 @@ struct ConversationRowView: View {
             .scaledFont(size: OmiType.body, weight: .medium)
             .foregroundColor(titleColor)
             .lineLimit(1)
+            .help(conversation.displayTitle)
 
           statusCluster(phase: phase)
 
@@ -472,6 +437,7 @@ struct ConversationRowView: View {
             .scaledFont(size: OmiType.subheading, weight: .medium)
             .foregroundColor(titleColor)
             .lineLimit(1)
+            .help(conversation.displayTitle)
 
           statusCluster(phase: phase)
 
@@ -544,116 +510,11 @@ struct ConversationRowView: View {
         .padding(.trailing, isCompactView ? OmiSpacing.md : OmiSpacing.lg)
       }
     }
-    .onHover { hovering in
+    .pointingHandOnHover { hovering in
       isHovering = hovering
-      if hovering {
-        NSCursor.pointingHand.push()
-      } else {
-        NSCursor.pop()
-      }
     }
     .contextMenu {
-      Button(action: copyTranscript) {
-        Label("Copy Transcript", systemImage: "doc.on.doc")
-      }
-
-      Button(action: { Task { await copyLink() } }) {
-        Label(
-          isCopyingLink ? "Generating Link..." : "Copy Share Link",
-          systemImage: isCopyingLink ? "arrow.triangle.2.circlepath" : "link")
-      }
-      .disabled(isCopyingLink)
-      .help("Anyone with the link can view")
-
-      Divider()
-
-      Button(action: {
-        editedTitle = conversation.title
-        showEditDialog = true
-      }) {
-        Label("Edit Title", systemImage: "pencil")
-      }
-
-      // Reprocess — surfaced in the menu (in addition to the inline hover
-      // button) so it's discoverable even without hovering. Only enabled when
-      // there's something to recover (canReprocess) or the pipeline stalled.
-      if offersReprocess(now: Date()) {
-        Button(action: { Task { await reprocessConversation() } }) {
-          Label(
-            isReprocessing ? "Reprocessing…" : "Reprocess Title & Summary",
-            systemImage: isReprocessing ? "arrow.triangle.2.circlepath" : "wand.and.stars")
-        }
-        .disabled(isReprocessing)
-      }
-
-      // Move to Folder submenu
-      if !folders.isEmpty {
-        Menu {
-          // Option to remove from folder
-          if conversation.folderId != nil {
-            Button(action: {
-              Task {
-                await onMoveToFolder(conversation.id, nil)
-              }
-            }) {
-              Label("Remove from Folder", systemImage: "folder.badge.minus")
-            }
-            Divider()
-          }
-
-          // List available folders
-          ForEach(folders) { folder in
-            Button(action: {
-              Task {
-                await onMoveToFolder(conversation.id, folder.id)
-              }
-            }) {
-              HStack {
-                Text(folder.name)
-                if conversation.folderId == folder.id {
-                  Image(systemName: "checkmark")
-                }
-              }
-            }
-            .disabled(conversation.folderId == folder.id)
-          }
-        } label: {
-          Label("Move to Folder", systemImage: "folder")
-        }
-      }
-
-      Divider()
-
-      Button(
-        role: .destructive,
-        action: {
-          showDeleteConfirmation = true
-        }
-      ) {
-        Label("Delete", systemImage: "trash")
-      }
-    }
-    .alert("Edit Conversation Title", isPresented: $showEditDialog) {
-      TextField("Title", text: $editedTitle)
-      Button("Cancel", role: .cancel) {}
-      Button("Save") {
-        Task {
-          await updateTitle()
-        }
-      }
-      .disabled(editedTitle.isEmpty || isUpdatingTitle)
-    } message: {
-      Text("Enter a new title for this conversation")
-    }
-    .alert("Delete Conversation", isPresented: $showDeleteConfirmation) {
-      Button("Cancel", role: .cancel) {}
-      Button("Delete", role: .destructive) {
-        Task {
-          await deleteConversation()
-        }
-      }
-    } message: {
-      Text("Are you sure you want to delete this conversation? This action cannot be undone.")
+      actionMenuItems
     }
   }
 }

@@ -1,0 +1,7 @@
+{
+  "version": "0.12.375",
+  "date": "2026-09-21",
+  "changes": [
+    "The rating prompt’s close button now has a real click target, so dismissing it works on the first try"
+  ]
+}

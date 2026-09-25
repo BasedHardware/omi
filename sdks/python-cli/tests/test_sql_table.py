@@ -39,3 +39,25 @@ def test_unambiguous_table_still_normalizes(config_path, cli_runner):
         "rows": [{"id": "1", "name": "café"}],
         "row_count": 1,
     }
+
+
+@pytest.mark.parametrize(
+    "table,expected",
+    [
+        (
+            "Error: code | Error: code\n--------------------\nE1 | E2\n\n1 row(s)",
+            {"error": "Error: code | Error: code\n--------------------\nE1 | E2\n\n1 row(s)"},
+        ),
+        (
+            "OK: status\n--------------------\nok\nResult truncated after 1 row(s) to protect chat context.\n\n2 row(s)",
+            {"ok": True, "message": "OK: status\n--------------------\nok\nResult truncated after 1 row(s) to protect chat context.\n\n2 row(s)"},
+        ),
+    ],
+)
+def test_ambiguous_status_prefixed_table_keeps_status_envelope(config_path, cli_runner, table, expected):
+    _configure_local_profile(config_path)
+    with respx.mock(base_url=FAKE_LOCAL_URL) as router:
+        router.post("/v1/local/tool").respond(json=_tool_response(table))
+        result = cli_runner.invoke(app, ["--json", "local", "sql", "SELECT 1"])
+    assert result.exit_code == 0, result.output
+    assert json.loads(result.stdout) == expected

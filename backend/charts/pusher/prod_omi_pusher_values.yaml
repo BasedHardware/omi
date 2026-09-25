@@ -36,8 +36,12 @@ serviceAccount:
   create: true
   # Automatically mount a ServiceAccount's API credentials?
   automount: false
-  # Annotations to add to the service account
-  annotations: {}
+  # Annotations to add to the service account.
+  # Keyless runtime identity (Workload Identity) that replaces the nik-164
+  # SERVICE_ACCOUNT_JSON key once the key env is removed; while the key env is
+  # present the JSON still wins.
+  annotations:
+    iam.gke.io/gcp-service-account: pusher-runtime@based-hardware.iam.gserviceaccount.com
   # The name of the service account to use.
   # If not set and create is true, a name is generated using the fullname template
   name: ""
@@ -111,6 +115,12 @@ envFrom:
 runtimeConfigMapName: prod-omi-backend-config
 
 env:
+  - name: FREE_TIER_LOCAL_PROCESSING
+    value: "false"
+  - name: FREE_TIER_EMERGENCY_STOP
+    value: "false"
+  - name: FREE_TIER_LOCAL_PROCESSING_COHORT
+    value: ""
   - name: BUCKET_SPEECH_PROFILES
     value: "profiles"
   - name: GITHUB_TOKEN
@@ -162,6 +172,10 @@ env:
   - name: CONVERSATION_CALENDAR_CONTEXT_READ_ENABLED
     value: "false"
   - name: CONVERSATION_OCR_CONTEXT_ENABLED
+    value: "false"
+  - name: MEETING_NOTES_RICH_CONTEXT_ENABLED
+    value: "false"
+  - name: MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED
     value: "false"
   - name: BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED
     value: "false"
@@ -347,6 +361,8 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: SERVICE_ACCOUNT_JSON
+  - name: OMI_CUSTOMER_DATA_PROJECT
+    value: "based-hardware"
   - name: METRICS_SECRET
     valueFrom:
       secretKeyRef:

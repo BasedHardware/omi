@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import json
 import re
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
@@ -156,14 +157,46 @@ class IosTooling:
         return out
 
     def connected(self) -> list[dict[str, str]]:
-        out = self._run("list", "devices")
+        # Human tables change across Xcode versions and mix watches,
+        # simulators, Macs and phones. Use Apple's versioned JSON output.
+        # A file works on older Xcode versions that cannot emit JSON to stdout.
+        with tempfile.TemporaryDirectory(prefix="omi-ios-discovery-") as directory:
+            output = Path(directory) / "devices.json"
+            self._run("list", "devices", "--json-output", str(output), "--timeout", "15")
+            try:
+                payload = json.loads(output.read_text(encoding="utf-8"))
+                entries = payload["result"]["devices"]
+                if not isinstance(entries, list):
+                    raise ValueError("result.devices must be a list")
+            except (OSError, ValueError, KeyError, TypeError) as exc:
+                raise DeviceRunnerError("devicectl returned invalid device JSON; inspect Xcode tooling") from exc
         devices: list[dict[str, str]] = []
-        for line in out.splitlines():
-            match = re.search(r"([0-9A-Fa-f-]{16,})\s*(.*)$", line)
-            # devicectl's dashed table-separator row also matches the UDID/UUID
-            # pattern; a real identifier always contains at least one hex digit.
-            if match and "Mac" not in line and any(c in "0123456789abcdefABCDEF" for c in match.group(1)):
-                devices.append({"device_id": match.group(1), "raw": line.strip()})
+        for entry in entries:
+            if not isinstance(entry, dict):
+                raise DeviceRunnerError("devicectl device entry is not an object")
+            # Xcode 27 moved these groups under properties. Older versions
+            # retain hardwareProperties/deviceProperties/connectionProperties.
+            properties = entry.get("properties", {})
+            if not isinstance(properties, dict):
+                raise DeviceRunnerError("devicectl properties is not an object")
+            hardware = properties.get("hardware", entry.get("hardwareProperties", {}))
+            state = properties.get("state", entry.get("deviceProperties", {}))
+            connection = properties.get("connection", entry.get("connectionProperties", {}))
+            if not all(isinstance(group, dict) for group in (hardware, state, connection)):
+                raise DeviceRunnerError("devicectl property group is not an object")
+            if hardware.get("platform") != "iOS" or hardware.get("reality") != "physical":
+                continue
+            if hardware.get("deviceType") not in ("iPhone", "iPad"):
+                continue
+            if state.get("bootState") != "booted" or connection.get("pairingState") != "paired":
+                continue
+            # tunnelState/state can be disconnected even for an available USB
+            # phone: devicectl connects its tunnel on demand. Never use it as
+            # proof of absence or of install/launch readiness.
+            device_id = hardware.get("udid")
+            if not isinstance(device_id, str) or not re.fullmatch(r"[A-Za-z0-9._-]{4,64}", device_id):
+                raise DeviceRunnerError("physical iOS device has no valid UDID")
+            devices.append({"device_id": device_id, "transport": str(connection.get("transportType", "unknown"))})
         return devices
 
     def install(self, device_id: str, artifact: Path) -> None:

@@ -95,16 +95,7 @@ struct OmiSearchField: View {
         }
 
       if !text.isEmpty {
-        Button {
-          text = ""
-        } label: {
-          Image(systemName: "xmark.circle.fill")
-            .scaledFont(size: OmiType.body)
-            .foregroundStyle(Ink.secondary)
-        }
-        .buttonStyle(.plain)
-        .help("Clear search")
-        .accessibilityLabel("Clear search")
+        ClearFieldButton { text = "" }
       }
     }
     .padding(.horizontal, OmiSpacing.md)
@@ -113,5 +104,7 @@ struct OmiSearchField: View {
     // cannot disagree — and no drop shadow, which is what `omiControlSurface` added.
     .glassField()
     .accessibilityElement(children: .contain)
+    // ⌘F lands here while this page is the one on screen (`FindCommandRouter`).
+    .focusesOnFind($isFocused)
   }
 }
