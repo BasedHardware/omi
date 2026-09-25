@@ -930,9 +930,6 @@ class AppLocalizationsHe extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'הוסף ל-claude_desktop_config.json';
-
-  @override
   String get copyConfig => 'העתק קונפיגורציה';
 
   @override
@@ -2463,13 +2460,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get clearAllNodesAndConnections => 'נקה את כל הצמתים והחיבורים';
 
   @override
-  String get addToClaudeDesktopConfig => 'הוסף ל-claude_desktop_config.json';
-
-  @override
   String get connectAiAssistantsToData => 'חבר עוזרים AI לנתונים שלך';
-
-  @override
-  String get useYourMcpApiKey => 'השתמש במפתח ה-API של MCP שלך';
 
   @override
   String get realTimeTranscript => 'תמלול בזמן אמת';
@@ -9884,7 +9875,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get transcriptionNoAudio => 'התמליל אינו מקבל שמע';
 
   @override
-  String get tapPlusToStartRecording => 'הקישו על + כדי להתחיל להקליט';
+  String get tapPlusToStartRecording => 'הקישו על כפתור ההקלטה כדי להתחיל להקליט';
 
   @override
   String get chatBlockTask => 'משימה';
@@ -10125,7 +10116,8 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
-  String get noConversationsHeroMessage => 'שיחות שתקליטו יופיעו כאן. הקישו על + במסך הבית כדי להקליט את הראשונה.';
+  String get noConversationsHeroMessage =>
+      'שיחות שתקליטו יופיעו כאן. הקישו על כפתור ההקלטה במסך הבית כדי להקליט את הראשונה.';
 
   @override
   String get conversationMap => 'מפת שיחות';
@@ -10599,7 +10591,7 @@ class AppLocalizationsHe extends AppLocalizations {
   String get deviceConnecting => 'מתחבר…';
 
   @override
-  String get recordOptionsTip => 'טיפ: לחיצה ארוכה על כפתור ההקלטה מקליטה שיחת טלפון.';
+  String get recordOptionsTip => 'טיפ: הקישו על החץ בכפתור ההקלטה כדי להקליט שיחת טלפון.';
 
   @override
   String get firmwareUpdateFailedTitle => 'העדכון נכשל';
@@ -11070,6 +11062,23 @@ class AppLocalizationsHe extends AppLocalizations {
       'כשאתם נותנים שם למישהו, Omi שומר דגימת קול קצרה כדי לזהות אותו בפעם הבאה';
 
   @override
+  String get leaveBlank => 'השאר ריק';
+
+  @override
+  String get mcpOAuthSetup =>
+      'ב-claude.ai הוסף מחבר מותאם אישית והדבק את כתובת השרת. אם Claude מבקש Client ID מתקדם של OAuth, השתמש בערך שלמטה והשאיר את הסוד ריק — לעולם אל תשתמש במפתח ה-API של MCP שלך כסוד OAuth.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'הוסף ל-~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'ב-Claude Desktop → Settings → Connectors הוסף מחבר מותאם אישית והדבק את כתובת השרת. אם Claude מבקש Client ID מתקדם של OAuth, השתמש בערך שלמטה והשאיר את הסוד ריק — לעולם אל תשתמש במפתח ה-API של MCP שלך כסוד OAuth.';
+
+  @override
   String get transcriptionUnavailableRecordingContinues =>
       'התמלילים אינם זמינים, ההקלטה ממשיכה במכשיר ותעובד מאוחר יותר';
 
@@ -11085,4 +11094,51 @@ class AppLocalizationsHe extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'תמלילים ממתינים $count';
   }
+
+  @override
+  String get captureSourceCall => 'שיחה';
+
+  @override
+  String get captureSourcePhoneMic => 'מיקרופון הטלפון';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'המשך';
+
+  @override
+  String get finish => 'סיום';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'התליון מושהה · ימשיך כשתסיימו';
+
+  @override
+  String get pendantIsListeningTitle => 'התליון שלכם מאזין';
+
+  @override
+  String get oneSourceAtATime => 'Omi מקליט ממקור אחד בכל פעם.';
+
+  @override
+  String get recordWithPhoneInstead => 'הקלטה בטלפון במקום';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'התליון מושהה עד שתסיימו';
+
+  @override
+  String get pendantPausesDuringCall => 'התליון מושהה במהלך השיחה';
+
+  @override
+  String get keepUsingPendant => 'המשך עם התליון';
+
+  @override
+  String get recordWith => 'הקלטה באמצעות';
+
+  @override
+  String get moreWaysToRecord => 'דרכים נוספות להקליט';
+
+  @override
+  String get openCall => 'פתיחת השיחה';
 }

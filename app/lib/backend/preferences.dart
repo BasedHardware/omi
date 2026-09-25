@@ -753,10 +753,6 @@ class SharedPreferencesUtil {
 
   bool get daySummaryToggled => getBool('daySummaryToggled');
 
-  bool get showSummarizeConfirmation => getBool('showSummarizeConfirmation', defaultValue: true);
-
-  set showSummarizeConfirmation(bool value) => saveBool('showSummarizeConfirmation', value);
-
   bool get showSubmitAppConfirmation => getBool('showSubmitAppConfirmation', defaultValue: true);
 
   set showSubmitAppConfirmation(bool value) => saveBool('showSubmitAppConfirmation', value);

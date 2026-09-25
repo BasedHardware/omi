@@ -936,9 +936,6 @@ class AppLocalizationsUk extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'Додати до claude_desktop_config.json';
-
-  @override
   String get copyConfig => 'Копіювати конфігурацію';
 
   @override
@@ -2480,13 +2477,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get clearAllNodesAndConnections => 'Очистити всі вузли та з\'єднання';
 
   @override
-  String get addToClaudeDesktopConfig => 'Додати до claude_desktop_config.json';
-
-  @override
   String get connectAiAssistantsToData => 'Підключіть AI-помічників до ваших даних';
-
-  @override
-  String get useYourMcpApiKey => 'Використовуйте свій MCP API-ключ';
 
   @override
   String get realTimeTranscript => 'Транскрипція в реальному часі';
@@ -9987,7 +9978,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get transcriptionNoAudio => 'Транскрипція не отримує аудіо';
 
   @override
-  String get tapPlusToStartRecording => 'Натисніть +, щоб почати запис';
+  String get tapPlusToStartRecording => 'Натисніть кнопку запису, щоб почати запис';
 
   @override
   String get chatBlockTask => 'Завдання';
@@ -10229,7 +10220,7 @@ class AppLocalizationsUk extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'Тут з\'являються записані розмови. Торкніться + на головній, щоб записати першу.';
+      'Тут з\'являються записані розмови. Торкніться кнопки запису на головній, щоб записати першу.';
 
   @override
   String get conversationMap => 'Мапа розмов';
@@ -10707,7 +10698,7 @@ class AppLocalizationsUk extends AppLocalizations {
   String get deviceConnecting => 'Підключення…';
 
   @override
-  String get recordOptionsTip => 'Порада: натисніть і утримуйте кнопку запису, щоб записати телефонний дзвінок.';
+  String get recordOptionsTip => 'Порада: торкніться стрілки на кнопці запису, щоб записати телефонний дзвінок.';
 
   @override
   String get firmwareUpdateFailedTitle => 'Не вдалося оновити';
@@ -11181,6 +11172,23 @@ class AppLocalizationsUk extends AppLocalizations {
       'Коли ви називаєте когось, Omi зберігає короткий зразок голосу, щоб наступного разу впізнати цю людину';
 
   @override
+  String get leaveBlank => 'Залиште порожнім';
+
+  @override
+  String get mcpOAuthSetup =>
+      'На claude.ai додайте користувацький конектор і вставте URL сервера. Якщо Claude попросить розширений OAuth Client ID, використайте значення нижче і залиште секрет порожнім — ніколи не використовуйте свій MCP API ключ як секрет OAuth.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'Додати до ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'На Claude Desktop → Settings → Connectors додайте користувацький конектор і вставте URL сервера. Якщо Claude попросить розширений OAuth Client ID, використайте значення нижче і залиште секрет порожнім — ніколи не використовуйте свій MCP API ключ як секрет OAuth.';
+
+  @override
   String get transcriptionUnavailableRecordingContinues =>
       'Транскрипція недоступна, запис триває на пристрої та буде оброблений пізніше';
 
@@ -11196,4 +11204,51 @@ class AppLocalizationsUk extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Транскрипцій у черзі $count';
   }
+
+  @override
+  String get captureSourceCall => 'Дзвінок';
+
+  @override
+  String get captureSourcePhoneMic => 'Мікрофон телефона';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Продовжити';
+
+  @override
+  String get finish => 'Завершити';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Кулон на паузі · продовжить після завершення';
+
+  @override
+  String get pendantIsListeningTitle => 'Ваш кулон слухає';
+
+  @override
+  String get oneSourceAtATime => 'Omi записує лише з одного джерела за раз.';
+
+  @override
+  String get recordWithPhoneInstead => 'Записати телефоном замість кулона';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'Кулон на паузі до завершення запису';
+
+  @override
+  String get pendantPausesDuringCall => 'Кулон на паузі під час дзвінка';
+
+  @override
+  String get keepUsingPendant => 'Продовжити з кулоном';
+
+  @override
+  String get recordWith => 'Записати через';
+
+  @override
+  String get moreWaysToRecord => 'Інші способи запису';
+
+  @override
+  String get openCall => 'Відкрити дзвінок';
 }

@@ -14101,6 +14101,11 @@
             },
             "title": "Transcript Segments",
             "type": "array"
+          },
+          "truncated": {
+            "default": false,
+            "title": "Truncated",
+            "type": "boolean"
           }
         },
         "required": [
@@ -24732,6 +24737,17 @@
             ],
             "title": "Created At"
           },
+          "deleted": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Deleted"
+          },
           "description": {
             "title": "Description",
             "type": "string"
@@ -24751,6 +24767,18 @@
           "id": {
             "title": "Id",
             "type": "string"
+          },
+          "updated_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Updated At"
           }
         },
         "required": [
@@ -51576,6 +51604,259 @@
         ]
       }
     },
+    "/v1/mcp": {
+      "delete": {
+        "description": "Delete/terminate an MCP session (stateless: always 204 when authed).",
+        "operationId": "mcp_delete_session_v1_mcp_delete",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Mcp-Session-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Mcp-Session-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Mcp Delete Session",
+        "tags": [
+          "mcp"
+        ]
+      },
+      "get": {
+        "description": "GET on the Streamable HTTP endpoint: this server offers no server-initiated\nstream, so it answers 405 (``Allow: POST, HEAD, DELETE``) on both paths.",
+        "operationId": "mcp_sse_get_v1_mcp_get",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Mcp-Session-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Mcp-Session-Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Mcp Sse Get",
+        "tags": [
+          "mcp"
+        ]
+      },
+      "head": {
+        "operationId": "mcp_sse_head_v1_mcp_head",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Mcp Sse Head",
+        "tags": [
+          "mcp"
+        ]
+      },
+      "post": {
+        "description": "Streamable HTTP Transport endpoint for MCP clients.\n\nCanonical path ``/v1/mcp`` and permanent alias ``/v1/mcp/sse`` share one\nstateless implementation in ``utils.mcp_server.transport``.",
+        "operationId": "mcp_streamable_http_v1_mcp_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "Authorization",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Authorization"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Mcp-Session-Id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Mcp-Session-Id"
+            }
+          },
+          {
+            "in": "header",
+            "name": "Accept",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Accept"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Mcp Streamable Http",
+        "tags": [
+          "mcp"
+        ]
+      }
+    },
     "/v1/mcp/action-items": {
       "get": {
         "operationId": "get_action_items_v1_mcp_action_items_get",
@@ -51648,6 +51929,38 @@
               "default": 0,
               "title": "Offset",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "updated_since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Updated Since"
             }
           }
         ],
@@ -51999,6 +52312,22 @@
               "title": "Offset",
               "type": "integer"
             }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
           }
         ],
         "responses": {
@@ -52113,6 +52442,38 @@
               "default": 0,
               "title": "Offset",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
+          },
+          {
+            "in": "query",
+            "name": "updated_since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Updated Since"
             }
           }
         ],
@@ -52359,6 +52720,22 @@
                 }
               ],
               "title": "End Date"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
             }
           }
         ],
@@ -52685,6 +53062,22 @@
           },
           {
             "in": "query",
+            "name": "updated_since",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Updated Since"
+            }
+          },
+          {
+            "in": "query",
             "name": "include_activity",
             "required": false,
             "schema": {
@@ -52701,6 +53094,22 @@
               "default": true,
               "title": "Include Sensitive",
               "type": "boolean"
+            }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
             }
           }
         ],
@@ -53179,6 +53588,22 @@
               "title": "Limit",
               "type": "integer"
             }
+          },
+          {
+            "in": "query",
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            }
           }
         ],
         "responses": {
@@ -53230,7 +53655,7 @@
     },
     "/v1/mcp/sse": {
       "delete": {
-        "description": "Delete/terminate an MCP session.",
+        "description": "Delete/terminate an MCP session (stateless: always 204 when authed).",
         "operationId": "mcp_delete_session_v1_mcp_sse_delete",
         "parameters": [
           {
@@ -53295,7 +53720,7 @@
         ]
       },
       "get": {
-        "description": "GET on the Streamable HTTP endpoint: this server offers no server-initiated stream.\n\nThe two header parameters are accepted and ignored: released app-client OpenAPI\ncontracts describe them on this operation, and removing them reads as a breaking\nrequest-shape change to the compatibility checker.\n\nPer the MCP Streamable HTTP transport spec (2025-03-26), a server that does not\noffer server-initiated messages MUST return 405 Method Not Allowed for GET, and\nclients MUST NOT treat that as an error.\n\nThis used to return an infinite keepalive-ping SSE stream that carried no protocol\ndata (this transport is stateless; nothing is ever pushed, and the deprecated\nHTTP+SSE transport's required ``endpoint`` event was never sent). Every connected\nMCP client parked one such stream for the full Cloud Run request timeout (3600s),\nwhich exhausted the service's concurrency slots while CPU sat idle and drove\ntool-call tail latency to minutes (\"no available instance\" aborts). Do not\nreintroduce a long-lived GET stream here without accounting for that capacity.",
+        "description": "GET on the Streamable HTTP endpoint: this server offers no server-initiated\nstream, so it answers 405 (``Allow: POST, HEAD, DELETE``) on both paths.",
         "operationId": "mcp_sse_get_v1_mcp_sse_get",
         "parameters": [
           {
@@ -53400,7 +53825,7 @@
         ]
       },
       "post": {
-        "description": "Streamable HTTP Transport endpoint for MCP clients.\n\nThis implements the MCP 2025-03-26 Streamable HTTP Transport specification.\n\n- POST JSON-RPC messages to this endpoint\n- Responses are returned as SSE stream or JSON depending on Accept header\n- This hosted transport is stateless; bearer-token auth scopes every request",
+        "description": "Streamable HTTP Transport endpoint for MCP clients.\n\nCanonical path ``/v1/mcp`` and permanent alias ``/v1/mcp/sse`` share one\nstateless implementation in ``utils.mcp_server.transport``.",
         "operationId": "mcp_streamable_http_v1_mcp_sse_post",
         "parameters": [
           {
@@ -53483,7 +53908,7 @@
     },
     "/v1/mcp/sse/info": {
       "get": {
-        "description": "Get information about the pre-hosted MCP server.",
+        "description": "Get information about the hosted MCP server.",
         "operationId": "mcp_sse_info_v1_mcp_sse_info_get",
         "responses": {
           "200": {

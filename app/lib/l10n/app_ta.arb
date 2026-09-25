@@ -1114,7 +1114,6 @@
     "daySummary": "நாள் சாரம்",
     "summaryGenerated": "சாரம் உருவாக்கப்பட்டது",
     "claudeDesktop": "Claude Desktop",
-    "addToClaudeConfig": "claude_desktop_config.json க்கு சேர்க்கவும்",
     "copyConfig": "ஆட்டு நகலெடுக்கவும்",
     "configCopied": "ஆட்டு கிளிப்போர்டுக்கு நகலெடுக்கப்பட்டது",
     "listeningMins": "கேட்கிறது (நிமிடங்கள்)",
@@ -2636,10 +2635,6 @@
     "@claudeDesktop": {
         "description": "Claude Desktop integration section"
     },
-    "addToClaudeDesktopConfig": "claude_desktop_config.json இல் சேர்க்கவும்",
-    "@addToClaudeDesktopConfig": {
-        "description": "Description for Claude Desktop config"
-    },
     "@configCopiedToClipboard": {
         "description": "Confirmation when config is copied"
     },
@@ -2673,10 +2668,6 @@
     },
     "@clientSecret": {
         "description": "OAuth client secret label"
-    },
-    "useYourMcpApiKey": "உங்கள் MCP API விசையைப் பயன்படுத்தவும்",
-    "@useYourMcpApiKey": {
-        "description": "Hint for client secret value"
     },
     "@webhooks": {
         "description": "Webhooks section header"
@@ -10799,7 +10790,7 @@
     "@memoryHistory": {
         "description": "Filter option for retained memory history"
     },
-    "tapPlusToStartRecording": "பதிவைத் தொடங்க + ஐத் தட்டவும்",
+    "tapPlusToStartRecording": "பதிவைத் தொடங்க பதிவு பொத்தானைத் தட்டவும்",
     "processingTakingLonger": "இன்னும் செயல்படுகிறது — இது வழக்கத்தை விட அதிக நேரம் எடுக்கிறது.",
     "speechProfileEnrollmentPrompt": "Omi உங்கள் குரலை அடையாளம் காண — எதைப் பற்றியாவது சுமார் 5 வினாடிகள் பேசுங்கள்.",
     "home": "முகப்பு",
@@ -10842,7 +10833,7 @@
     "conversationsMovedCount": "{count, plural, =1{1 உரையாடல் நகர்த்தப்பட்டது} other{{count} உரையாடல்கள் நகர்த்தப்பட்டன}}",
     "failedToMoveConversations": "உரையாடல்களை நகர்த்த முடியவில்லை",
     "discardedConversationTitle": "நிராகரிக்கப்பட்டது · {duration}",
-    "noConversationsHeroMessage": "நீங்கள் பதிவுசெய்யும் உரையாடல்கள் இங்கே தோன்றும். முதலாவதைப் பதிவுசெய்ய முகப்பில் + ஐத் தட்டவும்.",
+    "noConversationsHeroMessage": "நீங்கள் பதிவுசெய்யும் உரையாடல்கள் இங்கே தோன்றும். முதலாவதைப் பதிவுசெய்ய முகப்பில் பதிவு பொத்தானைத் தட்டவும்.",
     "conversationMap": "உரையாடல் வரைபடம்",
     "conversationCount": "{count, plural, =1{1 உரையாடல்} other{{count} உரையாடல்கள்}}",
     "taskCount": "{count, plural, =1{1 பணி} other{{count} பணிகள்}}",
@@ -10965,7 +10956,7 @@
     "batteryLevelSemantics": "பேட்டரி {level}%",
     "updateOmiGlassFirmware": "OmiGlass ஃபர்ம்வேரைப் புதுப்பி",
     "deviceConnecting": "இணைக்கிறது…",
-    "recordOptionsTip": "குறிப்பு: தொலைபேசி அழைப்பைப் பதிவுசெய்ய பதிவு பொத்தானை அழுத்திப் பிடிக்கவும்.",
+    "recordOptionsTip": "குறிப்பு: தொலைபேசி அழைப்பைப் பதிவுசெய்ய பதிவு பொத்தானில் உள்ள அம்புக்குறியைத் தட்டவும்.",
     "firmwareUpdateFailedTitle": "புதுப்பிப்பு தோல்வியடைந்தது",
     "firmwareUpdateFailedMessage": "புதுப்பிப்பு முடியவில்லை. உங்கள் சாதனம் இன்னும் தற்போதைய ஃபர்ம்வேரில் உள்ளது, பயன்படுத்தப் பாதுகாப்பானது. சார்ஜ் செய்து ஃபோன் அருகில் வைத்து மீண்டும் முயலுங்கள்.",
     "firmwareDownloadFailedMessage": "புதுப்பிப்பைப் பதிவிறக்க முடியவில்லை, உங்கள் சாதனம் மாற்றப்படவில்லை. இணைய இணைப்பைச் சரிபார்த்து மீண்டும் முயலுங்கள்.",
@@ -11097,8 +11088,28 @@
     "voiceSettingsAskToTag": "குரல்களைக் குறிக்க என்னிடம் கேள்",
     "voiceSettingsAskToTagSubtitle": "அவ்வப்போது, உங்கள் சமீபத்திய உரையாடல்களில் யார் பேசினார்கள் என்று Omi கேட்கும்",
     "voiceSettingsSaveOthersSubtitle": "நீங்கள் ஒருவருக்குப் பெயரிடும்போது, அடுத்த முறை அடையாளம் காண Omi ஒரு சிறிய குரல் மாதிரியை வைத்திருக்கும்",
+    "leaveBlank": "வெற்றாக விடவும்",
+    "mcpOAuthSetup": "claude.ai இல் தனிப்பயன் கனெக்டரைச் சேர்த்து, சர்வர் URL ஐ ஒட்டவும். Claude மேம்பட்ட OAuth Client ID கேட்டால், கீழே உள்ள மதிப்பைப் பயன்படுத்தி, ரகசியத்தை வெற்றாக விடவும் — உங்கள் MCP API திறவுகோலை OAuth ரகசியமாக ஒருபோதும் பயன்படுத்த வேண்டாம்.",
+    "claudeCode": "Claude Code",
+    "addToClaudeCodeConfig": "~/.claude.json இல் சேர்க்கவும்",
+    "claudeDesktopConnectorSetup": "Claude Desktop → Settings → Connectors இல் தனிப்பயன் கனெக்டரைச் சேர்த்து, சர்வர் URL ஐ ஒட்டவும். Claude மேம்பட்ட OAuth Client ID கேட்டால், கீழே உள்ள மதிப்பைப் பயன்படுத்தி, ரகசியத்தை வெற்றாக விடவும் — உங்கள் MCP API திறவுகோலை OAuth ரகசியமாக ஒருபோதும் பயன்படுத்த வேண்டாம்.",
     "transcriptionUnavailableRecordingContinues": "நகலெடுப்புகள் கிடைக்கவில்லை, பதிவு சாதனத்தில் தொடர்கிறது, பின்னர் செயலாக்கப்படும்",
     "transcriptionUnavailableSavingOnDevice": "நகலெடுப்பு இல்லை · சாதனத்தில் சேமிக்கப்படுகிறது",
     "transcriptionsPendingFraction": "நிலுவையில் உள்ள நகலெடுப்புகள் {pending}/{total}",
-    "transcriptionsPendingCount": "நிலுவையில் உள்ள நகலெடுப்புகள் {count}"
+    "transcriptionsPendingCount": "நிலுவையில் உள்ள நகலெடுப்புகள் {count}",
+    "captureSourceCall": "அழைப்பு",
+    "captureSourcePhoneMic": "போன் மைக்",
+    "captureStatusWithSource": "{status} · {source}",
+    "resume": "மீண்டும் தொடரவும்",
+    "finish": "முடிக்கவும்",
+    "pendantPausedResumesWhenYouFinish": "பதக்கம் இடைநிறுத்தப்பட்டது · நீங்கள் முடித்ததும் தொடரும்",
+    "pendantIsListeningTitle": "உங்கள் பதக்கம் கேட்கிறது",
+    "oneSourceAtATime": "Omi ஒரே நேரத்தில் ஒரு மூலத்திலிருந்து மட்டுமே பதிவுசெய்யும்.",
+    "recordWithPhoneInstead": "பதிலாக போனில் பதிவுசெய்யவும்",
+    "pendantPausesUntilYouFinish": "நீங்கள் முடிக்கும் வரை பதக்கம் இடைநிறுத்தப்படும்",
+    "pendantPausesDuringCall": "அழைப்பின்போது பதக்கம் இடைநிறுத்தப்படும்",
+    "keepUsingPendant": "பதக்கத்தையே பயன்படுத்தவும்",
+    "recordWith": "பதிவுசெய்யும் முறை",
+    "moreWaysToRecord": "பதிவுசெய்ய மேலும் வழிகள்",
+    "openCall": "அழைப்பைத் திறக்கவும்"
 }

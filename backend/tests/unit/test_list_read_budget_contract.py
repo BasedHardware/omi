@@ -574,8 +574,8 @@ def conv_mod(monkeypatch):
     import database.conversations as conv
 
     # Skip the decrypt decorator's data-protection backfill network calls.
-    monkeypatch.setattr(conv, '_prepare_conversation_for_read', lambda data, uid: data)
-    monkeypatch.setattr(conv, '_document_data_with_revision', lambda doc: doc.to_dict() | {'id': doc.id})
+    monkeypatch.setattr(conv, 'prepare_conversation_for_read', lambda data, uid: data)
+    monkeypatch.setattr(conv, 'document_data_with_revision', lambda doc: doc.to_dict() | {'id': doc.id})
     return conv
 
 

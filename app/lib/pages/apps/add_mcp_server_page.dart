@@ -196,7 +196,7 @@ class _AddMcpServerPageState extends State<AddMcpServerPage> {
               const SizedBox(height: OmiSpacing.md),
               TextFormField(
                 controller: _urlController,
-                decoration: appFormInputDecoration(label: l10n.mcpServerUrl, hint: 'https://mcp.example.com/sse'),
+                decoration: appFormInputDecoration(label: l10n.mcpServerUrl, hint: 'https://mcp.example.com/mcp'),
                 style: const TextStyle(color: OmiColors.textPrimary),
                 keyboardType: TextInputType.url,
                 autocorrect: false,

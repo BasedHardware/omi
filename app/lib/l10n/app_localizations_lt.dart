@@ -935,9 +935,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'Pridėti į claude_desktop_config.json';
-
-  @override
   String get copyConfig => 'Kopijuoti konfigūraciją';
 
   @override
@@ -2475,13 +2472,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get clearAllNodesAndConnections => 'Išvalyti visus mazgus ir ryšius';
 
   @override
-  String get addToClaudeDesktopConfig => 'Pridėti prie claude_desktop_config.json';
-
-  @override
   String get connectAiAssistantsToData => 'Prijunkite AI asistentus prie savo duomenų';
-
-  @override
-  String get useYourMcpApiKey => 'Naudokite savo MCP API raktą';
 
   @override
   String get realTimeTranscript => 'Nuorašas realiuoju laiku';
@@ -9984,7 +9975,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get transcriptionNoAudio => 'Transkripcija negauna garso';
 
   @override
-  String get tapPlusToStartRecording => 'Norėdami pradėti įrašymą, palieskite +';
+  String get tapPlusToStartRecording => 'Norėdami pradėti įrašymą, palieskite įrašymo mygtuką';
 
   @override
   String get chatBlockTask => 'Užduotis';
@@ -10227,7 +10218,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'Čia rodomi įrašyti pokalbiai. Pirmam įrašyti pradžios ekrane bakstelėkite +.';
+      'Čia rodomi įrašyti pokalbiai. Pirmam įrašyti pradžios ekrane bakstelėkite įrašymo mygtuką.';
 
   @override
   String get conversationMap => 'Pokalbių žemėlapis';
@@ -10704,7 +10695,7 @@ class AppLocalizationsLt extends AppLocalizations {
   String get deviceConnecting => 'Jungiamasi…';
 
   @override
-  String get recordOptionsTip => 'Patarimas: norėdami įrašyti skambutį, paspauskite ir palaikykite įrašymo mygtuką.';
+  String get recordOptionsTip => 'Patarimas: norėdami įrašyti skambutį, bakstelėkite rodyklę ant įrašymo mygtuko.';
 
   @override
   String get firmwareUpdateFailedTitle => 'Atnaujinti nepavyko';
@@ -11179,6 +11170,23 @@ class AppLocalizationsLt extends AppLocalizations {
       'Kai ką nors pavadinate, Omi išsaugo trumpą balso pavyzdį, kad kitą kartą jį atpažintų';
 
   @override
+  String get leaveBlank => 'Palikite tuščią';
+
+  @override
+  String get mcpOAuthSetup =>
+      'claude.ai svetainėje pridėkite pasirinktinę jungtį ir įklijuokite serverio URL. Jei Claude paprašys išplėstinio OAuth Client ID, naudokite toliau pateiktą reikšmę ir palikite slaptažodį tuščią — niekada nenaudokite savo MCP API rakto kaip OAuth paslapties.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'Pridėti prie ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'Claude Desktop → Settings → Connectors svetainėje pridėkite pasirinktinę jungtį ir įklijuokite serverio URL. Jei Claude paprašys išplėstinio OAuth Client ID, naudokite toliau pateiktą reikšmę ir palikite slaptažodį tuščią — niekada nenaudokite savo MCP API rakto kaip OAuth paslapties.';
+
+  @override
   String get transcriptionUnavailableRecordingContinues =>
       'Transkripcijos neprieinamos, įrašymas tęsiamas įrenginyje ir bus apdorotas vėliau';
 
@@ -11194,4 +11202,51 @@ class AppLocalizationsLt extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Laukiančios transkripcijos $count';
   }
+
+  @override
+  String get captureSourceCall => 'Skambutis';
+
+  @override
+  String get captureSourcePhoneMic => 'Telefono mikrofonas';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Tęsti';
+
+  @override
+  String get finish => 'Baigti';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Pakabukas pristabdytas · tęs, kai baigsite';
+
+  @override
+  String get pendantIsListeningTitle => 'Jūsų pakabukas klausosi';
+
+  @override
+  String get oneSourceAtATime => 'Omi vienu metu įrašo tik iš vieno šaltinio.';
+
+  @override
+  String get recordWithPhoneInstead => 'Verčiau įrašyti telefonu';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'Pakabukas pristabdomas, kol baigsite';
+
+  @override
+  String get pendantPausesDuringCall => 'Pakabukas pristabdomas skambučio metu';
+
+  @override
+  String get keepUsingPendant => 'Toliau naudoti pakabuką';
+
+  @override
+  String get recordWith => 'Įrašyti naudojant';
+
+  @override
+  String get moreWaysToRecord => 'Daugiau įrašymo būdų';
+
+  @override
+  String get openCall => 'Atidaryti skambutį';
 }

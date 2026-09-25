@@ -546,6 +546,9 @@ overlay:
           POSTHOG_PROJECT_API_KEY:
             secret: POSTHOG_PROJECT_API_KEY
             version: latest
+          POSTHOG_EVENTS_API_KEY:
+            secret: POSTHOG_EVENTS_API_KEY
+            version: latest
         env:
           OMI_CUSTOMER_DATA_PROJECT:
             value: based-hardware

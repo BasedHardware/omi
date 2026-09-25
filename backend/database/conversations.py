@@ -5,7 +5,7 @@ import uuid
 import zlib
 from collections.abc import Mapping
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional, Dict, Any, Callable
+from typing import List, Optional, Dict, Any, Callable, Tuple
 
 from google.api_core.exceptions import AlreadyExists, Conflict, NotFound
 from google.cloud import firestore
@@ -70,7 +70,7 @@ _PUBLIC_TRANSCRIPT_MAX_STORED_BYTES = 256 * 1024
 _PUBLIC_TRANSCRIPT_MAX_DECODED_BYTES = 512 * 1024
 _PUBLIC_TRANSCRIPT_MAX_SEGMENTS = 4096
 _PUBLIC_TRANSCRIPT_MAX_SEGMENT_TEXT_CHARS = 24_000
-_MCP_CONVERSATION_CARD_FIELD_PATHS = (
+MCP_CONVERSATION_CARD_FIELD_PATHS = (
     'id',
     'discarded',
     'deleted',
@@ -86,7 +86,7 @@ _MCP_CONVERSATION_CARD_FIELD_PATHS = (
     'structured.category',
     'structured.emoji',
 )
-_MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS = _MCP_CONVERSATION_CARD_FIELD_PATHS + (
+_MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS = MCP_CONVERSATION_CARD_FIELD_PATHS + (
     'transcript_segments',
     'transcript_segments_compressed',
 )
@@ -347,7 +347,7 @@ def raw_conversation_has_content(uid: str, conversation: Dict[str, Any]) -> bool
     return bool(segments)
 
 
-def _prepare_conversation_for_read(conversation_data: Optional[Dict[str, Any]], uid: str) -> Optional[Dict[str, Any]]:
+def prepare_conversation_for_read(conversation_data: Optional[Dict[str, Any]], uid: str) -> Optional[Dict[str, Any]]:
     if not conversation_data:
         return None
 
@@ -380,7 +380,7 @@ def _prepare_conversation_for_read(conversation_data: Optional[Dict[str, Any]], 
     return data
 
 
-def _document_data_with_revision(document) -> Optional[Dict[str, Any]]:
+def document_data_with_revision(document) -> Optional[Dict[str, Any]]:
     """Return Firestore document data with its canonical server revision."""
     data = document.to_dict()
     if data is None:
@@ -619,7 +619,7 @@ def _collect_visible_conversation_page(
         conversations: List[Dict[str, Any]] = []
         try:
             for doc in budgeted_stream_iter(conversations_ref, budget):
-                conversation = _document_data_with_revision(doc)
+                conversation = document_data_with_revision(doc)
                 if conversation is None or not is_visible_conversation(
                     conversation, include_discarded=include_discarded
                 ):
@@ -643,7 +643,7 @@ def _collect_visible_conversation_page(
     conversations: List[Dict[str, Any]] = []
     try:
         for doc in budgeted_stream_iter(conversations_ref, budget):
-            conversation = _document_data_with_revision(doc)
+            conversation = document_data_with_revision(doc)
             if conversation is None or not is_visible_conversation(conversation, include_discarded=include_discarded):
                 continue
             conversations.append(conversation)
@@ -864,12 +864,12 @@ def create_conversation_if_absent_with_lifecycle(uid: str, conversation_data: di
     return True
 
 
-@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
+@prepare_for_read(decrypt_func=prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
 def get_conversation(uid, conversation_id, *, read_site: FirestoreReadSite = FirestoreReadSite.UNATTRIBUTED):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-    conversation_data = _document_data_with_revision(conversation_ref.get())
+    conversation_data = document_data_with_revision(conversation_ref.get())
     record_document_read(
         read_site, FirestoreReadOutcome.HIT if conversation_data is not None else FirestoreReadOutcome.MISS
     )
@@ -931,7 +931,7 @@ def get_conversation_audio_stamp(uid: str, conversation_id: str) -> Optional[dic
     return (snapshot.to_dict() or {}).get('conversation_audio')
 
 
-@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
+@prepare_for_read(decrypt_func=prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
 def get_conversations(
     uid: str,
@@ -1030,7 +1030,7 @@ def get_conversations_count(
     return matching
 
 
-@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
+@prepare_for_read(decrypt_func=prepare_conversation_for_read)
 def get_conversations_without_photos(
     uid: str,
     limit: int = 100,
@@ -1099,51 +1099,7 @@ def get_conversations_without_photos(
     )
 
 
-@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
-def get_mcp_conversation_cards(
-    uid: str,
-    limit: int,
-    offset: int,
-    *,
-    start_date: Optional[datetime] = None,
-    end_date: Optional[datetime] = None,
-    categories: Optional[List[str]] = None,
-    firestore_client: Any = None,
-) -> List[Dict[str, Any]]:
-    """Return the transcript-free Firestore projection used by hosted MCP lists."""
-    client = firestore_client if firestore_client is not None else get_firestore_client()
-    collection = client.collection('users').document(uid).collection(conversations_collection)
-    query_spec = MCP_CONVERSATION_CARD_QUERY_SPECS[(bool(categories), start_date is not None, end_date is not None)]
-    query = query_spec.build(
-        collection,
-        {
-            'discarded': False,
-            'status': 'completed',
-            'categories': categories,
-            'start_date': start_date,
-            'end_date': end_date,
-        },
-        field_filter_factory=FieldFilter,
-    )
-    query = (
-        query.order_by('created_at', direction=firestore.Query.DESCENDING)
-        .select(list(_MCP_CONVERSATION_CARD_FIELD_PATHS))
-        .limit(limit)
-        .offset(offset)
-    )
-    conversations: List[Dict[str, Any]] = []
-    for doc in query.stream():
-        conversation = _document_data_with_revision(doc)
-        if conversation is None:
-            continue
-        if is_soft_deleted(conversation):
-            continue
-        conversation.setdefault('id', doc.id)
-        conversations.append(conversation)
-    return conversations
-
-
-@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
+@prepare_for_read(decrypt_func=prepare_conversation_for_read)
 def get_mcp_conversations_by_id(
     uid: str,
     conversation_ids: List[str],
@@ -1151,18 +1107,23 @@ def get_mcp_conversations_by_id(
     include_transcript: bool,
     include_discarded: bool = False,
     firestore_client: Any = None,
+    extra_field_paths: Optional[List[str]] = None,
 ) -> List[Dict[str, Any]]:
     """Return MCP card fields, optionally with transcript blobs, without photos or other result payloads."""
     client = firestore_client if firestore_client is not None else get_firestore_client()
     conversations_ref = client.collection('users').document(uid).collection(conversations_collection)
     doc_refs = [conversations_ref.document(str(conversation_id)) for conversation_id in conversation_ids]
-    field_paths = _MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS if include_transcript else _MCP_CONVERSATION_CARD_FIELD_PATHS
+    field_paths = list(
+        _MCP_CONVERSATION_TRANSCRIPT_FIELD_PATHS if include_transcript else MCP_CONVERSATION_CARD_FIELD_PATHS
+    )
+    if extra_field_paths:
+        field_paths.extend(extra_field_paths)
     docs = client.get_all(doc_refs, field_paths=list(field_paths))
     conversations_by_id: Dict[str, Dict[str, Any]] = {}
     for doc in docs:
         if not doc.exists:
             continue
-        data = _document_data_with_revision(doc)
+        data = document_data_with_revision(doc)
         if data is None:
             continue
         if not is_visible_conversation(data, include_discarded=include_discarded):
@@ -1191,7 +1152,7 @@ def iter_all_conversations(uid: str, batch_size: int = 400, include_discarded: b
         snapshots = list(batch_ref.stream())
         for doc in snapshots:
             conv = doc.to_dict()
-            conv = _prepare_conversation_for_read(conv, uid) or conv
+            conv = prepare_conversation_for_read(conv, uid) or conv
             if not is_visible_conversation(conv, include_discarded=include_discarded):
                 continue
             batch.append(conv)
@@ -1466,7 +1427,7 @@ def update_conversation_segment_text(uid: str, conversation_id: str, segment_id:
         if raw_data.get('is_locked', False):
             return 'locked'
 
-        conversation_data = _prepare_conversation_for_read(raw_data, uid)
+        conversation_data = prepare_conversation_for_read(raw_data, uid)
         if not conversation_data:
             return 'not_found'
 
@@ -1562,7 +1523,7 @@ def delete_conversation(uid, conversation_id):
     _delete_conversation_search_index(uid, conversation_id)
 
 
-@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
+@prepare_for_read(decrypt_func=prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
 def get_conversations_by_id(
     uid,
@@ -1574,7 +1535,7 @@ def get_conversations_by_id(
     return _get_conversations_by_id(uid, conversation_ids, include_discarded=include_discarded, read_site=read_site)
 
 
-@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
+@prepare_for_read(decrypt_func=prepare_conversation_for_read)
 def get_conversations_by_id_without_photos(
     uid,
     conversation_ids,
@@ -1739,7 +1700,7 @@ def migrate_conversations_level_batch(uid: str, conversation_ids: List[str], tar
 # **************************************
 
 
-@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
+@prepare_for_read(decrypt_func=prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
 def get_in_progress_conversation(uid: str):
     user_ref = db.collection('users').document(uid)
@@ -1755,7 +1716,7 @@ def get_in_progress_conversation(uid: str):
     return conversation
 
 
-@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
+@prepare_for_read(decrypt_func=prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
 def get_processing_conversations(uid: str):
     user_ref = db.collection('users').document(uid)
@@ -1812,7 +1773,7 @@ def get_stale_in_progress_conversations(uid: str, *, older_than_seconds: int, li
     return select_stale_in_progress((doc.to_dict() for doc in conversations_ref.stream()), cutoff, limit)
 
 
-@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
+@prepare_for_read(decrypt_func=prepare_conversation_for_read)
 def get_conversations_finished_after(
     uid: str,
     *,
@@ -1861,7 +1822,7 @@ def get_conversation_for_capture_check(uid: str, conversation_id: str, *, firest
     raw = snapshot.to_dict() if getattr(snapshot, 'exists', False) else None
     if not raw:
         return None, None
-    return _prepare_conversation_for_read(raw, uid), transcript_fingerprint(raw)
+    return prepare_conversation_for_read(raw, uid), transcript_fingerprint(raw)
 
 
 def link_duplicate_capture(uid: str, primary: Any, secondary: Any, overlap: dict, *, firestore_client=None) -> bool:
@@ -2089,7 +2050,7 @@ def get_action_items(
 
         if raw_action_items:
             # Decrypt conversation data for proper reading
-            decrypted_data = _prepare_conversation_for_read(conversation_data, uid)
+            decrypted_data = prepare_conversation_for_read(conversation_data, uid)
             conversations.append(decrypted_data)
             collected += _page_eligible_action_item_count(decrypted_data, include_completed)
             if needed > 0 and collected >= needed:
@@ -3011,7 +2972,7 @@ def select_closest_conversation(conversations, start_timestamp: int, end_timesta
     return closest_conversation
 
 
-@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
+@prepare_for_read(decrypt_func=prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
 def get_closest_conversation_to_timestamps(uid: str, start_timestamp: int, end_timestamp: int) -> Optional[dict]:
     start_threshold = datetime.fromtimestamp(start_timestamp, tz=timezone.utc) - timedelta(minutes=2)
@@ -3044,7 +3005,7 @@ def get_closest_conversation_to_timestamps(uid: str, start_timestamp: int, end_t
     return closest_conversation
 
 
-@prepare_for_read(decrypt_func=_prepare_conversation_for_read)
+@prepare_for_read(decrypt_func=prepare_conversation_for_read)
 @with_photos(get_conversation_photos)
 def get_last_completed_conversation(uid: str) -> Optional[dict]:
     query = (

@@ -939,9 +939,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'Afegir a claude_desktop_config.json';
-
-  @override
   String get copyConfig => 'Copiar configuració';
 
   @override
@@ -2491,13 +2488,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get clearAllNodesAndConnections => 'Esborra tots els nodes i connexions';
 
   @override
-  String get addToClaudeDesktopConfig => 'Afegeix a claude_desktop_config.json';
-
-  @override
   String get connectAiAssistantsToData => 'Connecta assistents d\'IA a les teves dades';
-
-  @override
-  String get useYourMcpApiKey => 'Utilitza la teva clau API MCP';
 
   @override
   String get realTimeTranscript => 'Transcripció en Temps Real';
@@ -10025,7 +10016,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get transcriptionNoAudio => 'La transcripció no rep àudio';
 
   @override
-  String get tapPlusToStartRecording => 'Toca + per començar a gravar';
+  String get tapPlusToStartRecording => 'Toca el botó de gravació per començar a gravar';
 
   @override
   String get chatBlockTask => 'Tasca';
@@ -10268,7 +10259,7 @@ class AppLocalizationsCa extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'Les converses que graves apareixen aquí. Toca + a l\'Inici per gravar la primera.';
+      'Les converses que graves apareixen aquí. Toca el botó de gravació a l\'Inici per gravar la primera.';
 
   @override
   String get conversationMap => 'Mapa de converses';
@@ -10748,7 +10739,7 @@ class AppLocalizationsCa extends AppLocalizations {
   String get deviceConnecting => 'S\'està connectant…';
 
   @override
-  String get recordOptionsTip => 'Consell: mantén premut el botó de gravació per gravar una trucada.';
+  String get recordOptionsTip => 'Consell: toca la fletxa del botó de gravació per gravar una trucada.';
 
   @override
   String get firmwareUpdateFailedTitle => 'L\'actualització ha fallat';
@@ -11224,6 +11215,23 @@ class AppLocalizationsCa extends AppLocalizations {
       'Quan anomenes algú, l’Omi guarda una mostra de veu breu per reconèixer-lo la propera vegada';
 
   @override
+  String get leaveBlank => 'Deixa-ho en blanc';
+
+  @override
+  String get mcpOAuthSetup =>
+      'A claude.ai, afegeix un connector personalitzat i enganxa l\'URL del servidor. Si Claude demana un Client ID d\'OAuth avançat, utilitza el valor següent i deixa el secret en blanc — mai utilitzis la teva clau d\'API MCP com a secret d\'OAuth.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'Afegeix a ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'A Claude Desktop → Settings → Connectors, afegeix un connector personalitzat i enganxa l\'URL del servidor. Si Claude demana un Client ID d\'OAuth avançat, utilitza el valor següent i deixa el secret en blanc — mai utilitzis la teva clau d\'API MCP com a secret d\'OAuth.';
+
+  @override
   String get transcriptionUnavailableRecordingContinues =>
       'Les transcripcions no estan disponibles, l\'enregistrament continua al dispositiu i es processarà més tard';
 
@@ -11239,4 +11247,51 @@ class AppLocalizationsCa extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Transcripcions pendents $count';
   }
+
+  @override
+  String get captureSourceCall => 'Trucada';
+
+  @override
+  String get captureSourcePhoneMic => 'Micròfon del telèfon';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Reprèn';
+
+  @override
+  String get finish => 'Finalitza';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Penjoll en pausa · es reprèn quan acabis';
+
+  @override
+  String get pendantIsListeningTitle => 'El teu penjoll està escoltant';
+
+  @override
+  String get oneSourceAtATime => 'Omi grava des d\'una sola font alhora.';
+
+  @override
+  String get recordWithPhoneInstead => 'Grava amb el telèfon en lloc seu';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'El penjoll es posa en pausa fins que acabis';
+
+  @override
+  String get pendantPausesDuringCall => 'El penjoll es posa en pausa durant la trucada';
+
+  @override
+  String get keepUsingPendant => 'Continua amb el penjoll';
+
+  @override
+  String get recordWith => 'Grava amb';
+
+  @override
+  String get moreWaysToRecord => 'Més maneres de gravar';
+
+  @override
+  String get openCall => 'Obre la trucada';
 }

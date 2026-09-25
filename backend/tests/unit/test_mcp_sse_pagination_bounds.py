@@ -34,39 +34,64 @@ def mcp():
     return mcp_sse
 
 
-def test_get_conversations_negative_offset_is_clamped(mcp):
-    """offset=-1 must be clamped to 0 before reaching Firestore .offset() (which raises on negative)."""
+@pytest.fixture(scope="module")
+def conversations_db():
+    # Patch the handler's own module binding: test_mcp_search_date_utc's
+    # sys.modules stub isolation can leave the router and the handler holding
+    # different `database` objects in a combined run.
+    from utils.mcp_server.handlers import conversations as mcp_conversations
 
-    def _firestore_like(uid, limit, offset, **kwargs):
-        # Mimic Firestore .offset(): a negative argument raises. See the clamp note in
-        # database/memories.py. Before the fix, offset=-1 reached here and this raised out of
-        # execute_tool as a 500.
-        if offset < 0:
-            raise ValueError("offset must be non-negative")
-        return []
+    return mcp_conversations.mcp_conversation_pages
 
-    with patch.object(mcp.conversations_db, "get_mcp_conversation_cards", side_effect=_firestore_like) as fake:
+
+def test_get_conversations_negative_offset_is_clamped(mcp, conversations_db):
+    """offset=-1 must be clamped to 0 before it can reach Firestore (which raises on negative)."""
+    page = MagicMock(return_value=([], None))
+    legacy = MagicMock(return_value=[])
+    with (
+        patch.object(conversations_db, "get_mcp_conversation_cards_page", page),
+        patch.object(conversations_db, "get_mcp_conversation_cards", legacy),
+    ):
         result = mcp.execute_tool("test-uid", "get_conversations", {"offset": -1})
 
     assert result == {"conversations": []}
-    assert fake.call_args.args[2] == 0  # offset clamped to 0, not -1
+    page.assert_called_once()
+    assert page.call_args.kwargs["after"] is None
+    legacy.assert_not_called()
 
 
-def test_get_conversations_non_int_limit_returns_invalid_params(mcp):
+def test_get_conversations_non_int_limit_returns_invalid_params(mcp, conversations_db):
     """A non-integer limit must return a clean -32602, not crash in the query layer."""
-    with patch.object(mcp.conversations_db, "get_mcp_conversation_cards", MagicMock(return_value=[])):
+    with patch.object(conversations_db, "get_mcp_conversation_cards_page", MagicMock(return_value=([], None))):
         with pytest.raises(mcp.ToolExecutionError) as exc:
             mcp.execute_tool("test-uid", "get_conversations", {"limit": "abc"})
 
     assert exc.value.code == -32602
 
 
-def test_get_conversations_oversized_limit_is_clamped_to_card_budget(mcp):
-    with patch.object(mcp.conversations_db, "get_mcp_conversation_cards", MagicMock(return_value=[])) as fake:
+def test_get_conversations_oversized_limit_is_clamped_to_card_budget(mcp, conversations_db):
+    with patch.object(conversations_db, "get_mcp_conversation_cards_page", MagicMock(return_value=([], None))) as fake:
         result = mcp.execute_tool("test-uid", "get_conversations", {"limit": 10_000})
 
     assert result == {"conversations": []}
     assert fake.call_args.args[1] == 100
+
+
+def test_get_conversations_explicit_offset_uses_legacy_offset_path(mcp, conversations_db):
+    """An explicit non-zero offset keeps the original raw-offset list semantics."""
+    legacy = MagicMock(return_value=[])
+    page = MagicMock(return_value=([], None))
+    with (
+        patch.object(conversations_db, "get_mcp_conversation_cards", legacy),
+        patch.object(conversations_db, "get_mcp_conversation_cards_page", page),
+    ):
+        result = mcp.execute_tool("test-uid", "get_conversations", {"offset": 40, "limit": 10})
+
+    assert result == {"conversations": []}
+    legacy.assert_called_once()
+    assert legacy.call_args.args[1] == 10
+    assert legacy.call_args.args[2] == 40
+    page.assert_not_called()
 
 
 def test_search_conversations_negative_limit_is_clamped(mcp):
@@ -77,7 +102,9 @@ def test_search_conversations_negative_limit_is_clamped(mcp):
         captured["limit"] = limit
         return []
 
-    with patch.object(mcp, "resolve_mcp_conversation_search_ids", side_effect=_resolve):
+    from utils.mcp_server.handlers import conversations as mcp_conversations
+
+    with patch.object(mcp_conversations, "resolve_mcp_conversation_search_ids", side_effect=_resolve):
         result = mcp.execute_tool("test-uid", "search_conversations", {"query": "hi", "limit": -5})
 
     assert result == {"conversations": []}

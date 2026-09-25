@@ -936,9 +936,6 @@ class AppLocalizationsMk extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'Додај во claude_desktop_config.json';
-
-  @override
   String get copyConfig => 'Копирај конфигурација';
 
   @override
@@ -2492,13 +2489,7 @@ class AppLocalizationsMk extends AppLocalizations {
   String get clearAllNodesAndConnections => 'Обриши сите јазли и врски';
 
   @override
-  String get addToClaudeDesktopConfig => 'Додај во claude_desktop_config.json';
-
-  @override
   String get connectAiAssistantsToData => 'Поврзи AI асистенти со твои податоци';
-
-  @override
-  String get useYourMcpApiKey => 'Користи твој MCP API клуч';
 
   @override
   String get realTimeTranscript => 'Препис во реално време';
@@ -10020,7 +10011,7 @@ class AppLocalizationsMk extends AppLocalizations {
   String get transcriptionNoAudio => 'Транскрипцијата не прима аудио';
 
   @override
-  String get tapPlusToStartRecording => 'Допрете + за да започнете со снимање';
+  String get tapPlusToStartRecording => 'Допрете го копчето за снимање за да започнете со снимање';
 
   @override
   String get chatBlockTask => 'Задача';
@@ -10263,7 +10254,7 @@ class AppLocalizationsMk extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'Разговорите што ги снимате се појавуваат тука. Допрете + на почетната за да го снимите првиот.';
+      'Разговорите што ги снимате се појавуваат тука. Допрете го копчето за снимање на почетната за да го снимите првиот.';
 
   @override
   String get conversationMap => 'Мапа на разговори';
@@ -10743,7 +10734,7 @@ class AppLocalizationsMk extends AppLocalizations {
   String get deviceConnecting => 'Се поврзува…';
 
   @override
-  String get recordOptionsTip => 'Совет: притиснете и задржете го копчето за снимање за да снимите телефонски повик.';
+  String get recordOptionsTip => 'Совет: допрете ја стрелката на копчето за снимање за да снимите телефонски повик.';
 
   @override
   String get firmwareUpdateFailedTitle => 'Ажурирањето не успеа';
@@ -11221,6 +11212,23 @@ class AppLocalizationsMk extends AppLocalizations {
       'Кога ќе именувате некого, Omi чува краток примерок од гласот за да го препознае следниот пат';
 
   @override
+  String get leaveBlank => 'Оставете празно';
+
+  @override
+  String get mcpOAuthSetup =>
+      'На claude.ai додадете прилагоден конектор и залепете ја URL-адресата на серверот. Ако Claude побара напреден OAuth Client ID, користете ја вредноста подолу и оставете ја тајната празна — никогаш не користете го вашиот MCP API клуч како OAuth тајна.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'Додај во ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'На Claude Desktop → Settings → Connectors додадете прилагоден конектор и залепете ја URL-адресата на серверот. Ако Claude побара напреден OAuth Client ID, користете ја вредноста подолу и оставете ја тајната празна — никогаш не користете го вашиот MCP API клуч како OAuth тајна.';
+
+  @override
   String get transcriptionUnavailableRecordingContinues =>
       'Транскрипциите се недостапни, снимањето продолжува на уредот и ќе биде обработено подоцна';
 
@@ -11236,4 +11244,51 @@ class AppLocalizationsMk extends AppLocalizations {
   String transcriptionsPendingCount(int count) {
     return 'Чекаат транскрипции $count';
   }
+
+  @override
+  String get captureSourceCall => 'Повик';
+
+  @override
+  String get captureSourcePhoneMic => 'Микрофон на телефонот';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Продолжи';
+
+  @override
+  String get finish => 'Заврши';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Приврзокот е паузиран · продолжува кога ќе завршите';
+
+  @override
+  String get pendantIsListeningTitle => 'Вашиот приврзок слуша';
+
+  @override
+  String get oneSourceAtATime => 'Omi снима само од еден извор истовремено.';
+
+  @override
+  String get recordWithPhoneInstead => 'Наместо тоа, снимај со телефонот';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'Приврзокот е паузиран додека не завршите';
+
+  @override
+  String get pendantPausesDuringCall => 'Приврзокот е паузиран за време на повикот';
+
+  @override
+  String get keepUsingPendant => 'Продолжи со приврзокот';
+
+  @override
+  String get recordWith => 'Снимај со';
+
+  @override
+  String get moreWaysToRecord => 'Повеќе начини за снимање';
+
+  @override
+  String get openCall => 'Отвори го повикот';
 }
