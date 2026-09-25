@@ -37,12 +37,11 @@ enum UpdateInstallActivity {
     return meetingCaptureActive ? now : lastTranscriptAt
   }
 
-  #if DEBUG
-    static func resetForTesting() {
-      lock.lock()
-      lastTranscriptAt = nil
-      meetingCaptureActive = false
-      lock.unlock()
-    }
-  #endif
+  /// Test seam. Not DEBUG-gated: the release compile also builds the test target.
+  static func resetForTesting() {
+    lock.lock()
+    lastTranscriptAt = nil
+    meetingCaptureActive = false
+    lock.unlock()
+  }
 }
