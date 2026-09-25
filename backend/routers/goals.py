@@ -78,8 +78,19 @@ def get_canonical_goals(
     return [normalize_goal_response(goal) for goal in goals]
 
 
+_KNOWN_GOAL_CONFLICTS = {
+    "focus full",
+    "account generation mismatch",
+    "ended goals cannot be focused",
+    "idempotency key was reused with different content",
+}
+
+
 def _sanitize_goal_conflict_error(exc: Exception) -> str:
     logger.warning(f"Goal mutation conflict: {type(exc).__name__}: {exc}")
+    detail = str(exc)
+    if detail in _KNOWN_GOAL_CONFLICTS:
+        return detail
     return "Goal conflict encountered. Please verify goal state and retry."
 
 

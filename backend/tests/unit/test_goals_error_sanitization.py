@@ -95,23 +95,28 @@ class GoalsErrorSanitizationTests(unittest.TestCase):
         sanitize = self._sanitize_fn
         GoalConflictError = self._goals_db.GoalConflictError
 
-        # 1. Any GoalConflictError returns safe generic message
-        generic = "Goal conflict encountered. Please verify goal state and retry."
+        # 1. Closed allowlist of known safe conflict reasons returned as-is
         self.assertEqual(
             sanitize(GoalConflictError("account generation mismatch")),
-            generic,
+            "account generation mismatch",
         )
         self.assertEqual(
             sanitize(GoalConflictError("idempotency key was reused with different content")),
-            generic,
+            "idempotency key was reused with different content",
         )
         self.assertEqual(
             sanitize(GoalConflictError("focus full")),
-            generic,
+            "focus full",
         )
         self.assertEqual(
             sanitize(GoalConflictError("ended goals cannot be focused")),
-            generic,
+            "ended goals cannot be focused",
+        )
+
+        # 2. Unknown or arbitrary conflict messages strictly fall back to generic message
+        self.assertEqual(
+            sanitize(GoalConflictError("some arbitrary unapproved conflict detail")),
+            "Goal conflict encountered. Please verify goal state and retry.",
         )
 
         # 2. Raw traceback filtered to generic message
@@ -150,11 +155,11 @@ class GoalsErrorSanitizationTests(unittest.TestCase):
         self.assertEqual(ctx.exception.status_code, 404)
         self.assertEqual(ctx.exception.detail, "Goal not found")
 
-        # 2. GoalConflictError raises 409 sanitized
+        # 2. GoalConflictError with known cause raises 409 with exact cause
         with self.assertRaises(HTTPException) as ctx:
             raise_store_error(goals_db.GoalConflictError("account generation mismatch"))
         self.assertEqual(ctx.exception.status_code, 409)
-        self.assertEqual(ctx.exception.detail, "Goal conflict encountered. Please verify goal state and retry.")
+        self.assertEqual(ctx.exception.detail, "account generation mismatch")
 
         # 3. GoalConflictError with sensitive traceback raises 409 sanitized
         sensitive_tb = "Traceback (most recent call last):\n  File 'app.py'\nKeyError: internal_key"
