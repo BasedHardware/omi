@@ -11167,4 +11167,21 @@ class AppLocalizationsBn extends AppLocalizations {
   @override
   String get claudeDesktopConnectorSetup =>
       'Claude Desktop → Settings → Connectors-এ একটি কাস্টম কানেক্টর যোগ করুন এবং সার্ভার URL পেস্ট করুন। Claude যদি অ্যাডভান্সড OAuth Client ID চায়, নিচের মানটি ব্যবহার করুন এবং সিক্রেট খালি রাখুন — OAuth সিক্রেট হিসেবে আপনার MCP API কী কখনোই ব্যবহার করবেন না।';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'ট্রান্সক্রিপশন অনুপলব্ধ, ডিভাইসে রেকর্ডিং চলছে এবং পরে প্রসেস করা হবে';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'ট্রান্সক্রিপশন অনুপলব্ধ · ডিভাইসে সংরক্ষণ হচ্ছে';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'অপেক্ষমাণ ট্রান্সক্রিপশন $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'অপেক্ষমাণ ট্রান্সক্রিপশন $count';
+  }
 }

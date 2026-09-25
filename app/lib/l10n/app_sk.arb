@@ -3526,5 +3526,9 @@
     "mcpOAuthSetup": "Na claude.ai pridajte vlastný konektor a vložte URL servera. Ak Claude požiada o pokročilé OAuth Client ID, použite hodnotu nižšie a nechajte tajný kľúč prázdny — nikdy nepoužívajte svoj MCP API kľúč ako OAuth secret.",
     "claudeCode": "Claude Code",
     "addToClaudeCodeConfig": "Pridať do ~/.claude.json",
-    "claudeDesktopConnectorSetup": "Na Claude Desktop → Settings → Connectors pridajte vlastný konektor a vložte URL servera. Ak Claude požiada o pokročilé OAuth Client ID, použite hodnotu nižšie a nechajte tajný kľúč prázdny — nikdy nepoužívajte svoj MCP API kľúč ako OAuth secret."
+    "claudeDesktopConnectorSetup": "Na Claude Desktop → Settings → Connectors pridajte vlastný konektor a vložte URL servera. Ak Claude požiada o pokročilé OAuth Client ID, použite hodnotu nižšie a nechajte tajný kľúč prázdny — nikdy nepoužívajte svoj MCP API kľúč ako OAuth secret.",
+    "transcriptionUnavailableRecordingContinues": "Transkripcie sú nedostupné, nahrávanie pokračuje v zariadení a neskôr sa spracuje",
+    "transcriptionUnavailableSavingOnDevice": "Transkripcia nedostupná · ukladá sa v zariadení",
+    "transcriptionsPendingFraction": "Čakajúce transkripcie {pending}/{total}",
+    "transcriptionsPendingCount": "Čakajúce transkripcie {count}"
 }

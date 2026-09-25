@@ -3568,5 +3568,9 @@
     "mcpOAuthSetup": "På claude.ai skal du tilføje en brugerdefineret connector og indsætte server-URL'en. Hvis Claude beder om et avanceret OAuth Client ID, skal du bruge værdien nedenfor og lade hemmeligheden stå tom — brug aldrig din MCP API-nøgle som OAuth-hemmelighed.",
     "claudeCode": "Claude Code",
     "addToClaudeCodeConfig": "Tilføj til ~/.claude.json",
-    "claudeDesktopConnectorSetup": "På Claude Desktop → Settings → Connectors skal du tilføje en brugerdefineret connector og indsætte server-URL'en. Hvis Claude beder om et avanceret OAuth Client ID, skal du bruge værdien nedenfor og lade hemmeligheden stå tom — brug aldrig din MCP API-nøgle som OAuth-hemmelighed."
+    "claudeDesktopConnectorSetup": "På Claude Desktop → Settings → Connectors skal du tilføje en brugerdefineret connector og indsætte server-URL'en. Hvis Claude beder om et avanceret OAuth Client ID, skal du bruge værdien nedenfor og lade hemmeligheden stå tom — brug aldrig din MCP API-nøgle som OAuth-hemmelighed.",
+    "transcriptionUnavailableRecordingContinues": "Transskriptioner er utilgængelige, optagelsen fortsætter på enheden og behandles senere",
+    "transcriptionUnavailableSavingOnDevice": "Transskription utilgængelig · gemmes på enheden",
+    "transcriptionsPendingFraction": "Transskriptioner i kø {pending}/{total}",
+    "transcriptionsPendingCount": "Transskriptioner i kø {count}"
 }

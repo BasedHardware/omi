@@ -11092,5 +11092,9 @@
     "mcpOAuthSetup": "ב-claude.ai הוסף מחבר מותאם אישית והדבק את כתובת השרת. אם Claude מבקש Client ID מתקדם של OAuth, השתמש בערך שלמטה והשאיר את הסוד ריק — לעולם אל תשתמש במפתח ה-API של MCP שלך כסוד OAuth.",
     "claudeCode": "Claude Code",
     "addToClaudeCodeConfig": "הוסף ל-~/.claude.json",
-    "claudeDesktopConnectorSetup": "ב-Claude Desktop → Settings → Connectors הוסף מחבר מותאם אישית והדבק את כתובת השרת. אם Claude מבקש Client ID מתקדם של OAuth, השתמש בערך שלמטה והשאיר את הסוד ריק — לעולם אל תשתמש במפתח ה-API של MCP שלך כסוד OAuth."
+    "claudeDesktopConnectorSetup": "ב-Claude Desktop → Settings → Connectors הוסף מחבר מותאם אישית והדבק את כתובת השרת. אם Claude מבקש Client ID מתקדם של OAuth, השתמש בערך שלמטה והשאיר את הסוד ריק — לעולם אל תשתמש במפתח ה-API של MCP שלך כסוד OAuth.",
+    "transcriptionUnavailableRecordingContinues": "התמלילים אינם זמינים, ההקלטה ממשיכה במכשיר ותעובד מאוחר יותר",
+    "transcriptionUnavailableSavingOnDevice": "תמליל לא זמין · נשמר במכשיר",
+    "transcriptionsPendingFraction": "תמלילים ממתינים {pending}/{total}",
+    "transcriptionsPendingCount": "תמלילים ממתינים {count}"
 }

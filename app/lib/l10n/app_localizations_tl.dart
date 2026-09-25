@@ -11264,4 +11264,21 @@ class AppLocalizationsTl extends AppLocalizations {
   @override
   String get claudeDesktopConnectorSetup =>
       'Sa Claude Desktop → Settings → Connectors, magdagdag ng custom connector at i-paste ang URL ng server. Kung hihingi ang Claude ng advanced na OAuth Client ID, gamitin ang halaga sa ibaba at iwanang blangko ang secret — huwag kailanman gamitin ang iyong MCP API key bilang OAuth secret.';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Hindi available ang mga transcript, nagpapatuloy ang pag-record sa device at ipoproseso mamaya';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Hindi available ang transcript · naka-save sa device';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Mga transcript na naghihintay $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Mga transcript na naghihintay $count';
+  }
 }

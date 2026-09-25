@@ -11161,4 +11161,21 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get claudeDesktopConnectorSetup =>
       'Trên Claude Desktop → Settings → Connectors, thêm trình kết nối tùy chỉnh và dán URL máy chủ. Nếu Claude yêu cầu OAuth Client ID nâng cao, hãy dùng giá trị bên dưới và để trống phần bí mật — không bao giờ dùng khóa API MCP của bạn làm bí mật OAuth.';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Bản chép âm không khả dụng, quá trình ghi âm tiếp tục trên thiết bị và sẽ được xử lý sau';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Bản chép âm không khả dụng · đang lưu trên thiết bị';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Bản chép âm đang chờ $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Bản chép âm đang chờ $count';
+  }
 }

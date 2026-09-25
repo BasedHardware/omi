@@ -3561,5 +3561,9 @@
     "mcpOAuthSetup": "claude.ai'de özel bir bağlayıcı ekleyin ve sunucu URL'sini yapıştırın. Claude gelişmiş bir OAuth Client ID isterse aşağıdaki değeri kullanın ve gizli anahtarı boş bırakın — MCP API anahtarınızı asla OAuth gizli anahtarı olarak kullanmayın.",
     "claudeCode": "Claude Code",
     "addToClaudeCodeConfig": "~/.claude.json dosyasına ekle",
-    "claudeDesktopConnectorSetup": "Claude Desktop → Settings → Connectors'de özel bir bağlayıcı ekleyin ve sunucu URL'sini yapıştırın. Claude gelişmiş bir OAuth Client ID isterse aşağıdaki değeri kullanın ve gizli anahtarı boş bırakın — MCP API anahtarınızı asla OAuth gizli anahtarı olarak kullanmayın."
+    "claudeDesktopConnectorSetup": "Claude Desktop → Settings → Connectors'de özel bir bağlayıcı ekleyin ve sunucu URL'sini yapıştırın. Claude gelişmiş bir OAuth Client ID isterse aşağıdaki değeri kullanın ve gizli anahtarı boş bırakın — MCP API anahtarınızı asla OAuth gizli anahtarı olarak kullanmayın.",
+    "transcriptionUnavailableRecordingContinues": "Transkriptler kullanılamıyor, kayıt cihazda devam ediyor ve daha sonra işlenecek",
+    "transcriptionUnavailableSavingOnDevice": "Transkript kullanılamıyor · cihaza kaydediliyor",
+    "transcriptionsPendingFraction": "Bekleyen transkriptler {pending}/{total}",
+    "transcriptionsPendingCount": "Bekleyen transkriptler {count}"
 }

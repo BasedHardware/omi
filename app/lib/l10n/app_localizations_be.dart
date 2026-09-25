@@ -11196,4 +11196,21 @@ class AppLocalizationsBe extends AppLocalizations {
   @override
   String get claudeDesktopConnectorSetup =>
       'На Claude Desktop → Settings → Connectors дадайце карыстальніцкі каннектар і ўстаўце URL сервера. Калі Claude запытае пашыраны OAuth Client ID, выкарыстайце значэнне ніжэй і пакіньце сакрэт пустым — ніколі не выкарыстоўвайце свой ключ MCP API як сакрэт OAuth.';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Транскрыпцыя недаступная, запіс працягваецца на прыладзе і будзе апрацаваны пазней';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Транскрыпцыя недаступная · захоўваецца на прыладзе';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Транскрыпцый у чаканні $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Транскрыпцый у чаканні $count';
+  }
 }

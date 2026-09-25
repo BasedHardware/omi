@@ -3526,5 +3526,9 @@
     "mcpOAuthSetup": "Trên claude.ai, thêm trình kết nối tùy chỉnh và dán URL máy chủ. Nếu Claude yêu cầu OAuth Client ID nâng cao, hãy dùng giá trị bên dưới và để trống phần bí mật — không bao giờ dùng khóa API MCP của bạn làm bí mật OAuth.",
     "claudeCode": "Claude Code",
     "addToClaudeCodeConfig": "Thêm vào ~/.claude.json",
-    "claudeDesktopConnectorSetup": "Trên Claude Desktop → Settings → Connectors, thêm trình kết nối tùy chỉnh và dán URL máy chủ. Nếu Claude yêu cầu OAuth Client ID nâng cao, hãy dùng giá trị bên dưới và để trống phần bí mật — không bao giờ dùng khóa API MCP của bạn làm bí mật OAuth."
+    "claudeDesktopConnectorSetup": "Trên Claude Desktop → Settings → Connectors, thêm trình kết nối tùy chỉnh và dán URL máy chủ. Nếu Claude yêu cầu OAuth Client ID nâng cao, hãy dùng giá trị bên dưới và để trống phần bí mật — không bao giờ dùng khóa API MCP của bạn làm bí mật OAuth.",
+    "transcriptionUnavailableRecordingContinues": "Bản chép âm không khả dụng, quá trình ghi âm tiếp tục trên thiết bị và sẽ được xử lý sau",
+    "transcriptionUnavailableSavingOnDevice": "Bản chép âm không khả dụng · đang lưu trên thiết bị",
+    "transcriptionsPendingFraction": "Bản chép âm đang chờ {pending}/{total}",
+    "transcriptionsPendingCount": "Bản chép âm đang chờ {count}"
 }

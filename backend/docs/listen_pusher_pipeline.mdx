@@ -43,6 +43,22 @@ can prioritize Parakeet only when that live-model capability matches; it never
 overrides the selected service/language/model tuple. All providers implement the
 `STTSocket` ABC and are wrapped by the universal `GatedSTTSocket` VAD gate.
 
+Soniox streams final token deltas whose network-frame boundaries can split a
+word. Its adapter retains the pending word across frames, preserving subword
+text until whitespace, a speaker change, a gap of at least three seconds, or
+the provider's `<end>`/`<fin>` marker establishes a boundary. A 4,096-character
+limit bounds accumulation; non-final and translated tokens do not enter the
+spoken transcript. Segment times use the provider's `start_ms` and `end_ms`,
+minus speech-profile preroll, rather than extending to the next token's start.
+
+When VAD requests finalization, Soniox queues a `{"type":"finalize"}` text
+control after accepted audio. Receive completion and synchronous `finish()`
+flush the last committed word exactly once; asynchronous draining awaits that
+callback even when the provider completion deadline expires. Off-loop finish
+and finalize calls schedule their work on the provider loop. These contracts
+are exercised in `tests/unit/test_soniox_token_boundaries.py`, including the
+downstream transcript merge that inserts spaces between distinct segments.
+
 Segments buffered in `realtime_segment_buffers` are sorted by `start` time
 before processing — this corrects non-deterministic WebSocket arrival order
 from providers like Modulate whose internal parallelism can deliver shorter
@@ -379,6 +395,23 @@ mobile and desktop reconnect/fallback logic. The backend deliberately does not
 replace a provider socket in-session because maintaining transcript timestamp
 continuity across that handoff requires a separate state model.
 
+#### Provider re-admission pacing (serve-error bench)
+
+A provider that dies mid-session (a typed serve error, e.g. Modulate/Velma
+`modulate_serve_error`) benches its process-local selection circuit
+(`utils/stt/provider_resilience.py`). The bench **escalates**: each further
+serve death in an unbroken benching cycle doubles the window from the
+baseline (180s default) up to 8x, and the ladder resets only on a full close
+(a probe that actually served). While such a bench stands, re-closing the
+breaker requires **serving evidence** — the probe session delivering a
+transcript segment or the provider's done frame (`SafeModulateSocket`
+health callbacks, attached by the connect seam) — never the 0.3s
+post-connect liveness grace alone, which a doomed stream passes before the
+fault kills it. The `/v3/speech-profile/stt-availability` pre-flight answers
+from the same breaker, so an escalated window also extends the "primary
+down" answer clients see; it flips true the moment the window lapses.
+Operational detail: `backend/docs/operational/modulate-serve-error-bench-escalation.md`.
+
 ```mermaid
 sequenceDiagram
     participant Client
@@ -494,6 +527,19 @@ capture confidence. Non-intersecting ambient items are untouched. Question
 verdicts are measured but deliberately produce nothing in v1 because the task
 extractor and capture policy have no question-routing destination. This path
 has no realtime wake-word state or notification surface.
+
+With `MEETING_NOTES_RICH_CONTEXT_ENABLED`, notes, memory, and app prompts share
+a normalized meeting roster in the CONVERSATION METADATA prefix: participant
+names and organizations come from the resolved calendar or screen-derived
+meeting context, and `spk` cluster binding follows the stricter roster guard.
+A desktop meeting capture treats the remote audio channel as mixed — when more
+than one remote participant could share it, that cluster stays `spk ?` rather
+than attributing several people's words to one name. Background context (prior
+meetings, people facts, goals, memories, and — under
+`MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED` — screen text) is gathered
+best-effort and appended only to the notes volatile suffix as BACKGROUND
+CONTEXT; it never enters the shared prefix, the memory extractor, or app
+prompts, and no single source failure can block the note.
 
 ### 2.1 Durable finalization ownership
 

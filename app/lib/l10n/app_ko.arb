@@ -3526,5 +3526,9 @@
     "mcpOAuthSetup": "claude.ai에서 사용자 지정 커넥터를 추가하고 서버 URL을 붙여넣으세요. Claude가 고급 OAuth Client ID를 요청하면 아래 값을 사용하고 시크릿은 비워 두세요. MCP API 키를 OAuth 시크릿으로 절대 사용하지 마세요.",
     "claudeCode": "Claude Code",
     "addToClaudeCodeConfig": "~/.claude.json에 추가",
-    "claudeDesktopConnectorSetup": "Claude Desktop → Settings → Connectors에서 사용자 지정 커넥터를 추가하고 서버 URL을 붙여넣으세요. Claude가 고급 OAuth Client ID를 요청하면 아래 값을 사용하고 시크릿은 비워 두세요. MCP API 키를 OAuth 시크릿으로 절대 사용하지 마세요."
+    "claudeDesktopConnectorSetup": "Claude Desktop → Settings → Connectors에서 사용자 지정 커넥터를 추가하고 서버 URL을 붙여넣으세요. Claude가 고급 OAuth Client ID를 요청하면 아래 값을 사용하고 시크릿은 비워 두세요. MCP API 키를 OAuth 시크릿으로 절대 사용하지 마세요.",
+    "transcriptionUnavailableRecordingContinues": "전사를 이용할 수 없습니다. 기기에서 녹음이 계속되며 나중에 처리됩니다",
+    "transcriptionUnavailableSavingOnDevice": "전사 불가 · 기기에 저장 중",
+    "transcriptionsPendingFraction": "대기 중인 전사 {pending}/{total}",
+    "transcriptionsPendingCount": "대기 중인 전사 {count}"
 }

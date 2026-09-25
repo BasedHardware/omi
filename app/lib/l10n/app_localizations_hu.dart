@@ -11209,4 +11209,21 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String get claudeDesktopConnectorSetup =>
       'A Claude Desktop → Settings → Connectors oldalon adjon hozzá egy egyéni összekötőt, és illessze be a szerver URL-címét. Ha a Claude speciális OAuth Client ID-t kér, használja az alábbi értéket, és hagyja üresen a titkot — soha ne használja az MCP API-kulcsot OAuth-titokként.';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Átiratok nem érhetők el, a felvétel folytatódik az eszközön, és később feldolgozásra kerül';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Átirat nem érhető el · mentés az eszközön';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Függő átiratok $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Függő átiratok $count';
+  }
 }

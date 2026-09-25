@@ -3526,5 +3526,9 @@
     "mcpOAuthSetup": "claude.aiでカスタムコネクタを追加し、サーバーURLを貼り付けてください。Claudeが高度なOAuth Client IDを求めてきた場合は、以下の値を使用し、シークレットは空欄のままにしてください。MCP APIキーをOAuthシークレットとして使用しないでください。",
     "claudeCode": "Claude Code",
     "addToClaudeCodeConfig": "~/.claude.jsonに追加",
-    "claudeDesktopConnectorSetup": "Claude Desktop → Settings → Connectorsでカスタムコネクタを追加し、サーバーURLを貼り付けてください。Claudeが高度なOAuth Client IDを求めてきた場合は、以下の値を使用し、シークレットは空欄のままにしてください。MCP APIキーをOAuthシークレットとして使用しないでください。"
+    "claudeDesktopConnectorSetup": "Claude Desktop → Settings → Connectorsでカスタムコネクタを追加し、サーバーURLを貼り付けてください。Claudeが高度なOAuth Client IDを求めてきた場合は、以下の値を使用し、シークレットは空欄のままにしてください。MCP APIキーをOAuthシークレットとして使用しないでください。",
+    "transcriptionUnavailableRecordingContinues": "文字起こしは利用できません。録音は端末上で続き、後で処理されます",
+    "transcriptionUnavailableSavingOnDevice": "文字起こし不可 · 端末に保存中",
+    "transcriptionsPendingFraction": "文字起こし待ち {pending}/{total}",
+    "transcriptionsPendingCount": "文字起こし待ち {count}"
 }

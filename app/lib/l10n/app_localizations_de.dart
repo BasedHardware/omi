@@ -11258,4 +11258,21 @@ class AppLocalizationsDe extends AppLocalizations {
   @override
   String get claudeDesktopConnectorSetup =>
       'Fügen Sie auf Claude Desktop → Settings → Connectors einen benutzerdefinierten Konnektor hinzu und fügen Sie die Server-URL ein. Wenn Claude nach einer erweiterten OAuth-Client-ID fragt, verwenden Sie den untenstehenden Wert und lassen Sie das Secret leer — verwenden Sie niemals Ihren MCP-API-Schlüssel als OAuth-Secret.';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Transkriptionen sind nicht verfügbar, die Aufnahme läuft auf dem Gerät weiter und wird später verarbeitet';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Transkription nicht verfügbar · wird auf dem Gerät gespeichert';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Offene Transkriptionen $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Offene Transkriptionen $count';
+  }
 }

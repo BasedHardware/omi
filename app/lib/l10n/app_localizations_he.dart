@@ -11076,4 +11076,21 @@ class AppLocalizationsHe extends AppLocalizations {
   @override
   String get claudeDesktopConnectorSetup =>
       'ב-Claude Desktop → Settings → Connectors הוסף מחבר מותאם אישית והדבק את כתובת השרת. אם Claude מבקש Client ID מתקדם של OAuth, השתמש בערך שלמטה והשאיר את הסוד ריק — לעולם אל תשתמש במפתח ה-API של MCP שלך כסוד OAuth.';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'התמלילים אינם זמינים, ההקלטה ממשיכה במכשיר ותעובד מאוחר יותר';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'תמליל לא זמין · נשמר במכשיר';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'תמלילים ממתינים $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'תמלילים ממתינים $count';
+  }
 }

@@ -11101,4 +11101,21 @@ class AppLocalizationsTh extends AppLocalizations {
   @override
   String get claudeDesktopConnectorSetup =>
       'บน Claude Desktop → Settings → Connectors ให้เพิ่มคอนเนคเตอร์แบบกำหนดเองและวาง URL ของเซิร์ฟเวอร์ หาก Claude ขอ OAuth Client ID ขั้นสูง ให้ใช้ค่าด้านล่างและเว้นความลับไว้ — อย่าใช้คีย์ MCP API ของคุณเป็นความลับ OAuth เด็ดขาด';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'การถอดเสียงไม่พร้อมใช้งาน การบันทึกยังดำเนินต่อในอุปกรณ์และจะประมวลผลในภายหลัง';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'การถอดเสียงไม่พร้อมใช้งาน · กำลังบันทึกในอุปกรณ์';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'การถอดเสียงที่รออยู่ $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'การถอดเสียงที่รออยู่ $count';
+  }
 }

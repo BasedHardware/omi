@@ -3561,5 +3561,9 @@
     "mcpOAuthSetup": "Di claude.ai, tambahkan konektor kustom dan tempel URL server. Jika Claude meminta OAuth Client ID tingkat lanjut, gunakan nilai di bawah ini dan biarkan secret kosong — jangan pernah menggunakan kunci API MCP Anda sebagai secret OAuth.",
     "claudeCode": "Claude Code",
     "addToClaudeCodeConfig": "Tambahkan ke ~/.claude.json",
-    "claudeDesktopConnectorSetup": "Di Claude Desktop → Settings → Connectors, tambahkan konektor kustom dan tempel URL server. Jika Claude meminta OAuth Client ID tingkat lanjut, gunakan nilai di bawah ini dan biarkan secret kosong — jangan pernah menggunakan kunci API MCP Anda sebagai secret OAuth."
+    "claudeDesktopConnectorSetup": "Di Claude Desktop → Settings → Connectors, tambahkan konektor kustom dan tempel URL server. Jika Claude meminta OAuth Client ID tingkat lanjut, gunakan nilai di bawah ini dan biarkan secret kosong — jangan pernah menggunakan kunci API MCP Anda sebagai secret OAuth.",
+    "transcriptionUnavailableRecordingContinues": "Transkripsi tidak tersedia, perekaman berlanjut di perangkat dan akan diproses nanti",
+    "transcriptionUnavailableSavingOnDevice": "Transkripsi tidak tersedia · disimpan di perangkat",
+    "transcriptionsPendingFraction": "Transkripsi tertunda {pending}/{total}",
+    "transcriptionsPendingCount": "Transkripsi tertunda {count}"
 }

@@ -3526,5 +3526,9 @@
     "mcpOAuthSetup": "في claude.ai، أضف موصلًا مخصصًا والصق عنوان الخادم. إذا طلب Claude معرّف عميل OAuth متقدمًا، فاستخدم القيمة أدناه واترك السر فارغًا — لا تستخدم أبدًا مفتاح MCP API الخاص بك كسر OAuth.",
     "claudeCode": "Claude Code",
     "addToClaudeCodeConfig": "أضف إلى ~/.claude.json",
-    "claudeDesktopConnectorSetup": "في Claude Desktop → Settings → Connectors، أضف موصلًا مخصصًا والصق عنوان الخادم. إذا طلب Claude معرّف عميل OAuth متقدمًا، فاستخدم القيمة أدناه واترك السر فارغًا — لا تستخدم أبدًا مفتاح MCP API الخاص بك كسر OAuth."
+    "claudeDesktopConnectorSetup": "في Claude Desktop → Settings → Connectors، أضف موصلًا مخصصًا والصق عنوان الخادم. إذا طلب Claude معرّف عميل OAuth متقدمًا، فاستخدم القيمة أدناه واترك السر فارغًا — لا تستخدم أبدًا مفتاح MCP API الخاص بك كسر OAuth.",
+    "transcriptionUnavailableRecordingContinues": "النسخ غير متوفر حاليًا، يستمر التسجيل على الجهاز وستتم المعالجة لاحقًا",
+    "transcriptionUnavailableSavingOnDevice": "النسخ غير متوفر · يتم الحفظ على الجهاز",
+    "transcriptionsPendingFraction": "نسخ معلّق {pending}/{total}",
+    "transcriptionsPendingCount": "نسخ معلّق {count}"
 }

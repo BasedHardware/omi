@@ -13244,5 +13244,34 @@
     "claudeDesktopConnectorSetup": "On Claude Desktop → Settings → Connectors, add a custom connector and paste the server URL. If Claude asks for an advanced OAuth Client ID, use the value below and leave the secret blank — never use your MCP API key as an OAuth secret.",
     "@claudeDesktopConnectorSetup": {
         "description": "Claude Desktop connector setup instructions for the hosted MCP server"
+    },
+    "transcriptionUnavailableRecordingContinues": "Transcriptions are unavailable, recording continues on device and will process later",
+    "@transcriptionUnavailableRecordingContinues": {
+        "description": "Live capture status while the transcription service is down; audio keeps recording locally."
+    },
+    "transcriptionUnavailableSavingOnDevice": "Transcription unavailable · saving on device",
+    "@transcriptionUnavailableSavingOnDevice": {
+        "description": "Compact transcription-outage status for the in-progress capture card."
+    },
+    "transcriptionsPendingFraction": "Transcriptions pending {pending}/{total}",
+    "@transcriptionsPendingFraction": {
+        "description": "Queued recordings still waiting for transcription (pending) out of the session total, on the live-capture WAL indicator.",
+        "placeholders": {
+            "pending": {
+                "type": "int"
+            },
+            "total": {
+                "type": "int"
+            }
+        }
+    },
+    "transcriptionsPendingCount": "Transcriptions pending {count}",
+    "@transcriptionsPendingCount": {
+        "description": "Phone-local recordings still waiting to be uploaded for transcription, on the conversations list banner.",
+        "placeholders": {
+            "count": {
+                "type": "int"
+            }
+        }
     }
 }

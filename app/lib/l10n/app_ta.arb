@@ -11092,5 +11092,9 @@
     "mcpOAuthSetup": "claude.ai இல் தனிப்பயன் கனெக்டரைச் சேர்த்து, சர்வர் URL ஐ ஒட்டவும். Claude மேம்பட்ட OAuth Client ID கேட்டால், கீழே உள்ள மதிப்பைப் பயன்படுத்தி, ரகசியத்தை வெற்றாக விடவும் — உங்கள் MCP API திறவுகோலை OAuth ரகசியமாக ஒருபோதும் பயன்படுத்த வேண்டாம்.",
     "claudeCode": "Claude Code",
     "addToClaudeCodeConfig": "~/.claude.json இல் சேர்க்கவும்",
-    "claudeDesktopConnectorSetup": "Claude Desktop → Settings → Connectors இல் தனிப்பயன் கனெக்டரைச் சேர்த்து, சர்வர் URL ஐ ஒட்டவும். Claude மேம்பட்ட OAuth Client ID கேட்டால், கீழே உள்ள மதிப்பைப் பயன்படுத்தி, ரகசியத்தை வெற்றாக விடவும் — உங்கள் MCP API திறவுகோலை OAuth ரகசியமாக ஒருபோதும் பயன்படுத்த வேண்டாம்."
+    "claudeDesktopConnectorSetup": "Claude Desktop → Settings → Connectors இல் தனிப்பயன் கனெக்டரைச் சேர்த்து, சர்வர் URL ஐ ஒட்டவும். Claude மேம்பட்ட OAuth Client ID கேட்டால், கீழே உள்ள மதிப்பைப் பயன்படுத்தி, ரகசியத்தை வெற்றாக விடவும் — உங்கள் MCP API திறவுகோலை OAuth ரகசியமாக ஒருபோதும் பயன்படுத்த வேண்டாம்.",
+    "transcriptionUnavailableRecordingContinues": "நகலெடுப்புகள் கிடைக்கவில்லை, பதிவு சாதனத்தில் தொடர்கிறது, பின்னர் செயலாக்கப்படும்",
+    "transcriptionUnavailableSavingOnDevice": "நகலெடுப்பு இல்லை · சாதனத்தில் சேமிக்கப்படுகிறது",
+    "transcriptionsPendingFraction": "நிலுவையில் உள்ள நகலெடுப்புகள் {pending}/{total}",
+    "transcriptionsPendingCount": "நிலுவையில் உள்ள நகலெடுப்புகள் {count}"
 }

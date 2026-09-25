@@ -3526,5 +3526,9 @@
     "mcpOAuthSetup": "Vietnē claude.ai pievienojiet pielāgotu savienotāju un ielīmējiet servera URL. Ja Claude pieprasa uzlabotu OAuth Client ID, izmantojiet tālāk norādīto vērtību un atstājiet noslēpumu tukšu — nekad neizmantojiet savu MCP API atslēgu kā OAuth noslēpumu.",
     "claudeCode": "Claude Code",
     "addToClaudeCodeConfig": "Pievienot ~/.claude.json",
-    "claudeDesktopConnectorSetup": "Vietnē Claude Desktop → Settings → Connectors pievienojiet pielāgotu savienotāju un ielīmējiet servera URL. Ja Claude pieprasa uzlabotu OAuth Client ID, izmantojiet tālāk norādīto vērtību un atstājiet noslēpumu tukšu — nekad neizmantojiet savu MCP API atslēgu kā OAuth noslēpumu."
+    "claudeDesktopConnectorSetup": "Vietnē Claude Desktop → Settings → Connectors pievienojiet pielāgotu savienotāju un ielīmējiet servera URL. Ja Claude pieprasa uzlabotu OAuth Client ID, izmantojiet tālāk norādīto vērtību un atstājiet noslēpumu tukšu — nekad neizmantojiet savu MCP API atslēgu kā OAuth noslēpumu.",
+    "transcriptionUnavailableRecordingContinues": "Transkripcijas nav pieejamas, ierakstīšana turpinās ierīcē un tiks apstrādāta vēlāk",
+    "transcriptionUnavailableSavingOnDevice": "Transkripcija nav pieejama · tiek saglabāta ierīcē",
+    "transcriptionsPendingFraction": "Gaidošas transkripcijas {pending}/{total}",
+    "transcriptionsPendingCount": "Gaidošas transkripcijas {count}"
 }

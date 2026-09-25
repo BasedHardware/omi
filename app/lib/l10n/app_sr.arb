@@ -11092,5 +11092,9 @@
     "mcpOAuthSetup": "На claude.ai додајте прилагођени конектор и налепите URL сервера. Ако Claude тражи напредни OAuth Client ID, користите вредност испод и оставите тајну празном — никада не користите свој MCP API кључ као OAuth тајну.",
     "claudeCode": "Claude Code",
     "addToClaudeCodeConfig": "Додај у ~/.claude.json",
-    "claudeDesktopConnectorSetup": "На Claude Desktop → Settings → Connectors додајте прилагођени конектор и налепите URL сервера. Ако Claude тражи напредни OAuth Client ID, користите вредност испод и оставите тајну празном — никада не користите свој MCP API кључ као OAuth тајну."
+    "claudeDesktopConnectorSetup": "На Claude Desktop → Settings → Connectors додајте прилагођени конектор и налепите URL сервера. Ако Claude тражи напредни OAuth Client ID, користите вредност испод и оставите тајну празном — никада не користите свој MCP API кључ као OAuth тајну.",
+    "transcriptionUnavailableRecordingContinues": "Транскрипције нису доступне, снимање се наставља на уређају и биће обрађено касније",
+    "transcriptionUnavailableSavingOnDevice": "Транскрипција недоступна · чува се на уређају",
+    "transcriptionsPendingFraction": "Транскрипције на чекању {pending}/{total}",
+    "transcriptionsPendingCount": "Транскрипције на чекању {count}"
 }

@@ -3526,5 +3526,9 @@
     "mcpOAuthSetup": "Voeg op claude.ai een aangepaste connector toe en plak de server-URL. Als Claude om een geavanceerde OAuth Client ID vraagt, gebruik dan de waarde hieronder en laat het geheim leeg — gebruik je MCP API-sleutel nooit als OAuth-geheim.",
     "claudeCode": "Claude Code",
     "addToClaudeCodeConfig": "Toevoegen aan ~/.claude.json",
-    "claudeDesktopConnectorSetup": "Voeg op Claude Desktop → Settings → Connectors een aangepaste connector toe en plak de server-URL. Als Claude om een geavanceerde OAuth Client ID vraagt, gebruik dan de waarde hieronder en laat het geheim leeg — gebruik je MCP API-sleutel nooit als OAuth-geheim."
+    "claudeDesktopConnectorSetup": "Voeg op Claude Desktop → Settings → Connectors een aangepaste connector toe en plak de server-URL. Als Claude om een geavanceerde OAuth Client ID vraagt, gebruik dan de waarde hieronder en laat het geheim leeg — gebruik je MCP API-sleutel nooit als OAuth-geheim.",
+    "transcriptionUnavailableRecordingContinues": "Transcripties zijn niet beschikbaar, de opname gaat door op het apparaat en wordt later verwerkt",
+    "transcriptionUnavailableSavingOnDevice": "Transcriptie niet beschikbaar · wordt op het apparaat opgeslagen",
+    "transcriptionsPendingFraction": "Transcripties in behandeling {pending}/{total}",
+    "transcriptionsPendingCount": "Transcripties in behandeling {count}"
 }

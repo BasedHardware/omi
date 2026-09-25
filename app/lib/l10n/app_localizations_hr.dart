@@ -11203,4 +11203,21 @@ class AppLocalizationsHr extends AppLocalizations {
   @override
   String get claudeDesktopConnectorSetup =>
       'Na Claude Desktop → Settings → Connectors dodajte prilagođeni konektor i zalijepite URL poslužitelja. Ako Claude zatraži napredni OAuth Client ID, koristite vrijednost ispod i ostavite tajnu praznom — nikada nemojte koristiti svoj MCP API ključ kao OAuth tajnu.';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Transkripcije nisu dostupne, snimanje se nastavlja na uređaju i obradit će se kasnije';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Transkripcija nedostupna · sprema se na uređaj';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Transkripcije na čekanju $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Transkripcije na čekanju $count';
+  }
 }

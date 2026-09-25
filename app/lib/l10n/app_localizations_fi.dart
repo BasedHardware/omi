@@ -11169,4 +11169,21 @@ class AppLocalizationsFi extends AppLocalizations {
   @override
   String get claudeDesktopConnectorSetup =>
       'Lisää Claude Desktop → Settings → Connectors-palvelussa mukautettu liitin ja liitä palvelimen URL-osoite. Jos Claude pyytää edistynyttä OAuth Client ID:tä, käytä alla olevaa arvoa ja jätä salaisuus tyhjäksi — älä koskaan käytä MCP API -avaintasi OAuth-salaisuuksena.';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Transkriptiot eivät ole käytettävissä, tallennus jatkuu laitteella ja käsitellään myöhemmin';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Transkriptio ei käytettävissä · tallennetaan laitteelle';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Jonossa olevat transkriptiot $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Jonossa olevat transkriptiot $count';
+  }
 }

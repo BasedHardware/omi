@@ -3526,5 +3526,9 @@
     "mcpOAuthSetup": "claude.ai svetainėje pridėkite pasirinktinę jungtį ir įklijuokite serverio URL. Jei Claude paprašys išplėstinio OAuth Client ID, naudokite toliau pateiktą reikšmę ir palikite slaptažodį tuščią — niekada nenaudokite savo MCP API rakto kaip OAuth paslapties.",
     "claudeCode": "Claude Code",
     "addToClaudeCodeConfig": "Pridėti prie ~/.claude.json",
-    "claudeDesktopConnectorSetup": "Claude Desktop → Settings → Connectors svetainėje pridėkite pasirinktinę jungtį ir įklijuokite serverio URL. Jei Claude paprašys išplėstinio OAuth Client ID, naudokite toliau pateiktą reikšmę ir palikite slaptažodį tuščią — niekada nenaudokite savo MCP API rakto kaip OAuth paslapties."
+    "claudeDesktopConnectorSetup": "Claude Desktop → Settings → Connectors svetainėje pridėkite pasirinktinę jungtį ir įklijuokite serverio URL. Jei Claude paprašys išplėstinio OAuth Client ID, naudokite toliau pateiktą reikšmę ir palikite slaptažodį tuščią — niekada nenaudokite savo MCP API rakto kaip OAuth paslapties.",
+    "transcriptionUnavailableRecordingContinues": "Transkripcijos neprieinamos, įrašymas tęsiamas įrenginyje ir bus apdorotas vėliau",
+    "transcriptionUnavailableSavingOnDevice": "Transkripcija neprieinama · saugoma įrenginyje",
+    "transcriptionsPendingFraction": "Laukiančios transkripcijos {pending}/{total}",
+    "transcriptionsPendingCount": "Laukiančios transkripcijos {count}"
 }

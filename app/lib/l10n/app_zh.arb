@@ -3526,5 +3526,9 @@
     "mcpOAuthSetup": "在 claude.ai 上添加自定义连接器并粘贴服务器 URL。如果 Claude 要求提供高级 OAuth Client ID，请使用下方的值并将密钥留空——切勿将您的 MCP API 密钥用作 OAuth 密钥。",
     "claudeCode": "Claude Code",
     "addToClaudeCodeConfig": "添加到 ~/.claude.json",
-    "claudeDesktopConnectorSetup": "在 Claude Desktop → Settings → Connectors 上添加自定义连接器并粘贴服务器 URL。如果 Claude 要求提供高级 OAuth Client ID，请使用下方的值并将密钥留空——切勿将您的 MCP API 密钥用作 OAuth 密钥。"
+    "claudeDesktopConnectorSetup": "在 Claude Desktop → Settings → Connectors 上添加自定义连接器并粘贴服务器 URL。如果 Claude 要求提供高级 OAuth Client ID，请使用下方的值并将密钥留空——切勿将您的 MCP API 密钥用作 OAuth 密钥。",
+    "transcriptionUnavailableRecordingContinues": "转录暂不可用，录音仍在设备上继续，稍后会进行处理",
+    "transcriptionUnavailableSavingOnDevice": "转录不可用 · 正在设备上保存",
+    "transcriptionsPendingFraction": "待处理转录 {pending}/{total}",
+    "transcriptionsPendingCount": "待处理转录 {count}"
 }

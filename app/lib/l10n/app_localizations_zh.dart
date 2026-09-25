@@ -10963,4 +10963,20 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get claudeDesktopConnectorSetup =>
       '在 Claude Desktop → Settings → Connectors 上添加自定义连接器并粘贴服务器 URL。如果 Claude 要求提供高级 OAuth Client ID，请使用下方的值并将密钥留空——切勿将您的 MCP API 密钥用作 OAuth 密钥。';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues => '转录暂不可用，录音仍在设备上继续，稍后会进行处理';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => '转录不可用 · 正在设备上保存';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return '待处理转录 $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return '待处理转录 $count';
+  }
 }

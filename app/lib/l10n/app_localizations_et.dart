@@ -11163,4 +11163,21 @@ class AppLocalizationsEt extends AppLocalizations {
   @override
   String get claudeDesktopConnectorSetup =>
       'Lehel Claude Desktop → Settings → Connectors lisa kohandatud konnektor ja kleebi serveri URL. Kui Claude küsib täiustatud OAuth Client ID-d, kasuta allolevat väärtust ja jäta saladus tühjaks — ära kunagi kasuta oma MCP API võtit OAuth saladusena.';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Transkriptsioonid pole saadaval, salvestamine jätkub seadmel ja töödeldakse hiljem';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Transkriptsioon pole saadaval · salvestatakse seadmesse';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Ootel transkriptsioonid $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Ootel transkriptsioonid $count';
+  }
 }

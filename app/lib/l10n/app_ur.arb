@@ -11092,5 +11092,9 @@
     "mcpOAuthSetup": "claude.ai پر ایک کسٹم کنیکٹر شامل کریں اور سرور URL پیسٹ کریں۔ اگر Claude ایک ایڈوانسڈ OAuth Client ID مانگے تو نیچے دی گئی قدر استعمال کریں اور سیکریٹ خالی چھوڑیں — اپنی MCP API کلید کو کبھی بھی OAuth سیکریٹ کے طور پر استعمال نہ کریں۔",
     "claudeCode": "Claude Code",
     "addToClaudeCodeConfig": "~/.claude.json میں شامل کریں",
-    "claudeDesktopConnectorSetup": "Claude Desktop → Settings → Connectors پر ایک کسٹم کنیکٹر شامل کریں اور سرور URL پیسٹ کریں۔ اگر Claude ایک ایڈوانسڈ OAuth Client ID مانگے تو نیچے دی گئی قدر استعمال کریں اور سیکریٹ خالی چھوڑیں — اپنی MCP API کلید کو کبھی بھی OAuth سیکریٹ کے طور پر استعمال نہ کریں۔"
+    "claudeDesktopConnectorSetup": "Claude Desktop → Settings → Connectors پر ایک کسٹم کنیکٹر شامل کریں اور سرور URL پیسٹ کریں۔ اگر Claude ایک ایڈوانسڈ OAuth Client ID مانگے تو نیچے دی گئی قدر استعمال کریں اور سیکریٹ خالی چھوڑیں — اپنی MCP API کلید کو کبھی بھی OAuth سیکریٹ کے طور پر استعمال نہ کریں۔",
+    "transcriptionUnavailableRecordingContinues": "ٹرانسکرپشن دستیاب نہیں، ریکارڈنگ ڈیوائس پر جاری ہے اور بعد میں پروسیس ہوگی",
+    "transcriptionUnavailableSavingOnDevice": "ٹرانسکرپشن دستیاب نہیں · ڈیوائس پر محفوظ ہو رہی ہے",
+    "transcriptionsPendingFraction": "زیرِ التوا ٹرانسکرپشن {pending}/{total}",
+    "transcriptionsPendingCount": "زیرِ التوا ٹرانسکرپشن {count}"
 }

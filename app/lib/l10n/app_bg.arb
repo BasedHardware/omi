@@ -3526,5 +3526,9 @@
     "mcpOAuthSetup": "В claude.ai добавете персонализиран конектор и поставете URL адреса на сървъра. Ако Claude поиска разширен OAuth Client ID, използвайте стойността по-долу и оставете тайната празна — никога не използвайте вашия MCP API ключ като OAuth тайна.",
     "claudeCode": "Claude Code",
     "addToClaudeCodeConfig": "Добавяне към ~/.claude.json",
-    "claudeDesktopConnectorSetup": "В Claude Desktop → Settings → Connectors добавете персонализиран конектор и поставете URL адреса на сървъра. Ако Claude поиска разширен OAuth Client ID, използвайте стойността по-долу и оставете тайната празна — никога не използвайте вашия MCP API ключ като OAuth тайна."
+    "claudeDesktopConnectorSetup": "В Claude Desktop → Settings → Connectors добавете персонализиран конектор и поставете URL адреса на сървъра. Ако Claude поиска разширен OAuth Client ID, използвайте стойността по-долу и оставете тайната празна — никога не използвайте вашия MCP API ключ като OAuth тайна.",
+    "transcriptionUnavailableRecordingContinues": "Транскрипциите са недостъпни, записването продължава на устройството и ще бъде обработено по-късно",
+    "transcriptionUnavailableSavingOnDevice": "Транскрипцията е недостъпна · записва се на устройството",
+    "transcriptionsPendingFraction": "Чакащи транскрипции {pending}/{total}",
+    "transcriptionsPendingCount": "Чакащи транскрипции {count}"
 }

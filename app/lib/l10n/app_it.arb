@@ -3526,5 +3526,9 @@
     "mcpOAuthSetup": "Su claude.ai, aggiungi un connettore personalizzato e incolla l'URL del server. Se Claude richiede un Client ID OAuth avanzato, usa il valore qui sotto e lascia il segreto vuoto — non usare mai la tua chiave API MCP come segreto OAuth.",
     "claudeCode": "Claude Code",
     "addToClaudeCodeConfig": "Aggiungi a ~/.claude.json",
-    "claudeDesktopConnectorSetup": "Su Claude Desktop → Settings → Connectors, aggiungi un connettore personalizzato e incolla l'URL del server. Se Claude richiede un Client ID OAuth avanzato, usa il valore qui sotto e lascia il segreto vuoto — non usare mai la tua chiave API MCP come segreto OAuth."
+    "claudeDesktopConnectorSetup": "Su Claude Desktop → Settings → Connectors, aggiungi un connettore personalizzato e incolla l'URL del server. Se Claude richiede un Client ID OAuth avanzato, usa il valore qui sotto e lascia il segreto vuoto — non usare mai la tua chiave API MCP come segreto OAuth.",
+    "transcriptionUnavailableRecordingContinues": "Trascrizioni non disponibili, la registrazione continua sul dispositivo e verrà elaborata più tardi",
+    "transcriptionUnavailableSavingOnDevice": "Trascrizione non disponibile · salvataggio sul dispositivo",
+    "transcriptionsPendingFraction": "Trascrizioni in attesa {pending}/{total}",
+    "transcriptionsPendingCount": "Trascrizioni in attesa {count}"
 }

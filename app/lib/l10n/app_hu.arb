@@ -3622,5 +3622,9 @@
     "mcpOAuthSetup": "A claude.ai oldalon adjon hozzá egy egyéni összekötőt, és illessze be a szerver URL-címét. Ha a Claude speciális OAuth Client ID-t kér, használja az alábbi értéket, és hagyja üresen a titkot — soha ne használja az MCP API-kulcsot OAuth-titokként.",
     "claudeCode": "Claude Code",
     "addToClaudeCodeConfig": "Hozzáadás a ~/.claude.json fájlhoz",
-    "claudeDesktopConnectorSetup": "A Claude Desktop → Settings → Connectors oldalon adjon hozzá egy egyéni összekötőt, és illessze be a szerver URL-címét. Ha a Claude speciális OAuth Client ID-t kér, használja az alábbi értéket, és hagyja üresen a titkot — soha ne használja az MCP API-kulcsot OAuth-titokként."
+    "claudeDesktopConnectorSetup": "A Claude Desktop → Settings → Connectors oldalon adjon hozzá egy egyéni összekötőt, és illessze be a szerver URL-címét. Ha a Claude speciális OAuth Client ID-t kér, használja az alábbi értéket, és hagyja üresen a titkot — soha ne használja az MCP API-kulcsot OAuth-titokként.",
+    "transcriptionUnavailableRecordingContinues": "Átiratok nem érhetők el, a felvétel folytatódik az eszközön, és később feldolgozásra kerül",
+    "transcriptionUnavailableSavingOnDevice": "Átirat nem érhető el · mentés az eszközön",
+    "transcriptionsPendingFraction": "Függő átiratok {pending}/{total}",
+    "transcriptionsPendingCount": "Függő átiratok {count}"
 }

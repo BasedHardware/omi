@@ -129,6 +129,12 @@ environments:
           CONVERSATION_OCR_CONTEXT_ENABLED:
             category: rollout
             value: 'true'
+          MEETING_NOTES_RICH_CONTEXT_ENABLED:
+            value: 'true'
+            category: rollout
+          MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
+            value: 'true'
+            category: rollout
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             category: rollout
             value: 'true'
@@ -305,6 +311,12 @@ environments:
           CONVERSATION_OCR_CONTEXT_ENABLED:
             category: rollout
             value: 'true'
+          MEETING_NOTES_RICH_CONTEXT_ENABLED:
+            value: 'true'
+            category: rollout
+          MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
+            value: 'true'
+            category: rollout
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             category: rollout
             value: 'true'
@@ -603,6 +615,12 @@ environments:
             CONVERSATION_OCR_CONTEXT_ENABLED:
               category: rollout
               value: 'true'
+            MEETING_NOTES_RICH_CONTEXT_ENABLED:
+              value: 'true'
+              category: rollout
+            MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
+              value: 'true'
+              category: rollout
             BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
               category: rollout
               value: 'true'
@@ -869,6 +887,12 @@ environments:
             CONVERSATION_OCR_CONTEXT_ENABLED:
               category: rollout
               value: 'true'
+            MEETING_NOTES_RICH_CONTEXT_ENABLED:
+              value: 'true'
+              category: rollout
+            MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
+              value: 'true'
+              category: rollout
             BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
               category: rollout
               value: 'true'
@@ -1670,6 +1694,12 @@ environments:
           CONVERSATION_OCR_CONTEXT_ENABLED:
             category: rollout
             value: 'false'
+          MEETING_NOTES_RICH_CONTEXT_ENABLED:
+            value: 'false'
+            category: rollout
+          MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
+            value: 'false'
+            category: rollout
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             category: rollout
             value: 'false'
@@ -1868,6 +1898,12 @@ environments:
           CONVERSATION_OCR_CONTEXT_ENABLED:
             category: rollout
             value: 'false'
+          MEETING_NOTES_RICH_CONTEXT_ENABLED:
+            value: 'false'
+            category: rollout
+          MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
+            value: 'false'
+            category: rollout
           BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
             category: rollout
             value: 'false'
@@ -2051,6 +2087,12 @@ environments:
             CONVERSATION_OCR_CONTEXT_ENABLED:
               category: rollout
               value: 'false'
+            MEETING_NOTES_RICH_CONTEXT_ENABLED:
+              value: 'false'
+              category: rollout
+            MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
+              value: 'false'
+              category: rollout
             BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
               category: rollout
               value: 'false'
@@ -2325,6 +2367,12 @@ environments:
             CONVERSATION_OCR_CONTEXT_ENABLED:
               category: rollout
               value: 'false'
+            MEETING_NOTES_RICH_CONTEXT_ENABLED:
+              value: 'false'
+              category: rollout
+            MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED:
+              value: 'false'
+              category: rollout
             BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED:
               category: rollout
               value: 'false'
@@ -2972,7 +3020,7 @@ environments:
             GOOGLE_CLOUD_PROJECT:
               value: based-hardware
             DAY3_REENGAGEMENT_EMAIL_ENABLED:
-              value: 'false'
+              value: 'true'
               category: lifecycle_email
             DAY3_REENGAGEMENT_EMAIL_KILL_SWITCH:
               value: 'false'

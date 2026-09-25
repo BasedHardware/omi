@@ -11092,5 +11092,9 @@
     "mcpOAuthSetup": "در claude.ai یک کانکتور سفارشی اضافه کنید و URL سرور را جای‌گذاری کنید. اگر Claude یک Client ID پیشرفته OAuth خواست، از مقدار زیر استفاده کنید و secret را خالی بگذارید — هرگز کلید MCP API خود را به‌عنوان secret OAuth استفاده نکنید.",
     "claudeCode": "Claude Code",
     "addToClaudeCodeConfig": "افزودن به ~/.claude.json",
-    "claudeDesktopConnectorSetup": "در Claude Desktop → Settings → Connectors یک کانکتور سفارشی اضافه کنید و URL سرور را جای‌گذاری کنید. اگر Claude یک Client ID پیشرفته OAuth خواست، از مقدار زیر استفاده کنید و secret را خالی بگذارید — هرگز کلید MCP API خود را به‌عنوان secret OAuth استفاده نکنید."
+    "claudeDesktopConnectorSetup": "در Claude Desktop → Settings → Connectors یک کانکتور سفارشی اضافه کنید و URL سرور را جای‌گذاری کنید. اگر Claude یک Client ID پیشرفته OAuth خواست، از مقدار زیر استفاده کنید و secret را خالی بگذارید — هرگز کلید MCP API خود را به‌عنوان secret OAuth استفاده نکنید.",
+    "transcriptionUnavailableRecordingContinues": "رونویسی‌ها در دسترس نیستند، ضبط در دستگاه ادامه دارد و بعداً پردازش می‌شود",
+    "transcriptionUnavailableSavingOnDevice": "رونویسی در دسترس نیست · در حال ذخیره روی دستگاه",
+    "transcriptionsPendingFraction": "رونویسی‌های در انتظار {pending}/{total}",
+    "transcriptionsPendingCount": "رونویسی‌های در انتظار {count}"
 }

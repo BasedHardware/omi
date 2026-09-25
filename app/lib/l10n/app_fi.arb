@@ -3526,5 +3526,9 @@
     "mcpOAuthSetup": "Lisää claude.ai-palvelussa mukautettu liitin ja liitä palvelimen URL-osoite. Jos Claude pyytää edistynyttä OAuth Client ID:tä, käytä alla olevaa arvoa ja jätä salaisuus tyhjäksi — älä koskaan käytä MCP API -avaintasi OAuth-salaisuuksena.",
     "claudeCode": "Claude Code",
     "addToClaudeCodeConfig": "Lisää ~/.claude.json-tiedostoon",
-    "claudeDesktopConnectorSetup": "Lisää Claude Desktop → Settings → Connectors-palvelussa mukautettu liitin ja liitä palvelimen URL-osoite. Jos Claude pyytää edistynyttä OAuth Client ID:tä, käytä alla olevaa arvoa ja jätä salaisuus tyhjäksi — älä koskaan käytä MCP API -avaintasi OAuth-salaisuuksena."
+    "claudeDesktopConnectorSetup": "Lisää Claude Desktop → Settings → Connectors-palvelussa mukautettu liitin ja liitä palvelimen URL-osoite. Jos Claude pyytää edistynyttä OAuth Client ID:tä, käytä alla olevaa arvoa ja jätä salaisuus tyhjäksi — älä koskaan käytä MCP API -avaintasi OAuth-salaisuuksena.",
+    "transcriptionUnavailableRecordingContinues": "Transkriptiot eivät ole käytettävissä, tallennus jatkuu laitteella ja käsitellään myöhemmin",
+    "transcriptionUnavailableSavingOnDevice": "Transkriptio ei käytettävissä · tallennetaan laitteelle",
+    "transcriptionsPendingFraction": "Jonossa olevat transkriptiot {pending}/{total}",
+    "transcriptionsPendingCount": "Jonossa olevat transkriptiot {count}"
 }

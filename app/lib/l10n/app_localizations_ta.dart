@@ -11242,4 +11242,21 @@ class AppLocalizationsTa extends AppLocalizations {
   @override
   String get claudeDesktopConnectorSetup =>
       'Claude Desktop → Settings → Connectors இல் தனிப்பயன் கனெக்டரைச் சேர்த்து, சர்வர் URL ஐ ஒட்டவும். Claude மேம்பட்ட OAuth Client ID கேட்டால், கீழே உள்ள மதிப்பைப் பயன்படுத்தி, ரகசியத்தை வெற்றாக விடவும் — உங்கள் MCP API திறவுகோலை OAuth ரகசியமாக ஒருபோதும் பயன்படுத்த வேண்டாம்.';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'நகலெடுப்புகள் கிடைக்கவில்லை, பதிவு சாதனத்தில் தொடர்கிறது, பின்னர் செயலாக்கப்படும்';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'நகலெடுப்பு இல்லை · சாதனத்தில் சேமிக்கப்படுகிறது';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'நிலுவையில் உள்ள நகலெடுப்புகள் $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'நிலுவையில் உள்ள நகலெடுப்புகள் $count';
+  }
 }

@@ -11201,4 +11201,21 @@ class AppLocalizationsKn extends AppLocalizations {
   @override
   String get claudeDesktopConnectorSetup =>
       'Claude Desktop → Settings → Connectors ನಲ್ಲಿ ಕಸ್ಟಮ್ ಕನೆಕ್ಟರ್ ಸೇರಿಸಿ ಮತ್ತು ಸರ್ವರ್ URL ಅನ್ನು ಅಂಟಿಸಿ. Claude ಸುಧಾರಿತ OAuth Client ID ಕೇಳಿದರೆ, ಕೆಳಗಿನ ಮೌಲ್ಯವನ್ನು ಬಳಸಿ ಮತ್ತು ಸೀಕ್ರೆಟ್ ಅನ್ನು ಖಾಲಿ ಬಿಡಿ — ನಿಮ್ಮ MCP API ಕೀಯನ್ನು OAuth ಸೀಕ್ರೆಟ್ ಆಗಿ ಎಂದಿಗೂ ಬಳಸಬೇಡಿ.';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'ಲಿಪ್ಯಂತರಗಳು ಲಭ್ಯವಿಲ್ಲ, ಧ್ವನಿಮುದ್ರಣ ಸಾಧನದಲ್ಲಿ ಮುಂದುವರಿಯುತ್ತದೆ ಮತ್ತು ನಂತರ ಪ್ರಕ್ರಿಯೆಗೊಳ್ಳುತ್ತದೆ';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'ಲಿಪ್ಯಂತರ ಲಭ್ಯವಿಲ್ಲ · ಸಾಧನದಲ್ಲಿ ಉಳಿಸಲಾಗುತ್ತಿದೆ';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'ಬಾಕಿ ಇರುವ ಲಿಪ್ಯಂತರಗಳು $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'ಬಾಕಿ ಇರುವ ಲಿಪ್ಯಂತರಗಳು $count';
+  }
 }

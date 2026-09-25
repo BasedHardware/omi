@@ -11092,5 +11092,9 @@
     "mcpOAuthSetup": "Sa claude.ai, magdagdag ng custom connector at i-paste ang URL ng server. Kung hihingi ang Claude ng advanced na OAuth Client ID, gamitin ang halaga sa ibaba at iwanang blangko ang secret — huwag kailanman gamitin ang iyong MCP API key bilang OAuth secret.",
     "claudeCode": "Claude Code",
     "addToClaudeCodeConfig": "Idagdag sa ~/.claude.json",
-    "claudeDesktopConnectorSetup": "Sa Claude Desktop → Settings → Connectors, magdagdag ng custom connector at i-paste ang URL ng server. Kung hihingi ang Claude ng advanced na OAuth Client ID, gamitin ang halaga sa ibaba at iwanang blangko ang secret — huwag kailanman gamitin ang iyong MCP API key bilang OAuth secret."
+    "claudeDesktopConnectorSetup": "Sa Claude Desktop → Settings → Connectors, magdagdag ng custom connector at i-paste ang URL ng server. Kung hihingi ang Claude ng advanced na OAuth Client ID, gamitin ang halaga sa ibaba at iwanang blangko ang secret — huwag kailanman gamitin ang iyong MCP API key bilang OAuth secret.",
+    "transcriptionUnavailableRecordingContinues": "Hindi available ang mga transcript, nagpapatuloy ang pag-record sa device at ipoproseso mamaya",
+    "transcriptionUnavailableSavingOnDevice": "Hindi available ang transcript · naka-save sa device",
+    "transcriptionsPendingFraction": "Mga transcript na naghihintay {pending}/{total}",
+    "transcriptionsPendingCount": "Mga transcript na naghihintay {count}"
 }
