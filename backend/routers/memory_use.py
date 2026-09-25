@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -22,6 +23,13 @@ from utils.memory.memory_use import (
 from utils.other import endpoints as auth
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
+
+
+def _sanitize_memory_use_error(exc: Exception, fallback: str) -> str:
+    """Sanitize internal memory-use exception details while preserving debug logging."""
+    logger.warning("Memory use operation failed: %s: %s", type(exc).__name__, exc)
+    return fallback
 
 
 class MemoryUseRequest(BaseModel):
@@ -114,7 +122,10 @@ def use_memory(
             )
         except MemoryUseConflict as exc:
             if "different action" in str(exc):
-                raise HTTPException(status_code=409, detail=str(exc)) from exc
+                detail = _sanitize_memory_use_error(
+                    exc, "feedback action conflicts with existing memory use record"
+                )
+                raise HTTPException(status_code=409, detail=detail) from exc
             raise
         if expected_revision is not None and item.item_revision != expected_revision:
             raise HTTPException(status_code=409, detail="memory revision has changed")
@@ -141,20 +152,24 @@ def use_memory(
     except HTTPException:
         raise
     except MemoryUseConflict as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        detail = _sanitize_memory_use_error(exc, "memory use feedback conflict")
+        raise HTTPException(status_code=409, detail=detail) from exc
     except ValueError as exc:
         message = str(exc)
         if "not found" in message:
             raise HTTPException(status_code=404, detail="Memory not found") from exc
         if "revision" in message or "expected_" in message:
             raise HTTPException(status_code=409, detail="memory revision has changed") from exc
-        raise HTTPException(status_code=409, detail=message) from exc
+        detail = _sanitize_memory_use_error(exc, "invalid memory use parameters")
+        raise HTTPException(status_code=409, detail=detail) from exc
     except CanonicalMemoryIntakePausedError as exc:
         raise HTTPException(status_code=503, detail="memory feedback intake is temporarily paused") from exc
     except MemoryFirestoreApplyError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        detail = _sanitize_memory_use_error(exc, "memory update could not be committed")
+        raise HTTPException(status_code=409, detail=detail) from exc
     except RuntimeError as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
+        detail = _sanitize_memory_use_error(exc, "internal memory use operation error")
+        raise HTTPException(status_code=409, detail=detail) from exc
 
     response.headers["Cache-Control"] = "no-store"
     use = _memory_use_state(updated)
@@ -172,4 +187,10 @@ def use_memory(
     )
 
 
-__all__ = ["MemoryUseRequest", "MemoryUseResponse", "router", "use_memory"]
+__all__ = [
+    "MemoryUseRequest",
+    "MemoryUseResponse",
+    "_sanitize_memory_use_error",
+    "router",
+    "use_memory",
+]
