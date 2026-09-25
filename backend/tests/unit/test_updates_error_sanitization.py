@@ -1,12 +1,10 @@
-import pytest
-from fastapi.testclient import TestClient
 # Assuming we only need to test the helper function
 from routers.updates import _sanitize_update_error
 
 def test_sanitize_update_error() -> None:
     # 1. Exact match leaks should be masked
     assert _sanitize_update_error(ValueError("generation mismatch: expected 1, current 2")) == "invalid_update_generation_state"
-    assert _sanitize_update_error(ValueError("expected current release_id X does not match Y")) == "invalid_update_release_state"
+    assert _sanitize_update_error(ValueError("current release mismatch: expected X, current Y")) == "invalid_update_release_state"
     assert _sanitize_update_error(ValueError("release_id already exists with different immutable metadata")) == "invalid_update_immutable_conflict"
     
     # 2. General database format errors

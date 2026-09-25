@@ -47,9 +47,10 @@ logger = logging.getLogger(__name__)
 def _sanitize_update_error(exc: ValueError) -> str:
     """Sanitize internal ValueError strings to prevent API state leaks."""
     msg = str(exc)
+    logger.warning("Sanitized internal exception: %s", msg)
     if "generation mismatch:" in msg:
         return "invalid_update_generation_state"
-    if "expected current release_id" in msg:
+    if "current release mismatch" in msg:
         return "invalid_update_release_state"
     if "release_id already exists" in msg or "immutable metadata" in msg:
         return "invalid_update_immutable_conflict"
@@ -60,6 +61,7 @@ def _sanitize_update_error(exc: ValueError) -> str:
     if "missing" in msg or "does not exist" in msg or "unavailable" in msg or "disabled" in msg:
         return "invalid_update_precondition"
     return "invalid_update_state"
+
 
 
 
