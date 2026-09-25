@@ -2252,15 +2252,7 @@ class CaptureController extends ChangeNotifier
 
     // Flush remaining phone mic WAL buffer before stopping
     if (_phoneMicWalActive) {
-      final flushed = _activeSource?.flush() ?? [];
-      for (final frame in flushed) {
-        _wal.getSyncs().phone.onFrameCaptured(frame);
-        if (_socket?.state == SocketServiceState.connected) {
-          _socket?.send(frame.payload);
-          _recordingTelemetry.observeSent(frame.payload.length);
-          _wal.getSyncs().phone.markFrameSynced(frame.syncKey);
-        }
-      }
+      _flushPhoneFrames();
       _phoneMicWalActive = false;
     }
     // Invalidate before native/WAL teardown so in-flight work cannot publish.
@@ -3317,9 +3309,14 @@ class CaptureController extends ChangeNotifier
     // Transcribe Later: the native writer drops packets while muted and resumes the same file.
     if (_phoneMicBatchActive) return;
     _phoneMicPaused = true;
-    // Send what was captured before the pause, then stop the microphone.
-    final flushed = _activeSource?.flush() ?? [];
-    for (final frame in flushed) {
+    _flushPhoneFrames(); // send what was captured before the pause, then release the microphone
+    _phoneMic.stop();
+    updateRecordingState(RecordingState.pause);
+  }
+
+  /// Writes the phone source's buffered tail to the WAL and, when connected, the socket.
+  void _flushPhoneFrames() {
+    for (final frame in _activeSource?.flush() ?? const []) {
       _wal.getSyncs().phone.onFrameCaptured(frame);
       if (_socket?.state == SocketServiceState.connected) {
         _socket?.send(frame.payload);
@@ -3327,8 +3324,6 @@ class CaptureController extends ChangeNotifier
         _wal.getSyncs().phone.markFrameSynced(frame.syncKey);
       }
     }
-    _phoneMic.stop();
-    updateRecordingState(RecordingState.pause);
   }
 
   Future<void> _resumePhoneRecording() async {
