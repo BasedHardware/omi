@@ -75,10 +75,10 @@ class FrameRequestsErrorSanitizationTests(unittest.TestCase):
         fallback = "frame_request_invalid_parameters"
         sanitize = self._sanitize_fn
 
-        # 1. Clean structured error key returned as-is
+        # 1. Any ValueError strictly returns the safe fallback key
         self.assertEqual(
             sanitize(ValueError("clean_error_code"), fallback),
-            "clean_error_code",
+            fallback,
         )
 
         # 2. Raw traceback filtered to fallback
