@@ -226,6 +226,8 @@ class MemoryGraphPage extends StatefulWidget {
   final bool showShareButton;
   final bool trackOpenEvent;
   final double initialZoom;
+  @visibleForTesting
+  final Future<Map<String, dynamic>> Function() loadGraph;
 
   const MemoryGraphPage({
     super.key,
@@ -234,6 +236,7 @@ class MemoryGraphPage extends StatefulWidget {
     this.showShareButton = true,
     this.trackOpenEvent = true,
     this.initialZoom = 1.0,
+    this.loadGraph = KnowledgeGraphApi.getKnowledgeGraph,
   });
 
   @override
@@ -318,7 +321,7 @@ class _MemoryGraphPageState extends State<MemoryGraphPage> with SingleTickerProv
     }
 
     try {
-      final data = await KnowledgeGraphApi.getKnowledgeGraph();
+      final data = await widget.loadGraph();
       if (!mounted) return;
 
       final newNodes = data['nodes'] as List<dynamic>? ?? [];
