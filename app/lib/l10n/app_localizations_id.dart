@@ -2493,12 +2493,6 @@ class AppLocalizationsId extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Pesan diagnostik terperinci';
 
   @override
-  String get autoCreateSpeakers => 'Buat Pembicara Otomatis';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Buat otomatis saat nama terdeteksi';
-
-  @override
   String get followUpQuestions => 'Pertanyaan Lanjutan';
 
   @override

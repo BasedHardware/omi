@@ -2508,12 +2508,6 @@ class AppLocalizationsTa extends AppLocalizations {
   String get detailedDiagnosticMessages => 'விস்தாரமான நோயறிதல் செய்திகள்';
 
   @override
-  String get autoCreateSpeakers => 'தானாக பேசுநர்களை உருவாக்கு';
-
-  @override
-  String get autoCreateWhenNameDetected => 'பெயர் கண்டறியப்படும் போது தானாக உருவாக்கு';
-
-  @override
   String get followUpQuestions => 'தொடர்ந்த கேள்விகள்';
 
   @override

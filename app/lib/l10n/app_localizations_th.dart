@@ -2472,12 +2472,6 @@ class AppLocalizationsTh extends AppLocalizations {
   String get detailedDiagnosticMessages => 'ข้อความวินิจฉัยโดยละเอียด';
 
   @override
-  String get autoCreateSpeakers => 'สร้างผู้พูดอัตโนมัติ';
-
-  @override
-  String get autoCreateWhenNameDetected => 'สร้างอัตโนมัติเมื่อตรวจพบชื่อ';
-
-  @override
   String get followUpQuestions => 'คำถามติดตาม';
 
   @override

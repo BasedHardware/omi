@@ -2491,12 +2491,6 @@ class AppLocalizationsVi extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Thông báo chẩn đoán chi tiết';
 
   @override
-  String get autoCreateSpeakers => 'Tự động tạo Người nói';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Tự động tạo khi phát hiện tên';
-
-  @override
   String get followUpQuestions => 'Câu hỏi Theo dõi';
 
   @override

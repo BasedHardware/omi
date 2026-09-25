@@ -1,0 +1,3 @@
+{
+  "change": "Onboarding no longer restarts unexpectedly after setup; any in-progress setup can still be completed."
+}

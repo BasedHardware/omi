@@ -2712,14 +2712,6 @@
     "@detailedDiagnosticMessages": {
         "description": "Description for transcription diagnostics"
     },
-    "autoCreateSpeakers": "தானாக பேசுநர்களை உருவாக்கு",
-    "@autoCreateSpeakers": {
-        "description": "Experimental feature name"
-    },
-    "autoCreateWhenNameDetected": "பெயர் கண்டறியப்படும் போது தானாக உருவாக்கு",
-    "@autoCreateWhenNameDetected": {
-        "description": "Description for auto-create speakers"
-    },
     "followUpQuestions": "தொடர்ந்த கேள்விகள்",
     "@followUpQuestions": {
         "description": "Experimental feature name"

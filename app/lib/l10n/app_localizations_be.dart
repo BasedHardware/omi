@@ -2498,12 +2498,6 @@ class AppLocalizationsBe extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Дэтальныя дыягностычныя паведамленні';
 
   @override
-  String get autoCreateSpeakers => 'Аўтаматычна ствараць дыктарыў';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Аўтаматычна ствараць пры выяўленні імя';
-
-  @override
   String get followUpQuestions => 'Наступныя пытанні';
 
   @override

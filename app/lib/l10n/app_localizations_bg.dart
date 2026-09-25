@@ -2494,12 +2494,6 @@ class AppLocalizationsBg extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Подробни диагностични съобщения';
 
   @override
-  String get autoCreateSpeakers => 'Автоматично създаване на говорители';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Автоматично създаване при откриване на име';
-
-  @override
   String get followUpQuestions => 'Последващи въпроси';
 
   @override

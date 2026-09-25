@@ -2712,14 +2712,6 @@
     "@detailedDiagnosticMessages": {
         "description": "Description for transcription diagnostics"
     },
-    "autoCreateSpeakers": "స్పీకర్‌లను స్వయంచాలకంగా సృష్టించండి",
-    "@autoCreateSpeakers": {
-        "description": "Experimental feature name"
-    },
-    "autoCreateWhenNameDetected": "పేరు కనుగొనబడినప్పుడు స్వయంచాలకంగా సృష్టించండి",
-    "@autoCreateWhenNameDetected": {
-        "description": "Description for auto-create speakers"
-    },
     "followUpQuestions": "అనుసరణ ప్రశ్నలు",
     "@followUpQuestions": {
         "description": "Experimental feature name"

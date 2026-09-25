@@ -2510,12 +2510,6 @@ class AppLocalizationsFr extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Messages de diagnostic détaillés';
 
   @override
-  String get autoCreateSpeakers => 'Créer automatiquement les locuteurs';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Créer automatiquement quand un nom est détecté';
-
-  @override
   String get followUpQuestions => 'Questions de suivi';
 
   @override

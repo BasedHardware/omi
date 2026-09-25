@@ -2469,12 +2469,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get detailedDiagnosticMessages => 'رسائل تشخيصية مفصلة';
 
   @override
-  String get autoCreateSpeakers => 'إنشاء المتحدثين تلقائيًا';
-
-  @override
-  String get autoCreateWhenNameDetected => 'إنشاء تلقائي عند اكتشاف الاسم';
-
-  @override
   String get followUpQuestions => 'أسئلة المتابعة';
 
   @override

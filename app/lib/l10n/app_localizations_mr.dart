@@ -2496,12 +2496,6 @@ class AppLocalizationsMr extends AppLocalizations {
   String get detailedDiagnosticMessages => 'तपशीलवार निदान संदेश';
 
   @override
-  String get autoCreateSpeakers => 'स्वयंचलितपणे व्यक्तीची निर्मिती करा';
-
-  @override
-  String get autoCreateWhenNameDetected => 'नाव सापडल्यावर स्वयंचलितपणे निर्मिती करा';
-
-  @override
   String get followUpQuestions => 'अनुवर्तन प्रश्न';
 
   @override

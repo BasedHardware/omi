@@ -2499,12 +2499,6 @@ class AppLocalizationsIt extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Messaggi diagnostici dettagliati';
 
   @override
-  String get autoCreateSpeakers => 'Crea Automaticamente Relatori';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Crea automaticamente quando viene rilevato un nome';
-
-  @override
   String get followUpQuestions => 'Domande di Follow-up';
 
   @override

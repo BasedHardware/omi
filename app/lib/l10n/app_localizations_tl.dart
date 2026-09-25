@@ -2510,12 +2510,6 @@ class AppLocalizationsTl extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Detailed na mga diagnostic messages';
 
   @override
-  String get autoCreateSpeakers => 'Awtomatikong Lumikha ng Speakers';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Awtomatikong lumikha kapag ang pangalan ay natuklasan';
-
-  @override
   String get followUpQuestions => 'Follow-up Questions';
 
   @override

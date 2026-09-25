@@ -764,8 +764,6 @@
     "experimental": "تجريبي",
     "transcriptionDiagnostics": "تشخيصات النسخ",
     "detailedDiagnosticMessages": "رسائل تشخيصية مفصلة",
-    "autoCreateSpeakers": "إنشاء المتحدثين تلقائيًا",
-    "autoCreateWhenNameDetected": "إنشاء تلقائي عند اكتشاف الاسم",
     "followUpQuestions": "أسئلة المتابعة",
     "suggestQuestionsAfterConversations": "اقتراح الأسئلة بعد المحادثات",
     "goalTracker": "متتبع الأهداف",

@@ -2712,14 +2712,6 @@
     "@detailedDiagnosticMessages": {
         "description": "Description for transcription diagnostics"
     },
-    "autoCreateSpeakers": "Awtomatikong Lumikha ng Speakers",
-    "@autoCreateSpeakers": {
-        "description": "Experimental feature name"
-    },
-    "autoCreateWhenNameDetected": "Awtomatikong lumikha kapag ang pangalan ay natuklasan",
-    "@autoCreateWhenNameDetected": {
-        "description": "Description for auto-create speakers"
-    },
     "followUpQuestions": "Follow-up Questions",
     "@followUpQuestions": {
         "description": "Experimental feature name"

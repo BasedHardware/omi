@@ -2504,12 +2504,6 @@ class AppLocalizationsMk extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Детални дијагностички пораки';
 
   @override
-  String get autoCreateSpeakers => 'Автоматски создавај говорници';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Автоматски создавај кога е детектирано име';
-
-  @override
   String get followUpQuestions => 'Следни прашања';
 
   @override

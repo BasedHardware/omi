@@ -484,7 +484,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
 
     // Initialize analytics (PostHog)
     AnalyticsManager.shared.initialize()
-    OnboardingRerunFlag.install()
     AnalyticsManager.shared.detectAndReportCrash()
     AnalyticsManager.shared.recoverMonitoringSessionIfNeeded()
     if let attempt = pendingUpdateRelaunch?.attempt {
@@ -539,8 +538,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
     // the app launches; the client also retries on owner restoration, app
     // activation, and periodic network recovery.
     Task { await JITTriggerFeedbackClient.shared.installLifecycleRetry() }
-
-    Task { await ContextWorkstreamReconciler.shared.start() }
 
     scheduleAppLifecycleMaintenance()
 
@@ -1442,8 +1439,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, NSMenuItemVa
 
     // Stop transcription retry service
     TranscriptionRetryService.shared.stop()
-
-    Task { await ContextWorkstreamReconciler.shared.stop() }
 
     // Finalize the active Rewind MP4 chunk while the app is still alive.
     // AVAssetWriter files are not readable until finishWriting writes the trailer.

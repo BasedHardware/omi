@@ -2503,12 +2503,6 @@ class AppLocalizationsHu extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Részletes diagnosztikai üzenetek';
 
   @override
-  String get autoCreateSpeakers => 'Beszélők automatikus létrehozása';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Automatikus létrehozás név észlelésekor';
-
-  @override
   String get followUpQuestions => 'Követő kérdések';
 
   @override

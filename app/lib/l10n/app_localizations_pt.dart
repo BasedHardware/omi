@@ -2468,12 +2468,6 @@ class AppLocalizationsPt extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Mensagens de diagnóstico detalhadas';
 
   @override
-  String get autoCreateSpeakers => 'Criar Oradores Automaticamente';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Criar automaticamente quando nome for detectado';
-
-  @override
   String get followUpQuestions => 'Perguntas de Acompanhamento';
 
   @override

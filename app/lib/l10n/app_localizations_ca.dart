@@ -2503,12 +2503,6 @@ class AppLocalizationsCa extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Missatges de diagnòstic detallats';
 
   @override
-  String get autoCreateSpeakers => 'Crea Parlants Automàticament';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Crea automàticament quan es detecti un nom';
-
-  @override
   String get followUpQuestions => 'Preguntes de Seguiment';
 
   @override

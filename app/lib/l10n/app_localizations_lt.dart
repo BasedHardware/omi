@@ -2487,12 +2487,6 @@ class AppLocalizationsLt extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Išsamūs diagnostiniai pranešimai';
 
   @override
-  String get autoCreateSpeakers => 'Automatiškai kurti kalbėtojus';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Automatiškai sukurti aptikus vardą';
-
-  @override
   String get followUpQuestions => 'Tolimesnės užklausos';
 
   @override

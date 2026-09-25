@@ -2476,12 +2476,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Mensajes de diagnóstico detallados';
 
   @override
-  String get autoCreateSpeakers => 'Crear Hablantes Automáticamente';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Crear automáticamente cuando se detecte un nombre';
-
-  @override
   String get followUpQuestions => 'Preguntas de Seguimiento';
 
   @override

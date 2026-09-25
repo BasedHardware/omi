@@ -2497,12 +2497,6 @@ class AppLocalizationsNl extends AppLocalizations {
   String get detailedDiagnosticMessages => 'Gedetailleerde diagnostische berichten';
 
   @override
-  String get autoCreateSpeakers => 'Sprekers automatisch aanmaken';
-
-  @override
-  String get autoCreateWhenNameDetected => 'Automatisch aanmaken wanneer naam gedetecteerd wordt';
-
-  @override
   String get followUpQuestions => 'Vervolgvragen';
 
   @override

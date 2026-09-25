@@ -210,7 +210,6 @@ final List<SettingsSearchEntry> settingsSearchEntries = [
   SettingsSearchEntry('daySummary', (l) => l.daySummary, SettingsDestination.developer, _developer),
   SettingsSearchEntry(
       'transcriptionDiagnostics', (l) => l.transcriptionDiagnostics, SettingsDestination.developer, _developer),
-  SettingsSearchEntry('autoCreateSpeakers', (l) => l.autoCreateSpeakers, SettingsDestination.developer, _developer),
 ];
 
 /// The entries whose rows are on screen for [scope] and whose title contains [query]

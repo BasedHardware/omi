@@ -2494,12 +2494,6 @@ class AppLocalizationsUr extends AppLocalizations {
   String get detailedDiagnosticMessages => 'تفصیلی تشخیصی پیغامات';
 
   @override
-  String get autoCreateSpeakers => 'خود کار طور پر بولنے والے بنائیں';
-
-  @override
-  String get autoCreateWhenNameDetected => 'جب نام پایا جائے تو خود کار طور پر بنائیں';
-
-  @override
   String get followUpQuestions => 'فالو اپ سوالات';
 
   @override
