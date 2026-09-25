@@ -251,3 +251,34 @@ def test_segments_not_yet_embedded_keep_capture_ids_and_lower_coverage():
 
     assert all(f's{index}' not in resolution.speaker_ids for index in range(10, 20))
     assert abs(resolution.coverage - 0.5) < 1e-9
+
+
+def test_resolve_conversation_speakers_null_start_or_end_timestamps():
+    rng = np.random.default_rng(42)
+    voice = rng.normal(size=256).astype(np.float32)
+    voice /= np.linalg.norm(voice)
+    segments = [
+        {'id': 's0', 'speaker_id': 0, 'start': None, 'end': 3.0},
+        {'id': 's1', 'speaker_id': 1, 'start': 4.0, 'end': None},
+        {'id': 's2', 'speaker_id': 2, 'start': 8.0, 'end': 11.0},
+    ]
+    embeddings = {'s0': voice, 's1': voice, 's2': voice}
+    resolution = resolve_conversation_speakers(segments, embeddings)
+    assert resolution is not None
+    assert 's0' in resolution.speaker_ids
+    assert 's1' in resolution.speaker_ids
+    assert 's2' in resolution.speaker_ids
+
+
+def test_significant_capture_speaker_ids_guards_non_int_and_boolean():
+    from utils.stt.conversation_speakers import significant_capture_speaker_ids
+
+    segments = [
+        {'id': 's0', 'speaker_id': 0, 'start': 0.0, 'end': 15.0},
+        {'id': 's1', 'speaker_id': 'SPEAKER_01', 'start': 15.0, 'end': 30.0},
+        {'id': 's2', 'speaker_id': False, 'start': 30.0, 'end': 45.0},
+        {'id': 's3', 'speaker_id': None, 'start': 45.0, 'end': 60.0},
+        {'id': 's4', 'speaker_id': '2', 'start': 60.0, 'end': 75.0},
+    ]
+    participants = significant_capture_speaker_ids(segments)
+    assert participants == [0, 2]
