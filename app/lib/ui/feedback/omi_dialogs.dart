@@ -25,11 +25,15 @@ const Color omiDialogDangerColor = OmiColors.danger;
 /// One button in an [OmiAlertDialog].
 class OmiDialogAction {
   const OmiDialogAction({
+    this.key,
     required this.label,
     required this.onPressed,
     this.isDestructive = false,
     this.isDefault = false,
   });
+
+  /// Identifies the rendered action button in tests.
+  final Key? key;
 
   /// A verb naming what the button does ("Delete", "Sign Out"), or Cancel / OK.
   final String label;
@@ -71,6 +75,7 @@ class OmiAlertDialog extends StatelessWidget {
         actions: [
           for (final action in actions)
             CupertinoDialogAction(
+              key: action.key,
               onPressed: action.onPressed,
               isDestructiveAction: action.isDestructive,
               isDefaultAction: action.isDefault,
@@ -86,6 +91,7 @@ class OmiAlertDialog extends StatelessWidget {
       actions: [
         for (final action in actions)
           TextButton(
+            key: action.key,
             onPressed: action.onPressed,
             style: TextButton.styleFrom(
               foregroundColor: action.isDestructive

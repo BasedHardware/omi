@@ -84,6 +84,8 @@ class AnalyticsManager {
   static bool get identityKnown => _identityKnown;
   static bool get trackingEnabled => _trackingEnabled;
   static String? get currentIdentity => _boundIdentity;
+  static String get appBuild => _globalEventProperties['app_build']?.toString() ?? 'unknown';
+  static String get mobilePlatform => _mobilePlatformName;
   static Map<String, Object> get healthSnapshot => {
         'ready': _analyticsReady,
         'queue_depth': _queuedEvents.length,
@@ -552,6 +554,25 @@ class AnalyticsManager {
     _setUserPropertiesBatch({'\$name': _preferences.fullName, '\$email': _preferences.email});
   }
 
+  Future<bool> isFeatureEnabled(String key) async {
+    final adapter = _adapter;
+    if (adapter == null || !adapter.isInitialized || !_trackingEnabled || _settledDistinctId == null) {
+      return false;
+    }
+    if (adapter is! AnalyticsFeatureFlagAdapter) return false;
+    final epoch = _identityEpoch;
+    final identity = _settledDistinctId;
+    try {
+      final enabled = await (adapter as AnalyticsFeatureFlagAdapter).isFeatureEnabled(key).timeout(_initTimeout);
+      if (epoch != _identityEpoch || !identical(identity, _settledDistinctId) || !_trackingEnabled) {
+        return false;
+      }
+      return enabled;
+    } catch (_) {
+      return false;
+    }
+  }
+
   void track(String eventName, {Map<String, dynamic>? properties}) =>
       PlatformService.executeIfSupported(PlatformService.isAnalyticsSupported, () {
         final adapter = _adapter;
@@ -941,7 +962,10 @@ class AnalyticsManager {
   void deviceConnected(BtDevice device) {
     final vendor = device.type.analyticsVendor;
     final hardwareFamily = DeviceUtils.analyticsHardwareFamily(device);
-    track('Device Connected', properties: _deviceConnectionEventProperties(device));
+    track('Device Connected', properties: {
+      ..._deviceConnectionEventProperties(device),
+      if (device.rssi < 0) 'rssi': device.rssi,
+    });
     setUserProperty('device_vendor', vendor);
     setUserProperty('hardware_family', hardwareFamily);
   }

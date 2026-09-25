@@ -923,9 +923,6 @@ class AppLocalizationsJa extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'claude_desktop_config.jsonに追加';
-
-  @override
   String get copyConfig => '設定をコピー';
 
   @override
@@ -2436,13 +2433,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get clearAllNodesAndConnections => 'すべてのノードと接続をクリア';
 
   @override
-  String get addToClaudeDesktopConfig => 'claude_desktop_config.jsonに追加';
-
-  @override
   String get connectAiAssistantsToData => 'AIアシスタントをデータに接続';
-
-  @override
-  String get useYourMcpApiKey => 'MCP APIキーを使用';
 
   @override
   String get realTimeTranscript => 'リアルタイム文字起こし';
@@ -9796,7 +9787,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get transcriptionNoAudio => '文字起こしが音声を受信していません';
 
   @override
-  String get tapPlusToStartRecording => '＋をタップして録音を開始';
+  String get tapPlusToStartRecording => '録音ボタンをタップして録音を開始';
 
   @override
   String get chatBlockTask => 'タスク';
@@ -10036,7 +10027,7 @@ class AppLocalizationsJa extends AppLocalizations {
   }
 
   @override
-  String get noConversationsHeroMessage => '録音した会話はここに表示されます。ホームの + をタップして最初の会話を録音しましょう。';
+  String get noConversationsHeroMessage => '録音した会話はここに表示されます。ホームの録音ボタンをタップして最初の会話を録音しましょう。';
 
   @override
   String get conversationMap => '会話マップ';
@@ -10509,7 +10500,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get deviceConnecting => '接続中…';
 
   @override
-  String get recordOptionsTip => 'ヒント：録音ボタンを長押しすると通話を録音できます。';
+  String get recordOptionsTip => 'ヒント：録音ボタンの矢印をタップすると通話を録音できます。';
 
   @override
   String get firmwareUpdateFailedTitle => 'アップデートに失敗しました';
@@ -10898,4 +10889,163 @@ class AppLocalizationsJa extends AppLocalizations {
     );
     return '$name + $_temp0';
   }
+
+  @override
+  String get recordingAndTranscription => '録音と文字起こし';
+
+  @override
+  String get notificationsAndDisplay => '通知と表示';
+
+  @override
+  String get helpAndAbout => 'ヘルプとアプリについて';
+
+  @override
+  String get speakerTagPromptTitle => 'Omiが声を聞き分けられるようにしましょう';
+
+  @override
+  String get speakerTagPromptSubtitle => '過去2日間の声をさっと確認';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'これはあなたですか？';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'これは $name さんですか？';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'これは誰ですか？';
+
+  @override
+  String get speakerTagPromptThatsMe => '自分です';
+
+  @override
+  String get speakerTagPromptNotMe => '自分ではない';
+
+  @override
+  String get speakerTagPromptSomeoneNew => '新しい人';
+
+  @override
+  String get speakerTagPromptDontKnow => '知らない人';
+
+  @override
+  String get speakerTagPromptNotSure => 'わからない';
+
+  @override
+  String get speakerTagPromptPlayClip => 'クリップを再生';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current/$total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => '名前を付けた人の声を記憶する';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody => '次回その人を聞き分けられるよう、Omiは短い音声サンプルを保存します。設定からいつでも変更できます。';
+
+  @override
+  String get speakerTagPromptThanks => 'ありがとうございます！Omiが声をよりうまく聞き分けられるようになります。';
+
+  @override
+  String get speakerTagPromptNameHint => '名前';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'このクリップを再生できませんでした';
+
+  @override
+  String get speakerTagPromptAnswerFailed => '保存できませんでした。もう一度お試しください。';
+
+  @override
+  String get voiceSettingsAskToTag => '声のタグ付けを依頼する';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle => 'ときどき、最近の会話で誰が話していたかをOmiが尋ねます';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle => '誰かに名前を付けると、次回聞き分けられるようOmiが短い音声サンプルを保存します';
+
+  @override
+  String get leaveBlank => '空白のままにする';
+
+  @override
+  String get mcpOAuthSetup =>
+      'claude.aiでカスタムコネクタを追加し、サーバーURLを貼り付けてください。Claudeが高度なOAuth Client IDを求めてきた場合は、以下の値を使用し、シークレットは空欄のままにしてください。MCP APIキーをOAuthシークレットとして使用しないでください。';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => '~/.claude.jsonに追加';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'Claude Desktop → Settings → Connectorsでカスタムコネクタを追加し、サーバーURLを貼り付けてください。Claudeが高度なOAuth Client IDを求めてきた場合は、以下の値を使用し、シークレットは空欄のままにしてください。MCP APIキーをOAuthシークレットとして使用しないでください。';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues => '文字起こしは利用できません。録音は端末上で続き、後で処理されます';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => '文字起こし不可 · 端末に保存中';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return '文字起こし待ち $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return '文字起こし待ち $count';
+  }
+
+  @override
+  String get captureSourceCall => '通話';
+
+  @override
+  String get captureSourcePhoneMic => '電話のマイク';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => '再開';
+
+  @override
+  String get finish => '終了';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'ペンダント一時停止中 · 終了すると再開します';
+
+  @override
+  String get pendantIsListeningTitle => 'ペンダントがリスニング中です';
+
+  @override
+  String get oneSourceAtATime => 'Omiは一度に1つのソースからのみ録音します。';
+
+  @override
+  String get recordWithPhoneInstead => '代わりに電話で録音';
+
+  @override
+  String get pendantPausesUntilYouFinish => '終了するまでペンダントは一時停止します';
+
+  @override
+  String get pendantPausesDuringCall => '通話中はペンダントが一時停止します';
+
+  @override
+  String get keepUsingPendant => 'ペンダントを使い続ける';
+
+  @override
+  String get recordWith => '録音方法';
+
+  @override
+  String get moreWaysToRecord => 'その他の録音方法';
+
+  @override
+  String get openCall => '通話を開く';
+
+  @override
+  String get captureRecoveryBanner => 'ペンダントの音声がアプリに届いていません — タップして修復';
 }

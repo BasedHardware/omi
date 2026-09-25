@@ -6,8 +6,8 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
-/// What the Home tab shows. These are everyday display preferences, so they live in top-level
-/// Settings (D4), not in Developer Settings. Every switch applies (and is saved) when flipped.
+/// What the Home tab shows. These are everyday display preferences, so they live in Settings >
+/// Notifications & Display (D4), not in Developer Settings. Every switch applies (and is saved) when flipped.
 class HomeScreenSettingsPage extends StatefulWidget {
   const HomeScreenSettingsPage({super.key});
 

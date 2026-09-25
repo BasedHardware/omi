@@ -18,6 +18,10 @@ enum OmiButtonVariant {
 
   /// Low-emphasis text action ("Skip", "Learn More", a dialog's Cancel): no fill.
   tertiary,
+
+  /// A labelled action inside a row of [OmiIconButton.filled] circles (a page header): the same
+  /// surface-1 fill and primary-text label and glyph, so the row reads as one calm set.
+  toolbar,
 }
 
 /// Button heights. Both keep a touch target of at least 44pt.
@@ -118,6 +122,22 @@ class OmiButton extends StatefulWidget {
         height = null,
         labelStyle = null;
 
+  /// See [OmiButtonVariant.toolbar].
+  const OmiButton.toolbar({
+    super.key,
+    required this.label,
+    required this.onPressed,
+    this.size = OmiButtonSize.regular,
+    this.icon,
+    this.leading,
+    this.isLoading = false,
+    this.expand = false,
+  })  : variant = OmiButtonVariant.toolbar,
+        colors = null,
+        width = null,
+        height = null,
+        labelStyle = null;
+
   final String label;
 
   /// Tap handler. May return a [Future]; the button shows a spinner until it completes.
@@ -204,6 +224,7 @@ class _OmiButtonState extends State<OmiButton> {
       OmiButtonVariant.secondary => (background: OmiColors.surface2, foreground: OmiColors.textPrimary),
       OmiButtonVariant.destructive => (background: OmiColors.dangerSurface, foreground: OmiColors.danger),
       OmiButtonVariant.tertiary => (background: Colors.transparent, foreground: OmiColors.textPrimary),
+      OmiButtonVariant.toolbar => (background: OmiColors.surface1, foreground: OmiColors.textPrimary),
     };
   }
 

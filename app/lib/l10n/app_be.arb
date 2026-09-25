@@ -1114,7 +1114,6 @@
     "daySummary": "Рэзюмэ дня",
     "summaryGenerated": "Рэзюмэ генераванае",
     "claudeDesktop": "Claude Desktop",
-    "addToClaudeConfig": "Дадаць у claude_desktop_config.json",
     "copyConfig": "Скапіяваць канфіг",
     "configCopied": "Канфіг скапіяваны ў буфер абмену",
     "listeningMins": "Слуханне (хвіліны)",
@@ -2636,10 +2635,6 @@
     "@claudeDesktop": {
         "description": "Claude Desktop integration section"
     },
-    "addToClaudeDesktopConfig": "Дадайце да claude_desktop_config.json",
-    "@addToClaudeDesktopConfig": {
-        "description": "Description for Claude Desktop config"
-    },
     "@configCopiedToClipboard": {
         "description": "Confirmation when config is copied"
     },
@@ -2673,10 +2668,6 @@
     },
     "@clientSecret": {
         "description": "OAuth client secret label"
-    },
-    "useYourMcpApiKey": "Выкарыстоўвайце ваш MCP ключ API",
-    "@useYourMcpApiKey": {
-        "description": "Hint for client secret value"
     },
     "@webhooks": {
         "description": "Webhooks section header"
@@ -10799,7 +10790,7 @@
     "@memoryHistory": {
         "description": "Filter option for retained memory history"
     },
-    "tapPlusToStartRecording": "Націсніце +, каб пачаць запіс",
+    "tapPlusToStartRecording": "Націсніце кнопку запісу, каб пачаць запіс",
     "processingTakingLonger": "Яшчэ апрацоўваецца — гэта доўжыцца даўжэй, чым звычайна.",
     "speechProfileEnrollmentPrompt": "Каб Omi ведаў, які голас ваш, гаварыце пра што заўгодна каля 5 секунд.",
     "home": "Галоўная",
@@ -10842,7 +10833,7 @@
     "conversationsMovedCount": "{count, plural, =1{Перамешчана 1 размова} other{Перамешчана размоў: {count}}}",
     "failedToMoveConversations": "Не ўдалося перамясціць размовы",
     "discardedConversationTitle": "Адкінута · {duration}",
-    "noConversationsHeroMessage": "Тут з'яўляюцца размовы, якія вы запісваеце. Націсніце + на галоўнай, каб запісаць першую.",
+    "noConversationsHeroMessage": "Тут з'яўляюцца размовы, якія вы запісваеце. Націсніце кнопку запісу на галоўнай, каб запісаць першую.",
     "conversationMap": "Карта размоў",
     "conversationCount": "{count, plural, =1{1 размова} other{Размоў: {count}}}",
     "taskCount": "{count, plural, =1{1 задача} other{Задач: {count}}}",
@@ -10965,7 +10956,7 @@
     "batteryLevelSemantics": "Батарэя {level}%",
     "updateOmiGlassFirmware": "Абнавіць прашыўку OmiGlass",
     "deviceConnecting": "Падключэнне…",
-    "recordOptionsTip": "Парада: націсніце і ўтрымлівайце кнопку запісу, каб запісаць тэлефонны званок.",
+    "recordOptionsTip": "Парада: націсніце стрэлку на кнопцы запісу, каб запісаць тэлефонны званок.",
     "firmwareUpdateFailedTitle": "Абнаўленне не ўдалося",
     "firmwareUpdateFailedMessage": "Абнаўленне не завяршылася. Прылада працуе на бягучай прашыўцы, ёю можна бяспечна карыстацца. Зарадзіце яе і трымайце побач з тэлефонам, потым паспрабуйце зноў.",
     "firmwareDownloadFailedMessage": "Не ўдалося спампаваць абнаўленне, прылада не змянілася. Праверце падключэнне да інтэрнэту і паспрабуйце зноў.",
@@ -11072,5 +11063,54 @@
     "captureSourcePendant": "Кулон",
     "conversationDeveloperTools": "Інструменты распрацоўшчыка ў размовах",
     "conversationDeveloperToolsDescription": "Паказваць «Скапіраваць ID размовы» і «Праверыць промпт» у меню размовы",
-    "participantsSummary": "{name} + {count, plural, =1{яшчэ 1} few{яшчэ {count}} many{яшчэ {count}} other{яшчэ {count}}}"
+    "participantsSummary": "{name} + {count, plural, =1{яшчэ 1} few{яшчэ {count}} many{яшчэ {count}} other{яшчэ {count}}}",
+    "recordingAndTranscription": "Запіс і транскрыпцыя",
+    "notificationsAndDisplay": "Паведамленні і адлюстраванне",
+    "helpAndAbout": "Дапамога і пра праграму",
+    "speakerTagPromptTitle": "Дапамажыце Omi распазнаваць галасы",
+    "speakerTagPromptSubtitle": "Хуткая праверка галасоў за апошнія два дні",
+    "speakerTagPromptIsThisYou": "Гэта вы?",
+    "speakerTagPromptIsThisPerson": "Гэта {name}?",
+    "speakerTagPromptWhoIsThis": "Хто гэта?",
+    "speakerTagPromptThatsMe": "Гэта я",
+    "speakerTagPromptNotMe": "Не я",
+    "speakerTagPromptSomeoneNew": "Хтосьці новы",
+    "speakerTagPromptDontKnow": "Незнаёмы чалавек",
+    "speakerTagPromptNotSure": "Не ўпэўнены",
+    "speakerTagPromptPlayClip": "Прайграць фрагмент",
+    "speakerTagPromptProgress": "{current} з {total}",
+    "speakerTagPromptSaveVoicesTitle": "Запамінаць галасы людзей, якіх вы назвалі",
+    "speakerTagPromptSaveVoicesBody": "Omi захоўвае кароткі ўзор голасу, каб пазнаць іх наступным разам. Гэта можна змяніць у любы час у Наладах.",
+    "speakerTagPromptThanks": "Дзякуй! Omi будзе лепш распазнаваць галасы.",
+    "speakerTagPromptNameHint": "Імя",
+    "speakerTagPromptClipUnavailable": "Не ўдалося прайграць гэты фрагмент",
+    "speakerTagPromptAnswerFailed": "Не ўдалося захаваць. Паспрабуйце яшчэ раз.",
+    "voiceSettingsAskToTag": "Прасіць мяне пазначаць галасы",
+    "voiceSettingsAskToTagSubtitle": "Час ад часу Omi пытаецца, хто гаварыў у вашых нядаўніх размовах",
+    "voiceSettingsSaveOthersSubtitle": "Калі вы называеце кагосьці, Omi захоўвае кароткі ўзор голасу, каб пазнаць яго наступным разам",
+    "leaveBlank": "Пакіньце пустым",
+    "mcpOAuthSetup": "На claude.ai дадайце карыстальніцкі каннектар і ўстаўце URL сервера. Калі Claude запытае пашыраны OAuth Client ID, выкарыстайце значэнне ніжэй і пакіньце сакрэт пустым — ніколі не выкарыстоўвайце свой ключ MCP API як сакрэт OAuth.",
+    "claudeCode": "Claude Code",
+    "addToClaudeCodeConfig": "Дадайце да ~/.claude.json",
+    "claudeDesktopConnectorSetup": "На Claude Desktop → Settings → Connectors дадайце карыстальніцкі каннектар і ўстаўце URL сервера. Калі Claude запытае пашыраны OAuth Client ID, выкарыстайце значэнне ніжэй і пакіньце сакрэт пустым — ніколі не выкарыстоўвайце свой ключ MCP API як сакрэт OAuth.",
+    "transcriptionUnavailableRecordingContinues": "Транскрыпцыя недаступная, запіс працягваецца на прыладзе і будзе апрацаваны пазней",
+    "transcriptionUnavailableSavingOnDevice": "Транскрыпцыя недаступная · захоўваецца на прыладзе",
+    "transcriptionsPendingFraction": "Транскрыпцый у чаканні {pending}/{total}",
+    "transcriptionsPendingCount": "Транскрыпцый у чаканні {count}",
+    "captureSourceCall": "Званок",
+    "captureSourcePhoneMic": "Мікрафон тэлефона",
+    "captureStatusWithSource": "{status} · {source}",
+    "resume": "Працягнуць",
+    "finish": "Завяршыць",
+    "pendantPausedResumesWhenYouFinish": "Кулон на паўзе · працягне пасля завяршэння",
+    "pendantIsListeningTitle": "Ваш кулон слухае",
+    "oneSourceAtATime": "Omi запісвае толькі з адной крыніцы за раз.",
+    "recordWithPhoneInstead": "Запісаць тэлефонам замест кулона",
+    "pendantPausesUntilYouFinish": "Кулон на паўзе да завяршэння запісу",
+    "pendantPausesDuringCall": "Кулон на паўзе падчас званка",
+    "keepUsingPendant": "Працягнуць з кулонам",
+    "recordWith": "Запісаць праз",
+    "moreWaysToRecord": "Іншыя спосабы запісу",
+    "openCall": "Адкрыць званок",
+    "captureRecoveryBanner": "Гук кулона не даходзіць да праграмы — націсніце, каб выправіць"
 }
