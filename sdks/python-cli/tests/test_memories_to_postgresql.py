@@ -45,7 +45,9 @@ class MemoriesToPostgreSqlTests(unittest.TestCase):
         self.assertEqual(escape_sql_string(None), "NULL")
         self.assertEqual(escape_sql_string("hello"), "'hello'")
         self.assertEqual(escape_sql_string("it's a test"), "'it''s a test'")
-        self.assertEqual(escape_sql_string("semi; colon ' quote"), "'semi; colon '' quote'")
+        self.assertEqual(
+            escape_sql_string("semi; colon ' quote"), "'semi; colon '' quote'"
+        )
 
     def test_escape_sql_json(self):
         self.assertEqual(escape_sql_json(None), "NULL")
@@ -69,46 +71,54 @@ class MemoriesToPostgreSqlTests(unittest.TestCase):
         self.assertTrue(ts2.startswith("2024-05-01 12:30:00"))
 
     def test_generate_schema_sql(self):
-        schema_default = generate_schema_sql(with_pgvector=False)
-        self.assertIn("CREATE TABLE IF NOT EXISTS omi_memories", schema_default)
-        self.assertIn("search_vector tsvector GENERATED ALWAYS", schema_default)
-        self.assertNotIn("CREATE EXTENSION IF NOT EXISTS \"vector\"", schema_default)
-        self.assertNotIn("embedding vector", schema_default)
-
-        schema_vector = generate_schema_sql(with_pgvector=True, vector_dim=768)
-        self.assertIn("CREATE EXTENSION IF NOT EXISTS \"vector\"", schema_vector)
-        self.assertIn("embedding vector(768)", schema_vector)
-        self.assertIn("idx_omi_memories_embedding", schema_vector)
+        schema = generate_schema_sql()
+        self.assertIn("CREATE TABLE IF NOT EXISTS omi_memories", schema)
+        self.assertIn("search_vector tsvector GENERATED ALWAYS", schema)
+        self.assertIn("idx_omi_memories_created_at", schema)
+        self.assertIn("idx_omi_memories_category", schema)
+        self.assertIn("idx_omi_memories_search", schema)
 
     def test_format_memory_sql_row_standard(self):
         mem = {
             "id": "mem-101",
             "content": "User prefers Earl Grey tea with milk.",
             "category": "preferences",
+            "visibility": "private",
             "created_at": "2024-05-01T08:00:00Z",
+            "updated_at": "2024-05-01T08:00:00Z",
             "manually_added": True,
-            "deleted": False,
-            "score": 5,
             "metadata": {"source": "voice_recording"},
         }
-        sql = format_memory_sql_row(mem, with_pgvector=False)
+        sql = format_memory_sql_row(mem)
         self.assertIn("INSERT INTO omi_memories", sql)
         self.assertIn("'mem-101'", sql)
         self.assertIn("'User prefers Earl Grey tea with milk.'", sql)
         self.assertIn("'preferences'", sql)
+        self.assertIn("'private'", sql)
         self.assertIn("ON CONFLICT (id) DO UPDATE SET", sql)
         self.assertIn("TRUE", sql)
 
-    def test_format_memory_sql_row_with_pgvector(self):
-        mem = {
-            "id": "mem-102",
-            "content": "Meeting with Sarah scheduled for Friday.",
+    def test_format_memory_sql_row_with_real_cli_fixture(self):
+        # Realistic fixture matching `omi --json memory list` export contract
+        cli_fixture = {
+            "id": "mem_01hqxyz123456789abcdef01",
             "category": "work",
-            "embedding": [0.123, -0.456, 0.789],
+            "visibility": "private",
+            "content": "Deploying the PostgreSQL database analytics cluster.",
+            "tags": ["database", "infrastructure"],
+            "created_at": "2024-05-10T14:22:10.000000Z",
+            "updated_at": "2024-05-10T14:25:00.000000Z",
+            "manually_added": False,
         }
-        sql = format_memory_sql_row(mem, with_pgvector=True)
-        self.assertIn("embedding", sql)
-        self.assertIn("'[0.123,-0.456,0.789]'::vector", sql)
+        sql = format_memory_sql_row(cli_fixture)
+        self.assertIn("'mem_01hqxyz123456789abcdef01'", sql)
+        self.assertIn("'work'", sql)
+        self.assertIn("'Deploying the PostgreSQL database analytics cluster.'", sql)
+        self.assertIn("FALSE", sql)
+        # Tags should be bundled into metadata jsonb
+        self.assertIn("database", sql)
+        self.assertIn("infrastructure", sql)
+        self.assertIn("::jsonb", sql)
 
     def test_sql_injection_resilience(self):
         malicious_mem = {
@@ -168,12 +178,12 @@ class MemoriesToPostgreSqlTests(unittest.TestCase):
             data = [{"id": "cli-1", "content": "Created via CLI test."}]
             in_file.write_text(json.dumps(data), encoding="utf-8")
 
-            exit_code = main(["-i", str(in_file), "-o", str(out_file), "--with-pgvector"])
+            exit_code = main(["-i", str(in_file), "-o", str(out_file)])
             self.assertEqual(exit_code, 0)
             self.assertTrue(out_file.exists())
             sql = out_file.read_text(encoding="utf-8")
             self.assertIn("cli-1", sql)
-            self.assertIn("vector", sql)
+            self.assertIn("CREATE TABLE IF NOT EXISTS omi_memories", sql)
 
     def test_main_cli_stdin_stdout(self):
         data = [{"id": "stdin-1", "content": "From STDIN."}]
