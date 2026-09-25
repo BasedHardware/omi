@@ -349,6 +349,15 @@ class CaptureGroup(BaseModel):
     members: List[CaptureGroupMember] = []
 
 
+def _apply_friend_language_default(instance):
+    """Shared model_validator logic: default language to 'en' for Friend / Friend-com sources."""
+    if instance.source in (ConversationSource.friend, ConversationSource.friend_com) and (
+        instance.language is None or not instance.language.strip()
+    ):
+        instance.language = 'en'
+    return instance
+
+
 class Conversation(BaseModel):
     sync_content_revision: Optional[int] = None
     sync_relevance: Optional[Literal['keep', 'review']] = None
@@ -362,7 +371,7 @@ class Conversation(BaseModel):
     finished_at: Optional[datetime]
 
     source: Optional[ConversationSource] = ConversationSource.omi
-    language: Optional[str] = None  # applies only to Friend # TODO: once released migrate db to default 'en'
+    language: Optional[str] = None  # applies only to Friend; Friend conversations default to 'en'
 
     # True when this conversation was transcribed on a third-party (custom STT)
     # provider, so no Omi transcription credits were consumed. Provenance for
@@ -445,6 +454,10 @@ class Conversation(BaseModel):
     meeting_treatment_reason: Optional[str] = None
     meeting_duration_s: Optional[float] = None
     meeting_dedup_speech_s: Optional[float] = None
+
+    @model_validator(mode='after')
+    def apply_friend_language_default(self):
+        return _apply_friend_language_default(self)
 
     def __init__(self, **data):
         raw_segments = data.get('transcript_segments')
@@ -596,6 +609,10 @@ class CreateConversation(BaseModel):
     # only after process_conversation has already persisted the row.
     external_data: Optional[Dict] = None
 
+    @model_validator(mode='after')
+    def apply_friend_language_default(self):
+        return _apply_friend_language_default(self)
+
     def get_transcript(self, include_timestamps: bool, people: List[Person] = None, user_name: str = None) -> str:
         return TranscriptSegment.segments_as_string(
             self.transcript_segments, include_timestamps=include_timestamps, user_name=user_name, people=people
@@ -622,6 +639,10 @@ class ExternalIntegrationCreateConversation(BaseModel):
 
     client_device_id: Optional[str] = None
     client_platform: Optional[str] = None
+
+    @model_validator(mode='after')
+    def apply_friend_language_default(self):
+        return _apply_friend_language_default(self)
 
     def get_transcript(self, include_timestamps: bool) -> str:
         return self.text

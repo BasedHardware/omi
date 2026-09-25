@@ -733,6 +733,43 @@ class TestProcessSegmentPreferences:
         assert incoming['private_cloud_sync_enabled'] is True
         assert 'test-id' in response['new_memories']
 
+    @patch('utils.sync.pipeline.get_closest_conversation_to_timestamps', return_value=None)
+    @patch('utils.sync.pipeline.get_timestamp_from_path', return_value=1700000000)
+    @patch('utils.sync.pipeline.prerecorded')
+    @patch('utils.sync.pipeline.delete_syncing_temporal_file')
+    @patch('utils.sync.pipeline.get_syncing_file_temporal_signed_url', return_value='http://example.com/audio.wav')
+    def test_detected_language_is_persisted_on_new_conversation(
+        self, mock_url, mock_delete, mock_dg, mock_ts, mock_closest
+    ):
+        """Detected language must be handed to the intake so the Friend 'en' default cannot replace it."""
+        from models.conversation_enums import ConversationSource
+        from utils.sync.pipeline import process_segment
+
+        mock_dg.return_value = (self._make_mock_words(), 'es')
+
+        response = {'new_memories': set(), 'updated_memories': set()}
+        lock = threading.Lock()
+        errors = []
+
+        assigned = _make_assigned_conversation()
+
+        with patch(
+            'utils.conversations.lifecycle.ingest_sync_conversation',
+            return_value=(assigned, True, assigned['transcript_segments']),
+        ) as mock_intake:
+            process_segment(
+                'test/path.bin',
+                'uid123',
+                response,
+                lock,
+                errors,
+                source=ConversationSource.friend,
+            )
+
+        incoming = mock_intake.call_args[0][1]
+        assert incoming['language'] == 'es', "Detected 'es' must be persisted, not replaced by the Friend 'en' default"
+        assert 'test-id' in response['new_memories']
+
 
 # ---------------------------------------------------------------------------
 # Structural: endpoint wires transcription_prefs into threads

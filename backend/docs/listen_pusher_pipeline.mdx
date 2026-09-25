@@ -988,6 +988,17 @@ stubs use ordinary temporal assignment; stubs remain untouched. Explicit targets
 with real live transcript or photo content retain live attachment and identity.
 Source, device and lock state isolate components; unknown device is its own partition.
 
+A conversation created by offline processing persists the transcription language
+resolved for the batch: the provider-detected language from `return_language`, or
+the user's single-language-mode choice when that mode trusts it over detection.
+That value is written on the initial conversation document, so later reprocessing
+reuses the resolved language instead of rediscovering it. The Friend-only `'en'`
+model default (`models.conversation.py::apply_friend_language_default`) applies
+only when no language is known; it never overrides a detected or user-selected
+value. `scripts/migrate_conversation_language.py` backfills the same default on
+existing `friend`/`friend_com` documents that have a null, missing, or blank
+language.
+
 `utils/conversation_continuity.py` owns the shared predicate. The remaining policy
 input difference is that realtime can configure its timeout per session, while WALs
 do not carry this setting and sync uses the default. Job leases, persistence fences,
