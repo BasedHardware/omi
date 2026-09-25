@@ -4,8 +4,9 @@ Use this recipe to export Omi memories into an optimized SQL script for ingestio
 lightning-fast OLAP analytical queries in [DuckDB](https://duckdb.org/).
 
 DuckDB is the premier in-process analytical SQL database (the "SQLite for Analytics").
-This recipe creates strongly typed schemas with native array columns (`VARCHAR[]`) and
-timestamp support, allowing unnesting tags and running analytical aggregations offline.
+This recipe creates strongly typed schemas with native array columns (`VARCHAR[]`),
+visibility attributes, and `TIMESTAMPTZ` timestamp support, allowing unnesting tags
+and running analytical aggregations offline.
 
 The companion script [`memories_to_duckdb.py`](memories_to_duckdb.py) runs on Python
 3.10+ using only standard library modules (`argparse`, `json`, `sys`, `pathlib`).
@@ -67,8 +68,8 @@ duckdb -c ".read memories.sql" -c "SELECT category, COUNT(*) as count FROM memor
 #### Most frequent tags (using DuckDB unnest):
 
 ```sql
-SELECT UNNEST(tags) AS tag, COUNT(*) AS count
-FROM memories
+SELECT tag, COUNT(*) AS count
+FROM (SELECT UNNEST(tags) AS tag FROM memories)
 GROUP BY tag
 ORDER BY count DESC
 LIMIT 10;

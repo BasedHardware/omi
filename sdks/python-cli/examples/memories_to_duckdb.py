@@ -1,24 +1,11 @@
 #!/usr/bin/env python3
-"""Convert Omi memories JSON exports into a DuckDB SQL ingestion script.
+"""Convert Omi memory JSON exports to a DuckDB SQL ingestion script.
 
-Usage:
-    # Basic export from saved memories JSON:
-    python memories_to_duckdb.py memories.json -o memories.sql
+Reads Omi memory JSON exports (from file paths or stdin), deduplicates by memory ID,
+and generates clean, idempotent DuckDB SQL statements (CREATE TABLE IF NOT EXISTS
+and INSERT OR REPLACE INTO).
 
-    # Piped directly from omi-cli:
-    omi --json memory list --limit 100 | python memories_to_duckdb.py - -o memories.sql
-
-    # Custom table name:
-    python memories_to_duckdb.py memories.json -o memories.sql --table-name my_memories
-
-    # Multi-file deduplicated export with overwrite protection:
-    python memories_to_duckdb.py day1.json day2.json -o memories.sql --force
-
-Format:
-    Generates a standards-compliant SQL script optimized for DuckDB OLAP execution:
-    - Strongly typed table schema with VARCHAR, TIMESTAMP_TZ, and VARCHAR[] list types.
-    - Idempotent INSERT OR REPLACE statements.
-    - Sample analytical queries for category aggregation and tag unnesting.
+Zero external dependencies - uses Python 3 standard library only.
 """
 
 from __future__ import annotations
@@ -26,67 +13,59 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from datetime import datetime, timezone
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Sequence, Tuple
 
 
 def sql_quote(val: Any) -> str:
-    """Safely format a value as a SQL literal string."""
+    """Format and escape a scalar value as a DuckDB SQL literal."""
     if val is None:
         return "NULL"
+    if isinstance(val, bool):
+        return "TRUE" if val else "FALSE"
+    if isinstance(val, (int, float)):
+        return str(val)
+    # Double single quotes for standard SQL literal escaping
     text = str(val).replace("'", "''")
     return f"'{text}'"
 
 
 def sql_array_literal(items: Sequence[str]) -> str:
-    """Format a list of strings as a DuckDB array literal ['item1', 'item2']."""
+    """Format a sequence of strings into a DuckDB VARCHAR[] array literal."""
     if not items:
         return "[]"
-    quoted = [sql_quote(i) for i in items]
-    return f"[{', '.join(quoted)}]"
+    escaped_items = ["'" + str(x).replace("'", "''") + "'" for x in items]
+    return f"[{', '.join(escaped_items)}]"
 
 
-def parse_memories_data(data: Any) -> List[Dict[str, Any]]:
-    """Parse raw JSON input into a list of memory dictionaries."""
-    if isinstance(data, str):
-        try:
-            parsed = json.loads(data)
-        except json.JSONDecodeError as exc:
-            raise ValueError(f"Invalid JSON data: {exc}") from exc
+def parse_memories_data(raw: Any) -> List[Dict[str, Any]]:
+    """Unwrap Omi memories from raw JSON input supporting common CLI shapes."""
+    if isinstance(raw, str):
+        data = json.loads(raw)
     else:
-        parsed = data
+        data = raw
 
-    if isinstance(parsed, dict):
-        items = (
-            parsed.get("memories")
-            or parsed.get("items")
-            or parsed.get("data")
-            or parsed.get("result")
-            or [parsed]
-        )
-    elif isinstance(parsed, list):
-        items = parsed
-    else:
-        raise ValueError("Expected a JSON object or array of memory items")
-
-    if not isinstance(items, list):
-        raise ValueError("Memory items must resolve to a list")
-
-    records: List[Dict[str, Any]] = []
-    for item in items:
-        if isinstance(item, dict):
-            records.append(item)
-    return records
+    if isinstance(data, list):
+        return [x for x in data if isinstance(x, dict)]
+    elif isinstance(data, dict):
+        for key in ("memories", "items", "data", "result"):
+            val = data.get(key)
+            if isinstance(val, list):
+                return [x for x in val if isinstance(x, dict)]
+        return [data]
+    return []
 
 
 def format_memory_for_duckdb(item: Dict[str, Any]) -> Dict[str, Any]:
-    """Extract and normalize memory fields for DuckDB insertion."""
+    """Extract and normalize memory properties for DuckDB relational storage."""
     raw_id = str(item.get("id") or item.get("uid") or "").strip()
     if not raw_id:
-        raise ValueError("Memory record missing required 'id' field")
+        raw_id = str(hash(json.dumps(item, sort_keys=True)))
 
-    content = str(item.get("content") or item.get("text") or item.get("memory") or "").strip()
-    category = str(item.get("category") or item.get("type") or "general").strip()
+    content = str(item.get("content") or item.get("text") or "").strip()
+    category = str(item.get("category") or "general").strip()
+    visibility = str(item.get("visibility") or "").strip()
 
     tags_val = item.get("tags") or []
     if isinstance(tags_val, str):
@@ -101,6 +80,7 @@ def format_memory_for_duckdb(item: Dict[str, Any]) -> Dict[str, Any]:
         "content": content,
         "category": category,
         "tags": tags,
+        "visibility": visibility,
         "created_at": item.get("created_at"),
         "updated_at": item.get("updated_at"),
     }
@@ -139,8 +119,9 @@ def generate_duckdb_sql(
         "    content TEXT NOT NULL,",
         "    category VARCHAR,",
         "    tags VARCHAR[],",
-        "    created_at TIMESTAMP_TZ,",
-        "    updated_at TIMESTAMP_TZ",
+        "    visibility VARCHAR,",
+        "    created_at TIMESTAMPTZ,",
+        "    updated_at TIMESTAMPTZ",
         ");",
         "",
     ]
@@ -150,12 +131,13 @@ def generate_duckdb_sql(
         content_val = sql_quote(rec["content"])
         category_val = sql_quote(rec["category"])
         tags_val = sql_array_literal(rec["tags"])
-        created_val = f"TRY_CAST({sql_quote(rec['created_at'])} AS TIMESTAMP_TZ)" if rec["created_at"] else "NULL"
-        updated_val = f"TRY_CAST({sql_quote(rec['updated_at'])} AS TIMESTAMP_TZ)" if rec["updated_at"] else "NULL"
+        vis_val = sql_quote(rec["visibility"])
+        created_val = f"TRY_CAST({sql_quote(rec['created_at'])} AS TIMESTAMPTZ)" if rec["created_at"] else "NULL"
+        updated_val = f"TRY_CAST({sql_quote(rec['updated_at'])} AS TIMESTAMPTZ)" if rec["updated_at"] else "NULL"
 
         sql_lines.append(
-            f"INSERT OR REPLACE INTO {table_name} (id, content, category, tags, created_at, updated_at) "
-            f"VALUES ({id_val}, {content_val}, {category_val}, {tags_val}, {created_val}, {updated_val});"
+            f"INSERT OR REPLACE INTO {table_name} (id, content, category, tags, visibility, created_at, updated_at) "
+            f"VALUES ({id_val}, {content_val}, {category_val}, {tags_val}, {vis_val}, {created_val}, {updated_val});"
         )
 
     sql_lines.extend([
@@ -165,7 +147,7 @@ def generate_duckdb_sql(
         f"-- SELECT category, COUNT(*) as total FROM {table_name} GROUP BY category ORDER BY total DESC;",
         "",
         f"-- 2. Most frequent tags (unnested):",
-        f"-- SELECT UNNEST(tags) as tag, COUNT(*) as count FROM {table_name} GROUP BY tag ORDER BY count DESC LIMIT 10;",
+        f"-- SELECT tag, COUNT(*) as count FROM (SELECT UNNEST(tags) as tag FROM {table_name}) GROUP BY tag ORDER BY count DESC LIMIT 10;",
         "",
         f"-- 3. Search memory content:",
         f"-- SELECT id, content, created_at FROM {table_name} WHERE content ILIKE '%project%' ORDER BY created_at DESC;",
@@ -178,56 +160,52 @@ def generate_duckdb_sql(
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="Convert Omi memory JSON exports to a DuckDB SQL ingestion script.",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""\
-Examples:
-  omi --json memory list --limit 100 | python memories_to_duckdb.py - -o memories.sql
-  python memories_to_duckdb.py memories.json -o memories.sql --table-name omi_memories
-  python memories_to_duckdb.py m1.json m2.json -o memories.sql --force
-""",
+        epilog="Example: omi --json memory list --limit 100 | python memories_to_duckdb.py - -o memories.sql",
     )
     parser.add_argument(
         "inputs",
         nargs="+",
         metavar="INPUT",
-        help="One or more memory JSON files exported from 'omi --json memory list', or '-' for stdin.",
+        help="One or more JSON files exported from 'omi memory list', or '-' for stdin",
     )
     parser.add_argument(
         "-o",
         "--output",
-        required=True,
-        metavar="FILE",
-        help="Output .sql file path.",
+        dest="output",
+        default=None,
+        help="Destination SQL file path (default: write to stdout)",
     )
     parser.add_argument(
         "--table-name",
+        dest="table_name",
         default="memories",
-        metavar="TABLE",
-        help="Target table name (default: 'memories').",
+        help="DuckDB target table name (default: memories)",
     )
     parser.add_argument(
-        "-f",
         "--force",
         action="store_true",
-        help="Overwrite output file if it already exists.",
+        help="Overwrite existing output file without prompting",
     )
 
     args = parser.parse_args()
 
-    out_path = Path(args.output)
-    if out_path.exists() and not args.force:
-        print(f"Error: Destination file '{args.output}' already exists. Use --force to overwrite.", file=sys.stderr)
+    out_path = Path(args.output) if args.output else None
+    if out_path and out_path.exists() and not args.force:
+        print(f"Error: Output file already exists: {out_path} (use --force to overwrite)", file=sys.stderr)
         sys.exit(1)
 
     try:
-        content, count = generate_duckdb_sql(args.inputs, table_name=args.table_name)
-    except (FileNotFoundError, ValueError) as err:
-        print(f"Error: {err}", file=sys.stderr)
+        sql_content, count = generate_duckdb_sql(args.inputs, table_name=args.table_name)
+    except Exception as exc:
+        print(f"Error during DuckDB SQL generation: {exc}", file=sys.stderr)
         sys.exit(1)
 
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    out_path.write_text(content, encoding="utf-8")
-    print(f"Exported {count} memory record(s) to '{args.output}'.")
+    if out_path:
+        out_path.parent.mkdir(parents=True, exist_ok=True)
+        out_path.write_text(sql_content, encoding="utf-8")
+        print(f"Successfully generated DuckDB SQL ingestion script: {out_path} ({count} memories)")
+    else:
+        sys.stdout.write(sql_content + "\n")
 
 
 if __name__ == "__main__":

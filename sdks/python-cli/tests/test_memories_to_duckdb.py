@@ -54,6 +54,7 @@ class TestMemoriesToDuckDb(unittest.TestCase):
             "content": "User lives in Seattle",
             "category": "personal",
             "tags": ["location", "bio"],
+            "visibility": "private",
             "created_at": "2026-09-24T12:00:00Z",
         }
         res = format_memory_for_duckdb(item)
@@ -61,10 +62,11 @@ class TestMemoriesToDuckDb(unittest.TestCase):
         self.assertEqual(res["content"], "User lives in Seattle")
         self.assertEqual(res["category"], "personal")
         self.assertEqual(res["tags"], ["location", "bio"])
+        self.assertEqual(res["visibility"], "private")
 
     def test_generate_duckdb_sql_statements(self):
         mems = [
-            {"id": "m1", "content": "Memory 1", "category": "work", "tags": ["w1"]},
+            {"id": "m1", "content": "Memory 1", "category": "work", "tags": ["w1"], "visibility": "public"},
             {"id": "m2", "content": "Memory 2", "category": "life"},
         ]
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -74,9 +76,13 @@ class TestMemoriesToDuckDb(unittest.TestCase):
             sql, count = generate_duckdb_sql([str(f)], table_name="custom_mems")
             self.assertEqual(count, 2)
             self.assertIn("CREATE TABLE IF NOT EXISTS custom_mems", sql)
+            self.assertIn("created_at TIMESTAMPTZ", sql)
+            self.assertIn("visibility VARCHAR", sql)
+            self.assertNotIn("TIMESTAMP_TZ", sql)
             self.assertIn("INSERT OR REPLACE INTO custom_mems", sql)
             self.assertIn("['w1']", sql)
-            self.assertIn("SELECT UNNEST(tags)", sql)
+            self.assertIn("'public'", sql)
+            self.assertIn("UNNEST(tags)", sql)
 
     def test_deduplication(self):
         m1 = [{"id": "dup", "content": "Old"}]
