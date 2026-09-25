@@ -349,10 +349,10 @@ struct ServerMemory: Decodable, Identifiable {
     let wire = try? OmiAPI.MemoryDB(from: decoder)
 
     // id / memory_id alias resolution: wire.id is the backend authority
-    // (required String); memory_id is an optional legacy alias. Preserve the
-    // silent-mismatch behavior from the legacy decoder.
+    // (required String); memory_id is gone from the wire contract, so it is
+    // read from the container only, for legacy persisted rows.
     let idValue = try wire?.id ?? container.decodeIfPresent(String.self, forKey: .id)
-    let memoryIdValue = try wire?.memoryId ?? container.decodeIfPresent(String.self, forKey: .memoryId)
+    let memoryIdValue = container.decodeIfPresent(String.self, forKey: .memoryId)
     switch (idValue, memoryIdValue) {
     case (.some(let id), .some(let memoryId)) where id != memoryId:
       self.id = id

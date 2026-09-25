@@ -280,7 +280,7 @@ def search_memories_text(
                 source_sink.append(
                     {
                         'kind': 'memory',
-                        'source_id': memory.memory_id or memory.id,
+                        'source_id': memory.id,
                         'title': 'Memory',
                         'preview': str(memory.content or '')[:600],
                         'created_at': safe_isoformat(
