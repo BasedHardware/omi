@@ -138,6 +138,47 @@ class TestConversationsToMeilisearch(unittest.TestCase):
         self.assertEqual(len(res_date), 1)
         self.assertEqual(res_date[0]["id"], "c3")
 
+    def test_transform_from_structured_cli_format(self):
+        real_fixture = [
+            {
+                "id": "conv-real-999",
+                "structured": {
+                    "title": "Weekly Engineering Sync",
+                    "category": "work",
+                    "overview": "Discussed release milestone and roadmap."
+                },
+                "started_at": "2026-09-24T10:00:00Z",
+                "finished_at": "2026-09-24T10:30:00Z",
+                "transcript_segments": [
+                    {"speaker": "David", "text": "Let's review the sprint board."},
+                    {"speaker": "Sarah", "text": "Backend PRs are all green."}
+                ]
+            }
+        ]
+        docs = transform_to_meilisearch(real_fixture)
+        self.assertEqual(len(docs), 1)
+        doc = docs[0]
+        self.assertEqual(doc["title"], "Weekly Engineering Sync")
+        self.assertEqual(doc["category"], "work")
+        self.assertEqual(doc["summary"], "Discussed release milestone and roadmap.")
+        self.assertEqual(doc["duration_seconds"], 1800)
+        self.assertEqual(doc["created_at"], "2026-09-24T10:00:00Z")
+        self.assertEqual(doc["started_at"], "2026-09-24T10:00:00Z")
+        self.assertIn("David: Let's review the sprint board.", doc["transcript"])
+        self.assertIn("Sarah: Backend PRs are all green.", doc["transcript"])
+        self.assertEqual(doc["speakers"], ["David", "Sarah"])
+
+    def test_timestamp_fallback_and_duration_calc(self):
+        item = {
+            "id": "c_fallback",
+            "started_at": "2026-09-24T08:00:00Z",
+            "finished_at": "2026-09-24T08:15:00Z",
+        }
+        docs = transform_to_meilisearch([item])
+        self.assertEqual(len(docs), 1)
+        self.assertEqual(docs[0]["created_at"], "2026-09-24T08:00:00Z")
+        self.assertEqual(docs[0]["duration_seconds"], 900)
+
     def test_cli_end_to_end_file_to_file(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             tmppath = Path(tmpdir)

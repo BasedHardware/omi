@@ -14,14 +14,14 @@ runs on Python 3.10+ using only standard library modules (`json`, `re`, `argpars
 Export conversations using the JSON output format:
 
 ```sh
-omi --json conversation list --limit 200 > conversations.json
+omi --json conversation list --include-transcript --limit 200 > conversations.json
 ```
 
 For large histories across multiple pages, paginate with `--offset`:
 
 ```sh
-omi --json conversation list --limit 200 --offset 0 > page1.json
-omi --json conversation list --limit 200 --offset 200 > page2.json
+omi --json conversation list --include-transcript --limit 200 --offset 0 > page1.json
+omi --json conversation list --include-transcript --limit 200 --offset 200 > page2.json
 ```
 
 ## 2. Convert to Meilisearch documents
@@ -35,7 +35,7 @@ python conversations_to_meilisearch.py conversations.json -o meili_docs.json
 Or pipe directly from `omi-cli`:
 
 ```sh
-omi --json conversation list --limit 200 | python conversations_to_meilisearch.py - -o meili_docs.json
+omi --json conversation list --include-transcript --limit 200 | python conversations_to_meilisearch.py - -o meili_docs.json
 ```
 
 ### Merging multiple pages
