@@ -114,6 +114,18 @@ class AuditCaptureProvider extends ChangeNotifier implements CaptureProvider {
   List<Wal> get unsyncedSessionWals => const [];
   @override
   int get inFlightAudioSeconds => 0;
+  // Capture actions a tap may reach; the audit shows the screen the tap leads to, it does not
+  // capture audio.
+  @override
+  Future<void> streamRecording({bool resumeCapture = true}) async {}
+  @override
+  Future<bool> stopStreamRecording({String reason = 'user_stopped', bool resumeHandedOffPendant = true}) async => true;
+  @override
+  Future<void> finishCapture() async {}
+  @override
+  Future<void> pauseCapture() async {}
+  @override
+  Future<void> resumeCapture() async {}
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
