@@ -18,6 +18,7 @@ from fastapi.testclient import TestClient
 from database import conversation_finalization_jobs as jobs_db
 from database.firestore_transaction_retry import FirestoreContentionExhausted
 from models.conversation_enums import ConversationStatus
+from utils.conversations.processing_trigger import ProcessingTrigger
 from routers.conversation_finalization import _parse_task_payload
 import routers.conversation_finalization as finalization_router
 import routers.pusher as pusher_router
@@ -290,6 +291,38 @@ def test_required_cloud_tasks_rejects_rest_admission_before_outbox_mutation(monk
         )
 
     create.assert_not_called()
+
+
+def test_required_cloud_tasks_rejects_disabled_dispatch_before_outbox_mutation(monkeypatch):
+    """A configured-but-disabled worker has no owning pusher for a REST caller."""
+    create = MagicMock()
+    monkeypatch.setattr(lifecycle_service.jobs_db, 'create_or_get_finalization_intent', create)
+    monkeypatch.setattr(lifecycle_service, 'is_listen_finalization_dispatch_configured', lambda: True)
+    monkeypatch.setattr(lifecycle_service, 'is_listen_finalization_dispatch_enabled', lambda: False)
+
+    with pytest.raises(lifecycle_service.FinalizationDispatchUnavailable):
+        lifecycle_service.request_finalization(
+            'uid-1',
+            'conversation-1',
+            has_byok_keys=False,
+            require_cloud_tasks=True,
+        )
+
+    create.assert_not_called()
+
+
+def test_non_required_caller_keeps_pusher_route_when_dispatch_disabled(monkeypatch):
+    intent = {'job_id': 'job-1', 'status': 'queued', 'dispatch_generation': 2, 'requires_byok': False}
+    _mock_lifecycle_conversation(monkeypatch)
+    monkeypatch.setattr(lifecycle_service.jobs_db, 'create_or_get_finalization_intent', MagicMock(return_value=intent))
+    monkeypatch.setattr(lifecycle_service, 'is_listen_finalization_dispatch_configured', lambda: True)
+    monkeypatch.setattr(lifecycle_service, 'is_listen_finalization_dispatch_enabled', lambda: False)
+
+    result = lifecycle_service.request_finalization(
+        'uid-1', 'conversation-1', has_byok_keys=False, require_cloud_tasks=False
+    )
+
+    assert result['route'] == 'pusher'
 
 
 def test_durable_finalization_maps_exhausted_firestore_contention_to_retryable_admission_failure(monkeypatch):
@@ -713,7 +746,7 @@ async def test_worker_forwards_rest_force_processing_mode_from_the_durable_job(m
         finalization_job_id='job-1',
         dispatch_generation=1,
         lease_epoch=1,
-        force_process=True,
+        trigger=ProcessingTrigger.CLIENT_FINALIZE,
         final_attempt=False,
     )
 

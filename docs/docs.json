@@ -196,6 +196,7 @@
               "doc/hardware/OmiConsumer",
               "doc/hardware/DevKit2",
               "doc/hardware/DevKit1",
+              "doc/hardware/SpeakerMod",
               "doc/hardware/PaintingOMI"
             ]
           },

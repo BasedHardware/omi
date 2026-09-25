@@ -11,6 +11,7 @@ os.environ.setdefault(
 
 from models.chat import FileChat  # noqa: E402
 from utils.other import chat_file  # noqa: E402
+from utils.llm.model_config import LUNA_MODEL
 
 
 class _Callback:
@@ -73,6 +74,6 @@ async def test_vision_chat_uses_luna_completion_budget_field(monkeypatch):
     assert answer == 'A test image.'
     assert callback.chunks == ['A test image.']
     assert callback.ended is True
-    assert request['model'] == 'gpt-5.6-luna'
+    assert request['model'] == LUNA_MODEL
     assert request['max_completion_tokens'] == 2048
     assert 'max_tokens' not in request

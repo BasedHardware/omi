@@ -368,7 +368,7 @@ def _record_chat_quota_question_best_effort(
         logger.exception('Failed to record chat quota question source=%s uid=%s', source, uid)
 
 
-def _release_chat_quota_question_best_effort(
+async def _release_chat_quota_question_best_effort(
     uid: str,
     *,
     idempotency_key: str,
@@ -378,7 +378,7 @@ def _release_chat_quota_question_best_effort(
     A release failure must never mask the original stream failure, and a retry
     is idempotent on the same event doc."""
     try:
-        llm_usage_db.release_chat_quota_question(uid, idempotency_key)
+        await run_blocking(db_executor, llm_usage_db.release_chat_quota_question, uid, idempotency_key)
     except Exception:
         logger.exception('Failed to release chat quota question uid=%s', uid)
 
@@ -725,7 +725,7 @@ def send_message(
                         )
                     # The turn produced no answer: release the question charged
                     # up front so the user is not billed for a failed turn.
-                    _release_chat_quota_question_best_effort(uid, idempotency_key=quota_idempotency_key)
+                    await _release_chat_quota_question_best_effort(uid, idempotency_key=quota_idempotency_key)
                     yield await emit_stream_error_fallback(
                         uid,
                         app_id_from_app,
@@ -741,7 +741,7 @@ def send_message(
             raise
         except Exception:
             journey_attempt.finish('failure')
-            _release_chat_quota_question_best_effort(uid, idempotency_key=quota_idempotency_key)
+            await _release_chat_quota_question_best_effort(uid, idempotency_key=quota_idempotency_key)
             raise
         finally:
             reset_usage_context(usage_token)

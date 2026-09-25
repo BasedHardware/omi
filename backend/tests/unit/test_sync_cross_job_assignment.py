@@ -292,6 +292,19 @@ def test_real_process_segment_two_independent_job_responses(monkeypatch):
         pipeline._reprocess_conversation_after_update('u', 'a', 'en')
         pipeline.process_conversation.assert_not_called()
 
+        # Everything the rules cannot settle is assessed as a sync update, with
+        # the stored restore marker the wire model does not carry.
+        pipeline.conversations_db.get_conversation = lambda *a: {
+            'sync_relevance': 'keep',
+            'sync_relevance_user_kept': True,
+            'transcript_segments': chunk('a', 1000, 'Oh')['transcript_segments'],
+        }
+        pipeline.deserialize_conversation = MagicMock()
+        pipeline._reprocess_conversation_after_update('u', 'a', 'en')
+        kwargs = pipeline.process_conversation.call_args.kwargs
+        assert kwargs['trigger'] is pipeline.ProcessingTrigger.SYNC_UPDATE
+        assert kwargs['user_kept'] is True
+
         pipeline._reprocess_conversation_after_update = MagicMock()
         pipeline._reprocess_merged_conversations('u', {'_merged': {'new': 'en', 'old': 'en'}, 'new_memories': {'new'}})
         calls = pipeline._reprocess_conversation_after_update.call_args_list

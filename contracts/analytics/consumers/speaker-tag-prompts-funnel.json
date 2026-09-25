@@ -1,0 +1,20 @@
+{
+  "id": "speaker-tag-prompts-funnel",
+  "kind": "question",
+  "owner": "People intelligence",
+  "question": "Do speaker tag prompts get seen, played and answered, and how often do people turn off saving other people's voices, per namespace/build? Recognition quality itself is measured server-side from answer outcomes (omi_speaker_tag_prompt_quality_total), not from these presence counts.",
+  "query": "contracts/analytics/consumers/speaker-tag-prompts-funnel.sql",
+  "events": [
+    "speakerTagPromptsViewed",
+    "speakerTagPromptClipPlayed",
+    "speakerTagPromptAnswerSubmitted",
+    "speakerTagPromptsClosed",
+    "voiceProfileSettingToggled"
+  ],
+  "namespace_property": "$app_namespace",
+  "dimensions": [
+    "git_sha",
+    "build_number"
+  ],
+  "zero_policy": "Zero views can mean no eligible clips in the last 48 hours; read the server's omi_speaker_tag_prompt_requests_total status before calling the card broken."
+}

@@ -4,27 +4,33 @@ import 'package:flutter/services.dart';
 
 import 'package:collection/collection.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
-import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
-import 'package:omi/widgets/shimmer_with_timeout.dart';
-import 'package:webview_flutter/webview_flutter.dart';
 
 import 'package:omi/backend/preferences.dart';
+import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/settings/widgets/cancel_subscription_sheet.dart';
-import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/models/subscription.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
+import 'package:omi/pages/settings/widgets/plans/plan_cards.dart';
+import 'package:omi/pages/settings/widgets/plans/plan_display_name.dart';
+import 'package:omi/pages/settings/widgets/plans/plans_hero.dart';
+import 'package:omi/pages/settings/widgets/plans/training_data_option.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
 import 'package:omi/providers/user_provider.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/plan_pricing.dart';
 import 'package:omi/services/freemium_transcription_service.dart';
-import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
-import 'package:omi/widgets/confirmation_dialog.dart';
+import 'package:omi/utils/other/temp.dart';
 import 'package:omi/pages/settings/payment_webview_page.dart';
 
+/// Plan picker, upgrade/downgrade and payment management.
+///
+/// Content for a bottom sheet: present it with `showOmiSheet(context: context, padding:
+/// EdgeInsets.zero, builder: (_) => PlansSheet(...))`, which draws the handle, close button and
+/// sheet surface.
 class PlansSheet extends StatefulWidget {
   final AnimationController waveController;
   final AnimationController notesController;
@@ -49,7 +55,7 @@ class _PlansSheetState extends State<PlansSheet> {
   String selectedPlan = 'yearly'; // 'yearly' or 'monthly'  (billing period)
   String? selectedTierId; // 'unlimited', 'operator', 'architect'
   bool _isUpgrading = false;
-  bool _showTrainingDataOptIn = false; // Control visibility of training data opt-in
+  final bool _showTrainingDataOptIn = false; // Control visibility of training data opt-in
   bool _isSwitchingToFree = false;
   final _promoCodeController = TextEditingController();
   String? _promoCodeError;
@@ -63,10 +69,8 @@ class _PlansSheetState extends State<PlansSheet> {
   Future<void> _handleTrainingDataOptIn() async {
     final userProvider = context.read<UserProvider>();
     final l10n = context.l10n;
-    // Show dialog with explanation and acknowledgement
-    final acknowledged = await showDialog<bool>(context: context, builder: (ctx) => _buildTrainingDataDialog(ctx));
-
-    if (acknowledged != true) return;
+    // Explain the program and ask for an explicit agreement first.
+    if (!await showTrainingDataOptInDialog(context)) return;
 
     try {
       await userProvider.optInForTrainingData();
@@ -74,124 +78,10 @@ class _PlansSheetState extends State<PlansSheet> {
       // Track the opt-in submission
       PlatformManager.instance.analytics.trainingDataOptInSubmitted();
 
-      if (mounted) {
-        AppSnackbar.showSnackbar(l10n.thankYouRequestUnderReview);
-      }
+      if (mounted) OmiFeedback.confirm(context, l10n.thankYouRequestUnderReview);
     } catch (e) {
-      AppSnackbar.showSnackbarError(l10n.anErrorOccurredTryAgain);
+      if (mounted) OmiFeedback.error(context, l10n.anErrorOccurredTryAgain);
     }
-  }
-
-  Widget _buildTrainingDataDialog(BuildContext ctx) {
-    bool isChecked = false;
-    return StatefulBuilder(
-      builder: (context, setDialogState) {
-        return AlertDialog(
-          backgroundColor: const Color(0xFF1F1F25),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Text(
-            context.l10n.omiTraining,
-            style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  context.l10n.getOmiUnlimitedFree,
-                  style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.5),
-                ),
-                const SizedBox(height: 16),
-                Text(
-                  context.l10n.trainingDataBullets,
-                  style: const TextStyle(color: Colors.white70, fontSize: 14, height: 1.5),
-                ),
-                const SizedBox(height: 16),
-                TextButton(
-                  onPressed: () {
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (context) => Scaffold(
-                          appBar: AppBar(title: Text(context.l10n.trainingDataProgram), backgroundColor: Colors.black),
-                          body: WebViewWidget(
-                            controller: WebViewController()
-                              ..setJavaScriptMode(JavaScriptMode.unrestricted)
-                              ..loadRequest(Uri.parse('https://omi.me/training')),
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                  style: TextButton.styleFrom(
-                    padding: EdgeInsets.zero,
-                    minimumSize: Size.zero,
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                  child: Text(
-                    context.l10n.learnMoreAtOmiTraining,
-                    style: const TextStyle(color: Colors.white, decoration: TextDecoration.underline, fontSize: 14),
-                  ),
-                ),
-                const SizedBox(height: 16),
-                InkWell(
-                  onTap: () {
-                    setDialogState(() {
-                      isChecked = !isChecked;
-                    });
-                  },
-                  child: Row(
-                    children: [
-                      SizedBox(
-                        width: 24,
-                        height: 24,
-                        child: Checkbox(
-                          value: isChecked,
-                          onChanged: (value) {
-                            setDialogState(() {
-                              isChecked = value ?? false;
-                            });
-                          },
-                          fillColor: WidgetStateProperty.resolveWith((states) {
-                            if (states.contains(WidgetState.selected)) {
-                              return Colors.white;
-                            }
-                            return Colors.transparent;
-                          }),
-                          checkColor: Colors.black,
-                          side: const BorderSide(color: Colors.white, width: 1.5),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          context.l10n.agreeToContributeData,
-                          style: const TextStyle(color: Colors.white, fontSize: 13),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 12),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: Text(context.l10n.cancel, style: TextStyle(color: Colors.grey.shade400)),
-            ),
-            TextButton(
-              onPressed: isChecked ? () => Navigator.of(ctx).pop(true) : null,
-              child: Text(
-                context.l10n.submitRequest,
-                style: TextStyle(color: isChecked ? Colors.white : Colors.grey.shade600, fontWeight: FontWeight.w600),
-              ),
-            ),
-          ],
-        );
-      },
-    );
   }
 
   Future<void> _handleCancelSubscription() async {
@@ -259,63 +149,55 @@ class _PlansSheetState extends State<PlansSheet> {
           await captureProvider.onRecordProfileSettingChanged();
 
           if (!mounted) return;
-          AppSnackbar.showSnackbar(context.l10n.switchedToOnDevice);
+          OmiFeedback.confirm(context, context.l10n.switchedToOnDevice);
           Navigator.of(context).pop(false); // false = switched to free
         }
       } else {
         // Need to set up on-device first
         if (!mounted) return;
         Navigator.of(context).pop();
-        Navigator.push(context, MaterialPageRoute(builder: (context) => const TranscriptionSettingsPage()));
+        routeToPage(context, const TranscriptionSettingsPage());
       }
     } catch (e) {
       Logger.debug('Error switching to free plan: $e');
-      if (mounted) {
-        AppSnackbar.showSnackbarError(context.l10n.couldNotSwitchToFreePlan);
-      }
+      if (mounted) OmiFeedback.error(context, context.l10n.couldNotSwitchToFreePlan);
     } finally {
       if (mounted) setState(() => _isSwitchingToFree = false);
     }
   }
 
   Future<void> _handleDowngradeToFreemium() async {
-    // Show confirmation dialog with limitations warning
+    // Confirm with the limitations the reader will get.
+    final l10n = context.l10n;
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF1F1F25),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-        title: Text(
-          context.l10n.downgradeToFreemiumTitle,
-          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(context.l10n.downgradeLimitationsHeading, style: TextStyle(color: Colors.grey.shade300, fontSize: 14)),
-            const SizedBox(height: 16),
-            _buildDowngradeLimitationRow(FontAwesomeIcons.carBattery, context.l10n.downgradeLimitBattery),
-            const SizedBox(height: 10),
-            _buildDowngradeLimitationRow(FontAwesomeIcons.triangleExclamation, context.l10n.downgradeLimitQuality),
-            const SizedBox(height: 10),
-            _buildDowngradeLimitationRow(FontAwesomeIcons.clock, context.l10n.downgradeLimitDelay),
-            const SizedBox(height: 10),
-            _buildDowngradeLimitationRow(FontAwesomeIcons.userSlash, context.l10n.downgradeLimitSpeakers),
-          ],
+      builder: (ctx) => OmiAlertDialog(
+        title: l10n.downgradeToFreemiumTitle,
+        content: Material(
+          type: MaterialType.transparency,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(l10n.downgradeLimitationsHeading, textAlign: TextAlign.start, style: OmiType.subhead),
+              const SizedBox(height: OmiSpacing.xs),
+              PlanDialogLine(
+                  icon: FontAwesomeIcons.carBattery, text: l10n.downgradeLimitBattery, color: OmiColors.danger),
+              PlanDialogLine(
+                icon: FontAwesomeIcons.triangleExclamation,
+                text: l10n.downgradeLimitQuality,
+                color: OmiColors.danger,
+              ),
+              PlanDialogLine(icon: FontAwesomeIcons.clock, text: l10n.downgradeLimitDelay, color: OmiColors.danger),
+              PlanDialogLine(
+                  icon: FontAwesomeIcons.userSlash, text: l10n.downgradeLimitSpeakers, color: OmiColors.danger),
+            ],
+          ),
         ),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text(
-              context.l10n.cancel,
-              style: const TextStyle(color: Colors.white, fontWeight: FontWeight.w500),
-            ),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text(context.l10n.downgradeAnyway, style: TextStyle(color: Colors.red.shade400)),
-          ),
+          OmiDialogAction(label: l10n.cancel, isDefault: true, onPressed: () => Navigator.of(ctx).pop(false)),
+          OmiDialogAction(
+              label: l10n.downgradeAnyway, isDestructive: true, onPressed: () => Navigator.of(ctx).pop(true)),
         ],
       ),
     );
@@ -325,21 +207,6 @@ class _PlansSheetState extends State<PlansSheet> {
     await _handleSwitchToFreePlan();
   }
 
-  Widget _buildDowngradeLimitationRow(FaIconData icon, String text) {
-    return Row(
-      children: [
-        FaIcon(icon, color: Colors.red.shade400, size: 18),
-        const SizedBox(width: 10),
-        Expanded(
-          child: Text(
-            text,
-            style: TextStyle(color: Colors.red.shade400, fontSize: 14, fontWeight: FontWeight.w500),
-          ),
-        ),
-      ],
-    );
-  }
-
   Future<void> _handleUpgradeWithSelectedPlan() async {
     final bool isYearly = selectedPlan == 'yearly';
 
@@ -347,7 +214,7 @@ class _PlansSheetState extends State<PlansSheet> {
     final usageProvider = context.read<UsageProvider>();
     final availablePlans = usageProvider.availablePlans;
     if (availablePlans == null) {
-      AppSnackbar.showSnackbarError(context.l10n.couldNotLoadPlans);
+      OmiFeedback.error(context, context.l10n.couldNotLoadPlans);
       return;
     }
 
@@ -367,7 +234,7 @@ class _PlansSheetState extends State<PlansSheet> {
         );
 
     if (selectedPlanData == null) {
-      AppSnackbar.showSnackbarError(context.l10n.selectedPlanNotAvailable);
+      OmiFeedback.error(context, context.l10n.selectedPlanNotAvailable);
       return;
     }
 
@@ -387,73 +254,38 @@ class _PlansSheetState extends State<PlansSheet> {
         isSameTier && (currentSub?.plan.isPaid ?? false) && currentSub?.status == SubscriptionStatus.active && isYearly;
 
     if (isUpgradingFromMonthlyToAnnual && currentSub?.cancelAtPeriodEnd != true) {
-      // Show confirmation popup for monthly to annual upgrade
+      final l10n = context.l10n;
       final confirmed = await showDialog<bool>(
         context: context,
-        builder: (ctx) => AlertDialog(
-          backgroundColor: const Color(0xFF1F1F25),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-          title: Row(
-            children: [
-              const Icon(Icons.payment, color: Colors.deepPurple, size: 24),
-              const SizedBox(width: 8),
-              Text(
-                context.l10n.upgradeToAnnualPlan,
-                style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-              ),
-            ],
-          ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                context.l10n.importantBillingInfo,
-                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
-              ),
-              const SizedBox(height: 12),
-              _buildBillingInfoItem(icon: FontAwesomeIcons.clock, text: context.l10n.monthlyPlanContinues),
-              const SizedBox(height: 8),
-              _buildBillingInfoItem(icon: FontAwesomeIcons.creditCard, text: context.l10n.paymentMethodCharged),
-              const SizedBox(height: 8),
-              _buildBillingInfoItem(icon: FontAwesomeIcons.calendarDay, text: context.l10n.annualSubscriptionStarts),
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.deepPurple.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.deepPurple.withValues(alpha: 0.3)),
+        builder: (ctx) => OmiAlertDialog(
+          title: l10n.upgradeToAnnualPlan,
+          content: Material(
+            type: MaterialType.transparency,
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  l10n.importantBillingInfo,
+                  textAlign: TextAlign.start,
+                  style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600),
                 ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.info_outline, color: Colors.deepPurple, size: 20),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        context.l10n.thirteenMonthsCoverage,
-                        style: TextStyle(color: Colors.deepPurple.shade300, fontSize: 14, fontWeight: FontWeight.w500),
-                      ),
-                    ),
-                  ],
+                const SizedBox(height: OmiSpacing.xxs),
+                PlanDialogLine(icon: FontAwesomeIcons.clock, text: l10n.monthlyPlanContinues),
+                PlanDialogLine(icon: FontAwesomeIcons.creditCard, text: l10n.paymentMethodCharged),
+                PlanDialogLine(icon: FontAwesomeIcons.calendarDay, text: l10n.annualSubscriptionStarts),
+                const SizedBox(height: OmiSpacing.xs),
+                PlanDialogLine(
+                  icon: FontAwesomeIcons.circleInfo,
+                  text: l10n.thirteenMonthsCoverage,
+                  color: OmiColors.success,
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.of(ctx).pop(false),
-              child: Text(context.l10n.cancel, style: const TextStyle(color: Colors.grey)),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.of(ctx).pop(true),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.deepPurple,
-                foregroundColor: Colors.white,
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-              child: Text(context.l10n.confirmUpgrade),
-            ),
+            OmiDialogAction(label: l10n.cancel, onPressed: () => Navigator.of(ctx).pop(false)),
+            OmiDialogAction(label: l10n.confirmUpgrade, isDefault: true, onPressed: () => Navigator.of(ctx).pop(true)),
           ],
         ),
       );
@@ -486,28 +318,20 @@ class _PlansSheetState extends State<PlansSheet> {
     }
 
     if (selectedPrice == null) {
-      AppSnackbar.showSnackbarError(context.l10n.selectedPlanNotAvailable);
+      OmiFeedback.error(context, l10n.selectedPlanNotAvailable);
       return;
     }
 
     final currentSub = provider.subscription!.subscription;
 
     if (currentSub.plan.isPaid) {
-      final confirmed = await showDialog<bool>(
-        context: context,
-        builder: (ctx) => ConfirmationDialog(
-          title: context.l10n.confirmPlanChange,
-          description: context.l10n.planSwitchingDescriptionWithTitle(selectedPrice!.title),
-          confirmText: context.l10n.confirmAndProceed,
-          cancelText: context.l10n.cancel,
-          onCancel: () => Navigator.of(ctx).pop(false),
-          onConfirm: () => Navigator.of(ctx).pop(true),
-        ),
+      final confirmed = await showOmiConfirm(
+        context,
+        title: l10n.confirmPlanChange,
+        message: l10n.planSwitchingDescriptionWithTitle(selectedPrice.title),
+        confirmLabel: l10n.changePlan,
       );
-
-      if (confirmed != true) {
-        return;
-      }
+      if (!confirmed) return;
     }
 
     setState(() => _isUpgrading = true);
@@ -526,15 +350,15 @@ class _PlansSheetState extends State<PlansSheet> {
           if (promoCode.isNotEmpty) {
             setState(() => _promoCodeError = detail);
           } else {
-            AppSnackbar.showSnackbarError(detail);
+            if (mounted) OmiFeedback.error(context, detail);
           }
           return;
         } else if (result != null) {
           setState(() => _promoCodeError = null);
           _promoCodeController.clear();
-          AppSnackbar.showSnackbar(l10n.planUpgradeScheduledMessage);
+          if (mounted) OmiFeedback.confirm(context, l10n.planUpgradeScheduledMessage);
         } else {
-          AppSnackbar.showSnackbarError(l10n.couldNotSchedulePlanChange);
+          if (mounted) OmiFeedback.error(context, l10n.couldNotSchedulePlanChange);
         }
       } else {
         // New subscription (for basic users or canceled subscriptions)
@@ -547,7 +371,7 @@ class _PlansSheetState extends State<PlansSheet> {
           if (sessionData.containsKey('status') && sessionData['status'] == 'reactivated') {
             // Quick reactivation - no charge now
             final message = sessionData['message'] as String? ?? l10n.subscriptionReactivatedDefault;
-            AppSnackbar.showSnackbar(message);
+            if (mounted) OmiFeedback.confirm(context, message);
             PlatformManager.instance.analytics.upgradeSucceeded(
               previousPlan: currentSub.plan.wireName,
               newPlan: targetPlan,
@@ -557,12 +381,10 @@ class _PlansSheetState extends State<PlansSheet> {
           }
           // Otherwise, this is a new subscription requiring checkout
           else if (sessionData.containsKey('url') && sessionData['url'] != null) {
-            final checkoutResult = await Navigator.of(
-              context,
-            ).push(MaterialPageRoute(builder: (context) => PaymentWebViewPage(checkoutUrl: sessionData['url']!)));
+            final checkoutResult = await routeToPage(context, PaymentWebViewPage(checkoutUrl: sessionData['url']!));
 
             if (checkoutResult == true) {
-              AppSnackbar.showSnackbar(l10n.subscriptionSuccessfulCharged);
+              if (mounted) OmiFeedback.confirm(context, l10n.subscriptionSuccessfulCharged);
               PlatformManager.instance.analytics.upgradeSucceeded(
                 previousPlan: currentSub.plan.wireName,
                 newPlan: targetPlan,
@@ -572,17 +394,38 @@ class _PlansSheetState extends State<PlansSheet> {
               PlatformManager.instance.analytics.upgradeCancelled();
             }
           } else {
-            AppSnackbar.showSnackbarError(l10n.couldNotProcessSubscription);
+            if (mounted) OmiFeedback.error(context, l10n.couldNotProcessSubscription);
           }
         } else {
-          AppSnackbar.showSnackbarError(l10n.couldNotLaunchUpgradePage);
+          if (mounted) OmiFeedback.error(context, l10n.couldNotLaunchUpgradePage);
         }
       }
     } catch (e) {
-      AppSnackbar.showSnackbarError(l10n.anErrorOccurredTryAgain);
+      if (mounted) OmiFeedback.error(context, l10n.anErrorOccurredTryAgain);
     } finally {
       _loadAvailablePlans();
       if (mounted) setState(() => _isUpgrading = false);
+    }
+  }
+
+  Future<void> _openPaymentPortal() async {
+    final navigator = Navigator.of(context);
+    final provider = context.read<UsageProvider>();
+    final l10n = context.l10n;
+    final portalData = await provider.openCustomerPortal();
+    if (portalData != null && portalData['url'] != null && mounted) {
+      await navigator.push(
+        omiPageRoute(
+          builder: (context) => PaymentWebViewPage(checkoutUrl: portalData['url']!, title: l10n.managePaymentMethod),
+        ),
+      );
+      // The user may have paid an overdue invoice or recovered a canceled plan inside the portal,
+      // so refresh subscription state on return instead of leaving the UI showing Free until a
+      // manual reload.
+      await provider.fetchSubscription();
+      await provider.loadAvailablePlans();
+    } else if (mounted) {
+      OmiFeedback.error(context, l10n.couldNotOpenPaymentSettings);
     }
   }
 
@@ -600,6 +443,37 @@ class _PlansSheetState extends State<PlansSheet> {
     super.dispose();
   }
 
+  /// Plan cards, their loading placeholder, or the failure state with Try Again.
+  Widget _plansOrPlaceholder(UsageProvider usageProvider) {
+    if (usageProvider.isLoadingPlans) {
+      return const Column(
+        children: [PlanOptionShimmer(), SizedBox(height: 18), PlanOptionShimmer()],
+      );
+    }
+    if (usageProvider.availablePlans != null) {
+      return _buildTierPlanCards(availablePlans: usageProvider.availablePlans!);
+    }
+    return OmiErrorState(
+      title: context.l10n.unableToLoadPlans,
+      message: context.l10n.checkConnectionTryAgain,
+      onRetry: _loadAvailablePlans,
+    );
+  }
+
+  /// The main action: Upgrade, Continue or Resubscribe.
+  Widget _primaryAction({Key? key, required String label}) {
+    return OmiButton(
+      key: key,
+      label: label,
+      expand: true,
+      isLoading: _isUpgrading,
+      onPressed: () {
+        HapticFeedback.mediumImpact();
+        return _handleUpgradeWithSelectedPlan();
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Consumer<UsageProvider>(
@@ -613,900 +487,284 @@ class _PlansSheetState extends State<PlansSheet> {
           return const SizedBox.shrink();
         }
 
+        final l10n = context.l10n;
         final sub = provider.subscription?.subscription;
         final isPaidPlan = sub?.plan.isPaid ?? false;
         final isUnlimited = isPaidPlan; // backward-compat alias for UI branching
         final isCancelled = sub?.cancelAtPeriodEnd ?? false;
+        final hasScheduledUpgrade = _hasScheduledUpgrade();
+        final plansLoaded = !provider.isLoadingPlans && provider.availablePlans != null;
 
-        String renewalDate = 'N/A';
-        if (sub?.currentPeriodEnd != null) {
-          final date = DateTime.fromMillisecondsSinceEpoch(sub!.currentPeriodEnd! * 1000);
-          renewalDate = DateFormat.yMMMd().format(date);
+        String renewalDate = '—';
+        final periodEnd = sub?.currentPeriodEnd;
+        if (periodEnd != null) {
+          renewalDate = OmiDateFormat.of(context).date(DateTime.fromMillisecondsSinceEpoch(periodEnd * 1000));
         }
-        return DraggableScrollableSheet(
-          initialChildSize: 0.9,
-          minChildSize: 0.5,
-          maxChildSize: 0.9,
-          builder: (BuildContext context, ScrollController scrollController) {
-            return Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.bottomCenter,
-                  end: Alignment.topCenter,
-                  colors: [
-                    Colors.deepPurple.withValues(alpha: 0.5),
-                    Colors.deepPurple.withValues(alpha: 0.3),
-                    Colors.black.withValues(alpha: 0.8),
-                    Colors.black,
-                  ],
-                  stops: const [0.0, 0.2, 0.6, 1.0],
-                ),
-                borderRadius: const BorderRadius.only(topLeft: Radius.circular(20), topRight: Radius.circular(20)),
-              ),
-              child: ListView(
-                controller: scrollController,
-                children: [
-                  Center(
-                    child: Container(
-                      margin: const EdgeInsets.symmetric(vertical: 24),
-                      width: 40,
-                      height: 4,
-                      decoration: BoxDecoration(color: Colors.grey.shade700, borderRadius: BorderRadius.circular(2)),
-                    ),
-                  ),
-                  SizedBox(
-                    height: 150,
-                    width: double.infinity,
-                    child: Stack(
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              flex: 1,
-                              child: ClipRect(
-                                child: SizedBox(
-                                  height: 120,
-                                  child: AnimatedBuilder(
-                                    animation: widget.waveController,
-                                    builder: (context, child) {
-                                      const double totalWidth = 420.0;
-                                      final scrollOffset = (widget.waveController.value * totalWidth) % totalWidth;
-                                      return Stack(
-                                        children: [
-                                          Positioned(
-                                            left: -totalWidth + scrollOffset,
-                                            top: 0,
-                                            bottom: 0,
-                                            child: Row(
-                                              children: List.generate(60, (index) {
-                                                final heights = [
-                                                  20.0,
-                                                  32.0,
-                                                  45.0,
-                                                  26.0,
-                                                  52.0,
-                                                  39.0,
-                                                  32.0,
-                                                  45.0,
-                                                  28.0,
-                                                  36.0,
-                                                  41.0,
-                                                  24.0,
-                                                  48.0,
-                                                  37.0,
-                                                  30.0,
-                                                  43.0,
-                                                  22.0,
-                                                  34.0,
-                                                  47.0,
-                                                  29.0,
-                                                  50.0,
-                                                  38.0,
-                                                  33.0,
-                                                  44.0,
-                                                ];
-                                                final height = heights[index % heights.length];
+        final periodEnded =
+            periodEnd != null && DateTime.fromMillisecondsSinceEpoch(periodEnd * 1000).isBefore(DateTime.now());
+        final secondary = OmiType.subhead.copyWith(color: OmiColors.textSecondary);
 
-                                                return Container(
-                                                  width: 4,
-                                                  height: height,
-                                                  margin: const EdgeInsets.symmetric(horizontal: 1.5),
-                                                  decoration: BoxDecoration(
-                                                    color: Colors.red.withValues(alpha: 0.7),
-                                                    borderRadius: BorderRadius.circular(2),
-                                                  ),
-                                                );
-                                              }),
-                                            ),
-                                          ),
-                                          Positioned(
-                                            left: scrollOffset,
-                                            top: 0,
-                                            bottom: 0,
-                                            child: Row(
-                                              children: List.generate(60, (index) {
-                                                final heights = [20.0, 32.0, 45.0, 26.0, 52.0, 39.0, 32.0, 45.0];
-                                                final height = heights[index % heights.length];
-
-                                                return Container(
-                                                  width: 4,
-                                                  height: height,
-                                                  margin: const EdgeInsets.symmetric(horizontal: 1.5),
-                                                  decoration: BoxDecoration(
-                                                    color: Colors.red.withValues(alpha: 0.7),
-                                                    borderRadius: BorderRadius.circular(2),
-                                                  ),
-                                                );
-                                              }),
-                                            ),
-                                          ),
-                                        ],
-                                      );
-                                    },
-                                  ),
-                                ),
-                              ),
-                            ),
-                            Expanded(
-                              flex: 1,
-                              child: ClipRect(
-                                child: SizedBox(
-                                  height: 120,
-                                  child: AnimatedBuilder(
-                                    animation: widget.notesController,
-                                    builder: (context, child) {
-                                      const double totalWidth = 440.0;
-                                      final scrollOffset = (widget.notesController.value * totalWidth) % totalWidth;
-                                      return Stack(
-                                        children: [
-                                          Positioned(
-                                            left: -totalWidth + scrollOffset,
-                                            top: 0,
-                                            bottom: 0,
-                                            child: Row(
-                                              children: List.generate(8, (index) {
-                                                return Container(
-                                                  width: 45,
-                                                  height: 55,
-                                                  margin: const EdgeInsets.symmetric(horizontal: 5),
-                                                  decoration: BoxDecoration(
-                                                    color: Colors.white.withValues(alpha: 0.95),
-                                                    borderRadius: BorderRadius.circular(8),
-                                                    boxShadow: [
-                                                      BoxShadow(
-                                                        color: Colors.black.withValues(alpha: 0.15),
-                                                        blurRadius: 4,
-                                                        offset: const Offset(0, 2),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                  child: Padding(
-                                                    padding: const EdgeInsets.all(6),
-                                                    child: Column(
-                                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                                      children: [
-                                                        Container(
-                                                          width: 26,
-                                                          height: 3,
-                                                          decoration: BoxDecoration(
-                                                            color: Colors.black,
-                                                            borderRadius: BorderRadius.circular(1.5),
-                                                          ),
-                                                        ),
-                                                        const SizedBox(height: 4),
-                                                        ...List.generate(
-                                                          5,
-                                                          (i) => Container(
-                                                            width: i == 4 ? 24 : 35, // Last line shorter
-                                                            height: 2,
-                                                            margin: const EdgeInsets.symmetric(vertical: 2),
-                                                            decoration: BoxDecoration(
-                                                              color: Colors.grey[350],
-                                                              borderRadius: BorderRadius.circular(1),
-                                                            ),
-                                                          ),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  ),
-                                                );
-                                              }),
-                                            ),
-                                          ),
-                                          Positioned(
-                                            left: scrollOffset,
-                                            top: 0,
-                                            bottom: 0,
-                                            child: Row(
-                                              children: List.generate(8, (index) {
-                                                return Container(
-                                                  width: 45,
-                                                  height: 55,
-                                                  margin: const EdgeInsets.symmetric(horizontal: 5),
-                                                  decoration: BoxDecoration(
-                                                    color: Colors.white.withValues(alpha: 0.95),
-                                                    borderRadius: BorderRadius.circular(8),
-                                                    boxShadow: [
-                                                      BoxShadow(
-                                                        color: Colors.black.withValues(alpha: 0.15),
-                                                        blurRadius: 4,
-                                                        offset: const Offset(0, 2),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                  child: Padding(
-                                                    padding: const EdgeInsets.all(6),
-                                                    child: Column(
-                                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                                      children: [
-                                                        Container(
-                                                          width: 26,
-                                                          height: 3,
-                                                          decoration: BoxDecoration(
-                                                            color: Colors.black,
-                                                            borderRadius: BorderRadius.circular(1.5),
-                                                          ),
-                                                        ),
-                                                        const SizedBox(height: 4),
-                                                        ...List.generate(
-                                                          5,
-                                                          (i) => Container(
-                                                            width: i == 4 ? 24 : 35, // Last line shorter
-                                                            height: 2,
-                                                            margin: const EdgeInsets.symmetric(vertical: 2),
-                                                            decoration: BoxDecoration(
-                                                              color: Colors.grey[350],
-                                                              borderRadius: BorderRadius.circular(1),
-                                                            ),
-                                                          ),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                  ),
-                                                );
-                                              }),
-                                            ),
-                                          ),
-                                        ],
-                                      );
-                                    },
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        Positioned(
-                          left: (MediaQuery.of(context).size.width - 120) / 2,
-                          top: 5,
-                          child: Container(
-                            width: 120,
-                            height: 120,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(color: Colors.blue.withValues(alpha: 0.4), blurRadius: 20, spreadRadius: 3),
-                              ],
-                            ),
-                            child: ClipOval(child: Image.asset(Assets.images.omiWithoutRope.path, fit: BoxFit.cover)),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 24),
-                    child: Column(
-                      children: [
-                        const SizedBox(height: 24),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            const FaIcon(FontAwesomeIcons.crown, color: Colors.yellow, size: 20),
-                            const SizedBox(width: 8),
-                            Builder(
-                              builder: (context) {
-                                final hasScheduledUpgrade = _hasScheduledUpgrade();
-                                if (hasScheduledUpgrade) {
-                                  return Text(
-                                    context.l10n.upgradeScheduled,
-                                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                                  );
-                                } else {
-                                  return Text(
-                                    isUnlimited ? context.l10n.changePlan : context.l10n.upgradeYourPlan,
-                                    style: const TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
-                                  );
-                                }
-                              },
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Builder(
-                          builder: (context) {
-                            final hasScheduledUpgrade = _hasScheduledUpgrade();
-                            if (hasScheduledUpgrade) {
-                              return Text(
-                                context.l10n.upgradeAlreadyScheduled,
-                                textAlign: TextAlign.center,
-                                style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
-                              );
-                            } else {
-                              return Text(
-                                isUnlimited ? context.l10n.youAreOnAPaidPlan : context.l10n.planSheetChooseYourPlan,
-                                textAlign: TextAlign.center,
-                                style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
-                              );
-                            }
-                          },
-                        ),
-                        if (isUnlimited && isCancelled) ...[
-                          const SizedBox(height: 8),
-                          Builder(
-                            builder: (context) {
-                              // Check if subscription period has ended
-                              final sub = provider.subscription?.subscription;
-                              final periodEnded = sub?.currentPeriodEnd != null &&
-                                  DateTime.fromMillisecondsSinceEpoch(
-                                    sub!.currentPeriodEnd! * 1000,
-                                  ).isBefore(DateTime.now());
-
-                              if (periodEnded) {
-                                // Scenario B: Must create new subscription
-                                return Text(
-                                  context.l10n.planEndedOn(renewalDate),
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(fontSize: 14, color: Colors.orange.shade400),
-                                );
-                              } else {
-                                // Scenario A: Can reactivate without charge
-                                return Text(
-                                  context.l10n.planSetToCancelOn(renewalDate),
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(fontSize: 14, color: Colors.blue.shade400),
-                                );
-                              }
-                            },
-                          ),
-                        ] else if (isUnlimited && !isCancelled) ...[
-                          const SizedBox(height: 8),
-                          Builder(
-                            builder: (context) {
-                              final hasScheduledUpgrade = _hasScheduledUpgrade();
-                              if (hasScheduledUpgrade) {
-                                return Text(
-                                  context.l10n.annualPlanStartsAutomatically,
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(color: Colors.deepPurple.shade400, fontSize: 14),
-                                );
-                              } else {
-                                return Text(
-                                  context.l10n.planRenewsOn(renewalDate),
-                                  textAlign: TextAlign.center,
-                                  style: TextStyle(fontSize: 14, color: Colors.grey.shade400),
-                                );
-                              }
-                            },
-                          ),
-                        ],
-                        const SizedBox(height: 24),
-                        // Features list - shown to all users
-                        ...[
-                          Column(
-                            children: [
-                              _buildFeatureItem(
-                                faIcon: FontAwesomeIcons.infinity,
-                                text: context.l10n.unlimitedConversations,
-                              ),
-                              const SizedBox(height: 16),
-                              _buildFeatureItem(
-                                faIcon: FontAwesomeIcons.solidComments,
-                                text: context.l10n.askOmiAnything,
-                              ),
-                              const SizedBox(height: 16),
-                              _buildFeatureItem(
-                                faIcon: FontAwesomeIcons.brain,
-                                text: context.l10n.unlockOmiInfiniteMemory,
-                              ),
-                              const SizedBox(height: 16),
-                              _buildFeatureItem(
-                                faIcon: FontAwesomeIcons.globe,
-                                text: context.l10n.availableOnMacMobileWeb,
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 32),
-                        ],
-
-                        // Training Data Opt-in Option - only show after plans are loaded
-                        Consumer2<UsageProvider, UserProvider>(
-                          builder: (context, usageProvider, userProvider, child) {
-                            final shouldShowTrainingOption = _showTrainingDataOptIn &&
-                                !usageProvider.isLoadingPlans &&
-                                usageProvider.availablePlans != null;
-
-                            if (!shouldShowTrainingOption) {
-                              return const SizedBox.shrink();
-                            }
-
-                            final optedIn = userProvider.trainingDataOptedIn;
-                            final status = userProvider.trainingDataStatus;
-                            final isLoading = userProvider.isLoading;
-
-                            return Container(
-                              margin: const EdgeInsets.only(top: 24, bottom: 18),
-                              child: _buildTrainingDataOption(optedIn: optedIn, status: status, isLoading: isLoading),
-                            );
-                          },
-                        ),
-
-                        // Check if user is on annual plan
-                        if (isUnlimited && !isCancelled) ...[
-                          // Get current plan details to check if it's annual
-                          Builder(
-                            builder: (context) {
-                              final currentPlan = _getCurrentPlanDetails();
-                              final isOnAnnualPlan = currentPlan?['interval'] == 'year';
-                              final hasScheduledUpgrade = _hasScheduledUpgrade();
-
-                              if (hasScheduledUpgrade) {
-                                // User has a scheduled upgrade - show upgrade info
-                                return Container(
-                                  padding: const EdgeInsets.all(20),
-                                  decoration: BoxDecoration(
-                                    color: Colors.deepPurple.withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(16),
-                                    border: Border.all(color: Colors.deepPurple.withValues(alpha: 0.3)),
-                                  ),
-                                  child: Column(
-                                    children: [
-                                      const Icon(Icons.schedule, color: Colors.deepPurple, size: 32),
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        context.l10n.upgradeScheduled,
-                                        style: TextStyle(
-                                          color: Colors.deepPurple.shade300,
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        context.l10n.annualPlanStartsAutomatically,
-                                        textAlign: TextAlign.center,
-                                        style: TextStyle(color: Colors.deepPurple.shade400, fontSize: 14),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              } else if (isOnAnnualPlan) {
-                                // User is on annual plan - only show cancel option
-                                return Container(
-                                  padding: const EdgeInsets.all(20),
-                                  decoration: BoxDecoration(
-                                    color: Colors.blue.withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(16),
-                                    border: Border.all(color: Colors.blue.withValues(alpha: 0.3)),
-                                  ),
-                                  child: Column(
-                                    children: [
-                                      const Icon(Icons.check_circle_outline, color: Colors.blue, size: 32),
-                                      const SizedBox(height: 8),
-                                      Text(
-                                        context.l10n.youreOnAnnualPlan,
-                                        style: TextStyle(
-                                          color: Colors.blue.shade300,
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w600,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 4),
-                                      Text(
-                                        context.l10n.alreadyBestValuePlan,
-                                        textAlign: TextAlign.center,
-                                        style: TextStyle(color: Colors.blue.shade400, fontSize: 14),
-                                      ),
-                                    ],
-                                  ),
-                                );
-                              } else {
-                                // User is on monthly plan - show upgrade options
-                                return Consumer<UsageProvider>(
-                                  builder: (context, usageProvider, child) {
-                                    if (usageProvider.isLoadingPlans) {
-                                      return Column(
-                                        children: [
-                                          _buildShimmerPlanOption(),
-                                          const SizedBox(height: 18),
-                                          _buildShimmerPlanOption(),
-                                        ],
-                                      );
-                                    }
-                                    if (usageProvider.availablePlans != null) {
-                                      return _buildTierPlanCards(availablePlans: usageProvider.availablePlans!);
-                                    }
-                                    return _buildPlansErrorCard();
-                                  },
-                                );
-                              }
-                            },
-                          ),
-                        ] else if (isUnlimited && isCancelled) ...[
-                          // User has canceled subscription - show available plans to resubscribe
-                          Consumer<UsageProvider>(
-                            builder: (context, usageProvider, child) {
-                              if (usageProvider.isLoadingPlans) {
-                                return Column(
-                                  children: [
-                                    _buildShimmerPlanOption(),
-                                    const SizedBox(height: 18),
-                                    _buildShimmerPlanOption(),
-                                  ],
-                                );
-                              }
-                              if (usageProvider.availablePlans != null) {
-                                return _buildTierPlanCards(availablePlans: usageProvider.availablePlans!);
-                              }
-                              return _buildPlansErrorCard();
-                            },
-                          ),
-                        ] else if (!isUnlimited) ...[
-                          // User is on basic plan - show upgrade options
-                          Consumer<UsageProvider>(
-                            builder: (context, usageProvider, child) {
-                              if (usageProvider.isLoadingPlans) {
-                                return Column(
-                                  children: [
-                                    _buildShimmerPlanOption(),
-                                    const SizedBox(height: 18),
-                                    _buildShimmerPlanOption(),
-                                  ],
-                                );
-                              }
-                              if (usageProvider.availablePlans != null) {
-                                return _buildTierPlanCards(availablePlans: usageProvider.availablePlans!);
-                              }
-                              return _buildPlansErrorCard();
-                            },
-                          ),
-                        ],
-
-                        const SizedBox(height: 24),
-
-                        _buildPromoCodeField(),
-                        const SizedBox(height: 16),
-
-                        // Continue/Upgrade — hidden for same-tier annual (nothing to
-                        // change) and for desktop-plan → mobile-tier switches.
-                        Builder(
-                          builder: (context) {
-                            final currentPlan = _getCurrentPlanDetails();
-                            final isOnAnnualPlan = currentPlan?['interval'] == 'year';
-                            final hasScheduledUpgrade = _hasScheduledUpgrade();
-                            final usageProvider = context.read<UsageProvider>();
-                            final currentSub = usageProvider.subscription?.subscription;
-                            final shouldShowContinueButton = shouldShowPlanContinueButton(
-                              isOnAnnualPlan: isOnAnnualPlan,
-                              hasScheduledUpgrade: hasScheduledUpgrade,
-                              isCancelled: isCancelled,
-                              plansLoaded: !usageProvider.isLoadingPlans && usageProvider.availablePlans != null,
-                              selectedTierId: selectedTierId,
-                              currentTierId: currentSub?.plan.wireName,
-                              currentGrantsDesktop: currentSub?.plan.grantsDesktop ?? false,
-                            );
-
-                            if (!shouldShowContinueButton) {
-                              return const SizedBox.shrink();
-                            }
-
-                            final isLoading = _isUpgrading;
-                            // For basic users, show "Upgrade". For paid users upgrading, show "Continue"
-                            final buttonText = isUnlimited ? context.l10n.continueText : context.l10n.upgrade;
-
-                            return SizedBox(
-                              width: double.infinity,
-                              height: 56,
-                              child: ElevatedButton(
-                                key: const ValueKey('plans_sheet_upgrade_button'),
-                                onPressed: isLoading
-                                    ? null
-                                    : () {
-                                        HapticFeedback.mediumImpact();
-                                        _handleUpgradeWithSelectedPlan();
-                                      },
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: isLoading ? Colors.grey : Colors.white,
-                                  foregroundColor: isLoading ? Colors.white : Colors.black,
-                                  elevation: 0,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    if (isLoading) ...[
-                                      const SizedBox(
-                                        height: 20,
-                                        width: 20,
-                                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                                      ),
-                                    ] else ...[
-                                      Text(
-                                        buttonText,
-                                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      AnimatedBuilder(
-                                        animation: widget.arrowAnimation,
-                                        builder: (context, child) {
-                                          return Transform.translate(
-                                            offset: Offset(widget.arrowAnimation.value, 0),
-                                            child: const Icon(Icons.arrow_forward, size: 20),
-                                          );
-                                        },
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-
-                        // Freemium limitations warning - only show for basic users before downgrade option
-                        if (!isUnlimited) ...[
-                          const SizedBox(height: 32),
-                          Text(
-                            context.l10n.freemiumLimitsIntro,
-                            textAlign: TextAlign.center,
-                            style: TextStyle(color: Colors.grey.shade400, fontSize: 14, fontWeight: FontWeight.w500),
-                          ),
-                          const SizedBox(height: 16),
-                          Column(
-                            children: [
-                              _buildLimitationItem(
-                                icon: FontAwesomeIcons.carBattery,
-                                text: context.l10n.downgradeLimitBattery,
-                              ),
-                              const SizedBox(height: 12),
-                              _buildLimitationItem(
-                                icon: FontAwesomeIcons.triangleExclamation,
-                                text: context.l10n.downgradeLimitQuality,
-                              ),
-                              const SizedBox(height: 12),
-                              _buildLimitationItem(
-                                icon: FontAwesomeIcons.clock,
-                                text: context.l10n.downgradeLimitDelayNotRealTime,
-                              ),
-                              const SizedBox(height: 12),
-                              _buildLimitationItem(
-                                icon: FontAwesomeIcons.userSlash,
-                                text: context.l10n.downgradeLimitSpeakers,
-                              ),
-                            ],
-                          ),
-                        ],
-
-                        // Downgrade to Freemium button - only show for basic users
-                        if (!isUnlimited)
-                          Builder(
-                            builder: (context) {
-                              final usageProvider = context.read<UsageProvider>();
-                              final shouldShowDowngradeButton =
-                                  !usageProvider.isLoadingPlans && usageProvider.availablePlans != null;
-
-                              if (!shouldShowDowngradeButton) {
-                                return const SizedBox.shrink();
-                              }
-
-                              return Padding(
-                                padding: const EdgeInsets.only(top: 12),
-                                child: SizedBox(
-                                  width: double.infinity,
-                                  height: 50,
-                                  child: OutlinedButton(
-                                    onPressed: _isSwitchingToFree ? null : _handleDowngradeToFreemium,
-                                    style: OutlinedButton.styleFrom(
-                                      foregroundColor: Colors.grey.shade400,
-                                      side: BorderSide(color: Colors.grey.shade600, width: 1),
-                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                    ),
-                                    child: _isSwitchingToFree
-                                        ? const SizedBox(
-                                            height: 20,
-                                            width: 20,
-                                            child: CircularProgressIndicator(strokeWidth: 2, color: Colors.grey),
-                                          )
-                                        : Text(
-                                            context.l10n.downgradeToFreemiumAction,
-                                            style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
-                                          ),
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-
-                        // Continue button for canceled subscriptions
-                        Builder(
-                          builder: (context) {
-                            final usageProvider = context.read<UsageProvider>();
-                            final shouldShowResubscribeButton =
-                                isCancelled && !usageProvider.isLoadingPlans && usageProvider.availablePlans != null;
-
-                            if (!shouldShowResubscribeButton) {
-                              return const SizedBox.shrink();
-                            }
-
-                            return SizedBox(
-                              width: double.infinity,
-                              height: 56,
-                              child: ElevatedButton(
-                                onPressed: _isUpgrading
-                                    ? null
-                                    : () {
-                                        HapticFeedback.mediumImpact();
-                                        _handleUpgradeWithSelectedPlan();
-                                      },
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: _isUpgrading ? Colors.grey : Colors.white,
-                                  foregroundColor: _isUpgrading ? Colors.white : Colors.black,
-                                  elevation: 0,
-                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                                ),
-                                child: Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    if (_isUpgrading) ...[
-                                      const SizedBox(
-                                        height: 20,
-                                        width: 20,
-                                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                                      ),
-                                    ] else ...[
-                                      Text(
-                                        context.l10n.resubscribe,
-                                        style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                                      ),
-                                      const SizedBox(width: 8),
-                                      AnimatedBuilder(
-                                        animation: widget.arrowAnimation,
-                                        builder: (context, child) {
-                                          return Transform.translate(
-                                            offset: Offset(widget.arrowAnimation.value, 0),
-                                            child: const Icon(Icons.arrow_forward, size: 20),
-                                          );
-                                        },
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                        const SizedBox(height: 16),
-                        if (isUnlimited == true || sub?.stripeSubscriptionId?.isNotEmpty == true) ...[
-                          SizedBox(
-                            width: double.infinity,
-                            height: 50,
-                            child: OutlinedButton.icon(
-                              onPressed: () async {
-                                final navigator = Navigator.of(context);
-                                final provider = context.read<UsageProvider>();
-                                final l10n = context.l10n;
-                                final portalData = await provider.openCustomerPortal();
-                                if (portalData != null && portalData['url'] != null && mounted) {
-                                  await navigator.push(
-                                    MaterialPageRoute(
-                                      builder: (context) => PaymentWebViewPage(
-                                        checkoutUrl: portalData['url']!,
-                                        title: context.l10n.managePaymentMethod,
-                                      ),
-                                    ),
-                                  );
-                                  // The user may have paid an overdue invoice or
-                                  // recovered a canceled plan inside the portal, so
-                                  // refresh subscription state on return instead of
-                                  // leaving the UI showing Free until a manual reload.
-                                  await provider.fetchSubscription();
-                                  await provider.loadAvailablePlans();
-                                } else {
-                                  AppSnackbar.showSnackbarError(l10n.couldNotOpenPaymentSettings);
-                                }
-                              },
-                              icon: const Icon(Icons.credit_card, size: 20),
-                              label: Text(context.l10n.managePaymentMethod),
-                              style: OutlinedButton.styleFrom(
-                                foregroundColor: Colors.white,
-                                side: const BorderSide(color: Colors.white, width: 1),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                              ),
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          if (isUnlimited == true && !isCancelled) ...[
-                            TextButton(
-                              onPressed: () {
-                                _handleCancelSubscription();
-                              },
+        return DecoratedBox(
+          // Paints the sheet surface itself too, for hosts that present it without showOmiSheet.
+          decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.sheetTop),
+          child: SizedBox(
+            height: MediaQuery.sizeOf(context).height * 0.85,
+            child: ListView(
+              padding: const EdgeInsets.only(bottom: OmiSpacing.md),
+              children: [
+                const SizedBox(height: OmiSpacing.xs),
+                PlansHero(waveController: widget.waveController, notesController: widget.notesController),
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xl),
+                  child: Column(
+                    children: [
+                      const SizedBox(height: OmiSpacing.xl),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const ExcludeSemantics(child: FaIcon(FontAwesomeIcons.crown, color: Colors.amber, size: 20)),
+                          const SizedBox(width: OmiSpacing.xs),
+                          Flexible(
+                            child: Semantics(
+                              header: true,
                               child: Text(
-                                context.l10n.cancelSubscription,
-                                style: const TextStyle(color: Colors.red, fontSize: 16),
+                                hasScheduledUpgrade
+                                    ? l10n.upgradeScheduled
+                                    : (isUnlimited ? l10n.changePlan : l10n.upgradeYourPlan),
+                                style: OmiType.title3,
                               ),
                             ),
-                          ],
-                          const SizedBox(height: 8),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: OmiSpacing.xs),
+                      Text(
+                        hasScheduledUpgrade
+                            ? l10n.upgradeAlreadyScheduled
+                            : (isUnlimited ? l10n.youAreOnAPaidPlan : l10n.planSheetChooseYourPlan),
+                        textAlign: TextAlign.center,
+                        style: secondary,
+                      ),
+                      if (isUnlimited && isCancelled) ...[
+                        const SizedBox(height: OmiSpacing.xs),
+                        // Ended: must create a new subscription. Not yet ended: reactivate without charge.
+                        Text(
+                          periodEnded ? l10n.planEndedOn(renewalDate) : l10n.planSetToCancelOn(renewalDate),
+                          textAlign: TextAlign.center,
+                          style: OmiType.subhead.copyWith(color: OmiColors.warning),
+                        ),
+                      ] else if (isUnlimited && !isCancelled) ...[
+                        const SizedBox(height: OmiSpacing.xs),
+                        Text(
+                          hasScheduledUpgrade ? l10n.annualPlanStartsAutomatically : l10n.planRenewsOn(renewalDate),
+                          textAlign: TextAlign.center,
+                          style: secondary,
+                        ),
+                      ],
+                      const SizedBox(height: OmiSpacing.xl),
+                      // Features list - shown to all users
+                      PlanFeatureItem(icon: FontAwesomeIcons.infinity, text: l10n.unlimitedConversations),
+                      const SizedBox(height: OmiSpacing.md),
+                      PlanFeatureItem(icon: FontAwesomeIcons.solidComments, text: l10n.askOmiAnything),
+                      const SizedBox(height: OmiSpacing.md),
+                      PlanFeatureItem(icon: FontAwesomeIcons.brain, text: l10n.unlockOmiInfiniteMemory),
+                      const SizedBox(height: OmiSpacing.md),
+                      PlanFeatureItem(icon: FontAwesomeIcons.globe, text: l10n.availableOnMacMobileWeb),
+                      const SizedBox(height: OmiSpacing.xxl),
+
+                      // Training Data Opt-in Option - only show after plans are loaded
+                      if (_showTrainingDataOptIn && plansLoaded)
+                        Consumer<UserProvider>(
+                          builder: (context, userProvider, child) => Padding(
+                            padding: const EdgeInsets.only(top: OmiSpacing.xl, bottom: 18),
+                            child: TrainingDataOptionCard(
+                              optedIn: userProvider.trainingDataOptedIn,
+                              status: userProvider.trainingDataStatus,
+                              isLoading: userProvider.isLoading,
+                              onOptIn: _handleTrainingDataOptIn,
+                            ),
+                          ),
+                        ),
+
+                      if (isUnlimited && !isCancelled)
+                        Builder(
+                          builder: (context) {
+                            if (hasScheduledUpgrade) {
+                              return PlanStatusCard(
+                                icon: Icons.schedule,
+                                title: l10n.upgradeScheduled,
+                                message: l10n.annualPlanStartsAutomatically,
+                              );
+                            }
+                            if (_getCurrentPlanDetails()?['interval'] == 'year') {
+                              // Already on the annual plan - only the cancel option applies.
+                              return PlanStatusCard(
+                                icon: Icons.check_circle_outline,
+                                iconColor: OmiColors.success,
+                                title: l10n.youreOnAnnualPlan,
+                                message: l10n.alreadyBestValuePlan,
+                              );
+                            }
+                            return _plansOrPlaceholder(provider);
+                          },
+                        )
+                      else
+                        // Cancelled (resubscribe) or on the free plan (upgrade).
+                        _plansOrPlaceholder(provider),
+
+                      const SizedBox(height: OmiSpacing.xl),
+                      _buildPromoCodeField(),
+                      const SizedBox(height: OmiSpacing.md),
+
+                      // Continue/Upgrade — hidden for same-tier annual (nothing to change) and for
+                      // desktop-plan → mobile-tier switches.
+                      if (shouldShowPlanContinueButton(
+                        isOnAnnualPlan: _getCurrentPlanDetails()?['interval'] == 'year',
+                        hasScheduledUpgrade: hasScheduledUpgrade,
+                        isCancelled: isCancelled,
+                        plansLoaded: plansLoaded,
+                        selectedTierId: selectedTierId,
+                        currentTierId: sub?.plan.wireName,
+                        currentGrantsDesktop: sub?.plan.grantsDesktop ?? false,
+                      ))
+                        // For basic users, show "Upgrade". For paid users upgrading, show "Continue".
+                        _primaryAction(
+                          key: const ValueKey('plans_sheet_upgrade_button'),
+                          label: isUnlimited ? l10n.continueText : l10n.upgrade,
+                        ),
+
+                      // Freemium limitations and the downgrade option - basic users only
+                      if (!isUnlimited) ...[
+                        const SizedBox(height: OmiSpacing.xxl),
+                        Text(
+                          l10n.freemiumLimitsIntro,
+                          textAlign: TextAlign.center,
+                          style: secondary.copyWith(fontWeight: FontWeight.w500),
+                        ),
+                        const SizedBox(height: OmiSpacing.md),
+                        PlanFeatureItem(
+                          icon: FontAwesomeIcons.carBattery,
+                          text: l10n.downgradeLimitBattery,
+                          isLimitation: true,
+                        ),
+                        const SizedBox(height: OmiSpacing.sm),
+                        PlanFeatureItem(
+                          icon: FontAwesomeIcons.triangleExclamation,
+                          text: l10n.downgradeLimitQuality,
+                          isLimitation: true,
+                        ),
+                        const SizedBox(height: OmiSpacing.sm),
+                        PlanFeatureItem(
+                          icon: FontAwesomeIcons.clock,
+                          text: l10n.downgradeLimitDelayNotRealTime,
+                          isLimitation: true,
+                        ),
+                        const SizedBox(height: OmiSpacing.sm),
+                        PlanFeatureItem(
+                          icon: FontAwesomeIcons.userSlash,
+                          text: l10n.downgradeLimitSpeakers,
+                          isLimitation: true,
+                        ),
+                        if (plansLoaded) ...[
+                          const SizedBox(height: OmiSpacing.sm),
+                          OmiButton.secondary(
+                            label: l10n.downgradeToFreemiumAction,
+                            expand: true,
+                            isLoading: _isSwitchingToFree,
+                            onPressed: _handleDowngradeToFreemium,
+                          ),
                         ],
                       ],
-                    ),
+
+                      // Resubscribe for cancelled subscriptions
+                      if (isCancelled && plansLoaded) _primaryAction(label: l10n.resubscribe),
+                      const SizedBox(height: OmiSpacing.md),
+                      if (isUnlimited || sub?.stripeSubscriptionId?.isNotEmpty == true) ...[
+                        OmiButton.secondary(
+                          label: l10n.managePaymentMethod,
+                          icon: Icons.credit_card,
+                          expand: true,
+                          onPressed: _openPaymentPortal,
+                        ),
+                        const SizedBox(height: OmiSpacing.sm),
+                        if (isUnlimited && !isCancelled)
+                          OmiButton.tertiary(
+                            label: l10n.cancelSubscription,
+                            expand: true,
+                            onPressed: _handleCancelSubscription,
+                          ),
+                        const SizedBox(height: OmiSpacing.xs),
+                      ],
+                    ],
                   ),
-                ],
-              ),
-            );
-          },
+                ),
+              ],
+            ),
+          ),
         );
       },
     );
   }
 
   Widget _buildPromoCodeField() {
+    OutlineInputBorder border(Color color) =>
+        OutlineInputBorder(borderRadius: OmiRadius.mdAll, borderSide: BorderSide(color: color));
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        GestureDetector(
-          onTap: () => setState(() => _showPromoCodeField = !_showPromoCodeField),
-          child: Row(
-            children: [
-              Icon(Icons.local_offer_outlined, color: Colors.grey.shade400, size: 18),
-              const SizedBox(width: 8),
-              Text(context.l10n.promoCode, style: TextStyle(color: Colors.grey.shade400, fontSize: 14)),
-              const SizedBox(width: 4),
-              Icon(
-                _showPromoCodeField ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
-                color: Colors.grey.shade400,
-                size: 20,
+        Semantics(
+          button: true,
+          expanded: _showPromoCodeField,
+          child: InkWell(
+            onTap: () => setState(() => _showPromoCodeField = !_showPromoCodeField),
+            borderRadius: OmiRadius.smAll,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(minHeight: 44),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const ExcludeSemantics(
+                    child: Icon(Icons.local_offer_outlined, color: OmiColors.textSecondary, size: 18),
+                  ),
+                  const SizedBox(width: OmiSpacing.xs),
+                  Text(l10n.promoCode, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary)),
+                  const SizedBox(width: OmiSpacing.xxs),
+                  ExcludeSemantics(
+                    child: Icon(
+                      _showPromoCodeField ? Icons.keyboard_arrow_up : Icons.keyboard_arrow_down,
+                      color: OmiColors.textSecondary,
+                      size: 20,
+                    ),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
         ),
         if (_showPromoCodeField) ...[
-          const SizedBox(height: 10),
+          const SizedBox(height: OmiSpacing.xs),
           TextField(
             controller: _promoCodeController,
-            style: const TextStyle(color: Colors.white, fontSize: 16),
+            style: OmiType.callout,
             autocorrect: false,
             enableSuggestions: false,
             decoration: InputDecoration(
-              hintText: context.l10n.enterPromoCode,
-              hintStyle: TextStyle(color: Colors.grey.shade600, fontSize: 14),
+              hintText: l10n.enterPromoCode,
+              hintStyle: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
               filled: true,
-              fillColor: Colors.white.withValues(alpha: 0.08),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: BorderSide(color: Colors.white.withValues(alpha: 0.2)),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Colors.deepPurple),
-              ),
-              errorBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Colors.red),
-              ),
-              focusedErrorBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Colors.red),
-              ),
+              fillColor: OmiColors.surface2,
+              border: border(OmiColors.border),
+              enabledBorder: border(OmiColors.border),
+              focusedBorder: border(OmiColors.accent),
+              errorBorder: border(OmiColors.danger),
+              focusedErrorBorder: border(OmiColors.danger),
               errorText: _promoCodeError,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+              contentPadding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: 14),
               suffixIcon: _promoCodeController.text.isNotEmpty
-                  ? IconButton(
-                      icon: Icon(Icons.clear, color: Colors.grey.shade400, size: 20),
+                  ? OmiIconButton(
+                      icon: const Icon(Icons.clear, size: 20),
+                      label: l10n.clear,
+                      color: OmiColors.textSecondary,
                       onPressed: () {
                         setState(() {
                           _promoCodeController.clear();
@@ -1525,39 +783,9 @@ class _PlansSheetState extends State<PlansSheet> {
     );
   }
 
-  Widget _buildPlansErrorCard() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: Colors.red.withValues(alpha: 0.1),
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.red.withValues(alpha: 0.3)),
-      ),
-      child: Column(
-        children: [
-          const Icon(Icons.error_outline, color: Colors.red, size: 32),
-          const SizedBox(height: 8),
-          Text(
-            context.l10n.unableToLoadPlans,
-            style: TextStyle(color: Colors.red.shade300, fontSize: 16, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            context.l10n.checkConnectionTryAgain,
-            textAlign: TextAlign.center,
-            style: TextStyle(color: Colors.red.shade400, fontSize: 14),
-          ),
-          const SizedBox(height: 12),
-          TextButton(
-            onPressed: _loadAvailablePlans,
-            child: Text(context.l10n.retry, style: const TextStyle(color: Colors.red)),
-          ),
-        ],
-      ),
-    );
-  }
+  AppLocalizations get l10n => context.l10n;
 
-  /// Groups available plans by plan_id and shows tier cards using the existing card style.
+  /// Groups available plans by plan_id and shows one card per tier.
   Widget _buildTierPlanCards({required Map<String, dynamic> availablePlans}) {
     final plans = (availablePlans['plans'] as List).cast<Map<String, dynamic>>();
 
@@ -1589,121 +817,34 @@ class _PlansSheetState extends State<PlansSheet> {
     }
 
     final isYearly = selectedPlan == 'yearly';
-    final savePercent = bestAnnualDiscountPercent(grouped.values);
+    final subPlans = context.read<UsageProvider>().subscription?.availablePlans ?? [];
 
     return Column(
       children: [
-        // Billing period toggle — yearly/monthly
-        Row(
-          children: [
-            Expanded(
-              child: GestureDetector(
-                onTap: () {
-                  HapticFeedback.lightImpact();
-                  setState(() => selectedPlan = 'yearly');
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1F1F25),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: isYearly ? Colors.white : Colors.transparent, width: 2),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Text(
-                        context.l10n.billingYearly,
-                        style: TextStyle(
-                          color: isYearly ? Colors.white : Colors.grey.shade500,
-                          fontSize: 15,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      if (savePercent != null) ...[
-                        const SizedBox(width: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: Colors.green.shade800,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            context.l10n.savePercent(savePercent),
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 9,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 0.3,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: GestureDetector(
-                onTap: () {
-                  HapticFeedback.lightImpact();
-                  setState(() => selectedPlan = 'monthly');
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF1F1F25),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: !isYearly ? Colors.white : Colors.transparent, width: 2),
-                  ),
-                  child: Text(
-                    context.l10n.billingMonthly,
-                    textAlign: TextAlign.center,
-                    style: TextStyle(
-                      color: !isYearly ? Colors.white : Colors.grey.shade500,
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ),
-              ),
-            ),
-          ],
+        PlanBillingPeriodToggle(
+          isYearly: isYearly,
+          savePercent: bestAnnualDiscountPercent(grouped.values),
+          onChanged: (yearly) => setState(() => selectedPlan = yearly ? 'yearly' : 'monthly'),
         ),
         const SizedBox(height: 18),
-        // Tier cards — reuse the existing _buildDynamicPlanOption card style
         ...sortedTierIds.map((tierId) {
           final tierPlans = grouped[tierId]!;
           final planForPeriod = tierPlans.firstWhereOrNull((p) => p['interval'] == (isYearly ? 'year' : 'month'));
           if (planForPeriod == null) return const SizedBox.shrink();
 
-          final isSelected = selectedTierId == tierId;
-          final eyebrow = planForPeriod['eyebrow'] as String?;
-
-          // Look up plan display name from subscription's available_plans
-          final subPlans = context.read<UsageProvider>().subscription?.availablePlans ?? [];
-          final matchingPlan = subPlans.firstWhereOrNull((sp) => sp.id == tierId);
-          final displayTitle = matchingPlan?.title ?? planForPeriod['title'] as String;
-
-          // Override title with plan name for tier display
-          final planDataWithName = Map<String, dynamic>.from(planForPeriod);
-          planDataWithName['title'] = displayTitle;
-
-          // Get features from subscription's available_plans
-          final planFeatures = matchingPlan?.features ?? [];
-          final planSubtitle = planForPeriod['subtitle'] as String?;
+          // The tier's display name comes from the backend (subscription available_plans).
+          final planDataWithName = Map<String, dynamic>.from(planForPeriod)
+            ..['title'] = planTitleForTier(tierId, subPlans) ?? planForPeriod['title'] as String;
 
           return Padding(
-            padding: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.only(bottom: OmiSpacing.sm),
             child: _buildDynamicPlanOption(
-              isSelected: isSelected,
+              isSelected: selectedTierId == tierId,
               planData: planDataWithName,
               saveTag: isYearly ? _monthsFreeLabel(annualMonthsFree(tierPlans)) : null,
-              isPopular: eyebrow == 'Most popular',
-              featureSummary: planSubtitle,
-              features: planFeatures,
+              isPopular: planForPeriod['eyebrow'] == 'Most popular',
+              featureSummary: planForPeriod['subtitle'] as String?,
+              features: subPlans.firstWhereOrNull((sp) => sp.id == tierId)?.features ?? [],
               desktopAccess: _tierGrantsDesktop(tierId),
               onTap: () {
                 HapticFeedback.lightImpact();
@@ -1743,302 +884,6 @@ class _PlansSheetState extends State<PlansSheet> {
     );
   }
 
-  Widget _buildFeatureItem({required dynamic faIcon, required String text}) {
-    return Row(
-      children: [
-        Container(
-          width: 32,
-          height: 32,
-          decoration: BoxDecoration(
-            color: Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.white, width: 1),
-          ),
-          child: Center(child: FaIcon(faIcon, color: Colors.white, size: 16)),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Text(
-            text,
-            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w400),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildLimitationItem({required FaIconData icon, required String text}) {
-    return Row(
-      children: [
-        Container(
-          width: 32,
-          height: 32,
-          decoration: BoxDecoration(
-            color: Colors.red.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: Colors.red.shade400, width: 1),
-          ),
-          child: Center(child: FaIcon(icon, color: Colors.red.shade400, size: 18)),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
-          child: Text(
-            text,
-            style: TextStyle(color: Colors.red.shade400, fontSize: 16, fontWeight: FontWeight.w500),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildHardcodedPlanOption({
-    required bool isSelected,
-    required String title,
-    required String? subtitle,
-    required String monthlyPrice,
-    required VoidCallback onTap,
-    String? saveTag,
-    bool isPopular = false,
-    bool isActive = false,
-    String? endsOnDate,
-    String? featureSummary,
-    List<String> features = const [],
-    bool? desktopAccess,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1F1F25),
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: isSelected ? Colors.white : Colors.transparent, width: 2),
-      ),
-      child: Column(
-        children: [
-          // Main card area — tappable for plan selection
-          GestureDetector(
-            onTap: onTap,
-            behavior: HitTestBehavior.opaque,
-            child: Column(
-              children: [
-                if (isPopular) ...[
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12)),
-                        child: Text(
-                          context.l10n.popularBadge,
-                          style: const TextStyle(
-                            color: Colors.black,
-                            fontSize: 9,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                ],
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          title,
-                          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-                        ),
-                        if (subtitle != null) ...[
-                          const SizedBox(height: 4),
-                          Text(subtitle, style: TextStyle(color: Colors.grey[400], fontSize: 14)),
-                        ],
-                      ],
-                    ),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(
-                          monthlyPrice,
-                          style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-                        ),
-                        if (saveTag != null) ...[
-                          const SizedBox(height: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: Colors.green.shade800,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              saveTag,
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 9,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: 0.3,
-                              ),
-                            ),
-                          ),
-                        ],
-                        if (endsOnDate != null) ...[
-                          const SizedBox(height: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: Colors.red.shade800,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              context.l10n.endsOnDate(endsOnDate),
-                              style: const TextStyle(
-                                color: Colors.white,
-                                fontSize: 9,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: 0.3,
-                              ),
-                            ),
-                          ),
-                        ] else if (isActive) ...[
-                          const SizedBox(height: 8),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: Colors.red.shade800,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: const Text(
-                              'Active',
-                              style: TextStyle(
-                                color: Colors.white,
-                                fontSize: 9,
-                                fontWeight: FontWeight.w600,
-                                letterSpacing: 0.3,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          // Plan details — always visible (no expand/collapse toggle).
-          if (featureSummary != null || desktopAccess != null || features.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            if (featureSummary != null) Text(featureSummary, style: TextStyle(color: Colors.grey[400], fontSize: 12)),
-            if (featureSummary != null && (desktopAccess != null || features.isNotEmpty)) const SizedBox(height: 8),
-            // Desktop access — explicit ✓/✗ so Neo (mobile/web only) is clearly
-            // distinguished from Operator/Architect.
-            if (desktopAccess != null) _buildDesktopAccessRow(desktopAccess),
-            ...features.map(
-              (f) => Padding(
-                padding: const EdgeInsets.only(bottom: 4),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Icon(Icons.check, color: Colors.green[400], size: 14),
-                    const SizedBox(width: 6),
-                    Expanded(
-                      child: Text(f, style: TextStyle(color: Colors.grey[300], fontSize: 12, height: 1.3)),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ],
-        ],
-      ),
-    );
-  }
-
-  Widget _buildShimmerPlanOption() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-      decoration: BoxDecoration(
-        color: const Color(0xFF1F1F25), // Use conversation list background
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.1), width: 2),
-      ),
-      child: Column(
-        children: [
-          // Popular badge only at the top
-          const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    ShimmerWithTimeout(
-                      baseColor: Colors.white.withValues(alpha: 0.1),
-                      highlightColor: Colors.white.withValues(alpha: 0.3),
-                      child: Container(
-                        height: 18,
-                        width: double.infinity,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    ShimmerWithTimeout(
-                      baseColor: Colors.white.withValues(alpha: 0.1),
-                      highlightColor: Colors.white.withValues(alpha: 0.3),
-                      child: Container(
-                        height: 14,
-                        width: 100,
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.1),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  ShimmerWithTimeout(
-                    baseColor: Colors.white.withValues(alpha: 0.1),
-                    highlightColor: Colors.white.withValues(alpha: 0.3),
-                    child: Container(
-                      height: 18,
-                      width: 100,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  ShimmerWithTimeout(
-                    baseColor: Colors.white.withValues(alpha: 0.1),
-                    highlightColor: Colors.white.withValues(alpha: 0.3),
-                    child: Container(
-                      height: 14,
-                      width: 60,
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildDynamicPlanOption({
     required bool isSelected,
     required Map<String, dynamic> planData,
@@ -2049,34 +894,25 @@ class _PlansSheetState extends State<PlansSheet> {
     bool? desktopAccess,
     required VoidCallback onTap,
   }) {
-    final title = planData['title'] as String;
-    final priceString = planData['price_string'] as String;
     final interval = planData['interval'] as String;
     final unitAmount = planData['unit_amount'] as int;
     final isActive = planData['is_active'] as bool? ?? false;
-    final planPriceId = planData['id'] as String;
 
-    // Check if subscription is canceled and get end date
-    final provider = context.read<UsageProvider>();
-    final sub = provider.subscription?.subscription;
+    // An "Ends on [date]" badge only on the cancelled subscription's own price.
+    final sub = context.read<UsageProvider>().subscription?.subscription;
     final isCancelled = sub?.cancelAtPeriodEnd ?? false;
     String? endsOnDate;
-
-    // Only show "Ends on [date]" badge if:
-    // 1. Subscription is canceled
-    // 2. This plan's price_id matches the current subscription's price_id
-    if (isCancelled && sub?.currentPeriodEnd != null && sub?.currentPriceId == planPriceId) {
-      final date = DateTime.fromMillisecondsSinceEpoch(sub!.currentPeriodEnd! * 1000);
-      endsOnDate = DateFormat.yMMMd().format(date);
+    if (isCancelled && sub?.currentPeriodEnd != null && sub?.currentPriceId == planData['id']) {
+      endsOnDate = OmiDateFormat.of(context).date(DateTime.fromMillisecondsSinceEpoch(sub!.currentPeriodEnd! * 1000));
     }
 
-    return _buildHardcodedPlanOption(
+    return PlanOptionCard(
       isSelected: isSelected,
       saveTag: saveTag,
       isPopular: isPopular,
-      title: title,
-      subtitle: interval == 'year' ? context.l10n.annualBillingSummary(12, '\$${unitAmount / 100}') : null,
-      monthlyPrice: priceString,
+      title: planData['title'] as String,
+      subtitle: interval == 'year' ? l10n.annualBillingSummary(12, '\$${unitAmount / 100}') : null,
+      price: planData['price_string'] as String,
       onTap: isActive ? () {} : onTap,
       isActive: isActive && !isCancelled,
       endsOnDate: endsOnDate,
@@ -2103,199 +939,5 @@ class _PlansSheetState extends State<PlansSheet> {
     }
   }
 
-  String? _monthsFreeLabel(int? months) => months == null ? null : context.l10n.monthsFreeBadge(months);
-
-  Widget _buildDesktopAccessRow(bool granted) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 4),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(granted ? Icons.check : Icons.close, color: granted ? Colors.green[400] : Colors.red[400], size: 14),
-          const SizedBox(width: 6),
-          Expanded(
-            child: Text(
-              granted ? context.l10n.worksOnDesktop : context.l10n.noDesktopAccess,
-              style: TextStyle(
-                color: granted ? Colors.grey[300] : Colors.red[300],
-                fontSize: 12,
-                height: 1.3,
-                fontWeight: granted ? FontWeight.w400 : FontWeight.w500,
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBillingInfoItem({required FaIconData icon, required String text}) {
-    return Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        FaIcon(icon, color: Colors.green, size: 16),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(text, style: const TextStyle(color: Colors.white, fontSize: 14, height: 1.4)),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTrainingDataOption({required bool optedIn, required String? status, required bool isLoading}) {
-    // Approved status - show as active
-    if (optedIn && status == 'approved') {
-      return GestureDetector(
-        onTap: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (context) => Scaffold(
-                appBar: AppBar(title: Text(context.l10n.omiTraining), backgroundColor: Colors.black),
-                body: WebViewWidget(
-                  controller: WebViewController()
-                    ..setJavaScriptMode(JavaScriptMode.unrestricted)
-                    ..loadRequest(Uri.parse('https://omi.me/training')),
-                ),
-              ),
-            ),
-          );
-        },
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1F1F25),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.transparent, width: 2),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      context.l10n.getFreeUnlimitedAccess,
-                      style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(context.l10n.trainingDataProgram, style: TextStyle(color: Colors.grey[400], fontSize: 14)),
-                  ],
-                ),
-              ),
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(8)),
-                    child: const Text(
-                      'Active',
-                      style: TextStyle(
-                        color: Colors.black,
-                        fontSize: 9,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 0.3,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
-                ],
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    // Pending status - show with link to learn more
-    if (optedIn && status == 'pending_review') {
-      return GestureDetector(
-        onTap: () {
-          Navigator.of(context).push(
-            MaterialPageRoute(
-              builder: (context) => Scaffold(
-                appBar: AppBar(title: Text(context.l10n.omiTraining), backgroundColor: Colors.black),
-                body: WebViewWidget(
-                  controller: WebViewController()
-                    ..setJavaScriptMode(JavaScriptMode.unrestricted)
-                    ..loadRequest(Uri.parse('https://omi.me/training')),
-                ),
-              ),
-            ),
-          );
-        },
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-          decoration: BoxDecoration(
-            color: const Color(0xFF1F1F25),
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: Colors.transparent, width: 2),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      context.l10n.getFreeUnlimitedAccess,
-                      style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(context.l10n.yourRequestUnderReview, style: TextStyle(color: Colors.grey[400], fontSize: 14)),
-                  ],
-                ),
-              ),
-              const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
-            ],
-          ),
-        ),
-      );
-    }
-
-    // Default state - not opted in yet
-    return GestureDetector(
-      onTap: isLoading ? null : _handleTrainingDataOptIn,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-        decoration: BoxDecoration(
-          color: const Color(0xFF1F1F25),
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(color: Colors.transparent, width: 2),
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    context.l10n.getFreeUnlimitedAccess,
-                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(context.l10n.shareDataForTraining, style: TextStyle(color: Colors.grey[400], fontSize: 14)),
-                ],
-              ),
-            ),
-            if (isLoading)
-              const SizedBox(
-                width: 20,
-                height: 20,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                ),
-              )
-            else
-              const Icon(Icons.arrow_forward_ios, color: Colors.white, size: 16),
-          ],
-        ),
-      ),
-    );
-  }
+  String? _monthsFreeLabel(int? months) => months == null ? null : l10n.monthsFreeBadge(months);
 }
