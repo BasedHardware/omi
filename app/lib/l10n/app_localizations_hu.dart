@@ -11201,4 +11201,21 @@ class AppLocalizationsHu extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'Ha megnevezel valakit, az Omi egy rövid hangmintát tárol, hogy legközelebb felismerje';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Átiratok nem érhetők el, a felvétel folytatódik az eszközön, és később feldolgozásra kerül';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Átirat nem érhető el · mentés az eszközön';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Függő átiratok $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Függő átiratok $count';
+  }
 }

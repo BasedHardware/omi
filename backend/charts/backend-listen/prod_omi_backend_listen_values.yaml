@@ -349,11 +349,6 @@ env:
     value: "http://parakeet.omi.me"
   - name: STT_PRERECORDED_MODEL
     value: "parakeet,modulate-velma-2"
-  - name: DEEPGRAM_API_KEY
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: DEEPGRAM_API_KEY
   - name: DEEPGRAM_SELF_HOSTED_ENABLED
     value: "false"
   - name: STT_CONNECT_ORDER_FROM_CONFIG

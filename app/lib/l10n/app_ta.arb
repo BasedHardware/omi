@@ -11096,5 +11096,9 @@
     "speakerTagPromptAnswerFailed": "சேமிக்க முடியவில்லை. மீண்டும் முயற்சிக்கவும்.",
     "voiceSettingsAskToTag": "குரல்களைக் குறிக்க என்னிடம் கேள்",
     "voiceSettingsAskToTagSubtitle": "அவ்வப்போது, உங்கள் சமீபத்திய உரையாடல்களில் யார் பேசினார்கள் என்று Omi கேட்கும்",
-    "voiceSettingsSaveOthersSubtitle": "நீங்கள் ஒருவருக்குப் பெயரிடும்போது, அடுத்த முறை அடையாளம் காண Omi ஒரு சிறிய குரல் மாதிரியை வைத்திருக்கும்"
+    "voiceSettingsSaveOthersSubtitle": "நீங்கள் ஒருவருக்குப் பெயரிடும்போது, அடுத்த முறை அடையாளம் காண Omi ஒரு சிறிய குரல் மாதிரியை வைத்திருக்கும்",
+    "transcriptionUnavailableRecordingContinues": "நகலெடுப்புகள் கிடைக்கவில்லை, பதிவு சாதனத்தில் தொடர்கிறது, பின்னர் செயலாக்கப்படும்",
+    "transcriptionUnavailableSavingOnDevice": "நகலெடுப்பு இல்லை · சாதனத்தில் சேமிக்கப்படுகிறது",
+    "transcriptionsPendingFraction": "நிலுவையில் உள்ள நகலெடுப்புகள் {pending}/{total}",
+    "transcriptionsPendingCount": "நிலுவையில் உள்ள நகலெடுப்புகள் {count}"
 }

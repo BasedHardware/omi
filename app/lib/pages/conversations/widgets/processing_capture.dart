@@ -163,14 +163,14 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         setState(() {
           _isPhoneMicPaused = true;
         });
-        await provider.stopStreamRecording();
+        await provider.pauseCapture();
         PlatformManager.instance.analytics.phoneMicRecordingStopped();
       } else if (_isPhoneMicPaused) {
         // Resume recording
         setState(() {
           _isPhoneMicPaused = false;
         });
-        await provider.streamRecording();
+        await provider.resumeCapture();
         PlatformManager.instance.analytics.phoneMicRecordingStarted();
         _maybeShowOfflineFallbackSnackbar(provider);
       } else if (recordingState == RecordingState.initialising) {
@@ -288,7 +288,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
       if (captureProvider.terminalTranscriptionFailure != null) {
         // Audio remains in the WAL while reconnecting, but the server has
         // explicitly said live STT is unavailable. Do not claim "Listening".
-        stateText = captureStateLabel(l10n, CaptureDisplayState.transcriptionUnavailable);
+        stateText = captureStateLabel(l10n, CaptureDisplayState.transcriptionUnavailable, compact: true);
         statusIndicator = const PausedStatusIndicator();
       } else if (bufferingFor != null) {
         // Custom STT endpoint unreachable. Audio keeps recording
@@ -393,6 +393,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
         capturingPhotos: hasPhotos,
       ),
       bufferingFor: bufferingFor,
+      compact: true,
     );
 
     // When recording is active, show the unified UI design
@@ -877,8 +878,16 @@ Widget getProcessingConversationsWidget(List<ServerConversation> conversations) 
   if (conversations.isEmpty) {
     return const SliverToBoxAdapter(child: SizedBox.shrink());
   }
-  // Show only the first (most recent) processing conversation
-  return SliverToBoxAdapter(child: ProcessingConversationWidget(conversation: conversations.first));
+  // Live events append new IDs; list position is not recency. Processing begins
+  // at capture end, while the optimistic Process Now row has only createdAt.
+  final newest = conversations.reduce((a, b) {
+    final aTime = a.finishedAt ?? a.createdAt;
+    final bTime = b.finishedAt ?? b.createdAt;
+    return bTime.isAfter(aTime) ? b : a;
+  });
+  return SliverToBoxAdapter(
+    child: ProcessingConversationWidget(key: ValueKey('processing_${newest.id}'), conversation: newest),
+  );
 }
 
 // PROCESSING CONVERSATION

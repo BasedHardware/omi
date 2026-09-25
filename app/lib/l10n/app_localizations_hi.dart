@@ -11138,4 +11138,21 @@ class AppLocalizationsHi extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'जब आप किसी का नाम बताते हैं, तो अगली बार पहचानने के लिए Omi आवाज़ का एक छोटा नमूना रखता है';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'ट्रांसक्रिप्शन उपलब्ध नहीं हैं, रिकॉर्डिंग डिवाइस पर जारी है और बाद में प्रोसेस होगी';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'ट्रांसक्रिप्शन अनुपलब्ध · डिवाइस पर सहेजा जा रहा है';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'लंबित ट्रांसक्रिप्शन $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'लंबित ट्रांसक्रिप्शन $count';
+  }
 }

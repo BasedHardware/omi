@@ -3524,5 +3524,9 @@
     "speakerTagPromptAnswerFailed": "Tallennus epäonnistui. Yritä uudelleen.",
     "voiceSettingsAskToTag": "Pyydä minua merkitsemään äänet",
     "voiceSettingsAskToTagSubtitle": "Silloin tällöin Omi kysyy, kuka puhui viimeaikaisissa keskusteluissasi",
-    "voiceSettingsSaveOthersSubtitle": "Kun nimeät jonkun, Omi tallentaa lyhyen ääninäytteen tunnistaakseen hänet ensi kerralla"
+    "voiceSettingsSaveOthersSubtitle": "Kun nimeät jonkun, Omi tallentaa lyhyen ääninäytteen tunnistaakseen hänet ensi kerralla",
+    "transcriptionUnavailableRecordingContinues": "Transkriptiot eivät ole käytettävissä, tallennus jatkuu laitteella ja käsitellään myöhemmin",
+    "transcriptionUnavailableSavingOnDevice": "Transkriptio ei käytettävissä · tallennetaan laitteelle",
+    "transcriptionsPendingFraction": "Jonossa olevat transkriptiot {pending}/{total}",
+    "transcriptionsPendingCount": "Jonossa olevat transkriptiot {count}"
 }

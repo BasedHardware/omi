@@ -11193,4 +11193,21 @@ class AppLocalizationsKn extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'ನೀವು ಯಾರಿಗಾದರೂ ಹೆಸರಿಸಿದಾಗ, ಮುಂದಿನ ಬಾರಿ ಗುರುತಿಸಲು Omi ಒಂದು ಚಿಕ್ಕ ಧ್ವನಿ ಮಾದರಿಯನ್ನು ಇಟ್ಟುಕೊಳ್ಳುತ್ತದೆ';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'ಲಿಪ್ಯಂತರಗಳು ಲಭ್ಯವಿಲ್ಲ, ಧ್ವನಿಮುದ್ರಣ ಸಾಧನದಲ್ಲಿ ಮುಂದುವರಿಯುತ್ತದೆ ಮತ್ತು ನಂತರ ಪ್ರಕ್ರಿಯೆಗೊಳ್ಳುತ್ತದೆ';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'ಲಿಪ್ಯಂತರ ಲಭ್ಯವಿಲ್ಲ · ಸಾಧನದಲ್ಲಿ ಉಳಿಸಲಾಗುತ್ತಿದೆ';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'ಬಾಕಿ ಇರುವ ಲಿಪ್ಯಂತರಗಳು $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'ಬಾಕಿ ಇರುವ ಲಿಪ್ಯಂತರಗಳು $count';
+  }
 }

@@ -11210,4 +11210,21 @@ class AppLocalizationsRo extends AppLocalizations {
   @override
   String get voiceSettingsSaveOthersSubtitle =>
       'Când numești pe cineva, Omi păstrează o scurtă mostră de voce pentru a-l recunoaște data viitoare';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Transcrierile nu sunt disponibile, înregistrarea continuă pe dispozitiv și va fi procesată mai târziu';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Transcriere indisponibilă · se salvează pe dispozitiv';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Transcrieri în așteptare $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Transcrieri în așteptare $count';
+  }
 }
