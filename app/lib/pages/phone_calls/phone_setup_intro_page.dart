@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import 'package:omi/pages/phone_calls/phone_setup_number_page.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/other/temp.dart';
 
 class PhoneSetupIntroPage extends StatelessWidget {
   const PhoneSetupIntroPage({super.key});
@@ -10,38 +11,33 @@ class PhoneSetupIntroPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: Colors.white),
-          onPressed: () => Navigator.of(context).pop(),
-        ),
-      ),
+      appBar: AppBar(leading: const OmiBackButton()),
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
+          padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xl),
           child: Column(
             children: [
               const SizedBox(height: 40),
               // Hero icon
-              Container(
-                width: 80,
-                height: 80,
-                decoration: const BoxDecoration(shape: BoxShape.circle, color: Color(0xFF1F1F25)),
-                child: const Icon(Icons.phone, color: Colors.white, size: 36),
+              const ExcludeSemantics(
+                child: SizedBox(
+                  width: 80,
+                  height: 80,
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(shape: BoxShape.circle, color: OmiColors.surface1),
+                    child: Icon(Icons.phone, color: OmiColors.textPrimary, size: 36),
+                  ),
+                ),
               ),
-              const SizedBox(height: 24),
-              Text(
-                context.l10n.phoneCallsWithOmi,
-                style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: Colors.white),
-                textAlign: TextAlign.center,
+              const SizedBox(height: OmiSpacing.xl),
+              Semantics(
+                header: true,
+                child: Text(context.l10n.phoneCallsWithOmi, style: OmiType.title1, textAlign: TextAlign.center),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: OmiSpacing.xs),
               Text(
                 context.l10n.phoneCallsSubtitle,
-                style: TextStyle(fontSize: 15, color: Colors.grey[500]),
+                style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
                 textAlign: TextAlign.center,
               ),
               const SizedBox(height: 40),
@@ -51,43 +47,34 @@ class PhoneSetupIntroPage extends StatelessWidget {
                 title: context.l10n.phoneSetupStep1Title,
                 subtitle: context.l10n.phoneSetupStep1Subtitle,
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: OmiSpacing.md),
               _StepRow(
                 icon: Icons.dialpad,
                 title: context.l10n.phoneSetupStep2Title,
                 subtitle: context.l10n.phoneSetupStep2Subtitle,
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: OmiSpacing.md),
               _StepRow(
                 icon: Icons.people_outline,
                 title: context.l10n.phoneSetupStep3Title,
                 subtitle: context.l10n.phoneSetupStep3Subtitle,
               ),
               const Spacer(),
-              // Get Started button
-              GestureDetector(
-                onTap: () {
-                  HapticFeedback.mediumImpact();
-                  Navigator.of(context).push(MaterialPageRoute(builder: (_) => const PhoneSetupNumberPage()));
+              OmiButton(
+                label: context.l10n.phoneGetStarted,
+                expand: true,
+                onPressed: () {
+                  OmiHaptics.medium();
+                  routeToPage(context, const PhoneSetupNumberPage());
                 },
-                child: Container(
-                  width: double.infinity,
-                  height: 56,
-                  decoration: BoxDecoration(color: Colors.deepPurple, borderRadius: BorderRadius.circular(28)),
-                  alignment: Alignment.center,
-                  child: Text(
-                    context.l10n.phoneGetStarted,
-                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600, color: Colors.white),
-                  ),
-                ),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: OmiSpacing.xs),
               Text(
                 context.l10n.callRecordingConsentDisclaimer,
-                style: TextStyle(fontSize: 12, color: Colors.grey[700]),
+                style: OmiType.footnote.copyWith(color: OmiColors.textTertiary),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: OmiSpacing.md),
             ],
           ),
         ),
@@ -107,23 +94,22 @@ class _StepRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       children: [
-        Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(12)),
-          child: Icon(icon, color: Colors.white, size: 20),
+        ExcludeSemantics(
+          child: Container(
+            width: 40,
+            height: 40,
+            decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
+            child: Icon(icon, color: OmiColors.textPrimary, size: 20),
+          ),
         ),
-        const SizedBox(width: 16),
+        const SizedBox(width: OmiSpacing.md),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
-                title,
-                style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500, color: Colors.white),
-              ),
+              Text(title, style: OmiType.subhead.copyWith(fontWeight: FontWeight.w500)),
               const SizedBox(height: 2),
-              Text(subtitle, style: TextStyle(fontSize: 13, color: Colors.grey[500])),
+              Text(subtitle, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
             ],
           ),
         ),

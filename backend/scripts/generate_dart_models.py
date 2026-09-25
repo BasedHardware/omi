@@ -45,6 +45,8 @@ SCHEMA_GROUPS = {
             'PluginResult',
             'Event',
             'Section',
+            'Participant',
+            'Insight',
             'Structured',
             'Geolocation',
             'ConversationPhoto',
@@ -54,6 +56,8 @@ SCHEMA_GROUPS = {
             'CalendarEventLink',
             'CalendarCaptureGap',
             'TranscriptMatchSnippet',
+            'CaptureGroupMember',
+            'CaptureGroup',
             'Conversation',
             'ProjectedActionItem',
             'ProjectedSection',
@@ -72,6 +76,7 @@ SCHEMA_GROUPS = {
             'SyncCaptureManifestFile',
             'SyncCaptureManifestRequest',
             'SyncCaptureManifestResponse',
+            'StatusResponse',
         ),
     },
     'messages': {
@@ -202,6 +207,20 @@ SCHEMA_GROUPS = {
     'people': {
         'output': DEFAULT_OUTPUT_DIR / 'people_wire.g.dart',
         'schemas': ('Person',),
+    },
+    'speaker_tag_prompts': {
+        'output': DEFAULT_OUTPUT_DIR / 'speaker_tag_prompts_wire.g.dart',
+        'schemas': (
+            'SpeakerTagPrompt',
+            'SpeakerTagPromptsResponse',
+            'SpeakerTagPromptsShownRequest',
+            'SpeakerTagPromptsShownResponse',
+            'SpeakerTagPromptAnswerRequest',
+            'SpeakerTagPromptAnswerResponse',
+            'SpeakerTagPromptClip',
+            'VoiceProfileSettings',
+            'VoiceProfileSettingsUpdate',
+        ),
     },
     'imports_integrations': {
         'output': DEFAULT_OUTPUT_DIR / 'imports_integrations_wire.g.dart',

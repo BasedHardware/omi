@@ -735,6 +735,7 @@ _STUB_MODULES = [
     'models.transcript_segment',
     'database._client',
     'database.redis_db',
+    'database.auth',
     'database.fair_use',
     'database.users',
     'database.user_usage',
@@ -810,6 +811,7 @@ class TestProcessSegmentReal:
 
         sys.modules['database.redis_db'].r = MagicMock()
         sys.modules['database._client'].db = MagicMock()
+        sys.modules['database.auth'].get_user_name = MagicMock(return_value='User')
         _mock_conv_db = sys.modules['database.conversations']
         _mock_conv_db.get_closest_conversation_to_timestamps = MagicMock()
         _mock_conv_db.update_conversation_segments = MagicMock()

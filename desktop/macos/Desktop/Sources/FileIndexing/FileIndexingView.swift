@@ -13,7 +13,7 @@ struct FileIndexingView: View {
   @State private var scanningFolder: String = ""
   @State private var totalFilesScanned: Int = 0
   @State private var progress: Double = 0.0
-  @State private var statusText: String = "Scanning your files..."
+  @State private var statusText: String = "Scanning your files…"
   @State private var showInfoPopover: Bool = false
   @State private var chatMessages: [String] = []
   @State private var pipelineStarted = false
@@ -193,7 +193,7 @@ struct FileIndexingView: View {
           Image(systemName: "brain")
             .scaledFont(size: OmiType.hero)
             .foregroundColor(Ink.hairline)
-          Text("Your knowledge graph will grow as omi learns more about you")
+          Text("Your knowledge graph will grow as Omi learns more about you")
             .scaledFont(size: OmiType.body)
             .foregroundColor(Ink.secondary)
             .multilineTextAlignment(.center)
@@ -315,13 +315,13 @@ struct FileIndexingView: View {
       await MainActor.run {
         totalFilesScanned = existingCount
         progress = 0.6
-        statusText = "Analyzing your files..."
+        statusText = "Analyzing your files…"
       }
       return
     }
 
     await MainActor.run {
-      statusText = "Scanning your files..."
+      statusText = "Scanning your files…"
     }
 
     let home = FileManager.default.homeDirectoryForCurrentUser
@@ -366,7 +366,7 @@ struct FileIndexingView: View {
   /// Stage 2: AI exploration chat in background, progress 60% → 90%
   private func runAIExploration() async {
     await MainActor.run {
-      statusText = "Analyzing your files..."
+      statusText = "Analyzing your files…"
     }
 
     // Start progress animation (ease-out curve over ~30s)
@@ -405,7 +405,7 @@ struct FileIndexingView: View {
   /// We poll the local SQLite briefly, then fall back to API if needed.
   private func runKnowledgeGraphBuild() async {
     await MainActor.run {
-      statusText = "Building your knowledge graph..."
+      statusText = "Building your knowledge graph…"
       scanningFolder = ""
       progress = 0.92
     }
@@ -499,15 +499,6 @@ struct FileIndexingView: View {
 
   /// Send the exploration prompt to the chat
   private func startExplorationChat() async {
-    // Multi-chat users get a dedicated session; single-chat users stay in default chat
-    if chatProvider.multiChatEnabled {
-      let session = await chatProvider.createNewSession(skipGreeting: true)
-      guard session != nil else {
-        log("FileIndexingView: Failed to create session for file exploration")
-        return
-      }
-    }
-
     let prompt = """
       I just indexed \(totalFilesScanned) files on your computer. Explore them to learn about me, then build my knowledge graph.
 

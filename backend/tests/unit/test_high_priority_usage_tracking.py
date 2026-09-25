@@ -158,6 +158,7 @@ database_mod = _stub_module("database")
 if not hasattr(database_mod, '__path__'):
     database_mod.__path__ = []
 for submodule in [
+    "auth",
     "redis_db",
     "memories",
     "conversations",
@@ -182,6 +183,7 @@ for submodule in [
     setattr(database_mod, submodule, mod)
 
 # Set needed attributes on db stubs
+sys.modules["database.auth"].get_user_name = MagicMock(return_value="User")
 # utils.conversations.location (imported by external_integrations for daily-summary
 # address fill) does `from database.redis_db import r`; the stub must provide it.
 sys.modules["database.redis_db"].r = MagicMock()

@@ -531,20 +531,22 @@ def _overflow_enabled() -> bool:
     return os.getenv(_OVERFLOW_ENABLED_ENV, 'true').strip().lower() not in {'0', 'false', 'no', 'off'}
 
 
-def _fallback_chain(model: str) -> tuple[str, ...]:
+def _fallback_chain(model: str, *, origin_model: str | None = None) -> tuple[str, ...]:
     """Reachable models that may serve `model`'s traffic, best first."""
+    origin = ptr.lane_overflow_origin(model) if origin_model is None else origin_model
     try:
         return ptr.resolve_fallback_chain(
             model=model,
             pt_model=_provisioned_model(),
             unreachable=_unreachable_models(),
             override=os.getenv(_OVERFLOW_MODEL_OVERRIDE_ENV, ''),
+            origin_model=origin,
         )
     except ValueError:
         return ()
 
 
-def _first_reachable(model: str) -> str:
+def _first_reachable(model: str, *, origin_model: str | None = None) -> str:
     """`model`, or the best rung of its chain if traffic has proved it dead.
 
     Falling back before dispatch is what keeps a known-unreachable model from
@@ -552,7 +554,7 @@ def _first_reachable(model: str) -> str:
     """
     if _model_believed_available(model):
         return model
-    for candidate in _fallback_chain(model):
+    for candidate in _fallback_chain(model, origin_model=origin_model):
         return candidate
     # Nothing declared and reachable. Keep the request honest and let the
     # provider answer rather than inventing a substitute.
@@ -585,7 +587,7 @@ def _serving_model(model: str) -> str:
         intended = _provisioned_model()
     else:
         intended = model
-    return _first_reachable(intended)
+    return _first_reachable(intended, origin_model=ptr.lane_overflow_origin(model))
 
 
 def _retarget_path(path: str, model: str, action: str) -> str:
@@ -728,7 +730,7 @@ async def _upstream(
     return UpstreamRoute(_studio_url(path), {}, {**query, 'key': server_key}, 'ai_studio', 'server_key', 'global')
 
 
-def _overflow_plan(served_model: str) -> list[tuple[str, str]]:
+def _overflow_plan(served_model: str, *, origin_model: str | None = None) -> list[tuple[str, str]]:
     """Ordered (model, request_type) attempts to try after prepaid capacity is full.
 
     Only traffic that was actually routed at the reservation can exhaust it, so
@@ -746,7 +748,12 @@ def _overflow_plan(served_model: str) -> list[tuple[str, str]]:
     if served_model != pt_model:
         return []
     try:
-        ladder = ptr.resolve_overflow_ladder(pt_model=pt_model, override=os.getenv(_OVERFLOW_MODEL_OVERRIDE_ENV, ''))
+        origin = ptr.lane_overflow_origin(served_model) if origin_model is None else origin_model
+        ladder = ptr.resolve_overflow_ladder(
+            pt_model=pt_model,
+            override=os.getenv(_OVERFLOW_MODEL_OVERRIDE_ENV, ''),
+            origin_model=origin,
+        )
     except ValueError:
         return []
     plan: list[tuple[str, str]] = []
@@ -761,7 +768,9 @@ def _overflow_plan(served_model: str) -> list[tuple[str, str]]:
     return plan
 
 
-def _recovery_plan(served_model: str, status: int, message: str) -> list[tuple[str, str]]:
+def _recovery_plan(
+    served_model: str, status: int, message: str, *, origin_model: str | None = None
+) -> list[tuple[str, str]]:
     """Attempts to make after a response this proxy can route around.
 
     Two distinct recoverable conditions, for ANY routable model rather than
@@ -778,9 +787,9 @@ def _recovery_plan(served_model: str, status: int, message: str) -> list[tuple[s
         return []
     if ptr.is_model_unavailable(status, message):
         _record_model_unavailable(served_model)
-        return [(rung, ptr.REQUEST_TYPE_SHARED) for rung in _fallback_chain(served_model)]
+        return [(rung, ptr.REQUEST_TYPE_SHARED) for rung in _fallback_chain(served_model, origin_model=origin_model)]
     if _overflow_triggered(status, message):
-        return _overflow_plan(served_model)
+        return _overflow_plan(served_model, origin_model=origin_model)
     return []
 
 
@@ -1149,7 +1158,10 @@ async def _stream_provider(
             telemetry.record_attempt('error', _attempt_error_class(upstream.status_code, upstream.text))
             if not pending and query is not None:
                 for overflow_model, overflow_capacity in _recovery_plan(
-                    attempt_model, upstream.status_code, upstream.text
+                    attempt_model,
+                    upstream.status_code,
+                    upstream.text,
+                    origin_model=ptr.lane_overflow_origin(model),
                 ):
                     pending.append(
                         (
@@ -1501,7 +1513,9 @@ async def _proxy_unobserved(request: Request, path: str, streaming: bool, uid: s
             response = await _cancel_on_disconnect(request, post(route, body))
             if response.status_code < 400:
                 _record_model_available(model)
-            recovery = _recovery_plan(model, response.status_code, response.text)
+            recovery = _recovery_plan(
+                model, response.status_code, response.text, origin_model=ptr.lane_overflow_origin(model)
+            )
             if recovery:
                 query = dict(request.query_params)
                 for overflow_model, capacity in recovery:

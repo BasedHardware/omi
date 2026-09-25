@@ -1309,7 +1309,7 @@ describe("PiMonoAdapter served-model attribution", () => {
         role: "assistant",
         content: [{ type: "text", text: "done" }],
         model: "omi-sonnet",
-        responseModel: "gpt-5.6-luna",
+        responseModel: "gpt-6-luna",
         provider: "openai-codex",
       },
     }));
@@ -1318,7 +1318,7 @@ describe("PiMonoAdapter served-model attribution", () => {
     await expect(execution).resolves.toMatchObject({
       terminalStatus: "succeeded",
       providerTargets: ["openai-codex"],
-      modelsUsed: ["gpt-5.6-luna"],
+      modelsUsed: ["gpt-6-luna"],
     });
   });
 
@@ -1345,7 +1345,7 @@ describe("PiMonoAdapter served-model attribution", () => {
           role: "assistant",
           content: [{ type: "text", text: "…" }],
           model: "omi-sonnet",
-          responseModel: "gpt-5.6-luna",
+          responseModel: "gpt-6-luna",
         },
       }));
     }
@@ -1356,7 +1356,7 @@ describe("PiMonoAdapter served-model attribution", () => {
     const modelEvents = events.filter((e: any) => e.type === "model_used");
     expect(modelEvents).toEqual([{
       type: "model_used",
-      model: "gpt-5.6-luna",
+      model: "gpt-6-luna",
       requestedModel: "omi-sonnet",
       provider: undefined,
     }]);
@@ -1395,7 +1395,7 @@ describe("PiMonoAdapter served-model attribution", () => {
     );
     const turnEnd2 = makeTurnEndEvent("a2");
     (turnEnd2.message as any).model = "omi-sonnet";
-    (turnEnd2.message as any).responseModel = "gpt-5.6-luna";
+    (turnEnd2.message as any).responseModel = "gpt-6-luna";
     (adapter as any).handleTurnEnd(turnEnd2);
     await second;
 
@@ -1409,13 +1409,13 @@ describe("PiMonoAdapter served-model attribution", () => {
     );
     const turnEnd3 = makeTurnEndEvent("a3");
     (turnEnd3.message as any).model = "omi-sonnet";
-    (turnEnd3.message as any).responseModel = "gpt-5.6-luna";
+    (turnEnd3.message as any).responseModel = "gpt-6-luna";
     (adapter as any).handleTurnEnd(turnEnd3);
     await third;
 
     const modelEvents = events.filter((e: any) => e.type === "model_used");
     expect(modelEvents).toHaveLength(2);
-    expect(modelEvents.every((e: any) => e.model === "gpt-5.6-luna")).toBe(true);
+    expect(modelEvents.every((e: any) => e.model === "gpt-6-luna")).toBe(true);
   });
 });
 
