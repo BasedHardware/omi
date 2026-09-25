@@ -32,6 +32,7 @@ os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7
 # used by the tests that need real DNS/sockets.
 _REAL_GETADDRINFO = pysocket.getaddrinfo
 _REAL_CREATE_CONNECTION = pysocket.create_connection
+_REAL_DIAL_TLS = cimd._dial_tls
 
 CLIENT_ID = "https://app.example.com/oauth/client-metadata.json"
 REDIRECT_URI = "https://app.example.com/oauth/callback"
@@ -141,8 +142,10 @@ class _FakeTLSSocket:
 
 
 class _Dial:
-    """Callable ``_dial`` seam: records each ``(address, hostname, timeout)``
-    and hands out a fresh fake socket — or raises for configured addresses."""
+    """Callable ``_dial`` seam: records each ``(address, hostname, deadline)``
+    and hands out a fresh fake socket — or raises for configured addresses.
+    ``deadline`` is the absolute monotonic deadline the dial shares with the
+    fetch."""
 
     def __init__(self, response: bytes, fail_addresses=()):
         self.response = response
@@ -150,8 +153,8 @@ class _Dial:
         self.calls = []
         self.sockets = []
 
-    def __call__(self, address, hostname, timeout):
-        self.calls.append((address, hostname, timeout))
+    def __call__(self, address, hostname, deadline):
+        self.calls.append((address, hostname, deadline))
         if address in self.fail_addresses:
             raise OSError("connect failed")
         sock = _FakeTLSSocket(self.response)
@@ -359,10 +362,10 @@ def test_fetch_pins_validated_ip_and_preserves_hostname(monkeypatch):
     dial = _install_network(monkeypatch, addresses=("8.8.8.8",), response=_json_response(_metadata_body()))
     assert cimd.get_url_client(CLIENT_ID) is not None
 
-    address, hostname, timeout = dial.calls[0]
+    address, hostname, deadline = dial.calls[0]
     assert address == "8.8.8.8"
     assert hostname == "app.example.com"
-    assert 0 < timeout <= cimd.CIMD_FETCH_TIMEOUT_SECONDS
+    assert 0 < deadline - time.monotonic() <= cimd.CIMD_FETCH_TIMEOUT_SECONDS
     request = bytes(dial.sockets[0].sent).decode("ascii")
     assert request.startswith("GET /oauth/client-metadata.json HTTP/1.1\r\n")
     assert "Host: app.example.com\r\n" in request
@@ -402,9 +405,9 @@ def test_address_iteration_stops_at_the_shared_deadline(monkeypatch):
     )
     calls = []
 
-    def slow_dial(address, hostname, timeout):
+    def slow_dial(address, hostname, deadline):
         calls.append(address)
-        time.sleep(timeout)  # burn the entire remaining budget
+        time.sleep(max(0.0, deadline - time.monotonic()))  # burn the entire remaining budget
         raise OSError("connect timeout")
 
     monkeypatch.setattr(cimd, "_dial_tls", slow_dial)
@@ -507,7 +510,9 @@ def test_slow_drip_socket_cannot_hold_worker_past_deadline(monkeypatch):
             "localhost",
             "/meta.json",
             _resolver=lambda host, deadline: ["127.0.0.1"],
-            _dial=lambda address, host, timeout: pysocket.create_connection(("127.0.0.1", port), timeout=timeout),
+            _dial=lambda address, host, deadline: pysocket.create_connection(
+                ("127.0.0.1", port), timeout=max(0.0, deadline - time.monotonic())
+            ),
         )
         elapsed = time.monotonic() - start
     finally:
@@ -516,6 +521,97 @@ def test_slow_drip_socket_cannot_hold_worker_past_deadline(monkeypatch):
         thread.join(timeout=5)
     assert result is None
     assert elapsed < cimd.CIMD_FETCH_TIMEOUT_SECONDS + 1.5
+
+
+def test_stalled_tls_handshake_cannot_hold_worker_past_deadline(monkeypatch):
+    """REAL TLS handshake through the test-only hooks: a peer that accepts
+    TCP but never answers the ClientHello is cut at the shared 3s deadline —
+    ``_dial_tls`` re-anchors the socket timeout to the remaining budget right
+    before ``wrap_socket``. The real verifying TLS context runs; only
+    ``create_connection`` is redirected to the local listener, and only
+    inside the ``_dial`` hook."""
+    listener = pysocket.socket(pysocket.AF_INET, pysocket.SOCK_STREAM)
+    listener.setsockopt(pysocket.SOL_SOCKET, pysocket.SO_REUSEADDR, 1)
+    listener.bind(("127.0.0.1", 0))
+    listener.listen(1)
+    port = listener.getsockname()[1]
+    stop = threading.Event()
+
+    def accept_and_stall():
+        try:
+            conn, _ = listener.accept()
+            with conn:
+                conn.recv(4096)
+                while not stop.is_set():
+                    time.sleep(0.05)
+        except OSError:
+            pass
+
+    thread = threading.Thread(target=accept_and_stall, daemon=True)
+    thread.start()
+
+    def dial_to_listener(address, hostname, deadline):
+        monkeypatch.setattr(
+            cimd.socket,
+            "create_connection",
+            lambda *args, **kwargs: _REAL_CREATE_CONNECTION(("127.0.0.1", port), timeout=kwargs.get("timeout")),
+        )
+        return _REAL_DIAL_TLS(address, hostname, deadline)
+
+    try:
+        start = time.monotonic()
+        result = cimd._fetch_document(
+            "localhost",
+            "/meta.json",
+            _resolver=lambda host, deadline: ["127.0.0.1"],
+            _dial=dial_to_listener,
+        )
+        elapsed = time.monotonic() - start
+    finally:
+        stop.set()
+        listener.close()
+        thread.join(timeout=5)
+    assert result is None
+    assert elapsed < cimd.CIMD_FETCH_TIMEOUT_SECONDS + 1.5
+
+
+def test_dial_tls_reanchors_timeout_after_tls_context_load(monkeypatch):
+    """``_get_tls_context`` lazily loads the cert store and can consume budget,
+    so ``settimeout`` must run after it — immediately before ``wrap_socket`` —
+    with only the remaining deadline."""
+    events = []
+
+    class _FakeSock:
+        def settimeout(self, value):
+            events.append(("settimeout", value))
+
+        def close(self):
+            events.append(("close", None))
+
+    fake_sock = _FakeSock()
+    monkeypatch.setattr(cimd.socket, "create_connection", lambda *a, **k: fake_sock)
+
+    class _SlowContext:
+        def wrap_socket(self, sock, server_hostname):
+            events.append(("wrap", server_hostname))
+            return sock
+
+    def slow_context_load():
+        events.append(("context", None))
+        time.sleep(0.5)
+        return _SlowContext()
+
+    monkeypatch.setattr(cimd, "_get_tls_context", slow_context_load)
+    deadline = time.monotonic() + 10.0
+
+    result = _REAL_DIAL_TLS("93.184.216.34", "app.example.com", deadline)
+
+    assert result is fake_sock
+    assert events == [("context", None), ("settimeout", events[1][1]), ("wrap", "app.example.com")]
+    anchored = events[1][1]
+    assert anchored <= deadline - time.monotonic() + 0.05
+    # ~0.5s of context load must be reflected: a pre-load anchor would be ~10.0.
+    assert anchored < 9.9
 
 
 def test_localhost_client_id_rejected_without_hooks(monkeypatch):
@@ -614,31 +710,43 @@ def test_client_name_sanitized(raw_name, expected, monkeypatch):
     _install_network(monkeypatch, response=_json_response(_metadata_body(client_name=raw_name)))
     client = cimd.get_url_client(CLIENT_ID)
     assert client is not None
-    assert client["name"] == expected
+    assert client["name"] == f"{expected} (app.example.com)"
 
 
 @pytest.mark.parametrize(
     "raw_name",
-    ["Claude", "CLAUDE", "chatgpt", "Omi", "Ｃｌａｕｄｅ", " OMI "],
-    ids=["claude", "claude_upper", "chatgpt", "omi", "claude_fullwidth", "omi_padded"],
+    ["Claude", "CLAUDE", "chatgpt", "Omi", "Ｃｌａｕｄｅ", " OMI ", "Сlaude", "Claude Notes", "Example App"],
+    ids=[
+        "claude",
+        "claude_upper",
+        "chatgpt",
+        "omi",
+        "claude_fullwidth",
+        "omi_padded",
+        "claude_cyrillic_homoglyph",
+        "claude_near_miss",
+        "ordinary_name",
+    ],
 )
-def test_client_name_colliding_with_registered_connector_is_host_suffixed(raw_name, monkeypatch):
-    """A self-published client_name impersonating a registered connector is
-    not trusted bare — the verified ASCII host is appended instead."""
+def test_client_name_is_always_host_suffixed(raw_name, monkeypatch):
+    """Every self-published client_name carries the verified ASCII host —
+    an exact-match brand list cannot catch homoglyphs like Cyrillic
+    "Сlaude", so the suffix is unconditional, not only on collisions."""
     _install_network(monkeypatch, response=_json_response(_metadata_body(client_name=raw_name)))
     client = cimd.get_url_client(CLIENT_ID)
     assert client is not None
     assert client["name"].endswith(" (app.example.com)")
 
 
-def test_client_name_near_miss_is_not_suffixed(monkeypatch):
-    _install_network(monkeypatch, response=_json_response(_metadata_body(client_name="Claude Notes")))
-    client = cimd.get_url_client(CLIENT_ID)
-    assert client["name"] == "Claude Notes"
-
-
 def test_client_name_falls_back_to_host(monkeypatch):
     _install_network(monkeypatch, response=_json_response(_metadata_body(client_name="   ")))
+    client = cimd.get_url_client(CLIENT_ID)
+    assert client["name"] == "app.example.com"
+
+
+def test_client_name_matching_host_is_not_doubled(monkeypatch):
+    """A client_name that IS the host must not render as 'host (host)'."""
+    _install_network(monkeypatch, response=_json_response(_metadata_body(client_name="app.example.com")))
     client = cimd.get_url_client(CLIENT_ID)
     assert client["name"] == "app.example.com"
 
@@ -756,6 +864,41 @@ def test_integrity_key_is_derived_not_the_raw_secret(_fake_redis):
     assert envelope["mac"] != raw_key_mac
 
 
+def test_integrity_key_derivation_is_memoized_per_secret(monkeypatch):
+    """HKDF runs once per distinct ENCRYPTION_SECRET: repeated envelopes
+    reuse the derived key, a rotated secret derives a different key, and a
+    missing secret still yields None."""
+    import database.mcp_cache_integrity as integrity
+
+    derivations = []
+    real_derive = integrity.HKDF.derive
+
+    def counting_derive(self, secret):
+        derivations.append(secret)
+        return real_derive(self, secret)
+
+    monkeypatch.setattr(integrity.HKDF, "derive", counting_derive)
+    integrity._derive_key.cache_clear()
+    try:
+        monkeypatch.setenv("ENCRYPTION_SECRET", "rotation-test-secret-one")
+        blob_one = integrity.dumps_signed({"x": 1}, "cimd")
+        integrity.dumps_signed({"x": 2}, "cimd")
+        integrity.loads_verified(blob_one, "cimd")
+        assert derivations == [b"rotation-test-secret-one"]
+
+        monkeypatch.setenv("ENCRYPTION_SECRET", "rotation-test-secret-two")
+        blob_two = integrity.dumps_signed({"x": 1}, "cimd")
+        assert derivations == [b"rotation-test-secret-one", b"rotation-test-secret-two"]
+        assert json.loads(blob_one)["mac"] != json.loads(blob_two)["mac"]
+        assert integrity.loads_verified(blob_one, "cimd") is None  # foreign-keyed blob rejected
+
+        monkeypatch.delenv("ENCRYPTION_SECRET")
+        assert integrity.dumps_signed({"x": 1}, "cimd") is None
+        assert integrity.loads_verified(blob_two, "cimd") is None
+    finally:
+        integrity._derive_key.cache_clear()
+
+
 def test_poisoned_cache_entry_is_revalidated_and_refetched(monkeypatch, _fake_redis):
     _fake_redis.set(
         _cache_key(),
@@ -764,7 +907,7 @@ def test_poisoned_cache_entry_is_revalidated_and_refetched(monkeypatch, _fake_re
     )
     dial = _install_network(monkeypatch, response=_json_response(_metadata_body()))
     client = cimd.get_url_client(CLIENT_ID)
-    assert client is not None and client["name"] == "Example App"
+    assert client is not None and client["name"] == "Example App (app.example.com)"
     assert len(dial.calls) == 1  # bad cache value was not trusted
 
 
@@ -780,7 +923,7 @@ def test_forged_unsigned_cached_document_never_reaches_consent(monkeypatch, _fak
     dial = _install_network(monkeypatch, response=_json_response(_metadata_body()))
     client = cimd.get_url_client(CLIENT_ID)
     assert client is not None
-    assert client["name"] == "Example App"  # fetched document, not the forge
+    assert client["name"] == "Example App (app.example.com)"  # fetched document, not the forge
     assert client["allowed_redirect_uris"] == [REDIRECT_URI]
     assert len(dial.calls) == 1
 
@@ -797,7 +940,7 @@ def test_document_signed_with_foreign_secret_is_refetched(monkeypatch, _fake_red
     _fake_redis.set(_cache_key(), blob, ex=3600)
     dial = _install_network(monkeypatch, response=_json_response(_metadata_body()))
     client = cimd.get_url_client(CLIENT_ID)
-    assert client is not None and client["name"] == "Example App"
+    assert client is not None and client["name"] == "Example App (app.example.com)"
     assert len(dial.calls) == 1
 
 
@@ -1052,9 +1195,11 @@ def test_cimd_token_exchange_uses_metadata_client(mcp_client, monkeypatch):
     assert exchanged["client_id"] == CLIENT_ID
 
 
-def test_url_form_client_id_rate_limited_per_ip_on_all_endpoints(mcp_client, monkeypatch):
-    """GET/POST /authorize and POST /token all enforce the per-IP URL-form
-    limiter, keyed by the connection peer — never a forwarded header."""
+def test_url_form_client_id_rate_limited_per_host_on_all_endpoints(mcp_client, monkeypatch):
+    """GET/POST /authorize and POST /token all enforce the URL-form limiter:
+    the global backstop first, then a bucket keyed by the normalized CIMD
+    host — never the connection peer (the load balancer) or a forwarded
+    header."""
     client, module = mcp_client
     calls = module._test_rate_limit_calls
 
@@ -1087,7 +1232,52 @@ def test_url_form_client_id_rate_limited_per_ip_on_all_endpoints(mcp_client, mon
         ).status_code
         == 200
     )
-    assert calls == [("ip:testclient", "mcp:oauth_url_client")] * 3
+    assert calls == [("global", "mcp:oauth_url_client_global"), ("host:app.example.com", "mcp:oauth_url_client")] * 3
+
+
+def test_url_form_rate_limit_buckets_are_independent_per_host(mcp_client):
+    """Distinct metadata hosts get distinct buckets — one abusive host cannot
+    drain the budget of another."""
+    client, module = mcp_client
+    calls = module._test_rate_limit_calls
+    other = "https://other.example.net/oauth/client-metadata.json"
+    client.get("/authorize", params=_authorize_params())
+    client.get("/authorize", params=_authorize_params(client_id=other))
+    host_keys = [key for key, policy in calls if policy == "mcp:oauth_url_client"]
+    assert host_keys == ["host:app.example.com", "host:other.example.net"]
+
+
+def test_url_form_rate_limit_key_normalizes_case_and_path(mcp_client):
+    """Host case and differing paths collapse into one bucket — a client_id
+    cannot evade its limit by varying either."""
+    client, module = mcp_client
+    calls = module._test_rate_limit_calls
+    variants = [
+        "https://APP.example.com/oauth/client-metadata.json",
+        "https://app.example.com/other/path.json",
+        "https://app.example.com",
+    ]
+    for variant in variants:
+        client.get("/authorize", params=_authorize_params(client_id=variant))
+    host_keys = [key for key, policy in calls if policy == "mcp:oauth_url_client"]
+    assert host_keys == ["host:app.example.com"] * 3
+
+
+def test_url_form_rate_limit_malformed_ids_share_one_invalid_bucket(mcp_client):
+    """A URL-form client_id that fails ``_parse_metadata_url`` lands in one
+    shared invalid bucket — garbage ids never mint unbounded limiter keys."""
+    client, module = mcp_client
+    calls = module._test_rate_limit_calls
+    malformed = [
+        "http://app.example.com/meta.json",  # non-HTTPS
+        "https://user@app.example.com/meta.json",  # userinfo
+        "https://app.example.com/meta.json?x=1",  # query
+        "https://app.example.com:8443/meta.json",  # non-443 port
+    ]
+    for variant in malformed:
+        client.get("/authorize", params=_authorize_params(client_id=variant))
+    host_keys = [key for key, policy in calls if policy == "mcp:oauth_url_client"]
+    assert host_keys == ["host:invalid"] * 4
 
 
 def test_url_form_rate_limit_denial_is_a_fast_429(mcp_client, monkeypatch):
@@ -1099,6 +1289,30 @@ def test_url_form_rate_limit_denial_is_a_fast_429(mcp_client, monkeypatch):
     monkeypatch.setattr(module._oauth, "check_rate_limit_inline", deny)
     response = client.get("/authorize", params=_authorize_params())
     assert response.status_code == 429
+
+
+def test_url_form_rate_limit_429_fires_before_client_lookup(mcp_client, monkeypatch):
+    """The limiter sits in front of the metadata lookup: a denied request
+    must never reach ``get_client`` or a dial."""
+    client, module = mcp_client
+
+    def deny(key, policy):
+        raise HTTPException(status_code=429, detail="Rate limit exceeded", headers={"Retry-After": "30"})
+
+    monkeypatch.setattr(module._oauth, "check_rate_limit_inline", deny)
+    monkeypatch.setattr(
+        module.mcp_oauth_db,
+        "get_client",
+        lambda *a, **k: pytest.fail("client lookup ran after a 429"),
+    )
+    assert client.get("/authorize", params=_authorize_params()).status_code == 429
+    assert (
+        client.post(
+            "/token",
+            data={"grant_type": "refresh_token", "client_id": CLIENT_ID, "refresh_token": "omi_rt_x"},
+        ).status_code
+        == 429
+    )
 
 
 def test_registered_client_id_is_not_url_form_rate_limited(mcp_client, monkeypatch):

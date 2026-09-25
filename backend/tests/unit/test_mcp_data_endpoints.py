@@ -15,7 +15,7 @@ import sys
 from types import ModuleType, SimpleNamespace
 
 import pytest
-from fastapi import HTTPException, Request
+from fastapi import HTTPException
 
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
@@ -725,15 +725,6 @@ def test_mcp_oauth_authorize_rejects_non_qa_uid_before_grant_write(monkeypatch):
         with pytest.raises(HTTPException) as exc:
             asyncio.run(
                 sse.mcp_authorize_consent(
-                    Request(
-                        {
-                            "type": "http",
-                            "method": "POST",
-                            "path": "/authorize",
-                            "headers": [],
-                            "client": ("10.20.30.40", 4321),
-                        }
-                    ),
                     response_type='code',
                     client_id='omi-chatgpt-prod',
                     redirect_uri='https://chatgpt.com/connector_platform_oauth_redirect',

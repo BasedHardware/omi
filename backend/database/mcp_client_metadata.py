@@ -67,10 +67,6 @@ _CIMD_MAX_WIRE_BYTES = _CIMD_MAX_HEAD_BYTES + CIMD_MAX_BODY_BYTES + 64
 _NATIVE_LOOPBACK_HOSTS = {"localhost"}
 _NATIVE_LOOPBACK_SUFFIX = ".localhost"
 
-# Display names a self-published CIMD document may not claim bare; a collision
-# is suffixed with the verified ASCII host instead of rejected outright.
-_PROTECTED_CLIENT_NAMES = frozenset({"claude", "chatgpt", "omi"})
-
 _NAT64_WELL_KNOWN_PREFIX = ipaddress.IPv6Network("64:ff9b::/96")
 _NAT64_LOCAL_USE_PREFIX = ipaddress.IPv6Network("64:ff9b:1::/48")
 _6TO4_PREFIX = ipaddress.IPv6Network("2002::/16")
@@ -247,12 +243,17 @@ def _get_tls_context() -> ssl.SSLContext:
     return _tls_context
 
 
-def _dial_tls(address: str, hostname: str, timeout_seconds: float) -> ssl.SSLSocket:
+def _dial_tls(address: str, hostname: str, deadline: float) -> ssl.SSLSocket:
     """TCP-connect to the VALIDATED ``address``:443 and complete TLS with SNI
-    and certificate/hostname verification for ``hostname`` (never the IP)."""
-    sock = socket.create_connection((address, 443), timeout=timeout_seconds)
+    and certificate/hostname verification for ``hostname`` (never the IP).
+    ``deadline`` is the absolute monotonic deadline shared with the caller:
+    the socket timeout is re-anchored to the remaining budget immediately
+    before ``wrap_socket`` so a stalled handshake cannot overrun it."""
+    sock = socket.create_connection((address, 443), timeout=max(0.0, deadline - time.monotonic()))
     try:
-        return _get_tls_context().wrap_socket(sock, server_hostname=hostname)
+        context = _get_tls_context()
+        sock.settimeout(max(0.0, deadline - time.monotonic()))
+        return context.wrap_socket(sock, server_hostname=hostname)
     except BaseException:
         sock.close()
         raise
@@ -377,7 +378,7 @@ def _fetch_document(
         raw = None
         tls = None
         try:
-            tls = dial(address, hostname, remaining)
+            tls = dial(address, hostname, deadline)
             raw = _read_response(tls, hostname, target, deadline)
         except Exception as exc:
             logger.warning("MCP CIMD fetch failed: %s", type(exc).__name__)
@@ -458,14 +459,14 @@ def sanitize_client_name(value: object) -> str:
 
 
 def _display_name_for(metadata: Dict[str, Any], hostname: str) -> str:
-    """Consent-screen name: a self-published ``client_name`` colliding with a
-    registered connector's display name is suffixed with the verified ASCII
-    host so it cannot impersonate that connector."""
+    """Consent-screen name: every self-published ``client_name`` is suffixed
+    with the verified ASCII host — a near-homoglyph like Cyrillic "Сlaude"
+    slips past any exact-match brand check, so the suffix is unconditional.
+    The host itself is never doubled when it is already the fallback name."""
     name = metadata["client_name"] or hostname
-    folded = unicodedata.normalize("NFKC", name).strip().lower()
-    if folded in _PROTECTED_CLIENT_NAMES:
-        return f"{name} ({hostname})"
-    return name
+    if name == hostname:
+        return name
+    return f"{name} ({hostname})"
 
 
 def _validated_metadata(document: Dict[str, Any], client_id: str) -> Optional[Dict[str, Any]]:

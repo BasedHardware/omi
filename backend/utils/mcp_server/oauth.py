@@ -99,21 +99,36 @@ def _client_lookup_executor(client_id: Any):
     return cimd_executor if is_url_form_client_id(client_id) else db_executor
 
 
-def _url_form_rate_limit_key(request: Optional[Request]) -> str:
-    # Only the connection peer is trusted — never arbitrary forwarded headers.
-    host = request.client.host if request is not None and request.client else "unknown"
-    return f"ip:{host}"
+def _url_form_rate_limit_key(client_id: Any) -> str:
+    """Bucket URL-form client_ids by the normalized CIMD host the metadata
+    document would be fetched from: ``_parse_metadata_url`` lowercases and
+    IDNA-encodes it, so one host shares a bucket across paths and case. The
+    connection peer is the load balancer and forwarding headers are untrusted
+    by design, so neither can key this limiter. A malformed URL-form id maps
+    to one shared ``invalid`` bucket so garbage ids cannot mint unbounded
+    distinct limiter keys."""
+    parsed = mcp_client_metadata._parse_metadata_url(client_id) if isinstance(client_id, str) else None
+    host = parsed[0] if parsed is not None else "invalid"
+    return f"host:{host}"
 
 
-async def _enforce_url_form_rate_limit(request: Optional[Request], client_id: Any) -> None:
-    """Per-IP limiter for unauthenticated URL-form client_id lookups — each
-    one can cost a bounded outbound fetch, so the budget sits before it."""
+async def _enforce_url_form_rate_limit(client_id: Any) -> None:
+    """Per-CIMD-host limiter for unauthenticated URL-form client_id lookups —
+    each one can cost a bounded outbound fetch, so the budget sits before it.
+    A generous global bucket is checked first as a fleet-wide backstop."""
     if not is_url_form_client_id(client_id):
         return
     await run_blocking(
         critical_executor,
         check_rate_limit_inline,
-        _url_form_rate_limit_key(request),
+        "global",
+        "mcp:oauth_url_client_global",
+    )
+    host_key = await run_blocking(critical_executor, _url_form_rate_limit_key, client_id)
+    await run_blocking(
+        critical_executor,
+        check_rate_limit_inline,
+        host_key,
         "mcp:oauth_url_client",
     )
 
@@ -229,7 +244,7 @@ async def mcp_authorize(
 ):
     """OAuth authorize endpoint: render the consent page after request validation."""
     resource = _effective_resource(resource)
-    await _enforce_url_form_rate_limit(request, client_id)
+    await _enforce_url_form_rate_limit(client_id)
     try:
         client, scopes = await run_blocking(
             _client_lookup_executor(client_id),
@@ -295,10 +310,9 @@ async def mcp_authorize_consent(
     scope: Optional[str],
     code_challenge: Optional[str],
     code_challenge_method: Optional[str],
-    request: Optional[Request] = None,
 ):
     resource = _effective_resource(resource)
-    await _enforce_url_form_rate_limit(request, client_id)
+    await _enforce_url_form_rate_limit(client_id)
     try:
         _, scopes = await run_blocking(
             _client_lookup_executor(client_id),
@@ -370,7 +384,7 @@ async def mcp_token(request: Request):
     refresh_token = request_data.get("refresh_token")
     scope = request_data.get("scope")
 
-    await _enforce_url_form_rate_limit(request, client_id)
+    await _enforce_url_form_rate_limit(client_id)
     try:
         client = await run_blocking(_client_lookup_executor(client_id), mcp_oauth_db.get_client, client_id or "")
     except (ExecutorSaturatedError, mcp_client_metadata.McpCimdUnavailable):

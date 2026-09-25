@@ -127,21 +127,26 @@ the whole lookup dispatched by the OAuth layer, and a module-local
 `client_id` flood can never park `db_executor` or the event-loop threadpool
 on outbound I/O.
 Saturation returns a fast `503 temporarily_unavailable` on `/authorize`
-(GET and POST) and `/token`, and a per-IP rate limit
-(`mcp:oauth_url_client`, connection peer only — forwarded headers are never
+(GET and POST) and `/token`, and a per-host rate limit
+(`mcp:oauth_url_client`, keyed by the normalized `client_id` metadata host —
+the connection peer is the load balancer and forwarded headers are never
 trusted) throttles the unauthenticated lookups before they reach the pool.
+A generous global bucket (`mcp:oauth_url_client_global`, checked first)
+backstops it when many distinct hosts attack at once; malformed URL-form
+ids share a single `invalid` bucket.
 
 Every fetch shares one hard monotonic 3-second deadline across DNS, connect,
-and the iterative ~1 KiB body reads (each `recv` is re-timed to the
-remaining budget, so a slow-drip peer cannot hold a worker). URLs carrying a
-query string or fragment are rejected outright — cache-busting cannot mint
-distinct fetch identities — and failures are negative-cached for 60 seconds
-keyed by the canonical URL. DNS answers are all validated: any private,
-loopback, link-local, multicast, unspecified, reserved, NAT64
-(`64:ff9b::/96`, `64:ff9b:1::/48`), IPv4-compatible (`::/96`), 6to4
-(`2002::/16`), Teredo, or unsafe IPv4-mapped/embedded result rejects the
-whole host; validated addresses are tried IPv4-first inside the deadline.
-TLS is pinned to the validated address with hostname verification on the
-original host; redirects are never followed. A `client_name` colliding
-(case-insensitively, NFKC) with a registered connector name (Claude,
-ChatGPT, Omi) is displayed suffixed with the verified ASCII host.
+the TLS handshake, and the iterative ~1 KiB body reads (each `recv` is
+re-timed to the remaining budget, so a slow-drip peer cannot hold a
+worker). URLs carrying a query string or fragment are rejected outright —
+cache-busting cannot mint distinct fetch identities — and failures are
+negative-cached for 60 seconds keyed by the canonical URL. DNS answers are
+all validated: any private, loopback, link-local, multicast, unspecified,
+reserved, NAT64 (`64:ff9b::/96`, `64:ff9b:1::/48`), IPv4-compatible
+(`::/96`), 6to4 (`2002::/16`), Teredo, or unsafe IPv4-mapped/embedded
+result rejects the whole host; validated addresses are tried IPv4-first
+inside the deadline. TLS is pinned to the validated address with hostname
+verification on the original host; redirects are never followed. Every
+self-published `client_name` is displayed suffixed with the verified ASCII
+host — an exact-match brand list cannot catch homoglyph spoofs like
+Cyrillic "Сlaude".

@@ -212,7 +212,6 @@ async def mcp_authorize(
 
 @router.post("/authorize", tags=["mcp"], response_model=McpAuthorizeConsentResponse)
 async def mcp_authorize_consent(
-    request: Request,
     response_type: str = Form(...),
     client_id: str = Form(...),
     redirect_uri: str = Form(...),
@@ -233,7 +232,6 @@ async def mcp_authorize_consent(
         scope,
         code_challenge,
         code_challenge_method,
-        request=request,
     )
 
 

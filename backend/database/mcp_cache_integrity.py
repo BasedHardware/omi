@@ -13,6 +13,7 @@ metadata, ``"at"`` for access-token identities): a valid signed blob copied
 across cache types fails closed instead of being reinterpreted.
 """
 
+import functools
 import hashlib
 import hmac
 import json
@@ -30,17 +31,24 @@ _HKDF_INFO = b"mcp-cache-v1"
 _ENVELOPE_VERSION = 2
 
 
-def _key() -> Optional[bytes]:
-    """Derive the cache-signing key, or ``None`` when no secret is configured."""
-    secret = os.getenv(_SECRET_ENV) or ""
-    if not secret:
-        return None
+@functools.lru_cache(maxsize=8)
+def _derive_key(secret: str) -> bytes:
     return HKDF(
         algorithm=hashes.SHA256(),
         length=32,
         salt=None,
         info=_HKDF_INFO,
     ).derive(secret.encode("utf-8"))
+
+
+def _key() -> Optional[bytes]:
+    """Derive the cache-signing key, or ``None`` when no secret is configured.
+    The HKDF derivation is memoized per distinct secret, so a changed
+    ``ENCRYPTION_SECRET`` still switches keys while the hot path derives once."""
+    secret = os.getenv(_SECRET_ENV) or ""
+    if not secret:
+        return None
+    return _derive_key(secret)
 
 
 def integrity_available() -> bool:
