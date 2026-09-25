@@ -55,8 +55,15 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
             provider.companionBatteryLevel,
           ),
           builder: (context, data, child) {
-            final (batteryLevel, connectedDevice, pairedDevice, isConnecting, isCharging, companionDevice,
-                companionBatteryLevel) = data;
+            final (
+              batteryLevel,
+              connectedDevice,
+              pairedDevice,
+              isConnecting,
+              isCharging,
+              companionDevice,
+              companionBatteryLevel,
+            ) = data;
             final l10n = context.l10n;
             if (connectedDevice != null) {
               final hasBattery = batteryLevel > 0;

@@ -68,6 +68,7 @@ class _StubSyncProvider extends SyncProvider {
 
 Widget _app(_StubDeviceProvider device) {
   return MaterialApp(
+    locale: const Locale('en'),
     localizationsDelegates: const [
       AppLocalizations.delegate,
       GlobalMaterialLocalizations.delegate,
@@ -75,6 +76,10 @@ Widget _app(_StubDeviceProvider device) {
       GlobalCupertinoLocalizations.delegate,
     ],
     supportedLocales: AppLocalizations.supportedLocales,
+    builder: (context, child) => MediaQuery(
+      data: MediaQuery.of(context).copyWith(disableAnimations: true),
+      child: child!,
+    ),
     home: MultiProvider(
       providers: [
         ChangeNotifierProvider<DeviceProvider>.value(value: device),

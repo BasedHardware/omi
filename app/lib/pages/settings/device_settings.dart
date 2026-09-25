@@ -22,7 +22,6 @@ import 'package:omi/pages/settings/device_diagnostics.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
-import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/connectors/rayban_meta_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/ui/ui.dart';
@@ -541,6 +540,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
           (primary.type == DeviceType.omi || primary.type == DeviceType.openglass);
       if (!canPairSecond) return null;
       return OmiSettingsGroup(
+        key: const Key('second_device_section'),
         header: l10n.secondDevice,
         children: [
           OmiSettingsRow(
@@ -560,6 +560,7 @@ class _DeviceSettingsState extends State<DeviceSettings> {
         ? (companionBattery > 0 ? '${l10n.connected} · $companionBattery%' : l10n.connected)
         : l10n.offline;
     return OmiSettingsGroup(
+      key: const Key('second_device_section'),
       header: l10n.secondDevice,
       children: [
         OmiSettingsRow(
