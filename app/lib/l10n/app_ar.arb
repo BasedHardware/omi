@@ -3545,5 +3545,6 @@
     "keepUsingPendant": "متابعة استخدام القلادة",
     "recordWith": "التسجيل باستخدام",
     "moreWaysToRecord": "طرق أخرى للتسجيل",
-    "openCall": "فتح المكالمة"
+    "openCall": "فتح المكالمة",
+    "captureRecoveryBanner": "صوت القلادة لا يصل إلى التطبيق — انقر للإصلاح"
 }

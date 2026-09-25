@@ -13,6 +13,7 @@ import 'package:omi/backend/schema/person.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
 import 'package:omi/pages/conversation_detail/widgets/name_speaker_sheet.dart';
+import 'package:omi/pages/conversations/widgets/capture_recovery_banner.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
 import 'package:omi/providers/device_provider.dart';
@@ -143,6 +144,7 @@ class _ConversationCapturingPageState extends State<ConversationCapturingPage> {
           ),
           body: Column(
             children: [
+              const CaptureRecoveryBanner(),
               _buildUnsyncedWalIndicator(provider),
               Expanded(
                 child: provider.segments.isEmpty && provider.photos.isEmpty

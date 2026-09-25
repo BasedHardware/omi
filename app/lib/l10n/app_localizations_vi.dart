@@ -11225,4 +11225,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get openCall => 'Mở cuộc gọi';
+
+  @override
+  String get captureRecoveryBanner => 'Âm thanh từ mặt dây chuyền không đến được ứng dụng — chạm để sửa chữa';
 }

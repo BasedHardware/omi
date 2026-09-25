@@ -6,7 +6,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:omi/utils/analytics/analytics_adapter.dart';
 import 'package:omi/services/experiments/experiment_registry.dart';
 
-class PostHogAnalyticsAdapter implements AnalyticsAdapter, AnalyticsDeliveryAdapter, AnalyticsIdentityAdapter {
+class PostHogAnalyticsAdapter
+    implements AnalyticsAdapter, AnalyticsDeliveryAdapter, AnalyticsIdentityAdapter, AnalyticsFeatureFlagAdapter {
   PostHogAnalyticsAdapter({
     required this.apiKey,
     this.host = 'https://us.i.posthog.com',
@@ -92,6 +93,9 @@ class PostHogAnalyticsAdapter implements AnalyticsAdapter, AnalyticsDeliveryAdap
         for (final definition in MobileExperiments.all) '\$feature/${definition.key}': false,
         ...?properties,
       };
+
+  @override
+  Future<bool> isFeatureEnabled(String key) => Posthog().isFeatureEnabled(key);
 
   @override
   Future<String> settleIdentity(String? identity, {required bool reset}) async {

@@ -11326,4 +11326,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get openCall => 'Ouvrir l\'appel';
+
+  @override
+  String get captureRecoveryBanner => 'Le son du pendentif n\'arrive pas à l\'application — touchez pour réparer';
 }

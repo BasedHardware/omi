@@ -12,6 +12,7 @@ import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/services/capture/capture_composition.dart';
 import 'package:omi/services/capture/capture_seams.dart';
+import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/services/capture/capture_session_owner.dart';
 import 'package:omi/services/capture/conversation_location_capture.dart';
 import 'package:omi/services/capture/local_segment_store.dart';
@@ -585,5 +586,109 @@ void main() {
       await world.dispose();
       await dir.delete(recursive: true);
     }
+  });
+
+  group('capture wedge detection through the real provider', () {
+    CaptureWedgeMonitor installMonitor(List<Map<String, Object>> detected) {
+      final monitor = CaptureWedgeMonitor(
+        featureGate: () async => true,
+        track: (event, properties) {
+          if (event == 'Capture Wedge Detected') detected.add(properties);
+        },
+        bleRetry: (_) async {},
+        appBuild: () => '1',
+        platform: () => 'ios',
+      );
+      final previous = CaptureWedgeMonitor.instance;
+      CaptureWedgeMonitor.instance = monitor;
+      addTearDown(() => CaptureWedgeMonitor.instance = previous);
+      return monitor;
+    }
+
+    CaptureDependencies wedgeDeps(CaptureReplayWorld world, List<ScriptedPureSocket> transports) {
+      return _deps(
+        world: world,
+        open: ({
+          required codec,
+          required sampleRate,
+          required language,
+          required force,
+          source,
+          clientConversationId,
+          customSttConfig,
+          geolocation,
+        }) async {
+          final transport = ScriptedPureSocket();
+          transports.add(transport);
+          final socket =
+              TranscriptSegmentSocketService.withSocket(sampleRate, codec, language, transport, source: source);
+          await socket.start();
+          return socket;
+        },
+      );
+    }
+
+    test('three connected zero-byte pendant socket sessions declare a wedge', () async {
+      final dir = await Directory.systemTemp.createTemp('c1-wedge-');
+      final world = await CaptureReplayWorld.boot(tempDir: dir);
+      try {
+        world.disposeController();
+        final detected = <Map<String, Object>>[];
+        final monitor = installMonitor(detected);
+        final transports = <ScriptedPureSocket>[];
+        final p = composeCaptureProvider(wedgeDeps(world, transports));
+        final device = BtDevice(id: 'omi-1', name: 'Omi', type: DeviceType.omi, rssi: -50);
+        p.updateRecordingDevice(device);
+        p.updateRecordingState(RecordingState.deviceRecord);
+
+        for (var i = 0; i < 3; i++) {
+          await p.reconnectActiveCaptureForTesting();
+          expect(transports, hasLength(i + 1));
+          transports.last.emitClose();
+          await pumpEventQueue();
+        }
+        await pumpEventQueue();
+
+        expect(detected, hasLength(1));
+        expect(detected.single['source'], 'omi');
+        expect(detected.single['trigger'], 'zero_byte_streak');
+        expect(monitor.visiblePrompt, isNotNull);
+        p.dispose();
+      } finally {
+        await world.dispose();
+        await dir.delete(recursive: true);
+      }
+    });
+
+    test('a phone-mic session while a pendant is paired does not feed the detector', () async {
+      final dir = await Directory.systemTemp.createTemp('c1-wedge-phone-');
+      final world = await CaptureReplayWorld.boot(tempDir: dir);
+      try {
+        world.disposeController();
+        final detected = <Map<String, Object>>[];
+        installMonitor(detected);
+        final transports = <ScriptedPureSocket>[];
+        final p = composeCaptureProvider(wedgeDeps(world, transports));
+        final device = BtDevice(id: 'omi-2', name: 'Omi', type: DeviceType.omi, rssi: -50);
+        p.updateRecordingDevice(device);
+
+        await p.streamRecording();
+        await pumpEventQueue();
+        expect(transports, isNotEmpty);
+
+        for (var i = 0; i < 3; i++) {
+          transports.last.emitClose();
+          await pumpEventQueue();
+          world.scheduler.elapse(const Duration(seconds: 30));
+          await pumpEventQueue();
+        }
+
+        expect(detected, isEmpty);
+        p.dispose();
+      } finally {
+        await world.dispose();
+        await dir.delete(recursive: true);
+      }
+    });
   });
 }

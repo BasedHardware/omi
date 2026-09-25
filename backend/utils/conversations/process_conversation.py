@@ -1,6 +1,8 @@
 import os
+import json
 import random
 import re
+import sys
 import uuid
 import logging
 import asyncio
@@ -68,6 +70,7 @@ from utils.conversations.deterministic_minimum import build_deterministic_minimu
 from utils.conversations.duration import conversation_duration_seconds
 from utils.conversations.duplicate_capture import link_duplicate_captures
 from utils.conversations.processing_trigger import PROCESSING_MODES, ProcessingTrigger
+from utils.conversations.recovery import RecoveryStructureUnavailableError, structured_is_rich
 from utils.conversations.relevance import (
     RELEVANCE_DECISION_FIELD,
     Neighbor,
@@ -2885,6 +2888,22 @@ def process_conversation(
     )
     conversation = _get_conversation_obj(uid, structured, conversation, conversation_id=generated_conversation_id)
     _attach_client_projection(conversation, client_projection)
+    if trigger is ProcessingTrigger.SERVER_RECOVERY and not structured_is_rich(structured):
+        sys.stdout.write(
+            json.dumps(
+                {
+                    'event': 'selfheal_guard',
+                    'outcome': 'refused',
+                    'reason': 'empty_structured',
+                    'uid': uid,
+                    'conversation_id': conversation.id,
+                },
+                default=str,
+            )
+            + '\n'
+        )
+        sys.stdout.flush()
+        raise RecoveryStructureUnavailableError('server recovery produced no enriched structure')
     relevance = final_relevance(decisions[0] if decisions else None, discarded=conversation.discarded)
     if relevance is not None:
         record_decision(relevance)

@@ -11111,5 +11111,6 @@
     "keepUsingPendant": "Настави са привеском",
     "recordWith": "Снимај помоћу",
     "moreWaysToRecord": "Више начина снимања",
-    "openCall": "Отвори позив"
+    "openCall": "Отвори позив",
+    "captureRecoveryBanner": "Звук привеска не стиже до апликације — додирните за поправку"
 }

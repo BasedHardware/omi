@@ -4,6 +4,21 @@
 # Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
 # push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: feature-flag-registry
+    command: ["python3", "scripts/check_feature_flag_registry.py"]
+    triggers: ["config/feature-flags.yaml", "scripts/feature_flag_registry.py", "scripts/check_feature_flag_registry.py", "scripts/test_check_feature_flag_registry.py", "scripts/render_feature_flag_registry.py", "scripts/posthog_flag_sync.py", "scripts/test_posthog_flag_sync.py", "backend/docs/feature-flag-registry.md", "backend/**/*.py", "backend/deploy/runtime_env/**", "backend/charts/**", "desktop/macos/Desktop/Sources/**/*.swift", "app/lib/services/experiments/**", "web/**/*.ts", "web/**/*.tsx", "desktop/windows/src/**/*.ts", "desktop/windows/src/**/*.tsx", ".github/checks-manifest.yaml", ".github/scripts/run_checks.py"]
+    lanes: ["local", "ci"]
+    reason: "The 2026-09-24 inventory found an incorrect notes-v2 default and missing calendar, memory and JIT gates in the handwritten catalog; code reads and deploy declarations now require reviewed registry entries and a deterministic rendered doc"
+  - id: feature-flag-registry-fixtures
+    command: ["python3", "scripts/test_check_feature_flag_registry.py"]
+    triggers: ["config/feature-flags.yaml", "scripts/feature_flag_registry.py", "scripts/check_feature_flag_registry.py", "scripts/test_check_feature_flag_registry.py", "scripts/render_feature_flag_registry.py", ".github/scripts/run_checks.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "Registry extraction, uniqueness, date warnings, retirement and rendered-doc drift must remain covered by hermetic fixtures"
+  - id: posthog-flag-sync-fixtures
+    command: ["python3", "scripts/test_posthog_flag_sync.py"]
+    triggers: ["config/feature-flags.yaml", "scripts/posthog_flag_sync.py", "scripts/test_posthog_flag_sync.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "PostHog sync remains read-only by default and creation may only arm a missing kill switch at zero percent"
   - id: openfoodfacts-robustness-and-coercion-tests
     command: ["python3", "plugins/omi-openfoodfacts-app/test_robustness_and_coercion.py"]
     triggers: ["plugins/omi-openfoodfacts-app/**", ".github/checks-manifest.yaml"]

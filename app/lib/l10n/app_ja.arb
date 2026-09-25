@@ -3545,5 +3545,6 @@
     "keepUsingPendant": "ペンダントを使い続ける",
     "recordWith": "録音方法",
     "moreWaysToRecord": "その他の録音方法",
-    "openCall": "通話を開く"
+    "openCall": "通話を開く",
+    "captureRecoveryBanner": "ペンダントの音声がアプリに届いていません — タップして修復"
 }

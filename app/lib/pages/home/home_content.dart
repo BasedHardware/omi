@@ -7,6 +7,7 @@ import 'package:provider/provider.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
+import 'package:omi/pages/conversations/widgets/capture_recovery_banner.dart';
 import 'package:omi/pages/conversations/widgets/conversation_list_item.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/pages/conversations/widgets/today_tasks_widget.dart';
@@ -88,6 +89,8 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
             slivers: [
               // Live capture widget — shows when device or phone mic is recording
               const SliverToBoxAdapter(child: ConversationCaptureWidget(showsCall: true)),
+
+              const SliverToBoxAdapter(child: CaptureRecoveryBanner()),
 
               // Today section — TodayTasksWidget has its own header
               const SliverToBoxAdapter(child: TodayTasksWidget()),

@@ -11233,4 +11233,7 @@ class AppLocalizationsFi extends AppLocalizations {
 
   @override
   String get openCall => 'Avaa puhelu';
+
+  @override
+  String get captureRecoveryBanner => 'Riipuksen ääni ei tule perille sovellukseen — korjaa napauttamalla';
 }

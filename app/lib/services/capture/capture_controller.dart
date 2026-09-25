@@ -35,6 +35,7 @@ import 'package:omi/services/capture/stt_mode_resolver.dart';
 import 'package:omi/services/capture/recording_lifecycle_telemetry.dart';
 import 'package:omi/services/capture/capture_seams.dart';
 import 'package:omi/services/capture/capture_session_owner.dart';
+import 'package:omi/services/capture/capture_wedge_monitor.dart';
 import 'package:omi/services/capture/optimistic_processing.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/voice_playback/omi_voice_playback_service.dart';
@@ -98,6 +99,7 @@ class CaptureController extends ChangeNotifier
   final Future<CreateConversationResponse?> Function()? _processInProgressConversationOverride;
   final Future<DeviceConnection?> Function(String deviceId)? _deviceConnectionLoader;
   final ValueListenable<PhoneCallState>? _omiCallState;
+  final CaptureWedgeMonitor? _wedgeMonitorOverride;
   Geolocation? _sessionGeolocation;
   int _sessionGeolocationGeneration = 0;
   bool _sessionGeolocationPublishedToWal = false;
@@ -233,6 +235,7 @@ class CaptureController extends ChangeNotifier
     Future<CreateConversationResponse?> Function()? processInProgressConversation,
     Future<DeviceConnection?> Function(String deviceId)? deviceConnectionLoader,
     ValueListenable<PhoneCallState>? omiCallState,
+    CaptureWedgeMonitor? captureWedgeMonitor,
   })  : externalActions = externalActions ?? const NoopCaptureExternalActions(),
         _conversationLocationCapture = conversationLocationCapture ?? ConversationLocationCapture(),
         _inProgressConversationLoader = inProgressConversationLoader,
@@ -254,6 +257,7 @@ class CaptureController extends ChangeNotifier
         _processInProgressConversationOverride = processInProgressConversation,
         _deviceConnectionLoader = deviceConnectionLoader,
         _omiCallState = omiCallState,
+        _wedgeMonitorOverride = captureWedgeMonitor,
         _preferences = preferences ?? SharedPreferencesUtil() {
     _isConnected = _connectivity.initiallyConnected;
     lifetime.listen(_connectivity.changes, onConnectionStateChanged);
@@ -395,6 +399,10 @@ class CaptureController extends ChangeNotifier
 
   BtDevice? _recordingDevice;
   BtDevice? _sessionRecordingDevice;
+
+  CaptureWedgeMonitor get _wedgeMonitor => _wedgeMonitorOverride ?? CaptureWedgeMonitor.instance;
+
+  ({TranscriptSegmentSocketService socket, int handle})? _wedgeSession;
 
   String? _getConversationSourceFromDevice() {
     return conversationSourceForDeviceType(_recordingDevice?.type);
@@ -981,6 +989,7 @@ class CaptureController extends ChangeNotifier
             return opened;
           },
           close: (socket) async {
+            _completeWedgeSession(socket, intentional: true);
             if (identical(_socket, socket)) {
               _socket?.unsubscribe(this);
               _socket = null;
@@ -1184,6 +1193,7 @@ class CaptureController extends ChangeNotifier
       _socket = socket;
       _socket?.subscribe(this, this);
       _transcriptServiceReady = true;
+      _beginWedgeSession(socket);
       if (_sessionStartSeconds == 0) {
         _sessionStartSeconds = _now().millisecondsSinceEpoch ~/ 1000;
       }
@@ -1209,6 +1219,37 @@ class CaptureController extends ChangeNotifier
     _startInProgressConversationRefresh();
 
     notifyListeners();
+  }
+
+  void _beginWedgeSession(TranscriptSegmentSocketService socket) {
+    final previous = _wedgeSession;
+    if (previous != null) _completeWedgeSession(previous.socket, intentional: true);
+    final handle = _isHardwareCaptureSocket(socket)
+        ? _wedgeMonitor.onCaptureSessionConnected(deviceId: _recordingDevice!.id, source: socket.source ?? '')
+        : -1;
+    _wedgeSession = (socket: socket, handle: handle);
+  }
+
+  bool _isHardwareCaptureSocket(TranscriptSegmentSocketService socket) {
+    final device = _recordingDevice;
+    if (device == null || socket.state != SocketServiceState.connected) return false;
+    if (_phoneOwnsCapture || _pendantHandoff != null || isPaused || _preferences.batchModeEnabled) return false;
+    if (socket.onboardingMode || socket.customSttMode) return false;
+    final underlying = socket.socket;
+    if (underlying is CompositeTranscriptionSocket && !underlying.forwardRawAudioToSecondary) return false;
+    return socket.source == _getConversationSourceFromDevice();
+  }
+
+  void _completeWedgeSession(TranscriptSegmentSocketService socket, {required bool intentional}) {
+    final session = _wedgeSession;
+    if (session == null || !identical(session.socket, socket)) return;
+    _wedgeSession = null;
+    if (session.handle < 0) return;
+    _wedgeMonitor.onCaptureSessionEnded(
+      session.handle,
+      binaryBytesSent: socket.binaryAudioBytesSent,
+      intentional: intentional || socket.stoppedIntentionally,
+    );
   }
 
   // Omi-button actions are user-configurable; when disabled, single/double-tap
@@ -1748,6 +1789,7 @@ class CaptureController extends ChangeNotifier
     final previousSocket = _socket;
     _socket = null;
     _transcriptServiceReady = false;
+    if (previousSocket != null) _completeWedgeSession(previousSocket, intentional: true);
     try {
       await previousSocket?.stop(reason: reason);
     } catch (e, stack) {
@@ -2607,6 +2649,8 @@ class CaptureController extends ChangeNotifier
   void onClosed([int? closeCode]) {
     _transcriptionServiceStatuses = [];
     _transcriptServiceReady = false;
+    final wedgeSocket = _wedgeSession?.socket;
+    if (wedgeSocket != null) _completeWedgeSession(wedgeSocket, intentional: wedgeSocket.stoppedIntentionally);
 
     if (closeCode == 4002) {
       externalActions.markAsOutOfCreditsAndRefresh();
@@ -2755,6 +2799,8 @@ class CaptureController extends ChangeNotifier
     _recordingTelemetry.observeSocketError();
     _transcriptionServiceStatuses = [];
     _transcriptServiceReady = false;
+    final wedgeSocket = _wedgeSession?.socket;
+    if (wedgeSocket != null) _completeWedgeSession(wedgeSocket, intentional: wedgeSocket.stoppedIntentionally);
 
     notifyListeners();
     _startKeepAliveServices();
@@ -2764,6 +2810,10 @@ class CaptureController extends ChangeNotifier
   void onConnected() {
     _recordingTelemetry.observeConnected();
     _transcriptServiceReady = true;
+    final socket = _socket;
+    if (socket != null && _wedgeSession?.socket != socket) {
+      _beginWedgeSession(socket);
+    }
     // Restart mic on reconnect if interrupted (skip during active call).
     if (recordingState == RecordingState.interrupted && !_micInterrupted && !_phoneMicPaused) {
       if (_activeSource is PhoneMicSource) {

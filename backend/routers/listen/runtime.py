@@ -81,7 +81,7 @@ from .registry import unregister as unregister_listen_session
 from .speakers import SpeakerMatcher
 from .transcripts import TranscriptProcessor
 from utils.listen_audio import build_channel_config
-from utils.observability.transcription import record_listen_session_accepted
+from utils.observability.transcription import record_listen_no_audio_teardown, record_listen_session_accepted
 
 logger = logging.getLogger(__name__)
 
@@ -938,4 +938,13 @@ class ListenSessionRuntime:
 
 
 async def run_listen_session(request: ListenRequest) -> None:
-    await ListenSessionRuntime(request).run()
+    runtime: Optional[ListenSessionRuntime] = None
+    try:
+        runtime = ListenSessionRuntime(request)
+        await runtime.run()
+    finally:
+        if runtime is not None and runtime.state.first_audio_byte_timestamp is None:
+            record_listen_no_audio_teardown(
+                source=request.source,
+                platform=runtime.client_device_context.platform,
+            )

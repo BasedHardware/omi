@@ -317,6 +317,7 @@ class AppState: ObservableObject {
       } else {
         preferredMicrophoneReconnectMonitor.stop()
       }
+      publishMeetingCaptureActivity()
     }
   }
   /// A terminal live-STT failure reported by `/v4/listen`. Audio capture can
@@ -505,7 +506,13 @@ class AppState: ObservableObject {
   /// transcription session. This lives above `AudioCaptureService` because each
   /// rebuild creates a fresh service (and therefore a fresh service-local watchdog).
   var silentMicRecoveryAttempts = 0
-  var currentConversationRole: MeetingConversationBoundaryPolicy.Role = .ambient
+  var currentConversationRole: MeetingConversationBoundaryPolicy.Role = .ambient {
+    didSet { publishMeetingCaptureActivity() }
+  }
+  /// A relaunch mid-meeting splits the call into two conversations; the updater defers on this.
+  func publishMeetingCaptureActivity() {
+    UpdateInstallActivity.setMeetingCaptureActive(isLiveCapturing && currentConversationRole == .meeting)
+  }
   var meetingDetectorMode: AssistantSettings.AudioRecordingMode?
   var meetingBoundaryInProgress = false
   var pendingMeetingState: Bool?
@@ -538,7 +545,9 @@ class AppState: ObservableObject {
   /// user gets an alert, then it starts over.
   var silentMicHealedDeviceID: AudioDeviceID?
   var meetingEndFinalizationInProgress = false
-  @Published var isAwaitingMeeting = false
+  @Published var isAwaitingMeeting = false {
+    didSet { publishMeetingCaptureActivity() }
+  }
 
   /// Audio is actually reaching STT — not merely that a transcription session is armed.
   ///

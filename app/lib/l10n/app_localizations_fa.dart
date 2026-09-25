@@ -11227,4 +11227,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get openCall => 'باز کردن تماس';
+
+  @override
+  String get captureRecoveryBanner => 'صدای آویز به برنامه نمی‌رسد — برای تعمیر ضربه بزنید';
 }

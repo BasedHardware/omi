@@ -11111,5 +11111,6 @@
     "keepUsingPendant": "המשך עם התליון",
     "recordWith": "הקלטה באמצעות",
     "moreWaysToRecord": "דרכים נוספות להקליט",
-    "openCall": "פתיחת השיחה"
+    "openCall": "פתיחת השיחה",
+    "captureRecoveryBanner": "השמע מהתליון לא מגיע לאפליקציה — הקישו לתיקון"
 }

@@ -1,7 +1,6 @@
 import Foundation
 
 enum ContextBucketsFeature {
-  static let flagName = "context_buckets"
   /// Remote stop for the beta channel. Inverted on purpose: absent, unresolved, and false
   /// all mean "run the pipeline", so only an explicit true switches it off.
   static let killSwitchFlagName = "context_buckets_kill"

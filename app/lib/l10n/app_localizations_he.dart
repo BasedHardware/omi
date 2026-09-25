@@ -11141,4 +11141,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get openCall => 'פתיחת השיחה';
+
+  @override
+  String get captureRecoveryBanner => 'השמע מהתליון לא מגיע לאפליקציה — הקישו לתיקון';
 }

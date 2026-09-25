@@ -11210,4 +11210,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get openCall => 'कॉल खोलें';
+
+  @override
+  String get captureRecoveryBanner => 'पेंडेंट का ऑडियो ऐप तक नहीं पहुंच रहा है — ठीक करने के लिए टैप करें';
 }

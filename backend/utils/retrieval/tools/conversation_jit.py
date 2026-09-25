@@ -10,7 +10,6 @@ from utils.conversations.mcp_transcript_search import build_transcript_match_sni
 from utils.retrieval.tools import conversation_jit_gate as _jit_gate
 
 JIT_CONVERSATION_RETRIEVAL_CONFIG_KEY = _jit_gate.JIT_CONVERSATION_RETRIEVAL_CONFIG_KEY
-JIT_CONVERSATION_RETRIEVAL_ENV = _jit_gate.JIT_CONVERSATION_RETRIEVAL_ENV
 is_jit_conversation_retrieval_enabled = _jit_gate.is_jit_conversation_retrieval_enabled
 
 MAX_JIT_CONVERSATIONS = 20

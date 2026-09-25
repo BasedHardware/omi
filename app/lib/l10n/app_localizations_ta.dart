@@ -11307,4 +11307,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get openCall => 'அழைப்பைத் திறக்கவும்';
+
+  @override
+  String get captureRecoveryBanner => 'பென்டன்ட் ஆடியோ செயலியை அடையவில்லை — சரிசெய்ய தட்டவும்';
 }

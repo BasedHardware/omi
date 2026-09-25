@@ -3545,5 +3545,6 @@
     "keepUsingPendant": "Ďalej používať prívesok",
     "recordWith": "Nahrať pomocou",
     "moreWaysToRecord": "Ďalšie spôsoby nahrávania",
-    "openCall": "Otvoriť hovor"
+    "openCall": "Otvoriť hovor",
+    "captureRecoveryBanner": "Zvuk prívesku sa do aplikácie nedostáva — opravte klepnutím"
 }

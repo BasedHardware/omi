@@ -3587,5 +3587,6 @@
     "keepUsingPendant": "Fortsæt med vedhænget",
     "recordWith": "Optag med",
     "moreWaysToRecord": "Flere måder at optage på",
-    "openCall": "Åbn opkald"
+    "openCall": "Åbn opkald",
+    "captureRecoveryBanner": "Lyden fra vedhænget når ikke frem til appen — tryk for at reparere"
 }

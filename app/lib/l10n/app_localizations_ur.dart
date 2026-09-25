@@ -11240,4 +11240,7 @@ class AppLocalizationsUr extends AppLocalizations {
 
   @override
   String get openCall => 'کال کھولیں';
+
+  @override
+  String get captureRecoveryBanner => 'پینڈنٹ کی آواز ایپ تک نہیں پہنچ رہی — درست کرنے کے لیے ٹیپ کریں';
 }

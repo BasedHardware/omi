@@ -11227,4 +11227,7 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get openCall => 'Ava kõne';
+
+  @override
+  String get captureRecoveryBanner => 'Ripatsi heli ei jõua rakendusse — parandamiseks puudutage';
 }

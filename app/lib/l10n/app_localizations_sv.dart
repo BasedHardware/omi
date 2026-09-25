@@ -11239,4 +11239,7 @@ class AppLocalizationsSv extends AppLocalizations {
 
   @override
   String get openCall => 'Öppna samtal';
+
+  @override
+  String get captureRecoveryBanner => 'Ljudet från hänget når inte appen — tryck för att reparera';
 }

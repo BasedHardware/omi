@@ -3545,5 +3545,6 @@
     "keepUsingPendant": "Continua amb el penjoll",
     "recordWith": "Grava amb",
     "moreWaysToRecord": "Més maneres de gravar",
-    "openCall": "Obre la trucada"
+    "openCall": "Obre la trucada",
+    "captureRecoveryBanner": "L'àudio del penjoll no arriba a l'aplicació — toca'l per reparar"
 }

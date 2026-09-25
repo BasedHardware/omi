@@ -11240,4 +11240,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get openCall => 'Buka panggilan';
+
+  @override
+  String get captureRecoveryBanner => 'Audio pendant tidak sampai ke aplikasi — ketuk untuk memperbaiki';
 }

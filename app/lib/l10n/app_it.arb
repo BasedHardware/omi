@@ -3545,5 +3545,6 @@
     "keepUsingPendant": "Continua con il ciondolo",
     "recordWith": "Registra con",
     "moreWaysToRecord": "Altri modi per registrare",
-    "openCall": "Apri chiamata"
+    "openCall": "Apri chiamata",
+    "captureRecoveryBanner": "L'audio del ciondolo non arriva all'app — tocca per riparare"
 }

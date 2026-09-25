@@ -11111,5 +11111,6 @@
     "keepUsingPendant": "ادامه با آویز",
     "recordWith": "ضبط با",
     "moreWaysToRecord": "روش‌های دیگر ضبط",
-    "openCall": "باز کردن تماس"
+    "openCall": "باز کردن تماس",
+    "captureRecoveryBanner": "صدای آویز به برنامه نمی‌رسد — برای تعمیر ضربه بزنید"
 }

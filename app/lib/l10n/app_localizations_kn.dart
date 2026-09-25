@@ -11265,4 +11265,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get openCall => 'ಕರೆ ತೆರೆಯಿರಿ';
+
+  @override
+  String get captureRecoveryBanner => 'ಪೆಂಡೆಂಟ್‌ನ ಆಡಿಯೊ ಆ್ಯಪ್‌ಗೆ ತಲುಪುತ್ತಿಲ್ಲ — ಸರಿಪಡಿಸಲು ಟ್ಯಾಪ್ ಮಾಡಿ';
 }

@@ -713,6 +713,24 @@ OMI_LISTEN_UNKNOWN_CHANNEL_PREFIX_TOTAL = Counter(
     ['transcription_source', 'client_platform'],
 )
 
+OMI_LISTEN_ZERO_BYTE_SESSION_TOTAL = Counter(
+    'omi_listen_zero_byte_session_total',
+    (
+        'VAD-gated /v4/listen sessions that tore down after receiving literally no audio '
+        '(bytes_received==0, chunks_total==0, session_duration_sec==0.0)'
+    ),
+    ['transcription_source', 'client_platform'],
+)
+
+OMI_LISTEN_NO_AUDIO_TEARDOWN_TOTAL = Counter(
+    'omi_listen_no_audio_teardown_total',
+    (
+        'Accepted /v4/listen sessions that tore down before any first audio byte, '
+        'complementing outcome="first_audio" on omi_listen_audio_outcome_total'
+    ),
+    ['transcription_source', 'client_platform'],
+)
+
 # Sync intake created-vs-merged. Emitted from ingest_sync_conversation on Cloud Run
 # backend-sync, which Prometheus does not scrape today (exporter allowlist is
 # backend + desktop-backend only). Counters are still the contract; alerts on this
