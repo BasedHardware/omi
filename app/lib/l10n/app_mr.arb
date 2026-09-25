@@ -1114,7 +1114,6 @@
     "daySummary": "दिवस सारांश",
     "summaryGenerated": "सारांश तयार केला",
     "claudeDesktop": "Claude Desktop",
-    "addToClaudeConfig": "claude_desktop_config.json मध्ये जोडा",
     "copyConfig": "कॉन्फिग कॉपी करा",
     "configCopied": "कॉन्फिग क्लिपबोर्डला कॉपी केला",
     "listeningMins": "ऐकत आहे (मिनिटे)",
@@ -2636,10 +2635,6 @@
     "@claudeDesktop": {
         "description": "Claude Desktop integration section"
     },
-    "addToClaudeDesktopConfig": "claude_desktop_config.json मध्ये जोडा",
-    "@addToClaudeDesktopConfig": {
-        "description": "Description for Claude Desktop config"
-    },
     "@configCopiedToClipboard": {
         "description": "Confirmation when config is copied"
     },
@@ -2673,10 +2668,6 @@
     },
     "@clientSecret": {
         "description": "OAuth client secret label"
-    },
-    "useYourMcpApiKey": "आपली MCP API की वापरा",
-    "@useYourMcpApiKey": {
-        "description": "Hint for client secret value"
     },
     "@webhooks": {
         "description": "Webhooks section header"
@@ -10799,7 +10790,7 @@
     "@memoryHistory": {
         "description": "Filter option for retained memory history"
     },
-    "tapPlusToStartRecording": "रेकॉर्डिंग सुरू करण्यासाठी + टॅप करा",
+    "tapPlusToStartRecording": "रेकॉर्डिंग सुरू करण्यासाठी रेकॉर्ड बटण टॅप करा",
     "processingTakingLonger": "अजूनही काम सुरू आहे — याला नेहमीपेक्षा जास्त वेळ लागत आहे.",
     "speechProfileEnrollmentPrompt": "Omi ला तुमचा आवाज ओळखता यावा म्हणून — कोणत्याही विषयावर सुमारे 5 सेकंद बोला.",
     "home": "मुख्यपृष्ठ",
@@ -10842,7 +10833,7 @@
     "conversationsMovedCount": "{count, plural, =1{1 संभाषण हलवले} other{{count} संभाषणे हलवली}}",
     "failedToMoveConversations": "संभाषणे हलवता आली नाहीत",
     "discardedConversationTitle": "टाकून दिलेले · {duration}",
-    "noConversationsHeroMessage": "तुम्ही रेकॉर्ड केलेली संभाषणे येथे दिसतात. पहिले रेकॉर्ड करण्यासाठी होमवर + टॅप करा.",
+    "noConversationsHeroMessage": "तुम्ही रेकॉर्ड केलेली संभाषणे येथे दिसतात. पहिले रेकॉर्ड करण्यासाठी होमवर रेकॉर्ड बटण टॅप करा.",
     "conversationMap": "संभाषण नकाशा",
     "conversationCount": "{count, plural, =1{1 संभाषण} other{{count} संभाषणे}}",
     "taskCount": "{count, plural, =1{1 कार्य} other{{count} कार्ये}}",
@@ -10965,7 +10956,7 @@
     "batteryLevelSemantics": "बॅटरी {level}%",
     "updateOmiGlassFirmware": "OmiGlass फर्मवेअर अपडेट करा",
     "deviceConnecting": "कनेक्ट होत आहे…",
-    "recordOptionsTip": "टीप: फोन कॉल रेकॉर्ड करण्यासाठी रेकॉर्ड बटण दाबून धरा.",
+    "recordOptionsTip": "टीप: फोन कॉल रेकॉर्ड करण्यासाठी रेकॉर्ड बटणावरील बाण टॅप करा.",
     "firmwareUpdateFailedTitle": "अपडेट अयशस्वी",
     "firmwareUpdateFailedMessage": "अपडेट पूर्ण झाले नाही. तुमचे डिव्हाइस अजूनही सध्याच्या फर्मवेअरवर आहे आणि वापरण्यास सुरक्षित आहे. ते चार्ज करून फोनजवळ ठेवा, मग पुन्हा प्रयत्न करा.",
     "firmwareDownloadFailedMessage": "अपडेट डाउनलोड होऊ शकले नाही आणि तुमच्या डिव्हाइसमध्ये बदल झाला नाही. इंटरनेट कनेक्शन तपासा, मग पुन्हा प्रयत्न करा.",
@@ -11075,5 +11066,51 @@
     "participantsSummary": "{name} + {count, plural, =1{1 इतर} few{{count} इतर} many{{count} इतर} other{{count} इतर}}",
     "recordingAndTranscription": "रेकॉर्डिंग आणि प्रतिलेखन",
     "notificationsAndDisplay": "सूचना आणि प्रदर्शन",
-    "helpAndAbout": "मदत आणि माहिती"
+    "helpAndAbout": "मदत आणि माहिती",
+    "speakerTagPromptTitle": "Omi ला आवाज ओळखायला मदत करा",
+    "speakerTagPromptSubtitle": "गेल्या दोन दिवसांतील आवाजांची झटपट तपासणी",
+    "speakerTagPromptIsThisYou": "हे तुम्ही आहात का?",
+    "speakerTagPromptIsThisPerson": "हे {name} आहेत का?",
+    "speakerTagPromptWhoIsThis": "हे कोण आहे?",
+    "speakerTagPromptThatsMe": "हा मी आहे",
+    "speakerTagPromptNotMe": "मी नाही",
+    "speakerTagPromptSomeoneNew": "नवीन व्यक्ती",
+    "speakerTagPromptDontKnow": "ओळखीचे नसलेले कोणीतरी",
+    "speakerTagPromptNotSure": "खात्री नाही",
+    "speakerTagPromptPlayClip": "क्लिप प्ले करा",
+    "speakerTagPromptProgress": "{current}/{total}",
+    "speakerTagPromptSaveVoicesTitle": "तुम्ही नाव दिलेल्या लोकांचे आवाज लक्षात ठेवा",
+    "speakerTagPromptSaveVoicesBody": "पुढच्या वेळी ओळखता यावे म्हणून Omi आवाजाचा एक छोटा नमुना ठेवतो. तुम्ही हे कधीही सेटिंग्जमध्ये बदलू शकता.",
+    "speakerTagPromptThanks": "धन्यवाद! Omi आवाज ओळखण्यात आणखी चांगला होईल.",
+    "speakerTagPromptNameHint": "त्यांचे नाव",
+    "speakerTagPromptClipUnavailable": "ही क्लिप प्ले करता आली नाही",
+    "speakerTagPromptAnswerFailed": "सेव्ह करता आले नाही. कृपया पुन्हा प्रयत्न करा.",
+    "voiceSettingsAskToTag": "मला आवाज टॅग करायला सांगा",
+    "voiceSettingsAskToTagSubtitle": "अधूनमधून Omi विचारेल की तुमच्या अलीकडील संभाषणांमध्ये कोण बोलत होते",
+    "voiceSettingsSaveOthersSubtitle": "तुम्ही एखाद्याला नाव दिल्यावर, पुढच्या वेळी ओळखता यावे म्हणून Omi आवाजाचा एक छोटा नमुना ठेवतो",
+    "leaveBlank": "रिक्त ठेवा",
+    "mcpOAuthSetup": "claude.ai वर कस्टम कनेक्टर जोडा आणि सर्व्हर URL पेस्ट करा. Claude ने अ‍ॅडव्हान्स्ड OAuth Client ID मागितल्यास, खालील मूल्य वापरा आणि सीक्रेट रिक्त ठेवा — तुमची MCP API की कधीही OAuth सीक्रेट म्हणून वापरू नका.",
+    "claudeCode": "Claude Code",
+    "addToClaudeCodeConfig": "~/.claude.json मध्ये जोडा",
+    "claudeDesktopConnectorSetup": "Claude Desktop → Settings → Connectors वर कस्टम कनेक्टर जोडा आणि सर्व्हर URL पेस्ट करा. Claude ने अ‍ॅडव्हान्स्ड OAuth Client ID मागितल्यास, खालील मूल्य वापरा आणि सीक्रेट रिक्त ठेवा — तुमची MCP API की कधीही OAuth सीक्रेट म्हणून वापरू नका.",
+    "transcriptionUnavailableRecordingContinues": "ट्रान्सक्रिप्शन उपलब्ध नाही, रेकॉर्डिंग डिव्हाइसवर सुरू आहे आणि नंतर प्रोसेस होईल",
+    "transcriptionUnavailableSavingOnDevice": "ट्रान्सक्रिप्शन अनुपलब्ध · डिव्हाइसवर जतन केले जात आहे",
+    "transcriptionsPendingFraction": "प्रलंबित ट्रान्सक्रिप्शन {pending}/{total}",
+    "transcriptionsPendingCount": "प्रलंबित ट्रान्सक्रिप्शन {count}",
+    "captureSourceCall": "कॉल",
+    "captureSourcePhoneMic": "फोन माइक",
+    "captureStatusWithSource": "{status} · {source}",
+    "resume": "पुन्हा सुरू करा",
+    "finish": "पूर्ण करा",
+    "pendantPausedResumesWhenYouFinish": "पेंडंट थांबवले आहे · तुम्ही पूर्ण केल्यावर पुन्हा सुरू होईल",
+    "pendantIsListeningTitle": "तुमचे पेंडंट ऐकत आहे",
+    "oneSourceAtATime": "Omi एका वेळी एकाच स्रोतातून रेकॉर्ड करते.",
+    "recordWithPhoneInstead": "त्याऐवजी फोनने रेकॉर्ड करा",
+    "pendantPausesUntilYouFinish": "तुम्ही पूर्ण करेपर्यंत पेंडंट थांबलेले राहील",
+    "pendantPausesDuringCall": "कॉलदरम्यान पेंडंट थांबलेले राहील",
+    "keepUsingPendant": "पेंडंटच वापरत राहा",
+    "recordWith": "रेकॉर्ड करण्याची पद्धत",
+    "moreWaysToRecord": "रेकॉर्ड करण्याचे आणखी मार्ग",
+    "openCall": "कॉल उघडा",
+    "captureRecoveryBanner": "पेंडंटचे ऑडिओ ॲपपर्यंत पोहोचत नाही — दुरुस्त करण्यासाठी टॅप करा"
 }

@@ -928,9 +928,6 @@ class AppLocalizationsAr extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'أضف إلى claude_desktop_config.json';
-
-  @override
   String get copyConfig => 'نسخ التكوين';
 
   @override
@@ -2457,13 +2454,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get clearAllNodesAndConnections => 'مسح جميع العقد والاتصالات';
 
   @override
-  String get addToClaudeDesktopConfig => 'أضف إلى claude_desktop_config.json';
-
-  @override
   String get connectAiAssistantsToData => 'اربط مساعدي الذكاء الاصطناعي ببياناتك';
-
-  @override
-  String get useYourMcpApiKey => 'استخدم مفتاح MCP API الخاص بك';
 
   @override
   String get realTimeTranscript => 'نسخ في الوقت الفعلي';
@@ -9904,7 +9895,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get transcriptionNoAudio => 'النسخ لا يستلم الصوت';
 
   @override
-  String get tapPlusToStartRecording => 'اضغط على + لبدء التسجيل';
+  String get tapPlusToStartRecording => 'اضغط على زر التسجيل لبدء التسجيل';
 
   @override
   String get chatBlockTask => 'مهمة';
@@ -10146,7 +10137,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'تظهر هنا المحادثات التي تسجّلها. اضغط + في الصفحة الرئيسية لتسجيل أول محادثة.';
+      'تظهر هنا المحادثات التي تسجّلها. اضغط على زر التسجيل في الصفحة الرئيسية لتسجيل أول محادثة.';
 
   @override
   String get conversationMap => 'خريطة المحادثات';
@@ -10621,7 +10612,7 @@ class AppLocalizationsAr extends AppLocalizations {
   String get deviceConnecting => 'جارٍ الاتصال…';
 
   @override
-  String get recordOptionsTip => 'نصيحة: اضغط مع الاستمرار على زر التسجيل لتسجيل مكالمة هاتفية.';
+  String get recordOptionsTip => 'نصيحة: اضغط على السهم في زر التسجيل لتسجيل مكالمة هاتفية.';
 
   @override
   String get firmwareUpdateFailedTitle => 'فشل التحديث';
@@ -11021,4 +11012,157 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get helpAndAbout => 'المساعدة وحول التطبيق';
+
+  @override
+  String get speakerTagPromptTitle => 'ساعد Omi على التعرّف على الأصوات';
+
+  @override
+  String get speakerTagPromptSubtitle => 'مراجعة سريعة للأصوات من آخر يومين';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'هل هذا أنت؟';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'هل هذا $name؟';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'من هذا؟';
+
+  @override
+  String get speakerTagPromptThatsMe => 'هذا أنا';
+
+  @override
+  String get speakerTagPromptNotMe => 'ليس أنا';
+
+  @override
+  String get speakerTagPromptSomeoneNew => 'شخص جديد';
+
+  @override
+  String get speakerTagPromptDontKnow => 'شخص لا أعرفه';
+
+  @override
+  String get speakerTagPromptNotSure => 'لست متأكدًا';
+
+  @override
+  String get speakerTagPromptPlayClip => 'تشغيل المقطع';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current من $total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => 'تذكّر أصوات الأشخاص الذين تسمّيهم';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody =>
+      'يحتفظ Omi بعيّنة صوتية قصيرة ليتعرّف عليهم في المرة القادمة. يمكنك تغيير ذلك في أي وقت من الإعدادات.';
+
+  @override
+  String get speakerTagPromptThanks => 'شكرًا! سيصبح Omi أفضل في التعرّف على الأصوات.';
+
+  @override
+  String get speakerTagPromptNameHint => 'اسمه';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'تعذّر تشغيل هذا المقطع';
+
+  @override
+  String get speakerTagPromptAnswerFailed => 'تعذّر حفظ ذلك. يُرجى المحاولة مرة أخرى.';
+
+  @override
+  String get voiceSettingsAskToTag => 'اطلب مني تسمية الأصوات';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle => 'من حين لآخر، يسألك Omi عمّن كان يتحدث في محادثاتك الأخيرة';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle =>
+      'عندما تسمّي شخصًا، يحتفظ Omi بعيّنة صوتية قصيرة ليتعرّف عليه في المرة القادمة';
+
+  @override
+  String get leaveBlank => 'اتركه فارغًا';
+
+  @override
+  String get mcpOAuthSetup =>
+      'في claude.ai، أضف موصلًا مخصصًا والصق عنوان الخادم. إذا طلب Claude معرّف عميل OAuth متقدمًا، فاستخدم القيمة أدناه واترك السر فارغًا — لا تستخدم أبدًا مفتاح MCP API الخاص بك كسر OAuth.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'أضف إلى ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'في Claude Desktop → Settings → Connectors، أضف موصلًا مخصصًا والصق عنوان الخادم. إذا طلب Claude معرّف عميل OAuth متقدمًا، فاستخدم القيمة أدناه واترك السر فارغًا — لا تستخدم أبدًا مفتاح MCP API الخاص بك كسر OAuth.';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'النسخ غير متوفر حاليًا، يستمر التسجيل على الجهاز وستتم المعالجة لاحقًا';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'النسخ غير متوفر · يتم الحفظ على الجهاز';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'نسخ معلّق $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'نسخ معلّق $count';
+  }
+
+  @override
+  String get captureSourceCall => 'مكالمة';
+
+  @override
+  String get captureSourcePhoneMic => 'ميكروفون الهاتف';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'استئناف';
+
+  @override
+  String get finish => 'إنهاء';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'القلادة متوقفة مؤقتاً · تُستأنف عند الانتهاء';
+
+  @override
+  String get pendantIsListeningTitle => 'قلادتك تستمع';
+
+  @override
+  String get oneSourceAtATime => 'يسجّل Omi من مصدر واحد فقط في كل مرة.';
+
+  @override
+  String get recordWithPhoneInstead => 'التسجيل بالهاتف بدلاً من ذلك';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'تتوقف القلادة مؤقتاً حتى تنتهي';
+
+  @override
+  String get pendantPausesDuringCall => 'تتوقف القلادة مؤقتاً أثناء المكالمة';
+
+  @override
+  String get keepUsingPendant => 'متابعة استخدام القلادة';
+
+  @override
+  String get recordWith => 'التسجيل باستخدام';
+
+  @override
+  String get moreWaysToRecord => 'طرق أخرى للتسجيل';
+
+  @override
+  String get openCall => 'فتح المكالمة';
+
+  @override
+  String get captureRecoveryBanner => 'صوت القلادة لا يصل إلى التطبيق — انقر للإصلاح';
 }

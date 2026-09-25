@@ -70,3 +70,34 @@ def test_update_markup_id_renders_literally(
     assert route.call_count == 1
     assert "MarkupError" not in result.stderr
     assert MARKUP_ID in result.stderr
+
+
+LOCAL_TASK_CASES = [
+    (["local", "task", "complete", MARKUP_ID], "complete_task"),
+    (["local", "task", "delete", MARKUP_ID, "--yes"], "delete_task"),
+]
+
+
+@pytest.mark.parametrize("cli_args,tool_name", LOCAL_TASK_CASES)
+def test_local_task_markup_id_renders_literally(
+    cli_args, tool_name, config_path, respx_mock, cli_runner, monkeypatch
+) -> None:
+    from omi_cli import config as cfg
+
+    config = cfg.load()
+    profile = config.get_profile("default")
+    profile.local_api_url = "http://127.0.0.1:47778"
+    profile.local_token = "local_test_token"
+    config.set_profile(profile)
+    cfg.save(config)
+
+    monkeypatch.setenv("COLUMNS", "1000")
+    route = respx_mock.post("http://127.0.0.1:47778/v1/local/tool").respond(
+        json={"ok": True, "name": tool_name, "content_type": "text/plain", "result": "{}"}
+    )
+    result = cli_runner.invoke(app, ["--no-color", *cli_args])
+
+    assert result.exit_code == 0, result.output
+    assert route.call_count == 1
+    assert "MarkupError" not in result.stderr
+    assert MARKUP_ID in result.stderr

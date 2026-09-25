@@ -1965,12 +1965,6 @@ abstract class AppLocalizations {
   /// **'Claude Desktop'**
   String get claudeDesktop;
 
-  /// No description provided for @addToClaudeConfig.
-  ///
-  /// In en, this message translates to:
-  /// **'Add to claude_desktop_config.json'**
-  String get addToClaudeConfig;
-
   /// Button text to copy configuration
   ///
   /// In en, this message translates to:
@@ -4797,23 +4791,11 @@ abstract class AppLocalizations {
   /// **'Clear all nodes and connections'**
   String get clearAllNodesAndConnections;
 
-  /// Description for Claude Desktop config
-  ///
-  /// In en, this message translates to:
-  /// **'Add to claude_desktop_config.json'**
-  String get addToClaudeDesktopConfig;
-
   /// Description for MCP Server feature
   ///
   /// In en, this message translates to:
   /// **'Connect AI assistants to your data'**
   String get connectAiAssistantsToData;
-
-  /// Hint for client secret value
-  ///
-  /// In en, this message translates to:
-  /// **'Use your MCP API key'**
-  String get useYourMcpApiKey;
 
   /// Webhook type for real-time transcript
   ///
@@ -18537,10 +18519,10 @@ abstract class AppLocalizations {
   /// **'Transcription not receiving audio'**
   String get transcriptionNoAudio;
 
-  /// Empty-home hint pointing at the + record button
+  /// Empty-home hint pointing at the round record button
   ///
   /// In en, this message translates to:
-  /// **'Tap + to start recording'**
+  /// **'Tap the record button to start recording'**
   String get tapPlusToStartRecording;
 
   /// Eyebrow label on a chat task card block
@@ -18810,7 +18792,7 @@ abstract class AppLocalizations {
   /// Empty state message on the Conversations tab for a new user
   ///
   /// In en, this message translates to:
-  /// **'Conversations you record show up here. Tap + on Home to record your first one.'**
+  /// **'Conversations you record show up here. Tap the record button on Home to record your first one.'**
   String get noConversationsHeroMessage;
 
   /// Title of the page (and the button label) that shows conversations on a map
@@ -19548,7 +19530,7 @@ abstract class AppLocalizations {
   /// One-time hint after the first phone-mic recording
   ///
   /// In en, this message translates to:
-  /// **'Tip: press and hold the record button to record a phone call.'**
+  /// **'Tip: tap the arrow on the record button to record a phone call.'**
   String get recordOptionsTip;
 
   /// Title of the firmware update failed state
@@ -20210,6 +20192,282 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Help & About'**
   String get helpAndAbout;
+
+  /// Card title asking the user to label speakers from recent conversations
+  ///
+  /// In en, this message translates to:
+  /// **'Help Omi recognize voices'**
+  String get speakerTagPromptTitle;
+
+  /// Card subtitle for the speaker tagging prompt
+  ///
+  /// In en, this message translates to:
+  /// **'A quick check on voices from the last two days'**
+  String get speakerTagPromptSubtitle;
+
+  /// Question shown under a short audio clip of a speaker
+  ///
+  /// In en, this message translates to:
+  /// **'Is this you?'**
+  String get speakerTagPromptIsThisYou;
+
+  /// Question under an audio clip; {name} is a person's name
+  ///
+  /// In en, this message translates to:
+  /// **'Is this {name}?'**
+  String speakerTagPromptIsThisPerson(String name);
+
+  /// Question under an audio clip of an unknown speaker
+  ///
+  /// In en, this message translates to:
+  /// **'Who is this?'**
+  String get speakerTagPromptWhoIsThis;
+
+  /// Answer button: the clip is the user's own voice
+  ///
+  /// In en, this message translates to:
+  /// **'That\'s me'**
+  String get speakerTagPromptThatsMe;
+
+  /// Answer button: the clip is not the user's voice
+  ///
+  /// In en, this message translates to:
+  /// **'Not me'**
+  String get speakerTagPromptNotMe;
+
+  /// Answer button that opens a field to type a new person's name
+  ///
+  /// In en, this message translates to:
+  /// **'Someone new'**
+  String get speakerTagPromptSomeoneNew;
+
+  /// Answer button: the speaker is a stranger
+  ///
+  /// In en, this message translates to:
+  /// **'Someone I don\'t know'**
+  String get speakerTagPromptDontKnow;
+
+  /// Answer button to skip this question
+  ///
+  /// In en, this message translates to:
+  /// **'Not sure'**
+  String get speakerTagPromptNotSure;
+
+  /// Accessibility label for the play button of the audio clip
+  ///
+  /// In en, this message translates to:
+  /// **'Play clip'**
+  String get speakerTagPromptPlayClip;
+
+  /// Progress indicator, e.g. 2 of 4
+  ///
+  /// In en, this message translates to:
+  /// **'{current} of {total}'**
+  String speakerTagPromptProgress(int current, int total);
+
+  /// Label of an on/off switch to remember voices of people the user names
+  ///
+  /// In en, this message translates to:
+  /// **'Remember voices of people you name'**
+  String get speakerTagPromptSaveVoicesTitle;
+
+  /// Explanation under the remember-voices switch
+  ///
+  /// In en, this message translates to:
+  /// **'Omi keeps a short voice sample so it can recognize them next time. You can change this anytime in Settings.'**
+  String get speakerTagPromptSaveVoicesBody;
+
+  /// Shown after answering all speaker questions
+  ///
+  /// In en, this message translates to:
+  /// **'Thanks! Omi will get better at recognizing voices.'**
+  String get speakerTagPromptThanks;
+
+  /// Placeholder text in a name input field
+  ///
+  /// In en, this message translates to:
+  /// **'Their name'**
+  String get speakerTagPromptNameHint;
+
+  /// Error when the audio clip fails to load
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t play this clip'**
+  String get speakerTagPromptClipUnavailable;
+
+  /// Error when saving an answer fails
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t save that. Please try again.'**
+  String get speakerTagPromptAnswerFailed;
+
+  /// Settings switch label for periodic speaker tagging prompts
+  ///
+  /// In en, this message translates to:
+  /// **'Ask me to tag voices'**
+  String get voiceSettingsAskToTag;
+
+  /// Settings switch explanation for periodic speaker tagging prompts
+  ///
+  /// In en, this message translates to:
+  /// **'Once in a while, Omi asks who was speaking in your recent conversations'**
+  String get voiceSettingsAskToTagSubtitle;
+
+  /// Settings switch explanation for remembering voices of people the user names
+  ///
+  /// In en, this message translates to:
+  /// **'When you name someone, Omi keeps a short voice sample so it can recognize them next time'**
+  String get voiceSettingsSaveOthersSubtitle;
+
+  /// Hint for an intentionally empty field (e.g. OAuth client secret)
+  ///
+  /// In en, this message translates to:
+  /// **'Leave blank'**
+  String get leaveBlank;
+
+  /// OAuth connector setup instructions for the hosted MCP server
+  ///
+  /// In en, this message translates to:
+  /// **'On claude.ai, add a custom connector and paste the server URL. If Claude asks for an advanced OAuth Client ID, use the value below and leave the secret blank — never use your MCP API key as an OAuth secret.'**
+  String get mcpOAuthSetup;
+
+  /// Claude Code (CLI) integration section
+  ///
+  /// In en, this message translates to:
+  /// **'Claude Code'**
+  String get claudeCode;
+
+  /// Subtitle under the Claude Code section: add the snippet to ~/.claude.json
+  ///
+  /// In en, this message translates to:
+  /// **'Add to ~/.claude.json'**
+  String get addToClaudeCodeConfig;
+
+  /// Claude Desktop connector setup instructions for the hosted MCP server
+  ///
+  /// In en, this message translates to:
+  /// **'On Claude Desktop → Settings → Connectors, add a custom connector and paste the server URL. If Claude asks for an advanced OAuth Client ID, use the value below and leave the secret blank — never use your MCP API key as an OAuth secret.'**
+  String get claudeDesktopConnectorSetup;
+
+  /// Live capture status while the transcription service is down; audio keeps recording locally.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcriptions are unavailable, recording continues on device and will process later'**
+  String get transcriptionUnavailableRecordingContinues;
+
+  /// Compact transcription-outage status for the in-progress capture card.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcription unavailable · saving on device'**
+  String get transcriptionUnavailableSavingOnDevice;
+
+  /// Queued recordings still waiting for transcription (pending) out of the session total, on the live-capture WAL indicator.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcriptions pending {pending}/{total}'**
+  String transcriptionsPendingFraction(int pending, int total);
+
+  /// Phone-local recordings still waiting to be uploaded for transcription, on the conversations list banner.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcriptions pending {count}'**
+  String transcriptionsPendingCount(int count);
+
+  /// Capture source label when an Omi phone call is being recorded, on the live card (e.g. 'Call · Listening · 3:10'). A noun.
+  ///
+  /// In en, this message translates to:
+  /// **'Call'**
+  String get captureSourceCall;
+
+  /// The phone's microphone as a capture source: live page title ('Listening · Phone mic') and the first row of the 'Record with' sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'Phone mic'**
+  String get captureSourcePhoneMic;
+
+  /// Live page title: recording status followed by the capture source, e.g. 'Listening · Pendant'.
+  ///
+  /// In en, this message translates to:
+  /// **'{status} · {source}'**
+  String captureStatusWithSource(String status, String source);
+
+  /// Button that resumes a paused recording.
+  ///
+  /// In en, this message translates to:
+  /// **'Resume'**
+  String get resume;
+
+  /// Button that ends the live recording and processes the conversation.
+  ///
+  /// In en, this message translates to:
+  /// **'Finish'**
+  String get finish;
+
+  /// Small note on the live card while the phone records instead of the pendant.
+  ///
+  /// In en, this message translates to:
+  /// **'Pendant paused · resumes when you finish'**
+  String get pendantPausedResumesWhenYouFinish;
+
+  /// Sheet title shown when the user taps the phone record button while the pendant is recording.
+  ///
+  /// In en, this message translates to:
+  /// **'Your pendant is listening'**
+  String get pendantIsListeningTitle;
+
+  /// Explanation line under the 'Your pendant is listening' sheet title.
+  ///
+  /// In en, this message translates to:
+  /// **'Omi records from one source at a time.'**
+  String get oneSourceAtATime;
+
+  /// Option in the 'Your pendant is listening' sheet that switches recording to the phone microphone.
+  ///
+  /// In en, this message translates to:
+  /// **'Record with phone instead'**
+  String get recordWithPhoneInstead;
+
+  /// Subtitle of the 'Record with phone instead' option.
+  ///
+  /// In en, this message translates to:
+  /// **'Pendant pauses until you finish'**
+  String get pendantPausesUntilYouFinish;
+
+  /// Subtitle of the Phone call option in the 'Your pendant is listening' sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'Pendant pauses during the call'**
+  String get pendantPausesDuringCall;
+
+  /// Button that dismisses the 'Your pendant is listening' sheet and keeps the pendant recording.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep using pendant'**
+  String get keepUsingPendant;
+
+  /// Title of the sheet listing ways to record (Phone mic, Phone call).
+  ///
+  /// In en, this message translates to:
+  /// **'Record with'**
+  String get recordWith;
+
+  /// Accessibility label of the small arrow badge on the record button that opens the 'Record with' sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'More ways to record'**
+  String get moreWaysToRecord;
+
+  /// Accessibility hint on the live card during a call; tapping opens the call screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Open call'**
+  String get openCall;
+
+  /// Persistent repair banner shown when a connected pendant's audio is not reaching the app; tapping opens device repair settings
+  ///
+  /// In en, this message translates to:
+  /// **'Pendant audio is not reaching the app — tap to repair'**
+  String get captureRecoveryBanner;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

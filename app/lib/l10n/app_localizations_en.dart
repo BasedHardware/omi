@@ -932,9 +932,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'Add to claude_desktop_config.json';
-
-  @override
   String get copyConfig => 'Copy Config';
 
   @override
@@ -2479,13 +2476,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get clearAllNodesAndConnections => 'Clear all nodes and connections';
 
   @override
-  String get addToClaudeDesktopConfig => 'Add to claude_desktop_config.json';
-
-  @override
   String get connectAiAssistantsToData => 'Connect AI assistants to your data';
-
-  @override
-  String get useYourMcpApiKey => 'Use your MCP API key';
 
   @override
   String get realTimeTranscript => 'Real-time Transcript';
@@ -9956,7 +9947,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get transcriptionNoAudio => 'Transcription not receiving audio';
 
   @override
-  String get tapPlusToStartRecording => 'Tap + to start recording';
+  String get tapPlusToStartRecording => 'Tap the record button to start recording';
 
   @override
   String get chatBlockTask => 'Task';
@@ -10199,7 +10190,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'Conversations you record show up here. Tap + on Home to record your first one.';
+      'Conversations you record show up here. Tap the record button on Home to record your first one.';
 
   @override
   String get conversationMap => 'Conversation Map';
@@ -10676,7 +10667,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get deviceConnecting => 'Connecting…';
 
   @override
-  String get recordOptionsTip => 'Tip: press and hold the record button to record a phone call.';
+  String get recordOptionsTip => 'Tip: tap the arrow on the record button to record a phone call.';
 
   @override
   String get firmwareUpdateFailedTitle => 'Update Failed';
@@ -11078,4 +11069,157 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get helpAndAbout => 'Help & About';
+
+  @override
+  String get speakerTagPromptTitle => 'Help Omi recognize voices';
+
+  @override
+  String get speakerTagPromptSubtitle => 'A quick check on voices from the last two days';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'Is this you?';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'Is this $name?';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'Who is this?';
+
+  @override
+  String get speakerTagPromptThatsMe => 'That\'s me';
+
+  @override
+  String get speakerTagPromptNotMe => 'Not me';
+
+  @override
+  String get speakerTagPromptSomeoneNew => 'Someone new';
+
+  @override
+  String get speakerTagPromptDontKnow => 'Someone I don\'t know';
+
+  @override
+  String get speakerTagPromptNotSure => 'Not sure';
+
+  @override
+  String get speakerTagPromptPlayClip => 'Play clip';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current of $total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => 'Remember voices of people you name';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody =>
+      'Omi keeps a short voice sample so it can recognize them next time. You can change this anytime in Settings.';
+
+  @override
+  String get speakerTagPromptThanks => 'Thanks! Omi will get better at recognizing voices.';
+
+  @override
+  String get speakerTagPromptNameHint => 'Their name';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'Couldn\'t play this clip';
+
+  @override
+  String get speakerTagPromptAnswerFailed => 'Couldn\'t save that. Please try again.';
+
+  @override
+  String get voiceSettingsAskToTag => 'Ask me to tag voices';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle => 'Once in a while, Omi asks who was speaking in your recent conversations';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle =>
+      'When you name someone, Omi keeps a short voice sample so it can recognize them next time';
+
+  @override
+  String get leaveBlank => 'Leave blank';
+
+  @override
+  String get mcpOAuthSetup =>
+      'On claude.ai, add a custom connector and paste the server URL. If Claude asks for an advanced OAuth Client ID, use the value below and leave the secret blank — never use your MCP API key as an OAuth secret.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'Add to ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'On Claude Desktop → Settings → Connectors, add a custom connector and paste the server URL. If Claude asks for an advanced OAuth Client ID, use the value below and leave the secret blank — never use your MCP API key as an OAuth secret.';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Transcriptions are unavailable, recording continues on device and will process later';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Transcription unavailable · saving on device';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Transcriptions pending $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Transcriptions pending $count';
+  }
+
+  @override
+  String get captureSourceCall => 'Call';
+
+  @override
+  String get captureSourcePhoneMic => 'Phone mic';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Resume';
+
+  @override
+  String get finish => 'Finish';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Pendant paused · resumes when you finish';
+
+  @override
+  String get pendantIsListeningTitle => 'Your pendant is listening';
+
+  @override
+  String get oneSourceAtATime => 'Omi records from one source at a time.';
+
+  @override
+  String get recordWithPhoneInstead => 'Record with phone instead';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'Pendant pauses until you finish';
+
+  @override
+  String get pendantPausesDuringCall => 'Pendant pauses during the call';
+
+  @override
+  String get keepUsingPendant => 'Keep using pendant';
+
+  @override
+  String get recordWith => 'Record with';
+
+  @override
+  String get moreWaysToRecord => 'More ways to record';
+
+  @override
+  String get openCall => 'Open call';
+
+  @override
+  String get captureRecoveryBanner => 'Pendant audio is not reaching the app — tap to repair';
 }

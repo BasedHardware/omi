@@ -935,9 +935,6 @@ class AppLocalizationsMs extends AppLocalizations {
   String get claudeDesktop => 'Claude Desktop';
 
   @override
-  String get addToClaudeConfig => 'Tambah ke claude_desktop_config.json';
-
-  @override
   String get copyConfig => 'Salin Konfigurasi';
 
   @override
@@ -2485,13 +2482,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get clearAllNodesAndConnections => 'Kosongkan semua nod dan sambungan';
 
   @override
-  String get addToClaudeDesktopConfig => 'Tambah ke claude_desktop_config.json';
-
-  @override
   String get connectAiAssistantsToData => 'Sambungkan pembantu AI ke data anda';
-
-  @override
-  String get useYourMcpApiKey => 'Gunakan kunci API MCP anda';
 
   @override
   String get realTimeTranscript => 'Transkrip Masa Nyata';
@@ -9994,7 +9985,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get transcriptionNoAudio => 'Transkripsi tidak menerima audio';
 
   @override
-  String get tapPlusToStartRecording => 'Ketik + untuk mula merakam';
+  String get tapPlusToStartRecording => 'Ketik butang rakam untuk mula merakam';
 
   @override
   String get chatBlockTask => 'Tugas';
@@ -10237,7 +10228,7 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get noConversationsHeroMessage =>
-      'Perbualan yang anda rakam dipaparkan di sini. Ketik + di Utama untuk merakam yang pertama.';
+      'Perbualan yang anda rakam dipaparkan di sini. Ketik butang rakam di Utama untuk merakam yang pertama.';
 
   @override
   String get conversationMap => 'Peta Perbualan';
@@ -10715,7 +10706,7 @@ class AppLocalizationsMs extends AppLocalizations {
   String get deviceConnecting => 'Menyambung…';
 
   @override
-  String get recordOptionsTip => 'Petua: tekan dan tahan butang rakam untuk merakam panggilan telefon.';
+  String get recordOptionsTip => 'Petua: ketik anak panah pada butang rakam untuk merakam panggilan telefon.';
 
   @override
   String get firmwareUpdateFailedTitle => 'Kemas Kini Gagal';
@@ -11117,4 +11108,158 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get helpAndAbout => 'Bantuan & Perihal';
+
+  @override
+  String get speakerTagPromptTitle => 'Bantu Omi mengenal pasti suara';
+
+  @override
+  String get speakerTagPromptSubtitle => 'Semakan pantas suara dari dua hari lepas';
+
+  @override
+  String get speakerTagPromptIsThisYou => 'Adakah ini anda?';
+
+  @override
+  String speakerTagPromptIsThisPerson(String name) {
+    return 'Adakah ini $name?';
+  }
+
+  @override
+  String get speakerTagPromptWhoIsThis => 'Siapakah ini?';
+
+  @override
+  String get speakerTagPromptThatsMe => 'Itu saya';
+
+  @override
+  String get speakerTagPromptNotMe => 'Bukan saya';
+
+  @override
+  String get speakerTagPromptSomeoneNew => 'Orang baharu';
+
+  @override
+  String get speakerTagPromptDontKnow => 'Orang yang saya tidak kenal';
+
+  @override
+  String get speakerTagPromptNotSure => 'Tidak pasti';
+
+  @override
+  String get speakerTagPromptPlayClip => 'Main klip';
+
+  @override
+  String speakerTagPromptProgress(int current, int total) {
+    return '$current daripada $total';
+  }
+
+  @override
+  String get speakerTagPromptSaveVoicesTitle => 'Ingat suara orang yang anda namakan';
+
+  @override
+  String get speakerTagPromptSaveVoicesBody =>
+      'Omi menyimpan sampel suara pendek supaya dapat mengenali mereka lain kali. Anda boleh mengubahnya bila-bila masa dalam Tetapan.';
+
+  @override
+  String get speakerTagPromptThanks => 'Terima kasih! Omi akan lebih baik mengenal pasti suara.';
+
+  @override
+  String get speakerTagPromptNameHint => 'Nama mereka';
+
+  @override
+  String get speakerTagPromptClipUnavailable => 'Tidak dapat memainkan klip ini';
+
+  @override
+  String get speakerTagPromptAnswerFailed => 'Tidak dapat menyimpan. Sila cuba lagi.';
+
+  @override
+  String get voiceSettingsAskToTag => 'Minta saya tandakan suara';
+
+  @override
+  String get voiceSettingsAskToTagSubtitle =>
+      'Sekali-sekala, Omi akan bertanya siapa yang bercakap dalam perbualan terkini anda';
+
+  @override
+  String get voiceSettingsSaveOthersSubtitle =>
+      'Apabila anda menamakan seseorang, Omi menyimpan sampel suara pendek supaya dapat mengenalinya lain kali';
+
+  @override
+  String get leaveBlank => 'Biarkan kosong';
+
+  @override
+  String get mcpOAuthSetup =>
+      'Di claude.ai, tambahkan penyambung tersuai dan tampal URL pelayan. Jika Claude meminta OAuth Client ID lanjutan, gunakan nilai di bawah dan biarkan rahsia kosong — jangan sesekali gunakan kunci API MCP anda sebagai rahsia OAuth.';
+
+  @override
+  String get claudeCode => 'Claude Code';
+
+  @override
+  String get addToClaudeCodeConfig => 'Tambah ke ~/.claude.json';
+
+  @override
+  String get claudeDesktopConnectorSetup =>
+      'Di Claude Desktop → Settings → Connectors, tambahkan penyambung tersuai dan tampal URL pelayan. Jika Claude meminta OAuth Client ID lanjutan, gunakan nilai di bawah dan biarkan rahsia kosong — jangan sesekali gunakan kunci API MCP anda sebagai rahsia OAuth.';
+
+  @override
+  String get transcriptionUnavailableRecordingContinues =>
+      'Transkripsi tidak tersedia, rakaman diteruskan pada peranti dan akan diproses kemudian';
+
+  @override
+  String get transcriptionUnavailableSavingOnDevice => 'Transkripsi tidak tersedia · disimpan pada peranti';
+
+  @override
+  String transcriptionsPendingFraction(int pending, int total) {
+    return 'Transkripsi tertunggak $pending/$total';
+  }
+
+  @override
+  String transcriptionsPendingCount(int count) {
+    return 'Transkripsi tertunggak $count';
+  }
+
+  @override
+  String get captureSourceCall => 'Panggilan';
+
+  @override
+  String get captureSourcePhoneMic => 'Mikrofon telefon';
+
+  @override
+  String captureStatusWithSource(String status, String source) {
+    return '$status · $source';
+  }
+
+  @override
+  String get resume => 'Sambung';
+
+  @override
+  String get finish => 'Selesai';
+
+  @override
+  String get pendantPausedResumesWhenYouFinish => 'Loket dijeda · disambung apabila anda selesai';
+
+  @override
+  String get pendantIsListeningTitle => 'Loket anda sedang mendengar';
+
+  @override
+  String get oneSourceAtATime => 'Omi merakam daripada satu sumber pada satu masa.';
+
+  @override
+  String get recordWithPhoneInstead => 'Rakam dengan telefon sebaliknya';
+
+  @override
+  String get pendantPausesUntilYouFinish => 'Loket dijeda sehingga anda selesai';
+
+  @override
+  String get pendantPausesDuringCall => 'Loket dijeda semasa panggilan';
+
+  @override
+  String get keepUsingPendant => 'Terus guna loket';
+
+  @override
+  String get recordWith => 'Rakam dengan';
+
+  @override
+  String get moreWaysToRecord => 'Lebih banyak cara merakam';
+
+  @override
+  String get openCall => 'Buka panggilan';
+
+  @override
+  String get captureRecoveryBanner => 'Audio loket tidak sampai ke aplikasi — ketik untuk membaiki';
 }

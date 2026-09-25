@@ -18,7 +18,7 @@ from __future__ import annotations
 import os
 import sys
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import Mapping, Optional
 
 import click
 import typer
@@ -177,13 +177,32 @@ def ask(
     if ctx.renderer.json_mode:
         ctx.renderer.emit(result)
         return
-    payload = result or {}
-    typer.echo(payload.get("answer", ""))
-    sources = payload.get("sources") or []
-    if sources:
-        typer.echo("\nSources:")
-        for s in sources:
-            typer.echo(f"  - {s.get('title') or 'Untitled'} ({s.get('created_at') or ''})  [{s.get('id')}]")
+    if not isinstance(result, Mapping):
+        if result is not None:
+            typer.echo(str(result))
+        return
+
+    answer = result.get("answer")
+    if answer is not None:
+        typer.echo(str(answer))
+
+    raw_sources = result.get("sources")
+    if isinstance(raw_sources, list) and raw_sources:
+        rendered_sources: list[str] = []
+        for s in raw_sources:
+            if isinstance(s, Mapping):
+                title = str(s.get("title") or "Untitled")
+                created_at = s.get("created_at")
+                source_id = s.get("id")
+                created_part = f" ({created_at})" if created_at else ""
+                id_part = f"  [{source_id}]" if source_id is not None else ""
+                rendered_sources.append(f"  - {title}{created_part}{id_part}")
+            elif isinstance(s, str) and s:
+                rendered_sources.append(f"  - Untitled  [{s}]")
+        if rendered_sources:
+            typer.echo("\nSources:")
+            for line in rendered_sources:
+                typer.echo(line)
 
 
 # ---------------------------------------------------------------------------

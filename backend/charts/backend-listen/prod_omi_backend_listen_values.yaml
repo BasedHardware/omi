@@ -158,6 +158,10 @@ env:
     value: "false"
   - name: CONVERSATION_OCR_CONTEXT_ENABLED
     value: "false"
+  - name: MEETING_NOTES_RICH_CONTEXT_ENABLED
+    value: "false"
+  - name: MEETING_NOTES_SCREEN_TEXT_CONTEXT_ENABLED
+    value: "false"
   - name: BASIC_PLAN_GATE_EAGER_EXTRACTION_ENABLED
     value: "false"
   - name: WAKE_WORD_ADJUDICATION_ENABLED
@@ -345,11 +349,6 @@ env:
     value: "http://parakeet.omi.me"
   - name: STT_PRERECORDED_MODEL
     value: "parakeet,modulate-velma-2"
-  - name: DEEPGRAM_API_KEY
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: DEEPGRAM_API_KEY
   - name: DEEPGRAM_SELF_HOSTED_ENABLED
     value: "false"
   - name: STT_CONNECT_ORDER_FROM_CONFIG
