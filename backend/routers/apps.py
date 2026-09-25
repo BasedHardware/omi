@@ -189,13 +189,9 @@ class AppCreateResponse(AppMutationResponse):
     app_id: str
 
 
-
 class AppRejectRequest(PydanticBaseModel):
     reason: str
 
-
-class AppRejectRequest(PydanticBaseModel):
-    reason: str
 
 class AppMigrationResponse(AppMutationResponse):
     message: str
@@ -2067,7 +2063,10 @@ async def mcp_oauth_callback(code: str, state: str):
         )
     except Exception as e:
         logger.error(f"Token exchange failed: {e}")
-        return HTMLResponse('<html><body><h1>Token exchange failed</h1><p>Failed to exchange authorization code for access token.</p></body></html>', status_code=502)
+        return HTMLResponse(
+            '<html><body><h1>Token exchange failed</h1><p>Failed to exchange authorization code for access token.</p></body></html>',
+            status_code=502,
+        )
 
     # Update stored tokens
     oauth_tokens['access_token'] = token_data['access_token']
@@ -2080,7 +2079,10 @@ async def mcp_oauth_callback(code: str, state: str):
         tools = await discover_mcp_tools(server_url, token_data['access_token'])
     except Exception as e:
         logger.error(f"Tool discovery failed: {e}")
-        return HTMLResponse('<html><body><h1>Tool discovery failed</h1><p>Failed to discover tools on the MCP server.</p></body></html>', status_code=502)
+        return HTMLResponse(
+            '<html><body><h1>Tool discovery failed</h1><p>Failed to discover tools on the MCP server.</p></body></html>',
+            status_code=502,
+        )
 
     # Use the resolved URL from the first tool (discover_mcp_tools stores the working URL)
     resolved_url = tools[0].endpoint if tools else server_url
@@ -2375,7 +2377,7 @@ def reject_app(app_id: str, uid: str, data: Optional[AppRejectRequest] = Body(No
         uid,
         'App Rejected 😔',
         f'Your app {app["name"]} has been rejected.{reason_text} Please make the necessary changes and resubmit for approval.',
-        {'app_id': app_id, 'type': 'app_rejected', 'navigate_to': f'/apps/{app_id}'}
+        {'app_id': app_id, 'type': 'app_rejected', 'navigate_to': f'/apps/{app_id}'},
     )
     return {'status': 'ok'}
 
