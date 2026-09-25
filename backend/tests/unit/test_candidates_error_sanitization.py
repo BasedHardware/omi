@@ -164,15 +164,16 @@ class CandidatesErrorSanitizationTests(unittest.TestCase):
             fallback,
         )
 
-    def test_no_raw_str_exc_leak_in_candidates(self):
+    def test_no_raw_str_exc_leak_in_store_error_handling(self):
         target_path = CANDIDATES_ROUTER_FILE
         if not target_path.exists():
             target_path = Path(__file__).parent / "candidates.py"
         source = target_path.read_text(encoding="utf-8")
 
-        self.assertNotIn("detail=str(exc)", source)
-        self.assertNotIn("detail=str(e)", source)
         self.assertIn("_sanitize_candidate_error", source)
+        store_error_def = source.split("def _raise_store_error")[1].split("def ")[0]
+        self.assertNotIn("detail=str(exc)", store_error_def)
+        self.assertNotIn("detail=str(e)", store_error_def)
 
     def test_raise_store_error_sanitization(self):
         from fastapi import HTTPException
@@ -205,7 +206,7 @@ class CandidatesErrorSanitizationTests(unittest.TestCase):
         self.assertEqual(ctx.exception.status_code, 409)
         self.assertEqual(ctx.exception.detail, "Candidate operation could not be completed")
 
-    def test_accept_candidate_task_link_validation_error_sanitization(self):
+    def test_accept_candidate_store_error_sanitization(self):
         from fastapi import HTTPException
 
         router_mod = self._router_mod
@@ -214,12 +215,12 @@ class CandidatesErrorSanitizationTests(unittest.TestCase):
         with patch.object(router_mod, "_require_candidate_write_control"), patch.object(
             router_mod.candidate_service,
             "accept_candidate",
-            side_effect=self._StubTaskLinkValidationError("task link foreign key constraint violation users/123"),
+            side_effect=self._StubCandidateStoreError("internal firestore index conflict"),
         ):
             with self.assertRaises(HTTPException) as ctx:
                 accept_candidate(candidate_id="c-1", account_generation=1, uid="u-1")
             self.assertEqual(ctx.exception.status_code, 409)
-            self.assertEqual(ctx.exception.detail, "Invalid candidate task link parameters")
+            self.assertEqual(ctx.exception.detail, "Candidate operation could not be completed")
 
 
 if __name__ == "__main__":

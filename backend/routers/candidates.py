@@ -62,7 +62,7 @@ def _require_candidate_write_control(uid: str, account_generation: int) -> None:
 
 def _sanitize_candidate_error(exc: Exception, fallback: str) -> str:
     """Sanitize candidate store and resolution exception details while preserving debug logging."""
-    logger.warning("Candidate operation failed: %s: %s", type(exc).__name__, exc)
+    logger.warning("Candidate store operation failed: %s: %s", type(exc).__name__, exc)
     return fallback
 
 
@@ -335,8 +335,7 @@ def accept_candidate(
     try:
         return candidate_service.accept_candidate(uid, candidate_id, account_generation=account_generation)
     except TaskLinkValidationError as exc:
-        detail = _sanitize_candidate_error(exc, 'Invalid candidate task link parameters')
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail) from exc
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
     except candidates_db.CandidateStoreError as exc:
         _raise_store_error(exc)
 
