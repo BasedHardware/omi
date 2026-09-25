@@ -214,7 +214,7 @@ class DeviceService {
 
         final hasConnected = _connections.values.any((c) => c.status == DeviceConnectionState.connected);
         if (!hasConnected && storedDevices.isNotEmpty && _status == DeviceServiceStatus.ready) {
-          Logger.debug('Watchdog: No connected devices, running discovery...');
+          Logger.debug('Watchdog: No connected devices, running discovery…');
           await discover();
         }
       } catch (e) {
