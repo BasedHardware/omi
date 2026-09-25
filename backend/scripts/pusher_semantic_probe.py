@@ -61,6 +61,10 @@ DISCARD_KEEP_AUDIO_PASSES = 8
 # inter-arrival gap (above the 2 s anchor threshold) between them; the socket
 # stays open through finalization exactly like the base probe. This scenario
 # must only run on dev with an isolated test identity.
+# When that identity has a voiceprint (enrolled from the fixture voice), the
+# scenario additionally asserts live speaker identity on the same capture
+# clock — the owner is is_user in BOTH the WebSocket output and the persisted
+# conversation; without a voiceprint the check reports NOT_RUN, never PASS.
 ALIGNMENT_DELIVERED_SILENCE_SECONDS = 5.0
 ALIGNMENT_INTERARRIVAL_GAP_SECONDS = 4.0
 ALIGNMENT_COVERAGE_TOLERANCE_SECONDS = 0.001
@@ -445,6 +449,10 @@ async def run_alignment_scenario(args: argparse.Namespace) -> tuple[dict[str, An
     stack regression; this deployed check asserts the v2 marker, span coverage
     of the transcript windows, the clip endpoint's audio, and — as an
     auxiliary ASR check only — that the clip transcribes the fixture phrase.
+    When the identity has a voiceprint (enrolled from the fixture voice) it
+    also asserts live speaker identity on the same capture clock: every
+    persisted segment is_user and at least one live-delivered WebSocket
+    segment already is_user (the failover acceptance's deployed mirror).
     Receipts carry no transcript, audio bytes, token, or endpoint data.
     """
     started_at = _now()
@@ -453,6 +461,8 @@ async def run_alignment_scenario(args: argparse.Namespace) -> tuple[dict[str, An
     clip_ok: bool | None = None
     clip_phrase_match: bool | None = None
     marker_ok: bool | None = None
+    speaker_identity_ok: bool | None = None
+    live_owner_segment: bool | None = None
     try:
         token = _read_token(args.bearer_token_file)
         fixture = load_fixture()
@@ -484,7 +494,7 @@ async def run_alignment_scenario(args: argparse.Namespace) -> tuple[dict[str, An
             )
         finally:
             hold.set()
-        await listen_task
+        live_segments = await listen_task
         quoted = urllib.parse.quote(conversation_id, safe="")
         status, conversation = await asyncio.to_thread(_http_json_method, f"{base}/v1/conversations/{quoted}", token)
         if status != 200 or not conversation or conversation.get("id") != conversation_id:
@@ -503,6 +513,29 @@ async def run_alignment_scenario(args: argparse.Namespace) -> tuple[dict[str, An
         coverage_ok = bool(spans) and all(_alignment_covered(spans, start, end) for start, end in windows)
         if not coverage_ok:
             raise ProbeError("span_coverage")
+        # Live speaker identity rides the same capture clock: when the probe
+        # identity has a voiceprint (enrolled from the fixture voice), every
+        # persisted segment must be is_user and at least one live-delivered
+        # WebSocket segment must already carry it. Without a voiceprint the
+        # check is NOT_RUN, never PASS.
+        status, profile_state = await asyncio.to_thread(_http_json_method, f"{base}/v3/speech-profile", token)
+        if status != 200:
+            raise ProbeError("speech_profile_read")
+        if bool(profile_state and profile_state.get("has_profile")):
+            persisted_owner = [
+                item
+                for item in conversation.get("transcript_segments") or []
+                if isinstance(item, dict) and item.get("text")
+            ]
+            speaker_identity_ok = bool(persisted_owner) and all(bool(item.get("is_user")) for item in persisted_owner)
+            if not speaker_identity_ok:
+                raise ProbeError("speaker_identity")
+            live_owner_segment = any(isinstance(item, dict) and item.get("is_user") for item in live_segments)
+            if not live_owner_segment:
+                raise ProbeError("live_speaker_identity")
+        else:
+            speaker_identity_ok = None
+            live_owner_segment = None
         status, urls_payload = await asyncio.to_thread(_http_json_method, f"{base}/v1/sync/audio/{quoted}/urls", token)
         if status != 200 or not isinstance(urls_payload, dict):
             raise ProbeError("audio_urls_read")
@@ -557,6 +590,8 @@ async def run_alignment_scenario(args: argparse.Namespace) -> tuple[dict[str, An
             coverage_ok=coverage_ok,
             clip_ok=clip_ok,
             clip_phrase_match=clip_phrase_match,
+            speaker_identity_ok=speaker_identity_ok,
+            live_owner_segment=live_owner_segment,
         ),
         passed,
     )
@@ -571,8 +606,15 @@ def _alignment_receipt(
     coverage_ok: bool | None = None,
     clip_ok: bool | None = None,
     clip_phrase_match: bool | None = None,
+    speaker_identity_ok: bool | None = None,
+    live_owner_segment: bool | None = None,
 ) -> dict[str, Any]:
-    """Receipt without transcript, audio, token, or endpoint data."""
+    """Receipt without transcript, audio, token, or endpoint data.
+
+    speaker_identity/live_owner_segment are null when the probe identity has
+    no voiceprint: that check is NOT_RUN, never PASS (same convention as the
+    private-cloud enrollment gate).
+    """
     receipt: dict[str, Any] = {
         "schema_version": 1,
         "scenario": "audio_timeline_alignment",
@@ -583,6 +625,8 @@ def _alignment_receipt(
             "span_coverage": coverage_ok,
             "clip_available": clip_ok,
             "clip_phrase_match_auxiliary": clip_phrase_match,
+            "speaker_identity": speaker_identity_ok,
+            "live_owner_segment": live_owner_segment,
         },
         "synthetic_uid_class": SYNTHETIC_UID_CLASS,
     }

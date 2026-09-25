@@ -460,7 +460,10 @@ class TranscriptProcessor:
                 )
             await self._translate(updated, conversation.id, removed)
             await self._speaker_detection(
-                updated, self.host.state.first_audio_byte_timestamp - offset, capture_windows=capture_windows
+                updated,
+                self.host.state.first_audio_byte_timestamp - offset,
+                capture_windows=capture_windows,
+                queue_from_raw=raw_segments if capture_windows else None,
             )
         if self.host.speakers.tasks:
             try:
@@ -661,6 +664,7 @@ class TranscriptProcessor:
         segments: List[TranscriptSegment],
         abs_base: float,
         capture_windows: Optional[Dict[str, Tuple[float, float]]] = None,
+        queue_from_raw: Optional[List[Dict[str, Any]]] = None,
     ) -> None:
         """Queue speaker embedding work at absolute wall seconds.
 
@@ -674,6 +678,12 @@ class TranscriptProcessor:
         server-STT session, flag or not), the clip window is that position,
         which stays correct across provider failovers whose timestamps restart
         at zero — the legacy first-audio + provider-time formula does not.
+
+        queue_from_raw queues embedding work from the provider's raw segments
+        instead of the post-merge ``segments``: the live merge re-labels a
+        merged turn with the absorbing id, whose window is not in this batch's
+        id-keyed map, while each raw segment keeps its own capture window (the
+        matcher's covered-audio subtraction dedupes overlapping re-sends).
         """
         speaker = self.host.speakers
         for segment in segments:
@@ -694,6 +704,8 @@ class TranscriptProcessor:
                     segment.speaker_identity_status = SpeakerIdentityStatus.not_user
                     self.host.emit_speaker_suggestion(segment.speaker_id, person_id, person_name, segment_id)
                 self.suggested_segments.add(segment_id)
+                continue
+            if queue_from_raw is not None:
                 continue
             if should_queue_speaker_embedding(
                 speaker_id=segment.speaker_id,
@@ -762,6 +774,52 @@ class TranscriptProcessor:
                 speaker.segment_assignments[segment_id] = person_id
                 self.host.state.speaker_map_dirty = True
                 self.suggested_segments.add(segment_id)
+        if queue_from_raw is not None:
+            self._queue_raw_detections(queue_from_raw, capture_windows, abs_base)
+
+    def _queue_raw_detections(
+        self,
+        raw_segments: List[Dict[str, Any]],
+        capture_windows: Optional[Dict[str, Tuple[float, float]]],
+        abs_base: float,
+    ) -> None:
+        speaker = self.host.speakers
+        for raw in raw_segments:
+            if should_skip_speaker_detection(
+                person_id=raw.get('person_id'),
+                is_user=raw.get('is_user', False),
+                segment_id=cast(str, raw.get('id')),
+                suggested_segments=cast(Sequence[str], self.suggested_segments),
+            ):
+                continue
+            speaker_id = raw.get('speaker_id')
+            if should_queue_speaker_embedding(
+                speaker_id=speaker_id,
+                person_id=raw.get('person_id'),
+                is_user=raw.get('is_user', False),
+                speaker_id_enabled=self.host.state.speaker_id_enabled,
+                has_person_embeddings=bool(speaker.person_embeddings),
+                speaker_already_mapped=speaker_id in speaker.speaker_to_person,
+            ):
+                window = (capture_windows or {}).get(cast(str, raw.get('id')))
+                if window is not None:
+                    abs_start, abs_end = window
+                else:
+                    abs_start = abs_base + float(raw['start'])
+                    abs_end = abs_base + float(raw['end'])
+                try:
+                    speaker.queue.put_nowait(
+                        {
+                            'id': raw.get('id'),
+                            'conversation_id': self.host.state.current_conversation_id,
+                            'speaker_id': speaker_id,
+                            'abs_start': abs_start,
+                            'abs_end': abs_end,
+                            'duration': float(raw['end']) - float(raw['start']),
+                        }
+                    )
+                except asyncio.QueueFull:
+                    pass
 
     async def flush_translations(self) -> None:
         if self.translation_coordinator:
