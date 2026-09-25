@@ -325,7 +325,7 @@ class ActionsHygieneTests(unittest.TestCase):
                 "jobs:\n"
                 "  d:\n"
                 "    steps:\n"
-                "      - uses: some-org/deploy@v1\n"
+                "      - uses: some-org/deploy@1111111111111111111111111111111111111111\n"
                 "        with:\n"
                 '          ref: "${{ inputs.release_tag }}"\n'
                 '      - run: echo "tag=${GITHUB_SHA::7}"\n',
@@ -446,6 +446,80 @@ class ActionsHygieneTests(unittest.TestCase):
                 "jobs:\n  t:\n    steps:\n      - uses: some-org/tool@master\n",
             )
             self.assertTrue(any("@master" in e for e in validate(root)))
+
+    def test_rejects_mutable_version_tag(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(
+                root,
+                ".github/workflows/bad.yml",
+                "jobs:\n  t:\n    steps:\n      - uses: pnpm/action-setup@v6\n",
+            )
+            errors = validate(root)
+            self.assertEqual(len(errors), 1)
+            self.assertIn("full commit SHA", errors[0])
+
+    def test_rejects_third_party_ref_without_version(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(
+                root,
+                ".github/workflows/bad.yml",
+                "jobs:\n  t:\n    steps:\n      - uses: some-org/tool\n",
+            )
+            self.assertTrue(any("full commit SHA" in e for e in validate(root)))
+
+    def test_rejects_run_sha_with_prefixed_input_ref(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(
+                root,
+                ".github/workflows/promote.yml",
+                "jobs:\n"
+                "  d:\n"
+                "    steps:\n"
+                "      - uses: actions/checkout@v7\n"
+                "        with:\n"
+                "          ref: refs/tags/${{ inputs.tag }}\n"
+                '      - run: echo "tag=${GITHUB_SHA::7}"\n',
+            )
+            errors = validate(root)
+            self.assertEqual(len(errors), 1)
+            self.assertIn("operator-selected", errors[0])
+
+    def test_rejects_run_sha_with_input_ref_inside_format_expression(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(
+                root,
+                ".github/workflows/promote.yml",
+                "jobs:\n"
+                "  d:\n"
+                "    steps:\n"
+                "      - uses: actions/checkout@v7\n"
+                "        with:\n"
+                "          ref: ${{ format('refs/tags/{0}', inputs.tag) }}\n"
+                '      - run: echo "tag=${{ github.sha }}"\n',
+            )
+            errors = validate(root)
+            self.assertEqual(len(errors), 1)
+            self.assertIn("operator-selected", errors[0])
+
+    def test_accepts_non_input_expression_ref(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            write(
+                root,
+                ".github/workflows/deploy.yml",
+                "jobs:\n"
+                "  d:\n"
+                "    steps:\n"
+                "      - uses: actions/checkout@v7\n"
+                "        with:\n"
+                "          ref: refs/heads/${{ github.head_ref }}\n"
+                '      - run: echo "tag=${GITHUB_SHA::7}"\n',
+            )
+            self.assertEqual(validate(root), [])
 
 
 if __name__ == "__main__":

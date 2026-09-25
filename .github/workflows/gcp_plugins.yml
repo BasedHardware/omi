@@ -67,7 +67,7 @@ jobs:
       - name: Google Auth (prod WIF)
         id: auth-wif
         if: github.event.inputs.environment == 'prod'
-        uses: google-github-actions/auth@v3
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
         with:
           workload_identity_provider: projects/208440318997/locations/global/workloadIdentityPools/omi-gha-deploy-prod/providers/github
           service_account: omi-ci-deployer-prod@based-hardware.iam.gserviceaccount.com
@@ -75,7 +75,7 @@ jobs:
       - name: Google Auth
         id: auth
         if: github.event.inputs.environment != 'prod'
-        uses: google-github-actions/auth@v3
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093
         with:
           # Development: GitHub WIF as the dev deployer, no JSON key (credential hygiene WS-D).
           workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-gha-deploy-dev/providers/github
@@ -98,7 +98,7 @@ jobs:
 
       - name: Deploy to Cloud Run
         id: deploy
-        uses: google-github-actions/deploy-cloudrun@v3
+        uses: google-github-actions/deploy-cloudrun@2028e2d7d30a78c6910e0632e48dd561b064884d
         with:
           service: ${{ env.SERVICE }}
           region: ${{ env.REGION }}

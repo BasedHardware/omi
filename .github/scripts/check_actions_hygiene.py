@@ -13,12 +13,16 @@ FLUTTER_CACHE_KEY_RE = re.compile(r"key:\s*.*flutter-buildrunner")
 SHA_REF_RE = re.compile(r"@[0-9a-f]{40}$")
 # `github.event.inputs.*` is the workflow_dispatch payload; `inputs.*` is the
 # same operator selection in workflow_dispatch/workflow_call context. Both name
-# a ref the operator chose, which is not what the run SHA describes.
+# a ref the operator chose, which is not what the run SHA describes. The value
+# may prefix the expression (`refs/tags/${{ inputs.tag }}`) or build it inside
+# `${{ format(...) }}`, so match `inputs` anywhere within the ref scalar.
 OPERATOR_REF_CHECKOUT_RE = re.compile(
-    r"ref:\s*(?:['\"]\s*)?(?:[|>][-+]?\s*)?(?:['\"]\s*)?\$\{\{\s*(?:github\.event\.)?inputs(?:\.|\[\s*['\"][^'\"]+['\"]\s*\])"
+    r"(?<![\w-])ref:\s*(?:['\"]\s*)?(?:[|>][-+]?\s*)?(?:['\"]\s*)?"
+    r"[^#\n]*?\$\{\{[^#]*?(?:github\.event\.)?inputs(?:\.|\[\s*['\"][^'\"]+['\"]\s*\])"
 )
 WORKFLOW_DISPATCH_REF_CHECKOUT_RE = re.compile(
-    r"ref:\s*(?:['\"]\s*)?(?:[|>][-+]?\s*)?(?:['\"]\s*)?\$\{\{\s*github\.event\.inputs(?:\.|\[\s*['\"][^'\"]+['\"]\s*\])"
+    r"(?<![\w-])ref:\s*(?:['\"]\s*)?(?:[|>][-+]?\s*)?(?:['\"]\s*)?"
+    r"[^#\n]*?\$\{\{[^#]*?github\.event\.inputs(?:\.|\[\s*['\"][^'\"]+['\"]\s*\])"
 )
 RUN_SHA_RE = re.compile(r"GITHUB_SHA|github\.sha")
 JOB_START_RE = re.compile(r"^ {2}[A-Za-z_][\w-]*:\s*(?:#.*)?$")
@@ -240,6 +244,7 @@ def validate(root: Path) -> list[str]:
                 )
 
         def check_uses(line_number: int, uses: str) -> None:
+            forbidden_matched = False
             for forbidden in FORBIDDEN_USES_SUBSTRINGS:
                 if forbidden in uses:
                     errors.append(
@@ -247,15 +252,20 @@ def validate(root: Path) -> list[str]:
                         f"{uses!r} is forbidden; pin a full commit SHA "
                         f"(matched {forbidden!r})"
                     )
+                    forbidden_matched = True
+            if forbidden_matched:
+                return
             if uses.startswith(("actions/", "./")):
                 return
-            if DOCKER_LATEST_RE.fullmatch(uses):
-                errors.append(f"{rel}:{line_number}: Docker action {uses!r} must use an immutable image digest")
+            if uses.startswith("docker://"):
+                if DOCKER_LATEST_RE.fullmatch(uses):
+                    errors.append(f"{rel}:{line_number}: Docker action {uses!r} must use an immutable image digest")
                 return
-            if uses.endswith(("@master", "@main")) and not SHA_REF_RE.search(uses):
+            if not SHA_REF_RE.search(uses):
                 errors.append(
-                    f"{rel}:{line_number}: third-party action {uses!r} must not "
-                    "track a moving branch; pin a full commit SHA"
+                    f"{rel}:{line_number}: third-party action {uses!r} must be "
+                    "pinned to a full commit SHA; version tags and branch names "
+                    "are mutable and can be retargeted by the action owner"
                 )
 
         for line_number, block in _property_blocks(lines, "uses"):
@@ -295,7 +305,10 @@ def validate(root: Path) -> list[str]:
                 )
 
             match = USES_RE.match(line)
-            if match:
+            # Folded scalars (`uses: >-`) are validated as joined blocks by the
+            # _property_blocks pass above; the raw line only carries the block
+            # indicator, not the ref.
+            if match and not match.group(1).startswith(("|", ">")):
                 check_uses(line_number, match.group(1))
 
     return errors

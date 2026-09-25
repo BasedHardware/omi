@@ -45,7 +45,7 @@ jobs:
         with:
           persist-credentials: false
       # The app is pnpm-managed (pnpm-lock.yaml, lockfileVersion 9).
-      - uses: pnpm/action-setup@v6
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86
         with:
           version: 10
       - uses: actions/setup-node@v7
@@ -75,7 +75,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@v6
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86
         with:
           version: 10
       - uses: actions/setup-node@v7
@@ -129,7 +129,7 @@ jobs:
       - uses: actions/checkout@v7
         with:
           persist-credentials: false
-      - uses: pnpm/action-setup@v6
+      - uses: pnpm/action-setup@0977fd99725f1db4007ccb2928dbb4e90d06cc86
         with:
           version: 10
       - uses: actions/setup-node@v7
