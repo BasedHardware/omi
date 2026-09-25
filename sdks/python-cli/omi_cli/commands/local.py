@@ -350,8 +350,14 @@ def _normalize_sql_result(result: Any) -> Any:
         return fallback
 
     columns = [part.strip() for part in header.split("|")] if "|" in header else [header.strip()]
+    # Ambiguous tables must not be silently reshaped: duplicate column names
+    # would collapse rows keyed by column, so treat the text as non-table.
+    if len(set(columns)) != len(columns):
+        return fallback
     rows = []
     for line in data_lines:
+        if line.startswith("Result truncated after "):
+            return fallback
         values = [part.strip() for part in line.split("|")] if "|" in line else [line.strip()]
         if len(values) != len(columns):
             return fallback

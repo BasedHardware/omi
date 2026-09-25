@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Patch flutter_foreground_task 10.0.0 to promote on a cold service start.
+"""Patch flutter_foreground_task 10.0.0 foreground start and stop races.
 
 The plugin reads preferences and builds its configurable notification before
 its first startForeground(). On a background cold start, that path can consume
@@ -7,8 +7,9 @@ the Android deadline or reject the location type. Promote with a static
 shortService notification in onCreate, before either preferences or Flutter
 work; then let the normal path change to location if it is permitted.
 
-The patch also keeps the round-1 stop-path guard. It is idempotent and upgrades
-the already-patched pub-cache plugin from round 1 before that module compiles.
+The patch also keeps the earlier stop-path guards and uses the last delivered
+start ID when stopping, so a newer pending start does not lose its service
+record. It upgrades already-patched pub-cache copies before compilation.
 """
 
 from __future__ import annotations
@@ -19,6 +20,15 @@ from pathlib import Path
 MARKER = "OMI_FGS_START_CONTRACT"
 EARLY_MARKER = "OMI_FGS_EARLY_PROMOTION"
 RESTART_MARKER = "OMI_FGS_RESTART_PROMOTION"
+STOP_ID_MARKER = "OMI_FGS_STOP_START_ID"
+
+START_ID_OLD = """    private var isTimeout: Boolean = false
+"""
+
+START_ID_NEW = """    private var isTimeout: Boolean = false
+    // OMI_FGS_STOP_START_ID: preserve a newer start while an older one stops.
+    private var lastDeliveredStartId: Int = 0
+"""
 
 CREATE_OLD = """    override fun onCreate() {
         super.onCreate()
@@ -39,6 +49,14 @@ START_COMMAND_OLD = """    override fun onStartCommand(intent: Intent?, flags: I
 """
 
 START_COMMAND_NEW = """    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        // OMI_FGS_RESTART_PROMOTION: startForegroundService can target an
+        // existing instance, so onCreate will not run for this deadline.
+        promoteColdStart()
+        lastDeliveredStartId = startId
+        isTimeout = false
+"""
+
+START_COMMAND_ROUND3 = """    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         // OMI_FGS_RESTART_PROMOTION: startForegroundService can target an
         // existing instance, so onCreate will not run for this deadline.
         promoteColdStart()
@@ -64,6 +82,21 @@ STOP_SERVICE_NEW = """    private fun stopForegroundService() {
         // queued start command runs. Promote before removing foreground state.
         promoteColdStart()
         RestartReceiver.cancelRestartAlarm(this)
+"""
+
+STOP_SELF_OLD = """        stopForeground(true)
+        stopSelf()
+
+        _isRunningServiceState.update { false }
+"""
+
+STOP_SELF_NEW = """        stopForeground(true)
+        // OMI_FGS_STOP_START_ID: an unconditional stopSelf() tears down the
+        // ServiceRecord even when startForegroundService has a newer pending
+        // command. Android can then time out that new foreground start.
+        stopSelf(lastDeliveredStartId)
+
+        _isRunningServiceState.update { false }
 """
 
 UPDATE_OLD = """                ForegroundServiceAction.API_UPDATE -> {
@@ -220,10 +253,20 @@ HELPERS = """
 
 
 def apply_patch(source: str) -> str:
+    if STOP_ID_MARKER in source:
+        if (source.count("private var lastDeliveredStartId: Int = 0") != 1
+                or source.count("stopSelf(lastDeliveredStartId)") != 1
+                or source.count("lastDeliveredStartId = startId") != 1):
+            raise SystemExit("round-4 foreground-service patch is incomplete")
+        return source
     if RESTART_MARKER in source:
         if source.count("private fun promoteColdStart()") != 1 or UPDATE_NEW not in source:
             raise SystemExit("round-3 foreground-service patch is incomplete")
-        return source
+        if source.count(START_ID_OLD) != 1 or source.count(START_COMMAND_ROUND3) != 1 or source.count(STOP_SELF_OLD) != 1:
+            raise SystemExit("round-3 start-id anchors missing or not unique")
+        return (source.replace(START_ID_OLD, START_ID_NEW, 1)
+                .replace(START_COMMAND_ROUND3, START_COMMAND_NEW, 1)
+                .replace(STOP_SELF_OLD, STOP_SELF_NEW, 1))
     if EARLY_MARKER not in source and source.count(CREATE_OLD) != 1:
         raise SystemExit("flutter_foreground_task onCreate block missing or not unique")
     patched = source
@@ -282,6 +325,9 @@ def apply_patch(source: str) -> str:
     if patched.count(UPDATE_OLD) != 1:
         raise SystemExit("flutter_foreground_task update anchor missing or not unique")
     patched = patched.replace(UPDATE_OLD, UPDATE_NEW, 1)
+    if patched.count(START_ID_OLD) != 1 or patched.count(STOP_SELF_OLD) != 1:
+        raise SystemExit("flutter_foreground_task start-id anchors missing or not unique")
+    patched = patched.replace(START_ID_OLD, START_ID_NEW, 1).replace(STOP_SELF_OLD, STOP_SELF_NEW, 1)
     return patched
 
 

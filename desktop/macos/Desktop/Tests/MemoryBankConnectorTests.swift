@@ -163,6 +163,77 @@ final class MemoryBankConnectorTests: XCTestCase {
     XCTAssertEqual(try String(contentsOf: skillURL, encoding: .utf8), "user-authored")
   }
 
+  func testCodexConnectRewritesLegacySSEEntry() throws {
+    MemoryBankConnector.codexCLIPathOverrideForTesting = try writeFakeCodexCLI().path
+    let codex = tempHome.appendingPathComponent(".codex", isDirectory: true)
+    try FileManager.default.createDirectory(at: codex, withIntermediateDirectories: true)
+    try """
+    [mcp_servers.omi-memory]
+    command = "npx"
+    args = ["-y", "mcp-remote", "\(MemoryExportDestination.mcpLegacyServerURL)", "--header", "Authorization: Bearer test-key"]
+    """.write(to: codex.appendingPathComponent("config.toml"), atomically: true, encoding: .utf8)
+
+    let message = try MemoryBankConnector.connect(.codex, key: "test-key")
+
+    let content = try String(
+      contentsOf: codex.appendingPathComponent("config.toml"), encoding: .utf8)
+    XCTAssertEqual(message, "Codex is now connected.")
+    XCTAssertTrue(content.contains("\(MemoryExportDestination.mcpServerURL)\""))
+    XCTAssertFalse(content.contains("/v1/mcp/sse"))
+    XCTAssertTrue(MemoryExportConnectionDetector.hasExistingConnection(for: .codex, matchingKey: "test-key"))
+  }
+
+  func testCodexConnectRestoresOriginalConfigWhenAddFailsAfterRemove() throws {
+    MemoryBankConnector.codexCLIPathOverrideForTesting = try writeFakeCodexCLI().path
+    let codex = tempHome.appendingPathComponent(".codex", isDirectory: true)
+    try FileManager.default.createDirectory(at: codex, withIntermediateDirectories: true)
+    let config = codex.appendingPathComponent("config.toml")
+    let original = """
+      [mcp_servers.omi-memory]
+      command = "npx"
+      args = ["-y", "mcp-remote", "\(MemoryExportDestination.mcpLegacyServerURL)", "--header", "Authorization: Bearer test-key"]
+
+      [other]
+      keep = "me"
+      """
+    try original.write(to: config, atomically: true, encoding: .utf8)
+    try FileManager.default.setAttributes([.posixPermissions: 0o600], ofItemAtPath: config.path)
+    setenv("CODEX_FAKE_FAIL_ADD", "1", 1)
+    defer { unsetenv("CODEX_FAKE_FAIL_ADD") }
+
+    XCTAssertThrowsError(try MemoryBankConnector.connect(.codex, key: "test-key")) { error in
+      XCTAssertTrue(error.localizedDescription.contains("rejected the connection update"))
+      XCTAssertFalse(error.localizedDescription.contains("test-key"), error.localizedDescription)
+    }
+
+    XCTAssertEqual(try String(contentsOf: config, encoding: .utf8), original)
+    let mode = try XCTUnwrap(
+      (try FileManager.default.attributesOfItem(atPath: config.path))[.posixPermissions]
+        as? NSNumber)
+    XCTAssertEqual(mode.intValue, 0o600)
+    XCTAssertEqual(
+      MemoryExportConnectionDetector.localMCPConnectionState(for: .codex, matchingKey: "test-key"),
+      .needsUpdate)
+  }
+
+  func testCodexConnectFailsClosedOnUnreadableConfig() throws {
+    MemoryBankConnector.codexCLIPathOverrideForTesting = try writeFakeCodexCLI().path
+    let codex = tempHome.appendingPathComponent(".codex", isDirectory: true)
+    try FileManager.default.createDirectory(at: codex, withIntermediateDirectories: true)
+    let config = codex.appendingPathComponent("config.toml")
+    let missingTarget = codex.appendingPathComponent("missing-target")
+    try FileManager.default.createSymbolicLink(atPath: config.path, withDestinationPath: missingTarget.path)
+
+    XCTAssertThrowsError(try MemoryBankConnector.connect(.codex, key: "test-key")) { error in
+      XCTAssertTrue(error.localizedDescription.contains("could not be read"))
+    }
+
+    XCTAssertEqual(
+      try FileManager.default.destinationOfSymbolicLink(atPath: config.path),
+      missingTarget.path)
+    XCTAssertFalse(FileManager.default.fileExists(atPath: missingTarget.path))
+  }
+
   func testCodexConnectRequiresCLI() throws {
     XCTAssertThrowsError(try MemoryBankConnector.connect(.codex, key: "test-key")) { error in
       XCTAssertTrue(error.localizedDescription.contains("Codex is not available"))
@@ -639,7 +710,19 @@ final class MemoryBankConnectorTests: XCTestCase {
     let cli = tempHome.appendingPathComponent("codex")
     try """
     #!/bin/sh
+    if [ "$1" = "mcp" ] && [ "$2" = "remove" ] && [ "$3" = "omi-memory" ]; then
+      if [ -f "$CODEX_HOME/config.toml" ]; then
+        awk '/^\\[mcp_servers\\.omi-memory\\]/{skip=1; next} /^\\[/{skip=0} !skip' \
+          "$CODEX_HOME/config.toml" > "$CODEX_HOME/config.toml.tmp"
+        mv "$CODEX_HOME/config.toml.tmp" "$CODEX_HOME/config.toml"
+      fi
+      exit 0
+    fi
     if [ "$1" = "mcp" ] && [ "$2" = "add" ] && [ "$3" = "omi-memory" ]; then
+      if [ -n "$CODEX_FAKE_FAIL_ADD" ]; then
+        echo "simulated add failure" >&2
+        exit 1
+      fi
       mkdir -p "$CODEX_HOME"
       cat > "$CODEX_HOME/config.toml" <<EOF
     [mcp_servers.omi-memory]
