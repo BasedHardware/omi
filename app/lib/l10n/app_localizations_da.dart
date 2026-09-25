@@ -11216,4 +11216,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get openCall => 'Åbn opkald';
+
+  @override
+  String get captureRecoveryBanner => 'Lyden fra vedhænget når ikke frem til appen — tryk for at reparere';
 }

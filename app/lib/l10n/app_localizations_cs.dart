@@ -11227,4 +11227,7 @@ class AppLocalizationsCs extends AppLocalizations {
 
   @override
   String get openCall => 'Otevřít hovor';
+
+  @override
+  String get captureRecoveryBanner => 'Zvuk přívěsku se do aplikace nedostává — opravte klepnutím';
 }

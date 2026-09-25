@@ -11239,4 +11239,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get openCall => 'कॉल उघडा';
+
+  @override
+  String get captureRecoveryBanner => 'पेंडंटचे ऑडिओ ॲपपर्यंत पोहोचत नाही — दुरुस्त करण्यासाठी टॅप करा';
 }

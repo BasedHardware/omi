@@ -11045,4 +11045,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get openCall => '通話を開く';
+
+  @override
+  String get captureRecoveryBanner => 'ペンダントの音声がアプリに届いていません — タップして修復';
 }

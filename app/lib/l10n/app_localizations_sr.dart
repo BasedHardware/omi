@@ -11245,4 +11245,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get openCall => 'Отвори позив';
+
+  @override
+  String get captureRecoveryBanner => 'Звук привеска не стиже до апликације — додирните за поправку';
 }

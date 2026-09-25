@@ -1,0 +1,3 @@
+{
+  "change": "Fixed macOS dev app launches that could stay stuck without a window after resetting a profile"
+}

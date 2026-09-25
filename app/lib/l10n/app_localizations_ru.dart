@@ -11267,4 +11267,7 @@ class AppLocalizationsRu extends AppLocalizations {
 
   @override
   String get openCall => 'Открыть звонок';
+
+  @override
+  String get captureRecoveryBanner => 'Звук кулона не доходит до приложения — нажмите, чтобы исправить';
 }

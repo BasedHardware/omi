@@ -3545,5 +3545,6 @@
     "keepUsingPendant": "펜던트 계속 사용",
     "recordWith": "녹음 방법",
     "moreWaysToRecord": "다른 녹음 방법",
-    "openCall": "통화 열기"
+    "openCall": "통화 열기",
+    "captureRecoveryBanner": "펜던트 오디오가 앱에 도달하지 않습니다 — 탭하여 복구"
 }
