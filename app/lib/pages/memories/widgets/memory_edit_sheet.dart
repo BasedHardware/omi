@@ -1,32 +1,50 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/providers/memories_provider.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/widgets/extensions/string.dart';
-import 'delete_confirmation.dart';
+import 'memory_delete_undo.dart';
 
-void showMemoryQuickEditSheet(
+/// Opens [memory]: the edit sheet when it can be edited, otherwise the same sheet read-only (full
+/// text, nothing to save). Pass [readOnly] to open an editable memory for reading only (the
+/// long-press menu's Open).
+Future<void> showMemoryQuickEditSheet(
   BuildContext context,
   Memory memory,
   MemoriesProvider provider, {
   Function(BuildContext, Memory, MemoriesProvider)? onDelete,
+  bool readOnly = false,
 }) {
-  showModalBottomSheet(
+  return showOmiEditSheet<void>(
     context: context,
-    backgroundColor: Colors.transparent,
-    isScrollControlled: true,
-    builder: (context) => MemoryEditSheet(memory: memory, provider: provider, onDelete: onDelete),
+    builder: (context) => MemoryEditSheet(
+      memory: memory,
+      provider: provider,
+      onDelete: onDelete,
+      readOnly: readOnly || !memoryIsEditable(memory),
+    ),
   );
 }
 
+/// Views or edits one memory. Editing has explicit Cancel and Save; leaving with unsaved text asks
+/// first (the [OmiEditSheet] guard). Delete is immediate with an Undo toast.
 class MemoryEditSheet extends StatefulWidget {
   final Memory memory;
   final MemoriesProvider provider;
+
+  /// Called after the sheet deleted the memory and closed.
   final Function(BuildContext, Memory, MemoriesProvider)? onDelete;
 
-  const MemoryEditSheet({super.key, required this.memory, required this.provider, this.onDelete});
+  /// Show the memory without editing controls. Forced for memories that cannot be edited.
+  final bool readOnly;
+
+  const MemoryEditSheet(
+      {super.key, required this.memory, required this.provider, this.onDelete, this.readOnly = false});
 
   @override
   State<MemoryEditSheet> createState() => _MemoryEditSheetState();
@@ -34,15 +52,21 @@ class MemoryEditSheet extends StatefulWidget {
 
 class _MemoryEditSheetState extends State<MemoryEditSheet> {
   late final TextEditingController contentController;
+  late final String _originalContent;
   bool _isSaving = false;
   bool _saveFailed = false;
   late bool _isBaseline;
+
+  bool get _readOnly => widget.readOnly || !memoryIsEditable(widget.memory);
+
+  bool get _isDirty => !_readOnly && contentController.text.trim() != _originalContent.trim();
 
   @override
   void initState() {
     super.initState();
     _isBaseline = widget.memory.isBaseline;
-    contentController = TextEditingController(text: widget.memory.content.decodeString);
+    _originalContent = widget.memory.content.decodeString;
+    contentController = TextEditingController(text: _originalContent);
     contentController.selection = TextSelection.fromPosition(TextPosition(offset: contentController.text.length));
   }
 
@@ -54,112 +78,76 @@ class _MemoryEditSheetState extends State<MemoryEditSheet> {
 
   Future<void> _toggleBaseline() async {
     final newState = !_isBaseline;
-    setState(() {
-      _isBaseline = newState;
-    });
+    setState(() => _isBaseline = newState);
 
     final success = await widget.provider.toggleMemoryBaseline(widget.memory, newState);
 
     if (!success && mounted) {
-      setState(() {
-        _isBaseline = !newState;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Failed to update baseline status')));
+      setState(() => _isBaseline = !newState);
+      OmiFeedback.error(context, context.l10n.failedToUpdateBaselineStatus);
     }
+  }
+
+  void _delete() {
+    unawaited(deleteMemoryWithUndo(context, widget.provider, widget.memory));
+    Navigator.pop(context);
+    widget.onDelete?.call(context, widget.memory, widget.provider);
   }
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-      child: Container(
-        decoration: const BoxDecoration(
-          color: Color(0xFF1F1F25),
-          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+    final l10n = context.l10n;
+    final memory = widget.memory;
+    return OmiEditSheet(
+      title: _readOnly ? l10n.memoryDetailsTitle : l10n.editMemoryTitle,
+      isDirty: _isDirty,
+      enabled: !_isSaving,
+      actions: [
+        if (!_readOnly) ...[
+          OmiIconButton(
+            icon: Icon(_isBaseline ? Icons.flag : Icons.flag_outlined),
+            label: _isBaseline ? l10n.unpinAsBaseline : l10n.pinAsBaseline,
+            onPressed: _isSaving ? null : _toggleBaseline,
+          ),
+          OmiIconButton(
+            icon: const Icon(Icons.delete_outline),
+            label: l10n.deleteMemory,
+            isDestructive: true,
+            onPressed: _isSaving ? null : _delete,
+          ),
+        ],
+      ],
+      child: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            Wrap(
+              spacing: OmiSpacing.xs,
+              runSpacing: OmiSpacing.xs,
               children: [
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: 0.1),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(Icons.label_outline, size: 14, color: Colors.white),
-                          const SizedBox(width: 4),
-                          Text(
-                            widget.memory.category.toString().split('.').last,
-                            style: const TextStyle(color: Colors.white, fontSize: 14),
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (_isBaseline) ...[
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                        decoration: BoxDecoration(
-                          color: Colors.blue.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(color: Colors.blue.withValues(alpha: 0.5), width: 1),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            const Icon(Icons.flag, size: 14, color: Colors.blue),
-                            const SizedBox(width: 4),
-                            Text(
-                              context.l10n.baselineMemory,
-                              style: const TextStyle(color: Colors.blue, fontSize: 14, fontWeight: FontWeight.w500),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ],
-                ),
-                Row(
-                  children: [
-                    IconButton(
-                      icon: Icon(
-                        _isBaseline ? Icons.flag : Icons.flag_outlined,
-                        color: _isBaseline ? Colors.blue : Colors.white,
-                      ),
-                      onPressed: _toggleBaseline,
-                      tooltip: _isBaseline ? context.l10n.unpinAsBaseline : context.l10n.pinAsBaseline,
-                    ),
-                    IconButton(
-                      icon: const Icon(Icons.delete_outline, color: Colors.red),
-                      onPressed: () => _showDeleteConfirmation(context),
-                    ),
-                  ],
-                ),
+                _MemoryChip(icon: Icons.label_outline, label: memory.category.toString().split('.').last),
+                if (_isBaseline) _MemoryChip(icon: Icons.flag, label: l10n.baselineMemory),
               ],
             ),
-            const SizedBox(height: 12),
-            ConstrainedBox(
-              constraints: const BoxConstraints(maxHeight: 250),
-              child: SingleChildScrollView(
+            const SizedBox(height: OmiSpacing.sm),
+            if (_readOnly)
+              SelectableText(memory.content.decodeString, style: OmiType.callout.copyWith(height: 1.4))
+            else
+              ConstrainedBox(
+                constraints: const BoxConstraints(maxHeight: 250),
                 child: TextField(
+                  key: const ValueKey('memory_edit_field'),
                   controller: contentController,
+                  enabled: !_isSaving,
+                  onChanged: (_) => setState(() {}),
                   autofocus: true,
                   maxLines: null,
                   minLines: 3,
                   textInputAction: TextInputAction.newline,
                   keyboardType: TextInputType.multiline,
-                  style: const TextStyle(color: Colors.white, fontSize: 16, height: 1.4),
+                  style: OmiType.callout.copyWith(height: 1.4),
+                  cursorColor: OmiColors.accent,
                   decoration: const InputDecoration(
                     border: InputBorder.none,
                     contentPadding: EdgeInsets.zero,
@@ -167,43 +155,57 @@ class _MemoryEditSheetState extends State<MemoryEditSheet> {
                   ),
                 ),
               ),
-            ),
-            const SizedBox(height: 24),
-            if (_saveFailed) ...[
-              const Text(
-                'Failed to save. Please check your connection.',
-                style: TextStyle(color: Colors.redAccent, fontSize: 13),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 8),
+            if (memory.ledgerSlot != null && memory.ledgerSlot!.trim().isNotEmpty) ...[
+              const SizedBox(height: OmiSpacing.xs),
+              Text(memory.ledgerSlot!, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
             ],
-            SizedBox(
-              width: double.infinity,
-              child: ElevatedButton(
-                onPressed: _isSaving ? null : _handleSave,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: _saveFailed ? Colors.orange : Colors.deepPurpleAccent,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  disabledBackgroundColor: Colors.deepPurpleAccent.withValues(alpha: 0.5),
-                  disabledForegroundColor: Colors.white.withValues(alpha: 0.7),
-                ),
-                child: _isSaving
-                    ? const SizedBox(
-                        height: 20,
-                        width: 20,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                        ),
-                      )
-                    : Text(
-                        _saveFailed ? 'Retry' : 'Save Memory',
-                        style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-                      ),
+            // The list clips playbook bodies at three lines; here they are shown in full.
+            if (memory.isLedgerPlaybook && (memory.ledgerBody ?? '').trim().isNotEmpty) ...[
+              const SizedBox(height: OmiSpacing.sm),
+              SelectableText(
+                memory.ledgerBody!.trim(),
+                style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
               ),
-            ),
+            ],
+            if (_readOnly && !memory.isLocked && !memoryIsEditable(memory)) ...[
+              const SizedBox(height: OmiSpacing.md),
+              Text(l10n.memoryReadOnlyHint, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
+            ],
+            if (!_readOnly) ...[
+              const SizedBox(height: OmiSpacing.lg),
+              if (_saveFailed) ...[
+                Semantics(
+                  liveRegion: true,
+                  child: Text(
+                    l10n.failedToSaveMemory,
+                    style: OmiType.footnote.copyWith(color: OmiColors.danger),
+                    textAlign: TextAlign.center,
+                  ),
+                ),
+                const SizedBox(height: OmiSpacing.xs),
+              ],
+              Row(
+                children: [
+                  Expanded(
+                    child: OmiButton.secondary(
+                      label: l10n.cancel,
+                      expand: true,
+                      onPressed: _isSaving ? null : () => Navigator.pop(context),
+                    ),
+                  ),
+                  const SizedBox(width: OmiSpacing.sm),
+                  Expanded(
+                    child: OmiButton(
+                      key: const ValueKey('memory_edit_save'),
+                      label: _saveFailed ? l10n.tryAgain : l10n.save,
+                      expand: true,
+                      isLoading: _isSaving,
+                      onPressed: contentController.text.trim().isEmpty ? null : _handleSave,
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       ),
@@ -211,13 +213,9 @@ class _MemoryEditSheetState extends State<MemoryEditSheet> {
   }
 
   Future<void> _handleSave() async {
-    if (contentController.text.trim().isEmpty) return;
-    if (widget.memory.isKnowledgeLedger &&
-        (widget.memory.deleted ||
-            widget.memory.invalidAt != null ||
-            (widget.memory.supersededBy ?? '').trim().isNotEmpty ||
-            widget.memory.ledgerKind != KnowledgeLedgerKind.fact ||
-            widget.memory.isLocked)) {
+    if (_isSaving || contentController.text.trim().isEmpty || _readOnly) return;
+    if (!_isDirty) {
+      Navigator.pop(context, true);
       return;
     }
 
@@ -227,9 +225,8 @@ class _MemoryEditSheetState extends State<MemoryEditSheet> {
     });
 
     bool success;
-
     try {
-      success = await widget.provider.editMemory(widget.memory, contentController.text, widget.memory.category);
+      success = await widget.provider.editMemory(widget.memory, contentController.text.trim(), widget.memory.category);
     } catch (e) {
       success = false;
       Logger.debug('Error saving memory: $e');
@@ -243,20 +240,32 @@ class _MemoryEditSheetState extends State<MemoryEditSheet> {
     });
 
     if (success) {
-      Navigator.pop(context);
+      OmiHaptics.light();
+      OmiFeedback.confirm(context, context.l10n.saved);
+      Navigator.pop(context, true);
     }
   }
+}
 
-  Future<void> _showDeleteConfirmation(BuildContext context) async {
-    final shouldDelete = await DeleteConfirmation.show(context);
-    if (shouldDelete) {
-      widget.provider.deleteMemory(widget.memory);
-      if (context.mounted) {
-        Navigator.pop(context); // Close edit sheet
-        if (widget.onDelete != null) {
-          widget.onDelete!(context, widget.memory, widget.provider);
-        }
-      }
-    }
+class _MemoryChip extends StatelessWidget {
+  const _MemoryChip({required this.icon, required this.label});
+
+  final IconData icon;
+  final String label;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: 6),
+      decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.pillAll),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 14, color: OmiColors.textSecondary),
+          const SizedBox(width: OmiSpacing.xxs),
+          Text(label, style: OmiType.footnote),
+        ],
+      ),
+    );
   }
 }

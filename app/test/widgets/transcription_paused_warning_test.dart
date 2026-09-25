@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -9,6 +8,7 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -109,12 +109,15 @@ void main() {
       expect(captureProvider.recordingState, RecordingState.record);
       expect(captureProvider.terminalTranscriptionFailure?.status, 'stt_failed');
       final context = tester.element(find.byType(ConversationCaptureWidget));
-      expect(find.text(AppLocalizations.of(context).transcriptionUnavailable), findsWidgets);
+      // The compact card carries the short "saving on device" variant; the full
+      // recording-continues sentence belongs to the capturing page.
+      expect(find.text(AppLocalizations.of(context).transcriptionUnavailableSavingOnDevice), findsWidgets);
+      expect(find.text(AppLocalizations.of(context).transcriptionUnavailableRecordingContinues), findsNothing);
 
       captureProvider.onMessageEventReceived(MessageServiceStatusEvent(status: 'ready'));
       await tester.pump();
 
-      expect(find.text(AppLocalizations.of(context).transcriptionUnavailable), findsNothing);
+      expect(find.text(AppLocalizations.of(context).transcriptionUnavailableSavingOnDevice), findsNothing);
       expect(find.text(AppLocalizations.of(context).listening), findsWidgets);
     });
 
@@ -134,22 +137,20 @@ void main() {
 
       expect(find.text(pausedText), findsWidgets);
       expect(find.text(listeningText), findsNothing);
-      // Phone-mic paused affordance: orange status dot + play (resume) control.
+      // Paused affordance: the warning (amber) status dot. The OS owns an audio interruption and
+      // resumes capture itself, so the card offers no Pause/Resume control for it.
       expect(
         find.byWidgetPredicate((w) {
           if (w is! Container) return false;
           final d = w.decoration;
           return d is BoxDecoration &&
-              d.color == const Color(0xFFFF9500) &&
+              d.color == OmiColors.warning &&
               d.shape == BoxShape.circle &&
-              w.constraints?.maxWidth == 6;
+              w.constraints?.maxWidth == 8;
         }),
         findsOneWidget,
       );
-      expect(
-        find.byWidgetPredicate((w) => w is FaIcon && w.icon?.codePoint == FontAwesomeIcons.play.codePoint),
-        findsOneWidget,
-      );
+      expect(find.byType(OmiIconButton), findsNothing);
     });
 
     testWidgets('shows Listening during phone mic recording when transcription is down', (tester) async {
@@ -214,24 +215,18 @@ void main() {
 
       final context = tester.element(find.byType(ConversationCaptureWidget));
       final listeningText = AppLocalizations.of(context).listening;
-      final mutedText = AppLocalizations.of(context).muted;
+      // Paused, not "Muted": one word for a pause on every source (the control is Pause/Resume).
+      final pausedText = AppLocalizations.of(context).paused;
 
       // Initially should show Listening
       expect(find.text(listeningText), findsWidgets);
 
-      // Simulate device pause: set isPaused and change to pause state
-      captureProvider.updateRecordingState(RecordingState.pause);
-      // isPaused is set via pauseDeviceRecording which needs BLE — set it directly
-      // by triggering the internal pause flow
-      try {
-        await captureProvider.pauseDeviceRecording();
-      } catch (_) {
-        // BLE operations fail in test — but isPaused flag is set before the throw
-      }
+      // Exercise the production mute path, including its durable preference write.
+      await tester.runAsync(() => captureProvider.pauseDeviceRecording());
       await tester.pump();
 
-      // Muted/Paused should override Listening for device recording
-      expect(find.text(mutedText), findsWidgets);
+      // Paused should override Listening for device recording
+      expect(find.text(pausedText), findsWidgets);
     });
   });
 }

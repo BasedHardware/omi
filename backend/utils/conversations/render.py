@@ -7,10 +7,12 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 import database.folders as folders_db
 import database.users as users_db
+from database.auth import get_user_name
 from models.other import Person
 
 from models.client_processing import PROJECTION_FAMILY_FIELDS
 from models.conversation import Conversation
+from utils.conversations.summary_selection import select_primary_summary
 
 logger = logging.getLogger(__name__)
 
@@ -66,8 +68,7 @@ def populate_speaker_names(uid: str, conversations: List[Dict[str, Any]]) -> Non
     Mutates conversation dicts in-place. Works with both single conversations
     (pass as [conv]) and lists.
     """
-    user_profile = users_db.get_user_profile(uid)
-    user_name = user_profile.get('name') or 'User'
+    user_name = get_user_name(uid, use_default=False) or 'User'
 
     all_person_ids: Set[str] = set()
     for conv in conversations:
@@ -242,14 +243,7 @@ def conversations_to_string(
 
         conversation_str += f"{str(conversation.structured.title).capitalize()}\n"
 
-        if (
-            conversation.apps_results
-            and len(conversation.apps_results) > 0
-            and conversation.apps_results[0].content.strip()
-        ):
-            conversation_str += f"{conversation.apps_results[0].content}\n"
-        else:
-            conversation_str += f"{str(conversation.structured.overview).capitalize()}\n"
+        conversation_str += f"{select_primary_summary(conversation).content}\n"
 
         # attendees
         if people_map:

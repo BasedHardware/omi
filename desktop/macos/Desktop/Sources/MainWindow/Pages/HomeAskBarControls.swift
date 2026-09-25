@@ -156,7 +156,7 @@ struct HomeAskBarConnectButton: View {
     }
     .buttonStyle(.plain)
     .onHover { isHovering = $0 }
-    .help("Connect data & use omi anywhere")
+    .help("Connect data & use Omi anywhere")
     .accessibilityLabel(isActive ? "Close connect" : "Connect")
   }
 }

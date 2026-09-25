@@ -50,7 +50,9 @@
 #                               Background/ssh session with no keychain prompt)
 #   OMI_E2E_POOL_AUTOMATION_BASE / _BACKEND_BASE / _PYTHON_BASE
 #                               port bases; slot N gets base+N (defaults 47700 / 10100 / 8300,
-#                               all outside the per-worktree ranges dev-instance.sh derives)
+#                               all outside the per-worktree ranges dev-instance.sh derives).
+#                               Prefix and bases are pinned together on first acquire;
+#                               later shells load them from the slot record.
 #   OMI_E2E_POOL_REQUIRED       comma list `check` insists on
 #                               (default microphone,screen_recording,accessibility)
 #   OMI_E2E_POOL_MANAGER_NAME   overrides the launchctl managername probe that
@@ -60,6 +62,15 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+POOL_PREFIX_EXPLICIT=0
+AUTOMATION_BASE_EXPLICIT=0
+BACKEND_BASE_EXPLICIT=0
+PYTHON_BASE_EXPLICIT=0
+[ "${OMI_E2E_POOL_PREFIX+x}" = x ] && POOL_PREFIX_EXPLICIT=1
+[ "${OMI_E2E_POOL_AUTOMATION_BASE+x}" = x ] && AUTOMATION_BASE_EXPLICIT=1
+[ "${OMI_E2E_POOL_BACKEND_BASE+x}" = x ] && BACKEND_BASE_EXPLICIT=1
+[ "${OMI_E2E_POOL_PYTHON_BASE+x}" = x ] && PYTHON_BASE_EXPLICIT=1
 
 POOL_SIZE="${OMI_E2E_POOL_SIZE:-3}"
 POOL_PREFIX="${OMI_E2E_POOL_PREFIX:-omi-e2e}"
@@ -72,6 +83,14 @@ PYTHON_BASE="${OMI_E2E_POOL_PYTHON_BASE:-8300}"
 REQUIRED_PERMISSIONS="${OMI_E2E_POOL_REQUIRED:-microphone,screen_recording,accessibility}"
 APPLICATIONS_DIR="${OMI_E2E_POOL_APPLICATIONS_DIR:-/Applications}"
 
+# Keep the caller's requested routing tuple separate from the active tuple.
+# Commands can inspect multiple slots, and each acquired slot owns the exact
+# bundle prefix and port bases it was created with.
+CALLER_POOL_PREFIX="$POOL_PREFIX"
+CALLER_AUTOMATION_BASE="$AUTOMATION_BASE"
+CALLER_BACKEND_BASE="$BACKEND_BASE"
+CALLER_PYTHON_BASE="$PYTHON_BASE"
+
 say() { printf '%s\n' "$*"; }
 die() { printf 'omi-e2e-pool: %s\n' "$*" >&2; exit 1; }
 now() { date +%s; }
@@ -79,22 +98,35 @@ now() { date +%s; }
 case "$POOL_SIZE" in
   ''|*[!0-9]*|0) die "OMI_E2E_POOL_SIZE must be a positive integer (got '$POOL_SIZE')" ;;
 esac
-case "$POOL_PREFIX" in
-  omi-*) ;;
-  *) die "OMI_E2E_POOL_PREFIX must start with omi- so run.sh accepts it as a named bundle (got '$POOL_PREFIX')" ;;
-esac
-
 # run.sh slugifies OMI_APP_NAME (lowercase, [a-z0-9-]) before handing the slug
 # to `verify`, so a prefix that would not survive the same transform can never
 # match a derived slug — the run.sh guard would silently pass every build.
 pool_prefix_slug() {
   printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | sed -E 's/[^a-z0-9]+/-/g; s/^-+//; s/-+$//; s/-+/-/g'
 }
-_pool_prefix_slug="$(pool_prefix_slug "$POOL_PREFIX")"
-if [ "$_pool_prefix_slug" != "$POOL_PREFIX" ]; then
-  die "OMI_E2E_POOL_PREFIX must already be in run.sh slug form (lowercase letters, digits, single hyphens; got '$POOL_PREFIX' -> '$_pool_prefix_slug')"
-fi
-unset _pool_prefix_slug
+
+validate_pool_prefix() {
+  local prefix="$1" slug
+  case "$prefix" in
+    omi-*) ;;
+    *) die "OMI_E2E_POOL_PREFIX must start with omi- so run.sh accepts it as a named bundle (got '$prefix')" ;;
+  esac
+  slug="$(pool_prefix_slug "$prefix")"
+  if [ "$slug" != "$prefix" ]; then
+    die "OMI_E2E_POOL_PREFIX must already be in run.sh slug form (lowercase letters, digits, single hyphens; got '$prefix' -> '$slug')"
+  fi
+}
+
+validate_port_base() {
+  case "$2" in
+    ''|*[!0-9]*) die "$1 must be a non-negative integer (got '$2')" ;;
+  esac
+}
+
+validate_pool_prefix "$POOL_PREFIX"
+validate_port_base OMI_E2E_POOL_AUTOMATION_BASE "$AUTOMATION_BASE"
+validate_port_base OMI_E2E_POOL_BACKEND_BASE "$BACKEND_BASE"
+validate_port_base OMI_E2E_POOL_PYTHON_BASE "$PYTHON_BASE"
 
 # ── slot naming ─────────────────────────────────────────────────────────────
 slot_name()      { printf '%s-%s' "$POOL_PREFIX" "$1"; }
@@ -115,6 +147,17 @@ slug_slot() {
   esac
   case "$n" in ''|*[!0-9]*) return 0 ;; esac
   printf '%s' "$((10#$n))"
+}
+
+# Match the bundle name a slot was actually acquired with before consulting
+# this shell's prefix. This keeps run.sh's guard effective in a clean shell.
+persisted_slug_slot() {
+  local slug="$1" n
+  for ((n = 1; n <= POOL_SIZE; n++)); do
+    read_slot_routing "$n" || continue
+    [ "$slug" = "$R_PREFIX-$n" ] && { printf '%s' "$n"; return 0; }
+  done
+  return 1
 }
 
 valid_slot() {
@@ -194,6 +237,102 @@ slot_config_set() {
 slot_identity() { slot_config_get "$1" identity "$DEFAULT_IDENTITY"; }
 slot_auth()     { slot_config_get "$1" auth shared; }
 
+# The routing tuple is one atomic record: a slot's bundle identity and three
+# service ports must always move together. Once acquired, later shells load
+# this record instead of re-deriving a different slot from their own defaults.
+slot_routing_file() { printf '%s/routing' "$(slot_dir "$1")"; }
+
+read_slot_routing() {
+  local file key value
+  file="$(slot_routing_file "$1")"
+  R_PREFIX="" R_AUTOMATION_BASE="" R_BACKEND_BASE="" R_PYTHON_BASE=""
+  [ -f "$file" ] || return 1
+  while IFS='=' read -r key value; do
+    case "$key" in
+      prefix) R_PREFIX="$value" ;;
+      automation_base) R_AUTOMATION_BASE="$value" ;;
+      backend_base) R_BACKEND_BASE="$value" ;;
+      python_base) R_PYTHON_BASE="$value" ;;
+    esac
+  done < "$file"
+  if [ -z "$R_PREFIX" ] || [ -z "$R_AUTOMATION_BASE" ] || [ -z "$R_BACKEND_BASE" ] || [ -z "$R_PYTHON_BASE" ]; then
+    die "slot $1 has an incomplete routing record at $file; repair or remove it before using the slot"
+  fi
+  validate_pool_prefix "$R_PREFIX"
+  validate_port_base automation_base "$R_AUTOMATION_BASE"
+  validate_port_base backend_base "$R_BACKEND_BASE"
+  validate_port_base python_base "$R_PYTHON_BASE"
+}
+
+write_slot_routing() {
+  local slot="$1" file
+  file="$(slot_routing_file "$slot")"
+  mkdir -p "$(slot_dir "$slot")"
+  {
+    printf 'prefix=%s\n' "$CALLER_POOL_PREFIX"
+    printf 'automation_base=%s\n' "$CALLER_AUTOMATION_BASE"
+    printf 'backend_base=%s\n' "$CALLER_BACKEND_BASE"
+    printf 'python_base=%s\n' "$CALLER_PYTHON_BASE"
+  } > "$file.tmp"
+  mv -f "$file.tmp" "$file"
+}
+
+restore_caller_routing() {
+  POOL_PREFIX="$CALLER_POOL_PREFIX"
+  AUTOMATION_BASE="$CALLER_AUTOMATION_BASE"
+  BACKEND_BASE="$CALLER_BACKEND_BASE"
+  PYTHON_BASE="$CALLER_PYTHON_BASE"
+}
+
+routing_conflict() {
+  local slot="$1" variable="$2" requested="$3" pinned="$4"
+  die "slot $slot routing is pinned to $variable='$pinned', but this shell requested '$requested'. Unset $variable or use the pinned value. To deliberately repin an unused slot, release it, remove $(slot_routing_file "$slot"), and provide the complete routing tuple on the next acquire."
+}
+
+slot_has_legacy_state() {
+  local dir
+  dir="$(slot_dir "$1")"
+  [ -f "$dir/identity" ] || [ -f "$dir/auth" ] || [ -f "$dir/lease" ]
+}
+
+missing_slot_routing() {
+  local slot="$1"
+  die "slot $slot has persisted identity/auth/lease state but no routing record. Refusing to guess its bundle or ports. Re-run acquire with OMI_E2E_POOL_PREFIX and all three OMI_E2E_POOL_*_BASE values set to the slot's existing tuple."
+}
+
+activate_slot_routing() {
+  local slot="$1"
+  restore_caller_routing
+  if ! read_slot_routing "$slot"; then
+    slot_has_legacy_state "$slot" && missing_slot_routing "$slot"
+    return 0
+  fi
+  [ "$POOL_PREFIX_EXPLICIT" = 0 ] || [ "$CALLER_POOL_PREFIX" = "$R_PREFIX" ] || \
+    routing_conflict "$slot" OMI_E2E_POOL_PREFIX "$CALLER_POOL_PREFIX" "$R_PREFIX"
+  [ "$AUTOMATION_BASE_EXPLICIT" = 0 ] || [ "$CALLER_AUTOMATION_BASE" = "$R_AUTOMATION_BASE" ] || \
+    routing_conflict "$slot" OMI_E2E_POOL_AUTOMATION_BASE "$CALLER_AUTOMATION_BASE" "$R_AUTOMATION_BASE"
+  [ "$BACKEND_BASE_EXPLICIT" = 0 ] || [ "$CALLER_BACKEND_BASE" = "$R_BACKEND_BASE" ] || \
+    routing_conflict "$slot" OMI_E2E_POOL_BACKEND_BASE "$CALLER_BACKEND_BASE" "$R_BACKEND_BASE"
+  [ "$PYTHON_BASE_EXPLICIT" = 0 ] || [ "$CALLER_PYTHON_BASE" = "$R_PYTHON_BASE" ] || \
+    routing_conflict "$slot" OMI_E2E_POOL_PYTHON_BASE "$CALLER_PYTHON_BASE" "$R_PYTHON_BASE"
+  POOL_PREFIX="$R_PREFIX"
+  AUTOMATION_BASE="$R_AUTOMATION_BASE"
+  BACKEND_BASE="$R_BACKEND_BASE"
+  PYTHON_BASE="$R_PYTHON_BASE"
+}
+
+pin_slot_routing() {
+  local slot="$1"
+  if [ ! -f "$(slot_routing_file "$slot")" ]; then
+    if slot_has_legacy_state "$slot" && { [ "$POOL_PREFIX_EXPLICIT" = 0 ] || [ "$AUTOMATION_BASE_EXPLICIT" = 0 ] || \
+      [ "$BACKEND_BASE_EXPLICIT" = 0 ] || [ "$PYTHON_BASE_EXPLICIT" = 0 ]; }; then
+      missing_slot_routing "$slot"
+    fi
+    write_slot_routing "$slot"
+  fi
+  activate_slot_routing "$slot"
+}
+
 # ── lease records ───────────────────────────────────────────────────────────
 # Format, one key=value per line: holder, worktree, pid, token, acquired, touched.
 read_lease() {
@@ -267,10 +406,32 @@ lease_defunct_reason() {
 # A lease belongs to a worktree. The current one is the git toplevel of the cwd,
 # or OMI_E2E_POOL_WORKTREE when a harness wants to be explicit.
 current_worktree() {
-  if [ -n "${OMI_E2E_POOL_WORKTREE:-}" ]; then
-    printf '%s' "$OMI_E2E_POOL_WORKTREE"; return 0
+  local wt
+  if [ -n "${OMI_E2E_POOL_WORKTREE:-}" ]; then wt="$OMI_E2E_POOL_WORKTREE"
+  else wt="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
   fi
-  git rev-parse --show-toplevel 2>/dev/null || pwd
+  canonical_worktree "$wt"
+}
+
+# Lease identity must be spelling-independent: a lease acquired through a
+# relative path or a symlink must still match the canonical toplevel the owner
+# resolves to later, or `release --slot` would refuse the actual owner. Resolve
+# symlinks when the path exists (physical identity, like git's toplevel); fall
+# back to an absolute non-symlinked spelling otherwise, so a dangling path
+# never errors.
+canonical_worktree() {
+  local wt
+  wt="$(cd -P "$1" 2>/dev/null && pwd)" && { printf '%s' "$wt"; return 0; }
+  python3 -c 'import os,sys; print(os.path.abspath(sys.argv[1]))' "$1"
+}
+
+# The caller's identity for every command: an explicit --worktree when given
+# (canonicalized, so the spelling used at acquire time does not matter later),
+# else the current worktree.
+caller_worktree() {
+  if [ -n "$ARG_WORKTREE" ]; then canonical_worktree "$ARG_WORKTREE"
+  else current_worktree
+  fi
 }
 
 random_token() {
@@ -344,7 +505,7 @@ resolve_slot_for_worktree() {
 # ── commands ────────────────────────────────────────────────────────────────
 cmd_acquire() {
   parse_common "$@"
-  local wt="${ARG_WORKTREE:-$(current_worktree)}"
+  local wt; wt="$(caller_worktree)"
   local holder="${ARG_HOLDER:-$(basename "$wt")}"
   case "${ARG_AUTH:-}" in
     ''|shared|isolated) ;;
@@ -376,6 +537,7 @@ cmd_acquire() {
       die "worktree $wt already holds slot $held; release it before taking slot $ARG_SLOT"
     fi
     read_lease "$held"
+    pin_slot_routing "$held"
     [ -n "$ARG_PID" ] && L_PID="$ARG_PID"
     [ -n "$auth" ] && slot_config_set "$held" auth "$auth"
     L_TOUCHED="$(now)"
@@ -405,6 +567,7 @@ cmd_acquire() {
       fi
       [ "$ARG_QUIET" = 1 ] || say "omi-e2e-pool: reclaiming slot $n from '$L_HOLDER' — $reason"
     fi
+    pin_slot_routing "$n"
     if [ ! -f "$(slot_dir "$n")/identity" ]; then
       slot_config_set "$n" identity "$DEFAULT_IDENTITY"
     elif [ -n "${OMI_E2E_POOL_SIGN_IDENTITY:-}" ] && [ "$(slot_identity "$n")" != "$OMI_E2E_POOL_SIGN_IDENTITY" ]; then
@@ -460,12 +623,13 @@ write_env_file() {
 
 cmd_env() {
   parse_common "$@"
-  local wt="${ARG_WORKTREE:-$(current_worktree)}" slot
+  local wt slot; wt="$(caller_worktree)"
   slot="$(resolve_slot_for_worktree "$wt")"
   read_lease "$slot" || die "slot $slot is not leased"
   if [ "$L_WORKTREE" != "$wt" ]; then
     die "slot $slot is held by $L_HOLDER ($L_WORKTREE), not by $wt"
   fi
+  activate_slot_routing "$slot"
   touch_lease "$slot"
   env_lines "$slot"
 }
@@ -473,13 +637,14 @@ cmd_env() {
 cmd_run() {
   parse_common "$@"
   [ "${#REST[@]}" -gt 0 ] || die "usage: omi-e2e-pool run [--slot N] -- <command...>"
-  local wt="${ARG_WORKTREE:-$(current_worktree)}" slot
+  local wt slot; wt="$(caller_worktree)"
   local acquire_args=(--quiet --worktree "$wt")
   [ -n "$ARG_SLOT" ] && acquire_args+=(--slot "$ARG_SLOT")
   [ -n "$ARG_AUTH" ] && acquire_args+=(--auth "$ARG_AUTH")
   [ -n "$ARG_PID" ] && acquire_args+=(--pid "$ARG_PID")
   slot="$(cmd_acquire "${acquire_args[@]}")" || exit 1
   read_lease "$slot"
+  activate_slot_routing "$slot"
   eval "$(env_lines "$slot")"
   if [ "$(basename "${REST[0]}")" = "run.sh" ] && run_sh_wants_fast_only_default "${REST[@]}"; then
     say "omi-e2e-pool: no lane chosen for run.sh — injecting --fast-only (the pool default)." >&2
@@ -512,9 +677,18 @@ run_sh_wants_fast_only_default() {
 cmd_verify() {
   parse_common "$@"
   local slug="${REST[0]:-}"; [ -n "$slug" ] || die "usage: omi-e2e-pool verify <app-slug>"
-  local slot; slot="$(slug_slot "$slug")"
+  local slot
+  if ! slot="$(persisted_slug_slot "$slug")"; then
+    slot="$(slug_slot "$slug")"
+  fi
   [ -n "$slot" ] || return 0
-  local wt="${ARG_WORKTREE:-$(current_worktree)}"
+  valid_slot "$slot" || return 0
+  activate_slot_routing "$slot"
+  # A slug derived from the caller's default prefix is not a pool bundle when
+  # the persisted slot owns a different name. An explicit conflicting prefix
+  # has already failed above instead of silently bypassing the guard.
+  [ "$slug" = "$(slot_name "$slot")" ] || return 0
+  local wt; wt="$(caller_worktree)"
   if ! read_lease "$slot" || [ -n "$(lease_defunct_reason)" ]; then
     {
       say "omi-e2e-pool: '$slug' is pool slot $slot and nobody holds its lease."
@@ -542,6 +716,11 @@ cmd_verify() {
 
 cmd_release() {
   parse_common "$@"
+  # A slot selector does not identify its owner. Always resolve the caller's
+  # worktree so `release --slot N` cannot free another live lane's lease.
+  # An explicit --worktree is the caller identity for harnesses invoked from
+  # outside the checkout, matching the other pool commands' semantics.
+  local caller_wt; caller_wt="$(caller_worktree)"
   pool_lock
 
   local slot
@@ -549,7 +728,7 @@ cmd_release() {
     valid_slot "$ARG_SLOT" || die "slot $ARG_SLOT is outside the pool"
     slot="$ARG_SLOT"
   else
-    local wt="${ARG_WORKTREE:-$(current_worktree)}"
+    local wt; wt="$(caller_worktree)"
     if ! slot="$(worktree_slot "$wt")"; then
       [ "$ARG_QUIET" = 1 ] || say "omi-e2e-pool: $wt holds no slot — nothing to release"
       pool_unlock
@@ -561,8 +740,14 @@ cmd_release() {
     pool_unlock
     return 0
   fi
-  if [ -n "$ARG_WORKTREE" ] && [ "$L_WORKTREE" != "$ARG_WORKTREE" ] && [ -z "$(lease_defunct_reason)" ]; then
-    die "slot $slot is held by '$L_HOLDER' ($L_WORKTREE), not by $ARG_WORKTREE. Refusing to release someone else's lease."
+  if [ -f "$(slot_routing_file "$slot")" ]; then
+    activate_slot_routing "$slot"
+  else
+    restore_caller_routing
+  fi
+  local reason; reason="$(lease_defunct_reason)"
+  if [ "$L_WORKTREE" != "$caller_wt" ] && [ -z "$reason" ]; then
+    die "slot $slot is held by '$L_HOLDER' ($L_WORKTREE), not by $caller_wt. Refusing to release someone else's lease."
   fi
   [ -f "$L_WORKTREE/.dev/e2e-pool.env" ] && rm -f "$L_WORKTREE/.dev/e2e-pool.env"
   rm -f "$(lease_file "$slot")"
@@ -580,8 +765,9 @@ port_pid() {
 
 cmd_status() {
   local n
-  say "pool: $POOL_SIZE slot(s), prefix $POOL_PREFIX, leases in $POOL_DIR"
+  say "pool: $POOL_SIZE slot(s), leases in $POOL_DIR"
   for ((n = 1; n <= POOL_SIZE; n++)); do
+    activate_slot_routing "$n"
     local name; name="$(slot_name "$n")"
     local installed="not installed"
     [ -d "$(slot_app_path "$n")" ] && installed="installed"
@@ -607,6 +793,11 @@ cmd_reap() {
   pool_lock
   local n reaped=0
   for ((n = 1; n <= POOL_SIZE; n++)); do
+    if [ -f "$(slot_routing_file "$n")" ]; then
+      activate_slot_routing "$n"
+    else
+      restore_caller_routing
+    fi
     read_lease "$n" || continue
     local reason; reason="$(lease_defunct_reason)"
     [ -n "$reason" ] || continue
@@ -625,6 +816,7 @@ cmd_reap() {
 cmd_slots() {
   local n
   for ((n = 1; n <= POOL_SIZE; n++)); do
+    activate_slot_routing "$n"
     printf '%s\t%s\t%s\t%s\t%s\t%s\n' "$n" "$(slot_name "$n")" "$(slot_bundle_id "$n")" \
       "$(automation_port "$n")" "$(backend_port "$n")" "$(python_port "$n")"
   done
@@ -640,8 +832,9 @@ cmd_check() {
   if [ -n "$ARG_SLOT" ]; then
     valid_slot "$ARG_SLOT" || die "slot $ARG_SLOT is outside the pool"; slot="$ARG_SLOT"
   else
-    slot="$(resolve_slot_for_worktree "${ARG_WORKTREE:-$(current_worktree)}")"
+    slot="$(resolve_slot_for_worktree "$(caller_worktree)")"
   fi
+  activate_slot_routing "$slot"
   local port; port="$(automation_port "$slot")"
   local ctl="$SCRIPT_DIR/omi-ctl"
   [ -x "$ctl" ] || die "missing $ctl"
@@ -709,6 +902,7 @@ signing identity never change. Do these steps on the machine, in its GUI session
 
 EOF
   for n in "${slots[@]}"; do
+    activate_slot_routing "$n"
     local name; name="$(slot_name "$n")"
     cat <<EOF
 Slot $n — $name  (bundle id $(slot_bundle_id "$n"), identity "$(slot_identity "$n")", auth=$(slot_auth "$n"))

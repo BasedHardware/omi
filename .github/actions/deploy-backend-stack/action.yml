@@ -13,11 +13,20 @@ inputs:
     default: ''
   firebase_probe_signer_credentials:
     description: >-
-      Base64-encoded service-account key for the Firebase auth project, used to
-      sign release-probe custom tokens locally. This is how the development lane
-      signs for production Firebase without an IAM grant, matching
-      desktop_backend_auto_dev.yml. Mutually exclusive with
-      firebase_probe_signer_service_account.
+      Deprecated: base64-encoded service-account key for the Firebase auth
+      project, used to sign release-probe custom tokens locally. No workflow
+      supplies it any more; every development lane signs through IAM signJwt as
+      the named no-role signer (vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT).
+      Mutually exclusive with firebase_probe_signer_service_account.
+    required: false
+    default: ''
+  dev_free_tier_local_processing_cohort:
+    description: >-
+      Development-only free-tier cohort (`uid:<uid>[,uid:<uid>]`, or empty).
+      An input, not `vars.…`: a composite action cannot read the `vars` context
+      and fails to LOAD if it tries, which stops every deploy that uses it.
+      Callers pass it for development only; the prod overlay renders a literal
+      empty regardless of what arrives here.
     required: false
     default: ''
   deploy_profile:
@@ -42,8 +51,17 @@ inputs:
     required: false
     default: ''
   gcp_credentials:
-    description: 'GCP deployment credentials JSON'
-    required: true
+    description: 'GCP deployment credentials JSON. Required unless WIF inputs are set. Do not pass both.'
+    required: false
+    default: ''
+  workload_identity_provider:
+    description: 'WIF provider resource name. Development CD slice; mutually exclusive with gcp_credentials.'
+    required: false
+    default: ''
+  workload_identity_service_account:
+    description: 'Deployer service account email for WIF. Required when workload_identity_provider is set.'
+    required: false
+    default: ''
   project_id:
     description: 'GCP project ID for deployment'
     required: true
@@ -167,8 +185,36 @@ runs:
         printf 'DEPLOY_CONTROL_SCRIPTS=%s\n' "$control_scripts" >> "$GITHUB_ENV"
         printf 'DEPLOY_WORKFLOW_ROOT=%s\n' "$workflow_root" >> "$GITHUB_ENV"
 
-    - name: Google Auth
-      id: auth
+    - name: Validate GCP auth inputs
+      shell: bash
+      env:
+        HAS_WIF: ${{ inputs.workload_identity_provider != '' }}
+        HAS_SA: ${{ inputs.workload_identity_service_account != '' }}
+        HAS_JSON: ${{ inputs.gcp_credentials != '' }}
+      run: |
+        set -euo pipefail
+        if [[ "$HAS_WIF" == true && "$HAS_JSON" == true ]]; then
+          echo "Pass WIF or gcp_credentials, not both" >&2
+          exit 1
+        fi
+        if [[ "$HAS_WIF" != true && "$HAS_JSON" != true ]]; then
+          echo "Need workload_identity_provider or gcp_credentials" >&2
+          exit 1
+        fi
+        if [[ "$HAS_WIF" == true && "$HAS_SA" != true ]]; then
+          echo "WIF requires workload_identity_service_account" >&2
+          exit 1
+        fi
+
+    - name: Google Auth (WIF)
+      if: ${{ inputs.workload_identity_provider != '' }}
+      uses: google-github-actions/auth@v3
+      with:
+        workload_identity_provider: ${{ inputs.workload_identity_provider }}
+        service_account: ${{ inputs.workload_identity_service_account }}
+
+    - name: Google Auth (JSON)
+      if: ${{ inputs.workload_identity_provider == '' }}
       uses: google-github-actions/auth@v3
       with:
         credentials_json: ${{ inputs.gcp_credentials }}
@@ -501,6 +547,7 @@ runs:
       id: runtime-env
       shell: bash
       env:
+        FREE_TIER_LOCAL_PROCESSING_COHORT: ${{ inputs.dev_free_tier_local_processing_cohort }}
         ACCOUNT_DELETION_HANDLER_URL: ${{ steps.account-deletion-target.outputs.account_deletion_handler_url }}
         LISTEN_FINALIZATION_TASKS_HANDLER_URL: ${{ steps.account-deletion-target.outputs.listen_finalization_tasks_handler_url }}
         LISTEN_FINALIZATION_TASKS_INVOKER_SA: ${{ steps.account-deletion-target.outputs.listen_finalization_tasks_invoker_sa }}
@@ -525,6 +572,7 @@ runs:
     - name: Validate backend runtime env before deploy
       shell: bash
       env:
+        FREE_TIER_LOCAL_PROCESSING_COHORT: ${{ inputs.dev_free_tier_local_processing_cohort }}
         SYNC_LEDGER_FENCE_MODE: ${{ env.SYNC_LEDGER_FENCE_MODE }}
       run: |
         python3 "$DEPLOY_CONTROL_SCRIPTS/validate-backend-runtime-env.py" \
@@ -569,7 +617,7 @@ runs:
           --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}-base
           ${{ inputs.transcription_candidate_tag != '' && format('--tag={0}', inputs.transcription_candidate_tag) || '' }}
           ${{ inputs.deploy_profile == 'auto-dev' && format('--tag={0}', inputs.candidate_tag) || '' }}
-          --remove-env-vars=MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
+          --remove-env-vars=MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
           ${{ steps.runtime-env.outputs.cloud_run_flags }}
         env_vars: |-
           ${{ steps.runtime-env.outputs.backend_env_vars }}
@@ -656,7 +704,7 @@ runs:
         flags: >-
           --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
           ${{ inputs.deploy_profile == 'auto-dev' && format('--tag={0}', inputs.candidate_tag) || '' }}
-          --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
+          --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
           ${{ steps.runtime-env.outputs.cloud_run_flags }}
         env_vars: |-
           ${{ steps.runtime-env.outputs.backend_sync_env_vars }}
@@ -669,11 +717,10 @@ runs:
       run: |
         echo "revision=backend-sync-${{ steps.image-tag.outputs.revision_suffix }}" >> "$GITHUB_OUTPUT"
 
-    - name: Provision sync-backfill platform
-      if: ${{ inputs.deploy_profile == 'auto-dev' || inputs.deploy_targets == 'all' }}
+    - name: Provision sync-backfill lane
       uses: ./.deploy-workflow-source/.github/actions/sync-backfill-lifecycle
       with:
-        mode: platform
+        mode: ${{ (inputs.deploy_profile == 'auto-dev' || inputs.deploy_targets == 'all') && 'platform' || 'dispatch' }}
         project_id: ${{ inputs.project_id }}
         firestore_project_id: ${{ inputs.runtime_gcp_project_id }}
         region: ${{ inputs.region }}
@@ -724,7 +771,7 @@ runs:
         flags: >-
           --revision-suffix=${{ steps.image-tag.outputs.revision_suffix }}
           ${{ inputs.deploy_profile == 'auto-dev' && format('--tag={0}', inputs.candidate_tag) || '' }}
-          --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED
+          --remove-env-vars=HOSTED_PUSHER_API_URL,MEMORY_ENABLED_USERS,MEMORY_CANONICAL_PROMOTION_CRON_ENABLED,MEMORY_CANONICAL_PROMOTION_CRON_INTERVAL_HOURS,MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED,BASIC_TIER_MINUTES_LIMIT_PER_MONTH,BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH,BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH,BASIC_TIER_MEMORIES_CREATED_LIMIT_PER_MONTH
           ${{ steps.runtime-env.outputs.cloud_run_flags }}
           --cpu=2
           --memory=2Gi
@@ -833,6 +880,7 @@ runs:
           --audience backend-sync=${{ steps.candidate-urls.outputs.backend_sync_audience }} \
           --audience backend-sync-backfill=${{ steps.candidate-urls.outputs.backend_sync_backfill_audience }} \
           --audience backend-integration=${{ steps.candidate-urls.outputs.backend_integration_audience }} \
+          ${{ inputs.workload_identity_service_account != '' && format('--mint-impersonate {0}', inputs.workload_identity_service_account) || '' }} \
           --evidence-path artifacts/dev-backend-candidate-acceptance.json
 
     - name: Resolve transcription candidate URL
@@ -856,12 +904,10 @@ runs:
         project_id: ${{ inputs.project_id }}
         firebase_auth_project_id: based-hardware
         # The development backend authenticates against production Firebase, so
-        # a development deploy identity cannot sign this gate's custom token: it
-        # failed at custom_token_signing and blocked every manual development
-        # deploy. Sign locally with the Firebase project's own key instead --
-        # the same resolution desktop_backend_auto_dev.yml already uses. The
-        # named-signer input stays available but needs an IAM grant, so it is
-        # only consulted when a credential is not supplied.
+        # a development deploy identity cannot sign this gate's custom token as
+        # itself. It signs through IAM signJwt as the named no-role signer, on
+        # which the deploy identity holds roles/iam.serviceAccountTokenCreator.
+        # The deprecated key input is only consulted if a caller still passes it.
         firebase_signer_service_account: ${{ inputs.firebase_probe_signer_credentials == '' && inputs.firebase_probe_signer_service_account || '' }}
         firebase_signer_credentials: ${{ inputs.firebase_probe_signer_credentials }}
 
@@ -914,6 +960,7 @@ runs:
         ENVIRONMENT: ${{ inputs.runtime_env }}
         RUNTIME_ENV_MANIFEST: ${{ github.workspace }}/backend/deploy/runtime_env.yaml
         ACCOUNT_DELETION_HANDLER_URL: ${{ steps.account-deletion-target.outputs.account_deletion_handler_url }}
+        FREE_TIER_LOCAL_PROCESSING_COHORT: ${{ inputs.dev_free_tier_local_processing_cohort }}
         CONVERSATION_SUMMARIZED_APP_IDS: ${{ env.CONVERSATION_SUMMARIZED_APP_IDS }}
         GOOGLE_CLIENT_ID: ${{ env.GOOGLE_CLIENT_ID }}
         MCP_AUTHORIZATION_SERVER_URL: ${{ env.MCP_AUTHORIZATION_SERVER_URL }}

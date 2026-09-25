@@ -1637,6 +1637,14 @@ def _closed(reason: str) -> TranscriptionAllowance:
     return TranscriptionAllowance(TRANSCRIPTION_MODE_ON_DEVICE, 0, reason)
 
 
+# resolve_transcription_allowance() reasons meaning "this lookup could not be
+# trusted", as opposed to "the plan's minutes are actually exhausted". Failing
+# closed on these is right for a live listen socket (refusing one costs
+# nothing) but wrong for a decision written durably to storage, since nothing
+# routinely re-checks it later (#15232 — see should_lock in routers/sync.py).
+TRANSCRIPTION_ALLOWANCE_TRANSIENT_REASONS = frozenset({'allowance_unavailable', 'usage_invalid'})
+
+
 def transcription_allowance_seconds(plan: PlanType) -> Optional[int]:
     """The plan's managed transcription allowance, from the catalog alone.
 
@@ -1743,6 +1751,151 @@ def has_transcription_credits(uid: str, source: Optional[str] = None) -> bool:
     :func:`resolve_transcription_allowance`).
     """
     return resolve_transcription_allowance(uid, source).managed
+
+
+CONVERSATION_PROCESSING_MODE_ALLOWED = 'allowed'
+CONVERSATION_PROCESSING_MODE_SKIPPED = 'skipped'
+
+
+@dataclass(frozen=True)
+class ConversationProcessingAllowance:
+    """The one answer to "may Omi run paid structuring/summary/memory right now?".
+
+    Independent of managed-STT credits. Custom-STT users skip
+    :func:`has_transcription_credits` at listen connect; they still hit this
+    gate before Omi-paid post-processing (#7690). ``remaining_seconds`` is
+    ``None`` when the processing budget is unlimited (unlimited plans, LLM
+    BYOK, reviewers).
+    """
+
+    mode: str
+    remaining_seconds: Optional[int]
+    reason: str
+
+    @property
+    def allowed(self) -> bool:
+        return self.mode == CONVERSATION_PROCESSING_MODE_ALLOWED
+
+
+def _processing_closed(reason: str) -> ConversationProcessingAllowance:
+    return ConversationProcessingAllowance(CONVERSATION_PROCESSING_MODE_SKIPPED, 0, reason)
+
+
+def _usage_speech_seconds(usage: Any) -> Optional[int]:
+    """Speech seconds attributed this month, or ``None`` when the record is not trustworthy.
+
+    Custom-STT sessions record ``speech_seconds`` without ``transcription_seconds``
+    so the LLM processing budget can move independently of STT billing.
+    """
+    if not isinstance(usage, dict):
+        return None
+    value = usage.get('speech_seconds', 0)
+    if value is None:
+        return 0
+    if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+        return None
+    return value
+
+
+def resolve_conversation_processing_allowance(
+    uid: str,
+    source: Optional[str] = None,
+    *,
+    subscription: Any = _UNRESOLVED,
+    usage: Any = _UNRESOLVED,
+    byok_active: Any = _UNRESOLVED,
+) -> ConversationProcessingAllowance:
+    """Resolve the Omi-paid conversation-processing budget for one uid. Never raises.
+
+    Uses the catalog's monthly listening allowance as the processing budget and
+    meters it from ``speech_seconds`` (not ``transcription_seconds``). Lookup
+    failures fail open so a Firestore blip cannot strip summaries from fair
+    paid use (#12663).
+    """
+    try:
+        _ = source  # plan-wide budget; signature matches the transcription resolver
+        if is_marketplace_reviewer(uid):
+            return ConversationProcessingAllowance(CONVERSATION_PROCESSING_MODE_ALLOWED, None, 'marketplace_reviewer')
+        if byok_active is _UNRESOLVED:
+            byok_active = users_db.is_byok_active(uid)
+        if byok_active and _request_has_llm_byok_key():
+            return ConversationProcessingAllowance(CONVERSATION_PROCESSING_MODE_ALLOWED, None, 'llm_byok')
+        if subscription is _UNRESOLVED:
+            subscription = users_db.get_user_valid_subscription(uid)
+        if not subscription:
+            return _processing_closed('subscription_inactive')
+        allowance = transcription_allowance_seconds(subscription.plan)
+        if allowance is None:
+            return ConversationProcessingAllowance(CONVERSATION_PROCESSING_MODE_ALLOWED, None, 'plan_unlimited')
+        if usage is _UNRESOLVED:
+            usage = get_monthly_usage_for_subscription(uid)
+        used = _usage_speech_seconds(usage)
+        if used is None:
+            logger.warning('conversation processing allowance: untrusted usage record for uid=%s', uid)
+            record_fallback(
+                component='conversation_finalization',
+                from_mode='processing_gate',
+                to_mode='fail_open',
+                reason='malformed_doc',
+                outcome='degraded',
+                log=logger,
+            )
+            return ConversationProcessingAllowance(CONVERSATION_PROCESSING_MODE_ALLOWED, None, 'usage_invalid')
+        remaining = max(0, allowance - used)
+        if remaining > 0:
+            return ConversationProcessingAllowance(
+                CONVERSATION_PROCESSING_MODE_ALLOWED, remaining, 'plan_within_allowance'
+            )
+        return _processing_closed('plan_allowance_exhausted')
+    except Exception as exc:
+        logger.warning('conversation processing allowance unavailable for uid=%s: %s', uid, type(exc).__name__)
+        record_fallback(
+            component='conversation_finalization',
+            from_mode='processing_gate',
+            to_mode='fail_open',
+            reason='authorization_unavailable',
+            outcome='degraded',
+            log=logger,
+        )
+        return ConversationProcessingAllowance(CONVERSATION_PROCESSING_MODE_ALLOWED, None, 'allowance_unavailable')
+
+
+def has_conversation_processing_credits(uid: str, source: Optional[str] = None) -> bool:
+    """Whether Omi may run paid structuring/summary/memory for this user right now.
+
+    Custom-STT does not skip this check. See :func:`resolve_conversation_processing_allowance`.
+    """
+    return resolve_conversation_processing_allowance(uid, source).allowed
+
+
+def should_skip_omi_paid_postprocessing(
+    uid: str,
+    *,
+    uses_custom_stt: bool,
+    source: Optional[str] = None,
+) -> bool:
+    """Skip Omi-paid structuring/summary/memory for an exhausted custom-STT session.
+
+    Regular conversations stay bounded by transcription credits at listen
+    time and are never skipped here. Custom-STT skips those credits, so this
+    is the remaining cap. Fail-open on errors so a lookup blip cannot strip
+    summaries (#12663).
+    """
+    if not uses_custom_stt:
+        return False
+    try:
+        return not has_conversation_processing_credits(uid, source)
+    except Exception as exc:
+        logger.warning('custom-STT LLM gate unavailable for uid=%s: %s', uid, type(exc).__name__)
+        record_fallback(
+            component='conversation_finalization',
+            from_mode='processing_gate',
+            to_mode='fail_open',
+            reason='authorization_unavailable',
+            outcome='degraded',
+            log=logger,
+        )
+        return False
 
 
 def get_remaining_transcription_seconds(uid: str, source: Optional[str] = None) -> int | None:

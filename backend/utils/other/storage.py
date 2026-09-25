@@ -8,6 +8,7 @@ import threading
 import time
 import wave
 from contextlib import contextmanager
+from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 from concurrent.futures import as_completed, wait, FIRST_COMPLETED
 
@@ -28,7 +29,7 @@ from utils import encryption
 from utils.cloud_tasks import enqueue_audio_merge_job, is_audio_merge_dispatch_enabled
 from utils.observability.fallback import record_fallback
 from utils.other.deferred_delete import DeferredDeleter
-from utils.other.local_storage import create_storage_client, local_public_url
+from utils.other.local_storage import create_storage_client, iam_signing_kwargs, local_public_url
 from database import users as users_db
 import logging
 
@@ -1663,8 +1664,9 @@ def _get_signed_url(blob: Any, minutes: int) -> str:
     if cached := get_cached_signed_url(blob.name):
         return cached
 
+    signer = iam_signing_kwargs(getattr(blob, "client", None))
     signed_url: str = blob.generate_signed_url(
-        version="v4", expiration=datetime.timedelta(minutes=minutes), method="GET"
+        version="v4", expiration=datetime.timedelta(minutes=minutes), method="GET", **signer
     )
     cache_signed_url(blob.name, signed_url, minutes * 60)
     return signed_url
@@ -1729,14 +1731,16 @@ def upload_multi_chat_files(files_name: List[str], uid: str) -> Dict[str, str]:
     with owner_storage_write_gate(uid, bucket):
         for name in files_name:
             try:
-                blob = bucket.blob(f'{uid}/{name}')
+                source_path = Path(name)
+                blob_name = source_path.name
+                blob = bucket.blob(f'{uid}/{blob_name}')
                 blob.cache_control = 'public, no-cache'
-                blob.upload_from_filename(f'./{name}')
+                blob.upload_from_filename(str(source_path))
                 try:
                     blob.make_public()
                 except Exception as e:
                     logger.warning(f"Could not make blob public (may need bucket-level IAM): {e}")
-                dictFiles[name] = _blob_public_url(blob, chat_files_bucket, f'{uid}/{name}')
+                dictFiles[name] = _blob_public_url(blob, chat_files_bucket, f'{uid}/{blob_name}')
             except Exception as e:
                 logger.error("Failed to upload {} due to exception: {}".format(name, e))
     return dictFiles

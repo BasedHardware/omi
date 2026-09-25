@@ -25,7 +25,7 @@ import tiktoken
 
 from models.structured_extraction import StructuredExtraction
 from utils.byok import get_byok_key
-from utils.llm.byok_errors import handle_llm_error
+from utils.llm.byok_errors import handle_llm_error, handle_llm_error_async
 from utils.observability.fallback import record_fallback
 from utils.llm.model_config import (
     MODEL_QOS_PROFILES,
@@ -52,6 +52,7 @@ from utils.llm.model_config import (
     is_structured_output_feature,
     supports_cache_retention,
     supports_prompt_cache,
+    uses_explicit_cache_and_chat_sanitizer,
     _get_model_config,
 )  # noqa: F401 - legacy clients-module QoS re-exports
 from utils.llm.providers import (
@@ -384,7 +385,9 @@ class _OpenAIEmbeddingsProxy:
             return await ainvoke_openai_embeddings_gateway(texts, byok_api_key=byok)
         except Exception as e:
             if byok:
-                handle_llm_error(e, 'openai', feature='embeddings', model=self._model, operation='aembed_documents')
+                await handle_llm_error_async(
+                    e, 'openai', feature='embeddings', model=self._model, operation='aembed_documents'
+                )
                 if self._is_gateway_key_failure(e):
                     logger.warning(
                         "BYOK gateway OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__
@@ -437,7 +440,9 @@ class _OpenAIEmbeddingsProxy:
             return await inst.aembed_query(text)
         except Exception as e:
             if inst is not self._default:
-                handle_llm_error(e, 'openai', feature='embeddings', model=self._model, operation='aembed_query')
+                await handle_llm_error_async(
+                    e, 'openai', feature='embeddings', model=self._model, operation='aembed_query'
+                )
                 if self._is_key_failure(e):
                     logger.warning("BYOK OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__)
                     return await self._default_client().aembed_query(text)
@@ -454,7 +459,9 @@ class _OpenAIEmbeddingsProxy:
             return await inst.aembed_documents(texts)
         except Exception as e:
             if inst is not self._default:
-                handle_llm_error(e, 'openai', feature='embeddings', model=self._model, operation='aembed_documents')
+                await handle_llm_error_async(
+                    e, 'openai', feature='embeddings', model=self._model, operation='aembed_documents'
+                )
                 if self._is_key_failure(e):
                     logger.warning("BYOK OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__)
                     return await self._default_client().aembed_documents(texts)
@@ -472,7 +479,9 @@ class _OpenAIEmbeddingsProxy:
                     return await attr(*args, **kwargs)
                 except Exception as e:
                     if inst is not self._default:
-                        handle_llm_error(e, 'openai', feature='embeddings', model=self._model, operation=name)
+                        await handle_llm_error_async(
+                            e, 'openai', feature='embeddings', model=self._model, operation=name
+                        )
                         if self._is_key_failure(e):
                             logger.warning(
                                 "BYOK OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__
@@ -806,7 +815,7 @@ def get_llm(
     cache_params: Dict[str, Any] = {}
     if cache_key and supports_prompt_cache(model):
         cache_params['prompt_cache_key'] = cache_key
-    if prompt_cache_options and model.startswith('gpt-5.6'):
+    if prompt_cache_options and uses_explicit_cache_and_chat_sanitizer(model):
         # This is a provider request field, not a ChatOpenAI constructor field.
         # extra_body lets the OpenAI client merge it into the wire payload. It
         # must be sent even without a cache key: explicit mode with no

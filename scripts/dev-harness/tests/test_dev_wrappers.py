@@ -34,7 +34,7 @@ def _bash() -> str:
     return bash
 
 
-def _fixture_repo(root: Path, wrapper: str, cli_body: str) -> Path:
+def _fixture_repo(root: Path, wrapper: str, cli_body: str, extra_modules: dict[str, str] | None = None) -> Path:
     """A checkout carrying one wrapper plus a stand-in dev_harness package."""
     repo = root / "repo"
     harness = repo / "scripts/dev-harness"
@@ -46,17 +46,19 @@ def _fixture_repo(root: Path, wrapper: str, cli_body: str) -> Path:
     package.mkdir()
     (package / "__init__.py").write_text("", encoding="utf-8")
     (package / "cli.py").write_text(cli_body, encoding="utf-8")
+    for module, body in (extra_modules or {}).items():
+        (package / module).write_text(body, encoding="utf-8")
     return repo
 
 
-def _run_wrapper(repo: Path, wrapper: str) -> subprocess.CompletedProcess[str]:
+def _run_wrapper(repo: Path, wrapper: str, *args: str) -> subprocess.CompletedProcess[str]:
     env = os.environ.copy()
     # The resolver appends an inherited PYTHONPATH, and the fixture package must
     # be the only importable dev_harness.
     env.pop("PYTHONPATH", None)
     env["PYTHON"] = sys.executable
     return subprocess.run(
-        [_bash(), f"scripts/dev-harness/{wrapper}"],
+        [_bash(), f"scripts/dev-harness/{wrapper}", *args],
         cwd=repo,
         env=env,
         text=True,
@@ -68,20 +70,20 @@ def _run_wrapper(repo: Path, wrapper: str) -> subprocess.CompletedProcess[str]:
 
 
 @pytest.mark.parametrize("wrapper,subcommand", CLI_WRAPPERS)
-def test_wrapper_names_dev_init_when_the_harness_is_unprovisioned(
+def test_wrapper_names_lane_bootstrap_when_the_harness_is_unprovisioned(
     tmp_path: Path, wrapper: str, subcommand: str
 ) -> None:
     """The harness's own prerequisite check lives inside the Python CLI, so an
     unprovisioned venv used to die at `import dev_harness.cli` first — the
     contributor saw `ModuleNotFoundError: No module named 'dotenv'` and a
-    traceback naming neither the venv nor `make dev-init` (issue #11533).
+    traceback naming neither the venv nor the bootstrap command (issue #11533).
     """
     repo = _fixture_repo(tmp_path, wrapper, UNPROVISIONED_CLI)
 
     result = _run_wrapper(repo, wrapper)
 
     assert result.returncode != 0, result.stdout
-    assert "make dev-init" in result.stdout, result.stdout
+    assert "make lane-bootstrap" in result.stdout, result.stdout
     assert "omi_missing_third_party_dep" in result.stdout, result.stdout
     assert "Traceback" not in result.stdout, result.stdout
     assert f"cli {subcommand}" not in result.stdout, result.stdout
@@ -95,4 +97,26 @@ def test_wrapper_runs_the_cli_when_the_harness_imports(tmp_path: Path, wrapper: 
 
     assert result.returncode == 0, result.stdout
     assert f"cli {subcommand}" in result.stdout, result.stdout
-    assert "make dev-init" not in result.stdout, result.stdout
+    assert "make lane-bootstrap" not in result.stdout, result.stdout
+
+
+MOBILE_SESSION_MODULE = "import sys\nprint('cli', *sys.argv[1:])\n\nif __name__ == '__main__':\n    pass\n"
+
+
+def test_mobile_session_wrapper_forwards_arguments_to_the_cli(tmp_path: Path) -> None:
+    repo = _fixture_repo(tmp_path, "mobile-session.sh", PROVISIONED_CLI, {"mobile_session.py": MOBILE_SESSION_MODULE})
+
+    result = _run_wrapper(repo, "mobile-session.sh", "doctor", "--json")
+
+    assert result.returncode == 0, result.stdout
+    assert "cli doctor --json" in result.stdout, result.stdout
+
+
+def test_mobile_session_wrapper_names_lane_bootstrap_when_unprovisioned(tmp_path: Path) -> None:
+    repo = _fixture_repo(tmp_path, "mobile-session.sh", UNPROVISIONED_CLI, {"mobile_session.py": MOBILE_SESSION_MODULE})
+
+    result = _run_wrapper(repo, "mobile-session.sh", "list")
+
+    assert result.returncode != 0, result.stdout
+    assert "make lane-bootstrap" in result.stdout, result.stdout
+    assert "Traceback" not in result.stdout, result.stdout

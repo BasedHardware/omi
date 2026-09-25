@@ -6,6 +6,7 @@ import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
+import 'package:omi/ui/ui.dart';
 
 class NotificationsSettingsPage extends StatefulWidget {
   const NotificationsSettingsPage({super.key});
@@ -19,13 +20,13 @@ class NotificationsSettingsLoadingShimmer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final placeholderColor = Colors.grey.shade800;
+    const placeholderColor = OmiColors.surface2;
 
-    Widget placeholder({required double height, double? width, double radius = 8}) {
+    Widget placeholder({required double height, double? width, BorderRadius radius = OmiRadius.smAll}) {
       return Container(
         width: width,
         height: height,
-        decoration: BoxDecoration(color: placeholderColor, borderRadius: BorderRadius.circular(radius)),
+        decoration: BoxDecoration(color: placeholderColor, borderRadius: radius),
       );
     }
 
@@ -33,7 +34,7 @@ class NotificationsSettingsLoadingShimmer extends StatelessWidget {
       padding: const EdgeInsets.all(20),
       child: ShimmerWithTimeout(
         baseColor: placeholderColor,
-        highlightColor: Colors.grey.shade600,
+        highlightColor: OmiColors.surface3,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -43,7 +44,7 @@ class NotificationsSettingsLoadingShimmer extends StatelessWidget {
             const SizedBox(height: 8),
             placeholder(width: 250, height: 14),
             const SizedBox(height: 16),
-            placeholder(height: 172, radius: 20),
+            placeholder(height: 172, radius: OmiRadius.lgAll),
             const SizedBox(height: 32),
             placeholder(width: 150, height: 24),
             const SizedBox(height: 12),
@@ -51,7 +52,7 @@ class NotificationsSettingsLoadingShimmer extends StatelessWidget {
             const SizedBox(height: 8),
             placeholder(width: 220, height: 14),
             const SizedBox(height: 16),
-            placeholder(height: 145, radius: 20),
+            placeholder(height: 145, radius: OmiRadius.lgAll),
           ],
         ),
       ),
@@ -64,6 +65,7 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
 
   // Notification frequency (0-5), default 0 (disabled)
   int _notificationFrequency = 0;
+  int _savedNotificationFrequency = 0;
 
   // Daily Summary settings
   bool _dailySummaryEnabled = true;
@@ -94,6 +96,7 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
         }
         // Use backend value if available, otherwise use local
         _notificationFrequency = mentorSettings?.frequency ?? localFrequency;
+        _savedNotificationFrequency = _notificationFrequency;
         // Sync local with backend
         if (mentorSettings != null) {
           SharedPreferencesUtil().notificationFrequency = mentorSettings.frequency;
@@ -110,7 +113,13 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
     );
     setState(() => _notificationFrequency = value);
     SharedPreferencesUtil().notificationFrequency = value;
-    await setMentorNotificationSettings(value);
+    final saved = await setMentorNotificationSettings(value);
+    if (saved) {
+      _savedNotificationFrequency = value;
+    } else if (mounted && _notificationFrequency == value) {
+      setState(() => _notificationFrequency = _savedNotificationFrequency);
+      SharedPreferencesUtil().notificationFrequency = _savedNotificationFrequency;
+    }
   }
 
   String _getFrequencyLabel(BuildContext context, int value) {
@@ -151,189 +160,125 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
     }
   }
 
-  String _formatHourDisplay(int hour) {
-    final hour12 = hour == 0 ? 12 : (hour > 12 ? hour - 12 : hour);
-    final period = hour >= 12 ? 'PM' : 'AM';
-    return '$hour12:00 $period';
-  }
+  /// The hour in the reader's locale and clock ("10:00 PM", "22:00").
+  String _formatHourDisplay(BuildContext context, int hour) =>
+      OmiDateFormat.of(context).time(DateTime(2000, 1, 1, hour));
 
   Future<void> _updateDailySummaryEnabled(bool value) async {
+    final previous = _dailySummaryEnabled;
     setState(() => _dailySummaryEnabled = value);
-    await setDailySummarySettings(enabled: value);
+    if (!await setDailySummarySettings(enabled: value)) {
+      if (mounted) setState(() => _dailySummaryEnabled = previous);
+      return;
+    }
     PlatformManager.instance.analytics.dailySummaryToggled(enabled: value);
   }
 
   Future<void> _updateDailySummaryHour(int hour) async {
+    final previous = _dailySummaryHour;
     setState(() => _dailySummaryHour = hour);
-    await setDailySummarySettings(hour: hour);
+    if (!await setDailySummarySettings(hour: hour)) {
+      if (mounted) setState(() => _dailySummaryHour = previous);
+      return;
+    }
     PlatformManager.instance.analytics.dailySummaryTimeChanged(hour: hour);
   }
 
   Future<void> _showHourPicker() async {
     if (!_dailySummaryEnabled) return;
 
-    await showModalBottomSheet(
+    int tempHour = _dailySummaryHour;
+    final picked = await showOmiSheet<int>(
       context: context,
-      backgroundColor: const Color(0xFF1C1C1E),
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (context) {
-        int tempHour = _dailySummaryHour;
-        return StatefulBuilder(
-          builder: (context, setModalState) {
-            return Container(
-              height: 350,
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      TextButton(
-                        onPressed: () => Navigator.pop(context),
-                        child: Text(context.l10n.cancel, style: TextStyle(color: Colors.grey.shade400, fontSize: 16)),
-                      ),
-                      Text(
-                        context.l10n.selectTime,
-                        style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w600),
-                      ),
-                      TextButton(
-                        onPressed: () {
-                          _updateDailySummaryHour(tempHour);
-                          Navigator.pop(context);
-                        },
-                        child: Text(
-                          context.l10n.done,
-                          style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Expanded(
-                    child: CupertinoTheme(
-                      data: const CupertinoThemeData(brightness: Brightness.dark),
-                      child: CupertinoPicker(
-                        scrollController: FixedExtentScrollController(initialItem: tempHour),
-                        itemExtent: 44,
-                        onSelectedItemChanged: (index) {
-                          setModalState(() => tempHour = index);
-                        },
-                        children: List.generate(24, (index) {
-                          final hour12 = index == 0 ? 12 : (index > 12 ? index - 12 : index);
-                          final period = index >= 12 ? 'PM' : 'AM';
-                          return Center(
-                            child: Text(
-                              '$hour12:00 $period',
-                              style: const TextStyle(color: Colors.white, fontSize: 20),
-                            ),
-                          );
-                        }),
-                      ),
-                    ),
-                  ),
-                ],
+      title: context.l10n.selectTime,
+      builder: (sheetContext) => Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          SizedBox(
+            height: 216,
+            child: CupertinoTheme(
+              data: const CupertinoThemeData(brightness: Brightness.dark),
+              child: CupertinoPicker(
+                scrollController: FixedExtentScrollController(initialItem: tempHour),
+                itemExtent: 44,
+                onSelectedItemChanged: (index) => tempHour = index,
+                children: List.generate(
+                  24,
+                  (index) => Center(child: Text(_formatHourDisplay(sheetContext, index), style: OmiType.title3)),
+                ),
               ),
-            );
-          },
-        );
-      },
+            ),
+          ),
+          const SizedBox(height: OmiSpacing.md),
+          OmiButton(label: context.l10n.done, expand: true, onPressed: () => Navigator.of(sheetContext).pop(tempHour)),
+          const SizedBox(height: OmiSpacing.md),
+        ],
+      ),
     );
+    if (picked != null && picked != _dailySummaryHour) await _updateDailySummaryHour(picked);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Theme.of(context).colorScheme.primary,
-      appBar: AppBar(
-        title: Text(context.l10n.notifications),
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        elevation: 0,
-      ),
+      appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.notifications)),
       body: _isLoading
           ? const NotificationsSettingsLoadingShimmer()
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Notification Frequency Section
-                  _buildSectionHeader(context.l10n.notificationFrequency),
-                  const SizedBox(height: 8),
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 16),
-                    child: Text(
-                      context.l10n.notificationFrequencyDescription,
-                      style: TextStyle(color: Colors.grey.shade400, fontSize: 14, height: 1.5),
-                    ),
-                  ),
-                  _buildFrequencyCard(),
-
-                  const SizedBox(height: 32),
-
-                  // Daily Summary Section
-                  _buildSectionHeader(context.l10n.dailySummary),
-                  const SizedBox(height: 8),
-                  Padding(
-                    padding: const EdgeInsets.only(bottom: 16),
-                    child: Text(
-                      context.l10n.dailySummaryDescription,
-                      style: TextStyle(color: Colors.grey.shade400, fontSize: 14, height: 1.5),
-                    ),
-                  ),
-                  _buildDailySummaryCard(),
-                ],
-              ),
+          : ListView(
+              padding: const EdgeInsets.all(OmiSpacing.md),
+              children: [
+                OmiSectionHeader(
+                  context.l10n.notificationFrequency,
+                  subtitle: context.l10n.notificationFrequencyDescription,
+                ),
+                _buildFrequencyCard(),
+                const SizedBox(height: OmiSpacing.xxl),
+                _buildDailySummaryGroup(),
+              ],
             ),
     );
   }
 
-  Widget _buildSectionHeader(String title) {
-    return Text(
-      title,
-      style: const TextStyle(color: Colors.white, fontSize: 20, fontWeight: FontWeight.w600),
-    );
-  }
-
   Widget _buildFrequencyCard() {
+    final isOff = _notificationFrequency == 0;
     return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
+      padding: const EdgeInsets.all(OmiSpacing.lg),
+      decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
       child: Column(
         children: [
           // Current value display
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    _getFrequencyLabel(context, _notificationFrequency),
-                    style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    _getFrequencyDescription(context, _notificationFrequency),
-                    style: TextStyle(color: Colors.grey.shade400, fontSize: 14),
-                  ),
-                ],
-              ),
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: _notificationFrequency == 0
-                      ? Colors.grey.shade800
-                      : const Color(0xFF6366F1).withValues(alpha: 0.2),
-                  borderRadius: BorderRadius.circular(12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(_getFrequencyLabel(context, _notificationFrequency), style: OmiType.headline),
+                    const SizedBox(height: OmiSpacing.xxs),
+                    Text(
+                      _getFrequencyDescription(context, _notificationFrequency),
+                      style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+                    ),
+                  ],
                 ),
-                child: Center(
-                  child: Text(
-                    '$_notificationFrequency',
-                    style: TextStyle(
-                      color: _notificationFrequency == 0 ? Colors.grey.shade500 : const Color(0xFF6366F1),
-                      fontSize: 20,
-                      fontWeight: FontWeight.w700,
+              ),
+              const SizedBox(width: OmiSpacing.sm),
+              ExcludeSemantics(
+                child: Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: isOff ? OmiColors.surface2 : OmiColors.surface3,
+                    borderRadius: OmiRadius.mdAll,
+                  ),
+                  child: Center(
+                    child: Text(
+                      '$_notificationFrequency',
+                      style: OmiType.title3.copyWith(
+                        color: isOff ? OmiColors.textTertiary : OmiColors.textPrimary,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                 ),
@@ -341,15 +286,15 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
             ],
           ),
 
-          const SizedBox(height: 20),
+          const SizedBox(height: OmiSpacing.lg),
 
           // Slider
           SliderTheme(
             data: SliderTheme.of(context).copyWith(
-              activeTrackColor: const Color(0xFF6366F1),
-              inactiveTrackColor: Colors.grey.shade800,
-              thumbColor: Colors.white,
-              overlayColor: const Color(0xFF6366F1).withValues(alpha: 0.2),
+              activeTrackColor: OmiColors.accent,
+              inactiveTrackColor: OmiColors.surface3,
+              thumbColor: OmiColors.accent,
+              overlayColor: OmiColors.accent.withValues(alpha: 0.12),
               trackHeight: 6,
               thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 10),
             ),
@@ -358,69 +303,22 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
               min: 0,
               max: 5,
               divisions: 5,
+              label: _getFrequencyLabel(context, _notificationFrequency),
+              semanticFormatterCallback: (value) => _getFrequencyLabel(context, value.round()),
               onChanged: (value) => _updateNotificationFrequency(value.round()),
             ),
           ),
 
           // Labels
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(context.l10n.sliderOff, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
-                Text(context.l10n.sliderMax, style: TextStyle(color: Colors.grey.shade500, fontSize: 12)),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDailySummaryCard() {
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(20)),
-      child: Column(
-        children: [
-          // Enable toggle row
-          _buildSettingRow(
-            icon: FontAwesomeIcons.bell,
-            title: context.l10n.enable,
-            trailing: Switch(
-              value: _dailySummaryEnabled,
-              onChanged: _updateDailySummaryEnabled,
-              activeThumbColor: const Color(0xFF6366F1),
-            ),
-          ),
-
-          Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
-            child: Divider(color: Colors.grey.shade800, height: 1),
-          ),
-
-          // Time selector row
-          AnimatedOpacity(
-            opacity: _dailySummaryEnabled ? 1.0 : 0.4,
-            duration: const Duration(milliseconds: 200),
-            child: GestureDetector(
-              onTap: _showHourPicker,
-              behavior: HitTestBehavior.opaque,
-              child: _buildSettingRow(
-                icon: FontAwesomeIcons.clock,
-                title: context.l10n.deliveryTime,
-                trailing: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      _formatHourDisplay(_dailySummaryHour),
-                      style: TextStyle(color: Colors.grey.shade400, fontSize: 16),
-                    ),
-                    const SizedBox(width: 6),
-                    Icon(Icons.chevron_right, color: Colors.grey.shade600, size: 20),
-                  ],
-                ),
+          ExcludeSemantics(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xs),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(context.l10n.sliderOff, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
+                  Text(context.l10n.sliderMax, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
+                ],
               ),
             ),
           ),
@@ -429,23 +327,28 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
     );
   }
 
-  Widget _buildSettingRow({required FaIconData icon, required String title, required Widget trailing}) {
-    return Row(
+  Widget _buildDailySummaryGroup() {
+    return OmiSettingsGroup(
+      header: context.l10n.dailySummary,
+      headerSubtitle: context.l10n.dailySummaryDescription,
       children: [
-        Container(
-          width: 40,
-          height: 40,
-          decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(10)),
-          child: Center(child: FaIcon(icon, color: Colors.grey.shade400, size: 16)),
+        OmiSettingsRow.toggle(
+          leading: const FaIcon(FontAwesomeIcons.bell),
+          title: context.l10n.enable,
+          value: _dailySummaryEnabled,
+          onChanged: _updateDailySummaryEnabled,
         ),
-        const SizedBox(width: 14),
-        Expanded(
-          child: Text(
-            title,
-            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+        AnimatedOpacity(
+          opacity: _dailySummaryEnabled ? 1.0 : 0.4,
+          duration: OmiMotion.of(context).standard,
+          child: OmiSettingsRow(
+            leading: const FaIcon(FontAwesomeIcons.clock),
+            title: context.l10n.deliveryTime,
+            value: _formatHourDisplay(context, _dailySummaryHour),
+            showChevron: true,
+            onTap: _dailySummaryEnabled ? _showHourPicker : null,
           ),
         ),
-        trailing,
       ],
     );
   }

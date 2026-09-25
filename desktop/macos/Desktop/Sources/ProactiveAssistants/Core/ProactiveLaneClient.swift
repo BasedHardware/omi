@@ -826,7 +826,7 @@ enum ContextProactivityTelemetry {
 
   static func boundedProviderModel(_ value: String) -> String {
     switch value.lowercased() {
-    case "gpt-5.6-luna": "gpt-5.6-luna"
+    case "gpt-6-luna": "gpt-6-luna"
     case "gpt-5-nano": "gpt-5-nano"
     default: "other"
     }

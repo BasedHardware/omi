@@ -71,6 +71,11 @@ class AudioCaptureService: @unchecked Sendable {
   private var defaultDeviceListenerBlock: AudioObjectPropertyListenerBlock?
   private var deviceFormatListenerBlock: AudioObjectPropertyListenerBlock?
   private var isCapturing = false
+  /// When the current reconfiguration episode began, on a monotonic clock; nil when not
+  /// reconfiguring. Deliberately not `Date`: this is a budget, and a wall clock can be
+  /// stepped by NTP or by the user mid-episode, which would either cut the retries short
+  /// or run them long. `DispatchTime` cannot move backwards.
+  private var reconfigurationStartedAt: DispatchTime?
   private var isTrackingOverrideDevice = false
 
   /// Optional explicit device to open instead of the system default input.
@@ -1000,6 +1005,9 @@ class AudioCaptureService: @unchecked Sendable {
   private func handleConfigurationChange() {
     guard isCapturing, !isReconfiguring else { return }
     isReconfiguring = true
+    // One clock per reconfiguration episode, not per attempt: the budget is how long the
+    // device may take to come back, so it must span the whole retry chain.
+    reconfigurationStartedAt = DispatchTime.now()
 
     log("AudioCapture: Configuration changed, restarting with new device...")
     let routeHandler = onInputRouteChanged
@@ -1021,7 +1029,45 @@ class AudioCaptureService: @unchecked Sendable {
     }
   }
 
-  private static let maxRetries = 3
+  /// How long reconfiguration keeps trying before it concedes the device is gone, and the
+  /// ceiling on the gap between attempts.
+  ///
+  /// The shipped policy was three retries at 1s, 2s and 3s — six seconds, then a permanent
+  /// stop. That is far shorter than the devices that actually need it take to settle:
+  /// aggregate and virtual inputs renegotiate their stream format while another audio app
+  /// holds them, and every renegotiation fires the format listener, so the window has to
+  /// outlast the other application rather than the hardware. Six seconds does not.
+  private static let reconfigurationRetryWindow: TimeInterval = 300
+  private static let maxReconfigurationRetryDelay: TimeInterval = 30
+
+  /// The wait before the next attempt, or nil once the window is spent.
+  ///
+  /// Bounded by elapsed time rather than attempt count so the policy states the thing that
+  /// matters — how long a user's chosen microphone may take to come back — instead of a
+  /// number of tries whose meaning changes with the backoff curve. A device that really is
+  /// gone still ends in a give-up; it just is not one that fires while the device is merely
+  /// busy.
+  nonisolated static func reconfigurationRetryDelay(
+    retryCount: Int,
+    elapsed: TimeInterval
+  ) -> TimeInterval? {
+    let remaining = reconfigurationRetryWindow - elapsed
+    guard remaining > 0 else { return nil }
+    let backoff = min(pow(2.0, Double(max(retryCount, 0))), maxReconfigurationRetryDelay)
+    // Clamp to what is left: an unclamped backoff late in the episode schedules an attempt
+    // past the deadline the window is supposed to be, so the budget would mean one thing in
+    // the doc comment and another in the schedule.
+    return min(backoff, remaining)
+  }
+
+  /// Seconds between a monotonic mark and now. `DispatchTime` is unsigned and cannot run
+  /// backwards, so the only way `now` precedes `start` is a caller passing a future mark;
+  /// that reads as zero elapsed rather than underflowing into a vast interval.
+  nonisolated static func monotonicElapsed(since start: DispatchTime) -> TimeInterval {
+    let now = DispatchTime.now().uptimeNanoseconds
+    guard now > start.uptimeNanoseconds else { return 0 }
+    return TimeInterval(now - start.uptimeNanoseconds) / 1_000_000_000
+  }
 
   private func reconfigureAfterChange(retryCount: Int) {
     guard
@@ -1113,6 +1159,7 @@ class AudioCaptureService: @unchecked Sendable {
 
     log("AudioCapture: Restarted with new configuration")
     isReconfiguring = false
+    reconfigurationStartedAt = nil
   }
 
   nonisolated static func shouldRunDeferredReconfiguration(
@@ -1123,20 +1170,21 @@ class AudioCaptureService: @unchecked Sendable {
   }
 
   private func retryOrGiveUp(retryCount: Int) {
-    if retryCount < Self.maxRetries {
-      let delay = Double(retryCount + 1) * 1.0  // 1s, 2s, 3s backoff
-      log("AudioCapture: Retrying in \(delay)s...")
+    let elapsed = reconfigurationStartedAt.map { Self.monotonicElapsed(since: $0) } ?? 0
+    if let delay = Self.reconfigurationRetryDelay(retryCount: retryCount, elapsed: elapsed) {
+      log("AudioCapture: Retrying in \(delay)s (\(Int(elapsed))s elapsed)...")
       audioQueue.asyncAfter(deadline: .now() + delay) { [weak self] in
         self?.reconfigureAfterChange(retryCount: retryCount + 1)
       }
     } else {
-      logError("AudioCapture: Giving up after \(retryCount + 1) attempts")
+      logError("AudioCapture: Giving up after \(Int(elapsed))s of reconfiguration attempts")
       // Clearing isCapturing makes stopCapture() and deinit skip their
       // listener cleanup, so the still-registered CoreAudio listeners must be
       // removed here or repeated unrecoverable route changes leak them.
       removePropertyListeners()
       isReconfiguring = false
       isCapturing = false
+      reconfigurationStartedAt = nil
       unregisterActiveCapture()
     }
   }

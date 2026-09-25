@@ -7,14 +7,22 @@ utils/cloud_tasks.py, and the structural contract of the /v2/sync-jobs/run
 handler in routers/sync.py.
 """
 
+from utils import conversation_continuity  # noqa: F401 - retain pure policy across legacy package stubs
+from utils import manual_speaker_assignments  # noqa: F401 - retain pure policy across legacy package stubs
+from utils.stt import speaker_identity  # noqa: F401 - retain allocator across legacy package stubs
+from utils.stt import sync_speaker_evidence  # noqa: F401 - retain pure evidence policy across legacy package stubs
+from utils.observability import speaker_identification  # noqa: F401 - retain telemetry across legacy package stubs
+
 import asyncio
 import hashlib
 import json
+import logging
 import os
 import sys
 import time
 import types
 import unittest
+import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import fakeredis
@@ -562,6 +570,105 @@ class TestLegacyJobMutations:
 
 
 # ---------------------------------------------------------------------------
+# Finalization diagnostics
+# ---------------------------------------------------------------------------
+
+
+class TestFinalizationDiagnostics:
+    def test_diagnostic_kwargs_are_bounded_and_never_stored(self, caplog):
+        """Logging-only kwargs collapse to closed tokens and never reach the job doc."""
+        redis_client = fakeredis.FakeRedis()
+        sync_jobs, _ = _load_sync_jobs(redis_client)
+        job_id = 'job-diag'
+        _seed_fenced_job(
+            redis_client,
+            sync_jobs,
+            job_id,
+            {
+                'job_id': job_id,
+                'status': 'processing',
+                'ledger_fence_mode': 'legacy',
+                'result': None,
+                'failed_segments': 0,
+            },
+        )
+
+        with caplog.at_level(logging.INFO):
+            finalized = sync_jobs.finalize_sync_job(
+                job_id,
+                {'failed_segments': 0, 'total_segments': 1, 'errors': [], 'outcome': 'success'},
+                attempt_ref='uid-leaked-abc123',
+                failure_phase='/tmp/private/audio.wav',
+                failure_class='user-uid-abc123 detail',
+            )
+
+        assert finalized is not None
+        record = next(r for r in caplog.records if 'event=sync_transcription_job_finalized' in r.getMessage())
+        message = record.getMessage()
+        assert 'job_ref=none' in message
+        assert 'attempt_ref=none' in message
+        assert 'failure_phase=unknown' in message
+        assert 'failure_class=OtherException' in message
+        for leaked in ('uid-leaked-abc123', '/tmp/private/audio.wav', 'user-uid-abc123'):
+            assert leaked not in message
+        stored = sync_jobs.get_sync_job(job_id)
+        for diagnostic in ('attempt_ref', 'failure_phase', 'failure_class'):
+            assert diagnostic not in stored['result']
+
+    def test_diagnostic_kwargs_survive_closed_tokens_and_non_str(self, caplog):
+        redis_client = fakeredis.FakeRedis()
+        sync_jobs, _ = _load_sync_jobs(redis_client)
+        job_id = str(uuid.uuid4())
+        attempt_ref = uuid.uuid4().hex
+        _seed_fenced_job(
+            redis_client,
+            sync_jobs,
+            job_id,
+            {
+                'job_id': job_id,
+                'status': 'processing',
+                'ledger_fence_mode': 'legacy',
+                'result': None,
+                'failed_segments': 1,
+            },
+        )
+
+        with caplog.at_level(logging.INFO):
+            sync_jobs.finalize_sync_job(
+                job_id,
+                {
+                    'failed_segments': 1,
+                    'total_segments': 2,
+                    'errors': ['stt_timeout'],
+                    'outcome': 'upstream_error',
+                },
+                attempt_ref=attempt_ref,
+                failure_phase='provider_call',
+                failure_class='TimeoutError',
+            )
+            sync_jobs._log_sync_job_finalized(
+                finalized={'lane': 'fresh'},
+                result={'outcome': 'success', 'provider': 'deepgram', 'model': 'nova-3'},
+                status='completed',
+                total=0,
+                failed=0,
+                job_id=job_id,
+                attempt_ref=42,
+                failure_phase=object(),
+                failure_class=object(),
+            )
+
+        records = [r.getMessage() for r in caplog.records if 'event=sync_transcription_job_finalized' in r.getMessage()]
+        assert f'job_ref={uuid.UUID(job_id).hex}' in records[0]
+        assert f'attempt_ref={attempt_ref}' in records[0]
+        assert 'failure_phase=provider_call' in records[0]
+        assert 'failure_class=TimeoutError' in records[0]
+        assert 'failure_phase=unknown' in records[1]
+        assert 'failure_class=OtherException' in records[1]
+        assert 'attempt_ref=none' in records[1]
+
+
+# ---------------------------------------------------------------------------
 # Queued-reset, ledger, once-guards
 # ---------------------------------------------------------------------------
 
@@ -978,6 +1085,9 @@ def _load_sync_router_for_fast_path():
     from database.sync_jobs import SyncLedgerFenceMode
     from utils.stt import outcomes as actual_outcomes
     from utils.stt import speaker_match as actual_speaker_match
+    from utils.stt import speaker_identity as actual_speaker_identity
+    from utils import manual_speaker_assignments as actual_manual_assignments
+    from utils.sync import lanes as actual_sync_lanes
 
     saved_modules = {}
     prior_utils_sync = sys.modules.get('utils.sync')
@@ -988,6 +1098,7 @@ def _load_sync_router_for_fast_path():
         'database',
         'database.redis_db',
         'database._client',
+        'database.auth',
         'database.conversations',
         'database.users',
         'database.user_usage',
@@ -1015,6 +1126,7 @@ def _load_sync_router_for_fast_path():
         'utils.cloud_tasks',
         'utils.conversations',
         'utils.conversations.process_conversation',
+        'utils.sync.bridge',
         'utils.conversations.factory',
         'utils.conversations.location',
         'utils.other',
@@ -1029,6 +1141,12 @@ def _load_sync_router_for_fast_path():
         'utils.observability',
         'utils.observability.fallback',
         'utils.metrics',
+        'utils.product_metrics',
+        'utils.journey_metrics_contract',
+        'utils.sync.rate_limit',
+        'utils.sync.lanes',
+        'utils.sync.provenance',
+        'utils.sync.capture_manifest',
         'utils.log_sanitizer',
         'utils.http_client',
         'utils.multipart',
@@ -1048,6 +1166,18 @@ def _load_sync_router_for_fast_path():
     for mod_name in heavy_deps:
         saved_modules[mod_name] = sys.modules.get(mod_name)
         sys.modules[mod_name] = MagicMock()
+
+    # utils.conversations is a namespace package on disk (no __init__.py), so the
+    # sync pipeline's submodule imports resolve only through a real __path__.
+    # Replace the heavy_deps MagicMock parent with a real-path package and keep
+    # the existing submodule stubs on top of it — otherwise a new module-level
+    # import like utils.conversations.deterministic_minimum fails with
+    # "'utils.conversations' is not a package" during the file-path re-exec below.
+    conv_pkg = types.ModuleType('utils.conversations')
+    conv_pkg.__path__ = [os.path.join(BACKEND_DIR, 'utils', 'conversations')]
+    saved_modules['utils.conversations'] = sys.modules.get('utils.conversations')
+    sys.modules['utils.conversations'] = conv_pkg
+    sys.modules['utils.conversations.deterministic_minimum'] = MagicMock()
 
     sys.modules['utils'].__path__ = []
     # Hand-rolled sys.modules poking (not testing.import_isolation.stub_modules): new
@@ -1170,6 +1300,8 @@ def _load_sync_router_for_fast_path():
     saved_modules['utils.observability.transcription'] = sys.modules.get('utils.observability.transcription')
     saved_modules['utils.stt.outcomes'] = sys.modules.get('utils.stt.outcomes')
     saved_modules['utils.stt.speaker_match'] = sys.modules.get('utils.stt.speaker_match')
+    saved_modules['utils.stt.speaker_identity'] = sys.modules.get('utils.stt.speaker_identity')
+    saved_modules['utils.manual_speaker_assignments'] = sys.modules.get('utils.manual_speaker_assignments')
     sys.modules['utils.observability'] = obs_pkg
     sys.modules['utils.observability.fallback'] = fallback_mod
     sys.modules['utils.observability.transcription'] = transcription_mod
@@ -1180,6 +1312,14 @@ def _load_sync_router_for_fast_path():
     # calls select_speaker_match(), and a MagicMock stand-in would return a MagicMock
     # decision whose fields blow up the %.3f log formatting even on an empty match set.
     sys.modules['utils.stt.speaker_match'] = actual_speaker_match
+    # Keep allocator + receipt policy real: assignment.py imports both at module
+    # scope, and MagicMock parents for utils / utils.stt are not packages.
+    sys.modules['utils.stt.speaker_identity'] = actual_speaker_identity
+    sys.modules['utils.manual_speaker_assignments'] = actual_manual_assignments
+    saved_modules['utils.sync.lanes'] = sys.modules.get('utils.sync.lanes')
+    # Keep SyncLane real: the dispatch job payload JSON-serializes lane as a str-enum
+    # value, and a MagicMock lane breaks json.dumps. lanes.py is stdlib-only.
+    sys.modules['utils.sync.lanes'] = actual_sync_lanes
     sys.modules['utils.metrics'] = MagicMock(OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL=mock_counter)
 
     class _AudioPrecacheResponse(BaseModel):
@@ -2188,6 +2328,45 @@ async def test_sync_task_non_retryable_failure_terminates_on_its_first_delivery(
         )
         module.fenced_mark_job_queued_for_retry.assert_not_called()
         module._delete_staged_blobs_async.assert_awaited_once_with(['staged/audio.opus'])
+    finally:
+        sys.modules.pop('routers.sync', None)
+        sys.modules.pop('utils.sync.pipeline', None)
+        for mod_name, orig in saved_modules.items():
+            if orig is None:
+                sys.modules.pop(mod_name, None)
+            else:
+                sys.modules[mod_name] = orig
+
+
+@pytest.mark.asyncio
+async def test_sync_task_destructive_operation_fence_retries_with_typed_error_code():
+    '''A transient destructive-op fence must stay retryable and not look like STT failure.'''
+
+    module, saved_modules, _, _, _, _ = _load_sync_router_for_fast_path()
+
+    class DestructiveOperationInProgress(RuntimeError):
+        pass
+
+    request = _configure_task_handler(
+        module,
+        pipeline_error=DestructiveOperationInProgress('legal_hold_deletion_gates kind=retention_cleanup'),
+        latest_job={
+            'job_id': 'job-1',
+            'status': 'processing',
+            'stt_provider': 'parakeet',
+            'stt_model': 'parakeet',
+        },
+    )
+
+    try:
+        response = await module.run_sync_job(request, task_retry_count=0)
+
+        assert response.status_code == 500
+        assert json.loads(response.body) == {'status': 'retry'}
+        module.fenced_mark_job_queued_for_retry.assert_called_once_with(
+            'job-1', '1:lock-token', 1, 'destructive_operation_in_progress'
+        )
+        module._finalize_sync_job_failure.assert_not_awaited()
     finally:
         sys.modules.pop('routers.sync', None)
         sys.modules.pop('utils.sync.pipeline', None)

@@ -1,3 +1,5 @@
+export 'registry/typed_events.dart';
+
 import 'dart:async';
 import 'dart:convert';
 
@@ -10,13 +12,25 @@ import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/memory.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/env/physical_qualification.dart';
 import 'package:omi/utils/analytics/adapters/posthog_adapter.dart';
 import 'package:omi/utils/analytics/analytics_adapter.dart';
 import 'package:omi/utils/analytics/intercom.dart';
+import 'package:omi/utils/analytics/registry/events.g.dart';
+import 'package:omi/utils/analytics/registry/typed_events.dart';
+import 'package:omi/utils/build_provenance.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/utils/speech_profile_enroll_events.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:uuid/uuid.dart';
+import 'package:omi/utils/debugging/crashlytics_manager.dart';
+import 'package:omi/utils/analytics/background_checkpoint_store.dart';
+import 'package:omi/services/experiments/experiment_service.dart';
+import 'package:omi/services/experiments/experiment_registry.dart';
+import 'package:omi/services/experiments/posthog_experiment_flag_provider.dart';
+
+enum ProductErrorKind { flutterFramework, uncaughtDart, startup }
 
 class AnalyticsManager {
   static final AnalyticsManager _instance = AnalyticsManager._internal();
@@ -37,6 +51,168 @@ class AnalyticsManager {
   static int _droppedEvents = 0;
   static Map<String, Object> _globalEventProperties = {'app_platform': _mobilePlatformName};
   static bool _analyticsReady = false;
+  static bool _trackingEnabled = true;
+  static int _consentRevision = 0;
+  static ExperimentService? _experiments;
+  ExperimentService? get experiments => _experiments;
+  static String _experimentNamespace = 'mobile-dev';
+  static String _clientAppNamespace = 'unknown';
+  static int _appBuild = 0;
+  static String? _settledDistinctId;
+  static int _identityEpoch = 0;
+  static String? _boundIdentity;
+  static bool _identityKnown = false;
+  static bool _identityResetNeeded = false;
+  static Future<void>? _initialization;
+  static int _initFailures = 0;
+  static int _handoffFailures = 0;
+  static final Map<String, Object> _eventContext = {};
+  static Map<String, Object> Function()? experimentContext;
+  static final Object _experimentZone = Object();
+  static void withExperimentContext(Map<String, Object> context, void Function() emit) =>
+      runZoned(emit, zoneValues: {_experimentZone: (_identityEpoch, Map<String, Object>.unmodifiable(context))});
+  static Map<String, Object> captureExperimentContext() {
+    try {
+      return Map<String, Object>.unmodifiable(experimentContext?.call() ?? {});
+    } catch (_) {
+      return {};
+    }
+  }
+
+  static void Function(String? identity, bool enabled)? identityChanged;
+  static int get identityEpoch => _identityEpoch;
+  static bool get identityKnown => _identityKnown;
+  static bool get trackingEnabled => _trackingEnabled;
+  static String? get currentIdentity => _boundIdentity;
+  static Map<String, Object> get healthSnapshot => {
+        'ready': _analyticsReady,
+        'queue_depth': _queuedEvents.length,
+        'dropped_events': _droppedEvents,
+        'initialization_failures': _initFailures,
+        'handoff_failures': _handoffFailures,
+      };
+
+  void setSessionContext(String sessionId, {bool foreground = true}) {
+    _eventContext['app_session_id'] = sessionId;
+    try {
+      CrashlyticsManager.instance.setUserAttribute('app_session_id', sessionId);
+    } catch (_) {}
+    _eventContext['app_state'] = foreground ? 'foreground' : 'background';
+    try {
+      CrashlyticsManager.instance.setUserAttribute('app_state', foreground ? 'foreground' : 'background');
+    } catch (_) {}
+  }
+
+  void setForeground(bool foreground) {
+    _eventContext['app_state'] = foreground ? 'foreground' : 'background';
+    try {
+      CrashlyticsManager.instance.setUserAttribute('app_state', foreground ? 'foreground' : 'background');
+    } catch (_) {}
+  }
+
+  /// Fence synchronously, before any SDK identify/reset operation is scheduled.
+  void bindIdentity(String? identity) {
+    if (_identityKnown && _boundIdentity == identity) return;
+    final hadSession = _eventContext.containsKey('app_session_id');
+    _identityResetNeeded = _identityResetNeeded || !_identityKnown || _boundIdentity != null;
+    _identityKnown = true;
+    _identityEpoch++;
+    _boundIdentity = identity;
+    _droppedEvents += _queuedEvents.length;
+    _queuedEvents.clear();
+    _pendingTimedEvents.clear();
+    _eventContext.remove('app_session_id');
+    try {
+      CrashlyticsManager.instance.setUserAttribute('app_session_id', '');
+    } catch (_) {}
+    _settledDistinctId = null;
+    _notifyIdentity(null, false);
+    unawaited(_settleIdentity());
+    if (hadSession && _trackingEnabled) {
+      final sessionId = const Uuid().v4();
+      setSessionContext(sessionId, foreground: _eventContext['app_state'] != 'background');
+      track('App Session Started', properties: {'start_kind': 'identity_change'});
+    }
+  }
+
+  static void _notifyIdentity(String? distinctId, bool enabled) {
+    identityChanged?.call(distinctId, enabled);
+    _experiments?.updateContext(ExperimentContext(
+      identityKey: distinctId ?? '',
+      analyticsEnabled: enabled,
+      namespace: _experimentNamespace,
+      appBuild: _appBuild,
+    ));
+  }
+
+  static Future<void> _settleIdentity() async {
+    if (PhysicalQualification.enabled) return;
+    final adapter = _adapter;
+    if (adapter == null || !adapter.isInitialized || !_trackingEnabled) return;
+    if (adapter is AnalyticsIdentityAdapter && !_identityKnown) return;
+    final reset = _identityResetNeeded;
+    final epoch = _identityEpoch;
+    try {
+      String? distinctId = _boundIdentity;
+      if (adapter is AnalyticsIdentityAdapter) {
+        distinctId = await (adapter as AnalyticsIdentityAdapter)
+            .settleIdentity(_boundIdentity, reset: reset)
+            .timeout(_initTimeout);
+      } else {
+        if (reset) adapter.reset();
+        if (_boundIdentity != null) adapter.identify(userId: _boundIdentity!);
+      }
+      if (epoch != _identityEpoch || !identical(adapter, _adapter) || !_trackingEnabled) return;
+      _identityResetNeeded = false;
+      _settledDistinctId = distinctId;
+      _scheduleFlush();
+      _notifyIdentity(distinctId, true);
+    } catch (_) {
+      if (epoch == _identityEpoch) _notifyIdentity(null, false);
+    }
+  }
+
+  static void _configureExperiments(AnalyticsAdapter adapter) {
+    if (adapter is! PostHogAnalyticsAdapter || _experiments != null) return;
+    _experiments = ExperimentService(
+      provider: PosthogExperimentFlagProvider(projectToken: adapter.apiKey, host: Uri.parse(adapter.host)),
+      definitions: MobileExperiments.all,
+      emit: (name, properties) => _instance.track(name, properties: properties),
+    );
+    experimentContext = () => _experiments?.outcomeProperties() ?? {};
+  }
+
+  Future<void> refreshExperiments() async {
+    if (PhysicalQualification.enabled) return;
+    if (!_analyticsReady) await init();
+    if (_settledDistinctId == null) await _settleIdentity();
+    await _experiments?.refresh();
+  }
+
+  void recordProductError(ProductErrorKind kind) => track('Product Error', properties: {
+        'error_kind': switch (kind) {
+          ProductErrorKind.flutterFramework => 'flutter_framework',
+          ProductErrorKind.uncaughtDart => 'uncaught_dart',
+          ProductErrorKind.startup => 'startup',
+        },
+        'diagnostic_source': 'crashlytics',
+      });
+
+  /// Periodic operational signal; does not recursively emit on queue failures.
+  void recordTelemetryHealth() {
+    _reportHealth();
+    track('Mobile Telemetry Health', properties: {
+      ...healthSnapshot,
+      'delivery_semantics': 'sdk_handoff_only',
+      'queue_persistence': 'memory',
+    });
+  }
+
+  static void _reportHealth() {
+    try {
+      CrashlyticsManager.instance.setUserAttribute('mobile_telemetry_health', jsonEncode(healthSnapshot));
+    } catch (_) {}
+  }
 
   /// Inject the analytics adapter at boot. Must be called before [init].
   /// Calling without ever configuring leaves every method as a no-op, which
@@ -48,23 +224,69 @@ class AnalyticsManager {
   }
 
   static Future<void> init({Duration timeout = _initTimeout}) async {
+    if (PhysicalQualification.enabled) return;
     _initStarted = true;
     if (_adapter == null && Env.posthogApiKey != null) {
       _adapter = PostHogAnalyticsAdapter(apiKey: Env.posthogApiKey!);
     }
     final adapter = _adapter;
-    if (adapter == null) return;
+    if (adapter == null || _analyticsReady) return;
+    final existing = _initialization;
+    if (existing != null) {
+      try {
+        await existing.timeout(timeout);
+      } catch (_) {}
+      return;
+    }
+    // Keep the original completion alive after the caller's deadline. A slow
+    // successful setup must become ready without requiring another app launch.
+    final operation = () async {
+      try {
+        final consentRevision = _consentRevision;
+        final consent = await SharedPreferences.getInstance();
+        if (consentRevision == _consentRevision) {
+          _trackingEnabled = consent.getBool('product_analytics_enabled') ?? _trackingEnabled;
+        }
+        await PlatformService.executeIfSupportedAsync(PlatformService.isAnalyticsSupported, adapter.init);
+        if (!identical(_adapter, adapter)) return;
+        if (!_trackingEnabled) _queuedEvents.clear();
+        _registerBuildProvenance(adapter);
+        // Optional package metadata must not strand an initialized SDK queue.
+        _analyticsReady = true;
+        if (!_trackingEnabled) adapter.disable();
+        await _loadGlobalEventProperties(timeout: timeout ~/ 2);
+        await _loadPersonPropertyCache();
+        if (!identical(_adapter, adapter)) return;
+        _analyticsReady = true;
+        if (!_trackingEnabled) adapter.disable();
+        _configureExperiments(adapter);
+        await _settleIdentity();
+        _retryTimer?.cancel();
+        _retryTimer = null;
+        _scheduleFlush();
+        _reportHealth();
+      } catch (_) {
+        if (identical(_adapter, adapter)) {
+          _initFailures++;
+          _reportHealth();
+        }
+      }
+    }();
+    _initialization = operation;
+    unawaited(operation.whenComplete(() {
+      if (identical(_initialization, operation)) _initialization = null;
+    }));
     try {
-      await PlatformService.executeIfSupportedAsync(
-        PlatformService.isAnalyticsSupported,
-        adapter.init,
-      ).timeout(timeout);
-      await _loadGlobalEventProperties(timeout: timeout);
-      await _loadPersonPropertyCache();
-      _analyticsReady = true;
-      _retryTimer?.cancel();
-      _retryTimer = null;
-      _scheduleFlush();
+      await operation.timeout(timeout);
+    } on TimeoutException {
+      _initFailures++;
+      _reportHealth();
+    }
+  }
+
+  static void _registerBuildProvenance(AnalyticsAdapter adapter) {
+    try {
+      adapter.registerSuperProperties(BuildProvenance.fromEnvironment().asProperties);
     } catch (_) {}
   }
 
@@ -94,6 +316,23 @@ class AnalyticsManager {
     _droppedEvents = 0;
     _globalEventProperties = {'app_platform': _mobilePlatformName};
     _analyticsReady = false;
+    _trackingEnabled = true;
+    _experiments?.dispose();
+    _experiments = null;
+    _clientAppNamespace = 'unknown';
+    _experimentNamespace = 'mobile-dev';
+    _appBuild = 0;
+    _settledDistinctId = null;
+    _identityEpoch++;
+    _boundIdentity = null;
+    _identityKnown = false;
+    _identityResetNeeded = false;
+    _initialization = null;
+    _initFailures = 0;
+    _handoffFailures = 0;
+    _eventContext.clear();
+    experimentContext = null;
+    identityChanged = null;
   }
 
   factory AnalyticsManager() {
@@ -154,7 +393,7 @@ class AnalyticsManager {
         // sent — that would suppress every retry once the SDK is ready.
         if (!adapter.isInitialized) return;
         final uid = _preferences.uid;
-        if (uid.isEmpty) return;
+        if (!_trackingEnabled || !_identityKnown || uid.isEmpty || uid != _boundIdentity) return;
         final coerced = <String, Object>{};
         properties.forEach((k, v) {
           final c = _coerceProperty(v);
@@ -225,7 +464,20 @@ class AnalyticsManager {
     } catch (_) {}
   }
 
+  static Future<void> _persistTrackingPreference(bool enabled) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('product_analytics_enabled', enabled);
+      if (!enabled) await PreferencesBackgroundCheckpointStore().clear();
+    } catch (_) {}
+  }
+
   void optInTracking() {
+    _consentRevision++;
+    if (!_trackingEnabled) _identityEpoch++;
+    _trackingEnabled = true;
+    unawaited(_persistTrackingPreference(true));
+    _notifyIdentity(null, false);
     PlatformService.executeIfSupported(PlatformService.isAnalyticsSupported, () {
       final adapter = _adapter;
       if (adapter == null) return;
@@ -233,10 +485,19 @@ class AnalyticsManager {
         adapter.enable();
       } catch (_) {}
       identify();
+      unawaited(_settleIdentity());
     });
   }
 
   void optOutTracking() {
+    _consentRevision++;
+    _trackingEnabled = false;
+    unawaited(_persistTrackingPreference(false));
+    _identityEpoch++;
+    _queuedEvents.clear();
+    _pendingTimedEvents.clear();
+    _settledDistinctId = null;
+    _notifyIdentity(null, false);
     PlatformService.executeIfSupported(PlatformService.isAnalyticsSupported, () {
       final adapter = _adapter;
       if (adapter == null) return;
@@ -249,6 +510,10 @@ class AnalyticsManager {
   }
 
   void identify({String? authMethod, DateTime? userCreatedAt, String userRole = 'member'}) {
+    final identity = _preferences.uid;
+    if (!_trackingEnabled || identity.isEmpty) return;
+    if (_identityKnown && identity != _boundIdentity) return;
+    if (!_identityKnown) bindIdentity(identity);
     PlatformService.executeIfSupported(PlatformService.isAnalyticsSupported, () {
       final adapter = _adapter;
       if (adapter == null) return;
@@ -277,28 +542,20 @@ class AnalyticsManager {
   }
 
   void migrateUser(String newUid) {
-    PlatformService.executeIfSupported(PlatformService.isAnalyticsSupported, () {
-      final adapter = _adapter;
-      if (adapter == null) return;
-      unawaited(_clearPersonPropertyCache());
-      try {
-        adapter.alias(newUserId: newUid);
-        adapter.identify(userId: newUid);
-      } catch (_) {
-        return;
-      }
-      setNameAndEmail();
-    });
+    // Account transitions use the same fence; aliasing unrelated accounts is
+    // not a supported analytics migration policy.
+    bindIdentity(newUid);
+    unawaited(_clearPersonPropertyCache());
   }
 
   void setNameAndEmail() {
-    _setUserPropertiesBatch({'\$name': SharedPreferencesUtil().fullName, '\$email': SharedPreferencesUtil().email});
+    _setUserPropertiesBatch({'\$name': _preferences.fullName, '\$email': _preferences.email});
   }
 
   void track(String eventName, {Map<String, dynamic>? properties}) =>
       PlatformService.executeIfSupported(PlatformService.isAnalyticsSupported, () {
         final adapter = _adapter;
-        if (adapter == null) return;
+        if (adapter == null || !_trackingEnabled) return;
         final props = <String, Object>{};
         if (properties != null) {
           properties.forEach((k, v) {
@@ -311,13 +568,29 @@ class AnalyticsManager {
         if (start != null) {
           props['\$duration'] = DateTime.now().difference(start).inMilliseconds / 1000.0;
         }
-        _enqueueEvent(_QueuedAnalyticsEvent(eventName: eventName, properties: props));
+        props.addAll(_eventContext);
+        if (eventName == 'Product Journey Outcome' || eventName == 'Product Value') {
+          props['experiment_context_verified'] = true;
+          try {
+            final attribution = Zone.current[_experimentZone] as (int, Map<String, Object>)?;
+            if (attribution != null && attribution.$1 != _identityEpoch) return;
+            props.addAll(attribution?.$2 ?? captureExperimentContext());
+          } catch (_) {}
+        }
+        _enqueueEvent(_QueuedAnalyticsEvent(
+          eventName: eventName,
+          properties: props,
+          eventId: const Uuid().v4(),
+          occurredAt: DateTime.now().toUtc(),
+          identityEpoch: _identityEpoch,
+        ));
       });
 
   static void _enqueueEvent(_QueuedAnalyticsEvent event) {
     while (_queuedEvents.length >= _maxQueuedEvents) {
       _queuedEvents.removeAt(0);
       _droppedEvents++;
+      _reportHealth();
     }
     _queuedEvents.add(event);
     _scheduleFlush();
@@ -351,16 +624,40 @@ class AnalyticsManager {
       if (adapter == null || !adapter.isInitialized || !_analyticsReady) {
         retryLater = _queuedEvents.isNotEmpty;
         retryDelay = _retryDelays.last;
+        if (adapter != null && _initialization == null && _initFailures < _maxDeliveryAttempts) {
+          unawaited(init());
+        }
         return;
       }
 
+      if (adapter is AnalyticsIdentityAdapter && (!_identityKnown || _settledDistinctId == null)) {
+        retryLater = _queuedEvents.isNotEmpty;
+        return;
+      }
       var delivered = 0;
       while (_queuedEvents.isNotEmpty && delivered < _flushBatchSize) {
         final event = _queuedEvents.removeAt(0);
         try {
-          adapter.track(eventName: event.eventName, properties: {...event.properties, ..._globalEventProperties});
+          if (!_trackingEnabled || event.identityEpoch != _identityEpoch) continue;
+          final properties = {...event.properties, ..._globalEventProperties};
+          if (adapter is AnalyticsDeliveryAdapter) {
+            await (adapter as AnalyticsDeliveryAdapter).deliver(eventName: event.eventName, properties: {
+              ...properties,
+              'event_id': event.eventId,
+              r'$insert_id': event.eventId,
+              'occurred_at': event.occurredAt.toIso8601String(),
+              'schema_version': 1,
+              'client_app_namespace': _clientAppNamespace,
+              'client_app_profile': Env.profile.name,
+            }).timeout(_initTimeout);
+          } else {
+            adapter.track(eventName: event.eventName, properties: properties);
+          }
           delivered++;
         } catch (_) {
+          _handoffFailures++;
+          _reportHealth();
+          if (!_trackingEnabled || event.identityEpoch != _identityEpoch) continue;
           final retriedEvent = event.nextAttempt();
           _requeueOrDrop(retriedEvent);
           retryLater = _queuedEvents.isNotEmpty;
@@ -382,6 +679,7 @@ class AnalyticsManager {
   static void _requeueOrDrop(_QueuedAnalyticsEvent event) {
     if (event.attempts >= _maxDeliveryAttempts) {
       _droppedEvents++;
+      _reportHealth();
       return;
     }
     _queuedEvents.insert(0, event);
@@ -413,7 +711,7 @@ class AnalyticsManager {
     _pendingTimedEvents.removeWhere((_, started) => started.isBefore(cutoff));
   }
 
-  void onboardingCompleted() => track('Onboarding Completed');
+  void onboardingCompleted() => const TypedEvents().emit(const OnboardingCompleted());
 
   void onboardingStepCompleted(String step) => track('Onboarding Step $step Completed');
 
@@ -427,20 +725,18 @@ class AnalyticsManager {
   void deviceOnboardingStepCompleted(String step) =>
       track('Device Onboarding Step Completed', properties: {'step': step});
 
-  void deviceOnboardingCompleted() => track('Device Onboarding Completed');
+  void deviceOnboardingCompleted() => const TypedEvents().emit(const DeviceOnboardingCompleted());
 
-  void deviceOnboardingAbandoned(int step) => track('Device Onboarding Abandoned', properties: {'step': step});
+  void deviceOnboardingAbandoned(int step) => const TypedEvents().emit(DeviceOnboardingAbandoned(step: step));
 
   void deviceOnboardingDoubleTapConfigured(int action) =>
-      track('Device Onboarding Double Tap Configured', properties: {'action': action});
+      const TypedEvents().emit(DeviceOnboardingDoubleTapConfigured(action: action));
 
-  void settingsSaved({bool hasWebhookConversationCreated = false, bool hasWebhookTranscriptReceived = false}) => track(
-        'Developer Settings Saved',
-        properties: {
-          'has_webhook_memory_created': hasWebhookConversationCreated,
-          'has_webhook_transcript_received': hasWebhookTranscriptReceived,
-        },
-      );
+  void settingsSaved({bool hasWebhookConversationCreated = false, bool hasWebhookTranscriptReceived = false}) =>
+      const TypedEvents().emit(DeveloperSettingsSaved(
+        hasWebhookMemoryCreated: hasWebhookConversationCreated,
+        hasWebhookTranscriptReceived: hasWebhookTranscriptReceived,
+      ));
 
   void pageOpened(String name) {
     setInteractionContext(screenName: name, target: 'screen');
@@ -469,9 +765,9 @@ class AnalyticsManager {
     track('App Rated', properties: {'app_id': appId, 'rating': rating});
   }
 
-  void phoneMicRecordingStarted() => track('Phone Mic Recording Started');
+  void phoneMicRecordingStarted() => const TypedEvents().emit(const PhoneMicRecordingStarted());
 
-  void phoneMicRecordingStopped() => track('Phone Mic Recording Stopped');
+  void phoneMicRecordingStopped() => const TypedEvents().emit(const PhoneMicRecordingStopped());
 
   void recordingUploadStarted({
     required String attemptId,
@@ -540,27 +836,27 @@ class AnalyticsManager {
 
   // Transcribe Later (batch / offline capture)
   void transcribeLaterToggled({required bool enabled}) =>
-      track('Transcribe Later Toggled', properties: {'enabled': enabled});
+      const TypedEvents().emit(TranscribeLaterToggled(enabled: enabled));
 
   void transcribeLaterRecordingCaptured({int? durationSeconds}) =>
       track('Transcribe Later Recording Captured', properties: {'duration_seconds': durationSeconds});
 
-  void transcribeLaterRecordingProcessed() => track('Transcribe Later Recording Processed');
+  void transcribeLaterRecordingProcessed() => const TypedEvents().emit(const TranscribeLaterRecordingProcessed());
 
   // Phone Calls (VoIP)
-  void phoneCallPageOpened() => track('Phone Call Page Opened');
+  void phoneCallPageOpened() => const TypedEvents().emit(const PhoneCallPageOpened());
 
-  void phoneCallVerificationStarted() => track('Phone Call Verification Started');
+  void phoneCallVerificationStarted() => const TypedEvents().emit(const PhoneCallVerificationStarted());
 
-  void phoneCallVerificationCompleted() => track('Phone Call Verification Completed');
+  void phoneCallVerificationCompleted() => const TypedEvents().emit(const PhoneCallVerificationCompleted());
 
   void phoneCallStarted({String? contactName}) =>
-      track('Phone Call Started', properties: {'has_contact_name': contactName != null});
+      const TypedEvents().emit(PhoneCallStarted(hasContactName: contactName != null));
 
-  void phoneCallConnected() => track('Phone Call Connected');
+  void phoneCallConnected() => const TypedEvents().emit(const PhoneCallConnected());
 
   void phoneCallEnded({required int durationSeconds}) =>
-      track('Phone Call Ended', properties: {'duration_seconds': durationSeconds});
+      const TypedEvents().emit(PhoneCallEnded(durationSeconds: durationSeconds));
 
   /// End-of-call (or stall) snapshot of the live-transcript session.
   /// Aggregate counts and closed status strings only — no raw audio samples,
@@ -593,21 +889,21 @@ class AnalyticsManager {
         },
       );
 
-  void phoneCallFailed({String? error}) => track('Phone Call Failed', properties: {'error': error ?? 'unknown'});
+  void phoneCallFailed({String? error}) =>
+      track('Phone Call Failed', properties: {'failure_class': 'call_start_failed'});
 
   // Phone Calls Dialpad
-  void phoneCallDialpadOpened() => track('Phone Call Dialpad Opened');
+  void phoneCallDialpadOpened() => const TypedEvents().emit(const PhoneCallDialpadOpened());
 
-  void phoneCallDialpadDigitPressed(String digit) =>
-      track('Phone Call Dialpad Digit Pressed', properties: {'digit': digit});
+  void phoneCallDialpadDigitPressed(String digit) => track('Phone Call Dialpad Digit Pressed');
 
   // Phone Calls Upsell
   void phoneCallUpsellShown({required String source}) =>
       track('Phone Call Upsell Shown', properties: {'source': source});
 
-  void phoneCallUpsellUpgradeTapped() => track('Phone Call Upsell Upgrade Tapped');
+  void phoneCallUpsellUpgradeTapped() => const TypedEvents().emit(const PhoneCallUpsellUpgradeTapped());
 
-  void phoneCallUpsellDismissed() => track('Phone Call Upsell Dismissed');
+  void phoneCallUpsellDismissed() => const TypedEvents().emit(const PhoneCallUpsellDismissed());
 
   void appResultExpanded(ServerConversation conversation, String appId) {
     track('App Result Expanded', properties: getConversationEventProperties(conversation)..['app_id'] = appId);
@@ -624,18 +920,18 @@ class AnalyticsManager {
   }
 
   void calendarEnabled() {
-    track('Calendar Enabled');
+    const TypedEvents().emit(const CalendarEnabled());
     setUserProperty('Calendar Enabled', true);
   }
 
   void calendarDisabled() {
-    track('Calendar Disabled');
+    const TypedEvents().emit(const CalendarDisabled());
     setUserProperty('Calendar Enabled', false);
   }
 
   void calendarModePressed(String mode) => track('Calendar Mode $mode Pressed');
 
-  void calendarSelected() => track('Calendar Selected');
+  void calendarSelected() => const TypedEvents().emit(const CalendarSelected());
 
   void bottomNavigationTabClicked(String tab) {
     setInteractionContext(screenName: tab, target: 'bottom_navigation');
@@ -645,16 +941,7 @@ class AnalyticsManager {
   void deviceConnected(BtDevice device) {
     final vendor = device.type.analyticsVendor;
     final hardwareFamily = DeviceUtils.analyticsHardwareFamily(device);
-    track(
-      'Device Connected',
-      properties: {
-        ...device.toJson(),
-        'type': device.type.name,
-        'device_vendor': vendor,
-        'hardware_family': hardwareFamily,
-        ..._deviceIdentityProperties(device),
-      },
-    );
+    track('Device Connected', properties: _deviceConnectionEventProperties(device));
     setUserProperty('device_vendor', vendor);
     setUserProperty('hardware_family', hardwareFamily);
   }
@@ -662,16 +949,7 @@ class AnalyticsManager {
   void devicePaired(String firstPairedAt) {
     final device = _preferences.btDevice;
     final hardwareFamily = DeviceUtils.analyticsHardwareFamily(device);
-    track(
-      'Device Paired',
-      properties: {
-        ...device.toJson(),
-        'type': device.type.name,
-        'device_vendor': device.type.analyticsVendor,
-        'hardware_family': hardwareFamily,
-        ..._deviceIdentityProperties(device),
-      },
-    );
+    track('Device Paired', properties: _deviceConnectionEventProperties(device));
     _setUserPropertiesBatch({
       'has_paired_device': true,
       'first_paired_at': firstPairedAt,
@@ -680,7 +958,7 @@ class AnalyticsManager {
     });
   }
 
-  void deviceDisconnected() => track('Device Disconnected');
+  void deviceDisconnected() => const TypedEvents().emit(const DeviceDisconnected());
 
   void deviceSessionEnded({required BtDevice device, required Duration duration, String? reason, int? hciReasonCode}) {
     final properties = <String, Object>{
@@ -698,6 +976,16 @@ class AnalyticsManager {
   }
 
   static String _knownDeviceValue(String value) => value.isEmpty || value == 'Unknown' ? 'unknown' : value;
+
+  /// Closed Device Connected / Device Paired properties. Persistence fields
+  /// from [BtDevice.toJson] (raw id, name, serial, locator, RSSI) stay off
+  /// the analytics channel; hashed identity is the join key.
+  static Map<String, Object> _deviceConnectionEventProperties(BtDevice device) => {
+        'type': device.type.name,
+        'device_vendor': device.type.analyticsVendor,
+        'hardware_family': DeviceUtils.analyticsHardwareFamily(device),
+        ..._deviceIdentityProperties(device),
+      };
 
   static Map<String, Object> _deviceIdentityProperties(BtDevice device) {
     final serial = device.serialNumber?.trim();
@@ -729,9 +1017,9 @@ class AnalyticsManager {
   void memoriesPageDeletedMemory(Memory memory) =>
       track('Fact Page Deleted Fact', properties: {'fact_category': memory.category.toString().split('.').last});
 
-  void memoriesPageEditedMemory() => track('Fact Page Edited Fact');
+  void memoriesPageEditedMemory() => const TypedEvents().emit(const MemoriesPageEditedMemory());
 
-  void memoriesPageCreateMemoryBtn() => track('Fact Page Create Fact Button Pressed');
+  void memoriesPageCreateMemoryBtn() => const TypedEvents().emit(const MemoriesPageCreateMemoryBtn());
 
   void memoriesPageCreatedMemory(MemoryCategory category) =>
       track('Fact Page Created Fact', properties: {'fact_category': category.toString().split('.').last});
@@ -744,7 +1032,7 @@ class AnalyticsManager {
   }
 
   void memorySearchCleared(int totalFactsCount) {
-    track('Fact Search Cleared', properties: {'total_facts_count': totalFactsCount});
+    const TypedEvents().emit(MemorySearchCleared(totalFactsCount: totalFactsCount));
   }
 
   void memoryListItemClicked(Memory memory) {
@@ -797,16 +1085,23 @@ class AnalyticsManager {
   }
 
   void memoriesAllVisibilityChanged(MemoryVisibility newVisibility, int count) {
-    track('All Facts Visibility Changed', properties: {'new_visibility': newVisibility.name, 'facts_count': count});
+    const TypedEvents().emit(MemoriesAllVisibilityChanged(
+      newVisibility: switch (newVisibility) {
+        MemoryVisibility.private => MemoriesAllVisibilityChangedNewVisibility.private,
+        MemoryVisibility.public => MemoriesAllVisibilityChangedNewVisibility.public,
+        MemoryVisibility.shared => MemoriesAllVisibilityChangedNewVisibility.shared,
+      },
+      factsCount: count,
+    ));
   }
 
   void memoriesAllDeleted(int countBeforeDeletion) {
-    track('All Facts Deleted', properties: {'facts_count_before_deletion': countBeforeDeletion});
+    const TypedEvents().emit(MemoriesAllDeleted(factsCountBeforeDeletion: countBeforeDeletion));
   }
 
   void memoriesFiltered(String filter) => track('Facts Filtered', properties: {'filter': filter});
 
-  void memoriesManagementSheetOpened() => track('Facts Management Sheet Opened');
+  void memoriesManagementSheetOpened() => const TypedEvents().emit(const MemoriesManagementSheetOpened());
 
   Map<String, dynamic> _getTranscriptProperties(String transcript) {
     String transcriptCopy = transcript.substring(0, transcript.length);
@@ -833,18 +1128,21 @@ class AnalyticsManager {
   }
 
   void conversationCreated(ServerConversation conversation, {BtDevice? recordingDevice}) {
-    var properties = getConversationEventProperties(conversation);
-    properties['memory_result'] = conversation.discarded ? 'discarded' : 'saved';
-    properties['action_items_count'] = conversation.structured.actionItems.length;
-    properties['transcript_language'] = _preferences.userPrimaryLanguage;
-
-    // Additional properties for conversation creation
-    properties['conversation_source'] = conversation.source?.toString().split('.').last ?? 'unknown';
-    properties['duration_seconds'] = conversation.getDurationInSeconds();
-    properties['timestamp'] = conversation.createdAt.toIso8601String();
+    // Named fields only. getConversationEventProperties reads getTranscript()
+    // to derive counts; Memory Created must not pull user content into analytics.
+    final properties = <String, dynamic>{
+      'memory_id': conversation.id,
+      'memory_discarded': conversation.discarded,
+      'memory_hours_since_creation': DateTime.now().difference(conversation.createdAt).inHours,
+      'memory_result': conversation.discarded ? 'discarded' : 'saved',
+      'action_items_count': conversation.structured.actionItems.length,
+      'transcript_language': _preferences.userPrimaryLanguage,
+      'conversation_source': conversation.source?.toString().split('.').last ?? 'unknown',
+      'duration_seconds': conversation.getDurationInSeconds(),
+      'timestamp': conversation.createdAt.toIso8601String(),
+    };
     properties.addAll(recordingDeviceProperties(recordingDevice));
 
-    // Get the summarized app info if available
     if (conversation.appResults.isNotEmpty) {
       var summarizedApp = conversation.appResults.firstOrNull;
       if (summarizedApp != null && summarizedApp.appId != null) {
@@ -895,52 +1193,251 @@ class AnalyticsManager {
     track('Chat Voice Input Used', properties: {'chat_target_id': chatTargetId, 'is_persona_chat': isPersonaChat});
   }
 
-  void speechProfileCapturePageClicked() => track('Speech Profile Capture Page Clicked');
+  void speechProfileCapturePageClicked() => const TypedEvents().emit(const SpeechProfileCapturePageClicked());
 
-  void speechProfileSkipped() => track(speechProfileEnrollEventName(SpeechProfileEnrollEvent.skipped));
+  void speechProfileSkipped() => const TypedEvents().emit(const SpeechProfileSkipped());
 
-  void speechProfileUploadSucceeded() => track(speechProfileEnrollEventName(SpeechProfileEnrollEvent.uploadSucceeded));
+  void speechProfileUploadSucceeded() => const TypedEvents().emit(const SpeechProfileUploadSucceeded());
 
   void speechProfileUploadFailed({String? reason, int? statusCode}) => track(
         speechProfileEnrollEventName(SpeechProfileEnrollEvent.uploadFailed),
+        properties: {if (reason != null) 'reason': reason, if (statusCode != null) 'status_code': statusCode},
+      );
+
+  void speechProfileEmbeddingStored() => const TypedEvents().emit(const SpeechProfileEmbeddingStored());
+
+  void speechProfileContinued() => const TypedEvents().emit(const SpeechProfileContinued());
+
+  void guidedIntroStarted({
+    required String sessionId,
+    required String source,
+    required String variant,
+    required int promptCount,
+  }) =>
+      track(
+        'Guided Intro Started',
+        properties: {'session_id': sessionId, 'source': source, 'variant': variant, 'prompt_count': promptCount},
+      );
+
+  void guidedIntroPromptViewed({
+    required String sessionId,
+    required String source,
+    required String variant,
+    required int promptIndex,
+  }) =>
+      track(
+        'Guided Intro Prompt Viewed',
+        properties: {'session_id': sessionId, 'source': source, 'variant': variant, 'prompt_index': promptIndex},
+      );
+
+  void guidedIntroRecordingStarted({
+    required String sessionId,
+    required String source,
+    required String variant,
+    required int promptIndex,
+    required int attempt,
+  }) =>
+      track(
+        'Guided Intro Recording Started',
         properties: {
-          if (reason != null) 'reason': reason,
-          if (statusCode != null) 'status_code': statusCode,
+          'session_id': sessionId,
+          'source': source,
+          'variant': variant,
+          'prompt_index': promptIndex,
+          'attempt': attempt,
         },
       );
 
-  void speechProfileEmbeddingStored() => track(speechProfileEnrollEventName(SpeechProfileEnrollEvent.embeddingStored));
-
-  void speechProfileContinued() => track(speechProfileContinuedEventName);
-
-  void showDiscardedMemoriesToggled(bool showDiscarded) =>
-      track('Show Discarded Memories Toggled', properties: {'show_discarded': showDiscarded});
-
-  // Conversation Display Settings Events
-  void conversationDisplaySettingsOpened() => track('Conversation Display Settings Opened');
-
-  void showShortConversationsToggled(bool showShort) =>
-      track('Show Short Conversations Toggled', properties: {'show_short': showShort});
-
-  void showDiscardedConversationsToggled(bool showDiscarded) =>
-      track('Show Discarded Conversations Toggled', properties: {'show_discarded': showDiscarded});
-
-  void shortConversationThresholdChanged(int thresholdSeconds) => track(
-        'Short Conversation Threshold Changed',
-        properties: {'threshold_seconds': thresholdSeconds, 'threshold_minutes': thresholdSeconds ~/ 60},
+  void guidedIntroRecordingFailed({
+    required String sessionId,
+    required String source,
+    required String variant,
+    required int promptIndex,
+    required String failureClass,
+  }) =>
+      track(
+        'Guided Intro Recording Failed',
+        properties: {
+          'session_id': sessionId,
+          'source': source,
+          'variant': variant,
+          'prompt_index': promptIndex,
+          'failure_class': failureClass,
+        },
       );
 
-  void voiceResponseToggled(bool enabled) => track('Voice Response Audio Toggled', properties: {'enabled': enabled});
+  void guidedIntroPromptCompleted({
+    required String sessionId,
+    required String source,
+    required String variant,
+    required int promptIndex,
+    required String result,
+    required int durationMs,
+    required bool transcriptPresent,
+  }) =>
+      track(
+        'Guided Intro Prompt Completed',
+        properties: {
+          'session_id': sessionId,
+          'source': source,
+          'variant': variant,
+          'prompt_index': promptIndex,
+          'result': result,
+          'duration_ms': durationMs,
+          'transcript_present': transcriptPresent,
+        },
+      );
+
+  void guidedIntroReviewShown({
+    required String sessionId,
+    required String source,
+    required String variant,
+    required int answerCount,
+    required bool goalPresent,
+    required int reviewAttempt,
+  }) =>
+      track(
+        'Guided Intro Review Shown',
+        properties: {
+          'session_id': sessionId,
+          'source': source,
+          'variant': variant,
+          'answer_count': answerCount,
+          'goal_present': goalPresent,
+          'review_attempt': reviewAttempt,
+        },
+      );
+
+  void guidedIntroSaveSubmitted({
+    required String sessionId,
+    required String source,
+    required String variant,
+    required int selectedAnswerCount,
+    required int selectedMemoryCount,
+    required bool goalSelected,
+    required bool voiceAttempted,
+    required int attempt,
+  }) =>
+      track(
+        'Guided Intro Save Submitted',
+        properties: {
+          'session_id': sessionId,
+          'source': source,
+          'variant': variant,
+          'selected_answer_count': selectedAnswerCount,
+          'selected_memory_count': selectedMemoryCount,
+          'goal_selected': goalSelected,
+          'voice_attempted': voiceAttempted,
+          'attempt': attempt,
+        },
+      );
+
+  void guidedIntroVoiceEnrollment({
+    required String sessionId,
+    required String source,
+    required String variant,
+    required String result,
+    required int durationMs,
+    required int attempt,
+  }) =>
+      track(
+        'Guided Intro Voice Enrollment',
+        properties: {
+          'session_id': sessionId,
+          'source': source,
+          'variant': variant,
+          'result': result,
+          'duration_ms': durationMs,
+          'attempt': attempt,
+        },
+      );
+
+  void guidedIntroContentSave({
+    required String sessionId,
+    required String source,
+    required String variant,
+    required int memoryAttempted,
+    required int memorySaved,
+    required int memoryFailed,
+    required String goalResult,
+    required int attempt,
+  }) =>
+      track(
+        'Guided Intro Content Save',
+        properties: {
+          'session_id': sessionId,
+          'source': source,
+          'variant': variant,
+          'memory_attempted': memoryAttempted,
+          'memory_saved': memorySaved,
+          'memory_failed': memoryFailed,
+          'goal_result': goalResult,
+          'attempt': attempt,
+        },
+      );
+
+  void guidedIntroCompleted({
+    required String sessionId,
+    required String source,
+    required String variant,
+    required String completionMode,
+    required String voiceResult,
+    required int memorySaved,
+    required String goalResult,
+    required int elapsedMs,
+  }) =>
+      track(
+        'Guided Intro Completed',
+        properties: {
+          'session_id': sessionId,
+          'source': source,
+          'variant': variant,
+          'completion_mode': completionMode,
+          'voice_result': voiceResult,
+          'memory_saved': memorySaved,
+          'goal_result': goalResult,
+          'elapsed_ms': elapsedMs,
+        },
+      );
+
+  void showDiscardedMemoriesToggled(bool showDiscarded) =>
+      const TypedEvents().emit(ShowDiscardedMemoriesToggled(showDiscarded: showDiscarded));
+
+  // Conversation Display Settings Events
+  void conversationDisplaySettingsOpened() => const TypedEvents().emit(const ConversationDisplaySettingsOpened());
+
+  void showShortConversationsToggled(bool showShort) =>
+      const TypedEvents().emit(ShowShortConversationsToggled(showShort: showShort));
+
+  void showDiscardedConversationsToggled(bool showDiscarded) =>
+      const TypedEvents().emit(ShowDiscardedConversationsToggled(showDiscarded: showDiscarded));
+
+  void shortConversationThresholdChanged(int thresholdSeconds) => const TypedEvents().emit(
+        ShortConversationThresholdChanged(
+          thresholdSeconds: thresholdSeconds,
+          thresholdMinutes: thresholdSeconds ~/ 60,
+        ),
+      );
+
+  void voiceResponseToggled(bool enabled) => const TypedEvents().emit(VoiceResponseToggled(enabled: enabled));
 
   void voiceResponseModeChanged(int mode) {
-    const names = {0: 'off', 1: 'headphones_only', 2: 'always'};
-    track('Voice Response Mode Changed', properties: {'mode': names[mode] ?? 'unknown', 'mode_int': mode});
+    const TypedEvents().emit(VoiceResponseModeChanged(
+      mode: switch (mode) {
+        0 => VoiceResponseModeChangedMode.off,
+        1 => VoiceResponseModeChangedMode.headphonesOnly,
+        2 => VoiceResponseModeChangedMode.always,
+        _ => VoiceResponseModeChangedMode.unknown,
+      },
+      modeInt: mode,
+    ));
   }
 
   // Conversation Merge Events
-  void conversationMergeSelectionModeEntered() => track('Conversation Merge Selection Mode Entered');
+  void conversationMergeSelectionModeEntered() =>
+      const TypedEvents().emit(const ConversationMergeSelectionModeEntered());
 
-  void conversationMergeSelectionModeExited() => track('Conversation Merge Selection Mode Exited');
+  void conversationMergeSelectionModeExited() => const TypedEvents().emit(const ConversationMergeSelectionModeExited());
 
   void conversationSelectedForMerge(String conversationId, int totalSelected) => track(
         'Conversation Selected For Merge',
@@ -986,7 +1483,7 @@ class AnalyticsManager {
   void chatMessageConversationClicked(ServerConversation conversation) =>
       track('Chat Message Memory Clicked', properties: getConversationEventProperties(conversation));
 
-  void addManualConversationClicked() => track('Add Manual Memory Clicked');
+  void addManualConversationClicked() => const TypedEvents().emit(const AddManualConversationClicked());
 
   void manualConversationCreated(ServerConversation conversation) =>
       track('Manual Memory Created', properties: getConversationEventProperties(conversation));
@@ -1003,24 +1500,24 @@ class AnalyticsManager {
       track('Re-process Memory', properties: getConversationEventProperties(conversation));
 
   void developerModeEnabled() {
-    track('Developer Mode Enabled');
+    const TypedEvents().emit(const DeveloperModeEnabled());
     setUserProperty('Dev Mode Enabled', true);
   }
 
   void developerModeDisabled() {
-    track('Developer Mode Disabled');
+    const TypedEvents().emit(const DeveloperModeDisabled());
     setUserProperty('Dev Mode Enabled', false);
   }
 
-  void userIDCopied() => track('User ID Copied');
+  void userIDCopied() => const TypedEvents().emit(const UserIDCopied());
 
-  void exportMemories() => track('Dev Mode Export Memories');
+  void exportMemories() => const TypedEvents().emit(const ExportMemories());
 
-  void importMemories() => track('Dev Mode Import Memories');
+  void importMemories() => const TypedEvents().emit(const ImportMemories());
 
-  void importedMemories() => track('Dev Mode Imported Memories');
+  void importedMemories() => const TypedEvents().emit(const ImportedMemories());
 
-  void supportContacted() => track('Support Contacted');
+  void supportContacted() => const TypedEvents().emit(const SupportContacted());
 
   void copiedConversationDetails(ServerConversation conversation, {String source = ''}) =>
       track('Copied Memory Detail $source'.trim(), properties: getConversationEventProperties(conversation));
@@ -1049,22 +1546,22 @@ class AnalyticsManager {
         'change_source': 'mobile_checkout',
       },
     );
-    track('Upgrade Succeeded');
+    const TypedEvents().emit(const UpgradeSucceeded());
   }
 
-  void upgradeCancelled() => track('Upgrade Cancelled');
+  void upgradeCancelled() => const TypedEvents().emit(const UpgradeCancelled());
 
-  void upgradeModalDismissed() => track('Upgrade Modal Dismissed');
+  void upgradeModalDismissed() => const TypedEvents().emit(const UpgradeModalDismissed());
 
-  void upgradeModalClicked() => track('Upgrade Modal Clicked');
+  void upgradeModalClicked() => const TypedEvents().emit(const UpgradeModalClicked());
 
-  void subscriptionCancelFlowStarted() => track('Subscription Cancel Flow Started');
+  void subscriptionCancelFlowStarted() => const TypedEvents().emit(const SubscriptionCancelFlowStarted());
 
   void subscriptionCancelReasonSelected({required String reason}) =>
       track('Subscription Cancel Reason Selected', properties: {'reason': reason});
 
-  void subscriptionCancelConfirmed({required String reason, String? details}) =>
-      track('Subscription Cancel Confirmed', properties: {'reason': reason, 'reason_details': details});
+  void subscriptionCancelConfirmed({required String reason, String? details}) => track('Subscription Cancel Confirmed',
+      properties: {'reason': reason, 'has_details': details?.isNotEmpty == true});
 
   void subscriptionCancelKeptPlan({required int step, String? reason}) =>
       track('Subscription Cancel Kept Plan', properties: {'step': step, 'reason': reason});
@@ -1072,53 +1569,55 @@ class AnalyticsManager {
   void subscriptionCancelAbandoned({required int step, String? reason}) =>
       track('Subscription Cancel Abandoned', properties: {'step': step, 'reason': reason});
 
-  void connectFriendClicked() => track('Connect Friend Clicked');
+  void connectFriendClicked() => const TypedEvents().emit(const ConnectFriendClicked());
 
-  void disconnectFriendClicked() => track('Disconnect Friend Clicked');
+  void disconnectFriendClicked() => const TypedEvents().emit(const DisconnectFriendClicked());
 
-  void batteryIndicatorClicked() => track('Battery Indicator Clicked');
+  void batteryIndicatorClicked() => const TypedEvents().emit(const BatteryIndicatorClicked());
 
-  void useWithoutDeviceOnboardingWelcome() => track('Use Without Device Onboarding Welcome');
+  void useWithoutDeviceOnboardingWelcome() => const TypedEvents().emit(const UseWithoutDeviceOnboardingWelcome());
 
-  void useWithoutDeviceOnboardingFindDevices() => track('Use Without Device Onboarding Find Devices');
+  void useWithoutDeviceOnboardingFindDevices() =>
+      const TypedEvents().emit(const UseWithoutDeviceOnboardingFindDevices());
 
   // void pageViewed(String pageName) => startTimingEvent('Page View $pageName');
 
-  void addedPerson() => track('Added Person');
+  void addedPerson() => const TypedEvents().emit(const AddedPerson());
 
-  void removedPerson() => track('Removed Person');
+  void removedPerson() => const TypedEvents().emit(const RemovedPerson());
 
-  void tagSheetOpened() => track('Tag Sheet Opened');
+  void tagSheetOpened() => const TypedEvents().emit(const TagSheetOpened());
 
   void taggedSegment(String assignType) => track('Tagged Segment $assignType');
 
-  void untaggedSegment() => track('Untagged Segment');
+  void untaggedSegment() => const TypedEvents().emit(const UntaggedSegment());
 
-  void editSegmentTextStarted() => track('Edit Segment Text Started');
+  void editSegmentTextStarted() => const TypedEvents().emit(const EditSegmentTextStarted());
 
-  void editSegmentTextSaved() => track('Edit Segment Text Saved');
+  void editSegmentTextSaved() => const TypedEvents().emit(const EditSegmentTextSaved());
 
-  void editSegmentTextCancelled() => track('Edit Segment Text Cancelled');
+  void editSegmentTextCancelled() => const TypedEvents().emit(const EditSegmentTextCancelled());
 
-  void editSummaryStarted() => track('Edit Summary Started');
+  void editSummaryStarted() => const TypedEvents().emit(const EditSummaryStarted());
 
-  void editSummarySaved() => track('Edit Summary Saved');
+  void editSummarySaved() => const TypedEvents().emit(const EditSummarySaved());
 
-  void editSummaryCancelled() => track('Edit Summary Cancelled');
+  void editSummaryCancelled() => const TypedEvents().emit(const EditSummaryCancelled());
 
-  void deleteAccountClicked() => track('Delete Account Clicked');
+  void deleteAccountClicked() => const TypedEvents().emit(const DeleteAccountClicked());
 
-  void deleteAccountConfirmed() => track('Delete Account Confirmed');
+  void deleteAccountConfirmed() => const TypedEvents().emit(const DeleteAccountConfirmed());
 
-  void deleteAccountCancelled() => track('Delete Account Cancelled');
+  void deleteAccountCancelled() => const TypedEvents().emit(const DeleteAccountCancelled());
 
-  void deleteAccountFlowStarted() => track('Delete Account Flow Started');
+  void deleteAccountFlowStarted() => const TypedEvents().emit(const DeleteAccountFlowStarted());
 
   void deleteAccountReasonSelected({required String reason}) =>
       track('Delete Account Reason Selected', properties: {'reason': reason});
 
   void deleteAccountFeedbackSubmitted({required String reason, String? details}) =>
-      track('Delete Account Feedback Submitted', properties: {'reason': reason, 'reason_details': details});
+      track('Delete Account Feedback Submitted',
+          properties: {'reason': reason, 'has_details': details?.isNotEmpty == true});
 
   void deleteAccountAbandoned({required int step, String? reason}) =>
       track('Delete Account Abandoned', properties: {'step': step, 'reason': reason});
@@ -1134,8 +1633,8 @@ class AnalyticsManager {
       });
 
   // Apps Filter
-  void appsFilterOpened() => track('Apps Filter Opened');
-  void appsFilterApplied() => track('Apps Filter Applied');
+  void appsFilterOpened() => const TypedEvents().emit(const AppsFilterOpened());
+  void appsFilterApplied() => const TypedEvents().emit(const AppsFilterApplied());
   void appsCategoryFilter(String category, bool isSelected) {
     track('Apps Category Filter', properties: {'category': category, 'selected': isSelected});
   }
@@ -1156,16 +1655,18 @@ class AnalyticsManager {
     track('Apps Capability Filter', properties: {'capability': capability, 'selected': isSelected});
   }
 
-  void appsClearFilters() => track('Apps Clear Filters');
+  void appsClearFilters() => const TypedEvents().emit(const AppsClearFilters());
 
   // Brain Map Events
-  void brainMapOpened() => track('Brain Map Opened');
+  void brainMapOpened() => const TypedEvents().emit(const BrainMapOpened());
 
   void brainMapNodeClicked(String nodeId, String label, String type) {
-    track('Brain Map Node Clicked', properties: {'node_id': nodeId, 'label': label, 'type': type});
+    track('Brain Map Node Clicked', properties: {
+      'type': const {'person', 'place', 'organization', 'concept', 'event', 'memory'}.contains(type) ? type : 'other'
+    });
   }
 
-  void brainMapShareClicked() => track('Brain Map Share Clicked');
+  void brainMapShareClicked() => const TypedEvents().emit(const BrainMapShareClicked());
 
   // Summarized Apps Sheet Events
   void summarizedAppSheetViewed({required String conversationId, String? currentSummarizedAppId}) {
@@ -1202,22 +1703,22 @@ class AnalyticsManager {
   }
 
   // Action Items Page Events
-  void actionItemsPageOpened() => track('Action Items Page Opened');
+  void actionItemsPageOpened() => const TypedEvents().emit(const ActionItemsPageOpened());
 
   void actionItemsViewToggled(bool isGroupedView) {
-    track('Action Items View Toggled', properties: {'grouped_view': isGroupedView});
+    const TypedEvents().emit(ActionItemsViewToggled(groupedView: isGroupedView));
   }
 
   void actionItemToggledCompletionOnActionItemsPage({
     required String conversationId,
-    required String actionItemDescription, // Using description as a pseudo-ID if no stable ID exists
+    required String actionItemDescription, // Only presence is emitted; never content.
     required bool isCompleted,
   }) {
     track(
       'Action Item Completion Toggled on Action Items Page',
       properties: {
         'conversation_id': conversationId,
-        'action_item_description': actionItemDescription,
+        'has_description': actionItemDescription.isNotEmpty,
         'is_completed': isCompleted,
       },
     );
@@ -1229,7 +1730,7 @@ class AnalyticsManager {
   }) {
     track(
       'Action Item Tapped for Edit on Action Items Page',
-      properties: {'conversation_id': conversationId, 'action_item_description': actionItemDescription},
+      properties: {'conversation_id': conversationId, 'has_description': actionItemDescription.isNotEmpty},
     );
   }
 
@@ -1237,9 +1738,7 @@ class AnalyticsManager {
     track('Action Items Date Filter Applied', properties: {'filter_type': filterType});
   }
 
-  void actionItemsDateFilterCleared() {
-    track('Action Items Date Filter Cleared');
-  }
+  void actionItemsDateFilterCleared() => const TypedEvents().emit(const ActionItemsDateFilterCleared());
 
   void actionItemTabChanged(String tabName) {
     track('Action Item Tab Changed', properties: {'tab_name': tabName});
@@ -1250,12 +1749,12 @@ class AnalyticsManager {
   }
 
   void trainingDataOptInSubmitted() {
-    track('Training Data Opt-In Submitted');
+    const TypedEvents().emit(const TrainingDataOptInSubmitted());
     setUserProperty('Training Data Opted In', true);
   }
 
   void trainingDataOptInApproved() {
-    track('Training Data Opt-In Approved');
+    const TypedEvents().emit(const TrainingDataOptInApproved());
     setUserProperty('Training Data Status', 'approved');
   }
 
@@ -1265,7 +1764,7 @@ class AnalyticsManager {
   }
 
   void deletedConversationsFilterToggled(bool showDeleted) {
-    track('Deleted Conversations Filter Toggled', properties: {'show_deleted': showDeleted});
+    const TypedEvents().emit(DeletedConversationsFilterToggled(showDeleted: showDeleted));
   }
 
   void calendarFilterApplied(DateTime startDate, DateTime endDate) {
@@ -1280,13 +1779,9 @@ class AnalyticsManager {
     );
   }
 
-  void calendarFilterCleared() {
-    track('Calendar Filter Cleared');
-  }
+  void calendarFilterCleared() => const TypedEvents().emit(const CalendarFilterCleared());
 
-  void searchBarFocused() {
-    track('Search Bar Focused');
-  }
+  void searchBarFocused() => const TypedEvents().emit(const SearchBarFocused());
 
   void searchQueryEntered(String query, int resultsCount) {
     track(
@@ -1295,9 +1790,7 @@ class AnalyticsManager {
     );
   }
 
-  void searchQueryCleared() {
-    track('Search Query Cleared');
-  }
+  void searchQueryCleared() => const TypedEvents().emit(const SearchQueryCleared());
 
   void conversationOpenedFromSearch({
     required ServerConversation conversation,
@@ -1315,17 +1808,13 @@ class AnalyticsManager {
     required bool hasPhotos,
     required int segmentCount,
     required int photoCount,
-  }) {
-    track(
-      'Live Transcript Card Clicked',
-      properties: {
-        'has_segments': hasSegments,
-        'has_photos': hasPhotos,
-        'segment_count': segmentCount,
-        'photo_count': photoCount,
-      },
-    );
-  }
+  }) =>
+      const TypedEvents().emit(LiveTranscriptCardClicked(
+        hasSegments: hasSegments,
+        hasPhotos: hasPhotos,
+        segmentCount: segmentCount,
+        photoCount: photoCount,
+      ));
 
   void conversationListItemClickedWithTimeDifference({
     required ServerConversation conversation,
@@ -1422,9 +1911,7 @@ class AnalyticsManager {
     );
   }
 
-  void exportTasksBannerClicked() {
-    track('Export Tasks Banner Clicked');
-  }
+  void exportTasksBannerClicked() => const TypedEvents().emit(const ExportTasksBannerClicked());
 
   void taskIntegrationEnabled({required String appName, required bool success}) {
     track('Task Integration Enabled', properties: {'app_name': appName, 'success': success});
@@ -1459,7 +1946,10 @@ class AnalyticsManager {
   // ============================================================================
 
   void audioPlaybackFailed({required String conversationId, required String reason}) {
-    track('Audio Playback Failed', properties: {'conversation_id': conversationId, 'reason': reason});
+    track('Audio Playback Failed', properties: {
+      'conversation_id': conversationId,
+      'reason': const {'pending_timeout', 'no_matching_sources'}.contains(reason) ? reason : 'unknown'
+    });
   }
 
   void audioPlaybackStarted({required String conversationId, int? durationSeconds}) {
@@ -1528,7 +2018,7 @@ class AnalyticsManager {
   void audioShareFailed({required String conversationId, String? errorMessage}) {
     track(
       'Audio Share Failed',
-      properties: {'conversation_id': conversationId, if (errorMessage != null) 'error_message': errorMessage},
+      properties: {'conversation_id': conversationId, 'failure_class': 'unknown'},
     );
   }
 
@@ -1565,20 +2055,16 @@ class AnalyticsManager {
     required int titleDuePulled,
     required int titleDuePushed,
     required int remindersUnlinked,
-  }) {
-    track(
-      'Apple Reminders Sync Completed',
-      properties: {
-        'pending_exported': pendingExported,
-        'synced_checked': syncedChecked,
-        'completions_pulled': completionsPulled,
-        'completions_pushed': completionsPushed,
-        'title_due_pulled': titleDuePulled,
-        'title_due_pushed': titleDuePushed,
-        'reminders_unlinked': remindersUnlinked,
-      },
-    );
-  }
+  }) =>
+      const TypedEvents().emit(AppleRemindersSyncCompleted(
+        pendingExported: pendingExported,
+        syncedChecked: syncedChecked,
+        completionsPulled: completionsPulled,
+        completionsPushed: completionsPushed,
+        titleDuePulled: titleDuePulled,
+        titleDuePushed: titleDuePushed,
+        remindersUnlinked: remindersUnlinked,
+      ));
 
   void appleReminderDirectSync({required String actionItemId}) {
     track('Apple Reminder Direct Sync', properties: {'action_item_id': actionItemId});
@@ -1612,15 +2098,15 @@ class AnalyticsManager {
   }
 
   void appsFilterMyApps({required bool enabled}) {
-    track('Apps Filter My Apps', properties: {'enabled': enabled});
+    const TypedEvents().emit(AppsFilterMyApps(enabled: enabled));
   }
 
   void appsFilterInstalled({required bool enabled}) {
-    track('Apps Filter Installed', properties: {'enabled': enabled});
+    const TypedEvents().emit(AppsFilterInstalled(enabled: enabled));
   }
 
   void appsFilterRating({required int rating}) {
-    track('Apps Filter Rating', properties: {'rating': rating});
+    const TypedEvents().emit(AppsFilterRating(rating: rating));
   }
 
   void appsFilterCategory({required String category}) {
@@ -1756,9 +2242,7 @@ class AnalyticsManager {
     track('Folder Context Menu Opened', properties: {'folder_id': folderId, 'folder_name': folderName});
   }
 
-  void createFolderButtonClicked() {
-    track('Create Folder Button Clicked');
-  }
+  void createFolderButtonClicked() => const TypedEvents().emit(const CreateFolderButtonClicked());
 
   void conversationDetailFolderChipClicked({required String conversationId, String? currentFolderId}) {
     track(
@@ -1832,27 +2316,20 @@ class AnalyticsManager {
     track('Conversation Star Toggled', properties: properties);
   }
 
-  void omiDoubleTap({required String feature, Map<String, dynamic>? additionalProperties}) {
-    track(
-      'Omi Double Tap',
-      properties: {'feature': feature, if (additionalProperties != null) ...additionalProperties},
-    );
+  void omiDoubleTap({required String feature}) {
+    track('Omi Double Tap', properties: {'feature': feature});
   }
 
   // ============================================================================
   // WRAPPED 2025 TRACKING
   // ============================================================================
 
-  void wrappedPageOpened() {
-    track('Wrapped Page Opened');
-  }
+  void wrappedPageOpened() => const TypedEvents().emit(const WrappedPageOpened());
 
-  void wrappedBannerClicked() {
-    track('Wrapped Banner Clicked');
-  }
+  void wrappedBannerClicked() => const TypedEvents().emit(const WrappedBannerClicked());
 
   void wrappedGenerationStarted() {
-    track('Wrapped Generation Started');
+    const TypedEvents().emit(const WrappedGenerationStarted());
     startTimingEvent('Wrapped Generation Completed');
   }
 
@@ -1860,15 +2337,15 @@ class AnalyticsManager {
     required int totalConversations,
     required int totalMinutes,
     required int daysActive,
-  }) {
-    track(
-      'Wrapped Generation Completed',
-      properties: {'total_conversations': totalConversations, 'total_minutes': totalMinutes, 'days_active': daysActive},
-    );
-  }
+  }) =>
+      const TypedEvents().emit(WrappedGenerationCompleted(
+        totalConversations: totalConversations,
+        totalMinutes: totalMinutes,
+        daysActive: daysActive,
+      ));
 
   void wrappedGenerationFailed({String? error}) {
-    track('Wrapped Generation Failed', properties: {if (error != null) 'error': error});
+    track('Wrapped Generation Failed', properties: {'failure_class': 'unknown'});
   }
 
   void wrappedCardViewed({required String cardName, required int cardIndex}) {
@@ -1896,7 +2373,7 @@ class AnalyticsManager {
   void wrappedShareFailed({required String cardName, required int cardIndex, String? error}) {
     track(
       'Wrapped Share Failed',
-      properties: {'card_name': cardName, 'card_index': cardIndex, if (error != null) 'error': error},
+      properties: {'card_name': cardName, 'card_index': cardIndex, 'failure_class': 'unknown'},
     );
   }
 
@@ -1904,26 +2381,26 @@ class AnalyticsManager {
   // DAILY SUMMARY / RECAP TRACKING
   // ============================================================================
 
-  void dailySummarySettingsOpened() => track('Daily Summary Settings Opened');
+  void dailySummarySettingsOpened() => const TypedEvents().emit(const DailySummarySettingsOpened());
 
   // ============================================================================
   // Permissions
   // ============================================================================
 
-  void permissionsSettingsOpened() => track('Permissions Settings Opened');
+  void permissionsSettingsOpened() => const TypedEvents().emit(const PermissionsSettingsOpened());
 
   void permissionChanged({required String permission, required bool granted}) {
     track('Permission Changed', properties: {'permission': permission, 'granted': granted});
   }
 
-  void permissionsInterstitialShown() => track('Permissions Interstitial Shown');
+  void permissionsInterstitialShown() => const TypedEvents().emit(const PermissionsInterstitialShown());
 
-  void permissionsInterstitialCompleted() => track('Permissions Interstitial Completed');
+  void permissionsInterstitialCompleted() => const TypedEvents().emit(const PermissionsInterstitialCompleted());
 
-  void permissionsInterstitialSkipped() => track('Permissions Interstitial Skipped');
+  void permissionsInterstitialSkipped() => const TypedEvents().emit(const PermissionsInterstitialSkipped());
 
   void dailySummaryToggled({required bool enabled}) {
-    track('Daily Summary Toggled', properties: {'enabled': enabled});
+    const TypedEvents().emit(DailySummaryToggled(enabled: enabled));
     setUserProperty('Daily Summary Enabled', enabled);
   }
 
@@ -1949,10 +2426,10 @@ class AnalyticsManager {
   }
 
   void dailySummaryTestGenerationFailed({required String date, String? error}) {
-    track('Daily Summary Test Generation Failed', properties: {'date': date, if (error != null) 'error': error});
+    track('Daily Summary Test Generation Failed', properties: {'date': date, 'failure_class': 'unknown'});
   }
 
-  void recapTabOpened() => track('Recap Tab Opened');
+  void recapTabOpened() => const TypedEvents().emit(const RecapTabOpened());
 
   void recapSummaryCardClicked({required String summaryId, required String date, required int cardIndex}) {
     track('Recap Summary Card Clicked', properties: {'summary_id': summaryId, 'date': date, 'card_index': cardIndex});
@@ -2026,10 +2503,10 @@ class AnalyticsManager {
   }
 
   void changelogDismissed({required int changelogCount}) {
-    track('Changelog Dismissed', properties: {'changelog_count': changelogCount});
+    const TypedEvents().emit(ChangelogDismissed(changelogCount: changelogCount));
   }
 
-  void whatsNewOpened() => track('Whats New Opened');
+  void whatsNewOpened() => const TypedEvents().emit(const WhatsNewOpened());
 
   // ============================================================================
   // GOALS TRACKING
@@ -2093,13 +2570,13 @@ class AnalyticsManager {
     track('Daily Score CTA Tapped', properties: {'cta_type': ctaType});
   }
 
-  void dailyScoreHelpTapped() => track('Daily Score Help Tapped');
+  void dailyScoreHelpTapped() => const TypedEvents().emit(const DailyScoreHelpTapped());
 
   // ============================================================================
   // INTEGRATIONS PAGE TRACKING
   // ============================================================================
 
-  void integrationsPageOpened() => track('Integrations Page Opened');
+  void integrationsPageOpened() => const TypedEvents().emit(const IntegrationsPageOpened());
 
   void integrationConnectAttempted({required String integrationName}) {
     track('Integration Connect Attempted', properties: {'integration_name': integrationName});
@@ -2121,7 +2598,7 @@ class AnalyticsManager {
   // PAYMENTS PAGE TRACKING
   // ============================================================================
 
-  void paymentsPageOpened() => track('Payments Page Opened');
+  void paymentsPageOpened() => const TypedEvents().emit(const PaymentsPageOpened());
 
   void paymentMethodSelected({required String methodName}) {
     track('Payment Method Selected', properties: {'method_name': methodName});
@@ -2131,11 +2608,11 @@ class AnalyticsManager {
   // OTHER PAGES TRACKING
   // ============================================================================
 
-  void connectDevicePageOpened() => track('Connect Device Page Opened');
+  void connectDevicePageOpened() => const TypedEvents().emit(const ConnectDevicePageOpened());
 
-  void getOmiDeviceClicked() => track('Get Omi Device Clicked');
+  void getOmiDeviceClicked() => const TypedEvents().emit(const GetOmiDeviceClicked());
 
-  void connectionGuideOpened() => track('Connection Guide Opened');
+  void connectionGuideOpened() => const TypedEvents().emit(const ConnectionGuideOpened());
 
   void connectionGuideDeviceTapped(String deviceId) =>
       track('Connection Guide Device Tapped', properties: {'device_id': deviceId});
@@ -2146,26 +2623,26 @@ class AnalyticsManager {
   void connectionGuideReportIssue(String deviceId) =>
       track('Connection Guide Report Issue', properties: {'device_id': deviceId});
 
-  void dataPrivacyPageOpened() => track('Data Privacy Page Opened');
+  void dataPrivacyPageOpened() => const TypedEvents().emit(const DataPrivacyPageOpened());
 
-  void aiAppGeneratorPageOpened() => track('AI App Generator Page Opened');
+  void aiAppGeneratorPageOpened() => const TypedEvents().emit(const AiAppGeneratorPageOpened());
 
   void aiAppGeneratorPromptSubmitted({required int promptLength}) {
-    track('AI App Generator Prompt Submitted', properties: {'prompt_length': promptLength});
+    const TypedEvents().emit(AiAppGeneratorPromptSubmitted(promptLength: promptLength));
   }
 
   void aiAppGeneratorAppGenerated({required bool success}) {
-    track('AI App Generator App Generated', properties: {'success': success});
+    const TypedEvents().emit(AiAppGeneratorAppGenerated(success: success));
   }
 
-  void importHistoryPageOpened() => track('Import History Page Opened');
+  void importHistoryPageOpened() => const TypedEvents().emit(const ImportHistoryPageOpened());
 
   void importStarted({required String source}) {
     track('Import Started', properties: {'source': source});
   }
 
   void notificationFrequencyChanged({required int oldFrequency, required int newFrequency}) {
-    track('Notification Frequency Changed', properties: {'old_frequency': oldFrequency, 'new_frequency': newFrequency});
+    const TypedEvents().emit(NotificationFrequencyChanged(oldFrequency: oldFrequency, newFrequency: newFrequency));
   }
 
   static Object? _coerceProperty(dynamic value) {
@@ -2198,6 +2675,11 @@ class AnalyticsManager {
       final packageInfo = await PackageInfo.fromPlatform().timeout(timeout);
       if (packageInfo.version.isNotEmpty) version = packageInfo.version;
       if (packageInfo.buildNumber.isNotEmpty) build = packageInfo.buildNumber;
+      _appBuild = int.tryParse(build) ?? 0;
+      _clientAppNamespace = packageInfo.packageName;
+      _experimentNamespace = {'com.friend.ios', 'com.friend-app-with-wearable.ios12'}.contains(packageInfo.packageName)
+          ? 'mobile-prod'
+          : 'mobile-dev';
     } catch (_) {}
     _globalEventProperties = {'app_platform': _mobilePlatformName, 'app_version': version, 'app_build': build};
   }
@@ -2215,12 +2697,24 @@ class AnalyticsManager {
 }
 
 class _QueuedAnalyticsEvent {
-  const _QueuedAnalyticsEvent({required this.eventName, required this.properties, this.attempts = 0});
-
+  const _QueuedAnalyticsEvent(
+      {required this.eventName,
+      required this.properties,
+      required this.eventId,
+      required this.occurredAt,
+      required this.identityEpoch,
+      this.attempts = 0});
   final String eventName;
   final Map<String, Object> properties;
+  final String eventId;
+  final DateTime occurredAt;
+  final int identityEpoch;
   final int attempts;
-
-  _QueuedAnalyticsEvent nextAttempt() =>
-      _QueuedAnalyticsEvent(eventName: eventName, properties: properties, attempts: attempts + 1);
+  _QueuedAnalyticsEvent nextAttempt() => _QueuedAnalyticsEvent(
+      eventName: eventName,
+      properties: properties,
+      eventId: eventId,
+      occurredAt: occurredAt,
+      identityEpoch: identityEpoch,
+      attempts: attempts + 1);
 }

@@ -8,13 +8,17 @@ if str(Path(__file__).resolve().parents[2]) not in sys.path:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from config.prerecorded_stt import required_env_for_model_config  # noqa: E402
-from config.stt_provider_policy import STTServingSurface, canonical_model_config  # noqa: E402
+from config.stt_provider_policy import STTServingSurface, canonical_model_config, model_is_enabled  # noqa: E402
 from scripts.runtime_env_durable_dispatch_contracts import (  # noqa: E402
     validate_account_deletion_dispatch_contract as _validate_account_deletion_dispatch_contract,
     validate_listen_finalization_dispatch_contract as _validate_listen_finalization_dispatch_contract,
 )
 from scripts.runtime_env_parakeet_contract import validate_parakeet_admission_contract  # noqa: E402
-from scripts.runtime_env_capability_contracts import validate_conversation_finalization_capabilities  # noqa: E402
+from scripts.runtime_env_capability_contracts import (
+    validate_conversation_finalization_capabilities,
+    validate_free_tier_deploy_contract,
+    validate_speaker_embedding_hosts,
+)  # noqa: E402
 from scripts.runtime_env_memory_contract import validate_retired_memory_manifest  # noqa: E402
 from scripts.runtime_env_validation.cloud_run import (
     _fetch_live_cloud_run_state,
@@ -54,6 +58,17 @@ _MEMORY_MAINTENANCE_GATEWAY_REQUIRED_ENV = {
 }
 _MEMORY_MAINTENANCE_GATEWAY_REQUIRED_SECRETS = {'OMI_LLM_GATEWAY_SERVICE_TOKEN'}
 from scripts.runtime_env_validation.workflows import _validate_cloud_run_workflows
+
+_MISSING_CUSTOMER_DATA_IDENTITY = (
+    'missing customer-data identity: secret SERVICE_ACCOUNT_JSON or env OMI_CUSTOMER_DATA_PROJECT'
+)
+
+
+def _has_customer_data_identity(env_map: object, secrets_map: object) -> bool:
+    """A job reaches customer data through the legacy JSON key or a keyless runtime identity pin."""
+    if isinstance(secrets_map, dict) and 'SERVICE_ACCOUNT_JSON' in secrets_map:
+        return True
+    return bool((_manifest_literal_env_value(env_map, 'OMI_CUSTOMER_DATA_PROJECT') or '').strip())
 
 
 def _canonical_memory_surfaces(env_config: ConfigDict) -> list[tuple[str, ConfigDict]]:
@@ -277,6 +292,7 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
         'MEMORY_DAILY_MEMORY_SWEEP_COHORT_FLAG',
         'MEMORY_DAILY_MEMORY_SWEEP_COHORT_TIMEOUT_SECONDS',
         'MEMORY_DAILY_MEMORY_SWEEP_TIMEZONE_RECONCILIATION_ENABLED',
+        'MEMORY_DAILY_MEMORY_SWEEP_STAGGER_SECONDS',
     }
     for forbidden_name in sorted(daily_sweep_env_names.intersection(job_env)):
         errors.append(
@@ -321,8 +337,9 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
     ):
         if required_env not in job_env:
             errors.append(ValidationError(scope, f'missing env {required_env}'))
+    if not _has_customer_data_identity(job_env, job_secrets):
+        errors.append(ValidationError(scope, _MISSING_CUSTOMER_DATA_IDENTITY))
     for required_secret in (
-        'SERVICE_ACCOUNT_JSON',
         'ENCRYPTION_SECRET',
         'OPENAI_API_KEY',
         'PINECONE_API_KEY',
@@ -544,7 +561,9 @@ def _validate_daily_memory_sweep_job_contract(env: str, env_config: ConfigDict) 
     ):
         if required_env not in env_map:
             errors.append(ValidationError(scope, f'missing env {required_env}'))
-    for required_secret in ('SERVICE_ACCOUNT_JSON', 'ENCRYPTION_SECRET', 'OPENAI_API_KEY', 'POSTHOG_PROJECT_API_KEY'):
+    if not _has_customer_data_identity(env_map, secrets):
+        errors.append(ValidationError(scope, _MISSING_CUSTOMER_DATA_IDENTITY))
+    for required_secret in ('ENCRYPTION_SECRET', 'OPENAI_API_KEY', 'POSTHOG_PROJECT_API_KEY'):
         if required_secret not in secrets:
             errors.append(ValidationError(scope, f'missing secret {required_secret}'))
     return errors
@@ -641,6 +660,14 @@ def _validate_stt_serving_model_policy(env: str, env_config: ConfigDict) -> list
 
     for scope, env_map in surfaces:
         for env_name, expected_value in model_policy.items():
+            if (
+                scope == f'{env}/gke/backend-listen'
+                and env_name == 'STT_SERVICE_MODELS'
+                and _manifest_literal_env_value(env_map, 'STT_CONNECT_ORDER_FROM_CONFIG') == 'true'
+            ):
+                models = (_manifest_literal_env_value(env_map, env_name) or '').split(',')
+                if models and all(model_is_enabled(model.strip(), STTServingSurface.STREAMING) for model in models):
+                    continue
             if env_name not in env_map:
                 continue
             actual_value = _manifest_literal_env_value(env_map, env_name)
@@ -743,6 +770,8 @@ def validate_runtime_env(
     errors.extend(_validate_desktop_backend_vertex_pt_contract(env, env_config))
     errors.extend(_validate_gke(env_config, strict_provisional=strict_provisional))
     errors.extend(validate_conversation_finalization_capabilities(env, env_config))
+    errors.extend(validate_speaker_embedding_hosts(env, env_config))
+    errors.extend(validate_free_tier_deploy_contract(env, env_config))
     errors.extend(_validate_stt_serving_model_policy(env, env_config))
     errors.extend(validate_parakeet_admission_contract(env, env_config))
     errors.extend(_validate_prerecorded_stt_contract(env, env_config))

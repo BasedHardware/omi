@@ -70,7 +70,14 @@ def delete_focus_session(uid: str, session_id: str) -> bool:
 
 
 def get_focus_stats(uid: str, date: Optional[str] = None) -> Dict[str, Any]:
-    sessions = get_focus_sessions(uid, date=date, limit=5000, offset=0)
+    # A day's stats need a day.  Passing date=None straight through meant
+    # get_focus_sessions applied no created_at filter at all, so the totals
+    # below were summed from the user's entire history -- up to the 5000-row
+    # cap -- and then labelled with a single date.  Anyone opening focus
+    # stats without picking a day saw months of focus reported as today's.
+    # get_daily_score resolves the same way: no date means today.
+    day = date or datetime.now(timezone.utc).strftime('%Y-%m-%d')
+    sessions = get_focus_sessions(uid, date=day, limit=5000, offset=0)
     focused_count = 0
     distracted_count = 0
     total_focus_seconds = 0
@@ -92,7 +99,7 @@ def get_focus_stats(uid: str, date: Optional[str] = None) -> Dict[str, Any]:
     top = sorted(distractions.items(), key=lambda x: x[1]['total_seconds'], reverse=True)[:5]
 
     return {
-        'date': date or datetime.now(timezone.utc).strftime('%Y-%m-%d'),
+        'date': day,
         'focused_minutes': total_focus_seconds // 60,
         'distracted_minutes': total_distracted_seconds // 60,
         'session_count': focused_count + distracted_count,

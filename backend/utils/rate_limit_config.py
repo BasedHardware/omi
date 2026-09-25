@@ -67,7 +67,18 @@ ACTION_ITEMS_LIST_HOT_CLIENT_MAX: int = _hot_client_max()
 
 # Policies the boost must not touch. Env-overridable (see module docstring);
 # resolved against RATE_POLICIES below so a typo is dropped, not enforced.
-_BOOST_EXEMPT_DEFAULT = "action_items:list,action_items:list_hot_client,static_map:get"
+# The abuse ceilings below are decisions, not defaults: RATE_LIMIT_BOOST exists
+# to temporarily widen limits for events, and a boosted event window is exactly
+# when scripted abuse would exploit a multiplied dev-write budget (boost=100
+# would turn 30/min into 3,000/min). dev:memories and dev:conversations are
+# exempt too — they are the shared hourly ceilings the dedicated policies
+# compose with; exempting only the dedicated budgets would leave the aggregate
+# hourly caps boosted into no-ops.
+_BOOST_EXEMPT_DEFAULT = (
+    "action_items:list,action_items:list_hot_client,static_map:get,"
+    "dev:memories,dev:memories_write_burst,dev:conversations,dev:conversations_from_segments,"
+    "mcp:oauth_url_client,mcp:oauth_url_client_global"
+)
 _RATE_LIMIT_BOOST_EXEMPT_RAW: str = os.getenv("RATE_LIMIT_BOOST_EXEMPT", _BOOST_EXEMPT_DEFAULT)
 
 # ---------------------------------------------------------------------------
@@ -100,6 +111,10 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "file:upload": (40, 3600),
     # STT proxy — parakeet GPU batch transcription behind the Omi auth guard
     "stt:transcribe": (60, 3600),
+    # Speaker tag prompts: each clip merges stored audio chunks; each answer may
+    # queue voice-sample extraction. A daily set holds at most a handful.
+    "speaker_tag_prompts:clip": (60, 3600),
+    "speaker_tag_prompts:answer": (60, 3600),
     # Agent/MCP — bursty tool calls
     "agent:execute_tool": (120, 3600),
     # JIT frame metadata is cheap, but uploads carry bounded pixel bytes.
@@ -207,14 +222,37 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     "dev:conversation_transcript_read": (25, 3600),
     "dev:goals_read": (120, 3600),
     "dev:conversations": (25, 3600),
+    # Dedicated per-route budget for POST /v1/dev/user/conversations/from-segments,
+    # mirroring the first-party conversations:from-segments (30/hour) sizing.
+    # Composed on top of the shared dev:conversations ceiling so per-route
+    # tuning can never raise the aggregate conversation-write limit.
+    "dev:conversations_from_segments": (30, 3600),
     # Ask (/v1/dev/user/ask): one qa_rag LLM call per request over the caller's
     # conversations — billable like a conversation create, so it carries its own
     # low per-key cap instead of riding the cheap dev:conversations_read list limit.
     "dev:ask": (25, 3600),
     "dev:memories": (120, 3600),
+    # Per-minute burst ceiling on POST /v1/dev/user/memories, composed with
+    # dev:memories above. The hourly window alone admits the whole 120-request
+    # quota inside a single minute, which is exactly the scripted-burst shape
+    # seen on 2026-09-11 (69/min from one client). 30/min stays well above
+    # legitimate app/integration traffic while capping bursts far below it.
+    "dev:memories_write_burst": (30, 60),
     "dev:memories_batch": (15, 3600),
     "dev:action_items_write": (120, 3600),
     "dev:goals_write": (120, 3600),
+    # Unauthenticated URL-form (CIMD) client_id lookups on /authorize + /token:
+    # each can cost a bounded outbound metadata fetch, so the budget is
+    # per-minute and sits in front of the lookup. Keyed by the normalized
+    # client_id metadata host — the peer is the load balancer and forwarded
+    # headers are untrusted — so one abusive host cannot starve the rest.
+    # Boost-exempt: an event window must not widen an unauthenticated abuse
+    # surface.
+    "mcp:oauth_url_client": (30, 60),
+    # Fleet-wide backstop composed with the per-host bucket above: caps total
+    # unauthenticated URL-form admission when many distinct hosts attack at
+    # once, sized generously so real clients never notice it.
+    "mcp:oauth_url_client_global": (600, 60),
     # MCP REST data API
     "mcp:read": (300, 3600),
     "mcp:memories_read": (120, 3600),

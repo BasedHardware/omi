@@ -1126,7 +1126,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
       VStack(spacing: OmiSpacing.md) {
         ProgressView()
           .scaleEffect(0.8)
-        Text("Loading...")
+        Text("Loading…")
           .scaledFont(size: OmiType.body)
           .foregroundColor(Ink.secondary)
       }

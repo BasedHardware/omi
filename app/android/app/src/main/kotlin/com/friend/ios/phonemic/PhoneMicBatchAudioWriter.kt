@@ -2,9 +2,12 @@ package com.friend.ios.phonemic
 
 import com.friend.ios.batch.BaseBatchAudioWriter
 import com.friend.ios.batch.persistNativeBatchGeolocationSidecar
+import com.friend.ios.ble.OmiBleManager
 
 import android.content.Context
+import android.content.SharedPreferences
 import java.io.File
+import android.util.Log
 
 /**
  * Batch (transcribe-later) capture sink for the phone microphone — the Kotlin peer of
@@ -33,8 +36,24 @@ import java.io.File
  * markers, and nothing else — it is disjoint from the BLE writer's `audio_omibatch_` and
  * the Limitless writer's `audio_omibatchlimitless_`.
  */
-class PhoneMicBatchAudioWriter(context: Context, private val dirPath: String) :
-    BaseBatchAudioWriter(context, TAG, "audio_omibatchphone") {
+class PhoneMicBatchAudioWriter internal constructor(
+    private val dirPath: String,
+    preferences: () -> SharedPreferences,
+    notifyFinalized: (String) -> Unit,
+    log: (Int, String) -> Unit,
+) : BaseBatchAudioWriter("audio_omibatchphone", preferences, notifyFinalized, log) {
+
+    constructor(context: Context, dirPath: String) : this(
+        dirPath,
+        { context.getSharedPreferences(BaseBatchAudioWriter.FLUTTER_PREFS, Context.MODE_PRIVATE) },
+        { fileName ->
+            if (OmiBleManager.isFlutterAlive) {
+                val manager = OmiBleManager.instance
+                manager.mainHandler.post { manager.flutterApi?.onBatchRecordingFinalized(fileName) {} }
+            }
+        },
+        { priority, message -> Log.println(priority, TAG, message) },
+    )
 
     /**
      * Session total of frames durably accepted by the writer (each = one 20ms opus
@@ -75,9 +94,16 @@ class PhoneMicBatchAudioWriter(context: Context, private val dirPath: String) :
         synchronized(lock) {
             val now = System.currentTimeMillis()
 
-            // Muted: drop packets but keep the open file's gap timer fresh so unmute
-            // resumes the SAME file instead of opening a new one.
-            if (boolPref("batchMuted", false)) {
+            // Stamp the packet before doing any work. The policy is checked again
+            // under the write lock so queued audio admitted before a mute/revision
+            // change cannot cross the native file boundary.
+            val admittedRevision = captureAdmissionPolicy().revision
+            if (captureAdmissionPolicy().muted) {
+                if (isOpenLocked) lastFrameMs = now
+                return
+            }
+            val currentPolicy = captureAdmissionPolicy()
+            if (!currentPolicy.permits(admittedRevision)) {
                 if (isOpenLocked) lastFrameMs = now
                 return
             }
@@ -110,6 +136,13 @@ class PhoneMicBatchAudioWriter(context: Context, private val dirPath: String) :
                 wasStorageFull = false // a successful open means storage recovered
             }
 
+            // Opening/rotating a file can run arbitrary filesystem work. Re-read
+            // immediately before the write so a policy transition during that
+            // work cannot admit this packet.
+            if (!captureAdmissionPolicy().permits(admittedRevision)) {
+                if (isOpenLocked) lastFrameMs = now
+                return
+            }
             if (!writeFramesLocked(packets)) return
             // Location capture intentionally starts after native audio. Retry
             // until its fenced preference arrives; the sidecar helper never
