@@ -13,6 +13,7 @@ Zero external dependencies - uses Python 3 standard library only.
 from __future__ import annotations
 
 import argparse
+from datetime import datetime
 import json
 import sys
 from pathlib import Path
@@ -41,6 +42,10 @@ def surreal_quote(val: Any) -> str:
 def surreal_datetime_literal(val: Any) -> str:
     """Format an ISO-8601 timestamp string into a SurrealDB datetime literal d'...'.
 
+    Validates that the string conforms to ISO-8601 (handling 'Z' suffix).
+    If valid, returns d'...' literal for native SurrealDB datetime storage.
+    If unparseable or invalid, falls back to a plain quoted string literal
+    to prevent malformed records from aborting the entire surreal import.
     Returns 'NONE' if the value is absent or empty.
     """
     if not val:
@@ -48,12 +53,18 @@ def surreal_datetime_literal(val: Any) -> str:
     cleaned = str(val).strip()
     if not cleaned:
         return "NONE"
-    if (cleaned.startswith("'") and cleaned.endswith("'")) or (
-        cleaned.startswith('"') and cleaned.endswith('"')
-    ):
+    if (cleaned.startswith("'") and cleaned.endswith("'")) or (cleaned.startswith('"') and cleaned.endswith('"')):
         cleaned = cleaned[1:-1].strip()
     cleaned = cleaned.replace("'", "").replace("\\", "")
-    return f"d'{cleaned}'"
+    if not cleaned:
+        return "NONE"
+
+    try:
+        norm = cleaned.replace("Z", "+00:00")
+        datetime.fromisoformat(norm)
+        return f"d'{cleaned}'"
+    except (ValueError, TypeError):
+        return surreal_quote(cleaned)
 
 
 def surreal_array_literal(items: Sequence[str]) -> str:
@@ -67,6 +78,10 @@ def surreal_array_literal(items: Sequence[str]) -> str:
 def surreal_record_id(table_name: str, raw_id: str) -> str:
     """Format a safe record ID for SurrealDB using ⟨...⟩ wrapper if needed."""
     cleaned = str(raw_id).strip()
+    if not cleaned:
+        raise ValueError("Memory record missing required 'id' field")
+    if "⟩" in cleaned:
+        raise ValueError(f"Invalid memory record id containing literal '⟩': {raw_id}")
     return f"{table_name}:⟨{cleaned}⟩"
 
 
@@ -94,12 +109,10 @@ def format_memory_for_surreal(item: Dict[str, Any]) -> Dict[str, Any]:
     if not mid:
         raise ValueError("Memory record missing required 'id' field")
 
-    content = ""
+    content = str(item.get("content") or item.get("text") or item.get("transcript") or "").strip()
     structured = item.get("structured")
-    if isinstance(structured, dict):
-        content = structured.get("title") or structured.get("overview") or ""
-    if not content:
-        content = item.get("content") or item.get("text") or item.get("transcript") or ""
+    if not content and isinstance(structured, dict):
+        content = str(structured.get("title") or structured.get("overview") or "").strip()
 
     category = item.get("category")
     if not category and isinstance(structured, dict):
@@ -183,14 +196,16 @@ def generate_surrealql(
         )
         lines.append(f"UPSERT {rec_id} MERGE {fields};")
 
-    lines.extend([
-        "",
-        "-- Sample Analytical Queries in SurrealQL:",
-        f"-- 1. Search content: SELECT * FROM {table_name} WHERE string::contains(string::lowercase(content), 'meeting');",
-        f"-- 2. Count by category: SELECT category, count() AS total FROM {table_name} GROUP BY category;",
-        f"-- 3. Recent memories: SELECT * FROM {table_name} WHERE created_at > d'2026-01-01T00:00:00Z' ORDER BY created_at DESC LIMIT 10;",
-        "",
-    ])
+    lines.extend(
+        [
+            "",
+            "-- Sample Analytical Queries in SurrealQL:",
+            f"-- 1. Search content: SELECT * FROM {table_name} WHERE string::contains(string::lowercase(content), 'meeting');",
+            f"-- 2. Count by category: SELECT category, count() AS total FROM {table_name} GROUP BY category;",
+            f"-- 3. Recent memories: SELECT * FROM {table_name} WHERE created_at > d'2026-01-01T00:00:00Z' ORDER BY created_at DESC LIMIT 10;",
+            "",
+        ]
+    )
 
     return "\n".join(lines), len(normalized)
 
@@ -242,9 +257,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     if args.output != "-":
         out_path = Path(args.output)
         if out_path.exists() and not args.force:
-            sys.stderr.write(
-                f"Error: Output file already exists: {args.output} (use --force to overwrite)\n"
-            )
+            sys.stderr.write(f"Error: Output file already exists: {args.output} (use --force to overwrite)\n")
             return 1
 
     try:
@@ -259,9 +272,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         out_path = Path(args.output)
         out_path.parent.mkdir(parents=True, exist_ok=True)
         out_path.write_text(sql_content, encoding="utf-8")
-        sys.stderr.write(
-            f"Successfully generated SurrealQL script: {args.output} ({count} memories)\n"
-        )
+        sys.stderr.write(f"Successfully generated SurrealQL script: {args.output} ({count} memories)\n")
     return 0
 
 
