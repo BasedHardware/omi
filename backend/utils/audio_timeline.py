@@ -103,7 +103,8 @@ def _validated_chunk_spans(audio_files: Optional[Sequence]) -> Optional[List[Tup
             raw = getattr(audio_file, 'chunk_spans')
         else:
             return None
-        if not raw: continue
+        if not raw:
+            continue
         saw_any = True
         if not isinstance(raw, Sequence) or isinstance(raw, (str, bytes)):
             return None
