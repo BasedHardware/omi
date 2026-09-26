@@ -1,9 +1,18 @@
 import pytest
-from backend.routers.auth import _bounded_provider_error, _OAUTH_ERROR_CODES
+
+try:
+    from routers.auth import _bounded_provider_error, _OAUTH_ERROR_CODES
+except ImportError:
+    from backend.routers.auth import _bounded_provider_error, _OAUTH_ERROR_CODES
 
 
 def test_bounded_provider_error_valid_known_codes():
-    for code in ["access_denied", "invalid_request", "unauthorized_client", "server_error"]:
+    for code in [
+        "access_denied",
+        "invalid_request",
+        "unauthorized_client",
+        "server_error",
+    ]:
         assert _bounded_provider_error(code) == code
         assert _bounded_provider_error(f"  {code.upper()}  ") == code
 
