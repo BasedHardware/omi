@@ -45,13 +45,23 @@ class ChatToolResponse(BaseModel):
 
 class HolidayRequest(BaseModel):
     country_code: str = Field(..., min_length=2, max_length=2)
-    year: int = Field(..., ge=1970, le=2100)
+    year: int = Field(default=2026, ge=1970, le=2100)
     limit: int = Field(default=MAX_ITEMS, ge=1, le=MAX_ITEMS)
 
     @field_validator("country_code", mode="before")
     @classmethod
     def normalize_country_code(cls, value: str) -> str:
         return _normalize_country_code(value)
+
+    @field_validator("year", mode="before")
+    @classmethod
+    def normalize_year(cls, value: Any) -> int:
+        return _normalize_year(value)
+
+    @field_validator("limit", mode="before")
+    @classmethod
+    def normalize_limit(cls, value: Any) -> int:
+        return _normalize_limit(value, default=MAX_ITEMS)
 
 
 class NextHolidayRequest(BaseModel):
@@ -63,16 +73,31 @@ class NextHolidayRequest(BaseModel):
     def normalize_country_code(cls, value: str) -> str:
         return _normalize_country_code(value)
 
+    @field_validator("limit", mode="before")
+    @classmethod
+    def normalize_limit(cls, value: Any) -> int:
+        return _normalize_limit(value, default=8)
+
 
 class LongWeekendRequest(BaseModel):
     country_code: str = Field(..., min_length=2, max_length=2)
-    year: int = Field(..., ge=1970, le=2100)
+    year: int = Field(default=2026, ge=1970, le=2100)
     limit: int = Field(default=MAX_ITEMS, ge=1, le=MAX_ITEMS)
 
     @field_validator("country_code", mode="before")
     @classmethod
     def normalize_country_code(cls, value: str) -> str:
         return _normalize_country_code(value)
+
+    @field_validator("year", mode="before")
+    @classmethod
+    def normalize_year(cls, value: Any) -> int:
+        return _normalize_year(value)
+
+    @field_validator("limit", mode="before")
+    @classmethod
+    def normalize_limit(cls, value: Any) -> int:
+        return _normalize_limit(value, default=MAX_ITEMS)
 
 
 def _normalize_country_code(value: Any) -> str:
@@ -82,6 +107,31 @@ def _normalize_country_code(value: Any) -> str:
     if len(code) != 2 or not code.isalpha():
         raise ValueError("country_code must be a 2-letter code, such as US or DE")
     return code
+
+
+def _normalize_limit(value: Any, default: int = MAX_ITEMS) -> int:
+    if value is None or value == "":
+        return default
+    try:
+        coerced = int(value)
+    except (TypeError, ValueError):
+        raise ValueError(f"limit must be an integer between 1 and {MAX_ITEMS}")
+    if coerced < 1 or coerced > MAX_ITEMS:
+        raise ValueError(f"limit must be between 1 and {MAX_ITEMS}")
+    return coerced
+
+
+def _normalize_year(value: Any) -> int:
+    if value is None or value == "":
+        from datetime import datetime, timezone
+        return datetime.now(timezone.utc).year
+    try:
+        coerced = int(value)
+    except (TypeError, ValueError):
+        raise ValueError("year must be an integer between 1970 and 2100")
+    if coerced < 1970 or coerced > 2100:
+        raise ValueError("year must be an integer between 1970 and 2100")
+    return coerced
 
 
 def _format_list(values: Any) -> str:
