@@ -47,6 +47,12 @@ logger = logging.getLogger(__name__)
 _pool = ThreadPoolExecutor(max_workers=2, thread_name_prefix='transcription-shadow')
 _slots = threading.BoundedSemaphore(2)
 _OUTCOMES = {'ok', 'failed', 'timeout', 'partial_audio', 'no_audio', 'skipped_budget'}
+_PCM_BYTES_PER_SECOND = 32000
+_SILENCE_FRAME_BYTES = 3200  # 100 ms of 16 kHz mono PCM16
+_SILENCE_BREAK_FRAMES = 10
+_WINDOW_MARGIN_BYTES = 3 * _SILENCE_FRAME_BYTES
+_MAX_WINDOW_BYTES = 90 * _PCM_BYTES_PER_SECOND
+_FORCED_CONTEXT_BYTES = 10 * _PCM_BYTES_PER_SECOND
 
 
 class _BudgetExceeded(RuntimeError):
@@ -196,6 +202,48 @@ def _epoch(moment: Any) -> float | None:
     return moment.timestamp()
 
 
+def _audio_windows(pcm: bytes) -> list[tuple[int, int, int]]:
+    """Return (start, end, owned_start) byte ranges on the original PCM clock.
+
+    A stored upload batch can contain a few seconds of speech followed by tens
+    of seconds of delivered digital silence. Posting that whole batch invites
+    TDT to repeat the speech into silence. Silence breaks also give each new
+    request an utterance onset. Forced cuts retain ten seconds of context; only
+    words extending beyond the previously owned audio are accepted.
+
+    Only *digital* silence is skipped. A low-level recording is never classified
+    as silence by an amplitude threshold.
+    """
+    frames = [
+        (offset, any(pcm[offset : offset + _SILENCE_FRAME_BYTES]))
+        for offset in range(0, len(pcm), _SILENCE_FRAME_BYTES)
+    ]
+    active = [index for index, (_, has_signal) in enumerate(frames) if has_signal]
+    if not active:
+        return []
+    runs: list[tuple[int, int]] = []
+    first = previous = active[0]
+    for index in active[1:]:
+        if index - previous > _SILENCE_BREAK_FRAMES:
+            runs.append((first, previous))
+            first = index
+        previous = index
+    runs.append((first, previous))
+
+    windows: list[tuple[int, int, int]] = []
+    for first, last in runs:
+        start = max(0, frames[first][0] - _WINDOW_MARGIN_BYTES)
+        end = min(len(pcm), frames[last][0] + _SILENCE_FRAME_BYTES + _WINDOW_MARGIN_BYTES)
+        owned = start
+        while end - start > _MAX_WINDOW_BYTES:
+            cut = start + _MAX_WINDOW_BYTES
+            windows.append((start, cut, owned))
+            owned = cut
+            start = cut - _FORCED_CONTEXT_BYTES
+        windows.append((start, end, owned))
+    return windows
+
+
 def _make_pass(
     uid: str, conversation: Conversation, *, deadline: float, reserved_seconds: float
 ) -> tuple[list[TranscriptSegment], dict[str, float]]:
@@ -229,14 +277,19 @@ def _make_pass(
             if _reserve_budget(f'{conversation.id}:extra:{chunk_count}', extra) != 'reserved':
                 raise _BudgetExceeded('decoded audio exceeds daily budget')
             reserved_seconds += extra
-        for offset in range(0, len(pcm), 90 * 32000):
+        for offset, end, owned_start in _audio_windows(pcm):
             if time.monotonic() >= deadline:
                 raise TimeoutError('shadow deadline')
-            part = pcm[offset : offset + 90 * 32000]
+            part = pcm[offset:end]
             part_start = chunk_start + offset / 32000
             words = parakeet_prerecorded_from_bytes(part, diarize=True, attempts=1, encoding='linear16')
             if isinstance(words, tuple):
                 words = words[0]
+            # A forced cut re-posts context so TDT can recover the utterance
+            # onset. A word spanning the ownership boundary belongs to the
+            # later request, which can hear the complete utterance.
+            if owned_start > offset:
+                words = [w for w in words if offset + float(w['timestamp'][1]) * 32000 > owned_start]
             slice_segments = postprocess_words(words, 0) if words else []
             first_word = min((float(w['timestamp'][0]) for w in words), default=0.0)
             if slice_segments:

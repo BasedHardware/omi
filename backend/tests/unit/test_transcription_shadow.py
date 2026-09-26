@@ -1,8 +1,10 @@
 """Hermetic tests for stored-chunk timing and shadow admission."""
 
 from datetime import datetime, timezone
+from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import MagicMock
+import wave
 
 from models.transcript_segment import TranscriptSegment
 from utils.conversations import transcription_shadow as shadow
@@ -41,7 +43,7 @@ def test_shadow_requires_opt_in_stored_audio_and_budget(monkeypatch):
 
 
 def test_pass_uses_each_blob_clock_and_restores_first_word_offset(monkeypatch):
-    chunks = [(100.0, bytes(10 * 32000)), (107.0, bytes(10 * 32000))]
+    chunks = [(100.0, b'\x01\x00' * (10 * 16000)), (107.0, b'\x01\x00' * (10 * 16000))]
     monkeypatch.setattr(
         shadow, 'iter_audio_chunk_pcm', lambda _uid, _cid, wanted: ((t, p) for t, p in chunks if wanted(t, None))
     )
@@ -65,6 +67,105 @@ def test_pass_uses_each_blob_clock_and_restores_first_word_offset(monkeypatch):
     assert [round(s.end, 3) for s in passed] == [3.0, 13.0]
     assert audio == {'coverage': 0.85, 'tail_gap_seconds': 3.0, 'audio_seconds': 17.0}
     assert all(s.speaker_id_scope.startswith('sync:shadow:') for s in passed)
+
+
+def test_probe_audio_is_posted_as_two_speech_windows_not_long_silence(monkeypatch):
+    """The public 4.9 s probe is sent twice; 62.4 s of stored PCM has 34 spoken words."""
+    fixture = Path(__file__).resolve().parents[2] / 'testing/release_fixtures/transcription-release-probe.wav'
+    with wave.open(str(fixture), 'rb') as handle:
+        phrase = handle.readframes(handle.getnframes())
+    sentence = 'He began a confused complaint against the wizard who had vanished behind the curtain on the left.'
+    assert len(shadow._words(sentence)) == 17
+    rate = 32000
+    # A representative 60 s upload followed by a 2.4 s batch overlapping
+    # the last 3 s. Both probe utterances lie before that boundary.
+    pcm = bytearray(624 * rate // 10)
+    pcm[rate : rate + len(phrase)] = phrase
+    pcm[14 * rate : 14 * rate + len(phrase)] = phrase
+    chunks = [(100.0, bytes(pcm[: 60 * rate])), (157.0, bytes(pcm[57 * rate :]))]
+    monkeypatch.setattr(
+        shadow, 'iter_audio_chunk_pcm', lambda _uid, _cid, wanted: ((t, p) for t, p in chunks if wanted(t, None))
+    )
+    monkeypatch.setattr(shadow, 'build_person_embeddings_cache', lambda _uid: {})
+    monkeypatch.setattr(shadow, 'identify_speakers_for_segments', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(shadow, 'speaker_embedding_configured', lambda: False)
+    posted = []
+
+    def fake_parakeet(part, **_kwargs):
+        posted.append(len(part) / rate)
+        # A complete fixture in a long mostly silent POST can be repeated by
+        # TDT. The fake makes that failure deterministic without a GPU.
+        positions = []
+        found = part.find(phrase)
+        while found >= 0:
+            positions.append(found)
+            found = part.find(phrase, found + len(phrase))
+        count = len(positions)
+        if len(part) / rate > 20:
+            count *= 2
+        return [
+            {
+                'timestamp': [
+                    float(positions[index % len(positions)] / rate),
+                    float(positions[index % len(positions)] / rate + 4.9),
+                ],
+                'speaker': 'SPEAKER_00',
+                'text': sentence,
+            }
+            for index in range(count)
+        ]
+
+    monkeypatch.setattr(shadow, 'parakeet_prerecorded_from_bytes', fake_parakeet)
+    conversation = SimpleNamespace(
+        id='probe',
+        language='en',
+        audio_files=[SimpleNamespace(chunk_timestamps=[100.0, 157.0])],
+        finished_at=datetime.fromtimestamp(162.4, timezone.utc),
+        transcript_segments=[],
+    )
+    passed, audio = shadow._make_pass('probe', conversation, deadline=float('inf'), reserved_seconds=63)
+    assert len(posted) == 2
+    assert max(posted) < 6
+    assert [round(segment.start, 1) for segment in passed] == [1.0, 14.0]
+    assert sum(len(shadow._words(segment.text)) for segment in passed) == 34
+    assert audio == {'coverage': 1.0, 'tail_gap_seconds': 0.0, 'audio_seconds': 62.4}
+
+
+def test_forced_window_keeps_utterance_that_crosses_cut(monkeypatch):
+    fixture = Path(__file__).resolve().parents[2] / 'testing/release_fixtures/transcription-release-probe.wav'
+    with wave.open(str(fixture), 'rb') as handle:
+        phrase = handle.readframes(handle.getnframes())
+    rate = 32000
+    pcm = bytearray(b'\x01\x00' * (100 * 16000))
+    pcm[88 * rate : 88 * rate + len(phrase)] = phrase
+    monkeypatch.setattr(shadow, 'iter_audio_chunk_pcm', lambda *_args: iter([(100.0, bytes(pcm))]))
+    monkeypatch.setattr(shadow, 'build_person_embeddings_cache', lambda _uid: {})
+    monkeypatch.setattr(shadow, 'identify_speakers_for_segments', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(shadow, 'speaker_embedding_configured', lambda: False)
+    posted = []
+
+    def fake_parakeet(part, **_kwargs):
+        posted.append(len(part) / rate)
+        onset = part.find(phrase)
+        return (
+            [{'timestamp': [onset / rate, onset / rate + 4.9], 'speaker': 'SPEAKER_00', 'text': 'fixture'}]
+            if onset >= 0
+            else []
+        )
+
+    monkeypatch.setattr(shadow, 'parakeet_prerecorded_from_bytes', fake_parakeet)
+    conversation = SimpleNamespace(
+        id='synthetic',
+        language='en',
+        audio_files=[SimpleNamespace(chunk_timestamps=[100.0])],
+        finished_at=datetime.fromtimestamp(200, timezone.utc),
+        transcript_segments=[],
+    )
+    passed, audio = shadow._make_pass('synthetic', conversation, deadline=float('inf'), reserved_seconds=100)
+    assert posted == [90.0, 20.0]
+    assert len(passed) == 1
+    assert round(passed[0].start, 1) == 88.0
+    assert audio['audio_seconds'] == 100
 
 
 def test_decoded_audio_cannot_exceed_reserved_budget(monkeypatch):

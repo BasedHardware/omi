@@ -38,8 +38,10 @@ an active worker thread can run until process exit, then be lost with no shadow
 retry. Keep the Cloud Run
 shadow flag off until a separate durable task exists. Admission does not await
 STT. The pass waits for the 60-second pusher upload flush,
-reads only registered private-cloud chunks, transcribes each blob on its own
-timestamp with 90-second Parakeet `/v2` slices, runs Omi speaker matching and
+reads only registered private-cloud chunks, separates each blob at long runs of
+digital silence, and transcribes up to 90-second Parakeet `/v2` windows on each
+blob's own timestamp. A forced cut keeps 10 seconds of context so an utterance
+crossing it can be recovered. The pass runs Omi speaker matching and
 conversation-wide clustering, then compares the result with the streaming
 record. It never edits the conversation or any user-visible transcript,
 speaker, summary, memory, or translation. See

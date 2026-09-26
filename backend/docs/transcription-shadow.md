@@ -37,9 +37,16 @@ Only conversations with `private_cloud_sync_enabled` and registered
 `audio_files` qualify. The worker reads only chunk timestamps registered in
 those files. Each chunk is decoded and clipped by its own timestamp; the dense
 playback MP3 and the potentially drifting live `started_at` are never used to
-position pass words. The pass restores the first-word offset removed by
-`postprocess_words`. A batch slice is at most 90 seconds, below the 120-second
-provider limit and well below 100 MB for PCM16 mono at 16 kHz. Each slice gets
+position pass words. A long stored upload batch can contain a short utterance
+followed by delivered digital silence. Before calling Parakeet, the worker
+separates speech runs at at least one second of exact PCM zeroes and retains
+300 ms of context at each edge. This avoids posting a mostly silent 60-second
+batch for a few seconds of speech. It does not treat low-amplitude nonzero audio
+as silence. Runs longer than 90 seconds use 10 seconds of overlapping context;
+words spanning a cut are owned by the later request. The pass restores the
+first-word offset removed by `postprocess_words`. A posted window is at most
+90 seconds, below the 120-second provider limit and well below 100 MB for
+PCM16 mono at 16 kHz. Each window gets
 the offline-sync speaker matcher; conversation-wide clustering uses extracted
 segment embeddings and enrolled voiceprints. No speaker embedding cache or
 other canonical artifact is written by this path.
@@ -100,7 +107,10 @@ does **not** enroll private-cloud sync or check stored audio. Run its existing
 `--alignment-scenario` with the fixed `omi-release-probe` token after the dev
 pusher deployment. That scenario enrolls the isolated test account if needed,
 creates one finalized conversation, checks that its private-cloud flag is set,
-checks the candidate pusher's finalization-handoff log, and waits for
+and rejects a durable transcript whose word count is outside 50% to 150% of
+the two spoken 17-word fixture sentences. The receipt stores only live and
+expected scalar word counts, so repeated text cannot silently pass the probe.
+The scenario checks the candidate pusher's finalization-handoff log and waits for
 registered chunk spans covering its speech windows. Its receipt
 contains the generated `conversation_id` without transcript or audio content.
 This is a test-account write; the coordinator runs it after deployment, not as
