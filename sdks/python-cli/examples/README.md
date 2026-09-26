@@ -36,6 +36,7 @@
   JSON export to an Excel workbook with datetime cells, duration and filters.
 * [`conversations_sqlite.md`](conversations_sqlite.md) — import conversation-list
   JSON exports into a SQLite database for SQL queries and multi-page merges.
+* [`memories_duckdb.md`](memories_duckdb.md) — export Omi memories to DuckDB SQL analytical script.
 * [`memories_markdown.md`](memories_markdown.md) — export memories, facts, and learnings to structured Markdown notes for Obsidian & Notion.
 * [`conversations_atom.md`](conversations_atom.md) — publish conversation-list
   exports as an Atom 1.0 feed for any feed reader.
