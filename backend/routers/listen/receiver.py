@@ -13,7 +13,7 @@ from utils.manual_speaker_assignments import acknowledged_teaching
 from collections import OrderedDict, deque
 from typing import Any, Dict, List, Optional, Tuple, cast
 
-from config.audio_timeline import audio_timeline_v2_enabled
+from config.audio_timeline import audio_timeline_v2_enabled, live_speaker_capture_clock_enabled
 from routers.listen.contracts import ConversationCaptureOrigin
 from utils.audio_timeline import CaptureTimeline, ProviderEpochTranslator
 
@@ -263,6 +263,25 @@ class ListenReceiver:
                 self.capture_timeline.wall(start_sample), pinnable=True
             )
 
+    def _write_ring_buffer_frame(self, decoded: bytes, now: float, start_sample: int) -> None:
+        """Position one accepted decoded frame in the speaker-ID ring buffer.
+
+        v2 speaker queries project capture samples onto the wall axis
+        (``started_at + capture offset``) for the whole recording, so a v2
+        session keeps ``write_positioned`` even when the kill switch is off:
+        arrival-timestamped spans under capture-clock queries would feed every
+        speaker window the wrong bytes for the entire session, not just one
+        buffer length. The switch may only revert the legacy (clock-only)
+        session, whose matcher formula is ``first_audio + provider time``.
+        """
+        ring = self.host.state.audio_ring_buffer
+        if ring is None:
+            return
+        if self.capture_timeline_v2 or live_speaker_capture_clock_enabled():
+            ring.write_positioned(decoded, self.capture_timeline.wall(start_sample))
+        else:
+            ring.write(decoded, now)
+
     def _enqueue_translated_segments(self, segments: List[Dict[str, Any]], provider: Optional[str] = None) -> None:
         """Owner-resolve epoch-translated segments before they enter the buffer.
 
@@ -302,7 +321,18 @@ class ListenReceiver:
         output stay byte-identical to the flag-off baseline. The only addition
         is the private absolute window the ring buffer can actually locate,
         which survives provider failovers whose timestamps restart at zero.
+
+        LIVE_SPEAKER_CAPTURE_CLOCK is the runtime kill switch for that
+        addition (read here, at the call boundary): falsy reverts speaker-ID
+        windows to the legacy first-audio + provider-time formula without a
+        deploy. It never touches the transcript itself.
         """
+        if not live_speaker_capture_clock_enabled():
+            for segment in segments:
+                segment.pop('_capture_start_sample', None)
+                segment.pop('_capture_end_sample', None)
+            self._enqueue_stt_segments(segments)
+            return
         for segment in segments:
             start_sample = segment.pop('_capture_start_sample', None)
             end_sample = segment.pop('_capture_end_sample', None)
@@ -1331,10 +1361,7 @@ class ListenReceiver:
                         # wire must stay byte-identical to the legacy session.
                         start_sample, end_sample, _ = self.capture_timeline.accept(decoded, now, time.monotonic())
                         self._note_accepted_frame(start_sample, end_sample)
-                        if self.host.state.audio_ring_buffer is not None:
-                            self.host.state.audio_ring_buffer.write_positioned(
-                                decoded, self.capture_timeline.wall(start_sample)
-                            )
+                        self._write_ring_buffer_frame(decoded, now, start_sample)
                         if not self.host.use_custom_stt:
                             if not buffer:
                                 self._stt_buffer_start_sample = start_sample
