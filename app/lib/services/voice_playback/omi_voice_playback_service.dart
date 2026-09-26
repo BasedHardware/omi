@@ -72,9 +72,13 @@ class OmiVoicePlaybackService {
   static final OmiVoicePlaybackService instance = OmiVoicePlaybackService._();
 
   AudioPlayer? _playerField;
+  AudioPlayer? _previewPlayerField;
   FlutterTts? _fallbackTtsField;
+  FlutterTts? _previewFallbackTtsField;
   AudioPlayer get _player => _playerField ??= AudioPlayer(handleInterruptions: false);
+  AudioPlayer get _previewPlayer => _previewPlayerField ??= AudioPlayer(handleInterruptions: false);
   FlutterTts get _fallbackTts => _fallbackTtsField ??= FlutterTts();
+  FlutterTts get _previewFallbackTts => _previewFallbackTtsField ??= FlutterTts();
 
   @visibleForTesting
   VoicePlaybackDebugHooks? debugHooks;
@@ -106,6 +110,7 @@ class OmiVoicePlaybackService {
   bool _sessionActive = false;
   bool _pausedByInterruption = false;
   bool _previewActive = false;
+  bool _previewOwnsSession = false;
   Completer<void>? _previewStopSignal;
 
   bool get isSpeaking =>
@@ -156,6 +161,12 @@ class OmiVoicePlaybackService {
       await _fallbackTts.setPitch(1.0);
       await _fallbackTts.awaitSpeakCompletion(true);
     } catch (_) {}
+    try {
+      await _previewFallbackTts.setSpeechRate(0.5);
+      await _previewFallbackTts.setVolume(1.0);
+      await _previewFallbackTts.setPitch(1.0);
+      await _previewFallbackTts.awaitSpeakCompletion(true);
+    } catch (_) {}
   }
 
   /// Plays one onboarding preview regardless of the saved response mode.
@@ -165,42 +176,52 @@ class OmiVoicePlaybackService {
     if (cleaned.isEmpty) return;
 
     await _ensureInitialized();
-    await interrupt();
-    await _activateSession();
+    await _cancelPreview();
+    // A settings preview must never cut off or close a real reply lifecycle.
+    // The reply path owns the shared audio session while it is active.
+    if (_realReplyInFlight) return;
+
+    _previewOwnsSession = !_sessionActive;
+    if (_previewOwnsSession) await _activateSession();
 
     final stopSignal = Completer<void>();
     _previewStopSignal = stopSignal;
     _previewActive = true;
 
     try {
-      final bytes = await synthesizeSpeech(text: cleaned);
+      final bytes = await _synthesize(cleaned);
       if (!_previewActive || !identical(_previewStopSignal, stopSignal)) return;
       if (bytes == null || bytes.isEmpty) throw TtsUnavailableException(503);
 
-      await _player.setAudioSource(_BytesAudioSource(bytes));
-      unawaited(_player.play());
-      await Future.any<void>([
-        _player.processingStateStream.firstWhere((state) => state == ProcessingState.completed),
-        stopSignal.future,
-      ]);
+      if (debugHooks != null) {
+        await Future.any<void>([_playPreviewBytes(bytes), stopSignal.future]);
+      } else {
+        await _previewPlayer.setAudioSource(_BytesAudioSource(bytes));
+        unawaited(_previewPlayer.play());
+        await Future.any<void>([
+          _previewPlayer.processingStateStream.firstWhere((state) => state == ProcessingState.completed),
+          stopSignal.future,
+        ]);
+      }
     } catch (e) {
       if (_previewActive && identical(_previewStopSignal, stopSignal)) {
         Logger.debug('OmiVoicePlaybackService: preview cloud voice failed, using system voice: $e');
-        await _speakFallback(cleaned);
+        await _speakPreviewFallback(cleaned);
       }
     } finally {
       if (identical(_previewStopSignal, stopSignal)) {
         _previewActive = false;
         _previewStopSignal = null;
-        await _deactivateSession();
+        final ownsSession = _previewOwnsSession;
+        _previewOwnsSession = false;
+        if (ownsSession && !_realReplyInFlight) await _deactivateSession();
       }
     }
   }
 
   /// Stops only an active onboarding preview; real reply playback is untouched.
   Future<void> stopPreview() async {
-    if (!_previewActive) return;
-    await interrupt();
+    await _cancelPreview();
   }
 
   /// Start a new response lifecycle. Cancels any prior in-flight playback.
@@ -218,6 +239,7 @@ class OmiVoicePlaybackService {
     }
 
     await _ensureInitialized();
+    await _cancelPreview();
 
     final output = await _probeOutput();
     // Mode 1 (headphones only): skip if no private-listening output is
@@ -351,9 +373,7 @@ class OmiVoicePlaybackService {
       _lifecycleToken++;
       _emit(outcome: VoiceReplyPlaybackOutcome.interrupted, interruptSource: source);
     }
-    _previewActive = false;
-    _previewStopSignal?.complete();
-    _previewStopSignal = null;
+    await _cancelPreview();
     _activeMessageId = null;
     _spoken = 0;
     _synthesisQueue.clear();
@@ -412,6 +432,22 @@ class OmiVoicePlaybackService {
     _isPlayingQueue = false;
     _pausedByInterruption = false;
     await _stopPlayback();
+  }
+
+  bool get _realReplyInFlight =>
+      _lifecycleOpen ||
+      (_activeMessageId != null && (_sessionActive || _isPlayingQueue || _audioQueue.isNotEmpty || _synthesizing));
+
+  Future<void> _cancelPreview() async {
+    if (!_previewActive) return;
+    final ownsSession = _previewOwnsSession;
+    _previewActive = false;
+    _previewOwnsSession = false;
+    final stopSignal = _previewStopSignal;
+    _previewStopSignal = null;
+    if (stopSignal != null && !stopSignal.isCompleted) stopSignal.complete();
+    await _stopPreviewPlayback();
+    if (ownsSession && !_realReplyInFlight) await _deactivateSession();
   }
 
   Future<void> _drainSynthesis() async {
@@ -660,6 +696,35 @@ class OmiVoicePlaybackService {
     return synthesizeSpeech(text: text);
   }
 
+  Future<void> _playPreviewBytes(Uint8List bytes) async {
+    if (debugHooks != null) {
+      final play = debugHooks!.play;
+      if (play == null) {
+        throw StateError('Voice playback test hooks are installed without a play function');
+      }
+      await play(bytes);
+      return;
+    }
+    await _previewPlayer.setAudioSource(_BytesAudioSource(bytes));
+    await _previewPlayer.play();
+  }
+
+  Future<void> _speakPreviewFallback(String text) async {
+    try {
+      if (debugHooks != null) {
+        final speak = debugHooks!.speak;
+        if (speak == null) {
+          throw StateError('Voice playback test hooks are installed without a speak function');
+        }
+        await speak(text);
+      } else {
+        await _previewFallbackTts.speak(text);
+      }
+    } catch (e) {
+      Logger.debug('OmiVoicePlaybackService: preview flutter_tts fallback failed: $e');
+    }
+  }
+
   Future<void> _playCloudChunk(Uint8List bytes, {required int token}) async {
     if (debugHooks != null) {
       final play = debugHooks!.play;
@@ -689,6 +754,30 @@ class OmiVoicePlaybackService {
     }
     try {
       await _player.stop();
+    } catch (_) {}
+  }
+
+  Future<void> _stopPreviewPlayback() async {
+    if (debugHooks != null) {
+      final stop = debugHooks!.stopPlayback;
+      if (stop != null) {
+        try {
+          await stop();
+        } catch (_) {}
+      }
+      final stopSpeak = debugHooks!.stopSpeak;
+      if (stopSpeak != null) {
+        try {
+          await stopSpeak();
+        } catch (_) {}
+      }
+      return;
+    }
+    try {
+      await _previewPlayer.stop();
+    } catch (_) {}
+    try {
+      await _previewFallbackTts.stop();
     } catch (_) {}
   }
 
@@ -771,6 +860,9 @@ class OmiVoicePlaybackService {
     _isPlayingQueue = false;
     _sessionActive = false;
     _pausedByInterruption = false;
+    _previewActive = false;
+    _previewOwnsSession = false;
+    _previewStopSignal = null;
     _lifecycleOpen = false;
     _lifecycleToken++;
     _lifecycleStartedAt = null;
