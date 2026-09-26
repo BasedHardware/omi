@@ -5,16 +5,28 @@ import AppIntents
 
 enum SiriListeningFailure: Error {
     case deviceAlreadyListening
+    case recordingOff
+    case micDenied
+    case nothingToStop
     case unavailable
 
     init(pigeonCode: String) {
-        self = pigeonCode == "device_already_listening" ? .deviceAlreadyListening : .unavailable
+        switch pigeonCode {
+        case "device_already_listening": self = .deviceAlreadyListening
+        case "recording_off": self = .recordingOff
+        case "mic_permission_denied": self = .micDenied
+        case "nothing_to_stop": self = .nothingToStop
+        default: self = .unavailable
+        }
     }
 
-    var spokenDialog: String {
+    func spokenDialog(starting: Bool) -> String {
         switch self {
         case .deviceAlreadyListening: "Omi is already listening from your device."
-        case .unavailable: "Open Omi to start listening."
+        case .recordingOff: "Turn on audio recording in Omi first."
+        case .micDenied: "Allow microphone access in Omi first."
+        case .nothingToStop: "Omi isn't listening right now."
+        case .unavailable: starting ? "Open Omi to start listening." : "Open Omi to stop listening."
         }
     }
 }

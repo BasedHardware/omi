@@ -226,6 +226,19 @@ void main() {
     expect(phoneStarts, 1);
   });
 
+  test('Siri Stop reports nothing to stop with a typed listening outcome', () async {
+    final siri = SiriIntegration.forTest(RecordingSiriHost(), 'owner-stop', listeningCapture: (
+      start: () async {},
+      stop: () async => true,
+      source: () => null,
+      deviceConnected: () => false,
+      phoneBatchRecording: () => false,
+      deviceBatchRecording: () => false,
+    ));
+    await expectLater(siri.setListening(false),
+        throwsA(isA<PlatformException>().having((error) => error.code, 'code', 'nothing_to_stop')));
+  });
+
   test('sign-out ordered after an in-flight native session publication', () async {
     final host = _RaceHost();
     final siri = SiriIntegration.forTest(host, 'owner-race',
@@ -278,7 +291,9 @@ void main() {
   test('memory projection sorts newest and drops expired or deleted rows', () async {
     final host = RecordingSiriHost();
     final siri = SiriIntegration.forTest(host, 'owner-b');
-    Memory memory(String id, int ageDays, {bool deleted = false, DateTime? invalidAt, MemoryLayer? layer}) => Memory(
+    Memory memory(String id, int ageDays,
+            {bool deleted = false, DateTime? invalidAt, MemoryLayer? layer = MemoryLayer.longTerm}) =>
+        Memory(
           id: id,
           uid: 'owner-b',
           content: 'Content $id',
@@ -289,6 +304,7 @@ void main() {
           deleted: deleted,
           invalidAt: invalidAt,
           layer: layer,
+          layerIsExplicit: true,
         );
 
     await siri.upsertMemories([
@@ -352,5 +368,122 @@ void main() {
     expect(host.owner, 'owner-c');
     expect(host.deletedType, 'task');
     expect(host.deletedIds, ['active']);
+  });
+
+  test('Siri eligibility decision table covers every private-state field', () {
+    final date = now.subtract(const Duration(days: 1));
+    Memory memory({
+      bool deleted = false,
+      bool dismissed = false,
+      bool locked = false,
+      bool? userReview,
+      MemoryLayer? layer = MemoryLayer.longTerm,
+      bool layerIsExplicit = true,
+      DateTime? invalidAt,
+      String? ledgerStatus,
+      String? supersededBy,
+    }) =>
+        Memory(
+          id: 'memory',
+          uid: 'owner',
+          content: 'Visible',
+          category: MemoryCategory.manual,
+          createdAt: date,
+          updatedAt: now,
+          visibility: MemoryVisibility.private,
+          deleted: deleted,
+          isDismissed: dismissed,
+          isLocked: locked,
+          userReview: userReview,
+          layer: layer,
+          layerIsExplicit: layerIsExplicit,
+          invalidAt: invalidAt,
+          ledgerStatus: ledgerStatus,
+          supersededBy: supersededBy,
+        );
+    final memoryCases = <(String, Memory, bool)>[
+      ('eligible', memory(), true),
+      ('empty id', memory()..id = '', false),
+      ('missing tier', memory(layer: null), false),
+      ('unproven tier', memory(layerIsExplicit: false), false),
+      ('deleted', memory(deleted: true), false),
+      ('dismissed', memory(dismissed: true), false),
+      ('locked', memory(locked: true), false),
+      ('rejected', memory(userReview: false), false),
+      ('archive', memory(layer: MemoryLayer.archive), false),
+      ('expired', memory(invalidAt: date), false),
+      ('superseded status', memory(ledgerStatus: 'superseded'), false),
+      ('superseded target', memory(supersededBy: 'replacement'), false),
+      ('unknown visibility', memory()..visibility = MemoryVisibility.unknown, false),
+    ];
+    for (final (name, row, expected) in memoryCases) {
+      expect(siriMemoryIsIndexable(row, now), expected, reason: name);
+    }
+    expect(Memory.fromJson(memory(dismissed: true).toJson()).isDismissed, isTrue,
+        reason: 'wire dismissal must survive the Dart adapter');
+
+    ServerConversation conversation({
+      String id = 'conversation',
+      bool deleted = false,
+      bool discarded = false,
+      bool locked = false,
+      ConversationStatus status = ConversationStatus.completed,
+      DateTime? createdAt,
+    }) =>
+        ServerConversation(
+          id: id,
+          createdAt: createdAt ?? date,
+          structured: Structured('Title', 'Summary'),
+          deleted: deleted,
+          discarded: discarded,
+          isLocked: locked,
+          status: status,
+        );
+    final conversationCases = <(String, ServerConversation, bool)>[
+      ('eligible', conversation(), true),
+      ('empty id', conversation(id: ''), false),
+      ('deleted', conversation(deleted: true), false),
+      ('discarded', conversation(discarded: true), false),
+      ('locked', conversation(locked: true), false),
+      ('processing', conversation(status: ConversationStatus.processing), false),
+      ('aged', conversation(createdAt: now.subtract(const Duration(days: 181))), false),
+      ('unknown visibility', conversation()..visibility = ConversationVisibility.unknown, false),
+    ];
+    for (final (name, row, expected) in conversationCases) {
+      expect(siriConversationIsIndexable(row, now), expected, reason: name);
+    }
+
+    ActionItemWithMetadata task({
+      String id = 'task',
+      bool completed = false,
+      bool locked = false,
+      String status = 'active',
+      String? supersededBy,
+      DateTime? completedAt,
+    }) =>
+        ActionItemWithMetadata(
+          id: id,
+          description: 'Visible',
+          createdAt: date,
+          completed: completed,
+          completedAt: completedAt,
+          isLocked: locked,
+          status: status,
+          supersededBy: supersededBy,
+        );
+    final taskCases = <(String, ActionItemWithMetadata, bool)>[
+      ('eligible', task(), true),
+      ('empty id', task(id: ''), false),
+      ('locked', task(locked: true), false),
+      ('cancelled', task(status: 'cancelled'), false),
+      ('unknown status', task(status: 'processing'), false),
+      ('superseded', task(supersededBy: 'replacement'), false),
+      ('recent completion', task(completed: true, completedAt: date), true),
+      ('old completion', task(completed: true, completedAt: now.subtract(const Duration(days: 31))), false),
+    ];
+    for (final (name, row, expected) in taskCases) {
+      expect(siriTaskIsIndexable(row, now), expected, reason: name);
+    }
+    expect(siriMemoryIsIndexable(memory(), now, owner: 'other-owner'), false, reason: 'account owner');
   });
 }

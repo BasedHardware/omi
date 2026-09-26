@@ -95,6 +95,23 @@ final class SiriSnapshotStore {
         return owner == uid && SiriSession.shared.currentConfig()?.uid == uid
     }
     private func validOwnerLocked() -> Bool { enabled && accountOwnerLocked() }
+    private static let conversationAgeMs: Int64 = 180 * 86_400_000
+    private static let completedTaskAgeMs: Int64 = 30 * 86_400_000
+    private func eligible(_ row: Conversation, now: Int64) -> Bool {
+        !row.id.isEmpty && row.startedAtMs > now - Self.conversationAgeMs
+    }
+    private func eligible(_ row: Memory, now: Int64) -> Bool {
+        !row.id.isEmpty && (row.expiresAtMs == nil || row.expiresAtMs! > now)
+    }
+    private func eligible(_ row: Task, now: Int64) -> Bool {
+        !row.id.isEmpty && (!row.completed || (row.completedAtMs ?? 0) > now - Self.completedTaskAgeMs)
+    }
+    private func nextCutoffLocked() -> Int64? {
+        let deadlines = snapshot.conversations.values.map { $0.startedAtMs + Self.conversationAgeMs }
+            + snapshot.memories.values.compactMap(\.expiresAtMs)
+            + snapshot.tasks.values.compactMap { $0.completed ? $0.completedAtMs.map { $0 + Self.completedTaskAgeMs } : nil }
+        return deadlines.min()
+    }
     private func generationMatchesLocked(_ generation: Int64) -> Bool {
         (defaults.object(forKey: generationKey) as? Int64 ?? 0) == generation
     }
@@ -126,6 +143,15 @@ final class SiriSnapshotStore {
     }
     #if OMI_SIRI_PROBE
     func simulateTerminatedExpiryTimer() { cancelExpiryTask() }
+    func probeStoredEntity(type: String, id: String) -> Bool {
+        lock.lock(); defer { lock.unlock() }
+        switch type {
+        case "conversation": return snapshot.conversations[id] != nil
+        case "memory": return snapshot.memories[id] != nil
+        case "task": return snapshot.tasks[id] != nil
+        default: return false
+        }
+    }
     #endif
     /// Keep a live Runner's index fresh at the next expiry. A 24 hour cap also
     /// checks long-lived records without retaining an unbounded sleep.
@@ -135,7 +161,7 @@ final class SiriSnapshotStore {
         expiryTask = nil
         guard validOwnerLocked() else { return }
         let now = Int64(Date().timeIntervalSince1970 * 1000)
-        guard let next = snapshot.memories.values.compactMap(\.expiresAtMs).filter({ $0 > now }).min() else { return }
+        guard let next = nextCutoffLocked() else { return }
         let delayMs = UInt64(min(max(next - now + 50, 50), 24 * 60 * 60 * 1000))
         expiryTask = _Concurrency.Task.detached { [weak self] in
             try? await _Concurrency.Task.sleep(nanoseconds: delayMs * 1_000_000)
@@ -374,13 +400,11 @@ final class SiriSnapshotStore {
         let now = Int64(Date().timeIntervalSince1970 * 1000)
         switch type {
         case "conversation":
-            return snapshot.conversations[id].map { $0.startedAtMs > now - 180 * 86_400_000 } ?? false
+            return snapshot.conversations[id].map { eligible($0, now: now) } ?? false
         case "memory":
-            return snapshot.memories[id].map { $0.expiresAtMs == nil || $0.expiresAtMs! > now } ?? false
+            return snapshot.memories[id].map { eligible($0, now: now) } ?? false
         case "task":
-            return snapshot.tasks[id].map {
-                !$0.completed || ($0.completedAtMs ?? 0) > now - 30 * 86_400_000
-            } ?? false
+            return snapshot.tasks[id].map { eligible($0, now: now) } ?? false
         default: return false
         }
     }
@@ -389,9 +413,9 @@ final class SiriSnapshotStore {
     func conversations(ids: [String]?) -> [ConversationEntity] {
         lock.lock(); defer { lock.unlock() }
         guard validOwnerLocked() else { return [] }
-        let cutoff = Int64(Date().timeIntervalSince1970 * 1000) - 180 * 86_400_000
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
         let selected = snapshot.conversations.values.filter {
-            $0.startedAtMs > cutoff && (ids == nil || ids!.contains($0.id))
+            eligible($0, now: now) && (ids == nil || ids!.contains($0.id))
         }
         return selected.map { ConversationEntity(id: $0.id, name: $0.title, content: $0.summary,
             creationDate: Date(timeIntervalSince1970: Double($0.startedAtMs) / 1000),
@@ -402,7 +426,7 @@ final class SiriSnapshotStore {
         lock.lock(); defer { lock.unlock() }
         guard validOwnerLocked() else { return [] }
         let now = Int64(Date().timeIntervalSince1970 * 1000)
-        return snapshot.memories.values.filter { (ids == nil || ids!.contains($0.id)) && ($0.expiresAtMs == nil || $0.expiresAtMs! > now) }.map {
+        return snapshot.memories.values.filter { (ids == nil || ids!.contains($0.id)) && eligible($0, now: now) }.map {
             ConversationEntity(memoryId: $0.id, content: $0.content,
                 creationDate: Date(timeIntervalSince1970: Double($0.createdAtMs) / 1000))
         }
@@ -412,7 +436,7 @@ final class SiriSnapshotStore {
         lock.lock(); defer { lock.unlock() }
         guard validOwnerLocked() else { return [] }
         let now = Int64(Date().timeIntervalSince1970 * 1000)
-        return snapshot.memories.values.filter { (ids == nil || ids!.contains($0.id)) && ($0.expiresAtMs == nil || $0.expiresAtMs! > now) }.map {
+        return snapshot.memories.values.filter { (ids == nil || ids!.contains($0.id)) && eligible($0, now: now) }.map {
             MemoryEntity(id: $0.id, content: $0.content,
                 creationDate: Date(timeIntervalSince1970: Double($0.createdAtMs) / 1000)) }
     }
@@ -420,9 +444,9 @@ final class SiriSnapshotStore {
     func tasks(ids: [String]?) -> [TaskEntity] {
         lock.lock(); defer { lock.unlock() }
         guard validOwnerLocked() else { return [] }
-        let cutoff = Int64(Date().timeIntervalSince1970 * 1000) - 30 * 86_400_000
+        let now = Int64(Date().timeIntervalSince1970 * 1000)
         return snapshot.tasks.values.filter {
-            (ids == nil || ids!.contains($0.id)) && (!$0.completed || ($0.completedAtMs ?? 0) > cutoff)
+            (ids == nil || ids!.contains($0.id)) && eligible($0, now: now)
         }.map {
             TaskEntity(id: $0.id, title: $0.title, isCompleted: $0.completed,
                 creationDate: Date(timeIntervalSince1970: Double($0.createdAtMs) / 1000),
@@ -436,13 +460,13 @@ final class SiriSnapshotStore {
         guard let uid = owner, let indexName else { throw SiriSession.Failure.auth }
         let now = Int64(Date().timeIntervalSince1970 * 1000)
         try mutateForOwner(uid) {
-            snapshot.conversations = snapshot.conversations.filter { $0.value.startedAtMs > now - 180 * 86_400_000 }
+            snapshot.conversations = snapshot.conversations.filter { eligible($0.value, now: now) }
             let newest = snapshot.conversations.values.sorted { $0.startedAtMs > $1.startedAtMs }.prefix(2000)
             snapshot.conversations = Dictionary(uniqueKeysWithValues: newest.map { ($0.id, $0) })
-            snapshot.memories = snapshot.memories.filter { $0.value.expiresAtMs == nil || $0.value.expiresAtMs! > now }
+            snapshot.memories = snapshot.memories.filter { eligible($0.value, now: now) }
             let memories = snapshot.memories.values.sorted { $0.createdAtMs > $1.createdAtMs }.prefix(5000)
             snapshot.memories = Dictionary(uniqueKeysWithValues: memories.map { ($0.id, $0) })
-            snapshot.tasks = snapshot.tasks.filter { !$0.value.completed || ($0.value.completedAtMs ?? 0) > now - 30 * 86_400_000 }
+            snapshot.tasks = snapshot.tasks.filter { eligible($0.value, now: now) }
         }
         lock.lock()
         let count = snapshot.conversations.count + snapshot.memories.count + snapshot.tasks.count + 3

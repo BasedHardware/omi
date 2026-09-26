@@ -2,7 +2,7 @@ import 'package:omi/backend/schema/gen/memories_wire.g.dart' as wire;
 
 enum MemoryCategory { system, interesting, manual, workflow }
 
-enum MemoryVisibility { private, public, shared }
+enum MemoryVisibility { private, public, shared, unknown }
 
 /// Semantic row kind used by the intent-backed `knowledge_ledger.v1` contract.
 enum KnowledgeLedgerKind {
@@ -85,6 +85,7 @@ class Memory {
   bool manuallyAdded;
   bool edited;
   bool deleted;
+  bool isDismissed;
   MemoryVisibility visibility;
   bool isLocked;
   bool isBaseline;
@@ -136,6 +137,7 @@ class Memory {
     this.manuallyAdded = false,
     this.edited = false,
     this.deleted = false,
+    this.isDismissed = false,
     required this.visibility,
     this.isLocked = false,
     this.isBaseline = false,
@@ -270,8 +272,9 @@ class Memory {
       manuallyAdded: generated.manuallyAdded,
       edited: generated.edited,
       deleted: json['deleted'] as bool? ?? false,
+      isDismissed: generated.isDismissed,
       visibility: generated.visibility != null
-          ? (MemoryVisibility.values.asNameMap()[generated.visibility!] ?? MemoryVisibility.public)
+          ? (MemoryVisibility.values.asNameMap()[generated.visibility!] ?? MemoryVisibility.unknown)
           : MemoryVisibility.public,
       isLocked: generated.isLocked,
       isBaseline: json['is_baseline'] as bool? ?? false,
@@ -319,6 +322,7 @@ class Memory {
       'manually_added': manuallyAdded,
       'edited': edited,
       'deleted': deleted,
+      'is_dismissed': isDismissed,
       'visibility': visibility.name,
       'is_locked': isLocked,
       'is_baseline': isBaseline,

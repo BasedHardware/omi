@@ -176,6 +176,21 @@ enum SiriDebugProbe {
                         }
                         NSLog("[SiriProbe] staticItem=%@ count=%d", title, count)
                     }
+                    let cutoffNow = Int64(Date().timeIntervalSince1970 * 1000)
+                    let expiringConversation = SiriConversation(
+                        id: "probe-aged-conversation", title: "probe-aged-conversation-2026",
+                        summary: "Cutoff test", startedAtMs: cutoffNow - 180 * 86_400_000 + 1_500,
+                        updatedAtMs: cutoffNow)
+                    let expiringTask = SiriTask(
+                        id: "probe-aged-task", title: "probe-aged-task-2026", completed: true,
+                        createdAtMs: cutoffNow - 40 * 86_400_000,
+                        completedAtMs: cutoffNow - 30 * 86_400_000 + 1_500)
+                    try await SiriSnapshotStore.shared.upsert([expiringConversation], uid: config.uid)
+                    try await SiriSnapshotStore.shared.upsert([expiringTask], uid: config.uid)
+                    try await Task.sleep(nanoseconds: 2_000_000_000)
+                    NSLog("[SiriProbe] agedConversationTimer=%@ agedTaskTimer=%@",
+                          SiriSnapshotStore.shared.probeStoredEntity(type: "conversation", id: expiringConversation.id) ? "FAIL" : "PASS",
+                          SiriSnapshotStore.shared.probeStoredEntity(type: "task", id: expiringTask.id) ? "FAIL" : "PASS")
                     let expiring = SiriMemory(id: "probe-expiring", content: "probe-expiring-native-index-2026",
                         createdAtMs: Int64(Date().timeIntervalSince1970 * 1000),
                         expiresAtMs: Int64(Date().addingTimeInterval(1.5).timeIntervalSince1970 * 1000))
@@ -303,8 +318,15 @@ enum SiriDebugProbe {
                           SiriSnapshotStore.shared.conversations(ids: [oldConversation.id]).isEmpty &&
                           SiriSnapshotStore.shared.tasks(ids: [oldTask.id]).isEmpty ? "PASS" : "FAIL")
                     NSLog("[SiriProbe] deviceListeningDialog=%@",
-                          SiriListeningFailure(pigeonCode: "device_already_listening").spokenDialog ==
+                          SiriListeningFailure(pigeonCode: "device_already_listening").spokenDialog(starting: true) ==
                           "Omi is already listening from your device." ? "PASS" : "FAIL")
+                    NSLog("[SiriProbe] listeningFailureDialogs=%@",
+                          SiriListeningFailure(pigeonCode: "recording_off").spokenDialog(starting: true) ==
+                            "Turn on audio recording in Omi first." &&
+                          SiriListeningFailure(pigeonCode: "mic_permission_denied").spokenDialog(starting: true) ==
+                            "Allow microphone access in Omi first." &&
+                          SiriListeningFailure(pigeonCode: "nothing_to_stop").spokenDialog(starting: false) ==
+                            "Omi isn't listening right now." ? "PASS" : "FAIL")
                     defaults.removeObject(forKey: SiriStorageNamespace.current.ownerKey)
                     NSLog("[SiriProbe] ownerMissingVisible=%d", SiriSnapshotStore.shared.memories(ids: nil).count)
                     try await SiriSnapshotStore.shared.bind(uid: "siri-probe-next")

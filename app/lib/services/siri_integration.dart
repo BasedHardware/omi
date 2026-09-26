@@ -5,6 +5,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:omi/app_globals.dart';
 import 'package:omi/pages/home/home_navigation.dart';
 import 'package:omi/providers/action_items_provider.dart';
@@ -42,10 +43,15 @@ typedef SiriMemoryPageFetcher = Future<GetMemoriesResult> Function({
 /// The same owner-visible scope is used by both incremental writes and full
 /// snapshot reconciliation. A row leaving this scope must be deleted from the
 /// native index, even when the account's indexing preference is off.
-bool siriMemoryIsIndexable(Memory row, DateTime now) =>
+bool siriMemoryIsIndexable(Memory row, DateTime now, {String? owner}) =>
     row.id.isNotEmpty &&
+    (owner == null || row.uid == owner) &&
     !row.deleted &&
-    row.layer != MemoryLayer.archive &&
+    !row.isDismissed &&
+    !row.isLocked &&
+    row.visibility != MemoryVisibility.unknown &&
+    row.layerIsExplicit &&
+    (row.layer == MemoryLayer.shortTerm || row.layer == MemoryLayer.longTerm) &&
     (row.invalidAt == null || row.invalidAt!.isAfter(now)) &&
     (row.ledgerStatus == null || row.ledgerStatus == 'active') &&
     (row.supersededBy == null || row.supersededBy!.isEmpty) &&
@@ -56,12 +62,14 @@ bool siriConversationIsIndexable(ServerConversation row, DateTime now) =>
     row.status == ConversationStatus.completed &&
     !row.discarded &&
     !row.deleted &&
+    !row.isLocked &&
+    row.visibility != ConversationVisibility.unknown &&
     (row.startedAt ?? row.createdAt).isAfter(now.subtract(const Duration(days: 180)));
 
 bool siriTaskIsIndexable(ActionItemWithMetadata row, DateTime now) =>
     row.id.isNotEmpty &&
-    row.status != 'cancelled' &&
-    row.status != 'superseded' &&
+    !row.isLocked &&
+    (row.status == 'active' || row.status == 'completed') &&
     (row.supersededBy == null || row.supersededBy!.isEmpty) &&
     (!row.completed || (row.completedAt?.isAfter(now.subtract(const Duration(days: 30))) ?? false));
 
@@ -234,7 +242,7 @@ class SiriIntegration extends SiriEventsApi {
       final projected = _memoryProjection(rows, uid);
       final now = DateTime.now();
       final removed = rows
-          .where((row) => row.uid == uid && row.id.isNotEmpty && !siriMemoryIsIndexable(row, now))
+          .where((row) => row.uid == uid && row.id.isNotEmpty && !siriMemoryIsIndexable(row, now, owner: uid))
           .map((row) => row.id)
           .toSet();
       if (removed.isNotEmpty) await _host.deleteEntities(uid, 'memory', removed.toList());
@@ -259,7 +267,7 @@ class SiriIntegration extends SiriEventsApi {
     final now = DateTime.now();
     final newest = List<Memory>.of(rows)..sort((a, b) => b.createdAt.compareTo(a.createdAt));
     return newest
-        .where((row) => row.uid == uid && siriMemoryIsIndexable(row, now))
+        .where((row) => siriMemoryIsIndexable(row, now, owner: uid))
         .take(5000)
         .map((row) => SiriMemory(
               id: row.id,
@@ -426,10 +434,20 @@ class SiriIntegration extends SiriEventsApi {
             code: 'device_already_listening', message: 'Omi is already listening from your device.');
       }
       if (capture.source() == 'phone' || capture.phoneBatchRecording()) return;
-      await capture.start();
+      try {
+        await capture.start();
+      } catch (_) {
+        if (_testListeningCapture == null) {
+          final status = await Permission.microphone.status;
+          if (status.isDenied || status.isPermanentlyDenied || status.isRestricted) {
+            throw PlatformException(code: 'mic_permission_denied', message: 'Allow microphone access in Omi first.');
+          }
+        }
+        rethrow;
+      }
     } else {
       if (capture.source() != 'phone' && !capture.phoneBatchRecording()) {
-        throw StateError('Phone conversation capture is not recording');
+        throw PlatformException(code: 'nothing_to_stop', message: "Omi isn't listening right now.");
       }
       if (!await capture.stop()) throw StateError('Phone conversation capture did not stop');
     }

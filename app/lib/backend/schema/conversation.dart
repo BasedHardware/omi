@@ -123,7 +123,8 @@ class ConversationExternalData {
 // ignore: constant_identifier_names
 enum ConversationVisibility {
   private_('private'),
-  shared('shared');
+  shared('shared'),
+  unknown('unknown');
 
   final String value;
   const ConversationVisibility(this.value);
@@ -132,7 +133,7 @@ enum ConversationVisibility {
     if (s == private_.value) return private_;
     if (s == shared.value) return shared;
     if (s == 'public') return shared;
-    return private_;
+    return unknown;
   }
 }
 
