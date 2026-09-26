@@ -135,6 +135,10 @@ enum DefaultsKey: String {
   /// Ambient capture mutes its microphone contribution while a dictation app (Wispr Flow,
   /// superwhisper, macOS Dictation) holds the mic. Absent means on.
   case transcriptionIgnoreDictationApps = "transcription_ignoreDictationApps"
+  /// Current local day's per-bundle call-audio aggregates. The meeting detector
+  /// flushes the previous day as `Desktop Call App Audio Summary` on the first
+  /// tick of a new day and when it starts after a relaunch.
+  case callAppAudioDailyLedger = "callAppAudioDailyLedger"
   case floatingBarNotificationPreviewsEnabled = "shortcut_floatingBarNotificationPreviewsEnabled"
   case floatingBarCachedPlan = "floatingBar_cachedPlan"
   case floatingBarCachedDesktopGrandfatherUntil = "floatingBar_cachedDesktopGrandfatherUntil"
@@ -240,6 +244,14 @@ struct ScopedDefaultsKey {
     Self(rawValue: "dailySummary.lastSeenID.v1.\(ownerID)")
   }
 
+  /// Owner-scoped id of the newest daily summary the memory_v1 postcard-first
+  /// landing has already opened on. Separate from the notch-announcement latch
+  /// so neither consumes the other; the arm lands on the postcard exactly once
+  /// per summary.
+  static func dailySummaryPostcardLandedID(ownerID: String) -> Self {
+    Self(rawValue: "dailySummary.postcardLandedID.v1.\(ownerID)")
+  }
+
   /// Owner-scoped id of the daily summary that was on screen when the owner last cleared Chat.
   /// The card is chrome rather than a turn (INV-CHAT-1), so clearing the transcript cannot
   /// delete it — this is what makes Clear take it away anyway, until a newer summary arrives.
@@ -287,6 +299,7 @@ struct ScopedDefaultsKey {
 /// compiler-checked.
 extension UserDefaults {
   func string(forKey key: DefaultsKey) -> String? { string(forKey: key.rawValue) }
+  func data(forKey key: DefaultsKey) -> Data? { data(forKey: key.rawValue) }
   func bool(forKey key: DefaultsKey) -> Bool { bool(forKey: key.rawValue) }
   func integer(forKey key: DefaultsKey) -> Int { integer(forKey: key.rawValue) }
   func double(forKey key: DefaultsKey) -> Double { double(forKey: key.rawValue) }
