@@ -937,6 +937,41 @@ async def test_transcript_delivery_survives_a_non_string_started_at_on_a_resumed
 
 
 @pytest.mark.anyio
+async def test_transcript_delivery_does_not_read_a_boolean_started_at_as_a_1970_offset(monkeypatch):
+    """`bool` is an `int` subclass, so `started_at=True` must not be coerced to a numeric
+    timestamp (1.0s past epoch): it must fail closed to the first_audio_byte_timestamp
+    fallback, same as an unparseable value, instead of shifting segments by ~decades."""
+
+    class WebSocket:
+        def __init__(self):
+            self.sent = []
+
+        async def send_json(self, payload):
+            self.sent.append(payload)
+
+    captured_segments = []
+
+    async def cache_get(_conversation_id):
+        return {'transcript_segments': ['existing'], 'started_at': True}
+
+    async def update(_conversation, segments, _photos, _finished_at, _started_at):
+        captured_segments.extend(segments)
+        return SimpleNamespace(id='conversation-1'), segments, []
+
+    websocket = WebSocket()
+    processor, delivered, flushed = _transcript_processor_for_delivery(monkeypatch, websocket)
+    processor.cache = SimpleNamespace(get=cache_get)
+    processor._update_live_conversation = update
+
+    await processor.process_loop()
+
+    assert captured_segments[0].start == 0.0
+    assert captured_segments[0].end == 0.5
+    assert delivered == [True]
+    assert flushed == ['conversation-1']
+
+
+@pytest.mark.anyio
 async def test_transcript_loop_still_flushes_speaker_assignments_when_the_client_socket_is_closed(monkeypatch):
     """A send after close must not kill the loop before its final speaker flush.
 
