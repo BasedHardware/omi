@@ -104,8 +104,15 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
                 const SliverToBoxAdapter(child: FirstDayListeningHero()),
                 const SliverToBoxAdapter(child: IdleCaptureCard()),
               ] else
-                const SliverToBoxAdapter(
-                  child: ConversationCaptureWidget(showsCall: true, idle: IdleCaptureCard()),
+                SliverToBoxAdapter(
+                  // Start and Stop swap the idle and live cards: the change eases in rather than
+                  // jumping everything below.
+                  child: AnimatedSize(
+                    duration: OmiMotion.of(context).standard,
+                    curve: Curves.easeOutCubic,
+                    alignment: Alignment.topCenter,
+                    child: const ConversationCaptureWidget(showsCall: true, idle: IdleCaptureCard()),
+                  ),
                 ),
 
               const SliverToBoxAdapter(child: CaptureRecoveryBanner()),

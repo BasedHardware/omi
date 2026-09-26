@@ -111,20 +111,37 @@ class _Capture extends ChangeNotifier implements CaptureProvider {
   DateTime? get liveCaptureStartedAt => live == _Live.idle || live == _Live.idleDeviceConnected
       ? null
       : DateTime.now().subtract(const Duration(minutes: 12, seconds: 4));
+
+  /// What has been heard so far, when a test sets it ('' is nothing yet).
+  String? heard;
+
   @override
-  List<TranscriptSegment> get segments => live == _Live.idle
-      ? []
-      : [
-          TranscriptSegment(
-              id: '1',
-              text: 'Keep the pendant flow as it is.',
-              speaker: 'SPEAKER_0',
-              isUser: true,
-              personId: null,
-              start: 0,
-              end: 3,
-              translations: []),
-        ];
+  List<TranscriptSegment> get segments => heard != null
+      ? [
+          if (heard!.isNotEmpty)
+            TranscriptSegment(
+                id: 'h',
+                text: heard!,
+                speaker: 'SPEAKER_0',
+                isUser: true,
+                personId: null,
+                start: 0,
+                end: 3,
+                translations: []),
+        ]
+      : live == _Live.idle
+          ? []
+          : [
+              TranscriptSegment(
+                  id: '1',
+                  text: 'Keep the pendant flow as it is.',
+                  speaker: 'SPEAKER_0',
+                  isUser: true,
+                  personId: null,
+                  start: 0,
+                  end: 3,
+                  translations: []),
+            ];
   @override
   List<ConversationPhoto> get photos => const [];
   @override
@@ -336,6 +353,20 @@ void main() {
       expect(capture.phoneStarts, 0);
       capture.stopGate!.complete();
       await tester.pump();
+    });
+
+    // The transcript line has its room from the start, so the card does not grow as words arrive
+    // and Today does not shift during a recording.
+    testWidgets('the live card keeps its height as the transcript arrives', (tester) async {
+      Future<double> heightWith(String heard) async {
+        await pump(tester, const SingleChildScrollView(child: ConversationCaptureWidget(showsCall: true)),
+            capture: _Capture(_Live.pendant)..heard = heard);
+        return tester.getSize(find.byType(LiveCaptureCard)).height;
+      }
+
+      final silent = await heightWith('');
+      expect(await heightWith('Keep the pendant flow as it is.'), silent);
+      expect(await heightWith('We talked through the whole launch plan today. ' * 6), silent);
     });
 
     testWidgets('a muted pendant reads Muted and offers Unmute', (tester) async {

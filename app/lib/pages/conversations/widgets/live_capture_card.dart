@@ -28,6 +28,7 @@ class LiveCaptureCard extends StatelessWidget {
     this.elapsed,
     this.lastLine,
     this.note,
+    this.showsTranscript = true,
     this.onPauseToggle,
     this.onFinish,
   }) : live = live ?? !paused;
@@ -53,6 +54,10 @@ class LiveCaptureCard extends StatelessWidget {
   final String? lastLine;
   final String? note;
 
+  /// The card has a transcript line (live capture, a call): its two lines' room is kept from the
+  /// start, so the card does not grow as words arrive. Transcribe Later has none.
+  final bool showsTranscript;
+
   /// Null hides Mute/Unmute (glasses cannot mute).
   final VoidCallback? onPauseToggle;
 
@@ -77,6 +82,18 @@ class LiveCaptureCard extends StatelessWidget {
     }
     if (cut <= 0) return ('', text);
     return (text.substring(0, cut).trimRight(), text.substring(cut));
+  }
+
+  /// Two lines of the transcript's type at the reader's text size.
+  static double _transcriptRoom(BuildContext context) {
+    final painter = TextPainter(
+      text: TextSpan(text: '\n', style: OmiType.callout),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+    )..layout();
+    final height = painter.height;
+    painter.dispose();
+    return height;
   }
 
   /// The details sheet for a problem state: what is happening and that the audio is safe.
@@ -194,18 +211,25 @@ class LiveCaptureCard extends StatelessWidget {
         padding: const EdgeInsets.symmetric(vertical: 14),
         child: OmiListeningWave(key: const Key('live_capture_wave'), live: live),
       ),
-      if (line.isNotEmpty)
-        Text.rich(
-          TextSpan(children: [
-            TextSpan(
-              text: older.isEmpty ? '… ' : '…$older ',
-              style: TextStyle(color: OmiColors.textTertiary),
-            ),
-            TextSpan(text: latest),
-          ]),
-          maxLines: 3,
-          overflow: TextOverflow.ellipsis,
-          style: OmiType.callout,
+      // The transcript's room is there before the first word: the card keeps its height as words
+      // arrive, so Today does not shift during a recording.
+      if (showsTranscript)
+        ConstrainedBox(
+          constraints: BoxConstraints(minHeight: _transcriptRoom(context), minWidth: double.infinity),
+          child: line.isEmpty
+              ? null
+              : Text.rich(
+                  TextSpan(children: [
+                    TextSpan(
+                      text: older.isEmpty ? '… ' : '…$older ',
+                      style: TextStyle(color: OmiColors.textTertiary),
+                    ),
+                    TextSpan(text: latest),
+                  ]),
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: OmiType.callout,
+                ),
         ),
       if (note != null) ...[
         const SizedBox(height: OmiSpacing.sm),
