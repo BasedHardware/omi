@@ -26,6 +26,7 @@ from utils.speaker_tag_prompts.clips import (
     conversation_clip_pcm,
     pcm_to_wav,
 )
+from utils.speaker_tag_prompts.coverage import prompt_window_covered
 
 logger = logging.getLogger(__name__)
 
@@ -90,9 +91,15 @@ def get_speaker_tag_prompt_clip(
         raise HTTPException(status_code=404, detail='Conversation not found')
     if conversation.get('is_locked'):
         raise HTTPException(status_code=402, detail='A paid plan is required to access this conversation.')
+    if not prompt_window_covered(conversation, start, end):
+        raise HTTPException(status_code=404, detail='No audio stored for this part of the conversation')
     pcm = conversation_clip_pcm(uid, conversation, start, end)
     if not pcm:
         raise HTTPException(status_code=404, detail='No audio stored for this part of the conversation')
+    expected = service.clip_expected_text(conversation, start, end)
+    pcm = service.verified_clip_pcm(uid, conversation, start, end, expected, pcm)
+    if not pcm:
+        raise HTTPException(status_code=404, detail='No matching speech stored for this part of the conversation')
     return SpeakerTagPromptClip(
         audio_base64=base64.b64encode(pcm_to_wav(pcm)).decode('ascii'),
         duration_seconds=round(len(pcm) / (2 * CLIP_SAMPLE_RATE), 3),

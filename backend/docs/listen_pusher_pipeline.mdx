@@ -924,7 +924,7 @@ Parakeet service uses the `PARAKEET_`-prefixed equivalents.
 ### 4.1 Speaker tag prompts ("Is this you?" / "Who is this?")
 
 `routers/speaker_tag_prompts.py` serves a small daily set of voices to confirm,
-chosen by the pure `utils/speaker_tag_prompts/selection.py` from conversations
+chosen by `utils/speaker_tag_prompts/selection.py` from conversations
 started in the last **48 hours** that have stored audio (`audio_files`, i.e.
 private cloud sync was on). A candidate is one diarized speaker's longest clean
 stretch: consecutive segments with no other voice between them, at least 5 s,
@@ -935,6 +935,20 @@ conversation with no owner segments or when the owner has no voiceprint),
 unnamed voice); the last two need a paid plan (named speaker-ID). At most 4
 prompts, 2 per conversation, 2 owner checks; answered prompt ids are remembered
 for 7 days in `users/{uid}/speaker_tag_prompts/state`.
+
+Before offering a prompt, selection checks the exact clip window against v2
+validated chunk spans or conservative legacy `audio_files` bounds. Legacy file
+durations are estimates; the padded `conversation_audio.spans` playback length
+is never treated as proof of recorded speech. The top four eligible candidates
+are cut and transcribed; the resulting words must match the overlapping
+single-speaker transcript through `verify_and_transcribe_sample`. A failed or
+unavailable verification removes that candidate. Verdicts are cached for 12 h
+under a hash of the owner, conversation, window, expected text, language and
+audio manifest; a positive verdict also records the decoded clip digest, so a
+same-timestamp blob replacement must verify again. Transient failures cache
+for 5 min. The clip endpoint repeats
+the coverage check and requires the same content verdict before returning WAV.
+This applies to legacy live and merged sync rows as well as v2 rows.
 
 Pacing is server-owned: `POST /shown` starts a 20 h cooldown, three unanswered
 sets in a row (`POST /dismiss`) back off to 7 days, and an empty scan is cached
@@ -958,7 +972,7 @@ an explicit unknown decision. Voice learning stays behind existing gates:
 
 `GET /v1/speaker-tag-prompts/clip` streams at most 12 s of the user's own stored
 audio as WAV (`speaker_tag_prompts:clip` rate limit). Instrumentation is
-privacy-safe: Prometheus `omi_speaker_tag_prompt_{requests,served,sets,answers,
+privacy-safe: Prometheus `omi_speaker_tag_prompt_{requests,served,skipped,sets,answers,
 quality,voice_samples}_total` and `omi_voice_profile_setting_changes_total`
 carry only closed-enum labels. `quality` turns answers into precision
 (`owner_auto_confirmed|rejected`, `person_auto_confirmed|corrected`) and recall

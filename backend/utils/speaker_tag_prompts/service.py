@@ -8,14 +8,18 @@ saving other people's voices), the owner through a clip that must pass the same
 transcription check before it is pooled into the owner's voiceprint.
 """
 
+import asyncio
+import hashlib
+import json
 import logging
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable, Dict, List, Optional, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
 import numpy as np
 
 from database import conversations as conversations_db
+from database import redis_db
 from database import users as users_db
 from database import voice_profiles as voice_profiles_db
 from models.speaker_tag_prompts import (
@@ -35,6 +39,7 @@ from utils.observability.speaker_tag_prompts import (
     SPEAKER_TAG_PROMPT_SETS,
     SPEAKER_TAG_PROMPT_VOICE_SAMPLES,
     SPEAKER_TAG_PROMPTS_SERVED,
+    SPEAKER_TAG_PROMPTS_SKIPPED,
     VOICE_PROFILE_SETTING_CHANGES,
 )
 from utils.product_telemetry import emit_product_event
@@ -60,6 +65,8 @@ DISMISSED_COOLDOWN = timedelta(days=7)
 DISMISSALS_BEFORE_BACKOFF = 3
 EMPTY_RECHECK = timedelta(hours=2)
 RECENT_CONVERSATION_LIMIT = 30
+VERIFY_CACHE_SECONDS = 12 * 60 * 60
+VERIFY_ERROR_CACHE_SECONDS = 5 * 60
 
 ScheduleTask = Callable[..., None]
 
@@ -88,6 +95,75 @@ def _cooldown_until(state: Dict[str, Any]) -> Optional[datetime]:
     streak = int(state.get('consecutive_dismissals') or 0)
     wait = DISMISSED_COOLDOWN if streak >= DISMISSALS_BEFORE_BACKOFF else SHOW_COOLDOWN
     return last_shown + wait
+
+
+def _verification_cache_key(uid: str, conversation: Mapping[str, Any], start: float, end: float, text: str) -> str:
+    # Hash every private field and the current audio manifest. Nothing identifying
+    # or transcribed enters Redis keys or metrics labels in plaintext.
+    payload = json.dumps(
+        [uid, conversation['id'], start, end, text, conversation.get('audio_files'), conversation.get('language')],
+        sort_keys=True,
+        default=str,
+    )
+    return 'speaker_tag_clip_v2:' + hashlib.sha256(payload.encode()).hexdigest()
+
+
+def clip_expected_text(conversation: Mapping[str, Any], start: float, end: float) -> str:
+    """The overlapping single-speaker transcript used to check a requested clip."""
+    relevant = [
+        segment
+        for segment in conversation.get('transcript_segments') or []
+        if float(segment.get('start') or 0) < end and float(segment.get('end') or 0) > start
+    ]
+    if not relevant or len({speaker_id_of(segment) for segment in relevant}) != 1:
+        return ''
+    return ' '.join((segment.get('text') or '').strip() for segment in relevant).strip()
+
+
+def verified_clip_pcm(
+    uid: str, conversation: Mapping[str, Any], start: float, end: float, expected_text: str, pcm: Optional[bytes] = None
+) -> Optional[bytes]:
+    """Return playable PCM only after a matching transcription or cached verdict."""
+    if not expected_text:
+        SPEAKER_TAG_PROMPTS_SKIPPED.labels(reason='verify_failed').inc()
+        return None
+    key = _verification_cache_key(uid, conversation, start, end, expected_text)
+    cached = redis_db.get_generic_cache(key)
+    if cached is False:
+        SPEAKER_TAG_PROMPTS_SKIPPED.labels(reason='verify_failed').inc()
+        return None
+    try:
+        pcm = pcm if pcm is not None else conversation_clip_pcm(uid, conversation, start, end)
+    except Exception as error:
+        logger.warning('speaker tag clip verification failed error_type=%s', type(error).__name__)
+        SPEAKER_TAG_PROMPTS_SKIPPED.labels(reason='verify_error').inc()
+        return None
+    # A legacy file's encoded-size duration can overstate the decoded tail.
+    # Reject a truncated cut even if its first seconds happen to transcribe.
+    minimum_bytes = max(0, int((end - start - 0.02) * CLIP_SAMPLE_RATE)) * 2
+    if not pcm or len(pcm) < minimum_bytes:
+        SPEAKER_TAG_PROMPTS_SKIPPED.labels(reason='uncovered').inc()
+        return None
+    pcm_digest = hashlib.sha256(pcm).hexdigest()
+    if isinstance(cached, dict) and cached.get('pcm_sha256') == pcm_digest:
+        return pcm
+    try:
+        _transcript, valid, reason = asyncio.run(
+            verify_and_transcribe_sample(
+                pcm_to_wav(pcm), CLIP_SAMPLE_RATE, expected_text, language=conversation.get('language')
+            )
+        )
+    except Exception:
+        SPEAKER_TAG_PROMPTS_SKIPPED.labels(reason='verify_error').inc()
+        redis_db.set_generic_cache(key, False, ttl=VERIFY_ERROR_CACHE_SECONDS)
+        return None
+    if not valid:
+        is_error = reason.startswith('transcription_failed')
+        SPEAKER_TAG_PROMPTS_SKIPPED.labels(reason='verify_error' if is_error else 'verify_failed').inc()
+        redis_db.set_generic_cache(key, False, ttl=VERIFY_ERROR_CACHE_SECONDS if is_error else VERIFY_CACHE_SECONDS)
+        return None
+    redis_db.set_generic_cache(key, {'pcm_sha256': pcm_digest}, ttl=VERIFY_CACHE_SECONDS)
+    return pcm
 
 
 def get_prompts(uid: str, now: Optional[datetime] = None) -> SpeakerTagPromptsResponse:
@@ -136,6 +212,15 @@ def get_prompts(uid: str, now: Optional[datetime] = None) -> SpeakerTagPromptsRe
         named_allowed=named_allowed,
         answered=voice_profiles_db.answered_prompt_ids(state, now),
         people=people,
+        verify=lambda conversation, prompt, _expected: verified_clip_pcm(
+            uid,
+            conversation,
+            prompt.clip_start,
+            prompt.clip_end,
+            clip_expected_text(conversation, prompt.clip_start, prompt.clip_end),
+        )
+        is not None,
+        on_skip=lambda reason: SPEAKER_TAG_PROMPTS_SKIPPED.labels(reason=reason).inc(),
     )
     if not prompts:
         voice_profiles_db.mark_tag_prompts_empty(uid, now)

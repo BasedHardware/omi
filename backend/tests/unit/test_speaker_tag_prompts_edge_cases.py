@@ -14,7 +14,9 @@ def _make_conversation(segments, *, started_at=None, created_at=None):
         'started_at': started_at,
         'created_at': created_at or (now - timedelta(hours=1)),
         'status': 'completed',
-        'audio_files': [{'chunk_timestamps': [float((created_at or (now - timedelta(hours=1))).timestamp())]}],
+        'audio_files': [
+            {'chunk_timestamps': [float((created_at or (now - timedelta(hours=1))).timestamp())], 'duration': 60.0}
+        ],
         'transcript_segments': segments,
         'structured': {'title': 'Standup'},
     }
@@ -52,7 +54,7 @@ def test_conversation_clip_pcm_falls_back_to_created_at_and_normalizes_naive_utc
         'id': 'conv-clip',
         'started_at': None,
         'created_at': naive_created,
-        'audio_files': [{'chunk_timestamps': [expected_epoch]}],
+        'audio_files': [{'chunk_timestamps': [expected_epoch], 'duration': 10.0}],
     }
     monkeypatch.setattr(
         clips,
