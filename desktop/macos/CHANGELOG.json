@@ -2,6 +2,13 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.398",
+      "date": "2026-09-26",
+      "changes": [
+        "Back-to-back Zoom calls are now saved as separate conversations"
+      ]
+    },
+    {
       "version": "0.12.397",
       "date": "2026-09-26",
       "changes": [
