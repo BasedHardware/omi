@@ -30,3 +30,17 @@ enum SiriIndexScope {
     Array(items.prefix(limit))
   }
 }
+
+enum SiriMemoryExpirySweep {
+  static func nextExpiry(_ indexed: [String: Date]) -> Date? { indexed.values.min() }
+
+  @discardableResult
+  static func deleteDue(
+    _ indexed: [String: Date], now: Date,
+    deletion: ([String]) async throws -> Void
+  ) async throws -> [String] {
+    let due = indexed.filter { $0.value <= now }.map(\.key).sorted()
+    if !due.isEmpty { try await deletion(due) }
+    return due
+  }
+}

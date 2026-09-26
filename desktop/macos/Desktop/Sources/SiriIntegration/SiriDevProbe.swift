@@ -20,8 +20,25 @@
       do {
         try await index.indexAppEntities([MemoryEntity(record)], priority: 0)
         log("SiriDevProbe: synthetic MemoryEntity indexed")
-        let found = await spotlightContains(token)
+        let found = try await spotlightContains(token)
         log("SiriDevProbe: Core Spotlight fetch found=\(found)")
+        try await index.deleteAppEntities(identifiedBy: [token], ofType: MemoryEntity.self)
+        var absent = false
+        for _ in 0..<10 {
+          if try await spotlightContains(token) == false {
+            absent = true
+            break
+          }
+          try await Task.sleep(for: .milliseconds(250))
+        }
+        log("SiriDevProbe: synthetic MemoryEntity delete fetch absent=\(absent)")
+        if !absent {
+          throw NSError(
+            domain: "SiriDevProbe", code: 1,
+            userInfo: [
+              NSLocalizedDescriptionKey: "Synthetic entity remained searchable after deletion"
+            ])
+        }
       } catch {
         log("SiriDevProbe: Core Spotlight index failed: \(error.localizedDescription)")
       }
@@ -61,23 +78,21 @@
       }
     }
 
-    private static func spotlightContains(_ token: String) async -> Bool {
+    private static func spotlightContains(_ token: String) async throws -> Bool {
       let context = CSSearchQueryContext()
       context.fetchAttributes = ["contentDescription", "uniqueIdentifier"]
       let query = CSSearchQuery(queryString: "contentDescription == \"\(token)\"", queryContext: context)
-      let search = Task { () -> Bool in
-        do {
-          for try await hit in query.results {
-            if hit.item.attributeSet.contentDescription == token { return true }
-          }
-        } catch { log("SiriDevProbe: Core Spotlight query failed: \(error.localizedDescription)") }
+      let search = Task { () throws -> Bool in
+        for try await hit in query.results {
+          if hit.item.attributeSet.contentDescription == token { return true }
+        }
         return false
       }
       let timeout = Task {
         try? await Task.sleep(for: .seconds(10))
         search.cancel()
       }
-      let found = await search.value
+      let found = try await search.value
       timeout.cancel()
       return found
     }

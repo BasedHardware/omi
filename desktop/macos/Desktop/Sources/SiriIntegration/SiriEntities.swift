@@ -97,6 +97,7 @@ struct MemoryEntity: IndexedEntity {
   @Property(title: "Name", indexingKey: \.displayName) var name: String
   @Property(title: "Content", indexingKey: \.contentDescription) var content: String
   @Property(title: "Created", indexingKey: \.contentCreationDate) var creationDate: Date
+  var expiresAt: Date?
   var displayRepresentation: DisplayRepresentation { DisplayRepresentation(title: "\(name)") }
 
   init(_ record: MemoryRecord) {
@@ -104,6 +105,7 @@ struct MemoryEntity: IndexedEntity {
     name = String(record.content.prefix(60))
     content = record.content
     creationDate = record.createdAt
+    expiresAt = record.expiresAt
   }
 
   init(_ memory: ServerMemory) {
@@ -111,6 +113,7 @@ struct MemoryEntity: IndexedEntity {
     name = String(memory.content.prefix(60))
     content = memory.content
     creationDate = memory.createdAt
+    expiresAt = memory.expiresAt
   }
 
   init(donationID: String) {
@@ -118,6 +121,7 @@ struct MemoryEntity: IndexedEntity {
     name = "Omi Memory"
     content = ""
     creationDate = .distantPast
+    expiresAt = nil
   }
 }
 

@@ -49,7 +49,9 @@ final class SiriIntentServiceTests: XCTestCase {
 
   private actor DeletionProbe {
     var deletedID: String?
+    var deletedIDs: [String] = []
     func delete(_ id: String) { deletedID = id }
+    func delete(_ ids: [String]) { deletedIDs = ids }
   }
 
   func testMemoryInputIsTrimmedWithoutRewritingItsWords() {
@@ -137,6 +139,7 @@ final class SiriIntentServiceTests: XCTestCase {
     XCTAssertEqual(entity.id, "memory-synthetic")
     XCTAssertEqual(entity.content, record.content)
     XCTAssertEqual(entity.name, record.content)
+    XCTAssertEqual(entity.expiresAt, expiry)
   }
 
   @available(macOS 27, *)
@@ -332,5 +335,29 @@ final class SiriIntentServiceTests: XCTestCase {
         throw URLError(.notConnectedToInternet)
       })
     XCTAssertFalse(failed)
+  }
+
+  func testMemoryExpirySweepDeletesExactlyDueIdsBeforeReturning() async throws {
+    let now = Date(timeIntervalSince1970: 2_000_000_000)
+    let indexed = [
+      "already-expired": now.addingTimeInterval(-1),
+      "expires-now": now,
+      "later": now.addingTimeInterval(30),
+    ]
+    XCTAssertEqual(SiriMemoryExpirySweep.nextExpiry(indexed), now.addingTimeInterval(-1))
+    let probe = DeletionProbe()
+    let deleted = try await SiriMemoryExpirySweep.deleteDue(indexed, now: now) { ids in
+      await probe.delete(ids)
+    }
+    XCTAssertEqual(deleted, ["already-expired", "expires-now"])
+    let observed = await probe.deletedIDs
+    XCTAssertEqual(observed, deleted)
+
+    do {
+      _ = try await SiriMemoryExpirySweep.deleteDue(indexed, now: now) { _ in
+        throw URLError(.notConnectedToInternet)
+      }
+      XCTFail("Failed Spotlight deletion must remain eligible for retry")
+    } catch { XCTAssertTrue(error is URLError) }
   }
 }

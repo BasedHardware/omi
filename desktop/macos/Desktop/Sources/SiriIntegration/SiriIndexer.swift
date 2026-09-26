@@ -19,6 +19,8 @@ actor SiriIndexer {
   private var idleWaiters: [CheckedContinuation<Void, Never>] = []
   private var transitionInProgress = false
   private var transitionWaiters: [CheckedContinuation<Void, Never>] = []
+  private var indexedMemoryExpirations: [String: Date] = [:]
+  private var memoryExpiryTimer: Task<Void, Never>?
 
   private init() {
     indexedOwner = UserDefaults.standard.string(forKey: ownerKey)
@@ -68,6 +70,54 @@ actor SiriIndexer {
     for waiter in waiters { waiter.resume() }
   }
 
+  private func resetMemoryExpirations() {
+    memoryExpiryTimer?.cancel()
+    memoryExpiryTimer = nil
+    indexedMemoryExpirations.removeAll()
+  }
+
+  private func scheduleNextMemoryExpiry(owner: String) {
+    memoryExpiryTimer?.cancel()
+    guard let next = SiriMemoryExpirySweep.nextExpiry(indexedMemoryExpirations) else {
+      memoryExpiryTimer = nil
+      return
+    }
+    // Recheck within an hour if the wall clock moves or the machine sleeps.
+    let delay = min(max(next.timeIntervalSinceNow, 0), 3_600)
+    memoryExpiryTimer = Task { [weak self] in
+      try? await Task.sleep(for: .seconds(delay))
+      guard !Task.isCancelled else { return }
+      await self?.expireDueMemories(expectedOwner: owner)
+    }
+  }
+
+  private func expireDueMemories(expectedOwner: String) async {
+    let now = Date()
+    guard SiriMemoryExpirySweep.nextExpiry(indexedMemoryExpirations).map({ $0 <= now }) == true else {
+      scheduleNextMemoryExpiry(owner: expectedOwner)
+      return
+    }
+    do {
+      guard let index = try await operationIndex(expectedOwner: expectedOwner) else { return }
+      defer { finishOperation() }
+      let due = try await SiriMemoryExpirySweep.deleteDue(indexedMemoryExpirations, now: now) { ids in
+        for chunk in ids.chunkedSiriIndex(200) {
+          try await index.deleteAppEntities(identifiedBy: chunk, ofType: MemoryEntity.self)
+        }
+      }
+      for id in due { indexedMemoryExpirations.removeValue(forKey: id) }
+      scheduleNextMemoryExpiry(owner: expectedOwner)
+    } catch {
+      log("Siri memory expiry deletion pending retry: \(error.localizedDescription)")
+      memoryExpiryTimer?.cancel()
+      memoryExpiryTimer = Task { [weak self] in
+        try? await Task.sleep(for: .seconds(5))
+        guard !Task.isCancelled else { return }
+        await self?.expireDueMemories(expectedOwner: expectedOwner)
+      }
+    }
+  }
+
   private func operationIndex(expectedOwner: String? = nil) async throws -> CSSearchableIndex? {
     while true {
       await awaitTransition()
@@ -80,6 +130,7 @@ actor SiriIndexer {
           indexedOwner = try await SiriIndexOwnerFence.transition(from: indexedOwner, to: current) { owner in
             try await self.index(for: owner).deleteAllSearchableItems()
           }
+          resetMemoryExpirations()
           UserDefaults.standard.set(current, forKey: ownerKey)
           finishTransition()
         } catch {
@@ -113,6 +164,7 @@ actor SiriIndexer {
     await awaitIdle()
     do {
       if let indexedOwner { try await index(for: indexedOwner).deleteAllSearchableItems() }
+      resetMemoryExpirations()
       indexedOwner = nil
       UserDefaults.standard.removeObject(forKey: ownerKey)
       finishTransition()
@@ -132,6 +184,8 @@ actor SiriIndexer {
     guard let index = try await operationIndex(expectedOwner: expectedOwner) else { return }
     defer { finishOperation() }
     try await index.deleteAppEntities(identifiedBy: [id], ofType: MemoryEntity.self)
+    indexedMemoryExpirations.removeValue(forKey: id)
+    scheduleNextMemoryExpiry(owner: expectedOwner)
   }
 
   func deleteMemories(ids: [String], expectedOwner: String) async throws {
@@ -140,6 +194,8 @@ actor SiriIndexer {
     for chunk in ids.chunkedSiriIndex(200) {
       try await index.deleteAppEntities(identifiedBy: chunk, ofType: MemoryEntity.self)
     }
+    for id in ids { indexedMemoryExpirations.removeValue(forKey: id) }
+    scheduleNextMemoryExpiry(owner: expectedOwner)
   }
 
   func deleteTask(id: String, expectedOwner: String) async throws {
@@ -168,6 +224,8 @@ actor SiriIndexer {
     guard let index = try await operationIndex(expectedOwner: expectedOwner) else { return }
     defer { finishOperation() }
     for chunk in entities.chunkedSiriIndex(200) { try await index.indexAppEntities(chunk, priority: 0) }
+    for entity in entities { indexedMemoryExpirations[entity.id] = entity.expiresAt }
+    scheduleNextMemoryExpiry(owner: expectedOwner)
   }
 
   @available(macOS 27, *)
@@ -184,6 +242,7 @@ actor SiriIndexer {
     var count = 0
     do {
       try await index.deleteAllSearchableItems()
+      resetMemoryExpirations()
       if #available(macOS 27, *) {
         try await index.indexAppEntities([OmiFolderEntity.conversations, .memories], priority: 0)
         try await index.indexAppEntities([OmiListEntity.omi], priority: 0)
@@ -203,6 +262,8 @@ actor SiriIndexer {
         limit: SiriIndexScope.memoryLimit, backendOnly: true, expiresAfter: now)
       let memoryEntities = memories.map(MemoryEntity.init)
       for chunk in memoryEntities.chunkedSiriIndex(200) { try await index.indexAppEntities(chunk, priority: 0) }
+      for entity in memoryEntities { indexedMemoryExpirations[entity.id] = entity.expiresAt }
+      if let indexedOwner { scheduleNextMemoryExpiry(owner: indexedOwner) }
       count += memoryEntities.count
 
       if #available(macOS 27, *) {
