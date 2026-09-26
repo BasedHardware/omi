@@ -3544,6 +3544,7 @@
     "moreWaysToRecord": "更多录音方式",
     "openCall": "打开通话",
     "captureRecoveryBanner": "吊坠音频未送达应用 — 轻点以修复",
+    "phoneRecordingBlockedByPendantBatch": "在用手机录音之前，请先停止吊坠上的“稍后转录”。",
     "captureNotTranscribing": "未在转录",
     "captureAudioSavedTranscribesLater": "音频已保存，稍后转录",
     "captureStillRecording": "仍在录音",

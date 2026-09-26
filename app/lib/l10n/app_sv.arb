@@ -3544,6 +3544,7 @@
     "moreWaysToRecord": "Fler sätt att spela in",
     "openCall": "Öppna samtal",
     "captureRecoveryBanner": "Ljudet från hänget når inte appen — tryck för att reparera",
+    "phoneRecordingBlockedByPendantBatch": "Stoppa Transcribe Later på ditt hängsmycke innan du spelar in med telefonen.",
     "captureNotTranscribing": "Transkriberar inte",
     "captureAudioSavedTranscribesLater": "Ljud sparat, transkriberas senare",
     "captureStillRecording": "Spelar fortfarande in",

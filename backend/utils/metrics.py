@@ -718,6 +718,46 @@ OMI_LIVE_STT_TERMINAL_TOTAL = Counter(
     ['provider', 'outcome', 'client_platform', 'deployment_environment', 'phase'],
 )
 
+# Headline SLI for live listening: did this session get any transcript? Emitted
+# exactly once per backend-STT listen session at teardown (never for custom-STT
+# sessions, whose transcripts the client produces). too_short (under ~10s of
+# audio or no VAD speech) is excluded from the success-ratio denominator by the
+# alert, so quiet sessions cannot page. No provider/session labels: this is the
+# user-felt outcome, not provider attribution (2026-09-26 incident: ~34.8k/35k
+# modulate terminals failed for hours with nothing paging on the user outcome).
+OMI_LIVE_SESSION_TRANSCRIPT_OUTCOME_TOTAL = Counter(
+    'omi_live_session_transcript_outcome_total',
+    'Terminal transcript outcome per backend-STT live listen session (transcribed / no_transcript / too_short)',
+    ['outcome'],
+)
+
+# Process-local STT breaker state (utils/stt/provider_resilience.py), published
+# on every state transition. Per pod: sum across job=backend-listen-metrics for
+# "pods with this provider's breaker open". kind=account is the 402/balance
+# bench; kind=selection is the connect/serve bench.
+OMI_STT_PROVIDER_CIRCUIT_OPEN = Gauge(
+    'omi_stt_provider_circuit_open',
+    'Whether the process-local STT provider breaker is currently refusing traffic (1) or not (0)',
+    ['provider', 'kind'],
+)
+
+# Per-provider live-STT connection attempts on every connect path (legacy order
+# and configured chain), with a bounded error class for the failure tail.
+OMI_STT_PROVIDER_CONNECT_TOTAL = Counter(
+    'omi_stt_provider_connect_total',
+    'Live-STT provider connection attempts by bounded provider, outcome, and error class',
+    ['provider', 'outcome', 'error_class'],
+)
+
+# Deployment-marked retired providers (intentionally unfunded legs). Budget and
+# leg-error alerts subtract these so a provider that is dead on purpose cannot
+# page forever. Populated from STT_RETIRED_PROVIDERS (utils/stt/stream_close.py).
+OMI_STT_PROVIDER_RETIRED = Gauge(
+    'omi_stt_provider_retired',
+    'STT providers this deployment has retired (unfunded or decommissioned legs alerts must ignore)',
+    ['provider'],
+)
+
 # /v4/listen funnel for sources the client cannot self-report (phone_call today):
 # accepted socket -> first decoded audio -> transcript delivery. Sources and outcomes
 # are closed enums; no user, call, or session identifiers appear as labels.

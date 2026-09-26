@@ -11223,6 +11223,9 @@ class AppLocalizationsFa extends AppLocalizations {
   String get captureRecoveryBanner => 'صدای آویز به برنامه نمی‌رسد — برای تعمیر ضربه بزنید';
 
   @override
+  String get phoneRecordingBlockedByPendantBatch => 'قبل از ضبط با گوشی، Transcribe Later را روی آویز خود متوقف کنید.';
+
+  @override
   String get captureNotTranscribing => 'رونویسی انجام نمی‌شود';
 
   @override

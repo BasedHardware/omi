@@ -11256,6 +11256,9 @@ class AppLocalizationsBe extends AppLocalizations {
   String get captureRecoveryBanner => 'Гук кулона не даходзіць да праграмы — націсніце, каб выправіць';
 
   @override
+  String get phoneRecordingBlockedByPendantBatch => 'Спыніце Transcribe Later на падвесцы перад запісам на тэлефоне.';
+
+  @override
   String get captureNotTranscribing => 'Няма транскрыпцыі';
 
   @override

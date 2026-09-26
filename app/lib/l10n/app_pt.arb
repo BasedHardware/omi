@@ -3579,6 +3579,7 @@
     "moreWaysToRecord": "Mais formas de gravar",
     "openCall": "Abrir chamada",
     "captureRecoveryBanner": "O áudio do pingente não chega à aplicação — toque para reparar",
+    "phoneRecordingBlockedByPendantBatch": "Pare o Transcribe Later no seu pingente antes de gravar com o telefone.",
     "captureNotTranscribing": "Sem transcrição",
     "captureAudioSavedTranscribesLater": "Áudio salvo, transcrição depois",
     "captureStillRecording": "Ainda gravando",

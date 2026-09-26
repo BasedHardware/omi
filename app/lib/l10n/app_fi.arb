@@ -3544,6 +3544,7 @@
     "moreWaysToRecord": "Lisää tallennustapoja",
     "openCall": "Avaa puhelu",
     "captureRecoveryBanner": "Riipuksen ääni ei tule perille sovellukseen — korjaa napauttamalla",
+    "phoneRecordingBlockedByPendantBatch": "Lopeta Transcribe Later riipuksessa ennen kuin nauhoitat puhelimella.",
     "captureNotTranscribing": "Ei litterointia",
     "captureAudioSavedTranscribesLater": "Ääni tallennettu, litteroidaan myöhemmin",
     "captureStillRecording": "Tallennus jatkuu",

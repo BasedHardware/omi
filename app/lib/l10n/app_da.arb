@@ -3586,6 +3586,7 @@
     "moreWaysToRecord": "Flere måder at optage på",
     "openCall": "Åbn opkald",
     "captureRecoveryBanner": "Lyden fra vedhænget når ikke frem til appen — tryk for at reparere",
+    "phoneRecordingBlockedByPendantBatch": "Stop Transcribe Later på din pendant, før du optager med telefonen.",
     "captureNotTranscribing": "Transskriberer ikke",
     "captureAudioSavedTranscribesLater": "Lyd gemt, transskriberes senere",
     "captureStillRecording": "Optager stadig",

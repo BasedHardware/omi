@@ -3544,6 +3544,7 @@
     "moreWaysToRecord": "Citi ierakstīšanas veidi",
     "openCall": "Atvērt zvanu",
     "captureRecoveryBanner": "Kulona audio nesasniedz lietotni — pieskarieties, lai salabotu",
+    "phoneRecordingBlockedByPendantBatch": "Pirms ierakstīšanas ar tālruni apturiet Transcribe Later piekari.",
     "captureNotTranscribing": "Netiek transkribēts",
     "captureAudioSavedTranscribesLater": "Audio saglabāts, tiks transkribēts vēlāk",
     "captureStillRecording": "Ierakstīšana turpinās",

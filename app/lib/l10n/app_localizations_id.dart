@@ -11236,6 +11236,10 @@ class AppLocalizationsId extends AppLocalizations {
   String get captureRecoveryBanner => 'Audio pendant tidak sampai ke aplikasi — ketuk untuk memperbaiki';
 
   @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Hentikan Transcribe Later di pendant Anda sebelum merekam dengan ponsel.';
+
+  @override
   String get captureNotTranscribing => 'Tidak mentranskripsi';
 
   @override

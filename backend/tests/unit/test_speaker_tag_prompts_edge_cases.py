@@ -64,6 +64,28 @@ def test_conversation_clip_pcm_falls_back_to_created_at_and_normalizes_naive_utc
     assert len(pcm) == 5 * 16000 * 2
 
 
+def _raise_no_chunks(uid, cid, relevant, fill_gaps=True, sample_rate=16000):
+    raise FileNotFoundError(f'No chunks found for conversation {cid}')
+
+
+def test_conversation_clip_pcm_returns_none_when_listed_chunks_are_unreadable(monkeypatch):
+    # Legacy path: chunk timestamps are listed but storage cannot return them.
+    started = datetime(2026, 9, 26, 7, 0, 0, tzinfo=timezone.utc).timestamp()
+    legacy = {'id': 'conv-legacy', 'started_at': started, 'audio_files': [{'chunk_timestamps': [started]}]}
+    monkeypatch.setattr(clips, 'download_audio_chunks_and_merge', _raise_no_chunks)
+    assert clips.conversation_clip_pcm('uid-1', legacy, 1.0, 6.0) is None
+
+    # v2 path: validated spans cover the window, but the blobs are missing.
+    v2 = {
+        'id': 'conv-v2',
+        'started_at': datetime.fromtimestamp(started, tz=timezone.utc),
+        'audio_timeline': {'version': 2},
+        'private_cloud_sync_enabled': True,
+        'audio_files': [{'chunk_timestamps': [started], 'chunk_spans': [{'start': started, 'end': started + 10.0}]}],
+    }
+    assert clips.conversation_clip_pcm('uid-1', v2, 1.0, 6.0) is None
+
+
 def test_voice_profile_settings_preserve_default_true_when_stored_as_explicit_none():
     mock_client = MagicMock()
     mock_client.collection.return_value.document.return_value.get.return_value.to_dict.return_value = {

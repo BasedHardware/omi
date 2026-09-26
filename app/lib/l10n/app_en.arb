@@ -13336,6 +13336,7 @@
     "@captureRecoveryBanner": {
         "description": "Persistent repair banner shown when a connected pendant's audio is not reaching the app; tapping opens device repair settings"
     },
+    "phoneRecordingBlockedByPendantBatch": "Stop Transcribe Later on your pendant before recording with your phone.",
     "captureNotTranscribing": "Not transcribing",
     "@captureNotTranscribing": {
         "description": "Home live capture card, line 1: live transcription is not running (server said it cannot); audio keeps recording. Must stay short (one line on a small phone)."

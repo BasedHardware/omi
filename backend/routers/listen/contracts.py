@@ -49,7 +49,9 @@ def persisted_started_seconds(started_at: Any) -> Optional[float]:
             return datetime.fromisoformat(started_at).timestamp()
         except ValueError:
             return None
-    if isinstance(started_at, (int, float)):
+    # bool is an int subclass in Python; a stray True/False must not be read
+    # as a 1970-epoch offset (1.0/0.0 seconds).
+    if isinstance(started_at, (int, float)) and not isinstance(started_at, bool):
         return float(started_at)
     return None
 
@@ -121,6 +123,10 @@ class ListenSessionState:
     live_transcription_attempt: Any = None
     client_live_transcription_attempt: Any = None
     live_transcription_failed: bool = False
+    # Headline SLI latch: flipped once when the first nonempty transcript batch
+    # was delivered to the client (runtime.complete_live_transcription). Read at
+    # teardown by _record_session_transcript_outcome.
+    live_transcript_delivered: bool = False
     last_usage_record_timestamp: Optional[float] = None
     words_transcribed_since_last_record: int = 0
     last_transcript_time: Optional[float] = None

@@ -1,5 +1,6 @@
 import io
 import struct
+import time
 import wave
 from datetime import datetime, timezone
 
@@ -229,6 +230,29 @@ def test_cache_round_trip_and_corrupt_header_is_empty():
     np.testing.assert_allclose(decoded['a'][1], np.arange(4))
     assert stage.decode_cache(struct.pack('>I', 2) + b'{}') == {}
     assert stage.decode_cache(None) == {}
+
+
+def test_decode_cache_fails_open_on_truncated_or_malformed_blob():
+    # Header length claims more bytes than the blob actually carries.
+    assert stage.decode_cache(struct.pack('>I', 100) + b'{"v":1,"ids":["a"]') == {}
+    # Valid header but a matrix buffer that cannot reshape to the declared dim.
+    header = b'{"v":1,"ids":["a","b"],"durations":[1.0,1.0],"dim":64}'
+    blob = struct.pack('>I', len(header)) + header + b'\x00' * 4
+    assert stage.decode_cache(blob) == {}
+
+
+def test_started_at_anchors_a_naive_datetime_to_utc(monkeypatch):
+    monkeypatch.setenv('TZ', 'America/Los_Angeles')
+    time.tzset()
+    try:
+        conversation = _conversation([], scopes=[])
+        conversation.started_at = datetime(2026, 9, 25, 12, 0, 0)  # no tzinfo
+        conversation.created_at = conversation.started_at
+
+        assert stage._started_at(conversation) == datetime(2026, 9, 25, 12, 0, 0, tzinfo=timezone.utc).timestamp()
+    finally:
+        monkeypatch.delenv('TZ', raising=False)
+        time.tzset()
 
 
 def test_a_long_segment_overlapping_short_ones_is_still_embedded(env, monkeypatch):

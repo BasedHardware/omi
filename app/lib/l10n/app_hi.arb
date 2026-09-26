@@ -3544,6 +3544,7 @@
     "moreWaysToRecord": "रिकॉर्ड करने के और तरीके",
     "openCall": "कॉल खोलें",
     "captureRecoveryBanner": "पेंडेंट का ऑडियो ऐप तक नहीं पहुंच रहा है — ठीक करने के लिए टैप करें",
+    "phoneRecordingBlockedByPendantBatch": "फ़ोन से रिकॉर्ड करने से पहले अपने पेंडेंट पर Transcribe Later बंद करें।",
     "captureNotTranscribing": "ट्रांसक्राइब नहीं हो रहा",
     "captureAudioSavedTranscribesLater": "ऑडियो सहेजा गया, बाद में ट्रांसक्राइब होगा",
     "captureStillRecording": "अभी भी रिकॉर्ड हो रहा है",
