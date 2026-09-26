@@ -1,3 +1,4 @@
+import hmac
 import os
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
@@ -199,7 +200,7 @@ def dismiss_announcement_endpoint(
 def _verify_admin_key(secret_key: str):
     """Verify the secret key matches the ADMIN_KEY environment variable."""
     admin_key = os.getenv("ADMIN_KEY")
-    if not admin_key or secret_key != admin_key:
+    if not admin_key or not hmac.compare_digest(secret_key, admin_key):
         raise HTTPException(status_code=403, detail="You are not authorized to perform this action")
 
 
