@@ -48,7 +48,7 @@ def list_conversations(
     categories: Optional[str] = typer.Option(None, "--categories", help="Comma-separated category filter."),
     include_transcript: bool = typer.Option(False, "--include-transcript", help="Include transcript_segments."),
 ) -> None:
-    server_page_size = 25 if include_transcript else 100
+    server_page_size = 500 if include_transcript else 1000
     ctx = _ctx(typer_ctx)
     with ctx.make_client() as client:
         if limit <= server_page_size:

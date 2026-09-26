@@ -1508,7 +1508,7 @@ def get_conversations(
         # Clamp pagination so a negative value cannot reach Firestore (which raises -> HTTP 500) and an
         # oversized limit cannot stream the whole collection. Mirrors the GET /v3/memories hardening.
         offset = max(0, offset)
-        limit = max(1, min(limit, 25 if include_transcript else 100))
+        limit = max(1, min(limit, 500 if include_transcript else 1000))
         try:
             category_list = [CategoryEnum(c.strip()) for c in categories.split(",") if c.strip()] if categories else []
         except ValueError as e:
