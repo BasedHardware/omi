@@ -14,6 +14,24 @@ This is the shared contract for the macOS and iOS implementations. Both clients 
 
 The Xcode 27 metadata processor rejects two entity types conforming to `.notes.note`; the memory type must stay custom. Although `IndexedEntity` and `indexAppEntities` exist on iOS 18, the note, reminder, folder and list schema entities and `IndexedEntityQuery` reindex API used here require iOS 27. Supporting iOS 18–26 indexing would require separate entity types and queries for the same private objects, with a second mapping and reindex path. This PR keeps one owner, eligibility and wipe path and limits indexing to iOS 27+/macOS 27+. The index includes completed, retained conversations from the last 180 days (newest 2,000), active unexpired memories (newest 5,000), all open tasks and tasks completed in the last 30 days. An account gets its own named Core Spotlight index. Delete indexed items in each local delete/expiry path. On sign-out or UID change, wipe before indexing another account. The setting **Use Omi with Siri & Apple Intelligence** defaults ON; OFF wipes the index and suppresses future indexing and donations, while explicit intents still work.
 
+### Index eligibility (one shared decision table)
+
+Each row below is an AND condition. A missing required ID, owner, or completion date fails closed. `now` is evaluated at every incremental change, full rebuild, entity query/reindex, and launch maintenance. A live index timer removes rows as they cross a time cutoff. Collection folders and the Omi list have no private content and are present only while indexing is enabled for the current owner.
+
+| Field / state | Conversation | Memory | Task |
+| --- | --- | --- | --- |
+| Backend ID and account owner | Nonempty server ID, synced into the current account's cache | Nonempty server ID; `uid` (when supplied) equals the current account; current account cache | Nonempty server ID, current account cache |
+| Deleted / discarded | Neither deleted nor discarded | Not deleted | Not deleted |
+| Archived tier | N/A | Explicit `short_term` or `long_term` only; archive or unknown tier excluded | N/A |
+| Expired / invalidated | N/A | `expires_at` and `invalid_at` absent or later than `now` | N/A |
+| User rejected / dismissed | N/A | `user_review != false`, not dismissed | N/A |
+| Visibility | Owner-visible `private`, `shared`, or `public`; no hidden/unknown value | Owner-visible `private`, `shared`, or `public`; no hidden/unknown value | No visibility field in task response |
+| Lifecycle status | Completed only; in-progress, processing, merging, failed excluded | Ledger status absent or active, no `superseded_by` | Active open, or completed within 30 days; cancelled, superseded and `superseded_by` excluded |
+| Locked / paywalled | `is_locked == false` | `is_locked == false` | `is_locked == false` |
+| Age window | Started (or created) later than `now - 180 days` | No creation-age limit | Open tasks have no age limit; completed_at later than `now - 30 days` |
+
+Source fields were checked against Dart `Memory`, `ServerConversation`, `GeneratedActionItemResponse`; macOS GRDB `MemoryRecord`, `TranscriptionSessionRecord`, `ActionItemRecord`; and backend `MemoryDB`, `Conversation`, `ActionItemResponse`. Beyond the reported fields, this table explicitly covers locked/paywalled rows, memory invalidation and supersession, task supersession, and unknown visibility. The backend account-scoped fetch and local owner fence establish ownership where a row has no UID.
+
 ## Intents and phrases
 
 | Action | Kind | Parameters | Result |
@@ -29,6 +47,8 @@ The Xcode 27 metadata processor rejects two entity types conforming to `.notes.n
 App Shortcut phrases: “Remember something in `\(.applicationName)`”; “Tell `\(.applicationName)` to remember”; “Add a memory to `\(.applicationName)`”; “Start listening with `\(.applicationName)`”; “Stop `\(.applicationName)`”. A missing Remember parameter prompts “What should Omi remember?”. Trim surrounding whitespace and an initial “that ”, then save the remaining text verbatim. Never report write success before the backend or authoritative local-first store confirms it. Remember, Complete and Create require local device authentication. Open and Search run in the foreground. iOS listening waits for the Flutter capture stack; macOS uses its existing capture controller. Ask Omi is outside this PR.
 
 Failures have spoken, typed outcomes on both platforms: `auth` → “Open Omi and sign in first.”; `network` → “I couldn't reach Omi, so nothing was saved.” (or “the task wasn't changed”); `quota` (402) → “Your Omi limit has been reached, so nothing was saved.”; `rate_limited` (429) → “Omi is receiving too many requests. Try again shortly.”; `server` (5xx or malformed success) → “Omi couldn't save that right now.”; `cancelled` → no success claim. Unsupported task updates explain that Omi can only change completion through Siri. Do not turn a non-2xx response into an empty success.
+
+Listening failures have their own dialogs: recording off → “Turn on audio recording in Omi first.”; microphone denied → “Allow microphone access in Omi first.”; stop with no phone capture → “Omi isn't listening right now.”; unavailable start/stop → “Omi couldn't start/stop listening right now” on macOS and “Open Omi to start/stop listening” on iOS when its foreground Flutter capture stack is unavailable. iOS has no macOS-style audio-recording-mode setting; its `recording_off` bridge code is retained for dialog parity if the capture controller introduces one.
 
 ## Context, donations and telemetry
 
