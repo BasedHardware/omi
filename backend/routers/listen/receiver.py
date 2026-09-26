@@ -298,6 +298,20 @@ class ListenReceiver:
         """
         kept: List[Dict[str, Any]] = []
         for segment in segments:
+            if segment.pop('_capture_unplaced', False):
+                owner_sample = segment.pop('_capture_owner_sample', None)
+                owner = self._owner_for_sample(owner_sample) if owner_sample is not None else None
+                # A late provider final may outlive the retained owner ledger.
+                # Keep its text on the active recording with an explicit
+                # unplaced marker; never attach a speaker-ID audio window.
+                if owner is None and self.capture_timeline is not None and self.capture_timeline.anchors:
+                    anchor = self.capture_timeline.wall(self.capture_timeline.next_sample)
+                    segment['start'] = anchor
+                    segment['end'] = anchor
+                segment['_conversation_id'] = owner or self.host.state.current_conversation_id
+                kept.append(segment)
+                OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode='v2', outcome='unplaced').inc()
+                continue
             start_sample = segment.pop('_capture_start_sample', None)
             end_sample = segment.pop('_capture_end_sample', None)
             if start_sample is None or end_sample is None:
@@ -452,11 +466,15 @@ class ListenReceiver:
             if not self.capture_timeline_v2:
                 OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode='legacy', outcome='mapped').inc()
 
+        def record_recovered(reason: str) -> None:
+            OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode='v2', outcome='recovered').inc()
+
         epoch = ProviderEpochTranslator(
             timeline,
             int(self.host.request.sample_rate),
             on_reject=record_reject,
             on_mapped=record_mapped,
+            on_recover=record_recovered,
             project_times=self.capture_timeline_v2,
         )
 

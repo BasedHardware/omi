@@ -289,7 +289,9 @@ def test_translator_rejects_evicted_interval_segments():
     assert timeline.compacted_below_sample is not None and timeline.compacted_below_sample > old_start
 
     out = translator.translate([{'id': 'old', 'start': 0.0, 'end': 1.0, 'text': 'x'}])
-    assert out == []
+    assert [segment['text'] for segment in out] == ['x']
+    assert out[0]['audio_alignment'] == 'unplaced'
+    assert out[0]['start'] == out[0]['end'] == timeline.wall(timeline.next_sample)
     assert translator.rejected_segments == 1
 
 

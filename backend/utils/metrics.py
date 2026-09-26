@@ -103,7 +103,7 @@ OMI_CAPTURE_FINALIZATION_RECONCILIATIONS_TOTAL = Counter(
 
 # Audio-timeline v2 observability. Labels are bounded and never carry UID,
 # conversation id, or any transcript/audio content. mode=legacy|v2;
-# segments outcome=mapped|rejected|straddled|late_owner_dropped;
+# segments outcome=mapped|rejected|recovered|unplaced|straddled|late_owner_dropped;
 # coverage outcome is the 3.4 vocabulary covered|missing|pending_upload|no_audio|unsupported.
 OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL = Counter(
     'omi_audio_timeline_segments_total',
@@ -143,7 +143,7 @@ OMI_AUDIO_TIMELINE_REPLAY_CONFLICTS_TOTAL = Counter(
 for _mode in ('legacy', 'v2'):
     for _reason in AUDIO_TIMELINE_REJECT_REASONS:
         OMI_AUDIO_TIMELINE_REJECTS_TOTAL.labels(mode=_mode, reason=_reason)
-    for _outcome in ('mapped', 'rejected', 'straddled', 'late_owner_dropped'):
+    for _outcome in ('mapped', 'rejected', 'recovered', 'unplaced', 'straddled', 'late_owner_dropped'):
         OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode=_mode, outcome=_outcome)
     for _outcome in ('covered', 'missing', 'pending_upload', 'no_audio', 'unsupported'):
         OMI_AUDIO_TIMELINE_COVERAGE_TOTAL.labels(mode=_mode, outcome=_outcome)

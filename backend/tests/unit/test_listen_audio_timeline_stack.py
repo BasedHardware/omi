@@ -38,9 +38,11 @@ from routers.listen.receiver import ListenReceiver
 from routers.listen.transcripts import ConversationCache, TranscriptProcessor
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.audio_timeline import coverage_outcome
+from utils.audio import AudioRingBuffer
 from utils.listen_pusher_session import ListenPusherSession, ListenPusherSessionConfig, ListenPusherSessionDeps
 from utils.product_telemetry import set_product_telemetry_client_for_tests
 from utils.stt.vad_gate import GatedSTTSocket
+from utils.stt import vad_gate as vad_gate_module
 
 RATE = 16000
 UID = 'uid-at'
@@ -520,6 +522,103 @@ def _seed_conversation(store, cid):
     }
 
 
+@pytest.mark.parametrize('first,second', [('modulate', 'soniox'), ('soniox', 'modulate')])
+@pytest.mark.parametrize('codec', ['pcm16', 'opus'])
+async def test_prod_order_failover_keeps_text_and_locates_second_leg_audio(monkeypatch, first, second, codec):
+    """Prod-shaped receiver replay: active gate, two provider epochs, Opus/PCM.
+
+    The 31-minute logical inter-arrival hiatus exercises capture anchors
+    without a long sleep. Opus uses a deterministic decoder double because
+    the native codec library is not available in the hermetic test lane.
+    """
+    monkeypatch.setenv('STT_CONNECT_ORDER_FROM_CONFIG', 'true')
+    monkeypatch.setattr(vad_gate_module, '_get_ort_session', lambda: None)
+    monkeypatch.setattr(vad_gate_module.VADStreamingGate, '_run_vad', lambda self, pcm: any(pcm))
+    stack = _Stack(monkeypatch, v2=True, conversation_id=CONV1)
+    stack.host.request.codec = codec
+    stack.host.state.audio_ring_buffer = AudioRingBuffer(30, RATE)
+    store = StrictFirestore()
+    _seed_conversation(store, CONV1)
+    monkeypatch.setattr(conversations_db, 'get_firestore_client', lambda: store)
+    decoded_by_packet = {}
+
+    class OpusDecoder:
+        def decode(self, packet, frame_size):
+            return decoded_by_packet[packet]
+
+    if codec == 'opus':
+        stack.receiver.opus_decoder = OpusDecoder()
+
+    def frames(marker):
+        result = []
+        pcm = _phrase(marker, 4.0)
+        chunk = RATE  # 0.5 second PCM16
+        for index in range(8):
+            part = pcm[index * chunk : (index + 1) * chunk]
+            if codec == 'opus':
+                packet = f'op{marker}-{index}'.encode()
+                decoded_by_packet[packet] = part
+            else:
+                packet = part
+            result.append(_frame(packet, 0.5, 0.5))
+        for index in range(4):
+            silence = b'\x00\x00' * (RATE // 2)
+            if codec == 'opus':
+                packet = f'os{marker}-{index}'.encode()
+                decoded_by_packet[packet] = silence
+            else:
+                packet = silence
+            result.append(_frame(packet, 0.5, 0.5))
+        result.append(_disconnect_frame())
+        return result
+
+    try:
+        for leg_index, provider in enumerate((first, second)):
+            gate = vad_gate_module.VADStreamingGate(sample_rate=RATE, mode='active', hangover_ms=300)
+            stack.receiver.vad_gate = gate
+            gated_callback, passthrough_callback, epoch = stack.receiver._build_stt_callbacks()
+            raw = FakeProviderSocket()
+            stack.receiver.stt_socket = GatedSTTSocket(
+                raw, gate=gate, passthrough_audio=provider == 'modulate', send_tracker=epoch
+            )
+            stack.host.state.active = True
+            replay = frames(leg_index + 1)
+            if leg_index:
+                replay[0]['_advance'] = (31 * 60.5, 31 * 60.5)
+            await _run_receiver_frames(stack, replay)
+            assert raw.accepted_samples >= 4 * RATE
+            callback = passthrough_callback if provider == 'modulate' else gated_callback
+            callback([_provider_segment(0.5, 3.0, f'{provider} words')])
+            if leg_index:
+                callback([_provider_segment(1.0, 1.0, 'point word')])
+                callback([_provider_segment(30.0, 31.0, 'late word')])
+
+        assert [s['text'] for s in stack.segments_collected] == [
+            f'{first} words',
+            f'{second} words',
+            'point word',
+            'late word',
+        ]
+        second_segment = stack.segments_collected[1]
+        window = stack.host.state.audio_ring_buffer.get_time_range()
+        assert window is not None
+        assert window[0] <= second_segment['start'] < second_segment['end'] <= window[1]
+        clip = stack.host.state.audio_ring_buffer.extract(second_segment['start'], second_segment['end'])
+        assert clip and clip != b'\x00' * len(clip)
+        assert stack.segments_collected[-1]['audio_alignment'] == 'unplaced'
+        assert stack.segments_collected[-1]['start'] == stack.segments_collected[-1]['end']
+
+        await _persist_collected(stack, store, monkeypatch)
+        persisted = _decode_segments(store.rows[('users', UID, 'conversations', CONV1)])
+        assert all(
+            text in ' '.join(s['text'] for s in persisted)
+            for text in [f'{first} words', f'{second} words', 'point word', 'late word']
+        )
+        assert any(s.get('audio_alignment') == 'unplaced' for s in persisted)
+    finally:
+        stack.restore()
+
+
 async def _run_scenario(monkeypatch, gcs, pusher_env, *, v2: bool):
     """Burst phrase A, logical wall-clock jump, real-time phrase B, reconnect, rollover C."""
     phrase_a = _phrase(1, 10.0)
@@ -568,7 +667,8 @@ async def _run_scenario(monkeypatch, gcs, pusher_env, *, v2: bool):
             stack.receiver._enqueue_translated_segments(translated, provider='fake')
             rejected_before = stack.epoch.rejected_segments
             dropped = stack.epoch.translate([_provider_segment(25.0, 26.0, 'hallucinated')])
-            assert dropped == []
+            assert [segment['text'] for segment in dropped] == ['hallucinated']
+            assert dropped[0]['audio_alignment'] == 'unplaced'
             assert stack.epoch.rejected_segments == rejected_before + 1
             await _persist_collected(stack, store, monkeypatch)
         else:
