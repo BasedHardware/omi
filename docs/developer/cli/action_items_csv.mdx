@@ -1,94 +1,93 @@
 ---
-title: "Export Action Items to CSV"
-description: "Convert your Omi action-item JSON export to a spreadsheet-ready CSV file."
+title: Export Action Items to CSV
 ---
 
-## Overview
-
-This recipe exports your Omi action items to a UTF-8 BOM CSV file that opens
-correctly in Excel, Numbers, and Google Sheets without a manual import wizard.
-
-The workflow follows the same offline-conversion pattern used by other examples
-in this directory: export JSON with the `omi` CLI first, then transform it with
-a standalone Python script — no additional Python packages required.
-
----
+Export your Omi action items to a CSV file for use in spreadsheet applications such as Excel or LibreOffice Calc.
 
 ## Prerequisites
 
-| Requirement | Notes |
-|---|---|
-| `omi-cli` | Install with `pip install omi-cli` (not the bare `omi` package — see the [CLI README](https://pypi.org/project/omi-cli/)). |
-| Python 3.8+ | Standard library only — `csv`, `json`, `pathlib`. |
+```bash
+pip install omi-cli
+```
 
----
+> **Note:** Install `omi-cli`, not `omi`. The bare `omi` name on PyPI is an unrelated package.
 
-## Step 1 — Export action items to JSON
+## Step 1 — Export JSON
 
 ```bash
 omi --json action-item list > action_items.json
 ```
 
----
-
 ## Step 2 — Convert to CSV
 
+Save the script below as `action_items_to_csv.py`, then run:
+
 ```bash
-python scripts/action_items_to_csv.py action_items.json
-# output: action_items.csv  (default)
-
-# custom output path
-python scripts/action_items_to_csv.py action_items.json ~/Desktop/tasks.csv
+python action_items_to_csv.py
 ```
 
----
+This creates `action_items.csv` in the current directory.
 
-## Output format
+## Script
 
-The CSV contains the following columns, matching the action-item data model:
+```python
+# action_items_to_csv.py
+import csv
+import json
 
-| Column | Type | Description |
-|---|---|---|
-| `id` | UUID string | Unique identifier of the action item. |
-| `description` | string | Text of the action item. |
-| `completed` | bool | `True` if the item has been completed. |
-| `due_at` | ISO 8601 / empty | Due date, if set. |
-| `created_at` | ISO 8601 | Creation timestamp. |
+INPUT_FILE = "action_items.json"
+OUTPUT_FILE = "action_items.csv"
 
-### Sample output
+FIELDS = ["id", "description", "completed", "due_at", "created_at"]
+
+
+def sanitize(value):
+    """Prevent formula injection in spreadsheet applications.
+
+    Fields that start with =, +, -, or @ are prefixed with a single quote
+    so spreadsheet applications treat them as plain text.
+    See: https://owasp.org/www-community/attacks/CSV_Injection
+    """
+    s = str(value)
+    if s.startswith(("=", "+", "-", "@")):
+        return "'" + s
+    return s
+
+
+def main():
+    with open(INPUT_FILE, encoding="utf-8") as f:
+        items = json.load(f)
+
+    # utf-8-sig writes the BOM Excel needs to detect UTF-8 automatically
+    with open(OUTPUT_FILE, "w", newline="", encoding="utf-8-sig") as f:
+        writer = csv.writer(f)
+        writer.writerow(FIELDS)
+        for item in items:
+            writer.writerow([
+                sanitize(item.get("id", "")),
+                sanitize(item.get("description", "")),
+                item.get("completed", False),
+                item.get("due_at") or "",
+                item.get("created_at") or "",
+            ])
+
+    print(f"Wrote {len(items)} action item(s) to {OUTPUT_FILE}")
+
+
+if __name__ == "__main__":
+    main()
+```
+
+## Sample output
 
 ```
-"id","description","completed","due_at","created_at"
-"a1b2c3d4-e5f6-7890-abcd-ef1234567890","Buy groceries","False","","2024-05-01T09:00:00Z"
-"b2c3d4e5-f6a7-8901-bcde-f12345678901","Call dentist","True","2024-05-10T00:00:00Z","2024-05-01T09:05:00Z"
+id,description,completed,due_at,created_at
+3f6a1b2c-...,Buy groceries,False,,2024-11-01T09:00:00Z
+7c9d4e5f-...,Schedule dentist appointment,True,2024-11-15T00:00:00Z,2024-11-01T09:05:00Z
 ```
 
----
+## Notes
 
-## Security — CSV injection prevention
-
-Spreadsheet applications execute cell content that begins with `=`, `+`, `-`,
-`@`, `\t`, or `\r` as formulas. The script prefixes any such value with a
-literal single quote (`'`), which causes the application to treat the cell as
-plain text. This follows the
-[OWASP CSV Injection guidance](https://owasp.org/www-community/attacks/CSV_Injection)
-and the pattern used in the other conversion scripts in this repository.
-
-Python's `csv.writer` with `quoting=csv.QUOTE_ALL` handles structural CSV
-escaping (commas, embedded quotes, newlines) separately from the formula-prefix
-check above.
-
----
-
-## Troubleshooting
-
-**`omi: command not found`**
-Run `pip install omi-cli`. Do not use `pip install omi` — that installs an
-unrelated package that will cause an import error.
-
-**Empty `action_items.json`**
-Confirm you are authenticated: `omi whoami`. Re-run the export after logging in.
-
-**Garbled characters in Excel**
-The file is written with a UTF-8 BOM (`utf-8-sig`). If characters still appear
-garbled, open Excel's Text Import Wizard and select *Unicode (UTF-8)*.
+- **Formula injection:** Values starting with `=`, `+`, `-`, or `@` are prefixed with `'` so spreadsheet applications render them as plain text instead of executing them as formulas.
+- **Excel UTF-8:** The file is written with the UTF-8 BOM (`utf-8-sig`) so Excel opens it correctly without a manual import step.
+- **`completed`** is a boolean (`True`/`False`); filter or reformat it in your spreadsheet as needed.
