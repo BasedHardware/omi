@@ -136,7 +136,8 @@ def retrieve_file_paths(files: List[UploadFile], uid: str) -> List[str]:
         except Exception as e:
             if os.path.exists(path):
                 os.remove(path)
-            raise HTTPException(status_code=500, detail=f"Failed to write file {filename}: {str(e)}")
+            logger.error(f"Failed to write file {filename}: {type(e).__name__}")
+            raise HTTPException(status_code=500, detail=f"Failed to write file {filename}") from e
     return paths
 
 
