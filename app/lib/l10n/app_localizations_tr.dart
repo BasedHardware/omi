@@ -11238,6 +11238,10 @@ class AppLocalizationsTr extends AppLocalizations {
   String get captureRecoveryBanner => 'Kolye sesi uygulamaya ulaşmıyor — onarmak için dokunun';
 
   @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Telefonunuzla kaydetmeden önce kolyenizdeki Transcribe Later\'ı durdurun.';
+
+  @override
   String get captureNotTranscribing => 'Metne dökülmüyor';
 
   @override

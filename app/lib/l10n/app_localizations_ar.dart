@@ -11158,6 +11158,9 @@ class AppLocalizationsAr extends AppLocalizations {
   String get captureRecoveryBanner => 'صوت القلادة لا يصل إلى التطبيق — انقر للإصلاح';
 
   @override
+  String get phoneRecordingBlockedByPendantBatch => 'أوقف «النسخ لاحقًا» على قلادتك قبل التسجيل بهاتفك.';
+
+  @override
   String get captureNotTranscribing => 'لا يتم النسخ';
 
   @override

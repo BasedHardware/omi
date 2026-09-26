@@ -11278,6 +11278,10 @@ class AppLocalizationsRo extends AppLocalizations {
   String get captureRecoveryBanner => 'Sunetul pandantivului nu ajunge în aplicație — atinge pentru a repara';
 
   @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Opriți Transcribe Later pe pandantiv înainte de a înregistra cu telefonul.';
+
+  @override
   String get captureNotTranscribing => 'Fără transcriere';
 
   @override

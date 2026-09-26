@@ -14,6 +14,7 @@ import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversations/widgets/live_capture_card.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
+import 'package:omi/pages/conversation_capturing/page.dart';
 import 'package:omi/pages/home/widgets/battery_info_widget.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/connectivity_provider.dart';
@@ -22,7 +23,7 @@ import 'package:omi/providers/phone_call_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/enums.dart';
 
-enum _Live { idle, idleDeviceConnected, pendant, pendantPaused, phone, phoneAfterPendant }
+enum _Live { idle, idleDeviceConnected, pendant, pendantPaused, pendantBatch, phone, phoneAfterPendant }
 
 class _Capture extends ChangeNotifier implements CaptureProvider {
   _Capture(this.live,
@@ -46,11 +47,12 @@ class _Capture extends ChangeNotifier implements CaptureProvider {
   int pauses = 0;
   int resumes = 0;
   int phoneStarts = 0;
+  Object? phoneStartFailure;
 
   @override
   String? get liveCaptureSource => switch (live) {
         _Live.idle || _Live.idleDeviceConnected => null,
-        _Live.pendant || _Live.pendantPaused => 'omi',
+        _Live.pendant || _Live.pendantPaused || _Live.pendantBatch => 'omi',
         _ => 'phone',
       };
   @override
@@ -60,7 +62,7 @@ class _Capture extends ChangeNotifier implements CaptureProvider {
           ? RecordingState.pause
           : switch (live) {
               _Live.idle || _Live.idleDeviceConnected => RecordingState.stop,
-              _Live.pendant => RecordingState.deviceRecord,
+              _Live.pendant || _Live.pendantBatch => RecordingState.deviceRecord,
               _Live.pendantPaused => RecordingState.pause,
               _ => RecordingState.record,
             };
@@ -82,6 +84,8 @@ class _Capture extends ChangeNotifier implements CaptureProvider {
   bool get offlineMuted => false;
   @override
   int? get offlineRecordingElapsedSeconds => batch ? 125 : null;
+  @override
+  bool get isPendantBatchRecording => live == _Live.pendantBatch;
   @override
   DateTime? get liveCaptureStartedAt => live == _Live.idle || live == _Live.idleDeviceConnected
       ? null
@@ -122,7 +126,12 @@ class _Capture extends ChangeNotifier implements CaptureProvider {
   @override
   Future<void> resumeCapture() async => resumes++;
   @override
-  Future<void> streamRecording({bool resumeCapture = true}) async => phoneStarts++;
+  Future<void> streamRecording({bool resumeCapture = true}) async {
+    phoneStarts++;
+    final failure = phoneStartFailure;
+    if (failure != null) throw failure;
+  }
+
   @override
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
@@ -397,6 +406,36 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.text(en.pendantIsListeningTitle), findsNothing);
       expect(capture.phoneStarts, 0);
+    });
+
+    testWidgets('a Transcribe Later pendant rejects phone takeover with visible feedback', (tester) async {
+      final capture = _Capture(_Live.pendantBatch);
+      await pump(tester, const HomeRecordButton(), capture: capture);
+      await tester.tap(find.bySemanticsLabel(en.startRecording));
+      await tester.pump();
+      expect(find.text(en.phoneRecordingBlockedByPendantBatch), findsOneWidget);
+      expect(capture.phoneStarts, 0);
+      expect(find.text(en.recordWith), findsNothing);
+    });
+
+    testWidgets('a start that fails says so and never opens the capturing page', (tester) async {
+      final capture = _Capture(_Live.idle)..phoneStartFailure = StateError('refused');
+      await pump(tester, const HomeRecordButton(), capture: capture);
+      await tester.tap(find.bySemanticsLabel(en.startRecording));
+      await tester.pump();
+      expect(capture.phoneStarts, 1);
+      expect(find.text(en.somethingWentWrong), findsOneWidget);
+      expect(find.byType(ConversationCapturingPage), findsNothing);
+    });
+
+    testWidgets('a start that resolves without phone ownership navigates nowhere', (tester) async {
+      final capture = _Capture(_Live.idle);
+      await pump(tester, const HomeRecordButton(), capture: capture);
+      await tester.tap(find.bySemanticsLabel(en.startRecording));
+      await tester.pump();
+      expect(capture.phoneStarts, 1);
+      expect(find.byType(ConversationCapturingPage), findsNothing);
+      expect(find.text(en.somethingWentWrong), findsNothing, reason: 'a refusal is not an error toast');
     });
 
     testWidgets('during an Omi call the button never starts a recording', (tester) async {
