@@ -37,10 +37,8 @@ from utils.transcribe_store import calendar_db, conversations_db, redis_db
 
 logger = logging.getLogger(__name__)
 
-# Orphan threshold for stale in_progress recovery (#9809). Any live session
-# refreshes finished_at continuously and its lifecycle loop processes an idle
-# conversation within the ~2-minute conversation timeout, so an hour of silence
-# proves no session owns the row — including one on another device.
+# Orphan threshold for stale in_progress recovery (#9809). A live session refreshes finished_at continuously
+# and lifecycle processes an idle conversation within ~2m; 1h silence proves no session owns the row.
 STALE_IN_PROGRESS_RECOVERY_AGE_SECONDS = 3600
 # Per-session recovery bound: spreads a large backlog across sessions instead of
 # fanning dozens of LLM finalizations out of one reconnect.
@@ -269,8 +267,7 @@ class LiveConversationController:
         recording_session_id = recording_session_id_for_lifecycle_event(
             self.host.recording_session_ids_by_conversation, conversation_id
         )
-        # Snapshot before the fenced delete: the outcome is only truthful if the
-        # delete actually wins the race to content, so emit after `deleted`.
+        # Snapshot before fenced delete: outcome is truthful only if delete wins race to content.
         was_no_audio_session = self._should_report_no_audio_teardown()
         deleted = await self.host.persistence.call(
             lifecycle_service.delete_empty_recording_conversation,
@@ -280,9 +277,7 @@ class LiveConversationController:
         )
         if deleted:
             if was_no_audio_session:
-                # A phone_call that stayed silent for its whole duration must be
-                # distinguishable from a call that was never transcribed at all;
-                # the empty-conversation deletion itself is unchanged.
+                # Silent phone_calls must be distinguishable from untranscribed calls; deletion unchanged.
                 logger.warning(
                     'Listen session tore down with no audio received source=%s platform=%s',
                     self.host.request.source,
@@ -336,11 +331,8 @@ class LiveConversationController:
         conversation_id = binding['conversation_id']
         self.host.recording_session_ids_by_conversation[conversation_id] = self.host.recording_session_id
         if proposed_id_is_server_generated and conversation_id == proposed_id:
-            # proposed_id was invented for this call and the binding adopted it
-            # verbatim, so no conversation document can exist under it yet: a
-            # lookup here is a guaranteed NOT_FOUND read. Client-supplied ids
-            # always still get looked up below, since they can legitimately
-            # name an existing conversation (resume/idempotency).
+            # proposed_id was invented for this call and adopted verbatim, so no document can exist yet
+            # (guaranteed NOT_FOUND read). Client-supplied ids still get looked up below for resume/idempotency.
             existing = None
         elif binding.get('conversation_snapshot_known'):
             # open_live_recording_session already read this exact document while
@@ -443,8 +435,7 @@ class LiveConversationController:
             proposed = {'conversation_id': conversation_id, 'recording_session_id': self.host.recording_session_id}
             adopted = await self._continuation(proposed)
             if adopted and adopted != proposed and await self._resume_continuation(adopted):
-                # The winner is revalidated before deleting our unexposed loser.
-                # A racing content write or lock still defeats deletion.
+                # Revalidate winner before deleting loser; racing content or lock defeats deletion.
                 await self.host.persistence.call(
                     lifecycle_service.delete_empty_recording_conversation,
                     request.uid,
@@ -462,11 +453,20 @@ class LiveConversationController:
                 now + timedelta(minutes=2),
             )
             if meetings:
-                closest = min(meetings, key=lambda meeting: abs((meeting['start_time'] - now).total_seconds()))
-                await self.host.persistence.call(redis_db.set_conversation_meeting_id, conversation_id, closest['id'])
+                now_ts = now.timestamp()
+                candidates = [
+                    (abs(ts - now_ts), m['id'])
+                    for m in meetings
+                    if isinstance(m, dict)
+                    and m.get('id')
+                    and (ts := persisted_started_seconds(m.get('start_time'))) is not None
+                ]
+                if candidates:
+                    await self.host.persistence.call(
+                        redis_db.set_conversation_meeting_id, conversation_id, min(candidates)[1]
+                    )
         self.host.state.current_conversation_id = conversation_id
-        # Fresh v2 generation: the origin is pinned by the receiver at the
-        # first accepted audio frame associated with this conversation.
+        # Fresh v2 generation: origin is pinned by receiver at the first accepted audio frame.
         self._adopt_capture_timeline(conversation_id, None)
         await self.host.speakers.refresh_for_conversation(conversation_id)
         self.send_conversation_session(binding, self.host.recording_session_id)

@@ -1163,3 +1163,66 @@ async def test_heartbeat_stops_after_close_message_instead_of_crashing():
     await runtime._heartbeat()
 
     assert runtime.state.active is False
+
+
+@pytest.mark.anyio
+async def test_desktop_meeting_attribution_handles_mixed_timestamp_types_and_missing_ids():
+    """Desktop meeting association must safely coerce naive datetimes, ISO strings,
+    epoch floats, None start_times, and non-dict/missing id entries without raising
+    TypeError or KeyError."""
+    from datetime import datetime, timezone, timedelta
+    from unittest.mock import AsyncMock, MagicMock
+    from models.conversation_enums import ConversationSource
+    from routers.listen.contracts import ListenRequest
+    from routers.listen.conversations import LiveConversationController
+
+    set_meeting_calls = []
+
+    async def fake_persistence(fn, *args, **kwargs):
+        name = getattr(fn, '__name__', str(fn))
+        if name == 'get_meetings_in_time_range':
+            now = datetime.now(timezone.utc)
+            return [
+                {'id': 'm_none', 'start_time': None},
+                {'start_time': now},  # missing 'id'
+                'not_a_dict',
+                {'id': 'm_naive', 'start_time': datetime(2026, 9, 26, 12, 0, 0)},
+                {'id': 'm_iso', 'start_time': (now + timedelta(seconds=10)).isoformat()},
+                {'id': 'm_closest', 'start_time': now.timestamp() - 1.0},
+            ]
+        if name == 'set_conversation_meeting_id':
+            set_meeting_calls.append(args)
+            return None
+        if name == 'open_live_recording_session':
+            return {'conversation_id': 'conv-123', 'requires_rollover': False}
+        if name in ('set_in_progress_conversation_id', 'update_conversation', 'create_conversation'):
+            return None
+        return None
+
+    request = ListenRequest(
+        websocket=SimpleNamespace(client_state=1), uid='test-uid', source=ConversationSource.desktop.value
+    )
+    host = SimpleNamespace(
+        request=request,
+        client_device_context=SimpleNamespace(client_device_id='dev-1', platform='desktop'),
+        language='en',
+        conversation_creation_timeout=120,
+        use_custom_stt=False,
+        private_cloud_sync_enabled=False,
+        is_multi_channel=False,
+        onboarding_handler=None,
+        recording_session_id='rec-123',
+        client_conversation_id=None,
+        recording_session_ids_by_conversation={},
+        persistence=SimpleNamespace(call=AsyncMock(side_effect=fake_persistence)),
+        state=SimpleNamespace(current_conversation_id=None),
+        speakers=SimpleNamespace(refresh_for_conversation=AsyncMock()),
+    )
+
+    manager = LiveConversationController(host)
+    manager._adopt_capture_timeline = lambda *args: None
+    manager.send_conversation_session = MagicMock()
+
+    await manager.create_new_in_progress_conversation()
+
+    assert set_meeting_calls == [('conv-123', 'm_closest')]
