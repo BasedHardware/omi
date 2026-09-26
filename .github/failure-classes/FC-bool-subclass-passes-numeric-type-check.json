@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-bool-subclass-passes-numeric-type-check",
+  "violated_contract": "A parser that branches on isinstance(x, (int, float)) must exclude bool first: bool subclasses int, so a boolean flag converts to 1.0/0.0 and masquerades as a real value instead of failing closed as unparseable.",
+  "canonical_prevention": "Reject bool explicitly before the numeric branch and return the unparseable sentinel (None); cover True and False in a regression test alongside unchanged int/float/str/None behavior.",
+  "canonical_prevention_artifact": [
+    "backend/routers/listen/contracts.py",
+    "backend/tests/unit/test_listen_started_seconds.py"
+  ],
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/routers/listen/**"
+  ],
+  "status": "open"
+}

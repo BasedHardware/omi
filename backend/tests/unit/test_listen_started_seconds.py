@@ -24,7 +24,8 @@ def test_int_and_float_still_parse():
 
 
 def test_iso_string_and_none_unchanged():
-    assert persisted_started_seconds("2024-01-01T00:00:00") == 1704045600.0
+    # Aware ISO string: timezone-independent epoch (2024-01-01T00:00:00Z).
+    assert persisted_started_seconds("2024-01-01T00:00:00+00:00") == 1704067200.0
     assert persisted_started_seconds(None) is None
     assert persisted_started_seconds("not-a-date") is None
     assert persisted_started_seconds([1]) is None
