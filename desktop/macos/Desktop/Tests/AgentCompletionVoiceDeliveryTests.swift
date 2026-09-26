@@ -89,6 +89,33 @@ final class AgentCompletionVoiceDeliveryTests: XCTestCase {
     XCTAssertEqual(harness.acknowledged, [["run-1"]])
   }
 
+  func testRealtimeExternalFloatingChatTerminalDeliversAndAcknowledges() async {
+    let harness = Harness()
+    let surface = AgentSurfaceReference.externalRun(
+      surfaceKind: "floating_chat", runId: "run-realtime-external")
+
+    harness.sut.observe([surface.key: projection(surface: surface, status: .running)])
+    harness.sut.observe([surface.key: projection(surface: surface, status: .succeeded)])
+    await harness.drainScheduledWork()
+
+    XCTAssertEqual(harness.peekCount, 1)
+    XCTAssertEqual(harness.injectedPrompts, ["agent finished"])
+    XCTAssertEqual(harness.acknowledged, [["run-1"]])
+  }
+
+  func testOrdinaryFloatingChatTerminalDoesNotTriggerDelivery() async {
+    let harness = Harness()
+    let surface = AgentSurfaceReference.floatingChat(chatId: "shared")
+
+    harness.sut.observe([surface.key: projection(surface: surface, status: .running)])
+    harness.sut.observe([surface.key: projection(surface: surface, status: .succeeded)])
+    await harness.drainScheduledWork()
+
+    XCTAssertEqual(harness.peekCount, 0)
+    XCTAssertTrue(harness.injectedPrompts.isEmpty)
+    XCTAssertTrue(harness.acknowledged.isEmpty)
+  }
+
   func testInjectFailureLeavesCheckpointUnadvanced() async {
     let harness = Harness()
     harness.injectResult = .retry

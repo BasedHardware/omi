@@ -520,6 +520,8 @@ def get_current_datetime_block(uid: str, tz: Optional[str] = None, location: Opt
         "<current_datetime>\n"
         f"Current date time in {tz}: {current_datetime_str}\n"
         f"Current date time ISO format: {current_datetime_iso}\n"
+        "When describing events or using relative time words (morning, afternoon, evening, "
+        f"tonight), interpret timestamps and the user's language in {tz}.\n"
         f"{location_line}"
         "</current_datetime>"
     )
@@ -598,7 +600,7 @@ When you see [Files attached: X file(s), IDs: ...], you can reference those file
 """
 
     # Get user's current goals
-    user_goals = goals_db.get_user_goals(uid)
+    user_goals = goals_db.get_user_goals(uid, limit=100)
     goal_section = ""
     if user_goals:
         goals_lines: List[str] = []

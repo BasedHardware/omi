@@ -2,13 +2,14 @@ import 'dart:convert';
 
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import 'package:provider/provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/http/api/goals.dart';
+import 'package:omi/pages/action_items/widgets/goal_form_sheet.dart';
 import 'package:omi/providers/goals_provider.dart';
+import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 
 /// Keep integer stepping for small goals without asking RenderSlider to paint
@@ -64,11 +65,6 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
 
   // Local emoji storage (goalId -> emoji)
   Map<String, String> _goalEmojis = {};
-  String _selectedEmoji = '🎯';
-
-  final TextEditingController _titleController = TextEditingController();
-  final TextEditingController _currentController = TextEditingController();
-  final TextEditingController _targetController = TextEditingController();
 
   @override
   void initState() {
@@ -84,9 +80,6 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _titleController.dispose();
-    _currentController.dispose();
-    _targetController.dispose();
     super.dispose();
   }
 
@@ -209,271 +202,42 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
   void addGoal() {
     final goalsProvider = Provider.of<GoalsProvider>(context, listen: false);
     if (goalsProvider.goals.length >= _maxGoals) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(context.l10n.maximumGoalsAllowed(_maxGoals)), backgroundColor: Colors.orange),
-      );
+      OmiFeedback.info(context, context.l10n.maximumGoalsAllowed(_maxGoals));
       return;
     }
 
     PlatformManager.instance.analytics.goalAddButtonTapped(source: 'home');
-    HapticFeedback.lightImpact();
-    _titleController.clear();
-    _currentController.text = '0';
-    _targetController.text = '100';
-    _selectedEmoji = '🎯'; // Default emoji, will be updated based on title when saved
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) => _buildGoalEditSheet(null),
-    );
+    OmiHaptics.light();
+    showGoalFormSheet(context, onSave: (title, current, target, _) => _saveGoal(null, title, current, target, null));
   }
 
   void _editGoal(Goal goal) {
-    HapticFeedback.lightImpact();
-    _titleController.text = goal.title;
-    _currentController.text = _rawNum(goal.currentValue);
-    _targetController.text = _rawNum(goal.targetValue);
-    _selectedEmoji = _getGoalEmoji(goal.id); // Load existing emoji
-
-    showModalBottomSheet(
-      context: context,
-      backgroundColor: Colors.transparent,
-      isScrollControlled: true,
-      builder: (context) => _buildGoalEditSheet(goal),
+    OmiHaptics.light();
+    showGoalFormSheet(
+      context,
+      goal: goal,
+      emojiChoices: _availableEmojis,
+      initialEmoji: _getGoalEmoji(goal.id),
+      onSave: (title, current, target, emoji) => _saveGoal(goal, title, current, target, emoji),
+      onDelete: () {
+        PlatformManager.instance.analytics.goalDeleted(goalId: goal.id, source: 'home', method: 'button');
+        _deleteGoal(goal);
+      },
     );
   }
 
-  Widget _buildGoalEditSheet(Goal? existingGoal) {
-    final isNew = existingGoal == null;
-
-    return StatefulBuilder(
-      builder: (context, setSheetState) => Padding(
-        padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
-        child: Container(
-          decoration: const BoxDecoration(
-            color: Color(0xFF1A1A1A),
-            borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-          ),
-          padding: const EdgeInsets.all(24),
-          child: SafeArea(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  width: 40,
-                  height: 4,
-                  margin: const EdgeInsets.only(bottom: 20),
-                  decoration: BoxDecoration(color: Colors.grey.shade700, borderRadius: BorderRadius.circular(2)),
-                ),
-                Text(
-                  isNew ? context.l10n.addGoal : context.l10n.editGoal,
-                  style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(height: 24),
-                // Emoji selector - only show when editing (not when creating new)
-                if (!isNew) ...[
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        context.l10n.icon,
-                        style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12),
-                      ),
-                      const SizedBox(height: 8),
-                      SizedBox(
-                        height: 44,
-                        child: ListView.builder(
-                          scrollDirection: Axis.horizontal,
-                          itemCount: _availableEmojis.length,
-                          itemBuilder: (context, index) {
-                            final emoji = _availableEmojis[index];
-                            final isSelected = emoji == _selectedEmoji;
-                            return GestureDetector(
-                              onTap: () {
-                                HapticFeedback.selectionClick();
-                                PlatformManager.instance.analytics.goalEmojiSelected(emoji: emoji);
-                                setSheetState(() => _selectedEmoji = emoji);
-                              },
-                              child: Container(
-                                width: 44,
-                                height: 44,
-                                margin: const EdgeInsets.only(right: 8),
-                                decoration: BoxDecoration(
-                                  color: isSelected
-                                      ? Colors.white.withValues(alpha: 0.15)
-                                      : Colors.white.withValues(alpha: 0.05),
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: isSelected
-                                      ? Border.all(color: Colors.white.withValues(alpha: 0.3), width: 2)
-                                      : null,
-                                ),
-                                child: Center(child: Text(emoji, style: const TextStyle(fontSize: 22))),
-                              ),
-                            );
-                          },
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-                ],
-                // Title field with label above
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      context.l10n.goalTitle,
-                      style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: _titleController,
-                      autofocus: true,
-                      style: const TextStyle(color: Colors.white, fontSize: 16),
-                      decoration: InputDecoration(
-                        filled: true,
-                        fillColor: Colors.white.withValues(alpha: 0.08),
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide.none,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                // Current & Target fields with labels above
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            context.l10n.current,
-                            style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12),
-                          ),
-                          const SizedBox(height: 8),
-                          TextField(
-                            controller: _currentController,
-                            keyboardType: TextInputType.number,
-                            style: const TextStyle(color: Colors.white, fontSize: 16),
-                            decoration: InputDecoration(
-                              filled: true,
-                              fillColor: Colors.white.withValues(alpha: 0.08),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide.none,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 16),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            context.l10n.target,
-                            style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12),
-                          ),
-                          const SizedBox(height: 8),
-                          TextField(
-                            controller: _targetController,
-                            keyboardType: TextInputType.number,
-                            style: const TextStyle(color: Colors.white, fontSize: 16),
-                            decoration: InputDecoration(
-                              filled: true,
-                              fillColor: Colors.white.withValues(alpha: 0.08),
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide.none,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-                // Action buttons
-                Row(
-                  children: [
-                    if (!isNew) ...[
-                      Expanded(
-                        child: TextButton(
-                          onPressed: () async {
-                            PlatformManager.instance.analytics.goalDeleted(
-                              goalId: existingGoal.id,
-                              source: 'home',
-                              method: 'button',
-                            );
-                            Navigator.pop(context);
-                            await _deleteGoal(existingGoal);
-                          },
-                          style: TextButton.styleFrom(
-                            foregroundColor: Colors.red,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
-                          ),
-                          child: Text(context.l10n.delete),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                    ],
-                    Expanded(
-                      flex: isNew ? 1 : 2,
-                      child: ElevatedButton(
-                        onPressed: () async {
-                          Navigator.pop(context);
-                          await _saveGoal(existingGoal);
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: const Color(0xFF22C55E),
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        ),
-                        child: Text(isNew ? context.l10n.addGoal : context.l10n.save),
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
-  Future<void> _saveGoal(Goal? existingGoal) async {
-    final title = _titleController.text.trim();
-    if (title.isEmpty) return;
-
-    final current = double.tryParse(_currentController.text) ?? 0;
-    final target = double.tryParse(_targetController.text) ?? 100;
+  Future<void> _saveGoal(Goal? existingGoal, String title, double current, double target, String? emoji) async {
     final goalsProvider = Provider.of<GoalsProvider>(context, listen: false);
 
     if (existingGoal != null) {
-      // Update existing goal via provider
       await goalsProvider.updateGoal(existingGoal.id, title: title, currentValue: current, targetValue: target);
 
       PlatformManager.instance.analytics.goalUpdated(goalId: existingGoal.id, source: 'home');
-      // Save emoji
-      setState(() {
-        _goalEmojis[existingGoal.id] = _selectedEmoji;
-      });
+      if (emoji != null) {
+        PlatformManager.instance.analytics.goalEmojiSelected(emoji: emoji);
+        if (mounted) setState(() => _goalEmojis[existingGoal.id] = emoji);
+      }
     } else {
-      // Create new goal via provider
       final smartEmoji = _getSmartEmoji(title);
       final created = await goalsProvider.createGoal(
         title: title,
@@ -489,36 +253,37 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
           targetValue: target,
           source: 'home',
         );
-        setState(() {
-          _goalEmojis[created.id] = smartEmoji;
-        });
+        if (mounted) setState(() => _goalEmojis[created.id] = smartEmoji);
       }
     }
 
     await _saveEmojis();
   }
 
-  Future<void> _deleteGoal(Goal goal) async {
-    HapticFeedback.mediumImpact();
+  /// Immediate with Undo (D5); the emoji is forgotten once the delete commits.
+  void _deleteGoal(Goal goal) {
     final goalsProvider = Provider.of<GoalsProvider>(context, listen: false);
-    await goalsProvider.deleteGoal(goal.id);
-
-    setState(() {
-      _goalEmojis.remove(goal.id);
-    });
-    await _saveEmojis();
+    deleteGoalWithUndo(
+      context,
+      goalsProvider,
+      goal,
+      onDeleted: () {
+        _goalEmojis.remove(goal.id);
+        if (mounted) setState(() {});
+        _saveEmojis();
+      },
+    );
   }
 
   String _rawNum(double v) {
     return v == v.roundToDouble() ? v.toStringAsFixed(0) : v.toStringAsFixed(1);
   }
 
+  /// Colour carries state only: on track (green), under way (amber), not started (grey).
   Color _getColor(double progress) {
-    if (progress >= 0.8) return const Color(0xFF22C55E);
-    if (progress >= 0.6) return const Color(0xFF84CC16);
-    if (progress >= 0.4) return const Color(0xFFFBBF24);
-    if (progress >= 0.2) return const Color(0xFFF97316);
-    return const Color(0xFF6B7280);
+    if (progress >= 0.8) return OmiColors.success;
+    if (progress >= 0.2) return OmiColors.warning;
+    return OmiColors.textTertiary;
   }
 
   @override
@@ -540,28 +305,30 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
 
         return Container(
           margin: const EdgeInsets.only(left: 16, right: 16),
-          padding: const EdgeInsets.only(top: 16, bottom: 20),
+          // The header row is as tall as its 44pt add button; the paddings around it
+          // give back the 6pt it gained on each side over the 32pt circle it paints.
+          padding: const EdgeInsets.only(top: 10, bottom: 20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Header
               Padding(
-                padding: const EdgeInsets.only(left: 8, bottom: 12),
+                padding: const EdgeInsets.only(left: 8, bottom: 6),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Text(
-                      context.l10n.goals,
-                      style: const TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w600),
-                    ),
+                    Semantics(header: true, child: Text(context.l10n.goals, style: OmiType.title3)),
                     if (goals.length < _maxGoals)
-                      GestureDetector(
-                        onTap: addGoal,
-                        child: Container(
-                          width: 32,
-                          height: 32,
-                          decoration: BoxDecoration(color: Colors.grey.withValues(alpha: 0.12), shape: BoxShape.circle),
-                          child: Icon(Icons.add, size: 18, color: Colors.grey[400]),
+                      Transform.translate(
+                        // Keeps the painted circle on the card's right edge.
+                        offset: const Offset((kOmiMinTapTarget - 32) / 2, 0),
+                        child: OmiIconButton.filled(
+                          label: context.l10n.addGoal,
+                          onPressed: addGoal,
+                          diameter: 32,
+                          fillColor: OmiColors.surface2,
+                          color: OmiColors.textSecondary,
+                          icon: const Icon(Icons.add),
                         ),
                       ),
                   ],
@@ -591,12 +358,12 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
       background: Container(
         alignment: Alignment.centerRight,
         padding: const EdgeInsets.only(right: 20.0),
-        color: Colors.red,
-        child: const Icon(Icons.delete, color: Colors.white),
+        decoration: const BoxDecoration(color: OmiColors.danger, borderRadius: OmiRadius.xlAll),
+        child: const Icon(Icons.delete_outline, color: OmiColors.textPrimary),
       ),
-      onDismissed: (direction) async {
+      onDismissed: (direction) {
         PlatformManager.instance.analytics.goalDeleted(goalId: goal.id, source: 'home', method: 'swipe');
-        await _deleteGoal(goal);
+        _deleteGoal(goal);
       },
       child: GestureDetector(
         onTap: () {
@@ -607,7 +374,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
         },
         child: Container(
           margin: EdgeInsets.only(bottom: isLast ? 0 : 12),
-          decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(24)),
+          decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.xlAll),
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
           child: Row(
             children: [
@@ -616,11 +383,8 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                 width: 40,
                 height: 40,
                 margin: const EdgeInsets.only(right: 12),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.1),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Center(child: Text(emoji, style: const TextStyle(fontSize: 18))),
+                decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
+                child: Center(child: ExcludeSemantics(child: Text(emoji, style: OmiType.headline))),
               ),
               // Content
               Expanded(
@@ -629,7 +393,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                   children: [
                     Text(
                       goal.title,
-                      style: const TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.w500),
+                      style: OmiType.subhead.copyWith(fontWeight: FontWeight.w500),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -644,7 +408,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                               data: SliderThemeData(
                                 trackHeight: 6,
                                 activeTrackColor: color,
-                                inactiveTrackColor: Colors.white.withValues(alpha: 0.1),
+                                inactiveTrackColor: OmiColors.surface3,
                                 thumbColor: color,
                                 thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 0),
                                 overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
@@ -673,11 +437,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
                         const SizedBox(width: 8),
                         Text(
                           '${_rawNum(goal.currentValue)}/${_rawNum(goal.targetValue)}',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.white.withValues(alpha: 0.5),
-                            fontWeight: FontWeight.w500,
-                          ),
+                          style: OmiType.footnote.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w500),
                         ),
                       ],
                     ),
@@ -694,7 +454,7 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
   // Update UI state only (called during drag) - use provider for immediate feedback
   void _updateGoalProgressUI(Goal goal, double newValue) {
     if (newValue == goal.currentValue) return;
-    HapticFeedback.lightImpact();
+    OmiHaptics.light();
     // The provider will notify listeners and the UI will update
   }
 

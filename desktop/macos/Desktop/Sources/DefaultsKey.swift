@@ -39,6 +39,7 @@ enum DefaultsKey: String {
   case automationOwnerABackup = "automation_swap_owner_a_backup"
   case chatBridgeMode = "chatBridgeMode"
   case preferredMicrophoneDeviceUID = "preferredMicrophoneDeviceUID"
+  /// Retired "Multiple Chat Sessions" toggle; only cleared from disk, never written now.
   case multiChatEnabled = "multiChatEnabled"
   /// Opt-in: proactive notifications are also spoken out loud on delivery.
   case speakNotificationsAloud = "speakNotificationsAloud"
@@ -131,6 +132,13 @@ enum DefaultsKey: String {
   /// Silent Type: a dictation still types into the focused app, but the turn is
   /// never written to the chat transcript. Absent means off.
   case shortcutSilentTypeEnabled = "shortcut_silentTypeEnabled"
+  /// Ambient capture mutes its microphone contribution while a dictation app (Wispr Flow,
+  /// superwhisper, macOS Dictation) holds the mic. Absent means on.
+  case transcriptionIgnoreDictationApps = "transcription_ignoreDictationApps"
+  /// Current local day's per-bundle call-audio aggregates. The meeting detector
+  /// flushes the previous day as `Desktop Call App Audio Summary` on the first
+  /// tick of a new day and when it starts after a relaunch.
+  case callAppAudioDailyLedger = "callAppAudioDailyLedger"
   case floatingBarNotificationPreviewsEnabled = "shortcut_floatingBarNotificationPreviewsEnabled"
   case floatingBarCachedPlan = "floatingBar_cachedPlan"
   case floatingBarCachedDesktopGrandfatherUntil = "floatingBar_cachedDesktopGrandfatherUntil"
@@ -141,6 +149,8 @@ enum DefaultsKey: String {
   case byokEnrolledFingerprints = "byok_enrolled_fingerprints"
   /// UID that last owned persisted BYOK keys on this Mac.
   case byokOwnerUid = "byok_owner_uid"
+  /// Durable, owner-scoped explanation shown after unsafe legacy/foreign BYOK keys are cleared.
+  case byokOwnerResetNotice = "byok_owner_reset_notice"
   case rewindDisableContentCache = "rewindDisableContentCache"
   // Task-order migration keys are typed so TasksPage and its tests share the
   // migration contract instead of repeating raw UserDefaults literals.
@@ -157,6 +167,13 @@ enum DefaultsKey: String {
   /// `PUT /v1/users/preferences/app`. Same name mobile uses in SharedPreferences.
   case preferredSummarizationAppId = "preferredSummarizationAppId"
   case disableSystemAudioCapture = "disableSystemAudioCapture"
+  /// Local embedding runtime: skip Apple NLCE / hybrid and keep Gemini screen search.
+  case disableLocalEmbeddings = "disableLocalEmbeddings"
+  /// Local embedding runtime: opt in to on-device hybrid search. Defaults off on
+  /// production-family bundles and on in non-production; `OMI_LOCAL_EMBEDDINGS` overrides.
+  case localEmbeddingsEnabled = "localEmbeddingsEnabled"
+  /// Local embedding runtime: pin an engine id. Unknown ids fail closed to keyword-only.
+  case forceLocalEmbeddingEngine = "forceLocalEmbeddingEngine"
 }
 
 /// Compile-checked owner-scoped defaults keys whose final storage key is
@@ -274,6 +291,7 @@ struct ScopedDefaultsKey {
 /// compiler-checked.
 extension UserDefaults {
   func string(forKey key: DefaultsKey) -> String? { string(forKey: key.rawValue) }
+  func data(forKey key: DefaultsKey) -> Data? { data(forKey: key.rawValue) }
   func bool(forKey key: DefaultsKey) -> Bool { bool(forKey: key.rawValue) }
   func integer(forKey key: DefaultsKey) -> Int { integer(forKey: key.rawValue) }
   func double(forKey key: DefaultsKey) -> Double { double(forKey: key.rawValue) }

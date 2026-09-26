@@ -648,3 +648,750 @@ def test_cloud_run_instance_start_fail_alert_is_zero_baseline_logging_count():
         assert query["model"]["projectId"] == "based-hardware"
         threshold = rule["data"][2]["model"]["conditions"][0]["evaluator"]["params"]
         assert threshold == [0]
+
+
+STT_CHAIN_EXHAUSTED_RATIO_EXPR = (
+    'sum(increase(omi_fallback_total{job="backend-listen-metrics",component="stt_selection",'
+    'outcome="exhausted"}[5m])) / clamp_min(sum(increase(omi_listen_accepted_total'
+    '{job="backend-listen-metrics"}[5m])), 1)'
+)
+STT_CHAIN_EXHAUSTED_TRAFFIC_EXPR = 'sum(increase(omi_listen_accepted_total{job="backend-listen-metrics"}[5m]))'
+STT_FALLBACK_LEG_ATTEMPTS_EXPR = (
+    'sum by (to_mode) (increase(omi_fallback_total{job="backend-listen-metrics",'
+    'component=~"stt_selection|stt_live_session"}[6h]))'
+)
+STT_FALLBACK_LEG_RECOVERED_EXPR = (
+    'sum by (to_mode) (increase(omi_fallback_total{job="backend-listen-metrics",'
+    'component=~"stt_selection|stt_live_session",outcome="recovered"}[6h])) or sum by (to_mode) '
+    '(increase(omi_fallback_total{job="backend-listen-metrics",component=~"stt_selection|stt_live_session"}[6h])) * 0'
+)
+STT_PROVIDER_BUDGET_EXPR = (
+    '(sum by (provider) (increase(omi_stt_stream_close_total{job="backend-listen-metrics",'
+    'reason="provider_budget_exhausted"}[5m])) > 0 or max by (provider) '
+    '(omi_stt_provider_circuit_open{job="backend-listen-metrics",kind="account"}) == 1) '
+    'unless on (provider) (max by (provider) (omi_stt_provider_retired{job="backend-listen-metrics"} == 1))'
+)
+STT_PROVIDER_RETIRED_EXPR = '(max by (provider) (omi_stt_provider_retired{job="backend-listen-metrics"} == 1))'
+STT_CHAIN_EXHAUSTION_RULES = {
+    "omi-stt-chain-exhausted-warn": ("warning", "$A >= 50 && $B > 0.35", "10m"),
+    "omi-stt-chain-exhausted-page": ("critical", "$A >= 50 && $B > 0.60", "5m"),
+}
+
+
+def test_stt_chain_exhaustion_alerts_ratio_listen_accepted_on_the_listen_job():
+    """initialize_stt deaths never built a LiveSTTAttempt, so the 10% live-STT
+    ratio is blind to them. These rules watch omi_fallback_total exhausted over
+    the socket-accept counter that does increment at /v4/listen accept.
+    """
+    for export_name, rules in _all_rule_exports().items():
+        for uid, (severity, gate, pending) in STT_CHAIN_EXHAUSTION_RULES.items():
+            rule = rules[uid]
+            assert rule["labels"]["severity"] == severity, f"{export_name}:{uid}"
+            assert rule["labels"]["impact"] == "user-experience", f"{export_name}:{uid}"
+            assert rule["noDataState"] == "OK", f"{export_name}:{uid}"
+            assert rule["for"] == pending, f"{export_name}:{uid}"
+            exprs = [d["model"]["expr"] for d in rule["data"] if d["model"].get("expr")]
+            assert exprs[0] == STT_CHAIN_EXHAUSTED_TRAFFIC_EXPR, f"{export_name}:{uid}"
+            assert exprs[1] == STT_CHAIN_EXHAUSTED_RATIO_EXPR, f"{export_name}:{uid}"
+            math_nodes = [d["model"]["expression"] for d in rule["data"] if d["model"].get("type") == "math"]
+            assert math_nodes == [gate], f"{export_name}:{uid}"
+            assert "increase(" in exprs[1] and "rate(" not in exprs[1], f"{export_name}:{uid}"
+            assert 'job="backend-listen-metrics"' in exprs[1], f"{export_name}:{uid}"
+            assert "evaluated_bad" in rule["annotations"], f"{export_name}:{uid}"
+            assert "evaluated_good" in rule["annotations"], f"{export_name}:{uid}"
+            assert "0.817" in rule["annotations"]["evaluated_bad"], f"{export_name}:{uid}"
+            assert "0.251" in rule["annotations"]["evaluated_good"], f"{export_name}:{uid}"
+            assert rule["annotations"]["__dashboardUid__"] == "omi-resilience-fallbacks"
+            assert rule["annotations"]["__panelId__"] == "15"
+
+
+def test_stt_fallback_leg_dead_alert_zero_fills_legs_with_no_recovered_series():
+    """A to_mode that never recovered produces no recovered series; without the
+    `or ... * 0` term, 100% handshake failure (Deepgram since 2026-09-14) is silent.
+    """
+    for export_name, rules in _all_rule_exports().items():
+        rule = rules["omi-stt-fallback-leg-dead"]
+        assert rule["labels"]["severity"] == "warning", export_name
+        assert rule["noDataState"] == "OK", export_name
+        assert rule["for"] == "30m", export_name
+        exprs = [d["model"]["expr"] for d in rule["data"] if d["model"].get("expr")]
+        assert exprs[0] == STT_FALLBACK_LEG_ATTEMPTS_EXPR, export_name
+        assert exprs[1] == STT_FALLBACK_LEG_RECOVERED_EXPR, export_name
+        math_nodes = [d["model"]["expression"] for d in rule["data"] if d["model"].get("type") == "math"]
+        assert math_nodes == ["$A >= 50 && $B < 1"], export_name
+        assert "evaluated_bad" in rule["annotations"], export_name
+        assert "recovered=0" in rule["annotations"]["evaluated_bad"], export_name
+        assert 'component=~"stt_selection|stt_live_session"' in exprs[0], export_name
+        assert 'component="other"' not in exprs[0], export_name
+        assert rule["annotations"]["__panelId__"] == "16"
+
+
+def test_stt_provider_budget_alert_pages_on_typed_stream_closes():
+    """Monthly/quota exhaustion is never transient. The 2026-09-19 Soniox
+    organization_monthly_budget_exhausted outage closed every hop and was
+    unpaged for 27.5h because recovered was recorded at connect.
+
+    2026-09-26 revision: the alert is per provider (the aggregated form carried
+    no signal — Deepgram kept it firing for days) and subtracts deployment-
+    retired providers so an intentionally unfunded leg (hosted Deepgram, per
+    the 2026-09 cost ruling) cannot page forever.
+
+    2026-09-26 review fix: budget closes stop the moment pods open the 30m
+    account bench (no dial, no close), so the increase() term alone went green
+    mid-outage and flapped on every half-open probe. The rule now also holds
+    while the per-pod account breaker gauge is open and only resolves once the
+    cooldown has cleared — i.e. after a top-up actually took effect.
+    """
+    for export_name, rules in _all_rule_exports().items():
+        rule = rules["omi-stt-provider-budget"]
+        assert len(rule["uid"]) < 40, export_name
+        assert rule["labels"]["severity"] == "critical", export_name
+        assert rule["labels"]["impact"] == "product", export_name
+        assert rule["noDataState"] == "OK", export_name
+        assert rule["for"] == "2m", export_name
+        exprs = [d["model"]["expr"] for d in rule["data"] if d["model"].get("expr")]
+        assert exprs[0] == STT_PROVIDER_BUDGET_EXPR, export_name
+        assert "sum by (provider)" in exprs[0], export_name
+        # The or-union must be parenthesized: `unless` binds tighter than `or`,
+        # so without the parens the retired exclusion would only guard the gauge
+        # term and budget closes on a retired provider would page forever.
+        assert exprs[0].startswith("("), export_name
+        union_close = exprs[0].index(") unless on (provider)")
+        union = exprs[0][1:union_close]
+        assert " > 0 or " in union, export_name
+        assert 'reason="provider_budget_exhausted"' in union, export_name
+        assert 'kind="account"' in union, export_name
+        assert "unless on (provider)" in exprs[0], export_name
+        assert "omi_stt_provider_retired" in exprs[0], export_name
+        math_nodes = [d["model"]["expression"] for d in rule["data"] if d["model"].get("type") == "math"]
+        assert math_nodes == ["$A > 0"], export_name
+        assert "top up" in rule["annotations"]["summary"].lower(), export_name
+        assert "evaluated_bad" in rule["annotations"], export_name
+        assert "evaluated_good" in rule["annotations"], export_name
+        assert "gauge=1" in rule["annotations"]["evaluated_bad"], export_name
+        assert rule["annotations"]["__panelId__"] == "18"
+
+
+LIVE_TRANSCRIPTION_SUCCESS_RULE = "omi-live-transcription-success-low"
+LIVE_TRANSCRIPTION_SUCCESS_TOTAL_EXPR = (
+    'sum(increase(omi_live_session_transcript_outcome_total{job="backend-listen-metrics",'
+    'outcome=~"transcribed|no_transcript"}[5m]))'
+)
+LIVE_TRANSCRIPTION_SUCCESS_RATIO_EXPR = (
+    '(sum(increase(omi_live_session_transcript_outcome_total{job="backend-listen-metrics",'
+    'outcome="transcribed"}[5m])) or vector(0)) / clamp_min(sum(increase('
+    'omi_live_session_transcript_outcome_total{job="backend-listen-metrics",'
+    'outcome=~"transcribed|no_transcript"}[5m])), 1)'
+)
+
+
+def test_live_transcription_success_alert_measures_the_user_felt_outcome():
+    """The headline SLI: did this session get any transcript?
+
+    2026-09-26 incident: ~34.8k of ~35k sessions failed for hours and nothing
+    paged, because every existing rule watched provider plumbing instead of
+    the session outcome. too_short sessions stay out of the denominator so
+    quiet nights cannot page, and the >= 50 volume guard keeps no-data healthy.
+    """
+    for export_name, rules in _all_rule_exports().items():
+        rule = rules[LIVE_TRANSCRIPTION_SUCCESS_RULE]
+        assert len(rule["uid"]) < 40, export_name
+        assert rule["labels"]["severity"] == "critical", export_name
+        assert rule["labels"]["impact"] == "user-experience", export_name
+        assert rule["noDataState"] == "OK", export_name
+        assert rule["for"] == "5m", export_name
+        exprs = [d["model"]["expr"] for d in rule["data"] if d["model"].get("expr")]
+        assert exprs[0] == LIVE_TRANSCRIPTION_SUCCESS_TOTAL_EXPR, export_name
+        assert exprs[0] != exprs[1], export_name
+        assert 'outcome="transcribed"' in exprs[1], export_name
+        assert 'outcome="too_short"' not in exprs[1], export_name
+        assert "clamp_min" in exprs[1], export_name
+        math_nodes = [d["model"]["expression"] for d in rule["data"] if d["model"].get("type") == "math"]
+        assert math_nodes == ["$A >= 50 && $B < 0.90"], export_name
+        assert rule["notification_settings"]["receiver"] == "Omi - Services Alerting (Telegram)", export_name
+        assert (REPO / rule["annotations"]["runbook"]).is_file(), export_name
+
+
+def test_live_transcription_success_alert_fires_when_no_transcribed_series_exists():
+    """All no_transcript, zero transcribed must page, not read as No Data.
+
+    sum() of a selector with no series is an empty vector, not 0; empty /
+    number is No Data in Grafana math, and noDataState=OK would store the rule
+    as healthy through a rolling restart straight into a total outage (every
+    pod fresh, no outcome child incremented yet). The numerator zero-fills via
+    `or vector(0)` — the same defense omi-stt-fallback-leg-dead uses for a
+    recovered series that was never born — and the emitter pre-creates all
+    three outcome children at process start so the numerator is a real series.
+    """
+    for export_name, rules in _all_rule_exports().items():
+        rule = rules[LIVE_TRANSCRIPTION_SUCCESS_RULE]
+        exprs = [d["model"]["expr"] for d in rule["data"] if d["model"].get("expr")]
+        assert exprs[1] == LIVE_TRANSCRIPTION_SUCCESS_RATIO_EXPR, export_name
+        numerator = exprs[1][: exprs[1].index(") / clamp_min")]
+        assert numerator.startswith("("), export_name
+        assert numerator.endswith("or vector(0)"), export_name
+        # only the numerator is zero-filled: the denominator (the volume
+        # guard's subject) must stay a plain sum so a quiet night is still
+        # No Data / OK rather than a 0-ratio page.
+        denominator = exprs[1][exprs[1].index("clamp_min") :]
+        assert "or vector(0)" not in denominator, export_name
+        assert "or vector(0)" not in exprs[0], export_name
+        # evaluated_bad must name the zero-transcribed contract case.
+        assert "no transcribed series" in rule["annotations"]["evaluated_bad"], export_name
+
+
+def test_stt_leg_error_rate_reads_a_metric_every_connect_path_emits():
+    """omi_stt_leg_attempts_total is configured-chain-only and was empty in prod
+    while the chain was off (2026-09-26 incident: the rule could never fire).
+    The rule now reads omi_stt_provider_connect_total, which both the legacy
+    order and the configured chain record, and excludes retired providers.
+    """
+    for export_name, rules in _all_rule_exports().items():
+        rule = rules["omi-stt-leg-error-rate"]
+        expressions = " ".join(d["model"].get("expr", "") for d in rule["data"])
+        assert "omi_stt_leg_attempts_total" not in expressions, export_name
+        assert "omi_stt_provider_connect_total" in expressions, export_name
+        assert 'outcome="failure"' in expressions, export_name
+        assert "unless on (provider)" in expressions, export_name
+        assert STT_PROVIDER_RETIRED_EXPR in expressions, export_name
+        assert 'job="backend-listen-metrics"' in expressions, export_name
+        assert rule["noDataState"] == "OK", export_name
+        assert "omi-stt-chain-terminal" not in rules, export_name
+
+
+# Series only the configured-order chain (STT_CONNECT_ORDER_FROM_CONFIG) ever
+# increments: declared in utils/stt/live_metrics.py, .inc()-ed solely from
+# utils/stt/live_chain.py. Being declared is not being emitted — while the
+# chain was off in prod both series were permanently empty and the rules
+# reading them were unfirable (the exact failure this gate family cites).
+CHAIN_ONLY_STT_SERIES = {
+    "omi_stt_leg_attempts_total": "utils/stt/live_chain.py",
+    "omi_stt_chain_exhausted_total": "utils/stt/live_chain.py",
+}
+
+
+def test_alert_rules_do_not_read_chain_only_series_without_documenting_the_dependency():
+    """Failure-Class: FC-alert-never-provably-fired
+
+    Declaring a Counter in backend source is not proof a rule can fire: these
+    chain-only series sit at zero/absent on any deployment without the
+    configured chain. A rule may read one only if its scope annotation names
+    the series AND the configured-chain dependency it is betting on.
+    """
+    for export_name, rules in _all_rule_exports().items():
+        for uid, rule in rules.items():
+            expressions = " ".join(d["model"].get("expr", "") for d in rule.get("data", []))
+            for series, emitter in CHAIN_ONLY_STT_SERIES.items():
+                if series not in expressions:
+                    continue
+                scope = rule["annotations"].get("scope", "")
+                assert series in scope and "configured chain" in scope.lower(), (
+                    f"{export_name}:{uid} reads {series}, incremented only from {emitter} on the "
+                    f"configured-order chain: an empty series on every deployment without it "
+                    "(FC-alert-never-provably-fired). Document the dependency in the rule's "
+                    "scope annotation or read the every-path counter instead."
+                )
+
+
+# Metrics that legitimately come from outside the backend source tree. Each
+# entry must name its emitter; anything not listed here and not declared in
+# backend source as a Counter/Gauge/Histogram fails the gate below. This is an
+# exact-name ratchet, not a prefix family: a typo inside a family (kube_,
+# container_, stackdriver_, ...) must fail exactly like an omi_* typo does, so
+# adding a new external metric to a rule requires naming it here.
+EXTERNAL_ALERT_METRICS = {
+    "up": "Prometheus builtin target health",
+    # kube-state-metrics
+    "kube_deployment_status_replicas": "kube-state-metrics",
+    "kube_deployment_status_replicas_ready": "kube-state-metrics",
+    "kube_endpoint_address_available": "kube-state-metrics",
+    "kube_horizontalpodautoscaler_status_target_metric": "kube-state-metrics",
+    "kube_pod_container_resource_limits": "kube-state-metrics",
+    "kube_pod_container_status_restarts_total": "kube-state-metrics",
+    "kube_pod_status_ready": "kube-state-metrics",
+    "namespace_workload_pod:kube_pod_owner:relabel": "kube-state-metrics relabeling rule",
+    # cAdvisor
+    "container_memory_working_set_bytes": "cAdvisor",
+    # prometheus-stackdriver-exporter
+    "stackdriver_firestore_instance_firestore_googleapis_com_document_read_count": "prometheus-stackdriver-exporter",
+    "stackdriver_https_lb_rule_loadbalancing_googleapis_com_https_backend_request_count": "prometheus-stackdriver-exporter",
+    "stackdriver_internal_http_lb_rule_loadbalancing_googleapis_com_https_internal_backend_latencies_bucket": (
+        "prometheus-stackdriver-exporter"
+    ),
+    "stackdriver_internal_http_lb_rule_loadbalancing_googleapis_com_https_internal_backend_latencies_count": (
+        "prometheus-stackdriver-exporter"
+    ),
+    "stackdriver_monitoring_last_scrape_error": "prometheus-stackdriver-exporter",
+    # deepgram self-hosted deployment exporter
+    "engine_stream_latency_bucket": "deepgram self-hosted deployment exporter",
+}
+
+_METRIC_DECLARATION = re.compile(r"(?:Counter|Gauge|Histogram)\(\s*['\"]([a-zA-Z0-9_:]+)['\"]")
+_PROMQL_KEYWORDS = frozenset(
+    {
+        "sum",
+        "by",
+        "without",
+        "increase",
+        "rate",
+        "irate",
+        "avg_over_time",
+        "max_over_time",
+        "min_over_time",
+        "count_over_time",
+        "sum_over_time",
+        "last_over_time",
+        "stddev_over_time",
+        "quantile_over_time",
+        "absent",
+        "absent_over_time",
+        "clamp_min",
+        "clamp_max",
+        "vector",
+        "or",
+        "and",
+        "unless",
+        "on",
+        "ignoring",
+        "group_left",
+        "group_right",
+        "offset",
+        "bool",
+        "histogram_quantile",
+        "topk",
+        "bottomk",
+        "count",
+        "max",
+        "min",
+        "avg",
+        "sort",
+        "sort_desc",
+        "label_replace",
+        "delta",
+        "idelta",
+        "deriv",
+        "predict_linear",
+        "resets",
+        "changes",
+        "abs",
+        "ceil",
+        "floor",
+        "round",
+        "sgn",
+        "exp",
+        "ln",
+        "log2",
+        "log10",
+        "sqrt",
+        "time",
+        "timestamp",
+    }
+)
+_PROMQL_GROUP_CLAUSE = re.compile(r"\b(?:by|on|without|group_left|group_right)\s*\([^)]*\)")
+_HISTOGRAM_SUFFIXES = ("_bucket", "_sum", "_count")
+
+
+def _declared_backend_metric_names() -> set[str]:
+    names: set[str] = set()
+    for path in (REPO / "backend").rglob("*.py"):
+        text = str(path)
+        if "/tests/" in text or "/testing/" in text or "/.venv/" in text:
+            continue
+        names |= set(_METRIC_DECLARATION.findall(path.read_text(encoding="utf-8", errors="ignore")))
+    return names
+
+
+# Scanned once at import (collection) time: the walk over backend source costs
+# ~0.4s CPU, which would otherwise blow the fast-unit per-call budget.
+DECLARED_BACKEND_METRIC_NAMES = _declared_backend_metric_names()
+
+
+def _alert_expr_metric_names(expr: str) -> set[str]:
+    # Drop label values, then grouping clauses, so only selectors remain.
+    stripped = _PROMQL_GROUP_CLAUSE.sub(" ", re.sub(r'"[^"]*"', '""', expr))
+    names = set()
+    for match in re.finditer(r"\b([a-z_][a-z0-9_]*(?::[a-z_][a-z0-9_]*)*)\b", stripped):
+        token = match.group(1)
+        if token in _PROMQL_KEYWORDS:
+            continue
+        if re.search(rf"\b{re.escape(token)}\s*(?:=~?|!=)", stripped):
+            continue  # label key in a matcher
+        names.add(token)
+    return names
+
+
+def _is_external_alert_metric(token: str) -> bool:
+    return token in EXTERNAL_ALERT_METRICS
+
+
+def test_every_alert_expression_metric_is_emitted_in_backend_source():
+    """An alert reading a metric nothing emits can never fire.
+
+    Failure-Class: FC-alert-never-provably-fired
+
+    omi-stt-chain-terminal and omi-stt-leg-error-rate read
+    omi_stt_chain_exhausted_total / omi_stt_leg_attempts_total, which only the
+    configured-order chain emits; with the chain off in prod both series were
+    permanently empty and the rules were unfirable through the whole 2026-09-26
+    incident. This gate fails when an alert expression references a metric
+    name that is neither declared as a Counter/Gauge/Histogram anywhere in
+    backend source nor explicitly allowlisted as an external emitter above.
+    """
+    declared = DECLARED_BACKEND_METRIC_NAMES
+    assert declared, "metric declaration scan found nothing; the gate is broken"
+
+    def _base(token: str) -> str:
+        for suffix in _HISTOGRAM_SUFFIXES:
+            if token.endswith(suffix):
+                return token[: -len(suffix)]
+        return token
+
+    offenders: dict[str, set[str]] = {}
+    for export_name, rules in _all_rule_exports().items():
+        for uid, rule in rules.items():
+            for node in rule.get("data", []):
+                model = node.get("model") or {}
+                expr = model.get("expr")
+                is_promql = (
+                    node.get("datasourceUid") == "prometheus"
+                    or (model.get("datasource") or {}).get("type") == "prometheus"
+                )
+                if not is_promql or not isinstance(expr, str) or not expr:
+                    continue
+                for token in _alert_expr_metric_names(expr):
+                    base = _base(token)
+                    if base in declared or token in declared or _is_external_alert_metric(token):
+                        continue
+                    offenders.setdefault(token, set()).add(f"{export_name}:{uid}")
+    assert not offenders, (
+        "Alert expressions reference metric names no backend source declares (and that are not "
+        "allowlisted external emitters): "
+        + "; ".join(f"{token} <- {sorted(uids)}" for token, uids in sorted(offenders.items()))
+        + ". Emit the metric or allowlist the external emitter. Failure-Class: FC-alert-never-provably-fired"
+    )
+
+
+# Cloud Logging tokens counted by Grafana rules, mapped to the Cloud Run
+# services that actually emit them. A query that pins resource.labels.service_name
+# to a set that is not exactly those emitters either watches a service that
+# never produces the numerator (permanently 0) or drops the service that does.
+# Measured 2026-09-21 00:00–18:00Z on based-hardware:
+#   created: 9626, all backend-sync-backfill; backend-sync created = 0
+#   merged:  21482 backend-sync-backfill + 757 backend-sync
+CLOUD_LOGGING_TOKEN_EMITTERS = {
+    "omi_sync_intake outcome=created": frozenset({"backend-sync-backfill"}),
+    "omi_sync_intake outcome=merged": frozenset({"backend-sync", "backend-sync-backfill"}),
+}
+_SERVICE_NAME_PIN = re.compile(r'resource\.labels\.service_name="([^"]+)"')
+
+
+def test_sync_intake_fragmentation_alert_uses_cloud_logging_until_scrape_exists():
+    """backend-sync is not in the Cloud Run metrics exporter allowlist, so a
+    Prometheus alert on omi_sync_intake_total would be permanently empty=healthy.
+    """
+    for export_name, rules in _all_rule_exports().items():
+        rule = rules["omi-sync-intake-fragmented"]
+        assert rule["labels"]["severity"] == "warning", export_name
+        assert rule["noDataState"] == "OK", export_name
+        assert rule["execErrState"] == "OK", export_name
+        queries = [d for d in rule["data"] if d.get("datasourceUid") == "deuxlwt1d569sb"]
+        assert len(queries) == 2, export_name
+        created, merged = (q["model"]["queryText"] for q in queries)
+        created_services = set(_SERVICE_NAME_PIN.findall(created))
+        merged_services = set(_SERVICE_NAME_PIN.findall(merged))
+        assert created_services == {"backend-sync-backfill"}, export_name
+        assert merged_services == {"backend-sync", "backend-sync-backfill"}, export_name
+        assert 'omi_sync_intake outcome=created' in created
+        assert 'omi_sync_intake outcome=merged' in merged
+        assert "jsonPayload.message" in created and "textPayload" in created
+        math_nodes = [d["model"]["expression"] for d in rule["data"] if d["model"].get("type") == "math"]
+        assert math_nodes == ["$C >= 100 && $C / ($C + $D + 0.001) > 0.80"], export_name
+        assert "9626" in rule["annotations"]["evaluated_good"], export_name
+        assert "0.302" in rule["annotations"]["evaluated_good"], export_name
+        assert rule["annotations"]["__panelId__"] == "17"
+
+
+def test_cloud_logging_alert_filters_pin_only_services_that_emit_the_counted_token():
+    """A Logging count whose service_name pin is not the token's emitters cannot fire.
+
+    omi-sync-intake-fragmented watched backend-sync for
+    ``omi_sync_intake outcome=created``. That service emitted zero created
+    lines (measured 2026-09-21 00:00–18:00Z); the numerator was permanently 0.
+    """
+    for export_name, rules in _all_rule_exports().items():
+        for uid, rule in rules.items():
+            for node in rule.get("data", []):
+                model = node.get("model") or {}
+                datasource = model.get("datasource") or {}
+                if datasource.get("type") != "googlecloud-logging-datasource":
+                    continue
+                query = model.get("queryText") or ""
+                pinned = set(_SERVICE_NAME_PIN.findall(query))
+                if not pinned:
+                    continue
+                for token, emitters in CLOUD_LOGGING_TOKEN_EMITTERS.items():
+                    if token not in query:
+                        continue
+                    assert pinned == emitters, (
+                        f"{export_name}:{uid} log filter for {token!r} pins "
+                        f"{sorted(pinned)} but emitters are {sorted(emitters)}"
+                    )
+
+
+def test_stt_exhaustion_dashboard_panels_plot_the_alerted_series():
+    dashboard = json.loads(RESILIENCE_DASHBOARD.read_text(encoding="utf-8"))
+    panels = {panel["id"]: panel for panel in dashboard["panels"]}
+    assert "omi_fallback_total" in panels[15]["targets"][0]["expr"]
+    assert 'outcome="exhausted"' in panels[15]["targets"][0]["expr"]
+    assert "omi_listen_accepted_total" in panels[15]["targets"][0]["expr"]
+    assert 'job="backend-listen-metrics"' in panels[15]["targets"][0]["expr"]
+    assert "omi_fallback_total" in panels[16]["targets"][0]["expr"]
+    assert 'outcome="recovered"' in panels[16]["targets"][0]["expr"]
+    assert "to_mode" in panels[16]["targets"][0]["expr"]
+    assert "stt_live_session" in panels[16]["targets"][0]["expr"]
+    assert "omi_sync_intake_total" in panels[17]["targets"][0]["expr"]
+    assert "Scrape gap" in panels[17]["description"]
+    assert "omi_stt_stream_close_total" in panels[18]["targets"][0]["expr"]
+    assert "provider_budget_exhausted" in panels[18]["fieldConfig"]["defaults"]["description"]
+
+
+def test_windowed_live_stt_rules_cover_admission_and_pre_audio_failures():
+    """September 19 account outage: failover success must not hide exhausted accounts.
+
+    2026-09-26: omi-stt-chain-terminal is deleted (it read the configured-chain-only
+    omi_stt_chain_exhausted_total, empty in prod while the chain was off) and
+    omi-stt-leg-error-rate reads the every-path connect counter instead.
+    """
+    expected = {
+        'omi-stt-leg-error-rate': ('omi_stt_provider_connect_total', 'by (provider)'),
+        'omi-stt-account-state': ('omi_stt_stream_close_total', 'reason="provider_auth_rejected"'),
+        'omi-stt-window-overflow': ('omi_stt_window_admissions_total', 'outcome="overflow"'),
+        'omi-stt-window-saturated': ('omi_stt_window_sessions_active', 'omi_stt_window_sessions_capacity'),
+        'omi-stt-window-post-errors': ('omi_stt_window_posts_total', 'outcome="error"'),
+        LIVE_TRANSCRIPTION_SUCCESS_RULE: ('omi_live_session_transcript_outcome_total', 'clamp_min'),
+    }
+    for rules in _all_rule_exports().values():
+        for uid, metrics in expected.items():
+            rule = rules[uid]
+            expressions = ' '.join(d['model'].get('expr', '') for d in rule['data'])
+            assert all(metric in expressions for metric in metrics), uid
+            assert 'job="backend-listen-metrics"' in expressions
+            assert rule['noDataState'] == 'OK'
+            assert any('$A' in d['model'].get('expression', '') for d in rule['data'])
+            assert (REPO / rule['annotations']['runbook']).is_file()
+
+
+LISTEN_DASHBOARD = MONITORING / "dashboards/gke/backend-listen.json"
+
+
+def test_backend_listen_dashboard_has_live_transcription_health_row():
+    """The 2026-09-26 incident had no panel answering 'did sessions get
+    transcripts, and which provider is benched'. The row the headline alert
+    links to must plot the alerted series: headline %, per-provider sessions
+    served and connect success, breaker-open pods, and error classes.
+    """
+    dashboard = json.loads(LISTEN_DASHBOARD.read_text(encoding="utf-8"))
+    panels = {panel["id"]: panel for panel in dashboard["panels"]}
+    row = panels[16]
+    assert row["type"] == "row"
+    assert row["title"] == "Live transcription health"
+
+    exprs = {panel_id: " ".join(t["expr"] for t in panels[panel_id]["targets"]) for panel_id in range(17, 23)}
+    assert "omi_live_session_transcript_outcome_total" in exprs[17]
+    assert 'outcome="transcribed"' in exprs[17]
+    assert "omi_live_session_transcript_outcome_total" in exprs[18]
+    assert "omi_live_stt_accepted_total" in exprs[19]
+    assert "omi_stt_provider_connect_total" in exprs[20]
+    assert 'outcome="success"' in exprs[20]
+    assert "omi_stt_provider_retired" in exprs[20]
+    assert "omi_stt_provider_circuit_open" in exprs[21]
+    assert "omi_stt_provider_connect_total" in exprs[22]
+    assert "error_class" in exprs[22]
+    for panel_id in range(17, 23):
+        assert 'job="backend-listen-metrics"' in exprs[panel_id], panel_id
+    # Success percentages are red below the 90% floor and green above it: the
+    # 2026-09-26 review caught these steps inverted (green base, red at 90),
+    # which painted a healthy 99% line red and a 10% outage green.
+    for panel_id in (17, 20):
+        steps = panels[panel_id]["fieldConfig"]["defaults"]["thresholds"]["steps"]
+        assert steps == [
+            {"color": "red", "value": 0},
+            {"color": "green", "value": 90},
+        ], panel_id
+
+
+# ---------------------------------------------------------------------------
+# Structural PromQL syntax gate: every Prometheus expression in every rule
+# export and dashboard must at least balance its braces/brackets/parens and
+# use only label-matcher selector blocks. No PromQL parser is a backend
+# dependency, so this is deliberately structural — but it is exactly the class
+# of defect the 2026-09-26 review caught (an extra `}` before the range
+# selector made two shipped panels error instead of plotting while every
+# substring-based assertion stayed green).
+# ---------------------------------------------------------------------------
+_GRAFANA_VARIABLE = re.compile(r"\$(?:__\w+|\{[^}]*\}|\w+)")
+_PROMQL_LABEL_MATCHERS = re.compile(
+    r"^\{\s*(?:(?:\"[a-zA-Z_][a-zA-Z0-9_]*\"|[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:=~|!~|!=|=)\s*"
+    r"(?:\"[^\"]*\"|'[^']*'|`[^`]*`)"
+    r"(?:\s*,\s*(?:\"[a-zA-Z_][a-zA-Z0-9_]*\"|[a-zA-Z_][a-zA-Z0-9_]*)\s*(?:=~|!~|!=|=)\s*"
+    r"(?:\"[^\"]*\"|'[^']*'|`[^`]*`))*)?\s*\}$"
+)
+
+
+def _mask_promql_strings(normalized: str) -> str | None:
+    """Blank out string literals so their contents cannot unbalance the check.
+
+    Returns None when a literal is unterminated (itself a syntax error).
+    """
+
+    out: list[str] = []
+    i = 0
+    while i < len(normalized):
+        char = normalized[i]
+        if char in "\"'`":
+            end = normalized.find(char, i + 1)
+            if end == -1:
+                return None
+            out.append(char + "n" + char)
+            i = end + 1
+        else:
+            out.append(char)
+            i += 1
+    return "".join(out)
+
+
+def _promql_syntax_errors(expr: str) -> list[str]:
+    normalized = _GRAFANA_VARIABLE.sub("5m", expr)
+    masked = _mask_promql_strings(normalized)
+    if masked is None:
+        return ["unterminated string literal"]
+    errors: list[str] = []
+    pairs = {")": "(", "]": "[", "}": "{"}
+    stack: list[str] = []
+    for char in masked:
+        if char in "([{":
+            stack.append(char)
+        elif char in ")]}":
+            if not stack or stack[-1] != pairs[char]:
+                errors.append(f"unbalanced {char!r}")
+                break
+            stack.pop()
+    if not errors and stack:
+        errors.append(f"unclosed {stack[-1]!r}")
+    for match in re.finditer(r"\{[^{}]*\}", masked):
+        if not _PROMQL_LABEL_MATCHERS.match(match.group(0)):
+            errors.append(f"brace block {match.group(0)[:50]!r} is not a label-matcher selector")
+    return errors
+
+
+def _prometheus_exprs_from_node(node: object, where: str) -> list[tuple[str, str]]:
+    """Every Prometheus expr in one dashboard JSON tree.
+
+    Grafana's usual panel shape carries the datasource on the panel and leaves
+    each target as a bare ``{expr, legendFormat, refId}``; those targets inherit
+    the panel's Prometheus datasource and are live queries. Loki panels share
+    that shape, so inheritance only follows an explicit panel-level prometheus
+    datasource. Stackdriver targets expose ``promQLQuery.expr`` (a different
+    dialect) instead of ``expr`` and never match.
+    """
+    found: list[tuple[str, str]] = []
+
+    def walk(node: object) -> None:
+        if isinstance(node, dict):
+            datasource = node.get("datasource")
+            if isinstance(node.get("expr"), str) and isinstance(datasource, dict):
+                if datasource.get("type") == "prometheus":
+                    found.append((where, node["expr"]))
+            if isinstance(datasource, dict) and datasource.get("type") == "prometheus":
+                targets = node.get("targets")
+                if isinstance(targets, list):
+                    for target in targets:
+                        if (
+                            isinstance(target, dict)
+                            and target.get("datasource") is None
+                            and isinstance(target.get("expr"), str)
+                        ):
+                            found.append((where, target["expr"]))
+            for value in node.values():
+                walk(value)
+        elif isinstance(node, list):
+            for value in node:
+                walk(value)
+
+    walk(node)
+    return found
+
+
+def _dashboard_prometheus_exprs() -> list[tuple[str, str]]:
+    found: list[tuple[str, str]] = []
+    for path in sorted((MONITORING / "dashboards").rglob("*.json")):
+        found.extend(
+            _prometheus_exprs_from_node(json.loads(path.read_text(encoding="utf-8")), str(path.relative_to(REPO)))
+        )
+    return found
+
+
+def test_every_prometheus_expression_in_alerts_and_dashboards_is_well_formed():
+    """Prometheus rejects a syntactically invalid expr at query time, so the
+    panel errors instead of plotting and the alert errors instead of firing —
+    while every name-based contract assertion stays green. Both the rule
+    exports and the dashboards they link to must at least parse structurally.
+    """
+    checked = 0
+    offenders: dict[str, set[str]] = {}
+    for export_name, rules in _all_rule_exports().items():
+        for uid, rule in rules.items():
+            for node in rule.get("data", []):
+                model = node.get("model") or {}
+                expr = model.get("expr")
+                is_promql = (
+                    node.get("datasourceUid") == "prometheus"
+                    or (model.get("datasource") or {}).get("type") == "prometheus"
+                )
+                if not is_promql or not isinstance(expr, str) or not expr:
+                    continue
+                checked += 1
+                for error in _promql_syntax_errors(expr):
+                    offenders.setdefault(error, set()).add(f"{export_name}:{uid}")
+    for where, expr in _dashboard_prometheus_exprs():
+        checked += 1
+        for error in _promql_syntax_errors(expr):
+            offenders.setdefault(error, set()).add(where)
+    assert checked > 100, "the scan found too few exprs; the gate is broken"
+    assert not offenders, "PromQL syntax errors in alert/dashboard expressions: " + "; ".join(
+        f"{error} <- {sorted(places)}" for error, places in sorted(offenders.items())
+    )
+
+
+def test_inherited_datasource_targets_join_the_promql_gate():
+    """A target without its own datasource inherits the panel's, so a bare
+    ``{expr, refId}`` under a prometheus panel is a live Prometheus query.
+    Round 3 of the 2026-09-26 review: 82 such targets (omi-translation,
+    parakeet-asr-monitoring, deepgram-self-hosted, omi-services-overview) were
+    skipped, so the extra ``}`` that broke two shipped panels passed this gate
+    everywhere the datasource lived on the panel.
+    """
+    panel = {
+        "datasource": {"type": "prometheus", "uid": "prometheus"},
+        "targets": [
+            {"expr": 'sum(rate(omi_x_total{outcome="failure"}}[$__rate_interval]))', "refId": "A"},
+        ],
+    }
+    exprs = [expr for _, expr in _prometheus_exprs_from_node(panel, "synthetic.json")]
+    assert exprs == [panel["targets"][0]["expr"]]
+    assert _promql_syntax_errors(exprs[0]), "an unbalanced brace in an inherited target must fail the gate"
+
+    # Non-prometheus panels keep the same shape and must not contribute, and a
+    # target that names its own datasource is judged by that datasource alone.
+    loki_panel = {
+        "datasource": {"type": "loki", "uid": "loki"},
+        "targets": [{"expr": 'sum(count_over_time({job="omi"}[5m]))}', "refId": "A"}],
+    }
+    mixed_panel = {
+        "datasource": {"type": "prometheus", "uid": "prometheus"},
+        "targets": [
+            {"expr": "invalid loki } syntax", "refId": "A", "datasource": {"type": "loki", "uid": "loki"}},
+        ],
+    }
+    assert _prometheus_exprs_from_node(loki_panel, "synthetic.json") == []
+    assert _prometheus_exprs_from_node(mixed_panel, "synthetic.json") == []

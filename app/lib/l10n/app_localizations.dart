@@ -216,7 +216,7 @@ abstract class AppLocalizations {
   /// Tab label for action items
   ///
   /// In en, this message translates to:
-  /// **'Action Items'**
+  /// **'Tasks'**
   String get actionItemsTab;
 
   /// Title for delete confirmation dialog
@@ -228,7 +228,7 @@ abstract class AppLocalizations {
   /// Message for delete confirmation dialog
   ///
   /// In en, this message translates to:
-  /// **'This will also delete associated memories, tasks, and audio files. This action cannot be undone.'**
+  /// **'This also deletes its memories, tasks, and audio files.'**
   String get deleteConversationMessage;
 
   /// Confirm button label
@@ -246,7 +246,7 @@ abstract class AppLocalizations {
   /// Generic OK button text
   ///
   /// In en, this message translates to:
-  /// **'Ok'**
+  /// **'OK'**
   String get ok;
 
   /// Delete button
@@ -378,7 +378,7 @@ abstract class AppLocalizations {
   /// Button to copy error details
   ///
   /// In en, this message translates to:
-  /// **'Copy error message'**
+  /// **'Copy Error Message'**
   String get copyErrorMessage;
 
   /// Snackbar message after copying error
@@ -396,13 +396,13 @@ abstract class AppLocalizations {
   /// Loading indicator text
   ///
   /// In en, this message translates to:
-  /// **'Loading...'**
+  /// **'Loading…'**
   String get loading;
 
   /// Loading duration indicator
   ///
   /// In en, this message translates to:
-  /// **'Loading duration...'**
+  /// **'Loading duration…'**
   String get loadingDuration;
 
   /// Duration in seconds
@@ -438,7 +438,7 @@ abstract class AppLocalizations {
   /// Speech profile setting
   ///
   /// In en, this message translates to:
-  /// **'Speech Profile'**
+  /// **'Voice Profile'**
   String get speechProfile;
 
   /// Label for speech sample
@@ -468,7 +468,7 @@ abstract class AppLocalizations {
   /// Deleting in progress indicator
   ///
   /// In en, this message translates to:
-  /// **'Deleting...'**
+  /// **'Deleting…'**
   String get deleting;
 
   /// Message shown during OAuth flow
@@ -522,7 +522,7 @@ abstract class AppLocalizations {
   /// Loading text displayed while search is in progress
   ///
   /// In en, this message translates to:
-  /// **'Searching...'**
+  /// **'Searching'**
   String get searching;
 
   /// Button to connect a device
@@ -642,14 +642,14 @@ abstract class AppLocalizations {
   /// Placeholder text for conversation search field
   ///
   /// In en, this message translates to:
-  /// **'Search conversations...'**
+  /// **'Search conversations'**
   String get searchConversations;
 
   /// Selection count label
   ///
   /// In en, this message translates to:
   /// **'{count} selected'**
-  String selectedCount(int count, Object s);
+  String selectedCount(int count);
 
   /// Merge button label
   ///
@@ -696,7 +696,7 @@ abstract class AppLocalizations {
   /// Loading text when clearing chat
   ///
   /// In en, this message translates to:
-  /// **'Deleting your messages from Omi\'s memory...'**
+  /// **'Deleting your messages from Omi\'s memory…'**
   String get deletingMessages;
 
   /// Snackbar message for copied text
@@ -792,7 +792,7 @@ abstract class AppLocalizations {
   /// Placeholder text for search input
   ///
   /// In en, this message translates to:
-  /// **'Search apps...'**
+  /// **'Search apps'**
   String get searchApps;
 
   /// Filter button for user's own apps
@@ -1017,6 +1017,12 @@ abstract class AppLocalizations {
   /// **'Automatically sync offline recordings when your device connects'**
   String get autoSyncDescription;
 
+  /// Toggle in device settings that controls whether the mobile app responds to Omi button actions
+  ///
+  /// In en, this message translates to:
+  /// **'Omi Button Actions'**
+  String get omiButtonActions;
+
   /// Device settings menu item
   ///
   /// In en, this message translates to:
@@ -1092,7 +1098,7 @@ abstract class AppLocalizations {
   /// Learn more link
   ///
   /// In en, this message translates to:
-  /// **'Learn more...'**
+  /// **'Learn more…'**
   String get learnMore;
 
   /// Data protection section title
@@ -1275,16 +1281,16 @@ abstract class AppLocalizations {
   /// **'Hardware'**
   String get hardwareSection;
 
-  /// V2 device undeteced dialog title
+  /// Dialog title when the connected device has no SD-card offline sync
   ///
   /// In en, this message translates to:
-  /// **'V2 undetected'**
+  /// **'Offline Sync unavailable'**
   String get v2Undetected;
 
-  /// V2 device undeteced dialog message
+  /// Dialog message when the connected device has no SD-card offline sync
   ///
   /// In en, this message translates to:
-  /// **'We see that you either have a V1 device or your device is not connected. SD Card functionality is available only for V2 devices.'**
+  /// **'Offline Sync needs a connected Omi device with SD-card storage. Your current device doesn\'t support it.'**
   String get v2UndetectedMessage;
 
   /// End conversation action
@@ -1428,7 +1434,7 @@ abstract class AppLocalizations {
   /// Text shown while saving settings
   ///
   /// In en, this message translates to:
-  /// **'Saving...'**
+  /// **'Saving…'**
   String get saving;
 
   /// Beta label for experimental features
@@ -1584,7 +1590,7 @@ abstract class AppLocalizations {
   /// Providing stat subtitle
   ///
   /// In en, this message translates to:
-  /// **'Action items, and notes automatically captured.'**
+  /// **'Tasks and notes, captured automatically.'**
   String get providingSubtitle;
 
   /// Remembering stat title
@@ -1638,7 +1644,7 @@ abstract class AppLocalizations {
   /// Message shown on locked memory items
   ///
   /// In en, this message translates to:
-  /// **'Upgrade to unlimited'**
+  /// **'Upgrade to Unlimited'**
   String get upgradeToUnlimited;
 
   /// Basic plan description
@@ -1656,25 +1662,25 @@ abstract class AppLocalizations {
   /// Share stats period: Today
   ///
   /// In en, this message translates to:
-  /// **'Today, omi has:'**
+  /// **'Today, Omi has:'**
   String get sharePeriodToday;
 
   /// Share stats period: Month
   ///
   /// In en, this message translates to:
-  /// **'This month, omi has:'**
+  /// **'This month, Omi has:'**
   String get sharePeriodMonth;
 
   /// Share stats period: Year
   ///
   /// In en, this message translates to:
-  /// **'This year, omi has:'**
+  /// **'This year, Omi has:'**
   String get sharePeriodYear;
 
   /// Share stats period: All Time
   ///
   /// In en, this message translates to:
-  /// **'So far, omi has:'**
+  /// **'So far, Omi has:'**
   String get sharePeriodAllTime;
 
   /// Share stats: listened
@@ -1758,7 +1764,7 @@ abstract class AppLocalizations {
   /// No description provided for @exportStarted.
   ///
   /// In en, this message translates to:
-  /// **'Export started. This may take a few seconds...'**
+  /// **'Export started. This may take a few seconds…'**
   String get exportStarted;
 
   /// Export all data feature name
@@ -1958,12 +1964,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Claude Desktop'**
   String get claudeDesktop;
-
-  /// No description provided for @addToClaudeConfig.
-  ///
-  /// In en, this message translates to:
-  /// **'Add to claude_desktop_config.json'**
-  String get addToClaudeConfig;
 
   /// Button text to copy configuration
   ///
@@ -2664,7 +2664,7 @@ abstract class AppLocalizations {
   /// No description provided for @actionItemsSyncedTo.
   ///
   /// In en, this message translates to:
-  /// **'Your action items will be synced to your {appName} account'**
+  /// **'Your tasks will be synced to your {appName} account'**
   String actionItemsSyncedTo(String appName);
 
   /// No description provided for @defaultSpace.
@@ -2850,7 +2850,7 @@ abstract class AppLocalizations {
   /// Button to dismiss explanation
   ///
   /// In en, this message translates to:
-  /// **'Got it'**
+  /// **'Got It'**
   String get gotIt;
 
   /// No description provided for @tasksExportedOneApp.
@@ -3192,13 +3192,13 @@ abstract class AppLocalizations {
   /// No description provided for @trySomethingLike.
   ///
   /// In en, this message translates to:
-  /// **'Try something like...'**
+  /// **'Try something like…'**
   String get trySomethingLike;
 
   /// No description provided for @tryIt.
   ///
   /// In en, this message translates to:
-  /// **'Try it'**
+  /// **'Try It'**
   String get tryIt;
 
   /// No description provided for @creatingPlan.
@@ -3246,13 +3246,13 @@ abstract class AppLocalizations {
   /// No description provided for @creatingYourApp.
   ///
   /// In en, this message translates to:
-  /// **'Creating your app...'**
+  /// **'Creating your app…'**
   String get creatingYourApp;
 
   /// No description provided for @generatingIcon.
   ///
   /// In en, this message translates to:
-  /// **'Generating icon...'**
+  /// **'Generating icon…'**
   String get generatingIcon;
 
   /// No description provided for @whatShouldWeMake.
@@ -3354,7 +3354,7 @@ abstract class AppLocalizations {
   /// Loading state text when app generation is in progress
   ///
   /// In en, this message translates to:
-  /// **'Creating...'**
+  /// **'Creating…'**
   String get creating;
 
   /// Button label to create a new app
@@ -3366,7 +3366,7 @@ abstract class AppLocalizations {
   /// Status text while scanning for Bluetooth devices
   ///
   /// In en, this message translates to:
-  /// **'Searching for devices...'**
+  /// **'Searching for devices'**
   String get searchingForDevices;
 
   /// No description provided for @devicesFoundNearby.
@@ -3426,7 +3426,7 @@ abstract class AppLocalizations {
   /// Title for the permissions request page
   ///
   /// In en, this message translates to:
-  /// **'Grant permissions'**
+  /// **'Grant Permissions'**
   String get grantPermissions;
 
   /// Title for background activity permission
@@ -3438,7 +3438,7 @@ abstract class AppLocalizations {
   /// Description for background activity permission
   ///
   /// In en, this message translates to:
-  /// **'Let Omi run in the background for better stability'**
+  /// **'So Omi keeps capturing when the screen is off or you switch apps.'**
   String get backgroundActivityDesc;
 
   /// Title for location access permission
@@ -3450,7 +3450,7 @@ abstract class AppLocalizations {
   /// Description for location access permission
   ///
   /// In en, this message translates to:
-  /// **'Enable background location for the full experience'**
+  /// **'So Omi can note where your conversations happened.'**
   String get locationAccessDesc;
 
   /// AppBar title for notifications settings page
@@ -3462,7 +3462,7 @@ abstract class AppLocalizations {
   /// Description for notifications permission
   ///
   /// In en, this message translates to:
-  /// **'Enable notifications to stay informed'**
+  /// **'So Omi can send you conversation summaries, task reminders and replies from your apps.'**
   String get notificationsDesc;
 
   /// Title for dialog when location services are off
@@ -3474,7 +3474,7 @@ abstract class AppLocalizations {
   /// Instructions to enable location services
   ///
   /// In en, this message translates to:
-  /// **'Location Service is Disabled. Please go to Settings > Privacy & Security > Location Services and enable it'**
+  /// **'Location Services are off on this device. Turn them on in Settings.'**
   String get locationServiceDisabledDesc;
 
   /// Title for dialog when background location is denied
@@ -3498,7 +3498,7 @@ abstract class AppLocalizations {
   /// Button text to defer action
   ///
   /// In en, this message translates to:
-  /// **'Maybe Later'**
+  /// **'Not Now'**
   String get maybeLater;
 
   /// Introduction text for speech profile setup
@@ -3534,7 +3534,7 @@ abstract class AppLocalizations {
   /// Link text to skip the permissions screen
   ///
   /// In en, this message translates to:
-  /// **'Skip for now'**
+  /// **'Skip for Now'**
   String get skipForNow;
 
   /// Title for connection error dialog
@@ -3786,7 +3786,7 @@ abstract class AppLocalizations {
   /// Title for the Action Items page
   ///
   /// In en, this message translates to:
-  /// **'To-Do\'s'**
+  /// **'Tasks'**
   String get actionItemsTitle;
 
   /// Instruction text for Action Items interactions
@@ -3816,7 +3816,7 @@ abstract class AppLocalizations {
   /// Message when To Do list is empty
   ///
   /// In en, this message translates to:
-  /// **'🎉 All caught up!\nNo pending action items'**
+  /// **'🎉 All caught up!\nNo pending tasks'**
   String get emptyTodoMessage;
 
   /// Message when Done list is empty
@@ -3840,25 +3840,25 @@ abstract class AppLocalizations {
   /// Snackbar message when item marked incomplete
   ///
   /// In en, this message translates to:
-  /// **'Action item marked as incomplete'**
+  /// **'Task marked as incomplete'**
   String get actionItemMarkedIncomplete;
 
   /// Snackbar message when item completed
   ///
   /// In en, this message translates to:
-  /// **'Action item completed'**
+  /// **'Task completed'**
   String get actionItemCompleted;
 
   /// Dialog title for delete confirmation
   ///
   /// In en, this message translates to:
-  /// **'Delete Action Item'**
+  /// **'Delete Task'**
   String get deleteActionItemTitle;
 
   /// Dialog message for delete confirmation
   ///
   /// In en, this message translates to:
-  /// **'Are you sure you want to delete this action item?'**
+  /// **'Are you sure you want to delete this task?'**
   String get deleteActionItemMessage;
 
   /// Title for bulk delete dialog
@@ -3870,25 +3870,25 @@ abstract class AppLocalizations {
   /// Confirmation message for bulk delete
   ///
   /// In en, this message translates to:
-  /// **'Are you sure you want to delete {count} selected action item{s}?'**
+  /// **'Are you sure you want to delete {count} selected task{s}?'**
   String deleteSelectedItemsMessage(int count, String s);
 
   /// Snackbar message after deleting single item
   ///
   /// In en, this message translates to:
-  /// **'Action item \"{description}\" deleted'**
+  /// **'Task \"{description}\" deleted'**
   String actionItemDeletedResult(String description);
 
   /// Snackbar message after bulk delete
   ///
   /// In en, this message translates to:
-  /// **'{count} action item{s} deleted'**
+  /// **'{count} task{s} deleted'**
   String itemsDeletedResult(int count, String s);
 
   /// Error message when deletion fails
   ///
   /// In en, this message translates to:
-  /// **'Failed to delete action item'**
+  /// **'Failed to delete task'**
   String get failedToDeleteItem;
 
   /// Error message when bulk deletion fails
@@ -3906,13 +3906,13 @@ abstract class AppLocalizations {
   /// Heading for empty state welcome
   ///
   /// In en, this message translates to:
-  /// **'Ready for Action Items'**
+  /// **'Ready for Tasks'**
   String get welcomeActionItemsTitle;
 
   /// Description for empty state welcome
   ///
   /// In en, this message translates to:
-  /// **'Your AI will automatically extract tasks and to-dos from your conversations. They\'ll appear here when created.'**
+  /// **'Your AI will automatically pull tasks out of your conversations. They\'ll appear here when created.'**
   String get welcomeActionItemsDescription;
 
   /// Feature point description
@@ -3936,7 +3936,7 @@ abstract class AppLocalizations {
   /// Tooltip for select all
   ///
   /// In en, this message translates to:
-  /// **'Select all'**
+  /// **'Select All'**
   String get selectAll;
 
   /// Tooltip for delete selected
@@ -3948,13 +3948,13 @@ abstract class AppLocalizations {
   /// Search input hint text
   ///
   /// In en, this message translates to:
-  /// **'Search memories...'**
+  /// **'Search memories'**
   String get searchMemories;
 
   /// Notification when memory deleted
   ///
   /// In en, this message translates to:
-  /// **'Memory Deleted.'**
+  /// **'Memory deleted'**
   String get memoryDeleted;
 
   /// Notice shown when the memory history response is truncated
@@ -3962,6 +3962,24 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Some memory history is unavailable. Showing the history received so far.'**
   String get memoryHistoryPartial;
+
+  /// Filter option for retained memory history
+  ///
+  /// In en, this message translates to:
+  /// **'History'**
+  String get memoryHistory;
+
+  /// Button that clears suppression so this memory may be used
+  ///
+  /// In en, this message translates to:
+  /// **'Allow Use'**
+  String get memoryAllowUse;
+
+  /// Button that suppresses this memory from future use
+  ///
+  /// In en, this message translates to:
+  /// **'Don\'t Use'**
+  String get memoryDontUse;
 
   /// Undo button text
   ///
@@ -4044,7 +4062,7 @@ abstract class AppLocalizations {
   /// Tooltip for create action item FAB
   ///
   /// In en, this message translates to:
-  /// **'Create new action item'**
+  /// **'Create new task'**
   String get createActionItemTooltip;
 
   /// Title for memory management dialog
@@ -4143,10 +4161,10 @@ abstract class AppLocalizations {
   /// **'Always in context'**
   String get alwaysInContext;
 
-  /// Input hint
+  /// Example of a useful personal preference to remember.
   ///
   /// In en, this message translates to:
-  /// **'I like to eat ice cream...'**
+  /// **'I prefer morning meetings.'**
   String get memoryContentHint;
 
   /// Error message
@@ -4164,19 +4182,19 @@ abstract class AppLocalizations {
   /// Button label to retry an action
   ///
   /// In en, this message translates to:
-  /// **'Retry'**
+  /// **'Try Again'**
   String get retry;
 
   /// Dialog title for creating action item
   ///
   /// In en, this message translates to:
-  /// **'Create Action Item'**
+  /// **'Create Task'**
   String get createActionItem;
 
   /// Dialog title for editing action item
   ///
   /// In en, this message translates to:
-  /// **'Edit Action Item'**
+  /// **'Edit Task'**
   String get editActionItem;
 
   /// Input hint
@@ -4188,31 +4206,31 @@ abstract class AppLocalizations {
   /// Error message
   ///
   /// In en, this message translates to:
-  /// **'Action item description cannot be empty.'**
+  /// **'Task description cannot be empty.'**
   String get actionItemDescriptionEmpty;
 
   /// Snackbar
   ///
   /// In en, this message translates to:
-  /// **'Action item updated'**
+  /// **'Task updated'**
   String get actionItemUpdated;
 
   /// Error message when updating action item fails
   ///
   /// In en, this message translates to:
-  /// **'Failed to update action item'**
+  /// **'Failed to update task'**
   String get failedToUpdateActionItem;
 
   /// Snackbar
   ///
   /// In en, this message translates to:
-  /// **'Action item created'**
+  /// **'Task created'**
   String get actionItemCreated;
 
   /// Error message when creating action item fails
   ///
   /// In en, this message translates to:
-  /// **'Failed to create action item'**
+  /// **'Failed to create task'**
   String get failedToCreateActionItem;
 
   /// Label for due date field
@@ -4230,7 +4248,7 @@ abstract class AppLocalizations {
   /// Placeholder
   ///
   /// In en, this message translates to:
-  /// **'Add due date'**
+  /// **'Add Due Date'**
   String get addDueDate;
 
   /// Instruction
@@ -4284,25 +4302,25 @@ abstract class AppLocalizations {
   /// Message shown when action item is deleted
   ///
   /// In en, this message translates to:
-  /// **'Action item deleted'**
+  /// **'Task deleted'**
   String get actionItemDeleted;
 
   /// Error message when deleting action item fails
   ///
   /// In en, this message translates to:
-  /// **'Failed to delete action item'**
+  /// **'Failed to delete task'**
   String get failedToDeleteActionItem;
 
   /// Dialog title
   ///
   /// In en, this message translates to:
-  /// **'Delete Action Item'**
+  /// **'Delete Task'**
   String get deleteActionItemConfirmTitle;
 
   /// Dialog message
   ///
   /// In en, this message translates to:
-  /// **'Are you sure you want to delete this action item?'**
+  /// **'Are you sure you want to delete this task?'**
   String get deleteActionItemConfirmMessage;
 
   /// Label for app language selector
@@ -4356,7 +4374,7 @@ abstract class AppLocalizations {
   /// Hint text for feedback textarea asking user to provide more details
   ///
   /// In en, this message translates to:
-  /// **'Tell us more about what went wrong...'**
+  /// **'Tell us more about what went wrong…'**
   String get tellUsMoreWhatWentWrong;
 
   /// Button to select text from message
@@ -4470,7 +4488,7 @@ abstract class AppLocalizations {
   /// Success message when action items are copied
   ///
   /// In en, this message translates to:
-  /// **'Action items copied to clipboard'**
+  /// **'Tasks copied to clipboard'**
   String get actionItemsCopiedToClipboard;
 
   /// Button text to generate a summary
@@ -4746,7 +4764,7 @@ abstract class AppLocalizations {
   /// Snackbar message when export starts
   ///
   /// In en, this message translates to:
-  /// **'Export started. This may take a few seconds...'**
+  /// **'Export started. This may take a few seconds…'**
   String get exportStartedMessage;
 
   /// Description for export feature
@@ -4773,23 +4791,11 @@ abstract class AppLocalizations {
   /// **'Clear all nodes and connections'**
   String get clearAllNodesAndConnections;
 
-  /// Description for Claude Desktop config
-  ///
-  /// In en, this message translates to:
-  /// **'Add to claude_desktop_config.json'**
-  String get addToClaudeDesktopConfig;
-
   /// Description for MCP Server feature
   ///
   /// In en, this message translates to:
   /// **'Connect AI assistants to your data'**
   String get connectAiAssistantsToData;
-
-  /// Hint for client secret value
-  ///
-  /// In en, this message translates to:
-  /// **'Use your MCP API key'**
-  String get useYourMcpApiKey;
 
   /// Webhook type for real-time transcript
   ///
@@ -4818,18 +4824,6 @@ abstract class AppLocalizations {
   /// Experimental feature name
   ///
   /// In en, this message translates to:
-  /// **'Auto-create Speakers'**
-  String get autoCreateSpeakers;
-
-  /// Description for auto-create speakers
-  ///
-  /// In en, this message translates to:
-  /// **'Auto-create when name detected'**
-  String get autoCreateWhenNameDetected;
-
-  /// Experimental feature name
-  ///
-  /// In en, this message translates to:
   /// **'Follow-up Questions'**
   String get followUpQuestions;
 
@@ -4854,7 +4848,7 @@ abstract class AppLocalizations {
   /// Error message when action item description is empty
   ///
   /// In en, this message translates to:
-  /// **'Action item description cannot be empty'**
+  /// **'Task description cannot be empty'**
   String get actionItemDescriptionCannotBeEmpty;
 
   /// Message shown when changes are saved
@@ -5016,7 +5010,7 @@ abstract class AppLocalizations {
   /// Placeholder text when recording keyboard shortcut
   ///
   /// In en, this message translates to:
-  /// **'Press keys...'**
+  /// **'Press keys…'**
   String get pressKeys;
 
   /// Error message when command key is not pressed
@@ -5046,7 +5040,7 @@ abstract class AppLocalizations {
   /// Search input placeholder text
   ///
   /// In en, this message translates to:
-  /// **'Search...'**
+  /// **'Search'**
   String get searchPlaceholder;
 
   /// Title for a conversation without a title
@@ -5133,12 +5127,6 @@ abstract class AppLocalizations {
   /// **'Review and manage your captured conversations'**
   String get reviewAndManageConversations;
 
-  /// Message explaining how to get started with conversations
-  ///
-  /// In en, this message translates to:
-  /// **'Start capturing conversations with your Omi device to see them here.'**
-  String get startCapturingConversations;
-
   /// Tip about using mobile app for audio capture
   ///
   /// In en, this message translates to:
@@ -5190,7 +5178,7 @@ abstract class AppLocalizations {
   /// Section header for action items
   ///
   /// In en, this message translates to:
-  /// **'Action Items'**
+  /// **'Tasks'**
   String get actionItems;
 
   /// Category label for tasks due today
@@ -5220,7 +5208,7 @@ abstract class AppLocalizations {
   /// Message shown while tasks are being loaded
   ///
   /// In en, this message translates to:
-  /// **'Loading tasks...'**
+  /// **'Loading tasks…'**
   String get loadingTasks;
 
   /// Title for the tasks page
@@ -5340,37 +5328,37 @@ abstract class AppLocalizations {
   /// Success message when action item is updated
   ///
   /// In en, this message translates to:
-  /// **'Action item updated successfully'**
+  /// **'Task updated successfully'**
   String get actionItemUpdatedSuccessfully;
 
   /// Success message when action item is created
   ///
   /// In en, this message translates to:
-  /// **'Action item created successfully'**
+  /// **'Task created successfully'**
   String get actionItemCreatedSuccessfully;
 
   /// Success message when action item is deleted
   ///
   /// In en, this message translates to:
-  /// **'Action item deleted successfully'**
+  /// **'Task deleted successfully'**
   String get actionItemDeletedSuccessfully;
 
   /// Dialog title for delete confirmation
   ///
   /// In en, this message translates to:
-  /// **'Delete Action Item'**
+  /// **'Delete Task'**
   String get deleteActionItem;
 
   /// Confirmation message for deleting action item
   ///
   /// In en, this message translates to:
-  /// **'Are you sure you want to delete this action item? This action cannot be undone.'**
+  /// **'Are you sure you want to delete this task? This action cannot be undone.'**
   String get deleteActionItemConfirmation;
 
   /// Placeholder text for action item description field
   ///
   /// In en, this message translates to:
-  /// **'Enter action item description...'**
+  /// **'Enter task description'**
   String get enterActionItemDescription;
 
   /// Label for completion checkbox
@@ -5388,13 +5376,13 @@ abstract class AppLocalizations {
   /// Loading message shown when reloading apps list
   ///
   /// In en, this message translates to:
-  /// **'Reloading apps...'**
+  /// **'Reloading apps…'**
   String get reloadingApps;
 
   /// Loading message shown when apps are being loaded
   ///
   /// In en, this message translates to:
-  /// **'Loading apps...'**
+  /// **'Loading apps…'**
   String get loadingApps;
 
   /// Subtitle describing app page functionality
@@ -5466,13 +5454,13 @@ abstract class AppLocalizations {
   /// Loading message shown while app is being submitted
   ///
   /// In en, this message translates to:
-  /// **'Submitting your app...'**
+  /// **'Submitting your app…'**
   String get submittingYourApp;
 
   /// Loading message shown while form is being prepared
   ///
   /// In en, this message translates to:
-  /// **'Preparing the form for you...'**
+  /// **'Preparing the form for you…'**
   String get preparingFormForYou;
 
   /// Section title for app metadata information
@@ -5514,7 +5502,7 @@ abstract class AppLocalizations {
   /// Placeholder text for chat prompt field
   ///
   /// In en, this message translates to:
-  /// **'You are an awesome app, your job is to respond to the user queries and make them feel good...'**
+  /// **'You are an awesome app, your job is to respond to the user queries and make them feel good…'**
   String get chatPromptPlaceholder;
 
   /// Section title for conversation prompt
@@ -5526,7 +5514,7 @@ abstract class AppLocalizations {
   /// Placeholder text for conversation prompt field
   ///
   /// In en, this message translates to:
-  /// **'You are an awesome app, you will be given transcript and summary of a conversation...'**
+  /// **'You are an awesome app, you will be given transcript and summary of a conversation…'**
   String get conversationPromptPlaceholder;
 
   /// Section title for notification scope configuration
@@ -5826,7 +5814,7 @@ abstract class AppLocalizations {
   /// Loading state message while fetching app capabilities
   ///
   /// In en, this message translates to:
-  /// **'Loading capabilities...'**
+  /// **'Loading capabilities…'**
   String get loadingCapabilities;
 
   /// Filter option for installed apps
@@ -6096,14 +6084,8 @@ abstract class AppLocalizations {
   /// Loading message while transcribing audio
   ///
   /// In en, this message translates to:
-  /// **'Transcribing...'**
+  /// **'Transcribing…'**
   String get transcribing;
-
-  /// Error message when transcription fails
-  ///
-  /// In en, this message translates to:
-  /// **'Transcription failed'**
-  String get transcriptionFailed;
 
   /// Label for a discarded conversation
   ///
@@ -6126,7 +6108,7 @@ abstract class AppLocalizations {
   /// Button label after copying link
   ///
   /// In en, this message translates to:
-  /// **'Copied!'**
+  /// **'Copied'**
   String get copied;
 
   /// Button label to copy conversation link
@@ -6198,7 +6180,7 @@ abstract class AppLocalizations {
   /// Loading message when refreshing conversations
   ///
   /// In en, this message translates to:
-  /// **'Reloading conversations...'**
+  /// **'Reloading conversations…'**
   String get reloadingConversations;
 
   /// Default fallback name when user name is empty
@@ -6312,7 +6294,7 @@ abstract class AppLocalizations {
   /// Loading overlay message when reloading memories
   ///
   /// In en, this message translates to:
-  /// **'Loading memories...'**
+  /// **'Loading memories…'**
   String get loadingMemories;
 
   /// Filter option to show all memories
@@ -6336,7 +6318,7 @@ abstract class AppLocalizations {
   /// Loading state message
   ///
   /// In en, this message translates to:
-  /// **'Loading your memories...'**
+  /// **'Loading your memories…'**
   String get loadingYourMemories;
 
   /// Empty state message when no memories
@@ -6564,7 +6546,7 @@ abstract class AppLocalizations {
   /// No description provided for @searchLanguages.
   ///
   /// In en, this message translates to:
-  /// **'Search languages...'**
+  /// **'Search languages'**
   String get searchLanguages;
 
   /// No description provided for @selectALanguage.
@@ -6666,7 +6648,7 @@ abstract class AppLocalizations {
   /// No description provided for @pleaseWait.
   ///
   /// In en, this message translates to:
-  /// **'Please wait...'**
+  /// **'Please wait…'**
   String get pleaseWait;
 
   /// No description provided for @joinTheCommunity.
@@ -6678,7 +6660,7 @@ abstract class AppLocalizations {
   /// No description provided for @loadingProfile.
   ///
   /// In en, this message translates to:
-  /// **'Loading profile...'**
+  /// **'Loading profile…'**
   String get loadingProfile;
 
   /// No description provided for @profileSettings.
@@ -6924,7 +6906,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncingDeveloperSettings.
   ///
   /// In en, this message translates to:
-  /// **'Syncing Developer Settings...'**
+  /// **'Syncing Developer Settings…'**
   String get syncingDeveloperSettings;
 
   /// No description provided for @summary.
@@ -7020,7 +7002,7 @@ abstract class AppLocalizations {
   /// No description provided for @generatingLink.
   ///
   /// In en, this message translates to:
-  /// **'Generating link...'**
+  /// **'Generating link…'**
   String get generatingLink;
 
   /// No description provided for @editConversation.
@@ -7062,7 +7044,7 @@ abstract class AppLocalizations {
   /// No description provided for @enterConversationTitle.
   ///
   /// In en, this message translates to:
-  /// **'Enter conversation title...'**
+  /// **'Enter conversation title…'**
   String get enterConversationTitle;
 
   /// No description provided for @conversationTitleUpdatedSuccessfully.
@@ -7086,7 +7068,7 @@ abstract class AppLocalizations {
   /// Status message when initializing recording
   ///
   /// In en, this message translates to:
-  /// **'Setting up...'**
+  /// **'Setting up…'**
   String get settingUp;
 
   /// Call-to-action text for first recording
@@ -7101,16 +7083,10 @@ abstract class AppLocalizations {
   /// **'Preparing system audio capture'**
   String get preparingSystemAudioCapture;
 
-  /// Instructions for starting recording
-  ///
-  /// In en, this message translates to:
-  /// **'Click the button to capture audio for live transcripts, AI insights, and automatic saving.'**
-  String get clickTheButtonToCaptureAudio;
-
   /// Status when reconnecting to audio
   ///
   /// In en, this message translates to:
-  /// **'Reconnecting...'**
+  /// **'Reconnecting…'**
   String get reconnecting;
 
   /// Status when recording is paused
@@ -7134,7 +7110,7 @@ abstract class AppLocalizations {
   /// Status when auto-resuming with countdown
   ///
   /// In en, this message translates to:
-  /// **'Resuming in {countdown}s...'**
+  /// **'Resuming in {countdown}s…'**
   String resumingInCountdown(String countdown);
 
   /// Instruction when paused
@@ -7146,7 +7122,7 @@ abstract class AppLocalizations {
   /// Status when listening for audio
   ///
   /// In en, this message translates to:
-  /// **'Listening for audio...'**
+  /// **'Listening for audio…'**
   String get listeningForAudio;
 
   /// Status when preparing to capture
@@ -7185,12 +7161,6 @@ abstract class AppLocalizations {
   /// **'{count} segments'**
   String segmentsPlural(String count);
 
-  /// Empty state message for transcript
-  ///
-  /// In en, this message translates to:
-  /// **'Start recording to see live transcript'**
-  String get startRecordingToSeeTranscript;
-
   /// Recording status: paused
   ///
   /// In en, this message translates to:
@@ -7200,7 +7170,7 @@ abstract class AppLocalizations {
   /// Recording status: initializing
   ///
   /// In en, this message translates to:
-  /// **'Initializing...'**
+  /// **'Initializing…'**
   String get initializing;
 
   /// Recording status: recording
@@ -7227,12 +7197,6 @@ abstract class AppLocalizations {
   /// **'Setting up system audio capture'**
   String get settingUpSystemAudioCapture;
 
-  /// Status when actively recording
-  ///
-  /// In en, this message translates to:
-  /// **'Capturing audio and generating transcript'**
-  String get capturingAudioAndGeneratingTranscript;
-
   /// Instruction to start system audio recording
   ///
   /// In en, this message translates to:
@@ -7254,7 +7218,7 @@ abstract class AppLocalizations {
   /// Credit line for translations
   ///
   /// In en, this message translates to:
-  /// **'translated by omi'**
+  /// **'translated by Omi'**
   String get translatedByOmi;
 
   /// Back button text
@@ -7296,7 +7260,7 @@ abstract class AppLocalizations {
   /// Status when loading audio devices
   ///
   /// In en, this message translates to:
-  /// **'Loading devices...'**
+  /// **'Loading devices…'**
   String get loadingDevices;
 
   /// Settings navigation header
@@ -7356,7 +7320,7 @@ abstract class AppLocalizations {
   /// Confirmation message in sign out dialog
   ///
   /// In en, this message translates to:
-  /// **'Are you sure you want to sign out?'**
+  /// **'You\'ll need to sign in again to see your conversations. Your paired device and app preferences stay on this phone.'**
   String get signOutConfirmation;
 
   /// Custom vocabulary section header
@@ -7512,7 +7476,7 @@ abstract class AppLocalizations {
   /// Snackbar message when exporting conversations
   ///
   /// In en, this message translates to:
-  /// **'Exporting conversations...'**
+  /// **'Exporting conversations…'**
   String get exportingConversations;
 
   /// No description provided for @clearNodesDescription.
@@ -7680,7 +7644,7 @@ abstract class AppLocalizations {
   /// Dialog title when a new app version is available
   ///
   /// In en, this message translates to:
-  /// **'New Version Available  🎉'**
+  /// **'New Version Available'**
   String get newVersionAvailable;
 
   /// Button text to decline or dismiss
@@ -7776,7 +7740,7 @@ abstract class AppLocalizations {
   /// Loading text while cancelling
   ///
   /// In en, this message translates to:
-  /// **'Cancelling...'**
+  /// **'Cancelling…'**
   String get cancelling;
 
   /// Message shown to beta testers
@@ -7992,7 +7956,7 @@ abstract class AppLocalizations {
   /// Loading message when adding task to a service
   ///
   /// In en, this message translates to:
-  /// **'Adding to {serviceName}...'**
+  /// **'Adding to {serviceName}…'**
   String addingToService(String serviceName);
 
   /// Success message when task was added to a service
@@ -8046,7 +8010,7 @@ abstract class AppLocalizations {
   /// Description of what API keys are used for
   ///
   /// In en, this message translates to:
-  /// **'API Keys are used for authentication when your app communicates with the OMI server. They allow your application to create memories and access other OMI services securely.'**
+  /// **'API Keys are used for authentication when your app communicates with the Omi server. They allow your application to create memories and access other Omi services securely.'**
   String get apiKeysDescription;
 
   /// Tooltip for API keys info button
@@ -8898,7 +8862,7 @@ abstract class AppLocalizations {
   /// Developer settings - exportStartedMayTakeFewSeconds
   ///
   /// In en, this message translates to:
-  /// **'Export started. This may take a few seconds...'**
+  /// **'Export started. This may take a few seconds…'**
   String get exportStartedMayTakeFewSeconds;
 
   /// Developer settings - knowledgeGraphDeleteDescription
@@ -8910,7 +8874,7 @@ abstract class AppLocalizations {
   /// Subtitle for Daily Summary menu item in profile settings
   ///
   /// In en, this message translates to:
-  /// **'Configure your daily action items digest'**
+  /// **'Configure your daily tasks digest'**
   String get configureDailySummaryDigest;
 
   /// Description showing what data types an app accesses, e.g. 'Accesses Conversations & Memories'
@@ -9318,7 +9282,7 @@ abstract class AppLocalizations {
   /// Status text while checking firmware version
   ///
   /// In en, this message translates to:
-  /// **'Checking firmware version...'**
+  /// **'Checking firmware version…'**
   String get checkingFirmwareVersion;
 
   /// Page title for firmware update screen
@@ -9456,7 +9420,7 @@ abstract class AppLocalizations {
   /// Button to defer connection
   ///
   /// In en, this message translates to:
-  /// **'I\'ll do it later'**
+  /// **'I\'ll Do It Later'**
   String get illDoItLater;
 
   /// Title when connection succeeds
@@ -9660,7 +9624,7 @@ abstract class AppLocalizations {
   /// Loading message shown while audio waveform is being processed
   ///
   /// In en, this message translates to:
-  /// **'Loading your recording...'**
+  /// **'Loading your recording…'**
   String get loadingYourRecording;
 
   /// Message shown when a photo was discarded as not significant
@@ -9672,7 +9636,7 @@ abstract class AppLocalizations {
   /// Loading text shown while analyzing a photo
   ///
   /// In en, this message translates to:
-  /// **'Analyzing...'**
+  /// **'Analyzing…'**
   String get analyzing;
 
   /// Placeholder text for country search field
@@ -9684,7 +9648,7 @@ abstract class AppLocalizations {
   /// Loading text while checking Apple Watch status
   ///
   /// In en, this message translates to:
-  /// **'Checking Apple Watch...'**
+  /// **'Checking Apple Watch…'**
   String get checkingAppleWatch;
 
   /// Title prompting user to install Omi on Apple Watch
@@ -9792,7 +9756,7 @@ abstract class AppLocalizations {
   /// Placeholder text shown while waiting for content
   ///
   /// In en, this message translates to:
-  /// **'Waiting for transcript or photos...'**
+  /// **'Waiting for transcript or photos…'**
   String get waitingForTranscriptOrPhotos;
 
   /// Text shown when no summary is available yet
@@ -9882,7 +9846,7 @@ abstract class AppLocalizations {
   /// Button text to update Omi device firmware
   ///
   /// In en, this message translates to:
-  /// **'Update omi firmware'**
+  /// **'Update Omi firmware'**
   String get updateOmiFirmware;
 
   /// Generic error message asking user to try again
@@ -9990,7 +9954,7 @@ abstract class AppLocalizations {
   /// Badge for action items in Wrapped
   ///
   /// In en, this message translates to:
-  /// **'Action Items'**
+  /// **'Tasks'**
   String get wrappedActionItems;
 
   /// Label for tasks created in Wrapped
@@ -10170,13 +10134,13 @@ abstract class AppLocalizations {
   /// Default processing status text
   ///
   /// In en, this message translates to:
-  /// **'Processing...'**
+  /// **'Processing…'**
   String get wrappedProcessingDefault;
 
   /// Text shown while generating the wrapped, includes newline
   ///
   /// In en, this message translates to:
-  /// **'Creating your\n2025 story...'**
+  /// **'Creating your\n2025 story…'**
   String get wrappedCreatingYourStory;
 
   /// Error header text, includes newline
@@ -10236,7 +10200,7 @@ abstract class AppLocalizations {
   /// Initial processing step text
   ///
   /// In en, this message translates to:
-  /// **'Starting...'**
+  /// **'Starting…'**
   String get wrappedStarting;
 
   /// Share button label
@@ -10644,19 +10608,19 @@ abstract class AppLocalizations {
   /// Loading message shown while uploading voice profile
   ///
   /// In en, this message translates to:
-  /// **'Uploading your voice profile....'**
+  /// **'Uploading your voice profile…'**
   String get uploadingVoiceProfile;
 
   /// Loading message shown while processing voice profile
   ///
   /// In en, this message translates to:
-  /// **'Memorizing your voice...'**
+  /// **'Memorizing your voice…'**
   String get memorizingYourVoice;
 
   /// Loading message shown while personalizing user experience
   ///
   /// In en, this message translates to:
-  /// **'Personalizing your experience...'**
+  /// **'Personalizing your experience…'**
   String get personalizingExperience;
 
   /// Instruction to user during speech profile recording
@@ -10890,7 +10854,7 @@ abstract class AppLocalizations {
   /// Loading text when syncing messages
   ///
   /// In en, this message translates to:
-  /// **'Syncing messages with server...'**
+  /// **'Syncing messages with server…'**
   String get syncingMessages;
 
   /// Title for chat apps drawer/section
@@ -11172,13 +11136,13 @@ abstract class AppLocalizations {
   /// Loading text while summarizing a conversation
   ///
   /// In en, this message translates to:
-  /// **'Summarizing conversation...\nThis may take a few seconds'**
+  /// **'Summarizing conversation…\nThis may take a few seconds'**
   String get summarizingConversation;
 
   /// Loading text while re-summarizing a conversation
   ///
   /// In en, this message translates to:
-  /// **'Re-summarizing conversation...\nThis may take a few seconds'**
+  /// **'Re-summarizing conversation…\nThis may take a few seconds'**
   String get resummarizingConversation;
 
   /// Message when no interesting content found
@@ -11298,7 +11262,7 @@ abstract class AppLocalizations {
   /// Button to proceed despite warnings
   ///
   /// In en, this message translates to:
-  /// **'Proceed anyway'**
+  /// **'Proceed Anyway'**
   String get proceedAnyway;
 
   /// Title for older device warning dialog
@@ -11370,7 +11334,7 @@ abstract class AppLocalizations {
   /// Link to view usage
   ///
   /// In en, this message translates to:
-  /// **'View usage'**
+  /// **'View Usage'**
   String get viewUsage;
 
   /// Info about local processing
@@ -11430,7 +11394,7 @@ abstract class AppLocalizations {
   /// Status during download
   ///
   /// In en, this message translates to:
-  /// **'Downloading...'**
+  /// **'Downloading…'**
   String get downloading;
 
   /// Dialog title for model download
@@ -11562,7 +11526,7 @@ abstract class AppLocalizations {
   /// Status when preparing model
   ///
   /// In en, this message translates to:
-  /// **'Preparing {model}...'**
+  /// **'Preparing {model}…'**
   String preparingModel(String model);
 
   /// Download error message
@@ -11604,7 +11568,7 @@ abstract class AppLocalizations {
   /// Placeholder for template dropdown
   ///
   /// In en, this message translates to:
-  /// **'Select a provider template...'**
+  /// **'Select a provider template…'**
   String get selectProviderTemplate;
 
   /// Description for response template selector
@@ -12000,7 +11964,7 @@ abstract class AppLocalizations {
   /// Loading text for knowledge graph
   ///
   /// In en, this message translates to:
-  /// **'Loading Knowledge Graph...'**
+  /// **'Loading Knowledge Graph…'**
   String get loadingKnowledgeGraph;
 
   /// Title when knowledge graph is empty
@@ -12012,7 +11976,7 @@ abstract class AppLocalizations {
   /// Message while building knowledge graph
   ///
   /// In en, this message translates to:
-  /// **'Building your knowledge graph from memories...'**
+  /// **'Building your knowledge graph from memories…'**
   String get buildingKnowledgeGraphFromMemories;
 
   /// Info message about automatic graph building
@@ -12042,7 +12006,7 @@ abstract class AppLocalizations {
   /// Snackbar message when opening an app
   ///
   /// In en, this message translates to:
-  /// **'Opening {appName}...'**
+  /// **'Opening {appName}…'**
   String openingApp(String appName);
 
   /// Hint text for reply text field
@@ -12108,7 +12072,7 @@ abstract class AppLocalizations {
   /// Hint text for reply input field
   ///
   /// In en, this message translates to:
-  /// **'Write your reply...'**
+  /// **'Write your reply…'**
   String get writeYourReply;
 
   /// Success message after sending a reply
@@ -12366,7 +12330,7 @@ abstract class AppLocalizations {
   /// Hint text for contacts search field
   ///
   /// In en, this message translates to:
-  /// **'Search contacts...'**
+  /// **'Search contacts'**
   String get searchContactsHint;
 
   /// Shows count of selected contacts
@@ -12378,7 +12342,7 @@ abstract class AppLocalizations {
   /// Button to clear all selected contacts
   ///
   /// In en, this message translates to:
-  /// **'Clear all'**
+  /// **'Clear All'**
   String get clearAllSelection;
 
   /// Button text when no contacts are selected
@@ -12510,7 +12474,7 @@ abstract class AppLocalizations {
   /// Status text shown during file transfer
   ///
   /// In en, this message translates to:
-  /// **'Transferring...'**
+  /// **'Transferring…'**
   String get transferring;
 
   /// Title when transfer is needed
@@ -12558,7 +12522,7 @@ abstract class AppLocalizations {
   /// Menu item text when transfer is ongoing
   ///
   /// In en, this message translates to:
-  /// **'Transfer in progress...'**
+  /// **'Transfer in progress…'**
   String get transferInProgress;
 
   /// Menu item to share a recording
@@ -12744,7 +12708,7 @@ abstract class AppLocalizations {
   /// Button text to postpone an action
   ///
   /// In en, this message translates to:
-  /// **'Later'**
+  /// **'Not Now'**
   String get later;
 
   /// Success message when an app is deleted
@@ -12780,7 +12744,7 @@ abstract class AppLocalizations {
   /// Migration ETA calculation in progress message
   ///
   /// In en, this message translates to:
-  /// **'Calculating...'**
+  /// **'Calculating…'**
   String get calculatingETA;
 
   /// Migration time remaining in minutes
@@ -12798,43 +12762,43 @@ abstract class AppLocalizations {
   /// Migration is almost complete
   ///
   /// In en, this message translates to:
-  /// **'Almost done...'**
+  /// **'Almost done…'**
   String get almostDone;
 
   /// Notification title for omi app messages
   ///
   /// In en, this message translates to:
-  /// **'omi says'**
+  /// **'Omi says'**
   String get omiSays;
 
   /// Migration start message when analyzing data
   ///
   /// In en, this message translates to:
-  /// **'Analyzing your data...'**
+  /// **'Analyzing your data…'**
   String get analyzingYourData;
 
   /// Notification body when migration starts
   ///
   /// In en, this message translates to:
-  /// **'Migrating to {level} protection...'**
+  /// **'Migrating to {level} protection…'**
   String migratingToProtection(String level);
 
   /// Migration message when no data needs to be migrated
   ///
   /// In en, this message translates to:
-  /// **'No data to migrate. Finalizing...'**
+  /// **'No data to migrate. Finalizing…'**
   String get noDataToMigrateFinalizing;
 
   /// Migration progress message with item type and percentage
   ///
   /// In en, this message translates to:
-  /// **'Migrating {itemType}... {percentage}%'**
+  /// **'Migrating {itemType}… {percentage}%'**
   String migratingItemsProgress(String itemType, int percentage);
 
   /// Migration message when all objects have been migrated
   ///
   /// In en, this message translates to:
-  /// **'All objects migrated. Finalizing...'**
+  /// **'All objects migrated. Finalizing…'**
   String get allObjectsMigratedFinalizing;
 
   /// Error message when data migration fails
@@ -12900,7 +12864,7 @@ abstract class AppLocalizations {
   /// Hint text for template name field
   ///
   /// In en, this message translates to:
-  /// **'e.g., Meeting Action Items Extractor'**
+  /// **'e.g., Meeting Task Extractor'**
   String get templateNameHint;
 
   /// Validation error when name is too short
@@ -12912,7 +12876,7 @@ abstract class AppLocalizations {
   /// Hint text for conversation prompt field
   ///
   /// In en, this message translates to:
-  /// **'e.g., Extract action items, decisions made, and key takeaways from the provided conversation.'**
+  /// **'e.g., Extract tasks, decisions made, and key takeaways from the provided conversation.'**
   String get conversationPromptHint;
 
   /// Validation error when prompt is empty
@@ -12942,19 +12906,19 @@ abstract class AppLocalizations {
   /// Status message during app creation
   ///
   /// In en, this message translates to:
-  /// **'Generating description...'**
+  /// **'Generating description…'**
   String get generatingDescription;
 
   /// Status message during app creation
   ///
   /// In en, this message translates to:
-  /// **'Creating app icon...'**
+  /// **'Creating app icon…'**
   String get creatingAppIcon;
 
   /// Status message during app creation
   ///
   /// In en, this message translates to:
-  /// **'Installing app...'**
+  /// **'Installing app…'**
   String get installingApp;
 
   /// Success message after app is created and installed
@@ -13200,7 +13164,7 @@ abstract class AppLocalizations {
   /// Status message shown while generating app icon
   ///
   /// In en, this message translates to:
-  /// **'Creating app icon...'**
+  /// **'Creating app icon…'**
   String get aiGenCreatingAppIcon;
 
   /// Error message with details in AI app generator
@@ -13302,7 +13266,7 @@ abstract class AppLocalizations {
   /// JSON configuration placeholder hint text in transcription settings
   ///
   /// In en, this message translates to:
-  /// **'Paste your JSON configuration here...'**
+  /// **'Paste your JSON configuration here…'**
   String get transcriptionJsonPlaceholder;
 
   /// Tab title for Omi transcription source option
@@ -13422,7 +13386,7 @@ abstract class AppLocalizations {
   /// Placeholder text for search field in conversation detail page
   ///
   /// In en, this message translates to:
-  /// **'Search transcript or summary...'**
+  /// **'Search transcript or summary'**
   String get searchTranscriptOrSummary;
 
   /// Default title for a new goal in the goal tracker widget
@@ -13812,13 +13776,13 @@ abstract class AppLocalizations {
   /// Loading text while reading memories
   ///
   /// In en, this message translates to:
-  /// **'Reading your memories...'**
+  /// **'Reading your memories…'**
   String get msgReadingMemories;
 
   /// Loading text while learning from memories
   ///
   /// In en, this message translates to:
-  /// **'Learning from your memories...'**
+  /// **'Learning from your memories…'**
   String get msgLearningMemories;
 
   /// Error when attached file upload fails
@@ -13920,7 +13884,7 @@ abstract class AppLocalizations {
   /// Indicator shown when a conversation is newly created
   ///
   /// In en, this message translates to:
-  /// **'New 🚀'**
+  /// **'New'**
   String get conversationNewIndicator;
 
   /// Count of photos in a conversation
@@ -13932,7 +13896,7 @@ abstract class AppLocalizations {
   /// Status indicator shown when conversations are being merged
   ///
   /// In en, this message translates to:
-  /// **'Merging...'**
+  /// **'Merging…'**
   String get mergingStatus;
 
   /// Duration in singular second
@@ -14058,13 +14022,13 @@ abstract class AppLocalizations {
   /// Status message while waiting for device connection
   ///
   /// In en, this message translates to:
-  /// **'Waiting for device...'**
+  /// **'Waiting for device…'**
   String get waitingForDevice;
 
   /// Prompt for user to start speaking
   ///
   /// In en, this message translates to:
-  /// **'Say something...'**
+  /// **'Say something…'**
   String get saySomething;
 
   /// Status message during system audio initialization on desktop
@@ -14154,7 +14118,7 @@ abstract class AppLocalizations {
   /// No description provided for @downloadingAudio.
   ///
   /// In en, this message translates to:
-  /// **'Downloading audio...'**
+  /// **'Downloading audio…'**
   String get downloadingAudio;
 
   /// No description provided for @shareAudio.
@@ -14172,7 +14136,7 @@ abstract class AppLocalizations {
   /// No description provided for @gettingAudioFiles.
   ///
   /// In en, this message translates to:
-  /// **'Getting audio files...'**
+  /// **'Getting audio files…'**
   String get gettingAudioFiles;
 
   /// No description provided for @downloadingAudioProgress.
@@ -14190,7 +14154,7 @@ abstract class AppLocalizations {
   /// No description provided for @combiningAudioFiles.
   ///
   /// In en, this message translates to:
-  /// **'Combining audio files...'**
+  /// **'Combining audio files…'**
   String get combiningAudioFiles;
 
   /// No description provided for @audioReady.
@@ -14202,7 +14166,7 @@ abstract class AppLocalizations {
   /// No description provided for @openingShareSheet.
   ///
   /// In en, this message translates to:
-  /// **'Opening share sheet...'**
+  /// **'Opening share sheet…'**
   String get openingShareSheet;
 
   /// No description provided for @audioShareFailed.
@@ -14490,7 +14454,7 @@ abstract class AppLocalizations {
   /// No description provided for @resetFilters.
   ///
   /// In en, this message translates to:
-  /// **'Reset filters'**
+  /// **'Reset Filters'**
   String get resetFilters;
 
   /// No description provided for @applyFilters.
@@ -14568,7 +14532,7 @@ abstract class AppLocalizations {
   /// No description provided for @authorizingMcpServer.
   ///
   /// In en, this message translates to:
-  /// **'Authorizing...'**
+  /// **'Authorizing…'**
   String get authorizingMcpServer;
 
   /// No description provided for @whereDidYouHearAboutOmi.
@@ -14676,7 +14640,7 @@ abstract class AppLocalizations {
   /// No description provided for @iveDoneThis.
   ///
   /// In en, this message translates to:
-  /// **'I\'ve done this'**
+  /// **'I\'ve Done This'**
   String get iveDoneThis;
 
   /// No description provided for @pairNewDevice.
@@ -14694,7 +14658,7 @@ abstract class AppLocalizations {
   /// No description provided for @reportAnIssue.
   ///
   /// In en, this message translates to:
-  /// **'Report an issue'**
+  /// **'Report an Issue'**
   String get reportAnIssue;
 
   /// Pairing title for Omi device
@@ -14826,7 +14790,7 @@ abstract class AppLocalizations {
   /// No description provided for @reconnectingToInternet.
   ///
   /// In en, this message translates to:
-  /// **'Reconnecting to internet...'**
+  /// **'Reconnecting to internet…'**
   String get reconnectingToInternet;
 
   /// No description provided for @uploadingToCloud.
@@ -14838,13 +14802,13 @@ abstract class AppLocalizations {
   /// No description provided for @processingOnServer.
   ///
   /// In en, this message translates to:
-  /// **'Processing on server...'**
+  /// **'Processing on server…'**
   String get processingOnServer;
 
   /// No description provided for @processingOnServerProgress.
   ///
   /// In en, this message translates to:
-  /// **'Processing... {current}/{total} segments'**
+  /// **'Processing… {current}/{total} segments'**
   String processingOnServerProgress(int current, int total);
 
   /// No description provided for @processedStatus.
@@ -15186,7 +15150,7 @@ abstract class AppLocalizations {
   /// No description provided for @statusCalling.
   ///
   /// In en, this message translates to:
-  /// **'Calling...'**
+  /// **'Calling…'**
   String get statusCalling;
 
   /// No description provided for @statusCallInProgress.
@@ -15276,13 +15240,13 @@ abstract class AppLocalizations {
   /// No description provided for @callStateConnecting.
   ///
   /// In en, this message translates to:
-  /// **'Connecting...'**
+  /// **'Connecting…'**
   String get callStateConnecting;
 
   /// No description provided for @callStateRinging.
   ///
   /// In en, this message translates to:
-  /// **'Ringing...'**
+  /// **'Ringing…'**
   String get callStateRinging;
 
   /// No description provided for @callStateEnded.
@@ -15300,7 +15264,7 @@ abstract class AppLocalizations {
   /// No description provided for @transcriptPlaceholder.
   ///
   /// In en, this message translates to:
-  /// **'Transcript will appear here...'**
+  /// **'Transcript will appear here…'**
   String get transcriptPlaceholder;
 
   /// No description provided for @phoneUnmute.
@@ -15474,7 +15438,7 @@ abstract class AppLocalizations {
   /// Phone calls upsell feature 2
   ///
   /// In en, this message translates to:
-  /// **'Automatic call summaries and action items'**
+  /// **'Automatic call summaries and tasks'**
   String get phoneCallsUpsellFeature2;
 
   /// Phone calls upsell feature 3
@@ -15732,7 +15696,7 @@ abstract class AppLocalizations {
   /// No description provided for @transcriptionPausedReconnecting.
   ///
   /// In en, this message translates to:
-  /// **'Still recording — reconnecting to transcription...'**
+  /// **'Still recording — reconnecting to transcription…'**
   String get transcriptionPausedReconnecting;
 
   /// No description provided for @fairUseBannerStatus.
@@ -15756,7 +15720,7 @@ abstract class AppLocalizations {
   /// No description provided for @improveConnectionAction.
   ///
   /// In en, this message translates to:
-  /// **'Got it'**
+  /// **'Got It'**
   String get improveConnectionAction;
 
   /// No description provided for @clockSkewWarning.
@@ -15828,7 +15792,7 @@ abstract class AppLocalizations {
   /// Button label to dismiss cancel dialog and continue syncing
   ///
   /// In en, this message translates to:
-  /// **'Keep syncing'**
+  /// **'Keep Syncing'**
   String get keepSyncing;
 
   /// Title for cancel sync confirmation dialog
@@ -16002,7 +15966,7 @@ abstract class AppLocalizations {
   /// Hint for cancel reason detail text field
   ///
   /// In en, this message translates to:
-  /// **'We appreciate any feedback...'**
+  /// **'We appreciate any feedback…'**
   String get cancelReasonDetailHint;
 
   /// Title for cancel consequences page
@@ -16188,7 +16152,7 @@ abstract class AppLocalizations {
   /// No description provided for @waitingForData.
   ///
   /// In en, this message translates to:
-  /// **'Waiting for data...'**
+  /// **'Waiting for data…'**
   String get waitingForData;
 
   /// No description provided for @liveRssiOverTime.
@@ -16206,7 +16170,7 @@ abstract class AppLocalizations {
   /// No description provided for @collectingData.
   ///
   /// In en, this message translates to:
-  /// **'Collecting data...'**
+  /// **'Collecting data…'**
   String get collectingData;
 
   /// No description provided for @cleanDisconnect.
@@ -16356,7 +16320,7 @@ abstract class AppLocalizations {
   /// Loading text while fetching stable firmware version
   ///
   /// In en, this message translates to:
-  /// **'Fetching latest stable firmware...'**
+  /// **'Fetching latest stable firmware…'**
   String get fetchingStableFirmware;
 
   /// Error message when no stable firmware is available
@@ -16382,6 +16346,60 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'{duration} audio saved locally'**
   String audioSavedLocally(String duration);
+
+  /// Live-capture WAL indicator while unsynced audio is uploading
+  ///
+  /// In en, this message translates to:
+  /// **'Uploading {duration} of audio for transcription…'**
+  String uploadingAudioForTranscription(String duration);
+
+  /// Live-capture WAL indicator after a failed upload attempt that will be retried automatically
+  ///
+  /// In en, this message translates to:
+  /// **'Retrying upload… {duration} of audio kept on your phone'**
+  String audioUploadRetrying(String duration);
+
+  /// Live-capture WAL indicator when auto-retries are exhausted and a manual retry is available
+  ///
+  /// In en, this message translates to:
+  /// **'Upload failed — {duration} of audio kept on your phone. Tap to retry.'**
+  String audioUploadFailedTapRetry(String duration);
+
+  /// Live-capture WAL indicator when the recording can no longer be uploaded (corrupted or past the recovery window)
+  ///
+  /// In en, this message translates to:
+  /// **'Upload failed — {duration} of audio kept on your phone.'**
+  String audioUploadFailedKeptLocal(String duration);
+
+  /// Live-capture empty state on audio-only setups (no photo capture source)
+  ///
+  /// In en, this message translates to:
+  /// **'Listening… a transcript will appear here.'**
+  String get listeningTranscriptWillAppear;
+
+  /// Live-capture empty state while the device has no internet connection
+  ///
+  /// In en, this message translates to:
+  /// **'Recording offline — the transcript will catch up when you\'re back online.'**
+  String get recordingOfflineTranscriptWillCatchUp;
+
+  /// Live-capture empty state when the plan is out of transcription credits
+  ///
+  /// In en, this message translates to:
+  /// **'Transcription is unavailable — recording continues and your audio is saved.'**
+  String get transcriptionUnavailableRecordingSaved;
+
+  /// Live-capture app bar title while both audio and photos are being captured
+  ///
+  /// In en, this message translates to:
+  /// **'Capturing'**
+  String get capturing;
+
+  /// Live-capture app bar title while only photos are being captured
+  ///
+  /// In en, this message translates to:
+  /// **'Capturing photos'**
+  String get capturingPhotos;
 
   /// No description provided for @willSyncAutomatically.
   ///
@@ -16410,13 +16428,13 @@ abstract class AppLocalizations {
   /// Status when transcription WebSocket is connecting
   ///
   /// In en, this message translates to:
-  /// **'Connecting transcription...'**
+  /// **'Connecting transcription…'**
   String get transcriptionConnecting;
 
   /// Status when transcription WebSocket is reconnecting
   ///
   /// In en, this message translates to:
-  /// **'Reconnecting transcription...'**
+  /// **'Reconnecting transcription…'**
   String get transcriptionReconnecting;
 
   /// Status when transcription WebSocket failed after max retries
@@ -16656,13 +16674,13 @@ abstract class AppLocalizations {
   /// Primary destructive action label
   ///
   /// In en, this message translates to:
-  /// **'Delete account permanently'**
+  /// **'Delete Account Permanently'**
   String get deleteAccountPermanently;
 
   /// Secondary action to back out of deletion
   ///
   /// In en, this message translates to:
-  /// **'Keep my account'**
+  /// **'Keep My Account'**
   String get keepMyAccount;
 
   /// Error shown when deletion API fails
@@ -16676,12 +16694,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Plan Update'**
   String get planUpdate;
-
-  /// Deprecation notice for legacy Unlimited subscribers
-  ///
-  /// In en, this message translates to:
-  /// **'Your Unlimited plan is being retired. Switch to the Operator plan — same great features at \$49/mo. Your current plan will continue to work in the meantime.'**
-  String get planDeprecationMessage;
 
   /// Header for plan upgrade screen for non-paid users
   ///
@@ -16866,7 +16878,7 @@ abstract class AppLocalizations {
   /// Voice response mode setting row title
   ///
   /// In en, this message translates to:
-  /// **'Voice response'**
+  /// **'Voice Response'**
   String get voiceResponseMode;
 
   /// Bottom sheet title for voice response mode selector
@@ -16968,13 +16980,13 @@ abstract class AppLocalizations {
   /// Hint text for the action items search field
   ///
   /// In en, this message translates to:
-  /// **'Search action items'**
+  /// **'Search tasks'**
   String get searchActionItems;
 
   /// Top-bar button to enter selection mode on the action items page
   ///
   /// In en, this message translates to:
-  /// **'Select multiple'**
+  /// **'Select Multiple'**
   String get selectActionItems;
 
   /// Title of the bottom sheet listing platforms to bulk-export selected action items to
@@ -17004,19 +17016,19 @@ abstract class AppLocalizations {
   /// Action menu entry to reveal completed tasks on the action items page
   ///
   /// In en, this message translates to:
-  /// **'Show completed'**
+  /// **'Show Completed'**
   String get showCompletedTasks;
 
   /// Action menu entry to hide completed tasks on the action items page
   ///
   /// In en, this message translates to:
-  /// **'Hide completed'**
+  /// **'Hide Completed'**
   String get hideCompletedTasks;
 
   /// Action menu entry to select every task in the action items list
   ///
   /// In en, this message translates to:
-  /// **'Select all'**
+  /// **'Select All'**
   String get selectAllTasksMenu;
 
   /// Snackbar shown when the user taps Export but no third-party task integration is connected
@@ -17034,7 +17046,7 @@ abstract class AppLocalizations {
   /// Action menu entry that clears any current task selection while staying in selection mode
   ///
   /// In en, this message translates to:
-  /// **'Deselect all'**
+  /// **'Deselect All'**
   String get deselectAllTasksMenu;
 
   /// Snackbar shown when every selected task is already exported and Export is tapped
@@ -17052,7 +17064,7 @@ abstract class AppLocalizations {
   /// Menu / button label to delete a daily recap. Used on the detail page action sheet and the swipe-to-delete background.
   ///
   /// In en, this message translates to:
-  /// **'Delete recap'**
+  /// **'Delete Recap'**
   String get deleteRecap;
 
   /// Title of the confirm dialog when deleting a daily recap.
@@ -17142,7 +17154,7 @@ abstract class AppLocalizations {
   /// No description provided for @deleteWhileProcessingTitle.
   ///
   /// In en, this message translates to:
-  /// **'Still processing'**
+  /// **'Still Processing'**
   String get deleteWhileProcessingTitle;
 
   /// No description provided for @deleteWhileProcessingMessage.
@@ -17352,7 +17364,7 @@ abstract class AppLocalizations {
   /// No description provided for @regenerateRecap.
   ///
   /// In en, this message translates to:
-  /// **'Regenerate recap'**
+  /// **'Regenerate Recap'**
   String get regenerateRecap;
 
   /// No description provided for @recapRegeneratedSnackbar.
@@ -17406,7 +17418,7 @@ abstract class AppLocalizations {
   /// Caveat note shown in the Transcribe Later sheet
   ///
   /// In en, this message translates to:
-  /// **'Works with the phone microphone, Omi, and Limitless devices. Audio stays on your phone until you choose to upload it.'**
+  /// **'Works with the phone microphone and Omi or Limitless wearables. Audio stays on your phone until you choose to upload it.'**
   String get transcribeLaterNote;
 
   /// Warning shown when storage is too low to keep recording in Transcribe Later mode
@@ -17520,7 +17532,7 @@ abstract class AppLocalizations {
   /// Tutorial step 1 placeholder in the live transcript area before any speech is detected
   ///
   /// In en, this message translates to:
-  /// **'Start speaking...'**
+  /// **'Start speaking…'**
   String get deviceOnboardingStartSpeaking;
 
   /// Tutorial step 2 title — prompts the user to ask Omi a voice question with a single button press
@@ -17538,13 +17550,13 @@ abstract class AppLocalizations {
   /// Tutorial step 2 status while the spoken question is processed by the AI
   ///
   /// In en, this message translates to:
-  /// **'Processing your question...'**
+  /// **'Processing your question…'**
   String get deviceOnboardingProcessingQuestion;
 
   /// Tutorial step 2 status chip while Omi is actively listening to the question
   ///
   /// In en, this message translates to:
-  /// **'Listening...'**
+  /// **'Listening…'**
   String get deviceOnboardingListening;
 
   /// Tutorial step 3 title while waiting for the user to power the device off
@@ -17598,7 +17610,7 @@ abstract class AppLocalizations {
   /// Tutorial step 3 status chip while the device is powering off
   ///
   /// In en, this message translates to:
-  /// **'Turning off...'**
+  /// **'Turning off…'**
   String get deviceOnboardingStatusTurningOff;
 
   /// Tutorial step 4 title — configure the device double-tap action
@@ -18168,13 +18180,13 @@ abstract class AppLocalizations {
   /// Label of the copy-message action on an AI chat message
   ///
   /// In en, this message translates to:
-  /// **'Copy message'**
+  /// **'Copy Message'**
   String get copyMessage;
 
   /// Placeholder of the search input in the settings drawer
   ///
   /// In en, this message translates to:
-  /// **'Search settings…'**
+  /// **'Search settings'**
   String get searchSettings;
 
   /// Title shown when an audio recording fails to load in the conversation player
@@ -18330,7 +18342,7 @@ abstract class AppLocalizations {
   /// Button that opens the app store for a required cutover upgrade
   ///
   /// In en, this message translates to:
-  /// **'Open store'**
+  /// **'Open Store'**
   String get accountCutoverOpenStore;
 
   /// Chat scope chip when asking about a specific conversation
@@ -18495,10 +18507,10 @@ abstract class AppLocalizations {
   /// **'Transcription not receiving audio'**
   String get transcriptionNoAudio;
 
-  /// Empty-home hint pointing at the + record button
+  /// Empty-home hint pointing at the round record button
   ///
   /// In en, this message translates to:
-  /// **'Tap + to start recording'**
+  /// **'Tap the record button to start recording'**
   String get tapPlusToStartRecording;
 
   /// Eyebrow label on a chat task card block
@@ -18540,7 +18552,7 @@ abstract class AppLocalizations {
   /// Action on a chat conversation link block
   ///
   /// In en, this message translates to:
-  /// **'Open conversation'**
+  /// **'Open Conversation'**
   String get chatBlockOpenConversation;
 
   /// Action on a chat memory link block
@@ -18584,6 +18596,1932 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Still working — this is taking longer than usual.'**
   String get processingTakingLonger;
+
+  /// First-run onboarding instruction: why Omi needs a short voice sample and the approximate duration.
+  ///
+  /// In en, this message translates to:
+  /// **'So Omi knows which voice is yours — talk for about 5 seconds about anything.'**
+  String get speechProfileEnrollmentPrompt;
+
+  /// Screen-reader label for the Home tab in the bottom navigation bar.
+  ///
+  /// In en, this message translates to:
+  /// **'Home'**
+  String get home;
+
+  /// Snackbar when toggling a memory's baseline flag fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to update baseline status'**
+  String get failedToUpdateBaselineStatus;
+
+  /// Accessible name for the conversation-detail star button when the conversation is already starred
+  ///
+  /// In en, this message translates to:
+  /// **'Unstar Conversation'**
+  String get unstarConversation;
+
+  /// Accessible name for the conversation-detail overflow menu
+  ///
+  /// In en, this message translates to:
+  /// **'More options'**
+  String get moreOptions;
+
+  /// Accessible name for the conversations calendar filter button
+  ///
+  /// In en, this message translates to:
+  /// **'Filter by date'**
+  String get filterByDate;
+
+  /// Accessible name for the memories graph button
+  ///
+  /// In en, this message translates to:
+  /// **'Memory graph'**
+  String get memoryGraph;
+
+  /// Guided voice introduction copy. English source fallback pending translation review.
+  ///
+  /// In en, this message translates to:
+  /// **'{part, select, title{Let Omi get to know you} intro{Finish four short sentences out loud. This helps Omi recognize your voice and remember what matters to you. Share only what you want.} hint{Say the whole sentence and finish it in your own words.} name{My name is ___, and I spend most of my time ___.} work{Right now, I am working on ___.} enjoy{Outside of that, I really enjoy ___.} food{My favorite food is ___.} remember{Something I would like help remembering is ___.} day{A good day for me includes ___.} another{Try another prompt} start{Start speaking} skipPrompt{Skip Question} captured{Voice sample captured} silence{Take your time. Speak toward your phone microphone.} audio{Audio detected} review{Here is what I heard} reviewHint{Edit or uncheck anything below. Personal details become memories; your goal is saved separately.} saveVoice{Save voice profile} savingVoice{Saving your voice profile…} savedVoice{Voice profile saved} voiceLater{Set up my voice later} keep{Save selected answers} without{Continue without saving answers} savedMemories{Your memories are saved} short{We need a little more audio. Add one more sentence; your earlier answers are safe.} addSample{Add another sentence} uploadError{Your voice profile could not be saved. Retry with the same recording, or set it up later.} memoryError{Some answers could not be saved. Saved items are safe; retry to save the rest.} transcriptionError{We could not transcribe that answer. Try again, keep speaking, or skip this question.} noMemories{You can tell Omi more about yourself whenever you like.} voiceOnlyHint{You can skip any personal prompt and talk about something else.} goalPrompt{Right now my number one goal is to ___.} savedGoal{Your goal is saved} goalError{Your goal could not be saved. Retry to save the same goal without duplicating it. Any memories already saved are safe.} goalLong{Shorten your goal to 500 characters or fewer, then try again.} voiceUnavailable{Voice setup is temporarily unavailable. Saved answers are safe. Retry, or continue and set up your voice later.} saveFinish{Save and finish} retryRemaining{Retry remaining} saveHint{Saves your voice profile and checked answers.} savedAll{Your introduction is saved.} continueSaved{Continue with what is saved} reviewAnswers{Review answers} originalGoal{Use original wording} savingAnswers{Saving your answers…} other{}}'**
+  String voiceIntroduction(String part);
+
+  /// Stored voice readiness only; no guarantee of a queued learning job.
+  ///
+  /// In en, this message translates to:
+  /// **'{status, select, ready{Voice ready for recognition} saved_sample_awaiting_embedding{Sample saved; voice processing still needed} not_learned{Voice not learned} other{Voice status unknown}}'**
+  String voiceRecognitionStatus(String status);
+
+  /// No description provided for @tagSpeakerIncludingLaterSpeech.
+  ///
+  /// In en, this message translates to:
+  /// **'Also tag later speech from this speaker'**
+  String get tagSpeakerIncludingLaterSpeech;
+
+  /// No description provided for @updateSummaryWithNewNames.
+  ///
+  /// In en, this message translates to:
+  /// **'Update summary with new names'**
+  String get updateSummaryWithNewNames;
+
+  /// Sync row status when the server's transcription job permanently rejected the recording's audio, so retrying cannot help.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio couldn\'t be read — can\'t be synced'**
+  String get syncStatusUnsupportedAudio;
+
+  /// Inline conversation-row hint when processing finished but the title pass produced nothing
+  ///
+  /// In en, this message translates to:
+  /// **'Title didn\'t generate'**
+  String get conversationTitleDidntGenerate;
+
+  /// Inline conversation-row action to rerun title and summary generation
+  ///
+  /// In en, this message translates to:
+  /// **'Reprocess'**
+  String get conversationReprocess;
+
+  /// Editable empty-chat starter; use capabilities/goal without personal data, activity/improve with saved data.
+  ///
+  /// In en, this message translates to:
+  /// **'{kind, select, capabilities{What can you do for me?} goal{Help me set a goal} activity{Summarize my recent activity} improve{How can I improve?} other{}}'**
+  String chatStarterPrompt(String kind);
+
+  /// Task due-date shortcut: seven days from today.
+  ///
+  /// In en, this message translates to:
+  /// **'Next week'**
+  String get nextWeek;
+
+  /// Clear the current search query.
+  ///
+  /// In en, this message translates to:
+  /// **'Clear Search'**
+  String get clearSearch;
+
+  /// Tooltip and sheet title for filtering conversations by who spoke (a person, not a loudspeaker)
+  ///
+  /// In en, this message translates to:
+  /// **'Filter by speaker'**
+  String get filterBySpeaker;
+
+  /// Button that postpones a prompt without dismissing it forever (iOS "Not Now")
+  ///
+  /// In en, this message translates to:
+  /// **'Not Now'**
+  String get notNow;
+
+  /// Destructive button that throws away unsaved edits
+  ///
+  /// In en, this message translates to:
+  /// **'Discard'**
+  String get discard;
+
+  /// Cancel button of the discard-changes dialog; returns to the editor
+  ///
+  /// In en, this message translates to:
+  /// **'Keep Editing'**
+  String get keepEditing;
+
+  /// Title of the dialog shown when leaving an editor with unsaved changes
+  ///
+  /// In en, this message translates to:
+  /// **'Discard Changes?'**
+  String get discardChangesTitle;
+
+  /// Message of the dialog shown when leaving an editor with unsaved changes
+  ///
+  /// In en, this message translates to:
+  /// **'Your unsaved changes will be lost.'**
+  String get discardChangesMessage;
+
+  /// Button label that pauses audio playback
+  ///
+  /// In en, this message translates to:
+  /// **'Pause'**
+  String get pause;
+
+  /// Title of the confirm dialog for deleting several selected conversations
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Delete 1 Conversation?} other{Delete {count} Conversations?}}'**
+  String deleteConversationsTitle(int count);
+
+  /// Message of the confirm dialog for deleting several selected conversations
+  ///
+  /// In en, this message translates to:
+  /// **'This also deletes their memories, tasks, and audio files.'**
+  String get deleteConversationsMessage;
+
+  /// Undo toast after deleting several conversations
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 conversation deleted} other{{count} conversations deleted}}'**
+  String conversationsDeletedCount(int count);
+
+  /// Confirmation after moving selected conversations into a folder
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Moved 1 conversation} other{Moved {count} conversations}}'**
+  String conversationsMovedCount(int count);
+
+  /// Error toast when moving selected conversations into a folder fails
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t move the conversations'**
+  String get failedToMoveConversations;
+
+  /// Row title for a discarded conversation, with its length (e.g. 'Discarded · 12s')
+  ///
+  /// In en, this message translates to:
+  /// **'Discarded · {duration}'**
+  String discardedConversationTitle(String duration);
+
+  /// Empty state message on the Conversations tab for a new user
+  ///
+  /// In en, this message translates to:
+  /// **'Conversations you record show up here. Tap the record button on Home to record your first one.'**
+  String get noConversationsHeroMessage;
+
+  /// Title of the page (and the button label) that shows conversations on a map
+  ///
+  /// In en, this message translates to:
+  /// **'Conversation Map'**
+  String get conversationMap;
+
+  /// A count of conversations (recap cards, map places)
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 conversation} other{{count} conversations}}'**
+  String conversationCount(int count);
+
+  /// A count of tasks (recap cards)
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 task} other{{count} tasks}}'**
+  String taskCount(int count);
+
+  /// Accessibility label of the playback control that jumps back 10 seconds
+  ///
+  /// In en, this message translates to:
+  /// **'Back 10 seconds'**
+  String get skipBack10Seconds;
+
+  /// Accessibility label of the playback control that jumps forward 10 seconds
+  ///
+  /// In en, this message translates to:
+  /// **'Forward 10 seconds'**
+  String get skipForward10Seconds;
+
+  /// Error toast when sharing a daily recap fails
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t share the recap'**
+  String get failedToShareRecap;
+
+  /// Live capture status: the speech endpoint is unreachable and audio is kept on the phone
+  ///
+  /// In en, this message translates to:
+  /// **'Offline, buffering'**
+  String get captureOfflineBuffering;
+
+  /// Live capture status with how many minutes audio has been kept on the phone
+  ///
+  /// In en, this message translates to:
+  /// **'Offline, buffering · {minutes} min'**
+  String captureOfflineBufferingFor(int minutes);
+
+  /// Title of the sheet that shows one memory read-only
+  ///
+  /// In en, this message translates to:
+  /// **'Memory'**
+  String get memoryDetailsTitle;
+
+  /// Title of the memory edit sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Edit Memory'**
+  String get editMemoryTitle;
+
+  /// Title of the new-memory sheet
+  ///
+  /// In en, this message translates to:
+  /// **'New Memory'**
+  String get newMemoryTitle;
+
+  /// Shown under a read-only (historical or superseded) memory
+  ///
+  /// In en, this message translates to:
+  /// **'This memory is kept as history and can\'t be edited.'**
+  String get memoryReadOnlyHint;
+
+  /// Accessibility label for the button that opens the conversation a memory came from
+  ///
+  /// In en, this message translates to:
+  /// **'Open conversation'**
+  String get openConversation;
+
+  /// Navigation title of the memory graph page
+  ///
+  /// In en, this message translates to:
+  /// **'Memory Graph'**
+  String get memoryGraphTitle;
+
+  /// Heading of the card listing memories Omi learned today
+  ///
+  /// In en, this message translates to:
+  /// **'Things I learned today'**
+  String get memoryReviewTitle;
+
+  /// Confirms a learned memory is correct (button)
+  ///
+  /// In en, this message translates to:
+  /// **'Right'**
+  String get memoryReviewRight;
+
+  /// Marks a learned memory as incorrect (button)
+  ///
+  /// In en, this message translates to:
+  /// **'Wrong'**
+  String get memoryReviewWrong;
+
+  /// Opens an inline editor to correct a learned memory (button)
+  ///
+  /// In en, this message translates to:
+  /// **'Fix'**
+  String get memoryReviewFix;
+
+  /// Status after the user confirms a learned memory
+  ///
+  /// In en, this message translates to:
+  /// **'Confirmed. I\'ll act on this.'**
+  String get memoryReviewConfirmed;
+
+  /// Status after the user marks a learned memory wrong
+  ///
+  /// In en, this message translates to:
+  /// **'Dropped. I\'ll avoid facts like this.'**
+  String get memoryReviewDropped;
+
+  /// Status after the user corrects a learned memory
+  ///
+  /// In en, this message translates to:
+  /// **'Updated.'**
+  String get memoryReviewUpdated;
+
+  /// Shown when a verdict or correction on a learned memory failed
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t save, try again'**
+  String get memoryReviewSaveFailed;
+
+  /// Menu action: nest a task one level under the task above it
+  ///
+  /// In en, this message translates to:
+  /// **'Indent'**
+  String get indentTask;
+
+  /// Menu action: move a nested task one level back out
+  ///
+  /// In en, this message translates to:
+  /// **'Outdent'**
+  String get outdentTask;
+
+  /// Undo toast after deleting a goal
+  ///
+  /// In en, this message translates to:
+  /// **'Goal deleted'**
+  String get goalDeleted;
+
+  /// Error when accepting shared tasks fails
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t accept these tasks. You may have already accepted this share.'**
+  String get sharedTasksAcceptFailed;
+
+  /// Pause playback of an audio sample (button label)
+  ///
+  /// In en, this message translates to:
+  /// **'Pause'**
+  String get pausePlayback;
+
+  /// Accessibility label for deleting a person's voice sample
+  ///
+  /// In en, this message translates to:
+  /// **'Delete sample'**
+  String get deleteSample;
+
+  /// Title of the confirmation before deleting a person
+  ///
+  /// In en, this message translates to:
+  /// **'Delete Person?'**
+  String get deletePersonTitle;
+
+  /// Accessibility label for the delete control on a person row
+  ///
+  /// In en, this message translates to:
+  /// **'Delete person'**
+  String get deletePersonLabel;
+
+  /// Empty state title on the People page
+  ///
+  /// In en, this message translates to:
+  /// **'No People Yet'**
+  String get noPeopleYet;
+
+  /// Title of the confirmation before deleting several tasks at once
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Delete 1 Task?} other{Delete {count} Tasks?}}'**
+  String deleteTasksTitle(int count);
+
+  /// Screen-reader label for the task count beside a section header
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 task} other{{count} tasks}}'**
+  String tasksCountLabel(int count);
+
+  /// Toast after accepting shared tasks
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Added 1 task to your list} other{Added {count} tasks to your list}}'**
+  String sharedTasksAdded(int count);
+
+  /// Button that accepts tasks someone shared
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{Add 1 Task} other{Add {count} Tasks}}'**
+  String sharedTasksAddButton(int count);
+
+  /// Title of the sheet showing tasks someone shared with the user
+  ///
+  /// In en, this message translates to:
+  /// **'{name} shared {count, plural, =1{1 task} other{{count} tasks}}'**
+  String sharedTasksTitle(String name, int count);
+
+  /// Caption on a task that was exported to another app, e.g. 'Exported to Todoist'
+  ///
+  /// In en, this message translates to:
+  /// **'Exported to {platform}'**
+  String exportedToPlatform(String platform);
+
+  /// A task's due date, e.g. 'Due Sep 23, 2026'
+  ///
+  /// In en, this message translates to:
+  /// **'Due {date}'**
+  String taskDueDate(String date);
+
+  /// Menu item and sheet title: link this conversation to a calendar event
+  ///
+  /// In en, this message translates to:
+  /// **'Link Event'**
+  String get linkEvent;
+
+  /// Empty state of the link-event sheet
+  ///
+  /// In en, this message translates to:
+  /// **'No calendar events found around this time.'**
+  String get noCalendarEventsNearby;
+
+  /// Badge on the calendar event that best matches the conversation time
+  ///
+  /// In en, this message translates to:
+  /// **'Suggested'**
+  String get suggestedEvent;
+
+  /// Action in the linked calendar event sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Open in Google Calendar'**
+  String get openInGoogleCalendar;
+
+  /// Action in the linked calendar event sheet: email the meeting attendees
+  ///
+  /// In en, this message translates to:
+  /// **'Share with Attendees'**
+  String get shareWithAttendees;
+
+  /// Action in the linked calendar event sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Unlink Calendar Event'**
+  String get unlinkCalendarEvent;
+
+  /// Email subject when sharing conversation notes with meeting attendees
+  ///
+  /// In en, this message translates to:
+  /// **'Notes: {title}'**
+  String meetingNotesSubject(String title);
+
+  /// Accessibility label of the up arrow in conversation search
+  ///
+  /// In en, this message translates to:
+  /// **'Previous result'**
+  String get previousResult;
+
+  /// Accessibility label of the down arrow in conversation search
+  ///
+  /// In en, this message translates to:
+  /// **'Next result'**
+  String get nextResult;
+
+  /// Accessibility label of the play button on a transcript line
+  ///
+  /// In en, this message translates to:
+  /// **'Play from here'**
+  String get playFromHere;
+
+  /// Title of the confirm shown before a private conversation is made shareable by link
+  ///
+  /// In en, this message translates to:
+  /// **'Share Conversation?'**
+  String get shareConversationQuestion;
+
+  /// Empty state message of a conversation's Tasks tab
+  ///
+  /// In en, this message translates to:
+  /// **'Tasks from this conversation will appear here.'**
+  String get conversationTasksEmptyMessage;
+
+  /// Placeholder row when every task of a conversation is done
+  ///
+  /// In en, this message translates to:
+  /// **'No pending tasks'**
+  String get noPendingTasks;
+
+  /// Accessibility label of the completed-count pill on a conversation's Tasks tab
+  ///
+  /// In en, this message translates to:
+  /// **'{count} completed'**
+  String nCompleted(int count);
+
+  /// Accessibility label of a speaker avatar/name in a transcript; opens the sheet to name the speaker
+  ///
+  /// In en, this message translates to:
+  /// **'Identify speaker'**
+  String get identifySpeaker;
+
+  /// No description provided for @couldNotLoadCheckout.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load the checkout page. Check your connection and try again.'**
+  String get couldNotLoadCheckout;
+
+  /// No description provided for @phoneFreeCallLimitReached.
+  ///
+  /// In en, this message translates to:
+  /// **'Monthly free call limit reached. It resets next month.'**
+  String get phoneFreeCallLimitReached;
+
+  /// No description provided for @couldNotLoadImportHistory.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load import history'**
+  String get couldNotLoadImportHistory;
+
+  /// No description provided for @phoneCallButton.
+  ///
+  /// In en, this message translates to:
+  /// **'Call'**
+  String get phoneCallButton;
+
+  /// No description provided for @searchContacts.
+  ///
+  /// In en, this message translates to:
+  /// **'Search contacts'**
+  String get searchContacts;
+
+  /// No description provided for @phoneContactsAccessTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Allow Contacts Access'**
+  String get phoneContactsAccessTitle;
+
+  /// No description provided for @phoneSelectCountryTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Select Country'**
+  String get phoneSelectCountryTitle;
+
+  /// No description provided for @phoneNoVerifiedNumbersTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'No Verified Numbers'**
+  String get phoneNoVerifiedNumbersTitle;
+
+  /// No description provided for @phoneNoVerifiedNumbersMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Verify your number to make calls through Omi.'**
+  String get phoneNoVerifiedNumbersMessage;
+
+  /// No description provided for @phoneDeleteNumberFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t delete this number'**
+  String get phoneDeleteNumberFailed;
+
+  /// Title of the confirmation before forgetting a paired device
+  ///
+  /// In en, this message translates to:
+  /// **'Forget Device?'**
+  String get forgetDeviceConfirmTitle;
+
+  /// Consequence of forgetting a paired device
+  ///
+  /// In en, this message translates to:
+  /// **'Omi will stop connecting to this device. To use it again, you\'ll have to pair it again.'**
+  String get forgetDeviceConfirmMessage;
+
+  /// Toast after the device was forgotten
+  ///
+  /// In en, this message translates to:
+  /// **'Device forgotten'**
+  String get deviceForgottenMessage;
+
+  /// Title of the confirmation before unpairing a Limitless device
+  ///
+  /// In en, this message translates to:
+  /// **'Unpair Device?'**
+  String get unpairDeviceConfirmTitle;
+
+  /// Confirm button: roll the firmware back to the stable version
+  ///
+  /// In en, this message translates to:
+  /// **'Roll Back'**
+  String get rollBack;
+
+  /// A data rate in kilobits per second
+  ///
+  /// In en, this message translates to:
+  /// **'{rate} kbps'**
+  String dataRateKbps(String rate);
+
+  /// Title and subject of the shared device diagnostics file
+  ///
+  /// In en, this message translates to:
+  /// **'Omi Device Diagnostics'**
+  String get diagnosticsExportTitle;
+
+  /// Badge on a device diagnostics event where the device failed to connect
+  ///
+  /// In en, this message translates to:
+  /// **'Failed'**
+  String get diagnosticsFailBadge;
+
+  /// Detail fragment in a disconnect event row: how long reconnecting took (joined with ' · ')
+  ///
+  /// In en, this message translates to:
+  /// **'reconnected in {duration}'**
+  String diagnosticsReconnectedIn(String duration);
+
+  /// Compact duration in days (chart axis)
+  ///
+  /// In en, this message translates to:
+  /// **'{count}d'**
+  String timeCompactDays(int count);
+
+  /// A compact duration in the past, e.g. '2h 5m ago'
+  ///
+  /// In en, this message translates to:
+  /// **'{duration} ago'**
+  String durationAgo(String duration);
+
+  /// Subtitle of the Custom STT language row when it uses the app's primary language
+  ///
+  /// In en, this message translates to:
+  /// **'Follows your primary language'**
+  String get sttLanguageFollowsPrimary;
+
+  /// No description provided for @creatorPayouts.
+  ///
+  /// In en, this message translates to:
+  /// **'Creator Payouts'**
+  String get creatorPayouts;
+
+  /// Button: choose a Custom STT language different from the primary language
+  ///
+  /// In en, this message translates to:
+  /// **'Override'**
+  String get sttLanguageOverride;
+
+  /// Button: drop the Custom STT language override
+  ///
+  /// In en, this message translates to:
+  /// **'Use Primary Language'**
+  String get sttUsePrimaryLanguage;
+
+  /// No description provided for @sttPrimaryLanguageUnsupported.
+  ///
+  /// In en, this message translates to:
+  /// **'{language} isn\'t supported by this provider, so it uses {fallback}.'**
+  String sttPrimaryLanguageUnsupported(String language, String fallback);
+
+  /// No description provided for @deviceRamBelowMinimum.
+  ///
+  /// In en, this message translates to:
+  /// **'Detected RAM: {ram} GB. Minimum recommended: 4 GB.'**
+  String deviceRamBelowMinimum(String ram);
+
+  /// No description provided for @olderIphoneModelDetected.
+  ///
+  /// In en, this message translates to:
+  /// **'Detected model: {model} (older than iPhone XS). On-device recognition may be slower.'**
+  String olderIphoneModelDetected(String model);
+
+  /// No description provided for @copyLogs.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy Logs'**
+  String get copyLogs;
+
+  /// No description provided for @openProviderDocs.
+  ///
+  /// In en, this message translates to:
+  /// **'Open Documentation'**
+  String get openProviderDocs;
+
+  /// No description provided for @getApiKey.
+  ///
+  /// In en, this message translates to:
+  /// **'Get API Key'**
+  String get getApiKey;
+
+  /// No description provided for @showApiKey.
+  ///
+  /// In en, this message translates to:
+  /// **'Show API Key'**
+  String get showApiKey;
+
+  /// No description provided for @hideApiKey.
+  ///
+  /// In en, this message translates to:
+  /// **'Hide API Key'**
+  String get hideApiKey;
+
+  /// No description provided for @removeVocabularyWord.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove {word}'**
+  String removeVocabularyWord(String word);
+
+  /// No description provided for @vocabularyWordCount.
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 word} other{{count} words}}'**
+  String vocabularyWordCount(int count);
+
+  /// No description provided for @phoneFreeCallsRemaining.
+  ///
+  /// In en, this message translates to:
+  /// **'{remaining} of {limit} free calls remaining this month'**
+  String phoneFreeCallsRemaining(int remaining, int limit);
+
+  /// No description provided for @phoneFreeCallsRemainingWithMax.
+  ///
+  /// In en, this message translates to:
+  /// **'{remaining} of {limit} free calls remaining this month · up to {minutes} min each'**
+  String phoneFreeCallsRemainingWithMax(int remaining, int limit, int minutes);
+
+  /// No description provided for @appCreators.
+  ///
+  /// In en, this message translates to:
+  /// **'App Creators'**
+  String get appCreators;
+
+  /// No description provided for @homeScreen.
+  ///
+  /// In en, this message translates to:
+  /// **'Home Screen'**
+  String get homeScreen;
+
+  /// No description provided for @phoneCalls.
+  ///
+  /// In en, this message translates to:
+  /// **'Phone Calls'**
+  String get phoneCalls;
+
+  /// No description provided for @vadGate.
+  ///
+  /// In en, this message translates to:
+  /// **'VAD Gate'**
+  String get vadGate;
+
+  /// No description provided for @vadGateDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Server-side voice gating to reduce speech-to-text costs'**
+  String get vadGateDescription;
+
+  /// No description provided for @flashCustomFirmware.
+  ///
+  /// In en, this message translates to:
+  /// **'Flash Custom Firmware'**
+  String get flashCustomFirmware;
+
+  /// No description provided for @flashCustomFirmwareDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Flash custom firmware builds'**
+  String get flashCustomFirmwareDescription;
+
+  /// No description provided for @selectFirmwareZip.
+  ///
+  /// In en, this message translates to:
+  /// **'Select firmware ZIP file'**
+  String get selectFirmwareZip;
+
+  /// No description provided for @customFirmwareWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Flashing custom firmware can brick your device. Make sure this is a valid Omi firmware build. Do not disconnect during the update.'**
+  String get customFirmwareWarning;
+
+  /// No description provided for @firmwareFlashed.
+  ///
+  /// In en, this message translates to:
+  /// **'Firmware flashed'**
+  String get firmwareFlashed;
+
+  /// No description provided for @deviceWillRestart.
+  ///
+  /// In en, this message translates to:
+  /// **'Your device will restart.'**
+  String get deviceWillRestart;
+
+  /// No description provided for @exportFailedTryAgain.
+  ///
+  /// In en, this message translates to:
+  /// **'Export failed. Please try again.'**
+  String get exportFailedTryAgain;
+
+  /// No description provided for @firmwareFlashTarget.
+  ///
+  /// In en, this message translates to:
+  /// **'Device: {deviceName}'**
+  String firmwareFlashTarget(String deviceName);
+
+  /// Cancel button of the dialog that confirms cancelling an app subscription
+  ///
+  /// In en, this message translates to:
+  /// **'Keep Subscription'**
+  String get keepSubscription;
+
+  /// Error shown in an in-app web page (referral, app home) that failed to load
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load this page. Check your connection and try again.'**
+  String get couldNotLoadPage;
+
+  /// No description provided for @leaveFlowStepOf.
+  ///
+  /// In en, this message translates to:
+  /// **'Step {current} of {total}'**
+  String leaveFlowStepOf(int current, int total);
+
+  /// Toast when a shared-tasks link cannot be opened
+  ///
+  /// In en, this message translates to:
+  /// **'These shared tasks weren\'t found, or the link has expired.'**
+  String get sharedTasksLinkExpired;
+
+  /// Sender name when a shared-tasks link has no sender name
+  ///
+  /// In en, this message translates to:
+  /// **'Someone'**
+  String get sharedTasksUnknownSender;
+
+  /// Button that shows the system permission prompt
+  ///
+  /// In en, this message translates to:
+  /// **'Allow'**
+  String get allow;
+
+  /// Status shown next to a permission the user has granted
+  ///
+  /// In en, this message translates to:
+  /// **'Allowed'**
+  String get permissionAllowed;
+
+  /// Shown under a permission the system will no longer ask for
+  ///
+  /// In en, this message translates to:
+  /// **'Turned off in Settings. Allow it there to use this.'**
+  String get permissionBlockedHint;
+
+  /// Consent step: signs out and returns to sign-in
+  ///
+  /// In en, this message translates to:
+  /// **'Use a Different Account'**
+  String get useDifferentAccount;
+
+  /// Screen-reader label of the onboarding progress dots
+  ///
+  /// In en, this message translates to:
+  /// **'Step {current} of {total}'**
+  String onboardingStepOf(int current, int total);
+
+  /// Completion screen at the end of first-run onboarding
+  ///
+  /// In en, this message translates to:
+  /// **'Keep Omi running in the background for 2 days and it will start giving you useful feedback.'**
+  String get onboardingCompleteMessage;
+
+  /// Shown when no device was found after scanning for a while
+  ///
+  /// In en, this message translates to:
+  /// **'Can\'t find your device? Make sure it\'s turned on and close to your phone, then scan again.'**
+  String get cantFindDeviceHint;
+
+  /// Button: restart the Bluetooth device search
+  ///
+  /// In en, this message translates to:
+  /// **'Scan Again'**
+  String get scanAgain;
+
+  /// Button: opens the connection guide
+  ///
+  /// In en, this message translates to:
+  /// **'How to Pair'**
+  String get howToPair;
+
+  /// Button that opens support
+  ///
+  /// In en, this message translates to:
+  /// **'Contact Support'**
+  String get contactSupportAction;
+
+  /// Tapping a saved device that is not advertising
+  ///
+  /// In en, this message translates to:
+  /// **'{deviceName} is offline. Press its button to wake it, then try again.'**
+  String deviceOfflineWakeHint(String deviceName);
+
+  /// Screen-reader label for a device battery level
+  ///
+  /// In en, this message translates to:
+  /// **'Battery {level}%'**
+  String batteryLevelSemantics(int level);
+
+  /// Card on the capture screen opening the OmiGlass update
+  ///
+  /// In en, this message translates to:
+  /// **'Update OmiGlass Firmware'**
+  String get updateOmiGlassFirmware;
+
+  /// Header device pill while a paired device reconnects
+  ///
+  /// In en, this message translates to:
+  /// **'Connecting…'**
+  String get deviceConnecting;
+
+  /// One-time hint after the first phone-mic recording
+  ///
+  /// In en, this message translates to:
+  /// **'Tip: tap the arrow on the record button to record a phone call.'**
+  String get recordOptionsTip;
+
+  /// Title of the firmware update failed state
+  ///
+  /// In en, this message translates to:
+  /// **'Update Failed'**
+  String get firmwareUpdateFailedTitle;
+
+  /// Firmware update failed while installing
+  ///
+  /// In en, this message translates to:
+  /// **'The update didn\'t finish. Your device is still on its current firmware and safe to use. Keep it charged and close to your phone, then try again.'**
+  String get firmwareUpdateFailedMessage;
+
+  /// Firmware download failed
+  ///
+  /// In en, this message translates to:
+  /// **'The update couldn\'t be downloaded, and your device wasn\'t changed. Check your internet connection, then try again.'**
+  String get firmwareDownloadFailedMessage;
+
+  /// Firmware update blocked by low battery
+  ///
+  /// In en, this message translates to:
+  /// **'Battery is at {level}%. Charge your device to at least 15% before updating.'**
+  String firmwareBatteryTooLow(int level);
+
+  /// Pre-flight sheet button that starts a firmware update
+  ///
+  /// In en, this message translates to:
+  /// **'Start Update'**
+  String get startUpdate;
+
+  /// OmiGlass OTA not supported on current firmware
+  ///
+  /// In en, this message translates to:
+  /// **'This firmware can\'t be updated over Wi-Fi.'**
+  String get otaNotSupported;
+
+  /// OmiGlass OTA could not reach the device
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t connect to {deviceName}. Keep it on and nearby, then try again.'**
+  String otaConnectFailed(String deviceName);
+
+  /// OmiGlass OTA has no download URL
+  ///
+  /// In en, this message translates to:
+  /// **'This update isn\'t available right now. Try again later.'**
+  String get otaUpdateUnavailable;
+
+  /// OmiGlass OTA starting
+  ///
+  /// In en, this message translates to:
+  /// **'Starting update…'**
+  String get otaStarting;
+
+  /// OmiGlass OTA failed to start
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t start the update. Check the Wi-Fi name and password, then try again.'**
+  String get otaStartFailed;
+
+  /// OmiGlass OTA installed, device rebooting
+  ///
+  /// In en, this message translates to:
+  /// **'{deviceName} is restarting with the new firmware.'**
+  String otaRebooting(String deviceName);
+
+  /// Toast after cancelling an OmiGlass update
+  ///
+  /// In en, this message translates to:
+  /// **'Update cancelled'**
+  String get otaUpdateCancelled;
+
+  /// Button that stops an OmiGlass update
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel Update'**
+  String get cancelUpdate;
+
+  /// Shown before an OmiGlass update starts
+  ///
+  /// In en, this message translates to:
+  /// **'Keep your device on and nearby during the update, and don\'t close the app.'**
+  String get otaKeepNearby;
+
+  /// OmiGlass OTA status
+  ///
+  /// In en, this message translates to:
+  /// **'Connecting to Wi-Fi…'**
+  String get otaWifiConnecting;
+
+  /// OmiGlass OTA status
+  ///
+  /// In en, this message translates to:
+  /// **'Connected to Wi-Fi'**
+  String get otaWifiConnected;
+
+  /// OmiGlass OTA status
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t join Wi-Fi. Check the network name and password.'**
+  String get otaWifiFailed;
+
+  /// OmiGlass OTA status
+  ///
+  /// In en, this message translates to:
+  /// **'The firmware download failed. Check the Wi-Fi connection and try again.'**
+  String get otaDownloadFailed;
+
+  /// OmiGlass OTA status
+  ///
+  /// In en, this message translates to:
+  /// **'Installation failed. Your device is still on its current firmware.'**
+  String get otaInstallFailed;
+
+  /// OmiGlass OTA success message
+  ///
+  /// In en, this message translates to:
+  /// **'{deviceName} is updated and will restart on its own.'**
+  String otaUpdatedMessage(String deviceName);
+
+  /// Tooltip on the password visibility toggle
+  ///
+  /// In en, this message translates to:
+  /// **'Show password'**
+  String get showPassword;
+
+  /// Tooltip on the password visibility toggle
+  ///
+  /// In en, this message translates to:
+  /// **'Hide password'**
+  String get hidePassword;
+
+  /// Toast when a link opens an app that was removed from the store
+  ///
+  /// In en, this message translates to:
+  /// **'This app is no longer available'**
+  String get appNotFoundOrRemoved;
+
+  /// Title of the screen shown when the app fails to launch
+  ///
+  /// In en, this message translates to:
+  /// **'Omi couldn’t start'**
+  String get startupFailedTitle;
+
+  /// Launch failure screen, runtime failure
+  ///
+  /// In en, this message translates to:
+  /// **'Something went wrong while Omi was starting. Check your connection, then try again.'**
+  String get startupFailedMessage;
+
+  /// Launch failure screen, rejected build configuration
+  ///
+  /// In en, this message translates to:
+  /// **'This build of Omi has a configuration problem. It is not a problem with your device. Contact support and include the details below.'**
+  String get startupFailedConfigMessage;
+
+  /// Dialog title when leaving the voice-sample recording mid-recording
+  ///
+  /// In en, this message translates to:
+  /// **'Discard Recording?'**
+  String get discardRecordingTitle;
+
+  /// Dialog message when leaving the voice-sample recording mid-recording
+  ///
+  /// In en, this message translates to:
+  /// **'Your voice sample isn’t saved yet. If you leave now, it will be discarded.'**
+  String get discardRecordingMessage;
+
+  /// Button that dismisses the discard-recording dialog and continues
+  ///
+  /// In en, this message translates to:
+  /// **'Keep Recording'**
+  String get keepRecording;
+
+  /// Button on an app row that opens the app's page (for apps that need payment or setup before they can be enabled)
+  ///
+  /// In en, this message translates to:
+  /// **'View'**
+  String get view;
+
+  /// Title of the consent dialog before enabling an app that works outside Omi
+  ///
+  /// In en, this message translates to:
+  /// **'Allow {appName} Access?'**
+  String appDataAccessTitle(String appName);
+
+  /// Body of the consent dialog before enabling an app that works outside Omi: what leaves Omi and where it goes
+  ///
+  /// In en, this message translates to:
+  /// **'{appName} will receive your conversations, memories and recordings on its developer\'s server. Omi isn\'t responsible for how that data is used there.'**
+  String appDataAccessMessage(String appName);
+
+  /// Undo toast after disabling an app
+  ///
+  /// In en, this message translates to:
+  /// **'{appName} disabled'**
+  String appDisabledNamed(String appName);
+
+  /// Number of ratings an app has, under its name in the store
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 rating} other{{count} ratings}}'**
+  String appRatingCount(int count);
+
+  /// Screen-reader label of an app screenshot in the store
+  ///
+  /// In en, this message translates to:
+  /// **'Screenshot {index} of {total}'**
+  String previewImageLabel(int index, int total);
+
+  /// Label of the chat button on an app's page
+  ///
+  /// In en, this message translates to:
+  /// **'Chat with {appName}'**
+  String chatWithApp(String appName);
+
+  /// Label of the gear button on an app's page that opens the app's own settings page
+  ///
+  /// In en, this message translates to:
+  /// **'{appName} settings'**
+  String appSettingsLabel(String appName);
+
+  /// Label of the button on an app's page that opens the owner's options (visibility, edit, delete)
+  ///
+  /// In en, this message translates to:
+  /// **'App options'**
+  String get appOptions;
+
+  /// Message of the dialog that confirms cancelling an app subscription
+  ///
+  /// In en, this message translates to:
+  /// **'You\'ll keep access until the end of your current billing period.'**
+  String get cancelSubscriptionKeepAccessMessage;
+
+  /// Screen-reader label and tooltip of the chat Send button
+  ///
+  /// In en, this message translates to:
+  /// **'Send message'**
+  String get chatSendMessage;
+
+  /// Screen-reader label and tooltip of the chat + button (photo, library, file)
+  ///
+  /// In en, this message translates to:
+  /// **'Add attachment'**
+  String get chatAddAttachment;
+
+  /// Screen-reader label of the X on a file picked for the next chat message
+  ///
+  /// In en, this message translates to:
+  /// **'Remove attachment'**
+  String get removeAttachment;
+
+  /// Screen-reader label of the X on the quoted text the next chat message asks about
+  ///
+  /// In en, this message translates to:
+  /// **'Remove quoted text'**
+  String get chatRemoveSelectedText;
+
+  /// Shown above the chat composer while the phone is offline; Send is disabled
+  ///
+  /// In en, this message translates to:
+  /// **'You\'re offline. Reconnect to send messages.'**
+  String get chatOfflineHint;
+
+  /// Shown in place of a chat reply that failed, next to Try Again
+  ///
+  /// In en, this message translates to:
+  /// **'Omi couldn\'t reply. Check your connection and try again.'**
+  String get chatReplyFailed;
+
+  /// Screen-reader label and tooltip of the control in the chat apps drawer that disables an app
+  ///
+  /// In en, this message translates to:
+  /// **'Disable {appName}'**
+  String disableAppNamed(String appName);
+
+  /// Title of the sheet that asks why a chat reply was rated down
+  ///
+  /// In en, this message translates to:
+  /// **'What Went Wrong?'**
+  String get whatWentWrong;
+
+  /// Label above the reasons in the chat feedback sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Select a reason'**
+  String get selectAReason;
+
+  /// Button that sends the chat feedback
+  ///
+  /// In en, this message translates to:
+  /// **'Submit'**
+  String get submit;
+
+  /// Reason a chat reply was rated down
+  ///
+  /// In en, this message translates to:
+  /// **'Too verbose'**
+  String get feedbackReasonTooVerbose;
+
+  /// Reason a chat reply was rated down
+  ///
+  /// In en, this message translates to:
+  /// **'Incorrect or made up'**
+  String get feedbackReasonIncorrect;
+
+  /// Reason a chat reply was rated down
+  ///
+  /// In en, this message translates to:
+  /// **'Not helpful or irrelevant'**
+  String get feedbackReasonNotHelpful;
+
+  /// Reason a chat reply was rated down
+  ///
+  /// In en, this message translates to:
+  /// **'Didn\'t follow instructions'**
+  String get feedbackReasonIgnoredInstructions;
+
+  /// Label above the comment field in the chat feedback sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Additional feedback (optional)'**
+  String get additionalFeedbackOptional;
+
+  /// Label of the thumbs-up under a chat reply (pairs with 'Not Helpful')
+  ///
+  /// In en, this message translates to:
+  /// **'Helpful'**
+  String get helpful;
+
+  /// Heading of a day summary message in chat; date is already formatted for the locale
+  ///
+  /// In en, this message translates to:
+  /// **'Day Summary · {date}'**
+  String daySummaryForDate(String date);
+
+  /// Suggested first question in a new chat
+  ///
+  /// In en, this message translates to:
+  /// **'What did I do yesterday?'**
+  String get chatStarterYesterday;
+
+  /// Suggested first question in a new chat
+  ///
+  /// In en, this message translates to:
+  /// **'What could I do differently today?'**
+  String get chatStarterDoDifferently;
+
+  /// Suggested first question in a new chat
+  ///
+  /// In en, this message translates to:
+  /// **'Can you teach me something new?'**
+  String get chatStarterTeachMe;
+
+  /// Shown while Omi prepares a chat reply, before it names a step
+  ///
+  /// In en, this message translates to:
+  /// **'Thinking'**
+  String get thinking;
+
+  /// Error in the What's New sheet when the changelog fails to load
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t load what\'s new'**
+  String get couldNotLoadWhatsNew;
+
+  /// Label of the field for an app's source repository when submitting an app
+  ///
+  /// In en, this message translates to:
+  /// **'GitHub Repository URL'**
+  String get githubRepositoryUrl;
+
+  /// Helper text under the GitHub repository field when submitting an app
+  ///
+  /// In en, this message translates to:
+  /// **'Link to your app\'s source code repository'**
+  String get githubRepositoryUrlHint;
+
+  /// Section title in app submission: which events start an external integration
+  ///
+  /// In en, this message translates to:
+  /// **'Trigger Events'**
+  String get triggerEvents;
+
+  /// Empty-state title of an app category with no apps
+  ///
+  /// In en, this message translates to:
+  /// **'No Apps in This Category Yet'**
+  String get noAppsInCategoryYet;
+
+  /// Section title in app submission: the permissions an app requests
+  ///
+  /// In en, this message translates to:
+  /// **'Scopes'**
+  String get scopes;
+
+  /// Title of the banner in the app store that opens the AI app generator
+  ///
+  /// In en, this message translates to:
+  /// **'Build an app with AI in one tap'**
+  String get aiAppGeneratorBannerTitle;
+
+  /// Tooltip of the button that reloads an MCP app's manifest
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh manifest'**
+  String get refreshManifest;
+
+  /// Heading of a version's page in the What's New sheet
+  ///
+  /// In en, this message translates to:
+  /// **'Version {version}'**
+  String versionLabel(String version);
+
+  /// Rounded number of people using an app, under its name on the app page
+  ///
+  /// In en, this message translates to:
+  /// **'{count}+ users'**
+  String appUsersCount(int count);
+
+  /// Eyebrow label of a chat card that shows something Omi discovered
+  ///
+  /// In en, this message translates to:
+  /// **'Discovery'**
+  String get discovery;
+
+  /// Button on a chat discovery card that expands it to its full text
+  ///
+  /// In en, this message translates to:
+  /// **'Show More'**
+  String get chatBlockShowMore;
+
+  /// Button on an expanded chat discovery card that collapses it back to its summary
+  ///
+  /// In en, this message translates to:
+  /// **'Show Less'**
+  String get chatBlockShowLess;
+
+  /// Placeholder of the trigger-event picker field when submitting an app with external integration
+  ///
+  /// In en, this message translates to:
+  /// **'Trigger Event'**
+  String get triggerEvent;
+
+  /// Label of the webhook URL field when submitting an app with external integration
+  ///
+  /// In en, this message translates to:
+  /// **'Webhook URL'**
+  String get webhookUrl;
+
+  /// Label of the app home URL field when submitting an app with external integration
+  ///
+  /// In en, this message translates to:
+  /// **'App Home URL'**
+  String get appHomeUrl;
+
+  /// Label of the authentication URL field when submitting an app with external integration
+  ///
+  /// In en, this message translates to:
+  /// **'Auth URL'**
+  String get authUrl;
+
+  /// Label of the setup-completed URL field when submitting an app with external integration
+  ///
+  /// In en, this message translates to:
+  /// **'Setup Completed URL'**
+  String get setupCompletedUrl;
+
+  /// Label of the chat tools manifest URL field when submitting an app with external integration
+  ///
+  /// In en, this message translates to:
+  /// **'Chat Tools Manifest URL'**
+  String get chatToolsManifestUrl;
+
+  /// Validation error under the webhook URL field when submitting an app
+  ///
+  /// In en, this message translates to:
+  /// **'Please enter a valid webhook URL'**
+  String get invalidWebhookUrlError;
+
+  /// Validation error when the GitHub repository field is empty while submitting an app
+  ///
+  /// In en, this message translates to:
+  /// **'GitHub repository URL is required'**
+  String get githubRepositoryUrlRequired;
+
+  /// Accessibility label and tooltip of the X on an app screenshot in the submit/update app form
+  ///
+  /// In en, this message translates to:
+  /// **'Remove screenshot'**
+  String get removeScreenshot;
+
+  /// Accessibility label and tooltip of the control that adds an app screenshot in the submit/update app form
+  ///
+  /// In en, this message translates to:
+  /// **'Add screenshot'**
+  String get addScreenshot;
+
+  /// Tooltip and accessibility label of the icon-only button that regenerates the app icon on the AI app generator preview card
+  ///
+  /// In en, this message translates to:
+  /// **'Regenerate icon'**
+  String get aiGenRegenerateIcon;
+
+  /// Number of apps listed on a category page in the app store, above the list
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 app} other{{count} apps}}'**
+  String categoryAppCount(int count);
+
+  /// Tooltip of the icon button that AI-generates the app description in the submit/update app forms
+  ///
+  /// In en, this message translates to:
+  /// **'Generate description'**
+  String get generateDescription;
+
+  /// Native file-picker dialog title when choosing an app icon or thumbnail image on web
+  ///
+  /// In en, this message translates to:
+  /// **'Select an Image File'**
+  String get selectImageFileTitle;
+
+  /// Native file-picker dialog title when choosing an app screenshot thumbnail on web
+  ///
+  /// In en, this message translates to:
+  /// **'Select a Thumbnail Image'**
+  String get selectThumbnailImageTitle;
+
+  /// Error toast when refreshing an app's manifest without a known app id
+  ///
+  /// In en, this message translates to:
+  /// **'App ID not found'**
+  String get appIdNotFoundError;
+
+  /// Success toast after manually refreshing an MCP app's manifest
+  ///
+  /// In en, this message translates to:
+  /// **'Manifest refreshed successfully'**
+  String get manifestRefreshedSuccess;
+
+  /// Error toast when manually refreshing an MCP app's manifest fails
+  ///
+  /// In en, this message translates to:
+  /// **'Failed to refresh manifest'**
+  String get manifestRefreshFailed;
+
+  /// Title of the sheet listing each device recording of one conversation
+  ///
+  /// In en, this message translates to:
+  /// **'Recordings of this conversation'**
+  String get captureRecordingsSheetTitle;
+
+  /// Button that splits one device recording out of a grouped conversation
+  ///
+  /// In en, this message translates to:
+  /// **'Separate…'**
+  String get captureRecordingSeparate;
+
+  /// Confirmation title before splitting a recording out of a grouped conversation
+  ///
+  /// In en, this message translates to:
+  /// **'Separate this recording?'**
+  String get captureRecordingSeparateTitle;
+
+  /// Confirmation body; recording is a device name and time range such as Desktop · 1:57 PM
+  ///
+  /// In en, this message translates to:
+  /// **'{recording} will show as its own conversation and won\'t be grouped with this event again.'**
+  String captureRecordingSeparateMessage(String recording);
+
+  /// Confirm button that splits a recording out of a grouped conversation
+  ///
+  /// In en, this message translates to:
+  /// **'Separate'**
+  String get captureRecordingSeparateConfirm;
+
+  /// Error after splitting a recording out of a grouped conversation failed
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t separate. Try again.'**
+  String get captureRecordingSeparateFailed;
+
+  /// Error when another device recording of the conversation could not be loaded
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t open this recording.'**
+  String get captureRecordingOpenFailed;
+
+  /// Accessibility label for the check mark on the recording currently open
+  ///
+  /// In en, this message translates to:
+  /// **'You\'re viewing this recording'**
+  String get captureRecordingViewing;
+
+  /// Accessibility label for the device icons on a conversation recorded by several devices
+  ///
+  /// In en, this message translates to:
+  /// **'Recorded by {devices}'**
+  String captureRecordedBy(String devices);
+
+  /// The Omi desktop app as the device that recorded a conversation
+  ///
+  /// In en, this message translates to:
+  /// **'Desktop'**
+  String get captureSourceDesktop;
+
+  /// Menu item that edits the conversation title
+  ///
+  /// In en, this message translates to:
+  /// **'Rename'**
+  String get renameConversation;
+
+  /// How many devices recorded this conversation, on the conversation header
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 recording} other{{count} recordings}}'**
+  String captureRecordingsCount(int count);
+
+  /// Name of the Omi wearable pendant as a capture source (which device recorded a conversation)
+  ///
+  /// In en, this message translates to:
+  /// **'Pendant'**
+  String get captureSourcePendant;
+
+  /// Developer Settings switch that shows developer actions in a conversation's menu
+  ///
+  /// In en, this message translates to:
+  /// **'Conversation Developer Tools'**
+  String get conversationDeveloperTools;
+
+  /// Subtitle of the Conversation Developer Tools switch
+  ///
+  /// In en, this message translates to:
+  /// **'Show Copy Conversation ID and Test Prompt in a conversation\'s menu'**
+  String get conversationDeveloperToolsDescription;
+
+  /// Conversation header people chip: the first named participant and how many others took part, e.g. 'David + 3 others'
+  ///
+  /// In en, this message translates to:
+  /// **'{name} + {count, plural, =1{1 other} few{{count} others} many{{count} others} other{{count} others}}'**
+  String participantsSummary(String name, int count);
+
+  /// Settings group: transcription, language, voice and capture settings
+  ///
+  /// In en, this message translates to:
+  /// **'Recording & Transcription'**
+  String get recordingAndTranscription;
+
+  /// Settings group: notifications, home screen and conversation display
+  ///
+  /// In en, this message translates to:
+  /// **'Notifications & Display'**
+  String get notificationsAndDisplay;
+
+  /// Settings group: feedback, help center, what's new and the app version
+  ///
+  /// In en, this message translates to:
+  /// **'Help & About'**
+  String get helpAndAbout;
+
+  /// Card title asking the user to label speakers from recent conversations
+  ///
+  /// In en, this message translates to:
+  /// **'Help Omi recognize voices'**
+  String get speakerTagPromptTitle;
+
+  /// Card subtitle for the speaker tagging prompt
+  ///
+  /// In en, this message translates to:
+  /// **'A quick check on voices from the last two days'**
+  String get speakerTagPromptSubtitle;
+
+  /// Question shown under a short audio clip of a speaker
+  ///
+  /// In en, this message translates to:
+  /// **'Is this you?'**
+  String get speakerTagPromptIsThisYou;
+
+  /// Question under an audio clip; {name} is a person's name
+  ///
+  /// In en, this message translates to:
+  /// **'Is this {name}?'**
+  String speakerTagPromptIsThisPerson(String name);
+
+  /// Question under an audio clip of an unknown speaker
+  ///
+  /// In en, this message translates to:
+  /// **'Who is this?'**
+  String get speakerTagPromptWhoIsThis;
+
+  /// Answer button: the clip is the user's own voice
+  ///
+  /// In en, this message translates to:
+  /// **'That\'s me'**
+  String get speakerTagPromptThatsMe;
+
+  /// Answer button: the clip is not the user's voice
+  ///
+  /// In en, this message translates to:
+  /// **'Not me'**
+  String get speakerTagPromptNotMe;
+
+  /// Answer button that opens a field to type a new person's name
+  ///
+  /// In en, this message translates to:
+  /// **'Someone new'**
+  String get speakerTagPromptSomeoneNew;
+
+  /// Answer button: the speaker is a stranger
+  ///
+  /// In en, this message translates to:
+  /// **'Someone I don\'t know'**
+  String get speakerTagPromptDontKnow;
+
+  /// Answer button to skip this question
+  ///
+  /// In en, this message translates to:
+  /// **'Not sure'**
+  String get speakerTagPromptNotSure;
+
+  /// Accessibility label for the play button of the audio clip
+  ///
+  /// In en, this message translates to:
+  /// **'Play clip'**
+  String get speakerTagPromptPlayClip;
+
+  /// Progress indicator, e.g. 2 of 4
+  ///
+  /// In en, this message translates to:
+  /// **'{current} of {total}'**
+  String speakerTagPromptProgress(int current, int total);
+
+  /// Label of an on/off switch to remember voices of people the user names
+  ///
+  /// In en, this message translates to:
+  /// **'Remember voices of people you name'**
+  String get speakerTagPromptSaveVoicesTitle;
+
+  /// Explanation under the remember-voices switch
+  ///
+  /// In en, this message translates to:
+  /// **'Omi keeps a short voice sample so it can recognize them next time. You can change this anytime in Settings.'**
+  String get speakerTagPromptSaveVoicesBody;
+
+  /// Shown after answering all speaker questions
+  ///
+  /// In en, this message translates to:
+  /// **'Thanks! Omi will get better at recognizing voices.'**
+  String get speakerTagPromptThanks;
+
+  /// Placeholder text in a name input field
+  ///
+  /// In en, this message translates to:
+  /// **'Their name'**
+  String get speakerTagPromptNameHint;
+
+  /// Error when the audio clip fails to load
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t play this clip'**
+  String get speakerTagPromptClipUnavailable;
+
+  /// Error when saving an answer fails
+  ///
+  /// In en, this message translates to:
+  /// **'Couldn\'t save that. Please try again.'**
+  String get speakerTagPromptAnswerFailed;
+
+  /// Settings switch label for periodic speaker tagging prompts
+  ///
+  /// In en, this message translates to:
+  /// **'Ask me to tag voices'**
+  String get voiceSettingsAskToTag;
+
+  /// Settings switch explanation for periodic speaker tagging prompts
+  ///
+  /// In en, this message translates to:
+  /// **'Once in a while, Omi asks who was speaking in your recent conversations'**
+  String get voiceSettingsAskToTagSubtitle;
+
+  /// Settings switch explanation for remembering voices of people the user names
+  ///
+  /// In en, this message translates to:
+  /// **'When you name someone, Omi keeps a short voice sample so it can recognize them next time'**
+  String get voiceSettingsSaveOthersSubtitle;
+
+  /// Hint for an intentionally empty field (e.g. OAuth client secret)
+  ///
+  /// In en, this message translates to:
+  /// **'Leave blank'**
+  String get leaveBlank;
+
+  /// OAuth connector setup instructions for the hosted MCP server
+  ///
+  /// In en, this message translates to:
+  /// **'On claude.ai, add a custom connector and paste the server URL. If Claude asks for an advanced OAuth Client ID, use the value below and leave the secret blank — never use your MCP API key as an OAuth secret.'**
+  String get mcpOAuthSetup;
+
+  /// Claude Code (CLI) integration section
+  ///
+  /// In en, this message translates to:
+  /// **'Claude Code'**
+  String get claudeCode;
+
+  /// Subtitle under the Claude Code section: add the snippet to ~/.claude.json
+  ///
+  /// In en, this message translates to:
+  /// **'Add to ~/.claude.json'**
+  String get addToClaudeCodeConfig;
+
+  /// Claude Desktop connector setup instructions for the hosted MCP server
+  ///
+  /// In en, this message translates to:
+  /// **'On Claude Desktop → Settings → Connectors, add a custom connector and paste the server URL. If Claude asks for an advanced OAuth Client ID, use the value below and leave the secret blank — never use your MCP API key as an OAuth secret.'**
+  String get claudeDesktopConnectorSetup;
+
+  /// Live capture status while the transcription service is down; audio keeps recording locally.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcriptions are unavailable, recording continues on device and will process later'**
+  String get transcriptionUnavailableRecordingContinues;
+
+  /// Queued recordings still waiting for transcription (pending) out of the session total, on the live-capture WAL indicator.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcriptions pending {pending}/{total}'**
+  String transcriptionsPendingFraction(int pending, int total);
+
+  /// Phone-local recordings still waiting to be uploaded for transcription, on the conversations list banner.
+  ///
+  /// In en, this message translates to:
+  /// **'Transcriptions pending {count}'**
+  String transcriptionsPendingCount(int count);
+
+  /// Capture source label when an Omi phone call is being recorded, on the live card (e.g. 'Call · Listening · 3:10'). A noun.
+  ///
+  /// In en, this message translates to:
+  /// **'Call'**
+  String get captureSourceCall;
+
+  /// The phone's microphone as a capture source: live page title ('Listening · Phone mic') and the first row of the 'Record with' sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'Phone mic'**
+  String get captureSourcePhoneMic;
+
+  /// Live page title: recording status followed by the capture source, e.g. 'Listening · Pendant'.
+  ///
+  /// In en, this message translates to:
+  /// **'{status} · {source}'**
+  String captureStatusWithSource(String status, String source);
+
+  /// Button that resumes a paused recording.
+  ///
+  /// In en, this message translates to:
+  /// **'Resume'**
+  String get resume;
+
+  /// Button that ends the live recording and processes the conversation.
+  ///
+  /// In en, this message translates to:
+  /// **'Finish'**
+  String get finish;
+
+  /// Small note on the live card while the phone records instead of the pendant.
+  ///
+  /// In en, this message translates to:
+  /// **'Pendant paused · resumes when you finish'**
+  String get pendantPausedResumesWhenYouFinish;
+
+  /// Sheet title shown when the user taps the phone record button while the pendant is recording.
+  ///
+  /// In en, this message translates to:
+  /// **'Your pendant is listening'**
+  String get pendantIsListeningTitle;
+
+  /// Explanation line under the 'Your pendant is listening' sheet title.
+  ///
+  /// In en, this message translates to:
+  /// **'Omi records from one source at a time.'**
+  String get oneSourceAtATime;
+
+  /// Option in the 'Your pendant is listening' sheet that switches recording to the phone microphone.
+  ///
+  /// In en, this message translates to:
+  /// **'Record with phone instead'**
+  String get recordWithPhoneInstead;
+
+  /// Subtitle of the 'Record with phone instead' option.
+  ///
+  /// In en, this message translates to:
+  /// **'Pendant pauses until you finish'**
+  String get pendantPausesUntilYouFinish;
+
+  /// Subtitle of the Phone call option in the 'Your pendant is listening' sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'Pendant pauses during the call'**
+  String get pendantPausesDuringCall;
+
+  /// Button that dismisses the 'Your pendant is listening' sheet and keeps the pendant recording.
+  ///
+  /// In en, this message translates to:
+  /// **'Keep using pendant'**
+  String get keepUsingPendant;
+
+  /// Title of the sheet listing ways to record (Phone mic, Phone call).
+  ///
+  /// In en, this message translates to:
+  /// **'Record with'**
+  String get recordWith;
+
+  /// Accessibility label of the small arrow badge on the record button that opens the 'Record with' sheet.
+  ///
+  /// In en, this message translates to:
+  /// **'More ways to record'**
+  String get moreWaysToRecord;
+
+  /// Accessibility hint on the live card during a call; tapping opens the call screen.
+  ///
+  /// In en, this message translates to:
+  /// **'Open call'**
+  String get openCall;
+
+  /// Persistent repair banner shown when a connected pendant's audio is not reaching the app; tapping opens device repair settings
+  ///
+  /// In en, this message translates to:
+  /// **'Pendant audio is not reaching the app — tap to repair'**
+  String get captureRecoveryBanner;
+
+  /// No description provided for @phoneRecordingBlockedByPendantBatch.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop Transcribe Later on your pendant before recording with your phone.'**
+  String get phoneRecordingBlockedByPendantBatch;
+
+  /// Home live capture card, line 1: live transcription is not running (server said it cannot); audio keeps recording. Must stay short (one line on a small phone).
+  ///
+  /// In en, this message translates to:
+  /// **'Not transcribing'**
+  String get captureNotTranscribing;
+
+  /// Home live capture card, line 2 after the timer (e.g. "0:14 · Audio saved, transcribes later"): recording continues on the phone and will be transcribed later.
+  ///
+  /// In en, this message translates to:
+  /// **'Audio saved, transcribes later'**
+  String get captureAudioSavedTranscribesLater;
+
+  /// Home live capture card, line 2 after the timer while the transcription connection is being restored: recording has not stopped.
+  ///
+  /// In en, this message translates to:
+  /// **'Still recording'**
+  String get captureStillRecording;
+
+  /// Home live capture card, line 2 after the timer when the OS or another app (a call, another audio app) took the microphone and capture is paused.
+  ///
+  /// In en, this message translates to:
+  /// **'Mic in use by another app'**
+  String get captureMicInUseElsewhere;
+
+  /// Details sheet opened from the Home live capture card when a call or another app took the microphone. Explains the pause and that it resumes by itself.
+  ///
+  /// In en, this message translates to:
+  /// **'A call or another app took the microphone, so Omi can\'t hear right now. Omi resumes on its own when the microphone is free. Everything recorded before this is safe.'**
+  String get captureMicInterruptedDetail;
+
+  /// Details sheet opened from the Home live capture card when the user's custom speech-to-text endpoint cannot be reached; audio is buffered on the phone.
+  ///
+  /// In en, this message translates to:
+  /// **'Your custom speech-to-text service can\'t be reached. Omi keeps your audio on this phone and sends it when the service is back. Nothing is lost.'**
+  String get captureCustomSttUnreachableDetail;
+
+  /// Home live capture card, line 1: the phone microphone recording is starting and audio is not flowing yet.
+  ///
+  /// In en, this message translates to:
+  /// **'Starting…'**
+  String get captureStarting;
+
+  /// Transcribe Later card, line 2 after the timer: recording paused because the phone is out of storage.
+  ///
+  /// In en, this message translates to:
+  /// **'Phone storage full'**
+  String get capturePhoneStorageFull;
+
+  /// Transcribe Later card for a pendant, line 2: the pendant's own storage is almost full.
+  ///
+  /// In en, this message translates to:
+  /// **'Storage almost full'**
+  String get captureStorageAlmostFull;
+
+  /// Details sheet from the Home live capture card when the pendant disconnected in the middle of a capture.
+  ///
+  /// In en, this message translates to:
+  /// **'Your pendant lost its connection to this phone. Omi reconnects on its own when the pendant is on and nearby. Everything recorded before this is safe.'**
+  String get capturePendantDisconnectedDetail;
+
+  /// Conversation header people chip when other voices spoke but could not be counted reliably, e.g. 'David + others'
+  ///
+  /// In en, this message translates to:
+  /// **'{name} + others'**
+  String participantsSummaryUncounted(String name);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

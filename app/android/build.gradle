@@ -24,6 +24,32 @@ subprojects {
     project.evaluationDependsOn(':app')
 }
 
+// flutter_foreground_task 10.0.0 loads preferences and builds its notification
+// before promotion. Its rejected background location start can also leave the
+// Android 14+ foreground-service deadline armed. Patch a native onCreate
+// promotion before those paths, plus the stop-path guard from round 1.
+// evaluationDependsOn(':app') has already evaluated that plugin, so
+// Project.afterEvaluate throws. projectsEvaluated still runs before compile.
+def foregroundTaskPatchScript = new File(rootProject.projectDir, '../scripts/patch_flutter_foreground_task.py')
+gradle.projectsEvaluated {
+    def sub = rootProject.subprojects.find { it.name == 'flutter_foreground_task' }
+    if (sub == null) {
+        return
+    }
+    def source = new File(sub.projectDir, 'src/main/kotlin/com/pravera/flutter_foreground_task/service/ForegroundService.kt')
+    if (!source.exists()) {
+        throw new GradleException("flutter_foreground_task ForegroundService.kt missing at ${source}")
+    }
+    def out = new StringBuffer()
+    def err = new StringBuffer()
+    def proc = ['python3', foregroundTaskPatchScript.absolutePath, source.absolutePath].execute(null, rootProject.projectDir)
+    proc.consumeProcessOutput(out, err)
+    proc.waitFor()
+    if (proc.exitValue() != 0) {
+        throw new GradleException("foreground-service patch failed: ${err}\n${out}")
+    }
+}
+
 
 tasks.register("clean", Delete) {
     delete rootProject.buildDir

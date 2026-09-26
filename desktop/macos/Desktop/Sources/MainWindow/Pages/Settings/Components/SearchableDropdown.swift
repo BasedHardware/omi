@@ -201,15 +201,7 @@ private struct SearchableDropdownPopover: View {
           }
 
         if !query.isEmpty {
-          Button {
-            query = ""
-          } label: {
-            Image(systemName: "xmark.circle.fill")
-              .scaledFont(size: OmiType.caption, weight: .medium)
-              .foregroundColor(Ink.secondary)
-          }
-          .buttonStyle(.plain)
-          .help("Clear search")
+          ClearFieldButton { query = "" }
         }
       }
       .padding(.horizontal, OmiSpacing.sm)

@@ -1,5 +1,6 @@
 import { omiApi } from './apiClient'
 import type { Memory } from '../hooks/useMemories'
+import type { MemoryReadView } from './memoriesCache'
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
@@ -18,13 +19,53 @@ async function waitInterruptible(ms: number, shouldStop?: () => boolean): Promis
 
 // A raw axios response, narrowed to just what the pager's onResponse hook reads
 // (headers) — avoids coupling this module to the full axios type surface.
-type MemoriesResponse = { data: unknown; headers?: Record<string, unknown> }
+export type MemoriesResponse = { data: unknown; headers?: Record<string, unknown> }
+
+export type FetchMemoriesOptions = {
+  /** Optional server-side temporal view. Omit for legacy/stable semantics. */
+  view?: MemoryReadView
+  /** Route used by the explicit history reader when the caller needs ledger rows. */
+  path?: '/v3/memories' | '/v3/memories/ledger-history'
+}
+
+export const MEMORY_BELIEF_ENABLED_HEADER = 'x-omi-memory-belief-enabled'
+export const MEMORY_NEXT_CURSOR_HEADER = 'x-omi-memory-next-cursor'
+export const MEMORY_LIST_TRUNCATED_HEADER = 'x-omi-list-truncated'
+export const MEMORY_TRUNCATED_MESSAGE =
+  'Memory list was truncated by the server read budget; result may be incomplete'
+
+function headerValue(
+  headers: Record<string, unknown> | undefined,
+  name: string
+): string | undefined {
+  if (!headers) return undefined
+  const wanted = name.toLowerCase()
+  const entry = Object.entries(headers).find(([key]) => key.toLowerCase() === wanted)?.[1]
+  return typeof entry === 'string' && entry.trim() ? entry.trim() : undefined
+}
+
+export function beliefCapabilityFromResponse(response: MemoriesResponse): boolean | null {
+  const value = headerValue(response.headers, MEMORY_BELIEF_ENABLED_HEADER)?.toLowerCase()
+  if (value === 'true') return true
+  if (value === 'false') return false
+  return null
+}
+
+export function nextMemoryCursor(response: MemoriesResponse): string | undefined {
+  return headerValue(response.headers, MEMORY_NEXT_CURSOR_HEADER)
+}
+
+export function listTruncatedFromResponse(response: MemoriesResponse): boolean {
+  return headerValue(response.headers, MEMORY_LIST_TRUNCATED_HEADER)?.toLowerCase() === 'true'
+}
 
 // Page through every memory. GET /v3/memories clamps `limit` to at most 500
 // (no first-page 5000 expansion — that caused prod GET 504s). Request the
 // server max page on every call and advance `offset` by items actually received.
-// Dedupes by id; stops on empty page or zero new ids.
+// Dedupes by id; stops on empty page or zero new ids; throws when the final
+// response was cut short by the server's read budget (X-Omi-List-Truncated).
 const MEMORIES_PAGE_LIMIT = 500
+const MAX_MEMORY_PAGES = 10_000
 //
 // `onResponse` fires for every raw page response so a caller (the Memories page)
 // can read capability headers off the first page — e.g.
@@ -33,15 +74,25 @@ const MEMORIES_PAGE_LIMIT = 500
 // memory": the display hook (useMemories) and the bulk export/purge paths all go
 // through it, so the pagination contract can never drift between them again.
 export async function fetchAllMemoriesPaged(
-  onResponse?: (res: MemoriesResponse) => void
+  onResponse?: (res: MemoriesResponse) => void,
+  options: FetchMemoriesOptions = {}
 ): Promise<Memory[]> {
   const byId = new Map<string, Memory>()
+  const path = options.path ?? '/v3/memories'
   let offset = 0
-  while (offset < 100_000) {
-    const r = await omiApi.get('/v3/memories', { params: { limit: MEMORIES_PAGE_LIMIT, offset } })
+  let cursor: string | undefined
+  let pageCount = 0
+  while (pageCount < MAX_MEMORY_PAGES) {
+    const params: Record<string, string | number> = { limit: MEMORIES_PAGE_LIMIT }
+    if (options.view && path === '/v3/memories') params.view = options.view
+    if (cursor) params.cursor = cursor
+    else params.offset = offset
+    const r = await omiApi.get(path, { params })
     onResponse?.(r)
+    const nextCursor = nextMemoryCursor(r)
+    const lastTruncated = listTruncatedFromResponse(r)
     const page = (Array.isArray(r.data) ? r.data : (r.data?.memories ?? [])) as Memory[]
-    if (page.length === 0) break
+    pageCount++
     let added = 0
     for (const m of page) {
       if (m.id && !byId.has(m.id)) {
@@ -49,15 +100,39 @@ export async function fetchAllMemoriesPaged(
         added++
       }
     }
-    if (added === 0) break
+    // A temporal view may filter an entire physical page. The server's cursor
+    // still advances in that case, so do not stop on an empty page while a
+    // continuation cursor is present.
+    if (nextCursor) {
+      if (nextCursor === cursor) {
+        // An unchanged cursor means the server cannot continue (budget spent);
+        // with the truncated flag set that must not masquerade as a complete list.
+        if (lastTruncated) throw new Error(MEMORY_TRUNCATED_MESSAGE)
+        break
+      }
+      cursor = nextCursor
+      continue
+    }
+    if (page.length === 0 || added === 0) {
+      // Only the LAST response's flag matters: in offset mode a truncated page
+      // still advances by rows received, so a later complete page recovers and
+      // the final empty page ends the walk cleanly.
+      if (lastTruncated) throw new Error(MEMORY_TRUNCATED_MESSAGE)
+      break
+    }
     offset += page.length
+  }
+  if (pageCount >= MAX_MEMORY_PAGES) {
+    throw new Error(
+      'Memory pagination exceeded the client safety bound; resume with a server cursor'
+    )
   }
   return [...byId.values()]
 }
 
 // Convenience wrapper for callers that only need the full list (export/purge).
-export function fetchAllMemories(): Promise<Memory[]> {
-  return fetchAllMemoriesPaged()
+export function fetchAllMemories(options?: FetchMemoriesOptions): Promise<Memory[]> {
+  return fetchAllMemoriesPaged(undefined, options)
 }
 
 // Cap aligned with the backend's MEMORIES_BATCH_MAX (backend/routers/memories.py)

@@ -359,11 +359,11 @@ def test_openai_embeddings_proxy_async_falls_back_on_byok_failure():
         byok_inst.aembed_query = AsyncMock(side_effect=_HTTPError('invalid_api_key', 401))
 
         with patch.object(_OpenAIEmbeddingsProxy, '_resolve', return_value=byok_inst), patch(
-            'utils.llm.clients.handle_llm_error'
+            'utils.llm.clients.handle_llm_error_async', new_callable=AsyncMock
         ) as mock_handle:
             result = asyncio.run(proxy.aembed_query('hello world'))
 
-        mock_handle.assert_called_once()
+        mock_handle.assert_awaited_once()
         assert mock_handle.call_args.kwargs.get('operation') == 'aembed_query'
         default.aembed_query.assert_awaited_once_with('hello world')
         assert result == [0.3, 0.4]

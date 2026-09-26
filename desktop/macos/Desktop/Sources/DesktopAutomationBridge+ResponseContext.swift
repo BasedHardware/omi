@@ -32,6 +32,7 @@ extension DesktopAutomationActionRegistry {
       return [
         "message_id": target.id,
         "models_used": target.metadata?.modelsUsed.joined(separator: ",") ?? "",
+        "provider_targets": target.metadata?.providerTargets.joined(separator: ",") ?? "",
       ]
     }
 

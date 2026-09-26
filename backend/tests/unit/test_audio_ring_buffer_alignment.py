@@ -58,3 +58,52 @@ def test_extract_with_even_start_offset_still_correct():
     samples = _decode(out)
     assert samples[0] == 1002  # byte 4 = sample index 2
     assert all(1000 <= s <= 1099 for s in samples), samples[:5]
+
+
+def _marker_pcm(marker: int, samples: int) -> bytes:
+    """PCM16 where every sample encodes (marker, index): byte-exact expectations."""
+    return b''.join(((marker << 8) | (i & 0xFF)).to_bytes(2, 'little') for i in range(samples))
+
+
+def test_extract_skips_wall_gap_after_client_stall():
+    """A >2 s arrival stall inside the buffer must not be read as audio.
+
+    write_positioned records per-chunk first-sample walls; extract used to
+    convert the whole wall delta into one byte offset, reading past the end of
+    the retained bytes (or wrapping the ring) instead of the post-stall audio.
+    """
+    sample_rate = 16000
+    buf = AudioRingBuffer(60.0, sample_rate)
+    before = _marker_pcm(1, sample_rate)  # 1 s ending at wall 101.0
+    buf.write_positioned(before, 100.0)
+    after = _marker_pcm(2, sample_rate)  # 1 s starting at wall 106.0 (5 s stall)
+    buf.write_positioned(after, 106.0)
+
+    # Window spans the stall: exactly the last 0.5 s of `before` and the first
+    # 0.5 s of `after`, with the 5 s gap skipped.
+    out = buf.extract(100.5, 106.5)
+    assert out == before[sample_rate // 2 * 2 :] + after[: sample_rate // 2 * 2]
+
+
+def test_extract_across_stall_with_ring_wraparound():
+    """Same stall shape, but the buffer wrapped: the span walk must still be exact."""
+    sample_rate = 16000
+    buf = AudioRingBuffer(2.0, sample_rate)  # exactly 2 s of bytes
+    first = _marker_pcm(3, sample_rate)
+    buf.write_positioned(first, 200.0)
+    second = _marker_pcm(4, sample_rate)
+    buf.write_positioned(second, 205.0)  # wraps the ring
+
+    out = buf.extract(200.5, 205.5)
+    assert out == first[sample_rate // 2 * 2 :] + second[: sample_rate // 2 * 2]
+
+
+def test_extract_before_first_span_and_past_last_span():
+    sample_rate = 16000
+    buf = AudioRingBuffer(10.0, sample_rate)
+    buf.write_positioned(_marker_pcm(5, sample_rate), 300.0)
+
+    assert buf.extract(298.0, 299.0) is None  # entirely before the retained audio
+    assert buf.extract(301.5, 302.5) is None  # entirely past it
+    # A window that only partially overlaps returns the overlap.
+    assert buf.extract(300.25, 300.75) == _marker_pcm(5, sample_rate)[8000:24000]

@@ -146,6 +146,16 @@ def _response_json(response: requests.Response):
 
 
 def _parse_categories(categories, category_cls: type, logger: logging.Logger) -> list:
+    """Parse a category filter, failing closed on any value this tool cannot use.
+
+    An unknown category used to be logged and dropped. Dropping every value of a
+    filter leaves an *empty* list, and both dispatchers only send the filter when
+    it is non-empty -- so "get my finance memories" (a conversation category, not
+    a memory one) requested the unfiltered list and the model reasoned over every
+    memory the user has, with nothing in the response to say the filter was gone.
+    That is the same silent-widening failure #13941 removed from the date filters
+    just below; categories now surface the same field-naming ValueError instead.
+    """
     if not isinstance(categories, list):
         raise ValueError(f"categories must be a list, got {type(categories)}")
     parsed = []
@@ -153,8 +163,22 @@ def _parse_categories(categories, category_cls: type, logger: logging.Logger) ->
         try:
             parsed.append(category_cls(category))
         except ValueError:
-            logger.warning(f"Could not parse category: {category}")
+            logger.warning(f"Rejecting unknown category: {category}")
+            valid = ", ".join(member.value for member in category_cls)
+            raise ValueError(f"Invalid category '{category}'. Expected one of: {valid}.") from None
     return parsed
+
+
+def _parse_date_only(value: str, field: str) -> datetime:
+    """Parse a YYYY-MM-DD date filter, naming the field when it is malformed.
+
+    A date filter that cannot be parsed must surface as an error to the model
+    instead of being silently dropped (which would return unfiltered results).
+    """
+    try:
+        return datetime.strptime(value, "%Y-%m-%d")
+    except ValueError:
+        raise ValueError(f"Invalid {field} '{value}'. Expected YYYY-MM-DD.") from None
 
 
 def get_memories(
@@ -233,16 +257,10 @@ def get_conversations(
 ) -> List:
     params = {"limit": limit, "offset": offset}
     if start_date:
-        try:
-            params["start_date"] = datetime.strptime(start_date, "%Y-%m-%d").isoformat()
-        except ValueError:
-            logger.warning(f"Could not parse start date: {start_date}")
+        params["start_date"] = _parse_date_only(start_date, "start_date").isoformat()
     if end_date:
-        try:
-            # Set to end of day (23:59:59) so the entire day is included
-            params["end_date"] = (datetime.strptime(end_date, "%Y-%m-%d") + timedelta(days=1) - timedelta(seconds=1)).isoformat()
-        except ValueError:
-            logger.warning(f"Could not parse end date: {end_date}")
+        # Set to end of day (23:59:59) so the entire day is included
+        params["end_date"] = (_parse_date_only(end_date, "end_date") + timedelta(days=1) - timedelta(seconds=1)).isoformat()
     if categories:
         params["categories"] = ",".join([c.value for c in categories])
 
@@ -273,9 +291,12 @@ def search_conversations(
 ) -> List:
     params = {"query": query, "limit": limit}
     if start_date:
-        params["start_date"] = start_date
+        # The backend's /v1/mcp/conversations/search parses YYYY-MM-DD and 400s
+        # on anything else; validate here so the error names the bad argument
+        # instead of surfacing as an opaque HTTP 400.
+        params["start_date"] = _parse_date_only(start_date, "start_date").strftime("%Y-%m-%d")
     if end_date:
-        params["end_date"] = end_date
+        params["end_date"] = _parse_date_only(end_date, "end_date").strftime("%Y-%m-%d")
 
     logger.info(f"Searching conversations with limit={limit}")
     response = requests.get(

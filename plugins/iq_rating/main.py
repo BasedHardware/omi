@@ -241,22 +241,24 @@ init_db()
 # ============== OPENAI NAME FILTERING ==============
 
 def filter_names_with_openai(names: List[str]) -> List[str]:
-    """Use OpenAI to filter out non-names from a list."""
+    """Use OpenAI to filter out non-names from a list with robust exception guards."""
     if not names:
         return []
     
     if not OPENAI_API_KEY:
         logger.warning("No OpenAI API key - names will not be AI-filtered")
-        return names
+        return [n for n in names if isinstance(n, str) and n.strip()]
     
-    try:
-        valid_names = []
-        batch_size = 50  # Process in batches
+    valid_names = []
+    batch_size = 50  # Process in batches
+
+    for i in range(0, len(names), batch_size):
+        batch = [n for n in names[i:i + batch_size] if isinstance(n, str) and n.strip()]
+        if not batch:
+            continue
+        names_str = ", ".join(batch)
         
-        for i in range(0, len(names), batch_size):
-            batch = names[i:i + batch_size]
-            names_str = ", ".join(batch)
-            
+        try:
             response = requests.post(
                 "https://api.openai.com/v1/chat/completions",
                 headers={
@@ -291,22 +293,30 @@ Return as a comma-separated list. If none are names, return 'NONE'."""
             )
             
             if response.status_code == 200:
-                result = response.json()
-                answer = result["choices"][0]["message"]["content"].strip()
+                result = response.json() if isinstance(response.json(), dict) else {}
+                choices = result.get("choices") if isinstance(result, dict) else None
+                if choices and isinstance(choices, list) and len(choices) > 0 and isinstance(choices[0], dict):
+                    message = choices[0].get("message")
+                    raw_content = message.get("content") if isinstance(message, dict) else ""
+                    answer = (raw_content or "").strip()
+                else:
+                    answer = ""
                 
-                if answer.upper() != "NONE":
-                    batch_valid = [n.strip() for n in answer.split(",") if n.strip()]
+                if answer and answer.upper() != "NONE":
+                    batch_valid = [n.strip() for n in answer.split(",") if n and n.strip()]
                     valid_names.extend(batch_valid)
+                elif not answer:
+                    logger.warning("Anomalous 200 with empty OpenAI response for batch; retaining batch")
+                    valid_names.extend(batch)
             else:
                 logger.error(f"OpenAI API error: {response.status_code}")
-                # On error, skip this batch
-        
-        logger.info(f"AI filtered {len(names)} -> {len(valid_names)} names")
-        return valid_names
-        
-    except Exception as e:
-        logger.error(f"Error filtering names with AI: {e}")
-        return names
+                valid_names.extend(batch)
+        except Exception as e:
+            logger.error(f"Error filtering names with AI: {e}")
+            valid_names.extend(batch)
+
+    logger.info(f"AI filtered {len(names)} -> {len(valid_names)} names")
+    return valid_names
 
 
 # ============== DATA FETCHING ==============
@@ -1014,7 +1024,9 @@ def calculate_iq_with_ai(people_dict: dict) -> dict:
     # Prepare batch for AI analysis
     people_to_analyze = []
     for name_lower, data in people_dict.items():
-        context = " | ".join(data.get("context_snippets", [])[:10])  # More snippets
+        raw_snippets = data.get("context_snippets", []) if isinstance(data, dict) else []
+        snippets_list = list(raw_snippets) if isinstance(raw_snippets, (list, tuple)) else []
+        context = " | ".join([str(s) for s in snippets_list[:10] if s is not None])  # More snippets
         if context:
             people_to_analyze.append({
                 "name": data["name"],
@@ -1077,31 +1089,52 @@ Return JSON: [{"name": "Chris", "iq": 85, "is_name": true}, ...]"""
             )
             
             if response.status_code == 200:
-                result = response.json()
-                answer = result["choices"][0]["message"]["content"].strip()
+                result = response.json() if isinstance(response.json(), dict) else {}
+                choices = result.get("choices") if isinstance(result, dict) else None
+                if choices and isinstance(choices, list) and len(choices) > 0 and isinstance(choices[0], dict):
+                    message = choices[0].get("message")
+                    raw_content = message.get("content") if isinstance(message, dict) else ""
+                    answer = (raw_content or "").strip()
+                else:
+                    answer = ""
                 
                 # Parse JSON from response
-                try:
-                    # Find JSON array in response
-                    import re
-                    json_match = re.search(r'\[.*\]', answer, re.DOTALL)
-                    if json_match:
-                        scores = json.loads(json_match.group())
-                        for score in scores:
-                            name = score.get("name", "").lower()
-                            iq = score.get("iq", 100)
-                            is_name = score.get("is_name", True)
-                            
-                            # Find matching person
-                            for p in batch:
-                                if p["name"].lower() == name or p["name_lower"] == name:
-                                    iq_scores[p["name_lower"]] = {
-                                        "iq": max(70, min(160, int(iq))),
-                                        "is_name": is_name
-                                    }
-                                    break
-                except Exception as e:
-                    logger.error(f"Error parsing AI response: {e}")
+                if answer:
+                    try:
+                        # Find JSON array in response
+                        import re
+                        json_match = re.search(r'\[.*\]', answer, re.DOTALL)
+                        if json_match:
+                            scores = json.loads(json_match.group())
+                            if isinstance(scores, list):
+                                for score in scores:
+                                    if not isinstance(score, dict):
+                                        logger.warning(f"Skipping non-dict score element in AI response: {type(score).__name__}")
+                                        continue
+                                    raw_name = score.get("name")
+                                    if not isinstance(raw_name, str) or not raw_name.strip():
+                                        continue
+                                    name = raw_name.strip().lower()
+
+                                    raw_iq = score.get("iq", 100)
+                                    try:
+                                        iq_val = int(raw_iq) if raw_iq is not None else 100
+                                    except (ValueError, TypeError):
+                                        iq_val = 100
+
+                                    raw_is_name = score.get("is_name", True)
+                                    is_name = bool(raw_is_name) if raw_is_name is not None else True
+
+                                    # Find matching person
+                                    for p in batch:
+                                        if p["name"].lower() == name or p["name_lower"] == name:
+                                            iq_scores[p["name_lower"]] = {
+                                                "iq": max(70, min(160, iq_val)),
+                                                "is_name": is_name
+                                            }
+                                            break
+                    except Exception as e:
+                        logger.error(f"Error parsing AI response: {e}")
             else:
                 logger.error(f"OpenAI API error: {response.status_code}")
                 

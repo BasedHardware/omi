@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from testing.import_isolation import AutoMockModule, load_module_fresh, stub_modules
-from utils.llm.model_config import UnknownLLMFeature
+from utils.llm.model_config import LUNA_MODEL, UnknownLLMFeature
 
 # ---------------------------------------------------------------------------
 # Isolated load of utils.llm.clients against in-memory langchain stubs.
@@ -348,7 +348,7 @@ class TestModelQosProfiles:
             'desktop_proactive_extraction',
         }
         expected_openai = {
-            **{feature: ('gpt-5.6-luna', 'openai') for feature in luna_features},
+            **{feature: (LUNA_MODEL, 'openai') for feature in luna_features},
             **{feature: ('gpt-5-nano', 'openai') for feature in nano_features},
         }
 
@@ -362,7 +362,7 @@ class TestModelQosProfiles:
         assert premium['onboarding'] == ('gemini-2.5-flash-lite', 'gemini')
         assert premium['app_integration'] == ('gemini-2.5-flash-lite', 'gemini')
         assert premium['trends'] == ('gemini-2.5-flash-lite', 'gemini')
-        assert premium['chat_agent'] == ('gpt-5.6-luna', 'openai')
+        assert premium['chat_agent'] == (LUNA_MODEL, 'openai')
         assert premium['web_search'] == ('sonar-pro', 'perplexity')
 
     def test_max_profile_model_variants(self):
@@ -370,7 +370,7 @@ class TestModelQosProfiles:
         max_prof = MODEL_QOS_PROFILES['max']
         distinct_models = {model for model, _provider in max_prof.values()}
         expected = {
-            'gpt-5.6-luna',
+            LUNA_MODEL,
             'gpt-5-nano',
             'gemini-2.5-flash-lite',
             'gemini-3-flash-preview',
@@ -407,11 +407,11 @@ class TestGetModel:
             get_model('totally_unknown_feature')
 
     def test_pinned_feature_ignores_profile(self):
-        assert get_model('fair_use') == 'gpt-5.6-luna'
+        assert get_model('fair_use') == LUNA_MODEL
 
     def test_chat_agent_returns_luna(self):
         model = get_model('chat_agent')
-        assert model == 'gpt-5.6-luna'
+        assert model == LUNA_MODEL
 
     def test_persona_chat_returns_model_string(self):
         model = get_model('persona_chat')
@@ -617,8 +617,10 @@ class TestCacheKeySafety:
     """Verify cache_key is only applied when the model supports it."""
 
     def test_cache_key_models_contains_expected(self):
-        assert supports_prompt_cache('gpt-5.6-luna')
-        assert not supports_cache_retention('gpt-5.6-luna')
+        assert supports_prompt_cache(LUNA_MODEL)
+        assert not supports_cache_retention(LUNA_MODEL)
+        assert supports_prompt_cache('gpt-5.6-sol')
+        assert not supports_cache_retention('gpt-5.6-sol')
         assert not supports_prompt_cache('claude-sonnet-4-6')
 
 
@@ -663,11 +665,11 @@ class TestPinnedFeatures:
     """Verify pinned features are immutable."""
 
     def test_fair_use_pinned_to_luna(self):
-        assert _PINNED_FEATURES['fair_use'] == ('gpt-5.6-luna', 'openai')
+        assert _PINNED_FEATURES['fair_use'] == (LUNA_MODEL, 'openai')
 
     def test_pinned_survives_profile_switch(self):
         # Even if profile doesn't list fair_use, it should resolve to pinned value
-        assert get_model('fair_use') == 'gpt-5.6-luna'
+        assert get_model('fair_use') == LUNA_MODEL
 
 
 class TestProviderClassification:
@@ -1095,7 +1097,7 @@ class TestBYOKProfile:
         bk = MODEL_QOS_PROFILES['byok']
         distinct = {model for model, _p in bk.values()}
         expected = {
-            'gpt-5.6-luna',
+            LUNA_MODEL,
             'gpt-5-nano',
             'gemini-2.5-flash-lite',
             'gemini-3-flash-preview',
@@ -1290,3 +1292,42 @@ class TestGeminiThinkingBudget:
 
         opts = get_route_options('chat', 'gemini-2.5-flash-lite', 'gemini')
         assert opts.get('thinking_budget') == 0
+
+
+def test_company_paid_profiles_and_pins_never_resolve_pro_or_image_gemini():
+    """SCA-481 fail-closed selection guard: Pro-text and image-output Gemini
+    shapes are PayGo-only SKUs and can never serve managed (company-paid)
+    extraction/proactivity/summarization traffic. BYOK may keep Pro."""
+    from utils.llm import model_config
+
+    # The shipped configuration must pass its own import-time guard.
+    model_config.validate_no_prohibited_company_paid_models(
+        model_config.MODEL_QOS_PROFILES, model_config._PINNED_FEATURES
+    )
+
+    bad_profiles = {
+        'premium': {'memories': ('gemini-3-pro-preview', 'gemini')},
+        'max': {},
+        'byok': {},
+    }
+    with pytest.raises(RuntimeError, match='SCA-481'):
+        model_config.validate_no_prohibited_company_paid_models(bad_profiles, {})
+
+    bad_profiles = {
+        'premium': {'chat_agent': ('gemini-3.1-flash-image', 'gemini')},
+        'max': {},
+        'byok': {},
+    }
+    with pytest.raises(RuntimeError, match='SCA-481'):
+        model_config.validate_no_prohibited_company_paid_models(bad_profiles, {})
+
+    with pytest.raises(RuntimeError, match='SCA-481'):
+        model_config.validate_no_prohibited_company_paid_models({}, {'fair_use': ('imagen-4.0-generate-001', 'gemini')})
+
+    # BYOK pays for what it asks: a Pro pin on the byok profile stays legal.
+    byok_pro = {
+        'premium': {},
+        'max': {},
+        'byok': {'persona_chat_premium': ('gemini-3-pro-preview', 'gemini')},
+    }
+    model_config.validate_no_prohibited_company_paid_models(byok_pro, {})

@@ -45,6 +45,7 @@ struct OmiMarkdown: View {
   /// banned SwiftUI selection: no `SelectionOverlay` is installed anywhere on
   /// this path, which is the whole distinction the boundary is drawing.
   let appKitProseSelection: Bool
+  let documentProse: Bool
   @Environment(\.fontScale) private var fontScale
 
   init(
@@ -52,7 +53,8 @@ struct OmiMarkdown: View {
     sender: ChatSender,
     citations: [ChatCitationReference] = [],
     onOpenCitation: ((ChatCitationReference) -> Void)? = nil,
-    appKitProseSelection: Bool = false
+    appKitProseSelection: Bool = false,
+    documentProse: Bool = false
   ) {
     let style: Style = sender == .user ? .user : .assistant
     self.text = Self.renderableText(text, style: style)
@@ -60,14 +62,16 @@ struct OmiMarkdown: View {
     self.citations = citations
     self.onOpenCitation = onOpenCitation
     self.appKitProseSelection = appKitProseSelection
+    self.documentProse = documentProse
   }
 
-  init(text: String, style: Style) {
+  init(text: String, style: Style, appKitProseSelection: Bool = false, documentProse: Bool = false) {
     self.text = Self.renderableText(text, style: style)
     self.style = style
     self.citations = []
     self.onOpenCitation = nil
-    self.appKitProseSelection = false
+    self.appKitProseSelection = appKitProseSelection
+    self.documentProse = documentProse
   }
 
   /// Assistant text may open with an Interject classification token; it is
@@ -79,9 +83,12 @@ struct OmiMarkdown: View {
 
   var body: some View {
     Group {
-      if citations.isEmpty && !appKitProseSelection {
-        OmiMarkdownContent(text: text, style: style, fontScale: fontScale)
-          .equatable()
+      if citations.isEmpty && onOpenCitation == nil {
+        OmiMarkdownContent(
+          text: text, style: style, fontScale: fontScale, appKitProseSelection: appKitProseSelection,
+          documentProse: documentProse
+        )
+        .equatable()
       } else {
         OmiMarkdownContent(
           text: text,
@@ -89,7 +96,7 @@ struct OmiMarkdown: View {
           fontScale: fontScale,
           citations: citations,
           onOpenCitation: onOpenCitation,
-          appKitProseSelection: appKitProseSelection)
+          appKitProseSelection: appKitProseSelection, documentProse: documentProse)
       }
     }
     .textSelection(.disabled)
@@ -106,7 +113,7 @@ struct OmiMarkdown: View {
 /// Keeps parent-only UI feedback (copy checkmarks, hover chrome, ratings) from
 /// rebuilding unchanged message content. Combined with the selection-free
 /// render boundary above, this prevents AppKit font invalidations from
-/// re-entering AttributeGraph while the transcript changes.
+/// re-entering AttributeGraph while the transcript changes. The AppKit prose path joins this island (citations opt out).
 struct OmiMarkdownContent: View, Equatable {
   let text: String
   let style: OmiMarkdown.Style
@@ -114,6 +121,7 @@ struct OmiMarkdownContent: View, Equatable {
   let citations: [ChatCitationReference]
   let onOpenCitation: ((ChatCitationReference) -> Void)?
   let appKitProseSelection: Bool
+  let documentProse: Bool
 
   init(
     text: String,
@@ -121,7 +129,8 @@ struct OmiMarkdownContent: View, Equatable {
     fontScale: CGFloat,
     citations: [ChatCitationReference] = [],
     onOpenCitation: ((ChatCitationReference) -> Void)? = nil,
-    appKitProseSelection: Bool = false
+    appKitProseSelection: Bool = false,
+    documentProse: Bool = false
   ) {
     self.text = text
     self.style = style
@@ -129,11 +138,13 @@ struct OmiMarkdownContent: View, Equatable {
     self.citations = citations
     self.onOpenCitation = onOpenCitation
     self.appKitProseSelection = appKitProseSelection
+    self.documentProse = documentProse
   }
 
   nonisolated static func == (lhs: Self, rhs: Self) -> Bool {
     lhs.text == rhs.text && lhs.style == rhs.style && lhs.fontScale == rhs.fontScale
       && lhs.citations == rhs.citations && lhs.appKitProseSelection == rhs.appKitProseSelection
+      && lhs.documentProse == rhs.documentProse
   }
 
   var body: some View {
@@ -184,7 +195,7 @@ struct OmiMarkdownContent: View, Equatable {
     let fontSize = round(14 * fontScale)
 
     Group {
-      if appKitProseSelection {
+      if appKitProseSelection || documentProse {
         // One text view per prose block: selection spans the whole block, and
         // the block is the whole message for all but tables and fenced code.
         // The block parses its own Markdown for AppKit; nothing of the SwiftUI
@@ -196,7 +207,8 @@ struct OmiMarkdownContent: View, Equatable {
           style: style,
           fontScale: fontScale,
           citations: citations,
-          onOpenCitation: onOpenCitation)
+          onOpenCitation: onOpenCitation,
+          documentProse: documentProse)
       } else if !citations.isEmpty {
         OmiMarkdownCitationContent(
           text: content,

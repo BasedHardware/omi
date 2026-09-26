@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -17,6 +18,47 @@ def _ordered(text: str, fragments: tuple[str, ...], *, workflow: str) -> list[st
     if locations != sorted(locations):
         return [f"{workflow}: release steps are not ordered as {fragments!r}"]
     return []
+
+
+_BROKEN_REUSE_EXTRACT = 'print(json.load(open(sys.argv[1], encoding="utf-8"))["reuse"])'
+_SHELL_SAFE_JSON_DUMPS_REUSE = 'json.dumps(json.load(open(sys.argv[1], encoding="utf-8"))["reuse"])'
+_REUSE_COMPARES_TO_JSON_TRUE = re.compile(
+    r'\[\[\s*(?:["\']?\$\{reuse\}|["\']?\$reuse["\']?)\s*==\s*["\']true["\']\s*\]\]',
+)
+_AGENT_VM_RESOLVER = "resolve_agent_vm_sha_release.py"
+
+
+def _agent_vm_resolver_step_contexts(text: str) -> list[str]:
+    """Return workflow step blocks that invoke the SHA-keyed Agent VM resolver."""
+    contexts: list[str] = []
+    start = 0
+    while True:
+        idx = text.find(_AGENT_VM_RESOLVER, start)
+        if idx < 0:
+            break
+        block_start = text.rfind("\n      - ", 0, idx)
+        if block_start < 0:
+            block_start = 0
+        block_end = text.find("\n      - ", idx)
+        if block_end < 0:
+            block_end = len(text)
+        contexts.append(text[block_start:block_end])
+        start = idx + len(_AGENT_VM_RESOLVER)
+    return contexts
+
+
+def _context_has_shell_safe_reuse_extract(context: str) -> bool:
+    if _SHELL_SAFE_JSON_DUMPS_REUSE in context and "reuse=" in context:
+        return True
+    if "reuse=" not in context:
+        return False
+    return bool(
+        re.search(
+            r'reuse\s*=\s*"\$\([^)]*workflow_json_field_for_shell\.py[^)]*\breuse\b',
+            context,
+            flags=re.DOTALL,
+        )
+    )
 
 
 def _step_block(text: str, name: str) -> str | None:
@@ -42,26 +84,27 @@ def _validate_production_python_runtime(text: str, *, workflow: str) -> list[str
         "Preflight production desktop secret resource names",
         'gcloud secrets describe "$secret"',
         "--format='none'",
-        "SERVICE_ACCOUNT_JSON",
-        "GOOGLE_APPLICATION_CREDENTIALS=/secrets/firebase/service-account.json",
+        "--service-account=desktop-backend-runtime@based-hardware.iam.gserviceaccount.com",
         "USE_VERTEX_AI=true",
         "GOOGLE_CLOUD_PROJECT=${{ vars.GCP_PROJECT_ID }}",
         "GCP_LOCATION=us-central1",
-        "/secrets/firebase/service-account.json=SERVICE_ACCOUNT_JSON:latest",
         "POSTHOG_PROJECT_API_KEY=POSTHOG_PROJECT_API_KEY:latest",
         "GEMINI_API_KEY=DESKTOP_GEMINI_API_KEY:latest",
         "FIREBASE_API_KEY=DESKTOP_FIREBASE_API_KEY:latest",
         "REDIS_DB_PASSWORD=DESKTOP_REDIS_DB_PASSWORD:latest",
         "REDIS_DB_HOST=DESKTOP_REDIS_DB_HOST:latest",
         "REDIS_DB_PORT=DESKTOP_REDIS_DB_PORT:latest",
-        "--remove-secrets=PINECONE_API_KEY,PINECONE_HOST",
+        "--remove-secrets=PINECONE_API_KEY,PINECONE_HOST,/secrets/firebase/service-account.json",
+        "--remove-env-vars=GOOGLE_APPLICATION_CREDENTIALS,",
     ):
         if fragment not in text:
             errors.append(f"{workflow}: missing Python production runtime contract {fragment!r}")
     for forbidden in (
         "Rust -> Python",
         "Rust → Python",
-        "--remove-env-vars=GOOGLE_APPLICATION_CREDENTIALS",
+        # Keyless since WS-B (2026-09-23): the nik-164 JSON key must never be mounted again.
+        "SERVICE_ACCOUNT_JSON:latest",
+        "GOOGLE_APPLICATION_CREDENTIALS=/secrets/firebase/service-account.json",
         f"context: {retired_desktop_context}",
         f"file: {retired_desktop_context}/Dockerfile",
         "GEMINI_API_KEY=GEMINI_API_KEY:latest",
@@ -181,6 +224,18 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
         if fragment not in text:
             errors.append(f"{workflow}: missing release boundary {fragment!r}")
 
+    for context in _agent_vm_resolver_step_contexts(text):
+        if _BROKEN_REUSE_EXTRACT in context:
+            errors.append(
+                f"{workflow}: Agent VM SHA reuse guard must not print a JSON boolean with Python repr "
+                '(use json.dumps or .github/scripts/workflow_json_field_for_shell.py)'
+            )
+        if _REUSE_COMPARES_TO_JSON_TRUE.search(context) and not _context_has_shell_safe_reuse_extract(context):
+            errors.append(
+                f"{workflow}: reuse branch compares to JSON true but no shell-safe reuse extraction is present "
+                "in the Agent VM resolver step"
+            )
+
     # Bound to the step, not to the file. attach_cloud_run_gmp_sidecar.py made
     # --expected-env-state required and only the backend caller was updated;
     # argparse exits before the attach runs, so both desktop deploy paths failed
@@ -222,7 +277,6 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
         ("Mint candidate probe identity",)
         if production
         else (
-            "Stage candidate probe signer",
             "Mint candidate probe identity",
         )
     )
@@ -284,19 +338,17 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
             "FIREBASE_AUTH_PROJECT_ID: based-hardware",
             "DEVELOPMENT_DESKTOP_BACKEND_URL: https://desktop-backend-dt5lrfkkoa-uc.a.run.app",
             'revision_suffix="${image_tag}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"',
-            "FIREBASE_AUTH_CREDENTIALS_PATH=/secrets/firebase/service-account.json",
+            "--service-account=dev-backend-runtime@based-hardware-dev.iam.gserviceaccount.com",
+            "--remove-secrets=/secrets/firebase/service-account.json",
             "FIREBASE_AUTH_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}",
             "FIREBASE_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}",
             "GOOGLE_CLOUD_PROJECT=${{ vars.GCP_PROJECT_ID }}",
             "USE_VERTEX_AI=true",
             "GCP_LOCATION=us-central1",
-            "/secrets/firebase/service-account.json=SERVICE_ACCOUNT_JSON:latest",
             "FIREBASE_API_KEY=FIREBASE_API_KEY:latest",
-            "${{ secrets.GCP_SERVICE_ACCOUNT }}",
-            'chmod 600 "$signer_file"',
-            "base64 --decode",
-            '--signer-credentials-file="$DESKTOP_BACKEND_PROBE_SIGNER_FILE"',
-            'rm -f "$DESKTOP_BACKEND_PROBE_SIGNER_FILE"',
+            "FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT: ${{ vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT }}",
+            '--signer-service-account "$FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT"',
+            'if [[ -z "${FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT:-}" ]]; then',
         ):
             if fragment not in text:
                 errors.append(f"{workflow}: missing development traffic guard {fragment!r}")
@@ -312,6 +364,15 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
         if "GCP_SERVICE_ACCOUNT:latest" in text or "GCP_SERVICE_ACCOUNT=GCP_SERVICE_ACCOUNT" in text:
             errors.append(
                 f"{workflow}: the Firebase probe signer must never become desktop-backend runtime configuration"
+            )
+        if "${{ secrets.GCP_SERVICE_ACCOUNT }}" in text:
+            # Phase C credential rotation: the development probe signs via IAM
+            # signJwt as vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT. A JSON
+            # key staged through this secret is exactly the material this
+            # policy exists to keep out of the runner.
+            errors.append(
+                f"{workflow}: development probe signing must use the named signer "
+                'vars.FIREBASE_PROBE_SIGNER_SERVICE_ACCOUNT, not the GCP_SERVICE_ACCOUNT key secret'
             )
         if "FIREBASE_AUTH_PROJECT_ID: based-hardware-dev" in text or "FIREBASE_PROJECT_ID=based-hardware-dev" in text:
             errors.append(f"{workflow}: development serving must retain the production Firebase project")
@@ -332,11 +393,16 @@ def validate_deploy_workflow(text: str, *, production: bool) -> list[str]:
                 # required runtime project binding.
                 if not any(line.strip() == env_var for line in block.splitlines()):
                     errors.append(f"{workflow}: {step} missing isolated development runtime env {env_var!r}")
-        if desktop_block is not None and not any(
-            line.strip() == "FIREBASE_AUTH_CREDENTIALS_PATH=/secrets/firebase/service-account.json"
-            for line in desktop_block.splitlines()
-        ):
-            errors.append(f"{workflow}: desktop candidate must isolate Firebase auth credentials from dev ADC")
+        if desktop_block is not None:
+            # Development runs keyless on its own runtime identity (WS-B, 2026-09-23): the
+            # production nik-164 JSON key must never be mounted into the dev candidate again.
+            block_lines = [line.strip() for line in desktop_block.splitlines()]
+            if "--service-account=dev-backend-runtime@based-hardware-dev.iam.gserviceaccount.com" not in block_lines:
+                errors.append(f"{workflow}: desktop candidate must run as the keyless dev-backend-runtime identity")
+            if any("SERVICE_ACCOUNT_JSON:" in line for line in block_lines) or any(
+                line.startswith("FIREBASE_AUTH_CREDENTIALS_PATH=") for line in block_lines
+            ):
+                errors.append(f"{workflow}: desktop candidate must not mount a SERVICE_ACCOUNT_JSON key")
         if desktop_block is not None:
             for env_var in ("USE_VERTEX_AI=true", "GCP_LOCATION=us-central1"):
                 if not any(line.strip() == env_var for line in desktop_block.splitlines()):

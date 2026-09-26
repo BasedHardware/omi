@@ -12,8 +12,10 @@ import pytest
 from fastapi import Response
 
 from llm_gateway.gateway.config_loader import load_gateway_config
+from models.users import PlanType
 from routers import desktop_proactivity
 from utils.observability import journeys
+from utils.llm.model_config import LUNA_MODEL
 from utils.subscription import (
     DESKTOP_ACCESS_TIER_ARCHITECT,
     DESKTOP_ACCESS_TIER_FREE,
@@ -39,6 +41,37 @@ def _stub_quota_lease(monkeypatch):
 
     monkeypatch.setattr(desktop_proactivity, '_renew_quota', renew)
     monkeypatch.setattr(desktop_proactivity, '_finalize_quota', finalize)
+
+
+@pytest.fixture(autouse=True)
+def _paid_plan_route_gate(monkeypatch):
+    # Existing route tests model a plan-admitted caller: the managed-compute
+    # gate answers architect/allow. Dedicated gate tests below override the
+    # decision per case; _proactive_completion_unobserved-driven tests never
+    # consult it (admission is a route-boundary concern, as on desktop_proxy).
+    monkeypatch.setattr(
+        desktop_proactivity,
+        'authorize_managed_compute',
+        lambda uid, feature, funding_owner: desktop_proactivity.Decision(
+            allowed=True,
+            reason='plan_paid',
+            feature=feature,
+            funding_owner=funding_owner,
+            plan=PlanType.architect,
+            plan_resolved=True,
+        ),
+    )
+
+
+def _gate_decision(*, allowed: bool, reason: str, plan=PlanType.basic):
+    return desktop_proactivity.Decision(
+        allowed=allowed,
+        reason=reason,
+        feature='desktop_proactive_extraction',
+        funding_owner='omi',
+        plan=plan,
+        plan_resolved=plan is not None,
+    )
 
 
 def request(
@@ -346,7 +379,7 @@ async def test_completion_success_attaches_quota_headers(monkeypatch):
                 200,
                 request=httpx.Request("POST", url),
                 json={
-                    "model": "gpt-5.6-luna",
+                    "model": LUNA_MODEL,
                     "choices": [{"message": {"content": '{"summary":"ok"}'}}],
                     "usage": {"prompt_tokens": 8},
                 },
@@ -372,7 +405,7 @@ async def test_completion_success_attaches_quota_headers(monkeypatch):
 
     response = Response()
     result = await desktop_proactivity.proactive_completion(request(), response, uid="user-1")
-    assert result.provider_model == "gpt-5.6-luna"
+    assert result.provider_model == LUNA_MODEL
     assert response.headers["X-Proactive-Quota-Limit"] == "200"
     assert response.headers["X-Proactive-Quota-Remaining"] == "12"
     assert response.headers["X-Proactive-Quota-Reset"] == "3600"
@@ -1026,7 +1059,7 @@ def test_dev_direct_provider_fallback_is_scoped_to_proactivity(monkeypatch):
     reasoning_provider = desktop_proactivity._proactive_provider_request(
         request("proactive_reasoning"), "user-1", "request-2"
     )
-    assert reasoning_provider.payload["model"] == "gpt-5.6-luna"
+    assert reasoning_provider.payload["model"] == LUNA_MODEL
     assert reasoning_provider.payload["reasoning_effort"] == "low"
 
 
@@ -1434,7 +1467,7 @@ async def test_facade_adds_provenance_and_cache_envelope(monkeypatch):
                 200,
                 request=httpx.Request("POST", url),
                 json={
-                    "model": "gpt-5.6-luna-2026-08-01",
+                    "model": f"{LUNA_MODEL}-2026-08-01",
                     "choices": [{"message": {"content": '{"summary":"ok"}'}}],
                     "usage": {
                         "prompt_tokens": 1200,
@@ -1472,7 +1505,7 @@ async def test_facade_adds_provenance_and_cache_envelope(monkeypatch):
     assert seen["json"]["max_completion_tokens"] == 2400
     assert seen["headers"]["X-Omi-User-Uid"] == "user-1"
     assert result.lane == "omi:auto:desktop-proactive-reasoning"
-    assert result.provider_model == "gpt-5.6-luna-2026-08-01"
+    assert result.provider_model == f"{LUNA_MODEL}-2026-08-01"
     assert result.usage.cached_tokens == 1024
     assert result.cache_write is False
     assert result.fallback_class == "none"
@@ -1526,7 +1559,7 @@ async def test_truncated_reasoning_retries_once_without_extra_quota(monkeypatch)
                 {"choices": [{"finish_reason": "length", "message": {"content": '{"summary":'}}]}
                 if len(calls) == 1
                 else {
-                    "model": "gpt-5.6-luna",
+                    "model": LUNA_MODEL,
                     "choices": [{"finish_reason": "stop", "message": {"content": '{"summary":"ok"}'}}],
                 }
             )
@@ -1626,7 +1659,7 @@ async def test_complete_invalid_json_returns_422_without_retry(monkeypatch):
                 200,
                 request=httpx.Request("POST", url),
                 json={
-                    "model": "gpt-5.6-luna",
+                    "model": LUNA_MODEL,
                     "choices": [{"finish_reason": "stop", "message": {"content": '{"summary":3}'}}],
                 },
             )
@@ -1679,7 +1712,7 @@ def _capture_proactivity_journeys(monkeypatch):
     monkeypatch.setattr(
         journeys,
         'record_client_journey_terminal',
-        lambda journey, client_kind, outcome, _elapsed, *, issue_class=None: terminal.append(
+        lambda journey, client_kind, outcome, _elapsed, *, issue_class=None, app_build='unknown': terminal.append(
             (journey, client_kind, outcome, issue_class)
         ),
     )
@@ -1733,7 +1766,7 @@ async def test_desktop_proactivity_journey_rejects_post_200_invalid_structured_o
                 200,
                 request=httpx.Request('POST', url),
                 json={
-                    'model': 'gpt-5.6-luna',
+                    'model': LUNA_MODEL,
                     'choices': [{'finish_reason': 'stop', 'message': {'content': '{"summary":3}'}}],
                 },
             )
@@ -1806,4 +1839,176 @@ async def test_legacy_clients_are_not_gated_by_jit_rollout(monkeypatch):
     envelope = await desktop_proactivity._proactive_completion_unobserved(request(), Response(), uid='user-1')
 
     assert provider_calls, 'provider must be reached without any JIT rollout consultation'
+    assert envelope.operation.value == 'proactive_extraction'
+
+
+# --- S14 proactivity half: route-level managed-compute plan gate ----------------
+
+
+@pytest.fixture
+def basic_plan_proactivity_gate_on(monkeypatch):
+    monkeypatch.setenv('BASIC_PLAN_GATE_PROACTIVITY_ENABLED', 'true')
+
+
+@pytest.mark.usefixtures('basic_plan_proactivity_gate_on')
+@pytest.mark.asyncio
+async def test_proactive_completion_rejects_basic_before_quota_or_provider(monkeypatch):
+    """Route-level fail-closed gate: basic never reaches a paid provider.
+
+    red-proof: drop the route's ``await _enforce_proactive_plan_gate(...)`` and
+    this fails — the quota spy then runs and the provider spy is reached.
+    """
+    touched = []
+
+    async def quota(*_args, **_kwargs):
+        touched.append('quota')
+        return desktop_proactivity.ProactiveQuotaState(limit=10, remaining=9, reset_seconds=60, reservation_token='tok')
+
+    async def provider(*_args, **_kwargs):
+        touched.append('provider')
+        raise AssertionError('provider must not run for a plan-gated basic user')
+
+    monkeypatch.setattr(
+        desktop_proactivity,
+        'authorize_managed_compute',
+        lambda *_args, **_kwargs: _gate_decision(allowed=False, reason='basic_not_entitled'),
+    )
+    monkeypatch.setattr(desktop_proactivity, '_consume_quota', quota)
+    monkeypatch.setattr(desktop_proactivity, '_post_provider_completion', provider)
+
+    with pytest.raises(desktop_proactivity.HTTPException) as error:
+        await desktop_proactivity.proactive_completion(request(), Response(), uid='basic-uid')
+
+    assert error.value.status_code == 402
+    assert error.value.detail == {
+        'error': 'plan_gated',
+        'plan_type': 'basic',
+        'reason': 'basic_not_entitled',
+    }
+    assert touched == []
+
+
+@pytest.mark.usefixtures('basic_plan_proactivity_gate_on')
+@pytest.mark.asyncio
+async def test_proactive_completion_rejects_basic_reasoning_on_its_own_lane(monkeypatch):
+    seen = {}
+
+    def authorize(uid, feature, funding_owner):
+        seen['feature'] = feature
+        seen['funding_owner'] = funding_owner
+        return _gate_decision(allowed=False, reason='basic_not_entitled')
+
+    async def quota(*_args, **_kwargs):
+        raise AssertionError('quota must not run for a plan-gated basic user')
+
+    monkeypatch.setattr(desktop_proactivity, 'authorize_managed_compute', authorize)
+    monkeypatch.setattr(desktop_proactivity, '_consume_quota', quota)
+
+    with pytest.raises(desktop_proactivity.HTTPException) as error:
+        await desktop_proactivity.proactive_completion(
+            request(operation='proactive_reasoning'), Response(), uid='basic-uid'
+        )
+
+    assert error.value.status_code == 402
+    assert seen['feature'] == 'desktop_proactive_reasoning'
+    assert seen['funding_owner'] == 'omi'
+
+
+@pytest.mark.usefixtures('basic_plan_proactivity_gate_on')
+@pytest.mark.asyncio
+async def test_proactive_completion_extraction_gate_uses_the_extraction_lane_feature(monkeypatch):
+    seen = {}
+
+    monkeypatch.setattr(
+        desktop_proactivity,
+        'authorize_managed_compute',
+        lambda uid, feature, funding_owner: seen.update(feature=feature)
+        or _gate_decision(allowed=False, reason='basic_not_entitled'),
+    )
+
+    with pytest.raises(desktop_proactivity.HTTPException):
+        await desktop_proactivity.proactive_completion(request(), Response(), uid='basic-uid')
+
+    assert seen['feature'] == 'desktop_proactive_extraction'
+
+
+@pytest.mark.usefixtures('basic_plan_proactivity_gate_on')
+@pytest.mark.asyncio
+async def test_proactive_completion_maps_authorization_outage_to_503(monkeypatch):
+    monkeypatch.setattr(
+        desktop_proactivity,
+        'authorize_managed_compute',
+        lambda *_args, **_kwargs: _gate_decision(allowed=False, reason='authorization_unavailable', plan=None),
+    )
+
+    with pytest.raises(desktop_proactivity.HTTPException) as error:
+        await desktop_proactivity.proactive_completion(request(), Response(), uid='blip-uid')
+
+    assert error.value.status_code == 503
+
+
+@pytest.mark.usefixtures('basic_plan_proactivity_gate_on')
+@pytest.mark.asyncio
+async def test_proactive_completion_paid_decision_reaches_the_provider(monkeypatch):
+    provider_calls = []
+
+    async def quota(*_args, **_kwargs):
+        return desktop_proactivity.ProactiveQuotaState(limit=10, remaining=9, reset_seconds=60, reservation_token='tok')
+
+    async def provider(provider_request, *, uid, operation, reservation_token, max_completion_tokens=None):
+        provider_calls.append(operation.value)
+        return {
+            'choices': [{'message': {'content': '{"summary": ""}'}}],
+            'usage': {'prompt_tokens': 1, 'completion_tokens': 1},
+        }
+
+    monkeypatch.setattr(
+        desktop_proactivity,
+        'authorize_managed_compute',
+        lambda *_args, **_kwargs: _gate_decision(allowed=True, reason='plan_paid'),
+    )
+    monkeypatch.setattr(desktop_proactivity, '_consume_quota', quota)
+    monkeypatch.setattr(desktop_proactivity, '_post_provider_completion', provider)
+    monkeypatch.setattr(desktop_proactivity, 'llm_stub_enabled', lambda: False)
+    monkeypatch.setenv('OMI_LLM_GATEWAY_URL', 'http://gateway')
+    monkeypatch.setattr(desktop_proactivity, '_validate_gateway_output', lambda *_a, **_k: None)
+
+    envelope = await desktop_proactivity.proactive_completion(request(), Response(), uid='paid-uid')
+
+    assert provider_calls == ['proactive_extraction']
+    assert envelope.operation.value == 'proactive_extraction'
+
+
+@pytest.mark.asyncio
+async def test_proactive_completion_switch_off_skips_authorize_and_reaches_the_provider(monkeypatch):
+    """Unset / not-true: byte-identical to main before #14165 for this surface."""
+    auth_calls = []
+    provider_calls = []
+
+    def authorize(*_args, **_kwargs):
+        auth_calls.append(True)
+        return _gate_decision(allowed=False, reason='basic_not_entitled')
+
+    async def quota(*_args, **_kwargs):
+        return desktop_proactivity.ProactiveQuotaState(limit=10, remaining=9, reset_seconds=60, reservation_token='tok')
+
+    async def provider(provider_request, *, uid, operation, reservation_token, max_completion_tokens=None):
+        provider_calls.append(operation.value)
+        return {
+            'choices': [{'message': {'content': '{"summary": ""}'}}],
+            'usage': {'prompt_tokens': 1, 'completion_tokens': 1},
+        }
+
+    monkeypatch.delenv('BASIC_PLAN_GATE_PROACTIVITY_ENABLED', raising=False)
+    monkeypatch.setattr(desktop_proactivity, 'authorize_managed_compute', authorize)
+    monkeypatch.setattr(desktop_proactivity, '_consume_quota', quota)
+    monkeypatch.setattr(desktop_proactivity, '_post_provider_completion', provider)
+    monkeypatch.setattr(desktop_proactivity, 'llm_stub_enabled', lambda: False)
+    monkeypatch.setenv('OMI_LLM_GATEWAY_URL', 'http://gateway')
+    monkeypatch.setattr(desktop_proactivity, '_validate_gateway_output', lambda *_a, **_k: None)
+
+    envelope = await desktop_proactivity.proactive_completion(request(), Response(), uid='basic-uid')
+
+    assert auth_calls == []
+    assert provider_calls == ['proactive_extraction']
     assert envelope.operation.value == 'proactive_extraction'

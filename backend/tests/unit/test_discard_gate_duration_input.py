@@ -166,7 +166,7 @@ def _loaded_process_conversation():
             sys.modules.pop('utils.conversations.process_conversation', None)
 
 
-def _conversation(segments):
+def _conversation(segments, photos=()):
     from models.conversation import Conversation
     from models.conversation_enums import ConversationSource
     from models.structured import Structured
@@ -178,6 +178,7 @@ def _conversation(segments):
         finished_at=FINISHED_AT,
         structured=Structured(),
         transcript_segments=segments,
+        photos=list(photos),
         source=ConversationSource.desktop,
     )
 
@@ -236,6 +237,11 @@ class TestDiscardGateDuration:
 
     def test_a_transcript_free_record_still_reports_the_wall_window(self):
         """Photo-only captures have no transcript span to prefer."""
-        duration = _duration_seen_by_the_discard_gate(_conversation([]))
+        from models.conversation_photo import ConversationPhoto
+
+        # A described photo is what sends a transcript-free capture to the model;
+        # without one the deterministic tier discards it before any model call.
+        photo = ConversationPhoto(base64='', description='a whiteboard with a launch checklist')
+        duration = _duration_seen_by_the_discard_gate(_conversation([], photos=[photo]))
 
         assert duration == WALL_WINDOW_SECONDS

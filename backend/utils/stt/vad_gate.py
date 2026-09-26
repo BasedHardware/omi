@@ -20,7 +20,7 @@ from bisect import bisect_right
 from collections import deque
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Deque, Dict, List, Optional, Tuple
+from typing import Any, Deque, Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
 
@@ -47,6 +47,8 @@ VAD_GATE_MODE = os.getenv('VAD_GATE_MODE', 'off')  # off | shadow | active
 VAD_GATE_PRE_ROLL_MS = 300
 VAD_GATE_HANGOVER_MS = 4000
 VAD_GATE_SPEECH_THRESHOLD = 0.65
+# Continue threshold defaults to the start threshold (no hysteresis). Callers that
+# pass a lower continue_threshold match Silero's published neg_threshold pair.
 VAD_GATE_FINALIZE_SILENCE_MS = 300  # Flush DG transcript during hangover after this much silence
 VAD_GATE_KEEPALIVE_SEC = 5
 
@@ -72,6 +74,10 @@ class GateOutput:
     should_finalize: bool = False  # call dg_socket.finalize()
     state: GateState = GateState.SILENCE
     is_speech: bool = False  # raw VAD decision for this chunk
+    # Audio-timeline v2: the capture sample spans of the audio actually
+    # forwarded in audio_to_send, as [(capture_start_sample, samples)]. Empty
+    # when the caller did not supply a capture position (v1 sessions).
+    send_spans: Tuple[Tuple[int, int], ...] = ()
 
 
 # ---------------------------------------------------------------------------
@@ -154,6 +160,10 @@ class VADStreamingGate:
         mode: 'shadow' or 'active'
         uid: User ID for logging
         session_id: Session ID for logging
+        speech_threshold: Probability that *starts* speech. Default VAD_GATE_SPEECH_THRESHOLD.
+        continue_threshold: Probability that *keeps* speech once started. Defaults to
+            speech_threshold (no hysteresis). Clamped so it cannot exceed the start threshold.
+        hangover_ms: Silence tail after the last speech frame. Default VAD_GATE_HANGOVER_MS.
     """
 
     def __init__(
@@ -163,6 +173,10 @@ class VADStreamingGate:
         mode: str = 'active',
         uid: str = '',
         session_id: str = '',
+        *,
+        speech_threshold: Optional[float] = None,
+        continue_threshold: Optional[float] = None,
+        hangover_ms: Optional[int] = None,
     ):
         self.sample_rate = sample_rate
         self.channels = channels
@@ -183,20 +197,26 @@ class VADStreamingGate:
         self._vad_context: np.ndarray[Any, Any]
         self._vad_state, self._vad_context = make_fresh_state()  # Per-connection ONNX recurrent state + context
         self._vad_inference_lock = threading.Lock()
-        self._speech_threshold = VAD_GATE_SPEECH_THRESHOLD
+        start = VAD_GATE_SPEECH_THRESHOLD if speech_threshold is None else speech_threshold
+        cont = start if continue_threshold is None else continue_threshold
+        self._speech_threshold = start
+        # A continue threshold above the start threshold is not hysteresis.
+        self._continue_threshold = min(start, cont)
 
         # State machine
         self._state = GateState.SILENCE
         self._audio_cursor_ms: float = 0.0
         self._last_speech_ms: float = 0.0
         self._pre_roll_ms = VAD_GATE_PRE_ROLL_MS
-        self._hangover_ms = VAD_GATE_HANGOVER_MS
+        self._hangover_ms = VAD_GATE_HANGOVER_MS if hangover_ms is None else hangover_ms
         self._finalize_silence_ms = VAD_GATE_FINALIZE_SILENCE_MS
         self._hangover_finalized = False  # True once finalize sent during current hangover
 
         # Pre-roll buffer: stores recent audio chunks for playback on speech onset.
         # Tracks accumulated duration to respect _pre_roll_ms regardless of chunk size.
-        self._pre_roll: Deque[bytes] = deque()
+        # Audio-timeline v2: each chunk keeps its capture start sample so a
+        # pre-roll emission can report the source spans it forwards.
+        self._pre_roll: Deque[Tuple[bytes, Optional[int]]] = deque()
         self._pre_roll_total_ms: float = 0.0
 
         # Timestamp mapper
@@ -293,6 +313,12 @@ class VADStreamingGate:
 
         return data_int16.astype(np.float32) / 32768.0
 
+    def _decision_threshold(self) -> float:
+        """Start threshold in SILENCE; continue threshold once speech is established."""
+        if self._state in (GateState.SPEECH, GateState.HANGOVER):
+            return self._continue_threshold
+        return self._speech_threshold
+
     def _run_vad(self, pcm_data: bytes) -> bool:
         """Run ONNX Silero VAD on audio chunk. Returns True if speech detected.
 
@@ -310,6 +336,7 @@ class VADStreamingGate:
             del float_data
 
             is_speech = False
+            threshold = self._decision_threshold()
             if len(self._vad_buffer) >= self._vad_window_samples:
                 # Process all complete windows in buffer
                 while len(self._vad_buffer) >= self._vad_window_samples:
@@ -319,7 +346,7 @@ class VADStreamingGate:
                     prob, self._vad_state, self._vad_context = run_vad_window(
                         window, self._vad_state, self._vad_context
                     )
-                    if prob > self._speech_threshold:
+                    if prob > threshold:
                         is_speech = True
 
             # Keep buffer bounded (max 1 window of leftover)
@@ -328,12 +355,23 @@ class VADStreamingGate:
 
             return is_speech
 
-    def process_audio(self, pcm_data: bytes, wall_time: float) -> GateOutput:
+    def process_audio(
+        self,
+        pcm_data: bytes,
+        wall_time: float,
+        score_pcm: Optional[bytes] = None,
+        start_sample: Optional[int] = None,
+    ) -> GateOutput:
         """Process an audio chunk through the VAD gate.
 
         Args:
-            pcm_data: Raw PCM16 audio bytes
+            pcm_data: Raw PCM16 audio bytes forwarded on admit (pre-roll / send)
             wall_time: Wall-clock timestamp of this chunk
+            score_pcm: Optional same-length copy for Silero only. Windowed ingest
+                AGC passes a level-corrected copy here so the stored buffer stays
+                original-level. Ignored when missing or a different length.
+            start_sample: Optional capture position of pcm_data's first sample
+                (audio-timeline v2). Enables GateOutput.send_spans.
 
         Returns:
             GateOutput with audio to send and control signals
@@ -349,8 +387,10 @@ class VADStreamingGate:
         chunk_ms = (n_samples * 1000.0) / self.sample_rate
         self._audio_cursor_ms += chunk_ms
 
-        # Run VAD
-        is_speech = self._run_vad(pcm_data)
+        vad_pcm = pcm_data
+        if score_pcm is not None and len(score_pcm) == len(pcm_data):
+            vad_pcm = score_pcm
+        is_speech = self._run_vad(vad_pcm)
 
         if is_speech:
             self._last_speech_ms = self._audio_cursor_ms
@@ -372,13 +412,14 @@ class VADStreamingGate:
                 should_finalize=False,
                 state=self._state,
                 is_speech=is_speech,
+                send_spans=((start_sample, n_samples),) if start_sample is not None else (),
             )
             self._record_prometheus_audio()
             return output
 
         # Active mode: state machine
         prev_state = self._state
-        output = self._update_state(pcm_data, is_speech, wall_time)
+        output = self._update_state(pcm_data, is_speech, wall_time, start_sample=start_sample)
 
         if prev_state != self._state:
             logger.debug(
@@ -405,7 +446,7 @@ class VADStreamingGate:
             OMI_VAD_GATE_AUDIO_SECONDS_TOTAL.labels(outcome='sent', mode=self.mode).inc(sent_delta / bytes_per_second)
             self._prometheus_bytes_sent = self._bytes_sent
 
-        pending_bytes = sum(len(chunk) for chunk in self._pre_roll)
+        pending_bytes = sum(len(chunk) for chunk, _ in self._pre_roll)
         skipped_bytes = max(0, self._bytes_received - self._bytes_sent - pending_bytes)
         skipped_delta = skipped_bytes - self._prometheus_bytes_skipped
         if skipped_delta:
@@ -414,18 +455,39 @@ class VADStreamingGate:
             )
             self._prometheus_bytes_skipped = skipped_bytes
 
-    def _update_state(self, pcm_data: bytes, is_speech: bool, wall_time: float) -> GateOutput:
-        """State machine transition logic."""
+    @staticmethod
+    def _spans_of(pieces: Sequence[Tuple[bytes, Optional[int]]]) -> Tuple[Tuple[int, int], ...]:
+        """Capture spans of consecutive pre-roll pieces, or () without positions."""
+        spans: List[Tuple[int, int]] = []
+        for chunk, start_sample in pieces:
+            if start_sample is None:
+                return ()
+            samples = len(chunk) // 2
+            if spans and spans[-1][0] + spans[-1][1] == start_sample:
+                spans[-1] = (spans[-1][0], spans[-1][1] + samples)
+            else:
+                spans.append((start_sample, samples))
+        return tuple(spans)
+
+    def _update_state(
+        self, pcm_data: bytes, is_speech: bool, wall_time: float, start_sample: Optional[int] = None
+    ) -> GateOutput:
+        """State machine transition logic.
+
+        ``start_sample`` is the capture position of pcm_data's first sample on
+        v2 sessions; the returned GateOutput.send_spans then describes exactly
+        which capture samples the forwarded audio covers, pre-roll included.
+        """
         wall_rel = wall_time - self._first_audio_wall_time if self._first_audio_wall_time else 0.0
         chunk_duration_sec = len(pcm_data) / (self._sample_width * self.channels * self.sample_rate)
         chunk_ms = chunk_duration_sec * 1000.0
 
         if self._state == GateState.SILENCE:
             # Buffer for pre-roll (time-based eviction)
-            self._pre_roll.append(pcm_data)
+            self._pre_roll.append((pcm_data, start_sample))
             self._pre_roll_total_ms += chunk_ms
             while self._pre_roll_total_ms > self._pre_roll_ms and len(self._pre_roll) > 1:
-                evicted = self._pre_roll.popleft()
+                evicted, _ = self._pre_roll.popleft()
                 evicted_ms = (len(evicted) / (self._sample_width * self.channels * self.sample_rate)) * 1000.0
                 self._pre_roll_total_ms -= evicted_ms
 
@@ -433,7 +495,8 @@ class VADStreamingGate:
                 # Transition: SILENCE → SPEECH
                 self._state = GateState.SPEECH
                 # Emit pre-roll + current chunk
-                pre_roll_audio = b''.join(self._pre_roll)
+                pre_roll_audio = b''.join(chunk for chunk, _ in self._pre_roll)
+                send_spans = self._spans_of(self._pre_roll)
                 self._pre_roll.clear()
                 self._pre_roll_total_ms = 0.0
 
@@ -449,6 +512,7 @@ class VADStreamingGate:
                     should_finalize=False,
                     state=GateState.SPEECH,
                     is_speech=True,
+                    send_spans=send_spans,
                 )
             else:
                 # Stay in SILENCE: audio buffered in pre-roll (not yet skipped/sent)
@@ -476,6 +540,7 @@ class VADStreamingGate:
                 should_finalize=False,
                 state=self._state,
                 is_speech=is_speech,
+                send_spans=((start_sample, len(pcm_data) // 2),) if start_sample is not None else (),
             )
 
         elif self._state == GateState.HANGOVER:
@@ -493,6 +558,7 @@ class VADStreamingGate:
                     should_finalize=False,
                     state=GateState.SPEECH,
                     is_speech=True,
+                    send_spans=((start_sample, len(pcm_data) // 2),) if start_sample is not None else (),
                 )
 
             if time_since_speech_ms > self._hangover_ms:
@@ -504,7 +570,7 @@ class VADStreamingGate:
                 self._hangover_finalized = False
                 self._pre_roll.clear()
                 self._pre_roll_total_ms = 0.0
-                self._pre_roll.append(pcm_data)
+                self._pre_roll.append((pcm_data, start_sample))
                 chunk_ms_local = (len(pcm_data) / (self._sample_width * self.channels * self.sample_rate)) * 1000.0
                 self._pre_roll_total_ms = chunk_ms_local
                 # pcm_data is buffered in pre-roll and will count as skipped if never sent
@@ -532,10 +598,15 @@ class VADStreamingGate:
                 should_finalize=should_finalize_now,
                 state=GateState.HANGOVER,
                 is_speech=False,
+                send_spans=((start_sample, len(pcm_data) // 2),) if start_sample is not None else (),
             )
 
         # Fallback: send everything
-        return GateOutput(audio_to_send=pcm_data, is_speech=is_speech)
+        return GateOutput(
+            audio_to_send=pcm_data,
+            is_speech=is_speech,
+            send_spans=((start_sample, len(pcm_data) // 2),) if start_sample is not None else (),
+        )
 
     def consume_speech_ms_delta(self) -> int:
         """Consume and reset the speech_ms delta since last call.
@@ -566,6 +637,9 @@ class VADStreamingGate:
             'bytes_saved_ratio': bytes_skipped / total_bytes,
             'keepalive_count': self._keepalive_count,
             'speech_ms_total': self._speech_ms_total,
+            'speech_threshold': self._speech_threshold,
+            'continue_threshold': self._continue_threshold,
+            'hangover_ms': self._hangover_ms,
             'state': self._state.value,
             'mode': self.mode,
         }
@@ -614,11 +688,18 @@ class GatedSTTSocket(STTSocket):
     """
 
     def __init__(
-        self, stt_connection: STTSocket, gate: Optional['VADStreamingGate'] = None, passthrough_audio: bool = False
+        self,
+        stt_connection: STTSocket,
+        gate: Optional['VADStreamingGate'] = None,
+        passthrough_audio: bool = False,
+        send_tracker: Any = None,
     ):
         self._conn = stt_connection
         self._gate = gate
         self._passthrough_audio = passthrough_audio
+        # Audio-timeline v2: the provider epoch's translator. Accepted sends
+        # are recorded on it; a failed send does not consume provider time.
+        self._send_tracker = send_tracker
         # Audio capture for transcript quality validation (off by default)
         self._capture_dir = os.getenv('VAD_GATE_AUDIO_CAPTURE_DIR', '')
         self._raw_file = None
@@ -658,16 +739,19 @@ class GatedSTTSocket(STTSocket):
             ).inc()
         return audio
 
-    def send(self, data: bytes, wall_time: Optional[float] = None) -> bool:
+    def send(self, data: bytes, wall_time: Optional[float] = None, start_sample: Optional[int] = None) -> bool:
         """Send audio through VAD gate and report whether it was accepted."""
         if self.is_connection_dead:
             return False
         if self._gate is None:
-            return self._conn.send(self._counted(data))
+            accepted = self._conn.send(self._counted(data))
+            if accepted is True and self._send_tracker is not None and start_sample is not None and len(data) >= 2:
+                self._send_tracker.note_accepted(start_sample, len(data) // 2)
+            return accepted
 
         now = wall_time or time.time()
         try:
-            gate_out = self._gate.process_audio(data, now)
+            gate_out = self._gate.process_audio(data, now, start_sample=start_sample)
         except Exception:
             logger.exception('VAD gate process error, falling back to direct send uid=%s', self._gate.uid)
             record_fallback(
@@ -679,19 +763,27 @@ class GatedSTTSocket(STTSocket):
             )
             self._gate.mode = 'off'  # Disable timestamp remapping in stream_transcript wrapper
             self._gate = None  # Disable gate for rest of session
-            return self._conn.send(data)
+            accepted = self._conn.send(data)
+            if accepted is True and self._send_tracker is not None and start_sample is not None and len(data) >= 2:
+                self._send_tracker.note_accepted(start_sample, len(data) // 2)
+            return accepted
         if self._raw_file:
             self._raw_file.write(data)
         if self._gated_file and gate_out.audio_to_send:
             self._gated_file.write(gate_out.audio_to_send)
         if self._passthrough_audio:
             accepted = self._conn.send(self._counted(data))
+            sent_spans = ((start_sample, len(data) // 2),) if start_sample is not None else ()
         elif gate_out.audio_to_send:
             accepted = self._conn.send(self._counted(gate_out.audio_to_send))
+            sent_spans = gate_out.send_spans
         else:
             # Deliberately filtered silence is accepted by the gate; it is not
             # a provider enqueue failure and must not terminate the session.
             accepted = True
+            sent_spans = ()
+        if accepted is True and self._send_tracker is not None and sent_spans:
+            self._send_tracker.note_accepted_spans(sent_spans)
         if gate_out.should_finalize:
             try:
                 self._conn.finalize()

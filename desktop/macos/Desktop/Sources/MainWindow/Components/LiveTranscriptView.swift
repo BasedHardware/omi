@@ -14,6 +14,10 @@ struct LiveTranscriptPanel: View {
   }
 
   var body: some View {
+    content.reportsLiveTranscriptVisibility()
+  }
+
+  @ViewBuilder private var content: some View {
     if displaySegments.isEmpty {
       VStack(spacing: OmiSpacing.lg) {
         Image(systemName: "waveform")
@@ -121,6 +125,10 @@ struct ConversationsLiveTranscript: View {
   @State private var isHovered = false
 
   var body: some View {
+    content.reportsLiveTranscriptVisibility()
+  }
+
+  @ViewBuilder private var content: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.sm) {
       HStack(spacing: OmiSpacing.xs) {
         Circle().fill(Ink.errorRed).frame(width: 7, height: 7)
@@ -140,7 +148,7 @@ struct ConversationsLiveTranscript: View {
         LiveTranscriptView(segments: monitor.segments)
           .frame(maxHeight: 220)
           // Let clicks fall through to the card's expand tap rather than being
-          // captured by the inner scroll / text selection.
+          // captured by the inner scroll view.
           .allowsHitTesting(false)
       }
     }
@@ -257,6 +265,10 @@ struct ConversationsLiveTranscriptFullScreen: View {
   var onCollapse: () -> Void
 
   var body: some View {
+    content.reportsLiveTranscriptVisibility()
+  }
+
+  @ViewBuilder private var content: some View {
     VStack(alignment: .leading, spacing: 0) {
       HStack(spacing: OmiSpacing.sm) {
         Circle().fill(Ink.errorRed).frame(width: 8, height: 8)
@@ -301,19 +313,12 @@ struct ConversationsLiveTranscriptFullScreen: View {
   }
 }
 
-/// Live transcript view showing speaker segments during recording
+/// Live transcript view showing speaker segments during recording. Each turn renders through the
+/// saved transcript's `SpeakerBubbleView`, so a capture does not change layout or colors once saved.
 struct LiveTranscriptView: View {
   let segments: [SpeakerSegment]
   var speakerNames: [Int: String] = [:]
   var onSpeakerTapped: ((SpeakerSegment) -> Void)? = nil
-
-  /// Format timestamp as MM:SS
-  private func formatTime(_ seconds: Double) -> String {
-    let totalSeconds = Int(seconds)
-    let minutes = totalSeconds / 60
-    let secs = totalSeconds % 60
-    return String(format: "%d:%02d", minutes, secs)
-  }
 
   /// A lightweight fingerprint of the segments to detect any content change
   private var scrollTrigger: String {
@@ -325,12 +330,16 @@ struct LiveTranscriptView: View {
     ScrollViewReader { proxy in
       ScrollView {
         VStack(alignment: .leading, spacing: OmiSpacing.md) {
+          // NOTE: no SwiftUI text selection on these bubbles. It wraps each Text in an
+          // NSTextView-backed StyledTextLayoutEngine (SelectionOverlay), the
+          // FC-selection-overlay-layout-loop failure class the saved transcript hit; a long capture
+          // mounts one overlay per segment and every live update relays them all. Once saved, the
+          // conversation detail header's Copy control copies the full transcript.
           ForEach(segments) { segment in
-            LiveSegmentView(
-              segment: segment,
-              formatTime: formatTime,
+            SpeakerBubbleView(
+              liveSegment: segment,
               personName: speakerNames[segment.speaker],
-              onSpeakerTapped: !segment.isUser ? { onSpeakerTapped?(segment) } : nil
+              onSpeakerTapped: segment.isUser || onSpeakerTapped == nil ? nil : { onSpeakerTapped?(segment) }
             )
           }
 
@@ -346,133 +355,6 @@ struct LiveTranscriptView: View {
         proxy.scrollTo("transcript-bottom", anchor: .bottom)
       }
     }
-  }
-}
-
-/// Individual segment view for live transcript
-private struct LiveSegmentView: View {
-  let segment: SpeakerSegment
-  let formatTime: (Double) -> String
-  var personName: String? = nil
-  var onSpeakerTapped: (() -> Void)? = nil
-
-  @State private var isHovered = false
-
-  private var isUser: Bool {
-    segment.isUser
-  }
-
-  private var speakerLabel: String {
-    if isUser { return "You" }
-    if let name = personName { return name }
-    return "Speaker \(segment.speaker)"
-  }
-
-  private var bubbleColor: Color {
-    isUser ? PageGlass.speakerTints[0] : Ink.rowFillHover
-  }
-
-  var body: some View {
-    HStack(alignment: .top, spacing: 0) {
-      if !isUser {
-        // Other speakers - left aligned
-        segmentContent
-        Spacer(minLength: 60)
-      } else {
-        // User - right aligned
-        Spacer(minLength: 60)
-        segmentContent
-      }
-    }
-  }
-
-  private var segmentContent: some View {
-    VStack(alignment: isUser ? .trailing : .leading, spacing: OmiSpacing.xxs) {
-      // Speaker label and timestamp
-      HStack(spacing: OmiSpacing.sm) {
-        if !isUser {
-          speakerAvatar
-        }
-
-        if !isUser, let onTap = onSpeakerTapped {
-          Button(action: onTap) {
-            HStack(spacing: OmiSpacing.xxs) {
-              Text(speakerLabel)
-                .scaledFont(size: OmiType.caption, weight: personName != nil ? .semibold : .medium)
-                .foregroundColor(personName != nil ? Ink.primary : Ink.secondary)
-
-              if personName == nil {
-                Image(systemName: "pencil")
-                  .scaledFont(size: OmiType.micro)
-                  .foregroundColor(Ink.secondary)
-                  .opacity(isHovered ? 1 : 0)
-              }
-            }
-          }
-          .buttonStyle(.plain)
-          .onHover { hovering in
-            isHovered = hovering
-            if hovering {
-              NSCursor.pointingHand.push()
-            } else {
-              NSCursor.pop()
-            }
-          }
-        } else {
-          Text(speakerLabel)
-            .scaledFont(size: OmiType.caption, weight: .medium)
-            .foregroundColor(Ink.secondary)
-        }
-
-        Text(formatTime(segment.start))
-          .scaledFont(size: OmiType.caption)
-          .foregroundColor(Ink.secondary)
-
-        if isUser {
-          speakerAvatar
-        }
-      }
-
-      // Message bubble
-      Text(segment.text)
-        .scaledFont(size: OmiType.body)
-        .foregroundColor(Ink.primary)
-        .textSelection(.enabled)
-        .padding(.horizontal, OmiSpacing.md)
-        .padding(.vertical, OmiSpacing.sm)
-        .background(
-          RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
-            .fill(bubbleColor)
-        )
-
-      // Translations from backend
-      if !segment.translations.isEmpty {
-        ForEach(segment.translations, id: \.lang) { translation in
-          Text(translation.text)
-            .scaledFont(size: OmiType.body)
-            .foregroundColor(Ink.secondary)
-            .italic()
-            .textSelection(.enabled)
-            .padding(.horizontal, OmiSpacing.md)
-            .padding(.vertical, OmiSpacing.xs)
-            .background(
-              RoundedRectangle(cornerRadius: OmiChrome.chipRadius)
-                .fill(bubbleColor.opacity(0.5))
-            )
-        }
-      }
-    }
-  }
-
-  private var speakerAvatar: some View {
-    Circle()
-      .fill(isUser ? Ink.primary : Ink.rowFillHover)
-      .frame(width: 24, height: 24)
-      .overlay(
-        Text(isUser ? "Y" : (personName?.prefix(1).uppercased() ?? String(segment.speaker)))
-          .scaledFont(size: OmiType.caption, weight: .medium)
-          .foregroundColor(isUser ? Ink.surface : Ink.primary)
-      )
   }
 }
 
