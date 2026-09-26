@@ -312,8 +312,9 @@ class GoalsWidgetState extends State<GoalsWidget> with WidgetsBindingObserver {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Header
+              // 20pt from the screen edge, in line with the day headers ("Today") below.
               Padding(
-                padding: const EdgeInsets.only(left: 8, bottom: 6),
+                padding: const EdgeInsets.only(left: OmiSpacing.xxs, bottom: 6),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [

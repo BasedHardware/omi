@@ -49,7 +49,9 @@ class _TaskCardBlockState extends State<TaskCardBlock> {
     if (_isToggling) return;
     setState(() => _isToggling = true);
     try {
-      await provider.updateActionItemState(item, !item.completed);
+      final saved = await provider.updateActionItemState(item, !item.completed);
+      // The provider puts a rejected change back; tell the reader rather than fail silently.
+      if (!saved && mounted) OmiFeedback.error(context, context.l10n.failedToUpdateActionItem);
     } finally {
       if (mounted) setState(() => _isToggling = false);
     }

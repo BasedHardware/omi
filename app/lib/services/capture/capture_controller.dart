@@ -486,6 +486,12 @@ class CaptureController extends ChangeNotifier
             }
           }
         }
+      case 'star':
+        if (isConversationMarkedForStarring) {
+          unmarkConversationForStarring();
+        } else {
+          markConversationForStarring();
+        }
       case 'finish':
         if (phone) {
           final hasContent = segments.isNotEmpty || photos.isNotEmpty;
@@ -494,10 +500,15 @@ class CaptureController extends ChangeNotifier
             throw StateError('Recording changed');
           }
           if (!batch && hasContent) await forceProcessingCurrentConversation();
-        } else if (batch) {
-          startNewOfflineRecording();
         } else {
-          await forceProcessingCurrentConversation();
+          // From the Lock Screen or the island, Finish stops for good: this conversation is closed
+          // and the pendant pauses, so the presentation ends instead of starting the next one.
+          if (batch) {
+            startNewOfflineRecording();
+          } else if (segments.isNotEmpty || photos.isNotEmpty) {
+            await forceProcessingCurrentConversation();
+          }
+          if (!isPaused) await pauseDeviceRecording();
         }
       default:
         throw ArgumentError.value(action, 'action');

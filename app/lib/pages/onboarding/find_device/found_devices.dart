@@ -12,6 +12,7 @@ import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/pages/onboarding/apple_watch_permission_page.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
+import 'package:omi/services/devices/bluetooth_readiness.dart';
 import 'package:omi/services/devices/connectors/apple_watch_connection.dart';
 import 'package:omi/services/devices/discovery/rayban_meta_discoverer.dart';
 import 'package:omi/utils/error_message.dart';
@@ -271,7 +272,9 @@ class _FoundDevicesState extends State<FoundDevices> {
   Widget build(BuildContext context) {
     return Consumer<OnboardingProvider>(
       builder: (context, provider, child) {
-        final visibleDevices = provider.visibleDeviceList;
+        // Found devices are stale once Bluetooth is off: say it is needed instead.
+        final bluetoothOff = BluetoothReadiness.instance.state == BluetoothAdapterState.off;
+        final visibleDevices = bluetoothOff ? const <BtDevice>[] : provider.visibleDeviceList;
         return MessageListener<OnboardingProvider>(
           showError: (error) => OmiFeedback.error(context, error),
           showInfo: (info) {
@@ -292,18 +295,24 @@ class _FoundDevicesState extends State<FoundDevices> {
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
               !provider.isConnected
-                  ? Text(
-                      provider.nearbyDeviceCount == 0
-                          ? context.l10n.searchingForDevices
-                          : context.l10n.devicesFoundNearby(provider.nearbyDeviceCount),
-                      style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+                  ? Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xl),
+                      child: Text(
+                        bluetoothOff
+                            ? context.l10n.bluetoothNeeded
+                            : provider.nearbyDeviceCount == 0
+                                ? context.l10n.searchingForDevices
+                                : context.l10n.devicesFoundNearby(provider.nearbyDeviceCount),
+                        textAlign: TextAlign.center,
+                        style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+                      ),
                     )
                   : Text(
                       context.l10n.pairingSuccessful,
                       style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
                     ),
               if (visibleDevices.isNotEmpty) const SizedBox(height: 16),
-              if (!provider.isConnected) ..._devicesList(provider),
+              if (!provider.isConnected && !bluetoothOff) ..._devicesList(provider),
               if (provider.isConnected)
                 Text(
                   () {

@@ -63,14 +63,32 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
   }
 
   /// Shows [day] in place of the current recap, from the top.
-  void _showDay(DailySummary day) {
+  void _showDay(DailySummary day, {String source = 'day_arrow'}) {
     OmiHaptics.selection();
     setState(() => _summary = day);
     if (_scrollController.hasClients) _scrollController.jumpTo(0);
     _animationController
       ..reset()
       ..forward();
-    PlatformManager.instance.analytics.dailySummaryDetailViewed(summaryId: day.id, date: day.date, source: 'day_arrow');
+    PlatformManager.instance.analytics.dailySummaryDetailViewed(summaryId: day.id, date: day.date, source: source);
+  }
+
+  /// The recap one day older ([step] 1) or newer (-1) than the one shown, from [DailySummaryDetailPage.days].
+  DailySummary? _neighbour(int step) {
+    final days = widget.days;
+    final i = days.indexWhere((d) => d.id == _summary?.id);
+    if (i < 0) return null;
+    final j = i + step;
+    return j >= 0 && j < days.length ? days[j] : null;
+  }
+
+  /// A sideways swipe turns the day like the arrows do: towards the older day's arrow shows it.
+  void _onSwipe(DragEndDetails details) {
+    final velocity = details.primaryVelocity ?? 0;
+    if (velocity.abs() < 300) return;
+    final rtl = Directionality.of(context) == TextDirection.rtl;
+    final day = _neighbour((velocity > 0) != rtl ? 1 : -1);
+    if (day != null) _showDay(day, source: 'day_swipe');
   }
 
   Future<void> _loadSummary() async {
@@ -319,47 +337,56 @@ class _DailySummaryDetailPageState extends State<DailySummaryDetailPage> with Si
       enabled: !_isLoading && !_isSharing && !_isDeleting && !_isRegenerating && summary.overview.trim().isNotEmpty,
       child: FadeTransition(
         opacity: _fadeAnimation,
-        child: CustomScrollView(
-          controller: _scrollController,
-          slivers: [
-            _buildHeader(summary),
-            SliverPadding(
-              padding: const EdgeInsets.fromLTRB(OmiSize.screenMargin, OmiSpacing.xs, OmiSize.screenMargin, 100),
-              sliver: SliverList(
-                delegate: SliverChildListDelegate([
-                  _buildTitleBlock(summary),
-                  const SizedBox(height: OmiSpacing.md),
-                  _buildOverviewCard(summary),
-                  const SizedBox(height: 24),
-                  _buildStatsRow(summary),
-                  if (summary.highlights.isNotEmpty) ...[const SizedBox(height: 32), _buildHighlightsSection(summary)],
-                  if (summary.actionItems.isNotEmpty) ...[
-                    const SizedBox(height: 32),
-                    _buildActionItemsSection(summary)
-                  ],
-                  if (summary.unresolvedQuestions.isNotEmpty) ...[
-                    const SizedBox(height: 32),
-                    _buildUnresolvedQuestionsSection(summary),
-                  ],
-                  if (summary.decisionsMade.isNotEmpty) ...[
-                    const SizedBox(height: 32),
-                    _buildDecisionsMadeSection(summary),
-                  ],
-                  if (summary.memoriesLearned.isNotEmpty) ...[
-                    const SizedBox(height: 32),
-                    _buildMemoriesLearnedSection(summary),
-                  ],
-                  if (summary.knowledgeNuggets.isNotEmpty) ...[
-                    const SizedBox(height: 32),
-                    _buildKnowledgeNuggetsSection(summary),
-                  ],
-                  if (summary.locations.isNotEmpty) ...[const SizedBox(height: 32), _buildLocationsMap(summary)],
-                  _buildDayArrows(summary),
-                  _buildAllRecapsLink(),
-                ]),
+        // Swipe between days (#5057); vertical scrolling and the page's own controls are unaffected.
+        child: GestureDetector(
+          key: const Key('recap_day_swipe'),
+          behavior: HitTestBehavior.translucent,
+          onHorizontalDragEnd: widget.days.length > 1 ? _onSwipe : null,
+          child: CustomScrollView(
+            controller: _scrollController,
+            slivers: [
+              _buildHeader(summary),
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(OmiSize.screenMargin, OmiSpacing.xs, OmiSize.screenMargin, 100),
+                sliver: SliverList(
+                  delegate: SliverChildListDelegate([
+                    _buildTitleBlock(summary),
+                    const SizedBox(height: OmiSpacing.md),
+                    _buildOverviewCard(summary),
+                    const SizedBox(height: 24),
+                    _buildStatsRow(summary),
+                    if (summary.highlights.isNotEmpty) ...[
+                      const SizedBox(height: 32),
+                      _buildHighlightsSection(summary)
+                    ],
+                    if (summary.actionItems.isNotEmpty) ...[
+                      const SizedBox(height: 32),
+                      _buildActionItemsSection(summary)
+                    ],
+                    if (summary.unresolvedQuestions.isNotEmpty) ...[
+                      const SizedBox(height: 32),
+                      _buildUnresolvedQuestionsSection(summary),
+                    ],
+                    if (summary.decisionsMade.isNotEmpty) ...[
+                      const SizedBox(height: 32),
+                      _buildDecisionsMadeSection(summary),
+                    ],
+                    if (summary.memoriesLearned.isNotEmpty) ...[
+                      const SizedBox(height: 32),
+                      _buildMemoriesLearnedSection(summary),
+                    ],
+                    if (summary.knowledgeNuggets.isNotEmpty) ...[
+                      const SizedBox(height: 32),
+                      _buildKnowledgeNuggetsSection(summary),
+                    ],
+                    if (summary.locations.isNotEmpty) ...[const SizedBox(height: 32), _buildLocationsMap(summary)],
+                    _buildDayArrows(summary),
+                    _buildAllRecapsLink(),
+                  ]),
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );

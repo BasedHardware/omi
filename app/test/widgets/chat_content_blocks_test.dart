@@ -18,7 +18,7 @@ import 'package:omi/providers/message_provider.dart';
 
 /// Records the single task-mutation path instead of hitting the network.
 class _RecordingActionItemsProvider extends ActionItemsProvider {
-  _RecordingActionItemsProvider(this._items)
+  _RecordingActionItemsProvider(this._items, {this.saves = true})
       : super(
           getActionItems: ({
             int limit = 100,
@@ -36,6 +36,9 @@ class _RecordingActionItemsProvider extends ActionItemsProvider {
   final List<ActionItemWithMetadata> _items;
   final List<(String, bool)> updates = [];
 
+  /// What the server says to an update.
+  final bool saves;
+
   @override
   List<ActionItemWithMetadata> get actionItems => _items;
 
@@ -49,7 +52,7 @@ class _RecordingActionItemsProvider extends ActionItemsProvider {
   Future<bool> updateActionItemState(ActionItemWithMetadata item, bool newState) async {
     updates.add((item.id, newState));
     notifyListeners();
-    return true;
+    return saves;
   }
 }
 
@@ -135,8 +138,9 @@ void main() {
     WidgetTester tester, {
     required ServerMessage message,
     List<ActionItemWithMetadata> tasks = const [],
+    bool saves = true,
   }) async {
-    final actionItems = _RecordingActionItemsProvider(tasks);
+    final actionItems = _RecordingActionItemsProvider(tasks, saves: saves);
     final messages = _RecordingMessageProvider();
     final conversations = ConversationProvider(isSignedIn: () => false);
     addTearDown(conversations.dispose);
@@ -221,6 +225,24 @@ void main() {
     await tester.pump();
 
     expect(actionItems.updates, [('task-1', true)]);
+  });
+
+  testWidgets('a rejected task toggle says so instead of failing silently (#17848)', (tester) async {
+    final (actionItems, _) = await pumpBlocks(
+      tester,
+      message: messageWithBlocks(),
+      tasks: [task(id: 'task-1')],
+      saves: false,
+    );
+
+    final toggle = find.byKey(const Key('chat-block-taskCard-block-task-toggle'));
+    await tester.ensureVisible(toggle);
+    await tester.tap(toggle);
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 400));
+
+    expect(actionItems.updates, [('task-1', true)]);
+    expect(find.text('Failed to update task'), findsOneWidget);
   });
 
   testWidgets('tapping a question option sends its prepared answer', (tester) async {
