@@ -3590,5 +3590,7 @@
     "capturePhoneStorageFull": "Stockage du téléphone plein",
     "captureStorageAlmostFull": "Stockage presque plein",
     "capturePendantDisconnectedDetail": "Votre pendentif a perdu la connexion avec ce téléphone. Omi se reconnectera tout seul quand le pendentif sera allumé et à proximité. Tout ce qui a été enregistré avant est en sécurité.",
-    "participantsSummaryUncounted": "{name} et d'autres"
+    "participantsSummaryUncounted": "{name} et d'autres",
+    "siriIndexSetting": "Utiliser Omi avec Siri et Apple Intelligence",
+    "siriIndexSettingDescription": "Autorisez Siri à trouver vos conversations, souvenirs et tâches sur cet appareil. Désactiver cette option les supprime de la recherche Apple."
 }

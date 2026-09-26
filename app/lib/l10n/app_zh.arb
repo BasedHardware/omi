@@ -3555,5 +3555,7 @@
     "capturePhoneStorageFull": "手机存储空间已满",
     "captureStorageAlmostFull": "存储空间即将用完",
     "capturePendantDisconnectedDetail": "吊坠与这部手机的连接已断开。吊坠开机并在附近时，Omi 会自动重新连接。此前录下的内容都已保存。",
-    "participantsSummaryUncounted": "{name}等人"
+    "participantsSummaryUncounted": "{name}等人",
+    "siriIndexSetting": "Use Omi with Siri & Apple Intelligence",
+    "siriIndexSettingDescription": "Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search."
 }

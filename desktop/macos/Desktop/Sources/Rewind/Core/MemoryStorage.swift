@@ -215,30 +215,30 @@ actor MemoryStorage {
     tags: [String]? = nil,
     tiers: [MemoryLayer]? = [.shortTerm, .longTerm],
     scope: MemoryRecordReadScope = .all,
-    includeDismissed: Bool = false
+    includeDismissed: Bool = false,
+    backendOnly: Bool = false,
+    expiresAfter: Date? = nil
   ) async throws -> [ServerMemory] {
     let db = try await ensureInitialized()
-
     return try await db.read { database in
       var query =
         MemoryRecord
         .filter(Column("deleted") == false)
-      // Show ALL local memories (synced or not) for local-first experience
-
       if !includeDismissed {
         query = query.filter(Column("isDismissed") == false)
       }
-
+      if backendOnly { query = query.filter(Column("backendId") != nil) }
+      if let expiresAfter {
+        query = query.filter(Column("expiresAt") == nil || Column("expiresAt") > expiresAfter)
+      }
       if let category = category {
         query = query.filter(Column("category") == category)
       }
-
       query = Self.applyTierFilter(query, tiers: tiers)
       query = Self.applyRecordReadScope(
         query,
         scope: scope
       )
-
       // Tag filtering using JSON
       if let tags = tags, !tags.isEmpty {
         for tag in tags {
@@ -619,9 +619,9 @@ actor MemoryStorage {
     if recordId > 0, !memory.content.isEmpty {
       LocalEmbeddingIndexer.scheduleMemoryIndex(id: recordId, content: memory.content)
     }
+    SiriIndexHooks.memoryChanged(memory.id)
     return recordId
   }
-
   /// Sync multiple ServerMemory objects to local storage (batch upsert)
   /// Used for efficient background sync after API fetch
   func syncServerMemories(_ memories: [ServerMemory]) async throws {
@@ -642,8 +642,8 @@ actor MemoryStorage {
       HomeKnowledgeCountInvalidation.post()
     }
     LocalEmbeddingIndexer.scheduleMemoryIndex(items: index)
+    for memory in memories { SiriIndexHooks.memoryChanged(memory.id) }
   }
-
   /// Upsert a server snapshot, then tombstone synced locals whose backendId is absent.
   /// Local-only rows (backendId NULL) are preserved. No-op when the snapshot is empty.
   @discardableResult
@@ -1478,8 +1478,8 @@ actor MemoryStorage {
     }
 
     log("MemoryStorage: Marked memory \(id) as synced (backendId: \(backendId))")
+    SiriIndexHooks.memoryChanged(backendId)
   }
-
   /// Reconcile a known local capture with the authoritative create receipt.
   ///
   /// A local record has no product-tier authority before the server responds.
@@ -1492,7 +1492,6 @@ actor MemoryStorage {
       guard var record = try MemoryRecord.fetchOne(database, key: id) else {
         throw MemoryStorageError.recordNotFound
       }
-
       if let existing =
         try MemoryRecord
         .filter(Column("backendId") == serverMemory.id)
@@ -1510,8 +1509,8 @@ actor MemoryStorage {
     }
 
     log("MemoryStorage: Reconciled memory \(id) from authoritative create receipt (backendId: \(serverMemory.id))")
+    SiriIndexHooks.memoryChanged(serverMemory.id)
   }
-
   /// Get memories that haven't been synced to backend yet
   func getUnsyncedMemories() async throws -> [MemoryRecord] {
     let db = try await ensureInitialized()
@@ -1524,7 +1523,6 @@ actor MemoryStorage {
         .fetchAll(database)
     }
   }
-
   // MARK: - Update Operations
 
   /// Update memory read status
@@ -1535,7 +1533,6 @@ actor MemoryStorage {
       guard var record = try MemoryRecord.fetchOne(database, key: id) else {
         throw MemoryStorageError.recordNotFound
       }
-
       record.isRead = isRead
       record.updatedAt = Date()
       try record.update(database)
@@ -1545,15 +1542,17 @@ actor MemoryStorage {
   /// Update memory dismissed status
   func updateDismissedStatus(id: Int64, isDismissed: Bool) async throws {
     let db = try await ensureInitialized()
-
-    try await db.write { database in
+    let backendId = try await db.write { database -> String? in
       guard var record = try MemoryRecord.fetchOne(database, key: id) else {
         throw MemoryStorageError.recordNotFound
       }
-
       record.isDismissed = isDismissed
       record.updatedAt = Date()
       try record.update(database)
+      return record.backendId
+    }
+    if let backendId {
+      if isDismissed { await SiriIndexHooks.memoryDeleted(backendId) } else { SiriIndexHooks.memoryChanged(backendId) }
     }
   }
 
@@ -1567,7 +1566,6 @@ actor MemoryStorage {
       guard let updatedAt = DatabaseValue(value: Date()) else { return }
       arguments.append(updatedAt)
       Self.appendTierCondition(&conditions, &arguments, tiers: scope.tiers)
-
       try database.execute(
         sql: "UPDATE memories SET isRead = 1, updatedAt = ? WHERE \(conditions.joined(separator: " AND "))",
         arguments: StatementArguments(arguments)
@@ -1581,33 +1579,38 @@ actor MemoryStorage {
   func deleteMemory(id: Int64) async throws {
     let db = try await ensureInitialized()
 
+    let backendId = try await getMemory(id: id)?.backendId
     try await db.write { database in
       guard var record = try MemoryRecord.fetchOne(database, key: id) else {
         throw MemoryStorageError.recordNotFound
       }
-
       record.deleted = true
       record.updatedAt = Date()
       try record.update(database)
     }
 
     log("MemoryStorage: Soft deleted memory \(id)")
+    if let backendId { await SiriIndexHooks.memoryDeleted(backendId) }
     HomeKnowledgeCountInvalidation.post()
   }
-
   /// Soft-delete synced memories tied to a deleted conversation (local cache hygiene).
   @discardableResult
   func softDeleteMemoriesByConversationId(_ conversationId: String) async throws -> Int {
     let db = try await ensureInitialized()
-
-    let deleted = try await db.write { database -> Int in
+    let (deleted, deletedIds) = try await db.write { database -> (Int, [String]) in
+      let ids = try String.fetchAll(
+        database,
+        sql: "SELECT backendId FROM memories WHERE deleted = 0 AND conversationId = ? AND backendId IS NOT NULL",
+        arguments: [conversationId]
+      )
       try database.execute(
         sql: "UPDATE memories SET deleted = 1, updatedAt = ? WHERE deleted = 0 AND conversationId = ?",
         arguments: [Date(), conversationId]
       )
-      return database.changesCount
+      return (database.changesCount, ids)
     }
     if deleted > 0 {
+      await SiriIndexHooks.memoriesDeleted(deletedIds)
       HomeKnowledgeCountInvalidation.post()
     }
     return deleted
@@ -1617,7 +1620,6 @@ actor MemoryStorage {
   func deleteMemoryByBackendId(_ backendId: String) async throws {
     try await deleteMemory(surfacedId: backendId)
   }
-
   /// Soft-delete a memory addressed by either a backend ID or a surfaced
   /// `local_<rowid>` placeholder.
   func deleteMemory(surfacedId: String) async throws {
@@ -1626,19 +1628,17 @@ actor MemoryStorage {
       try await deleteMemory(id: rowId)
     case .backend(let backendId):
       let db = try await ensureInitialized()
-
       try await db.write { database in
         try database.execute(
           sql: "UPDATE memories SET deleted = 1, updatedAt = ? WHERE backendId = ?",
           arguments: [Date(), backendId]
         )
       }
-
       log("MemoryStorage: Soft deleted memory with backendId \(backendId)")
+      await SiriIndexHooks.memoryDeleted(backendId)
       HomeKnowledgeCountInvalidation.post()
     }
   }
-
   /// Restore a soft-deleted memory addressed by either a backend ID or a
   /// surfaced `local_<rowid>` placeholder. Used by undo/delete-failure paths;
   /// callers must requery the active tier scope instead of appending directly
@@ -1647,7 +1647,6 @@ actor MemoryStorage {
     switch MemoryIdentity(surfacedId: surfacedId) {
     case .localRow(let rowId):
       let db = try await ensureInitialized()
-
       try await db.write { database in
         guard var record = try MemoryRecord.fetchOne(database, key: rowId) else {
           throw MemoryStorageError.recordNotFound
@@ -1656,24 +1655,21 @@ actor MemoryStorage {
         record.updatedAt = Date()
         try record.update(database)
       }
-
       log("MemoryStorage: Restored local memory \(rowId)")
       HomeKnowledgeCountInvalidation.post()
     case .backend(let backendId):
       let db = try await ensureInitialized()
-
       try await db.write { database in
         try database.execute(
           sql: "UPDATE memories SET deleted = 0, updatedAt = ? WHERE backendId = ?",
           arguments: [Date(), backendId]
         )
       }
-
       log("MemoryStorage: Restored memory with backendId \(backendId)")
+      SiriIndexHooks.memoryChanged(backendId)
       HomeKnowledgeCountInvalidation.post()
     }
   }
-
   /// Restore a soft-deleted memory by backend ID. Kept for existing callers;
   /// surfaced local IDs are resolved by `restoreMemory(surfacedId:)` as well.
   func restoreMemoryByBackendId(_ backendId: String) async throws {
@@ -1690,50 +1686,52 @@ actor MemoryStorage {
     within scope: MemoryLayerScope
   ) async throws -> Int {
     let db = try await ensureInitialized()
-
-    let removed = try await db.write { database -> Int in
+    let removedIds = try await db.write { database -> [String] in
       var query =
         MemoryRecord
         .filter(Column("backendId") != nil)
         .filter(Column("deleted") == false)
       query = Self.applyTierFilter(query, tiers: scope.tiers)
-
       let candidates = try query.fetchAll(database)
-
-      var removed = 0
+      var removedIds: [String] = []
       for var record in candidates {
         guard let backendId = record.backendId, !keep.contains(backendId) else { continue }
         record.deleted = true
         record.updatedAt = Date()
         try record.update(database)
-        removed += 1
+        removedIds.append(backendId)
       }
-      return removed
+      return removedIds
     }
-    if removed > 0 {
+    if !removedIds.isEmpty {
+      await SiriIndexHooks.memoriesDeleted(removedIds)
       HomeKnowledgeCountInvalidation.post()
     }
-    return removed
+    return removedIds.count
   }
 
   /// Soft delete memories within a tier scope.
   func deleteAllMemories(scope: MemoryLayerScope) async throws {
     let db = try await ensureInitialized()
-
-    try await db.write { database in
+    let deletedIds = try await db.write { database -> [String] in
       var conditions = ["deleted = 0"]
       var arguments: [DatabaseValue] = []
-      guard let updatedAt = DatabaseValue(value: Date()) else { return }
+      guard let updatedAt = DatabaseValue(value: Date()) else { return [] }
       arguments.append(updatedAt)
       Self.appendTierCondition(&conditions, &arguments, tiers: scope.tiers)
-
+      let ids = try String.fetchAll(
+        database,
+        sql: "SELECT backendId FROM memories WHERE \(conditions.joined(separator: " AND ")) AND backendId IS NOT NULL",
+        arguments: StatementArguments(Array(arguments.dropFirst()))
+      )
       try database.execute(
         sql: "UPDATE memories SET deleted = 1, updatedAt = ? WHERE \(conditions.joined(separator: " AND "))",
         arguments: StatementArguments(arguments)
       )
+      return ids
     }
-
     log("MemoryStorage: Soft deleted memories for scope \(scope.sqlTierRawValues)")
+    await SiriIndexHooks.memoriesDeleted(deletedIds)
     HomeKnowledgeCountInvalidation.post()
   }
 
@@ -1752,6 +1750,7 @@ actor MemoryStorage {
     if let rowId {
       LocalEmbeddingIndexer.scheduleMemoryIndex(id: rowId, content: content)
     }
+    SiriIndexHooks.memoryChanged(backendId)
   }
 
   /// Update visibility by backend ID

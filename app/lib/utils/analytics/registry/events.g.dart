@@ -1557,3 +1557,88 @@ final class VoiceReplyPlayback extends RegisteredEvent {
   @override
   Map<String, Object> get properties => {"outcome": outcome.wireName, "skip_reason": skipReason.wireName, "mode": mode.wireName, "output_route": outputRoute.wireName, "chunks_requested": chunksRequested, "chunks_played": chunksPlayed, "chunks_dropped": chunksDropped, "fallback_reason": fallbackReason.wireName, "first_audio_latency_ms": firstAudioLatencyMs, "interrupt_source": interruptSource.wireName};
 }
+
+enum SiriIntentPerformedIntent {
+  remember("remember"),
+  createNote("create_note"),
+  open("open"),
+  search("search"),
+  completeTask("complete_task"),
+  createTask("create_task"),
+  startListening("start_listening"),
+  stopListening("stop_listening");
+  const SiriIntentPerformedIntent(this.wireName);
+  final String wireName;
+}
+
+enum SiriIntentPerformedPlatform {
+  macos("macos"),
+  ios("ios");
+  const SiriIntentPerformedPlatform(this.wireName);
+  final String wireName;
+}
+
+enum SiriIntentPerformedOutcome {
+  ok("ok"),
+  auth("auth"),
+  network("network"),
+  rateLimited("rate_limited"),
+  quota("quota"),
+  server("server"),
+  cancelled("cancelled");
+  const SiriIntentPerformedOutcome(this.wireName);
+  final String wireName;
+}
+
+enum SiriIntentPerformedInvokedVia {
+  siri("siri"),
+  shortcuts("shortcuts"),
+  spotlight("spotlight"),
+  unknown("unknown");
+  const SiriIntentPerformedInvokedVia(this.wireName);
+  final String wireName;
+}
+
+final class SiriIntentPerformed extends RegisteredEvent {
+  const SiriIntentPerformed({required this.intent, required this.platform, required this.outcome, required this.latencyMs, required this.invokedVia});
+  final SiriIntentPerformedIntent intent;
+  final SiriIntentPerformedPlatform platform;
+  final SiriIntentPerformedOutcome outcome;
+  final int latencyMs;
+  final SiriIntentPerformedInvokedVia invokedVia;
+  @override
+  String get wireName => "Siri Intent Performed";
+  @override
+  Map<String, Object> get properties => {"intent": intent.wireName, "platform": platform.wireName, "outcome": outcome.wireName, "latency_ms": latencyMs, "invoked_via": invokedVia.wireName};
+}
+
+enum SiriIndexRebuiltPlatform {
+  macos("macos"),
+  ios("ios");
+  const SiriIndexRebuiltPlatform(this.wireName);
+  final String wireName;
+}
+
+enum SiriIndexRebuiltOutcome {
+  ok("ok"),
+  auth("auth"),
+  network("network"),
+  rateLimited("rate_limited"),
+  quota("quota"),
+  server("server"),
+  cancelled("cancelled");
+  const SiriIndexRebuiltOutcome(this.wireName);
+  final String wireName;
+}
+
+final class SiriIndexRebuilt extends RegisteredEvent {
+  const SiriIndexRebuilt({required this.platform, required this.entityCounts, required this.durationMs, required this.outcome});
+  final SiriIndexRebuiltPlatform platform;
+  final int entityCounts;
+  final int durationMs;
+  final SiriIndexRebuiltOutcome outcome;
+  @override
+  String get wireName => "Siri Index Rebuilt";
+  @override
+  Map<String, Object> get properties => {"platform": platform.wireName, "entity_counts": entityCounts, "duration_ms": durationMs, "outcome": outcome.wireName};
+}

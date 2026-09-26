@@ -3555,5 +3555,7 @@
     "capturePhoneStorageFull": "Telefono atmintis pilna",
     "captureStorageAlmostFull": "Atmintis beveik pilna",
     "capturePendantDisconnectedDetail": "Pakabukas prarado ryšį su šiuo telefonu. Omi pats vėl prisijungs, kai pakabukas bus įjungtas ir netoliese. Viskas, kas įrašyta iki šiol, išsaugota.",
-    "participantsSummaryUncounted": "{name} ir kiti"
+    "participantsSummaryUncounted": "{name} ir kiti",
+    "siriIndexSetting": "Use Omi with Siri & Apple Intelligence",
+    "siriIndexSettingDescription": "Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search."
 }

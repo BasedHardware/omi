@@ -3555,5 +3555,7 @@
     "capturePhoneStorageFull": "Memoria del telefono piena",
     "captureStorageAlmostFull": "Memoria quasi piena",
     "capturePendantDisconnectedDetail": "Il ciondolo ha perso la connessione con questo telefono. Omi si riconnetterà da solo quando il ciondolo sarà acceso e vicino. Tutto ciò che è stato registrato prima è al sicuro.",
-    "participantsSummaryUncounted": "{name} e altri"
+    "participantsSummaryUncounted": "{name} e altri",
+    "siriIndexSetting": "Use Omi with Siri & Apple Intelligence",
+    "siriIndexSettingDescription": "Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search."
 }

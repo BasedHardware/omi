@@ -1,0 +1,15 @@
+{
+  "id": "siri-intents",
+  "kind": "question",
+  "owner": "Siri integration",
+  "question": "How many Siri intent outcomes were observed per app namespace and build?",
+  "query": "contracts/analytics/consumers/siri-intents.sql",
+  "events": [
+    "siriIntentPerformed"
+  ],
+  "namespace_property": "$app_namespace",
+  "dimensions": [
+    "build_number"
+  ],
+  "zero_policy": "Zero may mean the user did not invoke Siri or indexing had no new work; inspect local build and index evidence before interpreting adoption."
+}

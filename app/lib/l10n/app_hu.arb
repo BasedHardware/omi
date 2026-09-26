@@ -3651,5 +3651,7 @@
     "capturePhoneStorageFull": "A telefon tárhelye megtelt",
     "captureStorageAlmostFull": "A tárhely majdnem megtelt",
     "capturePendantDisconnectedDetail": "A medál elvesztette a kapcsolatot ezzel a telefonnal. Az Omi magától újracsatlakozik, amikor a medál be van kapcsolva és a közelben van. Minden, amit eddig rögzített, biztonságban van.",
-    "participantsSummaryUncounted": "{name} és mások"
+    "participantsSummaryUncounted": "{name} és mások",
+    "siriIndexSetting": "Use Omi with Siri & Apple Intelligence",
+    "siriIndexSettingDescription": "Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search."
 }

@@ -311,9 +311,7 @@ describe('ConversationSplitView review regressions', () => {
   });
 
   it('leaves the detail pane width to the responsive layout', async () => {
-    harness.conversations = [
-      conversation('pane-conversation', '2026-08-11T12:00:00Z'),
-    ];
+    harness.conversations = [conversation('pane-conversation', '2026-08-11T12:00:00Z')];
 
     render(<ConversationSplitView />);
 

@@ -23,7 +23,12 @@ vi.mock('liquid-gooey', () => {
     scale?: number;
   }) {
     return (
-      <div data-testid="liquid-item" data-x={x ?? 0} data-y={y ?? 0} data-scale={scale ?? 1}>
+      <div
+        data-testid="liquid-item"
+        data-x={x ?? 0}
+        data-y={y ?? 0}
+        data-scale={scale ?? 1}
+      >
         {children}
       </div>
     );
@@ -144,7 +149,9 @@ describe('ChatBubble', () => {
 
     fireEvent.mouseLeave(container.firstChild as HTMLElement);
 
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Open chat' }));
+    expect(document.activeElement).toBe(
+      screen.getByRole('button', { name: 'Open chat' }),
+    );
   });
 
   it('skips the gooey fan when reduced motion is requested', () => {

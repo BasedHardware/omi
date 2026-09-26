@@ -3555,5 +3555,7 @@
     "capturePhoneStorageFull": "端末の空き容量なし",
     "captureStorageAlmostFull": "空き容量わずか",
     "capturePendantDisconnectedDetail": "ペンダントとこのスマートフォンの接続が切れました。ペンダントの電源が入っていて近くにあれば、Omiは自動で再接続します。それまでに録音した内容は保存されています。",
-    "participantsSummaryUncounted": "{name}ほか"
+    "participantsSummaryUncounted": "{name}ほか",
+    "siriIndexSetting": "SiriとApple IntelligenceでOmiを使用",
+    "siriIndexSettingDescription": "Siriがこのデバイス上の会話、メモリー、タスクを検索できるようにします。オフにするとAppleの検索から削除されます。"
 }

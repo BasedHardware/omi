@@ -218,6 +218,35 @@ extension SettingsContentView {
 
   var privacySection: some View {
     VStack(spacing: OmiSpacing.xl) {
+      settingsCard(settingId: "privacy.siri") {
+        HStack(spacing: OmiSpacing.lg) {
+          SettingsIconTile(symbol: "sparkles")
+          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+            Text("Use Omi with Siri & Apple Intelligence")
+              .scaledFont(size: OmiType.subheading, weight: .semibold)
+              .foregroundColor(Ink.primary)
+            Text("Make conversation summaries, memories and tasks available to Siri on this Mac")
+              .scaledFont(size: OmiType.body)
+              .foregroundColor(Ink.secondary)
+          }
+          Spacer()
+          Toggle(
+            "",
+            isOn: Binding(
+              get: { SiriIntegrationSettings.isEnabled },
+              set: { enabled in
+                SiriIntegrationSettings.isEnabled = enabled
+                if #available(macOS 15.4, *) {
+                  Task { try? await SiriIndexer.shared.preferenceOrOwnerChanged() }
+                }
+              }
+            )
+          )
+          .toggleStyle(OmiToggleStyle())
+          .labelsHidden()
+        }
+      }
+
       // Data Controls
       settingsCard(settingId: "privacy.storerecordings") {
         VStack(alignment: .leading, spacing: OmiSpacing.lg) {

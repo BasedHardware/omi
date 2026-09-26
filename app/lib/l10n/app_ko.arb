@@ -3555,5 +3555,7 @@
     "capturePhoneStorageFull": "휴대폰 저장 공간 부족",
     "captureStorageAlmostFull": "저장 공간 거의 참",
     "capturePendantDisconnectedDetail": "펜던트와 이 휴대폰의 연결이 끊겼어요. 펜던트가 켜져 있고 가까이 있으면 Omi가 자동으로 다시 연결해요. 그 전에 녹음된 내용은 안전하게 보관돼요.",
-    "participantsSummaryUncounted": "{name} 외 여러 명"
+    "participantsSummaryUncounted": "{name} 외 여러 명",
+    "siriIndexSetting": "Siri 및 Apple Intelligence와 함께 Omi 사용",
+    "siriIndexSettingDescription": "Siri가 이 기기에서 대화, 기억, 작업을 찾도록 허용합니다. 끄면 Apple 검색에서 삭제됩니다."
 }

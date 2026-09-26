@@ -3555,5 +3555,7 @@
     "capturePhoneStorageFull": "Пам’ять телефона заповнена",
     "captureStorageAlmostFull": "Пам’ять майже заповнена",
     "capturePendantDisconnectedDetail": "Кулон втратив зв’язок із цим телефоном. Omi перепідключиться сам, коли кулон буде ввімкнений і поруч. Усе, що записано до цього, збережено.",
-    "participantsSummaryUncounted": "{name} та інші"
+    "participantsSummaryUncounted": "{name} та інші",
+    "siriIndexSetting": "Use Omi with Siri & Apple Intelligence",
+    "siriIndexSettingDescription": "Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search."
 }

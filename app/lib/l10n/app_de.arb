@@ -3555,5 +3555,7 @@
     "capturePhoneStorageFull": "Telefonspeicher voll",
     "captureStorageAlmostFull": "Speicher fast voll",
     "capturePendantDisconnectedDetail": "Dein Anhänger hat die Verbindung zu diesem Telefon verloren. Omi verbindet sich von selbst neu, sobald der Anhänger eingeschaltet und in der Nähe ist. Alles bisher Aufgenommene ist sicher.",
-    "participantsSummaryUncounted": "{name} und weitere"
+    "participantsSummaryUncounted": "{name} und weitere",
+    "siriIndexSetting": "Use Omi with Siri & Apple Intelligence",
+    "siriIndexSettingDescription": "Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search."
 }

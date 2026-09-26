@@ -1,3 +1,4 @@
+import 'dart:io';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -9,6 +10,7 @@ import 'package:omi/backend/schema/app.dart';
 import 'package:omi/pages/apps/app_detail/app_detail.dart';
 import 'package:omi/providers/app_provider.dart';
 import 'package:omi/providers/user_provider.dart';
+import 'package:omi/services/siri_integration.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/other/temp.dart';
@@ -21,10 +23,32 @@ class DataPrivacyPage extends StatefulWidget {
 }
 
 class _DataPrivacyPageState extends State<DataPrivacyPage> {
+  bool _siriEnabled = true;
+  int _siriRevision = 0;
+
+  Future<void> _loadSiriSetting() async {
+    try {
+      final enabled = await SiriIntegration.instance.isEnabled();
+      if (mounted) setState(() => _siriEnabled = enabled);
+    } catch (_) {/* Keep the default until native state is available. */}
+  }
+
+  Future<void> _setSiriEnabled(bool enabled) async {
+    final revision = ++_siriRevision;
+    final previous = _siriEnabled;
+    setState(() => _siriEnabled = enabled);
+    try {
+      await SiriIntegration.instance.setEnabled(enabled);
+    } catch (_) {
+      if (mounted && revision == _siriRevision) setState(() => _siriEnabled = previous);
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     PlatformManager.instance.analytics.dataPrivacyPageOpened();
+    if (Platform.isIOS) _loadSiriSetting();
   }
 
   Widget _buildEncryptionBanner(BuildContext context) {
@@ -123,6 +147,18 @@ class _DataPrivacyPageState extends State<DataPrivacyPage> {
                 padding: const EdgeInsets.all(OmiSpacing.md),
                 children: [
                   _buildEncryptionBanner(context),
+                  if (Platform.isIOS) ...[
+                    const SizedBox(height: OmiSpacing.xxl),
+                    Container(
+                      decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+                      child: SwitchListTile(
+                        title: Text(context.l10n.siriIndexSetting),
+                        subtitle: Text(context.l10n.siriIndexSettingDescription),
+                        value: _siriEnabled,
+                        onChanged: _setSiriEnabled,
+                      ),
+                    ),
+                  ],
                   const SizedBox(height: OmiSpacing.xxl),
                   Consumer<AppProvider>(
                     builder: (context, appProvider, child) {

@@ -9,6 +9,7 @@ import 'package:tuple/tuple.dart';
 import 'package:uuid/uuid.dart';
 
 import 'package:omi/services/client_device_service.dart';
+import 'package:omi/services/siri_integration.dart';
 import 'package:omi/backend/http/api/memories.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/memory.dart';
@@ -818,6 +819,7 @@ class MemoriesProvider extends ChangeNotifier {
     final currentTombstoneId = _pendingDeletionId;
     final effectiveTombstoneId = currentTombstoneId ?? tombstoneId;
     _memories = effectiveTombstoneId != null ? all.where((memory) => memory.id != effectiveTombstoneId).toList() : all;
+    unawaited(SiriIntegration.instance.upsertMemories(_memories));
     _deviceScopeSupported = deviceScopeSupported;
     _ledgerHistorySupported = ledgerHistorySupported;
     _ledgerHistoryTruncated = ledgerHistoryTruncated;
@@ -825,7 +827,6 @@ class MemoriesProvider extends ChangeNotifier {
     _ledgerHistoryOffset = ledgerHistoryOffset;
     _ledgerHistoryNextCursor = ledgerHistoryNextCursor;
     _loadFailed = false;
-
     // Merge pending memories that haven't synced yet
     final pendingMemories = SharedPreferencesUtil().pendingMemories;
     for (var pending in pendingMemories) {
@@ -1318,14 +1319,12 @@ class MemoriesProvider extends ChangeNotifier {
     if (_pendingDeletionId != null) {
       unawaited(_finalizeDeletion());
     }
-
     _lastDeletedMemory = memory;
     _pendingDeletionId = memory.id;
-
+    unawaited(SiriIntegration.instance.delete("memory", memory.id));
     _memories.remove(memory);
     _setCategories();
     notifyListeners();
-
     _startDeletionTimer();
   }
 
@@ -1368,6 +1367,7 @@ class MemoriesProvider extends ChangeNotifier {
         _memories.add(deletedMemory!);
       }
       _setCategories();
+      unawaited(SiriIntegration.instance.upsertMemories([deletedMemory!]));
       notifyListeners();
     }
 
@@ -1390,10 +1390,9 @@ class MemoriesProvider extends ChangeNotifier {
 
     _cancelDeletionTimer();
     _pendingDeletionId = null;
-
     _memories.add(_lastDeletedMemory!);
+    unawaited(SiriIntegration.instance.upsertMemories([_lastDeletedMemory!]));
     _lastDeletedMemory = null;
-
     _setCategories();
     notifyListeners();
 
@@ -1463,6 +1462,7 @@ class MemoriesProvider extends ChangeNotifier {
       if (idx != -1) {
         _memories[idx].id = serverMemory.id;
       }
+      unawaited(SiriIntegration.instance.donateUiAction('memory', serverMemory.id));
     }
     if (generation != _sessionGeneration) return true;
 

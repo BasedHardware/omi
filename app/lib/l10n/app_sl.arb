@@ -11115,5 +11115,7 @@
     "capturePhoneStorageFull": "Pomnilnik telefona je poln",
     "captureStorageAlmostFull": "Pomnilnik je skoraj poln",
     "capturePendantDisconnectedDetail": "Obesek je izgubil povezavo s tem telefonom. Omi se bo sam znova povezal, ko bo obesek vklopljen in v bližini. Vse, kar je bilo posneto prej, je varno.",
-    "participantsSummaryUncounted": "{name} in drugi"
+    "participantsSummaryUncounted": "{name} in drugi",
+    "siriIndexSetting": "Use Omi with Siri & Apple Intelligence",
+    "siriIndexSettingDescription": "Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search."
 }

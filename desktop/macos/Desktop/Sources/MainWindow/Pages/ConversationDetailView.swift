@@ -252,6 +252,7 @@ struct ConversationDetailView: View {
         isOpen: $showRecordings, recordings: captureRecordings, phase: separation.phase,
         onOpen: openRecording, onSeparate: separateRecording, pendingSeparation: $pendingSeparation)
     )
+    .siriConversationIdentifier(conversation.id)
     .opacity(hasAppeared ? 1 : 0)
     .offset(y: hasAppeared ? 0 : 20)
     // Esc peels one layer: the transcript back to the summary, then the summary back to the list.

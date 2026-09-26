@@ -11115,5 +11115,7 @@
     "capturePhoneStorageFull": "ফোনের স্টোরেজ পূর্ণ",
     "captureStorageAlmostFull": "স্টোরেজ প্রায় পূর্ণ",
     "capturePendantDisconnectedDetail": "আপনার পেনড্যান্ট এই ফোনের সাথে সংযোগ হারিয়েছে। পেনড্যান্ট চালু ও কাছে থাকলে Omi নিজে থেকেই আবার সংযোগ করবে। এর আগে যা রেকর্ড হয়েছে তা নিরাপদ।",
-    "participantsSummaryUncounted": "{name} ও অন্যরা"
+    "participantsSummaryUncounted": "{name} ও অন্যরা",
+    "siriIndexSetting": "Use Omi with Siri & Apple Intelligence",
+    "siriIndexSettingDescription": "Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search."
 }

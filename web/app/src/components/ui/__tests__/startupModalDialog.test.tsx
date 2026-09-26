@@ -45,7 +45,9 @@ vi.mock('framer-motion', async () => {
 /** Every animated value across the props the dialogs passed to motion.div. */
 function animatedValues(): string[] {
   return mocks.motionProps.flatMap((props) =>
-    [props.initial, props.animate, props.exit].map((value) => JSON.stringify(value ?? null)),
+    [props.initial, props.animate, props.exit].map((value) =>
+      JSON.stringify(value ?? null),
+    ),
   );
 }
 
@@ -72,7 +74,10 @@ describe.each([
     }
 
     const dialog = mocks.motionProps.find(
-      (props) => typeof props.animate === 'object' && props.animate !== null && 'scale' in props.animate,
+      (props) =>
+        typeof props.animate === 'object' &&
+        props.animate !== null &&
+        'scale' in props.animate,
     );
     expect(dialog?.animate).toMatchObject({ opacity: 1, y: 0, scale: 1 });
   });

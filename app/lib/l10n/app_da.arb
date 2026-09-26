@@ -3597,5 +3597,7 @@
     "capturePhoneStorageFull": "Telefonens lager er fuldt",
     "captureStorageAlmostFull": "Lageret er næsten fuldt",
     "capturePendantDisconnectedDetail": "Dit vedhæng mistede forbindelsen til denne telefon. Omi genopretter forbindelsen af sig selv, når vedhænget er tændt og i nærheden. Alt optaget før dette er i sikkerhed.",
-    "participantsSummaryUncounted": "{name} og andre"
+    "participantsSummaryUncounted": "{name} og andre",
+    "siriIndexSetting": "Use Omi with Siri & Apple Intelligence",
+    "siriIndexSettingDescription": "Allow Siri to find your conversations, memories, and tasks on this device. Turning this off removes them from Apple search."
 }

@@ -2526,7 +2526,7 @@ class AuthService {
           // otherwise keep an open handle and publish after local deletion.
           await AgentVMService.shared.cancelForOwnerTransition()
           await AgentSyncService.shared.stop(flushPendingChanges: false)
-          await RewindIndexer.shared.suspendForOwnerTransition()
+          await SiriIndexLifecycle.suspendForOwnerTransition()
           try await RewindStorage.shared.resetForOwnerTransition()
           try await RewindDatabase.shared.applyAcceptedAccountDeletionLocalDataPolicy(
             ownerID: signingOutUserID ?? previousOwner,

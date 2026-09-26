@@ -9,7 +9,6 @@ import WidgetKit
 import BackgroundTasks
 
 extension FlutterError: Error {}
-
 // MARK: - Quick Actions Icon Patcher
 
 /// Observes UIApplication.shortcutItems via KVO and replaces template-image icons
@@ -81,7 +80,7 @@ final class QuickActionsIconPatcher: NSObject {
 }
 
 @main
-@objc class AppDelegate: FlutterAppDelegate {
+@objc class AppDelegate: FlutterAppDelegate, FlutterImplicitEngineDelegate {
   private static let unusedForegroundTaskRefreshIdentifier = "com.pravera.flutter_foreground_task.refresh"
   private var methodChannel: FlutterMethodChannel?
   private var capturePolicyChannel: FlutterMethodChannel?
@@ -122,25 +121,30 @@ final class QuickActionsIconPatcher: NSObject {
     _ application: UIApplication,
     didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?
   ) -> Bool {
-    // A debug build opened without Flutter tooling (Home Screen tap, or an iOS
-    // background relaunch after `flutter run` disconnected) has no engine: iOS
-    // refuses the JIT Dart VM, FlutterEngine init returns nil, and every
-    // registrar below would be nil. Registering plugins anyway crashed in
-    // SwiftAwesomeNotificationsPlugin.register; explain instead.
-    let flutterController = window?.rootViewController as? FlutterViewController
-    guard
-      FlutterLaunchEngineGuard.canRegisterPlugins(
-        hasFlutterRootViewController: flutterController != nil,
-        hasEngine: flutterController?.engine != nil
-      ), let controller = flutterController
-    else {
-      showFlutterEngineUnavailableNotice()
-      return super.application(application, didFinishLaunchingWithOptions: launchOptions)
+    QuickActionsIconPatcher.shared.startObserving()
+    SwiftFlutterForegroundTaskPlugin.setPluginRegistrantCallback { registry in
+      GeneratedPluginRegistrant.register(with: registry)
     }
-    GeneratedPluginRegistrant.register(with: self)
+    UNUserNotificationCenter.current().delegate = self as? UNUserNotificationCenterDelegate
+    let launched = super.application(application, didFinishLaunchingWithOptions: launchOptions)
+    SiriBridge.shared.retryPendingWipeOnLaunch()
+    BGTaskScheduler.shared.cancel(
+      taskRequestWithIdentifier: AppDelegate.unusedForegroundTaskRefreshIdentifier
+    )
+    if let url = AppLinks.shared.getLink(launchOptions: launchOptions) {
+      AppLinks.shared.handleLink(url: url)
+      return true
+    }
+    return launched
+  }
+
+  func didInitializeImplicitFlutterEngine(_ engineBridge: FlutterImplicitEngineBridge) {
+    GeneratedPluginRegistrant.register(with: engineBridge.pluginRegistry)
+    let messenger = engineBridge.applicationRegistrar.messenger()
+    SiriBridge.shared.attach(messenger: messenger)
     // Read-only admission evidence for the separately signed capture lane.
     // Missing flags stay nil so Dart fails closed before app-owned networking.
-    FlutterMethodChannel(name: "omi/physical_qualification", binaryMessenger: controller.binaryMessenger)
+    FlutterMethodChannel(name: "omi/physical_qualification", binaryMessenger: messenger)
       .setMethodCallHandler { call, result in
         guard call.method == "isolation" else {
           result(FlutterMethodNotImplemented)
@@ -154,7 +158,7 @@ final class QuickActionsIconPatcher: NSObject {
           "firebase_data_collection": info["FirebaseDataCollectionDefaultEnabled"] ?? NSNull()
         ])
       }
-    QuickActionsIconPatcher.shared.startObserving()
+
       
       
       if WCSession.isSupported() {
@@ -162,16 +166,16 @@ final class QuickActionsIconPatcher: NSObject {
           session?.delegate = self
           session?.activate();
 
-            flutterWatchAPI = WatchRecorderFlutterAPI(binaryMessenger: controller.binaryMessenger)
+            flutterWatchAPI = WatchRecorderFlutterAPI(binaryMessenger: messenger)
             let api: WatchRecorderHostAPI = RecorderHostApiImpl(session: session!, flutterWatchAPI: flutterWatchAPI)
 
-            WatchRecorderHostAPISetup.setUp(binaryMessenger: controller.binaryMessenger, api: api)
+            WatchRecorderHostAPISetup.setUp(binaryMessenger: messenger, api: api)
       }
 
       // Native BLE module — register Pigeon APIs
       NSLog("[OmiBle] Registering BLE Pigeon APIs")
       do {
-          let messenger = controller.binaryMessenger
+          let messenger = messenger
           let bleFlutterApi = BleFlutterApi(binaryMessenger: messenger)
           OmiBleManager.shared.setFlutterApi(bleFlutterApi)
           let bleHostApi = BleHostApiImpl(bleManager: OmiBleManager.shared)
@@ -183,7 +187,7 @@ final class QuickActionsIconPatcher: NSObject {
       // Registered unconditionally; the impl reports availability mode based on
       // whether the DAT SDK is linked into this build.
       do {
-          let messenger = controller.binaryMessenger
+          let messenger = messenger
           let rayBanFlutterApi = RayBanMetaFlutterAPI(binaryMessenger: messenger)
           let rayBanApi = RayBanMetaHostApiImpl(flutterAPI: rayBanFlutterApi)
           rayBanMetaHostApi = rayBanApi
@@ -194,7 +198,7 @@ final class QuickActionsIconPatcher: NSObject {
       // Self-healing AVAudioEngine capture; interruption/route recovery is
       // handled natively, Dart only mirrors the state.
       do {
-          let messenger = controller.binaryMessenger
+          let messenger = messenger
           let phoneMicFlutterApi = PhoneMicFlutterApi(binaryMessenger: messenger)
           let micController = PhoneMicController(
               environment: PhoneMicLiveEnvironment.make(sink: phoneMicFlutterApi))
@@ -207,7 +211,7 @@ final class QuickActionsIconPatcher: NSObject {
       // preference matches the requested revision.
       capturePolicyChannel = FlutterMethodChannel(
           name: "com.omi/capture_policy",
-          binaryMessenger: controller.binaryMessenger
+          binaryMessenger: messenger
       )
       capturePolicyChannel?.setMethodCallHandler { call, result in
           if call.method == "getRevision" {
@@ -259,7 +263,7 @@ final class QuickActionsIconPatcher: NSObject {
       // and releases this lease when the pass finishes.
       syncTransferChannel = FlutterMethodChannel(
           name: "com.friend.ios/sync_transfer",
-          binaryMessenger: controller.binaryMessenger
+          binaryMessenger: messenger
       )
       syncTransferChannel?.setMethodCallHandler { [weak self] call, result in
           guard let self else {
@@ -278,39 +282,33 @@ final class QuickActionsIconPatcher: NSObject {
           }
       }
 
-      // Retrieve the link from parameters
-    if let url = AppLinks.shared.getLink(launchOptions: launchOptions) {
-      // We have a link, propagate it to your Flutter app or not
-      AppLinks.shared.handleLink(url: url)
-      return true // Returning true will stop the propagation to other packages
-    }
     //Creates a method channel to handle notifications on kill
-    methodChannel = FlutterMethodChannel(name: "com.friend.ios/notifyOnKill", binaryMessenger: controller.binaryMessenger)
+    methodChannel = FlutterMethodChannel(name: "com.friend.ios/notifyOnKill", binaryMessenger: messenger)
     methodChannel?.setMethodCallHandler { [weak self] (call, result) in
       self?.handleMethodCall(call, result: result)
     }
     
     // Create Apple Reminders method channel
-    appleRemindersChannel = FlutterMethodChannel(name: "com.omi.apple_reminders", binaryMessenger: controller.binaryMessenger)
+    appleRemindersChannel = FlutterMethodChannel(name: "com.omi.apple_reminders", binaryMessenger: messenger)
     appleRemindersChannel?.setMethodCallHandler { [weak self] (call, result) in
       self?.handleAppleRemindersCall(call, result: result)
     }
 
     // Create Apple Health method channel
-    appleHealthChannel = FlutterMethodChannel(name: "com.omi.apple_health", binaryMessenger: controller.binaryMessenger)
+    appleHealthChannel = FlutterMethodChannel(name: "com.omi.apple_health", binaryMessenger: messenger)
     appleHealthChannel?.setMethodCallHandler { [weak self] (call, result) in
       self?.handleAppleHealthCall(call, result: result)
     }
 
     // Create Speech Recognition method channel
-    let speechChannel = FlutterMethodChannel(name: "com.omi.ios/speech", binaryMessenger: controller.binaryMessenger)
+    let speechChannel = FlutterMethodChannel(name: "com.omi.ios/speech", binaryMessenger: messenger)
     let speechHandler = SpeechRecognitionHandler()
     speechChannel.setMethodCallHandler { (call, result) in
         speechHandler.handle(call, result: result)
     }
 
     // TestFlight environment detection
-    let envChannel = FlutterMethodChannel(name: "com.omi/environment", binaryMessenger: controller.binaryMessenger)
+    let envChannel = FlutterMethodChannel(name: "com.omi/environment", binaryMessenger: messenger)
     envChannel.setMethodCallHandler { (call, result) in
         if call.method == "isTestFlight" {
             let isTestFlight = Bundle.main.appStoreReceiptURL?.lastPathComponent == "sandboxReceipt"
@@ -321,7 +319,7 @@ final class QuickActionsIconPatcher: NSObject {
     }
 
     // Audio session configuration for Bluetooth microphone support
-    let audioSessionChannel = FlutterMethodChannel(name: "com.omi.ios/audioSession", binaryMessenger: controller.binaryMessenger)
+    let audioSessionChannel = FlutterMethodChannel(name: "com.omi.ios/audioSession", binaryMessenger: messenger)
     audioSessionChannel.setMethodCallHandler { (call, result) in
         if call.method == "configureForBluetooth" {
             let audioSession = AVAudioSession.sharedInstance()
@@ -343,7 +341,7 @@ final class QuickActionsIconPatcher: NSObject {
 
     // Battery widget channel — writes Omi device battery to the shared App Group
     // so the WidgetKit extension can read it.
-    let batteryWidgetChannel = FlutterMethodChannel(name: "com.omi.battery_widget", binaryMessenger: controller.binaryMessenger)
+    let batteryWidgetChannel = FlutterMethodChannel(name: "com.omi.battery_widget", binaryMessenger: messenger)
     batteryWidgetChannel.setMethodCallHandler { (call, result) in
       let defaults = UserDefaults(suiteName: "group.com.friend-app-with-wearable.ios12")
       guard let args = call.arguments as? [String: Any] else {
@@ -375,25 +373,8 @@ final class QuickActionsIconPatcher: NSObject {
     }
 
     // Register Phone Calls plugin
-    OmiPhoneCallsPlugin.register(with: self.registrar(forPlugin: "OmiPhoneCallsPlugin")!)
+    OmiPhoneCallsPlugin.register(with: engineBridge.pluginRegistry.registrar(forPlugin: "OmiPhoneCallsPlugin")!)
 
-    // here, Without this code the task will not work.
-    SwiftFlutterForegroundTaskPlugin.setPluginRegistrantCallback { registry in
-      GeneratedPluginRegistrant.register(with: registry)
-    }
-    if #available(iOS 10.0, *) {
-      UNUserNotificationCenter.current().delegate = self as? UNUserNotificationCenterDelegate
-    }
-
-    let launched = super.application(application, didFinishLaunchingWithOptions: launchOptions)
-    if #available(iOS 13.0, *) {
-      // flutter_foreground_task registers an otherwise unused 25-second
-      // refresh. Clear requests left by older releases after plugin dispatch.
-      BGTaskScheduler.shared.cancel(
-        taskRequestWithIdentifier: AppDelegate.unusedForegroundTaskRefreshIdentifier
-      )
-    }
-    return launched
   }
 
   private func endNativeSyncTransferBackgroundTask() {
@@ -406,7 +387,7 @@ final class QuickActionsIconPatcher: NSObject {
   /// Swaps the engine-less storyboard controller for a plain notice before the
   /// window is shown, so nothing in this launch touches the missing engine.
   /// See FlutterLaunchEngineGuard for why the engine can be absent.
-  private func showFlutterEngineUnavailableNotice() {
+  func showFlutterEngineUnavailableNotice(in sceneWindow: UIWindow?) {
     #if DEBUG
     let debugBuild = true
     #else
@@ -437,8 +418,8 @@ final class QuickActionsIconPatcher: NSObject {
     ])
     // Also covers an iOS background relaunch (BLE/VoIP): nothing is drawn
     // until the user foregrounds the app, and this is what they see then.
-    window?.rootViewController = notice
-    window?.makeKeyAndVisible()
+    sceneWindow?.rootViewController = notice
+    sceneWindow?.makeKeyAndVisible()
   }
 
   override func applicationDidEnterBackground(_ application: UIApplication) {

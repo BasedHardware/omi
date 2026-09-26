@@ -350,6 +350,8 @@ actor TranscriptionStorage {
   func deleteSession(id: Int64) async throws {
     let db = try await ensureInitialized()
 
+    let backendId = try await getSession(id: id)?.backendId
+
     try await db.write { database in
       try database.execute(
         sql: "DELETE FROM transcription_sessions WHERE id = ?",
@@ -358,6 +360,7 @@ actor TranscriptionStorage {
     }
 
     log("TranscriptionStorage: Deleted session \(id)")
+    if let backendId { await SiriIndexHooks.conversationDeleted(backendId) }
   }
 
   /// Update session status helper
@@ -424,6 +427,7 @@ actor TranscriptionStorage {
         )
       }
     }
+    await SiriIndexHooks.conversationDeleted(backendId)
   }
 
   /// Update folder by backend conversation ID
@@ -1038,6 +1042,7 @@ actor TranscriptionStorage {
       )
     }
 
+    SiriIndexHooks.conversationChanged(conversation.id)
     return sessionId
   }
 
@@ -1052,6 +1057,21 @@ actor TranscriptionStorage {
         .filter(Column("discarded") == false)
         .order(Column("startedAt").desc)
         .limit(limit, offset: offset)
+        .fetchAll(database)
+    }
+  }
+
+  /// Newest completed, in-scope backend conversations for the bounded Siri snapshot.
+  func getSiriEligibleSessions(limit: Int, since: Date) async throws -> [TranscriptionSessionRecord] {
+    let db = try await ensureInitialized()
+    return try await db.read { database in
+      try TranscriptionSessionRecord
+        .filter(Column("backendSynced") == true && Column("backendId") != nil)
+        .filter(Column("deleted") == false && Column("discarded") == false)
+        .filter(Column("conversationStatus") == LocalConversationStatus.completed.rawValue)
+        .filter(Column("startedAt") >= since)
+        .order(Column("startedAt").desc)
+        .limit(limit)
         .fetchAll(database)
     }
   }

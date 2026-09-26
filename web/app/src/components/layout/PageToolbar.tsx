@@ -38,7 +38,7 @@ export function PageToolbar({
 }: PageToolbarProps) {
   return (
     <div
-      className={cn('flex-shrink-0 bg-bg-secondary border-b border-stroke', className)}
+      className={cn('flex-shrink-0 border-b border-stroke bg-bg-secondary', className)}
     >
       {/* Stacks on phones: the controls get a row of their own, because a
           narrow toolbar cannot hold tabs, a search field and page actions
@@ -51,7 +51,7 @@ export function PageToolbar({
         <div className="flex min-w-0 items-center gap-2 lg:ml-auto lg:flex-shrink-0">
           {search && (
             <div className="relative min-w-0 flex-1 lg:w-64 lg:flex-none">
-              <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-text-quaternary" />
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-text-quaternary" />
               <Input
                 type="text"
                 value={search.value}
@@ -71,9 +71,9 @@ export function PageToolbar({
                     search.onSubmit?.('');
                   }}
                   aria-label="Clear search"
-                  className="absolute right-2 top-1/2 -translate-y-1/2 p-1 rounded-element text-text-tertiary hover:bg-bg-quaternary hover:text-text-primary transition-colors"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-element p-1 text-text-tertiary transition-colors hover:bg-bg-quaternary hover:text-text-primary"
                 >
-                  <X className="w-3.5 h-3.5" />
+                  <X className="h-3.5 w-3.5" />
                 </button>
               )}
             </div>

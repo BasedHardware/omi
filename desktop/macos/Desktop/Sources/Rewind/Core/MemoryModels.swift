@@ -25,6 +25,7 @@ struct MemoryRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
   var scoring: String?
   var source: String?  // desktop, omi, screenshot, phone
   var conversationId: String?
+  var expiresAt: Date?
 
   // Desktop extraction fields
   var screenshotId: Int64?
@@ -80,6 +81,7 @@ struct MemoryRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
     scoring: String? = nil,
     source: String? = nil,
     conversationId: String? = nil,
+    expiresAt: Date? = nil,
     screenshotId: Int64? = nil,
     confidence: Double? = nil,
     reasoning: String? = nil,
@@ -115,6 +117,7 @@ struct MemoryRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
     self.scoring = scoring
     self.source = source
     self.conversationId = conversationId
+    self.expiresAt = expiresAt
     self.screenshotId = screenshotId
     self.confidence = confidence
     self.reasoning = reasoning
@@ -284,6 +287,7 @@ extension MemoryRecord {
       scoring: memory.scoring,
       source: memory.source,
       conversationId: memory.conversationId,
+      expiresAt: memory.expiresAt,
       screenshotId: nil,  // Not available from API
       confidence: memory.confidence,
       reasoning: memory.reasoning,
@@ -324,6 +328,7 @@ extension MemoryRecord {
     self.scoring = memory.scoring
     self.source = memory.source
     self.conversationId = memory.conversationId
+    self.expiresAt = memory.expiresAt
 
     // Update tags
     if !memory.tags.isEmpty,
@@ -499,6 +504,7 @@ extension MemoryRecord {
       tierIsExplicit: tierIsExplicit,
       createdAt: createdAt,
       updatedAt: updatedAt,
+      expiresAt: expiresAt,
       conversationId: conversationId,
       reviewed: reviewed,
       userReview: userReview,

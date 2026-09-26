@@ -11281,4 +11281,11 @@ class AppLocalizationsPt extends AppLocalizations {
   String participantsSummaryUncounted(String name) {
     return '$name e outros';
   }
+
+  @override
+  String get siriIndexSetting => 'Usar Omi com Siri e Apple Intelligence';
+
+  @override
+  String get siriIndexSettingDescription =>
+      'Permita que a Siri encontre suas conversas, memórias e tarefas neste dispositivo. Desativar remove esses itens da busca da Apple.';
 }
