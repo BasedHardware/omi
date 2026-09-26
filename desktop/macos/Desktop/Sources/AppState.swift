@@ -753,7 +753,7 @@ class AppState: ObservableObject {
     // didSet writes the new value. Only basic-tier users have a legitimate
     // pre-fetch paywalled state to preserve.
     // Freemium: the desktop trial paywall is disabled by default
-    // (backend TRIAL_PAYWALL_ENABLED off), so a stale cached
+    // (backend paywall permanently off), so a stale cached
     // `desktop_isPaywalled=true` from a pre-freemium session must not gate
     // anything on launch. Previously basic-tier users trusted that cache and
     // flashed the "monthly limit" popup until fetchTrialMetadata refreshed

@@ -4,7 +4,6 @@ import 'package:posthog_flutter/posthog_flutter.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/utils/analytics/analytics_adapter.dart';
-import 'package:omi/services/experiments/experiment_registry.dart';
 
 class PostHogAnalyticsAdapter
     implements AnalyticsAdapter, AnalyticsDeliveryAdapter, AnalyticsIdentityAdapter, AnalyticsFeatureFlagAdapter {
@@ -47,7 +46,6 @@ class PostHogAnalyticsAdapter
     config.optOut = !(preferences.getBool('product_analytics_enabled') ?? true);
     config.captureApplicationLifecycleEvents = captureLifecycleEvents;
     config.debug = debug;
-    // ExperimentService records exposure only when a variant is used/rendered.
     config.sendFeatureFlagEvents = false;
     config.preloadFeatureFlags = false;
     await Posthog().setup(config);
@@ -84,15 +82,7 @@ class PostHogAnalyticsAdapter
     return _serialize(() => Posthog().capture(eventName: eventName, properties: masked));
   }
 
-  /// Native identify() reloads flags even with preloadFeatureFlags disabled.
-  /// Both native SDKs merge caller feature properties over cached flag values;
-  /// explicit false prevents their cache from inventing assignment attribution.
-  /// Snapshot here, before queueing, so later caller mutations cannot relabel an
-  /// event. True exposure/outcome properties supplied by our service win.
-  Map<String, Object> _captureProperties(Map<String, Object>? properties) => {
-        for (final definition in MobileExperiments.all) '\$feature/${definition.key}': false,
-        ...?properties,
-      };
+  Map<String, Object> _captureProperties(Map<String, Object>? properties) => {...?properties};
 
   @override
   Future<bool> isFeatureEnabled(String key) => Posthog().isFeatureEnabled(key);

@@ -14,6 +14,10 @@
   (Portuguese agent guide).
 * [`agent_quickstart.ms.md`](agent_quickstart.ms.md) — omi-cli untuk ejen
   (Malay agent guide).
+* [`agent_quickstart.cy.md`](agent_quickstart.cy.md) — canllaw omi-cli ar gyfer
+  asiantau (Welsh agent guide).
+* [`agent_quickstart.th.md`](agent_quickstart.th.md) — คู่มือ omi-cli สำหรับ
+  AI agent (Thai agent guide).
 * [`agent_quickstart.ml.md`](agent_quickstart.ml.md) — ഏജന്റുകൾക്കായുള്ള omi-cli
   (Malayalam agent guide).
 * [`shell_examples.sh`](shell_examples.sh) — runnable shell snippets covering
