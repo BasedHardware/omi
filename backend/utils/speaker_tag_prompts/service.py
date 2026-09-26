@@ -57,7 +57,7 @@ from utils.executors import (
     sync_executor,
 )
 from utils.speaker_identification import extract_speaker_samples
-from utils.speaker_sample import verify_and_transcribe_sample
+from utils.speaker_sample import verify_and_transcribe_sample, verify_and_transcribe_sample_in_worker
 from utils.speaker_tag_prompts.clips import CLIP_SAMPLE_RATE, conversation_clip_pcm, pcm_to_wav
 from utils.speaker_tag_prompts.selection import (
     MAX_CLIP_SECONDS,
@@ -193,12 +193,16 @@ def verified_clip_pcm(
         if cached.get('valid') is True:
             return pcm
     try:
-        verify_kwargs: Dict[str, Any] = {'language': conversation.get('language')}
-        if verification_deadline is not None:
-            verify_kwargs['verification_deadline'] = verification_deadline
-        _transcript, valid, reason = asyncio.run(
-            verify_and_transcribe_sample(pcm_to_wav(pcm), CLIP_SAMPLE_RATE, expected_text, **verify_kwargs)
-        )
+        if verification_deadline is None:
+            _transcript, valid, reason = asyncio.run(
+                verify_and_transcribe_sample(
+                    pcm_to_wav(pcm), CLIP_SAMPLE_RATE, expected_text, language=conversation.get('language')
+                )
+            )
+        else:
+            _transcript, valid, reason = verify_and_transcribe_sample_in_worker(
+                pcm_to_wav(pcm), CLIP_SAMPLE_RATE, expected_text, conversation.get('language'), verification_deadline
+            )
     except Exception:
         SPEAKER_TAG_PROMPTS_SKIPPED.labels(reason='verify_error').inc()
         redis_db.set_generic_cache(

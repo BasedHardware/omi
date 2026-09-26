@@ -413,10 +413,8 @@ def test_verification_stt_runs_inline_with_one_budgeted_provider_attempt(monkeyp
     monkeypatch.setattr(speaker_sample, 'run_blocking', forbidden_shared_pool)
     words = [{'text': word, 'speaker': 'SPEAKER_00'} for word in 'one two three four five'.split()]
     monkeypatch.setattr(speaker_sample, 'deepgram_prerecorded_from_bytes', lambda *args, **kwargs: words)
-    result = asyncio.run(
-        speaker_sample.verify_and_transcribe_sample(
-            b'wave', 16000, 'one two three four five', verification_deadline=time.monotonic() + 1
-        )
+    result = speaker_sample.verify_and_transcribe_sample_in_worker(
+        b'wave', 16000, 'one two three four five', None, time.monotonic() + 1
     )
     assert result == ('one two three four five', True, 'ok')
 
@@ -501,11 +499,11 @@ def test_get_prompts_excludes_misaligned_merged_sync_audio(monkeypatch):
     monkeypatch.setattr(service, 'conversation_clip_pcm', lambda *args: b'\x01\x00' * (10 * 16000))
     checked = []
 
-    async def verify(audio, sample_rate, expected_text, language=None, **kwargs):
+    def verify(audio, sample_rate, expected_text, language, deadline):
         checked.append(expected_text)
         return ('Static and coughing', False, 'text_mismatch: containment=0.00')
 
-    monkeypatch.setattr(service, 'verify_and_transcribe_sample', verify)
+    monkeypatch.setattr(service, 'verify_and_transcribe_sample_in_worker', verify)
     response = service.get_prompts('u', NOW)
     assert response.status == 'no_candidates'
     assert checked == ['Please confirm these spoken words']

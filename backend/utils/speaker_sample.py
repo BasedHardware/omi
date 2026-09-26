@@ -33,7 +33,6 @@ async def verify_and_transcribe_sample(
     sample_rate: int,
     expected_text: Optional[str] = None,
     language: Optional[str] = None,
-    verification_deadline: Optional[float] = None,
 ) -> Tuple[Optional[str], bool, str]:
     """
     Transcribe audio and verify quality using PR #4291 rules.
@@ -57,23 +56,39 @@ async def verify_and_transcribe_sample(
         - other reasons indicate quality issues (sample may be dropped)
     """
     try:
-        if verification_deadline is None:
-            raw_words = await run_blocking(
-                sync_executor,
-                cast(Any, deepgram_prerecorded_from_bytes),
-                audio_bytes,
-                sample_rate,
-                True,
-                language=language,
-            )
-        else:
-            # The caller already runs on the isolated verification worker. Do
-            # not borrow a shared STT worker or create a nested pool dependency.
-            with verification_stt_deadline(verification_deadline):
-                raw_words = deepgram_prerecorded_from_bytes(audio_bytes, sample_rate, True, language=language)
+        raw_words = await run_blocking(
+            sync_executor,
+            cast(Any, deepgram_prerecorded_from_bytes),
+            audio_bytes,
+            sample_rate,
+            True,
+            language=language,
+        )
     except RuntimeError as e:
         # Transient transcription failure - distinguish from quality issues
         return None, False, f"transcription_failed: {e}"
+    return _validate_transcription(raw_words, expected_text, language)
+
+
+def verify_and_transcribe_sample_in_worker(
+    audio_bytes: bytes,
+    sample_rate: int,
+    expected_text: Optional[str],
+    language: Optional[str],
+    deadline: float,
+) -> Tuple[Optional[str], bool, str]:
+    """Verify list clips inside the isolated worker without borrowing a shared STT thread."""
+    try:
+        with verification_stt_deadline(deadline):
+            raw_words = deepgram_prerecorded_from_bytes(audio_bytes, sample_rate, True, language=language)
+    except RuntimeError as e:
+        return None, False, f"transcription_failed: {e}"
+    return _validate_transcription(raw_words, expected_text, language)
+
+
+def _validate_transcription(
+    raw_words: Any, expected_text: Optional[str], language: Optional[str]
+) -> Tuple[Optional[str], bool, str]:
 
     # deepgram_prerecorded_from_bytes returns List[dict] or (when return_language=True) Tuple[List[dict], str].
     # return_language defaults to False, so the runtime value is always the list; narrow for the type system.
