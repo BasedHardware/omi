@@ -141,6 +141,18 @@ void main() {
       expect(forEvent('Capture Recovery Actioned').single['surface'], 'banner');
     });
 
+    testWidgets('retention eviction shows a localized phone-storage risk warning', (tester) async {
+      final monitor = makeMonitor(transferRetry: () async {});
+      monitor.observeStorageAtRisk(engagedAt: DateTime(2026), evictedCount: 1, retainedCount: 720);
+
+      await pumpBanner(tester, monitor);
+
+      final context = tester.element(find.byType(CaptureRecoveryBanner));
+      final l10n = AppLocalizations.of(context);
+      expect(find.text('${l10n.phoneStorage}: ${l10n.recordingsNotSynced}'), findsOneWidget);
+      expect(find.byKey(const Key('capture_recovery_banner')), findsOneWidget);
+    });
+
     testWidgets('disappears when a positive-byte session resolves the wedge', (tester) async {
       final monitor = makeMonitor();
       wedge(monitor);

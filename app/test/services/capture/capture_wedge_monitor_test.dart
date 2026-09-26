@@ -349,6 +349,24 @@ void main() {
 
       expect(monitor.visiblePrompt, isNull);
     });
+
+    test('connected watchdog declares while the byte-producing socket never ends', () async {
+      var transferRetries = 0;
+      final monitor = makeMonitor(transferRetry: () async => transferRetries++);
+      final handle = connectedSession(monitor);
+      monitor.onSocketBytesSent(handle, 640);
+
+      now = now.add(CaptureWedgeMonitor.connectedNoTranscriptWindow);
+      monitor.runConnectedWatchdog();
+      await pumpEventQueue();
+
+      expect(transferRetries, 1);
+      expect(monitor.visiblePrompt?.trigger, CaptureWedgeMonitor.triggerBytesSentNoTranscript);
+      final detected = forEvent('Capture Wedge Detected').single;
+      expect(detected['bytes_since_last_transcript'], 640);
+      expect(detected['socket_still_connected'], isTrue);
+      monitor.dispose();
+    });
   });
 
   group('upload silence', () {
@@ -379,6 +397,26 @@ void main() {
       monitor.onUploadCompleted();
       expect(monitor.visiblePrompt, isNull);
       expect(forEvent('Capture Recovery Resolved'), hasLength(1));
+    });
+  });
+
+  group('storage retention risk', () {
+    test('cap engagement is surfaced once with eviction telemetry', () async {
+      var transferRetries = 0;
+      final monitor = makeMonitor(transferRetry: () async => transferRetries++);
+      final engagedAt = now;
+
+      monitor.observeStorageAtRisk(engagedAt: engagedAt, evictedCount: 3, retainedCount: 720);
+      monitor.observeStorageAtRisk(engagedAt: engagedAt, evictedCount: 3, retainedCount: 720);
+      await pumpEventQueue();
+
+      expect(transferRetries, 1);
+      expect(monitor.visiblePrompt?.trigger, CaptureWedgeMonitor.triggerStorageAtRisk);
+      final detected = forEvent('Capture Wedge Detected').single;
+      expect(detected['evicted_wal_count'], 3);
+      expect(detected['retained_wal_count'], 720);
+      expect(detected['retention_policy'], 'oldest_first_count_cap');
+      monitor.dispose();
     });
   });
 

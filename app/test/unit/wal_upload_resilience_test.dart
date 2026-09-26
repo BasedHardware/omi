@@ -518,4 +518,45 @@ void main() {
       expect(isDefinitiveUploadRefusal(const SyncUploadHttpException(500, 'retryable')), isFalse);
     });
   });
+
+  group('background live-capture drain', () {
+    test('recent ID-less WAL drains after connectivity returns without lifecycle events', () async {
+      final now = DateTime.utc(2026, 9, 26, 12);
+      const filename = 'accepted_socket_no_lifecycle.bin';
+      await File('${tempDir.path}/$filename').writeAsBytes([0xAA, 0xBB]);
+      var uploads = 0;
+      String? uploadedConversationId = 'not-called';
+      var claimedLiveCapture = true;
+      final backgroundSync = LocalWalSyncImpl(
+        listener,
+        now: () => now,
+        uploadGate: SyncUploadGate(
+          limiter: SyncRateLimiter.instance,
+          uploader: (files, {onUploadProgress, conversationId, claimLiveCapture = false, geolocation}) async {
+            uploads++;
+            uploadedConversationId = conversationId;
+            claimedLiveCapture = claimLiveCapture;
+            return UploadFilesResult.done(
+              SyncLocalFilesResponse(newConversationIds: ['recovered'], updatedConversationIds: []),
+            );
+          },
+          fairUseStatusLoader: () async => {'stage': 'none'},
+        ),
+      );
+      final wal = _makeWal(
+        timerStart: now.millisecondsSinceEpoch ~/ 1000 - 60,
+        filePath: filename,
+      );
+      expect(wal.conversationId, isNull, reason: 'no ConversationProcessingStartedEvent ever arrived');
+      backgroundSync.testWals = [wal];
+
+      final result = await backgroundSync.syncLiveCaptureOnly();
+
+      expect(uploads, 1, reason: 'the connectivity/background wake must drain the recent safety copy');
+      expect(uploadedConversationId, isNull);
+      expect(claimedLiveCapture, isFalse, reason: 'an ID-less WAL creates a new server conversation');
+      expect(result?.newConversationIds, ['recovered']);
+      expect(wal.status, WalStatus.synced);
+    });
+  });
 }

@@ -272,12 +272,14 @@ void main() {
       expect(batch.map((wal) => wal.timerStart), [liveNewest.timerStart, liveOlder.timerStart]);
     });
 
-    test('only a conversation-bound recent WAL counts as live capture', () {
+    test('recent ID-less WAL counts as live capture but cannot claim an existing manifest', () {
       const now = 2000000000;
       Wal at(int ageSeconds, {String? conversationId}) =>
           Wal(timerStart: now - ageSeconds, codec: BleAudioCodec.opus, seconds: 60, conversationId: conversationId);
 
-      expect(isLiveCaptureWal(at(60), now), isFalse);
+      final idLess = at(60);
+      expect(isLiveCaptureWal(idLess, now), isTrue);
+      expect(canClaimLiveCapture([idLess], [idLess], now), isFalse);
       expect(isLiveCaptureWal(at(60, conversationId: 'c'), now), isTrue);
       expect(isLiveCaptureWal(at(7 * 60 * 60, conversationId: 'c'), now), isFalse);
     });
@@ -350,6 +352,38 @@ void main() {
       expect(batch.length, 5);
       expect(canClaimLiveCapture(batch, oversized, now), isFalse);
       expect(canClaimLiveCapture(batch, oversized.take(5).toList(), now), isTrue);
+    });
+  });
+
+  group('bounded retained capture WALs', () {
+    Wal retained(int timerStart) => Wal(
+          timerStart: timerStart,
+          codec: BleAudioCodec.opus,
+          seconds: 60,
+          storage: WalStorage.disk,
+          status: WalStatus.miss,
+        );
+
+    test('the documented count cap does not evict at the boundary', () async {
+      sync.testWals = List.generate(maxRetainedCaptureWalCount, retained);
+
+      final evicted = await sync.enforceRetentionPolicyForTesting();
+
+      expect(evicted, 0);
+      expect(sync.testWals, hasLength(maxRetainedCaptureWalCount));
+      expect(sync.retentionRisk, isNull);
+    });
+
+    test('dead-backend accumulation evicts oldest WALs and records storage risk', () async {
+      sync.testWals = List.generate(maxRetainedCaptureWalCount + 3, retained);
+
+      final evicted = await sync.enforceRetentionPolicyForTesting();
+
+      expect(evicted, 3);
+      expect(sync.testWals, hasLength(maxRetainedCaptureWalCount));
+      expect(sync.testWals.map((wal) => wal.timerStart), isNot(contains(anyOf(0, 1, 2))));
+      expect(sync.retentionRisk?.evictedCount, 3);
+      expect(sync.retentionRisk?.retainedCount, maxRetainedCaptureWalCount);
     });
   });
 

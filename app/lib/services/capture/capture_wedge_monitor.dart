@@ -55,11 +55,14 @@ class CaptureWedgeMonitor extends ChangeNotifier {
   static const Duration uploadSilenceThreshold = Duration(hours: 2);
   static const Duration noTranscriptWindow = Duration(minutes: 10);
   static const int noTranscriptThreshold = 3;
+  static const Duration connectedWatchdogInterval = Duration(seconds: 30);
+  static const Duration connectedNoTranscriptWindow = Duration(minutes: 2);
 
   static const String triggerZeroByteStreak = 'zero_byte_streak';
   static const String triggerRapidReconnects = 'rapid_reconnects';
   static const String triggerBytesSentNoTranscript = 'bytes_sent_no_transcript';
   static const String triggerUploadSilence = 'upload_silence';
+  static const String triggerStorageAtRisk = 'storage_at_risk';
   static const String localWalDeviceId = 'local-wal';
   static const String localWalSource = 'local_wal';
 
@@ -75,6 +78,8 @@ class CaptureWedgeMonitor extends ChangeNotifier {
   final Map<int, _OpenCaptureSession> _openSessions = {};
   final Set<String> _retryInFlightDevices = {};
   DateTime? _lastUploadAt;
+  Timer? _connectedWatchdog;
+  String? _lastRetentionRiskFingerprint;
   int _nextSessionHandle = 0;
 
   static bool isCaptureSourceInScope(String? source) => source == 'omi' || source == 'friend_com';
@@ -84,8 +89,19 @@ class CaptureWedgeMonitor extends ChangeNotifier {
   int onCaptureSessionConnected({required String deviceId, required String source}) {
     if (!isCaptureSourceInScope(source)) return -1;
     final handle = ++_nextSessionHandle;
-    _openSessions[handle] = _OpenCaptureSession(deviceId: deviceId, source: source);
+    _openSessions[handle] = _OpenCaptureSession(deviceId: deviceId, source: source, connectedAt: _now());
+    _connectedWatchdog ??= Timer.periodic(connectedWatchdogInterval, (_) => runConnectedWatchdog());
     return handle;
+  }
+
+  /// Accounts bytes accepted by an open transcription socket. A connected
+  /// socket is not evidence of backend progress, so the periodic watchdog can
+  /// declare a wedge even when the socket never closes.
+  void onSocketBytesSent(int handle, int byteCount) {
+    if (byteCount <= 0) return;
+    final session = _openSessions[handle];
+    if (session == null) return;
+    session.bytesSinceTranscript += byteCount;
   }
 
   /// Records an actual transcript outcome for every currently open socket for
@@ -93,7 +109,12 @@ class CaptureWedgeMonitor extends ChangeNotifier {
   /// alive; this signal is deliberately separate from binary-byte accounting.
   void onTranscriptObserved(String deviceId) {
     for (final session in _openSessions.values) {
-      if (session.deviceId == deviceId) session.transcriptObserved = true;
+      if (session.deviceId == deviceId) {
+        session.transcriptObserved = true;
+        session.bytesSinceTranscript = 0;
+        session.lastTranscriptAt = _now();
+        session.watchdogDeclared = false;
+      }
     }
     final state = _devices[deviceId];
     if (state == null) return;
@@ -104,6 +125,10 @@ class CaptureWedgeMonitor extends ChangeNotifier {
   void onCaptureSessionEnded(int handle, {required int binaryBytesSent, bool intentional = false}) {
     final session = _openSessions.remove(handle);
     if (session == null) return;
+    if (_openSessions.isEmpty) {
+      _connectedWatchdog?.cancel();
+      _connectedWatchdog = null;
+    }
     final state = _stateFor(session.deviceId);
     if (binaryBytesSent > 0 && session.transcriptObserved) {
       state.zeroByteSessionEnds.clear();
@@ -168,6 +193,54 @@ class CaptureWedgeMonitor extends ChangeNotifier {
         },
       ),
     );
+  }
+
+  /// Surfaces a bounded-retention eviction once per cap-engagement event.
+  void observeStorageAtRisk({required DateTime engagedAt, required int evictedCount, required int retainedCount}) {
+    final fingerprint = '${engagedAt.microsecondsSinceEpoch}:$evictedCount:$retainedCount';
+    if (_lastRetentionRiskFingerprint == fingerprint) return;
+    _lastRetentionRiskFingerprint = fingerprint;
+    final state = _stateFor(localWalDeviceId);
+    unawaited(
+      _maybeDeclare(
+        state,
+        deviceId: localWalDeviceId,
+        source: localWalSource,
+        trigger: triggerStorageAtRisk,
+        requireFeatureGate: false,
+        extraProperties: {
+          'evicted_wal_count': evictedCount,
+          'retained_wal_count': retainedCount,
+          'retention_policy': 'oldest_first_count_cap',
+        },
+      ),
+    );
+  }
+
+  @visibleForTesting
+  void runConnectedWatchdog() {
+    final now = _now();
+    for (final session in _openSessions.values) {
+      if (session.watchdogDeclared || session.bytesSinceTranscript <= 0) continue;
+      final progressAt = session.lastTranscriptAt ?? session.connectedAt;
+      if (now.difference(progressAt) < connectedNoTranscriptWindow) continue;
+      session.watchdogDeclared = true;
+      final state = _stateFor(session.deviceId);
+      unawaited(
+        _maybeDeclare(
+          state,
+          deviceId: session.deviceId,
+          source: session.source,
+          trigger: triggerBytesSentNoTranscript,
+          requireFeatureGate: false,
+          extraProperties: {
+            'bytes_since_last_transcript': session.bytesSinceTranscript,
+            'seconds_since_last_transcript': now.difference(progressAt).inSeconds,
+            'socket_still_connected': true,
+          },
+        ),
+      );
+    }
   }
 
   void onUploadCompleted() {
@@ -247,6 +320,9 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     _openSessions.clear();
     _retryInFlightDevices.clear();
     _lastUploadAt = null;
+    _lastRetentionRiskFingerprint = null;
+    _connectedWatchdog?.cancel();
+    _connectedWatchdog = null;
     notifyListeners();
   }
 
@@ -255,6 +331,7 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     _devices.clear();
     _openSessions.clear();
     _retryInFlightDevices.clear();
+    _connectedWatchdog?.cancel();
     super.dispose();
   }
 
@@ -295,7 +372,10 @@ class CaptureWedgeMonitor extends ChangeNotifier {
     _retryInFlightDevices.add(episode.deviceId);
     try {
       final transferRetry = _transferRetry;
-      if (episode.trigger == triggerUploadSilence && transferRetry != null) {
+      if ((episode.trigger == triggerUploadSilence ||
+              episode.trigger == triggerStorageAtRisk ||
+              episode.trigger == triggerBytesSentNoTranscript) &&
+          transferRetry != null) {
         await transferRetry().timeout(retryTimeout);
       } else {
         await _bleRetry(episode.deviceId).timeout(retryTimeout);
@@ -341,9 +421,13 @@ class _DeviceWedgeState {
 }
 
 class _OpenCaptureSession {
-  _OpenCaptureSession({required this.deviceId, required this.source});
+  _OpenCaptureSession({required this.deviceId, required this.source, required this.connectedAt});
 
   final String deviceId;
   final String source;
+  final DateTime connectedAt;
   bool transcriptObserved = false;
+  DateTime? lastTranscriptAt;
+  int bytesSinceTranscript = 0;
+  bool watchdogDeclared = false;
 }

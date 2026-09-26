@@ -1808,6 +1808,11 @@ class CaptureController extends ChangeNotifier
           final socketPayload = _activeSource?.getSocketPayload(snapshot) ?? snapshot;
           _socket?.send(socketPayload);
 
+          final wedgeSession = _wedgeSession;
+          if (wedgeSession != null && wedgeSession.handle >= 0 && identical(wedgeSession.socket, _socket)) {
+            _wedgeMonitor.onSocketBytesSent(wedgeSession.handle, socketPayload.length);
+          }
+
           // Track bytes sent to websocket
           _metrics.addSocketBytes(socketPayload.length);
           _recordingTelemetry.observeSent(socketPayload.length);

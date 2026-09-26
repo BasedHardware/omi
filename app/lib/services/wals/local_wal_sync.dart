@@ -27,6 +27,21 @@ import 'package:omi/utils/wal_file_manager.dart';
 const _kBackendBusyErrorHint = 'background worker likely died';
 const _liveCaptureMaxAgeSeconds = 6 * 60 * 60;
 
+/// Phone-local safety copies are minute-sized capture chunks. Retaining 720
+/// unsynced chunks bounds the backlog at roughly twelve hours while leaving a
+/// useful recovery window during a backend outage. At the cap we evict the
+/// oldest retained chunk before admitting newer audio; the loss is surfaced
+/// through [WalRetentionRisk] and capture-recovery telemetry/UI.
+const int maxRetainedCaptureWalCount = 720;
+
+class WalRetentionRisk {
+  const WalRetentionRisk({required this.engagedAt, required this.evictedCount, required this.retainedCount});
+
+  final DateTime engagedAt;
+  final int evictedCount;
+  final int retainedCount;
+}
+
 /// One batch is one server-side sync job, and a job must finish inside the
 /// backend's 600s stale guard (backend/database/sync_jobs.py).
 const _syncUploadBatchLimit = 5;
@@ -71,14 +86,16 @@ bool syncJobIsBackendBusy(SyncJobStatusResponse status) {
   return status.status == 'failed' && status.totalSegments == 0 && (reasonCode == null || reasonCode.isEmpty);
 }
 
-bool isLiveCaptureWal(Wal wal, int nowSeconds) =>
-    wal.conversationId != null && nowSeconds - wal.timerStart <= _liveCaptureMaxAgeSeconds;
+bool isLiveCaptureWal(Wal wal, int nowSeconds) => nowSeconds - wal.timerStart <= _liveCaptureMaxAgeSeconds;
 
 /// The capture manifest is immutable per conversation, so claiming one for a
 /// partial batch strands the siblings that did not fit.
 @visibleForTesting
 bool canClaimLiveCapture(List<Wal> batch, List<Wal> pendingForConversation, int nowSeconds) =>
-    batch.isNotEmpty && isLiveCaptureWal(batch.first, nowSeconds) && pendingForConversation.length <= batch.length;
+    batch.isNotEmpty &&
+    batch.first.conversationId != null &&
+    isLiveCaptureWal(batch.first, nowSeconds) &&
+    pendingForConversation.length <= batch.length;
 
 String? _walLocationBatchKey(Wal wal) {
   final geolocation = wal.geolocation;
@@ -149,6 +166,10 @@ class LocalWalSyncImpl implements LocalWalSync {
   /// index from memory, so leaving them out would silently delete the other
   /// account's recordings from disk.
   final List<Wal> _foreignWals = [];
+
+  WalRetentionRisk? _retentionRisk;
+
+  WalRetentionRisk? get retentionRisk => _retentionRisk;
 
   bool _isCurrent(int generation) => generation == _sessionGeneration;
 
@@ -295,6 +316,7 @@ class LocalWalSyncImpl implements LocalWalSync {
     }
     if (!_isCurrent(admittedGeneration)) return;
     _wals.add(wal);
+    await _enforceRetentionPolicy();
     await _saveWalsToFile(admittedGeneration);
     _notifyUpdated(admittedGeneration);
     Logger.debug("LocalWalSync: Added external WAL ${wal.id} (${wal.seconds}s)");
@@ -358,6 +380,10 @@ class LocalWalSyncImpl implements LocalWalSync {
     if (!_isCurrent(generation)) {
       if (!_walReady.isCompleted) _walReady.complete();
       return;
+    }
+
+    if (await _enforceRetentionPolicy() > 0) {
+      await _saveWalsToFile(generation);
     }
 
     if (!_walReady.isCompleted) _walReady.complete();
@@ -525,8 +551,43 @@ class LocalWalSyncImpl implements LocalWalSync {
       DebugLogManager.logInfo('Flushed WALs from memory to disk', {'count': flushedCount});
     }
 
+    await _enforceRetentionPolicy();
     await _saveWalsToFile(generation);
   }
+
+  /// Applies the oldest-first phone-local safety-copy cap.
+  ///
+  /// Synced WALs are excluded because their lifecycle is governed by the
+  /// user's local-storage preference; this policy specifically bounds audio
+  /// retained because the backend has not acknowledged it.
+  Future<int> _enforceRetentionPolicy() async {
+    final retained = _wals.where((wal) => wal.storage == WalStorage.disk && wal.status != WalStatus.synced).toList()
+      ..sort((a, b) => a.timerStart.compareTo(b.timerStart));
+    final excess = retained.length - maxRetainedCaptureWalCount;
+    if (excess <= 0) return 0;
+
+    var evicted = 0;
+    for (final wal in retained.take(excess).toList()) {
+      if (await _deleteWal(wal)) evicted++;
+    }
+    if (evicted == 0) return 0;
+
+    _retentionRisk = WalRetentionRisk(
+      engagedAt: _now(),
+      evictedCount: evicted,
+      retainedCount: retained.length - evicted,
+    );
+    DebugLogManager.logEvent('wal_retention_cap_engaged', {
+      'policy': 'oldest_first_count_cap',
+      'cap': maxRetainedCaptureWalCount,
+      'evicted_count': evicted,
+      'retained_count': retained.length - evicted,
+    });
+    return evicted;
+  }
+
+  @visibleForTesting
+  Future<int> enforceRetentionPolicyForTesting() => _enforceRetentionPolicy();
 
   Future<void> _saveWalsToFile(int generation) async {
     if (!_isCurrent(generation)) return;
