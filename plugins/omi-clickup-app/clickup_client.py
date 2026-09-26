@@ -3,6 +3,8 @@ import requests
 from typing import Optional, List, Dict, Any
 from dotenv import load_dotenv
 
+REQUEST_TIMEOUT = (5, 30)
+
 load_dotenv()
 
 
@@ -46,7 +48,8 @@ class ClickUpClient:
                     "client_id": self.client_id,
                     "client_secret": self.client_secret,
                     "code": code
-                }
+                },
+                timeout=REQUEST_TIMEOUT,
             )
 
             if response.status_code == 200:
@@ -71,7 +74,8 @@ class ClickUpClient:
             headers = {"Authorization": access_token}
             response = requests.get(
                 f"{self.base_url}/user",
-                headers=headers
+                headers=headers,
+                timeout=REQUEST_TIMEOUT,
             )
 
             if response.status_code == 200:
@@ -96,7 +100,8 @@ class ClickUpClient:
             headers = {"Authorization": access_token}
             response = requests.get(
                 f"{self.base_url}/team",
-                headers=headers
+                headers=headers,
+                timeout=REQUEST_TIMEOUT,
             )
 
             if response.status_code == 200:
@@ -131,7 +136,8 @@ class ClickUpClient:
             response = requests.get(
                 f"{self.base_url}/team/{team_id}/space",
                 headers=headers,
-                params={"archived": "false"}
+                params={"archived": "false"},
+                timeout=REQUEST_TIMEOUT,
             )
 
             if response.status_code == 200:
@@ -166,7 +172,8 @@ class ClickUpClient:
             response = requests.get(
                 f"{self.base_url}/space/{space_id}/list",
                 headers=headers,
-                params={"archived": "false"}
+                params={"archived": "false"},
+                timeout=REQUEST_TIMEOUT,
             )
 
             if response.status_code == 200:
@@ -208,7 +215,8 @@ class ClickUpClient:
         response = requests.get(
             f"{self.base_url}/space/{space_id}/folder",
             headers=headers,
-            params={"archived": "false"}
+            params={"archived": "false"},
+            timeout=REQUEST_TIMEOUT,
         )
 
         if response.status_code != 200:
@@ -230,7 +238,8 @@ class ClickUpClient:
         response = requests.get(
             f"{self.base_url}/folder/{folder_id}/list",
             headers=headers,
-            params={"archived": "false"}
+            params={"archived": "false"},
+            timeout=REQUEST_TIMEOUT,
         )
 
         if response.status_code != 200:
@@ -308,7 +317,8 @@ class ClickUpClient:
             headers = {"Authorization": access_token}
             response = requests.get(
                 f"{self.base_url}/team/{team_id}",
-                headers=headers
+                headers=headers,
+                timeout=REQUEST_TIMEOUT,
             )
 
             if response.status_code == 200:
@@ -451,7 +461,8 @@ class ClickUpClient:
             response = requests.post(
                 f"{self.base_url}/list/{list_id}/task",
                 headers=headers,
-                json=task_data
+                json=task_data,
+                timeout=REQUEST_TIMEOUT,
             )
 
             if response.status_code == 200:

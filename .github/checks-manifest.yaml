@@ -39,6 +39,16 @@ checks:
     triggers: ["plugins/omi-notion-app/**", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "Notion tool endpoints must sanitize page, database, and parent identifiers by normalizing 32-hex strings, UUIDs, and Notion URLs to standard hyphenated UUIDs"
+  - id: plugin-request-timeouts
+    command: ["python3", "scripts/check_plugin_request_timeouts.py"]
+    triggers: ["plugins/**/*.py", "scripts/check_plugin_request_timeouts.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "requests applies no default timeout, so an upstream that accepts the connection and stops answering pins the worker; 19 of these calls ran inside async handlers, where one wedged token exchange blocked the event loop and the app stopped serving every user"
+  - id: plugin-request-timeout-check-tests
+    command: ["python3", "scripts/test_check_plugin_request_timeouts.py"]
+    triggers: ["scripts/check_plugin_request_timeouts.py", "scripts/test_check_plugin_request_timeouts.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "the timeout scanner is the guard for this class, so its own detection of bare calls, requests.Session aliases and async call sites stays executable"
   - id: omi-frankfurter-tests
     command: ["python3", "plugins/omi-frankfurter-app/test_main.py"]
     triggers: ["plugins/omi-frankfurter-app/**", ".github/checks-manifest.yaml"]
