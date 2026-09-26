@@ -117,10 +117,8 @@ async def mcp_streamable_http(
     """
     Streamable HTTP Transport endpoint for MCP clients.
 
-    Canonical paths ``/v1/mcp`` and ``/v1/mcp/`` and permanent alias
-    ``/v1/mcp/sse`` share one stateless implementation in
-    ``utils.mcp_server.transport``. The slash path is registered directly so
-    ``redirect_slashes`` cannot emit a scheme-downgrade redirect behind TLS.
+    Canonical path ``/v1/mcp`` and permanent alias ``/v1/mcp/sse`` share one
+    stateless implementation in ``utils.mcp_server.transport``.
     """
     return await _transport.handle_post_request(request, authorization, path_kind=_path_kind(request))
 
@@ -134,8 +132,7 @@ def mcp_sse_get(
 ):
     """
     GET on the Streamable HTTP endpoint: this server offers no server-initiated
-    stream, so it answers 405 (``Allow: POST, HEAD, DELETE``) on the canonical
-    paths and the legacy alias.
+    stream, so it answers 405 (``Allow: POST, HEAD, DELETE``) on both paths.
     """
     return _transport.no_stream_get_response()
 
