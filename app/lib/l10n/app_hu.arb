@@ -3674,5 +3674,20 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Hangosan játszik le a telefon hangszóróján keresztül.",
     "deviceOnboardingVoiceReplySettingsHint": "Ezt bármikor módosíthatja a {settings} › {voiceResponse} számon",
     "deviceOnboardingAllSetReplayHint": "A körutat bármikor újra lejátszhatja a következő számon: {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Fejhallgató"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Fejhallgató",
+    "usageListened": "Listened",
+    "usageWordsHeard": "Words heard",
+    "usageTasksNotes": "Tasks & notes",
+    "usagePeakHour": "Peak hour",
+    "usageBestDay": "Best day",
+    "usageBestMonth": "Best month",
+    "usageBestYear": "Best year",
+    "usageMinutes": "perc",
+    "usageWords": "Words",
+    "usageTasks": "Feladatok",
+    "usageMonth": "Ez a hónap",
+    "usageYear": "Ez az év",
+    "usageAll": "Minden idők",
+    "usageNow": "now",
+    "usageChatThisMonth": "Chat this month"
 }

@@ -11138,5 +11138,20 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Tumutugtog nang malakas sa pamamagitan ng speaker ng telepono.",
     "deviceOnboardingVoiceReplySettingsHint": "Maaari mo itong baguhin anumang oras sa {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "I-replay ang tour na ito anumang oras sa {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "Mga headphone"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "Mga headphone",
+    "usageListened": "Listened",
+    "usageWordsHeard": "Words heard",
+    "usageTasksNotes": "Tasks & notes",
+    "usagePeakHour": "Peak hour",
+    "usageBestDay": "Best day",
+    "usageBestMonth": "Best month",
+    "usageBestYear": "Best year",
+    "usageMinutes": "minutes",
+    "usageWords": "Words",
+    "usageTasks": "Mga Gawain",
+    "usageMonth": "Sa Buwan Na Ito",
+    "usageYear": "Sa Taong Ito",
+    "usageAll": "Lahat ng Panahon",
+    "usageNow": "now",
+    "usageChatThisMonth": "Chat this month"
 }

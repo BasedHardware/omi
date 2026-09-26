@@ -3578,5 +3578,20 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "เล่นเสียงดังผ่านลำโพงโทรศัพท์",
     "deviceOnboardingVoiceReplySettingsHint": "คุณสามารถเปลี่ยนได้ตลอดเวลาใน {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "เล่นทัวร์นี้ซ้ำได้ทุกเมื่อใน {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "หูฟัง"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "หูฟัง",
+    "usageListened": "Listened",
+    "usageWordsHeard": "Words heard",
+    "usageTasksNotes": "Tasks & notes",
+    "usagePeakHour": "Peak hour",
+    "usageBestDay": "Best day",
+    "usageBestMonth": "Best month",
+    "usageBestYear": "Best year",
+    "usageMinutes": "นาที",
+    "usageWords": "Words",
+    "usageTasks": "งาน",
+    "usageMonth": "เดือนนี้",
+    "usageYear": "ปีนี้",
+    "usageAll": "ตลอดเวลา",
+    "usageNow": "now",
+    "usageChatThisMonth": "Chat this month"
 }

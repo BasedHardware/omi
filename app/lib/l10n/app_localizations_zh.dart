@@ -11137,4 +11137,49 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => '耳机';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => '分钟';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => '任务';
+
+  @override
+  String get usageMonth => '本月';
+
+  @override
+  String get usageYear => '今年';
+
+  @override
+  String get usageAll => '全部时间';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
 }

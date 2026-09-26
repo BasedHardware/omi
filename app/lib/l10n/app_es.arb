@@ -3578,5 +3578,20 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "Se reproduce en voz alta a través del altavoz del teléfono.",
     "deviceOnboardingVoiceReplySettingsHint": "Puedes cambiar esto en cualquier momento en {settings} › {voiceResponse}",
     "deviceOnboardingAllSetReplayHint": "Reproduce este recorrido en cualquier momento en {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "auriculares"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "auriculares",
+    "usageListened": "Listened",
+    "usageWordsHeard": "Words heard",
+    "usageTasksNotes": "Tasks & notes",
+    "usagePeakHour": "Peak hour",
+    "usageBestDay": "Best day",
+    "usageBestMonth": "Best month",
+    "usageBestYear": "Best year",
+    "usageMinutes": "minutos",
+    "usageWords": "Words",
+    "usageTasks": "Tareas",
+    "usageMonth": "Este mes",
+    "usageYear": "Este año",
+    "usageAll": "Todo el tiempo",
+    "usageNow": "now",
+    "usageChatThisMonth": "Chat this month"
 }

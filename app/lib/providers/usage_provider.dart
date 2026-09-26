@@ -111,6 +111,25 @@ class UsageProvider with ChangeNotifier {
     notifyListeners();
   }
 
+  @visibleForTesting
+  void debugSetUsage(String period, UsageStats stats, List<UsageHistoryPoint> history) {
+    switch (period) {
+      case 'today':
+        _todayUsage = stats;
+        _todayHistory = history;
+      case 'monthly':
+        _monthlyUsage = stats;
+        _monthlyHistory = history;
+      case 'yearly':
+        _yearlyUsage = stats;
+        _yearlyHistory = history;
+      case 'all_time':
+        _allTimeUsage = stats;
+        _allTimeHistory = history;
+    }
+    notifyListeners();
+  }
+
   /// Wipes user-scoped state on logout so the next account doesn't inherit
   /// the previous account's subscription/usage (e.g. a stale Pro badge).
   void clearUserData() {

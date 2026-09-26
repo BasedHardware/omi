@@ -3578,5 +3578,20 @@
     "deviceOnboardingVoiceReplyStatusAlwaysSpeaker": "通过手机扬声器大声播放。",
     "deviceOnboardingVoiceReplySettingsHint": "您可以随时在 {settings} › {voiceResponse} 中更改此设置",
     "deviceOnboardingAllSetReplayHint": "随时重播此导览 {settings} › {deviceSettings} › {deviceTutorial}",
-    "deviceOnboardingVoiceReplyGenericHeadphones": "耳机"
+    "deviceOnboardingVoiceReplyGenericHeadphones": "耳机",
+    "usageListened": "Listened",
+    "usageWordsHeard": "Words heard",
+    "usageTasksNotes": "Tasks & notes",
+    "usagePeakHour": "Peak hour",
+    "usageBestDay": "Best day",
+    "usageBestMonth": "Best month",
+    "usageBestYear": "Best year",
+    "usageMinutes": "分钟",
+    "usageWords": "Words",
+    "usageTasks": "任务",
+    "usageMonth": "本月",
+    "usageYear": "今年",
+    "usageAll": "全部时间",
+    "usageNow": "now",
+    "usageChatThisMonth": "Chat this month"
 }

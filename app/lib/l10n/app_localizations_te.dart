@@ -11396,4 +11396,49 @@ class AppLocalizationsTe extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'హెడ్‌ఫోన్‌లు';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'నిమిషాలు';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'పనులు';
+
+  @override
+  String get usageMonth => 'ఈ నెల';
+
+  @override
+  String get usageYear => 'ఈ సంవత్సరం';
+
+  @override
+  String get usageAll => 'అన్ని సమయం';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
 }

@@ -11278,4 +11278,49 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get deviceOnboardingVoiceReplyGenericHeadphones => 'سماعات الرأس';
+
+  @override
+  String get usageListened => 'Listened';
+
+  @override
+  String get usageWordsHeard => 'Words heard';
+
+  @override
+  String get usageTasksNotes => 'Tasks & notes';
+
+  @override
+  String get usagePeakHour => 'Peak hour';
+
+  @override
+  String get usageBestDay => 'Best day';
+
+  @override
+  String get usageBestMonth => 'Best month';
+
+  @override
+  String get usageBestYear => 'Best year';
+
+  @override
+  String get usageMinutes => 'دقائق';
+
+  @override
+  String get usageWords => 'Words';
+
+  @override
+  String get usageTasks => 'المهام';
+
+  @override
+  String get usageMonth => 'هذا الشهر';
+
+  @override
+  String get usageYear => 'هذا العام';
+
+  @override
+  String get usageAll => 'كل الأوقات';
+
+  @override
+  String get usageNow => 'now';
+
+  @override
+  String get usageChatThisMonth => 'Chat this month';
 }
