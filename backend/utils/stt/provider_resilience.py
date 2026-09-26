@@ -13,6 +13,8 @@ import threading
 import time
 from typing import Any, Callable, Final
 
+from utils.metrics import OMI_STT_PROVIDER_CIRCUIT_OPEN
+
 logger = logging.getLogger(__name__)
 
 EXPECTED_REJECTIONS = frozenset({'capacity_full', 'allocation_rejected'})
@@ -78,6 +80,7 @@ class ProviderCircuitBreaker:
         serve_error_cooldown_seconds: float | None = None,
         serve_error_successes_to_close: int = 3,
         account_cooldown_seconds: float | None = None,
+        provider_label: str | None = None,
     ) -> None:
         if failure_threshold < 1:
             raise ValueError('failure_threshold must be >= 1')
@@ -119,6 +122,34 @@ class ProviderCircuitBreaker:
         self._account_cooldown: float | None = None
         self._generation = 0
         self._lock = threading.RLock()
+        # Observability only: publishes omi_stt_provider_circuit_open on every
+        # state transition. None (tests, untagged constructions) disables it;
+        # publishing must never influence or fail the breaker itself.
+        self._provider_label = provider_label
+        self._publish_state()
+
+    def _publish_state(self) -> None:
+        """Mirror the current bench state onto the per-pod gauge. Never raises.
+
+        kind=account: the 402/balance bench is actively holding the provider
+        out (cooldown not yet elapsed). kind=selection: the connect/serve bench
+        has the circuit fully open. half_open means a probe is in flight — that
+        is admitting traffic, not refusing it, so neither gauge is set.
+        """
+
+        if self._provider_label is None:
+            return
+        try:
+            account_open = self._account_cooldown is not None and self.account_cooldown_seconds_remaining > 0
+            selection_open = self._state == 'open' and not account_open
+            OMI_STT_PROVIDER_CIRCUIT_OPEN.labels(provider=self._provider_label, kind='account').set(
+                1 if account_open else 0
+            )
+            OMI_STT_PROVIDER_CIRCUIT_OPEN.labels(provider=self._provider_label, kind='selection').set(
+                1 if selection_open else 0
+            )
+        except Exception:
+            pass
 
     def _active_cooldown(self) -> float:
         if self._account_cooldown is not None:
@@ -184,6 +215,7 @@ class ProviderCircuitBreaker:
                     return False
                 self._state = 'half_open'
                 self._probes_in_flight = 0
+                self._publish_state()
             limit = 1 if self._account_cooldown is not None else max(1, max_probes)
             if self._probes_in_flight >= limit:
                 return False
@@ -224,6 +256,7 @@ class ProviderCircuitBreaker:
             # previous ladder had climbed.
             self._serve_error_events = 0
             self._serve_error_bench_seconds = self._serve_error_cooldown_seconds
+            self._publish_state()
 
     def record_failure(self) -> None:
         with self._lock:
@@ -234,6 +267,7 @@ class ProviderCircuitBreaker:
                 self._opened_at = self._clock()
                 if self._opened_by_serve_error:
                     self._remaining_successes_to_close = self._serve_error_successes_to_close
+                self._publish_state()
                 return
             self._failures += 1
             if self._failures >= self._failure_threshold:
@@ -242,6 +276,7 @@ class ProviderCircuitBreaker:
                 self._opened_at = self._clock()
                 self._opened_by_serve_error = False
                 self._remaining_successes_to_close = 1
+                self._publish_state()
 
     def record_serve_failure(self) -> None:
         """Open the circuit after a provider died while serving a session.
@@ -274,6 +309,7 @@ class ProviderCircuitBreaker:
                 self._serve_error_cooldown_seconds, self._serve_error_events - 1
             )
             self._remaining_successes_to_close = self._serve_error_successes_to_close
+            self._publish_state()
 
     def record_rejection(self, reason: str) -> None:
         if reason in EXPECTED_REJECTIONS:
@@ -332,6 +368,7 @@ class ProviderCircuitBreaker:
             self._account_cooldown = max(1, cooldown_seconds)
             self._opened_by_serve_error = False
             self._remaining_successes_to_close = 1
+            self._publish_state()
 
     def observe_serving(self) -> None:
         """Record that the session admitted against this provider actually served.
@@ -382,4 +419,8 @@ def soniox_circuit_from_env() -> ProviderCircuitBreaker:
     else:
         threshold = os.getenv('MODULATE_CIRCUIT_FAILURE_THRESHOLD', '3')
         cooldown = os.getenv('MODULATE_CIRCUIT_COOLDOWN_SECONDS', '30')
-    return ProviderCircuitBreaker(failure_threshold=int(threshold), cooldown_seconds=float(cooldown))
+    return ProviderCircuitBreaker(
+        failure_threshold=int(threshold),
+        cooldown_seconds=float(cooldown),
+        provider_label='soniox',
+    )

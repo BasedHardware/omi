@@ -13,6 +13,7 @@ from typing import Any, Callable, Literal, Mapping
 from models.conversation_enums import ConversationSource
 from utils.journey_metrics_contract import bounded_app_build
 from utils.metrics import (
+    OMI_LIVE_SESSION_TRANSCRIPT_OUTCOME_TOTAL,
     OMI_LIVE_STT_ACCEPTED_TOTAL,
     OMI_LIVE_STT_AUDIO_SECONDS_TOTAL,
     OMI_LIVE_STT_TERMINAL_TOTAL,
@@ -47,6 +48,9 @@ _LIVE_TERMINAL_OUTCOMES = frozenset({'success', 'failure', 'cancelled'})
 _LIVE_TERMINAL_PHASES = frozenset({'connection', 'initialization', 'send', 'teardown', 'transcript_delivery'})
 _LISTEN_AUDIO_OUTCOMES = frozenset({'first_audio', 'no_audio_teardown'})
 _SYNC_INTAKE_OUTCOMES = frozenset({'created', 'merged'})
+# Headline SLI outcomes (routers/listen/runtime.py session-end seam).
+LIVE_SESSION_TRANSCRIPT_OUTCOMES = frozenset({'transcribed', 'no_transcript', 'too_short'})
+LiveSessionTranscriptOutcome = Literal['transcribed', 'no_transcript', 'too_short']
 LiveSTTTerminalOutcome = Literal['success', 'failure', 'cancelled']
 LiveSTTTerminalPhase = Literal['connection', 'initialization', 'send', 'teardown', 'transcript_delivery']
 
@@ -380,6 +384,21 @@ def record_listen_audio_outcome(*, source: str | None, outcome: str, platform: s
         outcome=outcome,
         client_platform=_bounded_platform(platform),
     ).inc()
+
+
+def record_live_session_transcript_outcome(*, outcome: LiveSessionTranscriptOutcome) -> None:
+    """Record the headline per-session transcript outcome once at session teardown.
+
+    The one number that answers the incident question "did this session get any
+    transcript?". ``too_short`` (under ~10s of audio, or no speech per the
+    existing VAD) is a separate bucket so silence cannot dilute or fake the
+    failure ratio: alerts divide ``transcribed`` by
+    ``transcribed + no_transcript`` only.
+    """
+
+    if outcome not in LIVE_SESSION_TRANSCRIPT_OUTCOMES:
+        raise ValueError(f'unknown live session transcript outcome: {outcome}')
+    OMI_LIVE_SESSION_TRANSCRIPT_OUTCOME_TOTAL.labels(outcome=outcome).inc()
 
 
 def emit_listen_vad_gate_metrics(payload: Mapping[str, Any], *, source: str | None, platform: str | None) -> dict:

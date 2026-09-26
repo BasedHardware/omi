@@ -666,9 +666,11 @@ STT_FALLBACK_LEG_RECOVERED_EXPR = (
     '(increase(omi_fallback_total{job="backend-listen-metrics",component=~"stt_selection|stt_live_session"}[6h])) * 0'
 )
 STT_PROVIDER_BUDGET_EXPR = (
-    'sum(increase(omi_stt_stream_close_total{job="backend-listen-metrics",'
-    'reason="provider_budget_exhausted"}[5m])) or vector(0)'
+    'sum by (provider) (increase(omi_stt_stream_close_total{job="backend-listen-metrics",'
+    'reason="provider_budget_exhausted"}[5m])) unless on (provider) '
+    '(max by (provider) (omi_stt_provider_retired{job="backend-listen-metrics"} == 1))'
 )
+STT_PROVIDER_RETIRED_EXPR = '(max by (provider) (omi_stt_provider_retired{job="backend-listen-metrics"} == 1))'
 STT_CHAIN_EXHAUSTION_RULES = {
     "omi-stt-chain-exhausted-warn": ("warning", "$A >= 50 && $B > 0.35", "10m"),
     "omi-stt-chain-exhausted-page": ("critical", "$A >= 50 && $B > 0.60", "5m"),
@@ -727,6 +729,11 @@ def test_stt_provider_budget_alert_pages_on_typed_stream_closes():
     """Monthly/quota exhaustion is never transient. The 2026-09-19 Soniox
     organization_monthly_budget_exhausted outage closed every hop and was
     unpaged for 27.5h because recovered was recorded at connect.
+
+    2026-09-26 revision: the alert is per provider (the aggregated form carried
+    no signal — Deepgram kept it firing for days) and subtracts deployment-
+    retired providers so an intentionally unfunded leg (hosted Deepgram, per
+    the 2026-09 cost ruling) cannot page forever.
     """
     for export_name, rules in _all_rule_exports().items():
         rule = rules["omi-stt-provider-budget"]
@@ -737,15 +744,227 @@ def test_stt_provider_budget_alert_pages_on_typed_stream_closes():
         assert rule["for"] == "2m", export_name
         exprs = [d["model"]["expr"] for d in rule["data"] if d["model"].get("expr")]
         assert exprs[0] == STT_PROVIDER_BUDGET_EXPR, export_name
+        assert "sum by (provider)" in exprs[0], export_name
+        assert "unless on (provider)" in exprs[0], export_name
+        assert "omi_stt_provider_retired" in exprs[0], export_name
         math_nodes = [d["model"]["expression"] for d in rule["data"] if d["model"].get("type") == "math"]
-        assert math_nodes == ["$A >= 5"], export_name
-        assert "or vector(0)" in exprs[0], export_name
+        assert math_nodes == ["$A > 0"], export_name
+        assert "top up" in rule["annotations"]["summary"].lower(), export_name
         assert "evaluated_bad" in rule["annotations"], export_name
-        assert "64" in rule["annotations"]["evaluated_bad"], export_name
         assert "evaluated_good" in rule["annotations"], export_name
-        assert "0 budget closes" in rule["annotations"]["evaluated_good"], export_name
-        assert "Prometheus evaluation" in rule["annotations"]["verification"], export_name
         assert rule["annotations"]["__panelId__"] == "18"
+
+
+LIVE_TRANSCRIPTION_SUCCESS_RULE = "omi-live-transcription-success-low"
+LIVE_TRANSCRIPTION_SUCCESS_TOTAL_EXPR = (
+    'sum(increase(omi_live_session_transcript_outcome_total{job="backend-listen-metrics",'
+    'outcome=~"transcribed|no_transcript"}[5m]))'
+)
+
+
+def test_live_transcription_success_alert_measures_the_user_felt_outcome():
+    """The headline SLI: did this session get any transcript?
+
+    2026-09-26 incident: ~34.8k of ~35k sessions failed for hours and nothing
+    paged, because every existing rule watched provider plumbing instead of
+    the session outcome. too_short sessions stay out of the denominator so
+    quiet nights cannot page, and the >= 50 volume guard keeps no-data healthy.
+    """
+    for export_name, rules in _all_rule_exports().items():
+        rule = rules[LIVE_TRANSCRIPTION_SUCCESS_RULE]
+        assert len(rule["uid"]) < 40, export_name
+        assert rule["labels"]["severity"] == "critical", export_name
+        assert rule["labels"]["impact"] == "user-experience", export_name
+        assert rule["noDataState"] == "OK", export_name
+        assert rule["for"] == "5m", export_name
+        exprs = [d["model"]["expr"] for d in rule["data"] if d["model"].get("expr")]
+        assert exprs[0] == LIVE_TRANSCRIPTION_SUCCESS_TOTAL_EXPR, export_name
+        assert exprs[0] != exprs[1], export_name
+        assert 'outcome="transcribed"' in exprs[1], export_name
+        assert 'outcome="too_short"' not in exprs[1], export_name
+        assert "clamp_min" in exprs[1], export_name
+        math_nodes = [d["model"]["expression"] for d in rule["data"] if d["model"].get("type") == "math"]
+        assert math_nodes == ["$A >= 50 && $B < 0.90"], export_name
+        assert rule["notification_settings"]["receiver"] == "Omi - Services Alerting (Telegram)", export_name
+        assert (REPO / rule["annotations"]["runbook"]).is_file(), export_name
+
+
+def test_stt_leg_error_rate_reads_a_metric_every_connect_path_emits():
+    """omi_stt_leg_attempts_total is configured-chain-only and was empty in prod
+    while the chain was off (2026-09-26 incident: the rule could never fire).
+    The rule now reads omi_stt_provider_connect_total, which both the legacy
+    order and the configured chain record, and excludes retired providers.
+    """
+    for export_name, rules in _all_rule_exports().items():
+        rule = rules["omi-stt-leg-error-rate"]
+        expressions = " ".join(d["model"].get("expr", "") for d in rule["data"])
+        assert "omi_stt_leg_attempts_total" not in expressions, export_name
+        assert "omi_stt_provider_connect_total" in expressions, export_name
+        assert 'outcome="failure"' in expressions, export_name
+        assert "unless on (provider)" in expressions, export_name
+        assert STT_PROVIDER_RETIRED_EXPR in expressions, export_name
+        assert 'job="backend-listen-metrics"' in expressions, export_name
+        assert rule["noDataState"] == "OK", export_name
+        assert "omi-stt-chain-terminal" not in rules, export_name
+
+
+# Metrics that legitimately come from outside the backend source tree. Each
+# entry must name its emitter; anything not listed here and not declared in
+# backend source as a Counter/Gauge/Histogram fails the gate below.
+EXTERNAL_ALERT_METRIC_PREFIXES = {
+    "kube_": "kube-state-metrics",
+    "namespace_workload_pod:": "kube-state-metrics relabeling rule",
+    "container_": "cAdvisor",
+    "stackdriver_": "prometheus-stackdriver-exporter",
+    "engine_": "deepgram self-hosted deployment exporter",
+}
+EXTERNAL_ALERT_METRICS = {
+    "up": "Prometheus builtin target health",
+}
+
+_METRIC_DECLARATION = re.compile(r"(?:Counter|Gauge|Histogram)\(\s*['\"]([a-zA-Z0-9_:]+)['\"]")
+_PROMQL_KEYWORDS = frozenset(
+    {
+        "sum",
+        "by",
+        "without",
+        "increase",
+        "rate",
+        "irate",
+        "avg_over_time",
+        "max_over_time",
+        "min_over_time",
+        "count_over_time",
+        "sum_over_time",
+        "last_over_time",
+        "stddev_over_time",
+        "quantile_over_time",
+        "absent",
+        "absent_over_time",
+        "clamp_min",
+        "clamp_max",
+        "vector",
+        "or",
+        "and",
+        "unless",
+        "on",
+        "ignoring",
+        "group_left",
+        "group_right",
+        "offset",
+        "bool",
+        "histogram_quantile",
+        "topk",
+        "bottomk",
+        "count",
+        "max",
+        "min",
+        "avg",
+        "sort",
+        "sort_desc",
+        "label_replace",
+        "delta",
+        "idelta",
+        "deriv",
+        "predict_linear",
+        "resets",
+        "changes",
+        "abs",
+        "ceil",
+        "floor",
+        "round",
+        "sgn",
+        "exp",
+        "ln",
+        "log2",
+        "log10",
+        "sqrt",
+        "time",
+        "timestamp",
+    }
+)
+_PROMQL_GROUP_CLAUSE = re.compile(r"\b(?:by|on|without|group_left|group_right)\s*\([^)]*\)")
+_HISTOGRAM_SUFFIXES = ("_bucket", "_sum", "_count")
+
+
+def _declared_backend_metric_names() -> set[str]:
+    names: set[str] = set()
+    for path in (REPO / "backend").rglob("*.py"):
+        text = str(path)
+        if "/tests/" in text or "/testing/" in text or "/.venv/" in text:
+            continue
+        names |= set(_METRIC_DECLARATION.findall(path.read_text(encoding="utf-8", errors="ignore")))
+    return names
+
+
+# Scanned once at import (collection) time: the walk over backend source costs
+# ~0.4s CPU, which would otherwise blow the fast-unit per-call budget.
+DECLARED_BACKEND_METRIC_NAMES = _declared_backend_metric_names()
+
+
+def _alert_expr_metric_names(expr: str) -> set[str]:
+    # Drop label values, then grouping clauses, so only selectors remain.
+    stripped = _PROMQL_GROUP_CLAUSE.sub(" ", re.sub(r'"[^"]*"', '""', expr))
+    names = set()
+    for match in re.finditer(r"\b([a-z_][a-z0-9_]*(?::[a-z_][a-z0-9_]*)*)\b", stripped):
+        token = match.group(1)
+        if token in _PROMQL_KEYWORDS:
+            continue
+        if re.search(rf"\b{re.escape(token)}\s*(?:=~?|!=)", stripped):
+            continue  # label key in a matcher
+        names.add(token)
+    return names
+
+
+def _is_external_alert_metric(token: str) -> bool:
+    return token in EXTERNAL_ALERT_METRICS or any(token.startswith(prefix) for prefix in EXTERNAL_ALERT_METRIC_PREFIXES)
+
+
+def test_every_alert_expression_metric_is_emitted_in_backend_source():
+    """An alert reading a metric nothing emits can never fire.
+
+    Failure-Class: FC-alert-never-provably-fired
+
+    omi-stt-chain-terminal and omi-stt-leg-error-rate read
+    omi_stt_chain_exhausted_total / omi_stt_leg_attempts_total, which only the
+    configured-order chain emits; with the chain off in prod both series were
+    permanently empty and the rules were unfirable through the whole 2026-09-26
+    incident. This gate fails when an alert expression references a metric
+    name that is neither declared as a Counter/Gauge/Histogram anywhere in
+    backend source nor explicitly allowlisted as an external emitter above.
+    """
+    declared = DECLARED_BACKEND_METRIC_NAMES
+    assert declared, "metric declaration scan found nothing; the gate is broken"
+
+    def _base(token: str) -> str:
+        for suffix in _HISTOGRAM_SUFFIXES:
+            if token.endswith(suffix):
+                return token[: -len(suffix)]
+        return token
+
+    offenders: dict[str, set[str]] = {}
+    for export_name, rules in _all_rule_exports().items():
+        for uid, rule in rules.items():
+            for node in rule.get("data", []):
+                model = node.get("model") or {}
+                expr = model.get("expr")
+                is_promql = (
+                    node.get("datasourceUid") == "prometheus"
+                    or (model.get("datasource") or {}).get("type") == "prometheus"
+                )
+                if not is_promql or not isinstance(expr, str) or not expr:
+                    continue
+                for token in _alert_expr_metric_names(expr):
+                    base = _base(token)
+                    if base in declared or token in declared or _is_external_alert_metric(token):
+                        continue
+                    offenders.setdefault(token, set()).add(f"{export_name}:{uid}")
+    assert not offenders, (
+        "Alert expressions reference metric names no backend source declares (and that are not "
+        "allowlisted external emitters): "
+        + "; ".join(f"{token} <- {sorted(uids)}" for token, uids in sorted(offenders.items()))
+        + ". Emit the metric or allowlist the external emitter. Failure-Class: FC-alert-never-provably-fired"
+    )
 
 
 # Cloud Logging tokens counted by Grafana rules, mapped to the Cloud Run
@@ -833,14 +1052,19 @@ def test_stt_exhaustion_dashboard_panels_plot_the_alerted_series():
 
 
 def test_windowed_live_stt_rules_cover_admission_and_pre_audio_failures():
-    """September 19 account outage: failover success must not hide exhausted accounts."""
+    """September 19 account outage: failover success must not hide exhausted accounts.
+
+    2026-09-26: omi-stt-chain-terminal is deleted (it read the configured-chain-only
+    omi_stt_chain_exhausted_total, empty in prod while the chain was off) and
+    omi-stt-leg-error-rate reads the every-path connect counter instead.
+    """
     expected = {
-        'omi-stt-leg-error-rate': ('omi_stt_leg_attempts_total', 'by (to_mode)'),
-        'omi-stt-chain-terminal': ('omi_stt_chain_exhausted_total', 'omi_listen_accepted_total'),
+        'omi-stt-leg-error-rate': ('omi_stt_provider_connect_total', 'by (provider)'),
         'omi-stt-account-state': ('omi_stt_stream_close_total', 'reason="provider_auth_rejected"'),
         'omi-stt-window-overflow': ('omi_stt_window_admissions_total', 'outcome="overflow"'),
         'omi-stt-window-saturated': ('omi_stt_window_sessions_active', 'omi_stt_window_sessions_capacity'),
         'omi-stt-window-post-errors': ('omi_stt_window_posts_total', 'outcome="error"'),
+        LIVE_TRANSCRIPTION_SUCCESS_RULE: ('omi_live_session_transcript_outcome_total', 'clamp_min'),
     }
     for rules in _all_rule_exports().values():
         for uid, metrics in expected.items():
@@ -851,3 +1075,33 @@ def test_windowed_live_stt_rules_cover_admission_and_pre_audio_failures():
             assert rule['noDataState'] == 'OK'
             assert any('$A' in d['model'].get('expression', '') for d in rule['data'])
             assert (REPO / rule['annotations']['runbook']).is_file()
+
+
+LISTEN_DASHBOARD = MONITORING / "dashboards/gke/backend-listen.json"
+
+
+def test_backend_listen_dashboard_has_live_transcription_health_row():
+    """The 2026-09-26 incident had no panel answering 'did sessions get
+    transcripts, and which provider is benched'. The row the headline alert
+    links to must plot the alerted series: headline %, per-provider sessions
+    served and connect success, breaker-open pods, and error classes.
+    """
+    dashboard = json.loads(LISTEN_DASHBOARD.read_text(encoding="utf-8"))
+    panels = {panel["id"]: panel for panel in dashboard["panels"]}
+    row = panels[16]
+    assert row["type"] == "row"
+    assert row["title"] == "Live transcription health"
+
+    exprs = {panel_id: " ".join(t["expr"] for t in panels[panel_id]["targets"]) for panel_id in range(17, 23)}
+    assert "omi_live_session_transcript_outcome_total" in exprs[17]
+    assert 'outcome="transcribed"' in exprs[17]
+    assert "omi_live_session_transcript_outcome_total" in exprs[18]
+    assert "omi_live_stt_accepted_total" in exprs[19]
+    assert "omi_stt_provider_connect_total" in exprs[20]
+    assert 'outcome="success"' in exprs[20]
+    assert "omi_stt_provider_retired" in exprs[20]
+    assert "omi_stt_provider_circuit_open" in exprs[21]
+    assert "omi_stt_provider_connect_total" in exprs[22]
+    assert "error_class" in exprs[22]
+    for panel_id in range(17, 23):
+        assert 'job="backend-listen-metrics"' in exprs[panel_id], panel_id

@@ -11,6 +11,7 @@ if TYPE_CHECKING:
 
 from config.stt_provider_policy import DEEPGRAM_PROVIDERS, provider_for_model_token, provider_for_service
 from utils.observability.fallback import record_fallback
+from utils.stt.connect_metrics import CONNECT_FAILURE, CONNECT_SUCCESS, record_stt_provider_connect
 from utils.stt.live_failure import PendingLiveFailover
 from utils.stt.live_metrics import CHAIN_EXHAUSTED, LEG_ATTEMPTS
 from utils.stt.provider_resilience import EXPECTED_REJECTIONS, close_rejected_socket, fallback_socket_is_serving
@@ -91,6 +92,7 @@ async def connect_configured_chain(
                 raise
             reason = error.reason if isinstance(error, RejectedStream) else failure_reason(error)
             failed.add(provider_for_service(service) or service.value)
+            record_stt_provider_connect(provider=service.value, outcome=CONNECT_FAILURE, reason=reason)
             if reason == 'auth':
                 circuit.record_account_failure(float(os.getenv('STT_ACCOUNT_CIRCUIT_COOLDOWN_SECONDS', '1800')))
             elif reason in EXPECTED_REJECTIONS:
@@ -111,6 +113,7 @@ async def connect_configured_chain(
             origin, prior_reason = service.value, reason
             return None
         LEG_ATTEMPTS.labels(to_mode=service.value, outcome='success').inc()
+        record_stt_provider_connect(provider=service.value, outcome=CONNECT_SUCCESS)
         attach_health = getattr(socket, 'set_health_callbacks', None)
         if getattr(socket, 'defers_selection_success', False) and callable(attach_health):
             attach_health(on_success, on_close)

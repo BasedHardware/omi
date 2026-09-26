@@ -1,145 +1,5 @@
 [
   {
-    "uid": "omi-stt-chain-terminal",
-    "orgID": 1,
-    "folderUID": "betdycdziadc0e",
-    "ruleGroup": "Live STT",
-    "title": "Live STT - configured chain terminal exhaustion",
-    "condition": "D",
-    "data": [
-      {
-        "refId": "A",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 300,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[5m]))",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "A"
-        }
-      },
-      {
-        "refId": "B",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 300,
-          "to": 0
-        },
-        "datasourceUid": "prometheus",
-        "model": {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "prometheus"
-          },
-          "expr": "sum(increase(omi_stt_chain_exhausted_total{job=\"backend-listen-metrics\"}[5m])) / clamp_min(sum(increase(omi_listen_accepted_total{job=\"backend-listen-metrics\"}[5m])), 1)",
-          "instant": true,
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "B"
-        }
-      },
-      {
-        "refId": "C",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "$A >= 20 && $B > 0.10",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "refId": "C",
-          "type": "math"
-        }
-      },
-      {
-        "refId": "D",
-        "queryType": "",
-        "relativeTimeRange": {
-          "from": 0,
-          "to": 0
-        },
-        "datasourceUid": "__expr__",
-        "model": {
-          "conditions": [
-            {
-              "evaluator": {
-                "params": [],
-                "type": "gt"
-              },
-              "operator": {
-                "type": "and"
-              },
-              "query": {
-                "params": [
-                  "D"
-                ]
-              },
-              "reducer": {
-                "params": [],
-                "type": "last"
-              },
-              "type": "query"
-            }
-          ],
-          "datasource": {
-            "type": "__expr__",
-            "uid": "__expr__"
-          },
-          "expression": "C",
-          "intervalMs": 1000,
-          "maxDataPoints": 43200,
-          "reducer": "last",
-          "refId": "D",
-          "type": "reduce"
-        }
-      }
-    ],
-    "updated": "2026-09-21T00:00:00Z",
-    "noDataState": "OK",
-    "execErrState": "Error",
-    "for": "5m",
-    "keep_firing_for": "0s",
-    "annotations": {
-      "summary": "Live STT - configured chain terminal exhaustion",
-      "user_impact": "Users cannot start a live transcript after all configured providers fail.",
-      "scope": "backend-listen-metrics; bounded provider and outcome labels.",
-      "verification": "Hermetic rule contract checked; no production Prometheus evaluation or notification delivery performed.",
-      "safe_next_action": "Inspect provider health and account state. Roll back allocation before increasing capacity; measure GPU queueing first.",
-      "runbook": "backend/docs/operational/windowed-live-stt.md",
-      "threshold": "$A >= 20 && $B > 0.10",
-      "evaluated_bad": "Synthetic contract: traffic 100 with failure ratio 0.5; saturation ratio 1.0.",
-      "evaluated_good": "Synthetic contract: traffic 100 with failure ratio 0; saturation ratio 0.5."
-    },
-    "labels": {
-      "alert_identity": "omi-stt-chain-terminal",
-      "component": "live-transcription",
-      "impact": "user-experience",
-      "severity": "critical",
-      "instatus_component": "live-transcription"
-    },
-    "isPaused": false,
-    "notification_settings": {
-      "receiver": "Omi - Services Alerting (Telegram)"
-    },
-    "record": null
-  },
-  {
     "uid": "omi-stt-account-state",
     "orgID": 1,
     "folderUID": "betdycdziadc0e",
@@ -720,7 +580,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (to_mode) (increase(omi_stt_leg_attempts_total{job=\"backend-listen-metrics\"}[5m]))",
+          "expr": "sum by (provider) (increase(omi_stt_provider_connect_total{job=\"backend-listen-metrics\"}[5m])) unless on (provider) (max by (provider) (omi_stt_provider_retired{job=\"backend-listen-metrics\"} == 1))",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -740,7 +600,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum by (to_mode) (increase(omi_stt_leg_attempts_total{job=\"backend-listen-metrics\",outcome=\"error\"}[5m])) / clamp_min(sum by (to_mode) (increase(omi_stt_leg_attempts_total{job=\"backend-listen-metrics\"}[5m])), 1)",
+          "expr": "sum by (provider) (increase(omi_stt_provider_connect_total{job=\"backend-listen-metrics\",outcome=\"failure\"}[5m])) / clamp_min(sum by (provider) (increase(omi_stt_provider_connect_total{job=\"backend-listen-metrics\"}[5m])), 1) unless on (provider) (max by (provider) (omi_stt_provider_retired{job=\"backend-listen-metrics\"} == 1))",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -810,27 +670,167 @@
         }
       }
     ],
-    "updated": "2026-09-21T00:00:00Z",
+    "updated": "2026-09-26T00:00:00Z",
     "noDataState": "OK",
     "execErrState": "Error",
     "for": "10m",
     "keep_firing_for": "0s",
     "annotations": {
       "summary": "Live STT - provider leg connection errors",
-      "user_impact": "A configured provider leg rejects more than half its attempted connections; surviving sessions depend on the tail.",
-      "scope": "backend-listen-metrics; bounded provider and outcome labels.",
-      "verification": "Hermetic rule contract checked; no production Prometheus evaluation or notification delivery performed.",
+      "user_impact": "A provider fails more than half of its connection attempts (after any typed error class); surviving sessions depend on the remaining tail. Retired providers (intentionally unfunded, e.g. hosted Deepgram) are excluded via omi_stt_provider_retired.",
+      "scope": "backend-listen omi_stt_provider_connect_total by provider and error_class; emitted on every connect path (legacy order and configured chain), unlike the configured-chain-only omi_stt_leg_attempts_total this rule previously read and which was empty in prod while the chain was off.",
+      "verification": "Hermetic rule contract checked; the metric name is also asserted to be emitted in backend source. No production Prometheus evaluation or notification delivery performed.",
       "safe_next_action": "Inspect provider health and account state. Roll back allocation before increasing capacity; measure GPU queueing first.",
       "runbook": "backend/docs/operational/windowed-live-stt.md",
       "threshold": "$A >= 20 && $B > 0.50",
-      "evaluated_bad": "Synthetic contract: traffic 100 with failure ratio 0.5; saturation ratio 1.0.",
-      "evaluated_good": "Synthetic contract: traffic 100 with failure ratio 0; saturation ratio 0.5."
+      "evaluated_bad": "Synthetic contract: one provider with 100 connect attempts and a 100% failure ratio in 5m (any error class).",
+      "evaluated_good": "Synthetic contract: one provider with 100 connect attempts and a 0% failure ratio in 5m."
     },
     "labels": {
       "alert_identity": "omi-stt-leg-error-rate",
       "component": "live-transcription",
       "impact": "user-experience",
       "severity": "warning",
+      "instatus_component": "live-transcription"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "omi-live-transcription-success-low",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Live STT",
+    "title": "Live transcription working for under 90% of sessions",
+    "condition": "D",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[5m]))",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 300,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=\"transcribed\"}[5m])) / clamp_min(sum(increase(omi_live_session_transcript_outcome_total{job=\"backend-listen-metrics\",outcome=~\"transcribed|no_transcript\"}[5m])), 1)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "B"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "$A >= 50 && $B < 0.90",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "math"
+        }
+      },
+      {
+        "refId": "D",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [],
+                "type": "gt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "D"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "C",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "D",
+          "type": "reduce"
+        }
+      }
+    ],
+    "updated": "2026-09-26T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "summary": "Live transcription is working for under 90% of sessions that should have produced a transcript.",
+      "user_impact": "Roughly one in ten or more live sessions ended with no transcript at all - the 2026-09-26 incident shape (whole chain degraded for hours without a page on the user outcome).",
+      "scope": "backend-listen omi_live_session_transcript_outcome_total, emitted exactly once per backend-STT listen session at teardown. too_short sessions (under 10s of audio or no VAD speech) are excluded from the denominator; custom-STT sessions are not counted.",
+      "verification": "Hermetic rule contract checked; the metric name is also asserted to be emitted in backend source. No production Prometheus evaluation or notification delivery performed.",
+      "safe_next_action": "Open the Backend-listen dashboard Live transcription health row: check the per-provider success panels and breaker-open gauges, then inspect provider account state (top up balance) before touching routing.",
+      "runbook": "backend/docs/operational/windowed-live-stt.md",
+      "threshold": "$A >= 50 && $B < 0.90",
+      "evaluated_bad": "Synthetic contract: 100 counted sessions of which 80 transcribed (ratio 0.80 < 0.90).",
+      "evaluated_good": "Synthetic contract: 100 counted sessions of which 99 transcribed (ratio 0.99)."
+    },
+    "labels": {
+      "alert_identity": "omi-live-transcription-success-low",
+      "component": "live-transcription",
+      "impact": "user-experience",
+      "severity": "critical",
       "instatus_component": "live-transcription"
     },
     "isPaused": false,
