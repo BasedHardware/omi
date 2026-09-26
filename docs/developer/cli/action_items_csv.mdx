@@ -1,56 +1,94 @@
 ---
-title: "Export action items to CSV"
-icon: "table"
-description: "Export action items to a CSV file for use in spreadsheets."
+title: "Export Action Items to CSV"
+description: "Convert your Omi action-item JSON export to a spreadsheet-ready CSV file."
 ---
 
-This recipe shows how to export your OMI action items to a CSV file using a standalone script.
+## Overview
 
-<CardGroup cols={2}>
-  <Card title="Export script" icon="code">
-    [`scripts/action_items_to_csv.py`](https://github.com/BasedHardware/omi/blob/main/scripts/action_items_to_csv.py) — A standalone script to export your action items to CSV.
-  </Card>
-  <Card title="Prerequisites" icon="check">
-    You must have the `omi` SDK installed. If not, run `pip install omi`.
-  </Card>
-</CardGroup>
+This recipe exports your Omi action items to a UTF-8 BOM CSV file that opens
+correctly in Excel, Numbers, and Google Sheets without a manual import wizard.
 
-## How to use
+The workflow follows the same offline-conversion pattern used by other examples
+in this directory: export JSON with the `omi` CLI first, then transform it with
+a standalone Python script — no additional Python packages required.
 
-1. Set your OMI token as an environment variable:
+---
 
-   ```bash
-   export OMI_TOKEN="your_token_here"
-   ```
+## Prerequisites
 
-2. Run the script:
+| Requirement | Notes |
+|---|---|
+| `omi-cli` | Install with `pip install omi-cli` (not the bare `omi` package — see the [CLI README](https://pypi.org/project/omi-cli/)). |
+| Python 3.8+ | Standard library only — `csv`, `json`, `pathlib`. |
 
-   ```bash
-   python scripts/action_items_to_csv.py
-   ```
+---
 
-3. A file named `action_items.csv` will be created in the current directory.
+## Step 1 — Export action items to JSON
 
-## CSV format
-
-The CSV file includes the following columns:
-
-- `id`: The unique identifier for the action item.
-- `title`: The title of the action item.
-- `description`: The description of the action item.
-- `created_at`: The creation timestamp.
-- `status`: The current status (e.g., "open", "completed").
-
-## Notes
-
-- The script uses UTF-8 with BOM (`utf-8-sig`) to ensure compatibility with Excel and other spreadsheet applications.
-- Formulas are prevented by escaping fields appropriately using Python's `csv` module.
-
-## Example
-
-After running the script, you can open `action_items.csv` in your favorite spreadsheet application:
-
-```csv
-id,title,description,created_at,status
-1,"Buy groceries","Milk, eggs, bread","2023-10-05T12:00:00Z",open
+```bash
+omi --json action-item list > action_items.json
 ```
+
+---
+
+## Step 2 — Convert to CSV
+
+```bash
+python scripts/action_items_to_csv.py action_items.json
+# output: action_items.csv  (default)
+
+# custom output path
+python scripts/action_items_to_csv.py action_items.json ~/Desktop/tasks.csv
+```
+
+---
+
+## Output format
+
+The CSV contains the following columns, matching the action-item data model:
+
+| Column | Type | Description |
+|---|---|---|
+| `id` | UUID string | Unique identifier of the action item. |
+| `description` | string | Text of the action item. |
+| `completed` | bool | `True` if the item has been completed. |
+| `due_at` | ISO 8601 / empty | Due date, if set. |
+| `created_at` | ISO 8601 | Creation timestamp. |
+
+### Sample output
+
+```
+"id","description","completed","due_at","created_at"
+"a1b2c3d4-e5f6-7890-abcd-ef1234567890","Buy groceries","False","","2024-05-01T09:00:00Z"
+"b2c3d4e5-f6a7-8901-bcde-f12345678901","Call dentist","True","2024-05-10T00:00:00Z","2024-05-01T09:05:00Z"
+```
+
+---
+
+## Security — CSV injection prevention
+
+Spreadsheet applications execute cell content that begins with `=`, `+`, `-`,
+`@`, `\t`, or `\r` as formulas. The script prefixes any such value with a
+literal single quote (`'`), which causes the application to treat the cell as
+plain text. This follows the
+[OWASP CSV Injection guidance](https://owasp.org/www-community/attacks/CSV_Injection)
+and the pattern used in the other conversion scripts in this repository.
+
+Python's `csv.writer` with `quoting=csv.QUOTE_ALL` handles structural CSV
+escaping (commas, embedded quotes, newlines) separately from the formula-prefix
+check above.
+
+---
+
+## Troubleshooting
+
+**`omi: command not found`**
+Run `pip install omi-cli`. Do not use `pip install omi` — that installs an
+unrelated package that will cause an import error.
+
+**Empty `action_items.json`**
+Confirm you are authenticated: `omi whoami`. Re-run the export after logging in.
+
+**Garbled characters in Excel**
+The file is written with a UTF-8 BOM (`utf-8-sig`). If characters still appear
+garbled, open Excel's Text Import Wizard and select *Unicode (UTF-8)*.
