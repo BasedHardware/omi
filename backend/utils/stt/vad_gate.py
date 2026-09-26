@@ -226,6 +226,9 @@ class VADStreamingGate:
         self._chunks_total = 0
         self._chunks_speech = 0
         self._chunks_silence = 0
+        # Raw VAD decisions on capture samples, retained for a bounded window.
+        # This measures placement independently of the provider's send ledger.
+        self._speech_frames: Deque[Tuple[int, int, bool]] = deque(maxlen=2048)
         self._finalize_count = 0
         self._finalize_errors = 0
         self._bytes_received = 0
@@ -391,6 +394,8 @@ class VADStreamingGate:
         if score_pcm is not None and len(score_pcm) == len(pcm_data):
             vad_pcm = score_pcm
         is_speech = self._run_vad(vad_pcm)
+        if start_sample is not None and n_samples > 0:
+            self._speech_frames.append((start_sample, start_sample + n_samples, is_speech))
 
         if is_speech:
             self._last_speech_ms = self._audio_cursor_ms
@@ -434,6 +439,24 @@ class VADStreamingGate:
 
         self._record_prometheus_audio()
         return output
+
+    def classify_capture_speech(self, start_sample: int, end_sample: int) -> str:
+        """Classify a mapped window against retained raw VAD decisions."""
+        if end_sample <= start_sample:
+            return 'unknown'
+        covered = speech = 0
+        for first, last, is_speech in self._speech_frames:
+            overlap = max(0, min(end_sample, last) - max(start_sample, first))
+            covered += overlap
+            if is_speech:
+                speech += overlap
+        if covered < end_sample - start_sample:
+            return 'unknown'
+        if speech == covered:
+            return 'on_speech'
+        if speech == 0:
+            return 'on_silence'
+        return 'partial'
 
     def _record_prometheus_audio(self) -> None:
         """Record newly finalized sent/skipped audio without double-counting pre-roll."""

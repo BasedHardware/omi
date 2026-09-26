@@ -122,6 +122,7 @@ AUDIO_TIMELINE_REJECT_REASONS = (
     'discontinuous_interval',
     'evicted_interval',
     'callback_error',
+    'unverified_elapsed_gap',
     'other',
 )
 OMI_AUDIO_TIMELINE_REJECTS_TOTAL = Counter(
@@ -133,6 +134,11 @@ OMI_AUDIO_TIMELINE_MAPPED_TOTAL = Counter(
     'omi_audio_timeline_mapped_total',
     'Mapped provider intervals by bounded adapter',
     ['mode', 'provider', 'send_path'],
+)
+OMI_AUDIO_TIMELINE_ELAPSED_VALIDATION_TOTAL = Counter(
+    'omi_audio_timeline_elapsed_validation_total',
+    'Mapped capture windows compared with raw VAD speech decisions',
+    ['provider', 'outcome'],
 )
 AUDIO_TIMELINE_SEND_PATHS = (
     'vad_gate_active',

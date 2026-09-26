@@ -1024,6 +1024,20 @@ A mapped legacy segment follows the existing v1 timestamp path, including the
 active gate's remap for non-passthrough providers; the mapping only attaches a
 private capture window for live speaker identification.
 
+`SONIOX_ELAPSED_AXIS=off|shadow|on` defaults to `shadow`. In shadow, Soniox
+keeps the compact send axis for authoritative placement, but after the first
+gated pause it leaves later Soniox windows unplaced because neither provider
+axis has been verified. A separate elapsed-axis map is measured without
+changing provider PCM, transcript text, or legacy public timestamps. `on`
+allows elapsed-axis placement only after a live timing probe and validation;
+`off` disables the candidate map. Each Soniox candidate and mapped Modulate
+control segment increments `omi_audio_timeline_elapsed_validation_total` by
+`provider` and `outcome=on_speech|on_silence|partial|unknown`. The comparison
+uses bounded raw VAD decisions by capture sample, not the provider send map;
+missing/evicted decisions or unmappable candidates count as `unknown`. VAD can
+misclassify speech, so the metric is independent placement evidence rather
+than a substitute for a provider pause/finalize/keepalive timing probe.
+
 V2 keeps every emitted provider segment as text. Intervals crossing a VAD
 discontinuity, missing their owner, or arriving after owner closure are retained
 as `audio_alignment=unplaced` on the active conversation. Their persisted

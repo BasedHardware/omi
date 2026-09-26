@@ -17,6 +17,12 @@ def audio_timeline_v2_enabled() -> bool:
     return os.getenv('AUDIO_TIMELINE_V2', '').strip().lower() in _TRUTHY
 
 
+def soniox_elapsed_axis_mode() -> str:
+    """Select Soniox's unverified elapsed send axis; default to measurement only."""
+    value = os.getenv('SONIOX_ELAPSED_AXIS', 'shadow').strip().lower()
+    return value if value in ('off', 'shadow', 'on') else 'shadow'
+
+
 def live_speaker_capture_clock_enabled() -> bool:
     """Read LIVE_SPEAKER_CAPTURE_CLOCK at the call boundary. Default on.
 

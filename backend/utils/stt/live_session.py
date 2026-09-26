@@ -141,6 +141,10 @@ class LiveChainSession:
                     component='vad', from_mode='gated', to_mode='direct', reason='config_incomplete', outcome='degraded'
                 )
             passthrough = service == st.STTService.modulate
+            if epoch is not None:
+                epoch.set_validation_callback(
+                    lambda provider, interval: self.receiver._record_elapsed_validation(provider, interval, gate)
+                )
 
             def callback(segments: list[dict[str, Any]]) -> None:
                 if generation != self.generation and not (epoch is not None and epoch.project_times):

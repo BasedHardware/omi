@@ -368,7 +368,7 @@ class SendMap:
             provider_first, capture_first, length = self._spans[index]
             # Interior holes represent gated-out audio on an elapsed provider
             # axis. Edge tolerance applies only after the latest accepted send.
-            if index + 1 < len(self._spans) and provider_sample > provider_first + length:
+            if index + 1 < len(self._spans) and provider_sample >= provider_first + length:
                 return None
             if provider_sample <= provider_first + length + tolerance:
                 return (provider_first, capture_first, length)
@@ -489,6 +489,7 @@ class ProviderEpochTranslator:
         on_mapped: Optional[Callable[[], None]] = None,
         on_recover: Optional[Callable[[str], None]] = None,
         on_past_send: Optional[Callable[[Optional[float]], None]] = None,
+        on_validation: Optional[Callable[[str, Optional[Tuple[int, int]]], None]] = None,
         owner_at_send: Optional[Callable[[], Optional[str]]] = None,
         project_times: bool = True,
     ):
@@ -500,14 +501,25 @@ class ProviderEpochTranslator:
         self._on_mapped = on_mapped
         self._on_recover = on_recover
         self._on_past_send = on_past_send
+        self._on_validation = on_validation
         self._owner_at_send = owner_at_send
         self._project_times = project_times
         self.provider_label = 'unknown'
         self.send_path = 'unknown'
         self._last_accepted_wall_end: Optional[float] = None
+        # The elapsed Soniox axis is unverified. Shadow computes it without
+        # changing the compact map used for placement or owner resolution.
+        from config.audio_timeline import soniox_elapsed_axis_mode
+
+        self.soniox_elapsed_mode = soniox_elapsed_axis_mode()
+        self._elapsed_send_map = SendMap(provider_sample_rate)
+        self._first_elapsed_gap_sample: Optional[int] = None
         self._send_owners: List[Tuple[int, int, Optional[str]]] = []
         self.last_send_owner: Optional[str] = None
         self.initial_owner: Optional[str] = None
+
+    def set_validation_callback(self, callback: Callable[[str, Optional[Tuple[int, int]]], None]) -> None:
+        self._on_validation = callback
 
     def note_accepted(self, capture_start_sample: int, length_samples: int) -> None:
         """Record one accepted send of contiguous capture audio."""
@@ -523,15 +535,21 @@ class ProviderEpochTranslator:
             if length <= 0:
                 continue
             start = self.send_map.last_provider_sample or 0
-            if self.provider_label == 'soniox':
+            if self.provider_label == 'soniox' and self.soniox_elapsed_mode != 'off':
+                elapsed_start = self._elapsed_send_map.last_provider_sample or 0
                 wall_start = self.timeline.wall_strict(capture_start)
                 if wall_start is not None and self._last_accepted_wall_end is not None:
                     # Keepalives/finalize send no PCM, but observed Soniox
                     # token offsets continue along elapsed stream time. A
                     # withheld interval gets axis space, never a send span.
                     elapsed = max(0.0, wall_start - self._last_accepted_wall_end)
-                    start += round(elapsed * self.provider_sample_rate)
+                    if elapsed > 0 and self._first_elapsed_gap_sample is None:
+                        self._first_elapsed_gap_sample = start
+                    elapsed_start += round(elapsed * self.provider_sample_rate)
                 self._last_accepted_wall_end = self.timeline.wall_strict(capture_start + length)
+                self._elapsed_send_map.add_accepted(elapsed_start, capture_start, length)
+                if self.soniox_elapsed_mode == 'on':
+                    start = elapsed_start
             self.send_map.add_accepted(start, capture_start, length)
             end = start + length
             owner = self._owner_at_send() if self._owner_at_send is not None else None
@@ -595,6 +613,37 @@ class ProviderEpochTranslator:
                 continue
             rate = self.provider_sample_rate
             first_sample, last_sample = int(start * rate), int(end * rate)
+            if self._on_validation is not None:
+                validation_map = (
+                    self._elapsed_send_map
+                    if self.provider_label == 'soniox' and self.soniox_elapsed_mode != 'off'
+                    else self.send_map if self.provider_label == 'modulate' else None
+                )
+                if validation_map is not None:
+                    candidate = (
+                        validation_map.point_interval(first_sample)
+                        if first_sample == last_sample
+                        else validation_map.map_interval(first_sample, last_sample)
+                    )
+                    try:
+                        self._on_validation(self.provider_label, candidate)
+                    except Exception:
+                        pass
+            if (
+                self.provider_label == 'soniox'
+                and self.soniox_elapsed_mode == 'shadow'
+                and self._first_elapsed_gap_sample is not None
+                and first_sample >= self._first_elapsed_gap_sample
+            ):
+                # Compact timestamps can accidentally land in later sent PCM.
+                # After a pause neither Soniox axis has been proved, so leave
+                # its speaker and playback position unclaimed in shadow mode.
+                self._reject(segment, 'unverified_elapsed_gap')
+                if self._project_times:
+                    self._append_unplaced(translated, segment)
+                else:
+                    translated.append(segment)
+                continue
             if self._project_times:
                 segment['_provider_send_owner'] = self.owner_for_provider_sample(first_sample)
             interval: Optional[Tuple[int, int]] = None
