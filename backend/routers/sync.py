@@ -44,6 +44,7 @@ from models.conversation_enums import ConversationSource
 from models.sync_contract import SYNC_LOCAL_FILES_V2_RESPONSES
 from models.geolocation import geolocation_from_private_header
 from models.sync_audio import AudioPrecacheResponse, AudioUrlsResponse
+from routers.listen.contracts import persisted_started_seconds
 from utils.analytics import record_usage
 from utils.other import endpoints as auth
 from utils.account_cutover.access import should_skip_background_account_mutation
@@ -2111,8 +2112,12 @@ async def _run_conversation_merge_job(payload: dict, task_retry_count: int):
             if existing:
                 return JSONResponse(status_code=200, content={'status': 'exists'})
 
-        started_at = conversation.get('started_at') or conversation.get('created_at')
-        started_at_ts = started_at.timestamp()
+        started_at_ts = persisted_started_seconds(conversation.get('started_at') or conversation.get('created_at'))
+        if started_at_ts is None:
+            chunk_starts = [
+                min(af['chunk_timestamps']) for af in audio_files if isinstance(af, dict) and af.get('chunk_timestamps')
+            ]
+            started_at_ts = min(chunk_starts) if chunk_starts else 0.0
 
         try:
             mp3_data, spans = await run_blocking(
