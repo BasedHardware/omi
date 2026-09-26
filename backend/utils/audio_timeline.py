@@ -378,6 +378,33 @@ class SendMap:
             return None
         return (start_capture, end_capture)
 
+    def minimal_tail_interval(self, provider_first_sample: int, provider_last_sample: int) -> Optional[Tuple[int, int]]:
+        """A minimal (one-sample) window for an intentional provider tail.
+
+        A final that begins exactly at a span's end sample and ends inside the
+        edge tolerance is the provider's own tail accounting for audio it
+        buffered past our count (Modulate's ``done`` flush shape), not drift:
+        under clamping both of its endpoints land on the span end, so
+        ``map_interval`` fails closed — but the interval is real speech whose
+        text may have no other copy. Keep it as a one-sample window on the
+        span's last accepted sample. An interval whose start is strictly past
+        the span end (arbitrary drift, the many-texts-one-float poison shape)
+        still maps to None.
+        """
+        span = self._locate(provider_first_sample)
+        if span is None:
+            return None
+        provider_from, capture_from, length = span
+        if provider_first_sample != provider_from + length:
+            return None
+        tolerance = int(PROVIDER_EDGE_TOLERANCE_SECONDS * self.provider_sample_rate)
+        if provider_last_sample > provider_from + length + tolerance:
+            return None
+        span_end = capture_from + length
+        if span_end <= capture_from:
+            return None
+        return (span_end - 1, span_end)
+
 
 class ProviderEpochTranslator:
     """One provider connection's mapping onto the capture timeline.
@@ -430,11 +457,17 @@ class ProviderEpochTranslator:
         neighboring epoch; so are degenerate provider intervals (start >= end)
         and intervals whose two different provider times would clamp onto one
         capture sample — mapping those would fabricate a zero-length segment
-        at a span edge (the dev 2026-09-26 v2 collapse). Exception: with
-        ``project_times`` off, persistence must stay byte-identical to the
-        legacy behavior, so a rejected segment keeps its provider-native times
-        and simply carries no capture interval — only its speaker-ID window
-        falls back, never its transcript.
+        at a span edge (the dev 2026-09-26 v2 collapse). Two exceptions keep
+        intentional provider text: a positive-duration interval that begins
+        exactly at a span end and ends inside the edge tolerance (the
+        provider's own tail accounting) keeps a minimal one-sample window,
+        and zero-length points are still rejected here but Modulate's
+        ``_flush_partial`` now emits its tail with the provider clock's
+        smallest positive duration. With ``project_times`` off, persistence
+        must stay byte-identical to the legacy behavior, so a rejected
+        segment keeps its provider-native times and simply carries no
+        capture interval — only its speaker-ID window falls back, never its
+        transcript.
         """
         translated: List[Dict] = []
         for segment in segments:
@@ -460,11 +493,13 @@ class ProviderEpochTranslator:
                 if self.send_map.map_sample(first_sample) is None or self.send_map.map_sample(last_sample) is None:
                     reason = 'outside_accepted_sends'
                 else:
+                    interval = self.send_map.minimal_tail_interval(first_sample, last_sample)
                     reason = 'collapsed_interval'
-                self._reject(segment, reason)
-                if not self._project_times:
-                    translated.append(segment)
-                continue
+                if interval is None:
+                    self._reject(segment, reason)
+                    if not self._project_times:
+                        translated.append(segment)
+                    continue
             if self._project_times:
                 start_wall = self.timeline.wall_strict(interval[0])
                 end_wall = self.timeline.wall_strict(interval[1])

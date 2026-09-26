@@ -386,6 +386,21 @@ class TestSendMapCollapseRejection:
         mapped = sm.map_interval(int(0.9 * RATE), int(1.1 * RATE))
         assert mapped == (int(0.9 * RATE), RATE)
 
+    def test_minimal_tail_window_only_for_start_exactly_at_span_end(self):
+        """P2-3: only a start exactly at the span end is an intentional tail.
+
+        Strictly past the end (arbitrary drift — the many-texts-one-float
+        poison shape) keeps failing closed; a start on the end sample with
+        the end inside the tolerance keeps a one-sample window.
+        """
+        sm = SendMap(RATE)
+        sm.add_accepted_spans([(0, RATE)])
+        assert sm.minimal_tail_interval(int(1.05 * RATE), int(1.15 * RATE)) is None
+        assert sm.minimal_tail_interval(int(1.001 * RATE), int(1.249 * RATE)) is None
+        # End beyond the tolerance is outside the accepted sends, not a tail.
+        assert sm.minimal_tail_interval(RATE, int(1.3 * RATE)) is None
+        assert sm.minimal_tail_interval(RATE, int(1.1 * RATE)) == (RATE - 1, RATE)
+
     def test_later_batch_segment_maps_independently_across_spans(self):
         """A segment after the first provider batch keeps start < end.
 
@@ -434,6 +449,65 @@ class TestTranslatorDegenerateIntervals:
         assert translated == []
         assert reasons == ['collapsed_interval']
         assert translator.rejected_segments == 1
+
+    def test_v2_keeps_final_starting_at_span_end_within_tolerance(self):
+        """P2-3: a positive-duration final at the span end keeps its text.
+
+        The final begins exactly at the last accepted sample and ends inside
+        the 0.25 s edge tolerance (the provider's own tail accounting, e.g.
+        Modulate's ``done`` flush): both endpoints clamp onto the span end,
+        which used to reject as ``collapsed_interval`` and drop possibly the
+        only copy of the text. It now keeps a minimal one-sample window on
+        the span's last accepted sample.
+        """
+        timeline = self._timeline()
+        translator = ProviderEpochTranslator(timeline, RATE, project_times=True)
+        translator.note_accepted(0, RATE)
+        translated = translator.translate([{'start': 1.0, 'end': 1.1, 'text': 'tail final'}])
+        assert [segment['text'] for segment in translated] == ['tail final']
+        assert translated[0]['_capture_start_sample'] == RATE - 1
+        assert translated[0]['_capture_end_sample'] == RATE
+        assert translated[0]['start'] == pytest.approx(timeline.wall(RATE - 1))
+        assert translated[0]['end'] == pytest.approx(timeline.wall(RATE))
+        assert translated[0]['end'] > translated[0]['start']
+
+    def test_v2_keeps_sub_100ms_final_inside_span(self):
+        """A short interior word (40 ms) maps normally; nothing may regress it."""
+        translator = ProviderEpochTranslator(self._timeline(), RATE, project_times=True)
+        translator.note_accepted(0, 2 * RATE)
+        translated = translator.translate([{'start': 0.5, 'end': 0.54, 'text': 'word'}])
+        assert [segment['text'] for segment in translated] == ['word']
+        assert translated[0]['_capture_start_sample'] == int(0.5 * RATE)
+        assert translated[0]['_capture_end_sample'] == int(0.54 * RATE)
+        assert translated[0]['end'] > translated[0]['start']
+
+    def test_v2_keeps_modulate_unfinalized_tail_through_translate(self):
+        """P2-3: the done-flushed partial is the only copy of the tail text.
+
+        ``_flush_partial`` used to emit ``start == end``; v2's zero_length
+        rejection then dropped the tail forever (clock-only kept it). The
+        flush now emits the provider clock's smallest positive duration, so
+        the text survives v2 translation with a minimal capture window.
+        """
+        collected = []
+        epoch = ProviderEpochTranslator(self._timeline(), RATE, project_times=True)
+        epoch.note_accepted(0, RATE)
+
+        def stream(segments):
+            collected.extend(epoch.translate(segments))
+
+        socket = SimpleNamespace(
+            _prev_partial_text='the unfinalized tail',
+            _prev_partial_start_ms=400,
+            _prev_partial_word_count=3,
+            _preseconds=0,
+            _stream_transcript=stream,
+        )
+        st.SafeModulateSocket._flush_partial(socket)
+        assert [segment['text'] for segment in collected] == ['the unfinalized tail']
+        assert collected[0]['_capture_start_sample'] == int(0.4 * RATE)
+        assert collected[0]['_capture_end_sample'] == int(0.401 * RATE)
+        assert collected[0]['end'] > collected[0]['start']
 
 
 # ---------------------------------------------------------------------------
