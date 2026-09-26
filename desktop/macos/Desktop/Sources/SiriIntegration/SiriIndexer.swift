@@ -274,7 +274,7 @@ actor SiriIndexer {
     guard let index = try await operationIndex(expectedOwner: expectedOwner) else { return }
     defer { finishOperation() }
     for chunk in entities.chunkedSiriIndex(200) { try await index.indexAppEntities(chunk, priority: 0) }
-    for entity in entities { indexedMemoryExpirations[entity.id] = entity.expiresAt }
+    for entity in entities { indexedMemoryExpirations[entity.id] = entity.eligibilityCutoff }
     scheduleNextMemoryExpiry(owner: expectedOwner)
   }
 
@@ -306,10 +306,7 @@ actor SiriIndexer {
         let records = try await TranscriptionStorage.shared.getSiriEligibleSessions(
           limit: SiriIndexScope.conversationLimit,
           since: now.addingTimeInterval(-SiriIndexScope.conversationAge))
-        let entities = SiriIndexScope.capped(
-          records.filter { SiriIndexScope.conversation($0, now: now) },
-          at: SiriIndexScope.conversationLimit
-        ).map(ConversationEntity.init)
+        let entities = SiriIndexScope.eligibleConversations(records, now: now).map(ConversationEntity.init)
         for chunk in entities.chunkedSiriIndex(200) { try await index.indexAppEntities(chunk, priority: 0) }
         for entity in entities {
           indexedConversationCutoffs[entity.id] = entity.creationDate?.addingTimeInterval(
@@ -323,7 +320,7 @@ actor SiriIndexer {
         memories.filter { SiriIndexScope.memory($0, now: now) }, at: SiriIndexScope.memoryLimit
       ).map(MemoryEntity.init)
       for chunk in memoryEntities.chunkedSiriIndex(200) { try await index.indexAppEntities(chunk, priority: 0) }
-      for entity in memoryEntities { indexedMemoryExpirations[entity.id] = entity.expiresAt }
+      for entity in memoryEntities { indexedMemoryExpirations[entity.id] = entity.eligibilityCutoff }
       if let indexedOwner { scheduleNextMemoryExpiry(owner: indexedOwner) }
       count += memoryEntities.count
 

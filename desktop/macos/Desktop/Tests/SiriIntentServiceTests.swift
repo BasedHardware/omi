@@ -180,7 +180,7 @@ final class SiriIntentServiceTests: XCTestCase {
     XCTAssertEqual(entity.id, "memory-synthetic")
     XCTAssertEqual(entity.content, record.content)
     XCTAssertEqual(entity.name, record.content)
-    XCTAssertEqual(entity.expiresAt, expiry)
+    XCTAssertEqual(entity.eligibilityCutoff, expiry)
   }
 
   @available(macOS 27, *)
@@ -347,6 +347,34 @@ final class SiriIntentServiceTests: XCTestCase {
       change(&row)
       XCTAssertEqual(SiriIndexScope.task(row, now: now), expected, name)
     }
+  }
+
+  func testMemoryInvalidationSchedulesSpotlightRemovalWithoutExpiry() throws {
+    guard #available(macOS 15.4, *) else { return }
+    let invalidAt = Date(timeIntervalSince1970: 2_000_000_100)
+    let formatter = ISO8601DateFormatter()
+    formatter.formatOptions = [.withInternetDateTime]
+    let record = MemoryRecord(
+      backendId: "future-invalidation", backendSynced: true, content: "Current until invalidation",
+      tierIsExplicit: true, ledgerMetadataJson: "{\"invalid_at\":\"\(formatter.string(from: invalidAt))\"}")
+    XCTAssertNil(record.expiresAt)
+    XCTAssertEqual(MemoryEntity(record).eligibilityCutoff, invalidAt)
+  }
+
+  func testConversationCapCountsEligibleRowsOnly() {
+    let now = Date(timeIntervalSince1970: 2_000_000_000)
+    let hidden = (0..<SiriIndexScope.conversationLimit).map { index in
+      TranscriptionSessionRecord(
+        startedAt: now.addingTimeInterval(TimeInterval(-index)), source: "desktop",
+        backendId: "hidden-\(index)", backendSynced: true,
+        conversationStatus: .completed, visibility: "hidden")
+    }
+    let visible = TranscriptionSessionRecord(
+      startedAt: now.addingTimeInterval(-2_001), source: "desktop",
+      backendId: "eligible-after-cap", backendSynced: true,
+      conversationStatus: .completed, visibility: "private")
+    let rows = SiriIndexScope.eligibleConversations(hidden + [visible], now: now)
+    XCTAssertEqual(rows.map(\.backendId), ["eligible-after-cap"])
   }
 
   func testSiriTemporalCutoffDecisionTable() {

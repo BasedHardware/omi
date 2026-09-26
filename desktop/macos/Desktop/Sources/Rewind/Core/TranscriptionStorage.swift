@@ -1067,10 +1067,12 @@ actor TranscriptionStorage {
     let db = try await ensureInitialized()
     return try await db.read { database in
       try TranscriptionSessionRecord
-        .filter(Column("backendSynced") == true && Column("backendId") != nil)
+        .filter(Column("backendSynced") == true && Column("backendId") != nil && Column("backendId") != "")
         .filter(Column("deleted") == false && Column("discarded") == false)
+        .filter(Column("isLocked") == false)
+        .filter(["private", "shared", "public"].contains(Column("visibility")))
         .filter(Column("conversationStatus") == LocalConversationStatus.completed.rawValue)
-        .filter(Column("startedAt") >= since)
+        .filter(Column("startedAt") > since)
         .order(Column("startedAt").desc)
         .limit(limit)
         .fetchAll(database)

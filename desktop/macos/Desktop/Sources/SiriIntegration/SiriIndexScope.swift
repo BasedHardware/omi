@@ -20,10 +20,7 @@ enum SiriIndexScope {
     let invalidAt = metadata["invalid_at"]
     let validInvalidAt: Bool
     if let invalidAt, !invalidAt.isEmpty {
-      let fractional = ISO8601DateFormatter()
-      fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-      let standard = ISO8601DateFormatter()
-      validInvalidAt = (fractional.date(from: invalidAt) ?? standard.date(from: invalidAt)).map { $0 > now } ?? false
+      validInvalidAt = parseLedgerDate(invalidAt).map { $0 > now } ?? false
     } else {
       validInvalidAt = true
     }
@@ -35,6 +32,24 @@ enum SiriIndexScope {
         ledgerActive: status == nil || status == "active",
         unsuperseded: supersededBy == nil || supersededBy?.isEmpty == true,
         uninvalidated: validInvalidAt, now: now)
+  }
+
+  static func parseLedgerDate(_ raw: String?) -> Date? {
+    guard let raw, !raw.isEmpty else { return nil }
+    let fractional = ISO8601DateFormatter()
+    fractional.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    let standard = ISO8601DateFormatter()
+    return fractional.date(from: raw) ?? standard.date(from: raw)
+  }
+
+  static func memoryNextCutoff(expiresAt: Date?, invalidAt: String?) -> Date? {
+    [expiresAt, parseLedgerDate(invalidAt)].compactMap { $0 }.min()
+  }
+
+  static func eligibleConversations(
+    _ records: [TranscriptionSessionRecord], now: Date, limit: Int = conversationLimit
+  ) -> [TranscriptionSessionRecord] {
+    Array(records.lazy.filter { conversation($0, now: now) }.prefix(limit))
   }
 
   static func memory(
