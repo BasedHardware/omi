@@ -478,9 +478,9 @@ class CaptureController extends ChangeNotifier
   // presentation/action identity, not another capture authorization generation.
   int _systemSurfaceConversationRevision = 0;
   int get systemSurfaceConversationRevision => _systemSurfaceConversationRevision;
-  bool get systemSurfacePhoneCapture => _activeSource is PhoneMicSource || _phoneMicBatchActive;
-  bool get systemSurfaceBatchCapture =>
-      _phoneMicBatchActive || (_recordingDevice != null && _preferences.batchModeEnabled);
+  // Committed coordinator ownership, as the live page reads it.
+  bool get systemSurfacePhoneCapture => _capture.readModel.liveOwnerName == 'phone';
+  bool get systemSurfaceBatchCapture => _capture.readModel.phoneBatchSession || _capture.readModel.pendantBatchSession;
   // Presentation-only observer of captured audio; never affects capture.
   AudioTap? systemSurfaceAudioTap;
   void _tapAudio(List<int> audio, BleAudioCodec codec) {
@@ -489,54 +489,23 @@ class CaptureController extends ChangeNotifier
     } catch (_) {} // The tap runs before WAL/socket delivery; it must never drop audio.
   }
 
+  /// A Live Activity button: one more caller of the live page's controls, so the
+  /// coordinator decides what pause, resume and finish do for the source that
+  /// owns capture. A tap from a card for an older recording or conversation fails.
   Future<void> performSystemSurfaceAction(String action,
       {required String recordingId, required int conversationRevision}) async {
-    bool current() =>
-        activeRecordingId == recordingId &&
-        _systemSurfaceConversationRevision == conversationRevision &&
-        !lifetime.isClosed;
-    if (!current()) throw StateError('Recording changed');
-    final phone = systemSurfacePhoneCapture;
-    final batch = systemSurfaceBatchCapture;
+    if (lifetime.isClosed ||
+        activeRecordingId != recordingId ||
+        _systemSurfaceConversationRevision != conversationRevision) {
+      throw StateError('Recording changed');
+    }
     switch (action) {
       case 'pause':
+        if (!isPaused) await pauseCapture();
       case 'resume':
-        final mute = action == 'pause';
-        if (isPaused == mute) return;
-        if (!phone) {
-          if (mute) {
-            await pauseDeviceRecording();
-          } else {
-            await resumeDeviceRecording();
-          }
-        } else {
-          final revision = await _setCaptureMuted(mute);
-          if (!current() || _preferences.capturePolicy.revision != revision) {
-            throw StateError('Recording changed');
-          }
-          if (!mute) {
-            if (batch) {
-              updateRecordingState(RecordingState.record);
-            } else {
-              // Rebind the existing native session to the new admission
-              // revision while preserving the socket and conversation.
-              await _resumeMicRecording();
-            }
-          }
-        }
+        if (isPaused) await resumeCapture();
       case 'finish':
-        if (phone) {
-          final hasContent = segments.isNotEmpty || photos.isNotEmpty;
-          await stopStreamRecording();
-          if (lifetime.isClosed || (activeRecordingId != null && activeRecordingId != recordingId)) {
-            throw StateError('Recording changed');
-          }
-          if (!batch && hasContent) await forceProcessingCurrentConversation();
-        } else if (batch) {
-          startNewOfflineRecording();
-        } else {
-          await forceProcessingCurrentConversation();
-        }
+        await finishCapture();
       default:
         throw ArgumentError.value(action, 'action');
     }
