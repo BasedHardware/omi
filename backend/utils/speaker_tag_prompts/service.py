@@ -422,7 +422,15 @@ def owner_clip_window(conversation: Dict[str, Any], segment_ids: List[str]) -> O
 
 
 async def store_owner_voice_sample(uid: str, conversation_id: str, segment_ids: List[str]) -> str:
-    """Verify a "That's me" clip and pool it into the owner's voiceprint. Returns the outcome label."""
+    """Verify a "That's me" clip and pool it into the owner's voiceprint. Returns the outcome label.
+
+    The outcome is attributable: beyond the Prometheus counter, one log line
+    names the outcome with the conversation id (never the uid). The
+    2026-09-25 incident left a client-side "succeeded=true" answer with no
+    owner_voice_confirmation and no trace beyond an unlabeled counter; the
+    recording session id is not on this path (prompts are answered after the
+    socket closed), so the conversation id is the join key.
+    """
     outcome = 'error'
     try:
         conversation = await run_blocking(db_executor, conversations_db.get_conversation, uid, conversation_id)
@@ -465,3 +473,8 @@ async def store_owner_voice_sample(uid: str, conversation_id: str, segment_ids: 
         return outcome
     finally:
         SPEAKER_TAG_PROMPT_VOICE_SAMPLES.labels(target='owner', outcome=outcome).inc()
+        logger.info(
+            'speaker tag prompt owner sample outcome=%s conversation=%s',
+            outcome,
+            conversation_id,
+        )

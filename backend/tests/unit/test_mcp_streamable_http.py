@@ -166,6 +166,45 @@ def _post(client, path, body, **headers):
 
 
 class TestRouteParity:
+    def test_trailing_slash_post_matches_canonical_without_redirect(self, client, authed):
+        """``/v1/mcp/`` is served in place. A 307 would follow the request scheme
+        and, behind the load balancer, downgrade https to http."""
+        for body in (_msg("ping"), _msg("initialize", params={"protocolVersion": PROTOCOL_VERSION_2026})):
+            canonical = client.post(
+                "/v1/mcp",
+                json=body,
+                headers={"Authorization": "Bearer tok"},
+                follow_redirects=False,
+            )
+            slashed = client.post(
+                "/v1/mcp/",
+                json=body,
+                headers={"Authorization": "Bearer tok"},
+                follow_redirects=False,
+            )
+            assert canonical.status_code == 200
+            assert slashed.status_code == 200
+            assert slashed.headers.get("location") is None
+            assert slashed.json() == canonical.json()
+
+    def test_trailing_slash_get_head_delete_are_not_redirects(self, client):
+        get_canonical = client.get("/v1/mcp", follow_redirects=False)
+        get_slashed = client.get("/v1/mcp/", follow_redirects=False)
+        assert get_canonical.status_code == 405
+        assert get_slashed.status_code == 405
+        assert get_slashed.headers.get("location") is None
+        assert "POST" in get_slashed.headers.get("allow", "")
+        assert client.head("/v1/mcp/", follow_redirects=False).status_code == 401
+        assert client.delete("/v1/mcp/", follow_redirects=False).status_code == 401
+
+    def test_trailing_slash_unauthenticated_challenge_is_canonical(self, client):
+        response = client.post("/v1/mcp/", json=_msg("ping"), follow_redirects=False)
+        assert response.status_code == 401
+        assert response.headers.get("location") is None
+        challenge = response.headers["www-authenticate"]
+        assert f'resource_metadata="{MCP_PROTECTED_RESOURCE_METADATA_URL}"' in challenge
+        assert "/v1/mcp/sse" not in challenge
+
     def test_post_serves_both_paths(self, client, authed):
         for path in ("/v1/mcp", "/v1/mcp/sse"):
             response = _post(client, path, _msg("ping"))
@@ -867,14 +906,45 @@ class TestSseAcceptAndAudiences:
     def test_resource_audience_canonical_equivalence(self):
         canonical = "https://api.omi.me/v1/mcp"
         legacy = "https://api.omi.me/v1/mcp/sse"
+        slashed = "https://api.omi.me/v1/mcp/"
+        assert mcp_oauth_db.canonical_mcp_resource_url(canonical) == canonical
+        assert mcp_oauth_db.canonical_mcp_resource_url(legacy) == canonical
+        assert mcp_oauth_db.canonical_mcp_resource_url(slashed) == canonical
         assert mcp_oauth_db.mcp_resource_urls_match(canonical, legacy)
         assert mcp_oauth_db.mcp_resource_urls_match(legacy, canonical)
+        assert mcp_oauth_db.mcp_resource_urls_match(slashed, canonical)
+        assert mcp_oauth_db.mcp_resource_urls_match(slashed, legacy)
         assert not mcp_oauth_db.mcp_resource_urls_match(canonical, "https://api.omiapi.com/v1/mcp")
+        assert not mcp_oauth_db.mcp_resource_urls_match(slashed, "https://api.omiapi.com/v1/mcp/")
+        assert mcp_oauth_db.mcp_resource_urls_match("https://api.omiapi.com/v1/mcp/", "https://api.omiapi.com/v1/mcp")
+        # One slash only. Collapsing every trailing slash would change the seed
+        # for a resource that already ended in ``/``.
+        assert not mcp_oauth_db.mcp_resource_urls_match(canonical, canonical + "//")
         client_doc = {"allowed_resources": [legacy]}
         assert mcp_oauth_db.validate_resource(client_doc, canonical)
+        assert mcp_oauth_db.validate_resource(client_doc, slashed)
         client_doc = {"allowed_resources": [canonical]}
         assert mcp_oauth_db.validate_resource(client_doc, legacy)
+        assert mcp_oauth_db.validate_resource(client_doc, slashed)
+        assert mcp_oauth_db.validate_resource({"allowed_resources": [slashed]}, canonical)
         assert not mcp_oauth_db.validate_resource({"allowed_resources": []}, canonical)
+
+    def test_trailing_slash_grant_id_matches_existing_forms(self):
+        """``/v1/mcp`` and ``/v1/mcp/sse`` keep the legacy-URL grant id; ``/v1/mcp/`` joins it."""
+        uid = "user-slash"
+        client_id = "omi-chatgpt-prod"
+        canonical = "https://api.omi.me/v1/mcp"
+        legacy = "https://api.omi.me/v1/mcp/sse"
+        slashed = "https://api.omi.me/v1/mcp/"
+        assert mcp_oauth_db.legacy_mcp_resource_url(canonical) == legacy
+        assert mcp_oauth_db.legacy_mcp_resource_url(legacy) == legacy
+        assert mcp_oauth_db.legacy_mcp_resource_url(slashed) == legacy
+        expected = f"{uid}:{client_id}:{mcp_oauth_db.hash_secret(legacy)[:16]}"
+        assert mcp_oauth_db._grant_document_id(uid, client_id, canonical) == expected
+        assert mcp_oauth_db._grant_document_id(uid, client_id, legacy) == expected
+        assert mcp_oauth_db._grant_document_id(uid, client_id, slashed) == expected
+        assert mcp_oauth_db._grant_document_id(uid, client_id, "https://api.omiapi.com/v1/mcp") != expected
+        assert mcp_oauth_db._grant_document_id(uid, client_id, "https://api.omiapi.com/v1/mcp/") != expected
 
     @pytest.mark.parametrize("path", ["/v1/mcp", "/v1/mcp/sse"])
     def test_oauth_validation_uses_canonical_resource_on_both_paths(self, client, path):
@@ -1177,10 +1247,14 @@ class TestOAuthResourceCanonicalization:
         audience; foreign origins stay rejected."""
         canonical = "https://api.omi.me/v1/mcp"
         legacy = "https://api.omi.me/v1/mcp/sse"
+        slashed = canonical + "/"
         for stored, supplied in (
             (canonical, legacy),
             (legacy, canonical),
             (canonical, canonical),
+            (canonical, slashed),
+            (slashed, legacy),
+            (legacy, slashed),
         ):
             assert mcp_oauth_db.mcp_resource_urls_match(stored, supplied), (stored, supplied)
         # Omitted resource keeps the stored audience by design; foreign
@@ -1325,16 +1399,33 @@ class TestOutputSchemaTimestampFormats:
 
 
 class TestClientCapabilities2026:
-    """Explicit 2026-07-28 declarations must carry the clientCapabilities
-    ``_meta`` object — both official SDKs stamp it on every modern call."""
+    """Explicit 2026-07-28 requests must carry the clientCapabilities
+    ``_meta`` object — both official SDKs stamp it on every modern call.
+    Notifications are exempt: the spec requirement is on requests."""
 
     @pytest.mark.parametrize("path", ["/v1/mcp", "/v1/mcp/sse"])
     def test_2026_header_without_capabilities_rejected(self, client, authed, path):
         response = _post(client, path, _msg("tools/list"), **{"mcp-protocol-version": PROTOCOL_VERSION_2026})
         assert response.status_code == 400
-        error = response.json()["error"]
+        body = response.json()
+        error = body["error"]
         assert error["code"] == -32602
         assert META_CLIENT_CAPABILITIES in error["message"]
+        assert body["id"] == 1
+
+    @pytest.mark.parametrize("path", ["/v1/mcp", "/v1/mcp/sse"])
+    @pytest.mark.parametrize("method", ["notifications/initialized", "notifications/cancelled"])
+    def test_2026_notification_without_capabilities_accepted(self, client, authed, path, method):
+        # Prod regression: a 2026 Go client sends notifications with no id and
+        # no clientCapabilities _meta. Those must be 202, not -32602 / HTTP 400.
+        response = _post(
+            client,
+            path,
+            {"jsonrpc": "2.0", "method": method},
+            **{"mcp-protocol-version": PROTOCOL_VERSION_2026},
+        )
+        assert response.status_code == 202
+        assert response.content == b""
 
     @pytest.mark.parametrize("path", ["/v1/mcp", "/v1/mcp/sse"])
     def test_2026_meta_without_capabilities_rejected(self, client, authed, path):

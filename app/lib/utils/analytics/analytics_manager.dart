@@ -26,9 +26,6 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:uuid/uuid.dart';
 import 'package:omi/utils/debugging/crashlytics_manager.dart';
 import 'package:omi/utils/analytics/background_checkpoint_store.dart';
-import 'package:omi/services/experiments/experiment_service.dart';
-import 'package:omi/services/experiments/experiment_registry.dart';
-import 'package:omi/services/experiments/posthog_experiment_flag_provider.dart';
 
 enum ProductErrorKind { flutterFramework, uncaughtDart, startup }
 
@@ -56,11 +53,7 @@ class AnalyticsManager {
   static bool _analyticsReady = false;
   static bool _trackingEnabled = true;
   static int _consentRevision = 0;
-  static ExperimentService? _experiments;
-  ExperimentService? get experiments => _experiments;
-  static String _experimentNamespace = 'mobile-dev';
   static String _clientAppNamespace = 'unknown';
-  static int _appBuild = 0;
   static String? _settledDistinctId;
   static int _identityEpoch = 0;
   static String? _boundIdentity;
@@ -70,17 +63,6 @@ class AnalyticsManager {
   static int _initFailures = 0;
   static int _handoffFailures = 0;
   static final Map<String, Object> _eventContext = {};
-  static Map<String, Object> Function()? experimentContext;
-  static final Object _experimentZone = Object();
-  static void withExperimentContext(Map<String, Object> context, void Function() emit) =>
-      runZoned(emit, zoneValues: {_experimentZone: (_identityEpoch, Map<String, Object>.unmodifiable(context))});
-  static Map<String, Object> captureExperimentContext() {
-    try {
-      return Map<String, Object>.unmodifiable(experimentContext?.call() ?? {});
-    } catch (_) {
-      return {};
-    }
-  }
 
   static void Function(String? identity, bool enabled)? identityChanged;
   static int get identityEpoch => _identityEpoch;
@@ -142,14 +124,6 @@ class AnalyticsManager {
 
   static void _notifyIdentity(String? distinctId, bool enabled) {
     identityChanged?.call(distinctId, enabled);
-    _experiments?.updateContext(
-      ExperimentContext(
-        identityKey: distinctId ?? '',
-        analyticsEnabled: enabled,
-        namespace: _experimentNamespace,
-        appBuild: _appBuild,
-      ),
-    );
   }
 
   static Future<void> _settleIdentity() async {
@@ -179,34 +153,14 @@ class AnalyticsManager {
     }
   }
 
-  static void _configureExperiments(AnalyticsAdapter adapter) {
-    if (adapter is! PostHogAnalyticsAdapter || _experiments != null) return;
-    _experiments = ExperimentService(
-      provider: PosthogExperimentFlagProvider(projectToken: adapter.apiKey, host: Uri.parse(adapter.host)),
-      definitions: MobileExperiments.all,
-      emit: (name, properties) => _instance.track(name, properties: properties),
-    );
-    experimentContext = () => _experiments?.outcomeProperties() ?? {};
-  }
-
-  Future<void> refreshExperiments() async {
-    if (PhysicalQualification.enabled) return;
-    if (!_analyticsReady) await init();
-    if (_settledDistinctId == null) await _settleIdentity();
-    await _experiments?.refresh();
-  }
-
-  void recordProductError(ProductErrorKind kind) => track(
-        'Product Error',
-        properties: {
-          'error_kind': switch (kind) {
-            ProductErrorKind.flutterFramework => 'flutter_framework',
-            ProductErrorKind.uncaughtDart => 'uncaught_dart',
-            ProductErrorKind.startup => 'startup',
-          },
-          'diagnostic_source': 'crashlytics',
+  void recordProductError(ProductErrorKind kind) => track('Product Error', properties: {
+        'error_kind': switch (kind) {
+          ProductErrorKind.flutterFramework => 'flutter_framework',
+          ProductErrorKind.uncaughtDart => 'uncaught_dart',
+          ProductErrorKind.startup => 'startup',
         },
-      );
+        'diagnostic_source': 'crashlytics',
+      });
 
   /// Periodic operational signal; does not recursively emit on queue failures.
   void recordTelemetryHealth() {
@@ -268,7 +222,6 @@ class AnalyticsManager {
         if (!identical(_adapter, adapter)) return;
         _analyticsReady = true;
         if (!_trackingEnabled) adapter.disable();
-        _configureExperiments(adapter);
         await _settleIdentity();
         _retryTimer?.cancel();
         _retryTimer = null;
@@ -328,11 +281,7 @@ class AnalyticsManager {
     _globalEventProperties = {'platform': _mobilePlatformName, 'app_platform': _mobilePlatformName};
     _analyticsReady = false;
     _trackingEnabled = true;
-    _experiments?.dispose();
-    _experiments = null;
     _clientAppNamespace = 'unknown';
-    _experimentNamespace = 'mobile-dev';
-    _appBuild = 0;
     _settledDistinctId = null;
     _identityEpoch++;
     _boundIdentity = null;
@@ -342,7 +291,6 @@ class AnalyticsManager {
     _initFailures = 0;
     _handoffFailures = 0;
     _eventContext.clear();
-    experimentContext = null;
     identityChanged = null;
   }
 
@@ -602,11 +550,6 @@ class AnalyticsManager {
         props.addAll(_eventContext);
         if (eventName == 'Product Journey Outcome' || eventName == 'Product Value') {
           props['experiment_context_verified'] = true;
-          try {
-            final attribution = Zone.current[_experimentZone] as (int, Map<String, Object>)?;
-            if (attribution != null && attribution.$1 != _identityEpoch) return;
-            props.addAll(attribution?.$2 ?? captureExperimentContext());
-          } catch (_) {}
         }
         _enqueueEvent(
           _QueuedAnalyticsEvent(
@@ -2763,11 +2706,7 @@ class AnalyticsManager {
       final packageInfo = await PackageInfo.fromPlatform().timeout(timeout);
       if (packageInfo.version.isNotEmpty) version = packageInfo.version;
       if (packageInfo.buildNumber.isNotEmpty) build = packageInfo.buildNumber;
-      _appBuild = int.tryParse(build) ?? 0;
       _clientAppNamespace = packageInfo.packageName;
-      _experimentNamespace = {'com.friend.ios', 'com.friend-app-with-wearable.ios12'}.contains(packageInfo.packageName)
-          ? 'mobile-prod'
-          : 'mobile-dev';
     } catch (_) {}
     _globalEventProperties = {
       'platform': _mobilePlatformName,

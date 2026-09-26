@@ -258,9 +258,6 @@ environments:
           OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE:
             value: '1.0'
             category: rollout
-          GOOGLE_CALENDAR_AUTO_LINK_ENABLED:
-            value: 'true'
-            category: rollout
           CONVERSATION_RELEVANCE_JEV_ENABLED:
             value: 'true'
             category: rollout
@@ -1634,7 +1631,7 @@ environments:
             value: prod
             category: runtime_identity
           STT_CONNECT_ORDER_FROM_CONFIG:
-            value: 'false'
+            value: 'true'
             category: rollout
           PARAKEET_WINDOW_ALLOCATION_PERCENT:
             value: '0'

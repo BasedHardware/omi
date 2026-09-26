@@ -61,7 +61,9 @@ class ConversationDetailHeader extends StatelessWidget {
               final peopleLabel = ConversationDetailMeta.peopleLabel(
                 people.named,
                 people.unnamed,
+                uncounted: people.uncounted,
                 summary: (first, others) => context.l10n.participantsSummary(first, others),
+                uncountedSummary: context.l10n.participantsSummaryUncounted,
               );
               return Wrap(
                 spacing: 6,
@@ -175,17 +177,21 @@ class ConversationDetailHeader extends StatelessWidget {
     );
   }
 
-  /// Who spoke, by name only: the owner as "You" and named people, plus how many unnamed speakers
-  /// there were. When the transcript names nobody, a linked calendar event's attendees.
-  static ({List<String> named, int unnamed}) _people(BuildContext context, ServerConversation conversation) {
+  /// Who spoke, by name only: the owner as "You" and named people, plus how many unnamed voices
+  /// took part. When the transcript names nobody, a linked calendar event's attendees.
+  static ({List<String> named, int unnamed, bool uncounted}) _people(
+    BuildContext context,
+    ServerConversation conversation,
+  ) {
     final speakers = ConversationDetailMeta.participants(
       conversation.transcriptSegments,
       you: context.l10n.you,
       personName: (personId) => SharedPreferencesUtil().getPersonById(personId)?.name,
+      speakers: conversation.speakerResolution,
     );
     if (speakers.named.isNotEmpty) return speakers;
     final attendees = (conversation.calendarEvent?.attendees ?? const []).map(_attendeeName).toList();
-    return attendees.isEmpty ? speakers : (named: attendees, unnamed: 0);
+    return attendees.isEmpty ? speakers : (named: attendees, unnamed: 0, uncounted: false);
   }
 
   static String _attendeeName(String attendee) {

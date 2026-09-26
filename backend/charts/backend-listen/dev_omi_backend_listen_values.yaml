@@ -201,8 +201,6 @@ env:
     value: "true"
   - name: WAKE_WORD_ADJUDICATION_ENABLED
     value: "true"
-  - name: GOOGLE_CALENDAR_AUTO_LINK_ENABLED
-    value: "true"
   - name: OMI_LLM_CHAT_AGENT_ROUTE
     value: "gateway"
   - name: PUBLIC_SHARED_CONVERSATION_CHAT_MODE
@@ -423,6 +421,11 @@ env:
         key: TWILIO_API_KEY_SECRET
   - name: VAD_GATE_MODE
     value: "active"
+  # Audio-timeline v2: one capture coordinate for segments and stored audio.
+  # Admits new eligible recordings only (single-channel, server STT);
+  # existing v1 sessions and resumed v1 conversations are unaffected.
+  - name: AUDIO_TIMELINE_V2
+    value: "true"
   # Fair-use system (PR #5748)
   - name: FAIR_USE_ENABLED
     value: "true"

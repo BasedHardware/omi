@@ -101,6 +101,45 @@ OMI_CAPTURE_FINALIZATION_RECONCILIATIONS_TOTAL = Counter(
     ['outcome'],
 )
 
+# Audio-timeline v2 observability. Labels are bounded and never carry UID,
+# conversation id, or any transcript/audio content. mode=legacy|v2;
+# segments outcome=mapped|rejected|straddled|late_owner_dropped;
+# coverage outcome is the 3.4 vocabulary covered|missing|pending_upload|no_audio|unsupported.
+OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL = Counter(
+    'omi_audio_timeline_segments_total',
+    'Live transcript segments by audio-timeline mapping outcome',
+    ['mode', 'outcome'],
+)
+OMI_AUDIO_TIMELINE_COVERAGE_TOTAL = Counter(
+    'omi_audio_timeline_coverage_total',
+    'Audio-linked coverage checks observed at bounded reconciliation points',
+    ['mode', 'outcome'],
+)
+# Pusher-side v2 replay reconciliation: frames overlapping already-accepted
+# audio whose bytes could not be proven identical (live-buffer compare or
+# flushed-run digest). Bounded counter, no identity labels.
+OMI_AUDIO_TIMELINE_REPLAY_CONFLICTS_TOTAL = Counter(
+    'omi_audio_timeline_replay_conflicts_total',
+    'v2 audio frames dropped because an already-accepted range holds different bytes',
+)
+for _mode in ('legacy', 'v2'):
+    for _outcome in ('mapped', 'rejected', 'straddled', 'late_owner_dropped'):
+        OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode=_mode, outcome=_outcome)
+    for _outcome in ('covered', 'missing', 'pending_upload', 'no_audio', 'unsupported'):
+        OMI_AUDIO_TIMELINE_COVERAGE_TOTAL.labels(mode=_mode, outcome=_outcome)
+
+# Live speaker-ID match exits: every early return before a match decision, by
+# bounded reason (enumerated in routers/listen/speakers.py). The reason is the
+# only label — never uid, session, or conversation identifiers; those travel on
+# the paired log line instead, which is how a single user report is attributed.
+OMI_SPEAKER_ID_MATCH_EXITS_TOTAL = Counter(
+    'omi_speaker_id_match_exits_total',
+    'Live speaker-ID detections that returned before a match decision, by bounded reason',
+    ['reason'],
+)
+for _reason in ('window_outside_buffer', 'too_short', 'no_pcm', 'stale_generation', 'already_mapped'):
+    OMI_SPEAKER_ID_MATCH_EXITS_TOTAL.labels(reason=_reason)
+
 # Export zero-valued children from a healthy but idle process. This lets
 # Prometheus/Grafana distinguish no user traffic from an absent scrape target.
 for _journey in ('chat_response', 'pusher_session', 'capture_finalization'):
@@ -679,6 +718,46 @@ OMI_LIVE_STT_TERMINAL_TOTAL = Counter(
     ['provider', 'outcome', 'client_platform', 'deployment_environment', 'phase'],
 )
 
+# Headline SLI for live listening: did this session get any transcript? Emitted
+# exactly once per backend-STT listen session at teardown (never for custom-STT
+# sessions, whose transcripts the client produces). too_short (under ~10s of
+# audio or no VAD speech) is excluded from the success-ratio denominator by the
+# alert, so quiet sessions cannot page. No provider/session labels: this is the
+# user-felt outcome, not provider attribution (2026-09-26 incident: ~34.8k/35k
+# modulate terminals failed for hours with nothing paging on the user outcome).
+OMI_LIVE_SESSION_TRANSCRIPT_OUTCOME_TOTAL = Counter(
+    'omi_live_session_transcript_outcome_total',
+    'Terminal transcript outcome per backend-STT live listen session (transcribed / no_transcript / too_short)',
+    ['outcome'],
+)
+
+# Process-local STT breaker state (utils/stt/provider_resilience.py), published
+# on every state transition. Per pod: sum across job=backend-listen-metrics for
+# "pods with this provider's breaker open". kind=account is the 402/balance
+# bench; kind=selection is the connect/serve bench.
+OMI_STT_PROVIDER_CIRCUIT_OPEN = Gauge(
+    'omi_stt_provider_circuit_open',
+    'Whether the process-local STT provider breaker is currently refusing traffic (1) or not (0)',
+    ['provider', 'kind'],
+)
+
+# Per-provider live-STT connection attempts on every connect path (legacy order
+# and configured chain), with a bounded error class for the failure tail.
+OMI_STT_PROVIDER_CONNECT_TOTAL = Counter(
+    'omi_stt_provider_connect_total',
+    'Live-STT provider connection attempts by bounded provider, outcome, and error class',
+    ['provider', 'outcome', 'error_class'],
+)
+
+# Deployment-marked retired providers (intentionally unfunded legs). Budget and
+# leg-error alerts subtract these so a provider that is dead on purpose cannot
+# page forever. Populated from STT_RETIRED_PROVIDERS (utils/stt/stream_close.py).
+OMI_STT_PROVIDER_RETIRED = Gauge(
+    'omi_stt_provider_retired',
+    'STT providers this deployment has retired (unfunded or decommissioned legs alerts must ignore)',
+    ['provider'],
+)
+
 # /v4/listen funnel for sources the client cannot self-report (phone_call today):
 # accepted socket -> first decoded audio -> transcript delivery. Sources and outcomes
 # are closed enums; no user, call, or session identifiers appear as labels.
@@ -1008,3 +1087,17 @@ def stop_metrics_sidecar_server() -> None:
     server.server_close()
     if thread is not None:
         thread.join(timeout=5)
+
+
+OMI_CONVERSATION_SPEAKER_RESOLUTION_TOTAL = Counter(
+    'omi_conversation_speaker_resolution_total',
+    'Conversation-wide speaker resolution runs by outcome',
+    ['outcome'],
+)
+
+OMI_CONVERSATION_SPEAKER_RESOLUTION_VOICES = Histogram(
+    'omi_conversation_speaker_resolution_voices',
+    'Speaker ids before and after conversation-wide resolution',
+    ['stage'],
+    buckets=(1, 2, 3, 4, 6, 8, 12, 16, 25, 50, 100, 250, 1000, 2500),
+)

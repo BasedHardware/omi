@@ -61,6 +61,8 @@ class AuditCaptureProvider extends ChangeNotifier implements CaptureProvider {
   @override
   bool get isPhoneMicBatchRecording => false;
   @override
+  bool get isPendantBatchRecording => false;
+  @override
   DateTime? get liveCaptureStartedAt =>
       live == AuditLive.idle ? null : DateTime.now().subtract(Duration(seconds: _phone ? 134 : 724));
   @override
@@ -181,6 +183,7 @@ class _HomeFrame extends StatelessWidget {
       body: Stack(children: [
         const HomeContentPage(),
         BottomNavBar(onTabTap: (_, __) {}),
+        const HomeChatBarBackdrop(),
         Positioned(
           left: 16,
           right: 16,
