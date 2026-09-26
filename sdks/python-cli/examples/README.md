@@ -8,6 +8,8 @@
   omi-cli 指南 (Traditional Chinese agent guide).
 * [`agent_quickstart.ja.md`](agent_quickstart.ja.md) — エージェントのための
   omi-cli ガイド (Japanese agent guide).
+* [`agent_quickstart.de.md`](agent_quickstart.de.md) — Leitfaden für Agenten
+  (German agent guide).
 * [`agent_quickstart.fr.md`](agent_quickstart.fr.md) — guide omi-cli pour les
   agents (French agent guide).
 * [`agent_quickstart.pt.md`](agent_quickstart.pt.md) — omi-cli para agentes
