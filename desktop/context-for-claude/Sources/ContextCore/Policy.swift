@@ -230,6 +230,15 @@ public enum PCM {
         }
     }
 
+    /// Largest absolute sample in the encoded data. The unsigned result can represent the
+    /// magnitude of Int16.min, which is one larger than Int16.max.
+    public static func peak(int16LE data: Data) -> UInt16 {
+        data.withUnsafeBytes { raw in
+            guard let bytes = raw.baseAddress?.assumingMemoryBound(to: UInt8.self) else { return 0 }
+            return ctx_pcm_peak_int16le(bytes, raw.count)
+        }
+    }
+
     /// Averages interleaved channels down to mono.
     ///
     /// Averaging rather than taking the first channel: USB interfaces and headsets routinely put the
@@ -267,11 +276,15 @@ public enum PCM {
     /// full-scale sign flip: an audible click that also drags the RMS of its window over the silence
     /// floor and wakes the model for nothing.
     public static func int16LE(from samples: [Float]) -> Data {
+        samples.withUnsafeBufferPointer { int16LE(from: $0) }
+    }
+
+    /// Pointer form used by CoreAudio callbacks to avoid copying the converter's output into a
+    /// second Swift array before encoding it.
+    public static func int16LE(from samples: UnsafeBufferPointer<Float>) -> Data {
         var bytes = [UInt8](repeating: 0, count: samples.count * 2)
-        let written = samples.withUnsafeBufferPointer { input in
-            bytes.withUnsafeMutableBufferPointer { output in
-                ctx_pcm_encode_int16le(input.baseAddress, samples.count, output.baseAddress)
-            }
+        let written = bytes.withUnsafeMutableBufferPointer { output in
+            ctx_pcm_encode_int16le(samples.baseAddress, samples.count, output.baseAddress)
         }
         if written < bytes.count { bytes.removeLast(bytes.count - written) }
         return Data(bytes)
