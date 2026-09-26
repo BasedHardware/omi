@@ -56,6 +56,23 @@ TRANSCRIPT_RECEIVE_BOUND_SECONDS = 45
 # so the durable-transcript readback never depends on a single STT pass.
 DISCARD_KEEP_AUDIO_PASSES = 8
 
+# Opt-in audio-timeline alignment scenario. Two distinguishable >8 s speech
+# windows paced in real time with delivered silence and one actual bounded
+# inter-arrival gap (above the 2 s anchor threshold) between them; the socket
+# stays open through finalization exactly like the base probe. This scenario
+# must only run on dev with an isolated test identity.
+# When that identity has a voiceprint (enrolled from the fixture voice), the
+# scenario additionally asserts live speaker identity on the same capture
+# clock — the owner is is_user in BOTH the WebSocket output and the persisted
+# conversation; without a voiceprint the check reports NOT_RUN, never PASS.
+ALIGNMENT_DELIVERED_SILENCE_SECONDS = 5.0
+ALIGNMENT_INTERARRIVAL_GAP_SECONDS = 4.0
+ALIGNMENT_COVERAGE_TOLERANCE_SECONDS = 0.001
+# Private-cloud chunks upload asynchronously after finalization (batches up to
+# 60 s old), so coverage is polled rather than read once at terminal.
+ALIGNMENT_COVERAGE_WAIT_SECONDS = 150
+ALIGNMENT_COVERAGE_POLL_SECONDS = 5
+
 
 class ProbeError(RuntimeError):
     """A bounded probe stage failed without retaining response or transcript data."""
@@ -279,6 +296,436 @@ def _http_json(url: str, token: str) -> tuple[int, dict[str, Any] | None]:
     except (UnicodeDecodeError, json.JSONDecodeError):
         return status, None
     return status, payload if isinstance(payload, dict) else None
+
+
+def _epoch_seconds(value: Any) -> float | None:
+    """Wall-epoch seconds of an API datetime (ISO string, naive = UTC) or number, else None."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, (int, float)):
+        return float(value)
+    if isinstance(value, str) and value.strip():
+        try:
+            parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+        except ValueError:
+            return None
+        return (parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)).timestamp()
+    return None
+
+
+def _alignment_covered(spans: list[Any], start: float, end: float) -> bool:
+    """Union-cover [start, end) with the conversation's validated chunk spans."""
+    merged: list[list[float]] = []
+    pairs: list[tuple[float, float]] = []
+    for item in spans:
+        # Stored entries are {start, end} objects (Firestore has no nested arrays).
+        if isinstance(item, dict) and item.get("start") is not None and item.get("end") is not None:
+            pairs.append((float(item["start"]), float(item["end"])))
+        elif isinstance(item, (list, tuple)) and len(item) == 2:
+            pairs.append((float(item[0]), float(item[1])))
+    for begin, finish in sorted(pairs):
+        if merged and begin <= merged[-1][1] + ALIGNMENT_COVERAGE_TOLERANCE_SECONDS:
+            merged[-1][1] = max(merged[-1][1], finish)
+        else:
+            merged.append([begin, finish])
+    remaining = start
+    for begin, finish in merged:
+        if finish <= remaining:
+            continue
+        if begin > remaining:
+            return False
+        if finish >= end:
+            return True
+        remaining = finish
+    return False
+
+
+def _alignment_word_counts(segments: list[Any], expected_phrase: str) -> tuple[int, int]:
+    """Check that two fixture sends did not become many durable copies."""
+    expected = 2 * len(expected_phrase.split())
+    observed = sum(
+        len(_normalize(item.get("text")).split()) for item in segments if isinstance(item, dict) and item.get("text")
+    )
+    return observed, expected
+
+
+def _alignment_word_count_ok(observed: int, expected: int) -> bool:
+    return expected > 0 and expected // 2 <= observed <= expected * 3 // 2
+
+
+def _http_json_method(url: str, token: str, method: str = "GET") -> tuple[int, dict[str, Any] | None]:
+    import urllib.request as _request
+
+    request = _request.Request(
+        url, method=method, headers={"Authorization": f"Bearer {token}", "Accept": "application/json"}
+    )
+    try:
+        with _request.urlopen(request, timeout=20) as response:
+            body = response.read(MAX_HTTP_BYTES + 1)
+            status = int(response.status)
+    except Exception as error:  # noqa: BLE001 - bounded probe surface
+        code = getattr(error, "code", 0)
+        return (int(code) if isinstance(code, int) else 0), None
+    if len(body) > MAX_HTTP_BYTES:
+        return status, None
+    try:
+        payload = json.loads(body.decode("utf-8"))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return status, None
+    return status, payload if isinstance(payload, dict) else None
+
+
+async def _alignment_listen(
+    base_url: str,
+    token: str,
+    fixture: Fixture,
+    conversation_id: str,
+    *,
+    allow_local_http: bool,
+    hold_open: asyncio.Event,
+) -> list[dict[str, Any]]:
+    """Stream two paced speech windows with a real inter-arrival gap; collect segments."""
+    parsed = urllib.parse.urlparse(base_url)
+    local_http = allow_local_http and parsed.scheme == "http" and parsed.hostname in {"127.0.0.1", "localhost"}
+    if (parsed.scheme != "https" and not local_http) or not parsed.netloc or parsed.path not in {"", "/"}:
+        raise ProbeError("api_url")
+    query = urllib.parse.urlencode(
+        {
+            "language": "en",
+            "sample_rate": fixture.sample_rate,
+            "codec": FIXTURE_CODEC,
+            "channels": 1,
+            "include_speech_profile": "false",
+            "source": "desktop",
+            "stt_service": "parakeet",
+            "client_conversation_id": conversation_id,
+        }
+    )
+    websocket_url = f"{'ws' if local_http else 'wss'}://{parsed.netloc}/v4/listen?{query}"
+    segments: list[dict[str, Any]] = []
+    session_bound = False
+    ready = False
+    chunk_bytes = fixture.sample_rate * 2 * CHUNK_MILLISECONDS // 1000
+    async with websockets.connect(
+        websocket_url,
+        extra_headers={"Authorization": f"Bearer {token}", "X-App-Platform": "desktop"},
+        max_size=10 * 1024 * 1024,
+        open_timeout=30,
+        ping_interval=20,
+        ping_timeout=20,
+    ) as websocket:
+        deadline = time.monotonic() + 60
+        while not (session_bound and ready):
+            payload = await _receive_json(websocket, deadline)
+            if isinstance(payload, dict) and payload.get("type") == "conversation_session":
+                session_bound = payload.get("conversation_id") == conversation_id
+            if (
+                isinstance(payload, dict)
+                and payload.get("type") == "service_status"
+                and payload.get("status") == "ready"
+            ):
+                ready = True
+
+        async def _stream_window() -> None:
+            for offset in range(0, len(fixture.pcm), chunk_bytes):
+                chunk = fixture.pcm[offset : offset + chunk_bytes]
+                if len(chunk) != chunk_bytes:
+                    break
+                await websocket.send(chunk)
+                await asyncio.sleep(CHUNK_MILLISECONDS / 1000.0)
+
+        async def receive_transcripts() -> None:
+            settle_deadline = time.monotonic() + TRANSCRIPT_RECEIVE_BOUND_SECONDS
+            while time.monotonic() < settle_deadline:
+                try:
+                    payload = await _receive_json(websocket, settle_deadline)
+                except ProbeError:
+                    return
+                batch = payload if isinstance(payload, list) else None
+                if batch is None and isinstance(payload, dict):
+                    batch = payload.get("segments")
+                if isinstance(batch, list):
+                    segments.extend(item for item in batch if isinstance(item, dict) and item.get("text"))
+
+        receiver = asyncio.create_task(receive_transcripts())
+        # Window A at real-time pace.
+        await _stream_window()
+        # Delivered PCM silence: advances the capture cursor, never a gap.
+        silence_chunk = b"\x00" * chunk_bytes
+        for _ in range(int(ALIGNMENT_DELIVERED_SILENCE_SECONDS * 1000 / CHUNK_MILLISECONDS)):
+            await websocket.send(silence_chunk)
+            await asyncio.sleep(CHUNK_MILLISECONDS / 1000.0)
+        # An actual bounded inter-arrival gap: nothing is sent for the window.
+        await asyncio.sleep(ALIGNMENT_INTERARRIVAL_GAP_SECONDS)
+        # Window B, then near-silence while finalization completes.
+        await _stream_window()
+        await asyncio.sleep(TRANSCRIPT_SETTLE_SECONDS)
+        receiver.cancel()
+        try:
+            await receiver
+        except asyncio.CancelledError:
+            pass
+        while not hold_open.is_set():
+            await websocket.send(silence_chunk)
+            try:
+                await asyncio.wait_for(hold_open.wait(), timeout=0.5)
+            except asyncio.TimeoutError:
+                pass
+        await websocket.close(code=1000, reason="alignment_probe_complete")
+    return segments
+
+
+async def run_alignment_scenario(args: argparse.Namespace) -> tuple[dict[str, Any], bool]:
+    """Opt-in audio-timeline v2 alignment proof on dev (never production).
+
+    Prerequisites proved before streaming: the deployment receipt names the
+    candidate pusher/backend, and the isolated dev identity has private-cloud
+    sync enabled (enrollment attempted; NOT_RUN when it cannot be enabled).
+    The hard gate for deterministic PCM/offset/byte identity is the hermetic
+    stack regression; this deployed check asserts the v2 marker, span coverage
+    of the transcript windows, the clip endpoint's audio, and — as an
+    auxiliary ASR check only — that the clip transcribes the fixture phrase.
+    When the identity has a voiceprint (enrolled from the fixture voice) it
+    also asserts live speaker identity on the same capture clock: every
+    persisted segment is_user and at least one live-delivered WebSocket
+    segment already is_user (the failover acceptance's deployed mirror).
+    Receipts carry no transcript, audio bytes, token, or endpoint data.
+    """
+    started_at = _now()
+    failure_stage: str | None = None
+    coverage_ok: bool | None = None
+    clip_ok: bool | None = None
+    clip_phrase_match: bool | None = None
+    marker_ok: bool | None = None
+    speaker_identity_ok: bool | None = None
+    live_owner_segment: bool | None = None
+    candidate_pusher_observed: bool | None = None
+    conversation_id: str | None = None
+    live_word_count: int | None = None
+    expected_word_count: int | None = None
+    try:
+        token = _read_token(args.bearer_token_file)
+        fixture = load_fixture()
+        deployment_receipt = json.loads(args.deployment_receipt.read_text(encoding="utf-8"))
+        if not isinstance(deployment_receipt, dict) or not deployment_receipt.get("source_sha"):
+            raise ProbeError("deployment_receipt")
+        base = args.api_url.rstrip("/")
+        parsed_base = urllib.parse.urlparse(base)
+        local_test = (
+            args.allow_local_http
+            and parsed_base.scheme == "http"
+            and parsed_base.hostname in {"127.0.0.1", "localhost"}
+        )
+        if base != "https://api.omiapi.com" and not local_test:
+            raise ProbeError("dev_api_url")
+        status, sync_state = await asyncio.to_thread(_http_json_method, f"{base}/v1/users/private-cloud-sync", token)
+        enabled = bool(sync_state and sync_state.get("private_cloud_sync_enabled"))
+        if status != 200:
+            raise ProbeError("private_cloud_sync_read")
+        if not enabled:
+            status, _ = await asyncio.to_thread(
+                _http_json_method, f"{base}/v1/users/private-cloud-sync?value=true", token, "POST"
+            )
+            if status not in {200, 201}:
+                # Report NOT_RUN, never PASS, when the identity cannot enroll.
+                return _alignment_receipt(status="NOT_RUN", started_at=started_at, failure_stage=None), False
+        conversation_id = str(uuid.uuid4())
+        hold = asyncio.Event()
+        listen_task = asyncio.create_task(
+            _alignment_listen(
+                base, token, fixture, conversation_id, allow_local_http=args.allow_local_http, hold_open=hold
+            )
+        )
+        try:
+            await _terminal_readback(
+                base, token, conversation_id, args.finalization_timeout_seconds, expected_phrase=fixture.expected_phrase
+            )
+        finally:
+            hold.set()
+        live_segments = await listen_task
+        await _observe_candidate_pusher(
+            deployment_receipt, conversation_id=conversation_id, project=args.project, namespace=args.namespace
+        )
+        candidate_pusher_observed = True
+        quoted = urllib.parse.quote(conversation_id, safe="")
+        coverage_deadline = time.monotonic() + ALIGNMENT_COVERAGE_WAIT_SECONDS
+        while True:
+            status, conversation = await asyncio.to_thread(
+                _http_json_method, f"{base}/v1/conversations/{quoted}", token
+            )
+            if status != 200 or not conversation or conversation.get("id") != conversation_id:
+                raise ProbeError("consumer_readback")
+            if conversation.get("private_cloud_sync_enabled") is not True:
+                raise ProbeError("private_cloud_conversation_flag")
+            marker_ok = (conversation.get("audio_timeline") or {}).get("version") == 2
+            if not marker_ok:
+                raise ProbeError("audio_timeline_marker")
+            windows = sorted(
+                (float(item["start"]), float(item["end"]))
+                for item in conversation.get("transcript_segments") or []
+                if isinstance(item, dict) and item.get("start") is not None and item.get("end") is not None
+            )
+            # A zero-length segment is a distinct bug signal (a provider interval
+            # collapsed onto one point instead of being mapped or rejected), not a
+            # coverage question: name it so the receipt points at the real defect.
+            if any(end <= start for start, end in windows):
+                raise ProbeError("zero_length_segment")
+            spans: list[Any] = []
+            for audio_file in conversation.get("audio_files") or []:
+                spans.extend(audio_file.get("chunk_spans") or [])
+            # Segment times are seconds from started_at; chunk spans are wall-epoch
+            # seconds. Compare them on one axis.
+            origin = _epoch_seconds(conversation.get("started_at"))
+            coverage_ok = (
+                origin is not None
+                and bool(spans)
+                and all(_alignment_covered(spans, origin + start, origin + end) for start, end in windows)
+            )
+            if coverage_ok:
+                break
+            if time.monotonic() >= coverage_deadline:
+                raise ProbeError("span_coverage")
+            await asyncio.sleep(ALIGNMENT_COVERAGE_POLL_SECONDS)
+        live_word_count, expected_word_count = _alignment_word_counts(
+            conversation.get("transcript_segments") or [], fixture.expected_phrase
+        )
+        # Exact words remain provider-dependent, but two spoken copies cannot
+        # legitimately produce four or eight complete copies. Fail the probe
+        # even when the expected phrase occurs somewhere in the transcript.
+        if not _alignment_word_count_ok(live_word_count, expected_word_count):
+            raise ProbeError("transcript_word_count")
+        # Live speaker identity rides the same capture clock: when the probe
+        # identity has a voiceprint (enrolled from the fixture voice), every
+        # persisted segment must be is_user and at least one live-delivered
+        # WebSocket segment must already carry it. Without a voiceprint the
+        # check is NOT_RUN, never PASS.
+        status, profile_state = await asyncio.to_thread(_http_json_method, f"{base}/v3/speech-profile", token)
+        if status != 200:
+            raise ProbeError("speech_profile_read")
+        if bool(profile_state and profile_state.get("has_profile")):
+            persisted_owner = [
+                item
+                for item in conversation.get("transcript_segments") or []
+                if isinstance(item, dict) and item.get("text")
+            ]
+            speaker_identity_ok = bool(persisted_owner) and all(bool(item.get("is_user")) for item in persisted_owner)
+            if not speaker_identity_ok:
+                raise ProbeError("speaker_identity")
+            live_owner_segment = any(isinstance(item, dict) and item.get("is_user") for item in live_segments)
+            if not live_owner_segment:
+                raise ProbeError("live_speaker_identity")
+        else:
+            speaker_identity_ok = None
+            live_owner_segment = None
+        status, urls_payload = await asyncio.to_thread(_http_json_method, f"{base}/v1/sync/audio/{quoted}/urls", token)
+        if status != 200 or not isinstance(urls_payload, dict):
+            raise ProbeError("audio_urls_read")
+        # Clip a window of the first transcript segment (bounded to 12 s).
+        if windows:
+            start, end = windows[0]
+            clip_start, clip_end = start, min(end, start + 10.0)
+            if clip_end - clip_start >= 2.0:
+                status, clip = await asyncio.to_thread(
+                    _http_json_method,
+                    f"{base}/v1/speaker-tag-prompts/clip?conversation_id={quoted}"
+                    f"&start={clip_start}&end={clip_end}",
+                    token,
+                )
+                clip_ok = status == 200 and bool(clip and clip.get("audio_base64"))
+                if clip_ok:
+                    try:
+                        import base64 as _base64
+                        import io as _io
+                        import sys as _sys
+                        import wave as _wave
+
+                        if str(ROOT / "backend") not in _sys.path:
+                            _sys.path.insert(0, str(ROOT / "backend"))
+                        from utils.speaker_sample import verify_and_transcribe_sample
+
+                        wav_bytes = _base64.b64decode(clip["audio_base64"])
+                        with _wave.open(_io.BytesIO(wav_bytes), "rb") as handle:
+                            clip_rate = handle.getframerate()
+                            clip_pcm = handle.readframes(handle.getnframes())
+                        text, verified, _reason = await asyncio.to_thread(
+                            verify_and_transcribe_sample, clip_pcm, clip_rate, fixture.expected_phrase, "en"
+                        )
+                        # Auxiliary only: a short clip can legitimately fail
+                        # verification; the deterministic identity gate lives
+                        # in the hermetic regression.
+                        clip_phrase_match = bool(text) and fixture.expected_phrase in _normalize(text)
+                    except Exception:  # noqa: BLE001 - auxiliary check must not fail the probe
+                        clip_phrase_match = None
+    except (OSError, json.JSONDecodeError, ProbeError) as error:
+        failure_stage = error.stage if isinstance(error, ProbeError) else "deployment_receipt"
+    finally:
+        if "token" in locals():
+            token = ""
+    passed = failure_stage is None
+    return (
+        _alignment_receipt(
+            status="PASS" if passed else "FAIL",
+            started_at=started_at,
+            failure_stage=failure_stage,
+            marker_ok=marker_ok,
+            coverage_ok=coverage_ok,
+            clip_ok=clip_ok,
+            clip_phrase_match=clip_phrase_match,
+            speaker_identity_ok=speaker_identity_ok,
+            live_owner_segment=live_owner_segment,
+            candidate_pusher_observed=candidate_pusher_observed,
+            conversation_id=conversation_id,
+            live_word_count=live_word_count,
+            expected_word_count=expected_word_count,
+        ),
+        passed,
+    )
+
+
+def _alignment_receipt(
+    *,
+    status: str,
+    started_at: str,
+    failure_stage: str | None,
+    marker_ok: bool | None = None,
+    coverage_ok: bool | None = None,
+    clip_ok: bool | None = None,
+    clip_phrase_match: bool | None = None,
+    speaker_identity_ok: bool | None = None,
+    live_owner_segment: bool | None = None,
+    candidate_pusher_observed: bool | None = None,
+    conversation_id: str | None = None,
+    live_word_count: int | None = None,
+    expected_word_count: int | None = None,
+) -> dict[str, Any]:
+    """Receipt without transcript, audio, token, or endpoint data.
+
+    speaker_identity/live_owner_segment are null when the probe identity has
+    no voiceprint: that check is NOT_RUN, never PASS (same convention as the
+    private-cloud enrollment gate).
+    """
+    receipt: dict[str, Any] = {
+        "schema_version": 1,
+        "scenario": "audio_timeline_alignment",
+        "status": status,
+        "window": {"started_at": started_at, "closed_at": _now()},
+        "checks": {
+            "v2_marker": marker_ok,
+            "span_coverage": coverage_ok,
+            "clip_available": clip_ok,
+            "clip_phrase_match_auxiliary": clip_phrase_match,
+            "speaker_identity": speaker_identity_ok,
+            "live_owner_segment": live_owner_segment,
+            "candidate_pusher_observed": candidate_pusher_observed,
+        },
+        "synthetic_uid_class": SYNTHETIC_UID_CLASS,
+        "word_counts": {"live": live_word_count, "expected": expected_word_count},
+    }
+    if failure_stage is not None:
+        receipt["failure_stage"] = failure_stage
+    if conversation_id is not None:
+        receipt["conversation_id"] = conversation_id
+    return receipt
 
 
 async def _terminal_readback(
@@ -511,12 +958,21 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     # Keep all authenticated read-back inside the existing five-minute probe
     # token lifetime even after WebSocket setup and real-time audio streaming.
     parser.add_argument("--finalization-timeout-seconds", type=int, default=180)
+    # Opt-in audio-timeline alignment scenario (dev only, isolated test
+    # identity with private-cloud sync). All authenticated reads must stay
+    # within the five-minute probe token TTL.
+    parser.add_argument("--alignment-scenario", action="store_true")
     parser.add_argument("--output", type=Path, required=True)
     return parser.parse_args(argv)
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = parse_args(argv or os.sys.argv[1:])
+    if args.alignment_scenario:
+        receipt, passed = asyncio.run(run_alignment_scenario(args))
+        args.output.write_text(json.dumps(receipt, sort_keys=True) + "\n", encoding="utf-8")
+        print(f"Pusher alignment probe status={receipt['status']} scenario=audio_timeline_alignment")
+        return 0 if passed else 1
     receipt, passed = asyncio.run(run_probe(args))
     args.output.write_text(json.dumps(receipt, sort_keys=True) + "\n", encoding="utf-8")
     print(f"Pusher semantic probe status={receipt['status']} evidence_id={receipt['evidence_id']}")

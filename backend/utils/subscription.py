@@ -193,10 +193,10 @@ TRIAL_LENGTH_SECONDS = 3 * 24 * 60 * 60  # 3 days
 # Master switch for the desktop trial paywall. Default OFF: basic/Neo desktop users are
 # never locked out (no 402) AND the client never sees `trial_expired=True`, so the
 # "you've hit your monthly limit" upgrade popup does not fire just from account age — only
-# the actual chat-question quota (30/mo) gates them. Set TRIAL_PAYWALL_ENABLED=true to
-# restore the 3-day trial lockout. NOTE: this changes ONLY the trial paywall — plan limits
-# (Neo questions, data-intake caps) are untouched.
-TRIAL_PAYWALL_ENABLED = os.getenv('TRIAL_PAYWALL_ENABLED', 'false').lower() == 'true'
+# the actual chat-question quota (30/mo) gates them. The paywall is permanently off; the
+# paywalled branches below are retained pending removal. NOTE: this gate covers ONLY the
+# trial paywall — plan limits (Neo questions, data-intake caps) are untouched.
+TRIAL_PAYWALL_ENABLED = False
 
 # X-App-Platform header values that identify a desktop client. macOS and Windows
 # are the two desktop OSes; both get the desktop plan catalog, the desktop trial
