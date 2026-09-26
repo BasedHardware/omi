@@ -414,9 +414,10 @@ def path_segment(value: str) -> str:
     collection — httpx resolves dot-segments, so ``omi goal delete a/../../conversations/X``
     would DELETE a conversation — while ``?`` and ``#`` silently truncate the path.
     """
-    if value in {"", ".", ".."}:
-        raise UsageError(message=f"Invalid ID: {value!r}", detail="IDs cannot be empty, '.' or '..'.")
-    return urllib.parse.quote(value, safe="")
+    cleaned = value.strip()
+    if not cleaned or cleaned in {".", ".."}:
+        raise UsageError(message=f"Invalid ID: {value!r}", detail="IDs cannot be empty, whitespace, '.' or '..'.")
+    return urllib.parse.quote(cleaned, safe="")
 
 
 def chunked(seq: list[Any], size: int) -> Iterator[list[Any]]:
