@@ -708,3 +708,59 @@ def test_screenshot_non_json_local_api_error_has_status_code(config_path: Path, 
     assert result.exception.message == "Local Omi Desktop API error (500)"
     assert result.exception.detail == "plain failure"
     assert payload["status_code"] == 500
+
+
+@pytest.mark.parametrize("bad_name", ["", "   ", " \t "])
+def test_local_call_rejects_empty_tool_name(config_path: Path, cli_runner, bad_name: str) -> None:
+    _configure_local_profile(config_path)
+    result = cli_runner.invoke(app, ["local", "call", bad_name])
+    assert result.exit_code == 1
+    assert "Invalid tool name" in result.stderr
+
+
+@pytest.mark.parametrize("bad_query", ["", "   "])
+def test_local_search_screen_rejects_empty_query(config_path: Path, cli_runner, bad_query: str) -> None:
+    _configure_local_profile(config_path)
+    result = cli_runner.invoke(app, ["local", "search-screen", bad_query])
+    assert result.exit_code == 1
+    assert "Invalid search query" in result.stderr
+
+
+@pytest.mark.parametrize("bad_id", ["", "   "])
+def test_local_screenshot_rejects_empty_id(config_path: Path, cli_runner, bad_id: str) -> None:
+    _configure_local_profile(config_path)
+    result = cli_runner.invoke(app, ["local", "screenshot", bad_id])
+    assert result.exit_code == 1
+    assert "Invalid screenshot ID" in result.stderr
+
+
+@pytest.mark.parametrize("bad_query", ["", "   "])
+def test_local_sql_rejects_empty_query(config_path: Path, cli_runner, bad_query: str) -> None:
+    _configure_local_profile(config_path)
+    result = cli_runner.invoke(app, ["local", "sql", bad_query])
+    assert result.exit_code == 1
+    assert "Invalid SQL query" in result.stderr
+
+
+@pytest.mark.parametrize("bad_query", ["", "   "])
+def test_local_task_search_rejects_empty_query(config_path: Path, cli_runner, bad_query: str) -> None:
+    _configure_local_profile(config_path)
+    result = cli_runner.invoke(app, ["local", "task", "search", bad_query])
+    assert result.exit_code == 1
+    assert "Invalid task query" in result.stderr
+
+
+@pytest.mark.parametrize("bad_id", ["", "   "])
+def test_local_task_complete_rejects_empty_id(config_path: Path, cli_runner, bad_id: str) -> None:
+    _configure_local_profile(config_path)
+    result = cli_runner.invoke(app, ["local", "task", "complete", bad_id])
+    assert result.exit_code == 1
+    assert "Invalid task ID" in result.stderr
+
+
+@pytest.mark.parametrize("bad_id", ["", "   "])
+def test_local_task_delete_rejects_empty_id(config_path: Path, cli_runner, bad_id: str) -> None:
+    _configure_local_profile(config_path)
+    result = cli_runner.invoke(app, ["local", "task", "delete", bad_id, "--yes"])
+    assert result.exit_code == 1
+    assert "Invalid task ID" in result.stderr
