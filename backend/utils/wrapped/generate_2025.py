@@ -928,11 +928,10 @@ def generate_wrapped_2025(uid: str, year: int = 2025):
     except Exception as e:
         total_time = time.time() - start_time
         logger.error(f"[Wrapped] ========== ERROR generating Wrapped 2025 for user {uid} ==========")
-        logger.error(f"[Wrapped] Error after {total_time:.2f}s: {e}")
-        import traceback
-
-        traceback.print_exc()
-        wrapped_db.update_wrapped_status(uid, year, WrappedStatus.ERROR, error=str(e))
+        logger.error(f"[Wrapped] Error after {total_time:.2f}s: {type(e).__name__}")
+        wrapped_db.update_wrapped_status(
+            uid, year, WrappedStatus.ERROR, error="Failed to generate Wrapped. Please try again later."
+        )
 
 
 def _compute_all_stats(conversations: List[Conversation], action_items: List[Dict[str, Any]]) -> Dict[str, Any]:
