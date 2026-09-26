@@ -25,7 +25,7 @@ dependencies** — Python ≥ 3.8 is all you need.
 omi --json memory list | python examples/memories_to_jsonl.py - -o dataset.jsonl
 
 # 2. Inspect the result:
-head -n 3 dataset.jsonl | python -m json.tool --no-ensure-ascii
+while read -r line; do echo "$line" | python -m json.tool --no-ensure-ascii; done < dataset.jsonl
 ```
 
 ---
