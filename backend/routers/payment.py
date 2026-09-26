@@ -1296,10 +1296,6 @@ async def stripe_connect_webhook(request: Request, stripe_signature: str = Heade
             if uid and await run_blocking(db_executor, get_default_payment_method, uid) is None:
                 await run_blocking(db_executor, set_default_payment_method, uid, 'stripe')
 
-    # TODO: handle this event to link transfers?
-    # if event['type'] == 'transfer.created':
-    #     transfer = event['data']['object']
-
     return {"status": "success"}
 
 
