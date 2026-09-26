@@ -19,8 +19,8 @@ import 'package:omi/utils/l10n_extensions.dart';
 /// actions red, the safe choice bold); elsewhere a Material `AlertDialog` with text buttons, the
 /// destructive one in [omiDialogDangerColor].
 
-/// Destructive action colour on Material dialogs (iOS dark-mode systemRed; legible on every dark surface).
-const Color omiDialogDangerColor = OmiColors.danger;
+/// Destructive action colour on Material dialogs ([OmiColors.danger]; legible on every dark surface).
+Color get omiDialogDangerColor => OmiColors.danger;
 
 /// One button in an [OmiAlertDialog].
 class OmiDialogAction {
@@ -96,7 +96,7 @@ class OmiAlertDialog extends StatelessWidget {
             style: TextButton.styleFrom(
               foregroundColor: action.isDestructive
                   ? omiDialogDangerColor
-                  : (action.isDefault ? Colors.white : Colors.white.withValues(alpha: 0.78)),
+                  : (action.isDefault ? OmiColors.textPrimary : OmiColors.textPrimary.withValues(alpha: 0.78)),
               minimumSize: const Size(64, 44),
             ),
             child: Text(
@@ -276,14 +276,14 @@ class OmiCheckboxRow extends StatelessWidget {
                       ? CupertinoCheckbox(
                           value: value,
                           onChanged: (v) => onChanged(v ?? false),
-                          activeColor: Colors.white,
-                          checkColor: CupertinoColors.black,
+                          activeColor: OmiColors.accent,
+                          checkColor: OmiColors.onAccent,
                         )
                       : Checkbox(
                           value: value,
                           onChanged: (v) => onChanged(v ?? false),
-                          activeColor: Colors.white,
-                          checkColor: Colors.black,
+                          activeColor: OmiColors.accent,
+                          checkColor: OmiColors.onAccent,
                         ),
                 ),
                 const SizedBox(width: 4),

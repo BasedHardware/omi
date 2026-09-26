@@ -53,7 +53,7 @@ class _PrivateCloudSyncPageState extends State<PrivateCloudSyncPage> {
     return Consumer<UserProvider>(
       builder: (context, userProvider, child) {
         return Scaffold(
-          appBar: AppBar(leading: const OmiBackButton(), title: Text(l10n.storeAudioOnCloud)),
+          appBar: OmiAppBar(leading: const OmiBackButton(), title: Text(l10n.storeAudioOnCloud)),
           body: userProvider.isLoading
               ? const OmiLoadingState()
               : ListView(

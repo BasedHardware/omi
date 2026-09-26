@@ -102,10 +102,10 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
                   enabled: !submitting,
                   maxLines: 4,
                   maxLength: 250,
-                  style: const TextStyle(color: OmiColors.textPrimary),
+                  style: TextStyle(color: OmiColors.textPrimary),
                   decoration: InputDecoration(
                     hintText: context.l10n.writeYourReply,
-                    hintStyle: const TextStyle(color: OmiColors.textTertiary),
+                    hintStyle: TextStyle(color: OmiColors.textTertiary),
                     filled: true,
                     fillColor: OmiColors.surface0.withValues(alpha: 0.3),
                     border: const OutlineInputBorder(borderRadius: OmiRadius.smAll, borderSide: BorderSide.none),
@@ -150,11 +150,10 @@ class _ReviewsListPageState extends State<ReviewsListPage> {
     final distribution = _getRatingDistribution(allReviews);
 
     return Scaffold(
-      appBar: AppBar(
+      appBar: OmiAppBar(
         backgroundColor: OmiColors.surface0,
-        elevation: 0,
         leading: const OmiBackButton(),
-        title: Text(context.l10n.ratingsAndReviews, style: OmiType.callout.copyWith(fontWeight: FontWeight.w600)),
+        title: Text(context.l10n.ratingsAndReviews),
       ),
       backgroundColor: OmiColors.surface0,
       body: SingleChildScrollView(

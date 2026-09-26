@@ -327,18 +327,18 @@ class _FeatureScreenState extends State<FeatureScreen> {
           imageUrl: imageUrl,
           fit: BoxFit.cover,
           placeholder: (context, url) => Container(
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               color: OmiColors.surface1,
               borderRadius: OmiRadius.xlAll,
             ),
-            child: const Center(child: OmiSpinner(color: OmiColors.textSecondary)),
+            child: Center(child: OmiSpinner(color: OmiColors.textSecondary)),
           ),
           errorWidget: (context, url, error) => Container(
-            decoration: const BoxDecoration(
+            decoration: BoxDecoration(
               color: OmiColors.surface1,
               borderRadius: OmiRadius.xlAll,
             ),
-            child: const Icon(Icons.image_not_supported_outlined, color: OmiColors.textTertiary, size: 48),
+            child: Icon(Icons.image_not_supported_outlined, color: OmiColors.textTertiary, size: 48),
           ),
         ),
       ),
@@ -362,11 +362,11 @@ class _FeatureScreenState extends State<FeatureScreen> {
             width: 72,
             height: 72,
             decoration: BoxDecoration(
-              color: Colors.white,
+              color: OmiColors.accent,
               shape: BoxShape.circle,
               boxShadow: [BoxShadow(color: Colors.black.withValues(alpha: 0.2), blurRadius: 12, spreadRadius: 2)],
             ),
-            child: const Icon(Icons.play_arrow_rounded, color: Colors.black, size: 36),
+            child: Icon(Icons.play_arrow_rounded, color: OmiColors.onAccent, size: 36),
           ),
         ],
       ),
@@ -450,9 +450,9 @@ class _FeatureScreenState extends State<FeatureScreen> {
       height: 8,
       decoration: BoxDecoration(
         color: isActive
-            ? Colors.white
+            ? OmiColors.accent
             : isPast
-                ? Colors.white54
+                ? OmiColors.textPrimary.withValues(alpha: 0.54)
                 : OmiColors.surface2,
         borderRadius: OmiRadius.smAll,
       ),

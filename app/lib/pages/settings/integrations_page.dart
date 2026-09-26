@@ -312,7 +312,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
       child: Container(
         width: 80,
         height: 32,
-        decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.pillAll),
+        decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.pillAll),
       ),
     );
   }
@@ -403,11 +403,11 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
   Widget _buildCreateYourOwnAppTile() {
     return _buildRow(
       leading: Container(
-        decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
-        child: const Icon(Icons.add_circle_outline, color: OmiColors.textPrimary, size: 24),
+        decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
+        child: Icon(Icons.add_circle_outline, color: OmiColors.textPrimary, size: 24),
       ),
       title: context.l10n.createYourOwnApp,
-      trailing: const Icon(Icons.chevron_right, color: OmiColors.textTertiary, size: 20),
+      trailing: Icon(Icons.chevron_right, color: OmiColors.textTertiary, size: 20),
       onTap: () => routeToPage(context, const AddAppPage(presetExternalIntegration: true)),
     );
   }
@@ -419,7 +419,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
     final isLoading = provider.isLoading || !provider.hasLoaded;
 
     return Scaffold(
-      appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.integrations)),
+      appBar: OmiAppBar(leading: const OmiBackButton(), title: Text(context.l10n.integrations)),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(OmiSpacing.lg),
@@ -431,8 +431,8 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
                 child: ListView(
                   children: [
                     ...IntegrationApp.values.map((app) => _buildAppTile(app, isLoading)),
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: OmiSpacing.xs),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: OmiSpacing.xs),
                       child: Divider(color: OmiColors.border, thickness: 1),
                     ),
                     _buildCreateYourOwnAppTile(),
@@ -444,7 +444,7 @@ class _IntegrationsPageState extends State<IntegrationsPage> with WidgetsBinding
                 padding: const EdgeInsets.only(top: OmiSpacing.lg),
                 child: Row(
                   children: [
-                    const Icon(Icons.info_outline, color: OmiColors.textTertiary, size: 16),
+                    Icon(Icons.info_outline, color: OmiColors.textTertiary, size: 16),
                     const SizedBox(width: OmiSpacing.xs),
                     Expanded(
                       child: Text(

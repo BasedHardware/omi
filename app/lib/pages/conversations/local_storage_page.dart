@@ -52,7 +52,7 @@ class _LocalStoragePageState extends State<LocalStoragePage> {
     final isEnabled = SharedPreferencesUtil().unlimitedLocalStorageEnabled;
 
     return Scaffold(
-      appBar: AppBar(leading: const OmiBackButton(), title: Text(l10n.storeAudioOnPhone)),
+      appBar: OmiAppBar(leading: const OmiBackButton(), title: Text(l10n.storeAudioOnPhone)),
       body: ListView(
         padding: const EdgeInsets.all(OmiSpacing.md),
         children: [

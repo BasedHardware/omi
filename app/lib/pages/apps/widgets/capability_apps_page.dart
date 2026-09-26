@@ -82,7 +82,7 @@ class _CapabilityAppsPageState extends State<CapabilityAppsPage> {
                   Container(
                     width: 140,
                     height: 20,
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       color: OmiColors.surface1,
                       borderRadius: OmiRadius.smAll,
                     ),
@@ -91,7 +91,7 @@ class _CapabilityAppsPageState extends State<CapabilityAppsPage> {
                   Container(
                     width: 40,
                     height: 20,
-                    decoration: const BoxDecoration(
+                    decoration: BoxDecoration(
                       color: OmiColors.surface1,
                       borderRadius: OmiRadius.smAll,
                     ),
@@ -121,7 +121,7 @@ class _CapabilityAppsPageState extends State<CapabilityAppsPage> {
                       Container(
                         width: 60,
                         height: 60,
-                        decoration: const BoxDecoration(
+                        decoration: BoxDecoration(
                           color: OmiColors.surface1,
                           borderRadius: OmiRadius.smAll,
                         ),
@@ -135,7 +135,7 @@ class _CapabilityAppsPageState extends State<CapabilityAppsPage> {
                             Container(
                               width: double.infinity,
                               height: 16,
-                              decoration: const BoxDecoration(
+                              decoration: BoxDecoration(
                                 color: OmiColors.surface1,
                                 borderRadius: OmiRadius.smAll,
                               ),
@@ -144,7 +144,7 @@ class _CapabilityAppsPageState extends State<CapabilityAppsPage> {
                             Container(
                               width: 80,
                               height: 12,
-                              decoration: const BoxDecoration(
+                              decoration: BoxDecoration(
                                 color: OmiColors.surface1,
                                 borderRadius: OmiRadius.smAll,
                               ),
@@ -156,7 +156,7 @@ class _CapabilityAppsPageState extends State<CapabilityAppsPage> {
                       Container(
                         width: 60,
                         height: 28,
-                        decoration: const BoxDecoration(
+                        decoration: BoxDecoration(
                           color: OmiColors.surface1,
                           borderRadius: OmiRadius.pillAll,
                         ),
@@ -227,7 +227,7 @@ class _CapabilityAppsPageState extends State<CapabilityAppsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: OmiColors.surface0,
-      appBar: AppBar(
+      appBar: OmiAppBar(
         backgroundColor: OmiColors.surface0,
         leading: const OmiBackButton(),
         title: Text(widget.capability.getLocalizedTitle(context)),

@@ -84,7 +84,7 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
+      appBar: OmiAppBar(
         leading: const OmiBackButton(),
         title: Text(context.l10n.appSettings(widget.appName)),
         actions: [
@@ -108,7 +108,7 @@ class _IntegrationSettingsPageState extends State<IntegrationSettingsPage> {
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.check_circle, color: OmiColors.success, size: 16),
+                    Icon(Icons.check_circle, color: OmiColors.success, size: 16),
                     const SizedBox(width: OmiSpacing.xs),
                     Expanded(
                       child: Text(

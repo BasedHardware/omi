@@ -373,8 +373,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
             isIntegration && app.externalIntegration?.setupInstructionsFilePath?.isNotEmpty == true;
         bool hasAuthSteps = isIntegration && app.externalIntegration?.authSteps.isNotEmpty == true;
         return Scaffold(
-          appBar: AppBar(
-            elevation: 0,
+          appBar: OmiAppBar(
             automaticallyImplyLeading: false,
             leading: const Center(child: OmiBackButton.circled()),
             actions: [
@@ -417,51 +416,66 @@ class _AppDetailPageState extends State<AppDetailPage> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SizedBox(height: 20),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const SizedBox(width: 20),
-                      CachedNetworkImage(
-                        imageUrl: app.getImageUrl(),
-                        imageBuilder: (context, imageProvider) => Container(
-                          width: 108,
-                          height: 108,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.rectangle,
-                            borderRadius: OmiRadius.xlAll,
-                            image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
+                  const SizedBox(height: 12),
+                  // v2 App detail: the icon beside the name and maker, the stats, then one full-width
+                  // action.
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: Row(
+                      children: [
+                        CachedNetworkImage(
+                          imageUrl: app.getImageUrl(),
+                          imageBuilder: (context, imageProvider) => Container(
+                            width: 72,
+                            height: 72,
+                            decoration: BoxDecoration(
+                              borderRadius: OmiRadius.xlAll,
+                              image: DecorationImage(image: imageProvider, fit: BoxFit.cover),
+                            ),
+                          ),
+                          placeholder: (context, url) => const SizedBox.square(
+                            dimension: 72,
+                            child: Center(child: OmiSpinner()),
+                          ),
+                          errorWidget: (context, url, error) => const SizedBox.square(
+                            dimension: 72,
+                            child: Center(child: FaIcon(FontAwesomeIcons.circleExclamation)),
                           ),
                         ),
-                        placeholder: (context, url) => const SizedBox.square(
-                          dimension: 108,
-                          child: Center(child: OmiSpinner()),
+                        const SizedBox(width: OmiSpacing.md),
+                        Expanded(
+                          child: AppDetailHeader(
+                            name: app.name.decodeString,
+                            author: app.author.decodeString,
+                            official: app.official,
+                          ),
                         ),
-                        errorWidget: (context, url, error) => const FaIcon(FontAwesomeIcons.circleExclamation),
-                      ),
-                      const SizedBox(width: 20),
-                      Expanded(
-                        child: AppDetailSummary(
-                          name: app.name.decodeString,
-                          author: app.author.decodeString,
-                          official: app.official,
-                          ratingCount: app.ratingCount,
-                          rating: app.getRatingAvg(),
-                          installs: app.installs,
-                          onRatingTap: () {
-                            if (app.ratingCount > 0 && _reviewsSectionKey.currentContext != null) {
-                              Scrollable.ensureVisible(
-                                _reviewsSectionKey.currentContext!,
-                                duration: const Duration(milliseconds: 300),
-                                curve: Curves.easeInOut,
-                              );
-                            }
-                          },
-                          action: _buildPrimaryAction(l10n),
-                        ),
-                      ),
-                      const SizedBox(width: 20),
-                    ],
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: OmiSpacing.md),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
+                    child: AppDetailStats(
+                      ratingCount: app.ratingCount,
+                      rating: app.getRatingAvg(),
+                      installs: app.installs,
+                      trigger: isIntegration ? _triggerLabel(l10n, app.externalIntegration?.triggersOn) : null,
+                      onRatingTap: () {
+                        if (app.ratingCount > 0 && _reviewsSectionKey.currentContext != null) {
+                          Scrollable.ensureVisible(
+                            _reviewsSectionKey.currentContext!,
+                            duration: const Duration(milliseconds: 300),
+                            curve: Curves.easeInOut,
+                          );
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: OmiSpacing.md),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 20),
+                    child: _buildPrimaryAction(l10n),
                   ),
                   const SizedBox(height: 16),
                   if (!isLoading && !app.private && app.isPaid && _hasActiveSubscription() && !appProvider.isAppOwner)
@@ -504,8 +518,8 @@ class _AppDetailPageState extends State<AppDetailPage> {
                         await _openSetupInstructions();
                         checkSetupCompleted();
                       },
-                      trailing: const Padding(
-                        padding: EdgeInsets.only(right: OmiSpacing.sm),
+                      trailing: Padding(
+                        padding: const EdgeInsets.only(right: OmiSpacing.sm),
                         child: FaIcon(FontAwesomeIcons.chevronRight, size: 20, color: OmiColors.textTertiary),
                       ),
                       title: Text(l10n.integrationInstructions, style: OmiType.headline),
@@ -843,16 +857,24 @@ class _AppDetailPageState extends State<AppDetailPage> {
   }
 
   /// Enable (after the data-access question for external apps), Subscribe, or Disable.
+  /// What makes an integration run, in the reader's words; null when unknown.
+  static String? _triggerLabel(AppLocalizations l10n, String? triggersOn) => switch (triggersOn) {
+        'memory_creation' => l10n.triggerConversationCreation,
+        'transcript_processed' => l10n.triggerTranscriptProcessed,
+        'audio_bytes' => l10n.triggerAudioBytes,
+        _ => null,
+      };
+
   Widget _buildPrimaryAction(AppLocalizations l10n) {
     if (isLoading) {
-      return OmiButton(label: l10n.enable, size: OmiButtonSize.compact, isLoading: true, onPressed: null);
+      return OmiButton(label: l10n.enable, expand: true, isLoading: true, onPressed: null);
     }
     // Handlers return nothing to the button on purpose: it spins for [appLoading] (the server
     // call), not while a question or an Undo toast is up.
     if (app.enabled) {
       return OmiButton.secondary(
         label: l10n.disable,
-        size: OmiButtonSize.compact,
+        expand: true,
         onPressed: () {
           _disableApp();
         },
@@ -861,7 +883,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
     if (app.isPaid && !app.isUserPaid) {
       return OmiButton(
         label: l10n.subscribe,
-        size: OmiButtonSize.compact,
+        expand: true,
         isLoading: appLoading,
         onPressed: () {
           _subscribe();
@@ -870,7 +892,7 @@ class _AppDetailPageState extends State<AppDetailPage> {
     }
     return OmiButton(
       label: l10n.enable,
-      size: OmiButtonSize.compact,
+      expand: true,
       isLoading: appLoading,
       onPressed: () {
         _enableWithConsent();

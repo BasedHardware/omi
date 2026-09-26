@@ -3,7 +3,6 @@ import 'dart:math' as math;
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import 'package:flutter_provider_utilities/flutter_provider_utilities.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -16,6 +15,7 @@ import 'package:omi/backend/http/api/messages.dart' show ChatPageContext;
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/chat/page.dart';
+import 'package:omi/pages/conversation_detail/widgets/conversation_ask_bar.dart';
 import 'package:omi/pages/conversations/conversation_action_analytics.dart';
 import 'package:omi/pages/conversations/conversation_actions.dart';
 import 'package:omi/providers/conversation_provider.dart';
@@ -31,7 +31,6 @@ import 'package:omi/utils/analytics/analytics_manager.dart';
 import 'package:omi/utils/conversations/capture_groups.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:omi/utils/share_sheet.dart';
-import 'package:omi/widgets/bottom_nav_bar.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart';
 import 'package:omi/widgets/extensions/string.dart';
 import 'conversation_detail_provider.dart';
@@ -451,7 +450,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
     }
     try {
       await _seekToSegmentCallback!(start, end);
-      if (mounted) HapticFeedback.lightImpact();
+      if (mounted) OmiHaptics.light();
     } catch (_) {
       // Audio may be unavailable offline; search still opened the transcript tab.
     }
@@ -595,7 +594,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
   /// One delete path with the list (D5): confirm unless opted out, close the page, then the list
   /// shows Undo while the provider holds the server delete back.
   Future<void> _handleDelete(BuildContext context, ConversationDetailProvider provider) async {
-    HapticFeedback.mediumImpact();
+    OmiHaptics.medium();
     if (!await confirmConversationDelete(context) || !context.mounted) return;
     final conversation = provider.conversation;
     final listContext = Navigator.of(context).context;
@@ -604,7 +603,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
   }
 
   void _copyContent(BuildContext context, String content, String? what) {
-    HapticFeedback.lightImpact();
+    OmiHaptics.light();
     OmiClipboard.copy(context, content, what: what);
   }
 
@@ -709,7 +708,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
 
   Future<void> _toggleStarred(ConversationDetailProvider provider) async {
     setState(() => _isTogglingStarred = true);
-    HapticFeedback.mediumImpact();
+    OmiHaptics.medium();
     try {
       final newStarredState = !provider.conversation.starred;
       final success = await setConversationStarred(provider.conversation.id, newStarredState);
@@ -736,7 +735,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
   /// agrees ("Anyone with the link can view"), and goes back to private if the share sheet reports
   /// that it was dismissed without sharing.
   Future<void> _shareConversation(ConversationDetailProvider provider) async {
-    HapticFeedback.mediumImpact();
+    OmiHaptics.medium();
     final conversation = provider.conversation;
     final wasPrivate = conversation.visibility != ConversationVisibility.shared;
     if (wasPrivate) {
@@ -821,7 +820,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
                 conversationId: provider.conversation.id,
               );
             }
-            HapticFeedback.mediumImpact();
+            OmiHaptics.medium();
           },
         ),
       PullDownMenuItem(
@@ -870,52 +869,28 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
       PullDownMenuItem(
         title: l10n.deleteConversation,
         isDestructive: true,
-        iconWidget: const FaIcon(FontAwesomeIcons.trashCan, size: 16, color: OmiColors.danger),
+        iconWidget: FaIcon(FontAwesomeIcons.trashCan, size: 16, color: OmiColors.danger),
         onTap: () => _handleMenuSelection(context, 'delete', provider),
       ),
     ];
   }
 
-  /// Header actions (David, 2026-09-24): Ask Omi as the primary, then Star and Share as 44pt icon
-  /// buttons, then one overflow holding Rename, Move to Folder, Recordings and the rest, Delete last.
+  /// Header actions (v2): Star, Share and one overflow (Rename, Move to Folder, Recordings and the
+  /// rest, Delete last) in one glass capsule. Ask about this conversation is the bar at the bottom.
   Widget _buildHeaderActions(BuildContext context, ConversationDetailProvider provider) {
     final l10n = context.l10n;
     final starred = provider.conversation.starred;
     return Padding(
-      padding: const EdgeInsets.only(right: OmiSpacing.xxs),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
+      padding: const EdgeInsets.only(right: OmiSpacing.xs),
+      child: OmiToolbarCapsule(
         children: [
-          // Ask about this conversation (#4515). Chat is a pushed page (D1). Same fill and colours as the
-          // Star and Share circles beside it (David, 2026-09-24): one calm row, no white primary.
-          OmiButton.toolbar(
-            key: const Key('conversation_ask_omi'),
-            label: l10n.askOmi,
-            // The bottom nav's two-bubbles glyph (FontAwesome comments, regular), so Ask Omi reads as
-            // the same place as the Chat tab.
-            leading: const FaIcon(kAskOmiGlyph),
-            size: OmiButtonSize.compact,
-            onPressed: () {
-              HapticFeedback.mediumImpact();
-              trackConversationAction(ConversationActionAction.askOmi, ConversationActionSurface.topBar);
-              final convo = provider.conversation;
-              routeToPage(
-                context,
-                ChatPage(
-                  initialChatContext:
-                      ChatPageContext(type: 'conversation', id: convo.id, title: convo.structured.title),
-                ),
-              );
-            },
-          ),
-          const SizedBox(width: OmiSpacing.xxs),
-          OmiIconButton.filled(
+          OmiIconButton(
             key: const Key('conversation_star'),
             icon: _isTogglingStarred
                 ? const OmiSpinner(size: OmiSpinnerSize.small)
                 : FaIcon(starred ? FontAwesomeIcons.solidStar : FontAwesomeIcons.star, size: 16),
             label: starred ? l10n.unstarConversation : l10n.starConversation,
-            color: starred ? Colors.amber : null,
+            color: starred ? OmiColors.warning : null,
             onPressed: _isTogglingStarred
                 ? null
                 : () {
@@ -929,7 +904,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
           // Also the share sheet's anchor (iPad needs one).
           KeyedSubtree(
             key: _shareButtonKey,
-            child: OmiIconButton.filled(
+            child: OmiIconButton(
               key: const Key('conversation_share'),
               icon: _isSharing
                   ? const OmiSpinner(size: OmiSpinnerSize.small)
@@ -945,12 +920,12 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
           ),
           PullDownButton(
             itemBuilder: (context) => _menuItems(context, provider),
-            buttonBuilder: (context, showMenu) => OmiIconButton.filled(
+            buttonBuilder: (context, showMenu) => OmiIconButton(
               key: const Key('conversation_more'),
               icon: const FaIcon(FontAwesomeIcons.ellipsisVertical, size: 16),
               label: l10n.moreOptions,
               onPressed: () {
-                HapticFeedback.mediumImpact();
+                OmiHaptics.medium();
                 PlatformManager.instance.analytics.conversationThreeDotsMenuOpened(
                   conversationId: provider.conversation.id,
                 );
@@ -960,6 +935,45 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
           ),
         ],
       ),
+    );
+  }
+
+  /// The recording's player (the one [ConversationBottomBar] owns), drawn as an inline card.
+  Widget _buildAudioCard(ServerConversation conversation, {required bool hasSegments, required bool hasTasks}) {
+    return ConversationBottomBar(
+      onAudioInteraction: () {
+        if (mounted && !_reviewInterrupted) setState(() => _reviewInterrupted = true);
+      },
+      mode: ConversationBottomBarMode.detail,
+      selectedTab: selectedTab,
+      conversation: conversation,
+      hasSegments: hasSegments,
+      hasActionItems: hasTasks,
+      onSeekFunctionReady: (seekFunction) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) {
+            setState(() => _seekToSegmentCallback = seekFunction);
+            _maybePlayInitialSeek();
+          }
+        });
+      },
+      onTabSelected: (tab) {
+        _hasExplicitTabSelection = true;
+        final index = _indexForTab(tab);
+        if (index < _controller!.length) _controller!.animateTo(index);
+      },
+      onStopPressed: () {},
+    );
+  }
+
+  /// Ask Omi about this conversation (#4515); chat is a pushed page (D1).
+  void _askAboutConversation(ConversationDetailProvider provider) {
+    OmiHaptics.medium();
+    trackConversationAction(ConversationActionAction.askOmi, ConversationActionSurface.detailBody);
+    final convo = provider.conversation;
+    routeToPage(
+      context,
+      ChatPage(initialChatContext: ChatPageContext(type: 'conversation', id: convo.id, title: convo.structured.title)),
     );
   }
 
@@ -999,6 +1013,9 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
 
     final hasTasks = conversation.structured.actionItems.any((item) => !item.deleted);
     if (_providerInitialized) _syncTabCount(hasTasks);
+    final hasSegments = conversation.transcriptSegments.isNotEmpty ||
+        conversation.photos.isNotEmpty ||
+        conversation.externalIntegration != null;
 
     return MessageListener<ConversationDetailProvider>(
       showError: (error) {
@@ -1030,6 +1047,34 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
                 children: [
                   // Title and facts, shared by every tab (#17297).
                   ConversationDetailHeader(onOpenRecordings: _openRecordings),
+                  // v2: the recording as an inline card, then Summary · Transcript · Tasks.
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.sm, OmiSpacing.md, 0),
+                    child: _buildAudioCard(conversation, hasSegments: hasSegments, hasTasks: hasTasks),
+                  ),
+                  if (hasSegments)
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.sm, OmiSpacing.md, OmiSpacing.xxs),
+                      child: OmiSegmentedControl<ConversationTab>(
+                        key: const Key('conversation_tabs'),
+                        segments: [
+                          OmiSegment(value: ConversationTab.summary, label: context.l10n.summary),
+                          OmiSegment(value: ConversationTab.transcript, label: context.l10n.transcript),
+                          if (_controller!.length > _tasksTabIndex)
+                            OmiSegment(
+                              value: ConversationTab.actionItems,
+                              label:
+                                  '${context.l10n.tasks} · ${conversation.structured.actionItems.where((i) => !i.deleted).length}',
+                            ),
+                        ],
+                        selected: selectedTab,
+                        onChanged: (tab) {
+                          _hasExplicitTabSelection = true;
+                          final index = _indexForTab(tab);
+                          if (index < _controller!.length) _controller!.animateTo(index);
+                        },
+                      ),
+                    ),
                   Expanded(
                       child: Padding(
                     padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md),
@@ -1051,7 +1096,7 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
                             // Seek to segment using callback (start + end for bounded play)
                             if (_seekToSegmentCallback != null) {
                               await _seekToSegmentCallback!(segment.start, segment.end);
-                              HapticFeedback.lightImpact();
+                              OmiHaptics.light();
                             }
                           },
                         ),
@@ -1076,48 +1121,16 @@ class ConversationDetailPageState extends State<ConversationDetailPage> with Tic
               ),
             ),
 
-            // Floating bottom bar — hidden while keyboard is up (e.g. inline summary edit)
+            // Ask about this conversation — hidden while the keyboard is up (e.g. inline summary edit).
             if (MediaQuery.of(context).viewInsets.bottom == 0)
               Positioned(
-                // Stable key so the body Stack's collection-`if` diff matches
-                // by identity, not by slot+type. Without it the surviving
-                // search-overlay Positioned below was being reused into this
-                // slot when the keyboard rose, tearing down the search
-                // TextField subtree and dropping the IME mid-frame.
+                // Stable key: the body Stack's collection-`if` diff must match by identity, not
+                // slot, or the search overlay below is remounted and drops its keyboard.
                 key: const ValueKey('detail_floating_bottom_bar'),
-                bottom: detailFloatingBarBottom(MediaQuery.viewPaddingOf(context).bottom),
-                left: 0,
-                right: 0,
-                child: ConversationBottomBar(
-                  onAudioInteraction: () {
-                    if (mounted && !_reviewInterrupted) setState(() => _reviewInterrupted = true);
-                  },
-                  mode: ConversationBottomBarMode.detail,
-                  selectedTab: selectedTab,
-                  conversation: conversation,
-                  hasSegments: conversation.transcriptSegments.isNotEmpty ||
-                      conversation.photos.isNotEmpty ||
-                      conversation.externalIntegration != null,
-                  hasActionItems: hasTasks,
-                  onSeekFunctionReady: (seekFunction) {
-                    WidgetsBinding.instance.addPostFrameCallback((_) {
-                      if (mounted) {
-                        setState(() {
-                          _seekToSegmentCallback = seekFunction;
-                        });
-                        _maybePlayInitialSeek();
-                      }
-                    });
-                  },
-                  onTabSelected: (tab) {
-                    _hasExplicitTabSelection = true;
-                    final index = _indexForTab(tab);
-                    if (index < _controller!.length) _controller!.animateTo(index);
-                  },
-                  onStopPressed: () {
-                    // Empty since we don't show the stop button in detail mode
-                  },
-                ),
+                left: OmiSpacing.md,
+                right: OmiSpacing.md,
+                bottom: MediaQuery.viewPaddingOf(context).bottom > 0 ? 30 : OmiSpacing.md,
+                child: ConversationAskBar(onTap: () => _askAboutConversation(detailProvider)),
               ),
 
             // Search bar over the content

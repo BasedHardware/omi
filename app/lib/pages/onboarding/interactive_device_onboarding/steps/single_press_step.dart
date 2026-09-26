@@ -10,16 +10,8 @@ import 'package:omi/providers/device_onboarding_provider.dart';
 import 'package:omi/providers/message_provider.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/widgets/onboarding_step_scaffold.dart';
 import 'package:omi/utils/l10n_extensions.dart';
-
-String _stripMarkdown(String text) {
-  return text
-      .replaceAllMapped(RegExp(r'\*\*(.+?)\*\*'), (m) => m[1]!)
-      .replaceAllMapped(RegExp(r'\*(.+?)\*'), (m) => m[1]!)
-      .replaceAllMapped(RegExp(r'__(.+?)__'), (m) => m[1]!)
-      .replaceAllMapped(RegExp(r'_(.+?)_'), (m) => m[1]!)
-      .replaceAllMapped(RegExp(r'~~(.+?)~~'), (m) => m[1]!)
-      .replaceAllMapped(RegExp(r'`(.+?)`'), (m) => m[1]!);
-}
+import 'package:omi/ui/omi_tokens.dart';
+import 'package:omi/ui/format/omi_plain_text.dart';
 
 class SinglePressStep extends StatefulWidget {
   final VoidCallback onComplete;
@@ -111,24 +103,24 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
       return Container(
         width: double.infinity,
         padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(20)),
+        decoration: BoxDecoration(color: OmiColors.accent, borderRadius: BorderRadius.circular(20)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             if (_userQuestion != null && _userQuestion!.isNotEmpty) ...[
               Text(
                 _userQuestion!,
-                style: TextStyle(color: Colors.black.withValues(alpha: 0.5), fontSize: 14, height: 1.3),
+                style: TextStyle(color: OmiColors.onAccent.withValues(alpha: 0.5), fontSize: 14, height: 1.3),
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 12),
-              Divider(height: 1, color: Colors.black.withValues(alpha: 0.08)),
+              Divider(height: 1, color: OmiColors.onAccent.withValues(alpha: 0.08)),
               const SizedBox(height: 12),
             ],
             Text(
-              _stripMarkdown(_aiResponse!),
-              style: const TextStyle(color: Colors.black, fontSize: 16, height: 1.5),
+              OmiPlainText.fromMarkdown(_aiResponse!),
+              style: TextStyle(color: OmiColors.onAccent, fontSize: 16, height: 1.5),
               maxLines: 10,
               overflow: TextOverflow.ellipsis,
             ),
@@ -141,7 +133,8 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
     if (provider.questionSent) {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-        decoration: BoxDecoration(color: Colors.white.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(20)),
+        decoration: BoxDecoration(
+            color: OmiColors.textPrimary.withValues(alpha: 0.06), borderRadius: BorderRadius.circular(20)),
         child: Column(
           children: [
             AnimatedBuilder(
@@ -150,7 +143,11 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
                 return ShaderMask(
                   shaderCallback: (bounds) {
                     return LinearGradient(
-                      colors: [Colors.white.withValues(alpha: 0.3), Colors.white, Colors.white.withValues(alpha: 0.3)],
+                      colors: [
+                        OmiColors.textPrimary.withValues(alpha: 0.3),
+                        OmiColors.textPrimary,
+                        OmiColors.textPrimary.withValues(alpha: 0.3)
+                      ],
                       stops: [
                         (_animController.value - 0.3).clamp(0.0, 1.0),
                         _animController.value,
@@ -162,7 +159,7 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
                   },
                   child: Text(
                     context.l10n.deviceOnboardingProcessingQuestion,
-                    style: const TextStyle(color: Colors.white, fontSize: 17, fontWeight: FontWeight.w500),
+                    style: TextStyle(color: OmiColors.textPrimary, fontSize: 17, fontWeight: FontWeight.w500),
                   ),
                 );
               },
@@ -171,7 +168,7 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
               const SizedBox(height: 12),
               Text(
                 '"$_userQuestion"',
-                style: const TextStyle(color: Color(0xFF9E9E9E), fontSize: 14, fontStyle: FontStyle.italic),
+                style: TextStyle(color: OmiColors.textSecondary, fontSize: 14, fontStyle: FontStyle.italic),
                 textAlign: TextAlign.center,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,
@@ -194,19 +191,19 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
               return Container(
                 padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
                 decoration: BoxDecoration(
-                  color: const Color(0xFF4CAF50).withValues(alpha: 0.1),
+                  color: OmiColors.success.withValues(alpha: 0.1),
                   borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: const Color(0xFF4CAF50).withValues(alpha: 0.3)),
+                  border: Border.all(color: OmiColors.success.withValues(alpha: 0.3)),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.mic, color: Color(0xFF4CAF50), size: 22),
+                    Icon(Icons.mic, color: OmiColors.success, size: 22),
                     const SizedBox(width: 14),
                     Expanded(
                       child: CustomPaint(
                         painter: _StaticWaveformPainter(
                           phase: _animController.value * 2 * pi * 3,
-                          color: const Color(0xFF4CAF50).withValues(alpha: 0.5),
+                          color: OmiColors.success.withValues(alpha: 0.5),
                         ),
                         size: const Size(double.infinity, 28),
                       ),
@@ -214,7 +211,7 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
                     const SizedBox(width: 14),
                     Text(
                       context.l10n.deviceOnboardingListening,
-                      style: const TextStyle(color: Color(0xFF4CAF50), fontSize: 14, fontWeight: FontWeight.w500),
+                      style: TextStyle(color: OmiColors.success, fontSize: 14, fontWeight: FontWeight.w500),
                     ),
                   ],
                 ),
@@ -268,7 +265,7 @@ class _SinglePressStepState extends State<SinglePressStep> with TickerProviderSt
       height: diameter,
       decoration: BoxDecoration(
         shape: BoxShape.circle,
-        border: Border.all(color: Colors.white.withValues(alpha: opacity), width: 1.5),
+        border: Border.all(color: OmiColors.textPrimary.withValues(alpha: opacity), width: 1.5),
       ),
     );
   }

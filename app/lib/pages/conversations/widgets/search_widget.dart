@@ -1,6 +1,5 @@
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
@@ -169,7 +168,7 @@ class _SearchWidgetState extends State<SearchWidget> {
               label: context.l10n.filterBySpeaker,
               icon: const Icon(Icons.person_search, size: 20),
               onPressed: () async {
-                HapticFeedback.mediumImpact();
+                OmiHaptics.medium();
                 await showSpeakerFilterSheet(context);
               },
             ),
@@ -186,7 +185,7 @@ class _SearchWidgetState extends State<SearchWidget> {
               label: context.l10n.filterByDate,
               icon: FaIcon(hasActiveFilter ? FontAwesomeIcons.calendarDay : FontAwesomeIcons.calendarDays, size: 18),
               onPressed: () async {
-                HapticFeedback.mediumImpact();
+                OmiHaptics.medium();
                 await showConversationDateRangePicker(context);
               },
             ),

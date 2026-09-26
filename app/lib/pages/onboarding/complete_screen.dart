@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/ui/ui.dart';
 
 import 'package:omi/utils/l10n_extensions.dart';
@@ -14,104 +15,132 @@ class OnboardingCompleteScreen extends StatefulWidget {
 }
 
 class _OnboardingCompleteScreenState extends State<OnboardingCompleteScreen> with SingleTickerProviderStateMixin {
-  late AnimationController _fadeController;
-  late Animation<double> _fadeAnimation;
-  late Animation<double> _scaleAnimation;
-  late Animation<double> _slideAnimation;
+  // v2 entrance: content rises 12pt and fades in (a plain fade under Reduce Motion).
+  late final AnimationController _entrance =
+      AnimationController(duration: const Duration(milliseconds: 620), vsync: this);
+  late final Animation<double> _fade = CurvedAnimation(parent: _entrance, curve: OmiMotion.springCurve);
 
   @override
   void initState() {
     super.initState();
-
-    _fadeController = AnimationController(duration: const Duration(milliseconds: 800), vsync: this);
-
-    _fadeAnimation = Tween<double>(
-      begin: 0.0,
-      end: 1.0,
-    ).animate(CurvedAnimation(parent: _fadeController, curve: Curves.easeOut));
-
-    _scaleAnimation = Tween<double>(
-      begin: 0.5,
-      end: 1.0,
-    ).animate(CurvedAnimation(parent: _fadeController, curve: Curves.elasticOut));
-
-    _slideAnimation = Tween<double>(
-      begin: 50.0,
-      end: 0.0,
-    ).animate(CurvedAnimation(parent: _fadeController, curve: Curves.easeOut));
-
-    Future.delayed(const Duration(milliseconds: 200), () {
-      if (mounted) _fadeController.forward();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      if (MediaQuery.maybeDisableAnimationsOf(context) ?? false) {
+        _entrance.value = 1;
+      } else {
+        _entrance.forward();
+      }
     });
   }
 
   @override
   void dispose() {
-    _fadeController.dispose();
+    _entrance.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
-    return Container(
+    final name = SharedPreferencesUtil().givenName.trim();
+    return ColoredBox(
       color: OmiColors.surface0,
-      width: double.infinity,
-      height: double.infinity,
-      child: SafeArea(
-        child: AnimatedBuilder(
-          animation: _fadeController,
-          builder: (context, child) {
-            return FadeTransition(
-              opacity: _fadeAnimation,
-              child: Transform.translate(
-                offset: Offset(0, _slideAnimation.value),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 40),
-                  child: Column(
-                    children: [
-                      const Spacer(flex: 3),
-                      ScaleTransition(
-                        scale: _scaleAnimation,
-                        child: Container(
-                          width: 72,
-                          height: 72,
-                          decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.xlAll),
-                          child: const Icon(Icons.check_rounded, color: OmiColors.textPrimary, size: 36),
-                        ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          // Rev 3 (any device): the Omi mark turning in its halo, not a pendant; the title starts
+          // under it and the button stays at the bottom.
+          final hero = (constraints.maxHeight * 0.34).clamp(180.0, 300.0);
+          final textTop = (hero - MediaQuery.paddingOf(context).top + OmiSpacing.lg).clamp(0.0, constraints.maxHeight);
+          return Stack(
+            fit: StackFit.expand,
+            children: [
+              Align(
+                alignment: Alignment.topCenter,
+                child: SizedBox(
+                  height: hero,
+                  child: const Center(child: OmiRingLogo(size: 72, mode: OmiRingMode.orbit, loops: 1)),
+                ),
+              ),
+              Positioned.fill(
+                child: SafeArea(
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, 0, OmiSpacing.xl, OmiSpacing.xs),
+                    child: AnimatedBuilder(
+                      animation: _fade,
+                      builder: (context, child) => Opacity(
+                        opacity: _fade.value,
+                        child: Transform.translate(offset: Offset(0, 12 * (1 - _fade.value)), child: child),
                       ),
-                      const SizedBox(height: OmiSpacing.xxl),
-                      Semantics(
-                        header: true,
-                        child: Text(
-                          context.l10n.onboardingYoureAllSet,
-                          style: OmiType.title1.copyWith(height: 1.2),
-                          textAlign: TextAlign.center,
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          SizedBox(height: textTop),
+                          Expanded(
+                            child: SingleChildScrollView(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Semantics(
+                                    header: true,
+                                    child: Text(
+                                      name.isEmpty
+                                          ? context.l10n.onboardingYoureAllSet
+                                          : context.l10n.onboardingAllSetName(name),
+                                      style: OmiType.serifDisplay,
+                                    ),
+                                  ),
+                                  const SizedBox(height: OmiSpacing.lg),
+                                  // v2: three things to know, a label and one line each.
+                                  _Tip(
+                                      label: context.l10n.completeListeningTitle,
+                                      text: context.l10n.completeListeningBody),
+                                  _Tip(label: context.l10n.today, text: context.l10n.completeHomeBody),
+                                  _Tip(label: context.l10n.completeAskTitle, text: context.l10n.completeAskAnyBody),
+                                  _Tip(label: context.l10n.devices, text: context.l10n.completeDevicesBody),
+                                ],
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: OmiSpacing.md),
+                          OmiButton(
+                            key: const Key('onboarding_complete_start'),
+                            label: context.l10n.startUsingOmi,
+                            expand: true,
+                            onPressed: () {
+                              OmiHaptics.success();
+                              widget.onComplete();
+                            },
+                          ),
+                          const SizedBox(height: OmiSpacing.sm),
+                        ],
                       ),
-                      const SizedBox(height: OmiSpacing.md),
-                      Text(
-                        context.l10n.onboardingCompleteMessage,
-                        textAlign: TextAlign.center,
-                        style: OmiType.body.copyWith(color: OmiColors.textSecondary, height: 1.5),
-                      ),
-                      const Spacer(flex: 3),
-                      OmiButton(
-                        key: const Key('onboarding_complete_start'),
-                        label: context.l10n.startUsingOmi,
-                        expand: true,
-                        onPressed: () {
-                          OmiHaptics.success();
-                          widget.onComplete();
-                        },
-                      ),
-                      const SizedBox(height: OmiSpacing.xxl),
-                    ],
+                    ),
                   ),
                 ),
               ),
-            );
-          },
-        ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+}
+
+class _Tip extends StatelessWidget {
+  const _Tip({required this.label, required this.text});
+
+  final String label;
+  final String text;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: OmiSpacing.md),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(width: 96, child: Text(label, style: OmiType.subhead.copyWith(fontWeight: FontWeight.w700))),
+          Expanded(child: Text(text, style: OmiType.subhead.copyWith(color: OmiColors.textSecondary, height: 1.35))),
+        ],
       ),
     );
   }

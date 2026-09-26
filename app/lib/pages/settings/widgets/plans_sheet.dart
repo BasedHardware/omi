@@ -1,6 +1,5 @@
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import 'package:collection/collection.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
@@ -13,7 +12,6 @@ import 'package:omi/models/subscription.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/pages/settings/widgets/plans/plan_cards.dart';
 import 'package:omi/pages/settings/widgets/plans/plan_display_name.dart';
-import 'package:omi/pages/settings/widgets/plans/plans_hero.dart';
 import 'package:omi/pages/settings/widgets/plans/training_data_option.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/usage_provider.dart';
@@ -32,18 +30,10 @@ import 'package:omi/pages/settings/payment_webview_page.dart';
 /// EdgeInsets.zero, builder: (_) => PlansSheet(...))`, which draws the handle, close button and
 /// sheet surface.
 class PlansSheet extends StatefulWidget {
-  final AnimationController waveController;
-  final AnimationController notesController;
-  final AnimationController arrowController;
-  final Animation<double> arrowAnimation;
   final VoidCallback? onCancelSubscription;
 
   const PlansSheet({
     super.key,
-    required this.waveController,
-    required this.notesController,
-    required this.arrowController,
-    required this.arrowAnimation,
     this.onCancelSubscription,
   });
 
@@ -468,7 +458,7 @@ class _PlansSheetState extends State<PlansSheet> {
       expand: true,
       isLoading: _isUpgrading,
       onPressed: () {
-        HapticFeedback.mediumImpact();
+        OmiHaptics.medium();
         return _handleUpgradeWithSelectedPlan();
       },
     );
@@ -506,36 +496,33 @@ class _PlansSheetState extends State<PlansSheet> {
 
         return DecoratedBox(
           // Paints the sheet surface itself too, for hosts that present it without showOmiSheet.
-          decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.sheetTop),
+          decoration: BoxDecoration(
+            color: OmiColors.sheet,
+            borderRadius: OmiRadius.sheetTopFor(Theme.of(context).platform),
+          ),
           child: SizedBox(
             height: MediaQuery.sizeOf(context).height * 0.85,
             child: ListView(
               padding: const EdgeInsets.only(bottom: OmiSpacing.md),
               children: [
                 const SizedBox(height: OmiSpacing.xs),
-                PlansHero(waveController: widget.waveController, notesController: widget.notesController),
+                // v2 Upgrade: the Omi mark, dots lighting in turn, above a serif headline.
+                const SizedBox(height: OmiSpacing.lg),
+                const Center(child: OmiRingLogo(size: 40, mode: OmiRingMode.chase, loops: 2)),
                 Padding(
                   padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xl),
                   child: Column(
                     children: [
                       const SizedBox(height: OmiSpacing.xl),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          const ExcludeSemantics(child: FaIcon(FontAwesomeIcons.crown, color: Colors.amber, size: 20)),
-                          const SizedBox(width: OmiSpacing.xs),
-                          Flexible(
-                            child: Semantics(
-                              header: true,
-                              child: Text(
-                                hasScheduledUpgrade
-                                    ? l10n.upgradeScheduled
-                                    : (isUnlimited ? l10n.changePlan : l10n.upgradeYourPlan),
-                                style: OmiType.title3,
-                              ),
-                            ),
-                          ),
-                        ],
+                      Semantics(
+                        header: true,
+                        child: Text(
+                          hasScheduledUpgrade
+                              ? l10n.upgradeScheduled
+                              : (isUnlimited ? l10n.changePlan : l10n.upgradeYourPlan),
+                          style: OmiType.serifTitle,
+                          textAlign: TextAlign.center,
+                        ),
                       ),
                       const SizedBox(height: OmiSpacing.xs),
                       Text(
@@ -723,7 +710,7 @@ class _PlansSheetState extends State<PlansSheet> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const ExcludeSemantics(
+                  ExcludeSemantics(
                     child: Icon(Icons.local_offer_outlined, color: OmiColors.textSecondary, size: 18),
                   ),
                   const SizedBox(width: OmiSpacing.xs),
@@ -847,7 +834,7 @@ class _PlansSheetState extends State<PlansSheet> {
               features: subPlans.firstWhereOrNull((sp) => sp.id == tierId)?.features ?? [],
               desktopAccess: _tierGrantsDesktop(tierId),
               onTap: () {
-                HapticFeedback.lightImpact();
+                OmiHaptics.light();
                 setState(() => selectedTierId = tierId);
               },
             ),
@@ -867,7 +854,7 @@ class _PlansSheetState extends State<PlansSheet> {
           saveTag: _monthsFreeLabel(annualMonthsFree(plans)),
           isPopular: true,
           onTap: () {
-            HapticFeedback.lightImpact();
+            OmiHaptics.light();
             setState(() => selectedPlan = 'yearly');
           },
         ),
@@ -876,7 +863,7 @@ class _PlansSheetState extends State<PlansSheet> {
           isSelected: selectedPlan == 'monthly',
           planData: plans.firstWhere((plan) => plan['interval'] == 'month', orElse: () => plans.first),
           onTap: () {
-            HapticFeedback.lightImpact();
+            OmiHaptics.light();
             setState(() => selectedPlan = 'monthly');
           },
         ),

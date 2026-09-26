@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import 'package:flutter_contacts/flutter_contacts.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -209,7 +208,7 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
       if (await canLaunchUrl(smsUri)) {
         // Track SMS opened
         PlatformManager.instance.analytics.shareToContactsSmsOpened(widget.conversation.id, selected.length);
-        HapticFeedback.mediumImpact();
+        OmiHaptics.medium();
         if (mounted) {
           Navigator.of(context).pop();
         }
@@ -260,7 +259,7 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
                 children: [
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.sm, vertical: 6),
-                    decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.pillAll),
+                    decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.pillAll),
                     child: Text(
                       context.l10n.contactsSelectedCount(selectedCount),
                       style: OmiType.footnote.copyWith(fontWeight: FontWeight.w600),
@@ -284,10 +283,10 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
               padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.xs),
               child: Container(
                 padding: const EdgeInsets.all(OmiSpacing.sm),
-                decoration: const BoxDecoration(color: OmiColors.dangerSurface, borderRadius: OmiRadius.smAll),
+                decoration: BoxDecoration(color: OmiColors.dangerSurface, borderRadius: OmiRadius.smAll),
                 child: Row(
                   children: [
-                    const Icon(Icons.error_outline, color: OmiColors.danger, size: 20),
+                    Icon(Icons.error_outline, color: OmiColors.danger, size: 20),
                     const SizedBox(width: OmiSpacing.xs),
                     Expanded(
                       child: Text(_errorMessage!, style: OmiType.footnote.copyWith(color: OmiColors.textPrimary)),
@@ -367,7 +366,7 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
       leading: CircleAvatar(
         backgroundColor: contact.isSelected ? OmiColors.accent : OmiColors.surface3,
         child: contact.isSelected
-            ? const Icon(Icons.check, color: OmiColors.onAccent, size: 20)
+            ? Icon(Icons.check, color: OmiColors.onAccent, size: 20)
             : Text(
                 contact.displayName.isNotEmpty ? contact.displayName[0].toUpperCase() : '?',
                 style: OmiType.headline,
@@ -379,8 +378,8 @@ class _ShareToContactsBottomSheetState extends State<ShareToContactsBottomSheet>
       ),
       subtitle: Text(contact.phoneNumber, style: OmiType.caption.copyWith(color: OmiColors.textTertiary)),
       trailing: contact.isSelected
-          ? const Icon(Icons.check_circle, color: OmiColors.accent)
-          : const Icon(Icons.circle_outlined, color: OmiColors.textTertiary),
+          ? Icon(Icons.check_circle, color: OmiColors.accent)
+          : Icon(Icons.circle_outlined, color: OmiColors.textTertiary),
     );
   }
 }

@@ -9,6 +9,7 @@ void main() {
   // Regression test: a glyph in a fixed-size circle must be centered, not painted at the
   // top-left (FaIcon has no internal Center; the rows now use the Recordings-sheet material
   // icons, which the same check covers).
+  // The options now live in the sheet that asks before the phone takes over from a listening wearable.
   testWidgets('record option icons are centered inside their circles', (tester) async {
     await tester.pumpWidget(
       MaterialApp(
@@ -20,7 +21,7 @@ void main() {
         ],
         supportedLocales: AppLocalizations.supportedLocales,
         home: Scaffold(
-          body: RecordOptionsSheet(onPickPhoneMic: () {}, onPickPhoneCall: () {}),
+          body: PendantListeningSheet(onRecordWithPhone: () {}, onPhoneCall: () {}, onKeepPendant: () {}),
         ),
       ),
     );

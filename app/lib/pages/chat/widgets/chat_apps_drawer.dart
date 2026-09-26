@@ -62,11 +62,11 @@ class ChatAppsDrawer extends StatelessWidget {
                       Expanded(
                         child: Semantics(header: true, child: Text(l10n.chatAppsTitle, style: OmiType.title3)),
                       ),
-                      const OmiCloseButton(color: OmiColors.textSecondary),
+                      OmiCloseButton(color: OmiColors.textSecondary),
                     ],
                   ),
                 ),
-                const Divider(color: OmiColors.border, height: 1),
+                Divider(color: OmiColors.border, height: 1),
                 Padding(
                   padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.md, OmiSpacing.lg, OmiSpacing.xs),
                   child: Text(
@@ -102,12 +102,12 @@ class ChatAppsDrawer extends StatelessWidget {
                           ),
                         ),
                       ListTile(
-                        leading: const Padding(
-                          padding: EdgeInsets.only(left: 2),
+                        leading: Padding(
+                          padding: const EdgeInsets.only(left: 2),
                           child: FaIcon(FontAwesomeIcons.circlePlus, color: OmiColors.textPrimary, size: 20),
                         ),
                         title: Text(l10n.enableApps, style: OmiType.callout),
-                        trailing: const Icon(Icons.chevron_right, color: OmiColors.textTertiary),
+                        trailing: Icon(Icons.chevron_right, color: OmiColors.textTertiary),
                         onTap: () {
                           Navigator.of(context).pop();
                           onEnableApps();
@@ -116,10 +116,10 @@ class ChatAppsDrawer extends StatelessWidget {
                     ],
                   ),
                 ),
-                const Divider(color: OmiColors.border, height: 1),
+                Divider(color: OmiColors.border, height: 1),
                 ListTile(
-                  leading: const Padding(
-                    padding: EdgeInsets.only(left: 2),
+                  leading: Padding(
+                    padding: const EdgeInsets.only(left: 2),
                     child: FaIcon(FontAwesomeIcons.solidTrashCan, color: OmiColors.danger, size: 20),
                   ),
                   title: Text(l10n.clearChat, style: OmiType.callout.copyWith(color: OmiColors.danger)),
@@ -160,8 +160,7 @@ class _AppRow extends StatelessWidget {
       leading: avatar,
       title: Text(name, style: OmiType.callout, overflow: TextOverflow.ellipsis),
       trailing: isSelected
-          ? const ExcludeSemantics(
-              child: FaIcon(FontAwesomeIcons.solidCircleCheck, color: OmiColors.textPrimary, size: 18))
+          ? ExcludeSemantics(child: FaIcon(FontAwesomeIcons.solidCircleCheck, color: OmiColors.textPrimary, size: 18))
           : onDisable == null
               ? null
               : OmiIconButton(
@@ -189,12 +188,12 @@ class ChatAppAvatar extends StatelessWidget {
       imageUrl: app.getImageUrl(),
       imageBuilder: (context, imageProvider) =>
           CircleAvatar(backgroundColor: Colors.white, radius: 12, backgroundImage: imageProvider),
-      errorWidget: (context, url, error) => const CircleAvatar(
+      errorWidget: (context, url, error) => CircleAvatar(
         backgroundColor: OmiColors.surface3,
         radius: 12,
         child: Icon(Icons.apps, size: 14, color: OmiColors.textSecondary),
       ),
-      placeholder: (context, url) => const CircleAvatar(backgroundColor: OmiColors.surface3, radius: 12),
+      placeholder: (context, url) => CircleAvatar(backgroundColor: OmiColors.surface3, radius: 12),
     );
   }
 }
@@ -213,7 +212,7 @@ class ChatOmiAvatar extends StatelessWidget {
       height: 24,
       width: 24,
       alignment: Alignment.center,
-      child: Image.asset(Assets.images.herologo.path, height: 16, width: 16),
+      child: Image.asset(Assets.images.herologo.path, height: 16, width: 16, color: OmiColors.textPrimary),
     );
   }
 }

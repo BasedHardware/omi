@@ -2,11 +2,16 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
-import 'package:omi/ui/omi_tokens.dart';
+import 'package:provider/provider.dart';
 
-/// The completion mark of a task row (Tasks page, Home's Today card): a quiet dashed ring while
-/// open, a filled amber disc with a check once done. Decorative — the tappable wrapper around it
-/// carries the semantics.
+import 'package:omi/backend/schema/action_item.dart';
+import 'package:omi/providers/conversation_provider.dart';
+import 'package:omi/ui/ui.dart';
+import 'package:omi/utils/l10n_extensions.dart';
+
+/// The completion mark of a task row (To do, Home's Up next): a thin ring while open, a disc in
+/// the label colour with a check once done (v2 `Tasks`, the same mark as Home's Getting started).
+/// Decorative — the tappable wrapper around it carries the semantics.
 class TaskCompletionMark extends StatelessWidget {
   const TaskCompletionMark({super.key, required this.completed, this.size = 22});
 
@@ -14,22 +19,19 @@ class TaskCompletionMark extends StatelessWidget {
   final double size;
 
   /// Done tasks and reached goals share this colour.
-  static const Color doneColor = Colors.amber;
+  static Color get doneColor => OmiColors.accent;
 
   @override
   Widget build(BuildContext context) {
-    if (completed) {
-      return Container(
-        width: size,
-        height: size,
-        decoration: const BoxDecoration(shape: BoxShape.circle, color: doneColor),
-        child: Icon(Icons.check, size: size * 0.64, color: OmiColors.onAccent),
-      );
-    }
-    // Dashed outline: quieter than a solid ring so the task title carries the visual weight.
-    return CustomPaint(
-      size: Size(size, size),
-      painter: _DashedCirclePainter(color: OmiColors.textTertiary, strokeWidth: 1.5, dashLength: 3, gapLength: 3),
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: completed ? doneColor : null,
+        border: completed ? null : Border.all(color: OmiColors.textTertiary, width: 1.5),
+      ),
+      child: completed ? Icon(Icons.check_rounded, size: size * 0.7, color: OmiColors.onAccent) : null,
     );
   }
 }
@@ -52,7 +54,7 @@ class TaskSelectionSquare extends StatelessWidget {
         border: Border.all(color: selected ? OmiColors.accent : OmiColors.textTertiary, width: 2),
         color: selected ? OmiColors.accent : Colors.transparent,
       ),
-      child: selected ? const Icon(Icons.check, size: 14, color: OmiColors.onAccent) : null,
+      child: selected ? Icon(Icons.check, size: 14, color: OmiColors.onAccent) : null,
     );
   }
 }
@@ -104,44 +106,95 @@ class GoalProgressPainter extends CustomPainter {
   bool shouldRepaint(GoalProgressPainter oldDelegate) => oldDelegate.progress != progress || oldDelegate.color != color;
 }
 
-class _DashedCirclePainter extends CustomPainter {
-  _DashedCirclePainter({
-    required this.color,
-    required this.strokeWidth,
-    required this.dashLength,
-    required this.gapLength,
-  });
-
-  final Color color;
-  final double strokeWidth;
-  final double dashLength;
-  final double gapLength;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = color
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..strokeCap = StrokeCap.round;
-
-    final center = Offset(size.width / 2, size.height / 2);
-    final radius = (size.width / 2) - (strokeWidth / 2);
-    final circumference = 2 * math.pi * radius;
-    final segments = (circumference / (dashLength + gapLength)).floor();
-    final adjustedSegment = circumference / segments;
-    final dashAngle = (dashLength / adjustedSegment) * (2 * math.pi / segments);
-    final stepAngle = 2 * math.pi / segments;
-
-    for (var i = 0; i < segments; i++) {
-      canvas.drawArc(Rect.fromCircle(center: center, radius: radius), i * stepAngle, dashAngle, false, paint);
-    }
+/// The name of an export destination ("Todoist", "Reminders") as a task row shows it.
+String taskExportPlatformLabel(String platform) {
+  switch (platform) {
+    case 'todoist':
+      return 'Todoist';
+    case 'asana':
+      return 'Asana';
+    case 'google_tasks':
+      return 'Google Tasks';
+    case 'clickup':
+      return 'ClickUp';
+    case 'apple_reminders':
+      return 'Reminders';
+    default:
+      return platform;
   }
+}
+
+/// A task row's second line (canvas Tasks): when it is due (amber today, red when overdue) and
+/// the conversation it came from ("from App UX and battery"). Nothing when it has neither.
+class TaskSubline extends StatelessWidget {
+  const TaskSubline({super.key, required this.item});
+
+  final ActionItemWithMetadata item;
 
   @override
-  bool shouldRepaint(_DashedCirclePainter oldDelegate) =>
-      oldDelegate.color != color ||
-      oldDelegate.strokeWidth != strokeWidth ||
-      oldDelegate.dashLength != dashLength ||
-      oldDelegate.gapLength != gapLength;
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    final due = item.dueAt?.toLocal();
+    String? source;
+    final conversationId = item.conversationId;
+    if (conversationId != null) {
+      for (final c in context.read<ConversationProvider>().conversations) {
+        if (c.id == conversationId) {
+          final title = c.structured.title.trim();
+          if (title.isNotEmpty) source = l10n.fromConversation(title);
+          break;
+        }
+      }
+    }
+    if (due == null && source == null) return const SizedBox.shrink();
+    String? dueText;
+    Color? dueColor;
+    if (due != null) {
+      final dates = OmiDateFormat.of(context);
+      final now = DateTime.now();
+      final endOfToday = DateTime(now.year, now.month, now.day + 1);
+      dueText = l10n.taskDueDayTime(dates.dayHeader(due), dates.time(due));
+      if (!item.completed) {
+        dueColor = due.isBefore(now) ? OmiColors.danger : (due.isBefore(endOfToday) ? OmiColors.warning : null);
+      }
+    }
+    return Padding(
+      padding: const EdgeInsets.only(top: 3),
+      child: Text.rich(
+        TextSpan(
+          style: OmiType.footnote.copyWith(color: OmiColors.textSecondary),
+          children: [
+            if (dueText != null) TextSpan(text: dueText, style: dueColor == null ? null : TextStyle(color: dueColor)),
+            if (dueText != null && source != null) const TextSpan(text: ' · '),
+            if (source != null) TextSpan(text: source),
+          ],
+        ),
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
+  }
+}
+
+/// A section's tasks on one card, a hairline between rows (canvas Tasks).
+class TaskSectionCard extends StatelessWidget {
+  const TaskSectionCard({super.key, required this.children});
+
+  final List<Widget> children;
+
+  @override
+  Widget build(BuildContext context) {
+    return OmiCard(
+      clip: true,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (final (i, child) in children.indexed) ...[
+            if (i > 0) Divider(height: 0.5, thickness: 0.5, indent: 52, color: OmiColors.border),
+            child,
+          ],
+        ],
+      ),
+    );
+  }
 }

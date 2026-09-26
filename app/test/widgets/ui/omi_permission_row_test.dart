@@ -67,7 +67,8 @@ void main() {
       onAllow: () {},
     )));
     expect(find.byType(FaIcon), findsOneWidget);
-    expect(tester.getSize(find.byType(FaIcon)).height, 22);
+    // v2: the glyph sits at 15pt inside the 30pt icon tile.
+    expect(tester.getSize(find.byType(FaIcon)).height, 15);
   });
 
   testWidgets('a granted permission shows Allowed and no action', (tester) async {

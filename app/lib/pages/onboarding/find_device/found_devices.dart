@@ -442,7 +442,7 @@ class _FoundDevicesState extends State<FoundDevices> {
                           Padding(
                             padding: const EdgeInsets.only(right: 16.0),
                             child: isConnecting
-                                ? const OmiSpinner(size: OmiSpinnerSize.small, color: OmiColors.onAccent)
+                                ? OmiSpinner(size: OmiSpinnerSize.small, color: OmiColors.onAccent)
                                 : const SizedBox.shrink(),
                           ),
                         ],

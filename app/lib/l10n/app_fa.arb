@@ -1781,10 +1781,6 @@
     "@openSettings": {
         "description": "Button text to open app settings"
     },
-    "whatsYourName": "نام شما چیست؟",
-    "@whatsYourName": {
-        "description": "Question asking for user's name"
-    },
     "@enterYourName": {
         "description": "Hint text for name input field"
     },
@@ -1807,14 +1803,6 @@
     "termsOfUse": "شرایط استفاده",
     "@termsOfUse": {
         "description": "Link text for Terms of Use"
-    },
-    "omiYourAiCompanion": "Omi – همراه هوش مصنوعی شما",
-    "@omiYourAiCompanion": {
-        "description": "App title or branding on onboarding screen"
-    },
-    "captureEveryMoment": "هر لحظه را ثبت کنید. خلاصه‌های هوش مصنوعی دریافت کنید.\nدیگر یادداشت نگیرید.",
-    "@captureEveryMoment": {
-        "description": "App value proposition or description"
     },
     "appleWatchSetup": "راه‌اندازی Apple Watch",
     "@appleWatchSetup": {
@@ -1877,27 +1865,11 @@
             }
         }
     },
-    "selectPrimaryLanguage": "زبان اصلی خود را انتخاب کنید",
-    "@selectPrimaryLanguage": {
-        "description": "Title for language selection dialog"
-    },
-    "languageBenefits": "زبان خود را برای رونویسی‌های تیزتر و تجربه شخصی‌سازی‌شده تنظیم کنید",
-    "@languageBenefits": {
-        "description": "Explanation of why language selection matters"
-    },
     "@searchLanguageHint": {
         "description": "Hint text for language search"
     },
     "@noLanguagesFound": {
         "description": "Text when search returns no results"
-    },
-    "whatsYourPrimaryLanguage": "زبان اصلی شما چیست؟",
-    "@whatsYourPrimaryLanguage": {
-        "description": "Question asking for primary language"
-    },
-    "selectYourLanguage": "زبان خود را انتخاب کنید",
-    "@selectYourLanguage": {
-        "description": "Placeholder for selected language name"
     },
     "personalGrowthJourney": "سفر رشد شخصی شما با هوش مصنوعی که به هر کلمه شما گوش می‌دهد.",
     "@personalGrowthJourney": {
@@ -3922,10 +3894,6 @@
     "@dataProtection": {
         "description": "Section title for data protection info"
     },
-    "yourDataIsProtected": "داده‌های شما محافظت شده و تحت حاکمیت ",
-    "@yourDataIsProtected": {
-        "description": "First part of data protection text"
-    },
     "pleaseSelectYourPrimaryLanguage": "لطفاً زبان اصلی خود را انتخاب کنید",
     "chooseYourLanguage": "زبان خود را انتخاب کنید",
     "selectPreferredLanguageForBestExperience": "زبان ترجیحی خود را برای بهترین تجربه Omi انتخاب کنید",
@@ -5933,10 +5901,6 @@
     "additionalSpeechSampleRemoved": "نمونه صوتی اضافی حذف‌شد",
     "@additionalSpeechSampleRemoved": {
         "description": "Confirmation message when an additional speech sample is deleted"
-    },
-    "consentDataMessage": "با ادامه دادن، مکالمات، ضبط‌ها و اطلاعات شخصی شما به طور ایمن در سرورهای ما ذخیره می‌شود. ضبط‌های صوتی و رونوشت‌های شما توسط سرویس‌های هوش مصنوعی شخص ثالث (از جمله Deepgram برای رونویسی و OpenAI برای تحلیل) پردازش می‌شوند تا بینش‌های مبتنی بر هوش مصنوعی را به شما ارائه دهند و تمام ویژگی‌های برنامه را فعال کنند.",
-    "@consentDataMessage": {
-        "description": "Consent message explaining how user data will be stored and used"
     },
     "tasksEmptyStateMessage": "وظایف از مکالمات شما اینجا ظاهر خواهند شد.\n+ را ضربه بزنید تا یکی به‌صورت دستی ایجاد کنید.",
     "@tasksEmptyStateMessage": {
@@ -9501,7 +9465,6 @@
     },
     "mcpConnectionFailed": "اتصال به سرور MCP ناموفق بود",
     "authorizingMcpServer": "تأیید هویت…",
-    "whereDidYouHearAboutOmi": "چگونه ما را پیدا کردید؟",
     "tiktok": "TikTok",
     "youtube": "YouTube",
     "instagram": "Instagram",
@@ -10790,7 +10753,6 @@
     "@memoryHistory": {
         "description": "Filter option for retained memory history"
     },
-    "tapPlusToStartRecording": "برای شروع ضبط روی دکمه ضبط بزنید",
     "processingTakingLonger": "هنوز در حال انجام است — بیشتر از حد معمول طول می‌کشد.",
     "speechProfileEnrollmentPrompt": "برای اینکه Omi بداند کدام صدا متعلق به شماست — حدود ۵ ثانیه درباره هر چیزی صحبت کنید.",
     "home": "خانه",
@@ -10956,7 +10918,6 @@
     "batteryLevelSemantics": "باتری {level}٪",
     "updateOmiGlassFirmware": "به‌روزرسانی میان‌افزار OmiGlass",
     "deviceConnecting": "در حال اتصال…",
-    "recordOptionsTip": "نکته: برای ضبط تماس تلفنی، روی فلش دکمه ضبط بزنید.",
     "firmwareUpdateFailedTitle": "به‌روزرسانی ناموفق بود",
     "firmwareUpdateFailedMessage": "به‌روزرسانی کامل نشد. دستگاه شما همچنان میان‌افزار فعلی را دارد و استفاده از آن امن است. آن را شارژ و نزدیک تلفن نگه دارید، سپس دوباره امتحان کنید.",
     "firmwareDownloadFailedMessage": "به‌روزرسانی دانلود نشد و دستگاه شما تغییری نکرد. اتصال اینترنت را بررسی کنید و دوباره امتحان کنید.",
@@ -11109,8 +11070,148 @@
     "pendantPausesUntilYouFinish": "آویز تا پایان کار شما متوقف می‌ماند",
     "pendantPausesDuringCall": "آویز در طول تماس متوقف می‌ماند",
     "keepUsingPendant": "ادامه با آویز",
-    "recordWith": "ضبط با",
-    "moreWaysToRecord": "روش‌های دیگر ضبط",
     "openCall": "باز کردن تماس",
-    "captureRecoveryBanner": "صدای آویز به برنامه نمی‌رسد — برای تعمیر ضربه بزنید"
+    "captureRecoveryBanner": "صدای آویز به برنامه نمی‌رسد — برای تعمیر ضربه بزنید",
+    "goodMorning": "صبح بخیر",
+    "goodAfternoon": "بعدازظهر بخیر",
+    "goodEvening": "عصر بخیر",
+    "alreadyHaveAccount": "از قبل حساب داری؟",
+    "signInToOmi": "ورود به Omi",
+    "signInSubtitle": "گفتگوها و خاطراتت با حسابت در تلفن، Mac و وب همراهت هستند.",
+    "onboardingAllSetName": "همه‌چیز آماده است، {name}.",
+    "completeHomeBody": "روز، کارها و خلاصه‌هایت در یک جا.",
+    "completeAskTitle": "بپرس",
+    "foundOmiOptionalHint": "اختیاری — به تیمی کوچک کمک می‌کند بداند چه چیزی جواب می‌دهد.",
+    "consentTitle": "داده‌های تو، به زبان ساده",
+    "consentSubtitle": "پیش از اینکه Omi شروع به گوش دادن کند، دقیقاً ببین با آنچه می‌شنود چه می‌شود.",
+    "consentStoredTitle": "چه چیزی ذخیره می‌شود",
+    "consentStoredBody": "صدا، رونوشت‌ها و جزئیاتی که Omi یاد می‌گیرد به‌صورت امن در حسابت ذخیره می‌شوند.",
+    "consentProcessorsTitle": "چه کسی آن‌ها را پردازش می‌کند",
+    "consentProcessorsBody": "گفتار توسط Deepgram رونویسی و توسط OpenAI تحلیل می‌شود تا خلاصه‌ها، کارها و خاطرات نوشته شوند.",
+    "consentControlTitle": "چه چیزی در اختیار توست",
+    "consentControlBody": "هر گفتگو، خاطره یا کل حسابت را هر وقت خواستی حذف کن.",
+    "readPrivacyPolicy": "خواندن سیاست حریم خصوصی",
+    "whatShouldOmiCallYou": "Omi تو را چه صدا کند؟",
+    "nameUsageHint": "Omi از این برای مشخص کردن تو در رونوشت‌ها و خروجی‌ها استفاده می‌کند.",
+    "yourNamePlaceholder": "نام تو",
+    "whatLanguageDoYouSpeakMost": "بیشتر به چه زبانی صحبت می‌کنی؟",
+    "languageOnboardingSubtitle": "Omi وقتی زبانت را بداند بهتر رونویسی می‌کند. بعداً می‌توانی زبان‌های بیشتری اضافه کنی.",
+    "permissionsFewTitle": "چند مجوز",
+    "permissionsFewSubtitle": "Omi فقط چیزی را می‌خواهد که استفاده می‌کند. هر زمان می‌توانی این‌ها را در تنظیمات تغییر دهی.",
+    "permissionsContinueNote": "«ادامه» چیزی درخواست نمی‌کند. هر مجوز فقط وقتی درخواست می‌شود که روی «اجازه دادن» بزنی.",
+    "howDidYouHearAboutOmi": "چطور با Omi آشنا شدی؟",
+    "showOnLockScreen": "نمایش در صفحهٔ قفل",
+    "seeAll": "مشاهده همه",
+    "upNext": "بعدی",
+    "allTasks": "همه کارها",
+    "thisWeek": "این هفته",
+    "capturedDuration": "{duration} ضبط شده",
+    "newMemoriesCount": "{count, plural, =1{1 خاطره جدید} other{{count} خاطره جدید}}",
+    "syncingFromPendant": "در حال همگام‌سازی از آویز شما",
+    "pendantRecordingsSynced": "ضبط‌های آویز همگام شد",
+    "recordedOnPendantWhileAway": "~{duration} روی آویز ضبط شد وقتی تلفنت دور بود",
+    "dailyRecapOn": "خلاصه روزانه · {day}",
+    "taskDueDayTime": "{day}، {time}",
+    "fromConversation": "از {title}",
+    "endCapture": "پایان",
+    "toDo": "کارها",
+    "devices": "دستگاه‌ها",
+    "devicesSubtitle": "هر چیزی که برایت گوش می‌دهد. هر بار فقط یکی ضبط می‌کند.",
+    "addADevice": "افزودن دستگاه",
+    "deviceReady": "آماده",
+    "importFromOtherApps": "وارد کردن از برنامه‌های دیگر",
+    "whatWillYouWear": "چه چیزی همراهت داری؟",
+    "pickDeviceSubtitle": "بعداً می‌توانی موارد بیشتری اضافه کنی. هر بار فقط یکی ضبط می‌کند.",
+    "alreadyHaveOne": "از قبل داری؟",
+    "noDeviceHeader": "بدون دستگاه",
+    "omiPendantName": "آویز Omi",
+    "allDayConversations": "گفتگوهای تمام روز",
+    "conversationsAndPhotos": "گفتگو + عکس",
+    "wristMic": "میکروفون مچی",
+    "glassesAudio": "صدای عینک",
+    "bringRecordingsIntoOmi": "ضبط‌هایت را به Omi بیاور",
+    "useThisIphone": "استفاده از این iPhone",
+    "useThisPhone": "استفاده از این تلفن",
+    "startInSeconds": "در 10 ثانیه شروع کن",
+    "askAboutThisConversationPlaceholder": "درباره این گفتگو بپرس",
+    "summaryStyle": "سبک خلاصه",
+    "summaryStyleSubtitle": "انتخاب کن کدام برنامه این خلاصه را بنویسد",
+    "appearance": "ظاهر",
+    "appearanceSystem": "سیستم",
+    "appearanceLight": "روشن",
+    "appearanceDark": "تیره",
+    "feel": "حس",
+    "haptics": "بازخورد لمسی",
+    "hapticsSubtitle": "یک ضربه‌ی آرام وقتی چیزی را تمام، ستاره‌دار یا کامل می‌کنی",
+    "textSize": "اندازه‌ی متن",
+    "textSizeSubtitle": "از اندازه‌ی متن گوشی‌ات پیروی می‌کند",
+    "appearanceMotionNote": "حرکت از «کاهش حرکت» در تنظیمات گوشی پیروی می‌کند؛ همه‌ی حلقه‌ها، از جمله چراغ دستگاه، متوقف می‌شوند.",
+    "signedInWithApple": "واردشده با Apple",
+    "signedInWithGoogle": "واردشده با Google",
+    "premiumMinutesLeftThisMonth": "{left} از {limit} دقیقه‌ی ویژه‌ی این ماه باقی مانده",
+    "recordingFrom": "ضبط از",
+    "recordingFromSubtitle": "هر بار فقط یک منبع ضبط می‌کند. تغییر منبع، گفتگوی فعلی را تمام می‌کند.",
+    "manageDevices": "مدیریت دستگاه‌ها",
+    "notListeningTitle": "در حال گوش دادن نیست",
+    "notListeningSubtitle": "با همین گوشی شروع کن یا دستگاهی وصل کن تا تمام روز گوش بدهد.",
+    "startListening": "شروع گوش دادن",
+    "searchEverything": "جستجو در همه‌چیز",
+    "searchResultsCount": "نتایج · {count}",
+    "nothingFound": "چیزی پیدا نشد",
+    "searchNothingFoundHint": "کلمه‌ی دیگری را امتحان کن یا از Omi بپرس — Omi معنا را می‌فهمد، نه فقط کلمات را.",
+    "askOmiInstead": "از Omi بپرس",
+    "recentSearches": "اخیر",
+    "searchAskSuggestion": "این هفته قول دادم چه کارهایی انجام دهم؟",
+    "welcomeRememberTitle": "هر گفتگو را به خاطر بسپار.",
+    "welcomeRememberSubtitle": "هرچه دوست داری بپوش. Omi آنچه می‌شنوی را به یادداشت، کار و مرور روزت تبدیل می‌کند.",
+    "memoriesSubtitle": "آنچه Omi می‌داند و از کجا یاد گرفته",
+    "memoryTierLongTerm": "بلندمدت",
+    "memoryTierShortTerm": "کوتاه‌مدت",
+    "memoriesTierNote": "خاطره‌های تازه ابتدا کوتاه‌مدت‌اند. Omi خودش آن‌هایی را که همچنان مهم می‌مانند به بلندمدت منتقل می‌کند.",
+    "askEmptyTitle": "درباره‌ی هر چیزی که شنیده‌ای بپرس.",
+    "askEmptySubtitle": "Omi از گفتگوها، خاطره‌ها و کارهایت پاسخ می‌دهد.",
+    "completeListeningTitle": "گوش دادن",
+    "completeListeningBody": "آبی یعنی Omi صدایت را می‌شنود — از دستگاهی که همراه داری یا از همین گوشی.",
+    "completeAskAnyBody": "روی «بپرس» بزن تا درباره‌ی هر چیزی که شنیده‌ای بپرسی.",
+    "completeDevicesBody": "هر وقت خواستی یک دستگاه پوشیدنی اضافه کن، یا با همین گوشی شروع کن.",
+    "conversationSourceGlasses": "عینک",
+    "conversationSourceImported": "واردشده",
+    "conversationSourceEmptyHint": "هنوز چیزی از این منبع ضبط نشده است.",
+    "findMyPendant": "پیدا کردن آویز من",
+    "findMyPendantHint": "صدایی پخش می‌کند تا آن را پیدا کنید",
+    "upToDate": "به‌روز",
+    "updateAvailable": "به‌روزرسانی موجود است",
+    "storageTitle": "فضای ذخیره‌سازی",
+    "connectStepTurnOn": "روشنش کنید و نزدیک نگه دارید",
+    "connectStepAllowBluetooth": "اجازهٔ بلوتوث بدهید",
+    "connectStepTest": "برای آزمایش چیزی بگویید",
+    "connectStepTestHint": "کلمات هنگام صحبت اینجا ظاهر می‌شوند",
+    "setUpLater": "بعداً راه‌اندازی کنید",
+    "recapPreviousDay": "خلاصهٔ روز قبل: {day}",
+    "recapNextDay": "خلاصهٔ روز بعد: {day}",
+    "askStarterToday": "امروز را خلاصه کن",
+    "askStarterPeople": "با چه کسی ملاقات کردم؟",
+    "askStarterOpen": "چه چیزی هنوز باز است؟",
+    "peopleSubtitle": "صداهایی که Omi در رونوشت‌ها تشخیص می‌دهد",
+    "usageCurrentPlan": "طرح فعلی",
+    "appsExplore": "کاوش",
+    "appOutOfFive": "از ۵",
+    "appStatUsers": "کاربران",
+    "homeWelcomeName": "خوش آمدید، {name}",
+    "homeWelcome": "خوش آمدید",
+    "homeFirstDaySubtitle": "اولین روز شما با Omi",
+    "homeListeningHeroTitle": "Omi در حال گوش دادن است",
+    "homeListeningHeroBody": "اولین گفتگوی شما یک دقیقه پس از پایانش اینجا نمایش داده می‌شود.",
+    "homeGettingStarted": "شروع کار",
+    "gettingStartedConnect": "یک دستگاه وصل کنید",
+    "gettingStartedConversation": "یک گفتگو داشته باشید",
+    "gettingStartedAsk": "درباره‌اش از Omi بپرسید",
+    "homeGoodToKnow": "خوب است بدانید",
+    "tipFinishTitle": "هر وقت خواستید تمام کنید",
+    "tipFinishBody": "روی پایان بزنید — یا آویز را دو بار فشار دهید — تا خلاصه بی‌درنگ شروع شود.",
+    "tipStarTitle": "موارد مهم را ستاره‌دار کنید",
+    "tipStarBody": "گفتگوهای ستاره‌دار بعداً به‌راحتی پیدا می‌شوند.",
+    "tipPrivateTitle": "به‌طور پیش‌فرض خصوصی",
+    "tipPrivateBody": "گفتگوهای شما خصوصی می‌مانند مگر آنکه آن‌ها را به اشتراک بگذارید.",
+    "homeGettingStartedProgress": "{done} از {total}"
 }

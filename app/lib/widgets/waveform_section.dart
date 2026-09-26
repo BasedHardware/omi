@@ -91,7 +91,7 @@ class _WaveformSectionState extends State<WaveformSection> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const OmiSpinner(color: OmiColors.textSecondary),
+            OmiSpinner(color: OmiColors.textSecondary),
             const SizedBox(height: 12),
             Text(context.l10n.loadingYourRecording, style: OmiType.caption.copyWith(color: OmiColors.textSecondary)),
           ],
@@ -154,7 +154,7 @@ class _WaveformSectionState extends State<WaveformSection> {
                 marker,
                 style: Theme.of(
                   context,
-                ).textTheme.labelMedium!.copyWith(color: Colors.grey.shade500, fontWeight: FontWeight.w400),
+                ).textTheme.labelMedium!.copyWith(color: OmiColors.textTertiary, fontWeight: FontWeight.w400),
               ),
             )
             .toList(),

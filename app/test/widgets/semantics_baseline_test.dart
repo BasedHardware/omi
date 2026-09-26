@@ -600,6 +600,9 @@ class _StubDeviceProvider extends ChangeNotifier implements DeviceProvider {
   bool get isConnected => connected;
 
   @override
+  bool get isConnecting => false;
+
+  @override
   BtDevice? get connectedDevice => null;
 
   @override

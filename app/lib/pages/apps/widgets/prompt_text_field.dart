@@ -27,24 +27,24 @@ class PromptTextField extends StatelessWidget {
           labelText: label,
           hintText: hint,
           hintMaxLines: 4,
-          labelStyle: TextStyle(color: Colors.grey.shade400),
+          labelStyle: TextStyle(color: OmiColors.textSecondary),
           hintStyle: OmiType.subhead.copyWith(color: OmiColors.textTertiary),
-          floatingLabelStyle: TextStyle(color: Colors.grey.shade300),
+          floatingLabelStyle: TextStyle(color: OmiColors.textSecondary),
           alignLabelWithHint: true,
           contentPadding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 16.0),
           border: OutlineInputBorder(
             borderRadius: OmiRadius.mdAll,
-            borderSide: BorderSide(color: Colors.grey.withValues(alpha: 0.3), width: 1),
+            borderSide: BorderSide(color: OmiColors.border.withValues(alpha: 0.3), width: 1),
           ),
           enabledBorder: OutlineInputBorder(
             borderRadius: OmiRadius.mdAll,
-            borderSide: BorderSide(color: Colors.grey.withValues(alpha: 0.3), width: 1),
+            borderSide: BorderSide(color: OmiColors.border.withValues(alpha: 0.3), width: 1),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: OmiRadius.mdAll,
-            borderSide: BorderSide(color: Colors.grey.shade400, width: 1),
+            borderSide: BorderSide(color: OmiColors.border, width: 1),
           ),
-          errorBorder: const OutlineInputBorder(
+          errorBorder: OutlineInputBorder(
             borderRadius: OmiRadius.mdAll,
             borderSide: BorderSide(color: OmiColors.danger, width: 1),
           ),

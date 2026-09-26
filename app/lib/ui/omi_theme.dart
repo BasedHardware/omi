@@ -11,25 +11,42 @@ import 'package:omi/ui/omi_tokens.dart';
 ///
 /// Material 2 stays on (`useMaterial3: false`); a Material 3 flip is a separate change.
 ///
-/// The colour scheme is a real dark scheme: [ColorScheme.primary] is the neutral accent (white)
-/// and [ColorScheme.surface] is the black page. Page backgrounds name [OmiColors.surface0]
-/// directly; never read `colorScheme.primary` as a background.
+/// Built from the active [OmiPalette] (`OmiColors.palette`), so it is a real dark or light scheme:
+/// [ColorScheme.primary] is the neutral accent (white on dark, ink on light) and
+/// [ColorScheme.surface] is the page. The app builds it again after every palette switch. Page
+/// backgrounds name [OmiColors.surface0] directly; never read `colorScheme.primary` as a background.
 ThemeData buildOmiTheme() {
-  const scheme = ColorScheme.dark(
-    primary: OmiColors.accent,
-    onPrimary: OmiColors.onAccent,
-    // Unchanged from the previous theme: chips, checkboxes and a few dialogs still read it.
-    secondary: Color(0xFF35343B),
-    surface: OmiColors.surface0,
-    onSurface: OmiColors.textPrimary,
-    error: OmiColors.danger,
-  );
+  final light = OmiColors.isLight;
+  final scheme = light
+      ? ColorScheme.light(
+          primary: OmiColors.accent,
+          onPrimary: OmiColors.onAccent,
+          secondary: OmiColors.surface3,
+          onSecondary: OmiColors.textPrimary,
+          surface: OmiColors.surface0,
+          onSurface: OmiColors.textPrimary,
+          error: OmiColors.danger,
+        )
+      : ColorScheme.dark(
+          primary: OmiColors.accent,
+          onPrimary: OmiColors.onAccent,
+          // Unchanged from the previous theme: chips, checkboxes and a few dialogs still read it.
+          secondary: const Color(0xFF35343B),
+          surface: OmiColors.surface0,
+          onSurface: OmiColors.textPrimary,
+          error: OmiColors.danger,
+        );
 
   return ThemeData(
     useMaterial3: false,
+    brightness: light ? Brightness.light : Brightness.dark,
     colorScheme: scheme,
+    canvasColor: OmiColors.surface0,
+    cardColor: OmiColors.surface1,
+    dividerColor: OmiColors.border,
+    iconTheme: IconThemeData(color: OmiColors.textPrimary),
     scaffoldBackgroundColor: OmiColors.surface0,
-    appBarTheme: const AppBarThemeData(
+    appBarTheme: AppBarThemeData(
       backgroundColor: OmiColors.surface0,
       foregroundColor: OmiColors.textPrimary,
       elevation: 0,
@@ -38,9 +55,9 @@ ThemeData buildOmiTheme() {
       titleTextStyle: OmiType.headline,
       iconTheme: IconThemeData(color: OmiColors.textPrimary),
       actionsIconTheme: IconThemeData(color: OmiColors.textPrimary),
-      systemOverlayStyle: SystemUiOverlayStyle.light,
+      systemOverlayStyle: light ? SystemUiOverlayStyle.dark : SystemUiOverlayStyle.light,
     ),
-    progressIndicatorTheme: const ProgressIndicatorThemeData(
+    progressIndicatorTheme: ProgressIndicatorThemeData(
       color: OmiColors.accent,
       refreshBackgroundColor: OmiColors.surface2,
       linearTrackColor: OmiColors.surface3,
@@ -55,17 +72,17 @@ ThemeData buildOmiTheme() {
       shape: const RoundedRectangleBorder(borderRadius: OmiRadius.mdAll),
       elevation: 0,
     ),
-    dialogTheme: const DialogThemeData(
+    dialogTheme: DialogThemeData(
       backgroundColor: OmiColors.surface1,
-      shape: RoundedRectangleBorder(borderRadius: OmiRadius.lgAll),
+      shape: const RoundedRectangleBorder(borderRadius: OmiRadius.lgAll),
     ),
     // No `showDragHandle` here: many sheets still draw their own handle. `showOmiSheet` turns the
     // framework handle on; the size and colour below make it look the same everywhere.
-    bottomSheetTheme: const BottomSheetThemeData(
-      backgroundColor: OmiColors.surface1,
-      modalBackgroundColor: OmiColors.surface1,
+    bottomSheetTheme: BottomSheetThemeData(
+      backgroundColor: OmiColors.sheet,
+      modalBackgroundColor: OmiColors.sheet,
       dragHandleColor: OmiColors.border,
-      dragHandleSize: Size(36, 4),
+      dragHandleSize: const Size(36, 4),
     ),
     switchTheme: SwitchThemeData(
       thumbColor: WidgetStateProperty.resolveWith((states) {
@@ -75,22 +92,67 @@ ThemeData buildOmiTheme() {
       }),
       trackColor: WidgetStateProperty.resolveWith((states) {
         if (states.contains(WidgetState.disabled)) return OmiColors.surface2;
-        if (states.contains(WidgetState.selected)) return OmiColors.accent.withValues(alpha: 0.5);
+        if (states.contains(WidgetState.selected)) return OmiColors.selection;
         return OmiColors.surface3;
       }),
     ),
-    textTheme: TextTheme(
-      titleLarge: const TextStyle(fontSize: 18, color: Colors.white),
-      titleMedium: const TextStyle(fontSize: 16, color: Colors.white),
-      bodyMedium: const TextStyle(fontSize: 14, color: Colors.white),
-      labelMedium: TextStyle(fontSize: 12, color: Colors.grey.shade200),
+    // v2: the remaining Material controls take the neutral palette instead of Material 2
+    // defaults (which read the legacy violet-grey `secondary` or grey[800]).
+    checkboxTheme: CheckboxThemeData(
+      fillColor: WidgetStateProperty.resolveWith((states) {
+        if (states.contains(WidgetState.disabled)) return OmiColors.surface3;
+        if (states.contains(WidgetState.selected)) return OmiColors.accent;
+        return Colors.transparent;
+      }),
+      checkColor: WidgetStatePropertyAll(OmiColors.onAccent),
+      side: BorderSide(color: OmiColors.textTertiary, width: 1.5),
     ),
-    textSelectionTheme: const TextSelectionThemeData(
+    sliderTheme: SliderThemeData(
+      activeTrackColor: OmiColors.accent,
+      inactiveTrackColor: OmiColors.surface3,
+      thumbColor: OmiColors.accent,
+      overlayColor: OmiColors.textPrimary.withValues(alpha: 0.12),
+    ),
+    floatingActionButtonTheme: FloatingActionButtonThemeData(
+      backgroundColor: OmiColors.accent,
+      foregroundColor: OmiColors.onAccent,
+      elevation: 0,
+      shape: const StadiumBorder(),
+    ),
+    chipTheme: ChipThemeData(
+      backgroundColor: OmiColors.surface2,
+      selectedColor: OmiColors.accent,
+      checkmarkColor: OmiColors.onAccent,
+      labelStyle: OmiType.footnote.copyWith(fontWeight: FontWeight.w600),
+      secondaryLabelStyle: OmiType.footnote.copyWith(color: OmiColors.onAccent, fontWeight: FontWeight.w600),
+      side: BorderSide.none,
+      shape: const StadiumBorder(),
+    ),
+    tabBarTheme: TabBarThemeData(
+      labelColor: OmiColors.textPrimary,
+      unselectedLabelColor: OmiColors.textSecondary,
+      indicatorColor: OmiColors.accent,
+      dividerColor: OmiColors.border,
+    ),
+    dividerTheme: DividerThemeData(color: OmiColors.border, thickness: 0.5, space: 1),
+    popupMenuTheme: PopupMenuThemeData(
+      color: OmiColors.surface2,
+      textStyle: OmiType.subhead,
+      shape: const RoundedRectangleBorder(borderRadius: OmiRadius.mdAll),
+    ),
+    textTheme: TextTheme(
+      titleLarge: TextStyle(fontSize: 18, color: OmiColors.textPrimary),
+      titleMedium: TextStyle(fontSize: 16, color: OmiColors.textPrimary),
+      bodyMedium: TextStyle(fontSize: 14, color: OmiColors.textPrimary),
+      labelMedium: TextStyle(fontSize: 12, color: OmiColors.textPrimary),
+    ),
+    textSelectionTheme: TextSelectionThemeData(
       cursorColor: OmiColors.accent,
-      selectionColor: Colors.white24,
+      selectionColor: OmiColors.textPrimary.withValues(alpha: light ? 0.18 : 0.24),
       selectionHandleColor: OmiColors.accent,
     ),
-    cupertinoOverrideTheme: const CupertinoThemeData(
+    cupertinoOverrideTheme: CupertinoThemeData(
+      brightness: light ? Brightness.light : Brightness.dark,
       primaryColor: OmiColors.accent, // Controls the selection handles on iOS
     ),
   );

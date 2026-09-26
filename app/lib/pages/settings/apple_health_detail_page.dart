@@ -98,7 +98,7 @@ class _AppleHealthDetailPageState extends State<AppleHealthDetailPage> {
     final isConnected = provider.isAppConnected(IntegrationApp.appleHealth);
 
     return Scaffold(
-      appBar: AppBar(leading: const OmiBackButton()),
+      appBar: const OmiAppBar(leading: OmiBackButton()),
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.fromLTRB(OmiSpacing.xl, 0, OmiSpacing.xl, OmiSpacing.xl),
@@ -120,7 +120,7 @@ class _AppleHealthDetailPageState extends State<AppleHealthDetailPage> {
                             Container(
                               width: 8,
                               height: 8,
-                              decoration: const BoxDecoration(color: OmiColors.success, shape: BoxShape.circle),
+                              decoration: BoxDecoration(color: OmiColors.success, shape: BoxShape.circle),
                             ),
                             const SizedBox(width: 6),
                             Text(
@@ -188,14 +188,14 @@ class _AppleHealthDetailPageState extends State<AppleHealthDetailPage> {
         const SizedBox(width: 18),
         Container(
           padding: const EdgeInsets.all(10),
-          decoration: const BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
+          decoration: BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
           child: Image.asset(Assets.images.herologo.path, width: 36, color: OmiColors.onAccent),
         ),
         Transform.translate(
           offset: const Offset(-18, 0),
           child: Container(
             padding: const EdgeInsets.all(10),
-            decoration: const BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
+            decoration: BoxDecoration(color: OmiColors.accent, shape: BoxShape.circle),
             child: ClipOval(
               child: Image.asset(
                 'assets/integration_app_logos/apple-health-logo.png',
@@ -206,7 +206,7 @@ class _AppleHealthDetailPageState extends State<AppleHealthDetailPage> {
                   width: 36,
                   height: 36,
                   decoration: const BoxDecoration(color: _healthPink, shape: BoxShape.circle),
-                  child: const Icon(Icons.favorite, color: OmiColors.textPrimary, size: 22),
+                  child: Icon(Icons.favorite, color: OmiColors.textPrimary, size: 22),
                 ),
               ),
             ),

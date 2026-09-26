@@ -1,30 +1,43 @@
-// Home: the recording source sheet, the announcement dialog, and the screen the app shows when
-// start-up fails. The Home capture surfaces themselves are in capture.dart.
-import 'package:flutter/material.dart';
+// Home: the announcement dialog and the screen the app shows when start-up fails (the Recording
+// from sheet is in capture.dart). The Home capture surfaces themselves are in capture.dart.
 
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+
+import 'package:omi/backend/schema/conversation.dart';
+import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/models/announcement.dart';
 import 'package:omi/pages/announcements/announcement_dialog.dart';
-import 'package:omi/pages/home/widgets/battery_info_widget.dart';
+import 'package:omi/pages/search/search_page.dart';
 import 'package:omi/startup_failure_app.dart';
 
 import '../harness.dart';
 
 final homeScenarios = <AuditScenario>[
   AuditScenario(
-    id: 'home-record-options',
-    title: 'Recording source sheet',
-    page: 'lib/pages/home/widgets/battery_info_widget.dart (RecordOptionsSheet)',
-    state: 'Opened on a neutral black host; capture is not started',
+    id: 'home-search',
+    title: 'Search everything: before typing, then results for a word',
+    page: 'lib/pages/search/search_page.dart (SearchPage)',
+    state: 'Signed-in fixture account; the conversation search answers with one conversation',
     run: (a) async {
-      await a.pumpHost(
-        (context) => showModalBottomSheet(
-          context: context,
-          backgroundColor: Colors.transparent,
-          builder: (_) => RecordOptionsSheet(onPickPhoneMic: () {}, onPickPhoneCall: () {}),
+      await a.pump(
+        SearchPage(
+          searchConversations: (query) async => [
+            ServerConversation(
+              id: 'c1',
+              createdAt: DateTime(2026, 9, 24, 14, 42),
+              structured: Structured('App UX and battery', '## Summary\n**Battery drain** reports from two users'),
+              source: ConversationSource.omi,
+            ),
+          ],
         ),
-        background: Colors.black,
+        scaffold: false,
       );
-      await a.shot('Open the recording source sheet');
+      await a.shot('Open Search', step: 'idle');
+      await a.tester.enterText(find.byKey(const ValueKey('search_field')), 'battery');
+      await a.tester.pump(const Duration(milliseconds: 350));
+      await a.settle();
+      await a.shot('Search for battery', step: 'results');
     },
   ),
   AuditScenario(

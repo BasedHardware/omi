@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'package:omi/ui/feedback/omi_dialogs.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/ui/omi_tokens.dart';
 
 /// Legacy adapter over `showOmiConfirm`; new code calls that directly (docs/ux-contract.md §4).
 ///
@@ -51,7 +52,8 @@ class OmiConfirmDialog {
     return ConfirmationResult(confirmed: result.confirmed, skipFutureConfirmations: result.dontAskAgain);
   }
 
-  static bool _isDestructiveColor(Color? color) => color == null || color.toARGB32() != Colors.white.toARGB32();
+  static bool _isDestructiveColor(Color? color) =>
+      color == null || color.toARGB32() != OmiColors.textPrimary.toARGB32();
 }
 
 class ConfirmationResult {

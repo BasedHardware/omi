@@ -28,7 +28,7 @@ class _TestPromptsPageState extends State<TestPromptsPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: OmiColors.surface0,
-      appBar: AppBar(
+      appBar: OmiAppBar(
         title: Text(context.l10n.testConversationPrompt),
         backgroundColor: OmiColors.surface0,
         actions: [

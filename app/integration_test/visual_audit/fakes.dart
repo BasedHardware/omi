@@ -159,6 +159,10 @@ class InertSyncProvider extends ChangeNotifier implements SyncProvider {
   @override
   bool get isSyncing => false;
   @override
+  bool get isFetchingConversations => false;
+  @override
+  double get walsSyncedProgress => 0;
+  @override
   bool get syncCompleted => false;
   @override
   List<SyncedConversationPointer> get syncedConversationsPointers => const [];

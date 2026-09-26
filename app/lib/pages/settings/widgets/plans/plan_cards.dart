@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 
@@ -167,10 +166,10 @@ class _CheckLine extends StatelessWidget {
 
 /// A small label on a plan card ("POPULAR", "2 months free", "Active").
 class PlanBadge extends StatelessWidget {
-  const PlanBadge({super.key, required this.label, this.color = OmiColors.surface3, this.inverted = false});
+  const PlanBadge({super.key, required this.label, this.color, this.inverted = false});
 
   final String label;
-  final Color color;
+  final Color? color;
 
   /// White fill with a black label.
   final bool inverted;
@@ -179,7 +178,8 @@ class PlanBadge extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-      decoration: BoxDecoration(color: inverted ? OmiColors.accent : color, borderRadius: OmiRadius.smAll),
+      decoration: BoxDecoration(
+          color: inverted ? OmiColors.accent : (color ?? OmiColors.surface3), borderRadius: OmiRadius.smAll),
       child: Text(
         label,
         style: OmiType.caption.copyWith(
@@ -203,7 +203,7 @@ class PlanOptionShimmer extends StatelessWidget {
       child: Container(
         height: height,
         width: width,
-        decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
+        decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.smAll),
       ),
     );
   }
@@ -260,16 +260,18 @@ class PlanBillingPeriodToggle extends StatelessWidget {
           inMutuallyExclusiveGroup: true,
           child: GestureDetector(
             onTap: () {
-              HapticFeedback.lightImpact();
+              OmiHaptics.light();
               onChanged(yearly);
             },
-            child: Container(
-              constraints: const BoxConstraints(minHeight: 48),
-              padding: const EdgeInsets.symmetric(vertical: OmiSpacing.sm, horizontal: OmiSpacing.md),
+            child: AnimatedContainer(
+              duration: OmiMotion.of(context).standard,
+              curve: OmiMotion.springCurve,
+              constraints: const BoxConstraints(minHeight: 40),
+              padding: const EdgeInsets.symmetric(vertical: OmiSpacing.xs, horizontal: OmiSpacing.md),
+              // v2 segmented: the selected half is the raised thumb on the shared track.
               decoration: BoxDecoration(
-                color: OmiColors.surface1,
+                color: selected ? OmiColors.surface3 : Colors.transparent,
                 borderRadius: OmiRadius.pillAll,
-                border: Border.all(color: selected ? OmiColors.accent : Colors.transparent, width: 2),
               ),
               child: DefaultTextStyle.merge(
                 style: OmiType.subhead.copyWith(
@@ -284,24 +286,28 @@ class PlanBillingPeriodToggle extends StatelessWidget {
       );
     }
 
-    return Row(
-      children: [
-        option(
-          yearly: true,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Flexible(child: Text(context.l10n.billingYearly)),
-              if (savePercent != null) ...[
-                const SizedBox(width: OmiSpacing.xs),
-                PlanBadge(label: context.l10n.savePercent(savePercent!), color: OmiColors.successSurface),
+    // v2: Monthly | Yearly on one capsule track (44pt target).
+    return Container(
+      padding: const EdgeInsets.all(2),
+      decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.pillAll),
+      child: Row(
+        children: [
+          option(yearly: false, child: Text(context.l10n.billingMonthly, textAlign: TextAlign.center)),
+          option(
+            yearly: true,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Flexible(child: Text(context.l10n.billingYearly)),
+                if (savePercent != null) ...[
+                  const SizedBox(width: OmiSpacing.xs),
+                  PlanBadge(label: context.l10n.savePercent(savePercent!), color: OmiColors.successSurface),
+                ],
               ],
-            ],
+            ),
           ),
-        ),
-        const SizedBox(width: OmiSpacing.sm),
-        option(yearly: false, child: Text(context.l10n.billingMonthly, textAlign: TextAlign.center)),
-      ],
+        ],
+      ),
     );
   }
 }
@@ -379,14 +385,15 @@ class PlanStatusCard extends StatelessWidget {
 
 /// An icon and a sentence, used inside the plan-change dialogs.
 class PlanDialogLine extends StatelessWidget {
-  const PlanDialogLine({super.key, required this.icon, required this.text, this.color = OmiColors.textPrimary});
+  const PlanDialogLine({super.key, required this.icon, required this.text, this.color});
 
   final FaIconData icon;
   final String text;
-  final Color color;
+  final Color? color;
 
   @override
   Widget build(BuildContext context) {
+    final color = this.color ?? OmiColors.textPrimary;
     return Padding(
       padding: const EdgeInsets.only(top: OmiSpacing.xs),
       child: Row(

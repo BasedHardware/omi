@@ -23,7 +23,7 @@ class MemoryManagementSheet extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               _buildFilterSection(context),
-              const Divider(height: 1, color: OmiColors.border),
+              Divider(height: 1, color: OmiColors.border),
               _buildMemoryCount(context),
               _buildActionButtons(context),
             ],
@@ -45,9 +45,9 @@ class MemoryManagementSheet extends StatelessWidget {
         _buildCategoryFilterOption(context, context.l10n.filterSystem, MemoryCategory.system),
         _buildCategoryFilterOption(context, context.l10n.filterInteresting, MemoryCategory.interesting),
         _buildCategoryFilterOption(context, context.l10n.filterManual, MemoryCategory.manual),
-        const Padding(
-          padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-          child: Divider(height: 1, color: Colors.white10),
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+          child: Divider(height: 1, color: OmiColors.textPrimary.withValues(alpha: 0.1)),
         ),
         if (provider.memoryBeliefEnabled) ...[
           _buildFilterOption(
@@ -68,9 +68,9 @@ class MemoryManagementSheet extends StatelessWidget {
             isSelected: provider.collectionView == MemoryCollectionView.all,
             onTap: () => provider.setCollectionView(MemoryCollectionView.all),
           ),
-          const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-            child: Divider(height: 1, color: Colors.white10),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
+            child: Divider(height: 1, color: OmiColors.textPrimary.withValues(alpha: 0.1)),
           ),
         ],
         _buildFilterOption(
@@ -132,7 +132,7 @@ class MemoryManagementSheet extends StatelessWidget {
                     style: OmiType.callout.copyWith(fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400),
                   ),
                 ),
-                if (isSelected) const Icon(Icons.check, color: OmiColors.accent, size: 20),
+                if (isSelected) Icon(Icons.check, color: OmiColors.accent, size: 20),
               ],
             ),
           ),
@@ -198,7 +198,7 @@ class MemoryManagementSheet extends StatelessWidget {
             },
           ),
           const SizedBox(height: 24),
-          const Divider(height: 1, color: OmiColors.border),
+          Divider(height: 1, color: OmiColors.border),
           const SizedBox(height: 24),
           OmiButton.destructive(
             label: context.l10n.deleteAllMemories,

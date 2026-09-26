@@ -487,4 +487,3 @@ Reference: `renders/{se,mini,iphone16,max}/{dark,light}/Complete.webp`, `specs/g
 | # | Control | Shown when | Production behaviour | Goes to | Transition |
 |---|---|---|---|---|---|
 | 1 | Start Using Omi | always | Persist completion, then replace the root with the tab shell on Home. The Omi mark flies into Home's status pill (0.5 s spring); Home content staggers in. | `Main` | replace root |
-

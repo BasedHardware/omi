@@ -21,13 +21,13 @@ class RecordingListItem extends StatelessWidget {
     final l = context.l10n;
     switch (recording.state) {
       case LocalRecordingState.uploading:
-        return (Colors.grey.shade300, l.syncStatusBackingUp);
+        return (OmiColors.textSecondary, l.syncStatusBackingUp);
       case LocalRecordingState.processing:
-        return (Colors.grey.shade400, l.syncStatusUploaded);
+        return (OmiColors.textSecondary, l.syncStatusUploaded);
       case LocalRecordingState.failed:
         return (OmiColors.danger, l.failedStatus);
       case LocalRecordingState.pending:
-        return (Colors.grey.shade500, l.privateAndSecureOnDevice);
+        return (OmiColors.textTertiary, l.privateAndSecureOnDevice);
     }
   }
 
@@ -43,7 +43,7 @@ class RecordingListItem extends StatelessWidget {
           padding: const EdgeInsets.only(top: 12, left: 16, right: 16),
           child: Container(
             width: double.maxFinite,
-            decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.xlAll),
+            decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.xlAll),
             child: ClipRRect(
               borderRadius: OmiRadius.xlAll,
               child: Dismissible(
@@ -75,8 +75,8 @@ class RecordingListItem extends StatelessWidget {
                         Container(
                           width: 40,
                           height: 40,
-                          decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
-                          child: Icon(Icons.graphic_eq, color: Colors.grey.shade400, size: 20),
+                          decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
+                          child: Icon(Icons.graphic_eq, color: OmiColors.textSecondary, size: 20),
                         ),
                         const SizedBox(width: 14),
                         Expanded(

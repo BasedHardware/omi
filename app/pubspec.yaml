@@ -207,6 +207,7 @@ flutter:
     - assets/images/herologo.png
     - assets/fonts/
     - assets/images/
+    - assets/icons/
     - assets/integration_app_logos/
     - assets/competitor-logos/
     - shorebird.yaml

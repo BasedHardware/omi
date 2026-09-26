@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/widgets/omi_confirm_dialog.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/ui/omi_tokens.dart';
 
 /// Confirmation gate for manually syncing offline recordings.
 ///
@@ -24,7 +25,7 @@ Future<bool> confirmSyncForCustomStt(BuildContext context) async {
     message: l.syncCustomSttWarningMessage,
     confirmLabel: l.sync,
     cancelLabel: l.cancel,
-    confirmColor: Colors.white,
+    confirmColor: OmiColors.textPrimary,
   );
   return confirmed ?? false;
 }

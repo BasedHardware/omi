@@ -21,6 +21,7 @@ import 'package:provider/provider.dart';
 
 import 'package:omi/app_globals.dart';
 import 'package:omi/l10n/app_localizations.dart';
+import 'package:omi/ui/omi_tokens.dart';
 
 import '../journeys/support/fixture_backend.dart';
 import '../journeys/support/hermetic_boot.dart';
@@ -262,6 +263,8 @@ void runAuditScenarios(AuditSuite suite, {List<AuditScenario>? only, Directory? 
   final frames = <Map<String, Object?>>[];
   setUpAll(() async {
     HttpOverrides.global = LoopbackOnly();
+    // OMI_AUDIT_THEME=light captures every scenario in the light palette (Settings → Appearance).
+    OmiColors.use(Platform.environment['OMI_AUDIT_THEME'] == 'light' ? OmiPalette.light : OmiPalette.dark);
     await _loadFonts();
     _outputDir = output?..createSync(recursive: true);
   });

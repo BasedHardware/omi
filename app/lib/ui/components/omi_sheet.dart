@@ -5,7 +5,7 @@ import 'package:omi/ui/omi_tokens.dart';
 
 /// Shows a modal bottom sheet in the app's one sheet shell and returns its result.
 ///
-/// The shell: [OmiColors.surface1] with 24pt top corners, the framework drag handle (36x4, which
+/// The shell: [OmiColors.sheet] with 40pt (iOS) / 28pt (Android) top corners, the framework drag handle (36x4, which
 /// screen readers can activate to dismiss), an optional title row with a trailing
 /// [OmiCloseButton], bottom safe-area padding, and padding for the keyboard so text fields stay
 /// visible. Content that does not fit scrolls if it is (or contains) a scrollable; wrap a long
@@ -45,8 +45,8 @@ Future<T?> showOmiSheet<T>({
     routeSettings: routeSettings,
     // Size (36x4) and colour come from the app theme's bottomSheetTheme (buildOmiTheme).
     showDragHandle: true,
-    backgroundColor: OmiColors.surface1,
-    shape: const RoundedRectangleBorder(borderRadius: OmiRadius.sheetTop),
+    backgroundColor: OmiColors.sheet,
+    shape: RoundedRectangleBorder(borderRadius: OmiRadius.sheetTopFor(Theme.of(context).platform)),
     clipBehavior: Clip.antiAlias,
     builder: (sheetContext) => OmiSheetScaffold(
       title: title,

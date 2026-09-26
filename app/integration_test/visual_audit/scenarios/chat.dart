@@ -60,12 +60,13 @@ final chatScenarios = <AuditScenario>[
       final memories = MemoriesProvider();
       await a.tester.runAsync(() => memories.createMemory('I prefer morning meetings.', MemoryVisibility.private));
       await a.pump(const ChatPage(), providers: [ChangeNotifierProvider<MemoriesProvider>.value(value: memories)]);
-      expect(find.text('Summarize my recent activity'), findsOneWidget);
-      expect(find.text('How can I improve?'), findsOneWidget);
+      expect(find.text('Summarize today'), findsOneWidget);
+      expect(find.text('Who did I meet?'), findsOneWidget);
+      expect(find.text("What's still open?"), findsOneWidget);
       expect(find.text('What can you do for me?'), findsNothing);
       await a.shot('Open empty chat with a saved memory');
-      await a.tap(find.byKey(const Key('chat_starter_activity')));
-      expect(_composer(a), 'Summarize my recent activity');
+      await a.tap(find.byKey(const Key('chat_starter_today')));
+      expect(_composer(a), 'Summarize today');
       expect(a.server.countOf('POST', '/v2/messages'), 0);
     },
   ),

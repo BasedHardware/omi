@@ -5,6 +5,7 @@
 #   app/scripts/visual_audit.sh --base <rev> --head <rev> [--only id,id] [--out DIR]
 #   app/scripts/visual_audit.sh --head WORKTREE [--only ...]   # this checkout as it is, one side
 #   app/scripts/visual_audit.sh --list
+#   OMI_AUDIT_THEME=light app/scripts/visual_audit.sh ...   # capture in the light palette
 #
 # Each revision is checked out in a temporary detached worktree under $OMI_WORKTREES (default:
 # the system temp dir), prepared like CI (generated files, pub get, build_runner), and removed on
@@ -133,7 +134,7 @@ capture() {
   echo "[$side] capturing"
   (
     cd "$app"
-    OMI_AUDIT_OUTPUT="$out/$side" OMI_AUDIT_ONLY="$only" \
+    OMI_AUDIT_OUTPUT="$out/$side" OMI_AUDIT_ONLY="$only" OMI_AUDIT_THEME="${OMI_AUDIT_THEME:-dark}" \
       flutter test -d flutter-tester --concurrency=1 integration_test/visual_audit/capture_test.dart --reporter expanded
   ) > "$out/$side/capture.log" 2>&1 || status=$?
   ((status == 0)) || echo "[$side] some scenarios failed (exit $status): $out/$side/capture.log" >&2

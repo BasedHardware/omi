@@ -38,6 +38,8 @@ void main() {
 
   testWidgets('a failed daily summary toggle puts the switch back', (tester) async {
     await _pumpPage(tester);
+    // The daily summary group sits under the six frequency levels.
+    await tester.scrollUntilVisible(find.byType(Switch), 200, scrollable: find.byType(Scrollable).first);
     expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
 
     await tester.tap(find.byType(Switch));
@@ -47,15 +49,22 @@ void main() {
     expect(tester.widget<Switch>(find.byType(Switch)).value, isTrue);
   });
 
+  bool ticked(WidgetTester tester, int level) => find
+      .descendant(of: find.byKey(ValueKey('notification_frequency_$level')), matching: find.byIcon(Icons.check_rounded))
+      .evaluate()
+      .isNotEmpty;
+
   testWidgets('a failed frequency change keeps the saved frequency', (tester) async {
     await _pumpPage(tester);
-    expect(tester.widget<Slider>(find.byType(Slider)).value, 2);
+    expect(ticked(tester, 2), isTrue);
 
-    tester.widget<Slider>(find.byType(Slider)).onChanged!(4);
+    await tester.ensureVisible(find.byKey(const ValueKey('notification_frequency_4')));
+    await tester.tap(find.byKey(const ValueKey('notification_frequency_4')));
     await tester.runAsync(() => Future<void>.delayed(const Duration(milliseconds: 200)));
     await tester.pump();
 
-    expect(tester.widget<Slider>(find.byType(Slider)).value, 2);
+    expect(ticked(tester, 2), isTrue);
+    expect(ticked(tester, 4), isFalse);
     expect(SharedPreferencesUtil().notificationFrequency, 2);
   });
 }

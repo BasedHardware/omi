@@ -89,9 +89,12 @@ class _ConversationTitleFieldState extends State<ConversationTitleField> {
   @override
   Widget build(BuildContext context) {
     return TextField(
+      // v2: the title wraps like a heading (up to three lines); Return still means Done, so a
+      // title never gets a newline.
       keyboardType: TextInputType.text,
       textInputAction: TextInputAction.done,
-      maxLines: 1,
+      minLines: 1,
+      maxLines: 3,
       focusNode: widget.focusNode,
       controller: widget.controller,
       onSubmitted: (_) => widget.focusNode?.unfocus(),
@@ -537,15 +540,15 @@ extension _AppResultDetailWidgetSliver on _AppResultDetailWidgetState {
         imageUrl: app.getImageUrl(),
         imageBuilder: (context, imageProvider) =>
             CircleAvatar(backgroundColor: OmiColors.textPrimary, radius: avatarRadius, backgroundImage: imageProvider),
-        errorWidget: (context, url, error) => const CircleAvatar(
+        errorWidget: (context, url, error) => CircleAvatar(
           backgroundColor: OmiColors.textPrimary,
           radius: avatarRadius,
-          child: Icon(Icons.error_outline_rounded, size: 12),
+          child: const Icon(Icons.error_outline_rounded, size: 12),
         ),
-        progressIndicatorBuilder: (context, url, progress) => const CircleAvatar(
+        progressIndicatorBuilder: (context, url, progress) => CircleAvatar(
           backgroundColor: OmiColors.surface2,
           radius: avatarRadius,
-          child: OmiSpinner(size: OmiSpinnerSize.small),
+          child: const OmiSpinner(size: OmiSpinnerSize.small),
         ),
       );
     } else {
@@ -557,7 +560,7 @@ extension _AppResultDetailWidgetSliver on _AppResultDetailWidgetState {
         height: 24,
         width: 24,
         alignment: Alignment.center,
-        child: Image.asset(Assets.images.herologo.path, height: 16, width: 16),
+        child: Image.asset(Assets.images.herologo.path, height: 16, width: 16, color: OmiColors.textPrimary),
       );
     }
 
@@ -595,7 +598,7 @@ extension _AppResultDetailWidgetSliver on _AppResultDetailWidgetState {
                   ],
                 ),
               ),
-              const SizedBox(
+              SizedBox(
                 width: 42,
                 child: Icon(Icons.arrow_forward_ios, color: OmiColors.textPrimary, size: 20),
               ),

@@ -144,7 +144,7 @@ class _PermissionsPageState extends State<PermissionsPage> with WidgetsBindingOb
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.permissions)),
+      appBar: OmiAppBar(leading: const OmiBackButton(), title: Text(context.l10n.permissions)),
       body: _isLoading
           ? const OmiLoadingState()
           : ListView(

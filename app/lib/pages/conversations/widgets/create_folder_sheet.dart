@@ -1,6 +1,5 @@
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
 import 'package:provider/provider.dart';
@@ -234,7 +233,7 @@ class _CreateFolderBottomSheetState extends State<CreateFolderBottomSheet> {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () {
-          HapticFeedback.selectionClick();
+          OmiHaptics.selection();
           setState(() => _selectedIcon = icon);
         },
         // 40pt tile inside a 44pt target.
@@ -269,7 +268,7 @@ class _CreateFolderBottomSheetState extends State<CreateFolderBottomSheet> {
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: () {
-          HapticFeedback.selectionClick();
+          OmiHaptics.selection();
           setState(() => _selectedColor = color);
         },
         // 32pt swatch inside a 44pt target.
@@ -281,9 +280,9 @@ class _CreateFolderBottomSheetState extends State<CreateFolderBottomSheet> {
             decoration: BoxDecoration(
               color: color,
               shape: BoxShape.circle,
-              border: Border.all(color: isSelected ? Colors.white : Colors.transparent, width: 2),
+              border: Border.all(color: isSelected ? OmiColors.textPrimary : Colors.transparent, width: 2),
             ),
-            child: isSelected ? const Icon(Icons.check, color: Colors.white, size: 16) : null,
+            child: isSelected ? Icon(Icons.check, color: OmiColors.textPrimary, size: 16) : null,
           ),
         ),
       ),

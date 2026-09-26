@@ -41,7 +41,7 @@ class _CustomVocabularyPageState extends State<CustomVocabularyPage> {
 
     return Container(
       padding: const EdgeInsets.all(OmiSpacing.md),
-      decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
+      decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -51,8 +51,8 @@ class _CustomVocabularyPageState extends State<CustomVocabularyPage> {
               Container(
                 width: 40,
                 height: 40,
-                decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
-                child: const Center(child: FaIcon(FontAwesomeIcons.book, color: OmiColors.textSecondary, size: 16)),
+                decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
+                child: Center(child: FaIcon(FontAwesomeIcons.book, color: OmiColors.textSecondary, size: 16)),
               ),
               const SizedBox(width: 14),
               Expanded(
@@ -70,7 +70,7 @@ class _CustomVocabularyPageState extends State<CustomVocabularyPage> {
                           excludeSemantics: true,
                           child: Container(
                             padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xs, vertical: OmiSpacing.xxs),
-                            decoration: const BoxDecoration(color: OmiColors.surface3, borderRadius: OmiRadius.smAll),
+                            decoration: BoxDecoration(color: OmiColors.surface3, borderRadius: OmiRadius.smAll),
                             child: Text(
                               '${words.length}',
                               style: OmiType.caption.copyWith(
@@ -107,7 +107,7 @@ class _CustomVocabularyPageState extends State<CustomVocabularyPage> {
                     contentPadding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: 14),
                     border: const OutlineInputBorder(borderRadius: OmiRadius.mdAll, borderSide: BorderSide.none),
                     enabledBorder: const OutlineInputBorder(borderRadius: OmiRadius.mdAll, borderSide: BorderSide.none),
-                    focusedBorder: const OutlineInputBorder(
+                    focusedBorder: OutlineInputBorder(
                       borderRadius: OmiRadius.mdAll,
                       borderSide: BorderSide(color: OmiColors.border),
                     ),
@@ -136,7 +136,7 @@ class _CustomVocabularyPageState extends State<CustomVocabularyPage> {
           // Words chips section
           if (words.isNotEmpty) ...[
             const SizedBox(height: OmiSpacing.lg),
-            const Divider(height: 1, color: OmiColors.border),
+            Divider(height: 1, color: OmiColors.border),
             const SizedBox(height: OmiSpacing.md),
             Wrap(
               spacing: OmiSpacing.xs,
@@ -161,7 +161,7 @@ class _CustomVocabularyPageState extends State<CustomVocabularyPage> {
                         ),
                       ),
                       if (isPendingDelete)
-                        const SizedBox(
+                        SizedBox(
                           width: kOmiMinTapTarget,
                           height: kOmiMinTapTarget,
                           child: Center(child: OmiSpinner(size: OmiSpinnerSize.small, color: OmiColors.textTertiary)),
@@ -249,7 +249,7 @@ class _CustomVocabularyPageState extends State<CustomVocabularyPage> {
     return GestureDetector(
       onTap: () => FocusScope.of(context).unfocus(),
       child: Scaffold(
-        appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.customVocabularyTitle)),
+        appBar: OmiAppBar(leading: const OmiBackButton(), title: Text(context.l10n.customVocabularyTitle)),
         body: Consumer<UserProvider>(
           builder: (context, userProvider, _) {
             return SingleChildScrollView(

@@ -322,4 +322,3 @@ Reference: `renders/{se,mini,iphone16,max}/{dark,light}/Sync.webp`, `specs/geome
 
 - Delete/acknowledge pendant data only after durable local save + server receipt.
 - States are separate labels; never merge “uploaded” into “ready”.
-

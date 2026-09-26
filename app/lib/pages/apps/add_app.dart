@@ -156,7 +156,7 @@ class _AddAppPageState extends State<AddAppPage> {
       builder: (context, provider, child) {
         return Scaffold(
           backgroundColor: OmiColors.surface0,
-          appBar: AppBar(
+          appBar: OmiAppBar(
             leading: const OmiBackButton(),
             title: Text(l10n.submitApp),
             backgroundColor: OmiColors.surface0,
@@ -338,7 +338,7 @@ class _AddAppPageState extends State<AddAppPage> {
                               AppFormCard(
                                 child: Row(
                                   children: [
-                                    const Text('\$', style: OmiType.title3),
+                                    Text('\$', style: OmiType.title3),
                                     const SizedBox(width: OmiSpacing.xs),
                                     Expanded(
                                       child: TextField(

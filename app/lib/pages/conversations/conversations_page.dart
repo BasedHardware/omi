@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 
 import 'package:provider/provider.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
@@ -9,7 +8,6 @@ import 'package:visibility_detector/visibility_detector.dart';
 
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/pages/capture/widgets/widgets.dart';
-import 'package:omi/pages/conversations/conversation_map_page.dart';
 import 'package:omi/pages/conversations/widgets/folder_tabs.dart';
 import 'package:omi/pages/conversations/widgets/goals_widget.dart';
 import 'package:omi/pages/conversations/widgets/capture_recovery_banner.dart';
@@ -40,7 +38,6 @@ import 'package:omi/pages/conversations/widgets/date_list_item.dart';
 import 'package:omi/pages/conversations/widgets/empty_conversations.dart';
 import 'package:omi/pages/conversations/widgets/recording_list_item.dart';
 import 'package:omi/ui/ui.dart';
-import 'package:omi/utils/other/temp.dart';
 import 'package:omi/widgets/bottom_nav_bar.dart';
 
 enum _ConversationListRowKind {
@@ -471,7 +468,10 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
   // folder-tab chips would hide on empty filtered results, leaving no way to
   // clear filters short of restarting the app.
   bool _hasActiveFilter(ConversationProvider provider) {
-    return provider.showStarredOnly || provider.selectedFolderId != null || provider.selectedStartDate != null;
+    return provider.showStarredOnly ||
+        provider.selectedFolderId != null ||
+        provider.selectedStartDate != null ||
+        provider.sourceFilter != ConversationSourceFilter.all;
   }
 
   Widget _buildNoConversationsHero(BuildContext context) {
@@ -565,7 +565,7 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
 
         return RefreshIndicator(
           onRefresh: () async {
-            HapticFeedback.mediumImpact();
+            OmiHaptics.medium();
             _lastLoadMoreRequestKey = null;
             Provider.of<CaptureProvider>(context, listen: false).refreshInProgressConversations();
             // Refresh goals widget
@@ -586,6 +586,21 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
             controller: _scrollController,
             physics: const AlwaysScrollableScrollPhysics(),
             slivers: [
+              // v2 Conversations: the large title, then search, then the folder chips.
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(OmiSize.screenMargin, 0, OmiSize.screenMargin, OmiSpacing.xs),
+                  child: Semantics(
+                    header: true,
+                    child: Text(
+                      context.l10n.conversations,
+                      style: OmiType.largeTitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+              ),
               // Header widgets (unchanged)
               const SliverToBoxAdapter(child: SpeechProfileCardWidget()),
               const SliverToBoxAdapter(child: UpdateFirmwareCardWidget()),
@@ -595,18 +610,9 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               const SliverToBoxAdapter(child: PendingTranscriptionsBanner()),
               const SliverToBoxAdapter(child: CaptureRecoveryBanner()),
 
-              // Search bar
-              Selector<HomeProvider, bool>(
-                selector: (_, homeProvider) => homeProvider.showConvoSearchBar,
-                builder: (context, showConvoSearchBar, _) {
-                  bool shouldShowSearchBar = showConvoSearchBar || convoProvider.previousQuery.isNotEmpty;
-                  if (!shouldShowSearchBar) {
-                    return const SliverToBoxAdapter(child: SizedBox.shrink());
-                  }
-                  return const SliverToBoxAdapter(
-                    child: Column(children: [SizedBox(height: 12), SearchWidget(), SizedBox(height: 12)]),
-                  );
-                },
+              // Search bar: always visible under the title (v2).
+              const SliverToBoxAdapter(
+                child: Padding(padding: EdgeInsets.only(bottom: OmiSpacing.xs), child: SearchWidget()),
               ),
               const SliverToBoxAdapter(child: SearchResultHeaderWidget()),
 
@@ -640,41 +646,6 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
               // One date filter, shown as a removable chip (hub audit #23).
               const SliverToBoxAdapter(child: ConversationDateFilterChip()),
 
-              // Section header. Hidden entirely when the user has zero
-              // non-discarded conversations — those users get the
-              // empty-state hero below instead. Daily Recaps is its own page.
-              // A pending Process Now row still counts: it lands in this list.
-              if (_nonDiscardedConversationCount(convoProvider) > 0 ||
-                  hasProcessingConversations ||
-                  isShowingConversationSkeleton ||
-                  _hasActiveFilter(convoProvider))
-                SliverToBoxAdapter(
-                  child: Builder(
-                    builder: (context) => Padding(
-                      padding: const EdgeInsets.only(left: 24, right: 16, top: 16, bottom: 8),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Semantics(
-                            header: true,
-                            child: Text(context.l10n.conversations, style: OmiType.headline),
-                          ),
-                          OmiIconButton(
-                            key: const Key('conversation_map_button'),
-                            label: context.l10n.conversationMap,
-                            icon: const Icon(Icons.map_outlined),
-                            onPressed: () => routeToPage(
-                              context,
-                              ConversationMapPage(conversations: convoProvider.displayedConversations),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-
               // Folder tabs - hide when the user has no conversations yet
               // (matches the title). Keep chips visible whenever a filter is
               // active so the user can always clear it, even when the
@@ -695,6 +666,8 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                         },
                         showStarredOnly: convoProvider.showStarredOnly,
                         onStarredToggle: convoProvider.toggleStarredFilter,
+                        sourceFilter: convoProvider.sourceFilter,
+                        onSourceSelected: convoProvider.setSourceFilter,
                       ),
                     );
                   },
@@ -728,7 +701,10 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                   child: Center(
                     child: Padding(
                       padding: const EdgeInsets.only(top: 32.0),
-                      child: EmptyConversationsWidget(isStarredFilterActive: convoProvider.showStarredOnly),
+                      child: EmptyConversationsWidget(
+                        isStarredFilterActive: convoProvider.showStarredOnly,
+                        isSourceFilterActive: convoProvider.sourceFilter != ConversationSourceFilter.all,
+                      ),
                     ),
                   ),
                 )
@@ -775,11 +751,25 @@ class _ConversationsPageState extends State<ConversationsPage> with AutomaticKee
                           gap: row.captureGap!,
                         );
                       case _ConversationListRowKind.conversation:
+                        // v2 day cards: neighbouring conversation rows share one card.
+                        bool isConversation(int i) =>
+                            i >= 0 &&
+                            i < conversationRows.length &&
+                            conversationRows[i].kind == _ConversationListRowKind.conversation;
+                        final first = !isConversation(index - 1);
+                        final last = !isConversation(index + 1);
                         return ConversationListItem(
                           key: ValueKey(row.conversation!.id),
                           conversation: row.conversation!,
                           conversationIdx: row.conversationIndex,
                           date: row.date,
+                          position: first && last
+                              ? ConversationRowPosition.only
+                              : first
+                                  ? ConversationRowPosition.first
+                                  : last
+                                      ? ConversationRowPosition.last
+                                      : ConversationRowPosition.middle,
                         );
                       case _ConversationListRowKind.recording:
                         return RecordingListItem(key: ValueKey('rec_${row.recording!.id}'), recording: row.recording!);

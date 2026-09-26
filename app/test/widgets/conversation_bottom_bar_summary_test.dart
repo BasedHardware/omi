@@ -6,6 +6,7 @@ import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversation_detail/conversation_detail_provider.dart';
+import 'package:omi/pages/conversation_detail/widgets/summary_style_row.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/widgets/conversation_bottom_bar.dart';
 
@@ -58,16 +59,27 @@ Future<void> _pumpBar(
 }
 
 void main() {
-  testWidgets('unattributed app output keeps Unknown App chrome in the summary pill', (tester) async {
+  testWidgets('unattributed app output reads Unknown App in the Summary style row', (tester) async {
     final provider = _provider(_conversation(appResults: [AppResponse('Imported app output.')]));
     addTearDown(provider.dispose);
 
-    await _pumpBar(tester, provider);
+    // v2: which app wrote the summary moved from the old floating pill to the Summary style row.
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: ThemeData.dark(),
+        localizationsDelegates: AppLocalizations.localizationsDelegates,
+        supportedLocales: AppLocalizations.supportedLocales,
+        home: ChangeNotifierProvider<ConversationDetailProvider>.value(
+          value: provider,
+          child: const Scaffold(body: SummaryStyleRow()),
+        ),
+      ),
+    );
+    await tester.pump();
 
-    // The full name is the text; the pill ellipsizes it by layout, never with a hand-made "...".
+    expect(find.text('Summary style'), findsOneWidget);
     expect(find.text('Unknown App'), findsOneWidget);
-    expect(find.byIcon(Icons.apps_outlined), findsOneWidget);
-    expect(find.text('Summary'), findsNothing);
+    expect(find.text('Default'), findsNothing);
   });
 
   testWidgets('transcript playback intent suppresses reviews even if audio is unavailable', (tester) async {

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/gen/assets.gen.dart';
 import 'package:omi/utils/device.dart';
+import 'package:omi/ui/omi_tokens.dart';
 
 class DeviceAnimationWidget extends StatefulWidget {
   final bool animatedBackground;
@@ -104,8 +105,8 @@ class _DeviceAnimationWidgetState extends State<DeviceAnimationWidget> with Tick
               height: imageHeight * 0.06,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: Colors.blue.withValues(alpha: 0.8),
-                boxShadow: [BoxShadow(color: Colors.blue.withValues(alpha: 0.5), blurRadius: 8, spreadRadius: 2)],
+                color: OmiColors.live.withValues(alpha: 0.8),
+                boxShadow: [BoxShadow(color: OmiColors.live.withValues(alpha: 0.5), blurRadius: 8, spreadRadius: 2)],
               ),
             ),
           ),

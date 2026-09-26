@@ -50,14 +50,14 @@ class PopularAppsSection extends StatelessWidget {
                 children: [
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                    decoration: const BoxDecoration(color: OmiColors.surface3, borderRadius: OmiRadius.smAll),
+                    decoration: BoxDecoration(color: OmiColors.surface3, borderRadius: OmiRadius.smAll),
                     child: Text(
                       '${apps.length}',
                       style: OmiType.caption.copyWith(color: OmiColors.textSecondary, fontWeight: FontWeight.w600),
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Icon(Icons.chevron_right, color: Colors.grey.shade400, size: 16),
+                  Icon(Icons.chevron_right, color: OmiColors.textSecondary, size: 16),
                 ],
               ),
             ],
@@ -98,7 +98,7 @@ class PopularAppsSection extends StatelessWidget {
                       child: Container(
                         width: 60,
                         height: 60,
-                        decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
+                        decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
                         child: CachedNetworkImage(
                           imageUrl: app.getImageUrl(),
                           httpHeaders: const {
@@ -112,11 +112,11 @@ class PopularAppsSection extends StatelessWidget {
                             child: Container(
                               width: double.infinity,
                               height: double.infinity,
-                              decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
+                              decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.mdAll),
                             ),
                           ),
                           errorWidget: (context, url, error) =>
-                              const Icon(Icons.apps, size: 30, color: OmiColors.textTertiary),
+                              Icon(Icons.apps, size: 30, color: OmiColors.textTertiary),
                         ),
                       ),
                     ),
@@ -145,7 +145,7 @@ class PopularAppsSection extends StatelessWidget {
                             const SizedBox(height: 4),
                             Row(
                               children: [
-                                const Icon(Icons.star_rounded, color: Colors.white, size: 14),
+                                Icon(Icons.star_rounded, color: OmiColors.textPrimary, size: 14),
                                 const SizedBox(width: 4),
                                 Text(
                                   app.getRatingAvg()!,

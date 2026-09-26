@@ -163,7 +163,7 @@ void main() {
   testWidgets('a still-retryable recording keeps its Retry affordance', (tester) async {
     await pumpRow(tester, makeWal(WalStatus.miss)..retryCount = walMaxAutoRetries);
 
-    expect(find.text('Failed — tap Retry'), findsOneWidget);
+    expect(find.text('Failed — tap Try Again'), findsOneWidget);
     expect(find.text('Try Again'), findsOneWidget);
     expect(find.text('Delete'), findsNothing, reason: 'a deliberate retry can still succeed here');
   });
@@ -173,7 +173,7 @@ void main() {
 
     expect(find.text("Audio couldn't be read — can't be synced"), findsOneWidget);
     expect(find.text('Try Again'), findsNothing);
-    expect(find.text('Failed — tap Retry'), findsNothing);
+    expect(find.text('Failed — tap Try Again'), findsNothing);
     expect(find.text('Delete'), findsOneWidget);
   });
 

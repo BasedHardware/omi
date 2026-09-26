@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import 'package:omi/backend/http/shared.dart';
 import 'package:omi/env/env.dart';
+import 'package:omi/ui/omi_tokens.dart';
 
 /// Resolves the Authorization header for proxy image requests. Injectable so
 /// tests can control when the header arrives (or never does).
@@ -53,7 +54,7 @@ class OmiMapPreview extends StatefulWidget {
   const OmiMapPreview({
     super.key,
     required this.pins,
-    this.backgroundColor = const Color(0xFF1A1A1F),
+    this.backgroundColor,
     this.imageUrl,
     this.authHeaderProvider,
   });
@@ -61,7 +62,8 @@ class OmiMapPreview extends StatefulWidget {
   final List<OmiMapPin> pins;
 
   /// Canvas color used for the loading/fallback render and image letterboxing.
-  final Color backgroundColor;
+  /// Behind the pins while the map loads; [OmiColors.surface1] by default.
+  final Color? backgroundColor;
 
   /// Pre-built image URL. Tests use this to avoid the network; production
   /// callers leave it null so [buildOmiStaticMapUrl] builds the proxy URL.
@@ -100,7 +102,7 @@ class _OmiMapPreviewState extends State<OmiMapPreview> {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final fallback = _PinDotsCanvas(pins: widget.pins, color: widget.backgroundColor);
+        final fallback = _PinDotsCanvas(pins: widget.pins, color: widget.backgroundColor ?? OmiColors.surface1);
         final width = constraints.maxWidth;
         final height = constraints.maxHeight;
         if (widget.pins.isEmpty || !width.isFinite || !height.isFinite || width <= 0 || height <= 0) {
@@ -219,7 +221,7 @@ class _PinDotsPainter extends CustomPainter {
       scale = math.min(usable.width / lngSpanProjected, usable.height / latSpan);
     }
 
-    final dot = Paint()..color = Colors.white;
+    final dot = Paint()..color = OmiColors.textPrimary;
     final outline = Paint()
       ..color = Colors.black
       ..style = PaintingStyle.stroke

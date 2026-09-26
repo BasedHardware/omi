@@ -52,7 +52,7 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
     const size = 256.0;
 
     // Draw white background
-    final bgPaint = Paint()..color = Colors.white;
+    final bgPaint = Paint()..color = OmiColors.textPrimary;
     canvas.drawRect(const Rect.fromLTWH(0, 0, size, size), bgPaint);
 
     // Draw emoji text
@@ -291,7 +291,7 @@ class _CreateTemplateBottomSheetState extends State<CreateTemplateBottomSheet> {
                 const SizedBox(height: OmiSpacing.lg),
                 Container(
                   padding: const EdgeInsets.all(OmiSpacing.md),
-                  decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
+                  decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
                   child: Row(
                     children: [
                       FaIcon(

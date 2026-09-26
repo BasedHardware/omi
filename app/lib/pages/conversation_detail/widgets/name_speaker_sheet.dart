@@ -217,7 +217,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
                       _buildUntaggedSegments(),
                       const SizedBox(height: 8),
                       if (_saveFailed)
-                        Text(context.l10n.somethingWentWrong, style: const TextStyle(color: Colors.white70)),
+                        Text(context.l10n.somethingWentWrong, style: TextStyle(color: OmiColors.textSecondary)),
                       _buildSaveButton(),
                       const SizedBox(height: OmiSpacing.md),
                     ],
@@ -278,9 +278,9 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
             hintText: context.l10n.enterPersonsName,
             filled: true,
             contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-            fillColor: Colors.grey[900],
+            fillColor: OmiColors.surface1,
             border: const OutlineInputBorder(borderRadius: OmiRadius.smAll, borderSide: BorderSide.none),
-            hintStyle: const TextStyle(color: Colors.grey),
+            hintStyle: TextStyle(color: OmiColors.textTertiary),
             errorText: _duplicateNameError,
           ),
         ),
@@ -293,7 +293,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
               setAllowSave(selectedPerson.isNotEmpty);
             });
           },
-          child: Text(context.l10n.cancel, style: const TextStyle(color: Colors.white)),
+          child: Text(context.l10n.cancel, style: TextStyle(color: OmiColors.textPrimary)),
         ),
       ],
     );
@@ -395,7 +395,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
           controlAffinity: ListTileControlAffinity.leading,
           dense: true,
           activeColor: Theme.of(context).colorScheme.secondary,
-          checkColor: Colors.white,
+          checkColor: OmiColors.textPrimary,
           contentPadding: EdgeInsets.zero,
           secondary: InkWell(
             onTap: () {
@@ -451,7 +451,7 @@ class _NameSpeakerBottomSheetState extends State<NameSpeakerBottomSheet> {
                   controlAffinity: ListTileControlAffinity.leading,
                   dense: true,
                   activeColor: Theme.of(context).colorScheme.secondary,
-                  checkColor: Colors.white,
+                  checkColor: OmiColors.textPrimary,
                 );
               },
             ),

@@ -11,6 +11,7 @@ import 'package:omi/providers/user_provider.dart';
 import 'package:omi/pages/onboarding/widgets/onboarding_card.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
+import 'package:omi/utils/language_autonyms.dart';
 import 'package:omi/utils/logger.dart';
 
 class PrimaryLanguageWidget extends StatefulWidget {
@@ -22,107 +23,14 @@ class PrimaryLanguageWidget extends StatefulWidget {
   State<PrimaryLanguageWidget> createState() => _PrimaryLanguageWidgetState();
 }
 
-class LanguageSelectorWidget extends StatefulWidget {
-  final Map<String, String> availableLanguages;
-  final String? selectedLanguage;
-  final String? selectedLanguageName;
-  final ScrollController languageScrollController;
-  final Function(String?, String?) onLanguageSelected;
-
-  const LanguageSelectorWidget({
-    super.key,
-    required this.availableLanguages,
-    this.selectedLanguage,
-    this.selectedLanguageName,
-    required this.languageScrollController,
-    required this.onLanguageSelected,
-  });
-
-  @override
-  State<LanguageSelectorWidget> createState() => _LanguageSelectorWidgetState();
-}
-
-class _LanguageSelectorWidgetState extends State<LanguageSelectorWidget> {
-  late List<MapEntry<String, String>> languages;
-  late List<MapEntry<String, String>> filteredLanguages;
-  String searchQuery = '';
-  String? currentSelectedLanguage;
-
-  @override
-  void initState() {
-    super.initState();
-    languages = widget.availableLanguages.entries.toList();
-    filteredLanguages = List.from(languages);
-    currentSelectedLanguage = widget.selectedLanguage;
-  }
-
-  void filterLanguages(String query) {
-    Logger.debug(query);
-    setState(() {
-      searchQuery = query.toLowerCase();
-      if (query.isEmpty) {
-        filteredLanguages = List.from(languages);
-      } else {
-        filteredLanguages = languages.where((lang) {
-          return lang.key.toLowerCase().contains(searchQuery) || lang.value.toLowerCase().contains(searchQuery);
-        }).toList();
-      }
-
-      // Debug print to verify filtering
-      Logger.debug('Search query: $searchQuery, Found ${filteredLanguages.length} languages');
-      for (var lang in filteredLanguages) {
-        Logger.debug('Filtered language: ${lang.key} (${lang.value})');
-      }
-    });
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return SizedBox(
-      height: MediaQuery.sizeOf(context).height * 0.7,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Text(context.l10n.languageBenefits, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
-          const SizedBox(height: OmiSpacing.md),
-          OmiSearchField(placeholder: context.l10n.searchLanguageHint, onChanged: filterLanguages),
-          const SizedBox(height: OmiSpacing.md),
-          Expanded(
-            child: filteredLanguages.isEmpty
-                ? OmiEmptyState(icon: Icons.translate, title: context.l10n.noLanguagesFound)
-                : ListView.builder(
-                    controller: widget.languageScrollController,
-                    key: ValueKey(searchQuery), // Force rebuild when search changes
-                    itemCount: filteredLanguages.length,
-                    itemBuilder: (context, index) {
-                      final language = filteredLanguages[index];
-                      final isSelected = currentSelectedLanguage == language.value;
-                      return ListTile(
-                        title: Text(language.key, style: OmiType.body),
-                        trailing: isSelected ? const Icon(Icons.check_circle, color: OmiColors.accent) : null,
-                        selected: isSelected,
-                        selectedTileColor: OmiColors.surface2,
-                        shape: const RoundedRectangleBorder(borderRadius: OmiRadius.smAll),
-                        // Picking a language is the answer: it selects and closes the picker.
-                        onTap: () {
-                          OmiHaptics.selection();
-                          widget.onLanguageSelected(language.value, language.key);
-                          Navigator.of(context).pop();
-                        },
-                      );
-                    },
-                  ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-
 class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
   String? selectedLanguage;
   String? selectedLanguageName;
-  final ScrollController _languageScrollController = ScrollController();
+  String _query = '';
+
+  /// The language chosen for the person before they touch the list (saved, or the device's),
+  /// shown first so the check is on screen. A tap does not reorder the list under the finger.
+  String? _suggested;
 
   @override
   void initState() {
@@ -135,6 +43,7 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
       if (savedLanguage.isNotEmpty) {
         setState(() {
           selectedLanguage = savedLanguage;
+          _suggested = savedLanguage;
           // Find the language name for the saved language code
           try {
             selectedLanguageName =
@@ -167,6 +76,7 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
           setState(() {
             selectedLanguage = entry.value;
             selectedLanguageName = entry.key;
+            _suggested = entry.value;
           });
           Logger.debug('Auto-selected language: ${entry.key} (${entry.value})');
           return;
@@ -176,33 +86,6 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
     } catch (e) {
       Logger.debug('Error auto-detecting device language: $e');
     }
-  }
-
-  void _showLanguageSelector(BuildContext context, Map<String, String> availableLanguages) {
-    showOmiSheet<void>(
-      context: context,
-      title: context.l10n.selectPrimaryLanguage,
-      builder: (context) {
-        return LanguageSelectorWidget(
-          availableLanguages: availableLanguages,
-          selectedLanguage: selectedLanguage,
-          selectedLanguageName: selectedLanguageName,
-          languageScrollController: _languageScrollController,
-          onLanguageSelected: (language, name) {
-            setState(() {
-              selectedLanguage = language;
-              selectedLanguageName = name;
-            });
-          },
-        );
-      },
-    );
-  }
-
-  @override
-  void dispose() {
-    _languageScrollController.dispose();
-    super.dispose();
   }
 
   Future<void> _continue() async {
@@ -225,67 +108,124 @@ class _PrimaryLanguageWidgetState extends State<PrimaryLanguageWidget> {
     widget.goNext();
   }
 
+  /// Name → code pairs matching the search, the suggested language first.
+  List<MapEntry<String, String>> _visibleLanguages(Map<String, String> available) {
+    final query = _query.trim().toLowerCase();
+    final matches = available.entries.where((language) {
+      if (query.isEmpty) return true;
+      final autonym = languageAutonym(language.value)?.toLowerCase() ?? '';
+      return language.key.toLowerCase().contains(query) ||
+          language.value.toLowerCase().contains(query) ||
+          autonym.contains(query);
+    }).toList();
+    final suggested = matches.indexWhere((language) => language.value == _suggested);
+    if (suggested > 0) matches.insert(0, matches.removeAt(suggested));
+    return matches;
+  }
+
+  void _select(MapEntry<String, String> language) {
+    OmiHaptics.selection();
+    setState(() {
+      selectedLanguage = language.value;
+      selectedLanguageName = language.key;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    final hasSelection = selectedLanguageName != null;
+    final l10n = context.l10n;
+    final languages = _visibleLanguages(context.watch<HomeProvider>().availableLanguages);
     return OnboardingStep(
       card: OnboardingCard(
         content: [
-          Semantics(
-            header: true,
-            child: Text(context.l10n.whatsYourPrimaryLanguage, style: OmiType.title1, textAlign: TextAlign.center),
-          ),
-          const SizedBox(height: OmiSpacing.xxl),
-          Semantics(
-            button: true,
-            label: context.l10n.selectPrimaryLanguage,
-            value: selectedLanguageName,
-            excludeSemantics: true,
-            child: Material(
-              color: OmiColors.surface1,
-              shape: const RoundedRectangleBorder(
-                borderRadius: OmiRadius.lgAll,
-                side: BorderSide(color: OmiColors.border),
-              ),
-              child: InkWell(
-                customBorder: const RoundedRectangleBorder(borderRadius: OmiRadius.lgAll),
-                onTap: () {
-                  final homeProvider = Provider.of<HomeProvider>(context, listen: false);
-                  _showLanguageSelector(context, homeProvider.availableLanguages);
-                },
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xl, vertical: OmiSpacing.lg),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Flexible(
-                        child: Text(
-                          selectedLanguageName ?? context.l10n.selectYourLanguage,
-                          style: OmiType.body.copyWith(
-                            color: hasSelection ? OmiColors.textPrimary : OmiColors.textTertiary,
-                            fontWeight: FontWeight.w500,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: OmiSpacing.sm),
-                      const Icon(Icons.keyboard_arrow_down, color: OmiColors.textTertiary, size: 24),
-                    ],
-                  ),
-                ),
+          OnboardingHeader(title: l10n.whatLanguageDoYouSpeakMost, subtitle: l10n.languageOnboardingSubtitle),
+          const SizedBox(height: OmiSpacing.md),
+          OmiSearchField(placeholder: l10n.searchLanguages, onChanged: (value) => setState(() => _query = value)),
+          const SizedBox(height: OmiSpacing.sm),
+          if (languages.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: OmiSpacing.xl),
+              child: Center(child: Text(l10n.noLanguagesFound, style: OmiType.subhead)),
+            )
+          else
+            // v2: one grouped card; each row is the language in its own script over its English name.
+            Container(
+              decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.rowAll),
+              child: Column(
+                children: [
+                  for (final (i, language) in languages.indexed) ...[
+                    if (i > 0) Divider(height: 0.5, thickness: 0.5, indent: OmiSpacing.md, color: OmiColors.border),
+                    _LanguageRow(
+                      key: ValueKey('onboarding_language_${language.value}'),
+                      name: language.key,
+                      autonym: languageAutonym(language.value),
+                      selected: language.value == selectedLanguage,
+                      onTap: () => _select(language),
+                    ),
+                  ],
+                ],
               ),
             ),
-          ),
         ],
         footer: [
-          const SizedBox(height: OmiSpacing.xxl),
+          const SizedBox(height: OmiSpacing.md),
           // Async: the button shows a spinner and ignores taps while the language saves.
           OmiButton(
             key: const Key('onboarding_language_continue'),
-            label: context.l10n.continueButton,
+            label: l10n.continueButton,
             expand: true,
             onPressed: selectedLanguage == null ? null : _continue,
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _LanguageRow extends StatelessWidget {
+  const _LanguageRow(
+      {super.key, required this.name, required this.autonym, required this.selected, required this.onTap});
+
+  /// The English name ("Spanish (Latin America)").
+  final String name;
+
+  /// The name in the language's own script, when known.
+  final String? autonym;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final primary = autonym ?? name;
+    return Semantics(
+      button: true,
+      selected: selected,
+      label: autonym == null || autonym == name ? name : '$primary, $name',
+      excludeSemantics: true,
+      onTap: onTap,
+      child: InkWell(
+        onTap: onTap,
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 52),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: OmiSpacing.sm),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(primary, style: OmiType.body),
+                      if (autonym != null) Text(name, style: OmiType.footnote.copyWith(color: OmiColors.textSecondary)),
+                    ],
+                  ),
+                ),
+                if (selected) OmiGlyph(OmiGlyphs.checkmark, size: 17, color: OmiColors.textPrimary),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

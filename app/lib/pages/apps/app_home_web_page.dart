@@ -25,7 +25,7 @@ class AppHomeWebPage extends StatelessWidget {
     // A malformed app-provided URL gets the page's error state, not a crash in build.
     if (url == null || !url.hasScheme) {
       return Scaffold(
-        appBar: AppBar(leading: const OmiBackButton(), title: Text(app.name.decodeString)),
+        appBar: OmiAppBar(leading: const OmiBackButton(), title: Text(app.name.decodeString)),
         body: OmiErrorState(message: context.l10n.couldNotLoadPage),
       );
     }

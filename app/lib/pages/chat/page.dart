@@ -42,7 +42,6 @@ import 'package:omi/pages/apps/widgets/app_actions.dart';
 import 'package:omi/pages/chat/widgets/chat_apps_drawer.dart';
 import 'package:omi/pages/chat/widgets/chat_composer_parts.dart';
 import 'package:omi/ui/ui.dart';
-import 'package:omi/widgets/bottom_nav_bar.dart';
 
 class ChatPage extends StatefulWidget {
   final bool isPivotBottom;
@@ -50,12 +49,17 @@ class ChatPage extends StatefulWidget {
   final bool autoStartVoice;
   final ChatPageContext? initialChatContext;
 
+  /// A question the user typed before Chat opened (the dock's Ask field); sent as theirs once the
+  /// thread has loaded.
+  final String? initialQuestion;
+
   const ChatPage({
     super.key,
     this.isPivotBottom = false,
     this.autoMessage,
     this.autoStartVoice = false,
     this.initialChatContext,
+    this.initialQuestion,
   });
 
   @override
@@ -125,6 +129,12 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
       }
       // Sync Apple Health data if connected (ensures fresh data for health queries)
       _syncAppleHealthIfConnected();
+      final question = widget.initialQuestion?.trim() ?? '';
+      if (question.isNotEmpty && _isInitialLoad) {
+        _runLater(const Duration(milliseconds: 400), () {
+          if (mounted) _sendMessageUtil(question);
+        });
+      } else
       // Auto-start voice recording if requested (e.g., from home chat bar mic button)
       if (widget.autoStartVoice && _isInitialLoad) {
         _runLater(const Duration(milliseconds: 300), () {
@@ -289,7 +299,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                     return Theme(
                                       data: Theme.of(context).copyWith(
                                         textSelectionTheme: TextSelectionThemeData(
-                                          selectionColor: Colors.white.withValues(alpha: 0.3),
+                                          selectionColor: OmiColors.textPrimary.withValues(alpha: 0.3),
                                           selectionHandleColor: OmiColors.accent,
                                         ),
                                       ),
@@ -515,8 +525,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                                                         : Theme(
                                                             data: Theme.of(context).copyWith(
                                                               textSelectionTheme: TextSelectionThemeData(
-                                                                selectionColor: Colors.grey.withValues(alpha: 0.4),
-                                                                selectionHandleColor: Colors.white,
+                                                                selectionColor:
+                                                                    OmiColors.textTertiary.withValues(alpha: 0.4),
+                                                                selectionHandleColor: OmiColors.textPrimary,
                                                               ),
                                                             ),
                                                             child: TextField(
@@ -704,13 +715,9 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
                     },
                   ),
                 ),
-                if (!textFieldFocusNode.hasFocus)
-                  BottomNavBar(
-                    onTabTap: (index, isRepeat) {
-                      context.read<HomeProvider>().setIndex(index);
-                      Navigator.of(context).pop();
-                    },
-                  ),
+                // v2: Chat is a pushed page, so it shows no tab bar (back returns to the tab). The
+                // composer keeps clear of the home indicator while the keyboard is down.
+                if (!textFieldFocusNode.hasFocus) SizedBox(height: MediaQuery.viewPaddingOf(context).bottom),
               ],
             ),
           ),
@@ -762,7 +769,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin, 
     if (!mounted) return;
     // Refresh subscription data so the plans sheet is up-to-date
     context.read<UsageProvider>().fetchSubscription();
-    showOmiSheet<void>(context: context, padding: EdgeInsets.zero, builder: (_) => const _PlansSheetWrapper());
+    showOmiSheet<void>(context: context, padding: EdgeInsets.zero, builder: (_) => const PlansSheet());
   }
 
   sendInitialAppMessage(App? app) async {
@@ -1078,7 +1085,7 @@ class _OfflineHint extends StatelessWidget {
         child: Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const ExcludeSemantics(child: Icon(Icons.cloud_off_rounded, size: 14, color: OmiColors.textTertiary)),
+            ExcludeSemantics(child: Icon(Icons.cloud_off_rounded, size: 14, color: OmiColors.textTertiary)),
             const SizedBox(width: 6),
             Flexible(
               child: Text(
@@ -1133,7 +1140,7 @@ class _ComposerChip extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 6),
-                    const Icon(Icons.close, size: 14, color: OmiColors.textSecondary),
+                    Icon(Icons.close, size: 14, color: OmiColors.textSecondary),
                   ],
                 ),
               ),
@@ -1157,12 +1164,12 @@ class _SelectedTextChip extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.only(top: OmiSpacing.xxs, left: 2),
       child: Container(
-        decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.lgAll),
+        decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.lgAll),
         padding: const EdgeInsets.only(left: OmiSpacing.sm),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const ExcludeSemantics(
+            ExcludeSemantics(
               child: Icon(Icons.subdirectory_arrow_right, size: 14, color: OmiColors.textSecondary),
             ),
             const SizedBox(width: OmiSpacing.xs),
@@ -1183,50 +1190,6 @@ class _SelectedTextChip extends StatelessWidget {
           ],
         ),
       ),
-    );
-  }
-}
-
-class _PlansSheetWrapper extends StatefulWidget {
-  const _PlansSheetWrapper();
-
-  @override
-  State<_PlansSheetWrapper> createState() => _PlansSheetWrapperState();
-}
-
-class _PlansSheetWrapperState extends State<_PlansSheetWrapper> with TickerProviderStateMixin {
-  late AnimationController _waveController;
-  late AnimationController _arrowController;
-  late AnimationController _notesController;
-  late Animation<double> _arrowAnimation;
-
-  @override
-  void initState() {
-    super.initState();
-    _waveController = AnimationController(vsync: this, duration: const Duration(seconds: 2))..repeat();
-    _arrowController = AnimationController(vsync: this, duration: const Duration(milliseconds: 800))..repeat();
-    _notesController = AnimationController(vsync: this, duration: const Duration(seconds: 3))..repeat();
-    _arrowAnimation = Tween<double>(
-      begin: 0,
-      end: 10,
-    ).animate(CurvedAnimation(parent: _arrowController, curve: Curves.easeInOut));
-  }
-
-  @override
-  void dispose() {
-    _waveController.dispose();
-    _arrowController.dispose();
-    _notesController.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return PlansSheet(
-      waveController: _waveController,
-      notesController: _notesController,
-      arrowController: _arrowController,
-      arrowAnimation: _arrowAnimation,
     );
   }
 }

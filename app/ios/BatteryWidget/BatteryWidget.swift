@@ -46,16 +46,11 @@ struct OmiBatteryWidget: Widget {
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: BatteryTimelineProvider()) { entry in
-            if #available(iOS 17.0, *) {
-                BatteryWidgetEntryView(entry: entry)
-                    .containerBackground(.fill.tertiary, for: .widget)
-            } else {
-                BatteryWidgetEntryView(entry: entry)
-            }
+            BatteryWidgetEntryView(entry: entry)
         }
         .configurationDisplayName("Omi Battery")
-        .description("Shows your Omi device battery level and mic state.")
-        .supportedFamilies([.accessoryRectangular, .accessoryCircular])
+        .description("Shows your Omi device's charge, and on the Lock Screen its mic state.")
+        .supportedFamilies([.systemSmall, .accessoryRectangular, .accessoryCircular])
     }
 }
 
@@ -67,11 +62,90 @@ struct BatteryWidgetEntryView: View {
 
     var body: some View {
         switch family {
+        case .systemSmall:
+            SmallBatteryView(info: entry.info).widgetBackground(SmallBatteryView.background)
         case .accessoryCircular:
-            AccessoryCircularView(info: entry.info)
+            AccessoryCircularView(info: entry.info).widgetBackground(.clear, accessory: true)
         default:
-            AccessoryRectangularView(info: entry.info)
+            AccessoryRectangularView(info: entry.info).widgetBackground(.clear, accessory: true)
         }
+    }
+}
+
+extension View {
+    /// The widget's container background on iOS 17+ (the system fill for Lock Screen accessories);
+    /// earlier systems draw [color] behind the view.
+    @ViewBuilder
+    func widgetBackground(_ color: Color, accessory: Bool = false) -> some View {
+        if #available(iOS 17.0, *) {
+            if accessory {
+                containerBackground(.fill.tertiary, for: .widget)
+            } else {
+                containerBackground(color, for: .widget)
+            }
+        } else if accessory {
+            self
+        } else {
+            padding(16).frame(maxWidth: .infinity, maxHeight: .infinity).background(color)
+        }
+    }
+}
+
+// MARK: - Home Screen: Small (v2 HomeScreen "Battery")
+
+/// The Omi's charge at a glance (v2 HomeScreen): the orb, "Battery", the level large, and the
+/// device's state ("Omi · charging"). The orb's light is on while the device is connected.
+struct SmallBatteryView: View {
+    let info: DeviceBatteryInfo
+
+    /// Liquid Dock card graphite in dark appearance, white in light.
+    static let background = Color(UIColor { traits in
+        traits.userInterfaceStyle == .dark
+            ? UIColor(red: 20 / 255, green: 23 / 255, blue: 29 / 255, alpha: 1)
+            : UIColor.white
+    })
+
+    private var levelText: String {
+        info.isConnected && info.batteryLevel >= 0 ? "\(info.batteryLevel)%" : "--%"
+    }
+
+    private var stateText: String {
+        let name = info.deviceName.isEmpty ? "Omi" : info.deviceName
+        if !info.isConnected { return "\(name) · not connected" }
+        return info.isCharging ? "\(name) · charging" : name
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(alignment: .top, spacing: 4) {
+                CapturePendant(active: info.isConnected, size: 40)
+                Spacer(minLength: 0)
+                Text("Battery")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
+            Spacer(minLength: 0)
+            HStack(alignment: .firstTextBaseline, spacing: 3) {
+                Text(levelText)
+                    .font(.system(size: 34, weight: .bold, design: .rounded))
+                    .foregroundStyle(info.isConnected ? .primary : .secondary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.6)
+                if info.isConnected && info.isCharging {
+                    Image(systemName: "bolt.fill")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            Text(stateText)
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(Text("Omi battery \(levelText), \(stateText)"))
     }
 }
 
@@ -187,7 +261,26 @@ struct OmiBatteryWidget_Previews: PreviewProvider {
             )
         )
 
+        let charging = BatteryEntry(
+            date: Date(),
+            info: DeviceBatteryInfo(
+                deviceName: "Omi",
+                batteryLevel: 42,
+                deviceType: "omi",
+                isConnected: true,
+                lastUpdated: Date(),
+                isMuted: false,
+                isCharging: true
+            )
+        )
+
         Group {
+            BatteryWidgetEntryView(entry: charging)
+                .previewContext(WidgetPreviewContext(family: .systemSmall))
+                .previewDisplayName("Small – Charging")
+            BatteryWidgetEntryView(entry: disconnected)
+                .previewContext(WidgetPreviewContext(family: .systemSmall))
+                .previewDisplayName("Small – Disconnected")
             BatteryWidgetEntryView(entry: connected)
                 .previewContext(WidgetPreviewContext(family: .accessoryRectangular))
                 .previewDisplayName("Rectangular – Connected")

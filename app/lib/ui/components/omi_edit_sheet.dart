@@ -148,8 +148,8 @@ class _OmiEditSheetState extends State<OmiEditSheet> {
           valueListenable: _dragOffset,
           builder: (context, offset, child) => Transform.translate(offset: Offset(0, offset), child: child),
           child: Material(
-            color: OmiColors.surface1,
-            shape: const RoundedRectangleBorder(borderRadius: OmiRadius.sheetTop),
+            color: OmiColors.sheet,
+            shape: RoundedRectangleBorder(borderRadius: OmiRadius.sheetTopFor(Theme.of(context).platform)),
             clipBehavior: Clip.antiAlias,
             child: SafeArea(
               top: false,
@@ -173,7 +173,7 @@ class _OmiEditSheetState extends State<OmiEditSheet> {
                           child: Container(
                             width: 36,
                             height: 4,
-                            decoration: const BoxDecoration(color: OmiColors.border, borderRadius: OmiRadius.pillAll),
+                            decoration: BoxDecoration(color: OmiColors.border, borderRadius: OmiRadius.pillAll),
                           ),
                         ),
                       ),

@@ -111,7 +111,10 @@ class DailySummariesListState extends State<DailySummariesList> {
 
     // Detail page pops with ``{deleted: true, summaryId}`` when the user deletes
     // from there — drop the row so they don't see a ghost card on return.
-    final result = await routeToPage(context, DailySummaryDetailPage(summaryId: summary.id, summary: summary));
+    final result = await routeToPage(
+      context,
+      DailySummaryDetailPage(summaryId: summary.id, summary: summary, days: List.of(_summaries)),
+    );
     if (!mounted) return;
     if (result is Map && result['deleted'] == true) {
       final deletedId = result['summaryId'] as String?;
@@ -210,7 +213,7 @@ class DailySummariesListState extends State<DailySummariesList> {
               highlightColor: AppStyles.backgroundTertiary,
               child: Container(
                 height: 80,
-                decoration: const BoxDecoration(color: AppStyles.backgroundSecondary, borderRadius: OmiRadius.xlAll),
+                decoration: BoxDecoration(color: AppStyles.backgroundSecondary, borderRadius: OmiRadius.xlAll),
               ),
             ),
           ),
@@ -231,7 +234,7 @@ class DailySummariesListState extends State<DailySummariesList> {
   Widget _buildSummaryCard(DailySummary summary) {
     final l10n = context.l10n;
     final stats = _statsLabel(summary);
-    const metaStyle = TextStyle(color: OmiColors.textTertiary, fontSize: 14);
+    final metaStyle = TextStyle(color: OmiColors.textTertiary, fontSize: 14);
     return Dismissible(
       key: ValueKey('daily-summary-${summary.id}'),
       direction: DismissDirection.endToStart,
@@ -245,7 +248,7 @@ class DailySummariesListState extends State<DailySummariesList> {
       background: Padding(
         padding: const EdgeInsets.only(top: 12, left: 16, right: 16),
         child: Container(
-          decoration: const BoxDecoration(color: OmiColors.danger, borderRadius: OmiRadius.xlAll),
+          decoration: BoxDecoration(color: OmiColors.danger, borderRadius: OmiRadius.xlAll),
           padding: const EdgeInsets.symmetric(horizontal: 24),
           alignment: Alignment.centerRight,
           child: Row(
@@ -253,7 +256,7 @@ class DailySummariesListState extends State<DailySummariesList> {
             children: [
               Text(l10n.deleteRecap, style: OmiType.subhead.copyWith(fontWeight: FontWeight.w600)),
               const SizedBox(width: 10),
-              const Icon(Icons.delete_outline, color: Colors.white),
+              Icon(Icons.delete_outline, color: OmiColors.textPrimary),
             ],
           ),
         ),
@@ -264,7 +267,7 @@ class DailySummariesListState extends State<DailySummariesList> {
           padding: const EdgeInsets.only(top: 12, left: 16, right: 16),
           child: Container(
             width: double.maxFinite,
-            decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.xlAll),
+            decoration: BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.xlAll),
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
               child: Row(
@@ -274,7 +277,7 @@ class DailySummariesListState extends State<DailySummariesList> {
                   Container(
                     width: 40,
                     height: 40,
-                    decoration: const BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
+                    decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: OmiRadius.mdAll),
                     alignment: Alignment.center,
                     child: ExcludeSemantics(
                       child: Text(summary.dayEmoji, style: const TextStyle(fontSize: 22, fontWeight: FontWeight.w500)),

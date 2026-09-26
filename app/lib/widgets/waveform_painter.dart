@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
+import 'package:omi/ui/omi_tokens.dart';
 
 class WaveformPainter extends CustomPainter {
   final bool isPlaying;
@@ -12,12 +13,12 @@ class WaveformPainter extends CustomPainter {
   @override
   void paint(Canvas canvas, Size size) {
     final paint = Paint()
-      ..color = Colors.grey.shade600
+      ..color = OmiColors.textTertiary
       ..strokeWidth = 2
       ..strokeCap = StrokeCap.round;
 
     final activePaint = Paint()
-      ..color = Colors.white
+      ..color = OmiColors.textPrimary
       ..strokeWidth = 2
       ..strokeCap = StrokeCap.round;
 
@@ -79,7 +80,7 @@ class WaveformPainter extends CustomPainter {
     if (isPlaying && playbackProgress > 0) {
       final progressX = (barCount * playbackProgress) * (barWidth + spacing);
       final dotPaint = Paint()
-        ..color = const Color(0xFF4A90E2) // Blue color like in the image
+        ..color = OmiColors.live
         ..style = PaintingStyle.fill;
 
       // Draw the progress dot above the waveform
@@ -91,7 +92,7 @@ class WaveformPainter extends CustomPainter {
 
       // Draw a subtle vertical line from dot to waveform
       final linePaint = Paint()
-        ..color = const Color(0xFF4A90E2).withValues(alpha: 0.5)
+        ..color = OmiColors.live.withValues(alpha: 0.5)
         ..strokeWidth = 1.0;
 
       canvas.drawLine(Offset(progressX, size.height * 0.05 + 6), Offset(progressX, size.height * 0.95), linePaint);

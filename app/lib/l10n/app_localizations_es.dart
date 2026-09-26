@@ -1850,9 +1850,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get openSettings => 'Abrir ajustes';
 
   @override
-  String get whatsYourName => '¿Cómo te llamas?';
-
-  @override
   String get speakTranscribeSummarize => 'Habla. Transcribe. Resume.';
 
   @override
@@ -1866,12 +1863,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get termsOfUse => 'Términos de uso';
-
-  @override
-  String get omiYourAiCompanion => 'Omi – Tu compañero IA';
-
-  @override
-  String get captureEveryMoment => 'Captura cada momento. Obtén resúmenes IA.';
 
   @override
   String get appleWatchSetup => 'Configuración Apple Watch';
@@ -1912,18 +1903,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String errorStartingRecording(String error) {
     return 'Error iniciando grabación: $error';
   }
-
-  @override
-  String get selectPrimaryLanguage => 'Selecciona tu idioma principal';
-
-  @override
-  String get languageBenefits => 'Configura tu idioma para mejores resultados';
-
-  @override
-  String get whatsYourPrimaryLanguage => '¿Cuál es tu idioma principal?';
-
-  @override
-  String get selectYourLanguage => 'Selecciona tu idioma';
 
   @override
   String get personalGrowthJourney => 'Tu viaje de crecimiento personal con IA que escucha cada palabra tuya.';
@@ -3364,9 +3343,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get dataProtection => 'Protección de datos';
-
-  @override
-  String get yourDataIsProtected => 'Tus datos están protegidos y regidos por nuestra ';
 
   @override
   String get pleaseSelectYourPrimaryLanguage => 'Por favor, seleccione su idioma principal';
@@ -5055,10 +5031,6 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get additionalSpeechSampleRemoved => 'Muestra de voz adicional eliminada';
-
-  @override
-  String get consentDataMessage =>
-      'Al continuar, tus conversaciones, grabaciones e información personal se almacenarán de forma segura en nuestros servidores. Tus grabaciones de audio y transcripciones son procesadas por servicios de IA de terceros (incluyendo Deepgram para transcripción y OpenAI para análisis) para proporcionarte información impulsada por IA y habilitar todas las funciones de la aplicación.';
 
   @override
   String get tasksEmptyStateMessage =>
@@ -7792,9 +7764,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get authorizingMcpServer => 'Autorizando…';
 
   @override
-  String get whereDidYouHearAboutOmi => '¿Cómo nos encontraste?';
-
-  @override
   String get tiktok => 'TikTok';
 
   @override
@@ -9984,9 +9953,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get transcriptionNoAudio => 'La transcripción no recibe audio';
 
   @override
-  String get tapPlusToStartRecording => 'Toca el botón de grabar para empezar a grabar';
-
-  @override
   String get chatBlockTask => 'Tarea';
 
   @override
@@ -10706,9 +10672,6 @@ class AppLocalizationsEs extends AppLocalizations {
   String get deviceConnecting => 'Conectando…';
 
   @override
-  String get recordOptionsTip => 'Consejo: toca la flecha del botón de grabar para grabar una llamada.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Error en la actualización';
 
   @override
@@ -11254,14 +11217,474 @@ class AppLocalizationsEs extends AppLocalizations {
   String get keepUsingPendant => 'Seguir usando el colgante';
 
   @override
-  String get recordWith => 'Grabar con';
-
-  @override
-  String get moreWaysToRecord => 'Más formas de grabar';
-
-  @override
   String get openCall => 'Abrir llamada';
 
   @override
   String get captureRecoveryBanner => 'El audio del colgante no llega a la app — toca para reparar';
+
+  @override
+  String get goodMorning => 'Buenos días';
+
+  @override
+  String get goodAfternoon => 'Buenas tardes';
+
+  @override
+  String get goodEvening => 'Buenas noches';
+
+  @override
+  String get alreadyHaveAccount => '¿Ya tienes una cuenta?';
+
+  @override
+  String get signInToOmi => 'Inicia sesión en Omi';
+
+  @override
+  String get signInSubtitle => 'Tus conversaciones y recuerdos van con tu cuenta en el teléfono, el Mac y la web.';
+
+  @override
+  String onboardingAllSetName(String name) {
+    return 'Todo listo, $name.';
+  }
+
+  @override
+  String get completeHomeBody => 'Tu día, tareas y resúmenes en un solo lugar.';
+
+  @override
+  String get completeAskTitle => 'Preguntar';
+
+  @override
+  String get foundOmiOptionalHint => 'Opcional: ayuda a un equipo pequeño a saber qué funciona.';
+
+  @override
+  String get consentTitle => 'Tus datos, en palabras sencillas';
+
+  @override
+  String get consentSubtitle => 'Antes de que Omi empiece a escuchar, esto es exactamente lo que pasa con lo que oye.';
+
+  @override
+  String get consentStoredTitle => 'Qué se guarda';
+
+  @override
+  String get consentStoredBody =>
+      'Tu audio, tus transcripciones y los detalles que Omi aprende se guardan de forma segura en tu cuenta.';
+
+  @override
+  String get consentProcessorsTitle => 'Quién los procesa';
+
+  @override
+  String get consentProcessorsBody =>
+      'Deepgram transcribe la voz y OpenAI la analiza para escribir resúmenes, tareas y recuerdos.';
+
+  @override
+  String get consentControlTitle => 'Lo que tú controlas';
+
+  @override
+  String get consentControlBody => 'Elimina cualquier conversación, recuerdo o tu cuenta entera cuando quieras.';
+
+  @override
+  String get readPrivacyPolicy => 'Lee la Política de privacidad';
+
+  @override
+  String get whatShouldOmiCallYou => '¿Cómo debería llamarte Omi?';
+
+  @override
+  String get nameUsageHint => 'Omi lo usa para identificarte en las transcripciones y exportaciones.';
+
+  @override
+  String get yourNamePlaceholder => 'Tu nombre';
+
+  @override
+  String get whatLanguageDoYouSpeakMost => '¿Qué idioma hablas más?';
+
+  @override
+  String get languageOnboardingSubtitle => 'Omi transcribe mejor cuando conoce el idioma. Puedes añadir más después.';
+
+  @override
+  String get permissionsFewTitle => 'Algunos permisos';
+
+  @override
+  String get permissionsFewSubtitle => 'Omi solo pide lo que usa. Puedes cambiarlo cuando quieras en Ajustes.';
+
+  @override
+  String get permissionsContinueNote =>
+      '«Continuar» no pide nada. Cada permiso solo se solicita cuando tocas «Permitir».';
+
+  @override
+  String get howDidYouHearAboutOmi => '¿Cómo conociste Omi?';
+
+  @override
+  String get showOnLockScreen => 'Mostrar en la pantalla de bloqueo';
+
+  @override
+  String get seeAll => 'Ver todo';
+
+  @override
+  String get upNext => 'A continuación';
+
+  @override
+  String get allTasks => 'Todas las tareas';
+
+  @override
+  String get thisWeek => 'Esta semana';
+
+  @override
+  String capturedDuration(String duration) {
+    return '$duration capturados';
+  }
+
+  @override
+  String newMemoriesCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count recuerdos nuevos',
+      one: '1 recuerdo nuevo',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncingFromPendant => 'Sincronizando desde tu colgante';
+
+  @override
+  String get pendantRecordingsSynced => 'Grabaciones del colgante sincronizadas';
+
+  @override
+  String recordedOnPendantWhileAway(String duration) {
+    return '~$duration grabados en el colgante mientras tu teléfono no estaba';
+  }
+
+  @override
+  String dailyRecapOn(String day) {
+    return 'Resumen diario · $day';
+  }
+
+  @override
+  String taskDueDayTime(String day, String time) {
+    return '$day, $time';
+  }
+
+  @override
+  String fromConversation(String title) {
+    return 'De $title';
+  }
+
+  @override
+  String get endCapture => 'Terminar';
+
+  @override
+  String get toDo => 'Pendientes';
+
+  @override
+  String get devices => 'Dispositivos';
+
+  @override
+  String get devicesSubtitle => 'Todo lo que escucha por ti. Solo graba uno a la vez.';
+
+  @override
+  String get addADevice => 'Añadir un dispositivo';
+
+  @override
+  String get deviceReady => 'Listo';
+
+  @override
+  String get importFromOtherApps => 'Importar de otras apps';
+
+  @override
+  String get whatWillYouWear => '¿Qué vas a llevar?';
+
+  @override
+  String get pickDeviceSubtitle => 'Puedes añadir más después. Solo graba uno a la vez.';
+
+  @override
+  String get alreadyHaveOne => '¿Ya tienes uno?';
+
+  @override
+  String get noDeviceHeader => 'Sin dispositivo';
+
+  @override
+  String get omiPendantName => 'Colgante Omi';
+
+  @override
+  String get allDayConversations => 'Conversaciones todo el día';
+
+  @override
+  String get conversationsAndPhotos => 'Conversaciones + fotos';
+
+  @override
+  String get wristMic => 'Micrófono en la muñeca';
+
+  @override
+  String get glassesAudio => 'Audio de las gafas';
+
+  @override
+  String get bringRecordingsIntoOmi => 'Lleva tus grabaciones a Omi';
+
+  @override
+  String get useThisIphone => 'Usar este iPhone';
+
+  @override
+  String get useThisPhone => 'Usar este teléfono';
+
+  @override
+  String get startInSeconds => 'Empieza en 10 segundos';
+
+  @override
+  String get askAboutThisConversationPlaceholder => 'Pregunta sobre esta conversación';
+
+  @override
+  String get summaryStyle => 'Estilo del resumen';
+
+  @override
+  String get summaryStyleSubtitle => 'Elige qué app escribe este resumen';
+
+  @override
+  String get appearance => 'Apariencia';
+
+  @override
+  String get appearanceSystem => 'Sistema';
+
+  @override
+  String get appearanceLight => 'Claro';
+
+  @override
+  String get appearanceDark => 'Oscuro';
+
+  @override
+  String get feel => 'Sensación';
+
+  @override
+  String get haptics => 'Vibración háptica';
+
+  @override
+  String get hapticsSubtitle => 'Un toque suave al terminar, destacar o completar algo';
+
+  @override
+  String get textSize => 'Tamaño del texto';
+
+  @override
+  String get textSizeSubtitle => 'Sigue el tamaño de texto de tu teléfono';
+
+  @override
+  String get appearanceMotionNote =>
+      'El movimiento sigue a «Reducir movimiento» en los ajustes del teléfono: se detienen todos los bucles, incluida la luz del dispositivo.';
+
+  @override
+  String get signedInWithApple => 'Sesión iniciada con Apple';
+
+  @override
+  String get signedInWithGoogle => 'Sesión iniciada con Google';
+
+  @override
+  String premiumMinutesLeftThisMonth(String left, int limit) {
+    return 'Te quedan $left de $limit minutos prémium este mes';
+  }
+
+  @override
+  String get recordingFrom => 'Grabando desde';
+
+  @override
+  String get recordingFromSubtitle => 'Graba una sola fuente a la vez. Al cambiar, se cierra la conversación actual.';
+
+  @override
+  String get manageDevices => 'Gestionar dispositivos';
+
+  @override
+  String get notListeningTitle => 'Sin escuchar';
+
+  @override
+  String get notListeningSubtitle => 'Empieza con este teléfono o conecta un dispositivo para escuchar todo el día.';
+
+  @override
+  String get startListening => 'Empezar a escuchar';
+
+  @override
+  String get searchEverything => 'Buscar en todo';
+
+  @override
+  String searchResultsCount(int count) {
+    return 'Resultados · $count';
+  }
+
+  @override
+  String get nothingFound => 'No se encontró nada';
+
+  @override
+  String get searchNothingFoundHint =>
+      'Prueba con otra palabra o pregúntale a Omi: entiende el significado, no solo las palabras.';
+
+  @override
+  String get askOmiInstead => 'Preguntar a Omi';
+
+  @override
+  String get recentSearches => 'Recientes';
+
+  @override
+  String get searchAskSuggestion => '¿Qué prometí hacer esta semana?';
+
+  @override
+  String get welcomeRememberTitle => 'Recuerda cada conversación.';
+
+  @override
+  String get welcomeRememberSubtitle =>
+      'Lleva lo que prefieras. Omi convierte lo que oyes en notas, pendientes y un resumen de tu día.';
+
+  @override
+  String get memoriesSubtitle => 'Lo que Omi sabe y dónde lo aprendió';
+
+  @override
+  String get memoryTierLongTerm => 'A largo plazo';
+
+  @override
+  String get memoryTierShortTerm => 'A corto plazo';
+
+  @override
+  String get memoriesTierNote =>
+      'Los recuerdos nuevos empiezan a corto plazo. Omi pasa por su cuenta a largo plazo los que siguen importando.';
+
+  @override
+  String get askEmptyTitle => 'Pregunta sobre cualquier cosa que hayas oído.';
+
+  @override
+  String get askEmptySubtitle => 'Omi responde a partir de tus conversaciones, recuerdos y tareas.';
+
+  @override
+  String get completeListeningTitle => 'Escucha';
+
+  @override
+  String get completeListeningBody =>
+      'El azul significa que Omi te escucha, desde un dispositivo que llevas o desde este teléfono.';
+
+  @override
+  String get completeAskAnyBody => 'Toca Preguntar para preguntar sobre cualquier cosa que hayas oído.';
+
+  @override
+  String get completeDevicesBody => 'Añade un wearable cuando quieras o empieza con este teléfono.';
+
+  @override
+  String get conversationSourceGlasses => 'Gafas';
+
+  @override
+  String get conversationSourceImported => 'Importadas';
+
+  @override
+  String get conversationSourceEmptyHint => 'Aún no se ha grabado nada desde esta fuente.';
+
+  @override
+  String get findMyPendant => 'Buscar mi colgante';
+
+  @override
+  String get findMyPendantHint => 'Emite un sonido para que lo encuentres';
+
+  @override
+  String get upToDate => 'Actualizado';
+
+  @override
+  String get updateAvailable => 'Actualización disponible';
+
+  @override
+  String get storageTitle => 'Almacenamiento';
+
+  @override
+  String get connectStepTurnOn => 'Enciéndelo y acércalo';
+
+  @override
+  String get connectStepAllowBluetooth => 'Permite el Bluetooth';
+
+  @override
+  String get connectStepTest => 'Di algo para probar';
+
+  @override
+  String get connectStepTestHint => 'Las palabras aparecen aquí mientras hablas';
+
+  @override
+  String get setUpLater => 'Configurar más tarde';
+
+  @override
+  String recapPreviousDay(String day) {
+    return 'Resumen del día anterior: $day';
+  }
+
+  @override
+  String recapNextDay(String day) {
+    return 'Resumen del día siguiente: $day';
+  }
+
+  @override
+  String get askStarterToday => 'Resume el día de hoy';
+
+  @override
+  String get askStarterPeople => '¿Con quién me reuní?';
+
+  @override
+  String get askStarterOpen => '¿Qué queda pendiente?';
+
+  @override
+  String get peopleSubtitle => 'Voces que Omi reconoce en las transcripciones';
+
+  @override
+  String get usageCurrentPlan => 'Plan actual';
+
+  @override
+  String get appsExplore => 'Explorar';
+
+  @override
+  String get appOutOfFive => 'de 5';
+
+  @override
+  String get appStatUsers => 'Usuarios';
+
+  @override
+  String homeWelcomeName(String name) {
+    return 'Te damos la bienvenida, $name';
+  }
+
+  @override
+  String get homeWelcome => 'Bienvenida';
+
+  @override
+  String get homeFirstDaySubtitle => 'Tu primer día con Omi';
+
+  @override
+  String get homeListeningHeroTitle => 'Omi está escuchando';
+
+  @override
+  String get homeListeningHeroBody => 'Tu primera conversación aparecerá aquí un minuto después de terminar.';
+
+  @override
+  String get homeGettingStarted => 'Primeros pasos';
+
+  @override
+  String get gettingStartedConnect => 'Conecta un dispositivo';
+
+  @override
+  String get gettingStartedConversation => 'Ten una conversación';
+
+  @override
+  String get gettingStartedAsk => 'Pregúntale a Omi';
+
+  @override
+  String get homeGoodToKnow => 'Conviene saber';
+
+  @override
+  String get tipFinishTitle => 'Termina cuando quieras';
+
+  @override
+  String get tipFinishBody => 'Toca Finalizar —o pulsa dos veces el colgante— y el resumen empieza enseguida.';
+
+  @override
+  String get tipStarTitle => 'Destaca lo importante';
+
+  @override
+  String get tipStarBody => 'Las conversaciones destacadas son fáciles de encontrar después.';
+
+  @override
+  String get tipPrivateTitle => 'Privado por defecto';
+
+  @override
+  String get tipPrivateBody => 'Tus conversaciones son privadas salvo que las compartas.';
+
+  @override
+  String homeGettingStartedProgress(int done, int total) {
+    return '$done de $total';
+  }
 }

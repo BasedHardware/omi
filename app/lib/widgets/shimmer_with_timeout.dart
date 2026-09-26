@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 import 'package:shimmer/shimmer.dart';
+import 'package:omi/ui/omi_tokens.dart';
 
 /// A shimmer widget that automatically falls back to a static skeleton after a timeout.
 ///
@@ -26,10 +27,10 @@ class ShimmerWithTimeout extends StatefulWidget {
   final int timeoutSeconds;
 
   /// The base color of the shimmer gradient.
-  final Color baseColor;
+  final Color? baseColor;
 
   /// The highlight color of the shimmer gradient.
-  final Color highlightColor;
+  final Color? highlightColor;
 
   /// Optional direction of the shimmer animation.
   final ShimmerDirection direction;
@@ -38,8 +39,8 @@ class ShimmerWithTimeout extends StatefulWidget {
     super.key,
     required this.child,
     this.timeoutSeconds = 5,
-    this.baseColor = const Color(0xFF2A2A32),
-    this.highlightColor = const Color(0xFF3A3A42),
+    this.baseColor,
+    this.highlightColor,
     this.direction = ShimmerDirection.ltr,
   });
 
@@ -73,8 +74,8 @@ class _ShimmerWithTimeoutState extends State<ShimmerWithTimeout> {
   Widget build(BuildContext context) {
     if (_showShimmer) {
       return Shimmer.fromColors(
-        baseColor: widget.baseColor,
-        highlightColor: widget.highlightColor,
+        baseColor: widget.baseColor ?? OmiColors.surface3,
+        highlightColor: widget.highlightColor ?? OmiColors.surface4,
         direction: widget.direction,
         child: widget.child,
       );

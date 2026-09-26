@@ -2,11 +2,13 @@ import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:font_awesome_flutter/font_awesome_flutter.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/widgets/shimmer_with_timeout.dart';
 import 'package:omi/ui/ui.dart';
+import 'package:omi/pages/settings/widgets/live_activity_settings.dart';
 
 class NotificationsSettingsPage extends StatefulWidget {
   const NotificationsSettingsPage({super.key});
@@ -20,7 +22,7 @@ class NotificationsSettingsLoadingShimmer extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    const placeholderColor = OmiColors.surface2;
+    final placeholderColor = OmiColors.surface2;
 
     Widget placeholder({required double height, double? width, BorderRadius radius = OmiRadius.smAll}) {
       return Container(
@@ -60,8 +62,11 @@ class NotificationsSettingsLoadingShimmer extends StatelessWidget {
   }
 }
 
-class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
+class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> with WidgetsBindingObserver {
   bool _isLoading = true;
+
+  /// Whether the phone lets Omi notify at all (v2 Notifications: "iPhone notifications").
+  OmiPermissionStatus? _permission;
 
   // Notification frequency (0-5), default 0 (disabled)
   int _notificationFrequency = 0;
@@ -74,8 +79,39 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadSettings();
+    _loadPermission();
     PlatformManager.instance.analytics.dailySummarySettingsOpened();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  /// Back from the Settings app: the reader may have changed the permission there.
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _loadPermission();
+  }
+
+  Future<void> _loadPermission() async {
+    OmiPermissionStatus? status;
+    try {
+      status = OmiPermissionStatus.fromStatus(await Permission.notification.status);
+    } catch (_) {
+      // No permission plugin (tests, unsupported platforms): the row stays hidden.
+    }
+    if (mounted) setState(() => _permission = status);
+  }
+
+  Future<void> _requestPermission() async {
+    try {
+      final status = await Permission.notification.request();
+      if (mounted) setState(() => _permission = OmiPermissionStatus.fromStatus(status));
+    } catch (_) {}
   }
 
   Future<void> _loadSettings() async {
@@ -222,108 +258,67 @@ class _NotificationsSettingsPageState extends State<NotificationsSettingsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(leading: const OmiBackButton(), title: Text(context.l10n.notifications)),
-      body: _isLoading
-          ? const NotificationsSettingsLoadingShimmer()
-          : ListView(
-              padding: const EdgeInsets.all(OmiSpacing.md),
-              children: [
-                OmiSectionHeader(
-                  context.l10n.notificationFrequency,
-                  subtitle: context.l10n.notificationFrequencyDescription,
-                ),
-                _buildFrequencyCard(),
-                const SizedBox(height: OmiSpacing.xxl),
-                _buildDailySummaryGroup(),
-              ],
-            ),
+      appBar: OmiAppBar(leading: const OmiBackButton(), title: Text(context.l10n.notifications)),
+      body: Column(children: [
+        const LiveActivitySettings(),
+        Expanded(
+            child: _isLoading
+                ? const NotificationsSettingsLoadingShimmer()
+                : ListView(
+                    padding: const EdgeInsets.all(OmiSpacing.md),
+                    children: [
+                      if (_permission != null) ...[
+                        OmiSettingsGroup(
+                          children: [
+                            OmiPermissionRow(
+                              key: const Key('notifications_permission_row'),
+                              inGroup: true,
+                              icon: Icons.notifications_none,
+                              title: context.l10n.notifications,
+                              reason: context.l10n.notificationsDesc,
+                              status: _permission!,
+                              onAllow: _requestPermission,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: OmiSpacing.xxl),
+                      ],
+                      _buildFrequencyGroup(),
+                      const SizedBox(height: OmiSpacing.xxl),
+                      _buildDailySummaryGroup(),
+                    ],
+                  )),
+      ]),
     );
   }
 
-  Widget _buildFrequencyCard() {
-    final isOff = _notificationFrequency == 0;
-    return Container(
-      padding: const EdgeInsets.all(OmiSpacing.lg),
-      decoration: const BoxDecoration(color: OmiColors.surface1, borderRadius: OmiRadius.lgAll),
-      child: Column(
-        children: [
-          // Current value display
-          Row(
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(_getFrequencyLabel(context, _notificationFrequency), style: OmiType.headline),
-                    const SizedBox(height: OmiSpacing.xxs),
-                    Text(
-                      _getFrequencyDescription(context, _notificationFrequency),
-                      style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: OmiSpacing.sm),
-              ExcludeSemantics(
-                child: Container(
-                  width: 48,
-                  height: 48,
-                  decoration: BoxDecoration(
-                    color: isOff ? OmiColors.surface2 : OmiColors.surface3,
-                    borderRadius: OmiRadius.mdAll,
-                  ),
-                  child: Center(
-                    child: Text(
-                      '$_notificationFrequency',
-                      style: OmiType.title3.copyWith(
-                        color: isOff ? OmiColors.textTertiary : OmiColors.textPrimary,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-
-          const SizedBox(height: OmiSpacing.lg),
-
-          // Slider
-          SliderTheme(
-            data: SliderTheme.of(context).copyWith(
-              activeTrackColor: OmiColors.accent,
-              inactiveTrackColor: OmiColors.surface3,
-              thumbColor: OmiColors.accent,
-              overlayColor: OmiColors.accent.withValues(alpha: 0.12),
-              trackHeight: 6,
-              thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 10),
-            ),
-            child: Slider(
-              value: _notificationFrequency.toDouble(),
-              min: 0,
-              max: 5,
-              divisions: 5,
-              label: _getFrequencyLabel(context, _notificationFrequency),
-              semanticFormatterCallback: (value) => _getFrequencyLabel(context, value.round()),
-              onChanged: (value) => _updateNotificationFrequency(value.round()),
+  /// v2 Notifications "How often": the six levels as a list, the current one ticked.
+  Widget _buildFrequencyGroup() {
+    return OmiSettingsGroup(
+      header: context.l10n.notificationFrequency,
+      headerSubtitle: context.l10n.notificationFrequencyDescription,
+      children: [
+        for (var level = 0; level <= 5; level++)
+          Semantics(
+            key: ValueKey('notification_frequency_$level'),
+            selected: level == _notificationFrequency,
+            inMutuallyExclusiveGroup: true,
+            child: OmiSettingsRow(
+              title: _getFrequencyLabel(context, level),
+              subtitle: _getFrequencyDescription(context, level),
+              showChevron: false,
+              trailing: level == _notificationFrequency
+                  ? Icon(Icons.check_rounded, size: 20, color: OmiColors.textPrimary)
+                  : const SizedBox(width: 20),
+              onTap: level == _notificationFrequency
+                  ? null
+                  : () {
+                      OmiHaptics.selection();
+                      _updateNotificationFrequency(level);
+                    },
             ),
           ),
-
-          // Labels
-          ExcludeSemantics(
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.xs),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(context.l10n.sliderOff, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
-                  Text(context.l10n.sliderMax, style: OmiType.footnote.copyWith(color: OmiColors.textTertiary)),
-                ],
-              ),
-            ),
-          ),
-        ],
-      ),
+      ],
     );
   }
 

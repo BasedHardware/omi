@@ -24,9 +24,9 @@ abstract final class OmiFeedbackTiming {
 
 enum OmiFeedbackKind { confirm, info, error, undo, progress }
 
-const Color _successIconColor = OmiColors.success;
-const Color _errorIconColor = OmiColors.danger;
-const Color _infoIconColor = OmiColors.textSecondary;
+Color get _successIconColor => OmiColors.success;
+Color get _errorIconColor => OmiColors.danger;
+Color get _infoIconColor => OmiColors.textSecondary;
 
 /// The app's one toast system: a floating, neutral snackbar with a small coloured status icon.
 ///
@@ -135,7 +135,7 @@ abstract final class OmiFeedback {
       // Undo would never commit its delete.
       persist: false,
       showCloseIcon: showClose,
-      closeIconColor: Colors.white70,
+      closeIconColor: OmiColors.textSecondary,
       dismissDirection: DismissDirection.down,
       content: Semantics(
         liveRegion: true,
@@ -148,7 +148,7 @@ abstract final class OmiFeedback {
         ),
       ),
       action: actionLabel != null && onAction != null
-          ? SnackBarAction(label: actionLabel, textColor: Colors.white, onPressed: onAction)
+          ? SnackBarAction(label: actionLabel, textColor: OmiColors.textPrimary, onPressed: onAction)
           : null,
     );
   }
@@ -163,14 +163,14 @@ abstract final class OmiFeedback {
 
   static Widget _icon(OmiFeedbackKind kind) {
     return switch (kind) {
-      OmiFeedbackKind.confirm => const Icon(Icons.check_circle_rounded, size: 20, color: _successIconColor),
-      OmiFeedbackKind.error => const Icon(Icons.error_rounded, size: 20, color: _errorIconColor),
-      OmiFeedbackKind.undo => const Icon(Icons.delete_outline_rounded, size: 20, color: _infoIconColor),
-      OmiFeedbackKind.info => const Icon(Icons.info_outline_rounded, size: 20, color: _infoIconColor),
-      OmiFeedbackKind.progress => const SizedBox.square(
+      OmiFeedbackKind.confirm => Icon(Icons.check_circle_rounded, size: 20, color: _successIconColor),
+      OmiFeedbackKind.error => Icon(Icons.error_rounded, size: 20, color: _errorIconColor),
+      OmiFeedbackKind.undo => Icon(Icons.delete_outline_rounded, size: 20, color: _infoIconColor),
+      OmiFeedbackKind.info => Icon(Icons.info_outline_rounded, size: 20, color: _infoIconColor),
+      OmiFeedbackKind.progress => SizedBox.square(
           dimension: 20,
           child: Padding(
-            padding: EdgeInsets.all(2),
+            padding: const EdgeInsets.all(2),
             child: CircularProgressIndicator(strokeWidth: 2, color: _infoIconColor),
           ),
         ),

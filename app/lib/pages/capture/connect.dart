@@ -1,3 +1,4 @@
+import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/utils/platform/platform_manager.dart';
 import 'package:flutter/material.dart';
 
@@ -8,6 +9,7 @@ import 'package:url_launcher/url_launcher.dart';
 import 'package:omi/pages/home/home_navigation.dart';
 import 'package:omi/pages/onboarding/find_device/page.dart';
 import 'package:omi/pages/settings/device_settings.dart';
+import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/onboarding_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -24,8 +26,15 @@ Future<void> openOmiStore({Future<bool> Function(Uri)? launcher}) async {
   await (launcher ?? (url) => launchUrl(url, mode: LaunchMode.externalApplication))(_omiStoreUrl);
 }
 
+/// Connect a wearable (Rev 3 Connect): the device with its live state, three steps — turn it on
+/// and hold it close, allow Bluetooth, say something to test — and the devices found nearby.
+///
+/// With [onDone] (onboarding) the page stays after pairing so the live test can show real words;
+/// Continue and Set up later both call [onDone]. Without it, pairing returns to where it was opened.
 class ConnectDevicePage extends StatefulWidget {
-  const ConnectDevicePage({super.key});
+  const ConnectDevicePage({super.key, this.onDone});
+
+  final VoidCallback? onDone;
 
   @override
   State<ConnectDevicePage> createState() => _ConnectDevicePageState();
@@ -38,6 +47,13 @@ class _ConnectDevicePageState extends State<ConnectDevicePage> {
     PlatformManager.instance.analytics.connectDevicePageOpened();
   }
 
+  /// What the connected device has heard so far this session (the live test's words).
+  static String _heardWords(BuildContext context) {
+    final capture = context.watch<CaptureProvider?>();
+    if (capture == null) return '';
+    return capture.segments.map((s) => s.text.trim()).where((t) => t.isNotEmpty).join(' ');
+  }
+
   void _showConnectionGuide() {
     PlatformManager.instance.analytics.connectionGuideOpened();
     ConnectionGuideSheet.show(context);
@@ -47,7 +63,7 @@ class _ConnectDevicePageState extends State<ConnectDevicePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: OmiColors.surface0,
-      appBar: AppBar(
+      appBar: OmiAppBar(
         leading: const OmiBackButton(),
         title: Text(context.l10n.connect),
         actions: [
@@ -72,18 +88,36 @@ class _ConnectDevicePageState extends State<ConnectDevicePage> {
                       isScanning: !onboardingProvider.isConnected,
                       size: MediaQuery.sizeOf(context).height <= 700 ? 280 : 360,
                     ),
-                  DeviceAnimationWidget(
-                    isConnected: onboardingProvider.isConnected,
-                    deviceName: onboardingProvider.deviceName,
-                    deviceType: onboardingProvider.deviceType,
-                    animatedBackground: onboardingProvider.isConnected,
-                  ),
+                  // v2 Pairing: the Omi pendant is drawn (LED lit once connected); another kind of
+                  // device keeps its photo.
+                  if (onboardingProvider.deviceType == null || onboardingProvider.deviceType == DeviceType.omi)
+                    OmiPendant(size: 150, lit: onboardingProvider.isConnected)
+                  else
+                    DeviceAnimationWidget(
+                      isConnected: onboardingProvider.isConnected,
+                      deviceName: onboardingProvider.deviceName,
+                      deviceType: onboardingProvider.deviceType,
+                      animatedBackground: onboardingProvider.isConnected,
+                    ),
                 ],
               ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(OmiSpacing.md, OmiSpacing.md, OmiSpacing.md, OmiSpacing.lg),
+                child: ConnectSteps(
+                  found: onboardingProvider.deviceList.isNotEmpty || onboardingProvider.isConnected,
+                  bluetoothAllowed: onboardingProvider.hasBluetoothPermission ||
+                      onboardingProvider.deviceList.isNotEmpty ||
+                      onboardingProvider.isConnected,
+                  connected: onboardingProvider.isConnected,
+                  heard: onboardingProvider.isConnected ? _heardWords(context) : '',
+                ),
+              ),
               FindDevicesPage(
-                isFromOnboarding: false,
+                // Onboarding stays here after pairing (the live test); elsewhere pairing pops back.
+                isFromOnboarding: widget.onDone != null,
                 goNext: () {
                   Logger.debug('onConnected from FindDevicesPage');
+                  if (widget.onDone != null) return;
                   // Back to the Home already underneath, not a second Home on top of it.
                   HomeNavigation.returnHome(context);
                 },
@@ -95,6 +129,33 @@ class _ConnectDevicePageState extends State<ConnectDevicePage> {
       ),
       bottomNavigationBar: Consumer<OnboardingProvider>(
         builder: (context, onboardingProvider, child) {
+          final onDone = widget.onDone;
+          if (onDone != null) {
+            return Padding(
+              padding: EdgeInsets.fromLTRB(
+                OmiSpacing.md,
+                OmiSpacing.sm,
+                OmiSpacing.md,
+                MediaQuery.of(context).padding.bottom + OmiSpacing.xs,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  OmiButton(
+                    key: const Key('connect_continue'),
+                    label: context.l10n.continueButton,
+                    expand: true,
+                    onPressed: onboardingProvider.isConnected ? onDone : null,
+                  ),
+                  OmiButton.tertiary(
+                    key: const Key('connect_set_up_later'),
+                    label: context.l10n.setUpLater,
+                    onPressed: onDone,
+                  ),
+                ],
+              ),
+            );
+          }
           if (onboardingProvider.isConnected) return const SizedBox.shrink();
           return Padding(
             padding: EdgeInsets.only(bottom: MediaQuery.of(context).padding.bottom + OmiSpacing.md, top: OmiSpacing.sm),
@@ -117,6 +178,108 @@ class _ConnectDevicePageState extends State<ConnectDevicePage> {
             ),
           );
         },
+      ),
+    );
+  }
+}
+
+/// The three steps every device shares (Rev 3 Connect), each ticked as it happens. The last one
+/// shows the words the device hears, so the test proves real audio reaches Omi.
+class ConnectSteps extends StatelessWidget {
+  const ConnectSteps({
+    super.key,
+    required this.found,
+    required this.bluetoothAllowed,
+    required this.connected,
+    this.heard = '',
+  });
+
+  final bool found;
+  final bool bluetoothAllowed;
+  final bool connected;
+
+  /// The words the connected device has heard; empty until the first arrive.
+  final String heard;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = context.l10n;
+    // The latest words, so the line keeps up as the reader talks.
+    final words = heard.length > 64 ? '…${heard.substring(heard.length - 64).trimLeft()}' : heard;
+    return OmiCard(
+      padding: const EdgeInsets.symmetric(vertical: OmiSpacing.xs),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          _ConnectStep(number: 1, title: l10n.connectStepTurnOn, done: found),
+          _ConnectStep(number: 2, title: l10n.connectStepAllowBluetooth, done: bluetoothAllowed),
+          _ConnectStep(
+            number: 3,
+            title: l10n.connectStepTest,
+            done: words.isNotEmpty,
+            detail: !connected ? null : (words.isEmpty ? l10n.connectStepTestHint : '“$words”'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ConnectStep extends StatelessWidget {
+  const _ConnectStep({required this.number, required this.title, required this.done, this.detail});
+
+  final int number;
+  final String title;
+  final bool done;
+  final String? detail;
+
+  @override
+  Widget build(BuildContext context) {
+    return MergeSemantics(
+      child: Semantics(
+        checked: done,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: OmiSpacing.md, vertical: 10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              AnimatedContainer(
+                duration: OmiMotion.of(context).quick,
+                width: 26,
+                height: 26,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: done ? OmiColors.accent : OmiColors.surface3,
+                ),
+                child: done
+                    ? Icon(Icons.check_rounded, size: 16, color: OmiColors.onAccent)
+                    : Text('$number', style: OmiType.footnote.copyWith(fontWeight: FontWeight.w700)),
+              ),
+              const SizedBox(width: OmiSpacing.sm),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.only(top: 3),
+                      child: Text(title, style: OmiType.callout.copyWith(fontWeight: FontWeight.w600)),
+                    ),
+                    if (detail != null) ...[
+                      const SizedBox(height: 2),
+                      Text(
+                        detail!,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: OmiType.subhead.copyWith(color: OmiColors.textSecondary),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }

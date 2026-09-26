@@ -132,7 +132,7 @@ class _RecordingDetailSheetState extends State<_RecordingDetailSheet> {
                     children: [
                       IconButton(
                         iconSize: 28,
-                        color: Colors.white,
+                        color: OmiColors.textPrimary,
                         disabledColor: OmiColors.textDisabled,
                         tooltip: l10n.skipBack10Seconds,
                         onPressed: canPlay && isPlaying ? () => provider.skipBackward() : null,
@@ -167,7 +167,7 @@ class _RecordingDetailSheetState extends State<_RecordingDetailSheet> {
                       const SizedBox(width: 28),
                       IconButton(
                         iconSize: 28,
-                        color: Colors.white,
+                        color: OmiColors.textPrimary,
                         disabledColor: OmiColors.textDisabled,
                         tooltip: l10n.skipForward10Seconds,
                         onPressed: canPlay && isPlaying ? () => provider.skipForward() : null,
@@ -194,11 +194,11 @@ class _RecordingDetailSheetState extends State<_RecordingDetailSheet> {
     );
   }
 
-  static final TextStyle _timeStyle = OmiType.caption.copyWith(
-    color: OmiColors.textTertiary,
-    fontWeight: FontWeight.w500,
-    fontFeatures: const [FontFeature.tabularFigures()],
-  );
+  static TextStyle get _timeStyle => OmiType.caption.copyWith(
+        color: OmiColors.textTertiary,
+        fontWeight: FontWeight.w500,
+        fontFeatures: const [FontFeature.tabularFigures()],
+      );
 
   Widget _buildWaveform(
     LocalRecordingsProvider provider,
@@ -253,7 +253,7 @@ class _RecordingDetailSheetState extends State<_RecordingDetailSheet> {
   Widget _buildMenu(BuildContext context, LocalRecordingsProvider provider, LocalRecording rec) {
     return PopupMenuButton<String>(
       tooltip: context.l10n.moreOptions,
-      icon: const Icon(Icons.more_horiz_rounded, color: OmiColors.textSecondary),
+      icon: Icon(Icons.more_horiz_rounded, color: OmiColors.textSecondary),
       color: OmiColors.surface2,
       shape: const RoundedRectangleBorder(borderRadius: OmiRadius.mdAll),
       position: PopupMenuPosition.under,
@@ -268,8 +268,8 @@ class _RecordingDetailSheetState extends State<_RecordingDetailSheet> {
         }
       },
       itemBuilder: (_) => [
-        _menuItem('share', Icons.ios_share_rounded, context.l10n.shareRecording, Colors.white),
-        _menuItem('info', Icons.info_outline_rounded, context.l10n.recordingInfo, Colors.white),
+        _menuItem('share', Icons.ios_share_rounded, context.l10n.shareRecording, OmiColors.textPrimary),
+        _menuItem('info', Icons.info_outline_rounded, context.l10n.recordingInfo, OmiColors.textPrimary),
         if (!rec.isBusy) _menuItem('delete', Icons.delete_outline_rounded, context.l10n.delete, OmiColors.danger),
       ],
     );

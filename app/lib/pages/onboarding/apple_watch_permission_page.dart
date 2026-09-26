@@ -22,7 +22,7 @@ class _AppleWatchPermissionPageState extends State<AppleWatchPermissionPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: OmiColors.surface0,
-      appBar: AppBar(
+      appBar: OmiAppBar(
         leading: const OmiBackButton(),
         title: Text(context.l10n.appleWatchSetup),
       ),

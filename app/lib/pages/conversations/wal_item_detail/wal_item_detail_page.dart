@@ -96,7 +96,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
+      appBar: OmiAppBar(
         leading: const OmiBackButton(),
         title: Text(context.l10n.recordingDetails),
         actions: [
@@ -133,7 +133,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
     final storageLabel =
         isFlashPage ? context.l10n.storageLocationLimitlessPendant : context.l10n.storageLocationSdCard;
     final storageIcon = isFlashPage ? Icons.memory : Icons.sd_card;
-    final storageColor = isFlashPage ? Colors.teal : OmiColors.textSecondary;
+    final storageColor = OmiColors.textSecondary;
 
     return Consumer<SyncProvider>(
       builder: (context, syncProvider, child) {
@@ -168,7 +168,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                   Text(
                     OmiDateFormat.of(context).time(DateTime.fromMillisecondsSinceEpoch(widget.wal.timerStart * 1000)),
                     style: Theme.of(context).textTheme.bodyMedium!.copyWith(
-                          color: Colors.grey.shade400,
+                          color: OmiColors.textSecondary,
                           fontSize: 16,
                           fontWeight: FontWeight.w400,
                         ),
@@ -209,7 +209,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                       Container(
                         width: 120,
                         height: 120,
-                        decoration: const BoxDecoration(color: OmiColors.surface1, shape: BoxShape.circle),
+                        decoration: BoxDecoration(color: OmiColors.surface1, shape: BoxShape.circle),
                         child: Center(
                           child: Icon(
                             isTransferring ? Icons.downloading : Icons.sd_card,
@@ -234,7 +234,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                             : context.l10n.transferRequiredDescription,
                         style: Theme.of(
                           context,
-                        ).textTheme.bodyMedium!.copyWith(color: Colors.grey.shade400, fontSize: 14),
+                        ).textTheme.bodyMedium!.copyWith(color: OmiColors.textSecondary, fontSize: 14),
                         textAlign: TextAlign.center,
                       ),
 
@@ -245,7 +245,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                           borderRadius: BorderRadius.circular(4),
                           child: LinearProgressIndicator(
                             value: transferProgress > 0 ? transferProgress : null,
-                            backgroundColor: Colors.grey.shade800,
+                            backgroundColor: OmiColors.surface2,
                             color: OmiColors.accent,
                             minHeight: 6,
                           ),
@@ -256,13 +256,14 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                           children: [
                             Text(
                               '${(transferProgress * 100).toInt()}%',
-                              style: TextStyle(color: Colors.grey.shade400, fontSize: 14, fontWeight: FontWeight.w500),
+                              style:
+                                  TextStyle(color: OmiColors.textSecondary, fontSize: 14, fontWeight: FontWeight.w500),
                             ),
                             if (transferSpeedKBps != null && transferSpeedKBps > 0) ...[
                               const SizedBox(width: 16),
                               Text(
                                 '${transferSpeedKBps.toStringAsFixed(1)} KB/s',
-                                style: TextStyle(color: Colors.grey.shade500, fontSize: 14),
+                                style: TextStyle(color: OmiColors.textTertiary, fontSize: 14),
                               ),
                             ],
                           ],
@@ -271,7 +272,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                           const SizedBox(height: 8),
                           Text(
                             context.l10n.etaLabel(_formatTransferEta(transferEtaSeconds)),
-                            style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+                            style: TextStyle(color: OmiColors.textTertiary, fontSize: 13),
                           ),
                         ],
                       ],
@@ -325,7 +326,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                   Text(
                     OmiDateFormat.of(context).time(DateTime.fromMillisecondsSinceEpoch(widget.wal.timerStart * 1000)),
                     style: Theme.of(context).textTheme.bodyMedium!.copyWith(
-                          color: Colors.grey.shade400,
+                          color: OmiColors.textSecondary,
                           fontSize: 16,
                           fontWeight: FontWeight.w400,
                         ),
@@ -335,17 +336,17 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                   Container(
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                     decoration: BoxDecoration(
-                      color: Colors.grey.withValues(alpha: 0.15),
+                      color: OmiColors.textTertiary.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.security, color: Colors.grey.shade400, size: 14),
+                        Icon(Icons.security, color: OmiColors.textSecondary, size: 14),
                         const SizedBox(width: 6),
                         Text(
                           context.l10n.privateAndSecureOnDevice,
-                          style: TextStyle(color: Colors.grey.shade400, fontSize: 12, fontWeight: FontWeight.w500),
+                          style: TextStyle(color: OmiColors.textSecondary, fontSize: 12, fontWeight: FontWeight.w500),
                         ),
                       ],
                     ),
@@ -404,7 +405,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
                         : (isPlaying ? FontAwesomeIcons.pause : FontAwesomeIcons.play),
                     size: 80,
                     backgroundColor: Theme.of(context).colorScheme.secondary,
-                    iconColor: Colors.white,
+                    iconColor: OmiColors.textPrimary,
                     onPressed: playbackState.canPlayOrShare && !playbackState.isProcessing
                         ? () => _handlePlayPause(context.read<SyncProvider>())
                         : null,
@@ -446,7 +447,7 @@ class _WalItemDetailPageState extends State<WalItemDetailPage> {
       ),
       child: IconButton(
         onPressed: onPressed,
-        icon: FaIcon(icon, color: iconColor ?? Colors.white, size: size * 0.4),
+        icon: FaIcon(icon, color: iconColor ?? OmiColors.textPrimary, size: size * 0.4),
       ),
     );
   }

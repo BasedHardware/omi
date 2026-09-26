@@ -4,6 +4,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:omi/providers/usage_provider.dart';
+import 'package:omi/models/user_usage.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/schema/person.dart';
@@ -12,6 +14,7 @@ import 'package:omi/pages/onboarding/guided_voice_controller.dart';
 import 'package:omi/pages/onboarding/speech_profile_widget.dart';
 import 'package:omi/pages/payments/payments_page.dart';
 import 'package:omi/pages/payments/stripe_connect_setup.dart';
+import 'package:omi/pages/settings/appearance_page.dart';
 import 'package:omi/pages/settings/delete_account.dart';
 import 'package:omi/pages/settings/developer.dart';
 import 'package:omi/pages/settings/integration_settings_page.dart';
@@ -43,6 +46,16 @@ final settingsPagesScenarios = <AuditScenario>[
     },
   ),
   AuditScenario(
+    id: 'settings-appearance',
+    title: 'Appearance: System, Light or Dark, and Feel',
+    page: 'lib/pages/settings/appearance_page.dart (AppearancePage)',
+    state: 'Signed-in fixture account; System selected (the default); haptics on',
+    run: (a) async {
+      await a.pump(const AppearancePage());
+      await a.shot('Open Appearance');
+    },
+  ),
+  AuditScenario(
     id: 'settings-usage',
     title: 'Plan & Usage before the subscription loads',
     page: 'lib/pages/settings/usage_page.dart (UsagePage)',
@@ -50,6 +63,28 @@ final settingsPagesScenarios = <AuditScenario>[
     run: (a) async {
       await a.pump(const UsagePage());
       await a.shot('Open Plan & Usage');
+    },
+  ),
+  AuditScenario(
+    id: 'settings-usage-data',
+    title: 'Plan & Usage with today and this month on hand',
+    page: 'lib/pages/settings/usage_page.dart (UsagePage)',
+    state: 'UsageProvider seeded with today (12 min) and this month (400 min); nothing is fetched',
+    run: (a) async {
+      UsageStats stats(int minutes) => UsageStats(
+            transcriptionSeconds: minutes * 60,
+            speechSeconds: minutes * 60,
+            wordsTranscribed: minutes * 150,
+            insightsGained: 3,
+            memoriesCreated: 5,
+          );
+      final usage = _SeededUsage()
+        ..debugSetUsageStats('today', stats(12))
+        ..debugSetUsageStats('monthly', stats(400));
+      await a.pump(const UsagePage(), providers: [ChangeNotifierProvider<UsageProvider>.value(value: usage)]);
+      await a.shot('Plan & Usage: the period under the plan, then the stats', step: 'today');
+      await a.tap(find.text('This Month'));
+      await a.shot('This Month', step: 'month');
     },
   ),
   AuditScenario(
@@ -242,28 +277,18 @@ class _SilentGuidedVoiceIO implements GuidedVoiceIO {
   Future<void> close() async {}
 }
 
-/// PlansSheet borrows its animation controllers from the page that opens it.
-class _PlansHost extends StatefulWidget {
+/// The plans sheet as the pages that open it present it.
+class _PlansHost extends StatelessWidget {
   @override
-  State<_PlansHost> createState() => _PlansHostState();
+  Widget build(BuildContext context) => const PlansSheet();
 }
 
-class _PlansHostState extends State<_PlansHost> with TickerProviderStateMixin {
-  late final _wave = AnimationController(vsync: this, duration: const Duration(seconds: 2))..repeat();
-  late final _arrow = AnimationController(vsync: this, duration: const Duration(milliseconds: 800))..repeat();
-  late final _notes = AnimationController(vsync: this, duration: const Duration(seconds: 3))..repeat();
-  late final _arrowAnimation =
-      Tween<double>(begin: 0, end: 10).animate(CurvedAnimation(parent: _arrow, curve: Curves.easeInOut));
-
+/// Usage already on hand for the audit: nothing is fetched.
+class _SeededUsage extends UsageProvider {
   @override
-  void dispose() {
-    _wave.dispose();
-    _arrow.dispose();
-    _notes.dispose();
-    super.dispose();
-  }
-
+  Future<void> fetchUsageStats({required String period}) async {}
   @override
-  Widget build(BuildContext context) => PlansSheet(
-      waveController: _wave, notesController: _notes, arrowController: _arrow, arrowAnimation: _arrowAnimation);
+  Future<void> fetchSubscription() async {}
+  @override
+  Future<void> loadAvailablePlans() async {}
 }

@@ -3633,12 +3633,6 @@ abstract class AppLocalizations {
   /// **'Open Settings'**
   String get openSettings;
 
-  /// Question asking for user's name
-  ///
-  /// In en, this message translates to:
-  /// **'What\'s your name?'**
-  String get whatsYourName;
-
   /// Tagline or slogan on the welcome/auth screen
   ///
   /// In en, this message translates to:
@@ -3668,18 +3662,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Terms of Use'**
   String get termsOfUse;
-
-  /// App title or branding on onboarding screen
-  ///
-  /// In en, this message translates to:
-  /// **'Omi – Your AI Companion'**
-  String get omiYourAiCompanion;
-
-  /// App value proposition or description
-  ///
-  /// In en, this message translates to:
-  /// **'Capture every moment. Get AI-powered\nsummaries. Never take notes again.'**
-  String get captureEveryMoment;
 
   /// Title for Apple Watch setup page
   ///
@@ -3752,30 +3734,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Error starting recording: {error}'**
   String errorStartingRecording(String error);
-
-  /// Title for language selection dialog
-  ///
-  /// In en, this message translates to:
-  /// **'Select your primary language'**
-  String get selectPrimaryLanguage;
-
-  /// Explanation of why language selection matters
-  ///
-  /// In en, this message translates to:
-  /// **'Set your language for sharper transcriptions and a personalized experience'**
-  String get languageBenefits;
-
-  /// Question asking for primary language
-  ///
-  /// In en, this message translates to:
-  /// **'What\'s your primary language?'**
-  String get whatsYourPrimaryLanguage;
-
-  /// Placeholder for selected language name
-  ///
-  /// In en, this message translates to:
-  /// **'Select your language'**
-  String get selectYourLanguage;
 
   /// Subtitle describing Omi on auth screen
   ///
@@ -6530,12 +6488,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Data Protection'**
   String get dataProtection;
-
-  /// First part of data protection text
-  ///
-  /// In en, this message translates to:
-  /// **'Your data is protected and governed by our '**
-  String get yourDataIsProtected;
 
   /// No description provided for @pleaseSelectYourPrimaryLanguage.
   ///
@@ -9590,12 +9542,6 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Additional Speech Sample Removed'**
   String get additionalSpeechSampleRemoved;
-
-  /// Consent message explaining how user data will be stored and used
-  ///
-  /// In en, this message translates to:
-  /// **'By continuing, your conversations, recordings, and personal information will be securely stored on our servers. Your audio recordings and transcripts are processed by third-party AI services — Deepgram for transcription and OpenAI for analysis — to provide you with AI-powered insights and enable all app features.'**
-  String get consentDataMessage;
 
   /// Empty state message shown when there are no tasks, with instruction to tap + button
   ///
@@ -14547,12 +14493,6 @@ abstract class AppLocalizations {
   /// **'Authorizing…'**
   String get authorizingMcpServer;
 
-  /// No description provided for @whereDidYouHearAboutOmi.
-  ///
-  /// In en, this message translates to:
-  /// **'How did you find us?'**
-  String get whereDidYouHearAboutOmi;
-
   /// No description provided for @tiktok.
   ///
   /// In en, this message translates to:
@@ -17136,7 +17076,7 @@ abstract class AppLocalizations {
   /// No description provided for @syncStatusFailed.
   ///
   /// In en, this message translates to:
-  /// **'Failed — tap Retry'**
+  /// **'Failed — tap Try Again'**
   String get syncStatusFailed;
 
   /// No description provided for @syncStatusFileUnavailable.
@@ -17202,7 +17142,7 @@ abstract class AppLocalizations {
   /// Status card: items that need user attention
   ///
   /// In en, this message translates to:
-  /// **'{count} recording{count, plural, =1{} other{s}} need attention'**
+  /// **'{count, plural, =1{1 recording needs attention} other{{count} recordings need attention}}'**
   String syncCardNeedsAttention(int count);
 
   /// No description provided for @syncFlowIntro.
@@ -18519,12 +18459,6 @@ abstract class AppLocalizations {
   /// **'Transcription not receiving audio'**
   String get transcriptionNoAudio;
 
-  /// Empty-home hint pointing at the round record button
-  ///
-  /// In en, this message translates to:
-  /// **'Tap the record button to start recording'**
-  String get tapPlusToStartRecording;
-
   /// Eyebrow label on a chat task card block
   ///
   /// In en, this message translates to:
@@ -19527,12 +19461,6 @@ abstract class AppLocalizations {
   /// **'Connecting…'**
   String get deviceConnecting;
 
-  /// One-time hint after the first phone-mic recording
-  ///
-  /// In en, this message translates to:
-  /// **'Tip: tap the arrow on the record button to record a phone call.'**
-  String get recordOptionsTip;
-
   /// Title of the firmware update failed state
   ///
   /// In en, this message translates to:
@@ -20445,18 +20373,6 @@ abstract class AppLocalizations {
   /// **'Keep using pendant'**
   String get keepUsingPendant;
 
-  /// Title of the sheet listing ways to record (Phone mic, Phone call).
-  ///
-  /// In en, this message translates to:
-  /// **'Record with'**
-  String get recordWith;
-
-  /// Accessibility label of the small arrow badge on the record button that opens the 'Record with' sheet.
-  ///
-  /// In en, this message translates to:
-  /// **'More ways to record'**
-  String get moreWaysToRecord;
-
   /// Accessibility hint on the live card during a call; tapping opens the call screen.
   ///
   /// In en, this message translates to:
@@ -20468,6 +20384,858 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Pendant audio is not reaching the app — tap to repair'**
   String get captureRecoveryBanner;
+
+  /// Home greeting before noon, above the user's name and today's date
+  ///
+  /// In en, this message translates to:
+  /// **'Good morning'**
+  String get goodMorning;
+
+  /// Home greeting from noon to 6 PM, above the user's name and today's date
+  ///
+  /// In en, this message translates to:
+  /// **'Good afternoon'**
+  String get goodAfternoon;
+
+  /// Home greeting after 6 PM, above the user's name and today's date
+  ///
+  /// In en, this message translates to:
+  /// **'Good evening'**
+  String get goodEvening;
+
+  /// Welcome screen, before the Sign In link
+  ///
+  /// In en, this message translates to:
+  /// **'Already have an account?'**
+  String get alreadyHaveAccount;
+
+  /// Sign-in screen title
+  ///
+  /// In en, this message translates to:
+  /// **'Sign in to Omi'**
+  String get signInToOmi;
+
+  /// Sign-in screen line under the title
+  ///
+  /// In en, this message translates to:
+  /// **'Your conversations and memories follow your account across your phone, Mac and the web.'**
+  String get signInSubtitle;
+
+  /// Onboarding complete headline with the user's first name
+  ///
+  /// In en, this message translates to:
+  /// **'You’re all set, {name}.'**
+  String onboardingAllSetName(String name);
+
+  /// Onboarding complete: what the Home tab is
+  ///
+  /// In en, this message translates to:
+  /// **'Your day, tasks and recaps in one place.'**
+  String get completeHomeBody;
+
+  /// Onboarding complete: label for the Ask tip
+  ///
+  /// In en, this message translates to:
+  /// **'Ask'**
+  String get completeAskTitle;
+
+  /// Under the where-did-you-hear-about-Omi question
+  ///
+  /// In en, this message translates to:
+  /// **'Optional — it helps a small team know what’s working.'**
+  String get foundOmiOptionalHint;
+
+  /// Title of the onboarding data consent step
+  ///
+  /// In en, this message translates to:
+  /// **'Your data, in plain words'**
+  String get consentTitle;
+
+  /// Subtitle of the onboarding data consent step
+  ///
+  /// In en, this message translates to:
+  /// **'Before Omi starts listening, here\'s exactly what happens to what it hears.'**
+  String get consentSubtitle;
+
+  /// Consent step row title: what data Omi stores
+  ///
+  /// In en, this message translates to:
+  /// **'What\'s stored'**
+  String get consentStoredTitle;
+
+  /// Consent step row body under What's stored
+  ///
+  /// In en, this message translates to:
+  /// **'Your audio, transcripts and the details Omi learns are stored securely with your account.'**
+  String get consentStoredBody;
+
+  /// Consent step row title: which services process the data
+  ///
+  /// In en, this message translates to:
+  /// **'Who processes it'**
+  String get consentProcessorsTitle;
+
+  /// Consent step row body under Who processes it; Deepgram and OpenAI are company names
+  ///
+  /// In en, this message translates to:
+  /// **'Speech is transcribed by Deepgram and analysed by OpenAI to write summaries, tasks and memories.'**
+  String get consentProcessorsBody;
+
+  /// Consent step row title: what the user controls
+  ///
+  /// In en, this message translates to:
+  /// **'What you control'**
+  String get consentControlTitle;
+
+  /// Consent step row body under What you control
+  ///
+  /// In en, this message translates to:
+  /// **'Delete any conversation, memory or your whole account whenever you like.'**
+  String get consentControlBody;
+
+  /// Link on the consent step that opens the Privacy Policy
+  ///
+  /// In en, this message translates to:
+  /// **'Read the Privacy Policy'**
+  String get readPrivacyPolicy;
+
+  /// Title of the onboarding name step
+  ///
+  /// In en, this message translates to:
+  /// **'What should Omi call you?'**
+  String get whatShouldOmiCallYou;
+
+  /// Hint under the name field in onboarding
+  ///
+  /// In en, this message translates to:
+  /// **'Omi uses this to label you in transcripts and exports.'**
+  String get nameUsageHint;
+
+  /// Placeholder in the onboarding name field
+  ///
+  /// In en, this message translates to:
+  /// **'Your name'**
+  String get yourNamePlaceholder;
+
+  /// Title of the onboarding language step
+  ///
+  /// In en, this message translates to:
+  /// **'What language do you speak most?'**
+  String get whatLanguageDoYouSpeakMost;
+
+  /// Subtitle of the onboarding language step
+  ///
+  /// In en, this message translates to:
+  /// **'Omi transcribes best when it knows. You can add more later.'**
+  String get languageOnboardingSubtitle;
+
+  /// Title of the onboarding permissions step
+  ///
+  /// In en, this message translates to:
+  /// **'A few permissions'**
+  String get permissionsFewTitle;
+
+  /// Subtitle of the onboarding permissions step
+  ///
+  /// In en, this message translates to:
+  /// **'Omi asks only for what it uses. You can change these any time in Settings.'**
+  String get permissionsFewSubtitle;
+
+  /// Note under the onboarding permission list. Continue and Allow are the button labels on the same screen
+  ///
+  /// In en, this message translates to:
+  /// **'Continue won\'t ask for anything. Each permission is only requested when you tap Allow.'**
+  String get permissionsContinueNote;
+
+  /// Title of the optional onboarding step asking where the user heard about Omi
+  ///
+  /// In en, this message translates to:
+  /// **'How did you hear about Omi?'**
+  String get howDidYouHearAboutOmi;
+
+  /// Setting for recording Live Activities on the lock screen and Dynamic Island
+  ///
+  /// In en, this message translates to:
+  /// **'Show on Lock Screen'**
+  String get showOnLockScreen;
+
+  /// Home section link that opens the whole list
+  ///
+  /// In en, this message translates to:
+  /// **'See All'**
+  String get seeAll;
+
+  /// Home section title above the next tasks
+  ///
+  /// In en, this message translates to:
+  /// **'Up next'**
+  String get upNext;
+
+  /// Home link that opens the Tasks tab
+  ///
+  /// In en, this message translates to:
+  /// **'All Tasks'**
+  String get allTasks;
+
+  /// Home card title: minutes captured per day this week
+  ///
+  /// In en, this message translates to:
+  /// **'This week'**
+  String get thisWeek;
+
+  /// Total audio captured this week, e.g. '3 h 38 min captured'
+  ///
+  /// In en, this message translates to:
+  /// **'{duration} captured'**
+  String capturedDuration(String duration);
+
+  /// Home card title: memories Omi learned in the last day
+  ///
+  /// In en, this message translates to:
+  /// **'{count, plural, =1{1 new memory} other{{count} new memories}}'**
+  String newMemoriesCount(int count);
+
+  /// Home sync card title while recordings upload from the pendant
+  ///
+  /// In en, this message translates to:
+  /// **'Syncing from your pendant'**
+  String get syncingFromPendant;
+
+  /// Home sync card title once every recording has uploaded
+  ///
+  /// In en, this message translates to:
+  /// **'Pendant recordings synced'**
+  String get pendantRecordingsSynced;
+
+  /// Home sync card line: how much audio the pendant saved offline, e.g. '~12 min'
+  ///
+  /// In en, this message translates to:
+  /// **'~{duration} recorded on the pendant while your phone was away'**
+  String recordedOnPendantWhileAway(String duration);
+
+  /// Label on the Home recap card, e.g. 'Daily recap · Wednesday'
+  ///
+  /// In en, this message translates to:
+  /// **'Daily recap · {day}'**
+  String dailyRecapOn(String day);
+
+  /// When a task is due, e.g. 'Today, 5:00 PM'
+  ///
+  /// In en, this message translates to:
+  /// **'{day}, {time}'**
+  String taskDueDayTime(String day, String time);
+
+  /// Task line naming the conversation it came from
+  ///
+  /// In en, this message translates to:
+  /// **'From {title}'**
+  String fromConversation(String title);
+
+  /// Live card button that ends and processes the current conversation
+  ///
+  /// In en, this message translates to:
+  /// **'End'**
+  String get endCapture;
+
+  /// Tab label: the to-do list
+  ///
+  /// In en, this message translates to:
+  /// **'To do'**
+  String get toDo;
+
+  /// Tab label and title: everything that records for Omi
+  ///
+  /// In en, this message translates to:
+  /// **'Devices'**
+  String get devices;
+
+  /// Subtitle under the Devices title
+  ///
+  /// In en, this message translates to:
+  /// **'Everything that listens for you. One records at a time.'**
+  String get devicesSubtitle;
+
+  /// Button on the Devices tab that pairs a new device
+  ///
+  /// In en, this message translates to:
+  /// **'Add a device'**
+  String get addADevice;
+
+  /// Device status: connected and able to record, but not recording now
+  ///
+  /// In en, this message translates to:
+  /// **'Ready'**
+  String get deviceReady;
+
+  /// Row that opens importing conversations from other recorders (Plaud, Limitless, …)
+  ///
+  /// In en, this message translates to:
+  /// **'Import from other apps'**
+  String get importFromOtherApps;
+
+  /// Title of the device picker
+  ///
+  /// In en, this message translates to:
+  /// **'What will you wear?'**
+  String get whatWillYouWear;
+
+  /// Subtitle of the device picker
+  ///
+  /// In en, this message translates to:
+  /// **'You can add more later. One records at a time.'**
+  String get pickDeviceSubtitle;
+
+  /// Device picker section: devices from other makers the user may own
+  ///
+  /// In en, this message translates to:
+  /// **'Already have one?'**
+  String get alreadyHaveOne;
+
+  /// Device picker section: record with this phone
+  ///
+  /// In en, this message translates to:
+  /// **'No device'**
+  String get noDeviceHeader;
+
+  /// Product name: the Omi pendant
+  ///
+  /// In en, this message translates to:
+  /// **'Omi pendant'**
+  String get omiPendantName;
+
+  /// What the Omi pendant is for
+  ///
+  /// In en, this message translates to:
+  /// **'All-day conversations'**
+  String get allDayConversations;
+
+  /// What OmiGlass is for
+  ///
+  /// In en, this message translates to:
+  /// **'Conversations + photos'**
+  String get conversationsAndPhotos;
+
+  /// What Apple Watch adds
+  ///
+  /// In en, this message translates to:
+  /// **'Wrist mic'**
+  String get wristMic;
+
+  /// What Ray-Ban Meta adds
+  ///
+  /// In en, this message translates to:
+  /// **'Glasses audio'**
+  String get glassesAudio;
+
+  /// What other recorders (Plaud, Bee, Limitless, …) are for
+  ///
+  /// In en, this message translates to:
+  /// **'Bring your recordings into Omi'**
+  String get bringRecordingsIntoOmi;
+
+  /// Device picker: record with the iPhone's microphone
+  ///
+  /// In en, this message translates to:
+  /// **'Use this iPhone'**
+  String get useThisIphone;
+
+  /// Device picker: record with the phone's microphone (non-iPhone)
+  ///
+  /// In en, this message translates to:
+  /// **'Use this phone'**
+  String get useThisPhone;
+
+  /// Device picker: recording with the phone starts right away
+  ///
+  /// In en, this message translates to:
+  /// **'Start in 10 seconds'**
+  String get startInSeconds;
+
+  /// Bar at the bottom of a conversation that opens Ask Omi about it
+  ///
+  /// In en, this message translates to:
+  /// **'Ask about this conversation'**
+  String get askAboutThisConversationPlaceholder;
+
+  /// Row in a conversation's summary: which app writes it
+  ///
+  /// In en, this message translates to:
+  /// **'Summary style'**
+  String get summaryStyle;
+
+  /// Subtitle of the Summary style row
+  ///
+  /// In en, this message translates to:
+  /// **'Choose which app writes this summary'**
+  String get summaryStyleSubtitle;
+
+  /// Settings row and page title: light, dark or follow the phone
+  ///
+  /// In en, this message translates to:
+  /// **'Appearance'**
+  String get appearance;
+
+  /// Appearance option: follow the phone's own light or dark setting
+  ///
+  /// In en, this message translates to:
+  /// **'System'**
+  String get appearanceSystem;
+
+  /// Appearance option: the light palette
+  ///
+  /// In en, this message translates to:
+  /// **'Light'**
+  String get appearanceLight;
+
+  /// Appearance option: the dark palette
+  ///
+  /// In en, this message translates to:
+  /// **'Dark'**
+  String get appearanceDark;
+
+  /// Appearance section header: haptics and motion
+  ///
+  /// In en, this message translates to:
+  /// **'Feel'**
+  String get feel;
+
+  /// Appearance toggle: vibration feedback
+  ///
+  /// In en, this message translates to:
+  /// **'Haptics'**
+  String get haptics;
+
+  /// Appearance: what the Haptics toggle does
+  ///
+  /// In en, this message translates to:
+  /// **'A light tap when you finish, star or complete something'**
+  String get hapticsSubtitle;
+
+  /// Appearance row: the size of text in the app
+  ///
+  /// In en, this message translates to:
+  /// **'Text size'**
+  String get textSize;
+
+  /// Appearance: text size comes from the phone's accessibility setting
+  ///
+  /// In en, this message translates to:
+  /// **'Follows your phone’s text size'**
+  String get textSizeSubtitle;
+
+  /// Appearance footnote: animations respect the phone's Reduce Motion setting
+  ///
+  /// In en, this message translates to:
+  /// **'Motion follows Reduce Motion in your phone’s settings — every loop, including the device light, stops.'**
+  String get appearanceMotionNote;
+
+  /// Settings account row: how the account signs in
+  ///
+  /// In en, this message translates to:
+  /// **'Signed in with Apple'**
+  String get signedInWithApple;
+
+  /// Settings account row: how the account signs in
+  ///
+  /// In en, this message translates to:
+  /// **'Signed in with Google'**
+  String get signedInWithGoogle;
+
+  /// Settings plan card: premium transcription minutes left
+  ///
+  /// In en, this message translates to:
+  /// **'{left} of {limit} premium minutes left this month'**
+  String premiumMinutesLeftThisMonth(String left, int limit);
+
+  /// Sheet title: which device or phone records now
+  ///
+  /// In en, this message translates to:
+  /// **'Recording from'**
+  String get recordingFrom;
+
+  /// Recording from sheet: the one-live-source rule
+  ///
+  /// In en, this message translates to:
+  /// **'One source records at a time. Switching finishes the current conversation.'**
+  String get recordingFromSubtitle;
+
+  /// Recording from sheet: opens the Devices tab
+  ///
+  /// In en, this message translates to:
+  /// **'Manage devices'**
+  String get manageDevices;
+
+  /// Today: nothing is recording right now
+  ///
+  /// In en, this message translates to:
+  /// **'Not listening'**
+  String get notListeningTitle;
+
+  /// Today idle card: how to start listening
+  ///
+  /// In en, this message translates to:
+  /// **'Start with this phone, or connect a device to listen all day.'**
+  String get notListeningSubtitle;
+
+  /// Button: start capturing with this phone
+  ///
+  /// In en, this message translates to:
+  /// **'Start listening'**
+  String get startListening;
+
+  /// Search page field: conversations, memories and tasks
+  ///
+  /// In en, this message translates to:
+  /// **'Search everything'**
+  String get searchEverything;
+
+  /// Search page: how many matches
+  ///
+  /// In en, this message translates to:
+  /// **'Results · {count}'**
+  String searchResultsCount(int count);
+
+  /// Search page: no matches
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing found'**
+  String get nothingFound;
+
+  /// Search page: no matches, suggest Ask
+  ///
+  /// In en, this message translates to:
+  /// **'Try another word, or ask Omi — it understands meaning, not just words.'**
+  String get searchNothingFoundHint;
+
+  /// Search page: open Ask with the words typed
+  ///
+  /// In en, this message translates to:
+  /// **'Ask Omi instead'**
+  String get askOmiInstead;
+
+  /// Search page header: the last few searches
+  ///
+  /// In en, this message translates to:
+  /// **'Recent'**
+  String get recentSearches;
+
+  /// Search page: a question to ask Omi
+  ///
+  /// In en, this message translates to:
+  /// **'What did I promise to do this week?'**
+  String get searchAskSuggestion;
+
+  /// Welcome headline (Rev 3: one memory, any device)
+  ///
+  /// In en, this message translates to:
+  /// **'Remember every conversation.'**
+  String get welcomeRememberTitle;
+
+  /// Welcome subtitle under the headline, above the list of supported devices
+  ///
+  /// In en, this message translates to:
+  /// **'Wear what you like. Omi turns what you hear into notes, to-dos and a recap of your day.'**
+  String get welcomeRememberSubtitle;
+
+  /// Memories page subtitle under the title
+  ///
+  /// In en, this message translates to:
+  /// **'What Omi knows, and where it learned it'**
+  String get memoriesSubtitle;
+
+  /// Memory row tier: kept because it keeps mattering
+  ///
+  /// In en, this message translates to:
+  /// **'Long-term'**
+  String get memoryTierLongTerm;
+
+  /// Memory row tier: new, not yet confirmed as lasting
+  ///
+  /// In en, this message translates to:
+  /// **'Short-term'**
+  String get memoryTierShortTerm;
+
+  /// Memories page footnote explaining short-term and long-term
+  ///
+  /// In en, this message translates to:
+  /// **'New memories start as short-term. Omi moves the ones that keep mattering to long-term on its own.'**
+  String get memoriesTierNote;
+
+  /// Ask Omi before the first question: headline
+  ///
+  /// In en, this message translates to:
+  /// **'Ask about anything you’ve heard.'**
+  String get askEmptyTitle;
+
+  /// Ask Omi before the first question: where answers come from
+  ///
+  /// In en, this message translates to:
+  /// **'Omi answers from your conversations, memories and tasks.'**
+  String get askEmptySubtitle;
+
+  /// Onboarding complete: tip label about the blue listening light
+  ///
+  /// In en, this message translates to:
+  /// **'Listening'**
+  String get completeListeningTitle;
+
+  /// Onboarding complete: what the blue light means, any device
+  ///
+  /// In en, this message translates to:
+  /// **'Blue means Omi hears you — from a device you wear or this phone.'**
+  String get completeListeningBody;
+
+  /// Onboarding complete: how to ask, any device
+  ///
+  /// In en, this message translates to:
+  /// **'Tap Ask to ask about anything you’ve heard.'**
+  String get completeAskAnyBody;
+
+  /// Onboarding complete: devices tip, any device
+  ///
+  /// In en, this message translates to:
+  /// **'Add a wearable anytime, or start with this phone.'**
+  String get completeDevicesBody;
+
+  /// Conversations filter chip: conversations recorded by smart glasses (OmiGlass, Ray-Ban Meta, Frame)
+  ///
+  /// In en, this message translates to:
+  /// **'Glasses'**
+  String get conversationSourceGlasses;
+
+  /// Conversations filter chip: conversations imported from other apps and devices (Plaud, Bee, Limitless, Fieldy)
+  ///
+  /// In en, this message translates to:
+  /// **'Imported'**
+  String get conversationSourceImported;
+
+  /// Conversations empty state when a source filter chip (Pendant, Glasses, Phone, Imported) matches nothing
+  ///
+  /// In en, this message translates to:
+  /// **'Nothing recorded from this source yet.'**
+  String get conversationSourceEmptyHint;
+
+  /// Device page row: makes the connected Omi pendant play a sound so the user can locate it
+  ///
+  /// In en, this message translates to:
+  /// **'Find my pendant'**
+  String get findMyPendant;
+
+  /// Device page: subtitle under 'Find my pendant' explaining the pendant will play a sound
+  ///
+  /// In en, this message translates to:
+  /// **'Plays a sound so you can find it'**
+  String get findMyPendantHint;
+
+  /// Device page: value beside 'Firmware' when no firmware update is available
+  ///
+  /// In en, this message translates to:
+  /// **'Up to date'**
+  String get upToDate;
+
+  /// Device page: value beside 'Firmware' when a firmware update can be installed
+  ///
+  /// In en, this message translates to:
+  /// **'Update available'**
+  String get updateAvailable;
+
+  /// Offline Sync page: section title above where recordings are kept (phone, cloud) and auto-sync
+  ///
+  /// In en, this message translates to:
+  /// **'Storage'**
+  String get storageTitle;
+
+  /// Connect a device, step 1: switch the wearable on and bring it near the phone
+  ///
+  /// In en, this message translates to:
+  /// **'Turn it on and hold it close'**
+  String get connectStepTurnOn;
+
+  /// Connect a device, step 2: give the app Bluetooth permission
+  ///
+  /// In en, this message translates to:
+  /// **'Allow Bluetooth'**
+  String get connectStepAllowBluetooth;
+
+  /// Connect a device, step 3: speak so the app can show the words the device heard
+  ///
+  /// In en, this message translates to:
+  /// **'Say something to test'**
+  String get connectStepTest;
+
+  /// Connect a device, step 3: shown until the first words the device heard arrive
+  ///
+  /// In en, this message translates to:
+  /// **'Words appear here as you speak'**
+  String get connectStepTestHint;
+
+  /// Connect a device during onboarding: skip pairing for now and continue
+  ///
+  /// In en, this message translates to:
+  /// **'Set up later'**
+  String get setUpLater;
+
+  /// Daily recap: accessibility label of the arrow to the day before; {day} is 'Yesterday' or a date like 'Tue, Sep 22'
+  ///
+  /// In en, this message translates to:
+  /// **'Previous day\'s recap: {day}'**
+  String recapPreviousDay(String day);
+
+  /// Daily recap: accessibility label of the arrow to the day after; {day} is 'Today' or a date like 'Thu, Sep 24'
+  ///
+  /// In en, this message translates to:
+  /// **'Next day\'s recap: {day}'**
+  String recapNextDay(String day);
+
+  /// Ask Omi starter question: a summary of today's conversations
+  ///
+  /// In en, this message translates to:
+  /// **'Summarize today'**
+  String get askStarterToday;
+
+  /// Ask Omi starter question: the people the user met recently
+  ///
+  /// In en, this message translates to:
+  /// **'Who did I meet?'**
+  String get askStarterPeople;
+
+  /// Ask Omi starter question: unfinished tasks and open questions
+  ///
+  /// In en, this message translates to:
+  /// **'What\'s still open?'**
+  String get askStarterOpen;
+
+  /// People page subtitle: the page lists whose voices Omi can tell apart in transcripts
+  ///
+  /// In en, this message translates to:
+  /// **'Voices Omi can recognize in transcripts'**
+  String get peopleSubtitle;
+
+  /// Plan & Usage page: small label above the name of the user's plan (e.g. 'Free Plan')
+  ///
+  /// In en, this message translates to:
+  /// **'Current plan'**
+  String get usageCurrentPlan;
+
+  /// Apps page: segment showing every app to discover (the other segment is 'Installed')
+  ///
+  /// In en, this message translates to:
+  /// **'Explore'**
+  String get appsExplore;
+
+  /// App page stats: caption under the average rating, e.g. '4.5' then 'out of 5'
+  ///
+  /// In en, this message translates to:
+  /// **'out of 5'**
+  String get appOutOfFive;
+
+  /// App page stats: label over how many people use the app
+  ///
+  /// In en, this message translates to:
+  /// **'Users'**
+  String get appStatUsers;
+
+  /// Home on the first day: large title greeting the new user by first name
+  ///
+  /// In en, this message translates to:
+  /// **'Welcome, {name}'**
+  String homeWelcomeName(String name);
+
+  /// Home on the first day: large title when the user's name is unknown
+  ///
+  /// In en, this message translates to:
+  /// **'Welcome'**
+  String get homeWelcome;
+
+  /// Home on the first day: line under the welcome title
+  ///
+  /// In en, this message translates to:
+  /// **'Your first day with Omi'**
+  String get homeFirstDaySubtitle;
+
+  /// Home on the first day: title of the card shown while Omi records the first conversation
+  ///
+  /// In en, this message translates to:
+  /// **'Omi is listening'**
+  String get homeListeningHeroTitle;
+
+  /// Home on the first day: what happens after the first recorded conversation
+  ///
+  /// In en, this message translates to:
+  /// **'Your first conversation will appear here a minute after it ends.'**
+  String get homeListeningHeroBody;
+
+  /// Home on the first days: title of the setup checklist
+  ///
+  /// In en, this message translates to:
+  /// **'Getting started'**
+  String get homeGettingStarted;
+
+  /// Home setup checklist step: pair a wearable (pendant, glasses, watch…)
+  ///
+  /// In en, this message translates to:
+  /// **'Connect a device'**
+  String get gettingStartedConnect;
+
+  /// Home setup checklist step: record a first conversation
+  ///
+  /// In en, this message translates to:
+  /// **'Have a conversation'**
+  String get gettingStartedConversation;
+
+  /// Home setup checklist step: ask Omi a question about the recorded conversation
+  ///
+  /// In en, this message translates to:
+  /// **'Ask Omi about it'**
+  String get gettingStartedAsk;
+
+  /// Home on the first day: title of the row of tips
+  ///
+  /// In en, this message translates to:
+  /// **'Good to know'**
+  String get homeGoodToKnow;
+
+  /// Home tip card title: ending a conversation early
+  ///
+  /// In en, this message translates to:
+  /// **'Finish anytime'**
+  String get tipFinishTitle;
+
+  /// Home tip card body: how ending a conversation starts its summary
+  ///
+  /// In en, this message translates to:
+  /// **'Tap End — or double-press your pendant — and the summary starts right away.'**
+  String get tipFinishBody;
+
+  /// Home tip card title: starring important conversations
+  ///
+  /// In en, this message translates to:
+  /// **'Star what matters'**
+  String get tipStarTitle;
+
+  /// Home tip card body: why to star conversations
+  ///
+  /// In en, this message translates to:
+  /// **'Starred conversations are easy to find later.'**
+  String get tipStarBody;
+
+  /// Home tip card title: conversations are private
+  ///
+  /// In en, this message translates to:
+  /// **'Private by default'**
+  String get tipPrivateTitle;
+
+  /// Home tip card body: conversations are only shared when the user chooses
+  ///
+  /// In en, this message translates to:
+  /// **'Your conversations stay private unless you share them.'**
+  String get tipPrivateBody;
+
+  /// Home setup checklist: how many steps are done, e.g. '2 of 4'
+  ///
+  /// In en, this message translates to:
+  /// **'{done} of {total}'**
+  String homeGettingStartedProgress(int done, int total);
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

@@ -74,6 +74,10 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    // v2 People: a person's samples fold under their row; a tap shows them.
+    expect(find.text('Sample 1'), findsNothing);
+    await tester.tap(find.text('Alex'));
+    await tester.pumpAndSettle();
     expect(find.text('Sample 1'), findsOneWidget);
     expect(find.text('Tap to delete'), findsNothing);
 
@@ -94,5 +98,44 @@ void main() {
     await tester.tap(find.text('Delete'));
     await tester.pumpAndSettle();
     expect(people.deletedSamples, [(0, 0)]);
+  });
+
+  testWidgets('long-pressing a person offers Edit and Delete', (tester) async {
+    final people = _People([
+      Person(
+        id: 'p1',
+        name: 'Alex',
+        createdAt: DateTime.utc(2026, 9, 1),
+        updatedAt: DateTime.utc(2026, 9, 1),
+      ),
+    ]);
+    addTearDown(people.dispose);
+    await tester.pumpWidget(
+      MultiProvider(
+        providers: [
+          ChangeNotifierProvider<PeopleProvider>.value(value: people),
+          ChangeNotifierProvider<ConnectivityProvider>(create: (_) => ConnectivityProvider()),
+          ChangeNotifierProvider<SpeakerTagPromptsProvider>(
+            create: (_) => SpeakerTagPromptsProvider(
+              fetchSettings: () async =>
+                  const ApiFailure<GeneratedVoiceProfileSettings>(ApiProblem(ApiProblemKind.transport)),
+            ),
+          ),
+        ],
+        child: const MaterialApp(
+          localizationsDelegates: AppLocalizations.localizationsDelegates,
+          supportedLocales: [Locale('en')],
+          home: UserPeoplePage(),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Voices Omi can recognize in transcripts'), findsOneWidget);
+    expect(find.byKey(const Key('people_you_row')), findsOneWidget);
+
+    await tester.longPress(find.text('Alex'));
+    await tester.pumpAndSettle();
+    expect(find.text('Edit Person'), findsOneWidget);
+    expect(find.text('Delete person'), findsOneWidget);
   });
 }

@@ -1865,9 +1865,6 @@ class AppLocalizationsMs extends AppLocalizations {
   String get openSettings => 'Buka Tetapan';
 
   @override
-  String get whatsYourName => 'Siapa nama anda?';
-
-  @override
   String get speakTranscribeSummarize => 'Bercakap. Transkrip. Ringkaskan.';
 
   @override
@@ -1881,12 +1878,6 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get termsOfUse => 'Terma Penggunaan';
-
-  @override
-  String get omiYourAiCompanion => 'Omi – Sahabat AI Anda';
-
-  @override
-  String get captureEveryMoment => 'Tangkap setiap detik. Dapatkan ringkasan dikuasakan AI.\nJangan ambil nota lagi.';
 
   @override
   String get appleWatchSetup => 'Persediaan Apple Watch';
@@ -1931,19 +1922,6 @@ class AppLocalizationsMs extends AppLocalizations {
   String errorStartingRecording(String error) {
     return 'Ralat memulakan rakaman: $error';
   }
-
-  @override
-  String get selectPrimaryLanguage => 'Pilih bahasa utama anda';
-
-  @override
-  String get languageBenefits =>
-      'Tetapkan bahasa anda untuk transkripsi yang lebih tajam dan pengalaman yang diperibadikan';
-
-  @override
-  String get whatsYourPrimaryLanguage => 'Apakah bahasa utama anda?';
-
-  @override
-  String get selectYourLanguage => 'Pilih bahasa anda';
 
   @override
   String get personalGrowthJourney =>
@@ -3383,9 +3361,6 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get dataProtection => 'Perlindungan Data';
-
-  @override
-  String get yourDataIsProtected => 'Data anda dilindungi dan dikawal oleh ';
 
   @override
   String get pleaseSelectYourPrimaryLanguage => 'Sila pilih bahasa utama anda';
@@ -5072,10 +5047,6 @@ class AppLocalizationsMs extends AppLocalizations {
 
   @override
   String get additionalSpeechSampleRemoved => 'Sampel suara tambahan dibuang';
-
-  @override
-  String get consentDataMessage =>
-      'Dengan meneruskan, perbualan, rakaman dan maklumat peribadi anda akan disimpan dengan selamat di pelayan kami. Rakaman audio dan transkrip anda diproses oleh perkhidmatan AI pihak ketiga (termasuk Deepgram untuk transkripsi dan OpenAI untuk analisis) untuk memberikan anda pandangan dikuasakan AI dan membolehkan semua ciri aplikasi.';
 
   @override
   String get tasksEmptyStateMessage =>
@@ -7798,9 +7769,6 @@ class AppLocalizationsMs extends AppLocalizations {
   String get authorizingMcpServer => 'Memberi kebenaran…';
 
   @override
-  String get whereDidYouHearAboutOmi => 'Bagaimana anda tahu tentang kami?';
-
-  @override
   String get tiktok => 'TikTok';
 
   @override
@@ -9985,9 +9953,6 @@ class AppLocalizationsMs extends AppLocalizations {
   String get transcriptionNoAudio => 'Transkripsi tidak menerima audio';
 
   @override
-  String get tapPlusToStartRecording => 'Ketik butang rakam untuk mula merakam';
-
-  @override
   String get chatBlockTask => 'Tugas';
 
   @override
@@ -10706,9 +10671,6 @@ class AppLocalizationsMs extends AppLocalizations {
   String get deviceConnecting => 'Menyambung…';
 
   @override
-  String get recordOptionsTip => 'Petua: ketik anak panah pada butang rakam untuk merakam panggilan telefon.';
-
-  @override
   String get firmwareUpdateFailedTitle => 'Kemas Kini Gagal';
 
   @override
@@ -11252,14 +11214,479 @@ class AppLocalizationsMs extends AppLocalizations {
   String get keepUsingPendant => 'Terus guna loket';
 
   @override
-  String get recordWith => 'Rakam dengan';
-
-  @override
-  String get moreWaysToRecord => 'Lebih banyak cara merakam';
-
-  @override
   String get openCall => 'Buka panggilan';
 
   @override
   String get captureRecoveryBanner => 'Audio loket tidak sampai ke aplikasi — ketik untuk membaiki';
+
+  @override
+  String get goodMorning => 'Selamat pagi';
+
+  @override
+  String get goodAfternoon => 'Selamat petang';
+
+  @override
+  String get goodEvening => 'Selamat malam';
+
+  @override
+  String get alreadyHaveAccount => 'Sudah ada akaun?';
+
+  @override
+  String get signInToOmi => 'Log masuk ke Omi';
+
+  @override
+  String get signInSubtitle => 'Perbualan dan kenangan anda mengikut akaun anda di telefon, Mac dan web.';
+
+  @override
+  String onboardingAllSetName(String name) {
+    return 'Semua sedia, $name.';
+  }
+
+  @override
+  String get completeHomeBody => 'Hari, tugasan dan ringkasan anda di satu tempat.';
+
+  @override
+  String get completeAskTitle => 'Tanya';
+
+  @override
+  String get foundOmiOptionalHint => 'Pilihan — membantu pasukan kecil mengetahui apa yang berkesan.';
+
+  @override
+  String get consentTitle => 'Data anda, dalam bahasa mudah';
+
+  @override
+  String get consentSubtitle =>
+      'Sebelum Omi mula mendengar, inilah yang sebenarnya berlaku kepada apa yang didengarnya.';
+
+  @override
+  String get consentStoredTitle => 'Apa yang disimpan';
+
+  @override
+  String get consentStoredBody =>
+      'Audio, transkrip dan butiran yang dipelajari Omi disimpan dengan selamat dalam akaun anda.';
+
+  @override
+  String get consentProcessorsTitle => 'Siapa yang memprosesnya';
+
+  @override
+  String get consentProcessorsBody =>
+      'Pertuturan ditranskripsi oleh Deepgram dan dianalisis oleh OpenAI untuk menulis ringkasan, tugasan dan kenangan.';
+
+  @override
+  String get consentControlTitle => 'Apa yang anda kawal';
+
+  @override
+  String get consentControlBody => 'Padam mana-mana perbualan, kenangan atau seluruh akaun anda bila-bila masa.';
+
+  @override
+  String get readPrivacyPolicy => 'Baca Dasar Privasi';
+
+  @override
+  String get whatShouldOmiCallYou => 'Apakah Omi patut panggil anda?';
+
+  @override
+  String get nameUsageHint => 'Omi menggunakan ini untuk melabel anda dalam transkrip dan eksport.';
+
+  @override
+  String get yourNamePlaceholder => 'Nama anda';
+
+  @override
+  String get whatLanguageDoYouSpeakMost => 'Bahasa apakah yang paling kerap anda tuturkan?';
+
+  @override
+  String get languageOnboardingSubtitle =>
+      'Omi mentranskripsi dengan terbaik apabila ia tahu bahasa anda. Anda boleh menambah lagi kemudian.';
+
+  @override
+  String get permissionsFewTitle => 'Beberapa kebenaran';
+
+  @override
+  String get permissionsFewSubtitle =>
+      'Omi hanya meminta apa yang digunakannya. Anda boleh menukarnya bila-bila masa dalam Tetapan.';
+
+  @override
+  String get permissionsContinueNote =>
+      '\"Teruskan\" tidak akan meminta apa-apa. Setiap kebenaran hanya diminta apabila anda mengetik \"Benarkan\".';
+
+  @override
+  String get howDidYouHearAboutOmi => 'Bagaimana anda tahu tentang Omi?';
+
+  @override
+  String get showOnLockScreen => 'Tunjukkan pada skrin kunci';
+
+  @override
+  String get seeAll => 'Lihat Semua';
+
+  @override
+  String get upNext => 'Seterusnya';
+
+  @override
+  String get allTasks => 'Semua Tugasan';
+
+  @override
+  String get thisWeek => 'Minggu ini';
+
+  @override
+  String capturedDuration(String duration) {
+    return '$duration dirakam';
+  }
+
+  @override
+  String newMemoriesCount(int count) {
+    String _temp0 = intl.Intl.pluralLogic(
+      count,
+      locale: localeName,
+      other: '$count memori baharu',
+      one: '1 memori baharu',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get syncingFromPendant => 'Menyegerak daripada loket anda';
+
+  @override
+  String get pendantRecordingsSynced => 'Rakaman loket telah disegerakkan';
+
+  @override
+  String recordedOnPendantWhileAway(String duration) {
+    return '~$duration dirakam pada loket semasa telefon anda jauh';
+  }
+
+  @override
+  String dailyRecapOn(String day) {
+    return 'Imbasan harian · $day';
+  }
+
+  @override
+  String taskDueDayTime(String day, String time) {
+    return '$day, $time';
+  }
+
+  @override
+  String fromConversation(String title) {
+    return 'Daripada $title';
+  }
+
+  @override
+  String get endCapture => 'Tamatkan';
+
+  @override
+  String get toDo => 'Tugasan';
+
+  @override
+  String get devices => 'Peranti';
+
+  @override
+  String get devicesSubtitle => 'Semua yang mendengar untuk anda. Satu merakam pada satu masa.';
+
+  @override
+  String get addADevice => 'Tambah peranti';
+
+  @override
+  String get deviceReady => 'Sedia';
+
+  @override
+  String get importFromOtherApps => 'Import daripada apl lain';
+
+  @override
+  String get whatWillYouWear => 'Apa yang akan anda pakai?';
+
+  @override
+  String get pickDeviceSubtitle => 'Anda boleh menambah lagi kemudian. Satu merakam pada satu masa.';
+
+  @override
+  String get alreadyHaveOne => 'Sudah ada?';
+
+  @override
+  String get noDeviceHeader => 'Tiada peranti';
+
+  @override
+  String get omiPendantName => 'Loket Omi';
+
+  @override
+  String get allDayConversations => 'Perbualan sepanjang hari';
+
+  @override
+  String get conversationsAndPhotos => 'Perbualan + foto';
+
+  @override
+  String get wristMic => 'Mikrofon di pergelangan';
+
+  @override
+  String get glassesAudio => 'Audio cermin mata';
+
+  @override
+  String get bringRecordingsIntoOmi => 'Bawa rakaman anda ke Omi';
+
+  @override
+  String get useThisIphone => 'Gunakan iPhone ini';
+
+  @override
+  String get useThisPhone => 'Gunakan telefon ini';
+
+  @override
+  String get startInSeconds => 'Mula dalam 10 saat';
+
+  @override
+  String get askAboutThisConversationPlaceholder => 'Tanya tentang perbualan ini';
+
+  @override
+  String get summaryStyle => 'Gaya ringkasan';
+
+  @override
+  String get summaryStyleSubtitle => 'Pilih apl yang menulis ringkasan ini';
+
+  @override
+  String get appearance => 'Penampilan';
+
+  @override
+  String get appearanceSystem => 'Sistem';
+
+  @override
+  String get appearanceLight => 'Cerah';
+
+  @override
+  String get appearanceDark => 'Gelap';
+
+  @override
+  String get feel => 'Rasa';
+
+  @override
+  String get haptics => 'Haptik';
+
+  @override
+  String get hapticsSubtitle => 'Ketukan ringan apabila anda menamatkan, membintangkan atau melengkapkan sesuatu';
+
+  @override
+  String get textSize => 'Saiz teks';
+
+  @override
+  String get textSizeSubtitle => 'Mengikut saiz teks telefon anda';
+
+  @override
+  String get appearanceMotionNote =>
+      'Pergerakan mengikut Kurangkan Gerakan dalam tetapan telefon — semua gelung, termasuk lampu peranti, berhenti.';
+
+  @override
+  String get signedInWithApple => 'Log masuk dengan Apple';
+
+  @override
+  String get signedInWithGoogle => 'Log masuk dengan Google';
+
+  @override
+  String premiumMinutesLeftThisMonth(String left, int limit) {
+    return 'Tinggal $left daripada $limit minit premium bulan ini';
+  }
+
+  @override
+  String get recordingFrom => 'Merakam daripada';
+
+  @override
+  String get recordingFromSubtitle =>
+      'Hanya satu sumber merakam pada satu masa. Menukar akan menamatkan perbualan semasa.';
+
+  @override
+  String get manageDevices => 'Urus peranti';
+
+  @override
+  String get notListeningTitle => 'Tidak mendengar';
+
+  @override
+  String get notListeningSubtitle =>
+      'Mulakan dengan telefon ini, atau sambungkan peranti untuk mendengar sepanjang hari.';
+
+  @override
+  String get startListening => 'Mula mendengar';
+
+  @override
+  String get searchEverything => 'Cari semua';
+
+  @override
+  String searchResultsCount(int count) {
+    return 'Hasil · $count';
+  }
+
+  @override
+  String get nothingFound => 'Tiada apa-apa ditemui';
+
+  @override
+  String get searchNothingFoundHint =>
+      'Cuba perkataan lain, atau tanya Omi — ia memahami maksud, bukan sekadar perkataan.';
+
+  @override
+  String get askOmiInstead => 'Tanya Omi';
+
+  @override
+  String get recentSearches => 'Terkini';
+
+  @override
+  String get searchAskSuggestion => 'Apa yang saya janji untuk lakukan minggu ini?';
+
+  @override
+  String get welcomeRememberTitle => 'Ingat setiap perbualan.';
+
+  @override
+  String get welcomeRememberSubtitle =>
+      'Pakai apa yang anda suka. Omi menukar apa yang anda dengar kepada nota, tugasan dan ringkasan hari anda.';
+
+  @override
+  String get memoriesSubtitle => 'Apa yang Omi tahu, dan dari mana ia mempelajarinya';
+
+  @override
+  String get memoryTierLongTerm => 'Jangka panjang';
+
+  @override
+  String get memoryTierShortTerm => 'Jangka pendek';
+
+  @override
+  String get memoriesTierNote =>
+      'Memori baharu bermula sebagai jangka pendek. Omi sendiri memindahkan yang terus penting ke jangka panjang.';
+
+  @override
+  String get askEmptyTitle => 'Tanya apa sahaja yang pernah anda dengar.';
+
+  @override
+  String get askEmptySubtitle => 'Omi menjawab berdasarkan perbualan, memori dan tugasan anda.';
+
+  @override
+  String get completeListeningTitle => 'Mendengar';
+
+  @override
+  String get completeListeningBody =>
+      'Biru bermaksud Omi mendengar anda — daripada peranti yang anda pakai atau telefon ini.';
+
+  @override
+  String get completeAskAnyBody => 'Ketik Tanya untuk bertanya apa sahaja yang pernah anda dengar.';
+
+  @override
+  String get completeDevicesBody => 'Tambah peranti boleh pakai bila-bila masa, atau mulakan dengan telefon ini.';
+
+  @override
+  String get conversationSourceGlasses => 'Cermin mata';
+
+  @override
+  String get conversationSourceImported => 'Diimport';
+
+  @override
+  String get conversationSourceEmptyHint => 'Belum ada apa-apa dirakam daripada sumber ini.';
+
+  @override
+  String get findMyPendant => 'Cari loket saya';
+
+  @override
+  String get findMyPendantHint => 'Memainkan bunyi supaya anda dapat menemuinya';
+
+  @override
+  String get upToDate => 'Terkini';
+
+  @override
+  String get updateAvailable => 'Kemas kini tersedia';
+
+  @override
+  String get storageTitle => 'Storan';
+
+  @override
+  String get connectStepTurnOn => 'Hidupkan dan dekatkan';
+
+  @override
+  String get connectStepAllowBluetooth => 'Benarkan Bluetooth';
+
+  @override
+  String get connectStepTest => 'Sebut sesuatu untuk menguji';
+
+  @override
+  String get connectStepTestHint => 'Perkataan muncul di sini semasa anda bercakap';
+
+  @override
+  String get setUpLater => 'Sediakan kemudian';
+
+  @override
+  String recapPreviousDay(String day) {
+    return 'Ringkasan hari sebelumnya: $day';
+  }
+
+  @override
+  String recapNextDay(String day) {
+    return 'Ringkasan hari berikutnya: $day';
+  }
+
+  @override
+  String get askStarterToday => 'Ringkaskan hari ini';
+
+  @override
+  String get askStarterPeople => 'Siapa yang saya jumpa?';
+
+  @override
+  String get askStarterOpen => 'Apa yang masih belum selesai?';
+
+  @override
+  String get peopleSubtitle => 'Suara yang Omi kenali dalam transkrip';
+
+  @override
+  String get usageCurrentPlan => 'Pelan semasa';
+
+  @override
+  String get appsExplore => 'Teroka';
+
+  @override
+  String get appOutOfFive => 'daripada 5';
+
+  @override
+  String get appStatUsers => 'Pengguna';
+
+  @override
+  String homeWelcomeName(String name) {
+    return 'Selamat datang, $name';
+  }
+
+  @override
+  String get homeWelcome => 'Selamat datang';
+
+  @override
+  String get homeFirstDaySubtitle => 'Hari pertama anda bersama Omi';
+
+  @override
+  String get homeListeningHeroTitle => 'Omi sedang mendengar';
+
+  @override
+  String get homeListeningHeroBody => 'Perbualan pertama anda akan muncul di sini seminit selepas ia tamat.';
+
+  @override
+  String get homeGettingStarted => 'Bermula';
+
+  @override
+  String get gettingStartedConnect => 'Sambungkan peranti';
+
+  @override
+  String get gettingStartedConversation => 'Adakan perbualan';
+
+  @override
+  String get gettingStartedAsk => 'Tanya Omi tentangnya';
+
+  @override
+  String get homeGoodToKnow => 'Baik untuk diketahui';
+
+  @override
+  String get tipFinishTitle => 'Tamatkan bila-bila masa';
+
+  @override
+  String get tipFinishBody => 'Ketik Tamat — atau tekan loket dua kali — dan ringkasan terus bermula.';
+
+  @override
+  String get tipStarTitle => 'Bintangkan yang penting';
+
+  @override
+  String get tipStarBody => 'Perbualan berbintang mudah dicari kemudian.';
+
+  @override
+  String get tipPrivateTitle => 'Peribadi secara lalai';
+
+  @override
+  String get tipPrivateBody => 'Perbualan anda kekal peribadi melainkan anda berkongsinya.';
+
+  @override
+  String homeGettingStartedProgress(int done, int total) {
+    return '$done daripada $total';
+  }
 }

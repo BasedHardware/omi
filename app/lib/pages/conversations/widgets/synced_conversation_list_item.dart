@@ -68,7 +68,7 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
         padding: const EdgeInsets.only(top: 12, left: 16, right: 16),
         child: Container(
           width: double.maxFinite,
-          decoration: BoxDecoration(color: const Color(0xFF1F1F25), borderRadius: BorderRadius.circular(24.0)),
+          decoration: BoxDecoration(color: OmiColors.surface2, borderRadius: BorderRadius.circular(24.0)),
           child: Padding(
             padding: const EdgeInsetsDirectional.all(16),
             child: Row(
@@ -117,7 +117,7 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
                               )
                             : Padding(
                                 padding: const EdgeInsets.all(8.0),
-                                child: Icon(Icons.refresh_outlined, color: Colors.grey.shade400),
+                                child: Icon(Icons.refresh_outlined, color: OmiColors.textSecondary),
                               ),
                       )
                     : const SizedBox.shrink(),
@@ -139,7 +139,7 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
               ? const SizedBox.shrink()
               : Text(
                   conversation.structured.getEmoji(),
-                  style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w500),
+                  style: TextStyle(color: OmiColors.textPrimary, fontSize: 22, fontWeight: FontWeight.w500),
                 ),
           conversation.structured.category.isNotEmpty && !conversation.discarded
               ? const SizedBox(width: 12)
@@ -162,7 +162,7 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
               children: [
                 Text(
                   OmiDateFormat.of(context).time(conversation.startedAt ?? conversation.createdAt),
-                  style: const TextStyle(color: Color(0xFF6A6B71), fontSize: 14),
+                  style: TextStyle(color: OmiColors.textTertiary, fontSize: 14),
                   maxLines: 1,
                   textAlign: TextAlign.end,
                 ),
@@ -171,10 +171,10 @@ class _SyncedConversationListItemState extends State<SyncedConversationListItem>
                     padding: const EdgeInsets.only(top: 2.0),
                     child: Container(
                       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(color: const Color(0xFF35343B), borderRadius: BorderRadius.circular(4)),
+                      decoration: BoxDecoration(color: OmiColors.surface4, borderRadius: BorderRadius.circular(4)),
                       child: Text(
                         _getConversationDuration(context),
-                        style: const TextStyle(color: Colors.white, fontSize: 11),
+                        style: TextStyle(color: OmiColors.textPrimary, fontSize: 11),
                         maxLines: 1,
                         textAlign: TextAlign.end,
                       ),
