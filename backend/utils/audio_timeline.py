@@ -91,19 +91,19 @@ def segment_wall_window(conversation: Mapping, start: float, end: float) -> Opti
 
 
 def _validated_chunk_spans(audio_files: Optional[Sequence]) -> Optional[List[Tuple[float, float]]]:
-    """Union-merge the validated ``chunk_spans`` of every audio file.
-
-    Returns None when no file carries spans (legacy lists) or any span is
-    malformed: a malformed span fails closed rather than guessing coverage.
+    """Union-merge the validated ``chunk_spans`` of every audio file. Returns None
+    when no file carries spans (legacy lists) or any span is malformed.
     """
     spans: List[Tuple[float, float]] = []
     saw_any = False
     for audio_file in audio_files or []:
-        if not isinstance(audio_file, Mapping):
+        if isinstance(audio_file, Mapping):
+            raw = audio_file.get('chunk_spans')
+        elif hasattr(audio_file, 'chunk_spans'):
+            raw = getattr(audio_file, 'chunk_spans')
+        else:
             return None
-        raw = audio_file.get('chunk_spans')
-        if not raw:
-            continue
+        if not raw: continue
         saw_any = True
         if not isinstance(raw, Sequence) or isinstance(raw, (str, bytes)):
             return None

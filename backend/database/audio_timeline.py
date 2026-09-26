@@ -65,12 +65,12 @@ def parse_span_blob_metadata(metadata: Optional[Dict]) -> Optional[Dict]:
 
 def chunk_span_bounds(item: object) -> Optional[Tuple[float, float]]:
     """``(start, end)`` of one stored ``chunk_spans`` entry, or None if malformed.
-
-    Entries are ``{start, end}`` objects (Firestore cannot store nested
-    arrays); a ``[start, end]`` pair is accepted for in-memory callers.
+    Entries are ``{start, end}`` dicts, ChunkSpan models, or ``[start, end]`` pairs.
     """
     if isinstance(item, Mapping):
         raw_start, raw_end = item.get('start'), item.get('end')
+    elif hasattr(item, 'start') and hasattr(item, 'end'):
+        raw_start, raw_end = getattr(item, 'start'), getattr(item, 'end')
     elif isinstance(item, (list, tuple)) and len(item) == 2:
         raw_start, raw_end = item[0], item[1]
     else:

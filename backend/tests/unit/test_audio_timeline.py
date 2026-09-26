@@ -401,6 +401,22 @@ class TestWallWindowAndCoverage:
         assert not has_nested_array(dumped)
         assert covered_window([dumped], 110.0, 150.0)
 
+    def test_chunk_span_bounds_and_covered_window_accept_pydantic_models(self):
+        from database.audio_timeline import chunk_span_bounds
+
+        span = ChunkSpan(start=100.0, end=160.0)
+        assert chunk_span_bounds(span) == (100.0, 160.0)
+
+        audio_file = AudioFile(
+            id='f',
+            uid='u',
+            conversation_id='c',
+            chunk_timestamps=[100.0],
+            duration=60.0,
+            chunk_spans=[span],
+        )
+        assert covered_window([audio_file], 110.0, 150.0)
+
     def test_anchor_gap_constant_is_jitter_guard(self):
         # The 2 s trigger is only an initial jitter guard, documented as such.
         assert ANCHOR_GAP_SECONDS == 2.0
