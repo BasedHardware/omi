@@ -666,6 +666,9 @@ class TestRouterPolicyMapping(unittest.TestCase):
             "test:prompt",
             "apps:generate_prompts",
             "apps:twitter_initial_message",
+            "speaker_tag_prompts:list",
+            "speaker_tag_prompts:clip",
+            "speaker_tag_prompts:answer",
         ]
         for policy in used_policies:
             self.assertIn(policy, RATE_POLICIES, f"Policy '{policy}' used in router but missing from config")

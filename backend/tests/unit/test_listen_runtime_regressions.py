@@ -845,6 +845,8 @@ def _transcript_processor_for_delivery(monkeypatch, websocket):
     processor = object.__new__(TranscriptProcessor)
     processor.host = host
     processor.segment_buffer = deque([{'id': 'segment-1', 'text': 'Hello', 'start': 0.0, 'end': 0.5}])
+    processor._v2_legacy_fallback = deque()
+    processor._v2_legacy_fallback_ids = set()
     processor.photo_buffer = deque()
     processor.cache = SimpleNamespace(get=cache_get)
     processor.current_session_segments = {}
@@ -1010,6 +1012,14 @@ async def test_process_loop_dispatches_v2_batches_before_the_first_audio_guard()
     processor.host = host
     processor.segment_buffer = deque([{'id': 'segment-1', 'text': 'Hello', 'start': 0.0, 'end': 0.5}])
     processor.photo_buffer = deque(['photo-1'])
+    processor._v2_retry_counts = {}
+    processor._v2_legacy_fallback = deque()
+    processor._v2_legacy_fallback_ids = set()
+    processor._v2_retry_until = 0.0
+    processor._v2_committed_ids = set()
+    processor._v2_photos_committed = False
+    processor._v2_photos_requeued = False
+    processor._v2_photo_failures = 0
     processor._process_v2_batches = fake_process_v2_batches
     processor.flush_speaker_assignments = AsyncMock()
 

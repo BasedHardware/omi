@@ -14,6 +14,7 @@ Locks the wiring the round-3 re-review flagged:
 
 import asyncio
 import logging
+import time
 import threading
 from collections import Counter
 from collections import deque
@@ -23,6 +24,7 @@ import pytest
 
 from routers.listen.contracts import ListenSessionState
 from routers.listen.receiver import ListenReceiver
+from routers.listen.receiver import _RecordingSTTSocket
 from routers.listen.transcripts import TranscriptProcessor
 from models.transcript_segment import TranscriptSegment
 from utils.metrics import (
@@ -31,6 +33,7 @@ from utils.metrics import (
     OMI_AUDIO_TIMELINE_REJECTS_TOTAL,
     OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL,
     OMI_AUDIO_TIMELINE_PAST_SEND_TOTAL,
+    OMI_AUDIO_TIMELINE_ELAPSED_SHADOW_ERRORS_TOTAL,
 )
 
 RATE = 16000
@@ -79,6 +82,55 @@ def _feed_contiguous(receiver: ListenReceiver, seconds: float, *, first_wall: fl
             first_start = start
         last_end = end
     return first_start, last_end
+
+
+@pytest.mark.parametrize('failure_site', ['wall_projection', 'send_bookkeeping', 'candidate_mapping'])
+def test_soniox_shadow_exception_keeps_off_sends_map_windows_and_transcripts(monkeypatch, failure_site):
+    def run(mode):
+        monkeypatch.setenv('SONIOX_ELAPSED_AXIS', mode)
+        receiver = _receiver(monkeypatch, v2=True)
+        _feed_contiguous(receiver, 2.0)
+        callback, _, epoch = receiver._build_stt_callbacks()
+        epoch.provider_label = 'soniox'
+        payloads = []
+
+        class Raw:
+            def send(self, data):
+                payloads.append(data)
+                return True
+
+        if mode == 'shadow':
+            if failure_site == 'wall_projection':
+                wall_strict = receiver.capture_timeline.wall_strict
+                calls = 0
+
+                def fail_once(sample):
+                    nonlocal calls
+                    calls += 1
+                    if calls == 1:
+                        raise RuntimeError('shadow')
+                    return wall_strict(sample)
+
+                receiver.capture_timeline.wall_strict = fail_once
+            elif failure_site == 'send_bookkeeping':
+                epoch._elapsed_send_map.add_accepted = lambda *args: (_ for _ in ()).throw(RuntimeError('shadow'))
+            else:
+                epoch._elapsed_send_map.map_interval = lambda *args: (_ for _ in ()).throw(RuntimeError('shadow'))
+        socket = _RecordingSTTSocket(Raw(), epoch)
+        pcm = b'\x01\x00' * RATE
+        assert socket.send(pcm, start_sample=0)
+        assert socket.send(pcm, start_sample=RATE)
+        callback([{'start': 0.25, 'end': 1.25, 'text': 'unchanged'}])
+        transcripts = [
+            {key: value for key, value in row.items() if key != 'speaker_id_scope'} for row in receiver.collected
+        ]
+        return payloads, [list(span) for span in epoch.send_map._spans], transcripts
+
+    baseline = run('off')
+    counter = OMI_AUDIO_TIMELINE_ELAPSED_SHADOW_ERRORS_TOTAL
+    before = counter._value.get()
+    assert run('shadow') == baseline
+    assert counter._value.get() == before + 1
 
 
 @pytest.mark.parametrize('v2,mode', [(False, 'legacy'), (True, 'v2')])
@@ -159,13 +211,48 @@ def test_rejected_text_keeps_owner_at_provider_send_across_rollover(monkeypatch)
     assert past._value.get() == before + 1
 
 
+def test_ambiguous_send_epoch_uses_counted_current_row_fallback(monkeypatch):
+    receiver = _receiver(monkeypatch, v2=True)
+    _feed_contiguous(receiver, 2.0)
+    _, _, epoch = receiver._build_stt_callbacks()
+    epoch.note_accepted(0, 2 * RATE)
+    receiver.host.state.current_conversation_id = 'conv-b'
+    _feed_contiguous(receiver, 2.0, first_wall=T0 + 2)
+    epoch.note_accepted(2 * RATE, 2 * RATE)
+    unavailable = OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode='v2', outcome='send_owner_unavailable')
+    before = unavailable._value.get()
+    receiver._enqueue_translated_segments(epoch.translate([{'text': 'ambiguous late final', 'start': 30, 'end': 31}]))
+    assert receiver.collected[0]['_conversation_id'] == 'conv-b'
+    assert receiver.collected[0]['audio_alignment'] == 'unplaced'
+    assert unavailable._value.get() == before + 1
+
+
+def test_send_owner_checks_the_entire_capture_span(monkeypatch):
+    receiver = _receiver(monkeypatch, v2=True)
+    receiver.host.state.conversation_sample_ranges = deque(
+        [(0, RATE, 'conv-a'), (RATE, 2 * RATE, 'conv-b'), (2 * RATE, 3 * RATE, 'conv-a')]
+    )
+    assert receiver._proven_send_owner(0, 3 * RATE) is None
+    assert receiver._proven_send_owner(2 * RATE, RATE) == 'conv-a'
+
+
 async def test_v2_persist_exception_requeues_pristine_batch():
     processor = object.__new__(TranscriptProcessor)
     processor.segment_buffer = deque([{'id': 's1', 'text': 'kept', 'start': T0, 'end': T0 + 1}])
     processor.photo_buffer = deque()
+    processor._v2_retry_counts = {}
+    processor._v2_legacy_fallback = deque()
+    processor._v2_legacy_fallback_ids = set()
+    processor._v2_fallback_retry_until = {}
+    processor._v2_fallback_failures = {}
+    processor._v2_retry_until = 0.0
+    processor._v2_committed_ids = set()
+    processor._v2_photos_committed = False
+    processor._v2_photos_requeued = False
+    processor._v2_photo_failures = 0
     processor.host = SimpleNamespace(
         state=SimpleNamespace(active=False, capture_timeline_v2=True, current_conversation_id='conv-a'),
-        wait=lambda seconds: asyncio.sleep(0, result=False),
+        wait=lambda seconds: asyncio.sleep(min(seconds, 0.01), result=False),
         speakers=SimpleNamespace(tasks=[], drain=lambda **kwargs: asyncio.sleep(0)),
     )
     attempts = []
@@ -182,6 +269,50 @@ async def test_v2_persist_exception_requeues_pristine_batch():
     assert len(attempts) == 2
     assert attempts[0] == attempts[1] == [{'id': 's1', 'text': 'kept', 'start': T0, 'end': T0 + 1}]
     assert not processor.segment_buffer
+
+
+@pytest.mark.asyncio
+async def test_failing_fallback_does_not_starve_v2_text_or_photos():
+    processor = object.__new__(TranscriptProcessor)
+    processor.segment_buffer = deque([{'id': 'normal', 'start': T0, 'end': T0 + 1, 'text': 'normal'}])
+    processor.photo_buffer = deque(['photo'])
+    processor._v2_legacy_fallback = deque([{'id': 'fallback', 'text': 'fallback'}])
+    processor._v2_legacy_fallback_ids = {'fallback'}
+    processor._v2_fallback_retry_until = {}
+    processor._v2_fallback_failures = {}
+    processor._v2_retry_counts = {}
+    processor._v2_retry_until = 0.0
+    processor._v2_committed_ids = set()
+    processor._v2_photos_committed = False
+    processor._v2_photos_requeued = False
+    processor._v2_photo_failures = 0
+    processor._flush_backoff_until = 0.0
+    processor.host = SimpleNamespace(
+        state=SimpleNamespace(
+            active=False, capture_timeline_v2=True, current_conversation_id='conv', speaker_map_dirty=False
+        ),
+        wait=lambda seconds: asyncio.sleep(0, result=False),
+        speakers=SimpleNamespace(tasks=[], drain=lambda **kwargs: asyncio.sleep(0)),
+    )
+    events = []
+
+    async def fallback(raw):
+        events.append(('fallback', raw['id']))
+        if events.count(('fallback', 'fallback')) == 1:
+            raise RuntimeError('owner unavailable')
+
+    async def normal(segments, photos, diarized):
+        events.append(('normal', [item['id'] for item in segments], photos))
+        assert processor._v2_fallback_retry_until['fallback'] > time.monotonic()
+        # Advance this item's timer without making the test sleep.
+        processor._v2_fallback_retry_until['fallback'] = 0.0
+
+    processor._persist_v1_unplaced = fallback
+    processor._process_v2_batches = normal
+    processor.flush_speaker_assignments = lambda owner: asyncio.sleep(0)
+    await asyncio.wait_for(processor.process_loop(), timeout=1)
+    assert events == [('fallback', 'fallback'), ('normal', ['normal'], ['photo']), ('fallback', 'fallback')]
+    assert not processor._v2_legacy_fallback
 
 
 def test_every_provider_segment_reaches_owner_or_counted_unplaced_fallback(monkeypatch):
@@ -211,6 +342,27 @@ def test_every_provider_segment_reaches_owner_or_counted_unplaced_fallback(monke
     for item in receiver.collected:
         if item['text'] in {'straddle', 'outside', 'non numeric', 'non finite', 'missing window'}:
             assert item['audio_alignment'] == 'unplaced'
+
+
+def test_v2_persist_retry_is_bounded_and_backed_off():
+    processor = object.__new__(TranscriptProcessor)
+    processor.segment_buffer = deque()
+    processor._v2_retry_counts = {}
+    processor._v2_legacy_fallback = deque()
+    processor._v2_legacy_fallback_ids = set()
+    processor._v2_retry_until = 0.0
+    processor._v2_committed_ids = set()
+    exhausted = OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode='v2', outcome='persist_retry_exhausted')
+    before = exhausted._value.get()
+    for attempt in range(1, 7):
+        processor._queue_v2_retry([{'id': 'persistent-failure', 'text': 'kept until bounded exhaustion'}])
+        if attempt <= 5:
+            assert len(processor.segment_buffer) == attempt
+            assert processor._v2_retry_until > time.monotonic()
+    assert len(processor.segment_buffer) == 5
+    assert exhausted._value.get() == before + 1
+    assert 'persistent-failure' not in processor._v2_retry_counts
+    assert [item['text'] for item in processor._v2_legacy_fallback] == ['kept until bounded exhaustion']
 
 
 def test_speaker_work_requires_a_proven_capture_window():
