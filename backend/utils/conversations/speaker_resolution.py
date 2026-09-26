@@ -21,7 +21,7 @@ import logging
 import os
 import struct
 import time
-from datetime import datetime
+from datetime import timezone
 from typing import Any, Dict, List, Mapping, Optional, Tuple
 
 import httpx
@@ -99,21 +99,26 @@ def encode_cache(entries: CacheEntries) -> bytes:
 def decode_cache(data: Optional[bytes]) -> CacheEntries:
     if not data or len(data) < 4:
         return {}
-    (length,) = struct.unpack('>I', data[:4])
-    header = json.loads(data[4 : 4 + length])
-    if header.get('v') != CACHE_FORMAT_VERSION or not header.get('ids'):
+    try:
+        (length,) = struct.unpack('>I', data[:4])
+        header = json.loads(data[4 : 4 + length])
+        if header.get('v') != CACHE_FORMAT_VERSION or not header.get('ids'):
+            return {}
+        dim = int(header['dim'])
+        matrix = np.frombuffer(data[4 + length :], dtype='<f2').astype(np.float32).reshape(len(header['ids']), dim)
+        return {sid: (float(d), matrix[i]) for i, (sid, d) in enumerate(zip(header['ids'], header['durations']))}
+    except (json.JSONDecodeError, ValueError, struct.error, KeyError, TypeError):
         return {}
-    dim = int(header['dim'])
-    matrix = np.frombuffer(data[4 + length :], dtype='<f2').astype(np.float32).reshape(len(header['ids']), dim)
-    return {sid: (float(d), matrix[i]) for i, (sid, d) in enumerate(zip(header['ids'], header['durations']))}
 
 
 # --- inputs ------------------------------------------------------------------
 
 
 def _started_at(conversation: Conversation) -> Optional[float]:
-    moment: Optional[datetime] = conversation.started_at or conversation.created_at
-    return moment.timestamp() if moment else None
+    moment = conversation.started_at or conversation.created_at
+    if moment.tzinfo is None:
+        moment = moment.replace(tzinfo=timezone.utc)
+    return moment.timestamp()
 
 
 def _duration(segment: TranscriptSegment) -> float:
