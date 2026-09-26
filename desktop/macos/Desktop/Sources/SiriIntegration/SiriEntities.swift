@@ -57,7 +57,7 @@ struct ConversationEntity: IndexedEntity {
 
   init(_ record: TranscriptionSessionRecord) {
     id = record.backendId ?? ""
-    name = AttributedString(record.title?.isEmpty == false ? record.title! : "Conversation")
+    name = AttributedString(record.title.flatMap { $0.isEmpty ? nil : $0 } ?? "Conversation")
     content = record.overview.map(AttributedString.init)
     attachments = []
     isPinned = false
