@@ -975,6 +975,12 @@ Staleness is fingerprint-driven: when late chunks change `audio_files` (pusher b
 
 ### Audio timeline v2 (AUDIO_TIMELINE_V2, dev-only until promoted)
 
+The flag-off capture clock exposes `omi_audio_timeline_segments_total{mode="legacy",outcome="mapped|rejected"}`
+for the accepted-send denominator and `omi_audio_timeline_rejects_total{mode="legacy|v2",reason="..."}`
+for bounded reject reasons. These counts contain no user or session labels. A
+mapped legacy segment retains its provider-native persisted timestamps; the
+mapping only attaches a private capture window for live speaker identification.
+
 `AUDIO_TIMELINE_V2` admits **new eligible recordings only**: single-channel,
 server-STT live capture on a fresh conversation. Existing sockets, resumed v1
 conversations, multi-channel mixes, custom/BYOK STT, offline WAL sync and

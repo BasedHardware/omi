@@ -68,9 +68,16 @@ def chunk_span_bounds(item: object) -> Optional[Tuple[float, float]]:
 
     Entries are ``{start, end}`` objects (Firestore cannot store nested
     arrays); a ``[start, end]`` pair is accepted for in-memory callers.
+    Attribute-style carriers (e.g. Pydantic v2 ``BaseModel``, which does not
+    inherit from ``Mapping``) are read via ``.start`` / ``.end`` — this keeps
+    the module import-free while accepting what the write path stores.
     """
     if isinstance(item, Mapping):
         raw_start, raw_end = item.get('start'), item.get('end')
+    elif hasattr(item, 'start') and hasattr(item, 'end'):
+        # Pydantic v2 BaseModel et al: not a Mapping, but carries .start/.end.
+        # Downstream bool/float/span_valid checks still fail closed on bad values.
+        raw_start, raw_end = item.start, item.end
     elif isinstance(item, (list, tuple)) and len(item) == 2:
         raw_start, raw_end = item[0], item[1]
     else:

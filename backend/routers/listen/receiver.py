@@ -94,7 +94,11 @@ from utils.observability.transcription import (
     record_listen_zero_byte_session,
     record_live_stt_failover_accepted,
 )
-from utils.metrics import OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL
+from utils.metrics import (
+    AUDIO_TIMELINE_REJECT_REASONS,
+    OMI_AUDIO_TIMELINE_REJECTS_TOTAL,
+    OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL,
+)
 from utils.product_telemetry import emit_product_event
 
 logger = logging.getLogger(__name__)
@@ -376,9 +380,12 @@ class ListenReceiver:
             try:
                 action(hop_segments)
             except Exception as error:
+                OMI_AUDIO_TIMELINE_REJECTS_TOTAL.labels(
+                    mode='v2' if self.capture_timeline_v2 else 'legacy', reason='callback_error'
+                ).inc(len(hop_segments))
                 OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(
                     mode='v2' if self.capture_timeline_v2 else 'legacy', outcome='rejected'
-                ).inc()
+                ).inc(len(hop_segments))
                 logger.warning(
                     'Listen STT callback failed on the listen loop type=%s segments=%d',
                     type(error).__name__,
@@ -435,14 +442,21 @@ class ListenReceiver:
             )
 
         def record_reject(reason: str) -> None:
-            OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(
-                mode='v2' if self.capture_timeline_v2 else 'legacy', outcome='rejected'
+            mode = 'v2' if self.capture_timeline_v2 else 'legacy'
+            OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode=mode, outcome='rejected').inc()
+            OMI_AUDIO_TIMELINE_REJECTS_TOTAL.labels(
+                mode=mode, reason=reason if reason in AUDIO_TIMELINE_REJECT_REASONS else 'other'
             ).inc()
+
+        def record_mapped() -> None:
+            if not self.capture_timeline_v2:
+                OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode='legacy', outcome='mapped').inc()
 
         epoch = ProviderEpochTranslator(
             timeline,
             int(self.host.request.sample_rate),
             on_reject=record_reject,
+            on_mapped=record_mapped,
             project_times=self.capture_timeline_v2,
         )
 

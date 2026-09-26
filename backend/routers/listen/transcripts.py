@@ -108,12 +108,18 @@ class TranscriptProcessor:
         self._flush_backoff_until = 0.0
 
     async def _load_conversation(self, conversation_id: str) -> Optional[Dict[str, Any]]:
-        return await self.host.persistence.call(
+        data = await self.host.persistence.call(
             conversations_db.get_conversation,
             self.host.request.uid,
             conversation_id,
             read_site=FirestoreReadSite.LISTEN_TRANSCRIPT_CACHE_LOAD,
         )
+        if data is not None and data.get('transcript_segments') is None:
+            # A row can be persisted with the field explicitly null rather than
+            # merely absent; every caller here treats it as a list (Conversation
+            # model validation, ConversationSpeakerIdAllocator.hydrate).
+            data['transcript_segments'] = []
+        return data
 
     def enqueue(self, segments: List[Dict[str, Any]]) -> None:
         self.segment_buffer.extend(segments)
@@ -388,14 +394,16 @@ class TranscriptProcessor:
             self.segment_buffer.clear()
             photos = list(self.photo_buffer)
             self.photo_buffer.clear()
-            if not self.host.state.first_audio_byte_timestamp:
-                continue
             if getattr(self.host.state, 'capture_timeline_v2', False):
                 # Audio-timeline v2 persistence: segments already carry
                 # absolute projected wall times and their owning conversation
                 # from the capture span; offsets are computed against the
-                # pinned origin below.
+                # pinned origin below. Dispatched before the first-audio guard
+                # below, since it has its own pre-audio handling (photo-only
+                # drains, re-queuing segments until the origin is pinned).
                 await self._process_v2_batches(raw_segments, photos, diarized_speaker_ids_by_conversation)
+                continue
+            if not self.host.state.first_audio_byte_timestamp:
                 continue
             # Legacy persistence (flag off, resumed rows, custom/multi channel).
             # Segments may still carry a capture-clock window attached by the

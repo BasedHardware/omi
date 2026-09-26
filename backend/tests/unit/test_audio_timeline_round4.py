@@ -22,7 +22,7 @@ import pytest
 
 from routers.listen.contracts import ListenSessionState
 from routers.listen.receiver import ListenReceiver
-from utils.metrics import OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL
+from utils.metrics import OMI_AUDIO_TIMELINE_REJECTS_TOTAL, OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL
 
 RATE = 16000
 UID = 'uid-r4'
@@ -70,6 +70,32 @@ def _feed_contiguous(receiver: ListenReceiver, seconds: float, *, first_wall: fl
             first_start = start
         last_end = end
     return first_start, last_end
+
+
+@pytest.mark.parametrize('v2,mode', [(False, 'legacy'), (True, 'v2')])
+def test_epoch_metrics_expose_bounded_reasons_and_flag_off_denominator(monkeypatch, v2, mode):
+    receiver = _receiver(monkeypatch, v2=v2)
+    _feed_contiguous(receiver, 2.0)
+    _, _, epoch = receiver._build_stt_callbacks()
+    assert epoch is not None
+    epoch.note_accepted(0, 2 * RATE)
+    mapped = OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode=mode, outcome='mapped')
+    rejected = OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode=mode, outcome='rejected')
+    outside = OMI_AUDIO_TIMELINE_REJECTS_TOTAL.labels(mode=mode, reason='outside_accepted_sends')
+    zero = OMI_AUDIO_TIMELINE_REJECTS_TOTAL.labels(mode=mode, reason='zero_length')
+    before = (mapped._value.get(), rejected._value.get(), outside._value.get(), zero._value.get())
+    result = epoch.translate(
+        [
+            {'start': 0.25, 'end': 0.75, 'text': 'inside'},
+            {'start': 9.0, 'end': 10.0, 'text': 'outside'},
+            {'start': 1.0, 'end': 1.0, 'text': 'partial'},
+        ]
+    )
+    assert [segment['text'] for segment in result] == (['inside'] if v2 else ['inside', 'outside', 'partial'])
+    assert rejected._value.get() == before[1] + 2
+    assert outside._value.get() == before[2] + 1
+    assert zero._value.get() == before[3] + 1
+    assert mapped._value.get() == before[0] + (0 if v2 else 1)
 
 
 # ---------------------------------------------------------------------------
@@ -169,12 +195,15 @@ def test_deferred_callback_exception_counts_rejected(monkeypatch, caplog, v2, mo
         raise ValueError('provider callback exploded')
 
     rejected = OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode=mode, outcome='rejected')
+    reason = OMI_AUDIO_TIMELINE_REJECTS_TOTAL.labels(mode=mode, reason='callback_error')
     before = rejected._value.get()
+    reason_before = reason._value.get()
     with caplog.at_level(logging.WARNING, logger='routers.listen.receiver'):
         receiver._run_on_listen_loop(boom, [{'id': 's1'}])
         callback, args = loop.callbacks[0]
         callback(*args)  # must not raise out of the deferred action
     assert rejected._value.get() == before + 1
+    assert reason._value.get() == reason_before + 1
     assert any('Listen STT callback failed' in record.message for record in caplog.records)
     # The bounded log never carries segment content or identity.
     assert 's1' not in caplog.text
