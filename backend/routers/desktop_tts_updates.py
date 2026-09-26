@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from html import escape
 import hmac
+import logging
 import os
 import httpx
 from fastapi import APIRouter, Depends, Header, HTTPException, Query
@@ -15,6 +16,8 @@ from utils.byok import get_byok_key
 from utils.executors import critical_executor, db_executor, run_blocking
 from utils.other.endpoints import get_current_user_uid
 from utils.subscription import is_desktop_trial_paywalled
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -229,6 +232,7 @@ async def get_latest_version():
     try:
         releases = await run_blocking(db_executor, _release_models)
     except Exception as exc:
+        logger.exception(f"Failed to fetch releases: {exc}")
         raise HTTPException(status_code=500, detail="Failed to fetch releases") from exc
     for _, release in releases:
         if release.is_live and release.channel == "stable":
@@ -246,6 +250,7 @@ async def download_redirect():
     try:
         releases = await run_blocking(db_executor, _release_models)
     except Exception as exc:
+        logger.exception(f"Failed to fetch releases: {exc}")
         raise HTTPException(status_code=500, detail="Failed to fetch releases") from exc
     for _, release in releases:
         if release.is_live and release.channel == "stable":
@@ -260,6 +265,7 @@ async def create_release(request: CreateReleaseRequest, x_release_secret: str | 
     try:
         doc_id = await run_blocking(db_executor, _create_release, request)
     except Exception as exc:
+        logger.exception(f"Failed to create release: {exc}")
         raise HTTPException(status_code=500, detail="Failed to create release") from exc
     return {"success": True, "doc_id": doc_id, "message": f"Release v{request.version} created successfully"}
 
@@ -271,9 +277,14 @@ async def promote_release(request: PromoteReleaseRequest, x_release_secret: str 
     try:
         old_channel, new_channel = await run_blocking(db_executor, _promote_release, request.doc_id)
     except ValueError as exc:
-        raise HTTPException(status_code=400, detail=f"Failed to promote: {exc}") from exc
+        logger.warning(f"Failed to promote release {request.doc_id}: {exc}")
+        err_msg = str(exc)
+        if err_msg in ("release not found", "release is already stable"):
+            raise HTTPException(status_code=400, detail=f"Failed to promote: {err_msg}") from exc
+        raise HTTPException(status_code=400, detail="Failed to promote release: invalid release state") from exc
     except Exception as exc:
-        raise HTTPException(status_code=400, detail="Failed to promote release") from exc
+        logger.exception(f"Unexpected error promoting release {request.doc_id}: {exc}")
+        raise HTTPException(status_code=500, detail="Failed to promote release") from exc
     return {
         "success": True,
         "doc_id": request.doc_id,
