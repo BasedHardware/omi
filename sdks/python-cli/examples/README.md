@@ -32,6 +32,8 @@
   JSON export to CSV for spreadsheets.
 * [`conversations_digest.md`](conversations_digest.md) — summarise conversation-list
   exports into a digest: per-day totals, categories and longest sessions.
+* [`conversations_jsonl.md`](conversations_jsonl.md) — convert conversation
+  exports to JSON Lines (.jsonl) for AI pipelines, LLM fine-tuning and vector indexing.
 * [`conversations_xlsx.md`](conversations_xlsx.md) — convert a conversation-list
   JSON export to an Excel workbook with datetime cells, duration and filters.
 * [`conversations_sqlite.md`](conversations_sqlite.md) — import conversation-list
