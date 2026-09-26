@@ -1010,9 +1010,13 @@ private capture window for live speaker identification.
 
 V2 keeps every emitted provider segment as text. Intervals crossing a VAD
 discontinuity, missing their owner, or arriving after owner closure are retained
-as `audio_alignment=unplaced` on the active conversation. Their persisted
+as `audio_alignment=unplaced` on their proven send owner. If no owner is
+provable, the current row is an explicit, counted degraded fallback. Their persisted
 `start=end=-1` cannot resolve to a v2 audio span in released clients, which
 seek by `start` alone. They are excluded from clip and speaker embedding work.
+The v2 persistence drain retries uncommitted text with stable IDs and bounded
+backoff. A successful owner write is excluded from later retries even if a
+different owner or photo write fails in the same drain; photos retry separately.
 Mapped rows retain their accepted capture-run start for live merging; rows
 across a skipped VAD gap stay separate so merging cannot invent a wider window.
 The expected remaining speaker-recognition gap is the fraction of segments

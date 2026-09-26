@@ -245,7 +245,6 @@ class ListenReceiver:
         # Capture start sample of the STT buffer's first byte; the buffer is
         # one contiguous run of accepted decoded audio.
         self._stt_buffer_start_sample: Optional[int] = None
-        self._initial_conversation_id = getattr(getattr(host, 'state', None), 'current_conversation_id', None)
 
     def _owner_for_sample(self, sample: int) -> Optional[str]:
         """The conversation that owned a capture sample at acceptance time."""
@@ -274,6 +273,21 @@ class ListenReceiver:
             owners = {conversation_id for _, _, conversation_id in ranges}
             if len(owners) == 1:
                 return next(iter(owners))
+        return None
+
+    def _proven_send_owner(self, start_sample: int, length: int) -> Optional[str]:
+        """Require one recorded owner across every sample in the sent span."""
+        cursor = start_sample
+        owner: Optional[str] = None
+        for start, end, candidate in self.host.state.conversation_sample_ranges:
+            if end <= cursor:
+                continue
+            if start > cursor or not candidate or (owner is not None and candidate != owner):
+                return None
+            owner = candidate
+            cursor = min(end, start_sample + length)
+            if cursor == start_sample + length:
+                return owner
         return None
 
     def _note_accepted_frame(self, start_sample: int, end_sample: int) -> None:
@@ -335,10 +349,7 @@ class ListenReceiver:
         for segment in segments:
             if segment.pop('_capture_unplaced', False):
                 owner = segment.pop('_provider_send_owner', None)
-                segment['_conversation_id'] = owner or self._initial_conversation_id
-                OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(
-                    mode='v2', outcome='send_owner_fallback' if owner else 'send_owner_unavailable'
-                ).inc()
+                segment['_conversation_id'] = self._unplaced_owner(owner)
                 kept.append(segment)
                 OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode='v2', outcome='unplaced').inc()
                 continue
@@ -367,13 +378,27 @@ class ListenReceiver:
         segment.pop('audio_capture_run', None)
         segment['end'] = segment['start']
         owner = segment.pop('_provider_send_owner', None)
-        segment['_conversation_id'] = owner or self._initial_conversation_id
-        OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(
-            mode='v2', outcome='send_owner_fallback' if owner else 'send_owner_unavailable'
-        ).inc()
+        segment['_conversation_id'] = self._unplaced_owner(owner)
         kept.append(segment)
         OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode='v2', outcome=outcome).inc()
         OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode='v2', outcome='unplaced').inc()
+
+    def _unplaced_owner(self, proven_owner: Optional[str]) -> Optional[str]:
+        if proven_owner:
+            OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode='v2', outcome='send_owner_fallback').inc()
+            return proven_owner
+        # With no matching accepted send, neither the initial nor the last
+        # conversation is proof of ownership. Retain text on the visible row
+        # only as an explicitly counted degraded fallback.
+        OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode='v2', outcome='send_owner_unavailable').inc()
+        record_fallback(
+            component='other',
+            from_mode='send_owner',
+            to_mode='current_conversation',
+            reason='other',
+            outcome='degraded',
+        )
+        return self.host.state.current_conversation_id
 
     def _enqueue_clock_positioned_segments(self, segments: List[Dict[str, Any]]) -> None:
         """Attach each segment's capture-projected window for speaker ID only.
@@ -589,11 +614,10 @@ class ListenReceiver:
                 send_path=audio_timeline_send_path_label(epoch.send_path),
                 bucket=audio_timeline_past_send_bucket(seconds),
             ).inc(),
-            owner_at_send=lambda: getattr(self.host.state, 'current_conversation_id', None),
+            owner_at_send=self._proven_send_owner,
             project_times=self.capture_timeline_v2,
         )
         epoch.provider_label = audio_timeline_provider_label(getattr(self.host.stt_service, 'value', None))
-        epoch.initial_owner = getattr(self.host.state, 'current_conversation_id', None)
 
         if self.capture_timeline_v2:
             # v2: the translation projects start/end onto the capture wall
