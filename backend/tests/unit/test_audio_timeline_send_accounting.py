@@ -51,9 +51,10 @@ class Provider(STTSocket):
 @pytest.mark.anyio
 @pytest.mark.parametrize('sample_rate', [8000, 16000, 48000])
 @pytest.mark.parametrize('override', [None, 'disabled', 'failed_init'])
-async def test_legacy_receiver_accounts_every_accepted_modulate_send(monkeypatch, override, sample_rate):
+@pytest.mark.parametrize('v2', [False, True])
+async def test_legacy_receiver_accounts_every_accepted_modulate_send(monkeypatch, override, sample_rate, v2):
     """The disabled and failed-init cases rejected 10/10 segments on #19198."""
-    monkeypatch.setenv('AUDIO_TIMELINE_V2', 'false')
+    monkeypatch.setenv('AUDIO_TIMELINE_V2', 'true' if v2 else 'false')
     monkeypatch.setattr(receiver_module, 'managed_chain_enabled', lambda _host: False)
     monkeypatch.setattr(receiver_module, 'VAD_GATE_MODE', 'active')
     monkeypatch.setattr(receiver_module, 'is_gate_enabled', lambda: True)
@@ -73,6 +74,8 @@ async def test_legacy_receiver_accounts_every_accepted_modulate_send(monkeypatch
     state = ListenSessionState()
     state.active = True
     state.current_conversation_id = 'conversation'
+    if v2:
+        state.conversations_awaiting_capture_origin.add('conversation')
     collected = []
     request = SimpleNamespace(
         uid='send-accounting',
@@ -119,7 +122,7 @@ async def test_legacy_receiver_accounts_every_accepted_modulate_send(monkeypatch
         await receiver._flush_stt_buffer(bytearray(pcm))
 
     outside = OMI_AUDIO_TIMELINE_REJECTS_TOTAL.labels(
-        mode='legacy', reason='outside_accepted_sends', provider='modulate'
+        mode='v2' if v2 else 'legacy', reason='outside_accepted_sends', provider='modulate'
     )
     before_outside = outside._value.get()
     adapter = object.__new__(SafeModulateSocket)
@@ -137,4 +140,9 @@ async def test_legacy_receiver_accounts_every_accepted_modulate_send(monkeypatch
     assert isinstance(receiver.stt_socket, GatedSTTSocket)
     assert (receiver.stt_socket._gate is None) == (override is not None)
     assert callbacks['epoch'].send_map.last_capture_sample == 2 * sample_rate
-    assert sum('_capture_abs_start' not in segment for segment in collected) == 0
+    if v2:
+        assert all(
+            segment['start'] < segment['end'] and segment.get('audio_alignment') != 'unplaced' for segment in collected
+        )
+    else:
+        assert sum('_capture_abs_start' not in segment for segment in collected) == 0
