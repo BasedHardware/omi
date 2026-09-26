@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "id": "FC-transcript-and-audio-on-independent-clocks",
+  "violated_contract": "A transcript time and the stored or buffered audio it refers to must be placed by one clock. Live listen placed segments by the socket's first-audio-byte wall time plus the STT provider's stream offset, while private-cloud chunks and the speaker-ID ring buffer were placed by frame-arrival wall time. The provider offset counts only audio that provider was sent and restarts at 0 on a mid-session failover, so the two placements drift apart silently: every subtraction succeeds, no exception is raised, and each component's tests stay green because each asserts its own clock. Measured 2026-09-25 on one account, 24 of 46 conversations with audio had first stored audio 1,159 to 3,258 s after `started_at` within one socket session, all 7 speaker-tag clip requests returned 404 for windows before any audio, and after a Modulate to Soniox failover live owner recognition returned early outside the 60 s ring buffer without a log line while the voiceprint itself matched offline at 0.35 to 0.52.",
+  "canonical_prevention": "Count accepted decoded samples once per listen socket (`backend/utils/audio_timeline.py::CaptureTimeline`) and translate every provider timestamp through the audio that provider actually accepted, in a per-connection epoch (`ProviderEpochTranslator`), so a provider clock never reaches a consumer. Derive segment times, chunk keys and the speaker-ID ring buffer from that one projection, prove coverage from recorded PCM spans rather than chunk timestamps, and pin it with a receiver-to-storage test that asserts which bytes a segment retrieves, plus a failover test that asserts owner recognition survives a provider restart.",
+  "evidence_prs": [],
+  "scope_hints": [
+    "backend/routers/listen/receiver.py",
+    "backend/routers/listen/transcripts.py",
+    "backend/routers/listen/speakers.py",
+    "backend/utils/listen_pusher_session.py",
+    "backend/routers/pusher.py",
+    "backend/utils/audio.py"
+  ],
+  "status": "open"
+}
