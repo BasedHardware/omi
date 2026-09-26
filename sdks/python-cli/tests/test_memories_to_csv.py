@@ -1,8 +1,8 @@
 """Tests for the memories -> CSV exporter.
 
 Pins the CSV column order, UTF-8 BOM and quoting, the formula-prefix guard,
-timestamp normalisation across naive/offset inputs, the `aw_json` envelope
-fallback, ordering, and the no-overwrite / no-partial-file guarantees.
+timestamp normalisation across naive/offset inputs, the empty-content guard,
+ordering, and the no-overwrite / no-partial-file guarantees.
 """
 
 from __future__ import annotations
@@ -66,17 +66,16 @@ class TestMemoriesToCsv(unittest.TestCase):
         self.assertEqual(rows[1][4], "'=1+1")
         self.assertEqual(rows[2][4], "'@mention")
 
-    def test_aw_json_envelope_fallback(self):
+    def test_missing_or_null_content_is_empty(self):
         _, destination = self.export([
-            {"id": "m1", "created_at": "2026-09-01T00:00:00Z",
-             "aw_json": json.dumps({"content": "unwrapped"})},
-            {"id": "m2", "created_at": "2026-09-01T00:00:00Z", "aw_json": "not json"},
+            {"id": "m1", "created_at": "2026-09-01T00:00:00Z", "content": None},
+            {"id": "m2", "created_at": "2026-09-01T00:00:00Z"},
             {"id": "m3", "created_at": "2026-09-01T00:00:00Z", "content": "direct"},
         ])
         rows = read_rows(destination)
         values = {row[0]: row[4] for row in rows[1:]}
-        self.assertEqual(values["m1"], "unwrapped")
-        self.assertEqual(values["m2"], "not json")
+        self.assertEqual(values["m1"], "")
+        self.assertEqual(values["m2"], "")
         self.assertEqual(values["m3"], "direct")
 
     def test_refuses_to_overwrite(self):

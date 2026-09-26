@@ -46,28 +46,14 @@ def utc_text(value):
 
 
 def memory_content(item):
-    """Pick the best available text for a memory.
+    """Return the memory text, or an empty string when it is absent.
 
-    Memories carry their text under `content` in current exports and under
-    `aw_json` in older ones, where the payload is a JSON envelope rather than
-    plain text. Both shapes appear in the same account, so the envelope is
-    unwrapped when it is recognised and the raw text is kept otherwise.
+    The list endpoint models the payload as `content: Optional[str]`, so a
+    missing or null value becomes an empty cell rather than an error.
     """
     content = item.get("content")
     if isinstance(content, str) and content.strip():
         return content
-    envelope = item.get("aw_json")
-    if isinstance(envelope, str) and envelope.strip():
-        try:
-            decoded = json.loads(envelope)
-        except ValueError:
-            return envelope
-        if isinstance(decoded, dict):
-            for key in ("content", "text", "message"):
-                inner = decoded.get(key)
-                if isinstance(inner, str) and inner.strip():
-                    return inner
-        return envelope
     return ""
 
 
