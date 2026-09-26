@@ -24,6 +24,8 @@ void main() {
       WalStatus.corrupted,
       WalStatus.outsideRecoveryWindow,
       WalStatus.unsupportedAudio,
+      // B5 terminal-upload spec: a definitive endpoint refusal cannot resume automatically.
+      WalStatus.uploadRejected,
     };
 
     test('isSyncing wins over every non-terminal status', () {
@@ -71,6 +73,14 @@ void main() {
           reason: 'retryCount=$r must not downgrade it back to the failed/tap-Retry loop',
         );
       }
+    });
+
+    test('uploadRejected wins over a stale syncing flag', () {
+      expect(
+        makeWal(status: WalStatus.uploadRejected, isSyncing: true).syncDisplayState,
+        WalSyncDisplayState.uploadRejected,
+        reason: 'audio the server definitively refused must never render as an active upload',
+      );
     });
 
     test('uploaded -> uploaded (processing on server)', () {

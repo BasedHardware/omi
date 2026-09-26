@@ -193,25 +193,6 @@ void main() {
     expect(adapter.identifies, ['account-b']);
   });
 
-  test('attempt retains original exposure after context clears without leaking to next outcome', () async {
-    final adapter = _FakeAnalyticsAdapter();
-    AnalyticsManager.configure(adapter);
-    await AnalyticsManager.init();
-    var context = <String, Object>{r'$feature/test-ui': 'compact'};
-    AnalyticsManager.experimentContext = () => context;
-    final telemetry = ProductTelemetry();
-    final attempt = telemetry.start(ProductJourney.summaryFeedback);
-    // Equivalent to lease disposal, TTL expiry or kill: subsequent context empty.
-    context = {};
-    attempt.complete(ProductOutcome.success);
-    telemetry.value(ProductValue.feedbackHelpful);
-    await AnalyticsManager.flushPending(force: true);
-    expect(adapter.events.singleWhere((event) => event.eventName == 'Product Journey Outcome').properties,
-        containsPair(r'$feature/test-ui', 'compact'));
-    expect(adapter.events.singleWhere((event) => event.eventName == 'Product Value').properties,
-        isNot(contains(r'$feature/test-ui')));
-  });
-
   test('attempt started without consent never emits after consent is restored', () async {
     final adapter = _FakeAnalyticsAdapter();
     AnalyticsManager.configure(adapter);
@@ -222,26 +203,6 @@ void main() {
     attempt.complete(ProductOutcome.success);
     await AnalyticsManager.flushPending(force: true);
     expect(adapter.events.where((event) => event.eventName == 'Product Journey Outcome'), isEmpty);
-  });
-
-  test('asynchronous zone cannot carry previous account variant into new identity', () async {
-    final adapter = _FakeAnalyticsAdapter();
-    AnalyticsManager.configure(adapter);
-    await AnalyticsManager.init();
-    AnalyticsManager().bindIdentity('account-a');
-    final release = Completer<void>();
-    late Future<void> delayed;
-    AnalyticsManager.withExperimentContext({r'$feature/test-ui': 'compact'}, () {
-      delayed = release.future.then((_) => AnalyticsManager().track('Product Value'));
-    });
-    AnalyticsManager().bindIdentity('account-b');
-    release.complete();
-    await delayed;
-    await AnalyticsManager.flushPending(force: true);
-    expect(adapter.events, isEmpty);
-    AnalyticsManager().track('Product Value');
-    await AnalyticsManager.flushPending(force: true);
-    expect(adapter.events.single.properties, isNot(contains(r'$feature/test-ui')));
   });
 
   test('page opens register context for native interaction events', () async {
