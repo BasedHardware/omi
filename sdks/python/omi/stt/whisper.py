@@ -11,9 +11,22 @@ class WhisperTranscriber:
     Feature gate: only importable/usable when a runner is provided or whisper is installed.
     """
 
-    def __init__(self, *, model_name: str = "tiny.en", runner: Optional[Callable[[bytes], str]] = None) -> None:
+    def __init__(
+        self,
+        *,
+        model_name: str = "tiny.en",
+        runner: Optional[Callable[[bytes], str]] = None,
+        language: Optional[str] = "en",
+    ) -> None:
+        """Use a language code or None for Whisper's language detection.
+
+        Non-English audio requires a multilingual model (for example, "tiny").
+        An injected runner continues to receive only PCM bytes and owns its
+        own language configuration.
+        """
         self.model_name = model_name
         self.runner = runner
+        self.language = language
         self._model = None
         if runner is None:
             try:
@@ -53,5 +66,5 @@ class WhisperTranscriber:
         import numpy as np  # type: ignore
 
         audio = np.frombuffer(pcm, dtype=np.int16).astype(np.float32) / 32768.0
-        result = self._model.transcribe(audio, fp16=False, language="en")
+        result = self._model.transcribe(audio, fp16=False, language=self.language)
         return (result.get("text") or "").strip()
