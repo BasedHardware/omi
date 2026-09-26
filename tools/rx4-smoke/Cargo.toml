@@ -1,0 +1,11 @@
+[package]
+name = "rx4-smoke"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# Local experiment harness — not part of any product build. Build it in place:
+#   cd tools/rx4-smoke && cargo build --release
+[dependencies]
+rx4 = { version = "0.7", features = ["providers", "builtin-tools"] }
+tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
