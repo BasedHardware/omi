@@ -29,6 +29,12 @@ from utils.speaker_tag_prompts.clips import (
 
 logger = logging.getLogger(__name__)
 
+
+def _sanitize_speaker_tag_prompt_error(exc: Exception, fallback: str) -> str:
+    logger.warning(f"Speaker tag prompt operation failed: {type(exc).__name__}: {exc}")
+    return fallback
+
+
 router = APIRouter()
 
 
@@ -64,15 +70,27 @@ def answer_speaker_tag_prompt(
     try:
         return service.apply_answer(uid, data, schedule=background_tasks.add_task)
     except service.TagPromptInvalid as error:
-        raise HTTPException(status_code=400, detail=str(error)) from error
+        raise HTTPException(
+            status_code=400,
+            detail=_sanitize_speaker_tag_prompt_error(error, "speaker_tag_prompt_invalid_submission"),
+        ) from error
     except service.TagPromptForbidden as error:
-        raise HTTPException(status_code=402, detail=str(error)) from error
+        raise HTTPException(
+            status_code=402,
+            detail=_sanitize_speaker_tag_prompt_error(error, "speaker_tag_prompt_forbidden"),
+        ) from error
     except LookupError as error:
-        raise HTTPException(status_code=404, detail=str(error)) from error
+        raise HTTPException(
+            status_code=404,
+            detail=_sanitize_speaker_tag_prompt_error(error, "speaker_tag_prompt_not_found"),
+        ) from error
     except PermissionError as error:
         raise HTTPException(status_code=402, detail='A paid plan is required to access this conversation.') from error
     except ValueError as error:
-        raise HTTPException(status_code=409, detail=str(error)) from error
+        raise HTTPException(
+            status_code=409,
+            detail=_sanitize_speaker_tag_prompt_error(error, "speaker_tag_prompt_state_conflict"),
+        ) from error
 
 
 @router.get('/v1/speaker-tag-prompts/clip', tags=['speaker-tag-prompts'], response_model=SpeakerTagPromptClip)
