@@ -1631,7 +1631,7 @@ environments:
             value: prod
             category: runtime_identity
           STT_CONNECT_ORDER_FROM_CONFIG:
-            value: 'false'
+            value: 'true'
             category: rollout
           PARAKEET_WINDOW_ALLOCATION_PERCENT:
             value: '0'

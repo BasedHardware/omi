@@ -11179,6 +11179,10 @@ class AppLocalizationsEt extends AppLocalizations {
   String get captureRecoveryBanner => 'Ripatsi heli ei jõua rakendusse — parandamiseks puudutage';
 
   @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Peata ripatsi režiim Transcribe Later enne telefoniga salvestamist.';
+
+  @override
   String get captureNotTranscribing => 'Transkriptsioon puudub';
 
   @override

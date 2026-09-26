@@ -26,7 +26,7 @@ import 'package:omi/providers/sync_provider.dart';
 import 'package:omi/ui/ui.dart';
 import 'package:omi/utils/enums.dart';
 
-enum _Live { idle, idleDeviceConnected, pendant, pendantPaused, phone, phoneAfterPendant }
+enum _Live { idle, idleDeviceConnected, pendant, pendantPaused, pendantBatch, phone, phoneAfterPendant }
 
 class _Capture extends ChangeNotifier implements CaptureProvider {
   _Capture(this.live,
@@ -51,11 +51,12 @@ class _Capture extends ChangeNotifier implements CaptureProvider {
   int resumes = 0;
   int finishes = 0;
   int phoneStarts = 0;
+  Object? phoneStartFailure;
 
   @override
   String? get liveCaptureSource => switch (live) {
         _Live.idle || _Live.idleDeviceConnected => null,
-        _Live.pendant || _Live.pendantPaused => 'omi',
+        _Live.pendant || _Live.pendantPaused || _Live.pendantBatch => 'omi',
         _ => 'phone',
       };
   @override
@@ -65,7 +66,7 @@ class _Capture extends ChangeNotifier implements CaptureProvider {
           ? RecordingState.pause
           : switch (live) {
               _Live.idle || _Live.idleDeviceConnected => RecordingState.stop,
-              _Live.pendant => RecordingState.deviceRecord,
+              _Live.pendant || _Live.pendantBatch => RecordingState.deviceRecord,
               _Live.pendantPaused => RecordingState.pause,
               _ => RecordingState.record,
             };
@@ -87,6 +88,8 @@ class _Capture extends ChangeNotifier implements CaptureProvider {
   bool get offlineMuted => false;
   @override
   int? get offlineRecordingElapsedSeconds => batch ? 125 : null;
+  @override
+  bool get isPendantBatchRecording => live == _Live.pendantBatch;
   @override
   DateTime? get liveCaptureStartedAt => live == _Live.idle || live == _Live.idleDeviceConnected
       ? null

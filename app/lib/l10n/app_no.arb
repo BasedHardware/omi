@@ -3530,6 +3530,7 @@
     "keepUsingPendant": "Fortsett med anhenget",
     "openCall": "Åpne anrop",
     "captureRecoveryBanner": "Lyden fra anhenget når ikke frem til appen — trykk for å reparere",
+    "phoneRecordingBlockedByPendantBatch": "Stopp Transcribe Later på anhenget ditt før du tar opp med telefonen.",
     "captureNotTranscribing": "Transkriberer ikke",
     "captureAudioSavedTranscribesLater": "Lyd lagret, transkriberes senere",
     "captureStillRecording": "Tar fortsatt opp",

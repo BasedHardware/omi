@@ -11225,6 +11225,10 @@ class AppLocalizationsBg extends AppLocalizations {
   String get captureRecoveryBanner => 'Звукът от висулката не достига до приложението — докоснете, за да поправите';
 
   @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Спрете Transcribe Later на висулката си, преди да записвате с телефона.';
+
+  @override
   String get captureNotTranscribing => 'Без транскрипция';
 
   @override

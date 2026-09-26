@@ -249,7 +249,7 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
       OmiHaptics.medium();
       if (provider.isPaused) {
         await provider.resumeCapture();
-        if (phone) PlatformManager.instance.analytics.phoneMicRecordingStarted();
+        if (phone && !provider.isPaused) PlatformManager.instance.analytics.phoneMicRecordingStarted();
       } else {
         await provider.pauseCapture();
         if (phone) PlatformManager.instance.analytics.phoneMicRecordingStopped();
@@ -435,7 +435,17 @@ class _ConversationCaptureWidgetState extends State<ConversationCaptureWidget> {
       // Phone-mic batch is user-driven (not ambient like BLE), so it needs an explicit Stop that ends
       // the session. BLE batch has no Stop by design.
       if (provider.isPhoneMicBatchRecording)
-        (icon: Icons.stop_rounded, label: l10n.stop, onTap: () => provider.stopStreamRecording()),
+        (
+          icon: Icons.stop_rounded,
+          label: l10n.stop,
+          onTap: () async {
+            try {
+              await provider.stopStreamRecording();
+            } catch (_) {
+              if (mounted) AppSnackbar.showSnackbar(context.l10n.somethingWentWrong);
+            }
+          },
+        ),
     ];
 
     return Column(

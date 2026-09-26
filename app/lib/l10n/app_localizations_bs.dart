@@ -11212,6 +11212,10 @@ class AppLocalizationsBs extends AppLocalizations {
   String get captureRecoveryBanner => 'Zvuk privjeska ne stiže do aplikacije — dodirnite za popravak';
 
   @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Zaustavite Transcribe Later na privjesku prije snimanja telefonom.';
+
+  @override
   String get captureNotTranscribing => 'Nema transkripcije';
 
   @override

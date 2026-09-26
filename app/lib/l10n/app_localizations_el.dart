@@ -11258,6 +11258,10 @@ class AppLocalizationsEl extends AppLocalizations {
   String get captureRecoveryBanner => 'Ο ήχος του μενταγιόν δεν φτάνει στην εφαρμογή — πατήστε για επισκευή';
 
   @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Σταματήστε το Transcribe Later στο κολιέ σας πριν ηχογραφήσετε με το τηλέφωνό σας.';
+
+  @override
   String get captureNotTranscribing => 'Χωρίς μεταγραφή';
 
   @override

@@ -105,8 +105,8 @@ enum ConferencingApps {
   static func currentCallIdentities() -> Set<String> {
     var identities = Set<String>()
     if #available(macOS 14.4, *) {
-      for bundleID in bundleIDsRunningInput() where isNativeCallApp(bundleID: bundleID) {
-        identities.insert("app:\(bundleID)")
+      for bundleID in bundleIDsRunningInput() {
+        if let appID = nativeCallAppID(bundleID: bundleID) { identities.insert("app:\(appID)") }
       }
     }
     for title in onScreenBrowserWindowTitles() {
@@ -138,9 +138,21 @@ enum ConferencingApps {
     "net.whatsapp.whatsapp",  // WhatsApp (net.whatsapp.WhatsApp)
   ]).union(telegramBundleIDs)
 
-  /// Whether a bundle ID belongs to a known native conferencing app (case-insensitive).
+  /// Whether a bundle ID belongs to a known native conferencing app or one of its helper
+  /// processes (case-insensitive).
   static func isNativeCallApp(bundleID: String) -> Bool {
-    nativeCallBundleIDs.contains(bundleID.lowercased())
+    nativeCallAppID(bundleID: bundleID) != nil
+  }
+
+  /// The catalog entry a process belongs to. Electron and Chromium-based apps capture the
+  /// microphone in a helper process with its own bundle ID: a Discord call holds the mic in
+  /// `com.hnc.Discord.helper.Renderer` (measured 2026-09-26), so an exact match missed the call
+  /// entirely. A helper is `<catalog id>.<suffix>`; the longest matching entry wins, so helpers
+  /// of one app always map to the same identity.
+  static func nativeCallAppID(bundleID: String) -> String? {
+    let lower = bundleID.lowercased()
+    if nativeCallBundleIDs.contains(lower) { return lower }
+    return nativeCallBundleIDs.filter { lower.hasPrefix($0 + ".") }.max { $0.count < $1.count }
   }
 
   /// Bundle-ID prefixes (lowercased) of web browsers. A browser process using the **microphone**

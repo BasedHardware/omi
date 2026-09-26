@@ -11246,6 +11246,10 @@ class AppLocalizationsCa extends AppLocalizations {
   String get captureRecoveryBanner => 'L\'àudio del penjoll no arriba a l\'aplicació — toca\'l per reparar';
 
   @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Atura Transcribe Later al penjoll abans d\'enregistrar amb el telèfon.';
+
+  @override
   String get captureNotTranscribing => 'Sense transcripció';
 
   @override

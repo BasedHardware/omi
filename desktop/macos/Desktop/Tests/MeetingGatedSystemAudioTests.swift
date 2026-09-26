@@ -89,6 +89,18 @@ import XCTest
       // fires while in a Discord voice channel, Slack huddle, or WhatsApp call.
       XCTAssertTrue(ConferencingApps.isNativeCallApp(bundleID: "com.hnc.Discord"))
       XCTAssertTrue(ConferencingApps.isNativeCallApp(bundleID: "com.hnc.discord"))  // case-insensitive
+      // A Discord call holds the mic in the Electron renderer helper (probe, 2026-09-26).
+      XCTAssertTrue(ConferencingApps.isNativeCallApp(bundleID: "com.hnc.Discord.helper.Renderer"))
+      XCTAssertEqual(
+        ConferencingApps.nativeCallAppID(bundleID: "com.hnc.Discord.helper.Renderer"), "com.hnc.discord")
+      XCTAssertEqual(ConferencingApps.nativeCallAppID(bundleID: "com.hnc.Discord.helper"), "com.hnc.discord")
+      XCTAssertEqual(
+        ConferencingApps.nativeCallAppID(bundleID: "com.tinyspeck.slackmacgap.helper"), "com.tinyspeck.slackmacgap")
+      // Sibling apps are not helpers: a dotted prefix is required.
+      XCTAssertEqual(ConferencingApps.nativeCallAppID(bundleID: "com.hnc.DiscordPTB"), "com.hnc.discordptb")
+      XCTAssertEqual(ConferencingApps.nativeCallAppID(bundleID: "com.microsoft.teams2.helper"), "com.microsoft.teams2")
+      XCTAssertNil(ConferencingApps.nativeCallAppID(bundleID: "com.hnc.discordian"))
+      XCTAssertNil(ConferencingApps.nativeCallAppID(bundleID: "com.google.Chrome.helper"))
       XCTAssertTrue(ConferencingApps.isNativeCallApp(bundleID: "com.tinyspeck.slackmacgap"))
       XCTAssertTrue(ConferencingApps.isNativeCallApp(bundleID: "net.whatsapp.WhatsApp"))
       // Omi itself and browsers are not native call apps (browser calls are matched

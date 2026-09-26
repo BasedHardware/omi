@@ -11209,6 +11209,9 @@ class AppLocalizationsLv extends AppLocalizations {
   String get captureRecoveryBanner => 'Kulona audio nesasniedz lietotni — pieskarieties, lai salabotu';
 
   @override
+  String get phoneRecordingBlockedByPendantBatch => 'Pirms ierakstīšanas ar tālruni apturiet Transcribe Later piekari.';
+
+  @override
   String get captureNotTranscribing => 'Netiek transkribēts';
 
   @override

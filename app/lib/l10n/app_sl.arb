@@ -11063,6 +11063,7 @@
     "keepUsingPendant": "Še naprej uporabljaj obesek",
     "openCall": "Odpri klic",
     "captureRecoveryBanner": "Zvuk obeska ne prihaja v aplikacijo — tapnite za popravilo",
+    "phoneRecordingBlockedByPendantBatch": "Pred snemanjem s telefonom ustavite Transcribe Later na obesku.",
     "captureNotTranscribing": "Ni prepisa",
     "captureAudioSavedTranscribesLater": "Zvok shranjen, prepis pozneje",
     "captureStillRecording": "Snemanje se nadaljuje",

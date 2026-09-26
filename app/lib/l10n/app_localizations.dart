@@ -20367,6 +20367,12 @@ abstract class AppLocalizations {
   /// **'Pendant audio is not reaching the app — tap to repair'**
   String get captureRecoveryBanner;
 
+  /// No description provided for @phoneRecordingBlockedByPendantBatch.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop Transcribe Later on your pendant before recording with your phone.'**
+  String get phoneRecordingBlockedByPendantBatch;
+
   /// Home live capture card, line 1: live transcription is not running (server said it cannot); audio keeps recording. Must stay short (one line on a small phone).
   ///
   /// In en, this message translates to:

@@ -11063,6 +11063,7 @@
     "keepUsingPendant": "ಪೆಂಡೆಂಟ್ ಬಳಸುವುದನ್ನು ಮುಂದುವರಿಸಿ",
     "openCall": "ಕರೆ ತೆರೆಯಿರಿ",
     "captureRecoveryBanner": "ಪೆಂಡೆಂಟ್‌ನ ಆಡಿಯೊ ಆ್ಯಪ್‌ಗೆ ತಲುಪುತ್ತಿಲ್ಲ — ಸರಿಪಡಿಸಲು ಟ್ಯಾಪ್ ಮಾಡಿ",
+    "phoneRecordingBlockedByPendantBatch": "ನಿಮ್ಮ ಫೋನ್‌ನಿಂದ ರೆಕಾರ್ಡ್ ಮಾಡುವ ಮೊದಲು ನಿಮ್ಮ ಪೆಂಡಂಟ್‌ನಲ್ಲಿ Transcribe Later ನಿಲ್ಲಿಸಿ.",
     "captureNotTranscribing": "ಪ್ರತಿಲೇಖನ ಆಗುತ್ತಿಲ್ಲ",
     "captureAudioSavedTranscribesLater": "ಆಡಿಯೋ ಉಳಿಸಲಾಗಿದೆ, ನಂತರ ಪ್ರತಿಲೇಖನ",
     "captureStillRecording": "ಇನ್ನೂ ರೆಕಾರ್ಡ್ ಆಗುತ್ತಿದೆ",

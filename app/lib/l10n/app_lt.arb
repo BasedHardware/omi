@@ -3530,6 +3530,7 @@
     "keepUsingPendant": "Toliau naudoti pakabuką",
     "openCall": "Atidaryti skambutį",
     "captureRecoveryBanner": "Pakabuko garsas nepasiekia programėlės — palieskite, kad ištaisytumėte",
+    "phoneRecordingBlockedByPendantBatch": "Prieš įrašinėdami telefonu, sustabdykite „Transcribe Later“ pakabuke.",
     "captureNotTranscribing": "Neperrašoma",
     "captureAudioSavedTranscribesLater": "Garsas išsaugotas, bus perrašytas vėliau",
     "captureStillRecording": "Įrašymas tęsiamas",

@@ -11063,6 +11063,7 @@
     "keepUsingPendant": "Працягнуць з кулонам",
     "openCall": "Адкрыць званок",
     "captureRecoveryBanner": "Гук кулона не даходзіць да праграмы — націсніце, каб выправіць",
+    "phoneRecordingBlockedByPendantBatch": "Спыніце Transcribe Later на падвесцы перад запісам на тэлефоне.",
     "captureNotTranscribing": "Няма транскрыпцыі",
     "captureAudioSavedTranscribesLater": "Аўдыя захавана, транскрыпцыя пазней",
     "captureStillRecording": "Запіс працягваецца",

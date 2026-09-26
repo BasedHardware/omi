@@ -11063,6 +11063,7 @@
     "keepUsingPendant": "Nastavi s privjeskom",
     "openCall": "Otvori poziv",
     "captureRecoveryBanner": "Zvuk privjeska ne stiže do aplikacije — dodirnite za popravak",
+    "phoneRecordingBlockedByPendantBatch": "Zaustavite Transcribe Later na privjesku prije snimanja telefonom.",
     "captureNotTranscribing": "Nema transkripcije",
     "captureAudioSavedTranscribesLater": "Zvuk je spremljen, transkripcija kasnije",
     "captureStillRecording": "Snimanje se nastavlja",

@@ -11220,6 +11220,10 @@ class AppLocalizationsRu extends AppLocalizations {
   String get captureRecoveryBanner => 'Звук кулона не доходит до приложения — нажмите, чтобы исправить';
 
   @override
+  String get phoneRecordingBlockedByPendantBatch =>
+      'Остановите Transcribe Later на подвеске, прежде чем записывать с телефона.';
+
+  @override
   String get captureNotTranscribing => 'Нет текста';
 
   @override

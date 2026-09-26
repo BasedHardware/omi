@@ -3530,6 +3530,7 @@
     "keepUsingPendant": "Continua amb el penjoll",
     "openCall": "Obre la trucada",
     "captureRecoveryBanner": "L'àudio del penjoll no arriba a l'aplicació — toca'l per reparar",
+    "phoneRecordingBlockedByPendantBatch": "Atura Transcribe Later al penjoll abans d'enregistrar amb el telèfon.",
     "captureNotTranscribing": "Sense transcripció",
     "captureAudioSavedTranscribesLater": "Àudio desat, es transcriurà més tard",
     "captureStillRecording": "Encara s'està gravant",
