@@ -12,9 +12,10 @@ import asyncio
 import hashlib
 import json
 import logging
+import threading
 import time
 import uuid
-from concurrent.futures import TimeoutError as FutureTimeoutError
+from concurrent.futures import Future, TimeoutError as FutureTimeoutError
 from datetime import datetime, timedelta, timezone
 from typing import Any, Callable, Dict, List, Mapping, Optional, Tuple
 
@@ -47,9 +48,10 @@ from utils.observability.speaker_tag_prompts import (
 )
 from utils.product_telemetry import emit_product_event
 from utils.executors import (
+    ExecutorSaturatedError,
     db_executor,
-    postprocess_executor,
     run_blocking,
+    speaker_tag_verify_executor,
     storage_executor,
     submit_with_context,
     sync_executor,
@@ -79,6 +81,8 @@ VERIFY_CACHE_SECONDS = 12 * 60 * 60
 VERIFY_ERROR_CACHE_SECONDS = 5 * 60
 LIST_VERIFY_BUDGET_SECONDS = 8.0
 MIN_EXPECTED_CONTAINMENT = 0.7
+_inflight_verifications: Dict[str, Future[Optional[bytes]]] = {}
+_inflight_lock = threading.RLock()
 
 ScheduleTask = Callable[..., None]
 
@@ -151,12 +155,20 @@ def clip_expected_text(conversation: Mapping[str, Any], start: float, end: float
 
 
 def verified_clip_pcm(
-    uid: str, conversation: Mapping[str, Any], start: float, end: float, expected_text: str, pcm: Optional[bytes] = None
+    uid: str,
+    conversation: Mapping[str, Any],
+    start: float,
+    end: float,
+    expected_text: str,
+    pcm: Optional[bytes] = None,
+    verification_deadline: Optional[float] = None,
 ) -> Optional[bytes]:
     """Return playable PCM only after a matching transcription or cached verdict."""
     if not expected_text:
         SPEAKER_TAG_PROMPTS_SKIPPED.labels(reason='verify_failed').inc()
         return None
+    if verification_deadline is not None and time.monotonic() >= verification_deadline:
+        raise FutureTimeoutError()
     key = _verification_cache_key(uid, conversation, start, end, expected_text)
     cached = redis_db.get_generic_cache(key)
     try:
@@ -172,6 +184,8 @@ def verified_clip_pcm(
         SPEAKER_TAG_PROMPTS_SKIPPED.labels(reason='uncovered').inc()
         return None
     pcm_digest = hashlib.sha256(pcm).hexdigest()
+    if verification_deadline is not None and time.monotonic() >= verification_deadline:
+        raise FutureTimeoutError()
     if isinstance(cached, dict) and cached.get('pcm_sha256') == pcm_digest:
         if cached.get('valid') is False:
             SPEAKER_TAG_PROMPTS_SKIPPED.labels(reason=cached.get('reason', 'verify_failed')).inc()
@@ -179,10 +193,11 @@ def verified_clip_pcm(
         if cached.get('valid') is True:
             return pcm
     try:
+        verify_kwargs: Dict[str, Any] = {'language': conversation.get('language')}
+        if verification_deadline is not None:
+            verify_kwargs['verification_deadline'] = verification_deadline
         _transcript, valid, reason = asyncio.run(
-            verify_and_transcribe_sample(
-                pcm_to_wav(pcm), CLIP_SAMPLE_RATE, expected_text, language=conversation.get('language')
-            )
+            verify_and_transcribe_sample(pcm_to_wav(pcm), CLIP_SAMPLE_RATE, expected_text, **verify_kwargs)
         )
     except Exception:
         SPEAKER_TAG_PROMPTS_SKIPPED.labels(reason='verify_error').inc()
@@ -190,6 +205,8 @@ def verified_clip_pcm(
             key, {'pcm_sha256': pcm_digest, 'valid': False, 'reason': 'verify_error'}, ttl=VERIFY_ERROR_CACHE_SECONDS
         )
         return None
+    if verification_deadline is not None and time.monotonic() >= verification_deadline:
+        raise FutureTimeoutError()
     if valid:
         valid = bool(_transcript) and compute_text_containment(expected_text, _transcript) >= MIN_EXPECTED_CONTAINMENT
     if not valid:
@@ -203,6 +220,36 @@ def verified_clip_pcm(
         return None
     redis_db.set_generic_cache(key, {'pcm_sha256': pcm_digest, 'valid': True}, ttl=VERIFY_CACHE_SECONDS)
     return pcm
+
+
+def _submit_list_verification(
+    uid: str, conversation: Mapping[str, Any], start: float, end: float, expected_text: str, deadline: float
+) -> Future[Optional[bytes]]:
+    """Share identical checks and reject distinct work when the small pool is full."""
+    key = _verification_cache_key(uid, conversation, start, end, expected_text)
+    with _inflight_lock:
+        existing = _inflight_verifications.get(key)
+        if existing is not None:
+            return existing
+        future = submit_with_context(
+            speaker_tag_verify_executor,
+            verified_clip_pcm,
+            uid,
+            conversation,
+            start,
+            end,
+            expected_text,
+            verification_deadline=deadline,
+        )
+        _inflight_verifications[key] = future
+
+        def clear(done: Future[Optional[bytes]]) -> None:
+            with _inflight_lock:
+                if _inflight_verifications.get(key) is done:
+                    del _inflight_verifications[key]
+
+        future.add_done_callback(clear)
+        return future
 
 
 def get_prompts(uid: str, now: Optional[datetime] = None) -> SpeakerTagPromptsResponse:
@@ -253,25 +300,20 @@ def get_prompts(uid: str, now: Optional[datetime] = None) -> SpeakerTagPromptsRe
         if remaining <= 0:
             timed_out = True
             return False
-        # A timed-out attempt continues in the bounded postprocess pool and
-        # warms the PCM-bound verdict cache for the next request.
-        future = None
         try:
-            future = submit_with_context(
-                postprocess_executor,
-                verified_clip_pcm,
+            future = _submit_list_verification(
                 uid,
                 conversation,
                 prompt.clip_start,
                 prompt.clip_end,
                 clip_expected_text(conversation, prompt.clip_start, prompt.clip_end),
+                deadline,
             )
             return future.result(timeout=remaining) is not None
         except FutureTimeoutError:
-            # Do not queue paid work after the caller has gone away. A running
-            # attempt can finish and populate the verdict cache.
-            if future is not None:
-                future.cancel()
+            timed_out = True
+            return False
+        except ExecutorSaturatedError:
             timed_out = True
             return False
         except Exception as error:

@@ -1,6 +1,7 @@
 import asyncio
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta, timezone
 
 import numpy as np
@@ -13,7 +14,11 @@ from models.speaker_tag_prompts import (
     SpeakerTagPromptOrigin as O,
     SpeakerTagPromptQualityOutcome as Q,
 )
+from utils import executors
+from utils import speaker_sample
 from utils.speaker_tag_prompts import service
+from utils.stt import pre_recorded
+from utils.executors import ExecutorSaturatedError, MonitoredThreadPoolExecutor
 
 NOW = datetime(2026, 9, 24, 12, 0, tzinfo=timezone.utc)
 
@@ -341,12 +346,16 @@ def test_prompt_list_verification_budget_returns_without_empty_cooldown(monkeypa
     release = threading.Event()
     started_verify = threading.Event()
 
-    def slow_verify(*args):
+    def slow_verify(*args, **kwargs):
         started_verify.set()
         release.wait(timeout=1)
         return None
 
     monkeypatch.setattr(service, 'verified_clip_pcm', slow_verify)
+    for shared in (executors.postprocess_executor, executors.sync_executor, executors.storage_executor):
+        monkeypatch.setattr(
+            shared, 'submit', lambda *args, **kwargs: pytest.fail('verification used a shared executor')
+        )
     try:
         began = time.monotonic()
         response = service.get_prompts('u', NOW)
@@ -356,6 +365,92 @@ def test_prompt_list_verification_budget_returns_without_empty_cooldown(monkeypa
         assert 'last_empty_check_at' not in world.state
     finally:
         release.set()
+
+
+def test_list_verification_pool_is_bounded_and_dedupes_inflight(monkeypatch):
+    pool = MonitoredThreadPoolExecutor(name='tag-test', max_workers=1, max_queue_size=1)
+    monkeypatch.setattr(service, 'speaker_tag_verify_executor', pool)
+    started = threading.Event()
+    release = threading.Event()
+    calls = []
+
+    def slow_verify(uid, row, start, end, text, *, verification_deadline):
+        calls.append(row['id'])
+        started.set()
+        release.wait(timeout=2)
+        return b'valid'
+
+    monkeypatch.setattr(service, 'verified_clip_pcm', slow_verify)
+    deadline = time.monotonic() + 1
+    try:
+        row = {'id': 'same', 'audio_files': [{'duration': 20}]}
+        with ThreadPoolExecutor(max_workers=4) as callers:
+            duplicates = list(
+                callers.map(
+                    lambda _: service._submit_list_verification('u', row, 0, 5, 'same words', deadline), range(4)
+                )
+            )
+        assert started.wait(timeout=1)
+        assert all(future is duplicates[0] for future in duplicates)
+        assert calls == ['same']
+
+        queued = service._submit_list_verification('u', {'id': 'queued'}, 0, 5, 'other words', deadline)
+        assert pool.active_count == 1
+        assert pool._work_queue.qsize() == 1
+        with pytest.raises(ExecutorSaturatedError):
+            service._submit_list_verification('u', {'id': 'rejected'}, 0, 5, 'third words', deadline)
+        assert service._submit_list_verification('u', row, 0, 5, 'same words', deadline) is duplicates[0]
+    finally:
+        release.set()
+        pool.shutdown(wait=True)
+    assert queued.done()
+
+
+def test_verification_stt_runs_inline_with_one_budgeted_provider_attempt(monkeypatch):
+    def forbidden_shared_pool(*args, **kwargs):
+        pytest.fail('verification submitted STT to a shared executor')
+
+    monkeypatch.setattr(speaker_sample, 'run_blocking', forbidden_shared_pool)
+    words = [{'text': word, 'speaker': 'SPEAKER_00'} for word in 'one two three four five'.split()]
+    monkeypatch.setattr(speaker_sample, 'deepgram_prerecorded_from_bytes', lambda *args, **kwargs: words)
+    result = asyncio.run(
+        speaker_sample.verify_and_transcribe_sample(
+            b'wave', 16000, 'one two three four five', verification_deadline=time.monotonic() + 1
+        )
+    )
+    assert result == ('one two three four five', True, 'ok')
+
+    attempts = []
+
+    class SlowProvider:
+        def __init__(self, timeout):
+            attempts.append(timeout)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            return None
+
+        def post(self, *args, **kwargs):
+            raise TimeoutError('provider timed out')
+
+    monkeypatch.setenv('MODULATE_API_KEY', 'test-only')
+    monkeypatch.setattr(pre_recorded, 'require_provider_environment', lambda _: None)
+    monkeypatch.setattr(pre_recorded.httpx, 'Client', SlowProvider)
+    with pre_recorded.verification_stt_deadline(time.monotonic() + 0.5):
+        with pytest.raises(RuntimeError, match='after 1 attempts'):
+            pre_recorded.modulate_prerecorded_from_bytes(b'wave')
+    assert len(attempts) == 1
+    assert 0 < attempts[0].read <= 0.5
+
+    attempts.clear()
+    monkeypatch.setenv('HOSTED_PARAKEET_API_URL', 'https://invalid.example')
+    with pre_recorded.verification_stt_deadline(time.monotonic() + 0.5):
+        with pytest.raises(RuntimeError, match='after 1 attempts'):
+            pre_recorded.parakeet_prerecorded_from_bytes(b'wave')
+    assert len(attempts) == 1
+    assert 0 < attempts[0].read <= 0.5
 
 
 def test_truncated_clip_is_rejected_before_transcription(monkeypatch):
@@ -406,7 +501,7 @@ def test_get_prompts_excludes_misaligned_merged_sync_audio(monkeypatch):
     monkeypatch.setattr(service, 'conversation_clip_pcm', lambda *args: b'\x01\x00' * (10 * 16000))
     checked = []
 
-    async def verify(audio, sample_rate, expected_text, language=None):
+    async def verify(audio, sample_rate, expected_text, language=None, **kwargs):
         checked.append(expected_text)
         return ('Static and coughing', False, 'text_mismatch: containment=0.00')
 
