@@ -279,8 +279,39 @@ def test_429_surfaces_rate_limit_with_policy(authed_profile, respx_mock) -> None
             client.post("/v1/dev/user/conversations", json_body={"text": "x"})
     err = info.value
     assert err.policy == "dev:conversations"
+    assert err.message == "Rate limited: dev:conversations (25/hr)"
     assert err.retry_after_seconds == 12.0
     assert "12s" in (err.detail or "")
+
+
+@pytest.mark.parametrize(
+    ("detail", "expected_policy", "expected_message"),
+    [
+        ("Rate limit exceeded for policy dev:goals_write", "dev:goals_write", "Rate limited: dev:goals_write (120/hr)"),
+        (
+            "Rate limit exceeded for policy dev:memories_write_burst",
+            "dev:memories_write_burst",
+            "Rate limited: dev:memories_write_burst (30/min)",
+        ),
+        (
+            "Rate limit exceeded for policy dev:custom_unlisted",
+            "dev:custom_unlisted",
+            "Rate limited: dev:custom_unlisted",
+        ),
+        ("Too many requests", None, "Rate limited"),
+    ],
+)
+def test_rate_limit_policy_formatting(authed_profile, respx_mock, detail, expected_policy, expected_message) -> None:
+    respx_mock.get("/v1/dev/user/memories").mock(
+        side_effect=[
+            httpx.Response(429, headers={"Retry-After": "100"}, json={"detail": detail}),
+        ]
+    )
+    with OmiClient(authed_profile) as client:
+        with pytest.raises(RateLimitError) as info:
+            client.get("/v1/dev/user/memories")
+    assert info.value.policy == expected_policy
+    assert info.value.message == expected_message
 
 
 def test_204_returns_none(authed_profile, respx_mock) -> None:
