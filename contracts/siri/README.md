@@ -32,6 +32,8 @@ Each row below is an AND condition. A missing required ID, owner, or completion 
 
 Source fields were checked against Dart `Memory`, `ServerConversation`, `GeneratedActionItemResponse`; macOS GRDB `MemoryRecord`, `TranscriptionSessionRecord`, `ActionItemRecord`; and backend `MemoryDB`, `Conversation`, `ActionItemResponse`. Beyond the reported fields, this table explicitly covers locked/paywalled rows, memory invalidation and supersession, task supersession, and unknown visibility. The backend account-scoped fetch and local owner fence establish ownership where a row has no UID.
 
+iOS refreshes its private snapshot from an owner-wide, bounded traversal independent of the visible UI page: open tasks and recent completed tasks, completed conversations in the 180-day window, and the unfiltered memory view. It defers the refresh after account binding and schedules it no more than once per owner per launch day; confirmed mutations remain incremental. A complete traversal may reconcile absent IDs in its covered scope. A failed, rate-limited, truncated, partially decoded, or cap-limited traversal only adds fetched rows. The conversation 429 path honors `Retry-After` before one retry. macOS queries eligible conversations before applying its 2,000-row limit. Both clients use the earliest applicable memory expiry or ledger `invalid_at`, conversation age, and completed-task age to schedule removal while running.
+
 ## Intents and phrases
 
 | Action | Kind | Parameters | Result |
