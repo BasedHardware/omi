@@ -107,10 +107,10 @@ def hive_graphql_request(
         print(f"🐝 Hive Request Timeout")
         return {"errors": [{"message": "Request timed out. Please try again."}]}
     except requests.RequestException as e:
-        print(f"🐝 Hive Request Error: {e}")
+        print(f"🐝 Hive Request Error: {type(e).__name__}")
         return {"errors": [{"message": "Hive request failed. Please try again."}]}
     except Exception as e:
-        print(f"🐝 Hive Unexpected Error: {e}")
+        print(f"🐝 Hive Unexpected Error: {type(e).__name__}")
         return {"errors": [{"message": "Unexpected error talking to Hive. Please try again."}]}
 
 
@@ -133,14 +133,26 @@ def _hive_error_message(result: Dict[str, Any]) -> Optional[str]:
     errors = result.get("errors")
     if not errors:
         return None
+    def _sanitize(val: Any) -> str:
+        if not isinstance(val, str) or not val.strip():
+            return "Unknown error"
+        lowered = val.lower()
+        if any(marker in lowered for marker in [
+            "traceback", "exception", "runtimeerror", "line ", "file ", "http://", "https://", "/", "\\"
+        ]):
+            return "Unknown error"
+        return val.strip()
+
     if isinstance(errors, list):
+        if not errors:
+            return None
         first = errors[0]
         if isinstance(first, dict):
-            return first.get("message", "Unknown error")
-        return str(first)
+            return _sanitize(first.get("message", "Unknown error"))
+        return _sanitize(first)
     if isinstance(errors, dict):
-        return errors.get("message", "Unknown error")
-    return str(errors)
+        return _sanitize(errors.get("message", "Unknown error"))
+    return _sanitize(errors)
 
 
 def hive_rest_request(uid: str, method: str, endpoint: str, data: Optional[Dict] = None, params: Optional[Dict] = None) -> Dict[str, Any]:
@@ -195,7 +207,7 @@ def hive_rest_request(uid: str, method: str, endpoint: str, data: Optional[Dict]
 
     except Exception as e:
         print(f"🐝 Hive REST Exception: {type(e).__name__}")
-        return {"errors": [{"message": type(e).__name__}]}
+        return {"errors": [{"message": "Request failed. Please try again."}]}
 
 
 def hive_api_request(uid: str, query: str, variables: Optional[Dict] = None) -> Dict[str, Any]:
@@ -334,7 +346,7 @@ def verify_api_key(api_key: str) -> Optional[Dict[str, Any]]:
                     workspace_id = workspaces[0].get("_id") or workspaces[0].get("id")
                     print(f"🐝 Using workspace from REST: {workspaces[0].get('name')} ({workspace_id})")
         except Exception as e:
-            print(f"🐝 REST API error: {e}")
+            print(f"🐝 REST API error: {type(e).__name__}")
 
     return {
         "user_id": data.get("_id"),
@@ -365,7 +377,7 @@ def get_user_workspaces(uid: str) -> List[Dict]:
         if response.status_code == 200:
             return response.json()
     except Exception as e:
-        print(f"🐝 REST API error in get_user_workspaces: {e}")
+        print(f"🐝 REST API error in get_user_workspaces: {type(e).__name__}")
 
     return []
 
