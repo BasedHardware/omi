@@ -1,4 +1,13 @@
-"""JATS abstracts and Crossref titles must be plain text (#13242, #14307)."""
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+try:
+    from test_main import _install_module_stubs
+
+    _install_module_stubs()
+except Exception:
+    pass
 
 from main import clean
 
@@ -36,3 +45,10 @@ def test_clean_preserves_encoded_and_raw_inequalities():
     # Encoded chained comparison must preserve <b> rather than stripping as a tag (#14307 review)
     assert clean("If a&lt;b&gt;c, continue.") == "If a<b>c, continue."
     assert clean("When x &lt; y and y &gt; z.") == "When x < y and y > z."
+
+
+if __name__ == "__main__":
+    for name, func in list(globals().items()):
+        if name.startswith("test_") and callable(func):
+            func()
+    print("All test_clean.py tests passed successfully!")
