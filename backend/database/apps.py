@@ -243,7 +243,7 @@ def update_app_in_db(app_data: Dict[str, Any]) -> None:
     if not app_id:
         raise ValueError("app_data must include 'id'")
     app_ref = db.collection(apps_collection).document(app_id)
-    app_ref.set(app_data, merge=True)
+    app_ref.update(app_data)
 
 
 def delete_app_from_db(app_id: str) -> None:

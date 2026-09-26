@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from google.cloud.firestore import ArrayRemove, ArrayUnion
+from google.cloud.firestore_v1 import _helpers
 
 import database.apps as apps_db
 
@@ -64,7 +65,7 @@ def test_set_app_popular_uses_set_merge(monkeypatch):
     fake_doc.set.assert_called_once_with({'is_popular': True}, merge=True)
 
 
-def test_update_app_in_db_uses_set_merge(monkeypatch):
+def test_update_app_in_db_uses_update(monkeypatch):
     fake_db = MagicMock()
     fake_coll = MagicMock()
     fake_doc = MagicMock()
@@ -77,7 +78,35 @@ def test_update_app_in_db_uses_set_merge(monkeypatch):
     apps_db.update_app_in_db(payload)
 
     fake_coll.document.assert_called_once_with('app-123')
-    fake_doc.set.assert_called_once_with(payload, merge=True)
+    fake_doc.update.assert_called_once_with(payload)
+
+
+def test_update_app_in_db_preserves_dotted_field_path_update_mask(monkeypatch):
+    fake_db = MagicMock()
+    fake_coll = MagicMock()
+    fake_doc = MagicMock()
+
+    fake_db.collection.return_value = fake_coll
+    fake_coll.document.return_value = fake_doc
+    monkeypatch.setattr(apps_db, 'db', fake_db)
+
+    payload = {
+        'id': 'app-123',
+        'external_integration.chat_messages_enabled': True,
+        'external_integration.chat_messages_target': 'main',
+    }
+    apps_db.update_app_in_db(payload)
+
+    fake_doc.update.assert_called_once_with(payload)
+    called_payload = fake_doc.update.call_args[0][0]
+
+    # Verify Firestore's pbs_for_update generates nested field_paths in update_mask
+    doc_path = 'projects/test-proj/databases/(default)/documents/plugins_data/app-123'
+    [write] = _helpers.pbs_for_update(doc_path, called_payload, None)
+    paths = set(write.update_mask.field_paths)
+    assert 'external_integration.chat_messages_enabled' in paths
+    assert 'external_integration.chat_messages_target' in paths
+    assert 'id' in paths
 
 
 def test_update_app_in_db_missing_id_raises_value_error(monkeypatch):
