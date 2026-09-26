@@ -78,16 +78,6 @@ and finalize calls schedule their work on the provider loop. These contracts
 are exercised in `tests/unit/test_soniox_token_boundaries.py`, including the
 downstream transcript merge that inserts spaces between distinct segments.
 
-On the managed chain, Soniox receives the original PCM through VAD pauses,
-just as Modulate does. The VAD still measures speech and requests finalization,
-but its withheld-silence output is not used for Soniox sends. Production
-`outside_accepted_sends` evidence showed Soniox final-token offsets 1–30 s
-ahead of the gated send ledger; forwarding the silence keeps the token axis and
-the accepted-send ledger on the same audio samples. The managed-chain regression
-drives the real VAD state machine across 5, 9, and 34 s pauses and Soniox final
-token shapes with zero translation rejects. Keepalive and finalize control
-frames do not add samples to the ledger.
-
 Segments buffered in `realtime_segment_buffers` are sorted by `start` time
 before processing — this corrects non-deterministic WebSocket arrival order
 from providers like Modulate whose internal parallelism can deliver shorter
@@ -1020,8 +1010,7 @@ private capture window for live speaker identification.
 
 V2 keeps every emitted provider segment as text. Intervals crossing a VAD
 discontinuity, missing their owner, or arriving after owner closure are retained
-as `audio_alignment=unplaced` on their proven send owner. If no owner is
-provable, the current row is an explicit, counted degraded fallback. Their persisted
+as `audio_alignment=unplaced` on the active conversation. Their persisted
 `start=end=-1` cannot resolve to a v2 audio span in released clients, which
 seek by `start` alone. They are excluded from clip and speaker embedding work.
 Mapped rows retain their accepted capture-run start for live merging; rows
@@ -1034,8 +1023,8 @@ are still needed to size that gap before any v2 production flag change.
 server-STT live capture on a fresh conversation. Existing sockets, resumed v1
 conversations, multi-channel mixes, custom/BYOK STT, offline WAL sync and
 manually merged rows always stay v1. The flag is read at the call boundary
-(`config/audio_timeline.py`); flag off retains the v1 schema and coordinate
-policy. Soniox's full-PCM send fix is independent of this persistence flag.
+(`config/audio_timeline.py`); flag off means the v1 wire, storage and
+persistence behavior is byte-for-byte unchanged.
 
 One coordinate. A per-listen-socket integer capture sample cursor
 (`utils/audio_timeline.CaptureTimeline`) owns the order of decoded PCM16 mono.
@@ -1057,8 +1046,7 @@ Provider times. Every selected provider socket — initial fallback and
 send-path failover — gets its own epoch translator created at callback
 creation. Sockets record only sends the provider accepted (pre-roll spans
 included through the VAD gate; the legacy direct socket still records sends
-when VAD is disabled or fails to initialize; Soniox and Modulate record full
-PCM through VAD gaps; keepalive/finalize controls are never audio);
+when VAD is disabled or fails to initialize; SafeDeepgram keepalives are never audio);
 provider timestamps map through those spans to capture samples, then to the
 wall axis, before `_enqueue_stt_segments`. A zero-duration provider point
 inside an accepted send gets a one-sample capture window and a `recovered`
@@ -1175,9 +1163,8 @@ runs in clock-only mode: the non-passthrough callback still applies the
 active VAD gate's `remap_segments` to provider timestamps exactly as
 `make_stream_callback` did on main — the epoch translation only *attaches*
 the private capture window without rewriting `start`/`end` — so
-provider-native segment times and the pusher wire stay on the flag-off
-coordinate. Soniox now forwards full PCM through active VAD, so its native
-clock no longer needs a skipped-silence remap. Only the speaker-ID clip window
+provider-native segment times, conversation ownership and the pusher wire
+stay byte-identical to the flag-off baseline. Only the speaker-ID clip window
 relocates onto the capture clock, which is what keeps live recognition
 working after a Modulate→Soniox-style failover (the 2026-09-25 incident: the
 legacy `first_audio + raw_start` window landed minutes before the 60 s ring

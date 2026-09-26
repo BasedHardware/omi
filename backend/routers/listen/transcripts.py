@@ -47,7 +47,6 @@ from utils.translation_coordinator import TranslationCoordinator
 from utils.product_telemetry import emit_product_event
 
 logger = logging.getLogger(__name__)
-MAX_V2_PERSIST_ATTEMPTS = 5
 
 
 class ConversationCache:
@@ -108,44 +107,6 @@ class TranscriptProcessor:
             )
         self._flush_failures = 0
         self._flush_backoff_until = 0.0
-        self._v2_retry_counts: Dict[str, int] = {}
-        self._v2_retry_until = 0.0
-        self._v2_committed_ids: set[str] = set()
-        self._v2_photos_committed = False
-        self._v2_photos_requeued = False
-        self._v2_photo_failures = 0
-
-    def _queue_v2_retry(self, segments: List[Dict[str, Any]]) -> None:
-        """Retry only uncommitted text, with a finite per-segment budget."""
-        for raw in reversed(segments):
-            key = str(raw.get('id') or '')
-            if key in self._v2_committed_ids:
-                continue
-            attempts = self._v2_retry_counts.get(key, 0) + 1
-            if attempts > MAX_V2_PERSIST_ATTEMPTS:
-                self._v2_retry_counts.pop(key, None)
-                OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode='v2', outcome='persist_retry_exhausted').inc()
-                logger.error('Audio-timeline segment persist exhausted retries')
-                continue
-            self._v2_retry_counts[key] = attempts
-            self._v2_retry_until = max(self._v2_retry_until, time.monotonic() + min(8.0, 0.5 * 2 ** (attempts - 1)))
-            self.segment_buffer.appendleft(raw)
-
-    def _queue_v2_photos(self, photos: List[ConversationPhoto]) -> None:
-        if not photos or self._v2_photos_committed or self._v2_photos_requeued:
-            return
-        self._v2_photos_requeued = True
-        self._v2_photo_failures += 1
-        if self._v2_photo_failures > MAX_V2_PERSIST_ATTEMPTS:
-            logger.error('Audio-timeline photo persist exhausted retries count=%s', len(photos))
-            record_fallback(
-                component='other', from_mode='v2_photo_persist', to_mode='none', reason='other', outcome='exhausted'
-            )
-            return
-        self._v2_retry_until = max(
-            self._v2_retry_until, time.monotonic() + min(8.0, 0.5 * 2 ** (self._v2_photo_failures - 1))
-        )
-        self.photo_buffer.extendleft(reversed(photos))
 
     async def _load_conversation(self, conversation_id: str) -> Optional[Dict[str, Any]]:
         data = await self.host.persistence.call(
@@ -275,8 +236,6 @@ class TranscriptProcessor:
             )
             if not isinstance(written, LiveTranscriptMerge):
                 return None
-            if getattr(self.host.state, 'capture_timeline_v2', False):
-                self._v2_committed_ids.update(str(segment.id) for segment in segments)
             serialised = written.segments
             by_id = {s['id']: TranscriptSegment(**s) for s in serialised}
             conversation.transcript_segments = list(by_id.values())
@@ -289,25 +248,16 @@ class TranscriptProcessor:
                 conversations_db.store_conversation_photos, self.host.request.uid, conversation.id, photos
             )
             if not stored:
-                if getattr(self.host.state, 'capture_timeline_v2', False):
-                    # Segment commit succeeded already. Retry only photos;
-                    # treating this as a failed group would roll over and
-                    # duplicate text on a different conversation.
-                    self._queue_v2_photos(photos)
-                else:
-                    return None
-            else:
-                if getattr(self.host.state, 'capture_timeline_v2', False):
-                    self._v2_photos_committed = True
-                source = resolve_photo_conversation_source(conversation.source.value if conversation.source else None)
-                if source is not None and conversation.source != ConversationSource(source):
-                    conversation.source = ConversationSource(source)
-                    await self.host.persistence.call(
-                        conversations_db.update_conversation,
-                        self.host.request.uid,
-                        conversation.id,
-                        {'source': conversation.source},
-                    )
+                return None
+            source = resolve_photo_conversation_source(conversation.source.value if conversation.source else None)
+            if source is not None and conversation.source != ConversationSource(source):
+                conversation.source = ConversationSource(source)
+                await self.host.persistence.call(
+                    conversations_db.update_conversation,
+                    self.host.request.uid,
+                    conversation.id,
+                    {'source': conversation.source},
+                )
         if update_finished_at:
             await self.host.persistence.call(
                 conversations_db.update_conversation_finished_at, self.host.request.uid, conversation.id, finished_at
@@ -442,17 +392,11 @@ class TranscriptProcessor:
         while self.host.state.active or self.segment_buffer or self.photo_buffer:
             if await self.host.wait(0.6) and not (self.segment_buffer or self.photo_buffer):
                 break
-            if getattr(self.host.state, 'capture_timeline_v2', False) and time.monotonic() < self._v2_retry_until:
-                continue
             if not self.segment_buffer and not self.photo_buffer:
                 if self.host.state.speaker_map_dirty and time.monotonic() >= self._flush_backoff_until:
                     await self.flush_speaker_assignments(self.host.state.current_conversation_id)
                 continue
             raw_segments = sort_segments_by_start(list(self.segment_buffer))
-            if getattr(self.host.state, 'capture_timeline_v2', False):
-                for raw in raw_segments:
-                    if not raw.get('id'):
-                        raw['id'] = str(uuid.uuid4())
             conversation_id = self.host.state.current_conversation_id
             self.segment_buffer.clear()
             photos = list(self.photo_buffer)
@@ -468,30 +412,18 @@ class TranscriptProcessor:
                 # call. Retain pristine copies so any exception can retry the
                 # whole drain with stable ids and absolute times.
                 retry_segments = [dict(raw) for raw in raw_segments]
-                self._v2_committed_ids.clear()
-                self._v2_photos_committed = False
-                self._v2_photos_requeued = False
                 try:
                     await self._process_v2_batches(raw_segments, photos, diarized_speaker_ids_by_conversation)
                 except asyncio.CancelledError:
-                    self._queue_v2_retry(
-                        [raw for raw in retry_segments if str(raw.get('id')) not in self._v2_committed_ids]
-                    )
-                    self._queue_v2_photos(photos)
+                    self.segment_buffer.extendleft(reversed(retry_segments))
+                    self.photo_buffer.extendleft(reversed(photos))
                     raise
                 except Exception as error:
-                    self._queue_v2_retry(
-                        [raw for raw in retry_segments if str(raw.get('id')) not in self._v2_committed_ids]
-                    )
-                    self._queue_v2_photos(photos)
+                    self.segment_buffer.extendleft(reversed(retry_segments))
+                    self.photo_buffer.extendleft(reversed(photos))
                     logger.error(
                         'Audio-timeline batch persist failed; retained for retry type=%s', type(error).__name__
                     )
-                finally:
-                    for committed_id in self._v2_committed_ids:
-                        self._v2_retry_counts.pop(committed_id, None)
-                    if self._v2_photos_committed:
-                        self._v2_photo_failures = 0
                 continue
             if not self.host.state.first_audio_byte_timestamp:
                 continue
@@ -608,8 +540,8 @@ class TranscriptProcessor:
             raw.pop('audio_capture_run', None)
             # The buffer may be retried after rollover. Never silently adopt
             # whichever conversation happens to be current at retry time.
+            self.segment_buffer.append(raw)
             OMI_AUDIO_TIMELINE_SEGMENTS_TOTAL.labels(mode='v2', outcome='unplaced').inc()
-        self._queue_v2_retry(segments)
 
     async def _process_v2_batches(
         self,
@@ -645,7 +577,7 @@ class TranscriptProcessor:
         for raw in raw_segments:
             owner = raw.get('_conversation_id')
             if not owner:
-                self._queue_v2_retry([raw])
+                self.segment_buffer.append(raw)
                 continue
             if owner not in groups:
                 groups[owner] = []
@@ -666,7 +598,8 @@ class TranscriptProcessor:
                 if is_current and segments:
                     # The conversation row may be a beat behind its binding;
                     # re-queue rather than drop live speech.
-                    self._queue_v2_retry(segments)
+                    for segment in reversed(segments):
+                        self.segment_buffer.appendleft(segment)
                 else:
                     self._reroute_unplaced(segments)
                 continue
@@ -715,7 +648,8 @@ class TranscriptProcessor:
                 if is_current and segments:
                     # First audio not observed yet; the origin is pinned by the
                     # receiver at the next accepted frame.
-                    self._queue_v2_retry(segments)
+                    for segment in reversed(segments):
+                        self.segment_buffer.appendleft(segment)
                     continue
                 self._reroute_unplaced(segments)
                 continue
@@ -749,6 +683,13 @@ class TranscriptProcessor:
                         segment.is_user = True
                         segment.speaker_identity_status = SpeakerIdentityStatus.user
                     new_segments.append(segment)
+                    self.current_session_segments[cast(str, segment.id)] = segment.speech_profile_processed
+                state.words_transcribed_since_last_record += len(
+                    ' '.join(segment.text for segment in new_segments).split()
+                )
+                diarized_by_conversation.setdefault(owner, set()).update(
+                    segment.speaker_id for segment in new_segments if isinstance(segment.speaker_id, int)
+                )
             current = deserialize_conversation(data)
             result = await self._update_live_conversation(
                 current,
@@ -797,12 +738,6 @@ class TranscriptProcessor:
                 self._reroute_unplaced(segments, base=started_ts)
                 continue
             conversation, updated, removed = result
-            for segment in new_segments:
-                self.current_session_segments[cast(str, segment.id)] = segment.speech_profile_processed
-            state.words_transcribed_since_last_record += len(' '.join(segment.text for segment in new_segments).split())
-            diarized_by_conversation.setdefault(owner, set()).update(
-                segment.speaker_id for segment in new_segments if isinstance(segment.speaker_id, int)
-            )
             if removed:
                 self.host.send_event(SegmentsDeletedEvent(segment_ids=removed))
             if not new_segments:

@@ -140,12 +140,7 @@ class LiveChainSession:
                 record_fallback(
                     component='vad', from_mode='gated', to_mode='direct', reason='config_incomplete', outcome='degraded'
                 )
-            # Soniox final-token offsets in live VAD sessions can continue on
-            # the stream's elapsed audio axis across long gated pauses. Send
-            # the original PCM (including silence) so its provider clock and
-            # our accepted-send map describe the same samples. Modulate already
-            # uses this path. Keep the gate for speech usage and finalize.
-            passthrough = service in (st.STTService.modulate, st.STTService.soniox)
+            passthrough = service == st.STTService.modulate
 
             def callback(segments: list[dict[str, Any]]) -> None:
                 if generation != self.generation and not (epoch is not None and epoch.project_times):

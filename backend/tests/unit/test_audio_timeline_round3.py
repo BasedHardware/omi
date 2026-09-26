@@ -232,8 +232,8 @@ async def test_late_final_resolves_owner_after_thirty_seconds(monkeypatch):
     assert len(receiver.collected) == 1
     assert receiver.collected[0]['_conversation_id'] == 'conv-r3'
 
-    # A straddling segment with no proven SEND owner takes the counted
-    # current-row fallback rather than silently claiming the initial row.
+    # A segment straddling A→B keeps its text on the socket's original
+    # conversation without inventing an audio claim.
     receiver.collected.clear()
     receiver._enqueue_translated_segments(
         [
@@ -250,7 +250,7 @@ async def test_late_final_resolves_owner_after_thirty_seconds(monkeypatch):
         ]
     )
     assert [segment['text'] for segment in receiver.collected] == ['straddle']
-    assert receiver.collected[0]['_conversation_id'] == 'conv-b'
+    assert receiver.collected[0]['_conversation_id'] == 'conv-r3'
     assert receiver.collected[0]['audio_alignment'] == 'unplaced'
 
 
@@ -383,13 +383,6 @@ def _processor(monkeypatch, store, *, current: Optional[str], photos_sink=None):
     processor.host = host
     processor.cache = ConversationCache(loader)
     processor.segment_buffer = deque()
-    processor.photo_buffer = deque()
-    processor._v2_retry_counts = {}
-    processor._v2_retry_until = 0.0
-    processor._v2_committed_ids = set()
-    processor._v2_photos_committed = False
-    processor._v2_photos_requeued = False
-    processor._v2_photo_failures = 0
     processor.current_session_segments = {}
     processor.suggested_segments = set()
     processor.speaker_id_allocator = ConversationSpeakerIdAllocator()
@@ -538,89 +531,6 @@ async def test_late_owner_drain_still_writes_current_photos(monkeypatch):
     assert sent == []
     # Diarization accounting covers the late owner too.
     assert diarized.get('conv-old') == {0}
-
-
-async def test_v2_retry_skips_an_already_committed_owner(monkeypatch):
-    import routers.listen.transcripts as transcript_module
-
-    monkeypatch.setattr(transcript_module, 'emit_product_event', lambda **kwargs: None)
-    store = StrictFirestore()
-    for owner in ('conv-a', 'conv-b'):
-        row = _seed_row(store, owner, started_at=datetime.fromtimestamp(T0, tz=timezone.utc))
-        row['audio_timeline'] = {'version': 2}
-    processor, _sent = _processor(monkeypatch, store, current=None)
-    processor.host.state.capture_timeline_v2 = True
-    processor.host.state.active = False
-    processor.host.wait = lambda seconds: asyncio.sleep(min(seconds, 0.01), result=False)
-    processor.host.speakers.tasks = []
-    processor.host.speakers.drain = _async_noop
-    processor.flush_speaker_assignments = _async_noop
-    processor.segment_buffer.extend(
-        [_v2_segment('a', T0 + 1, T0 + 2, 'conv-a'), _v2_segment('b', T0 + 1, T0 + 2, 'conv-b')]
-    )
-    load = processor._load_conversation
-    failed = False
-
-    async def fail_second_once(owner):
-        nonlocal failed
-        if owner == 'conv-b' and not failed:
-            failed = True
-            raise RuntimeError('transient read failure')
-        return await load(owner)
-
-    processor._load_conversation = fail_second_once
-    calls = []
-    persist = processor.host.persistence.call
-
-    async def count_writes(fn, *args, **kwargs):
-        if fn is conversations_db.update_conversation_segments:
-            calls.append(args[1])
-        return await persist(fn, *args, **kwargs)
-
-    processor.host.persistence.call = count_writes
-    await asyncio.wait_for(processor.process_loop(), 3)
-    assert failed
-    assert calls == ['conv-a', 'conv-b']
-    for owner in ('conv-a', 'conv-b'):
-        row = store.rows[('users', UID, 'conversations', owner)]
-        segments = conversations_db._decode_transcript_segments_strict(
-            UID, row.get('transcript_segments', []), bool(row.get('transcript_segments_compressed'))
-        )
-        assert len(segments) == 1
-
-
-async def test_v2_photo_failure_after_segment_commit_retries_only_photo(monkeypatch):
-    from models.conversation_photo import ConversationPhoto
-
-    store = StrictFirestore()
-    row = _seed_row(store, 'conv-photo-retry', started_at=datetime.fromtimestamp(T0, tz=timezone.utc))
-    row['audio_timeline'] = {'version': 2}
-    processor, _sent = _processor(monkeypatch, store, current='conv-photo-retry')
-    processor.host.state.capture_timeline_v2 = True
-    photo = ConversationPhoto(id='photo-retry', base64='ZmFrZQ==', description='retry', discarded=False)
-    persist = processor.host.persistence.call
-    failures = 0
-
-    async def fail_photo_once(fn, *args, **kwargs):
-        nonlocal failures
-        if fn is conversations_db.store_conversation_photos and failures == 0:
-            failures += 1
-            return False
-        return await persist(fn, *args, **kwargs)
-
-    processor.host.persistence.call = fail_photo_once
-    rollovers = []
-    processor.host.conversations.create_new_in_progress_conversation = lambda **kwargs: rollovers.append(kwargs)
-    await processor._process_v2_batches([_v2_segment('text-once', T0 + 1, T0 + 2, 'conv-photo-retry')], [photo], {})
-    assert not rollovers
-    assert len(processor.photo_buffer) == 1
-    processor._v2_photos_requeued = False
-    await processor._process_v2_batches([], list(processor.photo_buffer), {})
-    segments = conversations_db._decode_transcript_segments_strict(
-        UID, row.get('transcript_segments', []), bool(row.get('transcript_segments_compressed'))
-    )
-    assert len(segments) == 1
-    assert row['photos'][0]['id'] == 'photo-retry'
 
 
 async def test_fresh_v2_row_still_pins_marker(monkeypatch):
