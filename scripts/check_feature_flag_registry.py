@@ -17,7 +17,7 @@ AS_OF = re.compile(r"<!-- feature-flag-registry as-of: (\d{4}-\d{2}-\d{2}) -->")
 def check(root: Path, *, check_render: bool = True) -> tuple[list[str], list[str]]:
     registry_path = root / "config/feature-flags.yaml"
     registry = load_registry(registry_path)
-    errors = validate_registry(registry)
+    errors = validate_registry(registry, root=root)
     if errors:
         return errors, []
     flags = {entry["key"]: entry for entry in registry["flags"]}

@@ -40,7 +40,7 @@ void main() {
 
     // A non-user restart cannot override mute.
     final starts = world.hostApi.startCalls;
-    await world.controller.streamRecording(resumeCapture: false);
+    await expectLater(world.controller.streamRecording(resumeCapture: false), throwsA(isA<StateError>()));
     expect(world.hostApi.startCalls, starts);
     expect(world.controller.isPaused, isTrue);
 
