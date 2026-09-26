@@ -422,7 +422,8 @@ def get_memories(
         try:
             category_list = [MemoryCategory(c.strip()) for c in categories.split(",") if c.strip()]
         except ValueError as e:
-            raise HTTPException(status_code=400, detail=f"Invalid category {str(e)}")
+            logger.warning(f"Invalid category {e}")
+            raise HTTPException(status_code=400, detail="Invalid memory category. Please provide valid category names.")
 
     app_key_grant = authorize_memory_external_default_memory_read(auth_context, db_client=db)
     if not app_key_grant.allowed:
@@ -543,7 +544,10 @@ def get_conversations(
             [CategoryEnum(c.strip()).value for c in categories.split(",") if c.strip()] if categories else []
         )
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=f"Invalid category {str(e)}")
+        logger.warning(f"Invalid conversation category {e}")
+        raise HTTPException(
+            status_code=400, detail="Invalid conversation category. Please provide valid category names."
+        )
 
     try:
         page, next_cursor = mcp_conversation_handlers.conversation_cards_page_core(
